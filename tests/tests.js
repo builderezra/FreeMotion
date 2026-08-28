@@ -44989,6 +44989,92 @@
     }
   });
 
+  /* ═══ QUEUE 96 — AND THE FIXTURE THE ENTRY SAID COULD NOT EXIST ══════════════════════════════════
+   * *"Adding a song is really buggy and sometimes will not play at all."* That entry has been stuck on
+   * one sentence for months: **"the app cannot MAKE an mp3 to test with — no browser encodes MP3"**, so
+   * the length-disagreement it predicts has never been reproducible without a file from Ezra. (macOS
+   * cannot encode one either: afconvert lists MPG3 and then refuses with 'fmt?'.)
+   * **AN MP3 IS JUST A SEQUENCE OF FRAMES, and the property this needs is not musical.** Each MPEG-1
+   * Layer III frame is a 4-byte header plus a payload whose length follows from its bitrate index, and
+   * a file with NO Xing/Info header makes the browser estimate its length from the FIRST frame's
+   * bitrate and the file size. Vary the bitrate after the intro and that estimate is wrong by however
+   * much you like — in whichever direction you like. Chrome accepts these, reports a duration for them,
+   * and plays them.
+   * Built here in JavaScript rather than committed as a binary: 8 lines, and the construction is
+   * readable instead of being an opaque blob nobody can check. */
+  const MP3_BR = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320];
+  function mp3Frame(idx) {
+    const size = Math.floor(144 * MP3_BR[idx] * 1000 / 44100);
+    const b = new Uint8Array(size);
+    b[0] = 0xFF; b[1] = 0xFB;          // sync, MPEG-1, Layer III, no CRC
+    b[2] = (idx << 4);                  // bitrate index, sample-rate index 00 (44100), no padding
+    b[3] = 0xC0;                        // mono, no mode extension, no emphasis
+    return b;                           // payload left zero → decodes to silence, which is all this needs
+  }
+  function mp3File(name, frames, introIdx, restIdx) {
+    const parts = [];
+    for (let i = 0; i < frames; i++) parts.push(mp3Frame(i < 40 ? introIdx : restIdx));
+    let n = 0; parts.forEach(p => { n += p.length; });
+    const all = new Uint8Array(n); let o = 0;
+    parts.forEach(p => { all.set(p, o); o += p.length; });
+    return { file: new File([all], name, { type: 'audio/mpeg' }), trueDuration: frames * 1152 / 44100, bytes: n };
+  }
+
+  test('#96: an mp3 whose header lies about its length gets the clip the DECODER says', { item: '96' }, async function () {
+    if (!FM.loadVideoFile) throw new Error('FM.loadVideoFile is not reachable');
+    if (typeof FM._audioDurationFromDecode !== 'function') throw new Error('FM._audioDurationFromDecode is missing — the decode-first path is gone');
+    const cases = [
+      // OVER-claiming: a 32kbps intro makes the estimate far too LONG. This is the direction nothing
+      // had ever tested, because nobody had a file that did it — measured 29.439s for a true 10.449s.
+      { label: 'over-claims', spec: mp3File('over.mp3', 400, 1, 14) },
+      // UNDER-claiming: a 320kbps intro makes the estimate too SHORT. This is queue 72's liar.mp3
+      // direction, and it must keep working — the old Math.max is what protected it.
+      { label: 'under-claims', spec: mp3File('under.mp3', 400, 14, 1) },
+    ];
+    for (const c of cases) {
+      const dec = await FM._audioDurationFromDecode(c.spec.file);
+      if (!(dec > 0)) throw new Error(c.label + ': the decoder could not read the synthetic file at all (' + dec + '), so this case tests nothing');
+      if (Math.abs(dec - c.spec.trueDuration) > 0.5)
+        throw new Error(c.label + ': the decoder said ' + dec.toFixed(3) + ' for a file that is ' + c.spec.trueDuration.toFixed(3) + 's — the fixture is not what it claims to be');
+
+      const rec = await FM.loadVideoFile(c.spec.file);
+      if (!rec) throw new Error(c.label + ': loadVideoFile returned nothing');
+      /* THE CONTROL, and it is the whole reason this test means anything: the ELEMENT has to actually
+         disagree. If Chrome ever starts parsing these correctly the fixture stops exercising the bug,
+         and a green result would be measuring nothing at all. */
+      const own = rec.el ? rec.el.duration : NaN;
+      if (!(isFinite(own) && Math.abs(own - c.spec.trueDuration) > 1))
+        throw new Error(c.label + ': the element reported ' + own + ' against a true ' + c.spec.trueDuration.toFixed(3) +
+                        ' — it is NOT disagreeing, so this fixture no longer reproduces the fault and the pass below is empty');
+
+      if (Math.abs(rec.duration - c.spec.trueDuration) > 0.5) {
+        throw new Error(c.label + ': the clip came out ' + rec.duration.toFixed(3) + 's for ' + c.spec.trueDuration.toFixed(3) +
+                        's of sound (the element claimed ' + own.toFixed(3) + ') — ' +
+                        (rec.duration > c.spec.trueDuration
+                          ? 'the tail is silence the user cannot explain, and a playhead parked in it plays nothing'
+                          : 'the end of the song is simply gone'));
+      }
+    }
+  });
+
+  /* AND THE GUARANTEE THAT MADE THE OLD RULE RIGHT MUST SURVIVE: a decode that learns NOTHING must
+   * never shorten a clip to zero. v12.36 exists because a clip born with no length plays nothing at
+   * all, which is this same entry's symptom by a different route — so trusting the decode had to be
+   * conditional on the decode having actually worked. */
+  test('#96: a decode that fails still cannot give a clip no length', { item: '96' }, async function () {
+    if (!FM.loadVideoFile) throw new Error('FM.loadVideoFile is not reachable');
+    const real = FM._audioDurationFromDecode;
+    try {
+      FM._audioDurationFromDecode = async () => 0;          // exactly what a bounced/oversized file returns
+      const spec = mp3File('nodecode.mp3', 200, 1, 14);
+      const rec = await FM.loadVideoFile(spec.file);
+      if (!rec) throw new Error('loadVideoFile returned nothing');
+      if (!(rec.duration > 0))
+        throw new Error('with the decode returning 0 the clip was born with duration ' + rec.duration +
+                        ' — that is the v12.36 bug back, and a clip with no length plays nothing');
+    } finally { FM._audioDurationFromDecode = real; }
+  });
+
   /* Queue 343 clause 4 — sharing templates, in the shape Ezra chose.
    * He asked for links first, which would have needed a server and broken the app's local-only premise
    * outright. Told that, he picked the other option himself, verbatim: *"maybe not links then and

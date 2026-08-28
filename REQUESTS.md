@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.87
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.88
 >
-> **State:** v13.87, 1032 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.88, 1034 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -44,6 +44,16 @@
 > thing only you can do: **export something short with sound on the PC, then drag the .mp4 into a
 > Chrome tab and press play.** Sound → the file is fine and your camera roll is dropping it. No sound
 > → it is the project or your browser, and the app will name the reason.
+>
+> **🎵 AND YOUR SONG BUG HAS A FOURTH REAL CAUSE — found by building an MP3 by hand.** #96 had been
+> stuck for months on "we cannot make an mp3 to test with, so send me the file". It turns out an mp3
+> needs no encoder — it is just a list of frames, and a hand-built one can lie about its length by any
+> amount you like. With one: **the file is 10.4 seconds, Chrome's player says 29.4, and the app believed
+> Chrome.** So a song imported as a clip **19 seconds longer than the sound in it** — the tail is silence
+> you cannot explain, and pressing play with the playhead in that tail does nothing at all.
+> **Fixed: the app now believes the decoder, which measured it correctly in 15 milliseconds.**
+> ⚠️ I still cannot prove this is the bug you hit — but it is on the exact file type we suspected and it
+> produces exactly what you described.
 >
 > **✅ #602 IS CLOSED.** The text panel stopped covering your preview back in v13.52. The other half —
 > *"they're kinda pointless coz effects do the same thing"* — I checked against all 199 effects instead
@@ -2967,6 +2977,40 @@ better still, keep working inside the turn rather than parking work for a later 
       is the whole of queue 395. So reproducing this properly needs an mp3 from you, not another soak
       here. **If it happens again, the single most useful thing is the file itself** (or just its
       format and rough length), not a description.
+
+      ═══ ✅ **28 AUG (v13.88) — THAT BLOCKER IS GONE, AND IT WAS NEVER A REAL ONE. A FOURTH CAUSE
+      FOUND, MEASURED AND FIXED.** ═══
+      🔓 **"The app cannot MAKE an mp3" is true and beside the point — it does not need an ENCODER.**
+      An MP3 is a sequence of frames: a 4-byte header plus a payload whose length follows from its
+      bitrate index. A file with **no Xing/Info header** makes the browser estimate its length from the
+      FIRST frame's bitrate and the file size — so a 32 kbps intro followed by a 320 kbps body has a
+      header that lies by however much you choose, **in whichever direction you choose**. Chrome accepts
+      these, reports a duration for them, and plays them. (This Mac cannot encode one either: `afconvert`
+      lists MPG3 and then refuses with `'fmt?'`.)
+      📐 **MEASURED with such a file — 400 frames, true length 10.449s:**
+      | | says |
+      |---|---|
+      | the `<audio>` element | **29.439 s** |
+      | `FM._audioDurationFromDecode` | **10.448875 s, in 15 ms** — right, and fast |
+      | **the clip the app made** | **29.439 s** |
+      🚨 **THE DECODER WAS RIGHT AND WAS OVERRULED.** `js/media.js` took `Math.max(element, decode)`.
+      That rule was written for queue 72's direction — a header that UNDER-claims (`liar.mp3` says 11.2s,
+      is really 26.4s) — where taking the larger is exactly right and a failed decode can never shorten a
+      clip. **The opposite direction had never been tested because nobody could make a file that did it.**
+      ➡️ **THE SYMPTOM IT PRODUCES IS YOURS.** The song arrives as a clip **19 seconds longer than the
+      sound in it**, and the project stretches to match. The tail is silence you cannot account for, and
+      **a playhead parked in that tail plays nothing** — *"sometimes will not play at all"*.
+      ✅ **FIXED: the decode wins outright in both directions, and only when it actually succeeded.**
+      When it returns nothing (it is bounded by a size ceiling and wrapped in a try/catch) the old rule
+      applies unchanged, so **v12.36's guarantee that a clip can never be born with no length is
+      untouched** — and that has its own test, because a zero-length clip is this same complaint by a
+      different route. Mutation-checked: restoring `Math.max` is CAUGHT.
+      🔒 **The fixture is built in JavaScript inside the test — eight lines — rather than committed as a
+      binary blob**, so its construction is readable and checkable instead of opaque. Both directions are
+      covered, and the test carries a control that fails if Chrome ever starts parsing these correctly
+      (at which point the fixture would stop reproducing the fault and a green result would mean nothing).
+      ⚠️ **THIS STILL DOES NOT PROVE IT IS YOUR BUG** — but it is the fourth real defect found in this
+      entry, on the exact file type the entry already suspected, producing your exact symptom.
       It could NOT reproduce total silence on a well-formed file: 30 add-then-play trials at 1x and 8x
       CPU throttle all played.
 

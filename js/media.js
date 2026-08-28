@@ -95,15 +95,30 @@ window.FM = window.FM || {};
         try { URL.revokeObjectURL(url); } catch (e) {}
         reject(new Error('Could not read “' + file.name + '” — the browser never reported its size or length.'));
       }, 20000);
-      const finish = (override) => {
+      /* `trustOverride` — THE DECODE IS THE TRUTH FOR AN AUDIO FILE, NOT A SECOND OPINION (queue 96).
+       * `Math.max(own, override)` was written for the direction queue 72 had a file for: a VBR mp3 whose
+       * missing Xing header makes the browser UNDER-estimate (liar.mp3 claims 11.2s, is really 26.4s),
+       * where taking the larger is exactly right and a failed decode can never shorten a clip.
+       * 🚨 **THE OPPOSITE DIRECTION WAS NEVER TESTED, BECAUSE NOBODY HAD A FILE THAT DID IT** — the
+       * entry says so: *"the app cannot MAKE an mp3 to test with"*. One built by hand from raw MPEG-1
+       * Layer III frames does: Chrome accepts it, plays it, and reports **29.439s for a file that is
+       * really 10.449s**. MEASURED: the decoder answered **10.448875s in 15ms** — right, and fast — and
+       * `Math.max` threw it away. The clip was born **19 seconds longer than the sound in it**, and the
+       * project with it, so the tail is silence the user cannot explain and a playhead parked in it
+       * plays nothing. That is *"adding a song is really buggy and sometimes will not play at all"*.
+       * So: when the decode SUCCEEDS it wins outright, in either direction. When it returns nothing —
+       * it is bounded by a size ceiling and wrapped in a try/catch — the old rule applies unchanged, so
+       * the v12.36 guarantee that a clip can never be born with no length is untouched. */
+      const finish = (override, trustOverride) => {
         if (settled) return;
         settled = true;
         clearTimeout(metaTimer);
         const own = (isFinite(el.duration) && el.duration > 0) ? el.duration : 0;
+        const dec = (isFinite(override) && override > 0) ? override : 0;
         resolve({
           kind: 'video', el, url, file,
           width: el.videoWidth, height: el.videoHeight,
-          duration: Math.max(own, (isFinite(override) && override > 0) ? override : 0),
+          duration: (trustOverride && dec) ? dec : Math.max(own, dec),
         });
       };
       el.addEventListener('loadedmetadata', async () => {
@@ -128,8 +143,11 @@ window.FM = window.FM || {};
            *
            * Bounded three ways: only for audio, only under the waveform's own size ceiling, and inside
            * a try/catch that falls back to the container figure. Whichever is LARGER wins, so a decode
-           * that learns nothing can never SHORTEN a clip. */
-          finish(await FM._audioDurationFromDecode(file));
+           * that learns nothing can never SHORTEN a clip.
+           * ⚠️ AND THE DECODE NOW WINS IN BOTH DIRECTIONS — see the note on `finish`. Until v13.88
+           * this passed its answer into a Math.max, which is right for a file that under-claims and
+           * silently wrong for one that over-claims by 19 seconds. */
+          finish(await FM._audioDurationFromDecode(file), true);
         } else {
           finish();
         }
