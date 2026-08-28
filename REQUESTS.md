@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.92
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.93
 >
-> **State:** v13.92, 1038 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.93, 1038 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -44,6 +44,12 @@
 > thing only you can do: **export something short with sound on the PC, then drag the .mp4 into a
 > Chrome tab and press play.** Sound → the file is fine and your camera roll is dropping it. No sound
 > → it is the project or your browser, and the app will name the reason.
+>
+> **🎨 ONE LETTER FROM YOU CLOSES #98 — I have sent you a picture.** How big should text be when you
+> add it? **A** is what you have now, **B** is my recommendation, **C** is the biggest. Nothing is
+> changed until you say. Everything else in that entry turned out to be closed already: the two tick
+> buttons are Safari's own keyboard bar (your photo settled that), and the "225pt but tiny" complaint
+> was measured — the number and the picture agree.
 >
 > **🔇 AND I FOUND OUT WHY YOU NEVER SAW A "NO AUDIO" WARNING — THEY WERE BEHIND THE EXPORT SCREEN.**
 > The app has five separate warnings for a lost soundtrack, built over five rounds of chasing this. All
@@ -2866,6 +2872,25 @@ better still, keep working inside the turn rather than parking work for a later 
       new report with new evidence rather than this one.
 - [ ] **98 — Add Text could be better (phone screenshot at v6.60).** His words: *"add text could be
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ═══ 🎨 **28 AUG (v13.93) — THE OPTIONS ARE DRAWN AND SENT. This is the last thing in the entry.** ═══
+      **Everything else in #98 is closed:** (a)/(b) are iOS Safari's own keyboard accessory bar — settled
+      by his own photo on 27 Aug and not our DOM at all; (c)'s *"225pt renders tiny"* was measured and
+      **both the renderer and the pt readout are honest**; (d) shipped v8.53 (44px handles).
+      **What survived is a TASTE call, and it had only ever been described in WORDS.** The A/B/C options
+      were written into this file and never rendered — the same shape as #432 and #456, whose own rows
+      say they sat for weeks for exactly that reason. His standing rule (CLAUDE.md #545) is that a visual
+      is SHOWN as options before it ships.
+      📐 **`tests/_98size.html` renders the same 1080x1920 frame three times, at the size a phone judges
+      it:**
+      | | size | share of frame height |
+      |---|---|---|
+      | **A** | 160pt (`min(W,H)/6.75`) | 8.3% — what he has now |
+      | **B** | 216pt (`min(W,H)/5`) | 11.3% — **recommended** |
+      | **C** | 270pt (`min(W,H)/4`) | 14.1% |
+      ✅ **Sent to him as a picture, 28 Aug.**
+      🛑 **NOTHING WAS CHANGED.** `FM.defaultTextSize()` (js/scene.js) and `FM.addTextLayer` (js/app.js)
+      are untouched, deliberately: the entry's own measurement proves nothing is broken, so any edit
+      before he picks is a guess at his taste rather than a fix. **One letter closes this entry.**
       better."* From the screenshot: (a) TWO separate confirm buttons on screen at once — the blue ✓ in
       the top bar and another ✓ in the bar above the keyboard; (b) that second bar also carries ^ and v
       arrows and eats a row of space on an already-cramped phone; (c) the size says 225 pt but the

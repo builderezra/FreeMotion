@@ -1,0 +1,63 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#0b0e14;font:13px -apple-system,system-ui,sans-serif;color:#dfe7f5">
+<div id="o" style="padding:10px">rendering…</div>
+<div id="strip" style="display:flex;gap:14px;padding:0 10px 16px"></div>
+<iframe id="a" src="../index.html" style="width:1100px;height:820px;border:0;position:absolute;left:-4000px"></iframe>
+<script>
+/* QUEUE 98, clause (c) — the only thing left in that entry, and it is a TASTE call.
+ * Everything else in #98 is closed: (a)/(b) are iOS Safari's own keyboard bar (his own photo, 27 Aug),
+ * (d) shipped v8.53, and the "225pt renders tiny" measurement found the renderer and the pt readout
+ * both honest. What survives is whether the DEFAULT text size should be bigger — and he has been
+ * offered A/B/C in WORDS only. #432 and #456 both sat for weeks for exactly that reason, and his
+ * standing rule (CLAUDE.md #545) is that a visual is SHOWN as options before it ships.
+ * So: the same frame, three times, at the size it actually ships at. Nothing here changes the app. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').innerHTML = out.join('<br>'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.scene && w.FM.renderScene && w.FM.makeLayer)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait,50); }
+    setTimeout(run.bind(null,w), 1200);
+  })();
+});
+async function run(w){
+  try{
+    var FM = w.FM, d = w.document, P = FM.scene.project;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    var W = 1080, H = 1920;
+    P.width = W; P.height = H; P.duration = 4; P.background = '#101623';
+    var cur = FM.defaultTextSize ? FM.defaultTextSize() : Math.round(Math.min(W,H)/6.75);
+    say('project ' + W + '×' + H + ' — the app\'s current default is <b>' + cur + 'pt</b> (min(W,H)/6.75, ' +
+        (100*cur/H).toFixed(1) + '% of frame height)');
+
+    var OPTS = [
+      { k:'A', size: Math.round(Math.min(W,H)/6.75), note:'what you have now' },
+      { k:'B', size: Math.round(Math.min(W,H)/5),    note:'recommended' },
+      { k:'C', size: Math.round(Math.min(W,H)/4),    note:'biggest' },
+    ];
+    var strip = document.getElementById('strip');
+    for (var i=0;i<OPTS.length;i++){
+      var o = OPTS[i];
+      FM.scene.layers.length = 0;
+      var L = FM.makeLayer('text', { name:'Text', x: W/2, y: H/2, text:'Text', fontSize: o.size, fill:'#ffffff' });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers.push(L);
+      await new Promise(function(r){ setTimeout(r,300); });
+      var cv = d.createElement('canvas'); cv.width = W; cv.height = H;
+      FM.renderScene(cv.getContext('2d'), FM.scene, 1);
+      // shrink to the size it is actually judged at on his phone
+      var shot = document.createElement('canvas'); shot.width = 220; shot.height = Math.round(220*H/W);
+      shot.getContext('2d').drawImage(cv, 0, 0, shot.width, shot.height);
+      shot.style.cssText = 'border-radius:10px;border:1px solid #2a3550;display:block';
+      var cell = document.createElement('div');
+      var cap = document.createElement('div');
+      cap.style.cssText = 'padding:6px 2px;font-size:12px;line-height:1.5';
+      cap.innerHTML = '<b>' + o.k + '</b> — ' + o.size + 'pt · ' + (100*o.size/H).toFixed(1) + '% of height<br>' +
+                      '<span style="color:#8fa3c8">' + o.note + '</span>';
+      cell.appendChild(shot); cell.appendChild(cap);
+      strip.appendChild(cell);
+    }
+    say('Rendered at 1080×1920 and shown at the size a phone judges them.');
+  } catch(e){ say('threw: ' + (e && (e.stack||e.message||String(e)))); }
+  window.__done = true;
+}
+</script></body></html>
