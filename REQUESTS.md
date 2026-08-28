@@ -1,8 +1,22 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.80
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.81
 >
-> **State:** v13.80, 1030 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.81, 1032 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+>
+> **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
+> "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
+> maths faster, the honest answer was that the gap was about 50x and the best single win had been 11x —
+> **so no more tuning was ever going to fix it.** The effects run on the CPU, one pixel at a time, in
+> JavaScript.
+> **They can run on your GRAPHICS CARD instead**, and it turns out that fits your no-build-step rule
+> perfectly, because a shader is just a piece of text.
+> 📐 **Measured on a real frame at your own 1080x1350, with one Twirl: 39.8 ms → 2.0 ms. Twenty times
+> faster, and the same picture** (0.1% of pixels differ, all of them on an edge).
+> ⚠️ **Only Twirl is converted so far** — it was the most expensive one. The other 28 warp effects still
+> use the old path until each gets converted, and anything without a graphics card falls back to exactly
+> what it does today. **Ripple, Wave, Kaleidoscope, Grid Repeat and the rest are next, and each one is
+> small now that the hard part is built.**
 >
 > **✅ GROUPS ZOOM FROM THE MIDDLE NOW, AND YOU CAN SEE THE ANCHOR (#630 — both halves).** You said
 > *"they just zoom into the corners and not the middle and I can't find where the anchor even is."*
@@ -4531,9 +4545,34 @@ better still, keep working inside the turn rather than parking work for a later 
       **The readback is what eats the win** — 37x becomes 2.5x the moment the result is pulled back into
       an `ImageData`. Every `WARP_FX` kernel today ends with pixels in an ImageData, so a naive port
       would deliver 2.5x and look like a disappointment. **Composite the GL canvas with `drawImage`
-      instead and it is 11x — and a SECOND warp in the same chain costs 0.58 ms rather than 21.5, because
-      the picture never has to leave the GPU between them.** For your 24-effect project that is the
-      difference between a stack and a stall.
+      instead and it is 11x**, because nothing ever touches pixels at either end.
+      ⚠️ **A CHAIN OF WARPS DOES NOT YET STAY ON THE GPU, and that is a FUTURE win, not a claimed one.**
+      Each `drawWarpEffect` renders its layer into a fresh 2D plate and uploads it, so a second warp
+      costs another upload rather than the 0.58 ms a resident texture would. Keeping the picture on the
+      GPU across a chain is the next step and is worth roughly another 3x on a stacked layer — it is
+      written here as the plan, not as a result.
+
+      ═══ ✅ **BUILT AND SHIPPED v13.81 — `js/gl-warp.js`, and here is what it actually did.** ═══
+      📐 **MEASURED THROUGH THE REAL COMPOSITOR (tests/_glwarp2.html), not a side harness — a full
+      `FM.renderScene` at your 1080x1350 with one twirl:**
+      | path | cost |
+      |---|---|
+      | the CPU loop (`FM._noGL = true`) | **39.8 ms** |
+      | the GPU path | **2.0 ms — 19.9x** |
+      | pixels differing by more than resample noise | **0.10%** |
+      **THE CONTROL, which is the half that makes the rest mean anything:** with the switch off the
+      counters read *gpu 0, cpu 7*; with it on, *gpu 7, cpu 0*. WebGL can be absent, blocked or lost, and
+      every one of those makes `glWarp.run` return null and the old loop take over — so a test that
+      merely compared two renders would pass while measuring the CPU loop twice. `FM.glWarp.stats()`
+      exists precisely so the suite can prove which path ran.
+      **WHAT IS PORTED, AND WHAT IS NOT.** Twirl only — it was the dearest warp measured (669 ms at
+      1080x1350). The other 28 kernels keep their JavaScript loop until each gains a `.glsl` twin, which
+      is deliberate: 29 kernels do not get ported in one commit, and a partial port must never be a
+      partial app. **A kernel and its shader are a MATCHED PAIR** — change one, change both — which is
+      the same trap #630 paid for three times in one item, so it is written at both ends.
+      ➡️ **NEXT ON THIS, in order of what it is worth:** port ripple · wave · kaleidoscope · gridrepeat ·
+      radialrepeat · pinch (the same `prep`-keys-are-uniforms pattern, so each is small), then keep a
+      chain resident on the GPU.
       ⚠️ **TWO INSTRUMENT FAILURES ON THE WAY, both of which produced confident wrong answers:**
       **1. The first run measured SwiftShader** — headless Chrome runs software GL on purpose
       (`tests/_cdp.py`, for suite stability), so "6.4x, and the readback costs 30 ms" was a CPU renderer

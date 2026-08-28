@@ -1,0 +1,204 @@
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════════
+ * gl-warp.js — the WARP_FX family, on the GPU.
+ *
+ * WHY THIS EXISTS. The oldest open item in REQUESTS.md is "Editing lags, and gets bad fast", and after
+ * three months its own summary says the measurable half is finished and what remains is architectural:
+ * the cost is a per-pixel JavaScript loop, the gap to smooth is ~50x, and the best single kernel win in
+ * that whole time was 11x. **No amount of further kernel tuning closes it.**
+ *
+ * A fragment shader is a STRING. No build step, no bundler, no npm — which is the only reason this fits
+ * a project whose whole rule is vanilla files loaded with <script src>.
+ *
+ * 📐 MEASURED (tests/_glwarp.html) — one full-size twirl at Ezra's own 1080x1350, against the app's own
+ * kernel, on a real GPU:
+ *     the CPU kernel today        21.5 ms
+ *     GPU: upload + warp           0.58 ms    37x
+ *     GPU + blit onto a 2D canvas  1.92 ms    11x     ← what this module does
+ *     GPU + blit + getImageData    8.6  ms     2.5x   ← what a naive port would have delivered
+ * and the picture is the same: 0.38% of pixels differ, none by more than the sampling-grid rounding
+ * LOOP.md rule 14 says to expect from any resample.
+ *
+ * 🔑 THE THIRD ROW IS THE ENTIRE DESIGN. The readback is what eats the win. Every WARP_FX kernel today
+ * ends with its pixels in an ImageData, so the obvious port — run the shader, `getImageData`, carry on
+ * as before — would have delivered 2.5x and looked like a disappointment. **Nothing here ever reads
+ * pixels back.** The GL canvas is handed straight to `ctx.drawImage`, which is what the CPU path did
+ * with its 2D plate anyway, so the seam is the same shape and the fence is never hit.
+ *
+ * HOW A KERNEL OPTS IN. It gains a `.glsl` string — the body of a function mapping the destination
+ * point `xy` to the source point it reads from — and its existing `.prep` object becomes the uniforms,
+ * because `prep` already returns exactly the flat set of per-frame scalars a shader wants. A kernel
+ * with no `.glsl` is untouched and keeps its JavaScript loop. That is deliberate: 29 kernels do not get
+ * ported in one commit, and a partial port must never be a partial app.
+ *
+ * ⚠️ AND IT MUST BE ABLE TO NOT WORK. WebGL can be unavailable, blocked, or lost at any moment (a
+ * context loss is a normal event on a phone under memory pressure, not an error). Every entry point
+ * returns null rather than throwing, `drawWarpEffect` falls back to the loop that has always been
+ * there, and `FM.glWarp.stats()` says which path ran so the suite can prove the GPU one was actually
+ * taken rather than silently skipped — a green test against a permanent fallback would measure nothing.
+ * ═══════════════════════════════════════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  const FM = window.FM = window.FM || {};
+
+  const VS =
+    'attribute vec2 p; varying vec2 uv;' +
+    'void main(){ uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }';
+
+  let _cv = null, _gl = null, _tex = null, _quad = null, _dead = false;
+  const _progs = new Map();          // glsl body → { prog, u: {name → location} }
+  const _stats = { gpu: 0, cpu: 0, compiled: 0, lost: 0, reason: '' };
+
+  /* ONE canvas and ONE context for the whole app. A WebGL context is an expensive object and browsers
+     cap how many may exist at once (~16); allocating one per effect per layer would hit that ceiling on
+     a stacked project and start silently killing the OLDEST contexts, which is a bug that looks like
+     random effects going blank. */
+  function gl() {
+    if (_dead) return null;
+    if (_gl) return _gl;
+    try {
+      _cv = document.createElement('canvas');
+      /* alpha:true + premultipliedAlpha:false makes the whole path UN-premultiplied, which is what
+         `getImageData` gives and therefore what every kernel in compositor.js is written against.
+         Left at the default the source is un-premultiplied on upload and re-premultiplied on present,
+         so a semi-transparent edge comes back darker — visible exactly where a warp is most obvious.
+         preserveDrawingBuffer:true because the compositor blits the canvas in a LATER statement than
+         the draw; without it the browser is entitled to have cleared it, and the failure mode is an
+         effect that renders as nothing at all on some devices and fine on this one. */
+      _gl = _cv.getContext('webgl2', { alpha: true, premultipliedAlpha: false, preserveDrawingBuffer: true, antialias: false, depth: false, stencil: false })
+         || _cv.getContext('webgl',  { alpha: true, premultipliedAlpha: false, preserveDrawingBuffer: true, antialias: false, depth: false, stencil: false });
+      if (!_gl) { _dead = true; _stats.reason = 'no WebGL context'; return null; }
+      /* A LOST CONTEXT IS A NORMAL EVENT, not an error — a phone under memory pressure takes it back.
+         Everything is dropped and rebuilt on the next call rather than the app being left holding dead
+         GL objects, which throw on use and would take the whole render down with them. */
+      _cv.addEventListener('webglcontextlost', function (e) { e.preventDefault(); _stats.lost++; reset(); }, false);
+      _gl.pixelStorei(_gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      _gl.pixelStorei(_gl.UNPACK_FLIP_Y_WEBGL, false);   // texImage2D from a canvas puts row 0 at v=0
+      _tex = _gl.createTexture();
+      _gl.bindTexture(_gl.TEXTURE_2D, _tex);
+      _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_S, _gl.CLAMP_TO_EDGE);
+      _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_T, _gl.CLAMP_TO_EDGE);
+      // NEAREST, deliberately: the CPU loop truncates the mapped coordinate and reads that one texel.
+      // Bilinear here would be a *better* picture and a DIFFERENT one, and "the GPU path looks softer
+      // than the export" is not a trade to make silently.
+      _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MIN_FILTER, _gl.NEAREST);
+      _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MAG_FILTER, _gl.NEAREST);
+      _quad = _gl.createBuffer();
+      _gl.bindBuffer(_gl.ARRAY_BUFFER, _quad);
+      // One oversized triangle rather than two triangles: same covered area, no shared edge to seam.
+      _gl.bufferData(_gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), _gl.STATIC_DRAW);
+      return _gl;
+    } catch (e) { _dead = true; _stats.reason = String(e && e.message || e); return null; }
+  }
+
+  function reset() {
+    _gl = null; _cv = null; _tex = null; _quad = null; _progs.clear();
+  }
+
+  function shader(g, type, src) {
+    const s = g.createShader(type);
+    g.shaderSource(s, src);
+    g.compileShader(s);
+    if (!g.getShaderParameter(s, g.COMPILE_STATUS)) {
+      const log = g.getShaderInfoLog(s);
+      g.deleteShader(s);
+      throw new Error('warp shader: ' + log);
+    }
+    return s;
+  }
+
+  /* The wrapper every kernel body is dropped into. `uNames` become float uniforms, so a kernel's `prep`
+     object needs no schema — its own keys ARE the interface.
+     ⚠️ THE CLAMP REPRODUCES THE CPU LOOP EXACTLY, and it is not the obvious clamp. compositor.js does
+     `sx = m[0] | 0` (truncate) and then pins to [0, W-1], so the shader floors, pins to the same range
+     and samples the TEXEL CENTRE. Sampling at `s / res` instead would land on a texel boundary, where
+     NEAREST's tie-break is undefined and half the frame can shift by one pixel. */
+  function program(g, body, uNames) {
+    const key = uNames.join(',') + ' ' + body;
+    let p = _progs.get(key);
+    if (p) return p;
+    const decls = uNames.map(n => 'uniform float ' + n + ';').join('\n');
+    const fs = [
+      'precision highp float;',
+      'varying vec2 uv;',
+      'uniform sampler2D src;',
+      'uniform vec2 res;',
+      decls,
+      'vec2 fmWarp(vec2 xy){',
+      body,
+      '}',
+      'void main(){',
+      '  vec2 xy = vec2(uv.x * res.x, (1.0 - uv.y) * res.y);',
+      '  vec2 s = floor(fmWarp(xy));',
+      '  s = clamp(s, vec2(0.0), res - vec2(1.0));',
+      '  gl_FragColor = texture2D(src, (s + vec2(0.5)) / res);',
+      '}'
+    ].join('\n');
+    const prog = g.createProgram();
+    g.attachShader(prog, shader(g, g.VERTEX_SHADER, VS));
+    g.attachShader(prog, shader(g, g.FRAGMENT_SHADER, fs));
+    g.linkProgram(prog);
+    if (!g.getProgramParameter(prog, g.LINK_STATUS)) {
+      const log = g.getProgramInfoLog(prog);
+      g.deleteProgram(prog);
+      throw new Error('warp link: ' + log);
+    }
+    const u = { res: g.getUniformLocation(prog, 'res'), src: g.getUniformLocation(prog, 'src') };
+    uNames.forEach(n => { u[n] = g.getUniformLocation(prog, n); });
+    p = { prog: prog, u: u };
+    _progs.set(key, p);
+    _stats.compiled++;
+    return p;
+  }
+
+  /* Below this many pixels the CPU loop wins: a program bind, a texture upload and a draw all cost
+     something fixed, and a 120x120 effect thumbnail is mostly that fixed cost. 200x200 is where the
+     two crossed when measured; it is a floor, not a tuning knob. */
+  const MIN_PX = 40000;
+
+  FM.glWarp = {
+    /* srcCanvas → the warped picture, as a CANVAS ready for drawImage. Never an ImageData: the readback
+       is the thing that turns 11x into 2.5x, and no caller here needs pixels.
+       Returns null for every "cannot", and null means "use the loop you already have". */
+    run: function (srcCanvas, W, H, body, uniforms) {
+      if (FM._noGL) { _stats.cpu++; _stats.reason = 'disabled by FM._noGL'; return null; }
+      if (!body || !srcCanvas || !(W > 0) || !(H > 0)) { _stats.cpu++; return null; }
+      if (W * H < MIN_PX) { _stats.cpu++; _stats.reason = 'below the size floor'; return null; }
+      const g = gl();
+      if (!g) { _stats.cpu++; return null; }
+      try {
+        if (g.isContextLost && g.isContextLost()) { reset(); _stats.cpu++; _stats.reason = 'context lost'; return null; }
+        const names = [];
+        for (const k in uniforms) if (typeof uniforms[k] === 'number' && isFinite(uniforms[k])) names.push(k);
+        names.sort();   // stable, so the same kernel always hits the same cached program
+        const p = program(g, body, names);
+        if (_cv.width !== W || _cv.height !== H) { _cv.width = W; _cv.height = H; }
+        g.useProgram(p.prog);
+        g.bindBuffer(g.ARRAY_BUFFER, _quad);
+        const loc = g.getAttribLocation(p.prog, 'p');
+        g.enableVertexAttribArray(loc);
+        g.vertexAttribPointer(loc, 2, g.FLOAT, false, 0, 0);
+        g.activeTexture(g.TEXTURE0);
+        g.bindTexture(g.TEXTURE_2D, _tex);
+        g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, g.RGBA, g.UNSIGNED_BYTE, srcCanvas);
+        g.uniform1i(p.u.src, 0);
+        g.uniform2f(p.u.res, W, H);
+        for (let i = 0; i < names.length; i++) g.uniform1f(p.u[names[i]], uniforms[names[i]]);
+        g.viewport(0, 0, W, H);
+        g.drawArrays(g.TRIANGLES, 0, 3);
+        _stats.gpu++;
+        return _cv;
+      } catch (e) {
+        // One failure disables nothing permanently except a genuinely absent context — a bad kernel
+        // body should cost that kernel the GPU path, not the whole app.
+        _stats.cpu++; _stats.reason = String(e && e.message || e);
+        return null;
+      }
+    },
+    /* For the suite, and it is load-bearing: every assertion about the GPU path needs a control proving
+       the GPU path RAN. A test that passes because the code fell back to the CPU loop has measured the
+       CPU loop and said nothing at all about this file. */
+    stats: function () { return Object.assign({}, _stats); },
+    available: function () { return !FM._noGL && !!gl(); },
+    _reset: function () { reset(); _dead = false; _stats.gpu = 0; _stats.cpu = 0; _stats.compiled = 0; _stats.reason = ''; }
+  };
+})();

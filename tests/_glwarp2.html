@@ -1,0 +1,92 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:1100px;height:820px;border:0"></iframe>
+<script>
+/* THE GPU WARP PATH, WIRED IN — measured through the REAL compositor rather than a standalone harness.
+ * The first probe (_glwarp.html) proved a shader can do the twirl kernel 37x faster and get the same
+ * picture. That was my own loop against my own shader. This one asks the only question that matters
+ * now: does FM.renderScene get faster, and does it draw the same frame?
+ * FM._noGL is the switch — same scene, same time, same everything, one path each. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.scene && w.FM.renderScene && w.FM.fxRegistry)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait,50); }
+    setTimeout(run.bind(null,w), 1200);
+  })();
+});
+async function run(w){
+  try{
+    var FM = w.FM, d = w.document, P = FM.scene.project;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (!FM.glWarp) return say('❌ FM.glWarp is missing — the module did not load');
+    say('WebGL available to the app: ' + FM.glWarp.available() + '   ' + (FM.glWarp.stats().reason || ''));
+
+    var W = 1080, H = 1350;
+    P.width = W; P.height = H; P.duration = 6;
+    FM.scene.layers.length = 0;
+    var L = FM.makeLayer('shape', { shape:'rect', x: 540, y: 675, shapeW: 700, shapeH: 900, fill:'#4fd1ff' });
+    L.start = 0; L.duration = 6; L.effects = [];
+    var inst = FM.fxRegistry.makeInstance('twirl');
+    if (!inst) return say('❌ could not make a twirl instance — this probe would be timing a scene with no effect in it');
+    if (inst.params) inst.params.amount = 140;
+    L.effects.push(inst);
+    // a second shape so the warp has structure to move, not one flat block
+    var L2 = FM.makeLayer('shape', { shape:'rect', x: 380, y: 420, shapeW: 260, shapeH: 260, fill:'#ff9a4f' });
+    L2.start = 0; L2.duration = 6; L2.parent = null;
+    FM.scene.layers.push(L2, L);
+    await new Promise(function(r){ setTimeout(r,700); });
+
+    var cv = d.createElement('canvas'); cv.width = W; cv.height = H;
+    var cx = cv.getContext('2d', { willReadFrequently: true });
+    function shot(){ cx.clearRect(0,0,W,H); FM.renderScene(cx, FM.scene, 0.7); return cx.getImageData(0,0,W,H).data; }
+    function timed(){ var t0=performance.now(); cx.clearRect(0,0,W,H); FM.renderScene(cx, FM.scene, 0.7); return performance.now()-t0; }
+    function med(f, n){ var a=[]; for (var i=0;i<n;i++) a.push(f()); a.sort(function(x,y){return x-y;}); return a[a.length>>1]; }
+
+    FM._noGL = true;  FM.glWarp._reset(); timed();
+    var cpuShot = shot(); var cpuMs = med(timed, 5); var cpuStats = FM.glWarp.stats();
+    FM._noGL = false; FM.glWarp._reset(); timed();
+    var gpuShot = shot(); var gpuMs = med(timed, 5); var gpuStats = FM.glWarp.stats();
+
+    say('');
+    say('THE CONTROL FIRST — WHICH PATH ACTUALLY RAN:');
+    say('   with FM._noGL = true   → gpu ' + cpuStats.gpu + ', cpu ' + cpuStats.cpu + '   ' + (cpuStats.gpu === 0 ? '✅ CPU only' : '🚨 the switch does not switch'));
+    say('   with FM._noGL = false  → gpu ' + gpuStats.gpu + ', cpu ' + gpuStats.cpu + '   ' + (gpuStats.gpu > 0 ? '✅ the GPU path really ran' : '🚨 IT FELL BACK — everything below measures the CPU loop twice: ' + gpuStats.reason));
+    say('   programs compiled      : ' + gpuStats.compiled + '   context losses: ' + gpuStats.lost);
+
+    say('');
+    say('SPEED — a full renderScene at ' + W + 'x' + H + ' with one twirl:');
+    say('   CPU loop   ' + cpuMs.toFixed(1) + ' ms');
+    say('   GPU path   ' + gpuMs.toFixed(1) + ' ms   → ' + (cpuMs/gpuMs).toFixed(1) + 'x');
+
+    var diff=0, big=0, lit=0, worst=0;
+    for (var q=0;q<cpuShot.length;q+=4){
+      if (cpuShot[q+3]>4) lit++;
+      var e = Math.max(Math.abs(cpuShot[q]-gpuShot[q]), Math.abs(cpuShot[q+1]-gpuShot[q+1]),
+                       Math.abs(cpuShot[q+2]-gpuShot[q+2]), Math.abs(cpuShot[q+3]-gpuShot[q+3]));
+      if (e>0) diff++; if (e>24) big++; if (e>worst) worst=e;
+    }
+    say('');
+    say('SAME PICTURE?');
+    say('   differing at all  ' + diff + ' (' + (100*diff/(cpuShot.length/4)).toFixed(2) + '%)  of ' + lit + ' lit');
+    say('   differing > 24    ' + big + ' (' + (100*big/(cpuShot.length/4)).toFixed(2) + '%)   worst channel delta ' + worst);
+    say('   ' + (100*big/(cpuShot.length/4) < 1
+      ? '✅ the same frame — the remainder is resample-boundary noise (LOOP.md rule 14)'
+      : '🚨 the GPU draws a different picture'));
+
+    /* AND THE FALLBACK MUST STILL WORK, because it is what runs on any device without WebGL — and a
+       path nobody exercises is a path that rots. Proven by asking for a plate under the size floor. */
+    FM._noGL = false; FM.glWarp._reset();
+    P.width = 160; P.height = 160;
+    var sc = d.createElement('canvas'); sc.width = 160; sc.height = 160;
+    FM.renderScene(sc.getContext('2d'), FM.scene, 0.7);
+    var sm = FM.glWarp.stats();
+    say('');
+    say('THE FALLBACK, at 160x160 (under the size floor):  gpu ' + sm.gpu + ', cpu ' + sm.cpu +
+        '   ' + (sm.gpu === 0 && sm.cpu > 0 ? '✅ small plates still take the CPU loop' : 'ⓘ ' + sm.reason));
+    P.width = W; P.height = H;
+  } catch(e){ say('threw: ' + (e && (e.stack||e.message||String(e)))); }
+  window.__done = true;
+}
+</script></body></html>

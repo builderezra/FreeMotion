@@ -5823,8 +5823,6 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
       const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
       drawLayer(actx, tmp, t, scene);
-      const src = actx.getImageData(0, 0, W, H).data;
-      const bctx = wB.getContext('2d'), outImg = bctx.createImageData(W, H), o = outImg.data;
       const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy), pr = fx.params || {};
       /* OPT-IN PER-FRAME PRECOMPUTE (queue 474). A warp kernel is called once per pixel and gets no
        * chance to hoist anything out of that loop, so any term depending only on x, or only on y, is
@@ -5832,23 +5830,41 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        * runs ONCE here and is handed back to every call as the last argument. Kernels without one are
        * untouched — the extra argument is simply ignored by the other 28. */
       const pre = mapFn.prep ? mapFn.prep(W, H, cx, cy, maxR, pr, t, ps) : null;
-      for (let y = 0; y < H; y++) {
-        for (let x = 0; x < W; x++) {
-          const m = mapFn(x, y, W, H, cx, cy, maxR, pr, t, ps, pre);
-          let sx = m[0] | 0, sy = m[1] | 0;
-          if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
-          if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
-          const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
-          o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+      /* ═══ THE GPU PATH (the oldest open item, "Editing lags, and gets bad fast") ══════════════════
+       * That entry's own conclusion after three months: the cost is this loop, the gap is ~50x, and no
+       * further kernel tuning closes it. A kernel that carries a `.glsl` twin runs as a fragment shader
+       * instead — see js/gl-warp.js for the measurements and the design.
+       * 📐 One full-size twirl at 1080x1350: **21.5 ms → 1.92 ms, 11x**, same picture to 0.38% of pixels.
+       * ⚠️ THE `getImageData` BELOW IS INSIDE THE FALLBACK ON PURPOSE. It is the readback that turns 37x
+       * into 2.5x, and it costs the same whichever direction it runs in — so the GPU path must never
+       * touch pixels at either end. `glWarp.run` takes the plate CANVAS and hands back a CANVAS, which
+       * is exactly what the line at the bottom already wanted.
+       * Returns null for every "cannot" — no WebGL, a lost context, a kernel with no shader, a plate too
+       * small to be worth it — and null means the loop that has always been here. */
+      let warped = null;
+      if (mapFn.glsl && FM.glWarp) warped = FM.glWarp.run(wA, W, H, mapFn.glsl, pre || {});
+      if (!warped) {
+        const src = actx.getImageData(0, 0, W, H).data;
+        const bctx = wB.getContext('2d'), outImg = bctx.createImageData(W, H), o = outImg.data;
+        for (let y = 0; y < H; y++) {
+          for (let x = 0; x < W; x++) {
+            const m = mapFn(x, y, W, H, cx, cy, maxR, pr, t, ps, pre);
+            let sx = m[0] | 0, sy = m[1] | 0;
+            if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
+            if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+            const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
+            o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+          }
         }
+        bctx.putImageData(outImg, 0, 0);
+        warped = wB;
       }
-      bctx.putImageData(outImg, 0, 0);
       ctx.save();
       baseT(ctx);
       ctx.globalAlpha = opacity;
       ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
       ctx.filter = 'none';
-      ctx.drawImage(wB, OX, OY, PWp, PHp);   // plate → project units; identical to drawImage(wB,0,0) at scale 1
+      ctx.drawImage(warped, OX, OY, PWp, PHp);   // plate → project units; identical to drawImage(...,0,0) at scale 1
       ctx.restore();
     } finally { _wpDepth--; }
   }
@@ -7363,6 +7379,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     var ang = (FM.evalProp(p.amount, t) || 0) * Math.PI / 180;
     return { cx: tcx, cy: tcy, ang: ang, imaxR: 1 / tR };
   };
+  /* ═══ THE FIRST GLSL TWIN — twirl, because it was the dearest warp measured (669 ms at 1080x1350) ══
+   * ⚠️ THE SHADER AND THE JAVASCRIPT ABOVE IT ARE A MATCHED PAIR. Two expressions of one kernel, and
+   * #630 has just finished paying three times over for exactly this shape — change one, change both.
+   * The transcription is line-for-line rather than re-derived, which is the only reason that is safe.
+   * `prep`'s KEYS ARE THE UNIFORM NAMES: gl-warp.js uploads every finite number it returns, so a kernel
+   * needs no schema and the two cannot fall out of step over an argument order. */
+  WARP_FX.twirl.glsl = [
+    'vec2 dxy = xy - vec2(cx, cy);',
+    'float r = length(dxy);',
+    'float f = max(0.0, 1.0 - r * imaxR);',
+    'float d = ang * f * f;',
+    'float cD = cos(d), sD = sin(d);',
+    'return vec2(cx + dxy.x * cD - dxy.y * sD, cy + dxy.y * cD + dxy.x * sD);'
+  ].join('\n');
 
   WARP_FX.fractalwarp.prep = function (W, H, cx, cy, maxR, p, t, ps) {
     var fwK = ps || 1;

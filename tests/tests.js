@@ -44865,6 +44865,118 @@
     }
   });
 
+  /* ═══ THE GPU WARP PATH — the oldest open item's architectural half ════════════════════════════
+   * "Editing lags, and gets bad fast" concluded, after three months, that the cost is a per-pixel JS
+   * loop, the gap is ~50x, and no further kernel tuning closes it. js/gl-warp.js runs the WARP_FX
+   * family as a fragment shader instead. 📐 MEASURED through the real compositor (tests/_glwarp2.html)
+   * at 1080x1350 with one twirl: **39.8 ms → 2.0 ms, 19.9x**, 0.10% of pixels differing.
+   * ⚠️ THE CONTROL IS THE POINT OF THIS TEST. WebGL can be absent, blocked or lost, and gl-warp.js
+   * answers every one of those by returning null and letting the old loop run. So a test that merely
+   * compared two renders would pass perfectly while measuring the CPU loop twice and saying NOTHING
+   * about the shader. FM.glWarp.stats() exists so the test can prove which path ran. */
+  test('the GPU warp draws the same picture as the CPU loop', { item: 'lag-gl' }, async function () {
+    if (!FM.glWarp) throw new Error('FM.glWarp is missing — js/gl-warp.js did not load');
+    if (!FM.glWarp.available()) throw new Error('WebGL is not available to the suite, so the GPU warp path is UNTESTED: ' + FM.glWarp.stats().reason);
+    const P = FM.scene.project;
+    const saved = { layers: FM.scene.layers.slice(), w: P.width, h: P.height, dur: P.duration, noGL: FM._noGL };
+    try {
+      // Above gl-warp's size floor, or it legitimately refuses and the comparison is CPU vs CPU.
+      const W = 420, H = 420;
+      P.width = W; P.height = H; P.duration = 3;
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 210, y: 210, shapeW: 260, shapeH: 330, fill: '#4fd1ff' });
+      L.start = 0; L.duration = 3;
+      const inst = FM.fxRegistry.makeInstance('twirl');
+      if (!inst) throw new Error('could not make a twirl instance — this test would be comparing a scene with no effect in it');
+      if (inst.params) inst.params.amount = 140;
+      L.effects = [inst];
+      // a second, off-centre block so the warp has structure to move rather than one flat field
+      const L2 = FM.makeLayer('shape', { shape: 'rect', x: 140, y: 130, shapeW: 110, shapeH: 110, fill: '#ff9a4f' });
+      L2.start = 0; L2.duration = 3;
+      FM.scene.layers.push(L2, L);
+
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      const cx = cv.getContext('2d', { willReadFrequently: true });
+      const shot = () => { cx.clearRect(0, 0, W, H); FM.renderScene(cx, FM.scene, 0.5); return cx.getImageData(0, 0, W, H).data; };
+
+      FM._noGL = true; FM.glWarp._reset();
+      const cpu = shot();
+      const cpuStats = FM.glWarp.stats();
+      if (cpuStats.gpu !== 0) throw new Error('FM._noGL did not disable the GPU path (' + cpuStats.gpu + ' GPU passes) — the two sides of this comparison are not different paths');
+      if (!(cpuStats.cpu > 0)) throw new Error('the CPU side ran no warp at all — the fixture has no warp effect in it, so nothing below is measured');
+
+      FM._noGL = false; FM.glWarp._reset();
+      const gpu = shot();
+      const gpuStats = FM.glWarp.stats();
+      if (!(gpuStats.gpu > 0)) throw new Error('the GPU path did not run (' + gpuStats.reason + ') — this test would otherwise be comparing the CPU loop with itself and passing');
+
+      let lit = 0, big = 0, any = 0;
+      for (let i = 0; i < cpu.length; i += 4) {
+        if (cpu[i + 3] > 4) lit++;
+        const e = Math.max(Math.abs(cpu[i] - gpu[i]), Math.abs(cpu[i + 1] - gpu[i + 1]),
+                           Math.abs(cpu[i + 2] - gpu[i + 2]), Math.abs(cpu[i + 3] - gpu[i + 3]));
+        if (e > 0) any++;
+        if (e > 24) big++;
+      }
+      if (!(lit > 2000)) throw new Error('the fixture lit only ' + lit + ' pixels — it is not drawing anything, so an identical pair proves nothing');
+      /* A THRESHOLD, NEVER EQUALITY — LOOP.md rule 14. A resample that lands on the boundary between two
+         source pixels legitimately picks a different one on the GPU; the measured figure through the
+         real compositor was 0.10%, and Twirl's own CPU optimisation is already documented as moving ~4%
+         of pixels by one. 2% is a ceiling well under "a different picture" and well over the noise. */
+      const pct = 100 * big / (cpu.length / 4);
+      if (pct > 2) throw new Error('the GPU warp differs from the CPU loop on ' + pct.toFixed(2) + '% of pixels — that is a different picture, not resample noise');
+      /* …AND THE COMPARISON MUST NOT BE VACUOUS. If the two renders were byte-identical the likeliest
+         explanation is that the warp did nothing on both sides, not that the shader is perfect. */
+      if (any === 0 && !(gpuStats.gpu > 0 && cpuStats.cpu > 0)) throw new Error('the two renders are byte-identical AND the path counters disagree — something is not running');
+    } finally {
+      FM._noGL = saved.noGL;
+      FM.glWarp._reset();
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l));
+      P.width = saved.w; P.height = saved.h; P.duration = saved.dur;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
+  /* THE FALLBACK IS NOT DECORATION — it is what runs on every device without WebGL, and a path nobody
+   * exercises is a path that rots. gl-warp.js returns null for each "cannot" and the compositor must
+   * take its old loop every time, silently and correctly. */
+  test('a warp falls back to the CPU loop whenever the GPU cannot take it', { item: 'lag-gl' }, async function () {
+    if (!FM.glWarp) throw new Error('FM.glWarp is missing');
+    const P = FM.scene.project;
+    const saved = { layers: FM.scene.layers.slice(), w: P.width, h: P.height, dur: P.duration, noGL: FM._noGL };
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 80, shapeW: 100, shapeH: 100, fill: '#4fd1ff' });
+      L.start = 0; L.duration = 3;
+      const inst = FM.fxRegistry.makeInstance('twirl');
+      if (!inst) throw new Error('could not make a twirl instance');
+      L.effects = [inst];
+      FM.scene.layers.push(L);
+
+      // 1. UNDER THE SIZE FLOOR: a program bind, an upload and a draw all cost something fixed, and an
+      //    effect thumbnail is mostly that fixed cost. Small plates must stay on the CPU.
+      P.width = 160; P.height = 160; P.duration = 3;
+      FM._noGL = false; FM.glWarp._reset();
+      const small = document.createElement('canvas'); small.width = 160; small.height = 160;
+      FM.renderScene(small.getContext('2d'), FM.scene, 0.5);
+      const st1 = FM.glWarp.stats();
+      if (!(st1.cpu > 0)) throw new Error('a 160x160 plate ran no CPU warp — the fixture is not reaching drawWarpEffect at all');
+      if (st1.gpu !== 0) throw new Error('a 160x160 plate went to the GPU (' + st1.gpu + ') — below the floor the fixed cost is most of the work');
+
+      // 2. …and the picture still comes out. A fallback that returns to a broken loop is worse than none.
+      const px = small.getContext('2d').getImageData(0, 0, 160, 160).data;
+      let lit = 0;
+      for (let i = 3; i < px.length; i += 4) if (px[i] > 4) lit++;
+      if (!(lit > 200)) throw new Error('the CPU fallback drew almost nothing (' + lit + ' lit pixels)');
+    } finally {
+      FM._noGL = saved.noGL;
+      FM.glWarp._reset();
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l));
+      P.width = saved.w; P.height = saved.h; P.duration = saved.dur;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   /* Queue 343 clause 4 — sharing templates, in the shape Ezra chose.
    * He asked for links first, which would have needed a server and broken the app's local-only premise
    * outright. Told that, he picked the other option himself, verbatim: *"maybe not links then and
