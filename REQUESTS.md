@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.86
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.87
 >
-> **State:** v13.86, 1032 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.87, 1032 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -19,8 +19,12 @@
 > Kaleidoscope is **49.5×**.
 > ⚠️ **Eighteen of twenty-one warp effects so far**, and the last three are stopping deliberately — they carry number-scrambling maths the graphics-card language cannot express directly, and getting them subtly wrong is worse than leaving them fast-enough. They still use the old path,
 > and anything without a graphics card falls back to exactly what it does today — nothing can break.
-> **And stacking is measured now, which was the whole point:** five effects on one layer used to cost
-> **285.6 ms a frame** and now cost **23.6 ms** — it was four frames behind, it is now inside the budget.
+> **And here is the number that actually answers your complaint, measured at PHONE speed** (the same
+> browser, the same machine, one switch — so nothing else can be taking the credit):
+> **a project like yours went from 3.8 frames a second to 24.4.** Worst frame 380 ms → 67 ms.
+> At desktop speed it is 14.9 → 60.3 fps, which is the screen's own limit.
+> **The "timeline is laggy" part was never the timeline** — a timeline rebuild costs 3.7 ms even on a
+> throttled phone. It was always the picture, and the picture is now eight times cheaper to draw.
 >
 > **✅ GROUPS ZOOM FROM THE MIDDLE NOW, AND YOU CAN SEE THE ANCHOR (#630 — both halves).** You said
 > *"they just zoom into the corners and not the middle and I can't find where the anchor even is."*
@@ -3079,6 +3083,31 @@ better still, keep working inside the turn rather than parking work for a later 
       ⚠️ **What that does NOT settle:** a throttled desktop is not his phone. It rules out algorithmic
       blow-up; it cannot rule out something specific to iOS Safari. **So this stays open on the same
       question — but the in-app prompt (v11.83, below) is now the only thing that can close it.**
+
+      ═══ ✅ **28 AUG (v13.87) — RE-MEASURED AT PHONE SPEED WITH THE GPU WARP PATH LIVE, AND IT IS THE
+      BIGGEST CHANGE THIS ENTRY HAS EVER RECORDED.** ═══
+      📐 **`tools/_phoneprobe.py`, six layers carrying a representative stack (blur · saturate+contrast ·
+      glow+twirl · vignette+ripple · kaleidoscope), one switch (`FM._noGL`), same browser, same machine:**
+      | CPU | renderScene (JS) | renderScene (GPU) | fps (JS → GPU) | worst frame |
+      |---|---|---|---|---|
+      | 1x | 234.6 ms | **30.3 ms** | **14.9 → 60.3** | 120 → 18.8 ms |
+      | 4x | 857.3 ms | **108.2 ms** | **5.4 → 35.0** | 278.6 → 40.3 ms |
+      | **6x (a phone)** | **1290.3 ms** | **159.5 ms** | **3.8 → 24.4** | 380.8 → 66.6 ms |
+      **At phone speed the same project went from 3.8 fps to 24.4 fps.** Every path still scales at or
+      below linear with the CPU (0.46–1.05), so there is still no cliff.
+      ⚠️ **TWO THINGS ABOUT THIS MEASUREMENT THAT ARE THE POINT, not footnotes:**
+      **1. THE OLD FIXTURE COULD NOT HAVE SEEN ANY OF IT.** It carried blur, saturate, contrast, glow and
+      vignette — **every one a POST effect, not one of them a warp** — so it was structurally incapable of
+      measuring the thing that changed. It now carries three warps, because a phone-speed probe has to do
+      the work the phone actually does.
+      **2. THE COMPARISON IS INTERNAL ON PURPOSE.** The first re-run compared today against the 27 Aug
+      baseline and showed fps up ~50%, which was tempting and wrong: **that baseline was taken on
+      SwiftShader, a SOFTWARE renderer**, and today's run is on a real GPU. A before/after across those
+      two measures the renderer and calls it the app. One switch in one browser cannot be confounded
+      that way, and the probe now does it that way every run.
+      ➡️ **WHAT THIS MEANS FOR YOUR REPORT:** the *"timeline is laggy"* half was never the timeline —
+      a rebuild costs 3.7 ms even at 6x. It was the picture, and the picture is now eight times cheaper.
+      ❓ **Still open on the same question, which only you can answer: does it feel better on your phone?**
 
       **v11.83 — SO THE APP NOW ASKS YOU FOR THAT NUMBER, instead of waiting for it.**
       Four entries — this one, 125, 202 and the original unnumbered "editing lags" — have all ended on

@@ -47,7 +47,13 @@ SETUP = r"""
   // and reported 0.00 ms at every throttle, which reads as "the compositor is free on a phone" and
   // is the exact false reassurance this repo keeps getting burned by.  makeInstance() cannot be
   // wrong about its own shape.
-  const WANT = [['blur'], ['saturate', 'contrast'], ['glow'], ['vignette'], [], []];
+  /* ⚠️ THE FIXTURE HAD NO WARP IN IT, AND THAT MATTERED (28 Aug). blur/saturate/contrast/glow/vignette
+     are all POST effects; not one of them goes through drawWarpEffect. So when eighteen warp kernels
+     moved onto the GPU, this probe was structurally incapable of seeing it — and its numbers still
+     moved, which invited exactly the wrong conclusion. (They moved because the 27 Aug baseline was
+     taken on SwiftShader, a SOFTWARE renderer; comparing it with a real-GPU run measures the renderer,
+     not the app.) A phone-speed probe has to carry the work the phone actually does. */
+  const WANT = [['blur'], ['saturate', 'contrast'], ['glow', 'twirl'], ['vignette', 'ripple'], ['kaleidoscope'], []];
   let made = 0;
   ls.forEach((L, i) => {
     L.effects = (WANT[i] || []).map(id => {
@@ -299,22 +305,39 @@ def main():
             cdp.send("Emulation.setCPUThrottlingRate", rate=rate)
             time.sleep(0.3)
             raw = cdp.eval(MEASURE, await_promise=True)
+            d = json.loads(raw); d["rate"] = rate; d["layers"] = n; d["gl"] = True
+            # ⚠️ THE COMPARISON IS INTERNAL, against the SAME browser on the SAME machine with the GPU
+            # path switched off — never against a number recorded on another day. The 27 Aug baseline in
+            # REQUESTS was taken with SwiftShader (a software renderer) and this run is on a real GPU, so
+            # a before/after across those two would be measuring the renderer and calling it the app.
+            cdp.eval("FM._noGL = true; FM.glWarp && FM.glWarp._reset(); 1")
+            time.sleep(0.2)
+            raw2 = cdp.eval(MEASURE, await_promise=True)
+            cdp.eval("FM._noGL = false; FM.glWarp && FM.glWarp._reset(); 1")
+            d2 = json.loads(raw2); d2["rate"] = rate; d2["layers"] = n; d2["gl"] = False
             cdp.send("Emulation.setCPUThrottlingRate", rate=1)
-            d = json.loads(raw); d["rate"] = rate; d["layers"] = n
-            rows.append(d)
-            print(f"  {rate}x  {json.dumps(d)}", flush=True)
+            rows.append(d); rows.append(d2)
+            print(f"  {rate}x  GPU {json.dumps(d)}", flush=True)
+            print(f"  {rate}x  CPU {json.dumps(d2)}", flush=True)
     finally:
         if cdp: cdp.close()
         proc.terminate()
 
-    base = rows[0]
-    print("\n| CPU | renderScene | tap→inspector | timeline | scrub | fps | worst frame |")
-    print("|---|---|---|---|---|---|---|")
+    gpu = [r for r in rows if r.get("gl")]
+    cpu = [r for r in rows if not r.get("gl")]
+    base = gpu[0]
+    print("\n| CPU | warps | renderScene | tap→inspector | timeline | scrub | fps | worst frame |")
+    print("|---|---|---|---|---|---|---|---|")
     for r in rows:
-        print(f"| {r['rate']}x | {r['renderScene']} ms | {r['tapInspector']} ms | "
+        print(f"| {r['rate']}x | {'GPU' if r.get('gl') else 'JS '} | {r['renderScene']} ms | {r['tapInspector']} ms | "
               f"{r['timelineRebuild']} ms | {r.get('scrub')} ms | {r['fps']} | {r['worstFrameMs']} ms |")
+    print("\nwhat the GPU warp path is worth AT PHONE SPEED (same browser, same machine, one switch):")
+    for g, c in zip(gpu, cpu):
+        rs = c["renderScene"] / (g["renderScene"] or 0.01)
+        print(f"  {g['rate']}x  renderScene {c['renderScene']} → {g['renderScene']} ms ({rs:.1f}x)   "
+              f"fps {c['fps']} → {g['fps']}   worst frame {c['worstFrameMs']} → {g['worstFrameMs']} ms")
     print("\nscaling vs the throttle (1.0 = exactly as slow as the CPU is; >1.3 = worse than linear):")
-    for r in rows[1:]:
+    for r in gpu[1:]:
         for k in ("renderScene", "tapInspector", "timelineRebuild", "scrub"):
             b = base[k] or 0.01
             print(f"  {r['rate']}x {k}: {r[k]/b/r['rate']:.2f}x")
