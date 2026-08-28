@@ -1708,6 +1708,13 @@ window.FM = window.FM || {};
             // is the same click as pausing on one, and this is the path a loop takes every lap. (#148)
             try { m.el.volume = 0; } catch (e) {}
             m._resumedAt = now;
+            /* THE SOUND STOPPED AND WE ARE STARTING IT AGAIN. This branch runs both when the playhead
+               ENTERS a clip (ordinary) and when an element that was already playing has stopped on
+               its own (a fault, and on iOS the likeliest shape of "it cuts in and out"). The watcher
+               tells the two apart itself from what it can see — see noteRestart — rather than being
+               told, because the transport pauses elements in four different places and a flag that
+               all four must remember to set is a safeguard held shut by remembering. */
+            if (FM.audioHealth) FM.audioHealth.noteRestart(m, now, local);
             m.el.currentTime = local; m._syncAt = now; m.el.play().catch(() => {});   // re-entered the window → resume
           }
           else {
@@ -1806,6 +1813,13 @@ window.FM = window.FM || {};
             m.el.volume = Math.max(0, Math.min(1, vol));
             if (vol > 1 && FM.audioFxLive && FM.audioFxLive.setBoost) FM.audioFxLive.setBoost(layer, vol);
           }
+          /* DID IT ACTUALLY MAKE A SOUND? (queues 95, 96, 663 — all three end on "this needs a number
+             from HIS phone".) Everything above measures how well the sound is SYNCHRONISED; nothing
+             measured whether it was playing at all. A stalled element leaves no trace in any counter
+             here — no seek, no trim, no dropped frame — and "it cuts in and out" is what that sounds
+             like. js/audio-health.js does the judging; this line only reports the app's own view of
+             whether this element ought to be audible right now. */
+          if (FM.audioHealth) FM.audioHealth.note(m, now, !m.el.muted && vol > 0);
         } catch (e) {}
       }
     });
@@ -1996,6 +2010,9 @@ window.FM = window.FM || {};
       const m = FM.media.get(layer.id);
       if (m && m.el && m.el.pause) { try { m.el.pause(); m.el.muted = true; } catch (e) {} }
     });
+    // Written on STOP, never per frame: a localStorage write inside the tick would be the very
+    // main-thread stall this is here to detect.
+    if (FM.audioHealth) FM.audioHealth.save();
     document.getElementById('btn-play').innerHTML = '<svg viewBox="0 0 24 24" class="tco" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg>';   // play icon
     document.body.classList.remove('fm-playing');
     // Stopped = you're looking at a frame, so put every pixel back. This is the visible "it sharpens

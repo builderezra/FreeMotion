@@ -1,8 +1,20 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.12
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.13
 >
-> **State:** v14.12, 1056 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.13, 1060 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+>
+> **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
+> complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
+> end on the same line: *this needs a number from your phone.* I have measured everything measurable
+> on this Mac, including at a sixth of its speed, and none of it does what you describe.
+> **So the app now watches it.** Play something with sound on your phone until it misbehaves, press
+> stop, then go to **Settings → "Your last playback" → Copy** and paste that to me. It records whether
+> the sound actually kept playing, how many times it stopped, and what the app saw when it did.
+> ⚠️ **And I nearly gave you a broken instrument.** The first version counted every ordinary clip
+> ending as "something stopped my audio" — it would have shown you a screenful of faults on a
+> perfectly healthy project and sent me chasing a bug that did not exist. A review caught it before it
+> reached you. It now works out for itself whether a stop was normal, instead of being told.
 >
 > **⚡ AND v14.12 FINISHED IT — STACKING EFFECTS IS THE PART THAT WAS STILL SLOW, AND IT IS 35x NOW.**
 > Everything below was measured with ONE effect. Your real projects stack them, and until today each
@@ -3191,6 +3203,13 @@ better still, keep working inside the turn rather than parking work for a later 
         is what you do when you drag into the second half of a song and hit play. Nothing covered it.
         It asserts the element is neither muted NOR left paused, and mutation-checked both ways: deleting
         the `play()` call on that branch is caught by this test ALONE.
+      ═══ ✅ **29 AUG (v14.13) — THE MEASUREMENT THIS HAS BEEN WAITING FOR IS BUILT.** ═══
+      `js/audio-health.js` records whether a sound that was supposed to be playing actually advanced,
+      and writes it to **Settings → "Your last playback"** with a Copy button. **Full write-up lives in
+      #95**, which is the oldest of the three complaints and where the work is logged.
+      ➡️ **15 seconds from you closes this:** play it on your phone until the sound misbehaves, press
+      stop, then Settings → Your last playback → Copy, and paste it to me.
+
 - [ ] **95 — Phone: timeline still laggy AND audio does not play smoothly (tested with a voice memo).**
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words: *"Timeline on my phone is still really laggy and the audios don't play smoothly, I just
@@ -3357,6 +3376,58 @@ better still, keep working inside the turn rather than parking work for a later 
       control that healthy playback never offers.
       *(That is the third time this shape has bitten: queue 148's counter, 478's resize listener, this.
       Testing the repair is not testing the wiring.)*
+      ═══ ✅ **29 AUG (v14.13) — THE APP NOW MEASURES WHETHER THE SOUND ACTUALLY KEPT PLAYING.** ═══
+      **This entry, #96 and #663 all end on the same sentence — "what this half needs is a number from
+      HIS phone, not another pass here" — and have done for weeks.** Everything measurable has been
+      measured on this Mac at 4x and 6x CPU throttle and none of it reproduces what he describes. A
+      throttled desktop rules out algorithmic blow-up; it cannot rule out iOS Safari stopping a sound.
+      🔑 **AND THE APP ALREADY KNEW MOST OF IT AND HAD NO WAY TO SAY SO.** `FM.playbackStats` has
+      counted syncs, seeks, trims, rate-writes and dropped frames for months, **with no reader outside
+      the test suite** — the same shape as #215/#662 (five correct "no audio" warnings, every one of
+      them painted behind a dimmed overlay) and the same shape as the lag reports, which only ever
+      moved once there was something he could paste.
+      **`js/audio-health.js` adds the one thing none of those counters could see:** whether an element
+      that was SUPPOSED to be making sound actually advanced. A stall leaves no trace anywhere else —
+      no seek, no trim, no dropped frame, no hole in the waveform — and "it cuts in and out" is exactly
+      what a stall sounds like. It lands in **Settings → "Your last playback"** with a Copy button,
+      beside "Your last export", and it says: how long played, how many times the sound CUT OUT and for
+      how long, how many times it had to be RESTARTED, which element events fired, the sync counters,
+      the clock source, whether drawing is on the GPU, and the device string.
+      🚨 **AND THE FIRST VERSION OF IT WAS WRONG IN THE WORST POSSIBLE WAY — caught by review before it
+      ever reached him, and worth recording in full.** It counted the media element's own `pause` event
+      and told a system pause from a deliberate one with a FLAG the transport set before pausing.
+      **The transport pauses elements in FOUR places** — `FM.pause`, the frame-cache guard, the
+      reversed-clip silencer and the ordinary clip-exit — **and only one of them set the flag.** So
+      every clip ending and every loop lap would have been logged as "a pause nobody asked for", which
+      is precisely the iOS signature the instrument exists to detect. **It would have manufactured
+      evidence of its own subject** and sent the next session hunting a bug the app invented.
+      ✅ **The fix is not to set the flag in the other three places** — that is a safeguard held shut by
+      remembering, which this project's own rules say to remove rather than extend. A restart is judged
+      from **state the watcher can see for itself**: it counts only when the element was audible moments
+      ago AND was already sitting within a quarter-second of where it belonged — i.e. it stopped on its
+      own. Entering a clip, a seek and a loop wrap all fail one of those two and are silent. Four cases
+      are pinned by a test, including the exact false alarm above.
+      🔒 **AND A TEST PROVES THE TRANSPORT IS ACTUALLY CALLING IT** — mutation-checked. Both other tests
+      drive the watcher directly, so they would pass in full while the tick reported nothing and the
+      instrument sat permanently silent on his phone. **That test failed on its first run for a real
+      reason:** v7.33 makes the transport HOLD for up to 400ms waiting for sound to genuinely begin, so
+      a stub element whose time never moved never reached the sync loop at all.
+      ➡️ **WHAT I NEED FROM YOU, and it is 15 seconds:** play something with sound on your phone until
+      it does the cutting-out thing, press stop, then **Settings → Your last playback → Copy** and paste
+      it to me. That single block of text is what these three entries have been waiting weeks for.
+
+      🔬 **29 AUG — AND A WIDE READ OF THE AUDIO PATH FIRST, so the same ground is not covered again.**
+      Five independent passes over the transport clock, the media-element lifecycle, iOS-Safari
+      specifics, main-thread blocking and clip boundaries produced **34 candidate causes; 33 did not
+      survive** being checked against the code. The one that did was a defect in the brand-new
+      instrument itself (above), not in playback. Recorded so it is not re-hunted: the pooling angle
+      came back clean (one creation site, never re-pointed while playing, release detaches properly),
+      the clock arithmetic came back clean, and the strongest-looking hypotheses — a swallowed
+      `play()` retried every frame, the de-click leaving a hole of silence, the start-wait holding
+      volume at zero — were each refuted with the surrounding code quoted. **That is a session saved,
+      not a session wasted**, and it is exactly why the measurement above is the next step rather than
+      another hypothesis.
+
 - [x] **94 — Film grain in the menu is too jumpy and too obvious.** **DONE v6.62.** His words: *"The film grain in the
       menu is too jumpy and too noticeable, need to make it move smoothly and less noticeable."* Two
       separate dials: AMPLITUDE (how visible each grain is) and TEMPORAL BEHAVIOUR (how it changes frame
@@ -26038,6 +26109,13 @@ re-opened #480, which I had marked done and had not fixed.
       ➡️ **WHAT WOULD ACTUALLY ANSWER #663 is the audio half of the "what's slow" readout FROM HIS
       PHONE** — rate writes per second, seeks, and sync error. His PC sample reads 0 rate writes and
       0 seeks, i.e. perfectly healthy, and that is the device that works.
+
+      ═══ ✅ **29 AUG (v14.13) — THE MEASUREMENT THIS HAS BEEN WAITING FOR IS BUILT.** ═══
+      `js/audio-health.js` records whether a sound that was supposed to be playing actually advanced,
+      and writes it to **Settings → "Your last playback"** with a Copy button. **Full write-up lives in
+      #95**, which is the oldest of the three complaints and where the work is logged.
+      ➡️ **15 seconds from you closes this:** play it on your phone until the sound misbehaves, press
+      stop, then Settings → Your last playback → Copy, and paste it to me.
 
 - [x] **664 — Line height and Curve should BE effects, and add more text effects.** (28 Aug — answering
       #602's standing offer, and the answer is the opposite of what was offered.)

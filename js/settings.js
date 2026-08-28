@@ -496,6 +496,41 @@ window.FM = window.FM || {};
       expBtns.append(expCopy);
       expWrap.append(expHead, expBtns, expOut);
       body.appendChild(group(expWrap));
+
+      /* ═══ "YOUR LAST PLAYBACK" — the number three entries have been waiting weeks for ═══════════
+       * #95 ("the audios don't play smoothly"), #96 ("adding a SONG… sometimes will not play at all")
+       * and #663 ("audio still doesn't play consistently on mobile, it cuts in and out") all end on
+       * the same sentence: this needs a measurement from HIS phone. Everything measurable has been
+       * measured here, at 4x and 6x CPU throttle, and none of it reproduces what he describes.
+       * js/audio-health.js watches whether an element that should be making sound actually advanced
+       * — a stall that leaves no trace in any existing counter — and this is where he reads it.
+       * Same shape as "Your last export" directly above, for the same reason: a toast he might miss
+       * is not a report, and these three entries have already proved that a number nobody can reach
+       * is a number that changes nothing. */
+      const audWrap = el('div', 'set-row set-perf');
+      const audOut = el('pre', 'set-perf-out');
+      let audText = '';
+      try { audText = localStorage.getItem('fm.lastAudioReport') || ''; } catch (e) {}
+      audOut.textContent = audText || 'Nothing yet \u2014 play something with sound in it, press stop, then come back here.';
+      const audCopy = el('button', 'set-action', 'Copy'); audCopy.type = 'button'; audCopy.disabled = !audText;
+      audCopy.addEventListener('click', async () => {
+        const text = audOut.textContent;
+        try { await navigator.clipboard.writeText(text); if (FM.toast) FM.toast('Copied \u2014 paste it to me', 3000); }
+        catch (e) {
+          try {
+            const r = document.createRange(); r.selectNodeContents(audOut);
+            const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+            if (FM.toast) FM.toast('Selected \u2014 use Copy from the menu', 3000);
+          } catch (e2) {}
+        }
+      });
+      const audHead = el('div', 'set-rowtext');
+      audHead.appendChild(el('div', 'set-label', 'Your last playback'));
+      audHead.appendChild(el('div', 'set-hint', 'Whether the sound actually kept playing, and what the app saw when it did not. If audio cuts in and out on your phone, play it, press stop, then send me this.'));
+      const audBtns = el('div', 'set-perf-btns');
+      audBtns.append(audCopy);
+      audWrap.append(audHead, audBtns, audOut);
+      body.appendChild(group(audWrap));
     }
 
     const foot = el('div', 'set-foot');

@@ -45103,6 +45103,196 @@
     }
   });
 
+  /* ═══ DID THE SOUND ACTUALLY KEEP PLAYING? (queues 95, 96, 663) ═══════════════════════════════
+   * Ezra, on his phone: "audio still doesn't play consistently on mobile, it cuts in and out".
+   * All three of those entries end on the same sentence — this needs a number from HIS device — and
+   * have done for weeks, because nothing in the app measured whether an element that was supposed to
+   * be making sound actually advanced. Every existing counter measures how well the sound is
+   * SYNCHRONISED; a stall leaves no trace in any of them.
+   * These tests pin the judging, because a watcher that cried wolf would be worse than none: a report
+   * full of false alarms is a report he stops reading, and this is the only instrument those entries
+   * have. */
+  test('the audio watcher counts a sound that stopped advancing, and ignores one that did not', { item: '663' }, async function () {
+    if (!FM.audioHealth) throw new Error('FM.audioHealth is missing — js/audio-health.js did not load');
+    const fakeEl = over => Object.assign({
+      currentTime: 0, paused: false, muted: false, volume: 1, playbackRate: 1,
+      play() { this.paused = false; return Promise.resolve(); },
+      pause() { this.paused = true; },
+      addEventListener() {}, removeEventListener() {}
+    }, over || {});
+
+    // ── a sound that STOPPED: 250ms of wall clock, no progress at all ──
+    FM.audioHealth.reset();
+    const dead = { layerId: 'dead', el: fakeEl() };
+    FM.audioHealth.note(dead, 1000, true);          // first call only seeds the baseline
+    FM.audioHealth.note(dead, 1250, true);          // currentTime still 0
+    let st = FM._audioHealth;
+    if (st.stalls !== 1) throw new Error('a sounding element that did not advance for 250ms was not counted as a cut-out (stalls=' + st.stalls + ') — this is the only thing the watcher exists to catch');
+    if (!(st.worstStallMs >= 250)) throw new Error('the worst cut-out was recorded as ' + st.worstStallMs + 'ms, expected at least 250');
+
+    // ── a sound that is FINE: it advanced by roughly the elapsed time ──
+    FM.audioHealth.reset();
+    const ok = { layerId: 'ok', el: fakeEl() };
+    FM.audioHealth.note(ok, 1000, true);
+    ok.el.currentTime = 0.25;
+    FM.audioHealth.note(ok, 1250, true);
+    if (FM._audioHealth.stalls !== 0) throw new Error('a healthy element was reported as cutting out — a watcher that cries wolf is worse than no watcher');
+    if (!(FM._audioHealth.soundingMs >= 250)) throw new Error('healthy playback did not count toward the sounding total');
+
+    /* ── AND IT MUST NOT ACCUSE A SOUND THAT WAS NEVER MEANT TO BE HEARD. A muted element, a layer at
+       zero volume and a paused one all fail to advance BY DESIGN. Counting those would fill the
+       report with cut-outs on every project that has a muted layer in it. */
+    for (const [why, over, sounding] of [['muted', { muted: true }, true],
+                                         ['at zero volume', { volume: 0 }, true],
+                                         ['paused', { paused: true }, true],
+                                         ['not meant to sound', {}, false]]) {
+      FM.audioHealth.reset();
+      const q = { layerId: 'q', el: fakeEl(over) };
+      FM.audioHealth.note(q, 1000, sounding);
+      FM.audioHealth.note(q, 1250, sounding);
+      if (FM._audioHealth.stalls !== 0) throw new Error('an element ' + why + ' was reported as a cut-out — it is not supposed to be advancing');
+    }
+
+    /* ── AND JITTER IS NOT A CUT-OUT. Two ticks 20ms apart tell you nothing: ordinary frame timing,
+       an element's own block size and the output latency all live at that scale. Judging on such a
+       window would report a cut-out several times a second on a perfectly healthy clip. */
+    FM.audioHealth.reset();
+    const jit = { layerId: 'jit', el: fakeEl() };
+    FM.audioHealth.note(jit, 1000, true);
+    FM.audioHealth.note(jit, 1020, true);           // 20ms, no progress — below the judging window
+    if (FM._audioHealth.stalls !== 0) throw new Error('a 20ms gap was called a cut-out — ordinary frame jitter would fill the report');
+    FM.audioHealth.reset();
+  });
+
+  /* ⚠️ AND IT MUST NOT ACCUSE THE APP OF A FAULT IT COMMITTED ITSELF. This is the bug the first draft
+   * shipped with, found by a review before it ever reached him, and it is the sharpest lesson in this
+   * file. The watcher originally counted the media element's own `pause` event, telling a system pause
+   * from a deliberate one with a flag the transport set before pausing. The transport pauses elements
+   * in FOUR places — FM.pause, the frame-cache guard, the reversed-clip silencer and the ordinary
+   * clip-exit — and only one of them set it. So every clip ending and every loop lap would have been
+   * reported as "a pause nobody asked for", which is EXACTLY the iOS signature this instrument exists
+   * to detect. It would have manufactured evidence of its own subject, and sent the next session
+   * hunting a bug the app invented.
+   * The flag is gone. A restart is now judged from state: it counts only when the element was audible
+   * moments ago AND was already sitting where it was supposed to be — i.e. it stopped on its own. */
+  test('an ordinary clip entry is not recorded as the sound cutting out', { item: '663' }, async function () {
+    if (!FM.audioHealth || !FM.audioHealth.noteRestart) throw new Error('FM.audioHealth.noteRestart is missing');
+    const fakeEl = over => Object.assign({
+      currentTime: 0, paused: true, muted: false, volume: 1, playbackRate: 1,
+      play() { this.paused = false; return Promise.resolve(); }, pause() { this.paused = true; },
+      addEventListener() {}, removeEventListener() {}
+    }, over || {});
+
+    // ── ENTERING a clip for the first time: never tracked before, so not a fault ──
+    FM.audioHealth.reset();
+    const fresh = { layerId: 'fresh', el: fakeEl() };
+    FM.audioHealth.noteRestart(fresh, 5000, 0);
+    if (FM._audioHealth.restarts !== 0) throw new Error('the playhead entering a clip was counted as the sound cutting out — every project with more than one clip would report a fault');
+
+    // ── a SEEK / loop wrap: tracked, but the element is somewhere else entirely ──
+    FM.audioHealth.reset();
+    const seek = { layerId: 'seek', el: fakeEl({ currentTime: 9.5, paused: false }) };
+    FM.audioHealth.note(seek, 5000, true);          // tracked and audible…
+    seek.el.paused = true;
+    FM.audioHealth.noteRestart(seek, 5050, 0.2);    // …but now asked to play from somewhere far away
+    if (FM._audioHealth.restarts !== 0) throw new Error('a seek or a loop wrap was counted as the sound cutting out');
+
+    // ── the REAL fault: it was playing, it is still in the right place, and it had stopped ──
+    FM.audioHealth.reset();
+    const died = { layerId: 'died', el: fakeEl({ currentTime: 3.0, paused: false }) };
+    FM.audioHealth.note(died, 5000, true);
+    died.el.paused = true;                          // nobody asked for this
+    FM.audioHealth.noteRestart(died, 5050, 3.02);   // the transport restarts it where it already was
+    if (FM._audioHealth.restarts !== 1) throw new Error('an element that stopped on its own mid-clip was NOT counted (restarts=' + FM._audioHealth.restarts + ') — that is the one thing this signal is for');
+
+    // ── and a stale sighting is not enough: an element left alone for a second is a re-entry ──
+    FM.audioHealth.reset();
+    const stale = { layerId: 'stale', el: fakeEl({ currentTime: 3.0, paused: false }) };
+    FM.audioHealth.note(stale, 5000, true);
+    stale.el.paused = true;
+    FM.audioHealth.noteRestart(stale, 6500, 3.0);   // 1.5s later — it was not "just playing"
+    if (FM._audioHealth.restarts !== 0) throw new Error('a restart 1.5s after the element was last seen was counted as a cut-out');
+    FM.audioHealth.reset();
+  });
+
+  /* The instrument is worth nothing if he cannot reach it. #215 is the standing proof: five separate
+   * "no audio" warnings all fired correctly and every one of them painted BEHIND the export overlay,
+   * so a month went into proving a healthy muxer broken. Written down, not flashed. */
+  test('stopping playback writes an audio report he can copy out of Settings', { item: '663' }, async function () {
+    if (!FM.audioHealth) throw new Error('FM.audioHealth is missing');
+    let before = null;
+    try { before = localStorage.getItem('fm.lastAudioReport'); } catch (e) {}
+    try {
+      try { localStorage.removeItem('fm.lastAudioReport'); } catch (e) {}
+      FM.audioHealth.reset();
+      const el = { currentTime: 0, paused: false, muted: false, volume: 1, playbackRate: 1,
+                   play() { return Promise.resolve(); }, pause() {}, addEventListener() {} };
+      const m = { layerId: 'rep', el: el };
+      FM.audioHealth.note(m, 1000, true);
+      FM.audioHealth.note(m, 1300, true);           // one cut-out, so the report has something to say
+      if (FM._audioHealth.stalls !== 1) throw new Error('the fixture did not produce a cut-out, so this test would pass on an empty report');
+      FM.pause();                                   // the transport writes it on STOP, never per frame
+      let text = null;
+      try { text = localStorage.getItem('fm.lastAudioReport'); } catch (e) {}
+      if (!text) throw new Error('stopping playback did not write fm.lastAudioReport — Settings would show "nothing yet" no matter what happened to his sound');
+      if (text.indexOf('CUT OUT') < 0) throw new Error('the report does not carry the cut-out line, which is the one thing it exists to tell him: ' + text.slice(0, 120));
+      if (text.indexOf('device') < 0) throw new Error('the report does not name the device — on a bug that only happens on his phone that is the first thing I need');
+      /* THE COUNT MUST BE IN IT, not just the word. A report saying "CUT OUT" with no number would
+         read as a fault on every project that ever played. */
+      if (!/CUT OUT\s+1 time/.test(text)) throw new Error('the report does not carry the actual number of cut-outs: ' + text.split('\n').filter(l => l.indexOf('CUT OUT') >= 0)[0]);
+    } finally {
+      FM.audioHealth.reset();
+      try { if (before == null) localStorage.removeItem('fm.lastAudioReport'); else localStorage.setItem('fm.lastAudioReport', before); } catch (e) {}
+    }
+  });
+
+  /* ⚠️ AND THE TRANSPORT MUST ACTUALLY BE CALLING IT. Both tests above drive the watcher directly, so
+   * they would pass in full while the tick never reported anything — the watcher would be perfect and
+   * permanently silent, which is the exact failure mode this project keeps hitting (a probe timing an
+   * empty queue; a sniff gated behind a branch that is false on the device it was written for).
+   * This plays a real scene through the real transport and asserts the watcher heard about it. */
+  test('the playback tick reports every sounding clip to the audio watcher', { item: '663' }, async function () {
+    if (!FM.audioHealth) throw new Error('FM.audioHealth is missing');
+    const saved = { layers: FM.scene.layers.slice(), t: FM.time, dur: FM.scene.project.duration };
+    const realNote = FM.audioHealth.note;
+    let seen = 0, tickIv = null;
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('video', { name: 'sound' });
+      L.start = 0; L.duration = 4; L.volume = 100;
+      FM.scene.project.duration = 4;
+      FM.scene.layers.push(L);
+      /* ⚠️ THE FAKE ELEMENT HAS TO ACTUALLY ADVANCE, and finding that out was the point of writing
+         this test. v7.33 makes the transport HOLD at the current frame until an element that is
+         supposed to make sound really moves, giving up only after START_WAIT_MS (400ms). A stub whose
+         currentTime never changes therefore never gets past that hold, the sync loop never runs, and
+         the first version of this test failed for a reason that had nothing to do with the wiring it
+         was checking. It advances on a timer now, like a real element, and the wait is longer than
+         the transport's own deadline. */
+      const fel = { currentTime: 0, paused: false, muted: false, volume: 1, playbackRate: 1, readyState: 4,
+                    play() { this.paused = false; return Promise.resolve(); }, pause() { this.paused = true; },
+                    addEventListener() {}, removeEventListener() {} };
+      tickIv = setInterval(() => { if (!fel.paused) fel.currentTime += 0.016; }, 16);
+      FM.media.set(L.id, { kind: 'video', duration: 30, width: 2, height: 2, el: fel });
+      FM.audioHealth.note = function () { seen++; return realNote.apply(this, arguments); };
+      FM.setTime(0.5);
+      FM.play();
+      await new Promise(r => setTimeout(r, 900));   // past the 400ms start-wait, then several ticks
+      FM.pause();
+      if (!seen) throw new Error('the transport played a sounding clip and never told the audio watcher — the watcher is wired to nothing, so the report would stay empty on his phone no matter how badly the sound behaved');
+    } finally {
+      if (tickIv) clearInterval(tickIv);
+      FM.audioHealth.note = realNote;
+      try { FM.pause(); } catch (e) {}
+      FM.audioHealth.reset();
+      FM.scene.layers.forEach(l => { try { FM.media.delete && FM.media.delete(l.id); } catch (e) {} });
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l));
+      FM.scene.project.duration = saved.dur;
+      FM.setTime(saved.t);
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   /* THE FALLBACK IS NOT DECORATION — it is what runs on every device without WebGL, and a path nobody
    * exercises is a path that rots. gl-warp.js returns null for each "cannot" and the compositor must
    * take its old loop every time, silently and correctly. */
