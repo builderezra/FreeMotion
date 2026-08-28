@@ -7599,6 +7599,44 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     'return vec2(sx, sy);'
   ].join('\n');
 
+  /* CURL — a swirl whose angle oscillates with radius. ⚠️ At the exact centre GLSL's atan(0,0) is
+     UNDEFINED while JavaScript's Math.atan2(0,0) is 0; the CPU kernel then multiplies by r == 0 and
+     lands on the centre regardless, so the guard returns the centre rather than `xy` — those are the
+     same point only when the pivot is the pixel, and being sloppy there is how a one-pixel disagreement
+     gets written off as noise (see the half-pixel note in REQUESTS #lag). */
+  WARP_FX.curl.glsl = [
+    'vec2 c = vec2(u_cx, u_cy);',
+    'vec2 dxy = xy - c;',
+    'float r = length(dxy);',
+    'if (r < 1e-6) return c;',
+    'float sw = u_amt * 0.6 * sin(r / u_wl - u_ph);',
+    'float a = atan(dxy.y, dxy.x) + sw;',
+    'return c + vec2(cos(a), sin(a)) * r;'
+  ].join('\n');
+
+  /* SQUEEZE — a waist that pinches across one axis. ⚠️ THE DELICATE ONE, and its own comment says why:
+     `Math.PI*y/H` is `(Math.PI*y)/H`, NOT `Math.PI*(y/H)`, and the two differ in the last bits — feeding
+     the remapped fraction through the second form broke byte-identity on 357 of 2030 points at the
+     DEFAULT settings. The legacy expression is kept verbatim on the default path here too, in the same
+     shape, for the same reason. */
+  WARP_FX.squeeze.glslPrep = function (W, H, cx, cy, maxR, p, t, ps) {
+    var k = p.amount == null ? 0.5 : FM.evalProp(p.amount, t); if (k < -1) k = -1; if (k > 1) k = 1;
+    var pos = p.position == null ? 50 : FM.evalProp(p.position, t); if (pos < 0) pos = 0; if (pos > 100) pos = 100;
+    return { k: k, ax: p.axis == null ? 0 : (Math.round(FM.evalProp(p.axis, t)) | 0), pos: pos };
+  };
+  WARP_FX.squeeze.glsl = [
+    'const float PI = 3.141592653589793;',
+    'float u = u_ax > 0.5 ? (xy.x / res.x) : (xy.y / res.y);',
+    'float f2 = u;',
+    'if (u_pos != 50.0) {',
+    '  float sp = clamp(u_pos / 100.0, 0.0001, 0.9999);',
+    '  f2 = u < sp ? (u / sp) * 0.5 : 0.5 + ((u - sp) / (1.0 - sp)) * 0.5;',
+    '}',
+    'float arg = (u_ax < 0.5 && u_pos == 50.0) ? (PI * xy.y / res.y) : (PI * f2);',
+    'float sf = 1.0 - u_k * sin(arg); if (sf < 0.05) sf = 0.05;',
+    'return u_ax > 0.5 ? vec2(xy.x, fmCy + (xy.y - fmCy) / sf) : vec2(fmCx + (xy.x - fmCx) / sf, xy.y);'
+  ].join('\n');
+
   /* RADIAL REPEAT — a fan of wedges, optionally mirrored and twisted. This is the kernel that reads
      drawWarpEffect's RAW cx/cy/maxR arguments rather than its own prep, which is why the shader wrapper
      exposes fmCx/fmCy/fmMaxR derived from res. */

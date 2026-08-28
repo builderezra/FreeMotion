@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.84
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.85
 >
-> **State:** v13.84, 1032 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.85, 1032 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -17,10 +17,10 @@
 > **Kaleidoscope 49.5× · Radial Repeat 35.5× · Ripple 24.1× · Grid Repeat 13.1× · Twirl 11.7× · Wave 9.7×.**
 > That entry had said for months that it needed about **50×** and that nothing could get there.
 > Kaleidoscope is **49.5×**.
-> ⚠️ **Fifteen of twenty-one warp effects so far.** The rest still use the old path until each is converted,
+> ⚠️ **Seventeen of twenty-one warp effects so far.** The rest still use the old path until each is converted,
 > and anything without a graphics card falls back to exactly what it does today — nothing can break.
-> **The expensive ones gain the most, which is the shape you want:** the graphics card costs about the
-> same for every effect, so stacking them stops piling up the way it does now.
+> **And stacking is measured now, which was the whole point:** five effects on one layer used to cost
+> **285.6 ms a frame** and now cost **23.6 ms** — it was four frames behind, it is now inside the budget.
 >
 > **✅ GROUPS ZOOM FROM THE MIDDLE NOW, AND YOU CAN SEE THE ANCHOR (#630 — both halves).** You said
 > *"they just zoom into the corners and not the middle and I can't find where the anchor even is."*
@@ -4653,12 +4653,40 @@ better still, keep working inside the turn rather than parking work for a later 
       kaleidoscope **48.8x** · ripple 35.0x · fisheye 35.2x · stretchseg 35.2x · radialrepeat 34.5x ·
       bulge 34.3x · polarcoords 27.3x · innerpinch 25.0x · bend 22.7x · mirrortile 22.0x · twirl 21.6x ·
       tunnel 18.3x · tileshift 16.0x · gridrepeat 15.8x · wave 6.0x.
-      ➡️ **STILL TO PORT (6):** `glass` · `curl` · `fractalwarp` · `squeeze` · `turbulentdisplace` ·
-      `tilerotate`. ⚠️ **`squeeze` is the delicate one** — its own comment records that `Math.PI*y/H` and
-      `Math.PI*(y/H)` differ in the last bits and broke byte-identity on 357 of 2030 points, so it needs
-      the threshold read carefully rather than assumed. `glass` and the two noise kernels carry hashes
-      and lattices that have to be transcribed exactly, not approximated.
-      **Then keep a CHAIN resident on the GPU** so a second warp costs a draw rather than another upload.
+      ✅ **SEVENTEEN OF TWENTY-ONE AS OF v13.85** — `curl` 31.1x and `squeeze` 24.8x added, and
+      **sixteen of the seventeen are byte-identical**. Squeeze was expected to be the awkward one (its own
+      comment records `Math.PI*y/H` vs `Math.PI*(y/H)` breaking byte-identity on 357 of 2030 points) and
+      it came out at 0.000% — because the mapped coordinate is floored to a whole pixel before it is
+      used, so a difference in the last bits of a float almost never changes which pixel is read.
+      ➡️ **STILL TO PORT (4):** `glass` · `fractalwarp` · `turbulentdisplace` · `tilerotate`. The first
+      three carry hashes and noise lattices that must be transcribed exactly rather than approximated,
+      and the two noise kernels have already had large CPU optimisations, so they are the least valuable
+      and the most dangerous — a good place to stop rather than the next thing to rush.
+
+      ═══ 📐 **AND THE STACKING QUESTION IS NOW MEASURED (tests/_glchain.html), which was the whole point
+      of this entry.** ═══ Mixed warps on one layer at his 1080x1350, **fenced**:
+      | warps | CPU | GPU | speedup |
+      |---|---|---|---|
+      | 1 | 48.2 ms | 6.4 ms | 7.5x |
+      | 2 | 105.8 | 8.8 | 12.0x |
+      | 3 | 201.3 | 10.7 | 18.8x |
+      | 4 | 273.7 | 12.9 | 21.2x |
+      | **5** | **285.6** | **23.6** | **12.1x** |
+      | 6 | 350.8 | 33.6 | 10.4x |
+      **THE ENTRY'S OWN UNUSABLE CASE WAS FIVE EFFECTS.** It now costs **23.6 ms a frame instead of
+      285.6** — inside a 30fps budget where it used to be four frames behind.
+      ⚠️ **AND THE FIRST READING OF THIS TABLE WAS WRONG IN A WAY WORTH RECORDING, BECAUSE IT IS THE
+      THIRD TIME.** Unfenced, it reported five warps at **2.4 ms** and six at **28.1**, which reads as a
+      dramatic cliff at six — and is really five rows of QUEUED GPU work that had not happened yet,
+      followed by the bill arriving. `gl.finish()` not blocking was the first costume, a probe reporting
+      `0.0 ms` the second, and a fake cliff the third. **Every GPU timing in this project needs a fence,
+      and the fence has to be something the driver cannot defer past.**
+      ➡️ **WHAT IS LEFT ON THE TABLE, sized rather than guessed:** each extra warp still costs 2–10 ms
+      because `drawWarpEffect` re-renders the layer into a FRESH 2D plate at every level of the chain and
+      re-uploads it. Keeping the chain resident on the GPU would render the base once and then run N
+      shaders over it — roughly **3x more on a heavy stack** (a five-warp layer from ~23.6 ms toward ~7).
+      **That is the next real work here, and it is a restructuring of a recursive path, so it wants its
+      own session rather than being tacked onto a porting round.**
       ⚠️ **TWO INSTRUMENT FAILURES ON THE WAY, both of which produced confident wrong answers:**
       **1. The first run measured SwiftShader** — headless Chrome runs software GL on purpose
       (`tests/_cdp.py`, for suite stability), so "6.4x, and the readback costs 30 ms" was a CPU renderer

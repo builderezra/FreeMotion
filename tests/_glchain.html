@@ -1,0 +1,105 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:1100px;height:820px;border:0"></iframe>
+<script>
+/* HOW MUCH IS LEFT ON THE TABLE BY NOT KEEPING A CHAIN ON THE GPU?
+ * The oldest queue item's own diagnosis is that STACKING is what makes his projects crawl — "five
+ * effects on six shapes already gives 45 fps on a fast desktop and 17 fps at 6x". Each warp today
+ * renders the layer-minus-itself into a fresh 2D plate and uploads that plate, so N warps cost N plate
+ * renders and N uploads even though the picture never needed to leave the GPU between them.
+ * Making it resident is a real restructuring of a RECURSIVE path, so measure the prize before paying
+ * for it: if the cost per extra warp is already small, the work is not worth the risk. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.scene && w.FM.renderScene && w.FM.fxRegistry)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait,50); }
+    setTimeout(run.bind(null,w), 1200);
+  })();
+});
+async function run(w){
+  try{
+    var FM = w.FM, d = w.document, P = FM.scene.project;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    var W = 1080, H = 1350;
+    P.width = W; P.height = H; P.duration = 4;
+    var cv = d.createElement('canvas'); cv.width = W; cv.height = H;
+    var cx = cv.getContext('2d');
+    /* ⚠️ A FENCE, OR THIS PROBE LIES — and it lied once already. Timing renderScene alone reported a
+       five-warp stack at 2.4 ms and a six-warp one at 28.1: not a cliff at six, but five rows of
+       QUEUED GPU work that had not happened yet, followed by the bill. The same trap as gl.finish()
+       not blocking, in a third costume.
+       Reading a single pixel back off the 2D canvas forces every drawImage before it to have really
+       landed. One pixel, so it measures the fence and not a readback. */
+    function fence(){ cx.getImageData(0, 0, 1, 1); }
+    function med(n){ var a=[]; for (var i=0;i<n;i++){ var t=performance.now(); cx.clearRect(0,0,W,H); FM.renderScene(cx, FM.scene, 0.6); fence(); a.push(performance.now()-t);} a.sort(function(p,q){return p-q;}); return a[a.length>>1]; }
+
+    // A REAL STACK, not the same effect N times: mixed kernels are what a project actually carries.
+    var STACK = ['twirl','ripple','kaleidoscope','bulge','wave','tileshift'];
+    function build(n){
+      FM.scene.layers.length = 0;
+      var A = FM.makeLayer('shape', { shape:'rect', x:540, y:675, shapeW:620, shapeH:820, fill:'#4fd1ff' });
+      A.start=0; A.duration=4; A.effects=[];
+      for (var i=0;i<n;i++){ var inst = FM.fxRegistry.makeInstance(STACK[i]); if (inst) A.effects.push(inst); }
+      var B = FM.makeLayer('shape', { shape:'rect', x:330, y:380, shapeW:220, shapeH:220, fill:'#ff9a4f' });
+      B.start=0; B.duration=4;
+      FM.scene.layers.push(B, A);
+      return A.effects.length;
+    }
+    say('a stack of MIXED warps on one layer at ' + W + 'x' + H + ':');
+    say('');
+    say('warps   CPU ms    GPU ms   speedup   GPU passes   ms per EXTRA warp (GPU)');
+    var prevG = null;
+    for (var n=1;n<=6;n++){
+      var made = build(n);
+      if (made !== n) { say('only ' + made + ' of ' + n + ' instances were made — stopping'); break; }
+      await new Promise(function(r){ setTimeout(r,300); });
+      FM._noGL = true;  FM.glWarp._reset(); med(2); var c = med(5);
+      FM._noGL = false; FM.glWarp._reset(); med(2); var g = med(5); var gs = FM.glWarp.stats();
+      var per = prevG === null ? '' : (g - prevG).toFixed(2);
+      say(pad(n,8) + pad(c.toFixed(1),10) + pad(g.toFixed(1),9) + pad((c/g).toFixed(1)+'x',10) +
+          pad(gs.gpu,13) + per);
+      prevG = g;
+    }
+    function pad(s,n){ s=String(s); while (s.length<n) s+=' '; return s; }
+    say('');
+    say('READ THE LAST COLUMN. If each extra warp costs a few tenths of a ms, the chain is already');
+    say('cheap and keeping it resident on the GPU is not worth restructuring a recursive path for.');
+
+    /* THE CLIFF. Whatever happens at the sixth warp is worth more than the rest of this probe: five
+       effects is exactly the case the queue entry describes as unusable. Separate the two candidate
+       causes — is it the SIXTH KERNEL, or the sixth POSITION? Same question, one reordering. */
+    say('');
+    say('─── WHERE IS THE CLIFF? ───');
+    async function timeStack(list){
+      FM.scene.layers.length = 0;
+      var A = FM.makeLayer('shape', { shape:'rect', x:540, y:675, shapeW:620, shapeH:820, fill:'#4fd1ff' });
+      A.start=0; A.duration=4; A.effects=[];
+      for (var i=0;i<list.length;i++){ var inst = FM.fxRegistry.makeInstance(list[i]); if (inst) A.effects.push(inst); }
+      var B = FM.makeLayer('shape', { shape:'rect', x:330, y:380, shapeW:220, shapeH:220, fill:'#ff9a4f' });
+      B.start=0; B.duration=4;
+      FM.scene.layers.push(B, A);
+      await new Promise(function(r){ setTimeout(r,250); });
+      FM._noGL = false; FM.glWarp._reset(); med(3);
+      var g = med(5); var gs = FM.glWarp.stats();
+      return { ms: g, gpu: gs.gpu, cpu: gs.cpu, n: A.effects.length };
+    }
+    var TRIALS = [
+      ['twirl','ripple','kaleidoscope','bulge','wave'],                       // the fast five
+      ['twirl','ripple','kaleidoscope','bulge','wave','tileshift'],           // +tileshift LAST
+      ['tileshift','twirl','ripple','kaleidoscope','bulge','wave'],           // tileshift FIRST
+      ['twirl','ripple','kaleidoscope','bulge','wave','twirl'],               // sixth = a known-cheap one
+      ['twirl','ripple','kaleidoscope','bulge','wave','twirl','ripple'],      // seven
+      ['tileshift'],                                                          // tileshift alone
+    ];
+    for (var q=0;q<TRIALS.length;q++){
+      var r2 = await timeStack(TRIALS[q]);
+      say(pad(r2.n + ' warps', 10) + pad(r2.ms.toFixed(1) + ' ms', 11) +
+          pad('gpu ' + r2.gpu + '/cpu ' + r2.cpu, 16) + TRIALS[q].join(' → '));
+    }
+    FM._noGL = false; FM.glWarp._reset();
+  } catch(e){ say('threw: ' + (e && (e.stack||e.message||String(e)))); }
+  window.__done = true;
+}
+</script></body></html>
