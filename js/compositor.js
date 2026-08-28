@@ -1478,6 +1478,12 @@ window.FM = window.FM || {};
    * Cached on first use — a per-frame probe would cost more than the effects it is guarding. */
   let _ctxFilterOK = null;
   function ctxFilterOK() {
+    /* ⚠️ THE FORCE FLAG IS PART OF THE FIX, NOT A TEST CONVENIENCE (queue 661). The GPU colour
+     * fallback only ever runs on a device where ctx.filter does NOT work — which means it can never be
+     * exercised on any machine anyone can debug on. A fallback nobody can run is a fallback nobody can
+     * trust: it would ship untested to the one person who cannot report a stack trace.
+     * With this, the suite drives the real path on a healthy browser. */
+    if (FM._forceNoCtxFilter) return false;
     if (_ctxFilterOK !== null) return _ctxFilterOK;
     _ctxFilterOK = false;
     try {
@@ -5905,6 +5911,73 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       ctx.drawImage(warped, OX, OY, PWp, PHp);   // plate → project units; identical to drawImage(...,0,0) at scale 1
       ctx.restore();
     } finally { _wpDepth--; }
+  }
+
+  /* ═══ THE COLOUR EFFECTS, WITHOUT ctx.filter (queue 661) ══════════════════════════════════════════
+   * Ezra: *"These effects still don't work on mobile, this is probably the biggest issue you still
+   * haven't solved."* On a device where `ctx.filter` is silently ignored, the nine CSS_FX effects draw
+   * nothing at all — and the app's only response was to explain why.
+   * This is the same shape as `drawWarpEffect` directly above: render the layer into a plate with the
+   * colour effects REMOVED, push the plate through the shader, blit the result. Nothing is read back.
+   * ⚠️ IT RUNS ONLY WHERE ctx.filter IS ALREADY PROVEN BROKEN. On a healthy device this function is
+   * never called, so it cannot regress a path it never touches — which is the only responsible way to
+   * ship a fix for a device I cannot test on.
+   * ⚠️ AND THE RECURSION TERMINATES BY CONSTRUCTION: `tmp` has exactly the effects this pass consumes
+   * stripped out, so the re-entrant drawLayer finds nothing left to hand back here.
+   * ⚠️ blur and glow are NOT handled — they read neighbouring pixels, so they need a convolution rather
+   * than a matrix, and they stay honestly dead on such a device rather than being faked. */
+  function cssColorOps(layer, t) {
+    if (!FM.glColor) return null;
+    const list = (layer && layer.effects) || [];
+    const ops = [];
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
+      if (!e || e.enabled === false) continue;
+      if (!FM.CSS_FX[e.type]) continue;
+      if (!FM.glColor.supports(e.type)) return null;          // blur/glow in the stack → leave it all alone
+      const p = e.params || {};
+      const raw = e.type === 'hue' ? FM.evalProp(p.deg, t) : FM.evalProp(p.amount, t);
+      ops.push({ type: e.type, value: Number.isFinite(raw) ? raw : (e.type === 'hue' ? 0 : 1) });
+    }
+    return ops.length ? ops : null;
+  }
+
+  function drawCssFxOnGPU(ctx, layer, t, scene, ops) {
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
+    if (opacity <= 0) return true;
+    const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    const _np = nestedPlate(ctx, proj), ps = _np.ps, OX = _np.OX, OY = _np.OY;
+    const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
+    if (!(W > 0) || !(H > 0)) return false;
+    const d = _wpDepth++;
+    try {
+      if (!_wpPool[d]) _wpPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
+      const wA = _wpPool[d].A;
+      if (wA.width !== W || wA.height !== H) { wA.width = W; wA.height = H; }
+      wA.__fmRS = ps; wA.__fmOX = OX; wA.__fmOY = OY;
+      const actx = wA.getContext('2d');
+      baseT(actx); actx.clearRect(OX, OY, PWp, PHp);
+      actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
+      const keep = new Set(ops.map(o => o.type));
+      const tmp = Object.assign({}, layer, {
+        blendMode: 'normal',
+        effects: (layer.effects || []).filter(e => !(e && e.enabled !== false && keep.has(e.type) && FM.CSS_FX[e.type])),
+        behaviors: sansOpacityBehaviors(layer),
+        transform: Object.assign({}, layer.transform, { opacity: 1 }),
+      });
+      drawLayer(actx, tmp, t, scene);
+      const outCv = FM.glColor.apply(wA, W, H, ops);
+      if (!outCv) return false;                               // no GPU either — the caller carries on as before
+      ctx.save();
+      baseT(ctx);
+      ctx.globalAlpha = opacity;
+      ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+      ctx.filter = 'none';
+      ctx.drawImage(outCv, OX, OY, PWp, PHp);
+      ctx.restore();
+      return true;
+    } catch (e) { return false; }
+    finally { _wpDepth--; }
   }
 
   /* ============================== SQUISH — the frame edges are walls ==============================
@@ -12328,6 +12401,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // the finished layer whichever of the eight ways it draws.
     if (!_fogBusy && scene) { const _fa = camFogAmt(layer, t); if (_fa > 0.002) { drawFogLayer(ctx, layer, t, scene, _fa); return; } }
 
+    /* ⚠️ ON A DEVICE THAT CANNOT RUN ctx.filter, THE LINE BELOW DRAWS NOTHING AND SAYS NOTHING
+     * (queue 661) — that is the whole of "the effects don't work on mobile". Route the colour ones
+     * through the shader instead. Returns false for every "cannot", and then the old path runs exactly
+     * as it always did. Guarded on ctxFilterOK first so a healthy device never even builds the op list. */
+    if (!ctxFilterOK() && FM.glColor) {
+      const _ops = cssColorOps(layer, t);
+      if (_ops && drawCssFxOnGPU(ctx, layer, t, scene, _ops)) return;
+    }
     ctx.save();
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';

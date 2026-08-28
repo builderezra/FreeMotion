@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.95
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.96
 >
-> **State:** v13.95, 1043 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.96, 1045 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -44,6 +44,21 @@
 > thing only you can do: **export something short with sound on the PC, then drag the .mp4 into a
 > Chrome tab and press play.** Sound → the file is fine and your camera roll is dropping it. No sound
 > → it is the project or your browser, and the app will name the reason.
+>
+> **⚡ YOUR BIGGEST ISSUE — THE EFFECTS THAT DO NOTHING ON YOUR PHONE. Here is what it actually was.**
+> Your screenshot showed seven effects badged "no change at this value". **That badge was lying, and it
+> contradicts itself** — for Grayscale to say that, the app must have decided your square was NOT grey,
+> and grayscale on a non-grey square must change it. Both cannot be true. The only explanation is that
+> the drawing feature those nine effects rely on **does nothing on your phone, silently**.
+> ➡️ **The app has known this was possible for weeks and was writing the answer into a diagnostics
+> screen you would have to go hunting for.** It says so in the effects browser now.
+> ✅ **AND THEY NOW WORK ANYWAY.** Brightness, Contrast, Saturation, Hue, Grayscale, Sepia and Invert
+> are drawn with the graphics card when that feature is missing — the same trick as this morning's speed
+> work. Proven by making a healthy browser pretend to be broken, so the exact path your phone takes is
+> tested here rather than only by you.
+> ⚠️ **Blur and Glow are still dead on such a device** — they need a different kind of shader, and I
+> would rather say so than fake it. And I still cannot prove this is YOUR fault line: if the effects work
+> for you now it was the device; if not, the readout now names the real reason.
 >
 > **🎨 ONE LETTER FROM YOU CLOSES #98 — I have sent you a picture.** How big should text be when you
 > add it? **A** is what you have now, **B** is my recommendation, **C** is the biggest. Nothing is
@@ -25702,12 +25717,26 @@ re-opened #480, which I had marked done and had not fixed.
       **and the fallback path cannot be exercised on a healthy machine without a force flag, so that
       flag is part of the work rather than an afterthought.** Rushing it at the end of a long session is
       how the half-pixel bug got shipped this morning.
-      ➡️ **NEXT, and it is the whole remaining value of this entry:**
-      1. [ ] **A force flag** (`FM._forceNoCtxFilter`) so `ctxFilterOK()` can be made to report false,
-             and the fallback can be tested HERE rather than only on a device nobody can debug.
-      2. [ ] **Wire the fallback** into the two `ctx.filter = effectFilter(...)` sites.
-      3. [ ] **blur and glow are still dead on such a device** — both read neighbouring pixels, so they
-             need a convolution rather than a matrix. Say so honestly rather than implying all nine work.
+      ✅ **v13.96 — WIRED IN, AND PROVEN ON THE PATH HIS PHONE TAKES.**
+      1. [x] **The force flag** — `FM._forceNoCtxFilter` makes `ctxFilterOK()` report false on a healthy
+             browser. **This is part of the fix, not a test convenience:** the fallback only ever runs
+             where ctx.filter is broken, so without it the code could only be exercised by the one person
+             who cannot report a stack trace. A fallback nobody can run is a fallback nobody can trust.
+      2. [x] **Wired into `drawLayer`**, in the same plate-and-blit shape `drawWarpEffect` already uses:
+             render the layer with those effects stripped, push the plate through the shader, blit.
+             Nothing is read back. Guarded on `ctxFilterOK()` first, so a healthy device never even
+             builds the op list — **it cannot regress a path it never runs on.**
+      3. [x] **blur and glow stay honestly dead** — and more than that, a stack CONTAINING one is left
+             entirely alone. Applying the colours and silently dropping the blur would substitute a
+             DIFFERENT picture, which is worse than the effect not working. There is a test for it.
+      📐 **MEASURED with the flag on:** a red square with grayscale renders **grey, and the same grey
+      `ctx.filter` produces** — the test asserts both, plus a control proving the reference path greys it
+      in the first place, plus that the layer does not simply vanish.
+      ⚠️ **WHAT IS STILL NOT PROVEN: that this is what his phone actually suffers from.** The badge
+      pattern is only explicable by ctx.filter not applying, but that could equally be a broken filter
+      STRING on a healthy device (the keyframed-glow bug fixed in v13.94 was one live route). **If the
+      effects work for him now, it was the device; if they still do not, the "what's slow" readout now
+      says which — and that line has been there for weeks with nothing surfacing it.**
 
 - [ ] **662 — The export bug is MOBILE-ONLY. PC exports fine.** (28 Aug — answering the question #604
       **STATUS: 🟢 READY — nothing is stopping this**

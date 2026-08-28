@@ -45481,6 +45481,90 @@
     if (m('glow', 1)) throw new Error('glow claims to be a colour matrix');
   });
 
+  /* ═══ QUEUE 661 — AND NOW THEY ACTUALLY WORK ON A DEVICE WITHOUT ctx.filter ═════════════════════
+   * This is the test the whole entry was missing. `FM._forceNoCtxFilter` makes `ctxFilterOK()` report
+   * false on a perfectly healthy browser, so the exact path his phone takes can be driven HERE — on a
+   * machine where a stack trace exists — instead of shipping unexercised to the one person who cannot
+   * debug it. Without this flag the fallback could only ever be tested by him, which is no test at all. */
+  test('#661: colour effects still render when ctx.filter does not work', { item: '661' }, function () {
+    if (!FM.glColor) throw new Error('FM.glColor is missing');
+    if (!FM.glColor.available()) throw new Error('WebGL is not available, so the fallback cannot be exercised: ' + FM.glColor.stats().reason);
+    const P = { name: 'p', width: 120, height: 120, fps: 30, duration: 2, background: '#000000' };
+    const mk = () => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 60, shapeW: 90, shapeH: 90, fill: '#e8443f' });
+      L.start = 0; L.duration = 2;
+      const g = FM.fxRegistry.makeInstance('grayscale');
+      if (!g) throw new Error('could not make a grayscale instance');
+      L.effects = [g];
+      return L;
+    };
+    const shoot = () => {
+      const cv = document.createElement('canvas'); cv.width = 120; cv.height = 120;
+      const cx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(cx, { project: P, layers: [mk()], selectedId: null, selectedIds: [] }, 0.5);
+      return cx.getImageData(60, 60, 1, 1).data;    // dead centre of the square
+    };
+    const was = FM._forceNoCtxFilter;
+    try {
+      /* THE CONTROL: with ctx.filter working, grayscale must already grey the square. If it does not,
+         the fixture is wrong and everything below is meaningless. */
+      FM._forceNoCtxFilter = false;
+      const ref = shoot();
+      const refGrey = Math.abs(ref[0] - ref[1]) < 12 && Math.abs(ref[1] - ref[2]) < 12;
+      if (!refGrey) throw new Error('the control failed: with ctx.filter available, grayscale did not grey the square (' + [ref[0], ref[1], ref[2]] + ') — the fixture is not testing what it claims');
+      if (ref[3] < 200) throw new Error('the control drew nothing at the centre (alpha ' + ref[3] + ')');
+
+      /* AND NOW HIS DEVICE: ctx.filter reports broken, so the shader has to carry it. */
+      FM._forceNoCtxFilter = true;
+      FM.glColor._reset();
+      const got = shoot();
+      if (!(FM.glColor.stats().gpu > 0))
+        throw new Error('the GPU colour path never ran with ctx.filter forced off (' + FM.glColor.stats().reason +
+                        ') — so on his phone the effect still does nothing');
+      if (got[3] < 200) throw new Error('the fallback drew nothing at the centre (alpha ' + got[3] + ') — the layer vanished instead of being filtered');
+      const gotGrey = Math.abs(got[0] - got[1]) < 12 && Math.abs(got[1] - got[2]) < 12;
+      if (!gotGrey)
+        throw new Error('with ctx.filter unavailable the square came out ' + [got[0], got[1], got[2]] +
+                        ' — still coloured, which is exactly his report: "these effects still don\'t work on mobile"');
+      // …and it must be the SAME grey the real filter produces, not merely some grey.
+      for (let k = 0; k < 3; k++) {
+        if (Math.abs(ref[k] - got[k]) > 12)
+          throw new Error('the fallback greys to ' + [got[0], got[1], got[2]] + ' where ctx.filter gives ' +
+                          [ref[0], ref[1], ref[2]] + ' — his phone would not match his PC');
+      }
+    } finally {
+      FM._forceNoCtxFilter = was;
+      FM.glColor._reset();
+    }
+  });
+
+  /* A STACK WITH BLUR IN IT MUST BE LEFT ALONE. blur reads neighbouring pixels, so the matrix cannot
+   * express it — and half-applying a stack (the colours but not the blur) would be a DIFFERENT picture
+   * silently substituted, which is worse than the effect being honestly dead. */
+  test('#661: a stack the shader cannot express is not half-applied', { item: '661' }, function () {
+    if (!FM.glColor) throw new Error('FM.glColor is missing');
+    if (FM.glColor.supports('blur')) throw new Error('the shader claims to support blur — it reads neighbouring pixels and cannot');
+    if (!FM.glColor.supports('grayscale')) throw new Error('the shader does not support grayscale, which is the whole point');
+    const was = FM._forceNoCtxFilter;
+    try {
+      FM._forceNoCtxFilter = true;
+      FM.glColor._reset();
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 60, shapeW: 90, shapeH: 90, fill: '#e8443f' });
+      L.start = 0; L.duration = 2;
+      const g = FM.fxRegistry.makeInstance('grayscale'), b = FM.fxRegistry.makeInstance('blur');
+      if (!g || !b) throw new Error('could not build the mixed stack');
+      L.effects = [g, b];
+      const cv = document.createElement('canvas'); cv.width = 120; cv.height = 120;
+      const cx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(cx, { project: { name: 'p', width: 120, height: 120, fps: 30, duration: 2, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] }, 0.5);
+      if (FM.glColor.stats().gpu > 0)
+        throw new Error('the shader ran on a stack containing blur — it would have applied the colours and dropped the blur, silently substituting a different picture');
+      // and the frame must still be drawn by the old path rather than lost
+      const px = cx.getImageData(60, 60, 1, 1).data;
+      if (px[3] < 200) throw new Error('the layer disappeared entirely when the shader declined it (alpha ' + px[3] + ')');
+    } finally { FM._forceNoCtxFilter = was; FM.glColor._reset(); }
+  });
+
   /* Queue 343 clause 4 — sharing templates, in the shape Ezra chose.
    * He asked for links first, which would have needed a server and broken the app's local-only premise
    * outright. Told that, he picked the other option himself, verbatim: *"maybe not links then and
