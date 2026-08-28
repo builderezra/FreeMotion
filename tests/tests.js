@@ -46385,6 +46385,59 @@
     if (!/STUTTER/i.test(bad)) throw new Error('a stuttering sample lost its stutter verdict to the new scale branch: ' + bad);
   });
 
+  /* ═══ QUEUE 484 CLAUSE 2 — MOST OF THE "MISSING" EFFECTS WERE NEVER MISSING ═══════════════════
+   * He asked for the effects Alight Motion has that we lack. Checked one by one against our own 199,
+   * most were already here under a name he would never search for: Random Displacement is Turbulent
+   * Displace, Star is Sunburst, Time Quantization is Frame Stutter, Luma Stamper is Luma Matte,
+   * Turbulence is Fractal Ridges, Repeat is Trail.
+   * So the fix is not to build them and not to rename them back — clause 1 exists to move AWAY from
+   * AM's names, and one of them turned out to be a trade mark. The other name becomes a SEARCH TERM.
+   * ⚠️ A DEAD ALIAS IS SILENT: a key that no longer matches an effect simply never fires, and the
+   * search quietly stops finding the thing. Both directions are asserted here. */
+  test('#484: the effects he thinks are missing can be found by the name he would type', { item: '484' }, function () {
+    const A = FM.fxSearchAliases;
+    if (!A) throw new Error('FM.fxSearchAliases is missing — the alias map was reverted or renamed');
+    const defs = FM.fxRegistry.allIncludingHidden ? FM.fxRegistry.allIncludingHidden() : FM.fxRegistry.all();
+    const byKey = {};
+    defs.forEach(d => { byKey[d.key || d.id || d.type] = d; });
+
+    const dead = Object.keys(A).filter(k => !byKey[k]);
+    if (dead.length) throw new Error('these alias keys are not real effects, so those searches silently find nothing: ' + dead.join(', '));
+
+    /* AND THE ALIAS MUST ACTUALLY REACH THE SEARCH. The map existing proves nothing — tagsOf has to
+       merge it, and the browser has to match against tags. This asks the registry the same question
+       the search box asks it. */
+    const missed = [];
+    for (const key of Object.keys(A)) {
+      const tags = (byKey[key].tags || []).map(t => String(t).toLowerCase());
+      for (const alias of A[key]) {
+        const needle = alias.toLowerCase();
+        if (!tags.some(t => t.indexOf(needle) >= 0)) missed.push(key + ' ⇠ "' + alias + '"');
+      }
+    }
+    if (missed.length) throw new Error('these aliases never reach the search index: ' + missed.slice(0, 6).join(' · ') +
+                                       ' — the map is being ignored by tagsOf, so typing them finds nothing');
+
+    /* THE SIX THAT PROMPTED THIS, BY NAME. If any of these regresses, he is back to believing the app
+       is missing an effect it has had all along — which is the entire finding. */
+    const HIS = { turbulentdisplace: 'drift field', rays: 'star burst', framestutter: 'step time',
+                  lumamatte: 'brightness stencil', fractalridges: 'turbulence', linearrepeat: 'repeat' };
+    for (const key of Object.keys(HIS)) {
+      const hits = defs.filter(d => (d.tags || []).some(t => String(t).toLowerCase().indexOf(HIS[key]) >= 0));
+      if (!hits.some(d => (d.key || d.id || d.type) === key))
+        throw new Error('searching "' + HIS[key] + '" does not surface ' + key + ' (' + (byKey[key].label || '?') + ') — that is the effect he believes is missing');
+    }
+
+    /* ⚠️ AND AN ALIAS MUST NOT DRAG IN HALF THE LIBRARY. "star" is a real word in several labels, so
+       a sloppy alias makes the results useless — which is the complaint this is meant to fix, not
+       cause. A search for one of these must stay a short list. */
+    for (const term of ['drift field', 'step time', 'brightness stencil']) {
+      const hits = defs.filter(d => (d.label || '').toLowerCase().indexOf(term) >= 0 ||
+                                    (d.tags || []).some(t => String(t).toLowerCase().indexOf(term) >= 0));
+      if (hits.length > 4) throw new Error('searching "' + term + '" returns ' + hits.length + ' effects — an alias that matches everything is worse than none');
+    }
+  });
+
   /* ═══ QUEUE 484 CLAUSE 2 — WRAP SHIFT, the first of the gaps he asked to be filled ════════════
    * *"look for effects alight motion has that we don't, add them but change the names."* Theirs is
    * called Offset; ours is Wrap Shift. It slides the picture and brings whatever leaves one edge back

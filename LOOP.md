@@ -133,7 +133,48 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
-📍 **STATE, 28 Aug, v14.05 — 1052 tests green. The loop is running on a one-minute cron.**
+📍 **STATE, 29 Aug, v14.16 — 1065 tests green, live on Pages. The loop is running on a one-minute cron.**
+
+🟢 **THE OLDEST ITEM'S LAST ARCHITECTURAL PIECE IS DONE (v14.12).** *"Editing lags, and gets bad fast"*
+had written its own next step down as a plan: *"a chain of warps does not yet stay on the GPU."* It does
+now — one upload, one shader pass per effect ping-ponging between two framebuffers, one blit. Three
+stacked warps at his 1080x1350: **117.0 ms → 3.3 ms**, byte-identical (0 of 1,458,000 pixels differ).
+🔑 **AND THE NUMBER THAT MATTERS IS NOT A SPEEDUP.** At 6x CPU throttle (`tools/_chainphone.py`, new) the
+old path went **291.6 → 1642.1 ms** and the chained path went **5.5 → 5.1 ms — not slower at all.** The
+drawing is off the processor, so processor speed has stopped mattering. ⚠️ Chrome throttles the CPU, not
+the GPU, and that GPU is this Mac's — so 5.1 ms is NOT a prediction about his phone, only proof the work
+moved off the part of a phone that is slow.
+
+🔊 **THREE REPORTS NOW COME FROM HIS DEVICE INSTEAD OF FROM A QUESTION** — Settings, each with Copy:
+*Your last playback* (v14.13, #95/#96/#663), *Your last export* (v14.04, #215/#662), *A clip with no
+picture* (v14.14, #129). **All three entries had ended for weeks on "this needs a number from HIS phone."**
+
+🚨 **THE SAME SHAPE HIT FIVE TIMES, AND IT GREW A TWIN — read this before hunting any unreproducible bug.**
+The app works out the answer and writes it where he cannot read it (#129's extension and canPlayType went
+to an 8-second toast and a console.warn, on a bug he reported from a phone TWICE). **THE TWIN IS A WARNING
+THAT OUTLIVES ITS BUG:** `cssFxUnavailable()` still reported the nine colour effects dead after v14.02 made
+them work, so the browser painted "these will do nothing here" over a page where they had just started
+working — and `perf-probe` printed "looks healthy" four lines above its own "rendering at 28% scale".
+**A wrong reassurance and a wrong warning are one bug.** When you fix a capability, grep for who still
+REPORTS on it.
+
+🧮 **TWELVE ITEMS IN ONE DAY WERE PARKED ON AN ANSWER THAT WAS NEVER NEEDED** — six misclassified, six more
+marked "NEEDS YOU" while naming no question at all. `tools/asks.sh` flags that second kind now. A question
+asked once is not a question that still needs asking.
+
+⚠️ **APPLE'S TRADE MARK WAS IN THE EFFECTS UI UNTIL v14.15** — "Rounded Corners / Apple style", plus its
+toggle and its browser description. #484 called that exact string "the worst one, needs no debate" and
+then renamed the 22 Alight Motion labels and never looked at ours. Now *Squircle Corners*, with a sweep
+asserting no effect label, param or description carries any company's name. **Publishing blocker, not
+tidying.**
+
+🧪 **AND THE CRITIQUE STAGE EARNED ITS KEEP (v14.16).** Four new effects were designed for #484 clause 2;
+**only one shipped.** Duplicate Array was largely already there as `linearrepeat` ("Trail"); Spill Remover
+and Sway would both have been **invisible at their defaults** on the sample the tiles render against —
+which is #661 exactly. **Check a new effect against the existing 199 and against the thumbnail sample
+BEFORE writing it.**
+
+📍 **(previous) STATE, 28 Aug, v14.05 — 1052 tests green.**
 
 🔴 **HIS BIGGEST ISSUE IS #661 AND IT IS BUILT, BUT NOT CONFIRMED.** *"These effects still don't work on
 mobile, this is probably the biggest issue you still haven't solved."* Seven tiles badged "no change at

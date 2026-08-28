@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.16
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.17
 >
-> **State:** v14.16, 1065 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.17, 1066 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -13967,6 +13967,39 @@ wait for them to report back."*
       ➡️ **So clause 2 stays open, deliberately, with the next batch better specified than the last.**
       Three of four designs were wrong in ways that would have shipped as bugs, and finding that before
       writing them is worth more than four effects that each need a fix.
+
+      ═══ 🔑 **29 AUG (v14.17) — MOST OF THE "MISSING" EFFECTS WERE NEVER MISSING. This changes what
+      clause 2 IS.** ═══
+      The list above named about thirty effects AM has that we lack. **Checked one at a time against our
+      own 199 — most are already here, under a name you would never search for.** Six exactly:
+      | you asked for | you already have it as |
+      |---|---|
+      | Random Displacement → *Drift Field* | **Turbulent Displace** |
+      | Star → *Star Burst* | **Sunburst** |
+      | Time Quantization → *Step Time* | **Frame Stutter** (its own description already says "stop-motion") |
+      | Luma Stamper → *Brightness Stencil* | **Luma Matte** |
+      | Turbulence (texture) | **Fractal Ridges** |
+      | Parenting Helper → *Follow Layer* | the **Follow** behaviour — and ours also does delay and any target |
+      Plus **Repeat → Trail**, and four this entry had already spotted (Feather → Smooth Edges, Advanced
+      Chroma Key → Chroma Key Pro, Auto-Shake → Shake, Random Jitter → Wiggle). **Two more are not
+      effects at all:** *Pixel Warp* is the entire warp family, and *Size Helper* is the Fit command
+      already on the layer menu.
+      🛑 **OF FOURTEEN CANDIDATES, TWO ARE GENUINELY ABSENT** — Scatter Array and Silk Ribbon.
+      ➡️ **SO CLAUSE 2 IS MOSTLY NOT A MISSING-EFFECTS PROBLEM. IT IS A FINDING PROBLEM** — which is a
+      complaint you have made in its own right, that the effects list is hard to search.
+      ✅ **AND THAT IS FIXED RATHER THAN ARGUED.** Renaming them back toward AM's words is the one thing
+      we must not do — clause 1 exists to move away from those names, and one of them turned out to be a
+      trade mark. **So the other name became a SEARCH TERM.** The tile keeps our name; typing what you
+      were looking for finds it anyway. **Verified in the running app:** "drift field" → Turbulent
+      Displace · "star burst" → Sunburst · "step time" → Frame Stutter · "brightness stencil" → Luma
+      Matte · "turbulence" → Fractal Ridges · "green screen" → Chroma Key Pro · "feather" → Smooth Edges.
+      🔒 **A dead alias would be SILENT** — it would simply stop matching and nobody would notice — so a
+      test asserts every alias key is a real effect, that each alias actually reaches the search index,
+      and that no alias drags in half the library, which would be the same complaint from the other side.
+      📋 **WHAT IS LEFT OF CLAUSE 2, and it is now two items rather than thirty:** **Scatter Array**
+      (copies of the layer scattered rather than on a grid — nothing does this; the regular repeats are
+      all strictly regular) and **Silk Ribbon** (a flowing ribbon generator — ⚠️ worth asking whether it
+      belongs in Add → Shape beside the existing banner and flag shapes rather than in the effects list).
 
 - [x] **481 — PC effects browser: shrink the featured tiles, move Visual/Filters/Audio up beside the search and X, and make the category icons FIT.** ✅ **ALL FOUR DONE v12.04.** (23 Aug, two PC screenshots at v12.01.)
       Measured on a 1440px screen, where the browser docks into the inspector as a **346px column** — it

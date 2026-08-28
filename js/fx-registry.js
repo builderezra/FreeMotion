@@ -471,6 +471,43 @@ window.FM = window.FM || {};
     if (def.layer) out.push(def.layerLabel || 'Source');
     return out;
   }
+  /* ═══ WHAT HE WOULD ACTUALLY TYPE (queue 484 clause 2) ═══════════════════════════════════════════
+   * His ask was *"look for effects alight motion has that we don't, add them but change the names"*,
+   * and the entry duly listed about thirty. **Checked one by one against our own 199, most of them are
+   * ALREADY HERE under a name he would never search for.** Six, exactly:
+   *   Random Displacement → Turbulent Displace · Star → Sunburst · Time Quantization → Frame Stutter
+   *   Luma Stamper → Luma Matte · Turbulence → Fractal Ridges · Parenting Helper → the Follow behavior
+   * Plus four more the entry had already spotted (Feather → Smooth Edges, Advanced Chroma Key →
+   * Chroma Key Pro, Auto-Shake → Shake, Random Jitter → Wiggle) and Repeat, which is Trail.
+   * 🔑 **SO CLAUSE 2 IS MOSTLY NOT A MISSING-EFFECTS PROBLEM. IT IS A FINDING PROBLEM** — and that is a
+   * complaint he has made in its own right, that the effects list is hard to search. Renaming them back
+   * toward AM's words is the one thing we must NOT do (clause 1 exists to move away from those names,
+   * and one of them was a trade mark). So the other name becomes a SEARCH TERM instead: the tile keeps
+   * our name, and typing what he was looking for still finds it.
+   * ⚠️ A DEAD KEY HERE WOULD BE SILENT — the alias would simply never match, and nobody would know. A
+   * test asserts every key is a real effect AND that each alias actually surfaces its effect. */
+  const SEARCH_ALIASES = {
+    turbulentdisplace: ['drift field', 'random displacement', 'noise warp'],
+    rays:              ['star burst', 'starburst', 'star', 'energy rays'],
+    framestutter:      ['step time', 'time quantization', 'stop motion', 'choppy', 'strobe'],
+    lumamatte:         ['brightness stencil', 'luma stamper', 'luminance key'],
+    fractalridges:     ['turbulence', 'fractal noise', 'clouds'],
+    linearrepeat:      ['repeat', 'duplicate array', 'copies', 'echo'],
+    gridrepeat:        ['repeat grid', 'scatter field'],
+    radialrepeat:      ['repeat around', 'circular repeat'],
+    wrapshift:         ['offset', 'wrap around', 'loop shift'],
+    objectblur:        ['echo keyframes', 'ghost trail', 'motion trail'],
+    chromakeypro:      ['advanced chroma key', 'green screen', 'key spill'],
+    smoothedges:       ['feather', 'soften edge'],
+    stretchseg:        ['stretch axis'],
+    shake:             ['auto shake', 'camera shake'],
+    wiggle:            ['random jitter', 'jitter'],
+    starfield:         ['simple starfield', 'stars'],
+    lightning:         ['energy beam', 'laser beam', 'bolt'],
+  };
+  Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
+  FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam
+
   function tagsOf(def) {
     const cat = CATEGORY_LABELS[CATEGORY_OF[def.type] || 'stylize'] || '';
     const words = [].concat(
@@ -478,6 +515,7 @@ window.FM = window.FM || {};
       cat.split(/[^A-Za-z0-9]+/),
       paramWords(def).join(' ').split(/[^A-Za-z0-9]+/),
       def.tags || [],
+      SEARCH_ALIASES[def.type] || [],
       [def.type]
     );
     const seen = {}, out = [];
