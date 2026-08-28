@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.88
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.89
 >
-> **State:** v13.88, 1034 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.89, 1034 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -1922,7 +1922,31 @@ better still, keep working inside the turn rather than parking work for a later 
 
 - [ ] **125 — Timeline scrolling still lags badly, with barely any layers — and he is right that I keep
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
-      not fixing it.** His words: *"Still getting major lag when scrolling through the timeline; with not
+      not fixing it.**
+      ═══ 🚨 **28 AUG (v13.89) — THE SCROLL WAS NEVER MEASURED, AND THE NUMBER THAT SAID IT WAS FINE WAS
+      MEASURING SOMETHING ELSE. He has been right about this the whole time.** ═══
+      **TWO FAULTS IN THE INSTRUMENT, both in `tools/_phoneprobe.py`:**
+      **1. NO SCENARIO EVER DROVE THE SCROLL.** The probe called `FM.scrubTime` directly, which is the
+      MIDDLE of the path. A flick starts at a `scroll` event on `#timeline` and goes through the wall
+      clamp, the feedback guard, the 160ms settle, `updatePlayhead`, `scrubTime` **and** the
+      windowed-ruler repaint on the sibling listener (js/timeline.js:3481 and :3488). None of that was
+      ever timed. It is now, by writing `scrollLeft` and dispatching the event — which is what a finger
+      does.
+      **2. THE CLOCK STOPPED BEFORE THE FRAME WAS DRAWN.** `FM.requestRender` (js/app.js:107) only sets
+      a flag and schedules a rAF, and `void document.body.offsetHeight` forces DOM layout, not a canvas
+      paint. So the reading was the handler's bookkeeping, and #95 concluded from it that *"a scrub is
+      3.8 ms … one frame, not a stall"*.
+      📐 **WITH THE RENDER INSIDE THE READING, at 6x CPU — handler / frame:**
+      | gesture | old CPU path | GPU path (v13.86) |
+      |---|---|---|
+      | scrub | 1.8 / **133.3 ms** | 1.8 / **17.7 ms** |
+      | timeline scroll | 2.7 / **136.4 ms** | 1.8 / **17.6 ms** |
+      **A scroll cost 136 ms a frame at phone speed — eight frames, not one.** That is the lag he
+      described, in the gesture he named, and the entry's own instrument had been reporting 2 ms for it.
+      ✅ **AND IT IS NOW 17.6 ms**, because the cost was the picture and the picture moved to the GPU.
+      💡 **THE LESSON IS THE ONE THIS ENTRY KEEPS TEACHING:** he said the scroll lagged, the numbers said
+      it did not, and the numbers were measuring the wrong end of the gesture. **When a measurement and
+      a user disagree for three months, suspect the measurement.** His words: *"Still getting major lag when scrolling through the timeline; with not
       many layers added at all. I know I tell you about lag a lot but nothing much ever gets resolved,
       idk if you're working on it or think it should be fine but just letting you know it's not fine."*
       **NEW, 13 Aug — the biggest lead so far, from #130's measurement. Read that entry.** The adaptive
@@ -3121,6 +3145,14 @@ better still, keep working inside the turn rather than parking work for a later 
       **Every one scales at or BELOW linear with the CPU (0.63x-1.06x of it), so there is no cliff** —
       nothing here falls apart specifically because a device is slow, which is the shape a real phone-only
       bug would have. Scrubbing at 3.8 ms and a tap at 22 ms are a frame, not a stall.
+      🚨 **THAT LAST SENTENCE WAS WRONG, AND IT WAS WRONG BECAUSE THE PROBE MEASURED THE WRONG THING
+      (corrected 28 Aug, v13.89).** `FM.requestRender` only sets a flag and schedules a rAF, and
+      `void document.body.offsetHeight` forces DOM LAYOUT rather than a canvas paint — so the clock
+      stopped **before the frame the scrub had asked for was drawn**. 3.8 ms was the handler's
+      bookkeeping, measured in the same run that timed the frame itself at 172 ms.
+      📐 **RE-MEASURED with the render inside the reading, at 6x:** the scrub's HANDLER is 1.8 ms and
+      **the frame it causes is 133.3 ms** on the old CPU path. That is eight frames, not one — **it is
+      exactly the lag he reported, and this entry had concluded it was not there.**
       **The entry's opening line said this needed *"profiling on HIS phone, or a throttled-CPU profile as
       the nearest stand-in, before touching anything"*. The stand-in is now done and it says the timeline
       is not the problem** — which matches the two re-measurements above rather than contradicting them.

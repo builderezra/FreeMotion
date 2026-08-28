@@ -115,19 +115,69 @@ MEASURE = r"""
     out.timelineRebuild = +med(t).toFixed(2);
   }
 
-  // 4. SCRUBBING — the gesture he actually complains about (queue 387: "pressing on a layer to
-  //    scrub is still laggy").  Drive the app's own scrub entry point, not a bare rAF loop.
+  /* 4. SCRUBBING — the gesture he actually complains about (queue 387: "pressing on a layer to
+   *    scrub is still laggy").
+   * ⚠️ THIS SCENARIO WAS MEASURING THE WRONG THING UNTIL 28 AUG, and its number is quoted in
+   * REQUESTS #95 as proof that "a scrub is 3.8 ms and a tap is 22 ms, which is one frame, not a
+   * stall". `FM.requestRender` (js/app.js:107) only sets a flag and schedules a rAF; `void
+   * document.body.offsetHeight` forces DOM LAYOUT, not a canvas paint. So the clock stopped before
+   * the frame the scrub caused had been drawn, and 3.8 ms was the handler's bookkeeping — in the SAME
+   * run that measured the frame itself at 159.5 ms. The `await s(6)` made it worse by letting several
+   * scrubs coalesce onto one render.
+   * Both numbers are worth having, so both are reported: `scrubHandler` is the bookkeeping (what this
+   * used to call `scrub`), and `scrubFrame` is the RENDER that the scrub actually causes, timed inside
+   * renderScene so no rAF idle is counted as work. */
   {
-    const t = [];
-    for (let i = 0; i < 20; i++) {
-      const a = performance.now();
-      FM.scrubTime ? FM.scrubTime((i % 20) / 10) : FM.setTime((i % 20) / 10);
-      FM.requestRender && FM.requestRender();
-      void document.body.offsetHeight;
-      t.push(performance.now() - a);
-      await s(6);
+    const handler = [], frame = [];
+    const realRender = FM.renderScene;
+    let acc = 0;
+    FM.renderScene = function () { const r0 = performance.now(); try { return realRender.apply(this, arguments); } finally { acc += performance.now() - r0; } };
+    try {
+      for (let i = 0; i < 20; i++) {
+        acc = 0;
+        const a = performance.now();
+        FM.scrubTime ? FM.scrubTime((i % 20) / 10) : FM.setTime((i % 20) / 10);
+        FM.requestRender && FM.requestRender();
+        handler.push(performance.now() - a);
+        // …and now WAIT for the frame it asked for, so the render is inside the reading.
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        if (acc > 0) frame.push(acc);
+      }
+    } finally { FM.renderScene = realRender; }
+    out.scrubHandler = +med(handler).toFixed(2);
+    out.scrubFrame = frame.length ? +med(frame).toFixed(2) : -1;
+    out.scrub = out.scrubFrame > 0 ? out.scrubFrame : out.scrubHandler;   // the honest headline
+  }
+
+  /* 5. THE REAL TIMELINE SCROLL — the gesture queue 125 is actually about ("timeline scrolling still
+   *    lags badly"), and until 28 Aug NO scenario here drove it. Scenario 4 calls FM.scrubTime
+   *    directly, which is the middle of the path; the flick starts at a scroll event on #timeline and
+   *    goes through the wall clamp, the feedback guard, the 160ms settle, updatePlayhead, scrubTime,
+   *    AND the windowed-ruler repaint on the sibling listener. Writing scrollLeft and dispatching the
+   *    event is what a finger does. */
+  {
+    const el = document.getElementById('timeline');
+    if (!el) { out.scrollFrame = -1; out.scrollHandler = -1; }
+    else {
+      const handler = [], frame = [];
+      const realRender = FM.renderScene;
+      let acc = 0;
+      FM.renderScene = function () { const r0 = performance.now(); try { return realRender.apply(this, arguments); } finally { acc += performance.now() - r0; } };
+      try {
+        const span = Math.max(1, el.scrollWidth - el.clientWidth);
+        for (let i = 0; i < 20; i++) {
+          acc = 0;
+          const a = performance.now();
+          el.scrollLeft = Math.round(span * ((i % 10) / 10));
+          el.dispatchEvent(new Event('scroll'));
+          handler.push(performance.now() - a);
+          await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+          if (acc > 0) frame.push(acc);
+        }
+      } finally { FM.renderScene = realRender; }
+      out.scrollHandler = +med(handler).toFixed(2);
+      out.scrollFrame = frame.length ? +med(frame).toFixed(2) : 0;   // 0 = the flick caused no repaint at all
     }
-    out.scrub = +med(t).toFixed(2);
   }
 
   // 5. a real playback burst, driven through the app's OWN render request.
@@ -326,11 +376,14 @@ def main():
     gpu = [r for r in rows if r.get("gl")]
     cpu = [r for r in rows if not r.get("gl")]
     base = gpu[0]
-    print("\n| CPU | warps | renderScene | tap→inspector | timeline | scrub | fps | worst frame |")
-    print("|---|---|---|---|---|---|---|---|")
+    print("\n(scrub / scroll are shown as HANDLER / FRAME — the handler is bookkeeping, the frame is the")
+    print(" repaint the gesture actually causes. Only the second one is what a finger waits for.)")
+    print("\n| CPU | warps | renderScene | tap→inspector | timeline | scrub h/f | scroll h/f | fps | worst frame |")
+    print("|---|---|---|---|---|---|---|---|---|")
     for r in rows:
         print(f"| {r['rate']}x | {'GPU' if r.get('gl') else 'JS '} | {r['renderScene']} ms | {r['tapInspector']} ms | "
-              f"{r['timelineRebuild']} ms | {r.get('scrub')} ms | {r['fps']} | {r['worstFrameMs']} ms |")
+              f"{r['timelineRebuild']} ms | {r.get('scrubHandler')} / {r.get('scrubFrame')} ms | "
+              f"{r.get('scrollHandler')} / {r.get('scrollFrame')} ms | {r['fps']} | {r['worstFrameMs']} ms |")
     print("\nwhat the GPU warp path is worth AT PHONE SPEED (same browser, same machine, one switch):")
     for g, c in zip(gpu, cpu):
         rs = c["renderScene"] / (g["renderScene"] or 0.01)
