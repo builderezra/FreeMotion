@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.21
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.22
 >
-> **State:** v14.21, 1070 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.22, 1071 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -23789,14 +23789,13 @@ re-opened #480, which I had marked done and had not fixed.
       moves**, because a blank moment in the middle of a timeline is the truth about that moment and
       shifting it would make a saved frame a lie. Mutation-checked.
 
-- [ ] **632 — Inside a group, the left of the timeline wastes a lot of space.** (27 Aug, phone
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **632 — Inside a group, the left of the timeline wastes a lot of space.** (27 Aug, phone
       screenshot at v13.53 — inside a group, three clips at 3.08x, with a wide empty strip circled in
       orange down the far left of the layer heads.)
       His words, verbatim:
       > Inside groups the ui is cooked on the left it has heaps of wasted space
 
-      1. [ ] **Reclaim the empty column on the left of the layer heads when you are inside a group.**
+      1. [x] **Reclaim the empty column on the left of the layer heads when you are inside a group.**  ✅ v14.22 — 28px back
       📍 **What his circle is around:** a blank vertical strip to the LEFT of the eye icon, running
       the full height of the layer rows. On a normal timeline the eye is the first thing in the head
       column; inside a group something is reserving width before it and drawing nothing. **A thin
@@ -23811,6 +23810,30 @@ re-opened #480, which I had marked done and had not fixed.
       **#630** (zooming a group pivots at a corner, anchor not findable) and the group in **#627**'s
       screenshots. **Groups are not landing for him.** These are separate bugs and stay separate, but
       whoever picks one up should read all four.
+
+
+      ═══ ✅ **29 AUG (v14.22) — 28 PIXELS BACK, AND THE ENTRY'S GUESS WAS RIGHT.** ═══
+      📐 **MEASURED at 375px, where the eye icon sits:** **x=4 outside a group, x=32 inside one.**
+      **28px of a 375px screen — 7% of the width** — and your circle was around exactly that. The
+      "thin coloured sliver" you could see is a **3px stripe**; the rest was a **12px chevron with
+      nothing to disclose** plus an 18px nesting indent.
+      🔑 **CAUSE, and it is one line:** the chevron column is held open whenever **the scene** contains
+      a group — which is true the entire time you are inside one, because the group you entered is
+      still a layer. **But that group is not drawn; only its children are.** The column was being
+      reserved to line up with a row that is not on screen. It now asks whether any **visible** row is
+      a group.
+      🔗 **This is #295 and #191 again, one level deeper** — the code for those quotes you saying
+      *"you've left a bunch of dead space on the far left side"*, and the reasoning written there
+      applies unchanged: nothing needs aligning when there is nothing to align WITH.
+      ✅ **After: x=4 inside, the same as outside**, and the layer thumbnail grows from 24px to 34px —
+      the space goes back to content rather than to margin. The 3px stripe stays, because that is the
+      cue telling you that you are inside a group.
+      🔒 **THE INVARIANT THAT MUST NOT BREAK IS TESTED AS HARD AS THE SAVING.** That column exists so a
+      group row and a plain row at the same depth line up (#191: *"the arrow pushes the ui over making
+      it ugly"*). **A nested group inside the group brings it straight back**, and the test asserts it.
+      🐛 **The first attempt shifted the column instead of reclaiming it** — 4px of padding where a
+      normal row uses 8px, so in-group rows sat slightly LEFT of ordinary ones. From a width
+      measurement those two look identical and they are not the same thing. The test caught it.
 
 - [ ] **633 — The add-layer row does not draw the line that separates it from the layers.** (27 Aug,
       **STATUS: 🟢 READY — nothing is stopping this**

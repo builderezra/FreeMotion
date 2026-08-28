@@ -2663,7 +2663,21 @@ window.FM = window.FM || {};
      * the maths read the variable off the wrong element; here, the variable was declared on one. Putting
      * it on the shared ancestor is what makes both halves of the timeline agree by construction. The
      * class stays on #tl-tracks too, because .tl-no-groups .th-chevron--empty keys off it. */
-    const noGroups = !FM.scene.layers.some(l => l.type === 'group');
+    /* ⚠️ …AND IT IS THE ROWS ON SCREEN THAT DECIDE, NOT THE DOCUMENT (queue 632). Ezra: *"Inside
+     * groups the ui is cooked on the left it has heaps of wasted space"*.
+     * The rule above reserves the chevron column while the SCENE contains a group — which is true the
+     * whole time you are INSIDE one, because the group you entered is still a layer. But that group is
+     * not drawn: only its children are, and if none of THEM is a group there is nothing on screen to
+     * align with. So the column was held open for a row that is not there.
+     * 📐 MEASURED at 375px, the eye icon: **x=4 outside a group, x=32 inside one** — 28px of a phone's
+     * width, on a 3px stripe and a 12px chevron with nothing to disclose. That is the same complaint as
+     * #295 and #191, one level deeper, and the reasoning written for those applies unchanged: nothing
+     * needs aligning when there is nothing to align WITH. A nested group inside the group still
+     * reserves it, so the invariant holds exactly where it means something. */
+    const _ctx = liveGroupCtx();
+    const noGroups = _ctx
+      ? !FM.scene.layers.some(l => l.type === 'group' && inSubtree(l, _ctx))
+      : !FM.scene.layers.some(l => l.type === 'group');
     tracksEl.classList.toggle('tl-no-groups', noGroups);
     if (innerEl) innerEl.classList.toggle('tl-no-groups', noGroups);
     if (!FM.scene.layers.length) {

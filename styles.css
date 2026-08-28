@@ -8654,3 +8654,16 @@ body:has(#el-browser:not(.hidden)) #view-bar { display: none; }
   box-shadow: 0 0 0 2px var(--panel-2);
 }
 @media (prefers-reduced-motion: reduce) { .bs-tile { transition: none; } }
+
+/* ---- INSIDE EDIT GROUP, THE NESTING INDENT SAYS NOTHING (queue 632) ---------------------------
+   Ezra: "Inside groups the ui is cooked on the left it has heaps of wasted space".
+   `.track-head.in-group` indents 18px to show that a row sits inside a group — which is worth saying
+   in the MAIN timeline, where grouped and ungrouped rows are side by side. Inside Edit Group every
+   visible row is in the group, so indenting all of them distinguishes nothing and costs 18px on a
+   375px screen. The 3px stripe stays: that is the cue that you are inside a group, and it is the
+   "thin coloured sliver" he could see at the very left edge of his screenshot.
+   ⚠️ 8px, NOT a smaller number: that is `.track-head`'s own padding, so an in-group row lines up
+   EXACTLY with a normal one instead of sitting a few pixels further left. The first attempt used 4px
+   and the test caught it — "reclaim the wasted space" and "shift the column somewhere else" look the
+   same from a width measurement and are not the same thing. */
+body.group-editing .track-head.in-group { padding-left: 8px; }

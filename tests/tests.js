@@ -46392,6 +46392,61 @@
     if (!/STUTTER/i.test(bad)) throw new Error('a stuttering sample lost its stutter verdict to the new scale branch: ' + bad);
   });
 
+  /* ═══ QUEUE 632 — INSIDE A GROUP, THE LEFT OF THE TIMELINE WAS DEAD SPACE ═════════════════════
+   * Ezra: *"Inside groups the ui is cooked on the left it has heaps of wasted space"*, with the strip
+   * circled on a 380px phone.
+   * 📐 MEASURED at 375px, the eye icon: **x=4 outside a group, x=32 inside one** — 28px of a phone's
+   * scarce width, spent on a 3px stripe and a 12px chevron with nothing to disclose.
+   * The chevron column is reserved while the SCENE contains a group, which is true the whole time you
+   * are inside one — but the group you entered is not drawn, only its children are. The column was
+   * held open to align with a row that is not on screen. Same complaint as #295 and #191, one level
+   * deeper, and the reasoning written for those applies unchanged.
+   * ⚠️ THE INVARIANT IT MUST NOT BREAK is the reason that column exists at all: a group row and a
+   * plain row at the same depth have to line up (#191 — "the arrow pushes the ui over making it
+   * ugly"). So a NESTED group inside the group must bring the column straight back, and that case is
+   * asserted here as hard as the saving. */
+  test('#632: inside a group the layer heads do not waste the left column', { item: '632' }, function () {
+    const S = FM.scene;
+    const keep = S.layers.slice(), ctx0 = FM.groupContext;
+    const eyeXs = () => [].slice.call(document.querySelectorAll('.th-eye')).map(n => Math.round(n.getBoundingClientRect().left));
+    try {
+      S.layers.length = 0;
+      if (FM.exitGroup) FM.exitGroup(true);
+      const mk = (i) => { const L = FM.makeLayer('shape', { shape: 'rect', x: 100 + i * 40, y: 100, shapeW: 60, shapeH: 60, fill: '#4fd1ff' });
+                          L.start = 0; L.duration = 3; S.layers.push(L); return L; };
+      const a = mk(0), b = mk(1); mk(2);
+      FM.refreshAll();
+      const outside = eyeXs();
+      if (!outside.length) throw new Error('no layer heads rendered — the fixture is not reaching the timeline');
+
+      const G = FM.makeLayer('group', { name: 'G' }); G.start = 0; G.duration = 3;
+      S.layers.forEach(l => { if (l.type === 'shape') l.parent = G.id; });
+      S.layers.push(G);
+      FM.refreshAll();
+      FM.enterGroup(G.id);
+      FM.refreshAll();
+      const inside = eyeXs();
+      if (!inside.length) throw new Error('no layer heads rendered inside the group');
+      if (inside[0] !== outside[0]) throw new Error('inside a group the first control sits at x=' + inside[0] +
+        ' against x=' + outside[0] + ' outside — ' + (inside[0] - outside[0]) + 'px of a 375px screen is still being wasted on a column with nothing in it');
+
+      /* AND THE COLUMN COMES BACK WHEN THERE IS SOMETHING TO ALIGN WITH. Without this the fix would
+         reclaim the space by breaking the alignment rule the column exists for (#191). */
+      const N = FM.makeLayer('group', { name: 'Nested' }); N.start = 0; N.duration = 3; N.parent = G.id;
+      S.layers.push(N);
+      a.parent = N.id; b.parent = N.id;
+      FM.refreshAll();
+      const nested = eyeXs();
+      if (!nested.length) throw new Error('no heads rendered with a nested group');
+      if (nested[0] === outside[0]) throw new Error('a NESTED group inside the group did not reserve the chevron column again — the rows no longer line up, which is the bug that column was added to fix (#191)');
+    } finally {
+      if (FM.exitGroup) FM.exitGroup(true);
+      FM.groupContext = ctx0 || null;
+      S.layers.length = 0; keep.forEach(l => S.layers.push(l));
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   /* ═══ QUEUE 631 — SAVING THE LAST FRAME MUST NOT GIVE A BLACK IMAGE ═══════════════════════════
    * Ezra: *"I did save Frame as pnj on the last frame and I got a black image"*.
    * 📐 MEASURED on a 4s project at 30fps before the fix — lit pixels: end-2f 40,000 · end-1f 40,000 ·
