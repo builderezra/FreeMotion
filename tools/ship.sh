@@ -46,6 +46,37 @@ if [ "$FROM_FILE" = "0" ]; then
 fi
 [ -f .mutation-in-progress ] && { echo "❌ a mutation check is still in progress — refusing to ship a mutated tree"; exit 1; }
 
+# ─── NO NUL BYTES IN SOURCE (28 Aug) ────────────────────────────────────────────────────────────────
+# A NUL byte in a text file makes grep treat the WHOLE FILE as binary and print NOTHING for it — not an
+# error, not "binary file matches", just silence. `grep -n "function program" js/gl-warp.js` returned
+# nothing on a file that plainly contained it, which reads exactly like "that code does not exist".
+# This repo is navigated by grep; CLAUDE.md tells every session to use it.
+# It has cost something once already, in a different direction: js/compositor.js built a cache key with
+# NUL separators, `"$(cat file)"` truncates at the first NUL, so both arguments to a mutation collapsed
+# to the same prefix and mutate.sh announced "SURVIVED — the assertion is DEAD" against a perfectly good
+# test. A gate was added to catch that symptom; this removes the cause.
+# \u001f (unit separator) does every job a NUL was doing in those cache keys and is invisible to none of
+# the tools. So: no NUL in shipped source, ever, and the check refuses rather than reminds.
+# ⚠️ THE FIRST VERSION OF THIS CHECK FELL INTO THE VERY TRAP IT GUARDS. It searched with
+# `grep -qU "$(printf '\000')"` — and command substitution truncates at the first NUL, so the pattern
+# was the EMPTY STRING, which matches every file and therefore flags none of them usefully. Measured on
+# a file built to contain one: "DETECTOR DOES NOT WORK". Python reads bytes and cannot be fooled.
+NULBAD="$(git ls-files -m -o --exclude-standard | python3 -c '
+import sys, os
+for f in sys.stdin.read().split(chr(10)):
+    if not f or not os.path.isfile(f): continue
+    if not f.endswith((".js", ".html", ".css", ".md", ".py", ".sh")): continue
+    try:
+        if b"\x00" in open(f, "rb").read(): print(f)
+    except OSError: pass
+')"
+if [ -n "$NULBAD" ]; then
+  echo "❌ these files contain a NUL byte, which makes grep go SILENT on the whole file:"
+  printf '   %s\n' $NULBAD
+  echo "   Replace it with '\u001f' (unit separator) — same separator job, and grep can still read the file."
+  exit 1
+fi
+
 # ⏱️ BATCH GATE — the biggest drain on his TIME, measured 27 Aug and hard to argue with: 99 commits in
 # 20 hours, 51 of them touching NO app code, 38 version releases. Every one ran the suite (~8-9 min for
 # a code change, which runs it twice; ~4 for docs). That is roughly TEN of those twenty hours spent

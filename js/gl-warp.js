@@ -112,17 +112,47 @@
      `sx = m[0] | 0` (truncate) and then pins to [0, W-1], so the shader floors, pins to the same range
      and samples the TEXEL CENTRE. Sampling at `s / res` instead would land on a texel boundary, where
      NEAREST's tie-break is undefined and half the frame can shift by one pixel. */
+  /* SHARED HELPERS, and each is a MATCHED PAIR with a function in compositor.js. Two expressions of
+     one rule is the shape that has cost this project the most — queue 630 paid for it three times
+     inside a single item — so they are transcribed line for line and named identically at both ends. */
+  const PRELUDE = [
+    // compositor.js reflectInto — bounce a coordinate back inside [0, n-1] instead of clamping, so a
+    // kaleidoscope's mirrors reflect rather than smearing the edge pixel outward.
+    'float reflectInto(float v, float n){',
+    '  if (!(n > 1.0)) return 0.0;',
+    '  float last = n - 1.0, m = 2.0 * last;',
+    '  float q = mod(mod(v, m) + m, m);',
+    '  return q > last ? m - q : q;',
+    '}'
+  ].join('\n');
+
   function program(g, body, uNames) {
-    const key = uNames.join(',') + ' ' + body;
+    /* \u001f (unit separator), NOT a NUL. A NUL makes grep treat the WHOLE FILE as binary and go
+       silent — `grep -n "function program" js/gl-warp.js` printed nothing on a file that plainly
+       contains it, which reads as "the code is not there". This repo works by grep. \u001f cannot
+       occur in a GLSL identifier or body either, so it separates just as unambiguously. */
+    const key = uNames.join(',') + '\u001f' + body;
     let p = _progs.get(key);
     if (p) return p;
-    const decls = uNames.map(n => 'uniform float ' + n + ';').join('\n');
+    /* EVERY UNIFORM IS PREFIXED `u_`, AND THAT IS NOT TIDINESS. A kernel's `prep` keys become the
+       uniform names, and those keys were chosen for JavaScript: `kaleidoscope.prep` returns one
+       called **half**, which is a RESERVED WORD in GLSL ES — the shader would not compile at all.
+       The quieter danger is a key that compiles and is WRONG: `mix`, `step`, `length` and `filter`
+       are built-in FUNCTIONS, and a uniform of that name shadows one. Prefixing removes the entire
+       class, rather than keeping a list of words no kernel author may use. */
+    const decls = uNames.map(n => 'uniform float u_' + n + ';').join('\n');
     const fs = [
       'precision highp float;',
       'varying vec2 uv;',
       'uniform sampler2D src;',
       'uniform vec2 res;',
       decls,
+      PRELUDE,
+      /* Two kernels read drawWarpEffect's RAW cx/cy/maxR arguments rather than their own prep, and
+         those are always W/2, H/2 and hypot(cx,cy) — derivable from res, so they need no uniform and
+         cannot drift from what the CPU path was handed. */
+      'vec2 fmC = res * 0.5;',
+      'float fmCx = fmC.x, fmCy = fmC.y, fmMaxR = length(fmC);',
       'vec2 fmWarp(vec2 xy){',
       body,
       '}',
@@ -143,7 +173,7 @@
       throw new Error('warp link: ' + log);
     }
     const u = { res: g.getUniformLocation(prog, 'res'), src: g.getUniformLocation(prog, 'src') };
-    uNames.forEach(n => { u[n] = g.getUniformLocation(prog, n); });
+    uNames.forEach(n => { u[n] = g.getUniformLocation(prog, 'u_' + n); });
     p = { prog: prog, u: u };
     _progs.set(key, p);
     _stats.compiled++;
@@ -168,7 +198,16 @@
       try {
         if (g.isContextLost && g.isContextLost()) { reset(); _stats.cpu++; _stats.reason = 'context lost'; return null; }
         const names = [];
-        for (const k in uniforms) if (typeof uniforms[k] === 'number' && isFinite(uniforms[k])) names.push(k);
+        /* A BOOLEAN IS A VALUE TOO. `radialrepeat.prep` returns `mir: true`, and taking numbers only
+           left that uniform undeclared while the kernel body still referenced it — a compile error,
+           i.e. a silent permanent fallback for that one effect, which is the hardest kind of miss to
+           notice because everything still draws correctly. Arrays and objects are still skipped:
+           `wave.prep` returns two Float64Arrays for the CPU path and the shader recomputes those
+           sines directly, because on a GPU a sine is one instruction and a lookup table is not. */
+        for (const k in uniforms) {
+          const v = uniforms[k];
+          if (typeof v === 'boolean' || (typeof v === 'number' && isFinite(v))) names.push(k);
+        }
         names.sort();   // stable, so the same kernel always hits the same cached program
         const p = program(g, body, names);
         if (_cv.width !== W || _cv.height !== H) { _cv.width = W; _cv.height = H; }
@@ -182,7 +221,7 @@
         g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, g.RGBA, g.UNSIGNED_BYTE, srcCanvas);
         g.uniform1i(p.u.src, 0);
         g.uniform2f(p.u.res, W, H);
-        for (let i = 0; i < names.length; i++) g.uniform1f(p.u[names[i]], uniforms[names[i]]);
+        for (let i = 0; i < names.length; i++) { const v = uniforms[names[i]]; g.uniform1f(p.u[names[i]], v === true ? 1 : v === false ? 0 : v); }
         g.viewport(0, 0, W, H);
         g.drawArrays(g.TRIANGLES, 0, 3);
         _stats.gpu++;

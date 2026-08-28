@@ -7386,12 +7386,73 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * `prep`'s KEYS ARE THE UNIFORM NAMES: gl-warp.js uploads every finite number it returns, so a kernel
    * needs no schema and the two cannot fall out of step over an argument order. */
   WARP_FX.twirl.glsl = [
-    'vec2 dxy = xy - vec2(cx, cy);',
+    'vec2 dxy = xy - vec2(u_cx, u_cy);',
     'float r = length(dxy);',
-    'float f = max(0.0, 1.0 - r * imaxR);',
-    'float d = ang * f * f;',
+    'float f = max(0.0, 1.0 - r * u_imaxR);',
+    'float d = u_ang * f * f;',
     'float cD = cos(d), sD = sin(d);',
-    'return vec2(cx + dxy.x * cD - dxy.y * sD, cy + dxy.y * cD + dxy.x * sD);'
+    'return vec2(u_cx + dxy.x * cD - dxy.y * sD, u_cy + dxy.y * cD + dxy.x * sD);'
+  ].join('\n');
+
+  /* RIPPLE — concentric rings pushed along the radius. The kernel's `|| 1e-6` is a guard against a
+     divide by zero at the exact centre pixel; max() is the same guard without a branch. */
+  WARP_FX.ripple.glsl = [
+    'vec2 dxy = xy - vec2(u_cx, u_cy);',
+    'float r = max(length(dxy), 1e-6);',
+    'float off = u_amp * sin(r / u_wl - u_ph);',
+    'return xy + (dxy / r) * off;'
+  ].join('\n');
+
+  /* WAVE — separable, and the ONE kernel whose prep cannot simply become uniforms: it returns two
+     Float64Array lookup tables (the x shift per ROW, the y shift per COLUMN). That is the right answer
+     on a CPU — one sine per row instead of per pixel — and pointless on a GPU, where a sine is a single
+     instruction and uploading two tables as textures would cost more than it saves. So the shader
+     recomputes them, and `prep` now returns the scalars ALONGSIDE the tables; the CPU path still reads
+     the tables and is untouched, byte for byte. */
+  WARP_FX.wave.glsl = [
+    'return vec2(xy.x + u_amp * sin(xy.y / u_wl + u_ph),',
+    '            xy.y + u_amp * u_cross * sin(xy.x / u_wl2 + u_ph));'
+  ].join('\n');
+
+  /* KALEIDOSCOPE — fold the destination angle into one wedge, then bounce the source back inside the
+     frame. ⚠️ The kernel's `if (a < 0) a += slice` has NO counterpart here, and that is correct rather
+     than an omission: JavaScript's `%` keeps the sign of the dividend, GLSL's `mod` does not. Copying
+     the line across would be copying a fix for a problem this language does not have. */
+  WARP_FX.kaleidoscope.glsl = [
+    'vec2 dxy = xy - vec2(u_cx, u_cy);',
+    'float r = length(dxy);',
+    'float a = mod(atan(dxy.y, dxy.x) + u_ph, u_slice);',
+    'a = abs(a - u_half);',
+    'return vec2(reflectInto(u_cx + cos(a) * r, res.x), reflectInto(u_cy + sin(a) * r, res.y));'
+  ].join('\n');
+
+  /* GRID REPEAT — tile the frame, with optional per-row stagger and alternate-tile mirroring.
+     ⚠️ `grIx & 1` is an integer parity test and GLSL ES 1.0 has NO integer bitwise operators, so it is
+     written as mod(ix, 2.0) >= 0.5 — the same question asked of a float that is already whole. */
+  WARP_FX.gridrepeat.glsl = [
+    'float gx = xy.x;',
+    'if (u_stag > 0.0) { float row0 = floor(xy.y * u_icellH); if (mod(row0, 2.0) >= 0.5) gx = xy.x + u_stagCell; }',
+    'float ix = floor(gx * u_icellW), iy = floor(xy.y * u_icellH);',
+    'float gux = (gx - ix * u_cellW) * u_icellW;',
+    'float guy = (xy.y - iy * u_cellH) * u_icellH;',
+    'if (u_mir == 1.0 || u_mir == 3.0) { if (mod(ix, 2.0) >= 0.5) gux = 1.0 - gux; }',
+    'if (u_mir == 2.0 || u_mir == 3.0) { if (mod(iy, 2.0) >= 0.5) guy = 1.0 - guy; }',
+    'return vec2(gux * res.x, guy * res.y);'
+  ].join('\n');
+
+  /* RADIAL REPEAT — a fan of wedges, optionally mirrored and twisted. This is the kernel that reads
+     drawWarpEffect's RAW cx/cy/maxR arguments rather than its own prep, which is why the shader wrapper
+     exposes fmCx/fmCy/fmMaxR derived from res. */
+  WARP_FX.radialrepeat.glsl = [
+    'vec2 dxy = xy - vec2(fmCx, fmCy);',
+    'float r = length(dxy);',
+    'float base = atan(dxy.y, dxy.x) - u_rr;',
+    'float k = floor(base / u_seg);',
+    'float a2 = base - k * u_seg;',
+    'if (u_mir > 0.5 && mod(k, 2.0) >= 0.5) a2 = u_seg - a2;',
+    'if (u_tw != 0.0 && fmMaxR > 0.0) a2 += u_twRad * (r / fmMaxR);',
+    'a2 += u_rr;',
+    'return vec2(fmCx + cos(a2) * r, fmCy + sin(a2) * r);'
   ].join('\n');
 
   WARP_FX.fractalwarp.prep = function (W, H, cx, cy, maxR, p, t, ps) {
@@ -7426,7 +7487,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const SX = new Float64Array(H), SY = new Float64Array(W);
     for (let y = 0; y < H; y++) SX[y] = amp * Math.sin(y / wl + ph);          // the x shift, by ROW
     for (let x = 0; x < W; x++) SY[x] = amp * cross * Math.sin(x / wl2 + ph); // the y shift, by COLUMN
-    return { SX: SX, SY: SY };
+    /* THE SCALARS RIDE ALONG FOR THE SHADER, and the CPU path never looks at them. gl-warp.js uploads
+       only the numbers, so the two arrays above are simply ignored there — see WARP_FX.wave.glsl for
+       why a lookup table is the right answer on a CPU and the wrong one on a GPU. */
+    return { SX: SX, SY: SY, amp: amp, wl: wl, wl2: wl2, ph: ph, cross: cross };
   };
 
   /* The turbulence basis, shared by the lattice builder and the reference path in the kernel so the
@@ -13239,7 +13303,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     /* ⚠️ WORD SPACING BELONGS IN THIS KEY. measureText answers for it exactly as it does for letter
        spacing, so leaving it out means a layer whose ONLY change is word spacing keeps the wrapping it
        had — the lines break in the old places and the fix reads as doing nothing. */
-    const key = src + ' ' + ww + ' ' + ctx.font + ' ' + (ctx.letterSpacing || '') + ' ' + (ctx.wordSpacing || '');
+    /* \u001f (unit separator) rather than NUL, and the change is not cosmetic. THESE FOUR BYTES ARE
+       THE ONES CLAUDE.md's mutate.sh section is about: `"$(cat file)"` truncates at the first NUL,
+       so both arguments to a mutation collapsed to the same harmless prefix and the tool announced
+       "SURVIVED - the assertion is DEAD" against a perfectly good test. A gate was added to catch
+       that; this removes the cause. It also un-breaks grep, which treats any file containing a NUL
+       as binary and silently reports NOTHING for it - on a 13,000-line file this repo navigates by
+       grep. \u001f cannot appear in a font string or in user text, so the key is just as safe. */
+    const key = src + '\u001f' + ww + '\u001f' + ctx.font + '\u001f' + (ctx.letterSpacing || '') + '\u001f' + (ctx.wordSpacing || '');
     const cache = layer ? (layer._wrapCache || (layer._wrapCache = [])) : null;
     if (cache) { for (let i = 0; i < cache.length; i++) if (cache[i].key === key) return cache[i].lines; }
 

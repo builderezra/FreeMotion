@@ -1,0 +1,81 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:1100px;height:820px;border:0"></iframe>
+<script>
+/* EVERY PORTED WARP, EACH AGAINST ITS OWN CPU TWIN.
+ * A kernel and its shader are two expressions of one rule, which is the shape that has cost this
+ * project the most (#630 paid for it three times inside one item). So the check is not "does the GPU
+ * path work" — it is "does EACH kernel still agree with the JavaScript it was transcribed from", asked
+ * once per kernel, with the path counters proving which side actually ran. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.scene && w.FM.renderScene && w.FM.fxRegistry)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait,50); }
+    setTimeout(run.bind(null,w), 1200);
+  })();
+});
+async function run(w){
+  try{
+    var FM = w.FM, d = w.document, P = FM.scene.project;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (!FM.glWarp) return say('❌ FM.glWarp is missing');
+    say('WebGL available: ' + FM.glWarp.available());
+
+    var W = 720, H = 720;
+    P.width = W; P.height = H; P.duration = 4;
+
+    var KINDS = ['twirl','ripple','wave','kaleidoscope','gridrepeat','radialrepeat'];
+    var cv = d.createElement('canvas'); cv.width = W; cv.height = H;
+    var cx = cv.getContext('2d', { willReadFrequently: true });
+
+    function build(kind){
+      FM.scene.layers.length = 0;
+      // structure to move: an off-centre block over a big one, so a warp that does nothing is visible
+      var A = FM.makeLayer('shape', { shape:'rect', x: 360, y: 360, shapeW: 460, shapeH: 560, fill:'#4fd1ff' });
+      A.start = 0; A.duration = 4; A.effects = [];
+      var B = FM.makeLayer('shape', { shape:'rect', x: 240, y: 200, shapeW: 150, shapeH: 150, fill:'#ff9a4f' });
+      B.start = 0; B.duration = 4;
+      var inst = FM.fxRegistry.makeInstance(kind);
+      if (!inst) return null;
+      A.effects.push(inst);
+      FM.scene.layers.push(B, A);
+      return inst;
+    }
+    function shot(){ cx.clearRect(0,0,W,H); FM.renderScene(cx, FM.scene, 0.6); return cx.getImageData(0,0,W,H).data; }
+    function timeIt(){ var a=[]; for (var i=0;i<3;i++){ var t0=performance.now(); cx.clearRect(0,0,W,H); FM.renderScene(cx, FM.scene, 0.6); a.push(performance.now()-t0); } a.sort(function(x,y){return x-y;}); return a[1]; }
+
+    say('');
+    say('kernel          CPU ms   GPU ms   speedup   pixels differing >24   verdict');
+    for (var i=0;i<KINDS.length;i++){
+      var kind = KINDS[i];
+      var inst = build(kind);
+      if (!inst) { say(kind + ' — no instance could be made, SKIPPED (and that is a gap, not a pass)'); continue; }
+      await new Promise(function(r){ setTimeout(r,350); });
+
+      FM._noGL = true;  FM.glWarp._reset(); shot();
+      var A = shot(); var cpuMs = timeIt(); var cs = FM.glWarp.stats();
+      FM._noGL = false; FM.glWarp._reset(); shot();
+      var B = shot(); var gpuMs = timeIt(); var gs = FM.glWarp.stats();
+
+      var big=0, lit=0;
+      for (var q=0;q<A.length;q+=4){
+        if (A[q+3]>4) lit++;
+        var e = Math.max(Math.abs(A[q]-B[q]), Math.abs(A[q+1]-B[q+1]), Math.abs(A[q+2]-B[q+2]), Math.abs(A[q+3]-B[q+3]));
+        if (e>24) big++;
+      }
+      var pct = 100*big/(A.length/4);
+      var ran = gs.gpu > 0 && cs.gpu === 0;
+      var verdict = !ran ? '🚨 FELL BACK (' + gs.reason + ') — nothing was compared'
+                  : pct > 2 ? '🚨 DIFFERENT PICTURE'
+                  : '✅';
+      say(pad(kind,15) + pad(cpuMs.toFixed(1),9) + pad(gpuMs.toFixed(1),9) + pad((cpuMs/gpuMs).toFixed(1)+'x',10) +
+          pad(pct.toFixed(3)+'%',23) + verdict);
+    }
+    function pad(s,n){ s=String(s); while (s.length<n) s+=' '; return s; }
+    FM._noGL = false; FM.glWarp._reset();
+  } catch(e){ say('threw: ' + (e && (e.stack||e.message||String(e)))); }
+  window.__done = true;
+}
+</script></body></html>

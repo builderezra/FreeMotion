@@ -44874,60 +44874,65 @@
    * answers every one of those by returning null and letting the old loop run. So a test that merely
    * compared two renders would pass perfectly while measuring the CPU loop twice and saying NOTHING
    * about the shader. FM.glWarp.stats() exists so the test can prove which path ran. */
-  test('the GPU warp draws the same picture as the CPU loop', { item: 'lag-gl' }, async function () {
+  test('every ported warp draws the same picture on the GPU as on the CPU', { item: 'lag-gl' }, async function () {
     if (!FM.glWarp) throw new Error('FM.glWarp is missing — js/gl-warp.js did not load');
     if (!FM.glWarp.available()) throw new Error('WebGL is not available to the suite, so the GPU warp path is UNTESTED: ' + FM.glWarp.stats().reason);
+    if (!FM._warpFx) throw new Error('FM._warpFx is not exposed, so this test cannot find the ported kernels');
+    /* ⚠️ THE LIST IS DERIVED, NOT WRITTEN DOWN, and that is the point. Every kernel carrying a `.glsl`
+       is picked up automatically, so PORTING A NEW ONE CANNOT SHIP UNTESTED — which is the only version
+       of this test worth having, given that 23 kernels are still to come and each is a fresh chance to
+       transcribe a sign wrong. A hand-maintained list would be one more thing to remember. */
+    const ported = Object.keys(FM._warpFx).filter(k => typeof FM._warpFx[k] === 'function' && FM._warpFx[k].glsl);
+    if (!ported.length) throw new Error('no kernel carries a .glsl — either the port was reverted or this test is looking in the wrong place');
     const P = FM.scene.project;
     const saved = { layers: FM.scene.layers.slice(), w: P.width, h: P.height, dur: P.duration, noGL: FM._noGL };
     try {
       // Above gl-warp's size floor, or it legitimately refuses and the comparison is CPU vs CPU.
       const W = 420, H = 420;
       P.width = W; P.height = H; P.duration = 3;
-      FM.scene.layers.length = 0;
-      const L = FM.makeLayer('shape', { shape: 'rect', x: 210, y: 210, shapeW: 260, shapeH: 330, fill: '#4fd1ff' });
-      L.start = 0; L.duration = 3;
-      const inst = FM.fxRegistry.makeInstance('twirl');
-      if (!inst) throw new Error('could not make a twirl instance — this test would be comparing a scene with no effect in it');
-      if (inst.params) inst.params.amount = 140;
-      L.effects = [inst];
-      // a second, off-centre block so the warp has structure to move rather than one flat field
-      const L2 = FM.makeLayer('shape', { shape: 'rect', x: 140, y: 130, shapeW: 110, shapeH: 110, fill: '#ff9a4f' });
-      L2.start = 0; L2.duration = 3;
-      FM.scene.layers.push(L2, L);
-
       const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
       const cx = cv.getContext('2d', { willReadFrequently: true });
       const shot = () => { cx.clearRect(0, 0, W, H); FM.renderScene(cx, FM.scene, 0.5); return cx.getImageData(0, 0, W, H).data; };
+      const bad = [];
+      for (const kind of ported) {
+        FM.scene.layers.length = 0;
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 210, y: 210, shapeW: 260, shapeH: 330, fill: '#4fd1ff' });
+        L.start = 0; L.duration = 3;
+        const inst = FM.fxRegistry.makeInstance(kind);
+        if (!inst) throw new Error('could not make a "' + kind + '" instance — this test would be comparing a scene with no effect in it');
+        L.effects = [inst];
+        // a second, off-centre block so the warp has structure to MOVE rather than one flat field
+        const L2 = FM.makeLayer('shape', { shape: 'rect', x: 140, y: 130, shapeW: 110, shapeH: 110, fill: '#ff9a4f' });
+        L2.start = 0; L2.duration = 3;
+        FM.scene.layers.push(L2, L);
 
-      FM._noGL = true; FM.glWarp._reset();
-      const cpu = shot();
-      const cpuStats = FM.glWarp.stats();
-      if (cpuStats.gpu !== 0) throw new Error('FM._noGL did not disable the GPU path (' + cpuStats.gpu + ' GPU passes) — the two sides of this comparison are not different paths');
-      if (!(cpuStats.cpu > 0)) throw new Error('the CPU side ran no warp at all — the fixture has no warp effect in it, so nothing below is measured');
+        FM._noGL = true; FM.glWarp._reset();
+        const cpu = shot();
+        const cpuStats = FM.glWarp.stats();
+        if (cpuStats.gpu !== 0) throw new Error('FM._noGL did not disable the GPU path on ' + kind + ' — the two sides of this comparison are not different paths');
+        if (!(cpuStats.cpu > 0)) throw new Error('the CPU side ran no warp at all on ' + kind + ' — the fixture is not reaching drawWarpEffect');
 
-      FM._noGL = false; FM.glWarp._reset();
-      const gpu = shot();
-      const gpuStats = FM.glWarp.stats();
-      if (!(gpuStats.gpu > 0)) throw new Error('the GPU path did not run (' + gpuStats.reason + ') — this test would otherwise be comparing the CPU loop with itself and passing');
+        FM._noGL = false; FM.glWarp._reset();
+        const gpu = shot();
+        const gpuStats = FM.glWarp.stats();
+        if (!(gpuStats.gpu > 0)) throw new Error('the GPU path did not run on ' + kind + ' (' + gpuStats.reason + ') — this test would otherwise compare the CPU loop with itself and pass');
 
-      let lit = 0, big = 0, any = 0;
-      for (let i = 0; i < cpu.length; i += 4) {
-        if (cpu[i + 3] > 4) lit++;
-        const e = Math.max(Math.abs(cpu[i] - gpu[i]), Math.abs(cpu[i + 1] - gpu[i + 1]),
-                           Math.abs(cpu[i + 2] - gpu[i + 2]), Math.abs(cpu[i + 3] - gpu[i + 3]));
-        if (e > 0) any++;
-        if (e > 24) big++;
+        let lit = 0, big = 0;
+        for (let i = 0; i < cpu.length; i += 4) {
+          if (cpu[i + 3] > 4) lit++;
+          const e = Math.max(Math.abs(cpu[i] - gpu[i]), Math.abs(cpu[i + 1] - gpu[i + 1]),
+                             Math.abs(cpu[i + 2] - gpu[i + 2]), Math.abs(cpu[i + 3] - gpu[i + 3]));
+          if (e > 24) big++;
+        }
+        if (!(lit > 2000)) throw new Error('the ' + kind + ' fixture lit only ' + lit + ' pixels — it is not drawing anything, so an identical pair proves nothing');
+        /* A THRESHOLD, NEVER EQUALITY — LOOP.md rule 14. A resample landing on the boundary between two
+           source pixels legitimately picks a different one on the GPU; measured across all six ported
+           kernels the worst was 0.56%, and Twirl's own CPU optimisation is already documented as moving
+           ~4% of pixels by one. 2% is well under "a different picture" and well over the noise. */
+        const pct = 100 * big / (cpu.length / 4);
+        if (pct > 2) bad.push(kind + ' ' + pct.toFixed(2) + '%');
       }
-      if (!(lit > 2000)) throw new Error('the fixture lit only ' + lit + ' pixels — it is not drawing anything, so an identical pair proves nothing');
-      /* A THRESHOLD, NEVER EQUALITY — LOOP.md rule 14. A resample that lands on the boundary between two
-         source pixels legitimately picks a different one on the GPU; the measured figure through the
-         real compositor was 0.10%, and Twirl's own CPU optimisation is already documented as moving ~4%
-         of pixels by one. 2% is a ceiling well under "a different picture" and well over the noise. */
-      const pct = 100 * big / (cpu.length / 4);
-      if (pct > 2) throw new Error('the GPU warp differs from the CPU loop on ' + pct.toFixed(2) + '% of pixels — that is a different picture, not resample noise');
-      /* …AND THE COMPARISON MUST NOT BE VACUOUS. If the two renders were byte-identical the likeliest
-         explanation is that the warp did nothing on both sides, not that the shader is perfect. */
-      if (any === 0 && !(gpuStats.gpu > 0 && cpuStats.cpu > 0)) throw new Error('the two renders are byte-identical AND the path counters disagree — something is not running');
+      if (bad.length) throw new Error('these kernels draw a different picture on the GPU than in JavaScript: ' + bad.join(', ') + ' — a kernel and its shader are a matched pair, so one of the two is wrong');
     } finally {
       FM._noGL = saved.noGL;
       FM.glWarp._reset();

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.81
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.82
 >
-> **State:** v13.81, 1032 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.82, 1032 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -13,10 +13,14 @@
 > perfectly, because a shader is just a piece of text.
 > 📐 **Measured on a real frame at your own 1080x1350, with one Twirl: 39.8 ms → 2.0 ms. Twenty times
 > faster, and the same picture** (0.1% of pixels differ, all of them on an edge).
-> ⚠️ **Only Twirl is converted so far** — it was the most expensive one. The other 28 warp effects still
-> use the old path until each gets converted, and anything without a graphics card falls back to exactly
-> what it does today. **Ripple, Wave, Kaleidoscope, Grid Repeat and the rest are next, and each one is
-> small now that the hard part is built.**
+> **✅ AND FIVE MORE ARE NOW DONE TOO (v13.82), including the one that proves the point:**
+> **Kaleidoscope 49.5× · Radial Repeat 35.5× · Ripple 24.1× · Grid Repeat 13.1× · Twirl 11.7× · Wave 9.7×.**
+> That entry had said for months that it needed about **50×** and that nothing could get there.
+> Kaleidoscope is **49.5×**.
+> ⚠️ **Six of thirty-odd warp effects so far.** The rest still use the old path until each is converted,
+> and anything without a graphics card falls back to exactly what it does today — nothing can break.
+> **The expensive ones gain the most, which is the shape you want:** the graphics card costs about the
+> same for every effect, so stacking them stops piling up the way it does now.
 >
 > **✅ GROUPS ZOOM FROM THE MIDDLE NOW, AND YOU CAN SEE THE ANCHOR (#630 — both halves).** You said
 > *"they just zoom into the corners and not the middle and I can't find where the anchor even is."*
@@ -4570,9 +4574,38 @@ better still, keep working inside the turn rather than parking work for a later 
       is deliberate: 29 kernels do not get ported in one commit, and a partial port must never be a
       partial app. **A kernel and its shader are a MATCHED PAIR** — change one, change both — which is
       the same trap #630 paid for three times in one item, so it is written at both ends.
-      ➡️ **NEXT ON THIS, in order of what it is worth:** port ripple · wave · kaleidoscope · gridrepeat ·
-      radialrepeat · pinch (the same `prep`-keys-are-uniforms pattern, so each is small), then keep a
-      chain resident on the GPU.
+      ✅ **AND FIVE MORE LANDED v13.82 — INCLUDING THE 50x THIS ENTRY SAID WAS NEEDED.**
+      📐 **Each measured against its own JavaScript twin at 720x720, with the path counters proving which
+      side actually ran:**
+      | kernel | CPU | GPU | speedup | pixels differing |
+      |---|---|---|---|---|
+      | **kaleidoscope** | 29.7 ms | 0.6 ms | **49.5x** | 0.109% |
+      | radial repeat | 21.3 | 0.6 | **35.5x** | 0.221% |
+      | ripple | 16.9 | 0.7 | **24.1x** | 0.207% |
+      | grid repeat | 9.2 | 0.7 | **13.1x** | 0.558% |
+      | twirl | 17.5 | 1.5 | **11.7x** | 0.184% |
+      | wave | 6.8 | 0.7 | **9.7x** | 0.186% |
+      🔑 **THE HEADLINE IS KALEIDOSCOPE AT 49.5x**, because this entry's own words were *"the gap needs
+      ~50x and the best single win was 11x. A per-pixel JavaScript loop cannot close it."* That was
+      correct, and it is why the answer was never going to be another kernel rewrite.
+      **THE GPU COST BARELY MOVES BETWEEN KERNELS (0.6–1.5 ms) WHILE THE CPU COST TRIPLES**, which is the
+      shape that matters: the expensive effects gain the most, and stacking them stops compounding.
+      🔒 **THE TEST DERIVES ITS OWN LIST.** It walks `FM._warpFx` for anything carrying a `.glsl` and
+      checks each against its CPU twin, so **porting a new kernel cannot ship untested** — 23 are still to
+      come and each is a fresh chance to transcribe a sign wrong.
+      🧹 **AND ONE THING FOUND BY ACCIDENT THAT WAS WORTH MORE THAN IT LOOKED.** `grep -n "function
+      program" js/gl-warp.js` printed **nothing** for a file that plainly contained it: a stray **NUL
+      byte** makes grep treat the whole file as binary and go silent — no error, no "binary file matches".
+      This repo is navigated by grep. `js/compositor.js` had four of them in a cache key, and they are
+      the same four CLAUDE.md's mutate.sh section is about (`"$(cat file)"` truncates at a NUL, so a
+      mutation compared a string with itself and the tool announced *"SURVIVED — the assertion is
+      DEAD"* against a good test). All of them are now `\u001f`, and **ship.sh refuses a NUL in source**.
+      ⚠️ **That gate's FIRST version fell into the very trap it guards** — it searched with
+      `grep -qU "$(printf '\000')"`, and command substitution truncates at NUL, so the pattern was the
+      empty string. Caught by building a file with a NUL in it and watching the detector say nothing.
+      ➡️ **NEXT ON THIS:** port `pinch`, `bulge`, `curl` and the rest of the family (same
+      `prep`-keys-are-uniforms pattern, so each is small now), then keep a CHAIN resident on the GPU so a
+      second warp costs a draw rather than another upload.
       ⚠️ **TWO INSTRUMENT FAILURES ON THE WAY, both of which produced confident wrong answers:**
       **1. The first run measured SwiftShader** — headless Chrome runs software GL on purpose
       (`tests/_cdp.py`, for suite stability), so "6.4x, and the readback costs 30 ms" was a CPU renderer
