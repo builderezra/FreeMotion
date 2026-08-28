@@ -5842,7 +5842,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        * Returns null for every "cannot" — no WebGL, a lost context, a kernel with no shader, a plate too
        * small to be worth it — and null means the loop that has always been here. */
       let warped = null;
-      if (mapFn.glsl && FM.glWarp) warped = FM.glWarp.run(wA, W, H, mapFn.glsl, pre || {});
+      if (mapFn.glsl && FM.glWarp) {
+        /* ⚠️ A KERNEL CAN NEED UNIFORMS ITS CPU SELF NEVER HOISTED. `prep` exists to make the JS loop
+         * faster, so a kernel with nothing worth hoisting simply has none — bulge deliberately has no
+         * prep because prepping it MEASURED SLOWER (0.74x, repeatable; its early-out retires most
+         * pixels before any real work, and an extra object costs more than the evalProps it replaces).
+         * A shader still needs those numbers. `glslPrep` is that, and it runs ONLY on this path, so the
+         * CPU loop keeps exactly the shape that was measured — the finding above is not quietly undone
+         * by the GPU port. */
+        const gpre = mapFn.glslPrep ? mapFn.glslPrep(W, H, cx, cy, maxR, pr, t, ps) : pre;
+        warped = FM.glWarp.run(wA, W, H, mapFn.glsl, gpre || {});
+      }
       if (!warped) {
         const src = actx.getImageData(0, 0, W, H).data;
         const bctx = wB.getContext('2d'), outImg = bctx.createImageData(W, H), o = outImg.data;
@@ -7438,6 +7448,79 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     'if (u_mir == 1.0 || u_mir == 3.0) { if (mod(ix, 2.0) >= 0.5) gux = 1.0 - gux; }',
     'if (u_mir == 2.0 || u_mir == 3.0) { if (mod(iy, 2.0) >= 0.5) guy = 1.0 - guy; }',
     'return vec2(gux * res.x, guy * res.y);'
+  ].join('\n');
+
+  /* BULGE / PINCH — a radial lens. ⚠️ It has NO `prep` on purpose (prepping it measured 0.74x, i.e.
+     genuinely slower — see the note on the kernel), so the shader gets a `glslPrep` used by nothing else.
+     `pow` is undefined for a zero base in GLSL as it is in the maths; the r < 1e-4 branch is what keeps
+     it out, exactly as in the JavaScript. */
+  WARP_FX.bulge.glslPrep = function (W, H, cx, cy, maxR, p, t, ps) {
+    return { cx: wCx(p, t, W, cx), cy: wCy(p, t, H, cy), maxR: wR(p, t, maxR), k: FM.evalProp(p.amount, t) || 0 };
+  };
+  WARP_FX.bulge.glsl = [
+    'vec2 c = vec2(u_cx, u_cy);',
+    'vec2 n = (xy - c) / u_maxR;',
+    'float r = length(n);',
+    'if (r >= 1.0) return xy;',
+    'float sc = r < 1e-4 ? 1.0 : pow(r, 1.0 + u_k) / r;',
+    'return c + n * sc * u_maxR;'
+  ].join('\n');
+
+  /* FISHEYE — barrel (k>0) / pincushion (k<0). Same story as bulge: no CPU prep, so a GPU-only one. */
+  WARP_FX.fisheye.glslPrep = function (W, H, cx, cy, maxR, p, t, ps) {
+    return { cx: wCx(p, t, W, cx), cy: wCy(p, t, H, cy), maxR: wR(p, t, maxR), k: FM.evalProp(p.amount, t) || 0 };
+  };
+  WARP_FX.fisheye.glsl = [
+    'vec2 c = vec2(u_cx, u_cy);',
+    'vec2 dn = (xy - c) / u_maxR;',
+    'float r = length(dn);',
+    'if (r >= 1.0 || r < 1e-5) return xy;',
+    'float f = (r * (1.0 - u_k * (1.0 - r * r))) / r;',
+    'return c + dn * f * u_maxR;'
+  ].join('\n');
+
+  /* INNER PINCH — a soft local squeeze inside a radius, falling off as 1 - (r/rad)^2. */
+  WARP_FX.innerpinch.glsl = [
+    'if (u_rad <= 0.0) return xy;',
+    'vec2 c = vec2(u_cx, u_cy);',
+    'vec2 dxy = xy - c;',
+    'float nr = length(dxy) / u_rad;',
+    'if (nr >= 1.0) return xy;',
+    'float fall = 1.0 - nr * nr;',
+    'return c + dxy * (1.0 + u_a * fall * 0.8);'
+  ].join('\n');
+
+  /* TUNNEL — pushes the centre outward along the radius, which is what makes the hole. */
+  WARP_FX.tunnel.glsl = [
+    'if (u_a <= 0.0) return xy;',
+    'vec2 c = vec2(u_cx, u_cy);',
+    'vec2 dxy = xy - c;',
+    'float r = length(dxy);',
+    'if (r < 1e-4) return xy;',
+    'float rr = r * u_ia + (u_rad2 / r) * u_a;',
+    'return c + dxy / r * rr;'
+  ].join('\n');
+
+  /* MIRROR TILE — tile the frame and fold alternate tiles. ⚠️ The parity test must match JavaScript's
+     for NEGATIVE tile indices, which is where an offset puts you: JS `(-1) & 1` is 1 (two's complement)
+     and GLSL `mod(-1.0, 2.0)` is also 1.0, so they agree — but only because mod() here is the
+     floor-based one, not a truncating remainder. Worth stating, because the two differ in sign exactly
+     on the tiles an offset creates. */
+  WARP_FX.mirrortile.glslPrep = function (W, H, cx, cy, maxR, p, t, ps) {
+    var k = ps || 1;
+    var size = FM.evalProp(p.size, t); if (size == null) size = 140; size *= k; if (size < 1) size = 1;
+    var ox = p.offsetx == null ? 0 : FM.evalProp(p.offsetx, t);
+    var oy = p.offsety == null ? 0 : FM.evalProp(p.offsety, t);
+    var ax = p.axis == null ? 0 : (Math.round(FM.evalProp(p.axis, t)) | 0);
+    return { size: size, oxp: ox === 0 ? 0 : ox * k, oyp: oy === 0 ? 0 : oy * k, ax: ax };
+  };
+  WARP_FX.mirrortile.glsl = [
+    'float mx = xy.x - u_oxp, my = xy.y - u_oyp;',
+    'float cix = floor(mx / u_size); float lx = mx - cix * u_size;',
+    'if ((u_ax == 0.0 || u_ax == 1.0) && mod(cix, 2.0) >= 0.5) lx = u_size - lx;',
+    'float ciy = floor(my / u_size); float ly = my - ciy * u_size;',
+    'if ((u_ax == 0.0 || u_ax == 2.0) && mod(ciy, 2.0) >= 0.5) ly = u_size - ly;',
+    'return vec2((lx / u_size) * res.x, (ly / u_size) * res.y);'
   ].join('\n');
 
   /* RADIAL REPEAT — a fan of wedges, optionally mirrored and twisted. This is the kernel that reads

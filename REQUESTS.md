@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.82
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.83
 >
-> **State:** v13.82, 1032 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.83, 1032 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -17,7 +17,7 @@
 > **Kaleidoscope 49.5× · Radial Repeat 35.5× · Ripple 24.1× · Grid Repeat 13.1× · Twirl 11.7× · Wave 9.7×.**
 > That entry had said for months that it needed about **50×** and that nothing could get there.
 > Kaleidoscope is **49.5×**.
-> ⚠️ **Six of thirty-odd warp effects so far.** The rest still use the old path until each is converted,
+> ⚠️ **Eleven of twenty-one warp effects so far.** The rest still use the old path until each is converted,
 > and anything without a graphics card falls back to exactly what it does today — nothing can break.
 > **The expensive ones gain the most, which is the shape you want:** the graphics card costs about the
 > same for every effect, so stacking them stops piling up the way it does now.
@@ -4603,9 +4603,35 @@ better still, keep working inside the turn rather than parking work for a later 
       ⚠️ **That gate's FIRST version fell into the very trap it guards** — it searched with
       `grep -qU "$(printf '\000')"`, and command substitution truncates at NUL, so the pattern was the
       empty string. Caught by building a file with a NUL in it and watching the detector say nothing.
-      ➡️ **NEXT ON THIS:** port `pinch`, `bulge`, `curl` and the rest of the family (same
-      `prep`-keys-are-uniforms pattern, so each is small now), then keep a CHAIN resident on the GPU so a
-      second warp costs a draw rather than another upload.
+      ✅ **ELEVEN OF TWENTY-ONE ARE ON THE GPU AS OF v13.83**, and with the work spread wider the
+      numbers came up rather than down:
+      | kernel | CPU | GPU | speedup | differing |
+      |---|---|---|---|---|
+      | **kaleidoscope** | 30.5 ms | 0.6 ms | **50.8x** | 0.109% |
+      | bulge | 23.3 | 0.6 | **38.8x** | 0.125% |
+      | fisheye | 20.1 | 0.7 | **28.7x** | 0.185% |
+      | twirl | 15.9 | 0.6 | **26.5x** | 0.184% |
+      | mirror tile | 15.7 | 0.6 | **26.2x** | 0.893% |
+      | radial repeat | 19.9 | 0.8 | **24.9x** | 0.221% |
+      | ripple | 16.2 | 0.7 | **23.1x** | 0.207% |
+      | inner pinch | 13.5 | 0.6 | **22.5x** | 0.123% |
+      | tunnel | 11.9 | 0.6 | **19.8x** | 0.029% |
+      | grid repeat | 8.5 | 0.6 | **14.2x** | 0.558% |
+      | wave | 9.8 | 0.7 | **14.0x** | 0.186% |
+      **THE GPU COLUMN IS FLAT — 0.6 to 0.8 ms for every one of them — while the CPU column spans 8.5 to
+      30.5.** That is the whole shape of the fix: an effect's cost stops depending on how expensive the
+      effect is, so STACKING them stops compounding, which is the thing that actually makes his projects
+      crawl.
+      ⚠️ **BULGE AND FISHEYE NEEDED A GPU-ONLY `glslPrep`, and the reason is a finding worth preserving.**
+      Bulge has **no `prep` on purpose** — prepping it measured **0.74x, genuinely SLOWER**, because its
+      early-out retires most pixels before any real work and an extra object costs more than the evalProps
+      it replaces. A shader still needs those numbers. `glslPrep` runs only on the GPU path, so the CPU
+      loop keeps exactly the shape that was measured and the old finding is not quietly undone.
+      ➡️ **STILL TO PORT (10):** `polarcoords` · `bend` · `glass` · `curl` · `fractalwarp` · `squeeze` ·
+      `turbulentdisplace` · `stretchseg` · `tileshift` · `tilerotate`. ⚠️ **`squeeze` is the delicate one**
+      — its own comment records that `Math.PI*y/H` and `Math.PI*(y/H)` differ in the last bits and broke
+      byte-identity on 357 of 2030 points, so it needs the threshold read carefully rather than assumed.
+      **Then keep a CHAIN resident on the GPU** so a second warp costs a draw rather than another upload.
       ⚠️ **TWO INSTRUMENT FAILURES ON THE WAY, both of which produced confident wrong answers:**
       **1. The first run measured SwiftShader** — headless Chrome runs software GL on purpose
       (`tests/_cdp.py`, for suite stability), so "6.4x, and the readback costs 30 ms" was a CPU renderer

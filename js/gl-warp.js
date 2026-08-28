@@ -157,7 +157,15 @@
       body,
       '}',
       'void main(){',
-      '  vec2 xy = vec2(uv.x * res.x, (1.0 - uv.y) * res.y);',
+      /* ⚠️ floor() — THE KERNEL MUST BE ASKED THE SAME QUESTION THE CPU LOOP ASKS. That loop walks
+         INTEGER x and y; a fragment shader is evaluated at the PIXEL CENTRE, so this was handing
+         every kernel 90.5 where JavaScript passed 90. Half a pixel, on every kernel, in both axes.
+         It hid as "resample noise" (0.1-0.9% of pixels) and it was not noise, it was a constant
+         offset — and at a slider extreme it was the difference between a frame with one pixel in
+         it and a frame with none, which is how the suite finally caught it: bulge at amount=-1
+         maps everything to a ring except the exact centre pixel, and the shader never visited the
+         exact centre. MEASURED after this line: bulge's disagreement 0.125% -> 0.000%. */
+      '  vec2 xy = floor(vec2(uv.x * res.x, (1.0 - uv.y) * res.y));',
       '  vec2 s = floor(fmWarp(xy));',
       '  s = clamp(s, vec2(0.0), res - vec2(1.0));',
       '  gl_FragColor = texture2D(src, (s + vec2(0.5)) / res);',

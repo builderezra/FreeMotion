@@ -26,7 +26,11 @@ async function run(w){
     var W = 720, H = 720;
     P.width = W; P.height = H; P.duration = 4;
 
-    var KINDS = ['twirl','ripple','wave','kaleidoscope','gridrepeat','radialrepeat'];
+    /* DERIVED, not written down: every kernel carrying a .glsl is checked, so a newly ported one
+       cannot be measured by accident-of-memory. Same rule the suite test uses. */
+    var KINDS = Object.keys(FM._warpFx).filter(function(k){
+      return typeof FM._warpFx[k] === 'function' && FM._warpFx[k].glsl && k.charAt(0) !== '_'; });
+    say('ported kernels: ' + KINDS.length + ' — ' + KINDS.join(', '));
     var cv = d.createElement('canvas'); cv.width = W; cv.height = H;
     var cx = cv.getContext('2d', { willReadFrequently: true });
 

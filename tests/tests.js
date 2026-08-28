@@ -44925,12 +44925,19 @@
           if (e > 24) big++;
         }
         if (!(lit > 2000)) throw new Error('the ' + kind + ' fixture lit only ' + lit + ' pixels — it is not drawing anything, so an identical pair proves nothing');
-        /* A THRESHOLD, NEVER EQUALITY — LOOP.md rule 14. A resample landing on the boundary between two
-           source pixels legitimately picks a different one on the GPU; measured across all six ported
-           kernels the worst was 0.56%, and Twirl's own CPU optimisation is already documented as moving
-           ~4% of pixels by one. 2% is well under "a different picture" and well over the noise. */
+        /* ⚠️ 0.5%, AND THE HISTORY OF THIS NUMBER IS THE POINT. It was 2%, chosen because the ported
+           kernels disagreed with their CPU twins on 0.1-0.9% of pixels and LOOP.md rule 14 says to
+           expect resample-boundary noise. **It was not noise.** The shader was being evaluated at the
+           PIXEL CENTRE while the CPU loop walks integer x/y, so every kernel was asked about 90.5 where
+           JavaScript asked about 90 — half a pixel, in both axes, everywhere. One `floor()` later, ten
+           of the eleven are BYTE-IDENTICAL (0.000%) and the eleventh is 0.012%.
+           So the loose threshold was hiding a real bug, and the guard that actually caught it was the
+           parameter-extremes sweep, where half a pixel was the difference between a frame with one
+           pixel in it and a frame with none. 0.5% still allows genuine float differences between a
+           GPU and an FPU — it is 40x above the worst observed — while being tight enough that a
+           half-pixel-class mistake cannot hide behind it again. */
         const pct = 100 * big / (cpu.length / 4);
-        if (pct > 2) bad.push(kind + ' ' + pct.toFixed(2) + '%');
+        if (pct > 0.5) bad.push(kind + ' ' + pct.toFixed(3) + '%');
       }
       if (bad.length) throw new Error('these kernels draw a different picture on the GPU than in JavaScript: ' + bad.join(', ') + ' — a kernel and its shader are a matched pair, so one of the two is wrong');
     } finally {

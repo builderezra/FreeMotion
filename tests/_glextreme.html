@@ -1,0 +1,77 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:1100px;height:820px;border:0"></iframe>
+<script>
+/* The suite caught the GPU port erasing the layer at two slider extremes — bulge:amount=min and
+ * tunnel:radius=max — where the CPU loop does not. Reproduce the suite's own fixture and print what
+ * each path actually produces, instead of reasoning about NaN semantics from an armchair. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.scene && w.FM.renderScene && w.FM.fxRegistry)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait,50); }
+    setTimeout(run.bind(null,w), 1200);
+  })();
+});
+async function run(w){
+  try{
+    var FM = w.FM, d = w.document, P = FM.scene.project;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    P.width = 540; P.height = 960; P.duration = 5; P.background = '#000000';
+    var W = 180, H = 320;
+    var cv = d.createElement('canvas'); cv.width = W; cv.height = H;
+    var cx = cv.getContext('2d', { willReadFrequently: true });
+
+    /* THE SUITE'S OWN MACHINERY, not my guess at it — the first version of this probe invented a
+       registry shape, silently failed to set any extreme, and reported the DEFAULTS agreeing. */
+    var L = FM.makeLayer('shape', { shape:'rect', x:270, y:480, shapeW:300, shapeH:450, fill:'#e8a33d' });
+    L.start = 0; L.duration = 5; L.effects = [];
+    FM.scene.layers.length = 0; FM.scene.layers.push(L);
+    var bg = null;
+    function raw(){ cx.clearRect(0,0,W,H); FM.renderScene(cx, FM.scene, 0.5); return cx.getImageData(0,0,W,H).data; }
+    /* AND THE SUITE'S OWN METRIC: differing from the layer HIDDEN, not "any opaque pixel". The
+       background is opaque black, so counting alpha>8 counts the whole canvas every time — which is
+       exactly what the first version did and why every row read 57600. */
+    function visible(){
+      var a = raw(), n2 = 0;
+      for (var i=0;i<a.length;i+=4)
+        if (Math.abs(a[i]-bg[i]) + Math.abs(a[i+1]-bg[i+1]) + Math.abs(a[i+2]-bg[i+2]) > 12) n2++;
+      return n2;
+    }
+    function setup(kind, param, which){
+      var ps = FM.fxRegistry.paramsOf(kind) || [], spec = null;
+      for (var i=0;i<ps.length;i++) if (ps[i].key === param) spec = ps[i];
+      if (!spec) return null;
+      var v = spec.options ? (which === 'min' ? 0 : spec.options.length - 1) : (which === 'min' ? spec.min : spec.max);
+      var inst = FM.fxRegistry.makeInstance(kind);
+      if (!inst) return null;
+      inst.params = inst.params || {}; inst.params[param] = v;
+      L.effects = [inst];
+      return { inst: inst, v: v };
+    }
+    L.visible = false; bg = raw(); L.visible = true;
+    var plain = visible();
+    if (!(plain > 1000)) return say('the fixture layer is not visible against its background (' + plain + 'px) — nothing below would mean anything');
+    say('fixture visible with no effect: ' + plain + 'px');
+    say('');
+    var CASES = [['bulge','amount','min'], ['tunnel','radius','max'], ['fisheye','amount','min'], ['mirrortile','size','min'], ['innerpinch','radius','max']];
+    say('case                       value      CPU vis   GPU vis   verdict');
+    for (var c=0;c<CASES.length;c++){
+      var kind = CASES[c][0], param = CASES[c][1], which = CASES[c][2];
+      var st = setup(kind, param, which);
+      if (!st) { say(kind + ':' + param + ' — no such param, SKIPPED'); continue; }
+      FM._noGL = true;  FM.glWarp._reset(); var a1 = visible();
+      FM._noGL = false; FM.glWarp._reset(); var a2 = visible(); var gs = FM.glWarp.stats();
+      say(pad(kind+':'+param+'='+which, 27) + pad(String(st.v), 11) + pad(String(a1), 10) + pad(String(a2), 10) +
+          (gs.gpu === 0 ? 'GPU did not run (' + gs.reason + ')'
+           : (a1 > 0 && a2 === 0) ? '🚨 GPU ERASES IT, the CPU does not'
+           : (a1 === 0 && a2 === 0) ? 'both erase (allowed, or a fixture artefact)'
+           : (Math.abs(a1-a2) < Math.max(50, a1*0.1)) ? '✅ agree' : 'differ by ' + Math.abs(a1-a2)));
+    }
+    function pad(s,n){ s=String(s); while (s.length<n) s+=' '; return s; }
+    FM._noGL = false; FM.glWarp._reset();
+  } catch(e){ say('threw: ' + (e && (e.stack||e.message||String(e)))); }
+  window.__done = true;
+}
+</script></body></html>
