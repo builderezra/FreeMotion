@@ -364,6 +364,54 @@ window.FM = window.FM || {};
                    ', browser says canPlayType: "' + can + '", element error: ' + errText + '.' };
   };
 
+  /* ═══ WHAT THIS BROWSER WILL ACTUALLY ACCEPT — asked of the device it matters on ════════════════
+   * Queue 129 measured this table by hand on 27 Aug and the measurement is the most useful thing in
+   * the entry: H.265 came back "probably" while `video/quicktime` came back NOT SUPPORTED AT ALL —
+   * which points at the CONTAINER rather than the codec and needs a completely different fix.
+   * ⚠️ AND IT SETTLES NOTHING, because it was measured in Chrome and his phone runs a Safari-based
+   * PWA, where the two are roughly reversed. Codec support is per-browser, so a table taken here
+   * cannot speak for there. Asked on HIS device it is the whole answer. */
+  FM.codecSupport = function () {
+    const rows = [
+      ['H.265 hvc1', 'video/mp4; codecs="hvc1"'],
+      ['H.265 hev1', 'video/mp4; codecs="hev1"'],
+      ['H.264 avc1', 'video/mp4; codecs="avc1.42E01E"'],
+      ['mp4 generic', 'video/mp4'],
+      ['quicktime (.mov)', 'video/quicktime'],
+    ];
+    const v = document.createElement('video');
+    return rows.map(function (r) {
+      let can = '?', mse = '?';
+      try { can = v.canPlayType(r[1]) || 'NO'; } catch (e) {}
+      try { mse = (window.MediaSource && MediaSource.isTypeSupported) ? String(MediaSource.isTypeSupported(r[1])) : 'n/a'; } catch (e) { mse = 'n/a'; }
+      return r[0] + ': "' + can + '" (MSE ' + mse + ')';
+    }).join('  ·  ');
+  };
+
+  /* ═══ AND IT IS WRITTEN DOWN, NOT ONLY FLASHED (queue 129) ═══════════════════════════════════════
+   * The entry's remaining question is put to HIM: *"what does the FILE say — .mov or .mp4? A .mov
+   * points at the container, an .mp4 at the codec, and the two need different fixes."*
+   * ⚠️ THE APP ALREADY WORKS THAT OUT AND THROWS IT AWAY. `blankClipFacts` computes the extension,
+   * the MIME type and `canPlayType` every time this happens, and sends them to a toast that vanishes
+   * in 8 seconds and a `console.warn` nobody can read on a phone. He has reported this from a phone
+   * TWICE. Asking a man for a fact your own code just calculated is the failure this project keeps
+   * repeating — #215's warnings behind an overlay, #661's probe nobody could reach, #662's export
+   * values with no readers. Same cure each time: write it where he can copy it. */
+  FM.saveBlankClipReport = function (rec, facts, extra) {
+    try {
+      const rep = [
+        'FreeMotion blank-clip report',
+        'when       ' + new Date().toISOString(),
+        'file       ' + facts.name + '   extension .' + (facts.ext || '?') + '   type "' + facts.type + '"',
+        'browser    canPlayType "' + facts.canPlay + '"   element error: ' + facts.err,
+        'extra      ' + (extra || 'none'),
+        'codecs     ' + FM.codecSupport(),
+        'device     ' + (navigator.userAgent || '').slice(0, 120),
+      ].join('\n');
+      localStorage.setItem('fm.lastBlankClip', rep);
+    } catch (e) {}
+  };
+
   /* The one message, in one place, so the toast and the console cannot drift apart. */
   FM.hevcAdvice = function () {
     return 'This looks like an iPhone screen recording (H.265). This browser cannot play H.265 — ' +
@@ -394,6 +442,7 @@ window.FM = window.FM || {};
       if (FM.toast) FM.toast('No picture from “' + shortNm + '” — tap to see why', 8000,
                              () => { if (FM.toast) FM.toast('FreeMotion could not get a picture out of this file. ' + facts.line, 14000); });
       console.warn('FreeMotion BLANK CLIP FACTS (error event) — ' + facts.line);
+      FM.saveBlankClipReport(rec, facts, 'decoder raised an error before any frame arrived');
       if (FM.requestRender) FM.requestRender();
     });
 
@@ -496,6 +545,7 @@ window.FM = window.FM || {};
                                14000); });
       // The untruncated name and the actionable half, which will not fit in a phone toast.
       console.warn('FreeMotion BLANK CLIP FACTS — ' + facts.line);
+      FM.saveBlankClipReport(rec, facts, 'no frame after ' + Math.round(FM.decodeWait / 1000) + 's' + hevcFact);
       console.warn('FreeMotion: "' + nm + '" gave no video frame after ' + Math.round(FM.decodeWait / 1000) +
                    's (readyState ' + rec.el.readyState + ', ' + rec.width + 'x' + rec.height + '). The container ' +
                    'parsed, so this is a codec the decoder will not take — screen recordings are usually H.265/HEVC. ' +

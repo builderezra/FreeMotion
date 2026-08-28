@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.13
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.14
 >
-> **State:** v14.13, 1060 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.14, 1061 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -1585,6 +1585,34 @@ better still, keep working inside the turn rather than parking work for a later 
       **Still open, and still one sentence from you**, unchanged: if you see this toast the diagnosis is
       confirmed and the remaining answer is transcoding; if you see NO toast and the clip is still
       blank, it is something else and I have been looking in the wrong place.
+      ═══ ✅ **29 AUG (v14.14) — THE APP ANSWERS THIS ITSELF NOW, INSTEAD OF ASKING YOU.** ═══
+      🔑 **The question above — *"what does the FILE say, .mov or .mp4?"* — is one THIS CODE ALREADY
+      WORKS OUT, every single time it happens, and then throws away.** `FM.blankClipFacts` computes the
+      file name, the **extension**, the MIME type and what the browser says it can play… and sends them
+      to an 8-second toast and a `console.warn`. **You reported this from a phone. Twice.** A console
+      line is not reachable from a phone and a toast is gone before you can read it.
+      **That is the fifth time this exact shape has turned up** — #215's five audio warnings all painted
+      behind the export overlay, #661's probe that had been saying "this device cannot run canvas
+      filters" for weeks where nobody could see it, #662's export values with no readers, #95's playback
+      counters with no readers. **The app knows and cannot say.** Same cure every time.
+      ✅ **`Settings → "A clip with no picture"`, with a Copy button.** Written the moment a clip fails,
+      from BOTH paths that can detect it (the decoder raising an error, and no frame after 15 seconds).
+      It carries the file name, the extension, the MIME type, `canPlayType`, the element's own error,
+      and the H.265 sniff result when that ran.
+      🔑 **AND THE PART THAT ACTUALLY DECIDES THIS ENTRY: the codec table, asked of YOUR browser.** The
+      27 Aug measurement in this entry — H.265 "probably", `video/quicktime` NOT SUPPORTED — is the most
+      useful thing here **and it was taken in Chrome, which cannot speak for your Safari-based phone**,
+      where the two are roughly reversed. `FM.codecSupport()` now reports hvc1 · hev1 · avc1 · generic
+      mp4 · quicktime, with `canPlayType` AND MediaSource, **on whatever device it runs on**. On yours
+      that is the whole answer: if quicktime comes back "NO" it is the container, if H.265 comes back
+      "NO" it is the codec, and the two need different fixes.
+      ⚠️ **A live demonstration of why it had to be asked on the device, found while testing this:** the
+      headless Chrome the suite runs in reports **H.265 hvc1 "NO"**, while this entry's 27 Aug reading in
+      a normal Chrome said **"probably"**. Same browser family, different build, opposite answer. A table
+      measured anywhere but on your phone is worth nothing.
+      ➡️ **SO YOU NO LONGER HAVE TO KNOW ANYTHING.** Next time a clip lands with no picture: **Settings →
+      "A clip with no picture" → Copy**, and paste it. It will say which of the two fixes this needs.
+
 - [x] **130 — One 2-second clip, one project, and it lags — and the quality tier does not drop. THE TIER HALF IS DONE (v7.57, verified 15 Aug). The lag itself lives on in #125.** His
       words: *"I have got no other projects, just one; and I managed to add one screen recording that's
       two seconds long, and the project lags from just that, it also still doesn't compress the quality
@@ -7578,8 +7606,7 @@ better still, keep working inside the turn rather than parking work for a later 
       is worse than the 169px this replaces.
       **Phone is untouched**, as the entry always said it should be.
 
-- [ ] **148 — Imported audio plays back with a scratchy POPPING that hurts to listen to.** (13 Aug.)
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **148 — Imported audio plays back with a scratchy POPPING that hurts to listen to.** (13 Aug.)
       ═══ ✅ **28 AUG (v13.90) — A THIRD CUT FOUND AND FIXED: THE LOOP WRAP.** ═══
       **This entry has already fixed two places where a waveform gets opened at an arbitrary sample:**
       the CLIP EDGES (v7.66) and pressing PLAY mid-clip — both by opening the element at volume 0 and
@@ -7747,6 +7774,20 @@ better still, keep working inside the turn rather than parking work for a later 
       counter against the element's own: it must be non-zero when the element was really written to,
       and **never higher**, because counting decisions instead of writes is precisely the mistake that
       would report a quiet controller as a churning one. Both directions mutation-checked.
+
+
+      ═══ ✅ **29 AUG — CLOSED, AND CLOSED BY HIM RATHER THAN BY ME.** ═══
+      His words, 28 Aug, asked directly whether this was fixed:
+      > Seems fixed for the scratchy popping but audio still doesn't play consistently on mobile, it cuts in and out
+      **That is a confirmation of THIS entry's symptom on the device it was reported from**, which is
+      the only kind of answer that could ever close it — every fix here (v7.66 clip edges, v11.70 the
+      rate-churn cause, v13.90 the loop wrap) was verified by measurement on this Mac, and the
+      complaint was always about how it SOUNDED on his phone.
+      ⚠️ **The second half of that sentence is NOT this entry.** *"Audio still doesn't play consistently
+      on mobile, it cuts in and out"* is a different fault — a sound that STOPS, not a sound that is
+      scratchy — and it is tracked as **#663**, with the instrument built for it in **#95** (v14.13,
+      Settings → "Your last playback"). Splitting them rather than leaving this open on a symptom he
+      has told me is gone: an entry kept open past its own answer is how the list starts lying.
 
 - [x] **149 — Dragging a caption cue's LENGTH should update live, not jump on release.** (v6.95) His words:
       *"when dragging the cue length for captions it should show it changing live not just wait for you

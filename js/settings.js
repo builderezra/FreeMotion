@@ -531,6 +531,39 @@ window.FM = window.FM || {};
       audBtns.append(audCopy);
       audWrap.append(audHead, audBtns, audOut);
       body.appendChild(group(audWrap));
+
+      /* ═══ "A CLIP WITH NO PICTURE" (queue 129) ═════════════════════════════════════════════════
+       * That entry's last question is put to HIM — "what does the FILE say, .mov or .mp4? A .mov
+       * points at the container, an .mp4 at the codec, and the two need different fixes." The app
+       * has been working that out every single time it happens and throwing it away into a toast and
+       * a console line, on a bug he has reported from a PHONE twice. Now it is written down, with the
+       * codec table asked of HIS browser rather than of Chrome — which is the half the 27 Aug
+       * measurement could not supply, since codec support is per-browser and the two are reversed
+       * between Safari and Chrome. */
+      const bcWrap = el('div', 'set-row set-perf');
+      const bcOut = el('pre', 'set-perf-out');
+      let bcText = '';
+      try { bcText = localStorage.getItem('fm.lastBlankClip') || ''; } catch (e) {}
+      bcOut.textContent = bcText || 'Nothing yet \u2014 this fills in if a video ever lands on the timeline with no picture.';
+      const bcCopy = el('button', 'set-action', 'Copy'); bcCopy.type = 'button'; bcCopy.disabled = !bcText;
+      bcCopy.addEventListener('click', async () => {
+        const text = bcOut.textContent;
+        try { await navigator.clipboard.writeText(text); if (FM.toast) FM.toast('Copied \u2014 paste it to me', 3000); }
+        catch (e) {
+          try {
+            const r = document.createRange(); r.selectNodeContents(bcOut);
+            const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+            if (FM.toast) FM.toast('Selected \u2014 use Copy from the menu', 3000);
+          } catch (e2) {}
+        }
+      });
+      const bcHead = el('div', 'set-rowtext');
+      bcHead.appendChild(el('div', 'set-label', 'A clip with no picture'));
+      bcHead.appendChild(el('div', 'set-hint', 'If a video sits on the timeline but shows nothing, this says what the file was and what this browser will and will not play. Send it to me and I will know which fix it needs.'));
+      const bcBtns = el('div', 'set-perf-btns');
+      bcBtns.append(bcCopy);
+      bcWrap.append(bcHead, bcBtns, bcOut);
+      body.appendChild(group(bcWrap));
     }
 
     const foot = el('div', 'set-foot');

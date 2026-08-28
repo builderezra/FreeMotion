@@ -45164,6 +45164,47 @@
     FM.audioHealth.reset();
   });
 
+  /* ═══ A CLIP WITH NO PICTURE WRITES DOWN WHAT IT WAS (queue 129) ═══════════════════════════════
+   * That entry's last open question is asked of HIM: "what does the FILE say — .mov or .mp4? A .mov
+   * points at the container, an .mp4 at the codec, and the two need different fixes."
+   * ⚠️ THE APP HAS BEEN CALCULATING THAT EVERY TIME IT HAPPENS AND THROWING IT AWAY — into an
+   * 8-second toast and a console.warn, on a bug he has reported from a PHONE twice. `blankClipFacts`
+   * already knows the extension, the MIME type and canPlayType. This pins that it is now written
+   * somewhere he can copy, together with the codec table asked of HIS browser — the half the 27 Aug
+   * measurement could not supply, because codec support is per-browser and Safari and Chrome are
+   * roughly reversed on exactly these two entries. */
+  test('a clip that never shows a picture records what the file was, where he can read it', { item: '129' }, async function () {
+    if (!FM.saveBlankClipReport) throw new Error('FM.saveBlankClipReport is missing — the blank-clip report was reverted or renamed');
+    if (!FM.blankClipFacts) throw new Error('FM.blankClipFacts is missing');
+    let before = null;
+    try { before = localStorage.getItem('fm.lastBlankClip'); } catch (e) {}
+    try {
+      try { localStorage.removeItem('fm.lastBlankClip'); } catch (e) {}
+      const rec = { kind: 'video', file: new File([new Uint8Array(8)], 'IMG_4471.mov', { type: 'video/quicktime' }), el: {} };
+      const facts = FM.blankClipFacts(rec);
+      /* The facts themselves must carry the discriminator. If the extension is not in here the report
+         cannot answer the entry's question no matter where it is written. */
+      if (facts.ext !== 'mov') throw new Error('blankClipFacts did not read the extension (.mov) off the file — that single letter is what separates the container theory from the codec one');
+      FM.saveBlankClipReport(rec, facts, 'no frame after 15s');
+      let text = null;
+      try { text = localStorage.getItem('fm.lastBlankClip'); } catch (e) {}
+      if (!text) throw new Error('nothing was written to fm.lastBlankClip — Settings would still say "nothing yet" after the bug happened to him again');
+      for (const must of ['IMG_4471.mov', '.mov', 'video/quicktime', 'codecs', 'device']) {
+        if (text.indexOf(must) < 0) throw new Error('the blank-clip report does not mention "' + must + '", so it cannot answer the one question #129 is still asking him: ' + text.slice(0, 160));
+      }
+      /* THE CODEC TABLE IS THE POINT, and it has to be asked of the browser rather than hardcoded:
+         the 27 Aug reading was taken in Chrome and cannot speak for his Safari-based phone. */
+      if (!FM.codecSupport) throw new Error('FM.codecSupport is missing');
+      const table = FM.codecSupport();
+      for (const must of ['H.265 hvc1', 'H.264 avc1', 'quicktime']) {
+        if (table.indexOf(must) < 0) throw new Error('the codec table does not report ' + must + ' — that row is what tells container from codec: ' + table);
+      }
+      if (text.indexOf(table) < 0) throw new Error('the report does not carry the codec table it just built');
+    } finally {
+      try { if (before == null) localStorage.removeItem('fm.lastBlankClip'); else localStorage.setItem('fm.lastBlankClip', before); } catch (e) {}
+    }
+  });
+
   /* ⚠️ AND IT MUST NOT ACCUSE THE APP OF A FAULT IT COMMITTED ITSELF. This is the bug the first draft
    * shipped with, found by a review before it ever reached him, and it is the sharpest lesson in this
    * file. The watcher originally counted the media element's own `pause` event, telling a system pause
