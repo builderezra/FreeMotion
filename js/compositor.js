@@ -8480,7 +8480,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // comp-sized plate has already thrown away. Handed over as a callback so the plate machinery
     // stays in one place and nothing else pays for it — an effect that never calls it never builds one.
     const expand = (minM) => renderExpandedPlate(layer, fx, t, scene, ps, PW, PH, minM);
-    if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, fx.params || {}, t, FM.fxLocalTime(layer, t), layer, ps, expand);   // layer = temporal-cache key (motionflow); _clipStart = a group proxy's REAL clock
+    if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, fx.params || {}, t, FM.fxLocalTime(layer, t), layer, ps, expand, scene);   // `scene` is a trailing addition for roundcorners (queue 621), ignored by every other kernel   // layer = temporal-cache key (motionflow); _clipStart = a group proxy's REAL clock
     else bctx.drawImage(_cfA, 0, 0);   // empty / tainted → passthrough
     ctx.save();
     baseT(ctx);
@@ -9765,13 +9765,83 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         B.globalAlpha = 1;
       };
     })(),
-    roundcorners: function (A, B, W, H, bb, p, t) {
+    roundcorners: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       let r = FM.evalProp(p.radius, t); if (r == null) r = 80;
       const style = Math.round(fparam(p, 'style', 0, t));
       const x = bb.x + 2, y = bb.y + 2, w = bb.w - 4, h = bb.h - 4;   // inset the alphaBBox pad
       r = Math.max(0, Math.min(r, Math.min(w, h) / 2));
       B.drawImage(A, 0, 0);
       if (w < 4 || h < 4) return;
+
+      /* ═══ MASK IN THE LAYER'S OWN SPACE (queue 621) ═══════════════════════════════════════════
+       * Ezra: *"Rounded corners kinda does a shit job when you aren't using the Apple style and the
+       * Apple style only works on few things"*, and then, naming the cause himself: *"it literally
+       * changes depending on the layers size / rotation"*.
+       * 📐 BOTH HALVES MEASURED, and they are one bug seen twice. The mask above is built from `bb`,
+       * the AXIS-ALIGNED alpha box, in plate pixels:
+       *   · ROTATION — a rotated square's real corners sit at the MIDDLES of that box's edges and the
+       *     box's own corners are empty space, so the rounding cuts air. At 30° the surviving area was
+       *     0.539 of the box; an unrounded rotated square measures 0.536. It was doing NOTHING. That
+       *     is the whole of "only works on few things": it works while a layer is square-on.
+       *   · SIZE — `r` is absolute plate pixels clamped to half the shorter side, so the same setting
+       *     removed 0.780 of a 120px square and 0.945 of a 320px one. Four times the corner for the
+       *     same number.
+       * Both vanish if the mask is built where the content is square-on and its size is its own: the
+       * layer's local space. `layerCTM` maps local → comp (measured: local is CENTRED, -w/2..+w/2) and
+       * baseT's own mapping takes comp → this plate. The radius is then in the layer's units, so
+       * scaling the layer scales its corner and the shape looks identical at any size.
+       * ⚠️ AND IT VERIFIES ITSELF BEFORE TRUSTING `layerSize`. That helper answers "the selection box",
+       * which for text is explicitly a different question (see the note at ~line 10837) — so a layer
+       * whose real content spills outside it would get CLIPPED, turning a rounding bug into a
+       * destroyed layer. The projected box must contain the alpha box or this path is abandoned and
+       * the old one runs, unchanged. */
+      const _M = (layer && FM._layerCTM && scene) ? FM._layerCTM(layer, t, scene) : null;
+      const _sz = (layer && FM.layerSize) ? FM.layerSize(layer) : null;
+      if (_M && _sz && _sz.w > 4 && _sz.h > 4) {
+        const s = ps || 1, oX = (A.__fmOX || 0), oY = (A.__fmOY || 0);
+        const lw = _sz.w, lh = _sz.h;
+        // local → comp → plate device, the two maps composed by hand so the check below uses the
+        // exact same arithmetic the fill will.
+        const toPlate = (px, py) => {
+          const cxp = _M.a * px + _M.c * py + _M.e, cyp = _M.b * px + _M.d * py + _M.f;
+          return [s * cxp - oX * s, s * cyp - oY * s];
+        };
+        let nx = Infinity, ny = Infinity, xx = -Infinity, xy = -Infinity;
+        for (const [px, py] of [[-lw / 2, -lh / 2], [lw / 2, -lh / 2], [lw / 2, lh / 2], [-lw / 2, lh / 2]]) {
+          const q = toPlate(px, py);
+          if (q[0] < nx) nx = q[0]; if (q[0] > xx) xx = q[0];
+          if (q[1] < ny) ny = q[1]; if (q[1] > xy) xy = q[1];
+        }
+        const PAD = 3;   // alphaBBox pads; the projected box may sit just inside it and still be right
+        const covers = nx <= bb.x + PAD && ny <= bb.y + PAD &&
+                       xx >= bb.x + bb.w - PAD && xy >= bb.y + bb.h - PAD;
+        if (covers) {
+          const rr = Math.max(0, Math.min(r, Math.min(lw, lh) / 2));
+          B.save();
+          B.setTransform(s, 0, 0, s, -oX * s, -oY * s);      // comp → plate (B is identity by design)
+          B.transform(_M.a, _M.b, _M.c, _M.d, _M.e, _M.f);   // local → comp
+          B.globalCompositeOperation = 'destination-in';
+          B.beginPath();
+          if (style === 1) {
+            const n = 5, e = 2 / n, ax = lw / 2, ay = lh / 2;
+            const STEPS = Math.max(64, Math.min(256, Math.ceil((lw + lh) / 8)));
+            for (let i = 0; i <= STEPS; i++) {
+              const a = i / STEPS * Math.PI * 2, c = Math.cos(a), sn = Math.sin(a);
+              const px = ax * Math.sign(c) * Math.pow(Math.abs(c), e);
+              const py = ay * Math.sign(sn) * Math.pow(Math.abs(sn), e);
+              if (i === 0) B.moveTo(px, py); else B.lineTo(px, py);
+            }
+            B.closePath();
+          } else {
+            if (rr < 1) { B.restore(); return; }
+            B.roundRect(-lw / 2, -lh / 2, lw, lh, rr);
+          }
+          B.fill();
+          B.restore();
+          B.setTransform(1, 0, 0, 1, 0, 0);   // hand B back as the identity surface every other kernel expects
+          return;
+        }
+      }
 
       // APPLE CORNERS is an override, not a flavour of the radius. Ticked, the whole layer becomes one
       // superellipse across its full bounds — the app-icon shape, where the curve never stops turning

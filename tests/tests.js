@@ -46385,6 +46385,75 @@
     if (!/STUTTER/i.test(bad)) throw new Error('a stuttering sample lost its stutter verdict to the new scale branch: ' + bad);
   });
 
+  /* ═══ QUEUE 621 — ROUNDED CORNERS MUST NOT CHANGE WITH SIZE OR ROTATION ════════════════════════
+   * Ezra named the cause himself: *"it literally changes depending on the layers size / rotation"*,
+   * after *"the Apple style only works on few things"*.
+   * 📐 MEASURED BEFORE THE FIX: a square at 30 degrees kept 0.539 of its bounding box, and an
+   * UNROUNDED rotated square measures 0.536 — the effect was doing nothing at all. The mask was built
+   * from the axis-aligned alpha box, whose corners are empty space on a turned layer, so the rounding
+   * cut air. "Only works on few things" was "only works while the layer is square-on".
+   * The mask is built in the layer's own space now, so both invariances hold by construction.
+   * ⚠️ THE MEASURE IS AREA AGAINST THE SHAPE'S OWN AREA, not against its bounding box. Rounding a
+   * ROTATED square also shrinks its bounding box — the corners it removes are the extreme points — so
+   * a bounding-box ratio moves for two reasons at once and cannot separate them. The first version of
+   * this measurement used one and read 0.72 where the truth was 0.90. */
+  test('#621: rounded corners look the same whatever the layer size or rotation', { item: '621' }, function () {
+    const S = FM.scene, P = S.project;
+    const keep = S.layers.slice(), ow = P.width, oh = P.height, wasT = FM._exportTransparent;
+    try {
+      FM._exportTransparent = true;          // or the opaque project background makes every pixel lit
+      const W = 520, H = 520; P.width = W; P.height = H; P.duration = 3;
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      const cx = cv.getContext('2d', { willReadFrequently: true });
+      const kept = (size, rot, scale, style) => {
+        S.layers.length = 0;
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 260, y: 260, shapeW: size, shapeH: size, fill: '#ffffff' });
+        L.start = 0; L.duration = 3; L.transform.rotation = rot; L.transform.scale = scale;
+        const inst = FM.fxRegistry.makeInstance('roundcorners');
+        if (!inst) throw new Error('could not make a roundcorners instance');
+        if (style != null) inst.params.style = style;
+        L.effects = [inst]; S.layers.push(L);
+        cx.clearRect(0, 0, W, H); FM.renderScene(cx, S, 0.5);
+        const d = cx.getImageData(0, 0, W, H).data;
+        let a = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 128) a++;
+        return a / Math.pow(size * scale, 2);
+      };
+
+      /* IT MUST ACTUALLY BE ROUNDING SOMETHING. Without this the two invariance checks below pass
+         perfectly on an effect that does nothing at all — which is exactly the state this entry
+         was reporting. */
+      const flat = kept(240, 0, 1, 0);
+      if (!(flat > 0.80 && flat < 0.96)) throw new Error('a rounded square kept ' + flat.toFixed(4) +
+        ' of its own area — outside the range that means "rounded": above 0.96 it is barely cutting anything, below 0.80 it is nearly a circle');
+
+      for (const [rot, label] of [[30, '30 degrees'], [45, '45 degrees'], [17, '17 degrees']]) {
+        const r = kept(240, rot, 1, 0);
+        if (Math.abs(r - flat) > 0.03) throw new Error('rotated ' + label + ' the shape kept ' + r.toFixed(4) +
+          ' against ' + flat.toFixed(4) + ' square-on — the rounding changes with rotation, which is his exact complaint. ' +
+          '(Before the fix a 30-degree square measured 0.539 while an UNROUNDED one measures 0.536: it did nothing.)');
+      }
+      /* ⚠️ THE SCALES ARE CAPPED SO THE SHAPE STILL FITS THE FRAME. At x2.4 a 240px square is 576px
+         on a 520px canvas, so the frame CLIPS it, the area comes back small, and the test reads that
+         as the corner failing to scale. It failed exactly that way once. Anything above about x2.1
+         is measuring the canvas edge, not the effect. */
+      for (const sc of [1.4, 1.8]) {
+        const r = kept(240, 0, sc, 0);
+        if (Math.abs(r - flat) > 0.03) throw new Error('scaled x' + sc + ' the shape kept ' + r.toFixed(4) +
+          ' against ' + flat.toFixed(4) + ' at 1x — the corner does not scale with the layer, so the same setting looks different at different sizes');
+      }
+      /* The squircle mode has to hold too — his sentence named it as the one that "only works on few
+         things", and rotation was the reason. */
+      const ap0 = kept(240, 0, 1, 1), ap45 = kept(240, 45, 1, 1);
+      if (Math.abs(ap0 - ap45) > 0.03) throw new Error('the squircle kept ' + ap45.toFixed(4) + ' at 45 degrees against ' +
+        ap0.toFixed(4) + ' square-on — rotation still defeats it');
+    } finally {
+      FM._exportTransparent = wasT;
+      S.layers.length = 0; keep.forEach(l => S.layers.push(l));
+      P.width = ow; P.height = oh;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   /* ═══ QUEUE 484 CLAUSE 2 — SCATTER ARRAY, one of the only two genuinely absent effects ════════
    * Fourteen candidates were checked against the existing 199 and twelve were already here or were
    * not effects at all. This is one of the two that were real: every repeat in the app is strictly

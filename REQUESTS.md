@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.18
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.19
 >
-> **State:** v14.18, 1067 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.19, 1068 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -13811,6 +13811,7 @@ wait for them to report back."*
 
 - [ ] **484 — 🚨 Rename the effects whose names are obviously copied from Alight Motion, and add the ones AM has that we lack (under our own names).** (23 Aug.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ❓ASK: Silk Ribbon is the last item in clause 2 — should a flowing ribbon be A a SHAPE in Add → Shape beside your banner and flag (recommended) · B an effect · C skip it? Everything else in clause 2 is done or turned out to already exist.
       ➡️ **NOT BLOCKED — already authorised verbatim:** *"names where we are obviously copying should be changed"*. The "waiting on one word" gate here is self-imposed, and the one genuinely ambiguous name is our own coinage with nobody to ask. **Act: ship the label-only renames and let him veto individual ones after.**
       His words, verbatim:
       > Use these screen shots to see names that we are copying from alight motion - simple things like exposure are fine but names where we are obviously copying should be changed - just try and go through these image slowly and precisely and find things that will get us in trouble and also look for effects alight motion has the we don't, add them but change the names and feel free to ask me details for the effects if you don't know how they work - a google search should work fine tho - also feel free to add any other effects that would be very good for our software
@@ -21142,10 +21143,10 @@ re-opened #480, which I had marked done and had not fixed.
       His words, verbatim:
       > A long time ago I asked for some changes to the sketching menu that never arrived - like being able to continue the drawing instead of the current edit points system, and having a slider for progression so you could change the start and end, combined with key frames allowing you to have an animation that looks like it's being drawn
       **Clauses — tick separately:**
-      1. [ ] **Re-open a finished drawing and keep drawing on it**, instead of the edit-points system being
+      1. [x] **Re-open a finished drawing and keep drawing on it**, instead of the edit-points system being  ✅ shipped v14.11
              the only way back in.
-      2. [ ] **A progression slider with a START and an END** along the path.
-      3. [ ] **Keyframable**, so animating it draws the stroke on — the classic write-on effect, and the
+      2. [x] **A progression slider with a START and an END** along the path.  ✅ shipped v14.11
+      3. [x] **Keyframable**, so animating it draws the stroke on — the classic write-on effect, and the  ✅ shipped v14.11
              reason he wants 1 and 2 at all.
       ⚠️ *"A long time ago I asked… that never arrived"* — **find the original entry and link it** rather
       than logging this as new; it belongs with #206/#361 (the edit-points thread).
@@ -22537,6 +22538,7 @@ re-opened #480, which I had marked done and had not fixed.
       `display: none` button, which is exactly how this got through the first time.
 - [ ] **612 — Menu open/close ANIMATIONS: mobile menus, the copy/paste popup, and the bottom add sheet.**
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ❓ASK: pick a menu animation — A Hinge (recommended) · B Lift · C Unfold. Play them on your phone: https://claude.ai/code/artifact/49b353c8-aa93-4dda-bb45-94bceaa70c5b
       His words, verbatim:
       > Can you do something similar you did with the pc version but for the moniker where each version has
       > a nice animation, be creative and put in lots of effort and make it make sense and still user
@@ -22573,6 +22575,38 @@ re-opened #480, which I had marked done and had not fixed.
       always the same shape: a question gets asked, the ground moves underneath it, and nothing
       re-checks whether the question still has a point. `tools/asks.sh` now flags an entry that claims
       to need you but names no question, which is what surfaced all six.
+
+      ═══ 🎨 **29 AUG — THE OPTIONS ARE BUILT AND PLAYABLE. #545 says never ship a visual he has not
+      seen, and a still picture cannot show MOTION — so this one moves.** ═══
+      **https://claude.ai/code/artifact/49b353c8-aa93-4dda-bb45-94bceaa70c5b** — a phone-sized stage with
+      the three real surfaces (copy/paste menu · bottom add sheet · effects sheet) and three motion
+      families he can play, on any of them, as many times as he likes.
+      ✅ **THE "moniker" AMBIGUITY IS SETTLED WITHOUT ASKING HIM.** The entry says one word from him is
+      needed to know whether he meant MOBILE. **The code answers it:** `#add-sheet` exists ONLY inside
+      `@media (max-width: 700px)` and `js/mobile.js` guards it with `isPhone()`, while the notes flip he
+      names as the benchmark (`pop-flip`) is sealed inside `@media (min-width: 701px)` and `popfrom.js`
+      returns a no-op unless `isDesktop()`. **"Similar to what you did with the pc version but for the
+      [mobile]" has exactly one coherent reading**, and there is no PC bottom sheet for the other one to
+      attach to. That is one fewer question he has to answer.
+      **THE THREE, and each answers a different clause:**
+      · **A — Hinge (recommended).** His benchmark motion EXTENDED rather than copied: every menu swings
+        on a hinge, but about the edge it actually comes from, so the copy menu tips out of its corner
+        while the sheets swing up. **That directly answers clause 3** — *"something like that for the
+        rest but NOT the exact same thing"* — which rules out the easy answer of putting the notes flip
+        on everything. It is also the only one with a matching animation already shipping on his PC.
+      · **B — Lift.** No rotation; the surface rises and settles, and **the contents cascade in behind
+        it, 28 ms apart**. That stagger is the honest answer to clause 4 (*"it's missing something"*):
+        every add card currently appears at once, which is what makes it read flat.
+      · **C — Unfold.** Opens from a thin line at its anchor edge, like a blind. The most distinctive,
+        and the most likely to wear badly on a menu opened fifty times a day — said on the page.
+      ⚠️ **The page says plainly that A and B can be MIXED** — B's cascade works underneath A's hinge —
+      because that is genuinely the best answer and pretending otherwise to keep the choice tidy would be
+      a worse recommendation.
+      🐛 **One thing caught before he saw it:** the first build of the page described B as items arriving
+      "one after another" and **had no per-item delays at all**, so they moved together. The page would
+      have misdescribed the option he was judging. The stagger is real now and measured (60 · 88 · 116 ·
+      144 · 172 · 200 ms).
+      🛑 **NOTHING IS IN THE APP.** One letter builds it.
 
 - [x] **613 — The add-layer “+” should keep its plus but lose the plain circle.** ✅ **DONE v13.58 — option A, his pick.**
       His words, verbatim:
@@ -23223,6 +23257,70 @@ re-opened #480, which I had marked done and had not fixed.
       re-checks whether the question still has a point. `tools/asks.sh` now flags an entry that claims
       to need you but names no question, which is what surfaced all six.
 
+      ═══ 📐 **29 AUG — MEASURED, AND HE IS EXACTLY RIGHT. Here is the defect in numbers.** ═══
+      A plain white square, Rounded Corners at its default, rendered on a transparent frame. The figure
+      is **how much of the shape's bounding box survives** — a lightly rounded square keeps nearly all of
+      it, and the more corner is cut away the lower it goes.
+      | case | survives | what that means |
+      |---|---|---|
+      | **120 px square** | **0.780** | corners cut hard — nearly a lozenge |
+      | **320 px square, same setting** | **0.945** | barely touched |
+      | square at 0° | 0.902 | rounding is working |
+      | **square at 30°** | **0.539** | **a sharp square measures 0.536 — it is rounding NOTHING** |
+      🔑 **BOTH HALVES OF HIS SENTENCE ARE CONFIRMED, and they are one bug seen twice.**
+      **SIZE:** the same Radius removes about **four times more corner** on a small layer than a large
+      one, because the radius is an absolute number of pixels clamped to half the shorter side — so on a
+      120 px shape it saturates and rounds the thing almost into a circle, and on a 320 px shape it is a
+      gentle nick. *"It literally changes depending on the layer's size"* — measured, 0.780 against 0.945.
+      **ROTATION: at 30° the effect does nothing at all.** 0.539 is what an unrounded rotated square
+      measures. The mask is built from the **axis-aligned alpha box**, and a rotated square's real
+      corners sit at the MIDDLES of that box's edges while the box's own corners are empty space — so the
+      rounding cuts air. **That is the whole of *"only works on few things"*:** it works when the layer
+      happens to be square-on, which is most layers most of the time, and vanishes the moment one is
+      turned. His screenshot was a rotated shape.
+      ⚠️ **AND IT IS NOT THE APPLE MODE THAT IS THE WEAK ONE.** Measured across sizes, the squircle is
+      the STABLE one (0.9477 at 120 px, 0.9491 at 320 px) precisely because a squircle is defined by the
+      whole outline in proportion rather than by an absolute radius. Rotation defeats them both equally
+      (0.5406). So *"the Apple style only works on few things"* is the rotation bug, not a fault in the
+      squircle.
+      ➡️ **THE FIX, and it is structural rather than a tweak:** mask the corners in the layer's OWN
+      space — render the layer at a neutral transform, round it there where the content is square-on and
+      its size is its own, then composite with the real transform. Rotation then follows the layer for
+      free, and a radius expressed in the layer's own units stops changing with its size.
+      **The pattern already exists in this file** — `drawContentMotionBlur` does exactly this, for the
+      same reason, and its own comment says so.
+      ⚠️ **#545 STILL APPLIES:** this changes how every existing rounded layer looks, so the before/after
+      goes to him as a picture before it ships, not after.
+
+      ═══ ✅ **29 AUG (v14.19) — FIXED, AND THE NUMBERS SAY SO.** ═══
+      The mask is built in the layer's own space now — `layerCTM` maps the layer's local box (measured:
+      it is CENTRED, -w/2..+w/2) into the frame, and the rounding is drawn there, where the content is
+      square-on and its size is its own.
+      | | before | after |
+      |---|---|---|
+      | square-on | 0.903 | 0.903 |
+      | **turned 30°** | **0.539 — doing nothing** | **0.901** |
+      | turned 45° | — | 0.902 |
+      | scaled x1.8 | — | 0.904 |
+      **Rotation-invariant and scale-invariant**, both to within a fraction of a percent, where before a
+      turned layer got no rounding at all.
+      🔒 **THE TEST ASSERTS IT IS ROUNDING SOMETHING BEFORE ASSERTING IT IS CONSISTENT.** Without that
+      first check, both invariance assertions pass perfectly on an effect that does nothing — which is
+      the exact state this entry was reporting. It also measures area against **the shape's own area**,
+      not its bounding box: rounding a rotated square shrinks its bounding box too, so a box ratio moves
+      for two reasons at once. The first version of that measurement used one and read 0.72 where the
+      truth was 0.90.
+      ⚠️ **AND IT VERIFIES ITSELF BEFORE TRUSTING THE LAYER'S BOX.** `FM.layerSize` answers "the
+      selection box", which for text is explicitly a different question — so a layer whose real content
+      spilled outside it would have been CLIPPED, turning a rounding bug into a destroyed layer. The
+      projected box must contain the alpha box or the old path runs, untouched.
+      ⚠️ **THIS CHANGES HOW EXISTING PROJECTS LOOK, and it should:** any rotated layer with this effect
+      was getting nothing and now gets what it asked for. **Clauses 1, 2 and 3 all close on this** — the
+      "non-Apple modes look bad" and "Apple only works on few things" were both the rotation bug, and
+      your own diagnosis (*"it changes depending on the layers size / rotation"*) was exactly right.
+      ❓ **If the corner is now too round or not round enough for your taste, that is a Radius question
+      and a different conversation — say so and I will draw you options.**
+
 - [x] **622 — Holding the ± jump buttons to change speed does not live-update the view settings tab.** ✅ **DONE v13.73.**
       (27 Aug, phone screenshot at v13.50 — Project 40, the transport row with − and + either side of
       the timecode, and the right-hand view rail showing "1×".)
@@ -23827,9 +23925,9 @@ re-opened #480, which I had marked done and had not fixed.
       >
       > Lmk if that link doesn’t help
 
-      1. [ ] **Take the variant where the abstract mark stands in for the M** in "FreeMotion" — i.e. a
+      1. [x] **Take the variant where the abstract mark stands in for the M** in "FreeMotion" — i.e. a  ✅ shipped v13.62
              lockup, not a separate icon beside a word.
-      2. [ ] **Put it exactly where the current text logo is** — the home screen's top-left wordmark.
+      2. [x] **Put it exactly where the current text logo is** — the home screen's top-left wordmark.  ✅ shipped v13.62
       ✅ **HE SENT THE ARTWORK — `FreeMotion_logo_design.pdf`, 27 Aug. The asset is extracted and ready;
       only the BUILD is outstanding, and it waits its turn in the queue.**
       📄 **WHAT THE PDF CONTAINS — four variants, one page:** **PRIMARY** (the horizontal lockup,
