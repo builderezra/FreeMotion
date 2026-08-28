@@ -716,6 +716,21 @@ window.FM = window.FM || {};
        ⚠️ BOTH DEFAULT TO A NO-OP — word 0 px, line x1 — so every Text Spacing already sitting in one of
        his projects renders exactly as it did. A new control whose default changes existing work is the
        kind of "fix" that reads as a bug. */
+    { type: 'textcurve', label: 'Text Curve', params: [
+      { key: 'curve', label: 'Curve', min: -180, max: 180, step: 1, def: 60, unit: '\u00b0' },
+      { key: 'mode', label: 'Applies', def: 0, options: [[0, 'Replaces'], [1, 'Adds to layer']] },
+    ] },
+    { type: 'textreverse', label: 'Text Reverse', param: 'unit', def: 0,
+      options: [[0, 'Characters'], [1, 'Words'], [2, 'Lines']] },
+    { type: 'textrepeat', label: 'Text Repeat', params: [
+      { key: 'count', label: 'Copies', min: 1, max: 20, step: 1, def: 3 },
+      { key: 'sep', label: 'Separated by', def: 0, options: [[0, 'Space'], [1, 'New line'], [2, 'Dot'], [3, 'Nothing']] },
+    ] },
+    { type: 'textpad', label: 'Text Pad', params: [
+      { key: 'length', label: 'Width', min: 0, max: 40, step: 1, def: 3 },
+      { key: 'ch', label: 'Pad with', def: 0, options: [[0, 'Zeros'], [1, 'Spaces'], [2, 'Dots'], [3, 'Dashes']] },
+      { key: 'side', label: 'Side', def: 0, options: [[0, 'Before'], [1, 'After']] },
+    ] },
     { type: 'textspacing', label: 'Text Spacing', params: [
       { key: 'spacing', label: 'Letter spacing', min: -20, max: 120, step: 1, def: 24, unit: 'px' },
       { key: 'word', label: 'Word spacing', min: -40, max: 200, step: 1, def: 0, unit: 'px' },
@@ -1857,6 +1872,47 @@ window.FM = window.FM || {};
       }
       st.text = out;
     },
+    /* CURVE — the text panel's own control, promoted to an effect (queue 664). Absolute by default so
+       an existing layer's own curve is REPLACED exactly as the panel would, with an Adds mode for
+       stacking on top of it — the same Replaces/Adds shape Text Spacing already uses, because two
+       controls that do the same kind of thing should not answer to different words. */
+    textcurve: function (st, p, t) {
+      var deg = tnum(FM.evalProp(p.curve, t), 60);
+      var mode = p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0);
+      st.curve = mode === 1 ? (st.curve || 0) + deg : deg;
+    },
+    /* REVERSE — by character, by word or by line. The character mode is the party trick; the WORD mode
+       is the one that is actually useful, and neither exists anywhere else in the app. */
+    textreverse: function (st, p, t) {
+      var unit = p.unit == null ? 0 : (Math.round(FM.evalProp(p.unit, t)) | 0);
+      if (unit === 1) st.text = st.text.split('\n').map(function (ln) { return ln.split(/(\s+)/).reverse().join(''); }).join('\n');
+      else if (unit === 2) st.text = st.text.split('\n').reverse().join('\n');
+      else st.text = st.text.split('\n').map(function (ln) { return ln.split('').reverse().join(''); }).join('\n');
+    },
+    /* REPEAT — echo the string, with a separator that can be a newline. Reaches for the same place a
+       designer reaches when they want a word to become a texture. */
+    textrepeat: function (st, p, t) {
+      var n = Math.max(1, Math.min(20, Math.round(tnum(FM.evalProp(p.count, t), 3))));
+      var sepI = p.sep == null ? 0 : (Math.round(FM.evalProp(p.sep, t)) | 0);
+      var sep = sepI === 1 ? '\n' : sepI === 2 ? ' · ' : sepI === 3 ? '' : ' ';
+      if (n <= 1) return;
+      var one = st.text, out = one;
+      for (var i = 1; i < n; i++) out += sep + one;
+      st.text = out;
+    },
+    /* PAD — leading zeros and fixed-width labels. The obvious partner to Counter and Timecode, both of
+       which already exist and neither of which can do this. */
+    textpad: function (st, p, t) {
+      var len = Math.max(0, Math.min(40, Math.round(tnum(FM.evalProp(p.length, t), 3))));
+      var side = p.side == null ? 0 : (Math.round(FM.evalProp(p.side, t)) | 0);
+      var chI = p.ch == null ? 0 : (Math.round(FM.evalProp(p.ch, t)) | 0);
+      var ch = chI === 1 ? ' ' : chI === 2 ? '.' : chI === 3 ? '-' : '0';
+      st.text = st.text.split('\n').map(function (ln) {
+        if (ln.length >= len) return ln;
+        var pad = new Array(len - ln.length + 1).join(ch);
+        return side === 1 ? ln + pad : pad + ln;
+      }).join('\n');
+    },
     textspacing: function (st, p, t) {
       var sp = tnum(FM.evalProp(p.spacing, t), 24);
       // It always OVERRODE the layer's own spacing, so an effect meant to nudge tracking silently threw
@@ -1926,8 +1982,16 @@ window.FM = window.FM || {};
      effect that only touches word spacing still hands back the right line height, and every caller can
      read one object rather than mixing effect output with raw layer fields. */
   FM.applyTextEffects = function (layer, baseText, baseSpacing, t, scene) {
+    /* ⚠️ `curve` IS IN HERE NOW (queue 664). Ezra, on the text panel's Curve and Line height:
+     * *"Just add them as effects, they should already be, I didn't realise you forgot to add them."*
+     * He is right that they behave like effects, and Line height already IS one — it is a parameter of
+     * Text Spacing. Curve was not: it was read straight off `layer.textCurve` at the draw site, so it
+     * could not be stacked, keyframed through the effect rail, or previewed from the browser like
+     * everything else. Seeding it here and reading the RESOLVED value at the draw site is all it takes,
+     * and a layer with no curve effect gets exactly what it always did. */
     var st = { text: String(baseText == null ? '' : baseText), letterSpacing: baseSpacing || 0,
-               wordSpacing: 0, lineHeight: (layer && layer.lineHeight) || 1.15 };
+               wordSpacing: 0, lineHeight: (layer && layer.lineHeight) || 1.15,
+               curve: (layer && layer.textCurve) || 0 };
     var fx = layer && layer.effects;
     if (fx && fx.length) {
       var info = { localT: FM.fxLocalTime(layer, t), fps: (scene && scene.project && scene.project.fps) || 30 };   // _clipStart: a flattened group's proxy start is synthetic (t-1)
@@ -12548,7 +12612,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           const bx = align === 'center' ? -maxW / 2 : align === 'right' ? -maxW : 0;
           ctx.fillStyle = buildGradient(ctx, layer.fillGradient, { x: bx, y: -(total + fs) / 2, w: maxW, h: total + fs }, t);
         }
-        const curve = layer.textCurve || 0;
+        // …and the curve the EFFECTS resolved, not the layer's raw field (queue 664). Identical when no
+        // curve effect is present, because applyTextEffects seeds it from exactly that field.
+        const curve = (_tEff && _tEff.curve != null) ? _tEff.curve : (layer.textCurve || 0);
         if (Math.abs(curve) > 0.5) drawArcLine(ctx, lines.join(' '), layer, curve, drawStroke, bw, bcol);   // text on a curve
         else lines.forEach((line, i) => {
           const yy = i * lh - total / 2;

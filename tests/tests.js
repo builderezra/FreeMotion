@@ -45694,6 +45694,66 @@
     });
   });
 
+  /* ═══ QUEUE 664 — "just add them as effects, they should already be" ════════════════════════════
+   * His answer when offered the REMOVAL of a duplicated text control was the opposite of what was
+   * offered: he wants the text panel's controls promoted INTO the effects list, where they can be
+   * stacked, keyframed and previewed like everything else. "They should already be" is the operative
+   * phrase — he assumed they were.
+   * ⚠️ AND HALF OF IT ALREADY WAS: Line height is a parameter of Text Spacing. Curve was not — it was
+   * read straight off `layer.textCurve` at the draw site, so nothing in the effects rail could reach it. */
+  test('#664: Curve is an effect and reaches the renderer', { item: '664' }, function () {
+    if (!FM.applyTextEffects) throw new Error('FM.applyTextEffects is not reachable');
+    if (!FM.fxRegistry || !FM.fxRegistry.makeInstance) throw new Error('the registry is not reachable');
+    const L = FM.makeLayer('text', { text: 'Text', x: 100, y: 100 });
+    /* THE CONTROL: with no curve effect the resolved value must be the LAYER's own, or promoting it to
+       an effect would have quietly changed every text layer that already has a curve. */
+    L.effects = []; L.textCurve = 42;
+    const base = FM.applyTextEffects(L, 'Text', 0, 0, FM.scene);
+    if (base.curve !== 42) throw new Error('with no curve effect the resolved curve is ' + base.curve + ', not the layer\'s own 42 — existing curved text would change');
+
+    const inst = FM.fxRegistry.makeInstance('textcurve');
+    if (!inst) throw new Error('there is no "textcurve" effect — the whole point of this item');
+    inst.params = inst.params || {};
+    inst.params.curve = 90; inst.params.mode = 0;              // Replaces
+    L.effects = [inst];
+    const rep = FM.applyTextEffects(L, 'Text', 0, 0, FM.scene);
+    if (rep.curve !== 90) throw new Error('Replaces gave ' + rep.curve + ' instead of 90');
+    inst.params.mode = 1;                                       // Adds to layer
+    const add2 = FM.applyTextEffects(L, 'Text', 0, 0, FM.scene);
+    if (add2.curve !== 132) throw new Error('Adds gave ' + add2.curve + ' instead of 42 + 90 = 132');
+
+    // and it must be TEXT-ONLY, or it appears on shapes and does nothing
+    if (FM.fxRegistry.supportsLayer) {
+      const shape = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 10, shapeH: 10, fill: '#fff' });
+      if (FM.fxRegistry.supportsLayer('textcurve', shape)) throw new Error('Text Curve is offered on a shape layer, where it can do nothing');
+      if (!FM.fxRegistry.supportsLayer('textcurve', L)) throw new Error('Text Curve is NOT offered on a text layer');
+    }
+  });
+
+  test('#664: the new text effects change the string', { item: '664' }, function () {
+    if (!FM.applyTextEffects) throw new Error('FM.applyTextEffects is not reachable');
+    const L = FM.makeLayer('text', { text: 'ab cd', x: 100, y: 100 });
+    const run = (id, params) => {
+      const i = FM.fxRegistry.makeInstance(id);
+      if (!i) throw new Error('there is no "' + id + '" effect');
+      i.params = Object.assign(i.params || {}, params || {});
+      L.effects = [i];
+      return FM.applyTextEffects(L, 'ab cd', 0, 0, FM.scene).text;
+    };
+    /* Each assertion states the WHOLE expected string rather than "it changed", because "it changed"
+       is satisfied by an effect that mangles the text in some other way entirely. */
+    if (run('textreverse', { unit: 0 }) !== 'dc ba') throw new Error('reverse by character gave "' + run('textreverse', { unit: 0 }) + '"');
+    if (run('textreverse', { unit: 1 }) !== 'cd ab') throw new Error('reverse by word gave "' + run('textreverse', { unit: 1 }) + '"');
+    if (run('textrepeat', { count: 3, sep: 0 }) !== 'ab cd ab cd ab cd') throw new Error('repeat gave "' + run('textrepeat', { count: 3, sep: 0 }) + '"');
+    if (run('textrepeat', { count: 1, sep: 0 }) !== 'ab cd') throw new Error('repeat with 1 copy must be a no-op');
+    if (run('textpad', { length: 8, ch: 0, side: 0 }) !== '000ab cd') throw new Error('pad gave "' + run('textpad', { length: 8, ch: 0, side: 0 }) + '"');
+    if (run('textpad', { length: 3, ch: 0, side: 0 }) !== 'ab cd') throw new Error('padding to a width SHORTER than the text must leave it alone');
+    /* THE CONTROL: an unrelated text effect must not be quietly doing these. If every id returned the
+       same string, the assertions above would be measuring one shared bug rather than four effects. */
+    const upper = run('texttransform', { mode: 0 });
+    if (upper !== 'AB CD') throw new Error('the control failed: texttransform gave "' + upper + '"');
+  });
+
   /* Queue 343 clause 4 — sharing templates, in the shape Ezra chose.
    * He asked for links first, which would have needed a server and broken the app's local-only premise
    * outright. Told that, he picked the other option himself, verbatim: *"maybe not links then and

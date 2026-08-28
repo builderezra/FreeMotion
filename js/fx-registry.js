@@ -57,6 +57,7 @@ window.FM = window.FM || {};
     zoomstreaks: 'blur', innerblur: 'blur', contourstrips: 'proc', innerpinch: 'distort', crosshatch: 'drawing',
     // batch 19 (text)
     counter: 'text', textprogress: 'text', textrandomizer: 'text', textspacing: 'text', texttransform: 'text', timecode: 'text',
+    textcurve: 'text', textreverse: 'text', textrepeat: 'text', textpad: 'text',
     // batch 20 (cinematic grades + framing)
     bleachbypass: 'color', tealorange: 'color', crossprocess: 'color', lightleak: 'color', letterbox: 'stylize', border: 'drawing',
     // batch 21
@@ -150,7 +151,8 @@ window.FM = window.FM || {};
   // add-flow gate would now block a working effect.)
   const MEDIA_ONLY = { chromakey: 1, lumakey: 1 };
   // Text effects transform a text layer's displayed string / letter-spacing — only valid on text layers.
-  const TEXT_ONLY = { counter: 1, textprogress: 1, textrandomizer: 1, textspacing: 1, texttransform: 1, timecode: 1 };
+  const TEXT_ONLY = { counter: 1, textprogress: 1, textrandomizer: 1, textspacing: 1, texttransform: 1, timecode: 1,
+                      textcurve: 1, textreverse: 1, textrepeat: 1, textpad: 1 };
   // An adjustment layer grades the already-composited frame below it. compositor.applyAdjustment can
   // ONLY apply: CSS-filter effects (effectFilter) + the PIXEL_ADJ whole-frame grades + pixelate.
   // Every other effect (geometry warps, the rest of the pixel/text passes) is accepted but renders
@@ -426,7 +428,11 @@ window.FM = window.FM || {};
     counter: 'Counts a number up or down. Keyframe Progress and it animates between the two ends.',
     textprogress: 'Types the text on, character by character, as Progress runs.',
     textrandomizer: 'Scrambles the characters and resolves them into the real text.',
-    textspacing: 'Widens or tightens the gaps between letters.',
+    textspacing: 'Widens or tightens the gaps between letters. Also carries Line height.',
+    textcurve: 'Bends the line of text along an arc, each letter turned to follow it.',
+    textreverse: 'Reverses the text — by character, by word or by line.',
+    textrepeat: 'Echoes the text a number of times, on one line or stacked.',
+    textpad: 'Pads the text to a fixed width — leading zeros, dots or dashes.',
     texttransform: 'Forces the text to UPPERCASE, lowercase, Title Case or Sentence case without retyping it.',
     timecode: 'Shows the running time of the clip, in the format you pick.',
 

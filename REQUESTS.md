@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.00
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.01
 >
-> **State:** v14.00, 1048 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.01, 1050 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -25820,6 +25820,29 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **The text category already exists** — `TEXT_ONLY` at js/fx-registry.js:153 holds `counter`,
       `textprogress`, `textrandomizer`, `textspacing`, `texttransform`, `timecode` — so there is a home
       for these and a working pattern to copy.
+
+      ═══ ✅ **DONE v14.01 — and one of the two did not need doing, which is worth saying plainly.** ═══
+      1. [x] **LINE HEIGHT WAS ALREADY AN EFFECT.** It is a parameter of **Text Spacing**
+             (`{ key: 'line', label: 'Line height' }`). So *"they should already be"* was half right —
+             it is there, it is just not where anyone would look for it. **Nothing was added**, because
+             a second control doing the same job is worse than one that is hard to find. **If you would
+             rather it were its own tile, say so** — that is a real choice and it is yours, not mine.
+      2. [x] **CURVE IS A REAL EFFECT NOW — "Text Curve".** It genuinely was not one: the renderer read
+             `layer.textCurve` straight off the layer at the draw site, so nothing in the effects rail
+             could stack it, keyframe it or preview it. It flows through `applyTextEffects` now, with a
+             **Replaces / Adds to layer** mode — the same two words Text Spacing already uses, because
+             two controls of the same kind should not answer to different vocabulary.
+             ⚠️ **A LAYER WITH NO CURVE EFFECT RENDERS EXACTLY AS BEFORE, and there is a test pinning
+             it** — promoting a property to an effect is precisely how you silently change every project
+             that already used the property.
+      3. [x] **THREE NEW TEXT EFFECTS**, chosen because nothing else in the app can do them:
+             · **Text Reverse** — by character, by word or by line. The word mode is the useful one.
+             · **Text Repeat** — echo the string N times, on one line or stacked.
+             · **Text Pad** — pad to a fixed width with zeros, dots or dashes. The obvious partner to
+               Counter and Timecode, and neither of them could do it.
+             **Not a grab bag:** each is asserted on its WHOLE output string rather than "it changed",
+             with a control proving an unrelated text effect still does its own thing — four effects
+             that all returned the same string would otherwise read as four passes.
 
 - [x] **665 — 🔴 WHY THE UNREADABLE-TEXT BUGS KEEP REACHING HIM — and four more of them.** ✅ **DONE
       v13.99.** (28 Aug, prompted by his own words on #649.)
