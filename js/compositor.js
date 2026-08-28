@@ -585,6 +585,15 @@ window.FM = window.FM || {};
       { key: 'angle', label: 'Direction', min: 0, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'fade', label: 'Fade out', min: 0, max: 100, step: 1, def: 0, unit: '%' },        // 0 = every copy solid, as before
     ] },
+    // ---- Scatter Array (queue 484: AM's Scatter Repeat, our name) — copies that are NOT on a grid ----
+    { type: 'scatterarray', label: 'Scatter Array', params: [
+      { key: 'count', label: 'Copies', min: 1, max: 24, step: 1, def: 8 },
+      { key: 'spread', label: 'Spread', min: 0, max: 200, step: 1, def: 60, unit: '%' },
+      { key: 'sizevary', label: 'Size vary', min: 0, max: 100, step: 1, def: 30, unit: '%' },
+      { key: 'rotate', label: 'Rotate', min: 0, max: 180, step: 1, def: 25, unit: '°' },
+      { key: 'fade', label: 'Fade', min: 0, max: 100, step: 1, def: 35, unit: '%' },
+      { key: 'seed', label: 'Seed', min: 1, max: 99, step: 1, def: 1 },
+    ] },
     { type: 'radialrepeat', label: 'Ring Array', params: [
       { key: 'count', label: 'Segments', min: 2, max: 16, step: 1, def: 6 },
       { key: 'rotate', label: 'Seam angle', min: -360, max: 360, step: 1, def: 0, unit: '°' },
@@ -2644,7 +2653,7 @@ window.FM = window.FM || {};
     dropshadow: 1, chromaticaberration: 1, innerglow: 1, unsharpmask: 1, hextiles: 1, linstreaks: 1,
     blink: 1, flicker: 1, pulseopacity: 1, dissolve: 1, blockdissolve: 1, flashdark: 1,
     wipe: 1, radialwipe: 1, solidmatte: 1, mattechoker: 1, mattefringe: 1,
-    gridrepeat: 1, linearrepeat: 1, radialrepeat: 1, mirrortile: 1,
+    gridrepeat: 1, linearrepeat: 1, radialrepeat: 1, mirrortile: 1, scatterarray: 1,
     channelremap: 1, gradientoverlay: 1, lensflare: 1, roughenedges: 1, hexarray: 1,
     electricedges: 1, glowscan: 1, spinstreaks: 1, fractalridges: 1, smoothbevel: 1,
     zoomstreaks: 1, innerblur: 1, contourstrips: 1, innerpinch: 1, crosshatch: 1,
@@ -9857,6 +9866,52 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         } else {
           B.drawImage(A, dx, dy);
         }
+      }
+    },
+    /* SCATTER ARRAY (queue 484 clause 2 — Alight Motion calls it Scatter Repeat).
+       Every repeat this app has is strictly REGULAR — Trail walks a straight line, Tile Grid and Ring
+       Array lay copies on a lattice. Nothing scatters them, which is the whole difference, and it is
+       why this is not the Duplicate Array that was rejected for duplicating Trail.
+       ⚠️ THE SCATTER IS SEEDED, NOT RANDOM. `Math.random()` here would give a different picture every
+       frame, so the layer would boil during playback and — worse — an export would not match the
+       preview, which is a class of bug this file already carries scars from. The same integer
+       avalanche `particles` uses gives the same copy the same offset forever, so the effect is STILL
+       between frames unless you animate it, and a Seed slider is what re-rolls the arrangement. */
+    scatterarray: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+      const n = Math.max(1, Math.min(24, Math.round(fparam(p, 'count', 8, t))));
+      const spread = Math.max(0, Math.min(200, fparam(p, 'spread', 60, t))) / 100;
+      const rot = (fparam(p, 'rotate', 25, t) || 0) * Math.PI / 180;
+      const scaleV = Math.max(0, Math.min(100, fparam(p, 'sizevary', 30, t))) / 100;
+      const fade = Math.max(0, Math.min(100, fparam(p, 'fade', 35, t))) / 100;
+      const seed = Math.round(fparam(p, 'seed', 1, t)) | 0;
+      B.drawImage(A, 0, 0);                       // the original stays exactly where it is
+      if (n < 2) return;
+      const hash = function (k) {
+        let v = Math.imul((k ^ (k >>> 16)) + seed * 0x9e3779b9, 0x45d9f3b);
+        v = Math.imul(v ^ (v >>> 16), 0x45d9f3b);
+        v = v ^ (v >>> 16);
+        return (v >>> 0) / 4294967296;
+      };
+      /* Scatter about the CONTENT's own centre and by its own size, so the spread means the same
+         thing on a small shape and a full-frame clip — the mistake Trail's note warns about. */
+      const cx0 = bb.x + bb.w / 2, cy0 = bb.y + bb.h / 2;
+      const reach = Math.max(bb.w, bb.h) * spread;
+      for (let i = 1; i < n; i++) {
+        const dx = (hash(i * 5) - 0.5) * 2 * reach;
+        const dy = (hash(i * 5 + 1) - 0.5) * 2 * reach;
+        const a = 1 - fade * (hash(i * 5 + 2));
+        if (a <= 0.004) continue;
+        const sc = 1 + (hash(i * 5 + 3) - 0.5) * 2 * scaleV;
+        const an = (hash(i * 5 + 4) - 0.5) * 2 * rot;
+        if (cx0 + dx < -bb.w || cx0 + dx > W + bb.w || cy0 + dy < -bb.h || cy0 + dy > H + bb.h) continue;
+        B.save();
+        B.globalAlpha = a;
+        B.translate(cx0 + dx, cy0 + dy);
+        B.rotate(an);
+        B.scale(sc <= 0.02 ? 0.02 : sc, sc <= 0.02 ? 0.02 : sc);
+        B.translate(-cx0, -cy0);
+        B.drawImage(A, 0, 0);
+        B.restore();
       }
     },
     tiles: function (A, B, W, H, bb, p, t, tl, layer, ps, expand) {

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.17
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.18
 >
-> **State:** v14.17, 1066 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.18, 1067 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -14000,6 +14000,28 @@ wait for them to report back."*
       (copies of the layer scattered rather than on a grid — nothing does this; the regular repeats are
       all strictly regular) and **Silk Ribbon** (a flowing ribbon generator — ⚠️ worth asking whether it
       belongs in Add → Shape beside the existing banner and flag shapes rather than in the effects list).
+
+      ═══ ✅ **29 AUG (v14.18) — SCATTER ARRAY IS IN. One of the two genuinely absent effects.** ═══
+      Their **Scatter Repeat**, our **Scatter Array**. **Every repeat this app had was strictly
+      regular** — Trail walks a straight line, Tile Grid and Ring Array lay copies on a lattice — and
+      nothing scattered them. That irregularity is the whole difference, and it is exactly why this is
+      NOT the "Duplicate Array" rejected in the previous batch for duplicating Trail.
+      ⚠️ **THE SEED IS THE LOAD-BEARING PART, not a nicety.** `Math.random()` would redraw a different
+      arrangement every frame: the layer would boil during playback, **and the export would not match
+      the preview** — a class of bug this project already has scars from. The scatter is a seeded
+      integer hash, so the same copy gets the same place forever and the Seed slider is what re-rolls
+      it. The test pins determinism as hard as it pins visibility.
+      🔒 **Four assertions, and each is a way it could have been wrong:** visible at its DEFAULT (the
+      previous batch failed that twice — it is #661); byte-identical across two renders of the same
+      frame; the Seed actually re-rolls the arrangement rather than being decoration; and the copies
+      spread in TWO dimensions, because if they land in a line this is Trail with extra steps.
+      *(The first version of that visibility check measured lit pixels and the project background is
+      opaque, so it read 57,600 of 57,600 both before and after — a metric that cannot move is not a
+      measurement. It counts the layer's own colour now. LOOP.md rule 10, caught by the test failing.)*
+      📋 **CLAUSE 2 IS NOW ONE ITEM: Silk Ribbon** — and it comes with a real question rather than a
+      guess. ❓**Should a flowing ribbon be an EFFECT, or a SHAPE in Add → Shape beside the banner and
+      flag you already have?** It behaves like a shape, and the effects list is the thing you have said
+      is hard to search. **A: Add → Shape (recommended) · B: an effect · C: skip it.**
 
 - [x] **481 — PC effects browser: shrink the featured tiles, move Visual/Filters/Audio up beside the search and X, and make the category icons FIT.** ✅ **ALL FOUR DONE v12.04.** (23 Aug, two PC screenshots at v12.01.)
       Measured on a 1440px screen, where the browser docks into the inspector as a **346px column** — it

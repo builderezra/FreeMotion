@@ -46385,6 +46385,80 @@
     if (!/STUTTER/i.test(bad)) throw new Error('a stuttering sample lost its stutter verdict to the new scale branch: ' + bad);
   });
 
+  /* ═══ QUEUE 484 CLAUSE 2 — SCATTER ARRAY, one of the only two genuinely absent effects ════════
+   * Fourteen candidates were checked against the existing 199 and twelve were already here or were
+   * not effects at all. This is one of the two that were real: every repeat in the app is strictly
+   * REGULAR — Trail walks a line, Tile Grid and Ring Array lay copies on a lattice — and nothing
+   * scattered them. That irregularity is the entire difference, and it is why this is not the
+   * "Duplicate Array" that was rejected in the previous batch for duplicating Trail.
+   * ⚠️ THE SEED IS THE LOAD-BEARING PART. Math.random() here would redraw a different arrangement
+   * every frame — the layer would boil during playback, and the export would not match the preview.
+   * So the test pins determinism as hard as it pins visibility. */
+  test('#484: Scatter Array draws scattered copies, identically every time', { item: '484' }, function () {
+    if (!FM.fxRegistry.makeInstance('scatterarray')) throw new Error('scatterarray is not registered — a CANVAS_FX kernel with no POSTFX entry is unreachable dead code');
+    const S = FM.scene, P = S.project;
+    const keep = S.layers.slice(), ow = P.width, oh = P.height;
+    try {
+      const W = 240, H = 240;
+      P.width = W; P.height = H;
+      S.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 120, shapeW: 60, shapeH: 60, fill: '#4fd1ff' });
+      L.start = 0; L.duration = 3; L.effects = [];
+      S.layers.push(L);
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      const cx = cv.getContext('2d', { willReadFrequently: true });
+      const shot = () => { cx.clearRect(0, 0, W, H); FM.renderScene(cx, S, 0.5); return cx.getImageData(0, 0, W, H).data; };
+      /* ⚠️ COUNT THE SHAPE'S OWN COLOUR, NOT LIT PIXELS. The project background is opaque, so every
+         pixel on the canvas has alpha 255 and an alpha count returns 57600 (the whole frame) both
+         before and after — a metric that cannot move is not a measurement. The first version of this
+         test failed for exactly that reason, which is rule 10 in LOOP.md: measure where the thing
+         under test actually does something. */
+      const cyan = d => { let n = 0; for (let i = 0; i < d.length; i += 4)
+        if (Math.abs(d[i] - 79) < 60 && Math.abs(d[i + 1] - 209) < 60 && Math.abs(d[i + 2] - 255) < 60) n++;
+        return n; };
+
+      const before = shot();
+      L.effects.push(FM.fxRegistry.makeInstance('scatterarray'));
+      const after = shot();
+
+      /* VISIBLE AT ITS DEFAULT — the requirement the previous batch failed twice. An effect that does
+         nothing until a slider moves reads as broken; that is #661, and it cost weeks. */
+      if (!(cyan(after) > cyan(before) * 1.4)) throw new Error('adding Scatter Array at its defaults painted ' + cyan(after) +
+        ' pixels of the layer against ' + cyan(before) + ' — it barely changed the frame, which is the #661 complaint all over again');
+
+      /* DETERMINISTIC. Two renders of the same frame must be byte-identical, or the layer boils during
+         playback and the export does not match what he was shown. */
+      const again = shot();
+      for (let i = 0; i < after.length; i += 997) {
+        if (after[i] !== again[i]) throw new Error('two renders of the same frame differ — the scatter is using real randomness, so the layer will boil during playback and the export will not match the preview');
+      }
+
+      /* THE SEED MUST ACTUALLY RE-ROLL IT, or the control is decoration. */
+      L.effects[0].params.seed = 7;
+      const reseeded = shot();
+      let diff = 0;
+      for (let i = 0; i < after.length; i += 4) if (Math.abs(after[i] - reseeded[i]) > 24 || Math.abs(after[i + 2] - reseeded[i + 2]) > 24) diff++;
+      if (diff < 200) throw new Error('changing Seed moved only ' + diff + ' pixels — the seed does not re-roll the arrangement');
+
+      /* AND IT MUST NOT BE A LINE. This is the one thing that separates it from Trail, which already
+         exists — if the copies land collinearly the effect is a duplicate and should not ship. */
+      L.effects[0].params.seed = 1;
+      const d2 = shot();
+      let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        { const o = (y * W + x) * 4;
+          if (Math.abs(d2[o] - 79) < 60 && Math.abs(d2[o + 1] - 209) < 60 && Math.abs(d2[o + 2] - 255) < 60) {
+            if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; } }
+      }
+      if (!(maxX - minX > 80 && maxY - minY > 80)) throw new Error('the copies span ' + (maxX - minX) + 'x' + (maxY - minY) +
+        ' — they are not scattered in two dimensions, so this is Trail with extra steps');
+    } finally {
+      S.layers.length = 0; keep.forEach(l => S.layers.push(l));
+      P.width = ow; P.height = oh;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   /* ═══ QUEUE 484 CLAUSE 2 — MOST OF THE "MISSING" EFFECTS WERE NEVER MISSING ═══════════════════
    * He asked for the effects Alight Motion has that we lack. Checked one by one against our own 199,
    * most were already here under a name he would never search for: Random Displacement is Turbulent
