@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.04
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.05
 >
-> **State:** v14.04, 1052 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.05, 1052 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -25782,6 +25782,12 @@ re-opened #480, which I had marked done and had not fixed.
       📐 **MEASURED with the flag on:** a red square with grayscale renders **grey, and the same grey
       `ctx.filter` produces** — the test asserts both, plus a control proving the reference path greys it
       in the first place, plus that the layer does not simply vanish.
+      ⚠️ **AND AN HONEST COST, MEASURED (tests/_audiothrottle.html): effects that did nothing were
+      FREE.** Drawing them properly costs **1.19x** the per-frame time on the path his phone takes
+      (17.4 ms → 20.6 ms at 1080x1350 with twelve effects). That is not a regression — they were broken,
+      not cheap — but it is a real cost that lands on the same thread the audio tick runs on, and it is
+      worth stating rather than presenting the fix as free. **For scale: a healthy desktop with working
+      `ctx.filter` pays 17.9 ms for the same frame, so it lands within 15% of that.**
       ⚠️ **WHAT IS STILL NOT PROVEN: that this is what his phone actually suffers from.** The badge
       pattern is only explicable by ctx.filter not applying, but that could equally be a broken filter
       STRING on a healthy device (the keyframed-glow bug fixed in v13.94 was one live route). **If the
@@ -25830,6 +25836,29 @@ re-opened #480, which I had marked done and had not fixed.
       plus v13.90's loop-wrap fade.
       🔴 **What remains is "cuts in and out", MOBILE ONLY**, which is the same phrase as #604's second
       clause and #96. 🔗 **Merge the thinking with #662: both are now mobile-only audio.**
+
+      ═══ 🛑 **28 AUG — A PLAUSIBLE HYPOTHESIS, MEASURED AND REFUTED. Recorded so it is not had again.** ═══
+      **THE IDEA:** the sync controller runs on the MAIN THREAD, once a tick, and decides whether to trim
+      the element's playback rate or hard-seek it. When a frame is expensive the tick runs LATE, drift
+      accumulates, and the controller reacts — a seek leaves a hole, a rate rewrite re-primes the
+      time-stretcher, and both are audible. So the audio cutting out would be caused by *the picture*,
+      and today's GPU work (which made drawing ~8x cheaper at phone speed) would have quietly fixed it.
+      📐 **MEASURED (tests/_audiothrottle.html), four layers x three CSS effects at his 1080x1350:**
+      | | per frame | frames over 33ms |
+      |---|---|---|
+      | ctx.filter working (a desktop) | 17.9 ms | 0 |
+      | **his phone BEFORE** — ctx.filter dead, so the effects drew nothing | **17.4 ms** | 0 |
+      | **his phone AFTER** — the same effects, drawn on the GPU | **20.6 ms** | 0 |
+      🛑 **THE HYPOTHESIS IS WRONG, AND BACKWARDS.** On his phone the effects were not expensive — they
+      were **FREE, because they were not running at all.** Making them work costs **1.19x**, not less.
+      There was never a rendering cost for the GPU work to remove; there was an absence.
+      ⚠️ **SO #663 IS NOT FIXED BY ANY OF TODAY'S WORK AND MUST NOT BE CLAIMED AS SUCH.**
+      ✅ **The number is reassuring in the other direction, though, and worth keeping:** drawing them
+      properly lands **within 15% of what a healthy desktop pays** (20.6 against 17.9), with no frame
+      over budget. So the fix does not buy the picture at the cost of the sound.
+      ➡️ **WHAT WOULD ACTUALLY ANSWER #663 is the audio half of the "what's slow" readout FROM HIS
+      PHONE** — rate writes per second, seeks, and sync error. His PC sample reads 0 rate writes and
+      0 seeks, i.e. perfectly healthy, and that is the device that works.
 
 - [ ] **664 — Line height and Curve should BE effects, and add more text effects.** (28 Aug — answering
       **STATUS: 🟢 READY — nothing is stopping this**

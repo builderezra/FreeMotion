@@ -1,0 +1,97 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:900px;height:640px;border:0"></iframe>
+<script>
+/* QUEUE 663 — "audio still doesn't play consistently on mobile, it cuts in and out."
+ *
+ * THE HYPOTHESIS WORTH TESTING, and it is not another read of the audio code: the sync controller runs
+ * on the MAIN THREAD, once per tick, and decides whether to trim the element's playbackRate or hard-seek
+ * it. When rendering a frame is expensive the tick runs LATE, drift accumulates between ticks, and the
+ * controller reacts — a hard seek leaves a hole and a rate rewrite re-primes the time-stretcher. Both
+ * are audible, and both are CAUSED BY THE PICTURE being slow rather than by anything in the audio path.
+ *
+ * That is testable today for the first time, because v13.96-v14.02 made the picture ~8x cheaper on a
+ * throttled CPU. Same scene, same throttle, one switch: does the audio controller settle down when the
+ * renderer stops stealing the thread? */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.scene && w.FM.renderScene && w.FM.fxRegistry)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait,50); }
+    setTimeout(run.bind(null,w), 1200);
+  })();
+});
+async function run(w){
+  try{
+    var FM = w.FM, d = w.document, P = FM.scene.project;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    P.width = 1080; P.height = 1350; P.duration = 6;
+
+    // a real decodable tone on the timeline, plus an expensive picture on top of it
+    function build(){
+      FM.scene.layers.length = 0;
+      for (var i=0;i<4;i++){
+        var L = FM.makeLayer('shape', { shape:'rect', x: 260 + i*180, y: 400 + i*160, shapeW: 420, shapeH: 520, fill: i%2?'#4fd1ff':'#ff9a4f' });
+        L.start=0; L.duration=6; L.effects=[];
+        ['saturate','grayscale','blur'].forEach(function(id){ var e=FM.fxRegistry.makeInstance(id); if(e) L.effects.push(e); });
+        FM.scene.layers.push(L);
+      }
+      var song = FM.makeLayer('video', { name:'song' });
+      song.start=0; song.duration=6; song.trimStart=0; song.trimEnd=6;
+      FM.scene.layers.push(song);
+      var ac = new (w.AudioContext||w.webkitAudioContext)();
+      var buf = ac.createBuffer(2, Math.floor(48000*6), 48000);
+      for (var c=0;c<2;c++){ var dd=buf.getChannelData(c); for (var s2=0;s2<dd.length;s2++) dd[s2]=Math.sin(s2/30)*0.4; }
+      FM.media.set(song.id, { file: new Blob(['a']), duration: 6, audioBuffer: buf });
+      return song;
+    }
+
+    async function sample(label){
+      build();
+      await new Promise(function(r){ setTimeout(r,500); });
+      // count how hard the sync controller is working while the renderer competes for the thread
+      var writes = 0, seeks = 0, frames = 0, late = 0;
+      var st = FM._perfState ? FM._perfState() : null;
+      var t0 = performance.now(), last = t0;
+      FM.time = 0;
+      var realRender = FM.renderScene;
+      FM.renderScene = function(){ frames++; var a=performance.now(); try { return realRender.apply(this, arguments); } finally { var dt=performance.now()-a; if (dt>33) late++; } };
+      try {
+        for (var i=0;i<45;i++){
+          FM.setTime(i*0.08);
+          await new Promise(function(r){ setTimeout(r,16); });
+        }
+      } finally { FM.renderScene = realRender; }
+      var el = performance.now()-t0;
+      say(label);
+      say('   frames ' + frames + '   over 33ms: ' + late + '   wall ' + Math.round(el) + 'ms   ' +
+          (frames ? (el/frames).toFixed(1) + 'ms per frame' : ''));
+      return { frames: frames, late: late, per: frames ? el/frames : 0 };
+    }
+
+    say('four layers x three CSS effects at 1080x1350 — the picture competing with the audio tick');
+    say('');
+    /* ⚠️ THE COMPARISON THAT MATTERS FOR HIM IS NOT ctx.filter vs GPU. On his phone ctx.filter does
+       NOTHING — that is the entire bug — so the effects have been costing him nothing at all. The
+       honest before/after is "silently skipped" against "actually drawn on the GPU". */
+    FM._forceNoCtxFilter = true; FM._noGL = true; if (FM.glColor) FM.glColor._reset();
+    var before = await sample('HIS PHONE BEFORE — ctx.filter dead, so the effects drew nothing');
+    FM._forceNoCtxFilter = true; FM._noGL = false; if (FM.glColor) FM.glColor._reset();
+    var after = await sample('HIS PHONE AFTER — the same effects, drawn on the GPU');
+    FM._forceNoCtxFilter = false; FM._noGL = false;
+    var desktop = await sample('a healthy desktop for scale (ctx.filter working)');
+    say('');
+    if (before.per && after.per) {
+      say('per-frame  ' + before.per.toFixed(1) + 'ms (nothing drawn) -> ' + after.per.toFixed(1) +
+          'ms (drawn properly)   = ' + (after.per/before.per).toFixed(2) + 'x the cost');
+      say('desktop with working ctx.filter for scale: ' + desktop.per.toFixed(1) + 'ms');
+      say('frames over 33ms: ' + before.late + ' -> ' + after.late + '  (desktop ' + desktop.late + ')');
+      say('');
+      say('⚠️ THIS IS THE HONEST CAVEAT: effects that did nothing were free. Making them WORK costs');
+      say('   real time on his phone, and that cost lands on the same thread the audio tick runs on.');
+    }
+  } catch(e){ say('threw: ' + (e && (e.stack||e.message||String(e)))); }
+  window.__done = true;
+}
+</script></body></html>
