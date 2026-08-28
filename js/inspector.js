@@ -128,6 +128,44 @@ window.FM = window.FM || {};
     return row;
   }
 
+  /* ═══ BORDER & SHADOW: PREVIEW TILES (queue 610) ══════════════════════════════════════════════
+   * Ezra, and it was a REPEAT of an earlier ask: *"You still haven't re designed the border and shadow
+   * section to look better instead of the simple tick boxes as it is"*. He was right — in an app that
+   * is glassy numbered cards everywhere else, that panel was five bare checkboxes and plain text, and
+   * it looked like a debug form.
+   * Options were drawn at 380px and sent (#545); **he picked A, the preview tiles**, on 28 Aug.
+   * 🔑 IT FIXES A SECOND PROBLEM HE DID NOT NAME. "Trim path" and "Repeater" are not words that explain
+   * themselves, and a checkbox cannot teach you what it does. Each tile draws the thing: a stroked
+   * outline, a stroke that stops half way, a dashed one, an offset dark copy, three stepped copies. You
+   * can see what it is before you turn it on.
+   * The art is inline SVG on `currentColor`, so the ON state colours the picture as well as the frame
+   * without a second asset or a second copy of the shape. */
+  const BS_ART = {
+    outline:  '<svg viewBox="0 0 44 28" aria-hidden="true"><rect x="7.5" y="5.5" width="29" height="17" rx="4" fill="none" stroke="currentColor" stroke-width="2.4"/></svg>',
+    trim:     '<svg viewBox="0 0 44 28" aria-hidden="true"><rect x="7.5" y="5.5" width="29" height="17" rx="4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-dasharray="52 100" stroke-linecap="round"/></svg>',
+    dashes:   '<svg viewBox="0 0 44 28" aria-hidden="true"><rect x="7.5" y="5.5" width="29" height="17" rx="4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-dasharray="5 4.5" stroke-linecap="round"/></svg>',
+    shadow:   '<svg viewBox="0 0 44 28" aria-hidden="true"><rect x="12" y="9" width="26" height="16" rx="4" fill="currentColor" opacity=".32"/><rect x="6.5" y="4.5" width="26" height="16" rx="4" fill="none" stroke="currentColor" stroke-width="2.2"/></svg>',
+    /* ⚠️ THE COPIES ARE SPREAD, and that is not a nicety. At 44x28 three rects six pixels apart
+       overlap so heavily they read as one striped box — it looked like a battery in the first render.
+       Stepping them diagonally with clear air between is what makes "three copies of the same thing"
+       legible at the size it actually ships at, which is the whole argument for picture tiles. */
+    repeater: '<svg viewBox="0 0 44 28" aria-hidden="true"><rect x="24" y="4.5" width="15" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.9" opacity=".34"/><rect x="15" y="8.5" width="15" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.9" opacity=".62"/><rect x="6" y="12.5" width="15" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.9"/></svg>'
+  };
+  /* A BUTTON, not a label+checkbox. The whole tile is the target — on a phone a 44px-square tile is a
+     far easier thing to hit than a 15px box, and `aria-pressed` keeps it a toggle for a screen reader
+     rather than an unlabelled button. */
+  function bsTile(kind, label, on, onChange, wide) {
+    const t = el('button', 'bs-tile' + (on ? ' on' : '') + (wide ? ' bs-wide' : ''));
+    t.type = 'button';
+    t.setAttribute('aria-pressed', on ? 'true' : 'false');
+    const art = el('span', 'bs-art'); art.innerHTML = BS_ART[kind] || '';
+    t.appendChild(art);
+    t.appendChild(el('span', 'bs-name', label));
+    t.appendChild(el('span', 'bs-dot'));
+    t.addEventListener('click', () => { onChange(!on); commitH(); });
+    return t;
+  }
+
   function checkRow(label, checked, onChange) {
     const row = el('label', 'chk-row');
     const c = document.createElement('input');
@@ -5791,6 +5829,10 @@ window.FM = window.FM || {};
         body.appendChild(rangeRow('Gain', () => cg.gain, v => { cg.gain = v; }, 0, 3, 0.02));
       }
     } else if (key === 'border') {
+      /* THE TILE GRID IS APPENDED FIRST and every toggle goes into it, so the five controls read as one
+         block and each one's detail rows fall below the grid rather than splitting it in half. */
+      const bsGrid = el('div', 'bs-tiles');
+      body.appendChild(bsGrid);
       // ===== BORDER (AM parity, keyframeable) =====
       // Reuses layer.stroke as the single border. position = inside/center/outside. For line/arc shapes
       // stroke is the LINE colour (not a border), so no border UI there. Group border = silhouette
@@ -5807,7 +5849,7 @@ window.FM = window.FM || {};
         if (!layer.stroke) layer.stroke = { enabled: false, width: layer.type === 'text' ? 6 : 8, color: layer.type === 'text' ? '#000000' : '#ffffff' };
         const stk = layer.stroke;
         if (stk.position == null) stk.position = (layer.type === 'text' || layer.type === 'group') ? 'outside' : 'center';
-        body.appendChild(checkRow('Outline', stk.enabled, v => { stk.enabled = v; FM.requestRender(); FM.inspector.refresh(); }));
+        bsGrid.appendChild(bsTile('outline', 'Outline', stk.enabled, v => { stk.enabled = v; FM.requestRender(); FM.inspector.refresh(); }));
         if (stk.enabled) {
           if (layer.type !== 'group') body.appendChild(segRow('Position', [['inside', 'Inside'], ['center', 'Center'], ['outside', 'Outside']], () => stk.position, v => { stk.position = v; }));
           body.appendChild(kfColorRow(stk, 'color', 'Color', stk.color || '#ffffff'));
@@ -5821,7 +5863,7 @@ window.FM = window.FM || {};
       if (layer.type === 'shape') {
         const hasStroke = openKind || (layer.stroke && layer.stroke.enabled);
         const tp0 = layer.trimPath;
-        body.appendChild(checkRow('Trim path', !!(tp0 && tp0.enabled), v => {
+        bsGrid.appendChild(bsTile('trim', 'Trim path', !!(tp0 && tp0.enabled), v => {
           if (v) { if (!layer.trimPath) layer.trimPath = { enabled: true, start: 0, end: 1, offset: 0 }; else layer.trimPath.enabled = true; }
           else if (layer.trimPath) layer.trimPath.enabled = false;
           FM.requestRender(); FM.inspector.refresh();
@@ -5836,7 +5878,7 @@ window.FM = window.FM || {};
         // Dashes live inside the stroke object (created lazily on first enable).
         if (!layer.stroke) layer.stroke = { enabled: false, width: 8, color: '#ffffff' };
         const dstroke = layer.stroke;
-        body.appendChild(checkRow('Dashes', !!(dstroke.dash && dstroke.dash.enabled), v => {
+        bsGrid.appendChild(bsTile('dashes', 'Dashes', !!(dstroke.dash && dstroke.dash.enabled), v => {
           if (v) { if (!dstroke.dash) dstroke.dash = { enabled: true, length: 12, gap: 8, offset: 0 }; else dstroke.dash.enabled = true; }
           else if (dstroke.dash) dstroke.dash.enabled = false;
           FM.requestRender(); FM.inspector.refresh();
@@ -5862,7 +5904,7 @@ window.FM = window.FM || {};
       if (sh.alpha == null) sh.alpha = 100;
       /* "Shadow", not "Drop shadow" — the toggle now turns on either kind, and the old label was half of
          why he thought the offset one was all there was. */
-      body.appendChild(checkRow('Shadow', sh.enabled, v => { sh.enabled = v; FM.requestRender(); FM.inspector.refresh(); }));
+      bsGrid.appendChild(bsTile('shadow', 'Shadow', sh.enabled, v => { sh.enabled = v; FM.requestRender(); FM.inspector.refresh(); }));
       if (sh.enabled) {
         /* THE CHOICE, MADE VISIBLE. Position X/Y are still right there below and still keyframeable —
            this row does not replace them, it just means you do not have to know that a shadow becomes
@@ -5890,11 +5932,11 @@ window.FM = window.FM || {};
       // Its own block since it multiplies the WHOLE shape, not just the outline.
       if (layer.type === 'shape') {
         const rp0 = layer.repeater;
-        body.appendChild(checkRow('Repeater', !!(rp0 && rp0.enabled), v => {
+        bsGrid.appendChild(bsTile('repeater', 'Repeater', !!(rp0 && rp0.enabled), v => {
           if (v) { if (!layer.repeater) layer.repeater = { enabled: true, copies: 3, offsetX: 40, offsetY: 0, rotation: 0, scale: 1, opacity: 1, anchorX: 0.5, anchorY: 0.5 }; else layer.repeater.enabled = true; }
           else if (layer.repeater) layer.repeater.enabled = false;
           FM.requestRender(); FM.inspector.refresh();
-        }));
+        }, true));   // wide: Repeater spans both columns so the grid does not end on a lonely half-tile
         if (layer.repeater && layer.repeater.enabled) {
           const rp = layer.repeater;
           body.appendChild(kfNumRow(rp, 'copies', 'Copies', 1, 50, 1, 3, ''));

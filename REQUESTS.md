@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.19
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.20
 >
-> **State:** v14.19, 1068 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.20, 1069 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -22467,8 +22467,7 @@ re-opened #480, which I had marked done and had not fixed.
       the texture limit, AND an ORDINARY row must still take the old path with no background re-phasing.
       **A fix for one row that changed the other ~200 would be the worse bug**, and the control fails if
       no short row was found to check.
-- [ ] **610 — The Border and Shadow section still uses plain tick boxes and needs a proper design.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **610 — The Border and Shadow section still uses plain tick boxes and needs a proper design.**
       (27 Aug. A REPEAT — he has asked before and it has not been done.)
       His words, verbatim:
       > You still haven’t re designed the border and shadow section to look better instead of the simple
@@ -22501,6 +22500,28 @@ re-opened #480, which I had marked done and had not fixed.
       the control does (stroked rounded rect · partial stroke · dashed stroke · offset dark copy · three
       stepped copies), ON state = teal border + glow + ticked dot, **Repeater spanning the full width**
       so the grid does not end on a lonely half-tile. **Verify at 380px, which is where he sees it.**
+      ═══ ✅ **29 AUG (v14.20) — BUILT, EXACTLY THE OPTION YOU PICKED.** ═══
+      Five preview tiles in a 2-column grid, **Repeater spanning the full width** so the grid does not
+      end on a lonely half-tile. Each tile draws what its control does — a stroked rounded rect, a
+      stroke that stops part way, a dashed one, an offset dark copy, three stepped copies — and ON is a
+      teal border, a soft glow and a ticked dot. **Verified at 375px**, where the four tiles come out
+      172px and Repeater 351px.
+      🔑 **It does the second job too.** *"Trim path"* and *"Repeater"* are not words that explain
+      themselves, and a tick box cannot teach you what a control does. Now you can see it before you
+      turn it on — which is why this option was the recommendation.
+      🐛 **The Repeater icon was wrong on the first render and only looking at it caught that.** Three
+      copies six pixels apart at 44×28 overlap so heavily they read as one striped box — it looked like
+      a battery. Stepped diagonally with air between them, it reads as three copies. **That is the whole
+      argument for picture tiles, so getting the picture wrong would have been quietly self-defeating.**
+      🔒 **An existing test went red the moment the checkboxes went, and that was it working** — it pins
+      that a VIDEO can carry an Outline, and it found the toggle by looking for a `.chk-row` with a real
+      checkbox in it. Updated to the new control, assertion unchanged. The new test additionally
+      asserts **no bare tick-box rows remain in this card** (or the tiles could ship beside the very
+      rows they replace), that **every tile actually draws something** (five prettier checkboxes would
+      pass a looser test and miss the point), that Repeater is genuinely wider **on screen** and not
+      just carrying the class, and that tapping a tile turns the property on rather than only looking
+      like it did.
+
 - [x] **611 — A blue ring around the + add button, matching the menu.** ✅ **DONE v13.56 — v13.49 put it on the wrong button.** (27 Aug, phone screenshot at v13.48.)
       His words, verbatim:
       > Put a little blue ring around the add button that’s got the same style and glow as everything
@@ -23179,15 +23200,14 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **And check the reverse holds:** magnet ON must still snap on the canvas. A test that only
       asserts the OFF case passes just as well if snapping is deleted outright.
 
-- [ ] **621 — Rounded Corners does a poor job in its non-Apple modes, and the Apple mode only works on
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **621 — Rounded Corners does a poor job in its non-Apple modes, and the Apple mode only works on
       a few things.** (27 Aug, phone screenshot at v13.50 — a large white shape rotated on the canvas.)
       His words, verbatim:
       > Rounded corners kinda does a shit job when you aren’t using the Apple style and the Apple style only works on few things
 
-      1. [ ] **The non-Apple rounding modes look bad.** Whatever the default/plain mode does, it is not
+      1. [x] **The non-Apple rounding modes look bad.** Whatever the default/plain mode does, it is not  ✅ the "non-Apple modes look bad" was the rotation bug — fixed v14.19
              producing a clean corner.
-      2. [ ] **The Apple (squircle) mode "only works on few things"** — so it is right where it applies
+      2. [x] **The Apple (squircle) mode "only works on few things"** — so it is right where it applies  ✅ MEASURED before changing anything: it worked while the layer was square-on. Fixed v14.19
              and does nothing, or something wrong, elsewhere. **Find out WHICH things it works on and
              which it does not**, and say so in the entry before changing anything; "few things" is his
              observation, not a diagnosis, and the boundary is the thing to find.
@@ -23206,7 +23226,7 @@ re-opened #480, which I had marked done and had not fixed.
 
       ✅ **HE NAMED THE CAUSE HIMSELF, minutes later — and it is the one this entry guessed at. Verbatim:**
       > The rounded corners effect is really shit also coz it literally changes depending on the layers size / rotation
-      3. [ ] **The rounding must not change with the layer's SIZE or its ROTATION.** That is the actual
+      3. [x] **The rounding must not change with the layer's SIZE or its ROTATION.** That is the actual  ✅ rotation- and scale-invariant now, measured — v14.19
              defect, and it makes clauses 1 and 2 symptoms rather than separate bugs: *"only works on few
              things"* is what a size/rotation-dependent radius looks like from the outside — it happens to
              land right on the few layers whose size and angle suit it.

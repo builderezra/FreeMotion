@@ -8242,11 +8242,18 @@
          is called "Outline & Shadows" since queue 369, so the title alone passes it and the assertion
          proves nothing. The mutation check caught exactly that, in the same trap the canary test
          further up this file already documents. `checkRow` builds a `label.chk-row` holding a real
-         checkbox, so look for that. */
-      const rows = [].slice.call(document.querySelectorAll('#inspector .chk-row, .insp-body .chk-row'));
-      const outline = rows.filter(r => /^\s*Outline\s*$/.test(r.textContent || ''))[0];
-      if (!outline || !outline.querySelector('input[type="checkbox"]')) {
-        throw new Error('the Outline & Shadows card on a VIDEO offers no Outline TOGGLE (check rows found: ' + rows.map(r => (r.textContent || '').trim()).join(', ').slice(0, 140) + ')');
+         checkbox, so look for that.
+         ⚠️ IT IS A TILE NOW, NOT A CHECKBOX (queue 610, v14.20). Ezra asked twice for that panel to
+         stop looking like a debug form, so the five toggles became preview tiles — and this assertion
+         went red the moment they did, which is the test doing its job rather than a fault. What it
+         checks is unchanged and is the only thing that matters: the card must OFFER the toggle, and
+         it must be a real pressable control rather than the card's own title (the card is called
+         "Outline & Shadows", so matching the word alone passes on the heading and proves nothing —
+         a mutation check caught exactly that once). */
+      const tiles = [].slice.call(document.querySelectorAll('#inspector .bs-tile, .insp-body .bs-tile'));
+      const outline = tiles.filter(r => /^\s*Outline\s*$/.test((r.querySelector('.bs-name') || {}).textContent || ''))[0];
+      if (!outline || outline.getAttribute('aria-pressed') == null) {
+        throw new Error('the Outline & Shadows card on a VIDEO offers no Outline TOGGLE (tiles found: ' + tiles.map(r => ((r.querySelector('.bs-name') || {}).textContent || '').trim()).join(', ').slice(0, 140) + ')');
       }
     } finally {
       FM.scene.layers = layers0;
@@ -46383,6 +46390,65 @@
     /* A sample that is genuinely hitching must still say SO, not be relabelled. */
     const bad = FM.perfProbe._verdict({ med: 40, worst: 400, late: 9, total: 120, appMs: 4, budget: 16.7, effective: 0.28 });
     if (!/STUTTER/i.test(bad)) throw new Error('a stuttering sample lost its stutter verdict to the new scale branch: ' + bad);
+  });
+
+  /* ═══ QUEUE 610 — BORDER & SHADOW IS A PANEL, NOT A DEBUG FORM ════════════════════════════════
+   * Ezra, and it was a REPEAT of an earlier ask he had already made: *"You still haven't re designed
+   * the border and shadow section to look better instead of the simple tick boxes as it is"*.
+   * Options were rendered at 380px and sent (#545); **he picked A, the preview tiles**, on 28 Aug —
+   * so the shape below is his choice, not mine, and that is what this test pins.
+   * 🔑 The tiles do a second job he did not ask for: "Trim path" and "Repeater" are not words that
+   * explain themselves, and a checkbox cannot teach you what a control does. So the ART is asserted
+   * too — a grid of five prettier checkboxes would satisfy a looser test and miss the entire point. */
+  test('#610: Outline & Shadows is a grid of preview tiles, not bare checkboxes', { item: '610' }, function () {
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 60, fill: '#4fd1ff' });
+      L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.refresh();
+      FM.inspector.openCategory('border');
+
+      const tiles = [].slice.call(document.querySelectorAll('#inspector .bs-tile, .insp-body .bs-tile'));
+      const names = tiles.map(t => ((t.querySelector('.bs-name') || {}).textContent || '').trim());
+      for (const want of ['Outline', 'Trim path', 'Dashes', 'Shadow', 'Repeater']) {
+        if (names.indexOf(want) < 0) throw new Error('the panel is missing the "' + want + '" tile — found: ' + names.join(', '));
+      }
+      /* NO BARE CHECKBOXES LEFT IN THIS CARD. That is the literal complaint, made twice, and without
+         this the tiles could ship alongside the very rows they were meant to replace. */
+      const stale = [].slice.call(document.querySelectorAll('#inspector .chk-row, .insp-body .chk-row'));
+      if (stale.length) throw new Error(stale.length + ' plain tick-box rows are still in the Outline & Shadows card — that is exactly what he asked twice to be rid of: ' +
+        stale.map(r => (r.textContent || '').trim()).join(', ').slice(0, 120));
+
+      /* EVERY TILE DRAWS THE THING IT DOES. Without this, five nicer checkboxes pass. */
+      for (const t of tiles) {
+        const svg = t.querySelector('.bs-art svg');
+        if (!svg) throw new Error('the "' + ((t.querySelector('.bs-name') || {}).textContent || '?').trim() + '" tile has no picture, so it cannot say what the control does — which is the reason he was shown this option');
+        if (!svg.querySelector('rect, path, circle, line')) throw new Error('a tile carries an EMPTY svg');
+      }
+      /* REPEATER SPANS BOTH COLUMNS — the one arrangement detail in the option he picked, so that the
+         grid does not end on a lonely half-tile. */
+      const rep = tiles.filter(t => /Repeater/.test((t.querySelector('.bs-name') || {}).textContent || ''))[0];
+      if (!rep.classList.contains('bs-wide')) throw new Error('the Repeater tile does not span the full width, so the grid ends on a lonely half-tile');
+      const others = tiles.filter(t => t !== rep);
+      if (!(rep.getBoundingClientRect().width > others[0].getBoundingClientRect().width * 1.5))
+        throw new Error('the Repeater tile is not actually wider on screen (' + Math.round(rep.getBoundingClientRect().width) + ' vs ' + Math.round(others[0].getBoundingClientRect().width) + ') — the class is there but the CSS is not');
+
+      /* AND THE ON STATE HAS TO BE VISIBLE, or a tile grid is worse than a checkbox: at least a tick
+         box tells you whether it is on. */
+      const outline = tiles.filter(t => /^Outline$/.test(((t.querySelector('.bs-name') || {}).textContent || '').trim()))[0];
+      if (outline.classList.contains('on')) throw new Error('Outline reads as ON before anything was turned on');
+      outline.click();
+      FM.inspector.refresh(); FM.inspector.openCategory('border');
+      const after = [].slice.call(document.querySelectorAll('#inspector .bs-tile, .insp-body .bs-tile'))
+        .filter(t => /^Outline$/.test(((t.querySelector('.bs-name') || {}).textContent || '').trim()))[0];
+      if (!after || !after.classList.contains('on')) throw new Error('tapping the Outline tile did not turn it on — the tile is decorative');
+      if (!(FM.scene.layers[0].stroke && FM.scene.layers[0].stroke.enabled)) throw new Error('the tile looks on but the layer has no outline — it is not wired to the property');
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.inspector) FM.inspector.refresh();
+    }
   });
 
   /* ═══ QUEUE 621 — ROUNDED CORNERS MUST NOT CHANGE WITH SIZE OR ROTATION ════════════════════════
