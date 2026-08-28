@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.06
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.07
 >
-> **State:** v14.06, 1052 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.07, 1052 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -72,9 +72,12 @@
 > through this file — one inside each entry, with no way to see them together. Part of the honest answer
 > to *"why are you so selective"* is that several of them were waiting on a word you were never shown you
 > owed. The tool reads the entries rather than keeping a list, so it cannot go stale.
-> ⚠️ **And it found something that is MY fault: 19 of those 44 do not say what they are waiting for.**
+> ⚠️ **And it found something that is MY fault: 19 of those 44 did not say what they are waiting for.**
 > An item marked "waiting on Ezra" that never wrote down the question can sit forever and nobody notices.
-> Those are getting their questions written, or getting unblocked.
+> **An entry now has to SAY SO in one agreed place** — a line reading `❓ASK:` — because guessing the
+> question out of prose is what missed those 19 in the first place. Six are filled in already, including
+> **#98** (your letter on the text size), **#125** (does the scroll feel better) and **#406** (the
+> acknowledgement you asked me to chase you for). The rest are being worked through.
 >
 > **📋 YOUR NEXT SILENT EXPORT CAN END THIS — one tap.** Settings → **"Your last export"** → Copy →
 > send it to me. It says whether a soundtrack was written, which of the five reasons dropped it, and
@@ -2005,6 +2008,7 @@ better still, keep working inside the turn rather than parking work for a later 
 
 - [ ] **125 — Timeline scrolling still lags badly, with barely any layers — and he is right that I keep
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ❓ASK: does the timeline scroll feel better on your phone since v13.96? It measured 136ms a frame before and 17.6ms after.
       not fixing it.**
       ═══ 🚨 **28 AUG (v13.89) — THE SCROLL WAS NEVER MEASURED, AND THE NUMBER THAT SAID IT WAS FINE WAS
       MEASURING SOMETHING ELSE. He has been right about this the whole time.** ═══
@@ -2903,6 +2907,7 @@ better still, keep working inside the turn rather than parking work for a later 
       new report with new evidence rather than this one.
 - [ ] **98 — Add Text could be better (phone screenshot at v6.60).** His words: *"add text could be
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ❓ASK: how big should text start? A 160pt (what you have) · B 216pt (recommended) · C 270pt. The picture was sent 28 Aug.
       ═══ 🎨 **28 AUG (v13.93) — THE OPTIONS ARE DRAWN AND SENT. This is the last thing in the entry.** ═══
       **Everything else in #98 is closed:** (a)/(b) are iOS Safari's own keyboard accessory bar — settled
       by his own photo on 27 Aug and not our DOM at all; (c)'s *"225pt renders tiny"* was measured and
@@ -3020,6 +3025,7 @@ better still, keep working inside the turn rather than parking work for a later 
       **The taste call in (c) is still yours and still unanswered** — see the question block.
 - [ ] **96 — Adding a SONG is really buggy and sometimes will not play at all, as the only clip.** His
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ❓ASK: has a song failed to play since v13.88? If so, WHICH file — the format and rough length is enough. A fourth cause was found and fixed today; this is only open because I cannot prove it was yours.
 
       ✅ **v12.36 — A THIRD CAUSE, AND IT PRODUCES YOUR SYMPTOM EXACTLY: the clip could be born with NO
       LENGTH.** Found by taking this entry's own lead seriously — that the suspect is an mp3 whose length
@@ -16176,6 +16182,7 @@ wait for them to report back."*
 
 - [ ] **406 — 🚨 HE IS ASKING A QUESTION AND WANTS AN ANSWER: what is the difference between saving a
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ❓ASK: two answers — (1) acknowledge you have read the preset answer, which you asked me to chase you for; (2) which preset saver goes: A the layer ⋯ menu (recommended) · B an effect row ⋯ · C the Effects card button.
       preset with just effects and saving a layer as a preset? And drop preset-saving from that menu.**
       (19 Aug, via the phone inbox.) His words, verbatim, in full:
 
@@ -16490,6 +16497,7 @@ wait for them to report back."*
 
 - [ ] **418 — Make the undo/redo buttons look more like [an image he sent], with thinner lines.**
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ❓ASK: re-send the undo/redo picture — it never arrived in the inbox, so there is nothing to match.
       ✅ **BOTH CLAUSES BUILT (v11.73). The entry REMAINS OPEN for one reason only, stated plainly:
       I have never seen the picture you were asking me to match.** Your images were not reaching the
       inbox — a text file cannot carry one — so the icons were built from your written description, and
@@ -23973,6 +23981,7 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **591 — Standing steer: stop waiting on his answers, there is plenty I can already do.** (26 Aug.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ❓ASK: nothing. This is your standing steer, not a question — it should not be classified as waiting on you.
       His words, verbatim:
       > I’m not in a rush to answer every question coz you still have hours of work in the things that you can do
       **Read as a correction, because it is one.** The last several replies have LED with questions — the
