@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.07
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v14.08
 >
-> **State:** v14.07, 1052 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.08, 1052 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -77,7 +77,14 @@
 > **An entry now has to SAY SO in one agreed place** — a line reading `❓ASK:` — because guessing the
 > question out of prose is what missed those 19 in the first place. Six are filled in already, including
 > **#98** (your letter on the text size), **#125** (does the scroll feel better) and **#406** (the
-> acknowledgement you asked me to chase you for). The rest are being worked through.
+> acknowledgement you asked me to chase you for).
+> 🚨 **AND READING THE REST FOUND SOMETHING WORSE: SIX OF THEM WERE NEVER WAITING ON YOU AT ALL.**
+> **#395** you answered with a rule (*"i dont see why not having all the options… if its a bad idea for
+> any reason then no"*) and the reason your rule asked for was already measured and sitting in the entry.
+> **#406's** first half is settled by your own *"if we just have two buttons for the same thing"*.
+> **#418** is built and ticked — only the picture never arrived. **#484** you authorised word for word.
+> **#508** contains no question. **#552** is built and the text is stale.
+> **That is six items parked against you that I could have moved.** They now say what to do instead.
 >
 > **📋 YOUR NEXT SILENT EXPORT CAN END THIS — one tap.** Settings → **"Your last export"** → Copy →
 > send it to me. It says whether a soundtrack was written, which of the five reasons dropped it, and
@@ -13579,6 +13586,7 @@ wait for them to report back."*
 
 - [ ] **484 — 🚨 Rename the effects whose names are obviously copied from Alight Motion, and add the ones AM has that we lack (under our own names).** (23 Aug.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ➡️ **NOT BLOCKED — already authorised verbatim:** *"names where we are obviously copying should be changed"*. The "waiting on one word" gate here is self-imposed, and the one genuinely ambiguous name is our own coinage with nobody to ask. **Act: ship the label-only renames and let him veto individual ones after.**
       His words, verbatim:
       > Use these screen shots to see names that we are copying from alight motion - simple things like exposure are fine but names where we are obviously copying should be changed - just try and go through these image slowly and precisely and find things that will get us in trouble and also look for effects alight motion has the we don't, add them but change the names and feel free to ask me details for the effects if you don't know how they work - a google search should work fine tho - also feel free to add any other effects that would be very good for our software
       ⚠️ **NO SCREENSHOTS ARRIVED WITH THIS MESSAGE.** The two images in the previous turn are the PC
@@ -15603,6 +15611,7 @@ wait for them to report back."*
 
 - [ ] **392 — Text to voice: a button and a whole feature.** (18 Aug, phone screenshot at v9.87 with the
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ❓ASK: Text to Voice speaks aloud but can never reach an export — A leave it as is and use Record a voiceover for anything exported (recommended) · B add cloud TTS with your own key, so the voice becomes a real audio layer (a small bill, and your text leaves the device) · C move it into the audio and text effects menus, as you suggested.
       strip under the text clip circled.) His words, verbatim: *"Where I outlined add a button that says
       text to voice and make a whole menu and feature for this"*.
       **The button goes in the row he circled** — the strip directly under the clip, above the
@@ -15775,6 +15784,7 @@ wait for them to report back."*
       out silent, and v11.21 taught the mixer to name it. This stops it happening by accident.
 - [ ] **395 — More export formats, MP3 among them.** ⚠️ **CLAUSE 1 IS ALREADY SHIPPED — audio-only
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ➡️ **NOT ACTUALLY BLOCKED — he answered it and I kept asking.** His words are in this entry: *"i dont see why not having all the options, i mean if its a bad idea for any reason then no but I just want options."* That is a rule delegating the call, and the reason it asks for is already measured here (no browser encodes MP3; it needs a ~100 KB CDN library and a service-worker entry, and M4A is smaller and plays everywhere MP3 does). It has sat on the summary table twice with no reply. **Act: mark it Held with that reason, or ship lamejs — either needs nothing from him.**
       export exists and has since queue 216. Read this before building anything.** (19 Aug, phone inbox.)
       His words, verbatim: *"I want more export options like mp3 or whatever"*
       **Clauses:**
@@ -16182,6 +16192,7 @@ wait for them to report back."*
 
 - [ ] **406 — 🚨 HE IS ASKING A QUESTION AND WANTS AN ANSWER: what is the difference between saving a
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ➡️ **CLAUSE 1 IS NOT ACTUALLY BLOCKED — his own conditional decides it.** He wrote *"if you realise we just have two buttons for the same thing just get rid of the one isn't just saving as effects"*, and that antecedent is provably true: `js/app.js` (layer ⋯) and `js/inspector.js` (Presets card) call the SAME `FM.savePresetPrompt(layer)`. ⚠️ **And it collides with #454, which this file already says is wrong to ask separately** — clause 1 falls out of whatever #454 settles. **Only clause 3 still rides along: the acknowledgement he asked to be chased for.**
       ❓ASK: two answers — (1) acknowledge you have read the preset answer, which you asked me to chase you for; (2) which preset saver goes: A the layer ⋯ menu (recommended) · B an effect row ⋯ · C the Effects card button.
       preset with just effects and saving a layer as a preset? And drop preset-saving from that menu.**
       (19 Aug, via the phone inbox.) His words, verbatim, in full:
@@ -16497,6 +16508,7 @@ wait for them to report back."*
 
 - [ ] **418 — Make the undo/redo buttons look more like [an image he sent], with thinner lines.**
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ➡️ **NOT BLOCKED — it is BUILT.** Both clauses are ticked and the glyphs are live in index.html at stroke-width 1.8, matching the transport row. The only thing outstanding is the reference picture, which never arrived. **Act: close it, or re-ask for the picture — not both.**
       ❓ASK: re-send the undo/redo picture — it never arrived in the inbox, so there is nothing to match.
       ✅ **BOTH CLAUSES BUILT (v11.73). The entry REMAINS OPEN for one reason only, stated plainly:
       I have never seen the picture you were asking me to match.** Your images were not reaching the
@@ -17614,6 +17626,7 @@ wait for them to report back."*
       Both directions mutation-checked. Ezra: worth a quick confirm on the phone.
 - [ ] **454 — PRESETS ARE FOR EFFECTS ONLY. Strip every other meaning of the word.** (21 Aug, from his
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ❓ASK: "Save look + animations" is the ONLY way to copy a movement onto another layer, and deleting it takes your saved whole-look presets with it — A delete it entirely, as you literally said · B (recommended) keep it, stop calling it a preset: rename to "Copy look & motion…" and move it out of the Presets card, so "preset" means effects only · C cut it to effects only, which just duplicates "Save effects only".
       phone, with a screenshot of the New Project sheet.) His words, verbatim: *"I'm putting my foot
       down, presets are just for effects not anything else, if it says preset remove any other function
       than just saving what effects the layer has"*.
@@ -19035,6 +19048,7 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **508 — Opening a project is janky: the card should glide out left while the project comes in from the right.** (24 Aug.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ➡️ **NOT BLOCKED — there is no question in this entry at all.** It is measurable work (the card should glide out rather than cut), not a decision for him.
       His words, verbatim:
       > Also the animation when opening a project still looks really Jany like the button you press on like the project you press one to open doesn't smoothly glide to the left with like a nice animation and then the project comes in smoothly from the right. It's always junkie every time it doesn't look good.
       **He is describing a specific transition**, not "make it nicer": the card he tapped slides OUT to the
@@ -20727,6 +20741,7 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **552 — Sketching: continue an existing drawing, and a progression slider so a drawing can animate itself on.** (25 Aug.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ➡️ **NOT BLOCKED — already built and this text is stale.** `js/inspector.js` has ✎ Draw more calling `FM.startDraw` with the layer id, plus keyframable Draw from / Draw to. **The real defect is that both routes are buried under the Edit Points overlay, and that is buildable without him.**
       His words, verbatim:
       > A long time ago I asked for some changes to the sketching menu that never arrived - like being able to continue the drawing instead of the current edit points system, and having a slider for progression so you could change the start and end, combined with key frames allowing you to have an animation that looks like it's being drawn
       **Clauses — tick separately:**
@@ -20742,6 +20757,7 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **553 — 🔴 Leaving and re-opening a project leaves the app half-drawn: the home screen and the editor are BOTH on screen at once, side by side. Plus a black bar at the bottom.** (25 Aug, phone screenshot at v12.43.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ❓ASK: the app coming back with the home screen and the editor both drawn at once — seen it since late August? Y or N. (Do not wait on this: the black-bar half of the entry was never investigated and is measurable without you.)
       His words, verbatim:
       > Leaving and opening a project glitches the app out like this
       > Notice the black bar at the bottom also
@@ -20947,6 +20963,7 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **560 — Masks still don't behave like effects and still have their own separate menu.** (25 Aug, phone screenshot at v12.44.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ❓ASK: masks look and behave like effects now; the one thing left is that you cannot drag a mask ABOVE or BELOW an effect — they only reorder among themselves. A yes, interleave them properly (a render-path job across 8 files) · B (recommended) no, I never try that · C do it, but bundled with the next render-path job.
       ✅ **THE MENU IS GONE — v12.76. The entry REMAINS OPEN on one question for you, at the bottom.**
       His words, verbatim:
       > Masks still don’t work like effects and have their own menu fix this
