@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.91
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.92
 >
-> **State:** v13.91, 1036 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.92, 1038 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -44,6 +44,17 @@
 > thing only you can do: **export something short with sound on the PC, then drag the .mp4 into a
 > Chrome tab and press play.** Sound → the file is fine and your camera roll is dropping it. No sound
 > → it is the project or your browser, and the app will name the reason.
+>
+> **🔇 AND I FOUND OUT WHY YOU NEVER SAW A "NO AUDIO" WARNING — THEY WERE BEHIND THE EXPORT SCREEN.**
+> The app has five separate warnings for a lost soundtrack, built over five rounds of chasing this. All
+> five appear as a little pop-up at the bottom — and that pop-up sits UNDERNEATH the full-screen
+> "Exporting…" panel, which is up for the entire export. So they have all been firing into a layer you
+> could not see.
+> ➡️ **That matters more than it sounds:** "no warning appeared" was used as evidence that the problem
+> was deep in the file-writing, and a month was spent proving the file-writing was fine. It was fine.
+> ✅ **Now the export screen itself says it while rendering, and the "Export ready" card tells you
+> "Sound ✓" or "NO SOUND — <reason>" right next to the file size** — on the screen you are looking at
+> when you press Save to camera roll.
 >
 > **🎵 AND YOUR SONG BUG HAS A FOURTH REAL CAUSE — found by building an MP3 by hand.** #96 had been
 > stuck for months on "we cannot make an mp3 to test with, so send me the file". It turns out an mp3
@@ -10378,6 +10389,40 @@ better still, keep working inside the turn rather than parking work for a later 
       his standing words remain *"I know if you just go and do that urself ur gonna ruin every shape."*
 - [ ] **215 — ⚠️ EXPORTED VIDEO CAME OUT WITH NO AUDIO, though the clip had audio.** His words: *"I just
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ═══ 🚨 **28 AUG (v13.92) — THE WARNINGS WERE NEVER INVISIBLE BECAUSE THEY DID NOT FIRE. THEY WERE
+      PAINTED BEHIND THE EXPORT.** ═══
+      **This entry built FIVE audio-loss reports over five rounds** — `all-suppressed`, `mix-silent`,
+      `mix-failed`, `aac-unavailable`, `encode-failed` — and every one of them speaks through `FM.toast`.
+      **Every one fires while `#export-overlay` is on screen.** `#toast` is **z-index 60**;
+      `#export-overlay` is **100**, `position: fixed; inset: 0`, `rgba(0,0,0,.65)` with a 3px blur, and
+      `js/app.js` raises it BEFORE `FM.exporter.run()` is called — its own comment says *"up for the
+      WHOLE export, minutes at a time"*. They are siblings in the root stacking context.
+      ➡️ **SO HIS *"I don't think I got a message saying no audio"* WAS THE MESSAGING, NOT A SIXTH SILENT
+      PATH — and this entry's inference from it never held.** The reasoning recorded here was *no toast +
+      a silent file ⇒ the muxer never wrote the track*. **#604 later measured the muxer, the moov and a
+      decoded round-trip and found all three healthy**, which is the same conclusion reached the
+      expensive way, a month later.
+      💡 **AND THE REPO ALREADY KNEW THE RULE.** `js/settings.js:219` says it verbatim: *"No FM.toast here
+      on purpose: #toast sits at z-index 60 and .set-scrim at 220, so a toast raised from this panel
+      would be painted behind it and never seen."* It was worked around in that one place instead of
+      fixed, and nothing carried the lesson to the export path.
+      ⚠️ **MY FIRST FIX WAS WRONG AND THE SUITE CAUGHT IT — worth recording, because it is a genuine
+      conflict rather than a slip.** I raised `#toast` to 130. A test from v5.11 failed immediately:
+      **phone chrome must stay BELOW the modal layer**, because it once measured a phone dialog where
+      `elementFromPoint` at both "Export MP4" and "Cancel" returned the sheet — *a modal with no
+      reachable buttons*. A toast floating over a modal is that same bug. **Two correct rules pointing
+      opposite ways; the toast was the wrong end to fix.**
+      ✅ **SO THE MESSAGE GOES INSIDE THE CARD, WHERE NOTHING CAN COVER IT — two surfaces:**
+      1. **`#export-status` while it renders.** It normally reads *"Encoding audio + video… 60%"*; a loss
+         now replaces that and is styled so it stops looking like progress. All the loss sites write to it.
+      2. **The ready card's meta line.** It listed size, length, dimensions and frame rate — everything
+         except the one thing he has reported going wrong four times. It now reads **"… · Sound ✓"** or
+         **"… · NO SOUND — every audio clip is muted or at zero volume"**, in amber, **on the one screen
+         he is looking at when he presses Save to camera roll.** It cannot be missed and cannot time out.
+      🔒 **Tested structurally**: the premise (the toast is BELOW the overlay) is asserted, so if anyone
+      raises it again this test and the v5.11 one will disagree out loud instead of silently; the status
+      node is asserted to be INSIDE the overlay; and the number of loss sites writing to it is counted,
+      because a fix applied to four of five is the same bug.
       exported and got no audio even tho the video had audio."*
       ⚠️ **DELIBERATELY NOT TICKED (v12.52).** Three real silent-export paths were measured and made to
       speak, but none is PROVEN to be what happened on his phone — ticking it would claim something I

@@ -281,6 +281,26 @@ window.FM = window.FM || {};
     return reversed ? (startSample + (lenSamples - 1 - i) * speed) : (startSample + i * speed);
   };
 
+  /* ═══ SAY IT WHERE HE IS LOOKING (queue 215) ═════════════════════════════════════════════════════
+   * Every audio-loss report in this file used `FM.toast` alone — and `#toast` is z-index 60 against
+   * `#export-overlay`'s 100, a full-screen dimmed and blurred panel that app.js raises BEFORE run() is
+   * called and holds up for the entire export. **So all five warnings were painted behind the export.**
+   * That is what Ezra's *"I don't think I got a message saying no audio"* actually was, and #215 read
+   * it as proof of a sixth SILENT path and blamed the muxer — which #604 later measured, with the moov
+   * and a decoded round-trip, and found healthy.
+   * ⚠️ RAISING THE TOAST IS THE WRONG FIX, and the suite says so: a test from v5.11 requires every piece
+   * of phone chrome to stay BELOW the modal layer, because it once measured a dialog whose Export and
+   * Cancel both returned the sheet — a modal with no reachable buttons. A toast over a modal is that bug.
+   * So the message goes INSIDE the card instead, where nothing can cover it. The toast stays too: it is
+   * the right surface when no overlay is up (a background export, a re-render), and it costs nothing. */
+  function exportSay(msg) {
+    try {
+      const el = document.getElementById('export-status');
+      if (el) { el.textContent = msg; el.classList.add('export-status-warn'); }
+    } catch (e) {}
+  }
+  FM._exportSay = exportSay;   // suite seam
+
   async function buildAudioMix(scene, from, to) {
     const P = scene.project;
     const sampleRate = 48000, channels = 2;
@@ -485,6 +505,7 @@ window.FM = window.FM || {};
       console.warn('[export] the soundtrack is empty because these layers are hidden or solo-suppressed:\n  · ' + suppressed.join('\n  · '));
       FM._audioTrackDropped = 'all-suppressed';
       if (FM.toast) {
+        exportSay('Exporting with NO SOUND — ' + suppressed.length + ' audio clip' + (suppressed.length === 1 ? ' is' : 's are') + ' hidden or muted by solo');
         FM.toast('Exporting with NO SOUND — ' + suppressed.length + ' audio clip' + (suppressed.length === 1 ? ' is' : 's are') +
                  ' hidden or muted by solo', 5600);
       }
@@ -551,6 +572,7 @@ window.FM = window.FM || {};
     if (peak <= 0.0001) {
       console.warn('[export] the mix rendered but is pure silence — every contributing clip is muted or at zero volume');
       FM._audioTrackDropped = 'mix-silent';
+      exportSay('Exporting with NO SOUND — every audio clip is muted or at zero volume');
       if (FM.toast) FM.toast('Exporting with NO SOUND — every audio clip is muted or at zero volume', 5600);
     }
     return { audioBuffer: rendered, sampleRate, channels };
@@ -796,6 +818,7 @@ window.FM = window.FM || {};
       catch (e) {
         console.warn('[export] the soundtrack could not be built — exporting video only', e);
         FM._audioTrackDropped = 'mix-failed';
+        exportSay('The soundtrack could not be built — exporting WITHOUT SOUND');
         if (FM.toast) FM.toast('The soundtrack could not be built — exporting WITHOUT SOUND', 6000);
         mix = null;
       }
@@ -825,6 +848,7 @@ window.FM = window.FM || {};
         if (!audioOK) {
           console.warn('AAC audio encoding unavailable in this browser — exporting video only');
           FM._audioTrackDropped = 'aac-unavailable';
+          exportSay('This browser cannot encode AAC — exporting WITHOUT SOUND');
           if (FM.toast) FM.toast('This browser cannot encode AAC — exporting WITHOUT SOUND', 6000);
           mix = null;
         /* ⚠️ …but do NOT wipe a loss the MIXER already reported. This line clears the flag on the happy
@@ -1025,9 +1049,23 @@ window.FM = window.FM || {};
       const outBlob = sink.finish();
       const outName = (opts.name || 'freemotion-export') + '.mp4';
       if (typeof opts.onReady === 'function') {
+        /* ═══ THE CARD MUST SAY WHETHER IT HAS SOUND (queue 215) ══════════════════════════════════
+         * This file has FIVE separate audio-loss reports — all-suppressed, mix-silent, mix-failed,
+         * aac-unavailable, encode-failed — and every one of them speaks through `FM.toast`.
+         * 🚨 **EVERY ONE OF THEM IS PAINTED BEHIND THE EXPORT OVERLAY.** `#toast` is z-index 60 and
+         * `#export-overlay` is 100, `position: fixed; inset: 0`, `rgba(0,0,0,.65)` with a 3px blur —
+         * siblings in the root stacking context, and app.js raises the overlay before `run()` is even
+         * called, for the whole export. So Ezra's *"I don't think I got a message saying no audio"* is
+         * explained by the MESSAGING, not by a sixth silent path — and #215's inference from it
+         * ("no toast + a silent file ⇒ the muxer") never held. #604 later measured the muxer, the moov
+         * and a decoded round-trip and found all three healthy, which is the same conclusion arrived at
+         * the expensive way.
+         * The answer travels with the file now, onto the one card he is looking at when he presses
+         * Save. It cannot be missed, cannot time out, and cannot be painted behind anything. */
         await opts.onReady({
           blob: outBlob, name: outName, poster: poster,
           width: outW, height: outH, fps: fps, seconds: Math.max(0, end - start),
+          hasAudio: !!mix, audioDropped: FM._audioTrackDropped || null,
           save: () => deliver(outBlob, outName),
         });
       } else {

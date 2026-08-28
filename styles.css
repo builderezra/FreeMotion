@@ -3101,6 +3101,14 @@ body.white-chrome #time-readout:active {
 #xr-poster.hidden { display: none; }
 .xr-name { font-weight: 600; font-size: 13.5px; word-break: break-all; margin-bottom: 3px; }
 .xr-meta { color: var(--text-dim); font-size: 12px; font-variant-numeric: tabular-nums; margin-bottom: 16px; }
+/* A silent export is the one thing on this card worth interrupting for (queue 215) — it is the
+   moment before he presses Save to camera roll, and the four reports of a soundtrack going missing
+   all end here. Dim grey next to the file size is not enough to catch an eye that is already
+   heading for the button. */
+.xr-meta.xr-nosound { color: var(--warn, #ffb03a); font-weight: 600; }
+/* The in-export equivalent (queue 215): #export-status normally reads "Encoding audio + video… 60%",
+   and when the soundtrack has been lost it has to stop looking like progress. */
+#export-status.export-status-warn { color: var(--warn, #ffb03a); font-weight: 600; }
 #xr-save:disabled { opacity: .55; cursor: default; }
 
 /* ---- The export dialog's control column (queue 141 part 3) -------------------------------------
@@ -3271,6 +3279,13 @@ body.white-chrome #time-readout:active {
 .ctx-split-arrow:hover { background: var(--panel-3); color: var(--accent); }
 .ctx-sep { height: 1px; background: var(--line); margin: 4px 6px; }
 
+/* ⚠️ z-index 60 IS DELIBERATE AND MUST STAY BELOW THE MODAL LAYER (100) — I tried raising it to 130
+   for queue 215 and an existing test stopped me, correctly: v5.11 measured a phone dialog whose Export
+   and Cancel buttons BOTH returned the sheet from elementFromPoint, i.e. a modal with no reachable
+   buttons. A toast floating over a modal is that same bug.
+   So the queue-215 problem — every export audio warning painted behind #export-overlay — is fixed at
+   the OTHER end: the messages go to #export-status INSIDE the export card, and the outcome travels to
+   the ready card's meta line. Both are inside the overlay and cannot be covered by it. */
 #toast {
   position: fixed; bottom: 244px; left: 50%; transform: translateX(-50%);
   z-index: 60; background: var(--panel-3); color: var(--text);

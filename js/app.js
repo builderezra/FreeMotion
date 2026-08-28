@@ -4493,9 +4493,29 @@ window.FM = window.FM || {};
       const mb = (out.blob.size / 1048576);
       const secs = Math.round(out.seconds || 0);
       const mmss = Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0');
+      /* ⚠️ AND WHETHER IT HAS SOUND (queue 215). This line listed size, length, dimensions and frame
+       * rate — everything except the one thing he has reported going wrong four times. The five audio
+       * warnings that exist all speak through `#toast`, which is z-index 60 against the export
+       * overlay's 100 (full-screen, dimmed, blurred) — so every one of them has been painted BEHIND
+       * the export the whole time, which is why *"I don't think I got a message saying no audio"*.
+       * Here it cannot be missed and cannot time out. The reason is named when there is one, because
+       * "NO SOUND" on its own is what he already knew. */
+      const AUDIO_WHY = {
+        'all-suppressed': 'every audio layer is hidden or muted by solo',
+        'mix-silent': 'every audio clip is muted or at zero volume',
+        'mix-failed': 'the soundtrack could not be built',
+        'aac-unavailable': 'this browser cannot encode AAC',
+        'encode-failed': 'the audio encoder failed',
+      };
+      const sound = out.audioDropped ? ('NO SOUND — ' + (AUDIO_WHY[out.audioDropped] || out.audioDropped))
+                  : out.hasAudio ? 'Sound ✓'
+                  : 'no soundtrack';
       document.getElementById('xr-meta').textContent =
         (mb < 0.1 ? (Math.round(out.blob.size / 1024) + ' KB') : (mb.toFixed(1) + ' MB')) +
-        ' · ' + mmss + ' · ' + out.width + '×' + out.height + ' · ' + Math.round(out.fps) + ' fps';
+        ' · ' + mmss + ' · ' + out.width + '×' + out.height + ' · ' + Math.round(out.fps) + ' fps' +
+        ' · ' + sound;
+      const xrm = document.getElementById('xr-meta');
+      if (xrm) xrm.classList.toggle('xr-nosound', !!out.audioDropped);
 
       const saveBtn = document.getElementById('xr-save');
       const discardBtn = document.getElementById('xr-discard');

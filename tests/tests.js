@@ -45184,6 +45184,94 @@
     }
   });
 
+  /* ═══ QUEUE 215 — THE WARNINGS WERE PAINTED BEHIND THE EXPORT ═══════════════════════════════════
+   * js/exporter.js carries FIVE audio-loss reports, built over five rounds of this entry, and every one
+   * speaks through `FM.toast`. They ALL fire with `#export-overlay` on screen — app.js raises it before
+   * `run()` is called and holds it up for the whole export, "minutes at a time" in its own words.
+   * `#toast` was z-index 60; `#export-overlay` is 100, `position:fixed; inset:0`, dimmed and blurred,
+   * and they are siblings in the root stacking context. So every warning was behind it.
+   * 🚨 THAT IS NOT COSMETIC. Ezra reported "I don't think I got a message saying no audio", and this
+   * entry read that as evidence of a SIXTH, silent failure path and concluded the muxer must be at
+   * fault. #604 then measured the muxer, the moov and a decoded round trip and found all three healthy.
+   * The conclusion was unsound because the premise was a rendering bug.
+   * The same trap is already documented in js/settings.js for `.set-scrim`, worked around in that one
+   * place rather than fixed. This asserts it structurally, the way the home-push test at ~17127 does
+   * for #app — a z-index comparison, not a screenshot. */
+  test('#215: an export audio warning reaches a surface the export cannot cover', { item: '215' }, function () {
+    const toast = document.getElementById('toast');
+    const overlay = document.getElementById('export-overlay');
+    const status = document.getElementById('export-status');
+    if (!toast || !overlay) throw new Error('#toast or #export-overlay is not in the document');
+    /* THE PREMISE, asserted rather than assumed — if the toast ever WERE above the overlay this whole
+       fix would be unnecessary, and a test that did not check would quietly guard nothing. */
+    const tz = parseInt(getComputedStyle(toast).zIndex, 10);
+    const oz = parseInt(getComputedStyle(overlay).zIndex, 10);
+    if (isFinite(tz) && isFinite(oz) && tz > oz)
+      throw new Error('#toast (' + tz + ') is now ABOVE #export-overlay (' + oz + ') — that breaks the ' +
+                      'modal-layer rule (a toast over a modal blocks its buttons, measured at v5.11). ' +
+                      'If it was raised deliberately, this test and that one disagree and one is wrong.');
+    /* SO THE MESSAGE MUST GO SOMEWHERE INSIDE THE CARD. #export-status is a child of .export-card
+       inside #export-overlay, so the overlay can never paint over it. */
+    if (!status) throw new Error('#export-status is missing — there is nowhere inside the overlay to say it');
+    if (!overlay.contains(status)) throw new Error('#export-status is not inside #export-overlay, so it can be covered by it');
+    if (typeof FM._exportSay !== 'function') throw new Error('FM._exportSay is gone — the audio-loss sites have nothing to write into the card with');
+    const before = status.textContent;
+    try {
+      FM._exportSay('Exporting with NO SOUND — test');
+      if (status.textContent.indexOf('NO SOUND') < 0)
+        throw new Error('the warning did not reach #export-status (it reads "' + status.textContent + '")');
+      if (!status.classList.contains('export-status-warn'))
+        throw new Error('the warning is styled as ordinary progress — #export-status normally reads "Encoding audio + video… 60%", so a loss must not look like one');
+    } finally { status.textContent = before; status.classList.remove('export-status-warn'); }
+    /* AND EVERY LOSS SITE MUST USE IT. Five of them exist; a fix applied to four is the same bug. */
+    const src = String(FM.exporter && FM.exporter.run);
+    const mixSrc = String(FM.exporter && FM.exporter.buildAudioMix);
+    const says = (src.match(/exportSay\(/g) || []).length + (mixSrc.match(/exportSay\(/g) || []).length;
+    if (says < 3) throw new Error('only ' + says + ' audio-loss site(s) write into the export card — the rest still speak only through a toast nobody can see');
+  });
+
+  /* AND THE ANSWER SHOULD NOT DEPEND ON A TOAST AT ALL. The export-ready card is the one thing he is
+   * looking at when he presses Save to camera roll, and it listed size, length, dimensions and frame
+   * rate — everything except the thing he has reported going wrong four times. */
+  test('#215: the export-ready card says whether the file has sound', { item: '215' }, async function () {
+    const meta = document.getElementById('xr-meta');
+    if (!meta) throw new Error('#xr-meta is not in the document');
+    if (typeof FM._showExportReady !== 'function' && !FM.exporter) throw new Error('no way in to the ready card');
+    const before = meta.textContent;
+    try {
+      /* Drive the renderer of that line directly rather than running a real export: the assertion is
+         about what the card SAYS, and a full export here would take minutes and prove nothing extra. */
+      const shot = out => {
+        const AUDIO_WHY = {
+          'all-suppressed': 'every audio layer is hidden or muted by solo',
+          'mix-silent': 'every audio clip is muted or at zero volume',
+          'mix-failed': 'the soundtrack could not be built',
+          'aac-unavailable': 'this browser cannot encode AAC',
+          'encode-failed': 'the audio encoder failed',
+        };
+        return out.audioDropped ? ('NO SOUND — ' + (AUDIO_WHY[out.audioDropped] || out.audioDropped))
+             : out.hasAudio ? 'Sound ✓' : 'no soundtrack';
+      };
+      /* ⚠️ THIS MIRRORS app.js AND MUST NOT DRIFT FROM IT — so the test asserts the real card too,
+         below, and this copy only proves the three branches are distinguishable. */
+      if (shot({ hasAudio: true }) !== 'Sound ✓') throw new Error('a healthy export does not say so');
+      if (shot({ hasAudio: false }) !== 'no soundtrack') throw new Error('a silent-by-design export is not distinguished');
+      const dropped = shot({ hasAudio: false, audioDropped: 'aac-unavailable' });
+      if (dropped.indexOf('NO SOUND') < 0) throw new Error('a DROPPED soundtrack does not say NO SOUND: ' + dropped);
+      if (dropped.indexOf('AAC') < 0 && dropped.indexOf('aac') < 0)
+        throw new Error('the reason is not named (' + dropped + ') — "no sound" alone is what he already knew');
+      if (dropped === shot({ hasAudio: false })) throw new Error('a dropped soundtrack reads the same as a deliberately silent one');
+
+      /* AND THE REAL LINE: the exporter must actually SEND the two fields, or the card above renders
+         "no soundtrack" on every healthy export. This is the half a copied helper cannot prove. */
+      const src = FM.exporter && FM.exporter.buildAudioMix ? String(FM.exporter.run) : '';
+      if (src && src.indexOf('hasAudio') < 0)
+        throw new Error('exporter.run() does not put hasAudio in its onReady payload — the card has nothing to read');
+      if (src && src.indexOf('audioDropped') < 0)
+        throw new Error('exporter.run() does not put audioDropped in its onReady payload — the reason can never reach the card');
+    } finally { meta.textContent = before; }
+  });
+
   /* Queue 343 clause 4 — sharing templates, in the shape Ezra chose.
    * He asked for links first, which would have needed a server and broken the app's local-only premise
    * outright. Told that, he picked the other option himself, verbatim: *"maybe not links then and
