@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.83
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Aug at v13.84
 >
-> **State:** v13.83, 1032 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v13.84, 1032 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
 > "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
@@ -17,7 +17,7 @@
 > **Kaleidoscope 49.5× · Radial Repeat 35.5× · Ripple 24.1× · Grid Repeat 13.1× · Twirl 11.7× · Wave 9.7×.**
 > That entry had said for months that it needed about **50×** and that nothing could get there.
 > Kaleidoscope is **49.5×**.
-> ⚠️ **Eleven of twenty-one warp effects so far.** The rest still use the old path until each is converted,
+> ⚠️ **Fifteen of twenty-one warp effects so far.** The rest still use the old path until each is converted,
 > and anything without a graphics card falls back to exactly what it does today — nothing can break.
 > **The expensive ones gain the most, which is the shape you want:** the graphics card costs about the
 > same for every effect, so stacking them stops piling up the way it does now.
@@ -4627,10 +4627,37 @@ better still, keep working inside the turn rather than parking work for a later 
       early-out retires most pixels before any real work and an extra object costs more than the evalProps
       it replaces. A shader still needs those numbers. `glslPrep` runs only on the GPU path, so the CPU
       loop keeps exactly the shape that was measured and the old finding is not quietly undone.
-      ➡️ **STILL TO PORT (10):** `polarcoords` · `bend` · `glass` · `curl` · `fractalwarp` · `squeeze` ·
-      `turbulentdisplace` · `stretchseg` · `tileshift` · `tilerotate`. ⚠️ **`squeeze` is the delicate one**
-      — its own comment records that `Math.PI*y/H` and `Math.PI*(y/H)` differ in the last bits and broke
-      byte-identity on 357 of 2030 points, so it needs the threshold read carefully rather than assumed.
+      ═══ 🚨 **AND THEN THE PORT TURNED OUT TO HAVE BEEN HALF A PIXEL WRONG SINCE THE FIRST LINE OF IT
+      (v13.83). This is the most important thing in this entry.** ═══
+      **A FRAGMENT SHADER IS EVALUATED AT THE PIXEL CENTRE. The CPU loop walks WHOLE pixels.** So every
+      kernel was being asked *"where does 90.5 read from"* where JavaScript asked *"where does 90 read
+      from"* — half a pixel, in both axes, on every ported effect, from the moment it was written.
+      🙈 **AND I HAD ALREADY EXPLAINED IT AWAY.** The 0.1–0.9% disagreements are written up above as
+      resample-boundary noise, citing LOOP.md rule 14, which is exactly the sort of noise that rule
+      describes. **It was not noise. It was a constant offset wearing noise's clothes**, and the
+      threshold I chose to accommodate it (2%) is what let it hide.
+      🔎 **WHAT CAUGHT IT was an unrelated guard from queue 264** — *"no effect erases the layer at a
+      single parameter extreme"*. At `bulge:amount=-1` the effect throws every pixel out to a ring
+      **except the exact centre one**; the CPU left that 1 pixel and the GPU left 0, because the shader
+      never visited the exact centre. One pixel, and it was the whole bug.
+      📐 **ONE `floor()` LATER — measured across all fifteen ported kernels:**
+      **fourteen are BYTE-IDENTICAL (0.000%)** and the fifteenth (radial repeat) differs on **0.012%**.
+      Mirror Tile at size=20 went from 3,024 pixels out to exact. **The threshold is now 0.5%, forty
+      times tighter**, and the mutation check confirms it: putting the half-pixel back is CAUGHT, where
+      at 2% it would have SURVIVED.
+      💡 **THE LESSON, and it is not "shaders are tricky":** a tolerance chosen to accommodate an
+      unexplained difference will hide the cause of that difference. The number to justify is not the
+      one that passes — it is the one you expected before you measured.
+
+      ✅ **FIFTEEN OF TWENTY-ONE ARE ON THE GPU AS OF v13.84**, all byte-identical bar one:
+      kaleidoscope **48.8x** · ripple 35.0x · fisheye 35.2x · stretchseg 35.2x · radialrepeat 34.5x ·
+      bulge 34.3x · polarcoords 27.3x · innerpinch 25.0x · bend 22.7x · mirrortile 22.0x · twirl 21.6x ·
+      tunnel 18.3x · tileshift 16.0x · gridrepeat 15.8x · wave 6.0x.
+      ➡️ **STILL TO PORT (6):** `glass` · `curl` · `fractalwarp` · `squeeze` · `turbulentdisplace` ·
+      `tilerotate`. ⚠️ **`squeeze` is the delicate one** — its own comment records that `Math.PI*y/H` and
+      `Math.PI*(y/H)` differ in the last bits and broke byte-identity on 357 of 2030 points, so it needs
+      the threshold read carefully rather than assumed. `glass` and the two noise kernels carry hashes
+      and lattices that have to be transcribed exactly, not approximated.
       **Then keep a CHAIN resident on the GPU** so a second warp costs a draw rather than another upload.
       ⚠️ **TWO INSTRUMENT FAILURES ON THE WAY, both of which produced confident wrong answers:**
       **1. The first run measured SwiftShader** — headless Chrome runs software GL on purpose

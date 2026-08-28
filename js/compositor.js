@@ -7523,6 +7523,82 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     'return vec2((lx / u_size) * res.x, (ly / u_size) * res.y);'
   ].join('\n');
 
+  /* POLAR COORDS — rectangular <-> polar, blended by Amount. Reads the RAW cx/cy/maxR, hence fmCx etc.
+     JavaScript's atan2 and GLSL's atan(y,x) share the same (-PI, PI] range, so the `if (a < 0) a += 2PI`
+     transcribes directly rather than needing GLSL's mod. */
+  WARP_FX.polarcoords.glslPrep = function (W, H, cx, cy, maxR, p, t, ps) {
+    var amt = FM.evalProp(p.amount, t); if (amt == null) amt = 1; if (amt < 0) amt = 0; if (amt > 1) amt = 1;
+    return { amt: amt, mode: p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0) };
+  };
+  WARP_FX.polarcoords.glsl = [
+    'const float TAU = 6.283185307179586;',
+    'vec2 s;',
+    'if (u_mode > 0.5) {',
+    '  vec2 dxy = xy - vec2(fmCx, fmCy);',
+    '  float a = atan(dxy.y, dxy.x); if (a < 0.0) a += TAU;',
+    '  s = vec2((a / TAU) * res.x, (length(dxy) / fmMaxR) * res.y);',
+    '} else {',
+    '  float ang = (xy.x / res.x) * TAU;',
+    '  float rad = (xy.y / res.y) * fmMaxR;',
+    '  s = vec2(fmCx + cos(ang) * rad, fmCy + sin(ang) * rad);',
+    '}',
+    'return xy + (s - xy) * u_amt;'
+  ].join('\n');
+
+  /* BEND — bow the layer along one axis, with the peak wherever Position puts it. `u_half` is not
+     needed here, but note that a uniform called `half` WOULD have been a GLSL reserved word — which is
+     the whole reason gl-warp.js prefixes every one of them. The bow's amplitude is the raw cx or cy. */
+  WARP_FX.bend.glslPrep = function (W, H, cx, cy, maxR, p, t, ps) {
+    var amt = FM.evalProp(p.amount, t); if (amt == null) amt = 0.5; if (amt > 1) amt = 1; if (amt < -1) amt = -1;
+    var pos = p.position == null ? 50 : FM.evalProp(p.position, t); if (pos < 0) pos = 0; if (pos > 100) pos = 100;
+    return { amt: amt, ax: p.axis == null ? 0 : (Math.round(FM.evalProp(p.axis, t)) | 0), pos: pos };
+  };
+  WARP_FX.bend.glsl = [
+    'float u = u_ax > 0.5 ? (xy.x / res.x) : (xy.y / res.y);',
+    'float f = u;',
+    'if (u_pos != 50.0) {',
+    '  float bp = clamp(u_pos / 100.0, 0.0001, 0.9999);',
+    '  f = u < bp ? (u / bp) * 0.5 : 0.5 + ((u - bp) / (1.0 - bp)) * 0.5;',
+    '}',
+    'float shift = u_amt * (u_ax > 0.5 ? fmCy : fmCx) * sin(f * 3.141592653589793);',
+    'return u_ax > 0.5 ? vec2(xy.x, xy.y - shift) : vec2(xy.x - shift, xy.y);'
+  ].join('\n');
+
+  /* STRETCH SEGMENT — squash one horizontal band toward its own centre line and leave the rest alone.
+     ⚠️ `half` is a GLSL RESERVED WORD; it only works here because gl-warp.js turns every prep key into
+     `u_<key>`. Without that prefix this kernel would simply refuse to compile. */
+  WARP_FX.stretchseg.glslPrep = function (W, H, cx, cy, maxR, p, t, ps) {
+    var yy = FM.evalProp(p.y, t); if (yy == null) yy = 50;
+    var hh = FM.evalProp(p.height, t); if (hh == null) hh = 25;
+    var amt = FM.evalProp(p.amount, t); if (amt == null) amt = 0.6; if (amt < 0) amt = 0; if (amt > 0.95) amt = 0.95;
+    return { cyy: H * yy / 100, half: H * hh / 200, f: 1 - amt };
+  };
+  WARP_FX.stretchseg.glsl = [
+    'if (u_half < 1.0) return xy;',
+    'float dd = xy.y - u_cyy;',
+    'if (dd < -u_half || dd > u_half) return xy;',
+    'return vec2(xy.x, u_cyy + dd * u_f);'
+  ].join('\n');
+
+  /* TILE SHIFT — offset alternate rows sideways and alternate columns down, then wrap. The kernel's
+     `((v % n) + n) % n` is JavaScript guarding against a NEGATIVE remainder; the shifted coordinate is
+     never negative here (the offset is added), and GLSL's mod is floor-based anyway, so the double mod
+     is kept verbatim rather than simplified — it costs nothing and it matches line for line. */
+  WARP_FX.tileshift.glslPrep = function (W, H, cx, cy, maxR, p, t, ps) {
+    var sz = FM.evalProp(p.size, t); if (sz == null) sz = 120; if (sz < 8) sz = 8;
+    sz = Math.max(2, sz * (ps || 1));
+    var off = FM.evalProp(p.amount, t); if (off == null) off = 0.5;
+    return { sz: sz, off: off };
+  };
+  WARP_FX.tileshift.glsl = [
+    'float row = floor(xy.y / u_sz), col = floor(xy.x / u_sz);',
+    'float sx = xy.x + (mod(row, 2.0) >= 0.5 ? u_off * u_sz : 0.0);',
+    'float sy = xy.y + (mod(col, 2.0) >= 0.5 ? u_off * u_sz : 0.0);',
+    'sx = mod(mod(sx, res.x) + res.x, res.x);',
+    'sy = mod(mod(sy, res.y) + res.y, res.y);',
+    'return vec2(sx, sy);'
+  ].join('\n');
+
   /* RADIAL REPEAT — a fan of wedges, optionally mirrored and twisted. This is the kernel that reads
      drawWarpEffect's RAW cx/cy/maxR arguments rather than its own prep, which is why the shader wrapper
      exposes fmCx/fmCy/fmMaxR derived from res. */
