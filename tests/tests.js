@@ -3702,9 +3702,18 @@
            is padding + chevron + gap, while the head's WIDTH is what the lane gets back. Changing one
            does not move the other — a mutation putting --head-w back to 90 sailed past the wall check,
            because the eye genuinely had not moved. Both are asserted so both are guarded. */
-        if (grp.headW > 84) throw new Error('the track head is ' + grp.headW.toFixed(1) + 'px wide with a group in the project — every pixel of that is taken off the lane on every row, and it was 90 before he complained');
-        if (noGrp.headW > 68) throw new Error('with no group the head is still ' + noGrp.headW.toFixed(1) + 'px — the narrow case has to come down with the wide one or the two disagree about what the column costs');
-        if (!(grp.wall > noGrp.wall)) throw new Error('the eye sits at the same offset with and without a group (' + grp.wall + ' vs ' + noGrp.wall + ') — the chevron column is not being reserved at all, which is the alignment #191 asked for');
+        /* ⚠️ REWRITTEN IN v14.42. The width assertions stand — this test's real subject is that the head
+           does not steal lane width, and it still measures that. What changed is the third one, which
+           demanded the eye sit FURTHER from the wall with a group than without, because a group row
+           reserved a 22px chevron column and #191 asked every row to line up with it.
+           Queue 655 removed the chevron ("I don't want the feature"), so there is nothing to reserve
+           and nothing to align WITH — the alignment rule is satisfied vacuously and correctly, by there
+           being one layout. The assertion is inverted rather than deleted: the two must now be the
+           SAME, which is the #191 requirement restated for a world with no column, and it still fails
+           if a group row ever starts indenting itself again. */
+        if (grp.headW > 68) throw new Error('the track head is ' + grp.headW.toFixed(1) + 'px wide with a group in the project — since the chevron went there is nothing to make a group row wider, and every pixel of that comes off the lane on every row');
+        if (noGrp.headW > 68) throw new Error('with no group the head is still ' + noGrp.headW.toFixed(1) + 'px');
+        if (grp.wall !== noGrp.wall) throw new Error('the eye sits at ' + grp.wall + ' with a group and ' + noGrp.wall + ' without — a group row is indenting itself again, which is exactly the "it pushes the ui over making it ugly" of #191');
       }, 380);
     } finally {
       FM.scene.layers = layers0;
@@ -23939,13 +23948,23 @@
         throw new Error('a group inside a group shows ' + nested.length + ' rows at top level — he asked to see them "only when you go inside the group"');
       }
 
-      // 4. …and you can still get in, both ways.
+      /* 4. …AND YOU CAN STILL GET IN. ⚠️ THIS ASSERTION CHANGED IN v14.42 AND THE REASON MATTERS.
+         It used to require the row's chevron and click it. Ezra asked for that chevron gone — "they
+         have a small drop down button that needs removing cos I don't want the feature" — so the
+         control is no longer there to find. What this test was really protecting is not the chevron:
+         it is the sentence in its own error message, "collapsed by default with no way to open it is a
+         trap". That danger is real and it is unchanged, so the guard stays and is pointed at the route
+         that survives — Edit group, which js/app.js puts in the layer menu, reachable by long-press on
+         a phone and right-click on a PC. If that ever disappears while groups still start closed, this
+         still fails, which is the whole point. */
       const outer = FM.scene.layers.find(l => l.type === 'group' && !l.parent);
-      const chev = document.querySelector('#tl-tracks .track-head.group-head .th-chevron');
-      if (!chev) throw new Error('the group row has no expand control at all — collapsed by default with no way to open it is a trap');
-      chev.click(); await sleep(60);
-      if (document.querySelectorAll('#tl-tracks .track-row').length < 2) throw new Error('pressing the chevron did not reveal what is inside the group');
-      chev.click(); await sleep(60);
+      if (document.querySelector('#tl-tracks .track-head .th-chevron'))
+        throw new Error('the group chevron is back — he asked for it removed (queue 655)');
+      const menu = (FM.layerMenuItems ? FM.layerMenuItems(outer) : []).filter(function (it) { return it && /edit group/i.test(it.label || ''); });
+      if (!menu.length)
+        throw new Error('a group starts CLOSED and "Edit group" is no longer in its menu — that is collapsed by default with no way to open it, which is a trap');
+      if (typeof menu[0].action !== 'function')
+        throw new Error('the Edit group menu entry has no action, so the only remaining way into a closed group does nothing');
       FM.enterGroup(outer.id); FM.timeline.rebuild(); await sleep(60);
       if (document.querySelectorAll('#tl-tracks .track-row').length < 1) throw new Error('entering the group shows nothing');
       FM.exitGroup(true); FM.timeline.rebuild(); await sleep(60);
@@ -39458,9 +39477,16 @@
         if (b.rulerHead != null && Math.abs(b.rulerHead - b.renderedHead) > 0.6)
           throw new Error('with a group, the ruler reserves ' + b.rulerHead + 'px and the tracks render ' + b.renderedHead + 'px');
 
-        // …and the two states really do differ, or neither case proved anything about the other.
-        if (a.renderedHead === b.renderedHead)
-          throw new Error('the head is ' + a.renderedHead + 'px either way — the two branches this test exists to separate are the same, so it can no longer catch a mismatch');
+        /* ⚠️ INVERTED IN v14.42, AND IT IS A STRONGER ASSERTION THAN THE ONE IT REPLACES. This used to
+           demand the two heads DIFFER — the wide one held the group chevron — because if they were the
+           same the "with and without a group" structure proved nothing. The chevron is gone (queue
+           655), so there is one width now, and that is exactly what killed the bug measured in v14.41:
+           the head went 66 → 82 on the first redraw after grouping while the lane geometry had already
+           been computed from 66, putting every clip 16px out for a frame. A width that CANNOT change
+           cannot be read stale. So the test now demands they be equal: the two branches still exercise
+           different code, and the geometry assertions above still run in both. */
+        if (a.renderedHead !== b.renderedHead)
+          throw new Error('the track head is ' + a.renderedHead + 'px without a group and ' + b.renderedHead + 'px with one. Since queue 655 there is nothing to reserve a wider column for, and a head width that changes on grouping is what drew every clip ' + Math.abs(b.renderedHead - a.renderedHead) + 'px out of place for one frame.');
       } finally {
         FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
         FM.time = t0; FM.scene.project.markers = mk0;
@@ -47097,7 +47123,13 @@
       FM.refreshAll();
       const nested = eyeXs();
       if (!nested.length) throw new Error('no heads rendered with a nested group');
-      if (nested[0] === outside[0]) throw new Error('a NESTED group inside the group did not reserve the chevron column again — the rows no longer line up, which is the bug that column was added to fix (#191)');
+      /* ⚠️ INVERTED IN v14.42, same reason as the queue-442 test above. This demanded the column come
+         BACK for a nested group, because a group row used to carry a chevron and #191's rule is that
+         rows at the same depth must line up with it. The chevron is gone (queue 655), so there is no
+         column to reserve and every row lines up by construction. Asserting equality keeps the rule
+         guarded from the other side: if a nested group ever starts indenting its row again, this
+         fails, and that is the bug #191 was about. */
+      if (nested[0] !== outside[0]) throw new Error('a nested group indents its row by ' + Math.abs(nested[0] - outside[0]) + 'px while a plain row does not — since queue 655 there is no chevron column to reserve, so the rows must line up');
     } finally {
       if (FM.exitGroup) FM.exitGroup(true);
       FM.groupContext = ctx0 || null;

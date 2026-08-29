@@ -3480,7 +3480,12 @@ body.white-chrome #time-readout:active {
      every row still clears by 5px and the thumbnail keeps its full 34px. Eight pixels off every row,
      handed to the lane — and the eye starts at x=18 instead of x=27, which is the "towards the wall"
      he asked for without giving up the alignment #191 was about. */
-  :root { --head-w: 82px; }
+  /* ONE WIDTH, ALWAYS (queue 655, v14.42). This was 82px so a group row could hold the chevron, with
+     `#tl-inner.tl-no-groups { --head-w: 66px }` narrowing it back when no group existed. The chevron is
+     gone, so the wide case has nothing to hold — and the two-value arrangement was the direct cause of
+     the 16px jump measured in v14.41, where the lane geometry was computed from one width and rendered
+     at the other. A constant cannot be read stale. */
+  :root { --head-w: 66px; }
   /* ...but 90 is only needed to hold the chevron column, and that is only held open when the project
      HAS a group (see buildTracks). With no group there is nothing to align with, so the column goes and
      the head goes back to 72 — which fits comfortably: 7 padding + 15 eye + 6 gap + 34 thumb + 7 = 69.
@@ -3490,7 +3495,9 @@ body.white-chrome #time-readout:active {
      cascades downwards — declared on #tl-tracks the ruler kept the 90px default while the lanes
      rendered at 72, so every tick and benchmark pin sat 18px right of the clips and the playhead.
      Same defect as v9.29 seen from the CSS side; see the note at buildTracks in js/timeline.js. */
-  #tl-inner.tl-no-groups { --head-w: 66px; }   /* 4 + 15 + 6 + 34 + 4 = 63, clearing by 3 (queue 442) */
+  /* (was #tl-inner.tl-no-groups { --head-w: 66px } — 4 + 15 + 6 + 34 + 4 = 63, clearing by 3, queue 442.
+     Now the only width, above. The class is still toggled: it is a truthful "a group exists" marker and
+     several tests use it as their control.) */
   .th-name { display: none; }
   .track-head {
     width: var(--head-w); flex: 0 0 var(--head-w);
@@ -4929,7 +4936,7 @@ body.hm-selecting .hm-pin { display: none; }
    it — the glyph inside is a 11px triangle in a 16px box with a 6px gap after it. 12px and a 2px gap
    holds the same triangle and costs 8px less on every row, which comes straight off --head-w and goes to
    the lane. */
-.th-chevron { background: none; border: none; color: var(--text-dim); font-size: 11px; width: 12px; padding: 0; margin-right: -4px; cursor: pointer; flex: none; }
+/* .th-chevron and its empty twin were removed in v14.42 — see queue 655. */
 /* The same slot on a non-group row: holds the width so every head lines up, draws nothing, takes no
    taps. See the note in buildHead (queue 191). */
 /* THE CHEVRON KEEPS ITS BOX ON PURPOSE — and that is why the thumbnail has to be the one that gives.
@@ -4944,10 +4951,10 @@ body.hm-selecting .hm-pin { display: none; }
    eye from 28px to 8px on ungrouped rows and the columns stop lining up — there is a test for exactly
    that, and it caught this. So the space stays reserved and the surplus comes out of the thumbnail
    below, which is the only item in the head that can afford to lose a few pixels. */
-.th-chevron--empty { visibility: hidden; pointer-events: none; }
+
 /* In a project with no groups the reserved column is dead strip rather than alignment, so it goes
    entirely — display:none, which removes the box, not just the paint (queue 295). */
-.tl-no-groups .th-chevron--empty { display: none; }
+
 
 /* THE ACTUAL FIX. Every item in the head was `flex: 0 0 auto`, so when the content needed 82px in a
    72px box nothing could give and the surplus went outside the box — onto the timeline. The thumbnail

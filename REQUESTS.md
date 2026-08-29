@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.41
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.42
 >
-> **State:** v14.41, 1100 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.42, 1100 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -26690,8 +26690,7 @@ re-opened #480, which I had marked done and had not fixed.
       menus"*), **B** the top-bar arrow becoming an **✕**, **C** the back row naming where it goes.
       **Nothing visual ships until you pick a letter.**
 
-- [ ] **655 — Groups get a small drop-down arrow on their timeline row. Remove it — he does not want the
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **655 — Groups get a small drop-down arrow on their timeline row. Remove it — he does not want the
       feature, and it GLITCHES THE TIMELINE when a group is added.** (27 Aug, phone screenshot at v13.69.)
       His words, verbatim:
       > Log that when you add groups they have a small drop down button that needs removing cos I don't
@@ -26700,9 +26699,9 @@ re-opened #480, which I had marked done and had not fixed.
       bre…"** audio clip and an orange **"Mask Group"**. The Mask Group row alone carries a **small ▸
       triangle on the FAR LEFT, outside the eye icon**, where the audio row has nothing. That triangle is
       the disclosure toggle that expands the group's children inline.
-      1. [ ] **Remove the disclosure arrow from group rows.** He is explicit that he does not want what it
+      1. [x] **Remove the disclosure arrow from group rows.** He is explicit that he does not want what it
              opens, so this is a deletion, not a redesign.
-      2. [ ] **The glitch on ADD is the more serious half.** *"it being there glitches out the timeline
+      2. [x] **The glitch on ADD is the more serious half.** *"it being there glitches out the timeline
              when you add a group"* — so removing the control may or may not remove the glitch. **Reproduce
              the glitch FIRST and describe it in this entry before deleting anything**, or the deletion
              will be credited with a fix it did not make.
@@ -26736,6 +26735,26 @@ re-opened #480, which I had marked done and had not fixed.
       ⏭️ **STILL TO DO: clause 1, actually removing the arrow.** It touches four existing tests and the
       head-width logic the arrow's column exists for, so it gets its own pass rather than being rushed
       in behind a measurement.
+
+
+      ═══ ✅ **29 AUG (v14.42) — THE ARROW IS GONE, AND REMOVING IT KILLED THE GLITCH FOR GOOD.** ═══
+      🔑 **The two halves of your report turned out to be the same bug.** That arrow was the only reason
+      the track-head column had **two widths** — 66px without a group, 82px with, to make room for it.
+      And that pair is exactly what let the timeline be laid out at one width and drawn at the other,
+      which is the **16px jump** measured in v14.41. **There is one width now**, so it cannot happen at
+      all — not "fixed in the right order", *impossible*.
+      **Measured at 380px:** head **66px before AND after** grouping, clip on the centre line both
+      times, zero arrows in the page.
+      ✅ **Nothing is stranded, and I checked rather than assumed.** A group still starts **closed** —
+      you asked for that, because an open one left its members listed underneath *"which looks exactly
+      like copies left outside"* — and the way in is still **Edit group** in the layer menu (long-press
+      on the phone, right-click on PC). The code's own note names both routes: *"the chevron, **or
+      entering the group**, is how you look inside."* One of the two went; the way in did not.
+      🧪 **Four existing tests asserted that column, and all four were INVERTED rather than deleted**,
+      because each guarded something real that survives in a different shape — including one whose error
+      message reads *"collapsed by default with no way to open it is a trap"*. That one now checks that
+      **Edit group is still in the menu and still does something**, which is the danger it was actually
+      protecting against rather than the button it happened to use.
 
 - [ ] **656 — The SEARCH BAR still wears the dark theme and looks wrong on the light home.**
       **STATUS: 🟢 READY — nothing is stopping this**

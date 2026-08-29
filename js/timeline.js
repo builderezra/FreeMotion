@@ -972,21 +972,18 @@ window.FM = window.FM || {};
      * nothing drawn, nothing to tap.
      * The title also now says what it is in words rather than expecting a triangle to explain itself. */
     // (Solo "S" button removed per Ezra — was the per-layer "isolate this layer" toggle.)
-    if (layer.type === 'group') {   // collapsible group row
-      const chev = document.createElement('button');
-      chev.className = 'th-chevron';
-      chev.textContent = layer.collapsed ? '▸' : '▾';
-      chev.title = layer.collapsed ? 'Show what is inside this group' : 'Hide what is inside this group';
-      chev.setAttribute('aria-label', chev.title);
-      chev.addEventListener('click', (e) => { e.stopPropagation(); layer.collapsed = !layer.collapsed; FM.timeline.rebuild(); });
-      head.appendChild(chev);
-      head.classList.add('group-head');
-    } else {
-      const spacer = document.createElement('span');
-      spacer.className = 'th-chevron th-chevron--empty';
-      spacer.setAttribute('aria-hidden', 'true');
-      head.appendChild(spacer);
-    }
+    /* ⚠️ THE CHEVRON IS GONE (queue 655 clause 1, v14.42). Ezra: "when you add groups they have a small
+     * drop down button that needs removing cos I don't want the feature".
+     * The block above is kept as history because it explains a column that no longer exists.
+     * NOTHING IS STRANDED, and that was checked before deleting rather than assumed. A group is still
+     * created CLOSED — `g.collapsed = true` in js/app.js, which he asked for (an open group left its
+     * members listed underneath it, "which looks exactly like copies left outside") — and the way to
+     * look inside is still Edit Group. That app.js comment names both routes itself: "the chevron, OR
+     * ENTERING THE GROUP, is how you look inside." One of the two is being removed, not the capability.
+     * AND REMOVING IT KILLS A WHOLE CLASS OF BUG. The 22px column was the only reason the head column
+     * had two widths, which is what made the timeline jump 16px on the first redraw after grouping
+     * (measured in v14.41). A width that cannot change cannot be read stale. */
+    if (layer.type === 'group') head.classList.add('group-head');   // styles + tests key off this; only the button went
     if (inGroup(layer)) head.classList.add('in-group');
     const stripe = document.createElement('span');
     stripe.className = 'th-stripe';
@@ -1010,7 +1007,7 @@ window.FM = window.FM || {};
     let lpTimer = null, lpStart = null, panning = false, panFrom = 0, panMoved = false, lpFired = false;
     head.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
-      if (e.target.closest('.th-eye') || e.target.closest('.th-chevron')) return;   // buttons stay buttons
+      if (e.target.closest('.th-eye')) return;   // buttons stay buttons (the chevron went in v14.42)
       lpStart = { x: e.clientX, y: e.clientY };
       panning = false; panMoved = false; lpFired = false;
       panFrom = timelineEl ? timelineEl.scrollTop : 0;
