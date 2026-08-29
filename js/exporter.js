@@ -649,7 +649,17 @@ window.FM = window.FM || {};
         if (s && s.supported) return c;
       } catch (e) {}
     }
-    return 'avc1.42e01e';
+    /* ⚠️ WAS `return 'avc1.42e01e'` — ONE OF THE FOUR THAT JUST FAILED (queue 671).
+     * When every candidate probes false this used to hand back the last one anyway, and that codec is
+     * Baseline level 3.0, capped near 720x576. So on a browser that supports none of them the export
+     * proceeded with something guaranteed to throw at configure(), and what the user got was a second,
+     * misleading alert about a closed codec — pointing at the symptom, one step removed from the cause.
+     * The AUDIO path three functions up already does the right thing: probe, and report a NAMED reason
+     * the caller can turn into a real sentence. This is that pattern, not a new one.
+     * ⚠️ Not urgent for HIS devices — iOS Safari and Android Chrome pass the first or second candidate —
+     * but it is exactly the kind of failure that arrives as "export just doesn't work" with a message
+     * that sends you looking in the wrong place. */
+    throw new Error('NO_VIDEO_CODEC');
   }
 
   // Reverse + frame-blend slow-mo render from the frame cache; the preview cache (if any)
@@ -1045,9 +1055,18 @@ window.FM = window.FM || {};
                                    config: saved ? saved.config : null })
         : null;
 
+      /* ⚠️ THE ERROR IS HELD AND RETHROWN, NOT JUST LOGGED (queue 671). This used to be
+       * `error: e => console.error('video encode', e)` — so a hardware encoder failure mid-render went
+       * to the console, the frame loop carried on, and the export FINISHED and handed over a file built
+       * from whatever chunks happened to arrive. A silently truncated or corrupt video is worse than a
+       * failed export, because nothing tells you to do it again.
+       * The AUDIO encoder eleven hundred lines up already does exactly this — `encErr = e` and
+       * `if (encErr) throw encErr` after its flush. Same shape, and the asymmetry was the whole of the
+       * QA report's point. Thrown after flush() so the encoder is drained first. */
+      let vidErr = null;
       const encoder = new VideoEncoder({
         output: (chunk, meta) => { muxer.addVideoChunk(chunk, meta); if (recorder) recorder.add(chunk, meta); },
-        error: e => console.error('video encode', e),
+        error: e => { vidErr = e; console.error('video encode', e); },
       });
       encoder.configure({ codec, width: outW, height: outH, bitrate, framerate: fps });
 
@@ -1114,6 +1133,10 @@ window.FM = window.FM || {};
       }
 
       await encoder.flush();
+      /* Rethrown here rather than inside the callback: a throw from the encoder's own error handler
+         does not reach this async function, it becomes an unhandled rejection and the export keeps
+         going — which is the same silence in a different costume. */
+      if (vidErr) throw vidErr;
       encoder.close();
       reportSeekWatch();   // every frame is in the encoder now, so the tally is final
       // Save the last partial batch. The export is about to finalize, but finalizing is exactly where a

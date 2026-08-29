@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.48
+> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.49
 >
-> **State:** v14.48, 1106 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.49, 1108 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -27340,8 +27340,7 @@ re-opened #480, which I had marked done and had not fixed.
       session must not survive into the export, **and** it must be put back afterwards — otherwise the
       fix would swap a wrong export for wiping your solo state every time you export.
 
-- [ ] **671 — The video encoder path is unhardened where the audio path is hardened.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **671 — The video encoder path is unhardened where the audio path is hardened.**
       ✅ **PARTLY VALIDATED.** `pickVideoCodec` (`js/exporter.js:617`) tries four AVC candidates and
       then **returns `'avc1.42e01e'` — one of the four that just failed.** Confirmed in the source.
       That codec is Baseline level 3.0, capped near 720×576, so on any browser where all four probe
@@ -27356,6 +27355,24 @@ re-opened #480, which I had marked done and had not fixed.
       :587-612), and the encoder/`VideoFrame` leaking on error paths because both are declared inside
       the `try`. **The code asymmetry is real and readable; the browser condition that triggers it is
       not demonstrated.** Worth fixing as hardening, not as a reproduced bug.
+
+
+      ═══ ✅ **30 AUG (v14.49) — IT FAILS HONESTLY NOW, IN TWO PLACES IT COULD NOT.** ═══
+      **1. The codec pick.** It tried four H.264 settings and, when all four failed, **handed back one
+      of the four that had just failed.** So a browser that supports none of them went ahead with a
+      codec guaranteed to break, and you would have got an alert about a *"closed codec"* — the symptom,
+      one step away from the cause. It now refuses with a real sentence naming browsers that work, and
+      points at GIF / PNG-sequence export, which do not use the video encoder at all.
+      **Measured both ways:** an ordinary export still finds a codec; a browser supporting none refuses
+      instead of finishing.
+      **2. The encoder's own errors were only being LOGGED.** A hardware encoder failure mid-render went
+      to the console and the render carried on — so the export **finished and handed you a file** built
+      from whatever chunks had arrived. **A silently truncated video is worse than a failed export**,
+      because nothing tells you to do it again. It stops now, the same way the audio encoder always has.
+      🧪 The first test carries a **control** — an ordinary export must still succeed — because without
+      one, a change that made *every* export throw would pass the assertion and look like a fix.
+      ⚖️ **Honest scope:** the report said its last two findings were not reproduced at runtime, and I
+      have not reproduced them either. Fixed as hardening, not claimed as bugs you hit.
 
 - [ ] **672 — PC: the nine layer-panel labels are 0px tall on every common laptop resolution.**
       **STATUS: 🟢 READY — nothing is stopping this**

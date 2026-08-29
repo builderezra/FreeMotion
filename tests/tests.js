@@ -54050,4 +54050,64 @@
       FM.selectLayer(null); FM.refreshAll();
     }
   });
+
+  test('671 — a browser with no usable H.264 profile is told so, not handed a codec that just failed', { item: '671' }, async function () {
+    /* From the external QA pass, and verified in the source before changing anything: pickVideoCodec
+       probes four AVC profiles and, when every one fails, used to `return 'avc1.42e01e'` — ONE OF THE
+       FOUR THAT JUST FAILED. That profile is Baseline 3.0, capped near 720x576, so the export went on
+       with something guaranteed to throw at configure(), and the user got a second, misleading alert
+       about a closed codec: the symptom, one step removed from the cause.
+       The AUDIO path three functions up already probes and reports a NAMED reason. This is that
+       pattern, not a new one. */
+    if (typeof VideoEncoder === 'undefined') return;
+    const P = FM.scene.project, keep = FM.scene.layers.slice();
+    const w0 = P.width, h0 = P.height, d0 = P.duration, f0 = P.fps;
+    const real = VideoEncoder.isConfigSupported;
+    try {
+      P.width = 120; P.height = 120; P.duration = 0.3; P.fps = 10;
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 60, shapeW: 60, shapeH: 60, fill: '#4fd1ff' });
+      L.start = 0; L.duration = 0.3; FM.scene.layers.push(L);
+      FM.refreshAll();
+      const opts = { scale: 1, fps: 10, bitrate: 200000, from: 0, to: 0.3, outW: 120, outH: 120,
+                     onProgress: function () {}, onReady: async function () {} };
+      /* 1. THE CONTROL. Without it, a change that made every export throw would pass the assertion
+         below and look like a fix. */
+      let normalErr = null;
+      try { await FM.exporter.run(Object.assign({ name: 'x671ok' }, opts)); } catch (e) { normalErr = e; }
+      if (normalErr) throw new Error('an ordinary export now fails: ' + (normalErr.message || normalErr));
+      // 2. A browser that supports NONE of the four.
+      VideoEncoder.isConfigSupported = async function () { return { supported: false }; };
+      let msg = null;
+      try { await FM.exporter.run(Object.assign({ name: 'x671bad' }, opts)); } catch (e) { msg = e && e.message; }
+      if (msg !== 'NO_VIDEO_CODEC')
+        throw new Error('with no supported H.264 profile the export ' + (msg ? 'threw "' + msg + '"' : 'FINISHED') +
+          ' — it must refuse with NO_VIDEO_CODEC, or it proceeds with a codec that already failed and the user is told about the wrong thing');
+      /* 3. …AND SOMETHING MUST SAY IT IN WORDS. A named error nobody translates is an alert reading
+         "Export failed: NO_VIDEO_CODEC", which is not better than what it replaced. */
+      const appSrc = await (await fetch('../js/app.js?boot=' + Date.now())).text();
+      if (!/NO_VIDEO_CODEC/.test(appSrc))
+        throw new Error('nothing in js/app.js turns NO_VIDEO_CODEC into a sentence, so the user would see the raw code');
+    } finally {
+      VideoEncoder.isConfigSupported = real;
+      P.width = w0; P.height = h0; P.duration = d0; P.fps = f0;
+      FM.scene.layers.length = 0; keep.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); FM.refreshAll();
+    }
+  });
+
+  test('671 — a video encoder error stops the export instead of shipping a broken file', { item: '671' }, async function () {
+    /* The second half of the same asymmetry. The video encoder's error callback was
+       `e => console.error('video encode', e)` — logged, and the frame loop carried on, so the export
+       FINISHED and handed over a file built from whatever chunks happened to arrive. A silently
+       truncated video is worse than a failed export, because nothing tells you to do it again.
+       The AUDIO encoder already holds its error and rethrows after flush; asserted against the source
+       because provoking a real hardware encoder fault is not something a test can arrange. */
+    const src = await (await fetch('../js/exporter.js?boot=' + Date.now())).text();
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    if (/error:\s*e\s*=>\s*console\.error\('video encode'/.test(code))
+      throw new Error('the video encoder error is logged and dropped again — a hardware failure mid-render would finish the export and hand over a truncated file with nothing to say so');
+    if (!/vidErr\s*=\s*e/.test(code) || !/if\s*\(vidErr\)\s*throw vidErr/.test(code))
+      throw new Error('the video encoder error is no longer held and rethrown after flush, the way the audio encoder does it');
+  });
 })();

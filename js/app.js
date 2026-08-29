@@ -4578,6 +4578,9 @@ window.FM = window.FM || {};
     } catch (e) {
       overlay.classList.add('hidden');
       if (e.message === 'NO_WEBCODECS') alert('Export needs the WebCodecs video encoder. Please open FreeMotion in Google Chrome.');
+      /* queue 671: the encoder exists but supports none of the H.264 profiles we can write. Named
+         rather than left to throw at configure(), where the message named the symptom and not this. */
+      else if (e.message === 'NO_VIDEO_CODEC') alert('This browser\u2019s video encoder does not support any of the H.264 settings FreeMotion can write, so an MP4 cannot be made here.\n\nChrome, Edge and Safari all work. If you are on Firefox or an older Android browser, try one of those \u2014 or export a GIF or a PNG sequence instead, which do not need the video encoder.');
       else if (e.message === 'CANCELLED') { /* silent */ }
       else if (e.message === 'FRAMES_TOO_BIG') alert('That PNG sequence is too large to build in memory. Shorten the range, lower the frame rate, or drop the resolution and try again.');
       else if (e.message === 'NO_ZIP_WRITER') alert('The frame-sequence exporter failed to load. Please hard-refresh and try again.');
