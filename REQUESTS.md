@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.27
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.28
 >
-> **State:** v14.27, 1077 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.28, 1078 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -26190,8 +26190,7 @@ re-opened #480, which I had marked done and had not fixed.
       neither** — silencing a true warning would be the same mistake again, so the test pins that case
       as hard as the other two, and pins the banner following it.
 
-- [ ] **646 — PC: the loading animation cuts from white to the colours instead of fading, unlike mobile.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **646 — PC: the loading animation cuts from white to the colours instead of fading, unlike mobile.**
       (27 Aug, screen recording of the PC version.)
       His words, verbatim:
       > If u watch the pc version of the animation the background doesnt fade from white to the colours
@@ -26204,6 +26203,33 @@ re-opened #480, which I had marked done and had not fixed.
       `index.html`'s intro plus `splash-v2.mp4`, and the difference between the phone and desktop paths
       is readable and measurable without the video. Ask for it again only if the code shows no
       difference at all.
+
+
+      ═══ ✅ **29 AUG (v14.28) — THE FADE WAS WRITTEN LONG AGO AND HAD NEVER RUN ONCE.** ═══
+      🔑 **`theme-glass.css` has carried the whole thing all along:**
+      `html.splash-on-light { background:#111; animation: splash-ground 2.05s ease-in forwards; }`
+      — the page walking from #111 to white underneath the film, with a reduced-motion variant beside
+      it. **The class was never added, so none of it ever happened.**
+      🐛 **CAUSE, and it is three characters of scope:** `index.html` read `LIGHT` at the top of the boot
+      function while its `var LIGHT = true` sat **fifty lines below**. `var` hoists, so at that moment
+      the value was **`undefined`** — the `if` was falsy and the class silently never landed. **No
+      error. No warning.** The `try/catch` wrapped around it would have swallowed one anyway.
+      **So the 900ms dissolve was cross-fading your white film into a BLACK PAGE**, and the home colours
+      only arrived when `splash-on` came off a tenth of a second later. That is the cut, exactly as you
+      described it.
+      📐 **MEASURED AFTER: the page now ramps #111 → 39 → 111 → 215 → 255 across ~2s**, tracking the
+      film instead of swapping behind it.
+      ⚠️ **"Try really hard not to accidentally break anything" — so, plainly, what I touched:** one line
+      moved (the LIGHT computation, above its first use) and nothing else. **The dark look cannot be
+      affected**: its rules are keyed on a class it never gets.
+      🐛 **AND I NEARLY SHIPPED A SECOND COPY OF THE GROUND.** Before finding the original in
+      theme-glass.css I had written the same rule into styles.css. **Two declarations of one ground is
+      exactly how #643's six wordmark masks drifted apart** — so it was removed, a pointer left in its
+      place, and the test now fails if a second copy ever appears.
+      🐛 **One more, and it is the useful kind:** renaming a local variable while moving it broke an
+      existing #639 test that greps `index.html` for `typeof __st.homeLight === 'boolean'` — the guard
+      that stops a MISSING setting being read as "off" on a fresh install. Behaviour was identical; the
+      guard matches a NAME. Restored rather than relaxed.
 
 - [x] **647 — The empty-state HEADINGS on the home menus are unreadable — make them black.**
       (27 Aug, three phone screenshots at v13.69: Templates, Elements, Tutorials.)
@@ -26790,3 +26816,129 @@ re-opened #480, which I had marked done and had not fixed.
       hatch on the queue-order gate.
       🔒 **Proved by simulating the exact deletion that prompted it** — the gate fires and names the
       missing test. A gate nobody has watched fire is a gate nobody should trust.
+
+- [ ] **668 — 🔴🔴 P0 DATA LOSS: "Replace media…" silently reverts to the original file on reload.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      (29 Aug. From an external QA pass he commissioned — *"I haven't verified any of it so make sure
+      to validate its claims"*.)
+      ✅ **VALIDATED BY ME, in the source.** `js/storage.js:279` is the ONLY writer of a layer's media
+      blob and it reads:
+      > `const existing = await idbGet(db, layer.id);`
+      > `if (!existing) await idbPut(db, layer.id, { file: m.file, kind: m.kind });`
+      **It skips the write whenever a record already exists at that key.** `FM.replaceMediaWith` swaps
+      the file under the SAME layer id, so a replace can never be persisted — the old blob is still
+      there, so the guard refuses, and hydrate loads the original back.
+      **The report's repro is pixel-checked:** import red → replace with blue → save, reload → red
+      again, while `layer.mediaRev` still says 1. **The layer's own JSON says it was replaced and the
+      blob disagrees.** No error, no toast.
+      🔗 Same root cause claimed for `js/template-fill.js:241` (fill a template with your own photos →
+      reverts), and a cross-kind replace (video→image) would save `layer.type: image` against an IDB
+      record still marked `video`.
+      ➡️ **This is the one that destroys work, so it goes first.** The fix is to overwrite when the
+      registry's file differs from the stored one; `layer.mediaRev` already exists and is already in the
+      history snapshot, so it is the cheap key.
+      🔒 **Wants a gate:** a save/load round-trip AFTER a replace. Nothing in the suite round-trips a
+      replaced blob, which is exactly why this survived.
+
+- [ ] **669 — 🔴 GIF and PNG-frame export are both DEAD: `blit` is out of scope.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **VALIDATED BY ME, and it is not ambiguous.** `const blit` is declared at `js/exporter.js:775`
+      inside `async run(opts)` (line 750). It is called at **:1170 inside `runGif`** (line 1128) and
+      **:1228 inside `runFrames`** (line 1187). Those are sibling methods on the same object literal;
+      `blit` is not in their scope, and grep confirms there is no other declaration of it anywhere.
+      **So both formats throw `ReferenceError: blit is not defined` and produce no file** — and the
+      alert the user sees is literally *"Export failed: blit is not defined"*.
+      ⚠️ **The comment directly above the declaration says `blit` "is shared by the MP4, GIF and frame
+      paths".** The intent was written down; the scoping never matched it.
+      ✅ The QA pass also reports an AST scope sweep of all 74 files in `js/` finding **`blit` is the
+      only out-of-scope reference in the codebase** — so this is a one-off, not a pattern.
+      🔒 **Wants a gate:** a smoke test that exports a few frames in EVERY format listed in
+      `#exp-format`. The suite never runs `runGif`/`runFrames` far enough to reach the line.
+      ❓ASK: do you ever actually use GIF or PNG-frames export? It changes how urgent this is — the bug is real either way, but if you only ever export MP4 it can wait behind the data-loss one.
+
+- [ ] **670 — Export lies about itself: a stale audio flag, and "isolate one layer" that keeps the old solos.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **BOTH VALIDATED BY ME.**
+      **(a) The audio-drop flag is never reset in production.** `js/exporter.js:859` reads
+      `} else if (FM._audioTrackDropped !== 'mix-silent') FM._audioTrackDropped = null;` — so
+      `'mix-silent'` is **never** cleared. Grepping every reference: set at :506, :574, :820, :850,
+      :899, read at :1084 and :1098, and **reset to null only inside `tests/tests.js` (9 times)**.
+      **So the suite has been hiding this by cleaning up after the code** — which is precisely the
+      structural-safeguards failure this project keeps writing about.
+      **Consequence:** export a muted project, un-mute, export again — the ready card still says
+      *"NO SOUND"* over a file that plays fine, and `fm.lastExportReport` records it too. **The one
+      artefact built to turn "no audio" reports into facts produces a false one.** That directly
+      undermines #215/#662, which are waiting on exactly that report from your phone.
+      **(b) Export's layer isolation adds a solo without clearing the others** (`js/app.js:4478`,
+      `soloTarget.solo = true`). A solo left on from a previous session is serialised into the project,
+      so "export only this layer" can silently include another. The `soloRestore` snapshot is already
+      taken on the line above, so clearing them is free.
+      🔒 Wants a gate: export twice in a row and assert the second report is not the first's.
+
+- [ ] **671 — The video encoder path is unhardened where the audio path is hardened.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **PARTLY VALIDATED.** `pickVideoCodec` (`js/exporter.js:617`) tries four AVC candidates and
+      then **returns `'avc1.42e01e'` — one of the four that just failed.** Confirmed in the source.
+      That codec is Baseline level 3.0, capped near 720×576, so on any browser where all four probe
+      false it hands back something guaranteed to throw at `configure()` — then a second, misleading
+      alert about a "closed codec" points at the symptom rather than the cause.
+      ⚠️ **Not urgent for you specifically:** iOS Safari and Android Chrome normally pass the first or
+      second candidate. It bites Firefox, old Android WebViews and locked-down desktop builds.
+      **The audio path already does the right thing three lines away** (a named error and a genuinely
+      good message), so this is copying a pattern that already exists here.
+      ⚠️ **The report's other two video-path findings are NOT verified at runtime and it says so** —
+      the encoder's `error` callback being swallowed where audio's is held and rethrown (:953 vs
+      :587-612), and the encoder/`VideoFrame` leaking on error paths because both are declared inside
+      the `try`. **The code asymmetry is real and readable; the browser condition that triggers it is
+      not demonstrated.** Worth fixing as hardening, not as a reproduced bug.
+
+- [ ] **672 — PC: the nine layer-panel labels are 0px tall on every common laptop resolution.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **VALIDATED BY ME, measured in the running app:**
+      | viewport | label height |
+      |---|---|
+      | 1920×1080 | 14px ✓ |
+      | **1440×900** | **0px** |
+      | **1280×800** | **0px** |
+      The text is present in the DOM — *Colouring*, *Outline & Shadows*, *Mixing*, *Position / Scale* —
+      and renders at zero height, so **on an ordinary laptop you get eight unlabelled icons.** The card
+      is a fixed `height: var(--cat-h)`, the label is a shrinkable flex child, and `overflow: hidden`
+      hides the collapse instead of cropping it. The comment above the rule says *"a long label crops"*
+      — it does not crop, it disappears.
+      **The phone is fine** (labels render correctly at 414×896), which is why this never showed up in
+      the 380px pass every release runs.
+      ❓ASK: what resolution is your PC screen? If it is 1920×1080 you have never seen this, and it only bites you on a laptop — worth knowing before I decide how far up the queue it goes.
+
+- [ ] **673 — Malformed project import creates a junk project and says nothing.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **VALIDATED BY READING** (`js/storage.js:996-1001`): `FM.projects.create()` runs BEFORE
+      `applyScene()`, and `applyScene` returns `false` rather than throwing when the file has no
+      `layers` array. There is no `else` on that branch — **so a bad file leaves you in a new empty
+      project named after it, with no message at all.** The report reproduced it: project count 1 → 2,
+      no toast, editor showing an empty canvas titled with the file's name. A second bad file makes 3.
+      **It reads exactly like "the import destroyed my project"**, which is the worst possible reading
+      of a no-op.
+      ➡️ Validate before creating, and say what was wrong on the false branch.
+
+- [ ] **674 — The QA pass's remaining UI findings, and its own corrections.**
+      **STATUS: 🟠 NEEDS YOU — three of these are taste calls**
+      ❓ASK: three questions in here — (a) text at 160pt overflows the comp and never wraps: is that the same thing as #98's A/B/C size question, or do you still want the options drawn? (b) do you want the transport buttons' TAP AREA grown to 44px (icons unchanged)? (c) should Export / Canvas / Help stay reachable while a layer is selected?
+      · **Raw error text reaches you in alerts** (`js/app.js:4515`, `:3960`). The specific messages
+        around them are genuinely good; the two catch-alls undo that — today a phone shows
+        *"Export failed: blit is not defined"*. Wants a human sentence plus copyable details.
+      · **The clip name's ink is chosen against the clip colour and then drawn over the filmstrip**
+        (`js/timeline.js:507`, `:1526`). Measured contrast **1.10:1** — the report calls it the only
+        contrast failure in the editor. The base CSS rule was already written to be legible over any
+        filmstrip; the inline style overrides exactly the thing that solved it.
+      · **Text never wraps and 160pt overflows a 1080 comp immediately.** Overlaps **#98**, which is
+        already waiting on your A/B/C.
+      · **Touch targets:** 16 of 25 controls under 44×44 at 390×844; the transport row is 34×34 and the
+        clip trim grips are 13px wide.
+      · **Project actions vanish when a layer is selected** with no cue that they moved rather than broke.
+      ✅ **AND IT CORRECTED ITSELF ON TWO EARLIER CLAIMS, which is worth recording:** the export overlay
+      does NOT hide during a render (the earlier check used `offsetParent`, which is always null for
+      `position: fixed`), and import/export failures are NOT silent (they alert; the earlier check
+      scanned for toast nodes and `alert()` creates none). **Do not chase either.**
+      ⚠️ **Two items it flags as NOT REPRODUCED and I have not checked:** concurrent reverse-cache warms
+      fighting over one toast, and an inverted comment at `js/app.js:3371` about the media library.
+

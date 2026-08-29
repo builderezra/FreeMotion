@@ -1879,6 +1879,14 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
    than that, so a black splash on a lit canvas shows the same seam one step further out. The class is
    dropped when the splash is removed, which puts the theme's light straight back. */
 html.splash-on, html.splash-on body { background: #000; }
+/* ⚠️ THE LIGHT GROUND IS NOT DECLARED HERE — theme-glass.css owns it (queue 646). It has carried
+   `html.splash-on-light { background: #111; animation: splash-ground 2.05s ease-in forwards; }` all
+   along, ramping the page from #111 to white under the film, with a reduced-motion variant beside it.
+   None of it ever ran, because the CLASS was never added: `LIGHT` was read in index.html before its
+   `var` declaration further down the same function, so it was `undefined`, the `if` was falsy, and the
+   whole ramp sat there doing nothing. Hoisting made that completely silent.
+   I nearly shipped a second copy of this rule here before finding the original. It is left OUT on
+   purpose: two declarations of one ground is exactly how the six wordmark masks in #643 drifted. */
 /* keeps swallowing pointer/ghost-click events while fading — pointer-events:none let the post-touch
    synthesized click punch through to editor controls.
    The long curve (v4.92) is the hand-off into the home screen: the fade now STARTS ~0.9s before the

@@ -46400,6 +46400,45 @@
     if (!/STUTTER/i.test(bad)) throw new Error('a stuttering sample lost its stutter verdict to the new scale branch: ' + bad);
   });
 
+  /* ═══ QUEUE 646 — THE INTRO GROUND THAT NEVER RAN ════════════════════════════════════════════
+   * Ezra: *"the background doesnt fade from white to the colours it just cuts unlike mobile, try
+   * really hard not to accidentally break anything when fixing please"*.
+   * 🔑 THE RAMP HAD BEEN WRITTEN AND HAD NEVER ONCE RUN. theme-glass.css carries
+   * `html.splash-on-light { background:#111; animation: splash-ground 2.05s ease-in forwards; }`,
+   * which walks the page from #111 to white under the film. The CLASS was never added: index.html read
+   * `LIGHT` at the top of the boot IIFE while its `var` declaration sat fifty lines below, so hoisting
+   * made it `undefined`, the `if` was falsy, and nothing happened. **No error — that is what makes it
+   * the dangerous kind.** So the 900ms dissolve cross-faded a white film into a black page and the
+   * home colours arrived when the class came off: a swap, not a fade.
+   * ⚠️ TESTED AT THE SOURCE, deliberately. The splash runs once per session from an inline script and
+   * deletes itself, so there is no live state left to read — the same limit #642's test hit. */
+  test('#646: the light intro ground is armed before it is read', { item: '646' }, async function () {
+    const html = await (await fetch('index.html?t=' + Date.now())).text();
+    const use = html.indexOf("classList.add('splash-on-light')");
+    if (use < 0) throw new Error("index.html no longer adds 'splash-on-light', so the ground ramp cannot run at all");
+    const decl = html.indexOf('var LIGHT');
+    if (decl < 0) throw new Error('LIGHT is no longer declared in index.html');
+    if (decl > use) throw new Error('LIGHT is declared AFTER the line that reads it (' + decl + ' > ' + use +
+      ') — `var` hoists, so it is undefined at that point, the if is falsy and the ground ramp silently never runs. That is the exact bug this test exists for, and it produces no error.');
+
+    /* AND THE CLASS MUST LAND ON SOMETHING. If the ramp is ever deleted, adding the class becomes a
+       no-op again and this test would still pass on the ordering alone. */
+    const glass = await (await fetch('theme-glass.css?t=' + Date.now())).text();
+    if (!/html\.splash-on-light[^{]*\{[^}]*animation:\s*splash-ground/.test(glass))
+      throw new Error('theme-glass.css no longer ramps the ground for splash-on-light — the class would be landing on nothing');
+    if (!/@keyframes\s+splash-ground/.test(glass))
+      throw new Error('the splash-ground keyframes are gone, so the ramp cannot animate');
+
+    /* ⚠️ AND ONE DECLARATION ONLY. I nearly shipped a second copy of this ground into styles.css before
+       finding the original — two declarations of one ground is how #643's six wordmark masks drifted. */
+    /* comments stripped first — the pointer left in styles.css QUOTES the rule it is pointing at, and
+       a regex that cannot tell a declaration from a comment would fail on the note explaining why the
+       declaration is not there. */
+    const css = (await (await fetch('styles.css?t=' + Date.now())).text()).replace(/\/\*[\s\S]*?\*\//g, '');
+    if (/html\.splash-on-light[^{]*\{[^}]*background:/.test(css))
+      throw new Error('styles.css declares the light splash ground too — theme-glass.css already owns it, and two copies of one ground is exactly how the #643 masks drifted apart');
+  });
+
   /* ═══ QUEUE 643 — THE GLOW MASKS MUST TRACK THE WORDMARK ══════════════════════════════════════
    * Ezra spotted this himself and described it exactly: *"you've got like an M as like the backdrop for
    * like the big M but it's like not it doesn't look the same cause… mine looks more like a N than an

@@ -39,7 +39,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=649">
+<link rel="stylesheet" href="styles.css?v=650">
 <link rel="stylesheet" href="theme-glass.css?v=45">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -106,6 +106,17 @@
       if (skip && window.matchMedia && matchMedia('(hover: hover)').matches) skip.textContent = 'click to skip';
       sp.classList.remove('hidden');
       // Canvas and splash go black together (queue 162) — see the note on html.splash-on in styles.css.
+      /* ⚠️ `LIGHT` IS COMPUTED HERE, NOT 50 LINES DOWN (queue 646). It used to be declared with `var`
+         further down this same IIFE and READ here — and `var` hoists, so at this point it was
+         `undefined`, `if (LIGHT)` was falsy, and `splash-on-light` was NEVER ADDED. No error, no
+         warning: hoisting makes the failure completely silent, and the try/catch around it would have
+         swallowed one anyway. The comment below described an intention the code had never once
+         carried out. */
+      var LIGHT = true;
+      try {
+        var __st = JSON.parse(localStorage.getItem('fm.settings') || '{}');
+        if (__st && typeof __st.homeLight === 'boolean') LIGHT = __st.homeLight;
+      } catch (e) {}
       try {
         document.documentElement.classList.add('splash-on');
         /* The canvas/page ground matches the splash for as long as it is up (queue 162). The new film
@@ -162,11 +173,7 @@
          run (the settings object is only written once something is saved), and fell back to false. So
          a brand-new install got the OLD intro while every other part of the app went light. An absent
          key means "never chosen", not "chosen off". */
-      var LIGHT = true;
-      try {
-        var __st = JSON.parse(localStorage.getItem('fm.settings') || '{}');
-        if (__st && typeof __st.homeLight === 'boolean') LIGHT = __st.homeLight;
-      } catch (e) {}
+      // LIGHT is computed at the top of this IIFE now — see the note there (queue 646).
       if (LIGHT) sp.classList.add('splash-light');
       var pos = document.getElementById('splash-poster');
       /* NO POSTER ON THE NEW FILM, and that is a measurement rather than an omission. Its first frame
@@ -203,7 +210,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v14.27</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v14.28</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
