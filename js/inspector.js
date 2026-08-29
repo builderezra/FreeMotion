@@ -2096,12 +2096,43 @@ window.FM = window.FM || {};
       if (row._g && row._g.moved) { row._g.moved = false; return; }
       (layer.audioFx || []).forEach(e => { if (e !== fx) e._expanded = false; });   // accordion: exactly one editor open
       fx._expanded = !expanded;
+      // Collapsing the row you were auditioning must stop the sound: the control that would stop it is
+      // the thing being hidden, and audio playing from a panel you have closed is the worst kind of
+      // stuck state — there is nothing on screen to connect it to. (queue 653)
+      if (expanded && FM.audioFxLive && FM.audioFxLive.stopAudition) FM.audioFxLive.stopAudition();
       FM.inspector.refresh();
     };
     head.addEventListener('click', (e) => { if (e.target.closest('.fx-icon-btn')) return; toggle(); });
     if (!expanded && (layer.audioFx || []).length > 1) head.appendChild(el('span', 'fx-grip', '⠿'));
     head.appendChild(disc); head.appendChild(name); head.appendChild(el('span', 'fx-spacer'));
     if (expanded) {
+      /* ═══ HEAR IT (queue 653) ══════════════════════════════════════════════════════════════════
+       * Ezra: "Note that we need a way to hear audio effects while messing with them".
+       * On the EXPANDED row only, because that is the row whose sliders you are dragging — a play
+       * button on a collapsed row would audition an effect you cannot currently change.
+       * It does NOT auto-start when the row opens: his own rule in the entry. A panel that starts
+       * making noise because you tapped it is a different feature from one that offers to. */
+      const hear = el('button', 'fx-icon-btn fx-hear');
+      const live = FM.audioFxLive && FM.audioFxLive.auditioning && FM.audioFxLive.auditioning(layer);
+      hear.classList.toggle('on', !!live);
+      hear.title = live ? 'Stop' : 'Hear this effect';
+      hear.setAttribute('aria-label', hear.title);
+      hear.innerHTML = live ? svgIcon('M7 6h3v12H7zM14 6h3v12h-3z') : svgIcon('M8 5.5v13l11-6.5z');
+      hear.addEventListener('click', () => {
+        if (!FM.audioFxLive) return;
+        if (FM.audioFxLive.auditioning(layer)) { FM.audioFxLive.stopAudition(); FM.inspector.refresh(); return; }
+        /* The refusals come back as a WORD, not as false, so the button can say why instead of doing
+           nothing — "it does nothing" is the report this app gets most often, and each of these is a
+           case where auditioning would be a lie about what the project sounds like. */
+        const r = FM.audioFxLive.audition(layer);
+        const why = { reversed: 'A reversed clip\u2019s sound is rebuilt on playback, so it cannot be auditioned here',
+                      silent: 'This layer is hidden or muted \u2014 there is nothing to hear',
+                      solo: 'Another layer is soloed, so this one is silent' }[r];
+        if (why) { if (FM.toast) FM.toast(why, 3600); return; }
+        if (r !== true) { if (FM.toast) FM.toast('Could not start playback for this clip', 3000); return; }
+        FM.inspector.refresh();
+      });
+      head.appendChild(hear);
       const more = el('button', 'fx-icon-btn', '⋯'); more.title = 'More';
       more.addEventListener('click', (ev) => audioFxMoreMenu(layer, fx, idx, ev.currentTarget));
       const del = el('button', 'fx-icon-btn fx-del'); del.title = 'Delete effect'; del.innerHTML = svgIcon('M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13');

@@ -53557,4 +53557,85 @@
     if (!/--hm-more-glint/.test(glass))
       throw new Error('the light home has no ring colour of its own — the dark theme\'s pale cyan measured 1.37 contrast on a white card');
   });
+
+  /* ═══ QUEUE 653 — HEARING AN AUDIO EFFECT WHILE YOU CHANGE IT ══════════════════════════════════
+     Ezra: "Note that we need a way to hear audio effects while messing with them".
+     ⚠️ THE REASON THIS WAS IMPOSSIBLE IS THE THING WORTH GUARDING, and it is not obvious from either
+     file on its own. `applyAt` — the only thing that pushes a slider's new value into the live audio
+     nodes — runs from inside the playback tick, so a paused project is silent by construction. And the
+     obvious workaround defeats itself: every audio-fx slider writes through FM.setProp, whose FIRST
+     line pauses the transport. Press play, touch the slider, and it stops on the first applied value —
+     about one frame of sound. So the audition MUST NOT use the transport, and these tests exist mainly
+     to stop someone "simplifying" it into FM.play() later. */
+
+  test('653 — the audition plays without the transport, so a slider drag cannot kill it', { item: '653' }, async function () {
+    if (!FM.audioFxLive || !FM.audioFxLive.audition) throw new Error('FM.audioFxLive.audition is missing — there is no way to hear an effect');
+    /* THE INVARIANT, asserted against the source because it is a NEGATIVE and the suite has no audio
+       hardware to hear the difference: the audition must never start the transport. If it ever calls
+       FM.play(), FM.setProp's pause fires on the first slider value and the feature is dead again —
+       silently, and in exactly the way that reads as "it does not work" rather than as a regression. */
+    const src = String(FM.audioFxLive.audition);
+    if (/FM\.play\s*\(/.test(src))
+      throw new Error('audition() starts the transport — FM.setProp pauses playback on the first applied value, so the sound would stop the moment a slider moved. That is the bug this feature exists to get around.');
+    /* …and it must go through sync(), never createMediaElementSource itself: an element's source node
+       can be created once EVER, and a second one throws and leaves the clip permanently silent. */
+    if (/createMediaElementSource/.test(src))
+      throw new Error('audition() builds its own MediaElementSource — that can only be created once per element, ever, and a duplicate leaves the clip permanently silent. Route through sync().');
+    if (!/\.sync\(/.test(src))
+      throw new Error('audition() does not call sync(), so the effect chain may not exist or the element may not be routed');
+  });
+
+  test('653 — it refuses the cases where auditioning would be a lie', { item: '653' }, async function () {
+    const L = (FM.scene.layers || []).filter(l => l.type === 'video' && FM.media.get(l.id))[0];
+    if (!L) return;                       // no real clip in this run
+    const keep = { reversed: L.reversed, muted: L.muted, visible: L.visible };
+    try {
+      /* Each of these is a state where the clip is SILENT in the real project. Auditioning it anyway
+         would be the app telling you what your project sounds like and being wrong — which is the
+         defect #215 spent three months on, in a different medium. */
+      L.reversed = true;
+      if (FM.audioFxLive.audition(L) !== 'reversed') throw new Error('a reversed clip was auditioned — its element is muted and its sound is rebuilt elsewhere, so this would play silence or the wrong thing');
+      L.reversed = keep.reversed; L.muted = true;
+      if (FM.audioFxLive.audition(L) !== 'silent') throw new Error('a muted layer was auditioned, so it would play sound the project does not have');
+      L.muted = keep.muted; L.visible = false;
+      if (FM.audioFxLive.audition(L) !== 'silent') throw new Error('a hidden layer was auditioned');
+    } finally {
+      L.reversed = keep.reversed; L.muted = keep.muted; L.visible = keep.visible;
+      if (FM.audioFxLive.stopAudition) FM.audioFxLive.stopAudition();
+    }
+  });
+
+  test('653 — the Hear button is on the expanded row, and it does not start by itself', { item: '653' }, async function () {
+    /* His rule, in the entry: it must not auto-play when the row opens. A panel that starts making
+       noise because you tapped it is a different feature from one that offers to. */
+    const src = String(FM.inspector && FM.inspector.refresh) + '';
+    const L = (FM.scene.layers || []).filter(l => l.type === 'video' && FM.media.get(l.id))[0];
+    if (!L) return;
+    const keepFx = L.audioFx;
+    try {
+      const reg = FM.audioFxRegistry;
+      if (!reg || !reg.makeInstance) throw new Error('FM.audioFxRegistry.makeInstance is gone');
+      const inst = reg.makeInstance('reverb') || reg.makeInstance((reg.all()[0] || {}).id);
+      if (!inst) return;
+      inst._expanded = true;
+      L.audioFx = [inst];
+      FM.selectLayer(L.id);
+      if (FM.inspector.openCategory) FM.inspector.openCategory('audiofx');
+      await new Promise(r => setTimeout(r, 300));
+      const btn = document.querySelector('.fx-hear');
+      if (!btn) throw new Error('the expanded audio-effect row has no Hear button — there is still no way to audition one');
+      if (FM.audioFxLive.auditioning())
+        throw new Error('opening the row started playing by itself — the entry says explicitly it must not');
+      if (!btn.getAttribute('aria-label')) throw new Error('the Hear button has no aria-label; it is an icon-only control');
+      // COLLAPSING THE ROW MUST STOP IT — the control that would stop it is the thing being hidden.
+      const inspSrc = document.documentElement ? '' : '';
+      const jsSrc = await (await fetch('../js/inspector.js?boot=' + Date.now())).text();
+      if (!/stopAudition/.test(jsSrc))
+        throw new Error('nothing in the inspector ever stops the audition — sound would keep playing from a panel you have closed, with nothing on screen to connect it to');
+    } finally {
+      L.audioFx = keepFx;
+      if (FM.audioFxLive.stopAudition) FM.audioFxLive.stopAudition();
+      FM.inspector.refresh();
+    }
+  });
 })();

@@ -77,6 +77,11 @@ window.FM = window.FM || {};
   // exists the element's audio flows ONLY through Web Audio — so a dangling source = a permanently
   // silent clip. Cached on the media rec (underscore = never serialized), which is replaced together
   // with the element when media is swapped, so a new element naturally gets a new source.
+  /* The one audition in flight, if any. Module-level and singular on purpose: two clips auditioning at
+     once is two things to listen to, and the stop paths (collapse, edit, panel close) would each have to
+     know which one they meant. */
+  let _aud = null;
+
   function sourceFor(m) {
     if (m._mes) return m._mes;
     try { m._mes = FM.audioCtx().createMediaElementSource(m.el); } catch (e) { m._mes = null; }
@@ -183,6 +188,107 @@ window.FM = window.FM || {};
       } catch (e) { try { m._boost.gain.gain.value = g; } catch (e2) {} }
       return true;
     },
+
+    /* ═══ HEAR IT WHILE YOU ARE CHANGING IT (queue 653) ══════════════════════════════════════════
+     * Ezra: "Note that we need a way to hear audio effects while messing with them".
+     *
+     * 🔑 WHY THIS COULD NOT BE DONE BY JUST PRESSING PLAY, which is the whole reason the entry exists
+     * and is written down nowhere else. Two facts close that door:
+     *   1. `applyAt` — the only thing that pushes a slider's new value into the live audio nodes — is
+     *      driven from ONE place, inside the playback tick. Paused, every element is paused and muted,
+     *      so a paused project is silent by construction.
+     *   2. And the obvious workaround defeats itself: an audio-fx slider writes through `FM.setProp`,
+     *      whose FIRST line is `if (FM.playing && FM.pause) FM.pause()`. So you press play, touch the
+     *      slider, and the transport stops on the first applied value. You get about one frame of
+     *      sound. THAT is what he is describing.
+     * ⚠️ So this must NOT go through the transport, and `FM.setProp` must not be "fixed" either — that
+     * pause exists to stop a transform edit writing keyframes at a moving time, and loosening it would
+     * touch every slider in the app.
+     *
+     * The audition therefore plays the element itself, with its own frame loop driving `applyAt`, while
+     * `FM.playing` stays false. Nothing about the transport changes, and a drag cannot kill the sound.
+     *
+     * ⚠️ IT ROUTES THROUGH `sync()` AND NEVER BUILDS ITS OWN SOURCE NODE. See `sourceFor` above: an
+     * element's MediaElementSource can be created once ever, and a dangling one is a permanently silent
+     * clip. It also refuses the cases where auditioning would be a lie: a reversed clip (its element is
+     * muted and its audio is synthesized elsewhere), a hidden or muted layer, and one silenced by solo —
+     * auditioning a clip that is silent in the real project would be worse than not offering it. */
+    audition(layer, opts) {
+      if (!layer || layer.type !== 'video') return false;
+      if (layer.reversed) return 'reversed';
+      if (layer.visible === false || layer.muted) return 'silent';
+      if (FM.soloSilenced && FM.soloSilenced(layer)) return 'solo';
+      const m = FM.media.get(layer.id);
+      if (!m || !m.el) return false;
+      this.stopAudition();
+      this.sync(layer);                     // builds/refreshes the chain and routes the element
+      try { FM.audioCtx(); } catch (e) {}   // inside the click stack, or iOS never starts it
+      const seconds = (opts && opts.seconds) || 2.5;
+      /* Start from where the playhead is if it is over the clip, and from the clip's own start if it
+         is not — auditioning silence because the playhead happens to sit past the end is the kind of
+         "it does nothing" that reads as a broken button. */
+      let t0 = 0;
+      try {
+        const local = FM.layerLocalTime ? FM.layerLocalTime(layer, FM.time) : null;
+        t0 = (local != null && local >= 0 && local <= (m.el.duration || Infinity)) ? local : (layer.trimStart || 0);
+      } catch (e) { t0 = layer.trimStart || 0; }
+      const wasMuted = m.el.muted, wasTime = m.el.currentTime, wasVol = m.el.volume;
+      /* Volume and mute are reconciled inside the playback tick, which is not running — so they are set
+         by hand here, and put back on stop. Without this the element is still muted from the last frame
+         of playback and the audition is silent for a reason nothing on screen would explain. */
+      try {
+        m.el.muted = false;
+        const v = FM.layerVolume ? FM.layerVolume(layer, FM.time) : 1;
+        m.el.volume = Math.max(0, Math.min(1, v == null ? 1 : v));
+        m.el.currentTime = t0;
+        const pr = m.el.play();
+        if (pr && pr.catch) pr.catch(() => {});
+      } catch (e) { return false; }
+      const self = this;
+      _aud = {
+        layer: layer, m: m, t0: t0, wasMuted: wasMuted, wasTime: wasTime, wasVol: wasVol, raf: 0,
+      };
+      const tick = function () {
+        if (!_aud || _aud.m !== m) return;
+        /* THREE WAYS IT MUST STOP ITSELF, all of them states where the button that would stop it is no
+           longer reachable. Sound with no visible source is the worst stuck state this app can have,
+           because there is nothing on screen to connect it to.
+           NOT stopped on an effect edit, deliberately: toggling an effect off while auditioning is how
+           you hear what it was doing, and the chain is rebuilt under us — `applyAt` reads m._afxChain
+           fresh every frame, so that keeps working by construction. */
+        if (FM.playing) { self.stopAudition(); return; }                                   // the transport takes over
+        const layers = (FM.scene && FM.scene.layers) || [];
+        if (layers.indexOf(layer) < 0) { self.stopAudition(); return; }                    // the layer was deleted
+        if (m.el.ended) { try { m.el.currentTime = _aud.t0; m.el.play(); } catch (e) {} }   // ran off the end
+        try {
+          if (m.el.currentTime - _aud.t0 > seconds) m.el.currentTime = _aud.t0;   // a short loop, so you hear the change repeatedly
+          /* THE LINE THE WHOLE FEATURE RESTS ON. applyAt re-reads the effect's params every call, so a
+             slider being dragged right now is heard on the next frame — that is "hear it while you are
+             messing with it", and it costs nothing extra because the chain already works this way. */
+          const scene = (layer.start || 0) + (m.el.currentTime - (layer.trimStart || 0));
+          if (m._afxChain) m._afxChain.applyAt(scene);
+        } catch (e) {}
+        _aud.raf = requestAnimationFrame(tick);
+      };
+      _aud.raf = requestAnimationFrame(tick);
+      return true;
+    },
+
+    stopAudition() {
+      if (!_aud) return false;
+      const a = _aud; _aud = null;
+      if (a.raf) { try { cancelAnimationFrame(a.raf); } catch (e) {} }
+      try {
+        a.m.el.pause();
+        a.m.el.muted = a.wasMuted;
+        a.m.el.volume = a.wasVol;
+        a.m.el.currentTime = a.wasTime;   // put the picture back where it was
+      } catch (e) {}
+      if (FM.requestRender) FM.requestRender();
+      return true;
+    },
+
+    auditioning(layer) { return !!_aud && (!layer || _aud.layer === layer); },
 
     // Exposed so the suite can assert the routing decision without standing up a real graph.
     needsBoost(layer) { return needsBoost(layer); },

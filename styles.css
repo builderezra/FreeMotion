@@ -8972,3 +8972,10 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
   .hm-card-more.hm-more-pop .hm-dot { animation: none; }
   .hm-card-more.hm-more-pop { background-color: var(--hm-more-fill, rgba(90, 199, 237, .16)); }
 }
+
+/* The audition button on an expanded audio-effect row (queue 653, v14.39). It sits with ⋯ and the
+   delete icon and inherits their box; only the state differs, because "playing" has to be readable at a
+   glance from across the panel — you are looking at the slider, not at this. */
+.fx-icon-btn.fx-hear.on { color: var(--accent, #5ac7ed); }
+.fx-icon-btn.fx-hear.on svg { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent, #5ac7ed) 55%, transparent)); }
+@media (prefers-reduced-motion: reduce) { .fx-icon-btn.fx-hear.on svg { filter: none; } }

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.38
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.39
 >
-> **State:** v14.38, 1095 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.39, 1098 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -26619,8 +26619,7 @@ re-opened #480, which I had marked done and had not fixed.
       on, that event never fires at all, which would have left the button lit for the rest of the
       session. A timer covers that.
 
-- [ ] **653 — There must be a way to HEAR an audio effect while you are adjusting it.** (27 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **653 — There must be a way to HEAR an audio effect while you are adjusting it.** (27 Aug.)
       His words, verbatim:
       > Note that we need a way to hear audio effects while messing with them
       **The gap:** audio effects can be dialled with no sound coming out, so every adjustment is guesswork
@@ -26631,6 +26630,29 @@ re-opened #480, which I had marked done and had not fixed.
       ➡️ **The obvious shape: scrubbing a parameter plays a short loop of the affected clip through the
       effect**, the way the SFX list auditions a row. **Do not start playback on open** — it must be a
       deliberate press, or the panel makes noise every time he opens it.
+
+
+      ═══ ✅ **29 AUG (v14.39) — AND THE REASON IT WAS IMPOSSIBLE IS WORTH KNOWING.** ═══
+      🔑 **You could not have done this by pressing play first, and here is why.** Two things closed
+      that door. The code that pushes a slider's new value into the live sound only runs *while the
+      transport is running* — so a paused project is silent by construction. And **touching any effect
+      slider pauses the transport on its first value.** So: press play, grab the slider, and the app
+      stops. **You get about one frame of sound.** That is what you were hearing, and nothing anywhere
+      in the code or this file recorded it.
+      ✅ **So the new Hear button does not use the transport at all.** It plays the clip itself in a
+      short loop with its own frame timer feeding the effect, while the transport stays stopped —
+      **so dragging a slider cannot kill it.** I did *not* "fix" the pause: it exists to stop a
+      transform edit writing keyframes at a moving time, and loosening it would touch every slider in
+      the app.
+      🎛 **Where it is:** on an effect's row once you have opened it — ▶ beside the ⋯ and the bin, and
+      it turns blue while playing. **It never starts on its own**, which was your rule.
+      🔇 **It refuses three cases and says why**, because auditioning them would be the app lying about
+      what your project sounds like: a reversed clip, a hidden or muted layer, and one that solo has
+      silenced.
+      🧪 **Measured end to end on a real clip with reverb on it:** chain built, sound playing and
+      advancing, transport stopped the whole time, **and a parameter changed mid-audition with the
+      sound still running** — the exact thing that was impossible before.
+      📸 **Picture of both button states sent 29 Aug.**
 
 - [ ] **654 — A first-time user could not work out how to LEAVE the audio edit menu.** (27 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**
