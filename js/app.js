@@ -4443,6 +4443,27 @@ window.FM = window.FM || {};
   }
   FM._runAudioOnlyExport = runAudioOnlyExport;   // read by the suite
 
+  /* ⚠️ "EXPORT ONLY THIS LAYER" HAD TO CLEAR THE OTHER SOLOS, AND DID NOT (queue 670b).
+   * It snapshotted every layer's solo, set the target's, and left the rest alone — but `solo` is
+   * SERIALISED into the project, so one switched on in an earlier session is still on now. "Export
+   * only this layer" therefore quietly included whatever else happened to be soloed, and nothing on
+   * screen said otherwise: the dialog talks about one layer. The snapshot was already being taken for
+   * exactly this, so clearing costs nothing and the restore in `finally` puts every one of them back,
+   * including the ones cleared here.
+   * PULLED OUT OF runExport SO IT CAN BE ASSERTED. runExport is a local closure behind a click
+   * handler, so the invariant — "after prep, exactly the target and its descendants are soloed" — was
+   * not reachable from a test. Exposing the seam is this file's own idiom (FM._tlHeadW, FM._exportSay)
+   * and is cheaper than a source-text assertion, which could only ever check that a line is present
+   * rather than that it works. */
+  function exportSoloPrep(target) {
+    const restore = FM.scene.layers.map(l => [l, l.solo]);
+    FM.scene.layers.forEach(l => { l.solo = false; });
+    target.solo = true;
+    if (target.type === 'group' && FM.groupDescendants) FM.groupDescendants(target.id).forEach(l => { l.solo = true; });
+    return restore;
+  }
+  FM._exportSoloPrep = exportSoloPrep;   // suite seam
+
   async function runExport() {
     expPrefsSave();   // whatever you just chose becomes the default everywhere, including a new project
     hideExportDialog();
@@ -4504,12 +4525,7 @@ window.FM = window.FM || {};
     // Solo the layer the PICKER chose (queue 174). One source of truth — the old checkbox is gone, so
     // there is no second way to ask for this and nothing to keep in step.
     const soloTarget = expSoloId ? FM.layerById(FM.scene, expSoloId) : null;
-    let soloRestore = null;
-    if (soloTarget) {
-      soloRestore = FM.scene.layers.map(l => [l, l.solo]);
-      soloTarget.solo = true;
-      if (soloTarget.type === 'group' && FM.groupDescendants) FM.groupDescendants(soloTarget.id).forEach(l => { l.solo = true; });
-    }
+    let soloRestore = soloTarget ? exportSoloPrep(soloTarget) : null;
     const fmt = (document.getElementById('exp-format') || {}).value || 'mp4';
     const tCb = document.getElementById('exp-transparent');
     const transparent = !!(tCb && tCb.checked && (fmt === 'gif' || fmt === 'frames'));

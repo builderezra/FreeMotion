@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.47
+> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.48
 >
-> **State:** v14.47, 1105 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.48, 1106 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -27307,8 +27307,7 @@ re-opened #480, which I had marked done and had not fixed.
       so its position did not matter; the new one takes it as a value, so building it too early threw in
       eight tests at once. Moved.
 
-- [ ] **670 — Export lies about itself: a stale audio flag, and "isolate one layer" that keeps the old solos.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **670 — Export lies about itself: a stale audio flag, and "isolate one layer" that keeps the old solos.**
       ✅ **BOTH VALIDATED BY ME.**
       **(a) The audio-drop flag is never reset in production.** `js/exporter.js:859` reads
       `} else if (FM._audioTrackDropped !== 'mix-silent') FM._audioTrackDropped = null;` — so
@@ -27325,6 +27324,21 @@ re-opened #480, which I had marked done and had not fixed.
       so "export only this layer" can silently include another. The `soloRestore` snapshot is already
       taken on the line above, so clearing them is free.
       🔒 Wants a gate: export twice in a row and assert the second report is not the first's.
+
+
+      ═══ ✅ **30 AUG (v14.48) — ONE HALF WAS ALREADY DONE; THE OTHER WAS REAL.** ═══
+      **(a) The stale audio flag — ALREADY FIXED in v14.35**, as part of #215. This entry had gone stale
+      claiming otherwise, which is worth saying: I checked the source rather than trusting the write-up.
+      **(b) REAL, and this is the one that would have bitten you quietly.** "Export only this layer"
+      switched the chosen layer's solo on and **left every other solo alone** — and solo is **saved with
+      the project**, so one you turned on days ago is still on. Your "export only this layer" would have
+      **included that layer too, with nothing on screen mentioning it**, because the dialog only talks
+      about the one you picked.
+      ✅ It clears the others first now. The snapshot needed to put them all back was **already being
+      taken on the line above**, so this cost nothing.
+      🧪 **Tested both directions**, because the obvious fix has an obvious trap: a solo from an earlier
+      session must not survive into the export, **and** it must be put back afterwards — otherwise the
+      fix would swap a wrong export for wiping your solo state every time you export.
 
 - [ ] **671 — The video encoder path is unhardened where the audio path is hardened.**
       **STATUS: 🟢 READY — nothing is stopping this**

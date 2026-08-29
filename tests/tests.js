@@ -54018,4 +54018,36 @@
       if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
     }
   });
+
+  test('670 — export-only-this-layer clears the solos that were already on', { item: '670' }, async function () {
+    /* From the external QA pass, validated in the source before anything was changed: export's layer
+       isolation set the target's `solo` and left every other one alone. But `solo` is SERIALISED into
+       the project — a solo switched on in an earlier session is still on when you open it — so "export
+       only this layer" quietly included whatever else happened to be soloed, and nothing on screen said
+       so, because the dialog talks about one layer.
+       The snapshot was already being taken on the line above for the restore, so clearing was free. */
+    if (typeof FM._exportSoloPrep !== 'function') throw new Error('FM._exportSoloPrep is gone — the export isolation invariant is unreachable again');
+    const keep = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      const mk = (n) => { const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 40, shapeH: 40 }); L.name = n; L.start = 0; L.duration = 1; FM.scene.layers.push(L); return L; };
+      const a = mk('stale solo from a previous session'), b = mk('the one being exported'), c = mk('untouched');
+      a.solo = true;                 // …left on from some earlier session, and saved with the project
+      b.solo = false; c.solo = false;
+      const restore = FM._exportSoloPrep(b);
+      if (!b.solo) throw new Error('the layer being exported was not soloed at all');
+      if (a.solo)
+        throw new Error('a solo left on from an earlier session survived into an "export only this layer" — that export would silently contain a layer the dialog never mentioned');
+      if (c.solo) throw new Error('a layer that was never soloed came out soloed');
+      /* AND THE RESTORE MUST PUT BACK WHAT IT CLEARED — otherwise the fix trades a wrong export for
+         losing his solo state every time he exports. */
+      if (!restore || !restore.length) throw new Error('no restore list was returned, so the cleared solos are gone for good');
+      restore.forEach(([l, v]) => { l.solo = v; });
+      if (!a.solo) throw new Error('the restore did not put back the solo it cleared — exporting would silently wipe his solo state');
+      if (b.solo) throw new Error('the restore left the export target soloed');
+    } finally {
+      FM.scene.layers.length = 0; keep.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); FM.refreshAll();
+    }
+  });
 })();
