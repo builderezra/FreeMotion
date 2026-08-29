@@ -178,14 +178,40 @@ done
 # `next_up` lives in tools/_classify.py beside classify(), because next.sh, status.sh and this gate are
 # three readers of ONE rule — and this file's own history says a rule in two places is the most expensive
 # bug shape in the project. It has self-tests, and the run above refuses if any of them break.
+# ⚠️ AND THE LIST OF WHAT THIS RELEASE CLOSES IS READ FROM THE DIFF, NOT FROM THE LOG LINE (29 Aug).
+# The line below used to be the ONLY source, and it greps for the words "queue 651". That is a rule
+# about PHRASING. Five releases in a row wrote "#651" instead — v14.31, v14.34, v14.35, v14.36,
+# v14.37 — so CLOSES came back EMPTY and this gate, added on 26 Aug precisely because obeying the
+# order was "a thing to remember", matched nothing and passed everything. It fired on v14.32 and
+# v14.33 only because those log lines happened to quote a code comment containing "queue 650", which
+# is worse than not firing: it looked alive.
+# This file's own header already names the shape — "a safeguard that reads like protection and cannot
+# fire is worse than none, because it stops you being careful" — about the backtick check. Same bug,
+# second instance, so the fix is the same one: ask the question of something that cannot be phrased
+# around. An item is closed by this release exactly when its checkbox goes `- [ ]` -> `- [x]` in
+# REQUESTS.md. `closed_in_diff` lives in tools/_classify.py beside the rest, and is self-tested there,
+# so this cannot quietly stop working either.
+# The prose list is still unioned in: it is what the "log says it closes q but q is still open" gate
+# above needs, and a release may legitimately name an item it only partly closed.
 CLOSES="$(printf '%s' "$LOGLINE" | grep -o 'queue [0-9]\+' | grep -o '[0-9]\+' | sort -u | tr '\n' ' ')"
 ORDER_MSG="$(CLOSES="$CLOSES" PARTIALS="$PARTIALS" python3 - <<'PYORDER'
-import io, os, sys
+import io, os, subprocess, sys
 sys.path.insert(0, 'tools')
 import _classify as C
 md = io.open('REQUESTS.md', encoding='utf-8').read()
 partials = set(os.environ.get('PARTIALS', '').split())
-closes = sorted(int(n) for n in os.environ.get('CLOSES', '').split() if n not in partials)
+closes = set(int(n) for n in os.environ.get('CLOSES', '').split() if n not in partials)
+try:
+    diff = subprocess.check_output(['git', 'diff', 'HEAD', '--', 'REQUESTS.md'],
+                                   stderr=subprocess.DEVNULL).decode('utf-8', 'replace')
+except Exception:
+    diff = ''
+for num, suf in C.closed_in_diff(diff):
+    if num is None:
+        closes.add(-1)            # an unnumbered entry — older than every number
+    elif str(num) not in partials:
+        closes.add(num)
+closes = sorted(closes)
 nxt = C.next_up(md)
 if nxt and closes:
     num, suf, head = nxt

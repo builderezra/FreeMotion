@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.37
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.38
 >
-> **State:** v14.37, 1095 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.38, 1095 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -24463,7 +24463,7 @@ re-opened #480, which I had marked done and had not fixed.
       RE-BOXED.** Both previous bugs were geometry changes dressed as colour changes.
 
 - [ ] **642 — The intro has a white box at the start and white bars top and bottom; and experiment
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       more with the home background design.** (27 Aug, screen recording at v13.63.)
       His words, verbatim, in full:
       > If you analyse this video you’ll notice that basically at the start there’s like a weird like white box that pops up. It’s a bit glitchy and also there’s like two white bars at the top and bottom when the screen fully zooms in like I feel like you could probably fix that with a little bit of effort just don’t make the video playback loading intro look shit just like try and fix it up a little bit and also you’ve made the background in the hub menu like white not white but like black now like you’ve made a good dark again and Justin said the top buttons are white which isn’t terrible I would just like you to experiment a bit more and see if there’s a nicer design and layout that you can create for the background
@@ -24472,6 +24472,18 @@ re-opened #480, which I had marked done and had not fixed.
       2. [x] **Two white bars, top and bottom, when it fully zooms in.**  ✅ the light film fills the viewport, so there is no surround left to mismatch — v14.26
       3. [ ] **Experiment with a nicer background design/layout for the home screen.** ⚠️ **#545 — draw
              options and show him.** He is asking to be shown alternatives, not handed one.
+             ✅ **29 AUG — FOUR OPTIONS DRAWN AND SENT** (A today's drifting pools · B ribbons ·
+             C horizon · D mesh, recommended). Each rendered at phone size with real cards on top, in
+             BOTH the light look he is on and the dark one, because the choice reads differently on
+             each ground. **Nothing will be built until he picks a letter** — that is what #545 asks
+             for, and building one anyway is the thing it exists to prevent.
+             **JUMPED: waiting on his letter.** This clause is a taste decision and cannot be made
+             here; the options are in his hands. Declared rather than silently reordered, per the rule
+             in CLAUDE.md — and it is declared LATE, which is its own admission: v14.36 and v14.37
+             closed #651 and #652 ahead of this entry without any declaration at all. That was not
+             caught at the time because ship.sh's oldest-first gate had been reading the release notes
+             for the words "queue 651" while I was writing "#651" — see v14.38, which fixes the gate to
+             read the tick itself.
       ✅ **"you've made the background… black now" IS ALREADY FIXED — he is on v13.63 and it is #641.**
       The colour wash sits on its own element; the dark drift layer underneath was painting over the
       light page below it. **Fixed and shipping in v13.64**, so that half of his message needs no work.

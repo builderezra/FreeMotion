@@ -246,6 +246,58 @@ def sort_key(num, suffix):
     return (1, num, suffix)
 
 
+
+# ═══ WHAT A RELEASE ACTUALLY CLOSES — READ FROM THE DIFF, NOT FROM THE PROSE ══════════════════════
+# 29 Aug. ship.sh's oldest-first gate worked out which items a release closes by grepping the
+# POLISH-LOG line for the words "queue 651". That is a rule about PHRASING, and phrasing is not a
+# thing a gate can rely on: five releases in a row (v14.31, v14.34, v14.35, v14.36, v14.37) wrote
+# "#651" instead, so `CLOSES` came back EMPTY and the gate — the one added on 26 Aug precisely because
+# "obeying it was a thing to remember" — sat there matching nothing and passing everything.
+#
+# This is the same defect shape ship.sh's own header already names about its backtick check: "A
+# safeguard that reads like protection and cannot fire is worse than none, because it stops you being
+# careful." It fired accidentally on v14.32 and v14.33, because those log lines happened to quote a
+# code comment containing the words "queue 650" — which is worse again, because it looked alive.
+#
+# So the question is asked of the thing that cannot be phrased around: REQUESTS.md's own diff. An item
+# is CLOSED by this release exactly when its checkbox goes from `- [ ]` to `- [x]` in it. No convention
+# to remember, no words to get right, and it stays true if the log entry is written in any style at all.
+def closed_in_diff(diff):
+    """Numbers whose entry checkbox goes `- [ ]` -> `- [x]` in a `git diff` of REQUESTS.md.
+
+    Returns a sorted list of (num, suffix). Unnumbered entries come back as (None, '') — they are the
+    oldest in the file, so a release closing one still has to satisfy the ordering gate."""
+    opened, closed = set(), set()
+    for line in (diff or '').split('\n'):
+        if not line or line[0] not in '+-':
+            continue
+        # `---`/`+++` are the file headers, not content
+        if line.startswith('---') or line.startswith('+++'):
+            continue
+        body = line[1:]
+        m = re.match(r'- \[( |x)\] \*\*(\d+)([a-z]?)[ —]', body)
+        if not m:
+            # …and the unnumbered entries, which have no number at all
+            m2 = re.match(r'- \[( |x)\] \*\*(?!\d)', body)
+            if not m2:
+                continue
+            key = (None, body[:60])
+            (closed if m2.group(1) == 'x' else opened).add(key)
+            continue
+        key = (int(m.group(2)), m.group(3))
+        (closed if m.group(1) == 'x' else opened).add(key)
+    # A number that only appears as `+- [x]` is a NEW entry added already-ticked, not a close of
+    # something that was open — those are logged all the time and must not trip the ordering gate.
+    out = []
+    for k in closed:
+        if k[0] is None:
+            if any(o[0] is None and o[1] == k[1] for o in opened):
+                out.append((None, ''))
+        elif k in opened:
+            out.append(k)
+    return sorted(set(out), key=lambda t: sort_key(t[0], t[1]))
+
+
 def next_up(md):
     """The single lowest OPEN + ACTIONABLE entry — the one CLAUDE.md says to work.
        Returns (num, suffix, header) or None. `num` is None for an unnumbered entry."""
@@ -424,6 +476,22 @@ _WORK = [
 ]
 
 
+# Each of these is the bug that made this function necessary, or one it must not cause.
+_DIFF = [
+    ('-- [ ] **651 — Explain what templates ARE.**\n+- [x] **651 — Explain what templates ARE.**',
+     [(651, '')], 'a plain tick is a close'),
+    ('+- [x] **674 — a brand new entry, logged already done.**',
+     [], 'an entry ADDED already-ticked is not closing anything that was open'),
+    ('-- [ ] **31b — a letter-suffixed item.**\n+- [x] **31b — a letter-suffixed item.**',
+     [(31, 'b')], 'letter suffixes survive — mis-sorting one is a bug this repo has already had'),
+    ('-      some prose about #642 and queue 650\n+      more prose about #642',
+     [], 'a number mentioned in prose is not a close — the whole point of not reading prose'),
+    ('-- [ ] **215 — no audio.**\n+- [ ] **215 — no audio.** extra note',
+     [], 'an entry edited but left OPEN is not a close'),
+    ('-- [ ] **648 — a tap.**\n+- [x] **648 — a tap.**\n-- [ ] **650 — hover.**\n+- [x] **650 — hover.**',
+     [(648, ''), (650, '')], 'two closes in one release, in order'),
+]
+
 if __name__ == '__main__':
     import sys as _s
     bad = 0
@@ -448,7 +516,12 @@ if __name__ == '__main__':
         if got != want:
             bad += 1
             print('FAIL: live_clauses expected %d got %d — %s' % (want, got, why))
-    _total = len(_CASES) + len(_ORDER) + len(_WORK) + len(_LIVE)
+    for diff, want, why in _DIFF:
+        got = closed_in_diff(diff)
+        if got != want:
+            bad += 1
+            print('FAIL: closed_in_diff expected %-16s got %-16s — %s' % (want, got, why))
+    _total = len(_CASES) + len(_ORDER) + len(_WORK) + len(_LIVE) + len(_DIFF)
     if bad:
         print('\n%d of %d classifier rules are broken. Each one was a real bug; do not push this.' % (bad, _total))
         _s.exit(1)
