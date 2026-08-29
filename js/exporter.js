@@ -769,6 +769,33 @@ window.FM = window.FM || {};
     return { blob: new Blob([buf], { type: 'audio/mp4' }), reason: '' };
   }
 
+  /* ═══ ONE BLIT, THREE PATHS — AND IT WAS ONLY EVER IN SCOPE FOR ONE (queue 669) ═══════════════
+   * `blit` used to be a `const` declared inside `run()`, and `runGif` and `runFrames` — sibling
+   * methods on the same object literal, not nested inside it — called it anyway. It is not in their
+   * scope. So BOTH of those formats threw `ReferenceError: blit is not defined` on their first frame
+   * and produced no file, and what the user saw was an alert reading "Export failed: blit is not
+   * defined". Two of the three export formats were dead.
+   * ⚠️ THE INTENT WAS WRITTEN DOWN AND THE CODE NEVER MATCHED IT: the comment above the old
+   * declaration says, in as many words, that blit "is shared by the MP4, GIF and frame paths".
+   * It cannot simply be hoisted — it closes over six locals of run() — so it becomes a factory each
+   * path builds with its own. `fit` may be null: the GIF and PNG paths derive their size from the
+   * project's own aspect, so they never letterbox, and passing null says that rather than making them
+   * compute an identity rectangle to satisfy a signature. */
+  function makeBlit(projCanvas, outW, outH, fit, barFillNow) {
+    return function (ctx) {
+      ctx.save();
+      if (fit && fit.letterboxed) {
+        ctx.globalCompositeOperation = 'source-over';
+        const barFill = barFillNow ? barFillNow() : null;
+        if (barFill) { ctx.fillStyle = barFill; ctx.fillRect(0, 0, outW, outH); }
+        else ctx.clearRect(0, 0, outW, outH);   // transparent export keeps the bars transparent
+      }
+      if (fit) ctx.drawImage(projCanvas, fit.dx, fit.dy, fit.dw, fit.dh);
+      else ctx.drawImage(projCanvas, 0, 0, outW, outH);
+      ctx.restore();
+    };
+  }
+
   FM.exporter = {
     prepareCaches,
     buildAudioMix,
@@ -799,17 +826,6 @@ window.FM = window.FM || {};
          transparent GIFs COLOURED letterbox bars. `blit` is shared by the MP4, GIF and frame paths and
          all three set the flag after this line, so the fill has to be asked for per frame. */
       const barFillNow = () => (FM._exportTransparent || P.background == null) ? null : P.background;
-      const blit = (ctx) => {
-        ctx.save();
-        if (fit.letterboxed) {
-          ctx.globalCompositeOperation = 'source-over';
-          const barFill = barFillNow();
-          if (barFill) { ctx.fillStyle = barFill; ctx.fillRect(0, 0, outW, outH); }
-          else ctx.clearRect(0, 0, outW, outH);   // transparent export keeps the bars transparent
-        }
-        ctx.drawImage(projCanvas, fit.dx, fit.dy, fit.dw, fit.dh);
-        ctx.restore();
-      };
       const bitrate = Math.min(80e6, opts.bitrate || Math.round(outW * outH * fps * 0.12));   // cap so 4K60 doesn't choke the encoder
       const start = (opts.from != null) ? Math.max(0, opts.from) : 0;
       const end = (opts.to != null) ? Math.min(P.duration, opts.to) : P.duration;
@@ -848,6 +864,11 @@ window.FM = window.FM || {};
       const projCanvas = document.createElement('canvas');
       projCanvas.width = P.width; projCanvas.height = P.height;
       const projCtx = projCanvas.getContext('2d');
+      /* ⚠️ BUILT HERE, NOT WHERE THE OLD `blit` SAT. The original was a closure and read `projCanvas`
+         lazily at call time, so its position above the declaration was harmless. A factory takes the
+         canvas as a VALUE, so constructing it early threw "Cannot access 'projCanvas' before
+         initialization" — caught by the suite on the first run after the change, in eight tests. */
+      const blit = makeBlit(projCanvas, outW, outH, fit, barFillNow);
       const outCanvas = document.createElement('canvas');
       outCanvas.width = outW; outCanvas.height = outH;
       const outCtx = outCanvas.getContext('2d');
@@ -1248,6 +1269,9 @@ window.FM = window.FM || {};
       const projCanvas = document.createElement('canvas');
       projCanvas.width = P.width; projCanvas.height = P.height;
       const projCtx = projCanvas.getContext('2d');
+      /* queue 669: this path's own blit. It never letterboxes — outW/outH come straight off the
+         project's aspect — so `fit` is null and the draw is a plain scale. */
+      const blit = makeBlit(projCanvas, outW, outH, null, null);
       const outCanvas = document.createElement('canvas');
       outCanvas.width = outW; outCanvas.height = outH;
       const outCtx = outCanvas.getContext('2d', { willReadFrequently: true });
@@ -1307,6 +1331,9 @@ window.FM = window.FM || {};
       const projCanvas = document.createElement('canvas');
       projCanvas.width = P.width; projCanvas.height = P.height;
       const projCtx = projCanvas.getContext('2d');
+      /* queue 669: this path's own blit. It never letterboxes — outW/outH come straight off the
+         project's aspect — so `fit` is null and the draw is a plain scale. */
+      const blit = makeBlit(projCanvas, outW, outH, null, null);
       const outCanvas = document.createElement('canvas');
       outCanvas.width = outW; outCanvas.height = outH;
       const outCtx = outCanvas.getContext('2d');

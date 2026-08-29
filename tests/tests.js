@@ -53973,4 +53973,49 @@
       try { if (keep == null) localStorage.removeItem('fm.lastAudioReport'); else localStorage.setItem('fm.lastAudioReport', keep); } catch (e) {}
     }
   });
+
+  test('669 — every export format actually produces a file', { item: '669' }, async function () {
+    /* GIF AND PNG-FRAMES WERE BOTH DEAD. `blit` was a `const` declared inside run(), and runGif and
+       runFrames — sibling methods on the same object literal, not nested in it — called it anyway. Both
+       threw `ReferenceError: blit is not defined` on their first frame, and the user saw an alert
+       reading "Export failed: blit is not defined". Two of the three video formats produced nothing.
+       ⚠️ AND THE SUITE COULD NOT SEE IT, which is the part this test is really for: nothing ever ran
+       those two paths FAR ENOUGH to reach the call. So the gate is not "does the function exist" — it
+       is a real export, small enough to be cheap, that gets past the first frame and hands back bytes.
+       The intent was written down the whole time: the comment above the old declaration says blit "is
+       shared by the MP4, GIF and frame paths". The code never matched it. */
+    if (!FM.exporter) throw new Error('FM.exporter is gone');
+    const P = FM.scene.project, keep = FM.scene.layers.slice();
+    const w0 = P.width, h0 = P.height, d0 = P.duration, f0 = P.fps;
+    const realURL = URL.createObjectURL, realClick = HTMLAnchorElement.prototype.click;
+    const made = [];
+    try {
+      P.width = 120; P.height = 120; P.duration = 0.4; P.fps = 10;
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 60, shapeW: 80, shapeH: 80, fill: '#4fd1ff' });
+      L.start = 0; L.duration = 0.4; FM.scene.layers.push(L);
+      FM.refreshAll();
+      // Nothing must actually download: the suite would fill his Downloads folder one run at a time.
+      URL.createObjectURL = function (b) { made.push({ size: (b && b.size) || 0, type: (b && b.type) || '' }); return realURL.call(URL, b); };
+      HTMLAnchorElement.prototype.click = function () {};
+      const opts = { scale: 1, fps: 10, from: 0, to: 0.4, onProgress: function () {} };
+      let gifErr = null, framesErr = null;
+      try { await FM.exporter.runGif(Object.assign({ name: 'x669g' }, opts)); } catch (e) { gifErr = e; }
+      try { await FM.exporter.runFrames(Object.assign({ name: 'x669f', format: 'png' }, opts)); } catch (e) { framesErr = e; }
+      if (gifErr) throw new Error('GIF export threw: ' + (gifErr.message || gifErr) + ' — this format is dead for every user who picks it');
+      if (framesErr) throw new Error('PNG-frames export threw: ' + (framesErr.message || framesErr) + ' — this format is dead for every user who picks it');
+      /* AND IT MUST HAVE PRODUCED BYTES. A path that swallows its own error and returns quietly would
+         pass the two checks above while still handing the user nothing. */
+      const gif = made.filter(m => /gif/i.test(m.type) && m.size > 0);
+      const zip = made.filter(m => /zip/i.test(m.type) && m.size > 0);
+      if (!gif.length) throw new Error('the GIF export finished without producing a gif blob — it did not throw, it just handed back nothing');
+      if (!zip.length) throw new Error('the PNG-frames export finished without producing a zip blob');
+    } finally {
+      URL.createObjectURL = realURL; HTMLAnchorElement.prototype.click = realClick;
+      P.width = w0; P.height = h0; P.duration = d0; P.fps = f0;
+      FM.scene.layers.length = 0; keep.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); FM.refreshAll();
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    }
+  });
 })();

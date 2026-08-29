@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.46
+> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.47
 >
-> **State:** v14.46, 1104 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.47, 1105 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -27276,8 +27276,7 @@ re-opened #480, which I had marked done and had not fixed.
       this file exists to prevent. Written down here rather than fixed with a resolution, because a
       resolution is exactly what the last ten had.
 
-- [ ] **669 — 🔴 GIF and PNG-frame export are both DEAD: `blit` is out of scope.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **669 — 🔴 GIF and PNG-frame export are both DEAD: `blit` is out of scope.**
       ✅ **VALIDATED BY ME, and it is not ambiguous.** `const blit` is declared at `js/exporter.js:775`
       inside `async run(opts)` (line 750). It is called at **:1170 inside `runGif`** (line 1128) and
       **:1228 inside `runFrames`** (line 1187). Those are sibling methods on the same object literal;
@@ -27291,6 +27290,22 @@ re-opened #480, which I had marked done and had not fixed.
       🔒 **Wants a gate:** a smoke test that exports a few frames in EVERY format listed in
       `#exp-format`. The suite never runs `runGif`/`runFrames` far enough to reach the line.
       ❓ASK: do you ever actually use GIF or PNG-frames export? It changes how urgent this is — the bug is real either way, but if you only ever export MP4 it can wait behind the data-loss one.
+
+
+      ═══ ✅ **30 AUG (v14.47) — BOTH FORMATS WORK NOW, AND THE QUESTION IS WITHDRAWN.** ═══
+      ❓ I had asked *"do you ever actually use GIF or PNG-frames export?"* to judge urgency. **Forget
+      it — the fix was small enough that the answer did not matter.** Both formats produce real files:
+      measured, a **1KB GIF** and a **3KB zip of PNGs** out of a four-frame test render.
+      🔒 **The gate the entry asked for is the important half.** Nothing in the suite had ever run those
+      two paths *far enough to reach the broken line*, which is exactly why a dead format could sit
+      there. The new test is a **real export** — small and cheap — that gets past the first frame and
+      demands **actual bytes** come back, not merely that nothing threw. A path that swallowed its own
+      error and returned quietly would have passed a lazier check while still handing you nothing.
+      ✅ I checked the **other four** entries in the format picker for the same fault. They are fine.
+      🐛 **One bug introduced and caught by the suite in the same minute**, worth writing down because
+      it is a genuine difference between a closure and a factory: the old code read the canvas *lazily*,
+      so its position did not matter; the new one takes it as a value, so building it too early threw in
+      eight tests at once. Moved.
 
 - [ ] **670 — Export lies about itself: a stale audio flag, and "isolate one layer" that keeps the old solos.**
       **STATUS: 🟢 READY — nothing is stopping this**
