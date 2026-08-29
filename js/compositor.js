@@ -12143,7 +12143,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // glyphs, or a media/other layer's bounds — with a pixel-aligned copy of the backdrop below it.
   // The layer's own effects (set on ctx before this runs) then grade/blur that copy = a maskable,
   // shaped adjustment layer over the whole scene.
-  let _cbA = null;
+  let _cbA = null, _cbNorm = null;
   /* Magnify Background's lens plate: `snap` scaled by z about (px,py) on the SAME pixel grid, with
    * the border pixel repeated across anything the scaled copy does not reach. The clamp is not
    * cosmetic — the caller composites this with `source-in`, so a transparent margin is a HOLE
@@ -12235,8 +12235,41 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * 35.4) — a whole canvas allocate + clear + full-frame blit per copybg layer per frame.
      * The `&& M` half is correctness, not speed: with no transform there is no anchor to scale
      * about, so fall back to the unscaled copy rather than guess an origin. */
+    /* ═══ THE SNAPSHOT AND THIS CANVAS ARE NOT ALWAYS THE SAME PIXEL GRID (queue 634) ═════════════
+     * Ezra: *"For some reason when I use copy background and pixelate it just copy's the project into
+     * the top left corner"* — a pixelated miniature of the whole comp, pinned at the layer's corner.
+     * 📐 MEASURED, and both halves of the reproduction matter. A magenta marker at comp (350,350),
+     * well outside the layer, counted INSIDE it:
+     *     render scale 1.00 → 0 hits (correct) · 0.50 → lands at ~175 · 0.34 → lands at ~119
+     * i.e. comp (X,Y) reappears at (X·rs, Y·rs). **It is exact: 350×0.5 = 175, 350×0.34 = 119.**
+     * WHY. `_bgSnap` is captured at the REAL TARGET's size. Every plate in this file is the target's
+     * size too, so "the snapshot already IS this pixel grid" held everywhere — except one.
+     * `drawPixelate` deliberately builds a PROJECT-SIZED plate and stamps `__fmRS = 1`, because a
+     * mosaic block is a project length and must not change with the preview scale. That plate is
+     * 1/rs larger than the snapshot, so blitting the snapshot into it 1:1 drops the whole comp into
+     * the corner at rs of its proper size. The footprint mask is drawn through `ctx.getTransform()`
+     * and stays correct, which is exactly why the SHAPE looked right and only its contents were a
+     * miniature.
+     * ⚠️ AT 1:1 NOTHING CHANGES, and that is asserted rather than hoped: `plateScale` is capped at 1,
+     * so a supersampled target also comes out equal-sized. Only a REDUCED preview — his phone, and the
+     * adaptive quality tier — could ever differ, which is why his exports were always clean.
+     * The plate carries the same OX/OY, so the two cover the same comp region and differ only in
+     * resolution: scaling the snapshot onto this canvas is the whole correction.
+     * It is done BEFORE `magnifyPlate` on purpose — that function also assumes `sw === cw`, and its
+     * edge-clamp blits read `snap.width - 1`, so Magnify Background was wrong on the same stack for
+     * the same reason. Normalising first fixes both with one change. */
+    let _snapSrc = layer._bgSnap;
+    if (_snapSrc && (_snapSrc.width !== cw || _snapSrc.height !== ch) && cw > 0 && ch > 0) {
+      if (!_cbNorm) _cbNorm = document.createElement('canvas');
+      if (_cbNorm.width !== cw || _cbNorm.height !== ch) { _cbNorm.width = cw; _cbNorm.height = ch; }
+      const nctx = _cbNorm.getContext('2d');
+      nctx.setTransform(1, 0, 0, 1, 0, 0);
+      nctx.clearRect(0, 0, cw, ch);
+      try { nctx.drawImage(_snapSrc, 0, 0, _snapSrc.width, _snapSrc.height, 0, 0, cw, ch); } catch (e) {}
+      _snapSrc = _cbNorm;
+    }
     const z = copyBgZoom(layer, t);
-    const snap = (z !== 1 && M) ? magnifyPlate(layer._bgSnap, cw, ch, z, M.e, M.f) : layer._bgSnap;
+    const snap = (z !== 1 && M) ? magnifyPlate(_snapSrc, cw, ch, z, M.e, M.f) : _snapSrc;
     try { a.drawImage(snap, 0, 0); } catch (e) {}
     a.globalCompositeOperation = 'source-over';
     ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);   // plate and target share the grid; ctx keeps its alpha/blend/filter (= the layer's effects grade the copy)

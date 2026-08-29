@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.23
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.24
 >
-> **State:** v14.23, 1072 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.24, 1073 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -23881,14 +23881,13 @@ re-opened #480, which I had marked done and had not fixed.
       demanding a separator on something whose whole design is being a line would draw two. The test
       branches, and the suite runs both widths.
 
-- [ ] **634 — 🔴 Copy Background + Pixelate crams the whole project into the top-left corner.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **634 — 🔴 Copy Background + Pixelate crams the whole project into the top-left corner.**
       (27 Aug, phone screenshot at v13.53 — a "Square" layer with **Copy Background** and **Pixelate**
       stacked, and a pixelated miniature of the entire project sitting in the top-left of the layer.)
       His words, verbatim:
       > For some reason when I use copy background and pixelate it just copy’s the project into the top left corner
 
-      1. [ ] **Copy Background followed by Pixelate must not shrink the copy into a corner.**
+      1. [x] **Copy Background followed by Pixelate must not shrink the copy into a corner.**  ✅ v14.24
       📍 **The screenshot is precise about the symptom:** the pixelated copy is a SMALL version of
       the whole comp, anchored at the layer's top-left, with the layer's real content drawn at full size
       below it. So the copy is being drawn at the wrong SCALE and the wrong ORIGIN, not merely offset.
@@ -23903,6 +23902,38 @@ re-opened #480, which I had marked done and had not fixed.
       whether this is Copy Background's output or Pixelate's reading of it.
       ⚠️ **Check Copy Background with OTHER pixel effects too** (blur, mosaic-like ones). If it is the
       hand-off rather than Pixelate, several effects are wrong and only this pair has been noticed.
+
+
+      ═══ ✅ **29 AUG (v14.24) — REPRODUCED EXACTLY, AND THIS ENTRY'S HYPOTHESIS WAS RIGHT.** ═══
+      📐 **THE REPRODUCTION IS THE DIAGNOSIS.** A magenta marker at comp (350,350), well OUTSIDE the
+      layer, counted INSIDE it:
+      | render scale | marker inside the layer |
+      |---|---|
+      | **1.00 (what an export uses)** | **0 — correct** |
+      | 0.50 | lands at ~175 |
+      | 0.34 | lands at ~119, layer centre solid magenta |
+      **Comp (X,Y) reappears at (X·rs, Y·rs) — exactly: 350×0.5 = 175, 350×0.34 = 119.**
+      🔑 **SO YOUR EXPORTS WERE ALWAYS FINE. Only the phone preview was wrong** — and that is worth
+      saying first, because a fix aimed at the export path would have been aimed at nothing.
+      **CAUSE, and the entry called the area correctly:** the backdrop snapshot is captured at the REAL
+      TARGET's size, and every plate in the compositor is the target's size too — so *"the snapshot is
+      already on this pixel grid"* held everywhere **except one place**. `drawPixelate` deliberately
+      builds a **project-sized** plate stamped `__fmRS = 1`, because a mosaic block is a project length
+      and must not change with the preview scale. Blitting a target-sized snapshot into that plate 1:1
+      drops the whole comp into the corner at `rs` of its proper size.
+      **That is also why the SHAPE looked right and only its contents were a miniature:** the layer's
+      footprint mask is drawn through the real transform and was never wrong.
+      ✅ **Fixed by scaling the snapshot onto whatever grid it is being drawn into.** At 1:1 the sizes
+      match and the call is the same blit as before, so every export and thumbnail is byte-identical —
+      `plateScale` is capped at 1, so even a supersampled target comes out equal-sized. Only a REDUCED
+      preview could ever differ.
+      🎁 **AND IT FIXES A SECOND EFFECT NOBODY HAD REPORTED YET.** `magnifyPlate` makes the same
+      `sw === cw` assumption and its edge blits read `snap.width - 1`, so **Magnify Background was
+      wrong on the same stack for the same reason.** Normalising before the zoom step fixes both.
+      🔒 **The test guards the easy wrong fix:** an effect that draws NOTHING would satisfy "no
+      miniature" perfectly, so it also asserts the layer genuinely shows the backdrop through itself
+      rather than its own fill, and that the marker is still drawn where it belongs — otherwise a zero
+      would prove the fixture broke rather than the bug being gone. Mutation-checked.
 
 - [ ] **635 — Pinch / Bulge's sliders jump too much, too fast — make them gradual.** (27 Aug, at v13.55.)
       **STATUS: 🟢 READY — nothing is stopping this**

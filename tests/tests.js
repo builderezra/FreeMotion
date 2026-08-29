@@ -46392,6 +46392,75 @@
     if (!/STUTTER/i.test(bad)) throw new Error('a stuttering sample lost its stutter verdict to the new scale branch: ' + bad);
   });
 
+  /* ═══ QUEUE 634 — COPY BACKGROUND + PIXELATE PUT THE WHOLE COMP IN THE CORNER ═════════════════
+   * Ezra: *"For some reason when I use copy background and pixelate it just copy's the project into
+   * the top left corner"* — a pixelated miniature of the entire project, pinned at the layer's corner.
+   * 📐 MEASURED, and the two conditions together are the whole diagnosis. A magenta marker at comp
+   * (350,350), well OUTSIDE the layer, counted inside it:
+   *     render scale 1.00 → 0 hits (correct) · 0.50 → lands at ~175 · 0.34 → lands at ~119
+   * Comp (X,Y) reappeared at (X·rs, Y·rs) — exactly: 350×0.5 = 175, 350×0.34 = 119.
+   * CAUSE: `_bgSnap` is captured at the REAL TARGET's size, and every plate in the compositor is the
+   * target's size too — except `drawPixelate`, which deliberately builds a PROJECT-SIZED plate stamped
+   * `__fmRS = 1` so a mosaic block stays a project length whatever the preview scale. Blitting the
+   * snapshot into that plate 1:1 drops the whole comp into the corner at rs of its proper size.
+   * ⚠️ SO HIS EXPORTS WERE ALWAYS FINE and only the phone preview was wrong — which is why a fix aimed
+   * at the export path would have been aimed at nothing. */
+  test('#634: Copy Background under a pixel effect is not miniaturised at preview scale', { item: '634' }, function () {
+    const S = FM.scene, P = S.project;
+    const keep = S.layers.slice(), ow = P.width, oh = P.height, od = P.duration;
+    try {
+      P.width = 400; P.height = 400; P.duration = 4;
+      S.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 120, shapeW: 160, shapeH: 160, fill: '#0000ff' });
+      L.start = 0; L.duration = 4;
+      const mark = FM.makeLayer('shape', { shape: 'rect', x: 350, y: 350, shapeW: 80, shapeH: 80, fill: '#ff00ff' });
+      mark.start = 0; mark.duration = 4;
+      const bg = FM.makeLayer('shape', { shape: 'rect', x: 200, y: 200, shapeW: 400, shapeH: 400, fill: '#202020' });
+      bg.start = 0; bg.duration = 4;
+      const cb = FM.fxRegistry.makeInstance('copybg'), px = FM.fxRegistry.makeInstance('pixelate');
+      if (!cb || !px) throw new Error('could not make copybg/pixelate — this test would prove nothing');
+      L.effects = [cb, px];
+      S.layers.push(L, mark, bg);          // top-first: L is on top
+
+      const run = (rs, fx) => {
+        L.effects = fx;
+        const cv = document.createElement('canvas');
+        cv.width = Math.round(400 * rs); cv.height = Math.round(400 * rs);
+        cv.__fmRS = rs; cv.__fmOX = 0; cv.__fmOY = 0;
+        const cx = cv.getContext('2d', { willReadFrequently: true });
+        cx.clearRect(0, 0, cv.width, cv.height);
+        FM.renderScene(cx, S, 1);
+        const d = cx.getImageData(0, 0, cv.width, cv.height).data;
+        const at = (X, Y) => { const x = Math.round(X * rs), y = Math.round(Y * rs); const o = (y * cv.width + x) * 4; return [d[o], d[o + 1], d[o + 2]]; };
+        const magenta = c => c[0] > 150 && c[2] > 150 && c[1] < 120;
+        let hits = 0;
+        for (let y = 45; y < 195; y += 10) for (let x = 45; x < 195; x += 10) if (magenta(at(x, y))) hits++;
+        return { hits, centre: at(120, 120), realMark: at(360, 360) };
+      };
+
+      for (const rs of [1, 0.5, 0.34]) {
+        const r = run(rs, [cb, px]);
+        if (r.hits) throw new Error('at render scale ' + rs + ', ' + r.hits + ' samples inside the layer show content from the comp\'s BOTTOM-RIGHT corner — the whole project is being miniaturised into the layer, which is his report');
+        if (!magentaish(r.realMark)) throw new Error('at render scale ' + rs + ' the marker is no longer drawn where it belongs — the fixture broke, so the zero above proves nothing');
+      }
+
+      /* ⚠️ AND COPY BACKGROUND MUST STILL DO ITS JOB. Every assertion above is satisfied by an effect
+         that draws NOTHING AT ALL, which is the easiest wrong fix here — so the layer has to actually
+         show the backdrop through itself rather than its own blue fill. */
+      for (const rs of [1, 0.5]) {
+        const r = run(rs, [cb, px]);
+        const c = r.centre;
+        if (c[2] > 150 && c[0] < 90) throw new Error('at render scale ' + rs + ' the layer still shows its own blue fill — Copy Background is not drawing the backdrop at all, so the miniature is gone only because nothing is being copied');
+        if (Math.abs(c[0] - 32) > 40 || Math.abs(c[1] - 32) > 40) throw new Error('at render scale ' + rs + ' the layer shows ' + c.join(',') + ' where the backdrop under it is 32,32,32');
+      }
+      function magentaish(c) { return c[0] > 150 && c[2] > 150 && c[1] < 120; }
+    } finally {
+      S.layers.length = 0; keep.forEach(l => S.layers.push(l));
+      P.width = ow; P.height = oh; P.duration = od;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   /* ═══ QUEUE 633 — THE ADD ROW LOST THE LINE THAT SEPARATES IT ═════════════════════════════════
    * Ezra: *"On the layer with the add layer it doesn't show the line separating layers for some
    * reason"*, circled on the span between the dashed box and the grip on the right.
