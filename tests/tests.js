@@ -53787,4 +53787,58 @@
       }
     });
   });
+
+  test('656 — the search bar is a light field on the light home, and its hint can be read', { item: '656' }, async function () {
+    /* Ezra: "Search bar needs to look good and reflect the new colour scheme". His screenshot shows a
+       white home with one DARK TEAL SLAB across it — the search field, the only dark surface on screen.
+       ⚠️ A RULE FOR THIS ALREADY EXISTED AND COULD NOT FIRE, which is why it survived the whole
+       light-theme sweep: it set background-color and border-color on #hm-search-input, but that input
+       declares `background: none; border: none` — it is a transparent box inside .hm-search-wrap, and
+       the WRAPPER is what paints. Only its `color` ever applied. That is the third time this project
+       has shipped a rule that reads as protection and cannot fire, so this test asserts the painted
+       result rather than the presence of a rule. */
+    const root = document.documentElement, prev = root.getAttribute('data-home');
+    const bar = document.getElementById('hm-searchbar');
+    const wrap = document.querySelector('.hm-search-wrap');
+    const hint = document.querySelector('.hm-search-hint');
+    if (!wrap) throw new Error('.hm-search-wrap is gone — the search field has no wrapper to paint');
+    const wasHidden = bar && bar.classList.contains('hidden');
+    const rgb = (v) => { const m = /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/.exec(v || ''); return m ? [+m[1], +m[2], +m[3]] : null; };
+    const lum = (c) => { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
+    try {
+      if (bar) bar.classList.remove('hidden');
+      root.setAttribute('data-home', 'light');
+      await new Promise(r => setTimeout(r, 60));
+      /* 1. THE FIELD ITSELF. Measured as luminance rather than matched against a colour, so the exact
+         white can be retuned without touching this: what must never come back is a DARK slab. */
+      const fill = rgb(getComputedStyle(wrap).backgroundColor);
+      if (!fill) throw new Error('the search wrapper has no background colour at all');
+      if (lum(fill) < 0.5)
+        throw new Error('the search field is still a dark slab on the light home (' + getComputedStyle(wrap).backgroundColor + ') — that is the one dark surface his screenshot is about');
+      /* 2. THE HINT LINE, and this is a measurement, not a preference. --text-dim is #93aeb9, which on
+         this ground computes to 2.18:1 — under WCAG's 3:1 floor for LARGE text, and this line is
+         11.5px. His words: "too pale to read". */
+      if (hint) {
+        const ink = rgb(getComputedStyle(hint).color);
+        const ground = rgb(getComputedStyle(document.getElementById('home-screen')).backgroundColor) || [244, 246, 250];
+        if (ink) {
+          const a = lum(ink), b = lum(ground);
+          const ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+          if (ratio < 4.5)
+            throw new Error('the search hint measures ' + ratio.toFixed(2) + ':1 on the light home — it is the ONLY place the date syntax is taught, and it was 2.18:1 when he called it too pale to read');
+        }
+      }
+      /* 3. AND THE DARK HOME MUST NOT HAVE BEEN TRADED FOR IT — the whole point of scoping to
+         [data-home="light"] is that the other ground keeps what it had. */
+      root.setAttribute('data-home', 'dark');
+      await new Promise(r => setTimeout(r, 60));
+      const darkFill = rgb(getComputedStyle(wrap).backgroundColor);
+      if (darkFill && lum(darkFill) > 0.5)
+        throw new Error('the search field is now light on the DARK home too — the light rule is not scoped');
+    } finally {
+      if (prev === null) root.removeAttribute('data-home'); else root.setAttribute('data-home', prev);
+      if (bar && wasHidden) bar.classList.add('hidden');
+      await new Promise(r => setTimeout(r, 40));
+    }
+  });
 })();

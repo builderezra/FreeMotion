@@ -722,9 +722,38 @@ html[data-home="light"] .hm-selbar {
   background: rgba(248, 250, 253, .96); border-top-color: rgba(16, 30, 52, .12); color: #10151f;
 }
 html[data-home="light"] .hm-selcount { color: #46566e; }
-html[data-home="light"] #hm-search-input {
-  background-color: rgba(255, 255, 255, .9); border-color: rgba(16, 30, 52, .14); color: #10151f;
+/* ═══ THE SEARCH BAR ON THE LIGHT HOME (queue 656, v14.43) ═══════════════════════════════════════
+   Ezra: "Search bar needs to look good and reflect the new colour scheme". His screenshot shows a
+   white home with a single DARK TEAL SLAB across it for the search field.
+   ⚠️ AND A RULE FOR THIS ALREADY EXISTED AND DID NOTHING — that is the part worth recording, because
+   it is why the bar survived the whole light-theme sweep. The block below used to set
+   `background-color` and `border-color` on `#hm-search-input`. But the input declares
+   `background: none; border: none` in styles.css — it is a transparent box sitting INSIDE the wrapper,
+   and the wrapper is what paints. So the two properties were inert and only `color` ever applied.
+   A rule that looks like the fix and cannot fire is the same defect shape this project has now hit
+   three times (the export warning, the perf banner, the ordering gate): it reads as protection, so
+   nobody looks again. The `color` is kept — that one works — and the paint moves to the element that
+   actually paints.
+   Every value below is already in use elsewhere on the light home: the .9 white of the cards, the
+   slate rim of .hm-card, and the ink from .hm-selcount. Nothing new is invented. */
+html[data-home="light"] #hm-search-input { color: #10151f; }
+html[data-home="light"] #hm-search-input::placeholder { color: #6b7688; }
+html[data-home="light"] .hm-search-wrap {
+  background-color: rgba(255, 255, 255, .9);
+  border-color: rgba(16, 30, 52, .14);
 }
+html[data-home="light"] .hm-search-ico { color: #5f6b7d; }
+html[data-home="light"] #hm-search-clear {
+  background-color: rgba(16, 30, 52, .07); color: #46566e;
+}
+html[data-home="light"] .hm-search-btn { background-color: rgba(255, 255, 255, .82); border-color: rgba(16, 30, 52, .12); color: #23304a; }
+/* ⚠️ THE HINT LINE IS A MEASUREMENT, NOT A PREFERENCE. `--text-dim` is #93aeb9, and on this ground it
+   computes to **2.18:1** — under WCAG's 3:1 floor for large text, let alone the 4.5:1 for 11.5px body
+   copy. His own words for it: "too pale to read". #5a6478 measures **5.51:1** on the same ground.
+   The styles.css note beside this line already argues the point for the DARK theme ("--text-dim, not
+   --text-faint: at 11px the faint tone is ~3:1 and this line is the ONLY place the date syntax is
+   taught") — the same reasoning, never applied to the light one. */
+html[data-home="light"] .hm-search-hint { color: #5a6478; }
 
 /* ================================================================================================
    THE LIGHT LOOK, PART TWO (queue 639) — he looked at v13.57 and sent back a correction.

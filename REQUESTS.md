@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.42
+> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.43
 >
-> **State:** v14.42, 1100 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.43, 1101 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -26756,8 +26756,7 @@ re-opened #480, which I had marked done and had not fixed.
       **Edit group is still in the menu and still does something**, which is the danger it was actually
       protecting against rather than the button it happened to use.
 
-- [ ] **656 — The SEARCH BAR still wears the dark theme and looks wrong on the light home.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **656 — The SEARCH BAR still wears the dark theme and looks wrong on the light home.**
       (27 Aug, phone screenshot at v13.69 — search open on the Projects tab, 4 selected.)
       His words, verbatim:
       > Search bar needs to look good and reflect the new colour scheme
@@ -26766,11 +26765,11 @@ re-opened #480, which I had marked done and had not fixed.
       *"Search a name or a date…"* on it and a dark round ✕ at its right end. Below it the hint line
       *"Vague is fine — 'yesterday', 'last week', '2 aug', 'august', or part of a name."* is a **very pale
       grey that barely reads** on the light background.
-      1. [ ] **The field itself** — it is the only dark surface on the screen. It should read as a light
+      1. [x] **The field itself** — it is the only dark surface on the screen. It should read as a light
              input on the light home: white/near-white fill, the same soft blue rim the cards and tabs
              already use, dark ink for what you type.
-      2. [ ] **The placeholder** — near-white on dark today; it needs to become a mid grey on light.
-      3. [ ] **The hint line under it** — too pale to read. **Same family of bug as #647 and #649**, and
+      2. [x] **The placeholder** — near-white on dark today; it needs to become a mid grey on light.
+      3. [x] **The hint line under it** — too pale to read. **Same family of bug as #647 and #649**, and
              that is now the THIRD time a light-theme rule has missed a member: `.hm-empty-title` (#647),
              the New-project dialog heading (#649), and this. ⚠️ **Worth fixing as a CLASS this time** —
              find every rule in `theme-glass.css` under `html[data-home="light"]` and check which text
@@ -26779,6 +26778,23 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **#545 applies** — it is a look, so draw it and show him before it ships.
       📎 **Colours already established on the light home, reuse rather than invent:** `.hm-name` `#0d1420`
       (strong ink), `.hm-sub` `#5a6478` (body), `.hm-mi` `#5f6b7d`, card rim `rgba(127,216,255,.30)`.
+
+
+      ═══ ✅ **30 AUG (v14.43) — AND A RULE FOR THIS ALREADY EXISTED. IT JUST COULD NOT WORK.** ═══
+      🔑 **That is why the search bar survived the whole light-theme sweep.** There was already a light
+      rule pointed at the search **input** — but the input is a *transparent box*: it declares no
+      background and no border of its own, and the **wrapper around it** is what paints. So the rule set
+      two properties that went nowhere, and only the text colour ever took effect. It looked done.
+      ⚠️ **Third time today.** The export "no audio" warning wrote to a line the render overwrites; the
+      perf banner asked a question that stopped being true; the release gate looked for words I was not
+      writing. All four look like protection and cannot fire — so the new test checks **the colour that
+      actually lands on screen**, not whether a rule exists.
+      ✅ **The field** is white with the same rim your cards use, the placeholder is a readable grey, and
+      the magnifier, the ✕ and the header's search button all take the light ink.
+      📐 **The hint line is a measurement, not taste.** It was **2.18:1** against that background —
+      below the floor for *large* text, and this line is 11.5px. That is your *"too pale to read"*
+      exactly. It measures **5.50:1** now, live. The dark-theme note beside it had already made this
+      argument years of releases ago; nobody had applied it to the light side.
 
 - [ ] **657 — Performance sample from the PC, 10 s: it reads HEALTHY, which is itself the finding.**
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
