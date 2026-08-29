@@ -8986,3 +8986,28 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
 .fx-icon-btn.fx-hear.on { color: var(--accent, #5ac7ed); }
 .fx-icon-btn.fx-hear.on svg { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent, #5ac7ed) 55%, transparent)); }
 @media (prefers-reduced-motion: reduce) { .fx-icon-btn.fx-hear.on svg { filter: none; } }
+
+/* ===== THE THUMBNAIL PIN READS BLUE, NOT YELLOW (queue 658, v14.44) =============================
+   Ezra: "When hovering over the benchmark that's for setting the thumbnail make it so that it turns
+   the playhead fully blue instead of" — the sentence stops there, and the missing words are "instead
+   of yellow". Asking cost one line and was worth it: the first guess was "instead of a hollow ring",
+   which would have been built confidently and missed him entirely.
+   AND THE COLOUR IS A CORRECTNESS FIX, not only a preference. Yellow is this app's own affordance for
+   "a tap here REMOVES this benchmark" — but the toggle behind that tap searches with `!m.thumb`, so on
+   the thumbnail pin it finds nothing and ADDS a benchmark instead. The screen promised remove and the
+   tap did add. Blue says something different is here, which is true.
+   The accent is the same blue the head already uses when it is over nothing at all, which is the point
+   — the thumbnail pin is not a benchmark, so the head has no benchmark news to report. */
+#tl-centerline.on-thumb::before,
+#tl-centerline.thumb-hover::before { border-top-color: var(--accent, #29d9bb); }
+#tl-centerline.on-thumb #tl-headtap::after {
+  background: var(--accent, #29d9bb);
+  box-shadow: 0 0 0 2px #eaf0f8, 0 0 9px rgba(41, 217, 187, .55);
+}
+/* ⚠️ THE COLLAR IS RE-STATED IN EVERY ONE OF THESE, and the file warns about it a few rules up: the
+   `box-shadow` here REPLACES rather than adds, so a rule that forgets `0 0 0 2px #eaf0f8` pops the ring
+   off the knob. Checked against the yellow twin rather than written from memory. */
+#tl-centerline.thumb-hover #tl-headtap:hover::after {
+  box-shadow: 0 0 0 2px #eaf0f8, 0 0 8px rgba(41, 217, 187, .5), inset 0 0 0 3px var(--accent, #29d9bb);
+}
+#time-readout.on-thumb, #time-readout.thumb-hover { color: var(--accent, #29d9bb); }

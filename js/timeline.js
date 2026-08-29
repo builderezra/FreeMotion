@@ -789,8 +789,8 @@ window.FM = window.FM || {};
       // Hovering a benchmark lights the timecode chip yellow. The marker's own glow is pure CSS
       // (:hover); only the chip needs JS, because CSS can't reach across to it. Separate class from
       // the parked-on-a-marker state so updateReadout's toggle can't clobber a live hover. (#61)
-      el.addEventListener('pointerenter', () => markHover(true));
-      el.addEventListener('pointerleave', () => markHover(false));
+      el.addEventListener('pointerenter', () => markHover(true, !!mk.thumb));
+      el.addEventListener('pointerleave', () => markHover(false, !!mk.thumb));
       el.addEventListener('dblclick', (ev) => {
         ev.stopPropagation();
         const input = document.createElement('input');
@@ -806,7 +806,9 @@ window.FM = window.FM || {};
     // A rebuild replaces the marker elements, so a pointerleave for the old one never arrives and
     // the chip would be stranded yellow. Re-derive from the browser's own hit-testing instead of
     // remembering: :hover is accurate for wherever the cursor actually is now. (#61)
-    markHover(!!rulerEl.querySelector('.tl-marker:hover'));
+    /* Both hit-tests, not one: re-deriving with a single boolean would light a hovered THUMBNAIL pin
+       yellow after every rebuild, which is the state queue 658 exists to remove. */
+    markHover(!!rulerEl.querySelector('.tl-marker:hover'), !!rulerEl.querySelector('.tl-marker.thumb:hover'));
   }
 
   /* The hover half — and since queue 364 it lights the PLAYHEAD as well as the chip. His words:
@@ -817,11 +819,14 @@ window.FM = window.FM || {};
      add or remove one — so the playhead is what should answer.
      Both are toggled together rather than moving it, because the chip's version is also what reports
      "you are parked ON one" on a phone, where there is no hover at all (#61). */
-  function markHover(on) {
+  /* `thumb` splits the hover the same way `on-thumb` splits the parked state (queue 658): the
+     thumbnail pin reads BLUE, an ordinary benchmark reads yellow. Two arguments rather than one class
+     name, so the caller cannot forget which kind it hovered. */
+  function markHover(on, thumb) {
     const ro = document.getElementById('time-readout');
-    if (ro) ro.classList.toggle('mark-hover', on);
+    if (ro) { ro.classList.toggle('mark-hover', on && !thumb); ro.classList.toggle('thumb-hover', on && !!thumb); }
     const cl = document.getElementById('tl-centerline');
-    if (cl) cl.classList.toggle('mark-hover', on);
+    if (cl) { cl.classList.toggle('mark-hover', on && !thumb); cl.classList.toggle('thumb-hover', on && !!thumb); }
   }
 
   function isSelected(id) { return id === FM.scene.selectedId || !!(FM.scene.selectedIds && FM.scene.selectedIds.indexOf(id) >= 0); }

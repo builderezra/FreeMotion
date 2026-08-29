@@ -633,13 +633,27 @@ window.FM = window.FM || {};
       + '\nTap: play / pause · double-click: type a time · hold: loop playback on/off';
     // Parked on a benchmark? Light the timecode chip in marker yellow. A phone has no hover, so
     // this is the half that actually reports "you are ON a marker" on device. (#61)
+    /* ⚠️ THE THUMBNAIL PIN IS NOT A BENCHMARK, AND THE YELLOW WAS LYING ABOUT IT (queue 658).
+     * Ezra: "When hovering over the benchmark that's for setting the thumbnail make it so that it turns
+     * the playhead fully blue instead of [yellow]".
+     * He asked for a colour, and the colour turns out to be a correctness fix. This test had NO
+     * `!mk.thumb` filter, so parking on the thumbnail pin lit the playhead marker-yellow — and yellow
+     * is the app's own affordance for "a tap here will REMOVE this benchmark". But the toggle that runs
+     * on that tap finds with `!m.thumb` (see FM.toggleMarker), so it finds nothing and ADDS a new
+     * benchmark instead. The screen promised remove and the tap did add.
+     * ⚠️ `&& !onMark` IS LOAD-BEARING. A benchmark and the thumbnail pin can share a frame — the
+     * comment on that find says so explicitly — and on a shared frame the tap DOES remove the
+     * benchmark. So yellow has to win there, or the fix would introduce the same lie pointing the
+     * other way. */
     const mks = FM.scene.project.markers || [], halfF = 0.5 / f;
-    const onMark = mks.some(mk => Math.abs(mk.t - FM.time) <= halfF);
+    const onMark = mks.some(mk => !mk.thumb && Math.abs(mk.t - FM.time) <= halfF);
+    const onThumb = mks.some(mk => mk.thumb && Math.abs(mk.t - FM.time) <= halfF) && !onMark;
     readoutEl.classList.toggle('on-mark', onMark);
+    readoutEl.classList.toggle('on-thumb', onThumb);
     /* …and the PLAYHEAD's head goes yellow with it (queue 364, towards clause 2). The head is where you
        tap to add or remove a bookmark now, so it has to say which of the two your tap will do. */
     const _cl = document.getElementById('tl-centerline');
-    if (_cl) _cl.classList.toggle('on-mark', onMark);
+    if (_cl) { _cl.classList.toggle('on-mark', onMark); _cl.classList.toggle('on-thumb', onThumb); }
     // Keep the open Move & Transform readouts (value boxes, dial, scale strip) in step with the
     // playhead for animated props — every time-change path passes through here. (#2)
     if (FM.inspector && FM.inspector.syncTransform) FM.inspector.syncTransform();

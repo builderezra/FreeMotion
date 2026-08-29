@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.43
+> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.44
 >
-> **State:** v14.43, 1101 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.44, 1102 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -26846,8 +26846,7 @@ re-opened #480, which I had marked done and had not fixed.
       the switch is. ⚠️ **It does not cry wolf above 75%**, because a report that hedges on every sample
       stops being read: that is the same failure the queue's own half-done warning had this morning.
 
-- [ ] **658 — Hovering the thumbnail benchmark should turn the playhead FULLY blue.** (28 Aug, at v13.79,
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **658 — Hovering the thumbnail benchmark should turn the playhead FULLY blue.** (28 Aug, at v13.79,
       two phone screenshots.)
       His words, verbatim:
       > When hovering over the benchmark that’s for setting the thumbnail make it so that it turns the playhead fully blue instead of
@@ -26868,6 +26867,24 @@ re-opened #480, which I had marked done and had not fixed.
       🔗 **Same element as #568 and #587** (the playhead knob: blue at rest, yellow only on a benchmark).
       Read what those two settled before changing anything — this is a third rule on one small circle
       and the three must not contradict each other.
+
+
+      ═══ ✅ **30 AUG (v14.44) — YOU ASKED FOR A COLOUR AND FOUND A BUG.** ═══
+      🚨 **Yellow means "a tap here REMOVES this benchmark" — and on the thumbnail pin that was false.**
+      The check that paints it yellow did not exclude the thumbnail pin, but the code behind the tap
+      *does*: it skips thumbnail markers, finds nothing to remove, and **adds a new benchmark instead**.
+      So the screen promised remove and the tap did add. **Making it blue fixes both halves at once**,
+      because blue says "something else is here", which is true.
+      ✅ **Blue now**, both parked on it and hovering it — the same blue the playhead already wears over
+      empty timeline, which is the right choice: the pin is not a benchmark, so there is no benchmark
+      news to report.
+      🔑 **And one case makes it honest rather than a repaint: a benchmark and the pin can sit on the
+      SAME frame.** There a tap genuinely does remove the benchmark — so yellow still wins there, or the
+      fix would be the same lie pointing the other way.
+      📐 **Measured live, all four:** benchmark yellow · **thumbnail pin blue** · nothing pale · shared
+      frame yellow.
+      🙏 **Worth noting:** the entry's own earlier guess at your missing words was *"instead of a hollow
+      ring"* — wrong, and it would have been built confidently. Asking cost one line.
 
 - [ ] **659 — The Custom format should say "Auto adjusts", not "Any size".** (28 Aug, at v13.79, phone
       **STATUS: 🟢 READY — nothing is stopping this**

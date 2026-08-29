@@ -53841,4 +53841,47 @@
       await new Promise(r => setTimeout(r, 40));
     }
   });
+
+  test('658 — the thumbnail pin turns the playhead blue, and the yellow stops lying', { item: '658' }, async function () {
+    /* Ezra: "When hovering over the benchmark that's for setting the thumbnail make it so that it turns
+       the playhead fully blue instead of" — the sentence stops there, and the missing words are
+       "instead of YELLOW". Asking cost one line and was worth it: the first guess was "instead of a
+       hollow ring", which would have been built confidently and missed him entirely.
+       ⚠️ AND IT IS A CORRECTNESS FIX, NOT ONLY A COLOUR. Yellow is this app's own affordance for "a tap
+       here REMOVES this benchmark". The toggle behind that tap searches with `!m.thumb`, so parked on
+       the thumbnail pin it finds nothing and ADDS a benchmark. The screen promised remove; the tap did
+       add. That is what the third case below is really guarding. */
+    const P = FM.scene.project;
+    const mk0 = P.markers, t0 = FM.time, f0 = P.fps;
+    const cl = document.getElementById('tl-centerline');
+    if (!cl) throw new Error('#tl-centerline is gone — the playhead this entry is about');
+    const at = async (t) => { FM.time = t; FM.refreshAll(); await new Promise(r => setTimeout(r, 120)); };
+    try {
+      P.fps = 30;
+      P.markers = [{ t: 1, label: 'Benchmark' }, { t: 2, thumb: true }];
+      await at(1);
+      if (!cl.classList.contains('on-mark')) throw new Error('parked on an ordinary benchmark the playhead is no longer marked yellow — that state is unchanged and must stay');
+      if (cl.classList.contains('on-thumb')) throw new Error('an ordinary benchmark is being treated as the thumbnail pin');
+      await at(2);
+      if (!cl.classList.contains('on-thumb'))
+        throw new Error('parked on the THUMBNAIL pin the playhead is not blue — that is the whole request');
+      if (cl.classList.contains('on-mark'))
+        throw new Error('the thumbnail pin still lights the playhead YELLOW, which promises a tap will REMOVE a benchmark — but the toggle skips thumb markers and would ADD one. That is the lie this fixes.');
+      await at(4);
+      if (cl.classList.contains('on-mark') || cl.classList.contains('on-thumb'))
+        throw new Error('the playhead is marked while parked on nothing');
+      /* ⚠️ THE SHARED FRAME, and this is the case that makes the fix honest rather than a repaint.
+         A benchmark and the thumbnail pin CAN sit on the same frame — the code comment on that find
+         says so outright — and there a tap really does remove the benchmark. So yellow has to win, or
+         the fix would introduce the same lie pointing the other way. */
+      P.markers = [{ t: 3, label: 'Benchmark' }, { t: 3, thumb: true }];
+      FM.refreshAll();
+      await at(3);
+      if (!cl.classList.contains('on-mark') || cl.classList.contains('on-thumb'))
+        throw new Error('on a frame carrying BOTH a benchmark and the thumbnail pin the playhead must stay yellow — a tap there does remove the benchmark, so blue would be the same lie in reverse');
+    } finally {
+      P.markers = mk0; P.fps = f0; FM.time = t0;
+      FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    }
+  });
 })();
