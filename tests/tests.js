@@ -54110,4 +54110,54 @@
     if (!/vidErr\s*=\s*e/.test(code) || !/if\s*\(vidErr\)\s*throw vidErr/.test(code))
       throw new Error('the video encoder error is no longer held and rethrown after flush, the way the audio encoder does it');
   });
+
+  test('672 — the layer-panel labels never collapse to nothing, at any band height', { item: '672' }, async function () {
+    /* From the external QA pass, and reproduced before anything was changed:
+         1920x1080 -> label 14px ✓ · 1440x900 -> 0px · 1280x800 -> 0px
+       The text is in the DOM — Colouring, Outline & Shadows, Mixing — and renders at ZERO height, so on
+       an ordinary laptop you get eight unlabelled icons.
+       ⚠️ WHY IT SURVIVED: the card is a fixed height by design, the label is a shrinkable flex child,
+       and `overflow: hidden` was there to CROP a long one. But a flex child shrinks to zero before
+       overflow ever gets a say, so it did not crop — it vanished. Measured at 1280x800, the card is
+       50.7px and padding + icon + gap took 48.9 of it, leaving 1.8px for the label.
+       And the 380px pass every release runs cannot see this: the phone has its own layout.
+       This sweeps the BAND HEIGHT, which is the real input, rather than resizing the window — the whole
+       block is arithmetic on --tl-h, so driving that covers every laptop in one pass. */
+    return await atWideWidth(async function () {
+      const root = document.documentElement;
+      const prev = root.style.getPropertyValue('--tl-h');
+      const keep = FM.scene.layers.slice();
+      try {
+        FM.scene.layers.length = 0;
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 200, y: 200, shapeW: 200, shapeH: 200 });
+        L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+        FM.refreshAll(); FM.selectLayer(L.id);
+        await new Promise(r => setTimeout(r, 250));
+        if (!document.querySelector('.cat-card')) return;   // this layout has no category cards here
+        for (const h of [180, 200, 220, 240, 264, 300, 353, 420]) {
+          root.style.setProperty('--tl-h', h + 'px');
+          await new Promise(r => setTimeout(r, 90));
+          const cards = [...document.querySelectorAll('.cat-card')];
+          if (!cards.length) continue;
+          for (const c of cards) {
+            const lab = c.querySelector('.cat-label');
+            if (!lab || !(lab.textContent || '').trim()) continue;
+            const lr = lab.getBoundingClientRect(), cr = c.getBoundingClientRect();
+            if (lr.height < 1)
+              throw new Error('at a band height of ' + h + 'px the label "' + lab.textContent.trim() + '" renders 0px tall — the card becomes an unlabelled icon, which is what a 1440x900 laptop was showing');
+            /* …AND IT MUST NOT ESCAPE THE CARD EITHER. Protecting the label from collapsing is one
+               line; doing it without bounding it just moves the fault, because a label that WRAPS
+               ("Outline & Shadows") would then hang outside a card that is a fixed height by design. */
+            if (lr.bottom > cr.bottom + 0.6)
+              throw new Error('at a band height of ' + h + 'px the label "' + lab.textContent.trim() + '" hangs ' + Math.round(lr.bottom - cr.bottom) + 'px below its card');
+          }
+        }
+      } finally {
+        if (prev) root.style.setProperty('--tl-h', prev); else root.style.removeProperty('--tl-h');
+        FM.scene.layers.length = 0; keep.forEach(l => FM.scene.layers.push(l));
+        FM.selectLayer(null); FM.refreshAll();
+        await new Promise(r => setTimeout(r, 80));
+      }
+    });
+  });
 })();

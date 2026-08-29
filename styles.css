@@ -7994,7 +7994,17 @@ body.fm-pushing #toast { z-index: 213; }
     --insp-extra: 0px;
     --cat-h: clamp(40px, calc((var(--tl-h, 264px) - 88px - var(--insp-extra, 0px)) / 3), 101px);
     --cat-pad: clamp(4px, calc((var(--tl-h, 264px) - 120px - var(--insp-extra, 0px)) / 12), 17px);
-    --cat-ico: clamp(14px, calc((var(--tl-h, 264px) - 120px) / 5.6), 26px);
+    /* ⚠️ THE ICON IS SIZED FROM WHAT IS LEFT AFTER THE LABEL, NOT FROM THE BAND (queue 672).
+       📐 MEASURED at 1280x800, where the card is 50.7px tall: padding took 20, the icon 21.4 and the
+       gap 7.5 — 48.9 of 50.7 — leaving **1.8px for the label**. The label is a shrinkable flex child,
+       so it did not crop, it COLLAPSED TO ZERO, and every one of the eight cards rendered as an
+       unlabelled icon. Confirmed at 1440x900 too; 1920x1080 was fine, which is why nobody saw it — and
+       the 380px pass every release runs cannot see it either, because the phone has its own layout.
+       The old form asked "how tall is the band" and hoped the rest fitted. This asks "what is left
+       once the label has its line" and gives the icon that, so the label can never be squeezed out by
+       construction rather than by a number that happens to work. 15px is the worst-case line box
+       (11.5px at 1.3). Verified across the range: unchanged 26px at a full band, 12-15px at the floor. */
+    --cat-ico: clamp(12px, calc(var(--cat-h) - 2 * var(--cat-pad) - var(--cat-inner-gap) - 15px), 26px);
     --cat-inner-gap: clamp(2px, calc((var(--tl-h, 264px) - 120px) / 16), 9px);
     /* The gap BETWEEN tiles comes down too. Three rows means two of them, and at the floor they were
        costing more height than the padding inside a tile. */
@@ -8012,7 +8022,23 @@ body.fm-pushing #toast { z-index: 213; }
     height: var(--cat-h); box-sizing: border-box;
     padding: var(--cat-pad) 8px; gap: var(--cat-inner-gap);
   }
-  body #inspector-panel .cat-label { overflow: hidden; }
+  /* `flex: none` is the other half of queue 672: `overflow: hidden` was meant to CROP a long label, but
+     a flex child shrinks to zero before overflow ever gets a say, so it vanished instead. Now it keeps
+     its line and the icon yields, which is the right way round — the label is the information and the
+     icon is the decoration. */
+  /* `flex: none` is the other half of queue 672: `overflow: hidden` was meant to CROP a long label, but
+     a flex child shrinks to zero before overflow ever gets a say, so it VANISHED instead. Now it keeps
+     its line and the icon yields, which is the right way round — the label is the information and the
+     icon is the decoration.
+     …and `max-height` is what finally makes the old comment true. With `flex: none` a label that WRAPS
+     ("Outline & Shadows" goes to two lines) would take its full 22px and spill out of a card that is a
+     fixed height by design. Bounded to exactly the room left after the padding, gap and icon, it shows
+     the first line and crops the second — which is what "a long label crops" always claimed and never
+     did. One readable line beats a silent nothing, and beats text hanging outside its own card. */
+  body #inspector-panel .cat-label {
+    overflow: hidden; flex: none;
+    max-height: calc(var(--cat-h) - 2 * var(--cat-pad) - var(--cat-inner-gap) - var(--cat-ico));
+  }
   /* The one per-type row that exists today. `:has()` is already used elsewhere in this file for exactly
      this kind of state-dependent layout. */
   body #inspector-panel:has(.tts-row) { --insp-extra: 48px; }   /* a long label crops; the card's ring does not */

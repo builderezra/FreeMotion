@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.49
+> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.50
 >
-> **State:** v14.49, 1108 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.50, 1109 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -27374,8 +27374,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⚖️ **Honest scope:** the report said its last two findings were not reproduced at runtime, and I
       have not reproduced them either. Fixed as hardening, not claimed as bugs you hit.
 
-- [ ] **672 — PC: the nine layer-panel labels are 0px tall on every common laptop resolution.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **672 — PC: the nine layer-panel labels are 0px tall on every common laptop resolution.**
       ✅ **VALIDATED BY ME, measured in the running app:**
       | viewport | label height |
       |---|---|
@@ -27390,6 +27389,25 @@ re-opened #480, which I had marked done and had not fixed.
       **The phone is fine** (labels render correctly at 414×896), which is why this never showed up in
       the 380px pass every release runs.
       ❓ASK: what resolution is your PC screen? If it is 1920×1080 you have never seen this, and it only bites you on a laptop — worth knowing before I decide how far up the queue it goes.
+
+
+      ═══ ✅ **30 AUG (v14.50) — FIXED, AND THE QUESTION IS WITHDRAWN.** ═══
+      ❓ I had asked *"what resolution is your PC screen?"* — only to judge how far up the queue this
+      went. **Forget it: the fix landed before the answer mattered.**
+      🔑 **Why it lasted.** The card is a fixed height, the label is a shrinkable flex child, and
+      `overflow: hidden` sat on it to **crop** a long label. But **a flex child shrinks to zero before
+      overflow ever gets a say** — so it did not crop, it disappeared. The comment above that rule
+      literally said *"a long label crops"*. It never did.
+      📐 **At 1280×800:** card 50.7px, and padding (20) + icon (21.4) + gap (7.5) took **48.9** of it —
+      **1.8px left for the label.**
+      ✅ **Two changes, both structural rather than tuned numbers.** The icon is now sized from *what is
+      left once the label has its line*, instead of from the band with the rest hoped to fit — so the
+      label cannot be squeezed out by construction. And the label is bounded to exactly the room
+      remaining, which finally makes that old comment true: **it crops now**, rather than vanishing.
+      📊 **Measured after, at all three sizes the report named:** 1280×800 ✅, 1440×900 ✅, and
+      1920×1080 **untouched** (icon still 26px).
+      ⚠️ **The 380px check every release runs could never have caught this** — the phone has its own
+      layout. The new test sweeps the *band height* instead, which is the real input.
 
 - [ ] **673 — Malformed project import creates a junk project and says nothing.**
       **STATUS: 🟢 READY — nothing is stopping this**
