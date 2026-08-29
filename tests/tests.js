@@ -46405,6 +46405,65 @@
     if (!/STUTTER/i.test(bad)) throw new Error('a stuttering sample lost its stutter verdict to the new scale branch: ' + bad);
   });
 
+  /* ═══ QUEUE 648 — A TAP MUST NOT DEPEND ON A CLICK THE BROWSER MAY NEVER SEND ═════════════════
+   * Ezra: *"When selecting projects in the home menu it seemingly doesn't let me tap to select and I
+   * have to do the drag hold thing or nothing else will work"*.
+   * ⚠️ I COULD NOT REPRODUCE IT, and this test is written around that honestly. A synthetic tap on a
+   * desktop browser selected correctly before the fix — the card gained `hm-sel` and its tick. What a
+   * synthetic tap cannot reproduce is the thing his phone does differently: **the click is the
+   * browser's to give.** Selection lived only in the click handler, and inside a scrollable list a
+   * touch the browser decides was a scroll fires `pointercancel` and NO click. That is exactly "tap
+   * does nothing, hold-and-drag works" — the drag path never needed a click.
+   * So the case that matters here is the MIDDLE one: a pointerup with no click behind it. On the old
+   * code that selected nothing at all. */
+  test('#648: a tap selects even when no click follows the pointerup', { item: '648' }, async function () {
+    if (!FM.home || !FM.home.open) throw new Error('FM.home is missing');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    return await atPhoneWidth(async function () {
+      FM.home.open(); await sleep(500);
+      let cards = document.querySelectorAll('.hm-card[data-pid]');
+      if (cards.length < 2 && FM.projects && FM.projects.create) {
+        await FM.projects.create({ name: 'tap A', width: 1080, height: 1920 });
+        await FM.projects.create({ name: 'tap B', width: 1080, height: 1920 });
+        FM.home.open(); await sleep(600);
+        cards = document.querySelectorAll('.hm-card[data-pid]');
+      }
+      if (cards.length < 2) throw new Error('needs at least two project cards to test selection');
+      const btn = [].slice.call(document.querySelectorAll('button')).filter(b => /select/i.test(b.textContent || ''))[0];
+      if (!btn) throw new Error('no Select button on the home header');
+      btn.click(); await sleep(350);
+      if (!document.body.classList.contains('hm-selecting')) throw new Error('the Select button did not enter select mode, so nothing below is testing selection');
+
+      const card = () => document.querySelectorAll('.hm-card[data-pid]')[1];
+      const isSel = () => { const c = card(); return !!(c && c.classList.contains('hm-sel')); };
+      const tap = async (withClick) => {
+        const c = card(), r = c.getBoundingClientRect();
+        const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2);
+        const opt = { bubbles: true, clientX: x, clientY: y, pointerType: 'touch', isPrimary: true, button: 0 };
+        c.dispatchEvent(new PointerEvent('pointerdown', opt));
+        await sleep(30);
+        c.dispatchEvent(new PointerEvent('pointerup', opt));
+        if (withClick) c.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
+        await sleep(220);
+        return isSel();
+      };
+
+      const start = isSel();
+      const withClick = await tap(true);
+      if (withClick === start) throw new Error('an ordinary tap (pointerup then click) did not change the selection at all');
+
+      /* THE ONE THAT WAS BROKEN: the browser withheld the click, as it does for a touch it decided was
+         a scroll. Before the fix this selected nothing and the card could only be taken by holding. */
+      const noClick = await tap(false);
+      if (noClick === withClick) throw new Error('a tap whose click the browser never sent did NOT change the selection — that is his report: the tap does nothing and only the hold-drag works');
+
+      /* AND IT MUST NOT DOUBLE-TOGGLE when both DO arrive, which is the obvious way to "fix" this and
+         be left with a card that selects and instantly deselects itself. */
+      const again = await tap(true);
+      if (again === noClick) throw new Error('a tap with both pointerup and click flipped the selection twice, so it landed back where it started');
+    });
+  });
+
   /* ═══ QUEUE 612 — THE HINGE, AND THE MEASUREMENT IT NEARLY BROKE ══════════════════════════════
    * He picked option A off the options page: *"also do hinge for the animations"*. One piece of
    * physics with the axis chosen per surface, so each menu swings open from the edge it comes from.

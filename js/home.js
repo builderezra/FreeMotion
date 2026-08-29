@@ -1457,6 +1457,7 @@ window.FM = window.FM || {};
     }
     card.addEventListener('click', () => {
       if (card._paintedAway) { card._paintedAway = false; cancelPress(card); return; }   // that "click" was the end of a drag-select
+      if (card._tapHandled) { card._tapHandled = false; return; }   // pointerup already took this tap — see queue 648 below
       if (selectMode) { cancelPress(card); toggleSel(id); } else defaultAction();
     });
     /* …and the GESTURES, which lived in projectCard and so existed on one tab in three (v6.17).
@@ -1510,12 +1511,34 @@ window.FM = window.FM || {};
       paint.y = ev.clientY;
       paintTo(ev.clientY);
     });
-    const finish = () => { clearTimeout(holdTimer); holdTimer = null; endPaint(); };
+    const finish = () => { clearTimeout(holdTimer); holdTimer = null; return endPaint(); };   // returns whether it was a DRAG
     // The release deliberately does NOT let go of the press: click fires next, and the push takes the
     // card over from the same scale, so unpressing here would flash it back to full size first. The
     // timer is the escape hatch for a tap that never opens anything (a second tap during a load, a
     // release that turned out to be the end of a drag-select).
-    card.addEventListener('pointerup', () => { finish(); releasePress(card); });
+    card.addEventListener('pointerup', (ev) => {
+      const dragged = finish();
+      releasePress(card);
+      /* ═══ A TAP IN SELECT MODE MUST NOT DEPEND ON THE CLICK ARRIVING (queue 648) ══════════════
+       * Ezra: *"When selecting projects in the home menu it seemingly doesn't let me tap to select and
+       * I have to do the drag hold thing or nothing else will work"*.
+       * ⚠️ I COULD NOT REPRODUCE IT, and this fix is written to say so honestly. A synthetic tap on a
+       * desktop browser selects correctly — measured: the card gains `hm-sel` and its tick. What that
+       * test cannot reproduce is the one thing his phone does differently: **the click is the browser's
+       * to give.** Selection happened ONLY in the click handler, and inside a scrollable list a touch
+       * that the browser decides was a scroll fires `pointercancel` and NO click. That is precisely
+       * "tap does nothing, hold-and-drag works" — the drag path never needed the click.
+       * So the tap is handled where it cannot be taken away: on pointerup, when the gesture did not
+       * move. The click still handles the mouse case, and `_tapHandled` stops the two double-toggling
+       * — cleared on a 0ms timeout for the same reason `_paintedAway` is, because that runs after the
+       * click that may or may not follow. */
+      if (selectMode && !dragged && !card._paintedAway) {
+        card._tapHandled = true;
+        setTimeout(function () { card._tapHandled = false; }, 0);
+        cancelPress(card);
+        toggleSel(id);
+      }
+    });
     card.addEventListener('pointercancel', () => { finish(); cancelPress(card); });
     return !selectMode;   // caller uses this to decide whether to append its ⋯ button
   }

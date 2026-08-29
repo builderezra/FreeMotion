@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.30
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.31
 >
-> **State:** v14.30, 1081 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.31, 1082 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -26290,8 +26290,7 @@ re-opened #480, which I had marked done and had not fixed.
              `#0d1420`.** Matched to `.hm-name`, the darkest ink the light home already uses, so a
              heading weighs the same as a project card's title rather than being a new one-off black.
 
-- [ ] **648 — Home menu: tapping a project to select it does not work — only the press-and-hold drag does.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **648 — Home menu: tapping a project to select it does not work — only the press-and-hold drag does.**
       (27 Aug, at v13.69.)
       His words, verbatim:
       > When selecting projects in the home menu  it seemingly doesn't let me tap to select and I have to
@@ -26304,6 +26303,28 @@ re-opened #480, which I had marked done and had not fixed.
       ➡️ **Measure it before building:** in select mode, dispatch a plain tap (pointerdown/up with no
       movement) on a project card and read whether it becomes selected. If the tap is being swallowed by
       the long-press/drag recogniser, the fix is a movement/time threshold, not new tap code.
+
+
+      ═══ ⚠️ **29 AUG (v14.31) — FIXED, BUT I NEVER REPRODUCED IT. Read that before trusting this.** ═══
+      📐 **MEASURED FIRST, exactly as this entry demanded, and the measurement disagreed with you:** a
+      plain synthetic tap on a project card in select mode **selected correctly** — the card took
+      `hm-sel` and drew its tick. So on a desktop browser, tap-to-select works.
+      **I also checked the obvious suspect and cleared it.** #617's `selectify` routing was not the
+      cause, and the `_paintedAway` flag that once *"quietly ate a genuine tap"* was fixed back in
+      **v4.10**, long before your v13.69 report.
+      🔑 **BUT THERE IS ONE THING A SYNTHETIC TAP CANNOT REPRODUCE, AND IT FITS YOUR REPORT EXACTLY:
+      the click is the BROWSER'S to give.** Selection lived only in the `click` handler. Inside a
+      scrollable list, a touch the browser decides was a scroll fires `pointercancel` and **no click at
+      all** — and the hold-and-drag path never needed a click, which is why it kept working. *"Tap does
+      nothing, I have to do the drag hold thing"* is what that failure looks like from your side.
+      ✅ **So the tap is now handled where it cannot be taken away** — on `pointerup`, when the gesture
+      did not move. The click still handles the mouse, and a flag stops the two double-toggling.
+      **Measured, all three cases:** pointerup+click toggles ONCE · **pointerup with no click toggles**
+      (this did nothing before) · a further tap toggles back. No double-toggle.
+      ⚠️ **HONEST LIMIT: this is a fix for a mechanism that fits your description, not for a failure I
+      watched happen.** If tapping still misses on your phone, tell me and the next step is different —
+      it would mean the tap is not reaching the card at all, which is a different bug in a different
+      place.
 
 - [x] **649 — 🔴 The "New project" dialog's TITLE is unreadable — dark ink on the dark panel.**
       ✅ **DONE v13.97 — and he had to ask twice, which is the part worth recording.**
