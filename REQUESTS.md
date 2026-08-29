@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.31
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.32
 >
-> **State:** v14.31, 1082 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.32, 1085 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -26364,8 +26364,7 @@ re-opened #480, which I had marked done and had not fixed.
       of a label next to it, and assert the heading is not darker than the body around it. **The generic
       form of this bug is "a family rule that misses one member", and it has now happened twice.**
 
-- [ ] **650 — PC: hovering a project card should expand it, like the Add menu does in the editor.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **650 — PC: hovering a project card should expand it, like the Add menu does in the editor.**
       (27 Aug.)
       His words, verbatim:
       > Make it on the pc version when hovering ur curser over projects it exapnds them or something,
@@ -26377,6 +26376,32 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **Hover only — must not fire on touch.** A `:hover` rule on a phone latches on tap and stays
       stuck until you tap elsewhere. Gate it behind `@media (hover: hover) and (pointer: fine)`.
       ⚠️ **#545 applies** — it is a look, so show him before it ships.
+
+
+      ═══ ✅ **29 AUG (v14.32) — DONE, AND IT IS THE ADD MENU'S OWN TREATMENT, NOT A NEW ONE.** ═══
+      🔑 **You named the reference, so nothing here was invented.** The add menu's hover is three things
+      and the home screen now gets the same three: a wide faint **wash** under the list, a one-pixel
+      **ring** on each card lit from wherever your cursor is, and a brighter face on the card you are
+      over. On top of that is your own word — **"expands"** — so the card also comes forward: it grows
+      1.8% and lifts a pixel, with a shadow under it. **One tracker, two surfaces**, not a second copy
+      of the code (#116 is the standing warning about what happens when those drift apart).
+      📐 **A transform, not padding.** Growing the actual box would push every card below it down, so
+      the whole list would twitch as the cursor crossed it. A transform is composited — the card grows
+      and nothing else moves.
+      ⚠️ **AND THE ONE THING THAT WOULD HAVE SHIPPED BROKEN, CAUGHT BY MEASURING RATHER THAN LOOKING.**
+      The add menu's ring colour is a pale cyan built for a **dark** panel. Lifted straight onto the
+      home screen it **measured 1.37 contrast against a white card** — which is nothing. Your home
+      screen is the LIGHT one, so the feature would have been correct, green, pushed, and invisible.
+      The ring now takes its colour from the ground it is on: **4.78 on light**, the original cyan on
+      dark. There is a test that fails if either drops below 3.
+      ⚠️ **Hover only, exactly as this entry demanded** — gated behind `(hover: hover) and
+      (pointer: fine)`, which a finger cannot satisfy, so it can never latch on your phone.
+      **Measured at 380px: transform `none`, ring opacity `0`.** The phone is untouched.
+      🧪 **Three collisions checked rather than assumed, all three now tested:** a **press** still beats
+      the hover (measured: hover 1.018 → press 0.965 → back to 1.018); a **pinned** card keeps its blue
+      inset rail while hovered; and the **OPEN card's spinning glint** still sits on top of the lit ring
+      (z-index 3 over 2).
+      📸 **You have the picture** — sent 29 Aug, cursor on "Kitchen reveal".
 
 - [ ] **651 — Explain what templates ARE on the empty Templates panel, instead of hiding it behind a button.**
       **STATUS: 🟢 READY — nothing is stopping this**

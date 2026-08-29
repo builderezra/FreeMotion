@@ -5697,7 +5697,16 @@ window.FM = window.FM || {};
    * FM.playing — a decoration must never take frames from playback. Off entirely under
    * prefers-reduced-motion, and desktop-only, which is what he asked for. */
   function setupPanelGlow() {
-    const panel = document.getElementById('inspector-panel');
+    trackGlow(document.getElementById('inspector-panel'), true);
+    /* THE SAME TRACKER ON THE HOME LIST (queue 650). Ezra asked for the project cards to react to the
+       cursor "kinda like how in the editing menu it does the same thing when hovering over the add
+       menu" — he named the reference, so this is that mechanism pointed at a second surface rather
+       than a second mechanism. One writer, two hosts, which is #116's standing warning about what
+       happens when two surfaces meant to feel identical each get their own copy of the code.
+       No playback guard here: the home screen is not on screen while anything is playing. */
+    trackGlow(document.querySelector('#home-screen .hm-scroll'), false);
+  }
+  function trackGlow(panel, guardPlayback) {
     if (!panel) return;
     if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     /* COALESCED ON A CLOCK, NOT ON requestAnimationFrame — and that is not a style preference.
@@ -5713,7 +5722,7 @@ window.FM = window.FM || {};
     panel.addEventListener('pointermove', (e) => {
       if (e.pointerType === 'touch') return;             // a finger has no hover; this is the PC feature
       if (!matchMedia('(min-width: 701px)').matches) return;
-      if (FM.playing) return;                            // never spend a playback frame on a decoration
+      if (guardPlayback && FM.playing) return;           // never spend a playback frame on a decoration
       const now = (window.performance && performance.now) ? performance.now() : Date.now();
       if (now - last < 16) return;
       last = now;
@@ -5727,7 +5736,7 @@ window.FM = window.FM || {};
        it ran, which reads as a stuck highlight rather than as something reacting. FM.play calls this;
        there is no play EVENT to listen for, and inventing one would have been a second source of truth
        for something the function already knows. */
-    FM._panelGlowOff = off;
+    if (guardPlayback) FM._panelGlowOff = off;
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setupPanelGlow);
   else setupPanelGlow();

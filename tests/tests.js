@@ -52983,4 +52983,97 @@
       FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
     }
   });
+
+  /* ═══ QUEUE 650 — A PROJECT CARD COMES FORWARD UNDER THE CURSOR ═══════════════════════════════════
+     Ezra: "Make it on the pc version when hovering ur curser over projects it exapnds them or
+     something… kinda like how in the editing menu it does the same thing when hovering over the add
+     menu".
+     THREE THINGS ARE WORTH A TEST HERE AND THEY ARE NOT THE OBVIOUS ONE. `:hover` itself cannot be
+     forced from script, and asserting a scale would only be re-reading a stylesheet. What CAN break
+     silently, and would break in a way that reads as "the app got worse", is the pair of guards and
+     the colour. */
+  test('650 — the card hover is gated so a finger can never latch it, and a press still beats it', async function () {
+    const css = await (await fetch('../styles.css?boot=' + Date.now())).text();
+    const i = css.indexOf('queue 650');
+    if (i < 0) throw new Error('the queue-650 hover block is gone from styles.css');
+    const block = css.slice(i, i + 4200);
+    /* THE LATCH. A bare :hover sticks on a phone — you tap a card and it stays expanded until you tap
+       somewhere else. (hover: hover) and (pointer: fine) is the one gate a finger cannot satisfy, and
+       the entry called for it by name. */
+    if (!/@media \(min-width: 701px\) and \(hover: hover\) and \(pointer: fine\)/.test(block))
+      throw new Error('the hover block lost its (hover: hover) and (pointer: fine) gate — on a phone the expand would latch on tap and stay stuck');
+    /* THE PRESS. .hm-card.fm-card-press is a plain scale(.965) at the SAME specificity as
+       .hm-card:hover, so whichever sits later in the file wins. Excluding it by name is what makes
+       that immune to either rule moving. */
+    if (!/\.hm-card:hover:not\(\.fm-card-press\)/.test(block))
+      throw new Error('the hover rule no longer excludes .fm-card-press — pressing a card you are hovering would no longer shrink it');
+    /* THE PINNED RAIL. is-pinned carries an INSET shadow; a hover shadow at equal specificity replaces
+       it, and the pinned marker would blink out under the cursor. */
+    if (!/\.hm-card\.is-pinned:hover:not\(\.fm-card-press\)[^}]*inset 3px 0 0/.test(block))
+      throw new Error('the pinned card hover no longer restates its inset rail — the pin marker would vanish while hovered');
+  });
+
+  test('650 — the cursor ring is a colour the light home can actually show', async function () {
+    /* ⚠️ THIS IS THE BUG THIS TEST EXISTS FOR, AND IT WAS MEASURED, NOT IMAGINED. The add menu's ring
+       is rgba(150, 232, 255, .85) — a highlight built for a DARK panel. Lifted onto the home screen it
+       computed to a 1.37 contrast ratio against a white card, i.e. nothing at all, on the light home
+       he actually uses. It would have shipped correct and invisible. */
+    const sc = document.querySelector('#home-screen .hm-scroll');
+    if (!sc) throw new Error('no .hm-scroll to read the ring colour from');
+    const root = document.documentElement, prev = root.getAttribute('data-home');
+    function rgba(v) {
+      const m = /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/.exec(v || '');
+      return m ? [+m[1], +m[2], +m[3]] : null;
+    }
+    function lum(c) {
+      const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+      return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+    }
+    try {
+      root.setAttribute('data-home', 'light');
+      await new Promise(r => setTimeout(r, 40));
+      const light = rgba(getComputedStyle(sc).getPropertyValue('--hm-ring-hi'));
+      if (!light) throw new Error('--hm-ring-hi is not set on .hm-scroll — the ring has no colour to light with');
+      // Against a white card. Anything under 3 is the invisible ring this test exists to prevent.
+      const ratio = (1.05) / (lum(light) + 0.05);
+      if (ratio < 3) throw new Error('the light-home ring is invisible on a white card: contrast ' + ratio.toFixed(2) + ' (the dark-panel cyan measured 1.37, which is the bug)');
+      root.setAttribute('data-home', 'dark');
+      await new Promise(r => setTimeout(r, 40));
+      const dark = rgba(getComputedStyle(sc).getPropertyValue('--hm-ring-hi'));
+      if (!dark) throw new Error('--hm-ring-hi is not set for the dark home');
+      // …and it must genuinely be a DIFFERENT colour, or one ground is being served the other's value.
+      if (dark[0] === light[0] && dark[1] === light[1] && dark[2] === light[2])
+        throw new Error('the light and dark homes share one ring colour — one of the two grounds is showing a ring it cannot render');
+      if (lum(dark) <= lum(light))
+        throw new Error('the dark home ring is no brighter than the light one — the two are the wrong way round');
+    } finally {
+      if (prev === null) root.removeAttribute('data-home'); else root.setAttribute('data-home', prev);
+      await new Promise(r => setTimeout(r, 40));
+    }
+  });
+
+  test('650 — the home list tracks the cursor, and ignores a finger', async function () {
+    return await atWideWidth(async function () {
+      const sc = document.querySelector('#home-screen .hm-scroll');
+      if (!sc) throw new Error('no .hm-scroll');
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;   // the tracker stands down, correctly
+      sc.classList.remove('glow-on');
+      sc.style.removeProperty('--glow-x');
+      /* A FINGER FIRST, because a tracker that lit up for touch is how the phone would inherit a PC
+         decoration nobody asked for — and the ring would then sit stuck wherever the last tap was. */
+      sc.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'touch', clientX: 400, clientY: 300 }));
+      if (sc.classList.contains('glow-on'))
+        throw new Error('a touch lit the home glow — this is the PC feature, and on a phone it would stick where you last tapped');
+      await new Promise(r => setTimeout(r, 20));
+      sc.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse', clientX: 412, clientY: 318 }));
+      if (!sc.classList.contains('glow-on'))
+        throw new Error('a mouse move over the home list did not light the glow — the tracker is not attached');
+      const x = sc.style.getPropertyValue('--glow-x');
+      if (!/^\d+px$/.test(x))
+        throw new Error('the tracker did not write --glow-x (got ' + JSON.stringify(x) + ') — the ring has no position and would sit off screen');
+      sc.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true, pointerType: 'mouse' }));
+      if (sc.classList.contains('glow-on'))
+        throw new Error('the glow did not turn off when the cursor left the list');
+    });
+  });
 })();

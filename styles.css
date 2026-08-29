@@ -8761,3 +8761,107 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
 @media (prefers-reduced-motion: reduce) {
   #ctx-menu.ctx-hinge, #add-sheet.open, #fx-browser.fxb-sheet { animation: none; }
 }
+
+/* ===== A PROJECT CARD COMES FORWARD UNDER THE CURSOR (queue 650, v14.32) =========================
+   Ezra: "Make it on the pc version when hovering ur curser over projects it exapnds them or something,
+   just make it look good, kinda like how in the editing menu it does the same thing when hovering over
+   the add menu".
+   HE NAMED THE REFERENCE HIMSELF, so this is not a fresh design — it is queue 286's add-menu treatment
+   moved onto the home screen, which is also why the two feel like the same app. That treatment is three
+   things and this is the same three: a wide faint WASH under the surface, a one-pixel RING on each card
+   lit from wherever the cursor is, and a brighter face on the card you are actually over. What he added
+   on top of it is "expands", so the card also comes forward — a 1.8% scale and a 1px lift.
+
+   WHY A TRANSFORM AND NOT PADDING. Growing the box would reflow every card below it, so the list would
+   twitch as the cursor crossed it. A transform is composited: the card grows, nothing moves.
+
+   ⚠️ HOVER ONLY, AND THE ENTRY IS RIGHT TO WARN ABOUT IT. A bare `:hover` latches on a phone — you tap
+   a card, the rule sticks, and it stays expanded until you tap elsewhere. `(hover: hover) and
+   (pointer: fine)` is the gate that a finger cannot satisfy.
+
+   ⚠️ THREE COLLISIONS, ALL CHECKED RATHER THAN ASSUMED:
+   · `.hm-card.fm-card-press` (line ~6287) is a plain `transform: scale(.965)` at the SAME specificity
+     as `.hm-card:hover`, so whichever sits later in the file would win. A press must always beat a
+     hover — you are pressing the thing you are hovering — so it is excluded by name instead of by
+     position, which cannot rot when either rule moves.
+     `fm-card-lead`, `fm-intro-cut` and `fm-push-lead` are ANIMATIONS and beat any plain declaration in
+     the cascade by construction, so they need no guard.
+   · `.hm-card.is-pinned` carries a box-shadow with an INSET RAIL in it. A hover shadow at equal
+     specificity would replace that rail and the pinned marker would blink out under the cursor, so
+     pinned cards get their own hover shadow that keeps the rail.
+   · `.hm-card::after` is free. It is DECLARED with the grain (line ~4423) but queue 157 moved the field
+     to the background and left it drawing nothing — `background-image: none; opacity: 0`. Restated
+     here in full rather than relying on that, so this does not break if the grain ever comes back.
+     `::before` is left alone, and `.hm-glint` (the spinning ring on the OPEN card) is a real child
+     element at z-index 3, above this at 2 — the open card keeps its own ring on top of the lit one. */
+@media (min-width: 701px) and (hover: hover) and (pointer: fine) {
+  .hm-card {
+    transition: transform 180ms cubic-bezier(.2, .7, .3, 1), box-shadow 180ms ease-out,
+                border-color 180ms ease-out, background-color 180ms ease-out;
+  }
+  .hm-card:hover:not(.fm-card-press) {
+    transform: scale(1.018) translateY(-1px);
+    border-color: var(--hm-ring-edge);
+  }
+  .hm-card:hover:not(.fm-card-press):not(.is-pinned) { box-shadow: 0 10px 26px -16px rgba(0, 0, 0, .85); }
+  /* The pinned rail is the FIRST shadow here on purpose — it is the one that must survive. */
+  .hm-card.is-pinned:hover:not(.fm-card-press) {
+    box-shadow: inset 3px 0 0 rgba(127, 216, 255, .55), 0 10px 26px -14px rgba(127, 216, 255, .75);
+  }
+  /* THE WASH. On .hm-grid rather than .hm-scroll because an absolutely-positioned child of a scroller
+     is laid out against the whole scrollable content, not the visible slice. The grid box spans every
+     card, and `background-attachment: fixed` resolves the gradient against the VIEWPORT — so one
+     screen-space spotlight lights the gaps between cards with no per-card geometry read at all, which
+     is the same reason the add menu can afford it across seventy tiles. */
+  /* ⚠️ THE RING'S COLOUR IS A VARIABLE BECAUSE THE HOME SCREEN IS OFTEN WHITE, AND THE ADD MENU NEVER
+     IS. Lifting queue 286's palette straight across looked right in the code and MEASURED at a 1.37
+     contrast ratio against a light card — rgba(150, 232, 255, .85) is a highlight for a dark panel, and
+     on `data-home="light"` it is simply not there. That is the "the fix does not work" class of bug: it
+     ships, it is correct, and he sees nothing. Same three values, chosen per ground: 4.78 on light. */
+  .hm-scroll {
+    --glow-x: -9999px; --glow-y: -9999px;
+    --hm-ring-hi: rgba(150, 232, 255, .85);
+    --hm-ring-lo: rgba(150, 232, 255, .12);
+    --hm-ring-edge: rgba(150, 232, 255, .34);
+    --hm-wash: rgba(120, 214, 240, .085);
+  }
+  html[data-home="light"] .hm-scroll {
+    --hm-ring-hi: rgba(38, 118, 175, .80);
+    --hm-ring-lo: rgba(38, 118, 175, .10);
+    --hm-ring-edge: rgba(38, 118, 175, .38);
+    --hm-wash: rgba(52, 132, 184, .10);
+  }
+  .hm-grid { position: relative; }
+  .hm-grid::before {
+    content: ''; position: absolute; inset: -40px; z-index: 0; pointer-events: none;
+    background: radial-gradient(460px circle at var(--glow-x) var(--glow-y), var(--hm-wash), transparent 62%);
+    background-attachment: fixed;
+    opacity: 0; transition: opacity .22s ease-out;
+  }
+  .hm-scroll.glow-on .hm-grid::before { opacity: 1; }
+  /* THE RING — one pixel of border, lit from where the cursor is. `padding: 1px` plus the xor mask
+     leaves only the border band painted, so it reads as the edge catching light rather than as a glow
+     laid over the card. */
+  .hm-card::after {
+    content: ''; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+    border-radius: 16px; padding: 1px; background-image: none;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            mask-composite: exclude;
+    opacity: 0; animation-name: none; transition: opacity .22s ease-out;
+  }
+  .hm-scroll.glow-on .hm-card::after {
+    background-image: radial-gradient(220px circle at var(--glow-x) var(--glow-y), var(--hm-ring-hi), var(--hm-ring-lo) 40%, transparent 65%);
+    background-attachment: fixed;
+    opacity: 1;
+  }
+}
+/* The scale is the only part of this that MOVES, so it is the only part that has to stand down. The
+   ring and the wash are gated on the cursor, not on time, and withholding them would take the whole
+   feature away from anyone who has reduced motion on — the substitute-don't-delete rule this file
+   follows everywhere else. */
+@media (prefers-reduced-motion: reduce) {
+  .hm-card { transition: box-shadow 180ms ease-out, border-color 180ms ease-out; }
+  .hm-card:hover:not(.fm-card-press) { transform: none; }
+}
