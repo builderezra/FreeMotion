@@ -548,7 +548,20 @@ window.FM = window.FM || {};
           icon: ico('<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 8.6h16"/><rect x="7.2" y="11.7" width="9.6" height="5.6" rx="1.4"/>'),
           add: async function () { const ok = await FM.templates.insertInto(t.id); if (FM.toast) FM.toast(ok === false ? 'Template data missing \u2014 re-save it from a project' : 'Inserted \u201c' + t.name + '\u201d'); } };   // await the result \u2014 insertInto returns false when the IDB pack was evicted; the toast used to lie
       });
-      if (!out.length) out.push({ label: 'No templates yet', icon: ico('<rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 2"/>'), add: function () { if (FM.toast) FM.toast('Save one from the home screen: project card \u2192 \u22ef \u2192 Save as template'); } });
+      /* AN EMPTY PANEL THAT EXPLAINS ITSELF, NOT A BUTTON THAT POPS A TOAST (queue 651). Ezra, with a
+         screenshot of this exact panel: "also log to explain how templates work in here if u have no
+         templates instead of making u press the button and have a pop up explain it".
+         What was here was one dashed card reading "No templates yet" whose only job was to fire a toast
+         — so the explanation existed but you had to guess that tapping a disabled-looking tile was how
+         to reach it, and it vanished after four seconds. THE HOME SCREEN ALREADY SOLVED THIS (js/home.js
+         emptyState, "Tap + to save a project as one…"); this panel simply never got the same treatment,
+         which is what the entry says. Same shape, more words, because this is the surface where you
+         would be asking WHAT a template is rather than where they went. */
+      if (!out.length) out.push({ emptyPanel: {
+        mark: '\u25F1',
+        title: 'No templates yet',
+        lines: ['A template is a whole project saved as a starting point \u2014 its layers, effects and timing, ready to drop into whatever you are working on.',
+                'To make one: go to the home screen, open a project\u2019s \u22ef menu and choose Save as template.'] } });
       return out;
     } },
   ];
@@ -1126,6 +1139,20 @@ window.FM = window.FM || {};
         s.setProperty('--am-pager', (box ? box.h : (plan.rows * plan.h + (plan.rows - 1) * FIT_GAP)).toFixed(2) + 'px');
       }
 
+      /* Deliberately built with textContent and appendChild rather than innerHTML: the only reason this
+         panel exists is to carry WORDS, and words are the thing that must never be able to become
+         markup. Nothing here is user data today; the template NAME is one edit away from being. */
+      function emptyPanel(spec) {
+        var box = document.createElement('div'); box.className = 'am-empty';
+        var m = document.createElement('div'); m.className = 'am-empty-mark'; m.textContent = spec.mark || '\u25F1';
+        var t = document.createElement('div'); t.className = 'am-empty-title'; t.textContent = spec.title || '';
+        box.appendChild(m); box.appendChild(t);
+        (spec.lines || []).forEach(function (line) {
+          var p = document.createElement('p'); p.textContent = line; box.appendChild(p);
+        });
+        return box;
+      }
+
       function drawBody() {
         bodyEl.innerHTML = '';
         pinnedEl.innerHTML = '';
@@ -1139,6 +1166,24 @@ window.FM = window.FM || {};
            Only Media and Audio, because they are the two tabs that mix actions with a growing list;
            Shape, Elements and Template have nothing to scroll past. And only once there IS something
            to scroll — with no imports yet, splitting would just draw a divider under everything. */
+        /* AN EMPTY TAB SAYS WHAT IT IS FOR (queue 651). Generic rather than Template-only — Elements
+           and the media library will want the same treatment the day either can be empty, and a second
+           copy is how the two would drift.
+           ⚠️ IT IS WRAPPED IN THE ORDINARY PAGER/PAGE STRUCTURE, and that is not decoration. The first
+           cut returned early with just the panel, on the reasoning that prose has one page and no dots
+           — and the queue-275 test caught it: EVERY tab must render a `.addmenu-body` and a
+           `.addmenu-pager`, because that pair is what the sheet's height and no-vertical-scroll rules
+           are measured against. Breaking the invariant for one case would have left it true for four
+           tabs and false for the fifth, which is how a layout rule quietly stops being a rule. One
+           page, no dots, same boxes as everything else. */
+        if (opts.length === 1 && opts[0].emptyPanel) {
+          var epPager = document.createElement('div'); epPager.className = 'addmenu-pager';
+          var epPage = document.createElement('div'); epPage.className = 'addmenu-page';
+          epPage.appendChild(emptyPanel(opts[0].emptyPanel));
+          epPager.appendChild(epPage);
+          bodyEl.appendChild(epPager);
+          return;
+        }
         var splitTab = (tab.key === 'media' || tab.key === 'audio');
         var pinnedOpts = [];
         if (splitTab && opts.some(function (o) { return o.mid; })) {

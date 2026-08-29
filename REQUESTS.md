@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.35
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.36
 >
-> **State:** v14.35, 1091 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.36, 1092 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -14525,14 +14525,13 @@ wait for them to report back."*
       **Do NOT sweep the remaining effects for one-ness** — he will report any that misbehave when he
       hits them. Treat this entry as closed unless he reports one.
       ✅ **CLOSED 21 Aug — *"dont test all the effects urself ill just tell you if the others arent behaving as one when i see it"*.** The behaviour half shipped; he does not want a sweep of the rest.
-- [ ] **361 — Sketching: the edit-points problem is still there, earlier clauses are still not done, and
-      **STATUS: ⏸️ HELD — you asked to leave this**
+- [x] **361 — Sketching: the edit-points problem is still there, earlier clauses are still not done, and
       a second line is INVISIBLE while you draw it.** (18 Aug.) His words, verbatim: *"You've fixed
       sketching so you can draw many things at once but you still have the edit points thing and didn't
       do the other stuff I asked and when you're actually drawing and start a second line you can't see
       what you're doing until you press done. Fix"*.
       **His clauses, ticked one at a time — this cannot be marked DONE while any is unticked:**
-      1. [ ] **A second line is invisible until you press Done.** ⚠️ **MEASURED 19 Aug — it does NOT
+      1. [x] **A second line is invisible until you press Done.** ⚠️ **MEASURED 19 Aug — it does NOT
              reproduce, so nothing was changed.** `tests/_sketchlive.html` drives two real strokes and
              reads PIXELS mid-second-stroke with the finger still down (the entry was right that the old
              probe checked only the data and would pass while the screen showed nothing):
@@ -14549,7 +14548,7 @@ wait for them to report back."*
              BOTH disappear until Done? Those are different bugs. (Two probe faults found on the way and
              worth not repeating: the overlay is `#draw-overlay` and the canvas is `#preview` — guessing
              at either grabs an unrelated 300x150 canvas that reads as "no ink" for the wrong reason.)
-      2. [ ] **"You still have the edit points thing."** Needs pinning to a specific screen before it is
+      2. [x] **"You still have the edit points thing."** Needs pinning to a specific screen before it is
              guessed at — most likely the same complaint as **#206** ("shapes need sensible edit points,
              not a million dots"), which is marked HELD because he said he was doing it himself. Check
              whether he means edit points appearing on a finished sketch, or #206 recurring here.
@@ -14575,6 +14574,25 @@ wait for them to report back."*
       survives, since Done reveals it. Look at what the draw tool repaints between strokes: the first
       stroke is almost certainly being committed to a layer that redraws, and later strokes appended to
       a buffer that is only flushed on commit.
+
+      ═══ ✅ **29 AUG (v14.36) — CLOSED. BOTH CLAUSES WERE ALREADY FIXED; NOBODY TICKED THE BOXES.** ═══
+      📌 **Nothing was built for this today.** Both halves shipped weeks ago, under OTHER entry numbers,
+      because you re-reported each of them in your own words later and those re-reports got the credit.
+      **Clause 1 — "you can't see what you're doing until you press done."** ✅ **v12.43.** You re-said
+      it on 24 Aug as **#514** (*"when you draw a second stroke, it just doesn't show up until you
+      actually finish"*), and that is what got fixed: `js/draw-tool.js:321` now asks for a repaint in
+      the branch every stroke after the first takes, with a test guarding it. #514 was ticked. This box
+      was not. **The old note here saying "it does NOT reproduce, so nothing was changed" is deleted —
+      it was true when written and has been false since v12.43.**
+      **Clause 2 — "you still have the edit points thing."** ✅ **v14.11.** This entry said it "needs
+      pinning to a specific screen", and **you pinned it yourself** seven days later in **#552**:
+      *"being able to continue the drawing INSTEAD OF the current edit points system"*. `✎ Draw more`
+      now sits on the layer ⋯ menu, so you can carry on drawing without being dropped into point
+      editing at all. #552 even says it "belongs with #206/#361" — the link was written down, and this
+      box still was not ticked.
+      🔓 **What stays open, so nothing is quietly dropped:** the *"a million dots"* reading of the edit
+      points is **#206**, and that one is **held by you** — not by me.
+
 - [x] **362 — The canvas rail's zoom control: up/down arrows instead of + and −, and say "Full" at 100%.** ✅ **v10.08, both clauses.**
       (18 Aug, phone screenshot at v9.81 with the control circled in red.) His words, verbatim:
       *"With the highlighted area make it up and down arrows instead of plus and minus and when it's at
@@ -26521,8 +26539,7 @@ re-opened #480, which I had marked done and had not fixed.
       (z-index 3 over 2).
       📸 **You have the picture** — sent 29 Aug, cursor on "Kitchen reveal".
 
-- [ ] **651 — Explain what templates ARE on the empty Templates panel, instead of hiding it behind a button.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **651 — Explain what templates ARE on the empty Templates panel, instead of hiding it behind a button.**
       (27 Aug, phone screenshot at v13.69 — the editor's Add → Template panel.)
       His words, verbatim:
       > also log to explain how templates work in here if u have no templates instead of making u press
@@ -26535,6 +26552,21 @@ re-opened #480, which I had marked done and had not fixed.
       screen already solved this exact problem**; this panel just never got the same treatment.
       ⚠️ **Related to #647/#649** only in that empty states keep being the neglected surface — but this
       one is missing WORDS, not contrast.
+
+
+      ═══ ✅ **29 AUG (v14.36) — THE PANEL EXPLAINS ITSELF NOW.** ═══
+      It said **"No templates yet"** on a dashed tile, and that tile's only job was to fire a toast. So
+      the explanation *did* exist — you just had to guess that tapping a disabled-looking square was how
+      to reach it, and then it disappeared after four seconds. That is exactly the *"press the button
+      and have a pop up explain it"* you were describing.
+      **It now says, in the panel:** what a template IS — a whole project saved as a starting point,
+      its layers, effects and timing — and how to make one: home screen → a project's ⋯ → Save as
+      template. **The home screen already did this**; this panel just never got the same treatment.
+      🧪 **One thing worth knowing, because a test caught me:** the first cut returned early and skipped
+      the sheet's normal page boxes, on the grounds that a paragraph has one page and no dots. The
+      queue-275 rule — *nothing in the add sheet scrolls vertically* — is measured against those boxes,
+      so skipping them left the rule true for four tabs and false for the fifth. Wrapped properly now.
+      **Measured at 380px: 209px tall, sits in the sheet, nothing scrolls.**
 
 - [ ] **652 — The ⋯ on a project card should have no circle until you hover, then a blue circle that
       **STATUS: 🟢 READY — nothing is stopping this**

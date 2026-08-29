@@ -53429,4 +53429,39 @@
       if (n) { n.textContent = ''; n.classList.add('hidden'); }
     }
   });
+
+  test('651 — an empty Template panel explains what a template IS, instead of hiding it behind a tap', { item: '651' }, async function () {
+    /* Ezra, with a screenshot of this exact panel: "also log to explain how templates work in here if u
+       have no templates instead of making u press the button and have a pop up explain it".
+       What was here was ONE DASHED CARD reading "No templates yet" whose only job was to fire a toast —
+       so the explanation existed, but you had to guess that tapping a disabled-looking tile was how to
+       reach it, and it vanished after four seconds. The home screen had already solved this exact
+       problem with a written empty state; this panel never got the same treatment. */
+    if (!FM.addMenu || !FM.addMenu.openTab) throw new Error('FM.addMenu.openTab is missing');
+    if (FM.templates && FM.templates.list && FM.templates.list().length)
+      return;   // there are real templates here; the empty state is not what this panel is showing
+    FM.addMenu.openTab('template');
+    await new Promise(r => setTimeout(r, 300));
+    const box = document.querySelector('.am-empty');
+    if (!box) throw new Error('the empty Template panel has no written empty state — it is back to a tile you have to tap to learn anything');
+    const txt = box.textContent || '';
+    /* THE WORDS, not just the box. An empty state that says only "No templates yet" is what he was
+       complaining about — it names the absence and explains nothing. */
+    if (!/template is/i.test(txt))
+      throw new Error('the panel never says WHAT a template is, which is the half he asked for:\n' + txt);
+    if (!/save as template/i.test(txt))
+      throw new Error('the panel never says HOW to make one:\n' + txt);
+    /* AND IT MUST NOT BE A CARD ANY MORE. A tile in the grid is a thing you tap; the whole complaint is
+       that the explanation was behind a tap. */
+    const cards = document.querySelectorAll('.addmenu-page .addmenu-card, #add-sheet .addmenu-card');
+    for (const c of cards) {
+      if (/no templates yet/i.test(c.textContent || ''))
+        throw new Error('"No templates yet" is still a tappable card — that is the popup-behind-a-button this entry is about');
+    }
+    /* Built with textContent, never innerHTML: the only reason this panel exists is to carry words, and
+       a template NAME is one edit away from being user data in the same box. */
+    const src = String(FM.addMenu.render || '') + String(FM.addMenu.openTab || '');
+    if (/am-empty[\s\S]{0,200}innerHTML/.test(src))
+      throw new Error('the empty panel is being built with innerHTML — it carries prose that will one day carry a user-supplied name');
+  });
 })();

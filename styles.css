@@ -8880,3 +8880,25 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
    real. Amber rather than red: the export is still going to finish and still going to be usable, it is
    just going to be missing something, and red would read as "this failed". */
 #export-note.export-note-warn { color: var(--warn, #ffb03a); font-weight: 600; white-space: pre-line; }
+
+/* ===== AN EMPTY ADD-MENU TAB EXPLAINS ITSELF (queue 651, v14.33) =================================
+   Ezra: "also log to explain how templates work in here if u have no templates instead of making u
+   press the button and have a pop up explain it".
+   Lifted from `.hm-empty` — the home screen's empty state, which already solved this exact problem —
+   rather than invented, so the two surfaces read as one app. Two differences, both forced by where it
+   sits: the add SHEET on a phone is short, so this scrolls rather than overflowing, and the type is a
+   step down because it lives inside a panel rather than filling a screen. */
+.am-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px;
+  text-align: center; padding: 18px 18px 22px;
+  color: var(--text-dim); font-size: 13px;
+  /* ⚠️ NO OWN SCROLLBAR. The first cut had `max-height:100%; overflow-y:auto` here as insurance
+     against a short sheet — but the add sheet's whole layout rule (queue 275) is that NOTHING in it
+     scrolls vertically, and a scrollable child is that rule broken one level down where the test looks
+     at the pager rather than at this. Measured at 380px: 209px tall inside the sheet, no overflow. If a
+     future empty state needs more words than fit, the words are what to cut. */
+  max-height: 100%;
+}
+.am-empty-mark { font-size: 26px; line-height: 1; color: var(--accent); opacity: .55; }
+.am-empty-title { font-size: 15.5px; font-weight: 700; color: var(--text); letter-spacing: .2px; }
+.am-empty p { margin: 0; max-width: 40ch; line-height: 1.5; }
