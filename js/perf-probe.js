@@ -48,7 +48,18 @@ window.FM = window.FM || {};
        the only ones that go through ctx.filter, and an unsupported ctx.filter fails SILENTLY — so
        without this the report from the broken device looks identical to the report from the healthy one.
        He already runs this tool and pastes the output, so it costs no new UI and no new habit. */
-    bits.push('canvas filter ' + (FM.ctxFilterOK && FM.ctxFilterOK() ? 'OK' : 'MISSING'));
+    bits.push(FM.fxHealth ? FM.fxHealth().line : 'canvas filter ?');
+    /* AND THE GRAPHICS CHIP (the unnumbered "Editing lags" entry, v14.33). That entry's last open
+       question is literally "how fast your phone's graphics chip is — only your phone can say", and
+       three releases of work (v13.81-v14.12) moved the expensive drawing onto it. This report is the
+       one channel that reaches his device, and it said NOTHING about any of that: `grep -c glWarp
+       js/perf-probe.js` was 0. So the report that exists to answer "why is it slow" could not see the
+       single biggest thing that was done about it.
+       BOTH modules, because they answer different halves and either can be absent on its own: glWarp
+       is the per-pixel warps (twirl, ripple, wave…), glColor is the nine ctx.filter effects when the
+       device has no ctx.filter. A device with one and not the other is a real state, not a hypothesis. */
+    bits.push('webgl warp ' + (FM.glWarp && FM.glWarp.available && FM.glWarp.available() ? 'OK' : 'MISSING'));
+    bits.push('webgl colour ' + (FM.glColor && FM.glColor.available && FM.glColor.available() ? 'OK' : 'MISSING'));
     return bits.join(' · ');
   }
 
@@ -83,11 +94,33 @@ window.FM = window.FM || {};
        them. He has reported that three times and every desktop measurement came back clean, because on
        a desktop it IS clean. It goes at the TOP because a reader who stops after the first READ line
        must not miss it. */
-    if (FM.ctxFilterOK && !FM.ctxFilterOK()) {
-      lines.push('🚨 THIS DEVICE CANNOT RUN CANVAS FILTERS. Brightness, Saturation, Contrast,');
-      lines.push('Grayscale, Sepia, Invert, Hue Shift, Blur and Glow will do NOTHING here, and they');
-      lines.push('fail silently — which is why they work on the PC and not on this device.');
-      lines.push('This is queue 645. Send this line; it is the answer that was missing.');
+    /* ⚠️ AND THIS WARNING HAD GONE FALSE — v14.33, and it was false on HIS device specifically.
+       It was gated on `FM.ctxFilterOK()` ALONE. Since v14.02 the nine effects render through a shader
+       (js/gl-color.js) when ctx.filter is missing, and #675 corrected `FM.cssFxUnavailable` to ask
+       ctx.filter THEN the shader (js/compositor.js:1552). This banner never got that correction, so on
+       a phone with WebGL and no ctx.filter — REQUESTS.md names that as exactly his device — the one
+       report he actually runs and pastes opened with a 🚨 telling him nine of his effects do nothing,
+       above a screen where they had been working for eight releases.
+       #661 existed because the app told him these were fine when they were dead. Leaving this would
+       have been the same defect wearing the opposite sign, and #675 already wrote the rule down:
+       **a wrong reassurance and a wrong warning are the same bug.**
+       So it now asks the question the renderer asks, and there are THREE answers, not two — the middle
+       one being both the true state of his device and the thing the "Editing lags" entry has been
+       trying to find out. `m.dead` is a test seam: this branch decides what he reads, and a branch that
+       can only be exercised on hardware that lacks ctx.filter is a branch no suite can check. */
+    const dead = m.dead || (FM.cssFxUnavailable ? FM.cssFxUnavailable() : []);
+    const ctxOK = m.ctxFilterOK != null ? m.ctxFilterOK : !!(FM.ctxFilterOK && FM.ctxFilterOK());
+    if (dead.length) {
+      lines.push('🚨 THIS DEVICE CANNOT RUN CANVAS FILTERS, AND HAS NO WEBGL TO STAND IN. Brightness,');
+      lines.push('Saturation, Contrast, Grayscale, Sepia, Invert, Hue Shift, Blur and Glow will do');
+      lines.push('NOTHING here, and they fail silently — which is why they work on the PC and not on');
+      lines.push('this device. This is queue 645. Send this line; it is the answer that was missing.');
+      lines.push('');
+    } else if (!ctxOK) {
+      lines.push('ⓘ This device has no canvas filters — but Brightness, Saturation, Contrast,');
+      lines.push('Grayscale, Sepia, Invert, Hue Shift, Blur and Glow DO work here, because the app');
+      lines.push('runs them on the graphics chip instead. That is what v14.02 was for, and this line');
+      lines.push('is the proof it reached your phone. Nothing is broken.');
       lines.push('');
     }
     const latePct = m.total ? (m.late / m.total) * 100 : 0;
@@ -159,6 +192,21 @@ window.FM = window.FM || {};
       const ps0 = (function () {
         const p = FM.playbackStats || {};
         return { rateWrites: p.rateWrites | 0, seeks: p.seeks | 0, syncs: p.syncs | 0, at: performance.now() };
+      })();
+      /* ⚠️ THE GPU COUNTERS ARE SNAPSHOTTED FOR THE SAME REASON THE AUDIO ONES ARE, and the note above
+         is the reason this is not just `stats()` at the end. `_stats.gpu` accumulates from page load,
+         so a report taken after ten minutes of editing would show a huge GPU count and a huge CPU count
+         and say nothing about the ten seconds he is actually asking about — the exact shape of the
+         queue-489 bug, where a total was divided by this window and the number grew with how long he
+         had been playing. Everything below reports the DIFFERENCE over this sample. */
+      const gl0 = (function () {
+        const w = (FM.glWarp && FM.glWarp.stats) ? FM.glWarp.stats() : null;
+        const c = (FM.glColor && FM.glColor.stats) ? FM.glColor.stats() : null;
+        return {
+          warpGpu: w ? (w.gpu | 0) : 0, warpCpu: w ? (w.cpu | 0) : 0,
+          chains: w ? (w.chains | 0) : 0, chained: w ? (w.chained | 0) : 0,
+          colGpu: c ? (c.gpu | 0) : 0, colCpu: c ? (c.cpu | 0) : 0,
+        };
       })();
       let last = t0, frames = 0;
       const gapsPlay = [], gapsDrag = [];   // queue 387 — see the split in tick()
@@ -264,6 +312,49 @@ window.FM = window.FM || {};
           lines.push('CANVAS   ' + (st.canvasPx ? Math.round(st.canvasPx / 1000) + 'k pixels' : 'unknown') +
                      (st.locked ? ' · ladder LOCKED (probing stopped)' : ''));
         }
+        /* ═══ THE GRAPHICS CHIP (the unnumbered "Editing lags, and gets bad fast" entry, v14.33).
+         * That entry is the oldest thing on his list and it ends on a question only his phone can
+         * answer: three releases moved the expensive drawing off the CPU — did any of it reach HIS
+         * device, and did it help? This report is the only channel that reaches that device, and it
+         * had no idea any of that work existed.
+         * WHAT EACH NUMBER MEANS, because a number nobody can read is not an answer:
+         *  · warps  — twirl, ripple, wave and the rest. On the CPU each is a per-pixel JavaScript loop
+         *             over the whole plate, which is what the entry concluded the lag actually IS.
+         *  · chains — a run of warps kept on the card between passes instead of coming back through
+         *             a canvas each time (v14.12). "N deep" is how many collapsed into one.
+         *  · colour — the nine ctx.filter effects when this device has no ctx.filter (v14.02).
+         * A run where NOTHING was drawn leaves every counter at zero, and "0 on the chip, 0 in JS" must
+         * not be read as a failure — so that case says plainly that nothing was measured. */
+        (function () {
+          const wS = (FM.glWarp && FM.glWarp.stats) ? FM.glWarp.stats() : null;
+          const cS = (FM.glColor && FM.glColor.stats) ? FM.glColor.stats() : null;
+          if (!wS && !cS) return;
+          const wGpu = (wS ? (wS.gpu | 0) : 0) - gl0.warpGpu, wCpu = (wS ? (wS.cpu | 0) : 0) - gl0.warpCpu;
+          const cGpu = (cS ? (cS.gpu | 0) : 0) - gl0.colGpu, cCpu = (cS ? (cS.cpu | 0) : 0) - gl0.colCpu;
+          const chains = (wS ? (wS.chains | 0) : 0) - gl0.chains;
+          const chained = (wS ? (wS.chained | 0) : 0) - gl0.chained;
+          const warpUp = !!(FM.glWarp && FM.glWarp.available && FM.glWarp.available());
+          const colUp = !!(FM.glColor && FM.glColor.available && FM.glColor.available());
+          lines.push('GPU      ' + (warpUp ? 'warps ON the graphics chip' : 'warps CANNOT use the graphics chip') +
+                     ' · ' + (colUp ? 'colour ON it too' : 'colour CANNOT use it'));
+          if (wGpu || wCpu) {
+            lines.push('         warps this sample: ' + wGpu + ' on the chip, ' + wCpu + ' as JavaScript loops' +
+                       (chains > 0 ? ' · ' + chains + ' chain' + (chains === 1 ? '' : 's') +
+                                     ', ' + (chained / chains).toFixed(1) + ' effects deep' : ''));
+          }
+          if (cGpu || cCpu) lines.push('         colour this sample: ' + cGpu + ' on the chip, ' + cCpu + ' as JavaScript loops');
+          if (!wGpu && !wCpu && !cGpu && !cCpu) lines.push('         nothing drew a warp or a colour effect during this sample.');
+          /* The REASON string is why it fell back, straight from the module. It is the difference
+             between "this phone has no WebGL" and "the plate was too small to be worth uploading", and
+             guessing between those two from a distance is how three months went by on this entry. */
+          const why = (wS && wS.reason) || (cS && cS.reason) || '';
+          if (why && (wCpu || cCpu || !warpUp || !colUp)) lines.push('         fell back because: ' + why);
+          if (!warpUp && !colUp) {
+            lines.push('         ⚠ NO WEBGL ON THIS DEVICE. Every warp and every colour effect is a');
+            lines.push('           per-pixel JavaScript loop here. On a stacked layer that IS the lag,');
+            lines.push('           and it is the one thing the last three releases were meant to fix.');
+          }
+        })();
         /* ═══ AUDIO (queue 148, and 95 / 96 / 72 with it).
          * THREE of his open reports are about sound — scratchy popping, "the audios don't play
          * smoothly", a song that will not play — and this report said nothing whatsoever about audio.

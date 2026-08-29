@@ -1087,7 +1087,9 @@ window.FM = window.FM || {};
             'drops      ' + JSON.stringify(FM._lastAudioDrops || []),
             'suppressed ' + JSON.stringify(FM._lastAudioSuppressed || []),
             'AAC encode ' + (typeof AudioEncoder === 'undefined' ? 'AudioEncoder MISSING in this browser' : 'AudioEncoder present'),
-            'canvas fx  ' + (FM.ctxFilterOK ? (FM.ctxFilterOK() ? 'OK' : 'THIS DEVICE CANNOT RUN CANVAS FILTERS') : '?'),
+            // v14.33: was `ctxFilterOK() ? 'OK' : 'THIS DEVICE CANNOT RUN CANVAS FILTERS'`, which had
+            // been false on his own phone since v14.02 — see FM.fxHealth in js/compositor.js.
+            'canvas fx  ' + (FM.fxHealth ? FM.fxHealth().line : '?'),
             'device     ' + (navigator.userAgent || '').slice(0, 120),
           ].join('\n');
           localStorage.setItem('fm.lastExportReport', rep);

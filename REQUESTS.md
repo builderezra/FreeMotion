@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.32
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.33
 >
-> **State:** v14.32, 1085 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.33, 1088 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -4676,8 +4676,12 @@ better still, keep working inside the turn rather than parking work for a later 
       playback went 95.09 → 17.43 ms/frame on a 6-layer comp (5.5x, dropped frames 191 → 3) and
       forced layouts per tap are now FLAT with layer count instead of linear (211 → 5 at 80 layers).
       Left open until Ezra confirms it feels better on his own device and projects.
-      **Known and NOT fixed:** FM.media never releases a deleted clip's record, so memory grows with
-      every import you throw away. That one needs undo-stack surgery and was deliberately deferred.
+      ~~**Known and NOT fixed:** FM.media never releases a deleted clip's record, so memory grows with
+      every import you throw away. That one needs undo-stack surgery and was deliberately deferred.~~
+      ⚠️ **STRUCK OUT 29 AUG — THAT LINE HAS BEEN FALSE SINCE v8.44, and the very next paragraph says
+      so.** It is a v6.33 header sitting on top of a body that answered it eleven months of releases
+      ago, and it stayed because prose has no test. If you have read this entry and come away thinking
+      the leak is still there, this line is why. It is not.
 
       **THE MEMORY LEAK IS FIXED — v8.44.** (The entry stays OPEN: its other half is still waiting on
       you to say whether editing feels better on your own device and projects.)
@@ -5135,6 +5139,46 @@ better still, keep working inside the turn rather than parking work for a later 
       one: **does a project with several effects stacked on one layer still crawl on your phone?**
       Everything measurable has been measured, and the stacking cost this entry identified as "your
       lag" is the part that just got 35x cheaper.
+
+      ═══ 🔬 **29 AUG (v14.33) — THE REPORT THAT REACHES YOUR PHONE COULD NOT SEE ANY OF THIS WORK.** ═══
+      📐 **Measured, and it is a one-line fact:** `grep -c glWarp js/perf-probe.js` was **0**. Three
+      releases moved the expensive drawing onto the graphics chip, this entry's last question is *"how
+      fast your phone's graphics chip is, only your phone can say"* — and **"what's slow", the one
+      thing you actually run and paste, said nothing whatsoever about the graphics chip.** So the only
+      channel that could answer the question was blind to the answer.
+      ✅ **It can see it now.** The report has a **GPU** block: warps run on the chip vs run as
+      JavaScript loops, how many chains and how deep they collapsed, the same for colour, and the
+      module's own reason string when it fell back — so *"this phone has no WebGL"* and *"the plate was
+      too small to be worth uploading"* stop looking identical from here. **DEVICE** now says
+      `webgl warp OK/MISSING · webgl colour OK/MISSING` beside `canvas filter`.
+      🧮 **The numbers are DELTAS over the sample, not totals since you opened the app** — the same
+      trap #489 fell into with the audio counters, where a total got divided by the ten-second window
+      and grew with how long you had been playing. The test asserts *printed == after − before*, which
+      is unfoolable in both directions.
+      🚨 **AND WHILE DOING IT I FOUND THE REPORT LYING TO YOU, ON YOUR DEVICE SPECIFICALLY.** It opened
+      with a red banner: *"THIS DEVICE CANNOT RUN CANVAS FILTERS. Brightness, Saturation, Contrast,
+      Grayscale, Sepia, Invert, Hue Shift, Blur and Glow will do NOTHING here."* That was gated on
+      `ctx.filter` **alone** — but since **v14.02** those nine render through a shader when ctx.filter
+      is missing, and **#675** corrected the app's own checker to ask ctx.filter *then* the shader.
+      **This banner never got that correction.** On a phone with WebGL and no ctx.filter — which this
+      file names as exactly your phone — the report you paste has been telling you nine effects are
+      dead, above a screen where they had been working for eight releases.
+      🔁 **AND IT WAS IN TWO MORE PLACES — I found them while reading ahead for #47.** The **export
+      report** you paste said `canvas fx THIS DEVICE CANNOT RUN CANVAS FILTERS`, and the **playback
+      report** said `canvas fx UNAVAILABLE`. Three reports, three private copies of the same reasoning,
+      two of them wrong on your phone. That is #116's warning — two surfaces meant to say the same
+      thing each getting their own copy — except with three. **The sentence is written once now**, next
+      to the check it is about, and a test fails if any report goes back to deciding it alone.
+      **#661 existed because the app told you these were fine when they were dead. This was the same
+      bug with the opposite sign**, and #675 already wrote the rule down: *a wrong reassurance and a
+      wrong warning are the same bug.* There are three states now — silent when ctx.filter works, a
+      plain **"they DO work here, the app runs them on the graphics chip"** when the shader is standing
+      in, and the loud warning only when both are genuinely gone. Mutation-tested: putting the old gate
+      back fails the new test.
+      ❓ **SO THE ASK IS SMALLER THAN IT WAS, AND IT IS NO LONGER A JUDGEMENT CALL.** Stack a few
+      effects on one layer, hit **Measure** in Settings (or tap the toast when playback struggles), and
+      paste it. The **GPU** and **DEVICE** lines will say, in your own phone's words, whether the last
+      three releases actually reached you. That is the thing nothing here can measure for you.
 - [x] **72 — Audio import loses parts of the file.** **DONE v6.64 — it was TWO separate bugs.** *"when it's importing the audio it literally cuts
       out certain parts making it jumpy, even on the timeline you can see how it's missing parts"*.
       Not lag — actual missing audio. **HALF DONE, and I owe you an admission on the bookkeeping:**

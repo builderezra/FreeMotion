@@ -188,7 +188,7 @@
       lines.push('frames     drawn ' + (p.renders | 0) + ', dropped ' + (p.drops | 0));
       lines.push('clock      ' + (FM.clockSource ? FM.clockSource() : '?'));
       lines.push('drawing    ' + (FM.glWarp && FM.glWarp.available && FM.glWarp.available() ? 'GPU' : 'CPU (no WebGL)') +
-                 ', canvas fx ' + (FM.ctxFilterOK ? (FM.ctxFilterOK() ? 'OK' : 'UNAVAILABLE') : '?'));
+                 ', ' + (FM.fxHealth ? FM.fxHealth().line : 'canvas fx ?'));   // v14.33 — one writer, see FM.fxHealth
       lines.push('device     ' + (navigator.userAgent || '').slice(0, 120));
       return lines.join('\n');
     },

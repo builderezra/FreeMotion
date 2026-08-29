@@ -53076,4 +53076,152 @@
         throw new Error('the glow did not turn off when the cursor left the list');
     });
   });
+
+  /* ═══ THE OLDEST ENTRY — "Editing lags, and gets bad fast" — TEACHES ITS OWN REPORT ABOUT THE GPU ═══
+     Three releases (v13.81 → v14.12) moved the expensive drawing off the CPU, and the entry's last
+     open question is "how fast your phone's graphics chip is — only your phone can say". The report
+     that reaches his phone knew NOTHING about any of it: `grep -c glWarp js/perf-probe.js` was 0. */
+
+  test('the perf report no longer tells him nine effects are dead when the GPU is running them', { item: 'perf-probe' }, async function () {
+    /* ⚠️ THIS IS THE BUG, AND IT WAS AIMED AT HIS DEVICE SPECIFICALLY. The banner was gated on
+       FM.ctxFilterOK() ALONE. Since v14.02 the nine ctx.filter effects render through a shader when
+       ctx.filter is missing, and #675 corrected FM.cssFxUnavailable to ask ctx.filter THEN the shader
+       — this banner never got that correction. So on a phone with WebGL and no ctx.filter (REQUESTS.md
+       names that as his device) the one report he actually runs and pastes opened with a 🚨 saying nine
+       of his effects do nothing, above a screen where they had worked for eight releases.
+       #661 existed because the app told him these were fine when they were dead. This is the same
+       defect with the opposite sign, and #675 wrote the rule: a wrong reassurance and a wrong warning
+       are the same bug. THREE states, and the middle one is the one that was wrong. */
+    const m = { med: 16.7, worst: 20, late: 0, total: 600, appMs: 3, budget: 1000 / 60 };
+    const healthy = FM.perfProbe._verdict(Object.assign({}, m, { dead: [], ctxFilterOK: true }));
+    if (/CANNOT RUN CANVAS FILTERS/.test(healthy) || /no canvas filters/.test(healthy))
+      throw new Error('a device with working canvas filters was warned about them:\n' + healthy);
+
+    // THE MIDDLE STATE — his: no ctx.filter, but the shader is there, so the effects WORK.
+    const rescued = FM.perfProbe._verdict(Object.assign({}, m, { dead: [], ctxFilterOK: false }));
+    if (/🚨/.test(rescued) || /will do\s*\n?NOTHING/.test(rescued) || /CANNOT RUN CANVAS FILTERS/.test(rescued))
+      throw new Error('a device whose effects are rescued by the GPU was still told they do NOTHING — this is the exact false warning v14.33 removed:\n' + rescued);
+    if (!/DO work here/.test(rescued))
+      throw new Error('the GPU-rescued device is told nothing at all; it should be told its effects work, because that is the answer the oldest entry is waiting for:\n' + rescued);
+
+    // …and a device with neither must still get the loud warning, or the fix has thrown away #645.
+    const reallyDead = FM.perfProbe._verdict(Object.assign({}, m, { dead: ['brightness', 'saturate'], ctxFilterOK: false }));
+    if (!/CANNOT RUN CANVAS FILTERS/.test(reallyDead))
+      throw new Error('a device with no canvas filters AND no WebGL lost its warning — #645 is undone:\n' + reallyDead);
+    if (!/queue 645/.test(reallyDead))
+      throw new Error('the warning no longer names the queue item, so a pasted report cannot be traced back to it');
+  });
+
+  test('the perf report says whether the GPU work reached this device, and reports only THIS sample', { item: 'perf-probe' }, async function () {
+    if (!FM.perfProbe || !FM.perfProbe.run) throw new Error('FM.perfProbe.run is not exported');
+    if (!FM.glWarp || !FM.glWarp.stats) throw new Error('FM.glWarp.stats is gone — the report has nothing to read');
+    const run = function (ms) {
+      return new Promise(function (resolve) {
+        if (!FM.perfProbe.run(ms, resolve)) resolve(null);
+        setTimeout(function () { resolve(null); }, ms + 6000);
+      });
+    };
+    /* ⚠️ THE DELTA IS THE ASSERTION, and it is the queue-489 lesson applied to a second pair of
+       counters. `_stats.gpu` accumulates from page load. A report that printed the TOTAL would grow
+       with how long he had been editing before pressing Measure and would say nothing about the ten
+       seconds he is actually asking about — which is what the audio counters did, and it made the
+       report blame the app for a controller behaving correctly.
+       ⚠️ AND THE OBVIOUS VERSION OF THIS TEST IS WRONG — measured. The first draft did real GPU work,
+       then sampled "a window with no drawing" and demanded the report say nothing happened. In a LIVE
+       app there is no such window: the preview re-rendered twice inside it, so the report correctly
+       said "6 on the chip, 2 chains" and the test called that a leak. The pre-work was 6 separate
+       renders, i.e. 6 chains — arithmetic the first draft never checked.
+       So the assertion is made against the module's OWN counters instead of against an assumption
+       about whether anything drew: whatever the report prints must equal `after − before` exactly. That
+       is unfoolable in both directions — a running total fails it, and so does a delta taken from the
+       wrong pair of snapshots — and it does not care whether the app happened to draw. */
+    const P = FM.scene.project, keep = FM.scene.layers.slice();
+    const w0 = P.width, h0 = P.height;
+    try {
+      P.width = 480; P.height = 480;
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 240, y: 240, shapeW: 300, shapeH: 300, fill: '#4fd1ff' });
+      L.start = 0; L.duration = 6; L.effects = [];
+      ['twirl', 'ripple', 'wave'].forEach(function (k) { const i = FM.fxRegistry.makeInstance(k); if (i) L.effects.push(i); });
+      if (L.effects.length < 2) throw new Error('could not build a warp stack — this test would then measure nothing');
+      FM.scene.layers.push(L);
+      const cv = document.createElement('canvas'); cv.width = P.width; cv.height = P.height;
+      const cx = cv.getContext('2d', { willReadFrequently: true });
+      const draw = function () { cx.clearRect(0, 0, cv.width, cv.height); FM.renderScene(cx, FM.scene, 0.7); cx.getImageData(0, 0, 1, 1); };
+      /* A DOZEN RENDERS BEFORE THE SAMPLE, and the count matters: this is the history that must not
+         appear in the report. If the block were a running total it would carry all of them. */
+      for (let i = 0; i < 12; i++) draw();
+      const before = FM.glWarp.stats();
+      if ((before.gpu | 0) === 0 && (before.cpu | 0) === 0)
+        throw new Error('twelve renders of a three-warp stack moved no counter at all — this test would prove nothing');
+      const rep = await run(1000);
+      const after = FM.glWarp.stats();
+      if (!rep) throw new Error('the probe produced no report');
+      if (!/^GPU\s/m.test(rep)) throw new Error('the report has no GPU block — the oldest entry\'s last question is about the graphics chip, and the report is silent on it:\n' + rep);
+
+      const dGpu = (after.gpu | 0) - (before.gpu | 0);
+      const dCpu = (after.cpu | 0) - (before.cpu | 0);
+      const dChains = (after.chains | 0) - (before.chains | 0);
+      const line = /warps this sample: (\d+) on the chip, (\d+) as JavaScript loops(?: · (\d+) chains?)?/.exec(rep);
+      if (!line) {
+        // No warp line is only honest when nothing warped inside the window.
+        if (dGpu || dCpu) throw new Error('the sample did ' + dGpu + ' GPU and ' + dCpu + ' CPU warp passes, and the report printed no warp line at all:\n' + rep);
+        if (!/nothing drew a warp or a colour effect/.test(rep)) throw new Error('nothing warped and the report did not say so:\n' + rep);
+      } else {
+        if (+line[1] !== dGpu || +line[2] !== dCpu)
+          throw new Error('the GPU block is not a delta over the sample: it printed ' + line[1] + '/' + line[2] +
+            ' but the counters moved by ' + dGpu + '/' + dCpu + ' during the window (they stood at ' +
+            (before.gpu | 0) + '/' + (before.cpu | 0) + ' before it). A running total is the queue-489 bug:\n' + rep);
+        if (line[3] != null && +line[3] !== dChains)
+          throw new Error('the chain count is not a delta either: printed ' + line[3] + ', counters moved by ' + dChains + ':\n' + rep);
+      }
+      // DEVICE must name the graphics chip, or a pasted report still cannot answer the question.
+      if (!/webgl warp (OK|MISSING)/.test(rep)) throw new Error('the DEVICE line does not say whether WebGL warps are available here:\n' + rep);
+      if (!/webgl colour (OK|MISSING)/.test(rep)) throw new Error('the DEVICE line does not say whether WebGL colour is available here:\n' + rep);
+      if (!/canvas filter (OK|MISSING)/.test(rep)) throw new Error('the DEVICE line lost its canvas-filter bit — #645 still needs it');
+    } finally {
+      P.width = w0; P.height = h0;
+      FM.scene.layers.length = 0; keep.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll();
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    }
+  });
+
+  test('every report that tells him about the colour effects says the SAME thing', { item: 'perf-probe' }, async function () {
+    /* ⚠️ THIS ANSWER HAD DRIFTED INTO THREE COPIES AND TWO OF THEM WERE WRONG (v14.33).
+       FM.cssFxUnavailable is the correct question and #675 fixed it. But three separate places phrase
+       that answer for Ezra in prose — "what's slow" (js/perf-probe.js), the export report
+       (js/exporter.js) and the playback report (js/audio-health.js) — and each carried its own copy of
+       the reasoning, asking `ctxFilterOK()` alone. On a phone with WebGL and no ctx.filter, which
+       REQUESTS.md names as exactly his phone, the export report told him "THIS DEVICE CANNOT RUN
+       CANVAS FILTERS" while the shader had been running them since v14.02.
+       #116 is the standing warning about two surfaces meant to say the same thing each getting their
+       own copy. Three was worse. This test is the thing that makes one writer stay one writer. */
+    if (typeof FM.fxHealth !== 'function') throw new Error('FM.fxHealth is gone — the four reports are back to each deciding this for themselves');
+    const h = FM.fxHealth();
+    if (typeof h.line !== 'string' || !h.line) throw new Error('FM.fxHealth().line is not a sentence');
+    // It must AGREE with the predicate the renderer actually uses, in every direction.
+    const dead = FM.cssFxUnavailable();
+    if (h.dead !== dead.length) throw new Error('fxHealth.dead (' + h.dead + ') disagrees with cssFxUnavailable (' + dead.length + ')');
+    if (h.ctx && /MISSING/.test(h.line)) throw new Error('canvas filters work here, and the sentence says MISSING: ' + h.line);
+    if (!h.ctx && h.gl && /DO NOTHING/.test(h.line))
+      throw new Error('the GPU is standing in for ctx.filter, and the sentence still says the effects do nothing — that is the v14.33 bug: ' + h.line);
+    if (!h.ctx && !h.gl && !/DO NOTHING/.test(h.line))
+      throw new Error('neither path exists and the sentence does not say the effects are dead — #645 needs that said: ' + h.line);
+    /* AND NO CALLER MAY GO BACK TO DECIDING IT ALONE. Asserted against the SOURCE, because the wrong
+       branch only runs on hardware this suite will never have: a device with no ctx.filter. */
+    const files = ['perf-probe', 'exporter', 'audio-health'];
+    for (const f of files) {
+      const src = await (await fetch('../js/' + f + '.js?boot=' + Date.now())).text();
+      /* ⚠️ COMMENTS ARE STRIPPED FIRST, and that is not a loophole — it is what makes this test usable
+         in THIS codebase. The first version failed on js/exporter.js because the fix's own comment
+         QUOTES the line it replaced: "was `ctxFilterOK() ? 'OK' : 'THIS DEVICE CANNOT…'`". Every file
+         here records why it changed by quoting what it used to say, so a source check that cannot tell
+         code from history would forbid the repo's whole documentation style — and the pressure would
+         be to delete the explanation rather than to keep the code right. Only live code is checked. */
+      const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+      if (/ctxFilterOK\(\)\s*\?/.test(code))
+        throw new Error('js/' + f + '.js is phrasing the canvas-filter answer from ctxFilterOK() on its own again — that is the exact drift v14.33 removed; use FM.fxHealth()');
+    }
+  });
 })();

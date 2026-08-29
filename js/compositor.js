@@ -1554,6 +1554,31 @@ window.FM = window.FM || {};
     if (FM.glColor && FM.glColor.available && FM.glColor.available()) return [];
     return Object.keys(FM.CSS_FX);
   };
+  /* ⚠️ ONE SENTENCE ABOUT THIS, FOR EVERY REPORT HE READS — v14.33, and it exists because the answer
+     had already drifted into THREE copies and two of them were wrong.
+     `cssFxUnavailable` above is the correct question and #675 fixed it. But three separate places
+     phrase that answer for Ezra in prose, and each had its own copy of the reasoning:
+       · js/perf-probe.js — "what's slow", the report he actually runs and pastes;
+       · js/exporter.js   — the export report, which said "THIS DEVICE CANNOT RUN CANVAS FILTERS";
+       · js/audio-health.js — the playback report.
+     All three asked `ctxFilterOK()` alone, so on a phone with WebGL and no ctx.filter — which
+     REQUESTS.md names as exactly his phone — all three told him nine effects were dead while the
+     shader had been running them since v14.02.
+     #116 is this repo's standing warning about two surfaces meant to say the same thing each getting
+     their own copy: the timeline's glide was retuned and the sliders' was not, and he had to ask
+     twice. Three copies is worse. So the sentence is written ONCE, here, beside the predicate it is
+     about, and the callers print what they are given. */
+  FM.fxHealth = function () {
+    const ctx = ctxFilterOK();
+    const gl = !!(FM.glColor && FM.glColor.available && FM.glColor.available());
+    const dead = FM.cssFxUnavailable().length;
+    return {
+      ctx: ctx, gl: gl, dead: dead,
+      line: ctx ? 'canvas filter OK'
+          : gl ? 'canvas filter MISSING — the 9 colour effects run on the graphics chip instead, and DO work'
+               : 'canvas filter MISSING and no WebGL — the 9 colour effects DO NOTHING here',
+    };
+  };
   /* The effect list a layer actually renders with at time t: its own, plus the stack belonging to the
    * caption cue showing right now (queue 151). Returns the SAME array when there is nothing to add, so
    * the caller can tell "nothing changed" without comparing contents. Pure and exported, because the
