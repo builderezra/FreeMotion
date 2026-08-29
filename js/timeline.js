@@ -2642,6 +2642,27 @@ window.FM = window.FM || {};
     return !liveGroupCtx();
   }
 
+  /* ⚠️ THE CHEVRON COLUMN'S CLASS IS DECIDED HERE AND CALLED FROM TWO PLACES (queue 655 clause 2).
+   * It used to live inside `buildTracks`, which `rebuild()` runs AFTER `applyInnerWidth()`. So on the
+   * one rebuild that follows grouping, the lane geometry was computed while the head column was still
+   * the OLD width, and only then did the class change and widen it.
+   * 📐 MEASURED at 380px, two clips, tap Group, exactly ONE rebuild: the head goes 66 → 82px and a clip
+   * at t=0 lands **16px to the right of the centreline** — which is precisely 82 − 66. A second rebuild
+   * puts it back to 0, which is why this never showed up in a test: the existing ones call
+   * `FM.refreshAll(); FM.timeline.rebuild();` and measure the second pass.
+   * That 16px jump IS the "glitches the timeline when a group is added" half of his report.
+   * Idempotent by construction (`classList.toggle` with an explicit boolean), so calling it from both
+   * `rebuild()` and `buildTracks()` costs nothing — and `buildTracks` keeps its call because the
+   * add-row drag paths invoke it standalone, where `rebuild()` never runs. */
+  function syncGroupClass() {
+    const _ctx = liveGroupCtx();
+    const noGroups = _ctx
+      ? !FM.scene.layers.some(l => l.type === 'group' && inSubtree(l, _ctx))
+      : !FM.scene.layers.some(l => l.type === 'group');
+    tracksEl.classList.toggle('tl-no-groups', noGroups);
+    if (innerEl) innerEl.classList.toggle('tl-no-groups', noGroups);
+  }
+
   function buildTracks() {
     tracksEl.innerHTML = '';
     applyEmptyStart();   // every rebuild, every branch — see isEmptyStart
@@ -2674,12 +2695,7 @@ window.FM = window.FM || {};
      * #295 and #191, one level deeper, and the reasoning written for those applies unchanged: nothing
      * needs aligning when there is nothing to align WITH. A nested group inside the group still
      * reserves it, so the invariant holds exactly where it means something. */
-    const _ctx = liveGroupCtx();
-    const noGroups = _ctx
-      ? !FM.scene.layers.some(l => l.type === 'group' && inSubtree(l, _ctx))
-      : !FM.scene.layers.some(l => l.type === 'group');
-    tracksEl.classList.toggle('tl-no-groups', noGroups);
-    if (innerEl) innerEl.classList.toggle('tl-no-groups', noGroups);
+    syncGroupClass();
     if (!FM.scene.layers.length) {
       /* On a phone the Add row IS the empty state — it says "tap here to start creating", which is both
          the invitation and the control, so a sentence above it explaining the same thing is the exact
@@ -4123,6 +4139,8 @@ window.FM = window.FM || {};
       // cannot leave a stale width latched for the rest of the session.
       _laneFrozen = 1; _laneW = 0;
       try {
+        // BEFORE applyInnerWidth, not after — the whole point. See syncGroupClass.
+        syncGroupClass();
         applyInnerWidth();
         buildRuler();
         buildTracks();

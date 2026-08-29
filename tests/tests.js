@@ -53702,4 +53702,57 @@
       FM.selectLayer(null); FM.refreshAll();
     }
   });
+
+  test('655 — grouping does not shove the timeline sideways for one frame', { item: '655' }, async function () {
+    /* His words: groups "GLITCH THE TIMELINE when a group is added". Reproduced and measured before
+       anything was changed, which is what the entry demands.
+       📐 At 380px, two clips at t=0, tap Group, exactly ONE rebuild: the track head goes 66 → 82px
+       (the chevron column is reserved the moment a group exists) but the clip kept `left: 124px`,
+       which was computed from the OLD 66 — so it rendered 16px right of the centreline. 16 = 82 − 66.
+       A SECOND rebuild put it back to 108px and 0px offset.
+       ⚠️ THAT IS WHY NO TEST CAUGHT IT: every existing timeline test calls `FM.refreshAll();
+       FM.timeline.rebuild();` and measures the second pass. This one measures the FIRST, which is the
+       only one the app actually performs when you tap Group.
+       The cause was ordering: `rebuild()` ran `applyInnerWidth()` — which re-reads the head width and
+       recomputes the lane pad — BEFORE `buildTracks()` toggled the class that changes that width. */
+    return await atPhoneWidth(async function () {
+      const P = FM.scene.project, keep = FM.scene.layers.slice();
+      const w0 = P.width, h0 = P.height, d0 = P.duration;
+      try {
+        P.width = 1080; P.height = 1080; P.duration = 6;
+        FM.scene.layers.length = 0;
+        for (let i = 0; i < 2; i++) {
+          const L = FM.makeLayer('shape', { shape: 'rect', x: 200 + i * 120, y: 400, shapeW: 200, shapeH: 200 });
+          L.start = 0; L.duration = 4; FM.scene.layers.push(L);
+        }
+        FM.refreshAll(); FM.timeline.rebuild();
+        await new Promise(r => setTimeout(r, 200));
+        const centre = document.getElementById('tl-centerline');
+        if (!centre) return;                       // no centreline in this layout; nothing to measure against
+        const off = () => {
+          const c = document.querySelector('#tl-tracks .clip');
+          return c ? Math.round(c.getBoundingClientRect().left - centre.getBoundingClientRect().left) : null;
+        };
+        const before = off();
+        if (before == null) throw new Error('no clip on the timeline to measure — this test would prove nothing');
+        if (Math.abs(before) > 2) throw new Error('a t=0 clip was already ' + before + 'px off the centreline BEFORE grouping, so this test cannot attribute the jump to grouping');
+        const ids = FM.scene.layers.map(l => l.id);
+        FM.selectLayer(ids[0]); FM.toggleSelect(ids[1]);
+        await new Promise(r => setTimeout(r, 150));
+        if (FM.selectionIds().length !== 2) throw new Error('could not select two layers, so nothing was grouped and this test measured nothing');
+        FM.groupSelection();
+        await new Promise(r => setTimeout(r, 60));   // ONE rebuild — deliberately no refreshAll here
+        if (!FM.scene.layers.some(l => l.type === 'group')) throw new Error('grouping did not produce a group');
+        const after = off();
+        if (after == null) throw new Error('the timeline has no clip after grouping');
+        if (Math.abs(after) > 2)
+          throw new Error('after ONE rebuild the t=0 clip sits ' + after + 'px from the centreline — the lane pad was computed from the old head width before the chevron column widened it. Measured at 16px before the fix.');
+      } finally {
+        P.width = w0; P.height = h0; P.duration = d0;
+        FM.scene.layers.length = 0; keep.forEach(l => FM.scene.layers.push(l));
+        FM.selectLayer(null); FM.refreshAll();
+        if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+      }
+    });
+  });
 })();

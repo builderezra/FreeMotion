@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.40
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.41
 >
-> **State:** v14.40, 1099 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.41, 1100 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -26713,6 +26713,29 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **The extra element shifts the row's left edge**, which is a strong first suspect for the glitch:
       a group row is then a different width from every other row, and the timeline lays rows out on a
       shared grid. Measure a group row against a normal row before and after.
+
+
+      ═══ 📐 **29 AUG (v14.41) — THE GLITCH IS REAL, AND IT IS 16 PIXELS.** ═══
+      **Reproduced before touching anything, which is what this entry demands.** At 380px, two clips at
+      t=0, tap Group, **exactly one redraw** — the way the app actually does it:
+      | | track head | clip position | off the centre line |
+      |---|---|---|---|
+      | before grouping | 66px | 124px | 0 |
+      | **after grouping (1 redraw)** | **82px** | **124px** ← stale | **16px** 🚨 |
+      | after a 2nd redraw | 82px | 108px | 0 |
+      🔑 **16 is exactly 82 − 66.** The head widens the moment a group exists (it reserves the column
+      for the arrow) — but the clip's position had already been worked out from the old width. So the
+      whole timeline sits 16px off for a frame. **That is your "it glitches the timeline".**
+      ⚠️ **And this is why no test ever caught it:** every timeline test in the suite redraws **twice**
+      and measures the second pass. The app redraws once. The new test measures the first.
+      ✅ **Fixed** by deciding the column BEFORE the geometry instead of after. Measured after: 108px,
+      0px off. Mutation-tested — putting the old order back fails with the same 16px.
+      🙋 **Worth admitting:** after applying the fix I measured *no change* and nearly binned it as a
+      wrong theory. My browser was serving a cached page pointing at the old file. That is the
+      cache-buster trap, hit from the other side — it nearly threw away a fix that was right.
+      ⏭️ **STILL TO DO: clause 1, actually removing the arrow.** It touches four existing tests and the
+      head-width logic the arrow's column exists for, so it gets its own pass rather than being rushed
+      in behind a measurement.
 
 - [ ] **656 — The SEARCH BAR still wears the dark theme and looks wrong on the light home.**
       **STATUS: 🟢 READY — nothing is stopping this**
