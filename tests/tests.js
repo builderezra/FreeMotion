@@ -46400,6 +46400,56 @@
     if (!/STUTTER/i.test(bad)) throw new Error('a stuttering sample lost its stutter verdict to the new scale branch: ' + bad);
   });
 
+  /* ═══ QUEUE 642 — THE WHITE BARS ON THE INTRO ═════════════════════════════════════════════════
+   * Ezra: *"there's like two white bars at the top and bottom when the screen fully zooms in"*.
+   * 📐 MEASURED from his own screen recording, sampled through PLAYBACK (a seek-based probe returned
+   * the identical frame eight times and was thrown away): at t=3.48 the middle is 255 and the bands
+   * are 124 and 162.
+   * 🔑 THE CAUSE IS A COMMENT THAT STOPPED BEING TRUE. The splash sizes the film to the screen's SHORT
+   * side and says so honestly — "the rest of the screen is the same black the video ends in". That held
+   * for the old film. HIS NEW ONE ENDS IN WHITE, so on a tall phone the quarter of the screen above and
+   * below the square stays dark while the picture goes white: a hard-edged band, exactly as measured.
+   * The light film fills the viewport now, so there is no surround left to disagree with it. */
+  test('#642: the light intro fills the screen, leaving no bands to mismatch', { item: '642' }, function () {
+    /* ⚠️ THE SPLASH IS REMOVED FROM THE DOM once it has played, so by the time the suite runs there is
+       nothing live to measure — the first version of this test failed for that reason alone. It builds
+       the same markup instead, which exercises the REAL stylesheet rules rather than a copy of them. */
+    const sp = document.createElement('div'); sp.id = 'splash'; sp.className = 'splash-light';
+    const vid = document.createElement('video'); vid.id = 'splash-vid';
+    sp.appendChild(vid); document.body.appendChild(sp);
+    try {
+      const cs = getComputedStyle(vid);
+      if (cs.objectFit !== 'cover') throw new Error('the light intro is "' + cs.objectFit + '", not cover — a contained film leaves a letterbox, and a letterbox is what he photographed');
+      const b = vid.getBoundingClientRect();
+      if (b.width < window.innerWidth - 1 || b.height < window.innerHeight - 1)
+        throw new Error('the light intro is ' + Math.round(b.width) + 'x' + Math.round(b.height) +
+          ' in a ' + window.innerWidth + 'x' + window.innerHeight + ' viewport — the uncovered strip is where the white bars come from');
+
+      /* AND THE DARK FILM MUST KEEP ITS SQUARE. Its own edges are black and so is the surround, so
+         nothing there was ever wrong — cropping the old film to fix the new one breaks what works. */
+      sp.classList.remove('splash-light');
+      if (getComputedStyle(vid).objectFit === 'cover')
+        throw new Error('the DARK intro is now cover too — it was never letterboxed against a mismatched surround, so cropping it fixes nothing and loses picture');
+    } finally { sp.remove(); }
+  });
+
+  /* Clause 1 of the same report: *"at the start there's like a weird like white box that pops up"*.
+   * An `<img>` with no `src`, sized to the whole viewport, can paint as a placeholder box — so in the
+   * light look the element is REMOVED rather than merely left empty.
+   * ⚠️ ASSERTED AGAINST THE SOURCE, and that is a deliberate second best. The splash runs once per
+   * session from an inline script and is gone from the DOM before any test could watch it, so there is
+   * no live state left to read. Checking the source at least fails if the removal is deleted. */
+  test('#642: the light intro removes the empty poster instead of leaving it', { item: '642' }, async function () {
+    const src = await (await fetch('index.html?t=' + Date.now())).text();
+    const m = src.match(/if\s*\(pos\)\s*\{[^}]*\}/);
+    if (!m) throw new Error('the poster branch is gone from index.html — cannot tell what the intro does with #splash-poster');
+    if (!/LIGHT[^}]*pos\.remove\(\)/.test(m[0]))
+      throw new Error('the light look no longer REMOVES #splash-poster: ' + m[0].slice(0, 140) +
+        ' — an empty <img> the size of the viewport is exactly the "weird white box" he reported');
+    if (!/pos\.src\s*=/.test(m[0]))
+      throw new Error('the dark look no longer gives the poster a src, so it would render as the same placeholder box one theme over');
+  });
+
   /* ═══ QUEUE 635 — SLIDERS THAT JUMP TOO FAR, TOO FAST ═════════════════════════════════════════
    * Ezra: *"Pinch bulges slider jumps too much too fast, make its sliders more gradual"* — his THIRD
    * report of one feel, after *"the speed slider goes WAY too fast, it goes up 10x at a time"* (#455)

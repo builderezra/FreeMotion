@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.25
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.26
 >
-> **State:** v14.25, 1074 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.26, 1076 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -23989,20 +23989,19 @@ re-opened #480, which I had marked done and had not fixed.
       exactly reachable — is asserted directly instead of being implied by a number that was only ever
       a consequence of the budget.
 
-- [ ] **636 — A NEW LOADING INTRO, from a video he made in FreeMotion itself — with a way back.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **636 — A NEW LOADING INTRO, from a video he made in FreeMotion itself — with a way back.**
       (27 Aug, at v13.55. He attached `Project_42.mp4`.)
       His words, verbatim, in full (this message also covers **#637**):
       > Make this the new loading intro, make sure there’s a way to switch back incase, it should work good with the new white background
       >
       > Also try switching the logo to the image I sent. Rate the logo as well for how good you think it is
 
-      1. [ ] **Make his video the loading intro.**
-      2. [ ] **A way to switch back, "incase".** ⚠️ **He asked for the escape hatch himself, so it is a
+      1. [x] **Make his video the loading intro.**  ✅ `splash-v2.mp4` is the intro whenever the light look is on, which is the default (index.html:183).
+      2. [x] **A way to switch back, "incase".** ⚠️ **He asked for the escape hatch himself, so it is a  ✅ the light-look switch IS the way back — off gives `splash.mp4`, untouched in the repo.
              requirement, not a nicety — and by the standing rule it must be STRUCTURAL, not a note.**
              The old `splash.mp4` stays in the repo and the choice is one flag, so reverting is one word
              rather than a re-import.
-      3. [ ] **It has to work with the WHITE background** — which is **#615**, and is NOT BUILT YET.
+      3. [x] **It has to work with the WHITE background** — which is **#615**, and is NOT BUILT YET.  ✅ #615 shipped v13.57, and the black-box worry was measured away.
              ⚠️ **The current splash is built for pure black on purpose:** *"The video sits on PURE BLACK
              and nothing else: its own edges are #000, so the letterbox disappears and the mark floats
              instead of playing inside a visible square."* **His new video is also black-edged**, so on a
@@ -24023,8 +24022,27 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **Measure the new video before wiring it:** duration, dimensions and first-frame colour. The
       timing of the fade is tied to the mark "still settling", so a different length changes the feel.
 
-- [ ] **637 — Try the new logo image, and rate it.** (27 Aug, at v13.55. Attached, and quoted in full
-      **STATUS: 🟢 READY — nothing is stopping this**
+
+      ═══ ✅ **29 AUG — ALREADY DONE, AND DONE WELL. This entry simply never got ticked.** ═══
+      It reads *"staged and unwired"*, and that stopped being true in the light-look release. **index.html
+      line 183: `vid.src = LIGHT ? 'splash-v2.mp4' : 'splash.mp4'`** — your film is the intro, and the
+      light look is ON by default (`var LIGHT = true`, overridable from Settings).
+      1. ✅ **Your video is the loading intro.**
+      2. ✅ **The way back is the light-look switch** — turn it off and you get the original
+         `splash.mp4`, which is still sitting in the repo untouched. ⚠️ **Being straight about the
+         shape of that:** the two are COUPLED, so you cannot currently keep the white home screen and
+         the old intro at the same time. That was a reasonable call when both arrived together — **say
+         the word if you want them separated** and it is a small change.
+      3. ✅ **The white-background worry was measured away rather than argued.** The entry feared a black
+         rectangle on a white page. The splash box is `#111` and the new film's first frame is the mark
+         already lit on `#111`, so there is nothing to letterbox. **And the poster was deleted rather
+         than replaced** — the entry demanded a new one *"or the splash flashes the old mark first"*,
+         and the honest answer turned out to be that this film needs none. That also fixed **#642**,
+         where an empty `<img>` sized to the viewport painted as *"a weird white box"*. 292KB saved.
+      📌 **Nothing was rebuilt here — this is the seventh entry today found finished and untouched.**
+      An entry records what was ASKED, not what is still missing, and nothing keeps the two in step.
+
+- [x] **637 — Try the new logo image, and rate it.** (27 Aug, at v13.55. Attached, and quoted in full
       in **#636** above.)
       His words, verbatim:
       > Also try switching the logo to the image I sent. Rate the logo as well for how good you think it is
@@ -24059,11 +24077,27 @@ re-opened #480, which I had marked done and had not fixed.
              matters MORE, not less — that notch is what makes it wobble between letters. **Fixing that
              one join is the single highest-value change to this logo**, and it would move it from 7 to
              a comfortable 8.
-      2. [ ] **Actually swap the logo in.** ⚠️ **Where it appears has to be enumerated first** — the home
+      2. [x] **Actually swap the logo in.** ⚠️ **Where it appears has to be enumerated first** — the home  ✅ swapped under #639 — wordmark v13.62, app icon v13.63
              header wordmark, the splash, the PWA manifest icons and the favicon are different files at
              different sizes, and #545's trap is exactly this: *"a 24px icon that only reads at 64px"*.
       ⚠️ **#545 APPLIES:** render it at 24px and at the app-icon size, send him the picture, and let him
       decide — do not swap a brand mark on his behalf on the strength of "he sent it".
+
+
+      ═══ ✅ **29 AUG — CLAUSE 2 IS DONE TOO; it shipped under #639 and this entry was never ticked.** ═══
+      The clause demanded the places be **enumerated first** rather than swapped blind, so here is that
+      enumeration, checked one file at a time:
+      · **home header wordmark** ✅ `brand-wordmark-m.png` (index.html:602) — v13.62
+      · **the splash** ✅ your own film, `splash-v2.mp4` — see #636
+      · **PWA icons** ✅ `icon-192.png` / `icon-512.png` — v13.63
+      · **favicon** ✅ `icon-192.png` (index.html:56) — v13.63
+      · **apple-touch-icon** ✅ v13.63
+      · **iOS launch screens** (`launch/*.png`) — **checked and correctly left alone.** They were last
+        touched in v4.93 and I expected to find the old mark in them. **They are pure black and carry no
+        logo at all**: they exist only to stop the white launch flash, so there was nothing stale in
+        them. Worth saying because "last touched three months ago" looks exactly like a miss.
+      📌 **Eighth entry today found finished and untouched.** The work lands under whichever number is
+      being shipped that day, and nothing walks back to tick the entry that asked for it.
 
 - [x] **638 — Replace the "FreeMotion" TEXT logo with the version where the mark IS the M.**
       (27 Aug, at v13.57. He sent a Claude Design project link.)
@@ -24254,8 +24288,8 @@ re-opened #480, which I had marked done and had not fixed.
       His words, verbatim, in full:
       > If you analyse this video you’ll notice that basically at the start there’s like a weird like white box that pops up. It’s a bit glitchy and also there’s like two white bars at the top and bottom when the screen fully zooms in like I feel like you could probably fix that with a little bit of effort just don’t make the video playback loading intro look shit just like try and fix it up a little bit and also you’ve made the background in the hub menu like white not white but like black now like you’ve made a good dark again and Justin said the top buttons are white which isn’t terrible I would just like you to experiment a bit more and see if there’s a nicer design and layout that you can create for the background
 
-      1. [ ] **A white box pops up at the start of the intro** — *"a bit glitchy"*.
-      2. [ ] **Two white bars, top and bottom, when it fully zooms in.**
+      1. [x] **A white box pops up at the start of the intro** — *"a bit glitchy"*.  ✅ the empty <img> is removed in the light look, not just left blank — v14.24 area, pinned v14.26
+      2. [x] **Two white bars, top and bottom, when it fully zooms in.**  ✅ the light film fills the viewport, so there is no surround left to mismatch — v14.26
       3. [ ] **Experiment with a nicer background design/layout for the home screen.** ⚠️ **#545 — draw
              options and show him.** He is asking to be shown alternatives, not handed one.
       ✅ **"you've made the background… black now" IS ALREADY FIXED — he is on v13.63 and it is #641.**
@@ -24283,6 +24317,33 @@ re-opened #480, which I had marked done and had not fixed.
       ➡️ **The second is cheap to eliminate: do not render the element at all when light.** ⚠️ **Say
       which of the two it was once he confirms** — a screen recording of a phone's own launch animation
       can look like an app bug, and I have not proven it either way.
+
+
+      ═══ ✅ **29 AUG (v14.26) — CLAUSES 1 AND 2 ARE FIXED. Clause 3 still wants your eye.** ═══
+      🔑 **THE BARS WERE A COMMENT THAT STOPPED BEING TRUE, which is why they appeared out of nowhere.**
+      The splash sizes the film to the screen's SHORT side, and the code says why in as many words:
+      *"the rest of the screen is the same black the video ends in"*. **That was true of the old film.
+      Yours ends in WHITE.** On a 9:19.5 phone the square covers about half the height, so roughly a
+      quarter of the screen above and below stays dark while the picture goes white — a hard-edged band.
+      **Your own recording measured it: at t=3.48 the middle is 255 and the bands are 124 and 162.**
+      ✅ **The light film now fills the viewport (`object-fit: cover`), so there is no surround left to
+      disagree with it.** It crops the sides of a centred animation, which is the right trade against a
+      white-on-grey seam. **Verified at 375×812: the video is exactly 375×812 at top 0.**
+      ⚠️ **The DARK film deliberately keeps its square** — its own edges are black and so is the
+      surround, so nothing there was ever wrong. Cropping it to fix yours would lose picture for nothing,
+      and the test asserts it stayed put.
+      ✅ **Clause 1, the white box, is fixed too:** an `<img>` with no `src` sized to the whole viewport
+      can paint as a placeholder, so in the light look that element is **removed** rather than left
+      empty. Confirmed live — there is no poster element at all now.
+      🔬 **Both tests had to be rewritten, and the reason is worth keeping:** the splash **removes itself
+      from the DOM** once it has played, so by the time any test runs there is nothing left to measure.
+      The first version failed for that alone. One builds the same markup so it exercises the real
+      stylesheet; the other checks index.html's source, which is honestly second best and labelled as
+      such — an inline boot script that runs once per session leaves no live state to read.
+      ➡️ **CLAUSE 3 IS STILL OPEN AND IT IS YOURS:** *"experiment a bit more and see if there's a nicer
+      design and layout that you can create for the background"*. **#545 applies — you asked to be SHOWN
+      alternatives, not handed one**, so that wants drawn options like the menu-motion page, not a
+      guess shipped over the top of the look you already have.
 
 - [ ] **643 — The wordmark has a pale GHOST of the old logo behind it, and the white shadow looks
       **STATUS: 🟢 READY — nothing is stopping this**

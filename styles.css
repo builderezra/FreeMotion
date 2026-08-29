@@ -1899,6 +1899,25 @@ html.splash-on, html.splash-on body { background: #000; }
    where that is exactly the state — which is the play button appearing on the splash. So the video
    carries no poster attribute at all and stays invisible until its `playing` event fires; if it
    never plays (Low Power Mode, slow connection) you simply see the still and the splash times out. */
+/* ⚠️ THE SQUARE BOX ABOVE ASSUMED THE FILM ENDS IN BLACK — and his new one ends in WHITE (queue 642).
+   Ezra: *"there's like two white bars at the top and bottom when the screen fully zooms in"*.
+   The rule above sizes the video to the screen's SHORT side and explains itself honestly: "the rest of
+   the screen is the same black the video ends in". That was true of `splash.mp4`. On a 9:19.5 phone the
+   square covers about half the height, so roughly a quarter of the screen above and below it is
+   surround — invisible while the film is dark, and a hard-edged band the moment it is not.
+   📐 MEASURED from his own screen recording, sampled through PLAYBACK (a seek-based probe returned the
+   same frame eight times and was thrown away): at t=3.48 the middle is 255 and the bands are 124 and
+   162. The film goes white; the surround cannot follow it, because the ground animation ramps on its
+   own clock and no ramp tracks a film frame by frame.
+   So the light film fills the viewport and there is no surround left to mismatch. It crops the sides of
+   a centred animation, which is the right trade against a hard white-on-grey seam.
+   The DARK film keeps the square: its own edges are black, the surround is black, and nothing there was
+   ever wrong — this is not a shared bug with one correct answer. */
+#splash.splash-light #splash-vid {
+  width: 100vw; height: 100vh;
+  width: 100vw; height: 100dvh;   /* dynamic viewport where supported, same reason as the rule above */
+  object-fit: cover;
+}
 #splash-vid { opacity: 0; transition: opacity .2s linear; pointer-events: none; }
 #splash-vid.playing { opacity: 1; }
 #splash-vid.playing + #splash-poster { opacity: 0; }
