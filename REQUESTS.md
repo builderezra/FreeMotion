@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.34
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.35
 >
-> **State:** v14.34, 1090 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.35, 1091 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -10774,6 +10774,9 @@ better still, keep working inside the turn rather than parking work for a later 
       ✅ **SO THE MESSAGE GOES INSIDE THE CARD, WHERE NOTHING CAN COVER IT — two surfaces:**
       1. **`#export-status` while it renders.** It normally reads *"Encoding audio + video… 60%"*; a loss
          now replaces that and is styled so it stops looking like progress. All the loss sites write to it.
+         ⚠️ **BOTH SENTENCES ABOVE WERE WRONG — corrected 29 Aug (v14.35).** It was FOUR of SIX sites,
+         not five of five, and the surface it wrote to was the PROGRESS LINE, which is rewritten once
+         per frame. Every one of these was erased by frame 1.
       2. **The ready card's meta line.** It listed size, length, dimensions and frame rate — everything
          except the one thing he has reported going wrong four times. It now reads **"… · Sound ✓"** or
          **"… · NO SOUND — every audio clip is muted or at zero volume"**, in amber, **on the one screen
@@ -11114,6 +11117,42 @@ better still, keep working inside the turn rather than parking work for a later 
       (v14.04, Settings → "Your last export") records which of the five loss paths actually fired,
       whether a track was written, and whether this browser even has an AudioEncoder. **That block of
       text decides this entry.** Nothing here should be searched again until it arrives.
+
+      ═══ 🚨 **29 AUG (v14.35) — v13.92 DID NOT FIX THIS. IT MOVED IT TO A DIFFERENT KIND OF INVISIBLE.** ═══
+      📐 **Measured, not argued.** v13.92 took the audio-loss messages out of the toast — which really
+      was painted under the export overlay — and put them into `#export-status`. **But `#export-status`
+      IS THE PROGRESS LINE.** The app writes `"Encoding… 42%"` to that exact node **once per frame**,
+      and every audio-loss message fires **before** the frame loop starts. **Frame 1 erased all of
+      them.** The amber tint was never cleared either, so what you have actually been seeing is
+      ordinary progress text, tinted amber, **with none of the words**.
+      🔍 **And the old test could not see it** — it called the message function and read the node
+      straight back, with no frame loop in between. A green test over a dead feature. This entry had
+      already recorded that exact seam hole once before, for a different check.
+      ✅ **They now write to the note line added in v14.34**, which the frame loop never touches, and
+      they **stack** instead of overwriting — a dropped clip and a missing AAC encoder can both happen
+      in one export, and "last one wins" is how you lose the first. **Verified through a real export:
+      still on screen when the render ended.**
+      🚨 **AND THE REPORT COULD LIE TO YOU — this one matters more, because the report is the evidence
+      this entry says decides the case.** The "no audio" verdict had **no per-run reset**. So after
+      **one** muted export, **every later export in that session — healthy ones included — reported
+      "NO SOUND — every audio clip is muted or at zero volume"**, on the ready card and in the report
+      you are asked to paste. The drop lists carried over the same way, and worse: they are filled in
+      *after* the mixer is built, so if the mixer runs out of memory — **the phone theory in this very
+      entry** — it throws first and the report ships the *previous* export's list as this one's.
+      **So the one piece of evidence this entry has waited three months for could have been a stale
+      copy of an earlier export's verdict, with nothing on screen saying so.** Measured fixed.
+      🔴 **AND THE PATH THAT IS MOST LIKELY WHAT YOU ACTUALLY HIT.** When **every** audio clip fails to
+      decode, no flag was set anywhere — so the ready card fell through to **"no soundtrack"**, which
+      is *the exact wording a project with no audio in it gets*, and the report said `dropped no`. From
+      your side, an export whose entire soundtrack failed looked **identical to one that never had
+      sound**. The reasons only ever survived in the browser console, which is not a place a phone has.
+      It now says `none of the audio clips could be read`. `encode-failed` was toast-only too — also
+      invisible on a phone — and now speaks. **Both fixes mutation-tested; both caught.**
+      ⚠️ **The old test demanded 3 of the 6 sites.** It now demands all six.
+      ❓ **WHAT I STILL NEED, AND IT IS NOT AN ANSWER — IT IS ONE EXPORT.** Export something with sound
+      on your phone. If it comes out silent: **Settings → Your last export → Copy**, and paste it.
+      That report is now trustworthy for the first time, and it will name which of the six it was.
+
 - [ ] **202 — One simple video layer lags badly, and the video does not load properly.**
       **STATUS: 📌 NOTE — nothing to build**
 
@@ -26986,8 +27025,7 @@ re-opened #480, which I had marked done and had not fixed.
       🔒 **Proved by simulating the exact deletion that prompted it** — the gate fires and names the
       missing test. A gate nobody has watched fire is a gate nobody should trust.
 
-- [ ] **668 — 🔴🔴 P0 DATA LOSS: "Replace media…" silently reverts to the original file on reload.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **668 — 🔴🔴 P0 DATA LOSS: "Replace media…" silently reverts to the original file on reload.**
       (29 Aug. From an external QA pass he commissioned — *"I haven't verified any of it so make sure
       to validate its claims"*.)
       ✅ **VALIDATED BY ME, in the source.** `js/storage.js:279` is the ONLY writer of a layer's media
@@ -27008,6 +27046,19 @@ re-opened #480, which I had marked done and had not fixed.
       history snapshot, so it is the cheap key.
       🔒 **Wants a gate:** a save/load round-trip AFTER a replace. Nothing in the suite round-trips a
       replaced blob, which is exactly why this survived.
+
+
+      ═══ ✅ **FIXED, SHIPPED IN v14.29 — AND THIS BOX SAT UNTICKED FOR A DAY. That is its own bug.** ═══
+      🔴 **It is fixed and it is live.** `js/storage.js` now writes the blob whenever `mediaRev` has
+      moved, so a replaced file is persisted and survives a reload. There is a test. It is on the
+      remote. Your replaced media is safe.
+      ⚠️ **BUT THE FIX RODE ALONG INSIDE A RELEASE ABOUT SOMETHING ELSE** — v14.29 was the filters
+      release — so the commit message does not mention it, POLISH-LOG had no entry for it, and this box
+      stayed open. **A P0 DATA-LOSS ITEM SAT IN YOUR LIST READING "NOT DONE" WHILE IT WAS DONE.** If you
+      had opened this file you would have believed your replaced media was still being thrown away.
+      📌 **This is the eleventh time an item has been finished and not ticked**, and it is the failure
+      this file exists to prevent. Written down here rather than fixed with a resolution, because a
+      resolution is exactly what the last ten had.
 
 - [ ] **669 — 🔴 GIF and PNG-frame export are both DEAD: `blit` is out of scope.**
       **STATUS: 🟢 READY — nothing is stopping this**

@@ -45646,24 +45646,113 @@
       throw new Error('#toast (' + tz + ') is now ABOVE #export-overlay (' + oz + ') — that breaks the ' +
                       'modal-layer rule (a toast over a modal blocks its buttons, measured at v5.11). ' +
                       'If it was raised deliberately, this test and that one disagree and one is wrong.');
-    /* SO THE MESSAGE MUST GO SOMEWHERE INSIDE THE CARD. #export-status is a child of .export-card
-       inside #export-overlay, so the overlay can never paint over it. */
-    if (!status) throw new Error('#export-status is missing — there is nowhere inside the overlay to say it');
-    if (!overlay.contains(status)) throw new Error('#export-status is not inside #export-overlay, so it can be covered by it');
+    /* SO THE MESSAGE MUST GO SOMEWHERE INSIDE THE CARD…
+       ⚠️ …AND NOT INTO THE PROGRESS LINE, WHICH IS WHERE IT WENT FOR THREE RELEASES. v13.92 moved these
+       warnings out of the toast and into #export-status — but #export-status IS the progress line:
+       js/app.js's onProgress writes `'Encoding …'` to that same node once per frame, and every
+       audio-loss site fires BEFORE the frame loop. Frame 1 erased all of them, and `export-status-warn`
+       was never removed, so what he actually saw was ordinary progress text tinted amber, with none of
+       the words. The old test could not see it, because it called FM._exportSay directly and read the
+       node back — there was no frame loop in between. That is the seam hole this entry had already
+       recorded once for _checkExportAudioSupport, repeated.
+       #export-note is the surface the frame loop never touches. */
+    const note = document.getElementById('export-note');
+    if (!note) throw new Error('#export-note is missing — there is nowhere inside the overlay that survives the frame loop');
+    if (!overlay.contains(note)) throw new Error('#export-note is not inside #export-overlay, so it can be covered by it');
+    if (!status) throw new Error('#export-status is missing');
     if (typeof FM._exportSay !== 'function') throw new Error('FM._exportSay is gone — the audio-loss sites have nothing to write into the card with');
-    const before = status.textContent;
+    const beforeNote = note.textContent, beforeCls = note.className;
     try {
+      note.textContent = ''; note.classList.remove('export-note-warn');
       FM._exportSay('Exporting with NO SOUND — test');
-      if (status.textContent.indexOf('NO SOUND') < 0)
-        throw new Error('the warning did not reach #export-status (it reads "' + status.textContent + '")');
-      if (!status.classList.contains('export-status-warn'))
-        throw new Error('the warning is styled as ordinary progress — #export-status normally reads "Encoding audio + video… 60%", so a loss must not look like one');
-    } finally { status.textContent = before; status.classList.remove('export-status-warn'); }
-    /* AND EVERY LOSS SITE MUST USE IT. Five of them exist; a fix applied to four is the same bug. */
+      if (note.textContent.indexOf('NO SOUND') < 0)
+        throw new Error('the warning did not reach #export-note (it reads "' + note.textContent + '")');
+      if (!note.classList.contains('export-note-warn'))
+        throw new Error('the warning is not styled as one — it must not read as ordinary progress text');
+      /* SEVERAL CAN FIRE IN ONE EXPORT — a dropped clip AND no AAC encoder — and "the last one wins"
+         is how the first is lost. They stack; a repeat does not. */
+      FM._exportSay('This browser cannot encode AAC — exporting WITHOUT SOUND');
+      FM._exportSay('Exporting with NO SOUND — test');
+      const lines = note.textContent.split('\n').filter(Boolean);
+      if (lines.length !== 2)
+        throw new Error('two different warnings and one repeat produced ' + lines.length + ' line(s); expected 2 — either they overwrite each other or the repeat was not de-duplicated:\n' + note.textContent);
+    } finally { note.textContent = beforeNote; note.className = beforeCls; }
+    /* AND EVERY LOSS SITE MUST USE IT. There are SIX, not the five this test used to claim, and the
+       threshold was `< 3` — so a fix applied to half of them passed. Counted from the source: four in
+       run() (mix-silent, mix-failed, aac-unavailable, encode-failed) and two in buildAudioMix
+       (all-suppressed, and the dropped-clips report). A fix applied to four of six is the same bug. */
     const src = String(FM.exporter && FM.exporter.run);
     const mixSrc = String(FM.exporter && FM.exporter.buildAudioMix);
     const says = (src.match(/exportSay\(/g) || []).length + (mixSrc.match(/exportSay\(/g) || []).length;
-    if (says < 3) throw new Error('only ' + says + ' audio-loss site(s) write into the export card — the rest still speak only through a toast nobody can see');
+    if (says < 6) throw new Error('only ' + says + ' of the 6 audio-loss sites write into the export card — the rest still speak only through a toast painted under the overlay');
+  });
+
+  test('#215: an audio warning survives the frame loop, and a verdict does not carry into the next export', { item: '215' }, async function () {
+    /* ⚠️ THE TWO DEFECTS THAT KEPT THIS ENTRY OPEN, both driven through a REAL export rather than
+       through the seam — because the seam is exactly what hid the first one for three releases. */
+    if (typeof VideoEncoder === 'undefined') return;
+    const P = FM.scene.project, keep = FM.scene.layers.slice();
+    const w0 = P.width, h0 = P.height, d0 = P.duration, f0 = P.fps;
+    const note = document.getElementById('export-note');
+    if (!note) throw new Error('#export-note is missing');
+    try {
+      P.width = 160; P.height = 160; P.duration = 1; P.fps = 15;
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 80, shapeW: 100, shapeH: 100, fill: '#4fd1ff' });
+      L.start = 0; L.duration = 1; FM.scene.layers.push(L); FM.refreshAll();
+      const OPTS = function () { return { scale: 1, fps: 15, bitrate: 300000, name: 'x215probe', from: 0, to: 1, outW: 160, outH: 160 }; };
+
+      // ── 1. A WARNING MUST STILL BE ON SCREEN WHEN THE RENDER ENDS. ──
+      note.textContent = ''; note.classList.remove('export-note-warn');
+      const status = document.getElementById('export-status');
+      /* ⚠️ THE WARNING IS FIRED FROM INSIDE THE EXPORT, and the first draft of this test got that wrong
+         in a way worth keeping: it called _exportSay BEFORE run(), and run() now clears the note on
+         entry (so no caller can carry the last export's warning onto this one's card). The real sites
+         all fire after that reset, so writing beforehand tests a sequence that cannot happen.
+         Fired on the first frame instead. The real sites fire one frame earlier still — before the
+         loop — so this is a slightly WEAKER position than reality, and it is still enough: the whole
+         defect is that the per-frame progress write erases the node, and there are fourteen more
+         frames after this one. */
+      let said = false;
+      await FM.exporter.run(Object.assign(OPTS(), {
+        // the real caller's shape: it writes the progress line every frame, which is what erased this
+        onProgress: function (p, what, verbatim) {
+          if (!said) { said = true; FM._exportSay('Exporting with NO SOUND — 2 audio clips could not be read'); }
+          if (status) status.textContent = verbatim ? what : 'Encoding ' + what + '… ' + Math.round(p * 100) + '%';
+        },
+        onReady: async function () {},
+      }));
+      if (!said) throw new Error('the export never reported progress, so the warning was never written — this test measured nothing');
+      if (note.textContent.indexOf('NO SOUND') < 0)
+        throw new Error('the audio warning was gone by the end of the render — it now reads ' + JSON.stringify(note.textContent) +
+                        '. That is the v13.92 bug: the message goes to a node the frame loop overwrites.');
+
+      // ── 2. A VERDICT FROM AN EARLIER EXPORT MUST NOT SURVIVE INTO THE NEXT ONE. ──
+      /* The only clear used to live inside `if (mix)` and was guarded `!== 'mix-silent'`, so after one
+         muted export EVERY later export in the session — healthy ones included — reported "NO SOUND"
+         on the ready card and in the report he is asked to paste. The evidence this entry has waited
+         three months for could have been a stale copy of an earlier export's verdict. */
+      FM._audioTrackDropped = 'mix-silent';
+      FM._lastAudioDrops = ['a stale clip from a previous export'];
+      FM._lastAudioSuppressed = ['stale too'];
+      let ready = null;
+      await FM.exporter.run(Object.assign(OPTS(), { onProgress: function () {}, onReady: async function (o) { ready = o; } }));
+      if (!ready) throw new Error('the second export never reached onReady');
+      if (ready.audioDropped)
+        throw new Error('a healthy export inherited the previous one\'s verdict: audioDropped = ' + JSON.stringify(ready.audioDropped));
+      const rep = localStorage.getItem('fm.lastExportReport') || '';
+      if (/^dropped\s+mix-silent/m.test(rep))
+        throw new Error('the export report carried the previous export\'s reason — this is the artifact #215 says decides the case:\n' + rep);
+      if (/stale/.test(rep))
+        throw new Error('the report carried the previous export\'s drop list:\n' + rep);
+    } finally {
+      P.width = w0; P.height = h0; P.duration = d0; P.fps = f0;
+      FM.scene.layers.length = 0; keep.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll();
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+      note.textContent = ''; note.classList.add('hidden'); note.classList.remove('export-note-warn');
+      FM._audioTrackDropped = null; FM._lastAudioDrops = []; FM._lastAudioSuppressed = [];
+    }
   });
 
   /* AND THE ANSWER SHOULD NOT DEPEND ON A TOAST AT ALL. The export-ready card is the one thing he is
@@ -53242,9 +53331,18 @@
     const ov = document.getElementById('export-overlay');
     if (!ov || !ov.contains(note))
       throw new Error('#export-note is no longer inside #export-overlay — put it back, or it inherits the z-index bug the toast had');
-    // …and it must start silent, or every export opens claiming to be a resume.
-    if (!note.classList.contains('hidden') && note.textContent.trim())
-      throw new Error('#export-note starts with text showing — an ordinary export would open by announcing a resume that did not happen');
+    /* …AND IT MUST DEFAULT TO SILENT, or an ordinary export would open by announcing a resume that
+       never happened. Asserted against index.html's SOURCE rather than the live node, and that is not
+       a dodge: this node is shared mutable state, every export test in the suite writes to it, and
+       what it happens to contain 900 tests into a run is not a fact about the app. The first version
+       read the live node and failed for exactly that reason — a passing assertion about the wrong
+       thing. What actually has to be true is that the element SHIPS hidden and that run() clears it. */
+    const html = await (await fetch('../index.html?boot=' + Date.now())).text();
+    if (!/<div id="export-note" class="hidden"><\/div>/.test(html))
+      throw new Error('#export-note no longer ships empty and hidden — an ordinary export would open showing whatever was there last');
+    const runSrc = String(FM.exporter && FM.exporter.run);
+    if (!/export-note/.test(runSrc))
+      throw new Error('run() no longer clears #export-note on entry — the previous export\'s warning would sit on this export\'s card');
   });
 
   test('47 — a resumed export says so, and the fact outlives the overlay', { item: '47' }, async function () {

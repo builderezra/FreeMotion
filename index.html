@@ -39,7 +39,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=654">
+<link rel="stylesheet" href="styles.css?v=655">
 <link rel="stylesheet" href="theme-glass.css?v=45">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -210,7 +210,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v14.34</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v14.35</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -723,8 +723,13 @@
       <!-- QUEUE 47, v14.34. Crash-resume has worked since v7.53 and could never tell anyone it had.
            The one message that says it fired is FM.toast, and #toast is z-index 60 while
            #export-overlay is 100 with a 65% black backdrop over it — so it has been painted behind
-           the very screen it is about, for four releases. That is the SAME defect v13.92 fixed for the
-           five export audio warnings; this message was simply missed in that sweep.
+           the very screen it is about, for four releases.
+           ⚠️ CORRECTED v14.35: the line that used to sit here said this was "the same defect v13.92
+           fixed for the five export audio warnings", and that the resume message "was simply missed in
+           that sweep". THE REVERSE IS TRUE. v13.92 moved those warnings out of the toast and into
+           #export-status — which is the PROGRESS LINE, rewritten once per frame — so they were erased
+           by frame 1 and only their amber tint survived. They were never fixed; they were moved from
+           one kind of invisible to another that looks fixed. They write here now (#215).
            A toast cannot be raised above the overlay without putting it above every dialog in the app,
            so the note lives INSIDE the card instead, where the stacking order cannot reach it. -->
       <div id="export-note" class="hidden"></div>
@@ -990,14 +995,14 @@
   <script src="js/graph-editor.js?v=17"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
-  <script src="js/exporter.js?v=114"></script>
+  <script src="js/exporter.js?v=115"></script>
   <script src="js/sample.js?v=10"></script>
   <script src="js/contextmenu.js?v=43"></script>
   <script src="js/shortcuts.js?v=80"></script>
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=52"></script>
   <script src="js/audio-health.js?v=3"></script>
-  <script src="js/app.js?v=392"></script>
+  <script src="js/app.js?v=393"></script>
   <script src="js/audio-tools.js?v=5"></script>
   <script src="js/loading.js?v=1"></script>
   <script src="js/sfx.js?v=10"></script>

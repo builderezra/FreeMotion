@@ -8875,3 +8875,8 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
   font-size: 12.5px; line-height: 1.45; color: var(--text-dim);
   text-align: center; text-wrap: balance;
 }
+/* An export WARNING in the same slot (queue 215, v14.35). Several can stack in one export — a dropped
+   clip and no AAC encoder — so the box holds lines, and `pre-line` is what makes the \n between them
+   real. Amber rather than red: the export is still going to finish and still going to be usable, it is
+   just going to be missing something, and red would read as "this failed". */
+#export-note.export-note-warn { color: var(--warn, #ffb03a); font-weight: 600; white-space: pre-line; }

@@ -293,10 +293,29 @@ window.FM = window.FM || {};
    * Cancel both returned the sheet — a modal with no reachable buttons. A toast over a modal is that bug.
    * So the message goes INSIDE the card instead, where nothing can cover it. The toast stays too: it is
    * the right surface when no overlay is up (a background export, a re-render), and it costs nothing. */
+  /* ⚠️ v14.35 — THE REASONING ABOVE WAS RIGHT AND THE TARGET WAS WRONG, AND THAT IS WHY #215 NEVER
+   * MOVED. "The message goes INSIDE the card, where nothing can cover it" is correct. But it went into
+   * `#export-status`, and `#export-status` IS THE PROGRESS LINE: js/app.js's onProgress does
+   * `status.textContent = 'Encoding …'` on that same node, and the frame loop calls it once per frame.
+   * Every one of these warnings is written BEFORE the frame loop starts, so FRAME 1 ERASES IT.
+   * `export-status-warn` is never removed either, so what he has actually been seeing is ordinary
+   * progress text, tinted amber, with none of the words. v13.92 believed it had fixed this; measured,
+   * it moved the message from a toast painted UNDER the overlay to a line overwritten a sixtieth of a
+   * second later. Both are invisible, for different reasons, and the second looks fixed.
+   * `#export-note` (index.html, added v14.34 for the crash-resume message) is the surface that
+   * actually persists — the frame loop never touches it.
+   * APPENDS rather than replaces: several of these can fire in one export (a dropped clip AND no AAC),
+   * and "the last one wins" is how you lose the first. De-duplicated, because the mixer can report the
+   * same thing twice. */
   function exportSay(msg) {
     try {
-      const el = document.getElementById('export-status');
-      if (el) { el.textContent = msg; el.classList.add('export-status-warn'); }
+      const el = document.getElementById('export-note');
+      if (!el) return;
+      const have = el.textContent ? el.textContent.split('\n').filter(Boolean) : [];
+      if (have.indexOf(msg) < 0) have.push(msg);
+      el.textContent = have.join('\n');
+      el.classList.remove('hidden');
+      el.classList.add('export-note-warn');
     } catch (e) {}
   }
   FM._exportSay = exportSay;   // suite seam
@@ -490,11 +509,19 @@ window.FM = window.FM || {};
      * sound, so nothing looks wrong, and one of your clips is quietly missing from it. */
     if (dropped.length) {
       console.warn('[export] ' + dropped.length + ' layer(s) contributed no audio:\n  · ' + dropped.join('\n  · '));
-      if (FM.toast) {
-        FM.toast(any
-          ? dropped.length + ' clip' + (dropped.length === 1 ? '' : 's') + ' had no usable audio — see the console'
-          : 'Exporting with NO SOUND — ' + dropped.length + ' audio clip' + (dropped.length === 1 ? '' : 's') + ' could not be read (see the console)', 5200);
-      }
+      const _msg = any
+        ? dropped.length + ' clip' + (dropped.length === 1 ? '' : 's') + ' had no usable audio — the rest are in the file'
+        : 'Exporting with NO SOUND — ' + dropped.length + ' audio clip' + (dropped.length === 1 ? '' : 's') + ' could not be read';
+      /* ⚠️ v14.35 — THIS WAS THE LAST PATH THAT REACHED THE END SAYING NOTHING, and it is the worst of
+       * the six because it is indistinguishable from normal. Every audio clip failed to decode, so no
+       * flag was set anywhere: the ready card fell through to "no soundtrack", which is the exact
+       * wording a project with NO AUDIO IN IT gets, and the report said `dropped no`. From his side an
+       * export whose entire soundtrack failed looked identical to one that never had sound — which is
+       * a very good candidate for what he actually saw, and it is why this entry could not be closed.
+       * The reasons only ever survived in the console, which is not a place a phone has. */
+      if (!any) FM._audioTrackDropped = 'all-unreadable';
+      exportSay(_msg);
+      if (FM.toast) FM.toast(_msg + (any ? ' — see the console' : ' (see the console)'), 5200);
     }
     /* AND THE LAST SILENT REASON OF ALL: nothing was dropped, nothing was broken, and every clip that
      * could contribute was hidden or solo-suppressed. Reported only when the export ends up with NO
@@ -789,6 +816,34 @@ window.FM = window.FM || {};
       const totalFrames = Math.max(1, Math.round((end - start) * fps));
       FM._exportCancel = false;
       resetSeekWatch();
+      /* ⚠️ v14.35 — AND THE REPORT COULD LIE, WHICH MATTERS MORE THAN ANY OF THE MESSAGES, BECAUSE THE
+       * REPORT IS THE ARTIFACT THIS ENTRY SAYS DECIDES THE CASE. `FM._audioTrackDropped` had no
+       * per-run reset. Its only clear is inside `if (mix)` and is guarded `!== 'mix-silent'`, so:
+       *   · after ONE muted export, every later export in the same session — including a perfectly
+       *     healthy one — reported "NO SOUND — every audio clip is muted or at zero volume", on the
+       *     ready card AND in the report he is asked to paste;
+       *   · and after any other reason, a later export of a project with NO audio at all takes the
+       *     `mix === null` route, skips that whole block, and inherits the previous reason.
+       * So the one piece of evidence this entry has waited three months for could be a stale copy of an
+       * earlier export's verdict, with nothing on screen saying so. `_lastAudioDrops` and
+       * `_lastAudioSuppressed` carry over the same way — worse, they are assigned AFTER the mixer's
+       * OfflineAudioContext is constructed, so an OOM there (the phone theory in this very entry)
+       * throws first and the report ships the PREVIOUS export's drop list as if it were this one's.
+       * Only run() resets these: runGif and runFrames build no soundtrack, so they have no verdict to
+       * clear and clearing one there would only discard the last real answer. */
+      FM._audioTrackDropped = null;
+      FM._lastAudioDrops = [];
+      FM._lastAudioSuppressed = [];
+      /* ⚠️ AND THE NOTE IS CLEARED HERE, IN run(), NOT ONLY IN THE CALLER. js/app.js clears it too, but
+       * that is the click handler — so every other entry point (the suite, a re-render, anything added
+       * later) would carry the LAST export's warning onto this one's card. That is the same defect as
+       * the stale flag directly above, in a different medium, and it would be read the same way: a
+       * warning about an export that already finished, sitting on the screen of one that is fine.
+       * Safe here: the crash-resume note is written much later in run(), long after this. */
+      try {
+        const _n = document.getElementById('export-note');
+        if (_n) { _n.textContent = ''; _n.classList.add('hidden'); _n.classList.remove('export-note-warn'); }
+      } catch (e) {}
 
       const projCanvas = document.createElement('canvas');
       projCanvas.width = P.width; projCanvas.height = P.height;
@@ -897,6 +952,9 @@ window.FM = window.FM || {};
         } catch (e) {
           console.warn('[export] the soundtrack failed to encode — exporting video only', e);
           FM._audioTrackDropped = 'encode-failed';
+          // v14.35: toast-only until now, so on a phone this one was painted under the overlay and
+          // never seen — the very failure #215 is about, on one of the six paths that can cause it.
+          exportSay('The soundtrack failed to encode — exporting WITHOUT SOUND');
           if (FM.toast) FM.toast('The soundtrack failed to encode — exporting WITHOUT SOUND', 6000);
           mix = null; audioChunks = null;
         }
