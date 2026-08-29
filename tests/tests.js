@@ -46400,6 +46400,36 @@
     if (!/STUTTER/i.test(bad)) throw new Error('a stuttering sample lost its stutter verdict to the new scale branch: ' + bad);
   });
 
+  /* ═══ QUEUE 643 — THE GLOW MASKS MUST TRACK THE WORDMARK ══════════════════════════════════════
+   * Ezra spotted this himself and described it exactly: *"you've got like an M as like the backdrop for
+   * like the big M but it's like not it doesn't look the same cause… mine looks more like a N than an
+   * M"*. He was right, and it was a real bug rather than a matter of taste.
+   * CAUSE: every glow, halo and specular on the brand is SHAPED BY MASKING THE WORDMARK ART. Swapping
+   * the `<img>` to the new lockup changed the picture and left all six masks cut to the OLD silhouette,
+   * so a pale ghost of the previous wordmark sat offset behind the new one — in both looks.
+   * ⚠️ THE FIX SHIPPED WITH A NOTE SAYING THE MASKS MUST TRACK THE IMAGE, and a note is exactly what
+   * this repo's own rule says to replace with a gate: "when something important goes wrong, do not
+   * write a reminder — remove the possibility". Six separate declarations that must all agree with one
+   * `src` is a thing you forget once and cannot see afterwards, because a ghost behind a logo reads as
+   * a design choice. This is that gate. */
+  test('#643: every brand glow mask is cut from the wordmark actually on screen', { item: '643' }, async function () {
+    const html = await (await fetch('index.html?t=' + Date.now())).text();
+    const css = await (await fetch('styles.css?t=' + Date.now())).text();
+    const m = html.match(/class="hm-brand-img"\s+src="([^"?]+)/);
+    if (!m) throw new Error('the home wordmark <img> is gone from index.html, so nothing here can be checked');
+    const wordmark = m[1];
+
+    const masks = [];
+    const re = /mask-image:\s*url\(['"]?([^'")]+)['"]?\)/g;
+    let hit;
+    while ((hit = re.exec(css))) if (/brand-wordmark/.test(hit[1])) masks.push(hit[1].split('?')[0]);
+    if (!masks.length) throw new Error('no brand wordmark masks found in styles.css — if the glow stopped being masked, this guard is watching nothing');
+
+    const wrong = masks.filter(u => u !== wordmark);
+    if (wrong.length) throw new Error(wrong.length + ' of ' + masks.length + ' brand glow masks are cut from "' +
+      wrong[0] + '" while the wordmark on screen is "' + wordmark + '" — that is the pale ghost of the old logo sitting behind the new one, which he spotted before I did');
+  });
+
   /* ═══ QUEUE 642 — THE WHITE BARS ON THE INTRO ═════════════════════════════════════════════════
    * Ezra: *"there's like two white bars at the top and bottom when the screen fully zooms in"*.
    * 📐 MEASURED from his own screen recording, sampled through PLAYBACK (a seek-based probe returned

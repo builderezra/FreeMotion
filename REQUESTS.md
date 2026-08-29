@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.26
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.27
 >
-> **State:** v14.26, 1076 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.27, 1077 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -24345,8 +24345,7 @@ re-opened #480, which I had marked done and had not fixed.
       alternatives, not handed one**, so that wants drawn options like the menu-motion page, not a
       guess shipped over the top of the look you already have.
 
-- [ ] **643 — The wordmark has a pale GHOST of the old logo behind it, and the white shadow looks
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **643 — The wordmark has a pale GHOST of the old logo behind it, and the white shadow looks
       tacky. ✅ BOTH FIXED v13.65 — the "different M" was a real bug, not a matter of taste.**
       (27 Aug, zoomed phone screenshot at v13.63.)
       His words, verbatim:
@@ -24375,6 +24374,20 @@ re-opened #480, which I had marked done and had not fixed.
       things… give it a nice look"*. **#545 applies: draw options at header size and show him.** The
       ghost and the shadow were making it look bad for reasons that are now removed, **so he should see
       the clean version before choosing a treatment** — it may already be what he wanted.
+
+
+      ═══ 🔒 **29 AUG (v14.27) — THE NOTE BECAME A GATE, which is the only reason this cannot come back.** ═══
+      The fix shipped with *"a note at the first one saying they must track the image"*. **A note is
+      exactly what this project's own rule says to replace:** *"when something important goes wrong, do
+      not write a reminder — remove the possibility."*
+      **Six separate declarations that must all agree with one `<img src>` is a thing you forget once
+      and then cannot see** — a pale ghost behind a logo reads as a design choice, not a bug. **You
+      caught it last time, not me**, which is the strongest argument for a gate rather than a reminder.
+      ✅ A test reads the wordmark's real `src` out of `index.html` and asserts **every** brand glow mask
+      in `styles.css` is cut from that same file. Swap the logo again and all six must follow, or the
+      suite says so before you ever see it.
+      ✅ Verified today independently of the note: **zero references to the old art remain, six to the
+      new one.**
 
 - [x] **644 — 🔴 The pinned card's title is unreadable on the light look. ✅ FIXED v13.67.**
       (27 Aug, phone screenshot at v13.66 — two red arrows pointing at a title that is not there.)
