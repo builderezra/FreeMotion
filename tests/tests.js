@@ -53392,12 +53392,18 @@
        provide one. Checked in js/exporter.js rather than assumed — a suite that saved a file per run
        would fill his Downloads folder. */
     try {
-      /* ⚠️ SIX SECONDS, NOT FOUR, AND THE MARGIN IS THE POINT. The recorder hands a batch to storage
-         every 60 chunks and only counts it once the WRITE has landed, asynchronously. At 4s/30fps the
-         export died at frame 90, i.e. one batch handed over and possibly not yet written — so the
-         second run found nothing to resume from and reported 0%. Measured: this test failed that way
-         once, and it is a race in the TEST, not in the feature. At 6s the crash lands past frame 135,
-         with two batches handed over many frames earlier. */
+      /* ⚠️ THE CRASH POINT IS A RACE AND THIS IS THE SECOND ATTEMPT AT TAMING IT — worth writing down,
+         because the first attempt looked sufficient and was not. The recorder hands a batch to storage
+         every 60 chunks and only counts one once its write has LANDED. At 4s/30fps, dying at 75% put
+         the crash at frame 90 and the second run found nothing to resume from. Lengthening to 6s did
+         not fix it either: it failed again, at PHONE width only, and the reason is that chunks come
+         from the VideoEncoder's own output callback, ASYNCHRONOUSLY — so "frame 135 of 180" says
+         nothing about how many chunks have actually been emitted, let alone written. The frame loop
+         can be most of the way through a small render while the encoder is still far behind it.
+         So: die at 92% of a 6s render, and — more importantly — CHECK THE PRECONDITION rather than
+         assume it. If nothing reached storage, this test cannot reach its subject, and it says so in
+         those words instead of blaming the feature. A test that reports "the app is broken" when it is
+         really the harness that fell short is worse than one that fails honestly. */
       P.width = 240; P.height = 240; P.duration = 6; P.fps = 30;
       FM.scene.layers.length = 0;
       const L = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 120, shapeW: 180, shapeH: 180, fill: '#ff9a4f' });
@@ -53410,11 +53416,20 @@
       let died = false;
       try {
         await FM.exporter.run(Object.assign(OPTS(), {
-          onProgress: function (p) { if (p > 0.75) throw new Error('SIMULATED CRASH'); },
+          onProgress: function (p) { if (p > 0.92) throw new Error('SIMULATED CRASH'); },
           onReady: async function () {},
         }));
       } catch (e) { died = /SIMULATED CRASH/.test(String(e && e.message || e)); }
       if (!died) throw new Error('the export did not stop where this test stopped it — the rest of this measures nothing');
+
+      /* THE PRECONDITION, asserted rather than assumed. `written` is the count of parts confirmed on
+         disk; if it is zero the crash beat the encoder and there is genuinely nothing to resume from,
+         which is a fact about this run, not about the feature. */
+      let job = null;
+      try { job = await FM.storage.readMedia(FM.exportResume.JOB_KEY); } catch (e) {}
+      const parts = job ? (job.parts | 0) : 0;
+      if (!parts)
+        throw new Error('the crashed export saved no parts, so there is nothing for a resume to pick up and this test cannot reach its subject. That is the HARNESS falling short, not the feature: chunks arrive from the encoder asynchronously, so dying at 92% of the frame loop is still not a guarantee that 60 of them have been written. Raise the crash point or lengthen the render.');
 
       // ── 2. the SAME export again. It must pick up, and it must SAY so in all three places.
       const notes = [], phases = [];
@@ -53910,5 +53925,52 @@
       if (r.right > tr.right + 0.5 || r.left < tr.left - 0.5)
         throw new Error('"Auto adjusts" overflows the Custom tile at phone width by ' + Math.round(Math.max(r.right - tr.right, tr.left - r.left)) + 'px');
     });
+  });
+
+  test('663 — the audio watcher actually detects a cut-out, and stays quiet when nothing is wrong', { item: '663' }, async function () {
+    /* Ezra: "Seems fixed for the scratchy popping but audio still doesn't play consistently on mobile,
+       it cuts in and out". This is mobile-only and cannot be reproduced here, so the deliverable is the
+       INSTRUMENT — js/audio-health.js writes Settings → "Your last playback", and the entry asks him to
+       play it, let it break up, stop, and paste that.
+       ⚠️ ASKING HIM FOR A REPORT IS ONLY HONEST IF THE REPORT WORKS, and it had never been proven to
+       fire — it is driven from the playback tick, and the browser this is developed in does not run
+       requestAnimationFrame at all, so every attempt to exercise it live recorded 0.0s and proved
+       nothing. `note()` is a pure function of what it is TOLD, so it can be driven directly: no
+       transport, no rAF, no audio hardware.
+       The stall it looks for is the symptom in his own words — the wall clock advances while the
+       audio clock does not. Both directions are asserted, because an instrument that cries wolf on
+       healthy playback would be worse than none: it would send us chasing his hardware. */
+    if (!FM.audioHealth || !FM.audioHealth.note) throw new Error('FM.audioHealth is gone — #663 has no instrument and the ask in its entry is empty');
+    const mk = () => ({ layerId: 'probe', el: { currentTime: 0, muted: false, volume: 1, paused: false, playbackRate: 1,
+      addEventListener() {}, removeEventListener() {} } });
+    const keep = (function () { try { return localStorage.getItem('fm.lastAudioReport'); } catch (e) { return null; } })();
+    try {
+      // 1. HEALTHY — the audio clock keeps step with the wall clock.
+      FM.audioHealth.reset();
+      const a = mk(); let t = 1000;
+      for (let i = 0; i < 10; i++) { t += 200; a.el.currentTime = (t - 1000) / 1000; FM.audioHealth.note(a, t, true); }
+      const okRep = FM.audioHealth.report();
+      if (!/CUT OUT\s+0 time/.test(okRep))
+        throw new Error('healthy playback was reported as cutting out — this instrument would send us chasing his phone for a fault that is not there:\n' + okRep);
+      if (!/played\s+1\.8s/.test(okRep))
+        throw new Error('the watcher did not count the time that played:\n' + okRep);
+      // 2. STALLED — the wall clock advances and the audio clock freezes. His symptom, exactly.
+      FM.audioHealth.reset();
+      const b = mk(); let t2 = 1000;
+      for (let i = 0; i < 5; i++) { t2 += 200; b.el.currentTime = (t2 - 1000) / 1000; FM.audioHealth.note(b, t2, true); }
+      for (let i = 0; i < 5; i++) { t2 += 200; FM.audioHealth.note(b, t2, true); }   // currentTime frozen
+      const badRep = FM.audioHealth.report();
+      if (!/CUT OUT\s+[1-9]/.test(badRep))
+        throw new Error('the audio clock froze for a second while playback ran and the watcher saw nothing — that is the exact symptom it exists to catch:\n' + badRep);
+      // 3. …and it must be SAVEABLE, or he has nothing to paste.
+      FM.audioHealth.save();
+      let saved = '';
+      try { saved = localStorage.getItem('fm.lastAudioReport') || ''; } catch (e) {}
+      if (!/CUT OUT/.test(saved))
+        throw new Error('the report was never written to storage, so Settings would show "Nothing yet" after a playback that did cut out');
+    } finally {
+      FM.audioHealth.reset();
+      try { if (keep == null) localStorage.removeItem('fm.lastAudioReport'); else localStorage.setItem('fm.lastAudioReport', keep); } catch (e) {}
+    }
   });
 })();

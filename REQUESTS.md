@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.45
+> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.46
 >
-> **State:** v14.45, 1103 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.46, 1104 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -26906,8 +26906,7 @@ re-opened #480, which I had marked done and had not fixed.
       and these tiles are 95px wide on a phone. At 380px the label takes **55px inside a 95px tile — no
       clip, no wrap, one line.** The test asserts that, not just the wording.
 
-- [ ] **660 — 🔴 STANDING STEER: never stop to ask; log the question and keep going. And I was NOT doing
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **660 — 🔴 STANDING STEER: never stop to ask; log the question and keep going. And I was NOT doing
       oldest first.** (28 Aug, at v13.80.)
       His words, verbatim:
       > Dont ask questions like that dont stop to ask questions, log ur question and ask it me when i ask for me, just keep going, also ur not doing oldest first
@@ -26931,9 +26930,24 @@ re-opened #480, which I had marked done and had not fixed.
       actionable' was MY CLASSIFIER'S opinion, not a fact… An empty queue is a hypothesis to be CHECKED,
       not a result."* It was not an empty queue this time, it was a **filtered** one — same failure.
       1. [x] **Never stop the loop to ask.** ✅ Applied from v13.81.
-      2. [ ] **Make it structural, not remembered** — `next.sh` must stop hiding blocked items from
+      2. [x] **Make it structural, not remembered** — `next.sh` must stop hiding blocked items from
              START HERE, or this recurs the moment a session trusts the tool again.
-      3. [ ] **Work the genuinely-oldest items**, starting with the three unnumbered ones and #47.
+      3. [x] **Work the genuinely-oldest items**, starting with the three unnumbered ones and #47.
+
+
+      ═══ ✅ **30 AUG (v14.46) — CLOSED, AND YOU WERE RIGHT TWICE MORE SINCE.** ═══
+      **Clause 2 was already done and never ticked.** `next.sh` stops hiding blocked items — it now
+      lists the three unnumbered entries and then #47, #95, #96, #98 at the top, which is exactly what
+      this entry said was missing.
+      **Clause 3 was done today:** the unnumbered *"Editing lags"* (v14.33) and #47's first half
+      (v14.34) — the two genuinely-oldest actionable things in the file.
+      🚨 **AND THE DRIFT YOU DESCRIBED HAPPENED AGAIN TODAY, which is why this entry gets a third lock.**
+      v14.38 found that ship.sh's oldest-first gate **had been switched off for five releases** — it
+      looks for the words *"queue 651"* in the release notes and I had been writing *"#651"*, so it
+      matched nothing and passed everything. It now reads the **tick itself** out of the file's diff,
+      which is not a phrasing anyone can get wrong. Replaying real history through the fixed gate
+      **convicted two of my own releases** of jumping ahead of #642.
+      **So this is no longer a thing to remember. It is a thing that refuses.**
 
 - [x] **661 — 🔴🔴 THE EFFECTS STILL DO NOT WORK ON MOBILE — his words: "probably the biggest issue you
       still haven't solved".** (28 Aug, at v13.92, phone screenshot of the Colouring page.)
@@ -27065,7 +27079,7 @@ re-opened #480, which I had marked done and had not fixed.
              now say whether the probe is the thing that is wrong.
 
 - [ ] **663 — Audio still cuts in and out on mobile (the popping itself seems fixed).** (28 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
       > Seems fixed for the scratchy popping but audio still doesn’t play consistently on mobile, it cuts in and out
 
@@ -27103,6 +27117,23 @@ re-opened #480, which I had marked done and had not fixed.
       #95**, which is the oldest of the three complaints and where the work is logged.
       ➡️ **15 seconds from you closes this:** play it on your phone until the sound misbehaves, press
       stop, then Settings → Your last playback → Copy, and paste it to me.
+
+
+      ═══ 🔬 **30 AUG (v14.46) — THE THING I AM ASKING YOU TO SEND IS NOW PROVEN TO WORK.** ═══
+      This entry asks you to play it, let the sound break up, stop, and paste **Settings → "Your last
+      playback"**. **That ask had never been shown to actually produce anything.** The watcher runs off
+      the playback tick, and the browser I develop in **does not run animation frames at all** — so
+      every attempt to exercise it here recorded `0.0s` and proved nothing either way.
+      ✅ **Driven directly instead** (it is a plain function of what it is told, so it needs no
+      transport and no sound hardware):
+      · **healthy playback** — audio clock keeping step — reports **0 cut-outs**, 1.8s played;
+      · **audio clock frozen while the wall clock runs** — *your* symptom, in your words — reports
+        **5 cut-outs, 1.0s total, worst 200ms**;
+      · and it **saves** to the key Settings reads, so there is something to copy.
+      **Both directions are tested**, because a watcher that cried wolf on healthy playback would be
+      worse than none — it would send us chasing your phone for a fault that was not there.
+      ❓ **So the ask stands and it is real:** play it on your phone until it cuts out, press stop, then
+      **Settings → Your last playback → Copy**.
 
 - [x] **664 — Line height and Curve should BE effects, and add more text effects.** (28 Aug — answering
       #602's standing offer, and the answer is the opposite of what was offered.)
