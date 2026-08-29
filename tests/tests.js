@@ -53884,4 +53884,31 @@
       FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
     }
   });
+
+  test('659 — the Custom format says Auto adjusts, and it still fits the tile', { item: '659' }, async function () {
+    /* "Make the custom format say auto adjusts instead of any size." A string, not a behaviour — every
+       code path keys off data-aspect, never the tile's text. The entry names the one way it can go
+       wrong, so that is what is asserted: "Auto adjusts" is half again as long as "Any size", and these
+       tiles are 95px wide on a phone. */
+    const tile = document.querySelector('.hm-aspect[data-aspect="custom"]');
+    if (!tile) throw new Error('the Custom aspect tile is gone');
+    const sub = tile.querySelector('span:last-child');
+    if (!sub) throw new Error('the Custom tile has no sub-label');
+    if (!/auto adjusts/i.test(sub.textContent || ''))
+      throw new Error('the Custom tile still reads "' + (sub.textContent || '') + '"');
+    return await atPhoneWidth(async function () {
+      /* (No dialog lookup here: the tiles are in the markup whether the New-project sheet is open or
+         not, and the suite's own queue-497 guard rightly refused two ids I had invented for a variable
+         this never used.) */
+      const t = document.querySelector('.hm-aspect[data-aspect="custom"]');
+      const sb = t && t.querySelector('span:last-child');
+      if (!sb) return;
+      const r = sb.getBoundingClientRect(), tr = t.getBoundingClientRect();
+      if (!r.width || !tr.width) return;          // the dialog is closed in this run; nothing rendered to measure
+      if (sb.scrollWidth > sb.clientWidth + 1)
+        throw new Error('"Auto adjusts" is clipped inside the Custom tile at phone width (' + sb.scrollWidth + ' > ' + sb.clientWidth + ')');
+      if (r.right > tr.right + 0.5 || r.left < tr.left - 0.5)
+        throw new Error('"Auto adjusts" overflows the Custom tile at phone width by ' + Math.round(Math.max(r.right - tr.right, tr.left - r.left)) + 'px');
+    });
+  });
 })();

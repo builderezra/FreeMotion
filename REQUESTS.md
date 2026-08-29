@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.44
+> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.45
 >
-> **State:** v14.44, 1102 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.45, 1103 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -26886,8 +26886,7 @@ re-opened #480, which I had marked done and had not fixed.
       🙏 **Worth noting:** the entry's own earlier guess at your missing words was *"instead of a hollow
       ring"* — wrong, and it would have been built confidently. Asking cost one line.
 
-- [ ] **659 — The Custom format should say "Auto adjusts", not "Any size".** (28 Aug, at v13.79, phone
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **659 — The Custom format should say "Auto adjusts", not "Any size".** (28 Aug, at v13.79, phone
       screenshot of the New project dialog with the Custom tile circled in red.)
       His words, verbatim:
       > Make the custom format say auto adjusts instead of any size
@@ -26895,9 +26894,17 @@ re-opened #480, which I had marked done and had not fixed.
       **THE SCREENSHOT:** the New project sheet — NAME, then the six aspect-ratio tiles (9:16 Phone ·
       16:9 Wide · 1:1 Square · 4:5 Post · 4:3 Classic · **Custom / Any size**), Width x Height 1440 x 1080,
       30 fps, the background swatches, and Canvas 1440 x 1080 - 30 fps. **Custom is circled.**
-      1. [ ] **The Custom tile's sub-label reads "Auto adjusts" instead of "Any size".**
+      1. [x] **The Custom tile's sub-label reads "Auto adjusts" instead of "Any size".**
       ✅ **Unambiguous and tiny — a string, not a behaviour change.** Verify at 380px that the longer
       label does not wrap or clip inside the tile, which is the only way this can go wrong.
+
+
+      ═══ ✅ **30 AUG (v14.45) — done, in your words.** ═══
+      The Custom tile reads **"Auto adjusts"**. Nothing behavioural moved — every code path keys off the
+      tile's `data-aspect`, not its text, and I checked that before changing it.
+      📐 **The one risk this entry names, measured:** "Auto adjusts" is half again as long as "Any size"
+      and these tiles are 95px wide on a phone. At 380px the label takes **55px inside a 95px tile — no
+      clip, no wrap, one line.** The test asserts that, not just the wording.
 
 - [ ] **660 — 🔴 STANDING STEER: never stop to ask; log the question and keep going. And I was NOT doing
       **STATUS: 🟢 READY — nothing is stopping this**
