@@ -8865,3 +8865,13 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
   .hm-card { transition: box-shadow 180ms ease-out, border-color 180ms ease-out; }
   .hm-card:hover:not(.fm-card-press) { transform: none; }
 }
+
+/* The in-overlay export note (queue 47, v14.34). It is a persistent statement of fact, not a phase —
+   so it is quieter than #export-status above it and wraps rather than truncating: the sentence it
+   carries ("picking up an interrupted export at 60%…") is the whole point, and half of it would be
+   worse than none. Constrained to the card, which is centred and narrow on a phone. */
+#export-note {
+  margin: 8px auto 0; max-width: 34ch;
+  font-size: 12.5px; line-height: 1.45; color: var(--text-dim);
+  text-align: center; text-wrap: balance;
+}

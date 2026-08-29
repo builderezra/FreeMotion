@@ -4484,16 +4484,38 @@ window.FM = window.FM || {};
     const transparent = !!(tCb && tCb.checked && (fmt === 'gif' || fmt === 'frames'));
     try {
       const expName = (FM.scene.project.name || 'freemotion-export').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() || 'freemotion-export';
-      const onProgress = (p, what) => {
+      /* ⚠️ `verbatim` EXISTS BECAUSE THIS LINE HAS BEEN MANGLING WHOLE SENTENCES (queue 47, v14.34).
+         `what` carries two different kinds of thing and this treated them as one. Some are NOUNS to
+         slot in — 'video', 'audio + video', 'gif' — and some are complete sentences: prepareCaches
+         sends 'Decoding frames… 42%', and the crash-resume path sends 'picking up where the last
+         render stopped'. Wrapping the second kind produced, on screen:
+             "Encoding Decoding frames… 42%… 0%"       ← EVERY export with a video layer
+             "Encoding picking up where the last render stopped… 60%"
+         The second is the only message that says crash-resume fired, and it was both garbled and
+         overwritten one frame later. Four releases built that feature and this is one of two reasons
+         nobody could ever see it work. */
+      const onProgress = (p, what, verbatim) => {
         bar.style.width = Math.round(p * 100) + '%';
-        status.textContent = 'Encoding ' + what + '… ' + Math.round(p * 100) + '%';
+        status.textContent = verbatim ? what : 'Encoding ' + what + '… ' + Math.round(p * 100) + '%';
+      };
+      /* THE OTHER REASON: the message was a toast, and #toast is z-index 60 under #export-overlay's
+         100 plus its 65% black backdrop — so it was painted behind the screen it is about. This note
+         lives inside the card, where the stacking order cannot reach it, and it PERSISTS rather than
+         being overwritten by the next frame's percentage. Same fix v13.92 made for the five export
+         audio warnings; this message was missed in that sweep. */
+      const noteEl = document.getElementById('export-note');
+      if (noteEl) { noteEl.textContent = ''; noteEl.classList.add('hidden'); }
+      const onNote = (text) => {
+        if (!noteEl) return;
+        noteEl.textContent = text;
+        noteEl.classList.toggle('hidden', !text);
       };
       if (fmt === 'gif') {
         await FM.exporter.runGif({ scale, fps, from, to, name: expName, transparent, dither: true, onProgress });
       } else if (fmt === 'frames') {
         await FM.exporter.runFrames({ scale, fps, from, to, name: expName, transparent, format: 'png', onProgress });
       } else {
-        await FM.exporter.run({ scale, fps, bitrate, name: expName, from, to, outW, outH, onProgress,
+        await FM.exporter.run({ scale, fps, bitrate, name: expName, from, to, outW, outH, onProgress, onNote,
                                 onReady: showExportReady });
       }
       /* The MP4 path now ends on its own card, which has already said what happened and hidden the
@@ -4580,6 +4602,13 @@ window.FM = window.FM || {};
         ' · ' + sound;
       const xrm = document.getElementById('xr-meta');
       if (xrm) xrm.classList.toggle('xr-nosound', !!out.audioDropped);
+      /* …AND SAY IT SURVIVED (queue 47, v14.34). This card is the last thing on screen, and until now
+         a resumed export looked exactly like an ordinary one from here. Four releases built
+         crash-resume and nothing has ever told him it worked — which is why the entry cannot be closed
+         even though the mechanism is done. It is one clause on a line he already reads. */
+      if (xrm && out.resumedPct > 0) {
+        xrm.textContent += ' · picked up from ' + out.resumedPct + '%';
+      }
 
       const saveBtn = document.getElementById('xr-save');
       const discardBtn = document.getElementById('xr-discard');

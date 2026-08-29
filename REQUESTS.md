@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.33
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.34
 >
-> **State:** v14.33, 1088 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.34, 1090 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -6383,6 +6383,41 @@ better still, keep working inside the turn rather than parking work for a later 
       **Still untested ground for a later tick:** an export interrupted by a phone call. That one really
       does need a real device — it is an OS-level interruption, not a page-visibility state, so there is
       nothing here to impose. **Long renders and backgrounding have now both had a real pass.**
+
+      ═══ 🛟 **29 AUG (v14.34) — THE CRASH PROTECTION WORKS, AND IT COULD NOT TELL YOU IT HAD.** ═══
+      📐 **This is the bit that stopped this entry being closeable, and it is not the mechanism.**
+      Chunk-replay resume shipped **v7.53** and was hardened four more times (v7.54, v7.55, v11.67,
+      v11.68, v11.69). It works. But **nothing anywhere told you it had fired**, so there has never
+      been a way to know whether it has *ever* run on your phone — which is the one fact four releases
+      of work could not establish. Two reasons, both found by reading the code:
+      1️⃣ **The message was painted behind the screen it is about.** The only announcement was a toast,
+         and a toast sits at z-index 60 while the export overlay sits at 100 **with a 65% black sheet
+         over it**. For four releases it has been drawn underneath. That is the identical defect
+         **v13.92** fixed for the five export audio warnings — this one was simply missed in that sweep.
+         It is now a line **inside the export card**, where the stacking order cannot reach it, and it
+         STAYS up instead of being wiped by the next frame's percentage.
+      2️⃣ **And the wording was mangled on the way out.** The status line wrapped everything as
+         `Encoding … %`, but some messages are whole sentences. So a resumed export read
+         **"Encoding picking up where the last render stopped… 60%"** — and, for one frame, before the
+         next frame overwrote it. **The same bug is on EVERY export you have ever run that had a video
+         layer in it:** "Decoding frames… 42%" has been showing as
+         **"Encoding Decoding frames… 42%… 0%"**. Both fixed.
+      3️⃣ **Nothing was written down.** The export report now records **`resumed`** — YES with the
+         percentage and how many saved parts were reused, or plainly *"no — rendered start to finish"* —
+         and **`protected`**, which is whether the safety net was even up. That last one closes the
+         *"low storage"* ground this entry names: the recorder gives up **silently** on a full disk or
+         a refused write, and the flag saying so was exposed and never read by anyone. Hitting the
+         512 MB cap is reported separately, because that stop is deliberate and calling it a failure
+         would cry wolf on exactly the long exports where this matters most.
+      🧪 **VERIFIED BY CRASHING A REAL EXPORT, not by reading.** Killed at 75%; the rerun **picked up at
+      50% from 1 saved part**, the note appeared on the card, and the report recorded
+      *"resumed YES — picked up at 50% from 1 saved part · protected yes, the whole way"*. That
+      measurement also caught a grammar bug the eye had missed — *"The 1 part already rendered **were**
+      kept"*.
+      ⏳ **STILL OPEN: half (b), moving the compositor off the main thread.** Unstarted, and it is the
+      big one — 9,600 lines of DOM-canvas code onto OffscreenCanvas. Worth knowing: the *encoding*
+      already runs off the main thread (WebCodecs does that for us); what freezes is the drawing.
+
 - [x] **48 — Squish:** a new effect where the layer deforms against the canvas edges. **DONE v6.42.**
       The frame edges are solid now: slide a layer off-frame and it squashes against the wall instead
       of being cut off. Put a Bounce ease on Position and the impact squash comes free. Six controls

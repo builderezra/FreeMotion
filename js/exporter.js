@@ -799,7 +799,7 @@ window.FM = window.FM || {};
 
       // smooth slow-mo / reverse: build frame caches at the export fps so the output matches preview
       let exportCaches = [];
-      try { exportCaches = (await prepareCaches(scene, fps, s => opts.onProgress && opts.onProgress(0, s))) || []; } catch (e) { console.warn('cache prep failed', e); }
+      try { exportCaches = (await prepareCaches(scene, fps, s => opts.onProgress && opts.onProgress(0, s, true))) || []; } catch (e) { console.warn('cache prep failed', e); }
 
       FM._exporting = true;   // tells the compositor to skip the preview-only hold-frame capture/substitution (#13,#22)
       // Hoisted out of the try so the finally can shut the recorder down before deciding what to keep.
@@ -924,7 +924,7 @@ window.FM = window.FM || {};
        * A throw here can only come from the muxer rejecting a chunk, and by then chunks are already in
        * it, so there is no clean way to carry on. Bin the saved render and fail this one export: the
        * next attempt then starts from zero and works, which beats a resume that fails forever. */
-      let resumeFrom = 0, replayed = null;
+      let resumeFrom = 0, replayed = null, resumedPct = 0, resumedParts = 0;
       if (saved) {
         try {
           replayed = await XR.replayInto(muxer, saved);
@@ -937,8 +937,24 @@ window.FM = window.FM || {};
         else { saved = null; replayed = null; }
       }
       if (resumeFrom > 0) {
-        if (opts.onProgress) opts.onProgress(resumeFrom / totalFrames, 'picking up where the last render stopped');
-        if (FM.toast) FM.toast('Picking up the interrupted export at ' + Math.round(resumeFrom / totalFrames * 100) + '%', 3000);
+        /* ⚠️ `true` = SHOW THIS VERBATIM, and without it the caller mangles it. js/app.js renders every
+           status as `'Encoding ' + what + '… ' + pct + '%'`, so this arrived on screen as
+           "Encoding picking up where the last render stopped… 60%" — for one frame, before the next
+           frame's "Encoding audio + video… 61%" wiped it. Same for the preroll line below and for
+           prepareCaches, which sends whole sentences like "Decoding frames… 42%" and so has been
+           reading "Encoding Decoding frames… 42%… 0%" on EVERY export with a video layer. */
+        resumedPct = Math.round(resumeFrom / totalFrames * 100);
+        resumedParts = replayed ? replayed.parts : 0;
+        if (opts.onProgress) opts.onProgress(resumeFrom / totalFrames, 'Picking up where the last render stopped…', true);
+        /* THE NOTE, not a toast. The toast stays for any caller with no overlay, but it is invisible
+           behind this one — see the comment in index.html. */
+        /* The verb agrees too. The first cut pluralised the NOUN and not the VERB and produced "The 1
+           part already rendered were kept" — measured, in a real resumed export, not spotted by eye. */
+        if (opts.onNote) opts.onNote('Picking up an interrupted export at ' + resumedPct + '%. ' +
+          (resumedParts === 1 ? 'The part already rendered was kept'
+                              : 'The ' + resumedParts + ' parts already rendered were kept') +
+          ', so that time is not being spent again.');
+        if (FM.toast) FM.toast('Picking up the interrupted export at ' + resumedPct + '%', 3000);
       } else if (XR && sig) {
         // Starting fresh: sweep any older job's parts so two exports' leftovers never share the store.
         try { await XR.clear(); } catch (e) {}
@@ -972,7 +988,7 @@ window.FM = window.FM || {};
       const preroll = XR ? XR.prerollFrames(scene) : 0;
       if (resumeFrom > 0 && preroll > 0) {
         const warmFrom = Math.max(0, resumeFrom - preroll);
-        if (opts.onProgress) opts.onProgress(resumeFrom / totalFrames, 'warming up the effects at the join');
+        if (opts.onProgress) opts.onProgress(resumeFrom / totalFrames, 'Warming the effects back up at the join…', true);
         for (let f = warmFrom; f < resumeFrom; f++) {
           if (FM._exportCancel) { encoder.close(); throw new Error('CANCELLED'); }
           const t = start + f / fps;
@@ -1090,6 +1106,29 @@ window.FM = window.FM || {};
             // v14.33: was `ctxFilterOK() ? 'OK' : 'THIS DEVICE CANNOT RUN CANVAS FILTERS'`, which had
             // been false on his own phone since v14.02 — see FM.fxHealth in js/compositor.js.
             'canvas fx  ' + (FM.fxHealth ? FM.fxHealth().line : '?'),
+            /* ⚠️ #47, v14.34. Crash-resume has worked since v7.53 and NOTHING recorded that it fired —
+               so there has never been a way to know whether it has ever run on his phone, which is the
+               one fact four releases of work cannot establish from here. It is written down now, and
+               `no` is as much of an answer as a percentage. */
+            'resumed    ' + (resumedPct > 0 ? 'YES — picked up at ' + resumedPct + '% from ' + resumedParts + ' saved part' + (resumedParts === 1 ? '' : 's') : 'no (rendered start to finish)'),
+            /* AND WHETHER THE SAFETY NET WAS EVEN UP. XR.createRecorder gives up silently on a quota
+               error or a torn write (js/export-resume.js sets `dead = true` in two places and says
+               nothing), and `recorder.recording` was exposed for this and never read by anyone. A
+               crash during an export whose protection had already died looks identical, from here, to
+               a crash during one that was protected — and that is the difference between "resume is
+               broken" and "there was nothing to resume from". */
+            /* ⚠️ `capped` IS NOT A FAULT and must not be reported as one. The recorder stops at 512MB
+               ON PURPOSE (js/export-resume.js MAX_BYTES), so `recording` — which is `!dead && !capped`
+               — goes false on a long, perfectly healthy export. Lumping the two together would make
+               this line cry wolf on exactly the big renders where crash protection matters most, which
+               is the same wrong-warning defect v14.33 just removed from the other reports.
+               Read at this point on purpose: settle() (line ~1039) only flushes, and stop() — which
+               sets dead deliberately — does not run until the finally at ~1148. So `dead` here means
+               something genuinely failed. */
+            'protected  ' + (!recorder ? 'NO — crash-resume is not available in this browser'
+                            : recorder.recording ? 'yes, the whole way'
+                            : recorder.capped ? 'up to the 512MB cap, then stopped saving on purpose (the render itself was never at risk)'
+                            : 'NO — protection stopped part-way: the store refused a write (out of space, or private browsing)'),
             'device     ' + (navigator.userAgent || '').slice(0, 120),
           ].join('\n');
           localStorage.setItem('fm.lastExportReport', rep);
@@ -1098,6 +1137,8 @@ window.FM = window.FM || {};
           blob: outBlob, name: outName, poster: poster,
           width: outW, height: outH, fps: fps, seconds: Math.max(0, end - start),
           hasAudio: !!mix, audioDropped: FM._audioTrackDropped || null,
+          resumedPct: resumedPct, resumedParts: resumedParts,
+          protected: !recorder ? null : (recorder.recording ? true : recorder.capped ? 'capped' : false),
           save: () => deliver(outBlob, outName),
         });
       } else {
@@ -1155,7 +1196,7 @@ window.FM = window.FM || {};
 
       // smooth slow-mo / reverse: build frame caches at the export fps so the GIF matches preview
       let exportCaches = [];
-      try { exportCaches = (await prepareCaches(scene, fps, s => opts.onProgress && opts.onProgress(0, s))) || []; } catch (e) { console.warn('cache prep failed', e); }
+      try { exportCaches = (await prepareCaches(scene, fps, s => opts.onProgress && opts.onProgress(0, s, true))) || []; } catch (e) { console.warn('cache prep failed', e); }
 
       const transparent = !!opts.transparent;
       FM._exporting = true;   // skip the compositor's preview-only hold-frame capture (#13,#22)
@@ -1213,7 +1254,7 @@ window.FM = window.FM || {};
       const outCtx = outCanvas.getContext('2d');
 
       let exportCaches = [];
-      try { exportCaches = (await prepareCaches(scene, fps, s => opts.onProgress && opts.onProgress(0, s))) || []; } catch (e) { console.warn('cache prep failed', e); }
+      try { exportCaches = (await prepareCaches(scene, fps, s => opts.onProgress && opts.onProgress(0, s, true))) || []; } catch (e) { console.warn('cache prep failed', e); }
 
       const transparent = !!opts.transparent;
       FM._exporting = true;

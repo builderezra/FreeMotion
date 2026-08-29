@@ -53224,4 +53224,111 @@
         throw new Error('js/' + f + '.js is phrasing the canvas-filter answer from ctxFilterOK() on its own again — that is the exact drift v14.33 removed; use FM.fxHealth()');
     }
   });
+
+  /* ═══ #47 — CRASH-RESUME WORKED FOR FOUR RELEASES AND COULD NOT TELL ANYONE IT HAD ══════════════
+     v7.53 built chunk-replay resume, v7.54/v7.55/v11.67/v11.68/v11.69 hardened it, and the entry
+     still cannot be closed — because nothing anywhere told the user it fired. Two reasons, both
+     verified in the code before this was written, and both fixed in v14.34. */
+
+  test('47 — the export note lives INSIDE the overlay, where the stacking order cannot hide it', { item: '47' }, async function () {
+    /* THE FIRST REASON. The only message announcing a resume was FM.toast, and #toast is z-index 60
+       while #export-overlay is z-index 100 with a 65% black backdrop painted over it — so for four
+       releases it has been drawn behind the very screen it is about. That is the SAME defect v13.92
+       fixed for the five export audio warnings; this message was missed in that sweep.
+       A toast cannot simply be raised without putting it over every dialog in the app, so the note is
+       a child of the card. This test is what keeps it one. */
+    const note = document.getElementById('export-note');
+    if (!note) throw new Error('#export-note is gone — the resume message has nowhere to appear that the overlay cannot cover');
+    const ov = document.getElementById('export-overlay');
+    if (!ov || !ov.contains(note))
+      throw new Error('#export-note is no longer inside #export-overlay — put it back, or it inherits the z-index bug the toast had');
+    // …and it must start silent, or every export opens claiming to be a resume.
+    if (!note.classList.contains('hidden') && note.textContent.trim())
+      throw new Error('#export-note starts with text showing — an ordinary export would open by announcing a resume that did not happen');
+  });
+
+  test('47 — a resumed export says so, and the fact outlives the overlay', { item: '47' }, async function () {
+    /* THE SECOND REASON, and the one that made the feature unprovable: nothing recorded that a resume
+       happened, so there was no way — from here or from his phone — to know whether crash-resume has
+       EVER fired in real use. That is the fact four releases of work could not establish.
+       This drives the real thing: an export that dies three quarters through, then the same export
+       again, which must pick up rather than start over. */
+    if (!FM.exporter || !FM.exporter.run) throw new Error('FM.exporter.run is missing');
+    if (typeof VideoEncoder === 'undefined') return;        // no WebCodecs here; nothing to measure
+    if (!FM.exportResume) throw new Error('FM.exportResume is gone — #47\'s whole mechanism');
+    const P = FM.scene.project, keep = FM.scene.layers.slice();
+    const w0 = P.width, h0 = P.height, d0 = P.duration, f0 = P.fps;
+    /* No download happens: run() calls deliver() only when there is NO onReady, and both runs below
+       provide one. Checked in js/exporter.js rather than assumed — a suite that saved a file per run
+       would fill his Downloads folder. */
+    try {
+      P.width = 240; P.height = 240; P.duration = 4; P.fps = 30;
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 120, shapeW: 180, shapeH: 180, fill: '#ff9a4f' });
+      L.start = 0; L.duration = 4; FM.scene.layers.push(L);
+      FM.refreshAll();
+      const OPTS = function () { return { scale: 1, fps: 30, bitrate: 900000, name: 'x47probe', from: 0, to: 4, outW: 240, outH: 240 }; };
+
+      // ── 1. an export that DIES part-way. Chunks are kept on an exception (only success and Cancel
+      //      clear them), which is the whole premise of the feature.
+      let died = false;
+      try {
+        await FM.exporter.run(Object.assign(OPTS(), {
+          onProgress: function (p) { if (p > 0.75) throw new Error('SIMULATED CRASH'); },
+          onReady: async function () {},
+        }));
+      } catch (e) { died = /SIMULATED CRASH/.test(String(e && e.message || e)); }
+      if (!died) throw new Error('the export did not stop where this test stopped it — the rest of this measures nothing');
+
+      // ── 2. the SAME export again. It must pick up, and it must SAY so in all three places.
+      const notes = [], phases = [];
+      let payload = null;
+      await FM.exporter.run(Object.assign(OPTS(), {
+        onProgress: function (p, what, verbatim) { phases.push({ what: what, verbatim: !!verbatim }); },
+        onNote: function (t) { notes.push(t); },
+        onReady: async function (o) { payload = o; },
+      }));
+      if (!payload) throw new Error('the resumed export never reached onReady');
+      if (!(payload.resumedPct > 0))
+        throw new Error('the second run reported resumedPct ' + payload.resumedPct + ' — it started from scratch, or the fact was not recorded. Either way #47 is still unprovable.');
+      if (!notes.length) throw new Error('a resumed export sent no note — the one message that says it worked is missing again');
+      if (!/[Pp]icking up/.test(notes[0])) throw new Error('the note does not say what happened: ' + notes[0]);
+      /* ⚠️ AND THE GRAMMAR, because this was wrong on the first real run and only a measurement caught
+         it: the first cut pluralised the NOUN and not the VERB — "The 1 part already rendered were
+         kept". A sentence he reads mid-export should not be broken English. */
+      if (/\b1 parts?\b/.test(notes[0]) || /part already rendered were/.test(notes[0]))
+        throw new Error('the note does not agree with itself: ' + notes[0]);
+
+      // THE STATUS PHASE MUST BE MARKED VERBATIM, or the caller wraps it into nonsense.
+      const first = phases[0];
+      if (!first || !first.verbatim)
+        throw new Error('the resume phase was not marked verbatim, so js/app.js renders it as "Encoding ' +
+          (first ? first.what : '?') + '… 60%" — which is what it did for four releases');
+      // …and the ordinary frame phases must NOT be, or they lose their percentage.
+      const framePhase = phases.filter(function (x) { return /^(video|audio \+ video)$/.test(x.what); })[0];
+      if (framePhase && framePhase.verbatim)
+        throw new Error('the ordinary encoding phase is marked verbatim — it would lose the "… 61%" the progress line is for');
+
+      // THE REPORT — the only part that survives the overlay closing.
+      const rep = localStorage.getItem('fm.lastExportReport') || '';
+      if (!/^resumed\s+YES/m.test(rep))
+        throw new Error('the export report does not record that this was a resume, so there is still no way to know it has ever fired on his phone:\n' + rep);
+      if (!/^protected\s+/m.test(rep))
+        throw new Error('the export report does not say whether crash protection was up — a crash with no protection looks identical to a broken resume');
+      /* ⚠️ AND IT MUST NOT CRY WOLF ON A CAPPED RECORDER. `recording` is `!dead && !capped`, and the
+         recorder stops at 512MB ON PURPOSE — so lumping the two together would accuse the app of a
+         storage failure on exactly the long renders where protection matters most. That is the
+         wrong-warning defect v14.33 removed from the other reports; it must not be reintroduced here. */
+      if (/^protected\s+NO/m.test(rep) && /cap/i.test(rep))
+        throw new Error('a capped recorder is being reported as a failure — the 512MB stop is by design:\n' + rep);
+    } finally {
+      try { if (FM.exportResume && FM.exportResume.clear) await FM.exportResume.clear(); } catch (e) {}
+      P.width = w0; P.height = h0; P.duration = d0; P.fps = f0;
+      FM.scene.layers.length = 0; keep.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll();
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+      const n = document.getElementById('export-note');
+      if (n) { n.textContent = ''; n.classList.add('hidden'); }
+    }
+  });
 })();
