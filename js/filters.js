@@ -287,6 +287,70 @@ window.FM = window.FM || {};
                 e('filmgrain', { amount: 30, size: 2 }),
                 e('vignette', { amount: 0.48, size: 32 }),
                 e('flashdark', { amount: 0.28, speed: 10, soft: 0.3, floor: 0.4 })] },
+    /* ---- FIVE MORE, PLACED WHERE THE SET IS EMPTY (queue 675) ------------------------------------
+     * Ezra: *"re check all the filters ... and then add some more while ur at it"*.
+     * ⚠️ THE EXISTING 33 WERE MEASURED FIRST AND NOT TOUCHED. Git shows no filter definition has ever
+     * been rewritten, and rendered through both the ctx.filter path and the GPU shader every one of
+     * them came out IDENTICAL (0% of pixels differing). So there was nothing to repair, and repairing
+     * it anyway is exactly the "if im wrong again" he warned about.
+     * ⚠️ AND "IT LOOKS DIFFERENT" IS NOT ENOUGH TO JUSTIFY A NEW ONE — the queue-579 lesson. A new
+     * look has to sit somewhere the set does not already cover, on the axes that actually separate
+     * looks: MEAN brightness and COLOUR spread. Measured on the filtered layer, the 33 occupy roughly
+     * mean 85-140 with colour spread 0 (mono) or 60-153 (everything else). These five are placed in
+     * the gaps that leaves, and the test asserts each is far enough from EVERY existing filter rather
+     * than merely "does something":
+     *   Midnight    — genuinely DARK. Nothing sat below mean 85, so the whole bottom of the range was
+     *                 empty; a night look had to be faked with Blackout plus guesswork.
+     *   Ultraviolet — beyond the colour ceiling. Poppy's 153 was the most saturated thing here.
+     *   Matte       — FLAT and desaturated without being mono: the gap between grayscale's 0 and the
+     *                 next lowest colour spread was completely unoccupied.
+     *   Ember       — DARK with a hot glow. Every glow look sat bright (mean ~127); none was moody.
+     *   Copperplate — the only filter in the set built on DUOTONE. Nothing else maps tone to two
+     *                 colours, so no split-tone look was reachable at all. */
+    { id: 'midnight', name: 'Midnight', section: 'tuff',
+      desc: 'Deep and cold — the picture pulled down into the dark with the colour drained out of it.',
+      /* ⚠️ THE FLASH IS NOT OPTIONAL IN TUFF — his words when he asked for the section: the looks
+         "should also come with flicker or flash". The suite enforces it, and caught this one missing. */
+      effects: [e('brightness', { amount: 0.72 }), e('contrast', { amount: 1.26 }),
+                e('saturate', { amount: 0.55 }), e('temperature', { amount: -20, tint: -4 }),
+                e('highlightsshadows', { highlights: -6, shadows: -34 }),
+                e('vignette', { amount: 0.55, size: 26 }),
+                e('flashdark', { amount: 0.32, speed: 9, soft: 0.28, floor: 0.36 })] },
+    { id: 'ultraviolet', name: 'Ultraviolet', section: 'vivid',
+      desc: 'Colour pushed past believable and swung cold — club lighting rather than daylight.',
+      /* ⚠️ MEASURED AND MOVED. At saturate 1.95 / hue -28 it landed 8.9 from Neon Night — closer than
+         any two looks in this set should be. Pushed harder on both axes and brightened, which is the
+         direction that separates a club-light look from a neon-night one rather than deepening it. */
+      /* `hue` takes `deg` over 0-360, not `amount` — the suite checks every filter is built from
+         controls the effect actually has, and caught this. 308 is the -52 this was authored as. */
+      effects: [e('saturate', { amount: 2.3 }), e('hue', { deg: 308 }),
+                e('contrast', { amount: 1.16 }), e('brightness', { amount: 1.1 }),
+                e('temperature', { amount: -30, tint: 26 }),
+                e('lightglow', { amount: 0.34, radius: 14, threshold: 56 })] },
+    { id: 'matte', name: 'Matte', section: 'cinematic',
+      desc: 'A flat print — blacks lifted, contrast pulled back, colour quietened without going grey.',
+      effects: [e('contrast', { amount: 0.8 }), e('saturate', { amount: 0.68 }),
+                e('brightness', { amount: 1.04 }),
+                e('highlightsshadows', { highlights: -18, shadows: 34 })] },
+    { id: 'ember', name: 'Ember', section: 'glow',
+      desc: 'Dark and warm with the bright parts burning through — firelight, not daylight.',
+      /* The CSS-filter effects (brightness / contrast / saturate) are listed FIRST because that is the
+         order they RENDER in — the suite asserts the written list matches, so a reader is never shown a
+         sequence the compositor does not follow. Authored with temperature second and it failed. */
+      effects: [e('brightness', { amount: 0.82 }), e('contrast', { amount: 1.18 }),
+                e('saturate', { amount: 1.1 }), e('temperature', { amount: 26, tint: 4 }),
+                e('lightglow', { amount: 0.8, radius: 22, threshold: 52 }),
+                e('vignette', { amount: 0.45, size: 30 })] },
+    { id: 'copperplate', name: 'Copperplate', section: 'retro',
+      desc: 'Two-tone, like an old copper print — shadows in deep blue, highlights in warm metal.',
+      /* ⚠️ MEASURED AND MOVED, and this is the one the discipline caught. At amount 0.92 with those two
+         tones it landed 4.3 from Old Film — a near-duplicate wearing a different name, which is exactly
+         the failure queue 579 documents. The two tones are further apart now and the contrast harder,
+         so it reads as a TWO-TONE PRINT rather than a tinted photograph. */
+      effects: [e('grayscale', { amount: 1 }), e('contrast', { amount: 1.5 }),
+                e('duotone', { amount: 1, color: '#0d1b3d', color2: '#ffc078' }),
+                e('highlightsshadows', { highlights: 16, shadows: -18 }),
+                e('filmgrain', { amount: 14, size: 2 })] },
   ];
 
   /* Validate a definition against the LIVE registry and build a real container instance from it.

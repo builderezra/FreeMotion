@@ -475,6 +475,23 @@ window.FM = window.FM || {};
        · fog is haze, so it wants depth for the flattening to act on — 'bay'. */
     platinum:   'shore',   ink:    'towers',   fog:       'bay',
     poppy:      'bay',     candy:  'shore',    sunbaked:  'city',
+    /* THE FIVE ADDED FOR queue 675, under the same two standing rules: **no cars outside the tuff
+       group** (his v9.82 correction, still binding), and each subject picked for what that grade needs
+       to bite on rather than by rotation.
+       · midnight is the ninth TUFF look, so it does take a car — `tesla`, the one shot with bright
+         surfaces, because a look whose whole idea is pulling the picture down needs something lit to
+         pull. Checked against the adjacency rule the section has always followed: at four columns it
+         sits under `revuelto` and at two under `mclaren`, so tesla touches neither.
+       · ultraviolet pushes colour past believable, so it wants hard shapes and real colour to push —
+         `towers`. NOT `dusk`, which Neon Night already uses: the two looks are cousins and sharing a
+         photograph would make them look more alike than they are.
+       · matte flattens, so it needs a range of tones to flatten — `shore`.
+       · ember is warm and dark with the highlights burning, so it wants something with warmth already
+         in it and dark to sink into — `bush`.
+       · copperplate is a two-tone print, and prints are of people — `pair`.
+       No subject repeats inside any of their sections. */
+    midnight:   'tesla',   ultraviolet: 'towers', matte: 'shore',
+    ember:      'bush',    copperplate: 'pair',
   };
   Object.setPrototypeOf(FILTER_SUBJECT, null);   // an id like 'constructor' must miss, not inherit
 

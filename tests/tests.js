@@ -46400,6 +46400,136 @@
     if (!/STUTTER/i.test(bad)) throw new Error('a stuttering sample lost its stutter verdict to the new scale branch: ' + bad);
   });
 
+  /* ═══ QUEUE 675 — THE NEW FILTERS MUST OCCUPY EMPTY GROUND ════════════════════════════════════
+   * Ezra: *"re check all the filters and make sure theyre the best version of themselves and then add
+   * some more while ur at it, im worried an update along the way made them worse but be careful not to
+   * make them worse if im wrong again"*.
+   * ✅ THE RE-CHECK CAME BACK CLEAN, which is why the existing 33 are untouched: git shows no filter
+   * definition was ever rewritten, and rendered through the ctx.filter path and the GPU shader every
+   * one of the 33 was IDENTICAL (0% of pixels differing by more than 16). What he remembers is #661 —
+   * on his phone those colour operations did NOTHING until v14.02, so the filters were dead rather
+   * than degraded. Repairing what measures healthy is the "if im wrong" case he warned about.
+   * ⚠️ SO THE ONLY NEW RISK IS THE ADDITIONS, and "it looks different" does not justify one. A look has
+   * to sit where the set does not already reach. Measured on the filtered layer, on the two axes that
+   * actually separate looks — MEAN brightness and COLOUR spread — this asserts every new filter keeps
+   * its distance from every OLD one.
+   * 📐 Two of the five failed this on their first draft and were moved, which is the whole point of
+   * having it: Copperplate landed 4.3 from Old Film and Ultraviolet 8.9 from Neon Night. */
+  test('#675: every added filter sits somewhere the existing set does not', { item: '675' }, function () {
+    if (!FM.filters || !FM.filters.all) throw new Error('FM.filters is missing');
+    const NEW = ['midnight', 'ultraviolet', 'matte', 'ember', 'copperplate'];
+    const all = FM.filters.all();
+    for (const id of NEW) if (!all.some(f => f.id === id)) throw new Error('the filter "' + id + '" is gone from the set');
+
+    const S = FM.scene, P = S.project;
+    const keep = S.layers.slice(), ow = P.width, oh = P.height, od = P.duration;
+    try {
+      P.width = 200; P.height = 200; P.duration = 3;
+      S.layers.length = 0;
+      const hero = FM.makeLayer('shape', { shape: 'rect', shapeW: 400, shapeH: 400, fill: '#c05030' });
+      hero.start = 0; hero.duration = 3; S.layers.push(hero);   // oversized: it must cover the frame
+      const cv = document.createElement('canvas'); cv.width = 200; cv.height = 200;
+      const cx = cv.getContext('2d', { willReadFrequently: true });
+      /* ⚠️ THE CENTRE BOX ONLY. Half these filters carry a vignette, so sampling the whole frame
+         measures corner fall-off as if it were the look — and an earlier pass of this measurement read
+         a colour spread of 52 on a mono filter for exactly that kind of reason. */
+      const stats = () => {
+        cx.clearRect(0, 0, 200, 200); FM.renderScene(cx, S, 1);
+        const d = cx.getImageData(0, 0, 200, 200).data;
+        let n = 0, sum = 0, sp = 0;
+        for (let y = 70; y < 130; y++) for (let x = 70; x < 130; x++) {
+          const o = (y * 200 + x) * 4, r = d[o], g = d[o + 1], b = d[o + 2];
+          sum += r * 0.299 + g * 0.587 + b * 0.114;
+          sp += Math.max(r, g, b) - Math.min(r, g, b); n++;
+        }
+        return { mean: sum / n, colour: sp / n };
+      };
+      const rows = all.map(f => {
+        hero.effects = f.effects.map(e => JSON.parse(JSON.stringify(e)));
+        return Object.assign({ id: f.id }, stats());
+      });
+      hero.effects = [];
+
+      const dist = (a, b) => Math.hypot(a.mean - b.mean, (a.colour - b.colour) * 0.6);
+      for (const id of NEW) {
+        const a = rows.filter(r => r.id === id)[0];
+        let best = Infinity, who = '';
+        for (const b of rows) {
+          if (b.id === id || NEW.indexOf(b.id) >= 0) continue;   // against the ESTABLISHED set only
+          const d = dist(a, b);
+          if (d < best) { best = d; who = b.id; }
+        }
+        if (!(best > 10)) throw new Error('"' + id + '" measures mean ' + a.mean.toFixed(1) + ' / colour ' +
+          a.colour.toFixed(1) + ', only ' + best.toFixed(1) + ' from "' + who + '" — that is a near-duplicate under a new name, which is the queue-579 failure and makes the list harder to search rather than richer');
+      }
+      /* AND EACH MUST ACTUALLY DO SOMETHING. A filter that changed nothing would sit far from everything
+         only by accident of where "unfiltered" happens to land. */
+      hero.effects = []; const plain = stats();
+      for (const id of NEW) {
+        const a = rows.filter(r => r.id === id)[0];
+        if (dist(a, plain) < 8) throw new Error('"' + id + '" barely changes the picture (mean ' +
+          a.mean.toFixed(1) + ' vs ' + plain.mean.toFixed(1) + ') — it reads as broken, which is #661');
+      }
+    } finally {
+      S.layers.length = 0; keep.forEach(l => S.layers.push(l));
+      P.width = ow; P.height = oh; P.duration = od;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
+  /* ═══ QUEUE 668 — A REPLACED FILE MUST SURVIVE A RELOAD ═══════════════════════════════════════
+   * From an external QA pass, validated here before anything was changed: `js/storage.js` is the ONLY
+   * writer of a layer's media blob and it wrote `if (!existing)`. `FM.replaceMedia` swaps the file
+   * under the SAME layer id, so after a replace a record already existed and the write was skipped
+   * FOREVER — the registry held the new file all session and hydrate loaded the original back next
+   * launch. Reproduced before the fix: the store held RED while the registry held BLUE and
+   * `layer.mediaRev` said 1, with no error and no toast.
+   * ⚠️ AND THE GUARD WAS NOT WRONG, which is why the third assertion below exists. `save()` is a
+   * debounced autosave over whole video files; writing every blob every time would be brutal on a
+   * phone. A fix that simply always wrote would pass the first two checks and quietly cost that. */
+  test('#668: replacing a clip\'s media survives a save, without rewriting blobs every autosave', { item: '668' }, async function () {
+    if (!FM.storage || !FM.storage.save) throw new Error('FM.storage.save is missing');
+    const openDB = () => new Promise(res => { const r = indexedDB.open('freemotion', 1); r.onsuccess = () => res(r.result); r.onerror = () => res(null); });
+    const get = (db, k) => new Promise(res => { try { const q = db.transaction('media', 'readonly').objectStore('media').get(k); q.onsuccess = () => res(q.result); q.onerror = () => res(null); } catch (e) { res(null); } });
+    const S = FM.scene, keep = S.layers.slice();
+    let id = null, db = null;
+    try {
+      S.layers.length = 0;
+      const L = FM.makeLayer('video', { name: 'clip' });
+      L.start = 0; L.duration = 3; S.layers.push(L); id = L.id;
+      const A = new File([new Uint8Array([1, 2, 3, 4])], 'ORIGINAL.webm', { type: 'video/webm' });
+      const B = new File([new Uint8Array([9, 9, 9, 9, 9, 9])], 'REPLACED.webm', { type: 'video/webm' });
+
+      FM.media.set(id, { kind: 'video', file: A, duration: 3, width: 2, height: 2 });
+      await FM.storage.save();
+      db = await openDB();
+      if (!db) throw new Error('IndexedDB is unavailable here, so this test cannot say anything');
+      const first = await get(db, id);
+      if (!first || !first.file || first.file.name !== 'ORIGINAL.webm') throw new Error('the first save did not store the original file, so the replace below would prove nothing');
+
+      // the replace: same layer id, different file — exactly what FM.replaceMedia does
+      FM.media.set(id, { kind: 'video', file: B, duration: 3, width: 2, height: 2 });
+      L.mediaRev = (L.mediaRev || 0) + 1;
+      await FM.storage.save();
+      const second = await get(db, id);
+      if (!second || !second.file) throw new Error('the record vanished after the replace');
+      if (second.file.name !== 'REPLACED.webm') throw new Error('after replacing the media and saving, the store still holds "' +
+        second.file.name + '" — the replace is lost on the next launch, which is silent data loss and exactly what was reported');
+
+      /* ⚠️ AND AN IDLE SAVE MUST NOT REWRITE THE BLOB. Without this, "always write" passes everything
+         above while putting a whole video back into IndexedDB on every debounced autosave. */
+      let writes = 0;
+      const put = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function () { writes++; return put.apply(this, arguments); };
+      try { await FM.storage.save(); } finally { IDBObjectStore.prototype.put = put; }
+      if (writes) throw new Error('an idle save rewrote ' + writes + ' media blob(s) — the guard existed to stop exactly that, and a fix that always writes trades silent data loss for a phone writing whole videos on every autosave');
+    } finally {
+      try { if (db && id) { const tx = db.transaction('media', 'readwrite'); tx.objectStore('media').delete(id); } } catch (e) {}
+      S.layers.length = 0; keep.forEach(l => S.layers.push(l));
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   /* ═══ QUEUE 646 — THE INTRO GROUND THAT NEVER RAN ════════════════════════════════════════════
    * Ezra: *"the background doesnt fade from white to the colours it just cuts unlike mobile, try
    * really hard not to accidentally break anything when fixing please"*.

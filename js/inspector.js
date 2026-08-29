@@ -1678,7 +1678,13 @@ window.FM = window.FM || {};
          FITS matched on the first pass and returned before applying `hidden` — leaving an empty host
          still carrying its margins under every short row. Measured as 4px of stray space per row. */
       let count = -1;
-      const pages = () => Math.max(1, Math.round(grid.scrollWidth / Math.max(1, grid.clientWidth)));
+      /* ⚠️ CEIL, NOT ROUND (queue 675). `round` is right for a ratio of 2.0 and a lie at 1.25: a row
+         holding five tiles where four fit overflows by a quarter of a page, rounds to ONE, and draws a
+         single dot under a row the user can visibly scroll. The outer guard has already established
+         that it overflows, so the answer can never legitimately be 1 — any overflow at all is a second
+         page. Exposed by adding a fifth Cinematic filter, but the arithmetic was always wrong; every
+         section happened to sit at a whole number of pages until one did not. */
+      const pages = () => Math.max(2, Math.ceil(grid.scrollWidth / Math.max(1, grid.clientWidth)));
       const build = () => {
         const n = grid.scrollWidth > grid.clientWidth + 4 ? pages() : 0;
         if (n === count) return;

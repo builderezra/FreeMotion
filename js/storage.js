@@ -275,8 +275,28 @@ window.FM = window.FM || {};
           if (layer.type === 'text') continue;
           const m = FM.media.get(layer.id);
           if (m && m.file) {
+            /* ═══ A REPLACED FILE MUST OVERWRITE THE OLD BLOB (queue 668) ═══════════════════════
+             * This line used to read `if (!existing) await idbPut(...)`, and it is the ONLY writer of
+             * a layer's media blob. `FM.replaceMedia` swaps the file under the SAME layer id, so after
+             * a replace a record already existed here and the write was skipped — **forever**. The
+             * registry held the new file all session and `_hydrateSceneMedia` loaded the original back
+             * on the next launch.
+             * 📐 REPRODUCED before changing anything: import RED, replace with BLUE, save — the store
+             * still held RED while the registry held BLUE and `layer.mediaRev` said 1. **The layer's
+             * own JSON claimed the replace and the blob disagreed**, with no error and no toast. The
+             * same path is what "fill this template with my own photos" uses, so that reverted too.
+             * ⚠️ THE GUARD ITSELF WAS NOT WRONG, WHICH IS WHY THIS IS NOT JUST DELETED. `save()` is a
+             * debounced autosave and these are whole video files; writing every blob on every save
+             * would be brutal on a phone. So the test is not "always write" but "write when the file
+             * actually changed", and `mediaRev` — which already exists, is already bumped by the only
+             * code that replaces media, and is already inside the history snapshot — is what says so.
+             * A record written before this change has no `rev`, and an untouched layer has no
+             * `mediaRev`, so both read 0 and nothing is rewritten: existing projects do not get a mass
+             * re-write on first launch. `kind` rides along, which also fixes a video→image replace
+             * saving the layer as one type against a stored record marked the other. */
             const existing = await idbGet(db, layer.id);
-            if (!existing) await idbPut(db, layer.id, { file: m.file, kind: m.kind });
+            const rev = layer.mediaRev || 0;
+            if (!existing || (existing.rev || 0) !== rev) await idbPut(db, layer.id, { file: m.file, kind: m.kind, rev: rev });
           }
         }
         // NOTE: no blanket prune here any more — media blobs are shared across ALL projects (plus

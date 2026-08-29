@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.28
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.29
 >
-> **State:** v14.28, 1078 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.29, 1080 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -22559,7 +22559,7 @@ re-opened #480, which I had marked done and had not fixed.
       `display: none` button, which is exactly how this got through the first time.
 - [ ] **612 — Menu open/close ANIMATIONS: mobile menus, the copy/paste popup, and the bottom add sheet.**
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
-      ❓ASK: pick a menu animation — A Hinge (recommended) · B Lift · C Unfold. Play them on your phone: https://claude.ai/code/artifact/49b353c8-aa93-4dda-bb45-94bceaa70c5b
+      ✅ **ANSWERED 29 Aug — HE PICKED A, THE HINGE.** His words: *"also do hinge for the animations"*.
       His words, verbatim:
       > Can you do something similar you did with the pc version but for the moniker where each version has
       > a nice animation, be creative and put in lots of effort and make it make sense and still user
@@ -22628,6 +22628,17 @@ re-opened #480, which I had marked done and had not fixed.
       have misdescribed the option he was judging. The stagger is real now and measured (60 · 88 · 116 ·
       144 · 172 · 200 ms).
       🛑 **NOTHING IS IN THE APP.** One letter builds it.
+
+
+      ═══ ✅ **ANSWERED 29 AUG: "also do hinge for the animations" — OPTION A.** ═══
+      **So: the hinge family, on all four surfaces**, each hinged about the edge it actually comes from
+      — the copy/paste menu tips out of its corner, the add sheet and the effects sheet swing up from
+      the bottom. That is what makes it a family rather than the notes flip pasted everywhere, which is
+      what he ruled out in his original message: *"something like that for the rest but not the exact
+      same thing"*.
+      ⚠️ **He did NOT take the "A + B's stagger" option the page offered**, so the add sheet's cards are
+      NOT being staggered. Recording that as a deliberate omission rather than a miss — B's cascade is
+      still the honest answer to *"it's missing something"* on that sheet, and **one word adds it.**
 
 - [x] **613 — The add-layer “+” should keep its plus but lose the plain circle.** ✅ **DONE v13.58 — option A, his pick.**
       His words, verbatim:
@@ -26921,7 +26932,7 @@ re-opened #480, which I had marked done and had not fixed.
       ➡️ Validate before creating, and say what was wrong on the false branch.
 
 - [ ] **674 — The QA pass's remaining UI findings, and its own corrections.**
-      **STATUS: 🟠 NEEDS YOU — three of these are taste calls**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       ❓ASK: three questions in here — (a) text at 160pt overflows the comp and never wraps: is that the same thing as #98's A/B/C size question, or do you still want the options drawn? (b) do you want the transport buttons' TAP AREA grown to 44px (icons unchanged)? (c) should Export / Canvas / Help stay reachable while a layer is selected?
       · **Raw error text reaches you in alerts** (`js/app.js:4515`, `:3960`). The specific messages
         around them are genuinely good; the two catch-alls undo that — today a phone shows
@@ -26942,3 +26953,74 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **Two items it flags as NOT REPRODUCED and I have not checked:** concurrent reverse-cache warms
       fighting over one toast, and an inverted comment at `js/app.js:3371` about the media library.
 
+- [x] **675 — Re-check every FILTER, make sure each is the best version of itself, and add more.**
+      (29 Aug.)
+      His words, verbatim:
+      > re check all the filters and make sure theyre the best version of themselves and then add some more while ur at it, im worried an update along the way made them worse but be careful not to make them worse if im wrong again
+
+      **THREE CLAUSES, and the third governs the other two:**
+      1. [x] **Re-check every filter — is each the best version of itself?**  ✅ re-checked and NOTHING was changed — the evidence says they are fine. v14.29
+      2. [x] **Add more filters.**  ✅ five added, each measured into empty ground. v14.29
+      3. [x] **⚠️ DO NOT MAKE THEM WORSE IF HE IS WRONG.** *"if im wrong again"* — he is telling me he  ✅ honoured: not one existing filter was touched. v14.29
+             may be misremembering, and that a confident rewrite on a false premise is the failure he
+             is actually afraid of. **So this is an EVIDENCE job before it is a taste job.**
+      🔑 **THE METHOD THIS DEMANDS, and it is not the obvious one.** "Make them better" invites
+      rewriting curves by eye, which is exactly how a set of filters that was fine becomes a set that
+      is different-and-arguably-worse with no way to tell. Instead:
+      · **Measure every filter as it is TODAY first** — a fixed frame, numbers per filter — so there is
+        a baseline that any later change can be proved against rather than argued about.
+      · **Ask GIT whether a regression actually happened**, rather than trusting either of us. If an
+        update degraded them there is a commit that did it, and the before/after can be rendered.
+      · **Change only what the evidence condemns.** A filter that measures healthy gets left alone even
+        if I think I could do better, because his real request is "do not lose what works".
+      🔗 **History that matters here:** #579 measured the mono filters and found them CORRECT
+      (`Silver 0, Noir 0, Newsprint 2.98` colour spread on a 144-spread frame) — and that the one that
+      looked wrong, **Blackout**, is not a mono filter at all: it sits in `tuff` on `saturate: 0.7` by
+      design. **That was my own misdiagnosis, corrected by measurement**, and it is the precedent for
+      how this one should be run. #593, #603 and #645 are the same complaint from other angles.
+
+
+
+      ═══ ✅ **29 AUG (v14.29) — THE RE-CHECK CAME BACK CLEAN, SO NOTHING WAS CHANGED.** ═══
+      **You said *"be careful not to make them worse if im wrong again"*, so this was run as an evidence
+      job before a taste job. Three independent checks, all negative:**
+      1. **GIT: no filter definition has EVER been rewritten.** Every one of the seven commits that
+         touched `js/filters.js` only ADDED. Nothing was edited or removed, ever.
+      2. **RENDER: all 33 filters are pixel-identical on both drawing paths.** Rendered through
+         `ctx.filter` and through the GPU shader, **every single one came out with 0% of pixels
+         differing** (max channel delta 0–4, which is rounding).
+      3. **The mono filters desaturate perfectly** — measured on the filtered layer, Noir gives
+         `[73,73,73]`, a colour spread of **0**. Exactly what #579 found last time.
+      🔑 **SO WHAT YOU ARE REMEMBERING IS #661, AND IT IS THE OPPOSITE OF WORSE.** On your phone
+      `ctx.filter` does not work, so until v14.02 the colour operations these filters are built from did
+      **nothing at all** — which is precisely what you reported: *"none of the black and white filters
+      make anything black and white"*. **They were dead, not degraded, and they were fixed two days
+      ago.** Rewriting them now would have been the exact mistake you warned me about.
+      ✅ **FIVE ADDED, each placed where the set measurably was not:**
+      | filter | section | why it exists |
+      |---|---|---|
+      | **Midnight** | tuff | nothing sat below mean 85 — the whole dark end was empty |
+      | **Ultraviolet** | vivid | past the colour ceiling; Poppy was the most saturated thing here |
+      | **Matte** | cinematic | flat and desaturated **without** going mono — that gap was unoccupied |
+      | **Ember** | glow | every glow look was bright; none was dark |
+      | **Copperplate** | retro | the only filter built on DUOTONE — no split-tone look existed |
+      🔬 **TWO OF THE FIVE FAILED MY OWN BAR ON THE FIRST DRAFT AND WERE MOVED.** Copperplate landed
+      **4.3** from Old Film and Ultraviolet **8.9** from Neon Night — near-duplicates under new names,
+      which is the #579 failure. Both were pushed apart and re-measured; the closest any new filter now
+      sits to an existing one is **11.3**.
+      🚨 **AND THE SUITE CAUGHT FIVE HOUSE RULES I BROKE**, which is worth recording because I did not
+      know four of them: every Tuff look must carry the flash (*"they should also come with flicker or
+      flash"*); a filter may only use controls the effect actually has (`hue` takes `deg`, not
+      `amount`); CSS-filter effects must be authored FIRST so the written order matches the render
+      order; every filter needs its own demonstration photograph, preloaded; and **no cars outside the
+      Tuff group** — your own v9.82 correction, still binding.
+      🐛 **AND ONE REAL BUG FELL OUT OF IT, which is the closest thing to your instinct being right.**
+      Adding a fifth Cinematic filter made that row scroll, and the pager drew **one dot** under it.
+      `pages()` used `Math.round(scrollWidth / clientWidth)` — correct at a ratio of 2.0 and a lie at
+      1.25. **The arithmetic was always wrong; every section happened to sit at a whole number of pages
+      until one did not.** It ceils now.
+      ⚠️ **ONE THING I FOUND AND DELIBERATELY DID NOT "FIX":** on my two-axis measure the closest pair in
+      the whole library is **Poster and Silver at 2.3** — closer than anything I added. But that metric
+      only sees brightness and colour spread, and Posterize is a STRUCTURAL effect it cannot see.
+      **Condemning two existing filters on a metric too blunt to describe them is exactly the failure
+      you asked me to avoid**, so they are untouched and this is written down instead.
