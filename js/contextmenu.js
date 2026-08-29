@@ -98,11 +98,33 @@ window.FM = window.FM || {};
         menu.appendChild(b);
       });
       menu.style.left = x + 'px'; menu.style.top = y + 'px'; menu.classList.remove('hidden');
+      /* ⚠️ THE HINGE CLASS COMES OFF BEFORE ANYTHING IS MEASURED, and this cost a real bug on the
+         SECOND open. `fm-hinge-corner` is `animation-fill-mode: both`, so the moment the class is on,
+         the element is already wearing the FROM frame — `rotateX(-78deg)` — and a rotated box measures
+         about a fifth of its true height. Leaving last time's class on meant the clamp below asked "is
+         104px tall going to fit?" and was told 22px, so it did not clamp, and a menu opened near the
+         bottom of the phone hung off the screen. Measured: layout top 782 with height 104 on an 812
+         viewport. The FIRST open was always fine, which is exactly what makes it the kind of bug that
+         ships. */
+      menu.classList.remove('ctx-hinge');
       const r = menu.getBoundingClientRect();
-      if (r.right > window.innerWidth) menu.style.left = Math.max(6, window.innerWidth - r.width - 6) + 'px';
+      if (r.right > window.innerWidth) menu.style.left = Math.max(6, window.innerWidth - r.width - 6) + 'px';   // see the hinge note below: measured BEFORE any transform
       // Math.max(6,…): a menu TALLER than the viewport pushed top NEGATIVE, clipping its first items
       // off the top with no way to reach them — clamp to 6 and let CSS max-height/overflow scroll it.
-      if (r.bottom > window.innerHeight) menu.style.top = Math.max(6, window.innerHeight - r.height - 6) + 'px';
+      const flipX = r.right > window.innerWidth, flipY = r.bottom > window.innerHeight;
+      if (flipY) menu.style.top = Math.max(6, window.innerHeight - r.height - 6) + 'px';
+      /* ═══ THE HINGE GOES ON LAST, AND THAT ORDER IS THE WHOLE TRICK (queue 612) ═══════════════
+       * He picked the hinge: *"also do hinge for the animations"*. The menu swings open about the
+       * corner it came from — but the clamping directly above measures `getBoundingClientRect()` to
+       * decide whether the menu fits on screen, and a rotated box measures SMALLER than a flat one.
+       * Adding the class before that would have the menu clamp against its own foreshortened width
+       * and land in the wrong place, which reads as a positioning bug and not an animation one.
+       * So it is added after every measurement is finished, and the origin follows whichever corner
+       * the clamp actually put it on — a menu flipped to the left of your finger must hinge from the
+       * right, or it swings away from the thing you tapped. */
+      menu.style.transformOrigin = (flipX ? '100%' : '0%') + ' ' + (flipY ? '100%' : '0%');
+      void menu.offsetWidth;               // restart the animation when the menu is re-opened in place
+      menu.classList.add('ctx-hinge');
     },
     hide() { if (menu) menu.classList.add('hidden'); },
     isOpen() { return !!menu && !menu.classList.contains('hidden'); },

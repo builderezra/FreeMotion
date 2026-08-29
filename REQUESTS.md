@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.29
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.30
 >
-> **State:** v14.29, 1080 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.30, 1081 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -22557,8 +22557,7 @@ re-opened #480, which I had marked done and had not fixed.
       🔒 **A test now names the element by the SCREEN he was on**, and its control asserts the orb is
       actually visible — because a computed-style check alone was perfectly happy with a 0x0
       `display: none` button, which is exactly how this got through the first time.
-- [ ] **612 — Menu open/close ANIMATIONS: mobile menus, the copy/paste popup, and the bottom add sheet.**
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **612 — Menu open/close ANIMATIONS: mobile menus, the copy/paste popup, and the bottom add sheet.**
       ✅ **ANSWERED 29 Aug — HE PICKED A, THE HINGE.** His words: *"also do hinge for the animations"*.
       His words, verbatim:
       > Can you do something similar you did with the pc version but for the moniker where each version has
@@ -22639,6 +22638,40 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **He did NOT take the "A + B's stagger" option the page offered**, so the add sheet's cards are
       NOT being staggered. Recording that as a deliberate omission rather than a miss — B's cascade is
       still the honest answer to *"it's missing something"* on that sheet, and **one word adds it.**
+
+
+      ═══ ✅ **29 AUG (v14.30) — THE HINGE IS IN, ON THREE SURFACES.** ═══
+      · **the copy/paste menu** tips out of the corner you tapped
+      · **the bottom add sheet** swings up off the bottom edge, replacing its flat 220ms slide
+      · **the effects sheet** swings the same way but shallower — a full-height panel rotated as hard
+        as a small menu sweeps the whole screen and reads as a page turning, not a panel arriving
+      **One piece of physics, a different axis each time** — which is the half that answers *"something
+      like that for the rest but NOT the exact same thing"*.
+      ⚠️ **Perspective goes INSIDE the transform, not on a parent.** The notes flip learned that already
+      and its comment says so: a card given its own `perspective` property has it re-applied by its own
+      transform and the fold comes out flat.
+      🐛 **AND I SHIPPED A REAL BUG INTO IT AND CAUGHT IT BY MEASURING — worth writing down because the
+      FIRST open was always fine.** `FM.contextMenu.show` reads `getBoundingClientRect()` to decide
+      whether the menu fits on screen, and the hinge is `animation-fill-mode: both`, so the moment the
+      class is on the element already wears `rotateX(-78deg)` and **measures about a fifth of its true
+      height**. Leaving the previous open's class on meant the clamp asked *"will 104px fit?"* and was
+      told 22px — so it did not clamp, and a menu opened near the bottom of the phone **hung off the
+      screen** (layout top 782, height 104, viewport 812). The class comes off before anything is
+      measured now, and the test opens the menu TWICE in the same place, because once passes on the
+      broken code.
+      ✅ **The hinge follows the corner the clamp actually chose** — a menu pushed up the screen swings
+      from its bottom edge, or it opens away from the finger that summoned it. Verified at 375×812 in
+      all four corners.
+      ⚠️ **One existing test had to be adjusted and it is NOT weakened:** the Add-sheet geometry test
+      waited 140ms, which was fine for a 220ms slide and measures the new 360ms hinge MID-FLIGHT — it
+      failed as *"the sheet starts 6px away from the canvas"*, which is what a rotating box measured at
+      the wrong moment looks like. The wait is 430ms; every assertion and tolerance is unchanged.
+      🖥️ **Phone only, deliberately** — he asked for the mobile version, the PC already has its pop
+      family, and the add sheet and effects sheet do not exist above 700px at all.
+      ➡️ **STILL NOT DONE, and it is his to choose:** the page also offered **"A + B's stagger"** — the
+      add sheet's cards arriving one after another, 28ms apart, which is the honest answer to *"it's
+      missing something"* on that sheet. He said hinge, so the cards still arrive all at once. **One
+      word adds it.**
 
 - [x] **613 — The add-layer “+” should keep its plus but lose the plain circle.** ✅ **DONE v13.58 — option A, his pick.**
       His words, verbatim:

@@ -8708,3 +8708,56 @@ body:has(#el-browser:not(.hidden)) #view-bar { display: none; }
    and the test caught it — "reclaim the wasted space" and "shift the column somewhere else" look the
    same from a width measurement and are not the same thing. */
 body.group-editing .track-head.in-group { padding-left: 8px; }
+
+/* ═══ THE HINGE FAMILY — his pick for the phone's menus (queue 612) ═══════════════════════════════
+   Ezra, from the options page: *"also do hinge for the animations"* — option A.
+   His original ask ruled out the easy answer in the same breath: *"I love what you did with the notes
+   menu how it flipped up, something like that for the rest but NOT the exact same thing."* So this is
+   not the notes flip copied onto four surfaces. It is one piece of physics — a swing about a hinged
+   edge — with the AXIS chosen per surface, so each menu opens from the edge it actually comes from:
+   the copy/paste menu tips out of the corner you tapped, the sheets swing up off the bottom of the
+   screen. Same idea every time, never the same animation twice.
+
+   ⚠️ PERSPECTIVE IS INSIDE THE TRANSFORM, not a property on a parent. The notes flip learned this the
+   hard way and its comment says so — a card given its own `perspective` property has it re-applied by
+   its own transform and the fold comes out flat. `perspective()` as the first transform function is
+   the per-element form and folds correctly with no parent to prepare.
+
+   ⚠️ PHONE ONLY, on purpose. He asked for "the [mobile] version", the PC already has its own pop
+   family, and the add sheet and effects sheet do not exist above 700px at all. */
+@media (max-width: 700px) {
+  #ctx-menu.ctx-hinge {
+    animation: fm-hinge-corner 320ms cubic-bezier(.18, .85, .28, 1.02) both;
+    /* transform-origin is set in js/contextmenu.js — it follows the corner the on-screen clamp
+       actually put the menu on, so a menu flipped left of your finger hinges from the right. */
+  }
+  @keyframes fm-hinge-corner {
+    from { opacity: 0; transform: perspective(1400px) rotateX(-78deg) rotateZ(-3deg); }
+    60%  { opacity: 1; }
+    to   { opacity: 1; transform: perspective(1400px) rotateX(0deg) rotateZ(0deg); }
+  }
+
+  /* THE BOTTOM SHEET. It already slid up on a flat `transition: transform .22s ease` — the thing he
+     called "missing something". The slide is replaced by the swing rather than layered on top of it,
+     because a sheet that translates AND hinges reads as two animations disagreeing. */
+  #add-sheet.open { animation: fm-hinge-up 360ms cubic-bezier(.18, .85, .28, 1.02) both; transform-origin: 50% 100%; }
+  @keyframes fm-hinge-up {
+    from { opacity: 0; transform: perspective(1400px) translateY(100%) rotateX(-58deg); }
+    55%  { opacity: 1; }
+    to   { opacity: 1; transform: perspective(1400px) translateY(0) rotateX(0deg); }
+  }
+
+  /* THE FULL SHEET (effects). Shallower, because a full-height panel rotated as hard as a small menu
+     sweeps most of the screen and reads as a page turning rather than a panel arriving. */
+  #fx-browser.fxb-sheet { animation: fm-hinge-panel 360ms cubic-bezier(.18, .85, .28, 1.02) both; transform-origin: 50% 100%; }
+  @keyframes fm-hinge-panel {
+    from { opacity: 0; transform: perspective(1600px) rotateX(-42deg) translateY(14px); }
+    55%  { opacity: 1; }
+    to   { opacity: 1; transform: perspective(1600px) rotateX(0deg) translateY(0); }
+  }
+}
+/* The app already honours this for every other motion it has; a hinge is a bigger movement than most,
+   so it is the last thing that should ignore it. */
+@media (prefers-reduced-motion: reduce) {
+  #ctx-menu.ctx-hinge, #add-sheet.open, #fx-browser.fxb-sheet { animation: none; }
+}

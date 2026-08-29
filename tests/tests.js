@@ -771,7 +771,12 @@
       const sheet = document.getElementById('add-sheet'), stage = document.getElementById('stage');
       if (!sheet || !stage) throw new Error('#add-sheet / #stage missing');
       FM.mobile.openAdd();
-      await sleep(140);
+      /* ⚠️ 430ms, and it was 140 (queue 612). The sheet used to arrive on a 220ms transition; it now
+         swings in on a 360ms hinge, so 140ms measured it MID-FLIGHT — the failure read as "the sheet
+         starts 6px away from the canvas" and "the height differs per tab", which is what a rotating
+         box measured at different moments looks like. The assertion below is untouched: what it checks
+         is the SETTLED sheet, and this just waits for it to settle. */
+      await sleep(430);
       const tops = [];
       for (const k of FM.addMenu.TAB_KEYS) {
         FM.addMenu.openTab(k);
@@ -46398,6 +46403,61 @@
     /* A sample that is genuinely hitching must still say SO, not be relabelled. */
     const bad = FM.perfProbe._verdict({ med: 40, worst: 400, late: 9, total: 120, appMs: 4, budget: 16.7, effective: 0.28 });
     if (!/STUTTER/i.test(bad)) throw new Error('a stuttering sample lost its stutter verdict to the new scale branch: ' + bad);
+  });
+
+  /* ═══ QUEUE 612 — THE HINGE, AND THE MEASUREMENT IT NEARLY BROKE ══════════════════════════════
+   * He picked option A off the options page: *"also do hinge for the animations"*. One piece of
+   * physics with the axis chosen per surface, so each menu swings open from the edge it comes from.
+   * ⚠️ THE REAL RISK WAS NEVER THE ANIMATION, IT WAS THE MEASUREMENT. `FM.contextMenu.show` reads
+   * `getBoundingClientRect()` to decide whether the menu fits on screen, and the hinge is
+   * `animation-fill-mode: both` — so the instant the class is on, the element wears its FROM frame,
+   * `rotateX(-78deg)`, and measures about a fifth of its true height.
+   * 📐 I SHIPPED THAT BUG INTO THIS FILE AND CAUGHT IT BY MEASURING: leaving the previous open's class
+   * on meant the clamp asked "will 104px fit?" and was told 22px, so it did not clamp and a menu opened
+   * near the bottom of a phone hung off the screen — layout top 782, height 104, viewport 812. **The
+   * FIRST open was always correct**, which is exactly what makes it the kind of thing that ships.
+   * So this opens the menu TWICE in the same place. A single open passes on the broken code. */
+  test('#612: the hinged menu still clamps on screen when it is re-opened', { item: '612' }, async function () {
+    if (!FM.contextMenu || !FM.contextMenu.show) throw new Error('FM.contextMenu is missing');
+    /* ⚠️ AT PHONE WIDTH, because the hinge is deliberately phone-only — he asked for "the [mobile]
+       version" and the PC already has its own pop family. Run at desktop this reads no animation at
+       all and would fail for the wrong reason, which is how it first failed. */
+    return await atPhoneWidth(async function () {
+    const items = [{ label: 'Copy selected', action() {} }, { label: 'Paste on timeline', action() {} },
+                   { label: 'Duplicate', action() {} }];
+    try {
+      const at = (x, y) => {
+        FM.contextMenu.hide();
+        FM.contextMenu.show(x, y, items);
+        const m = document.getElementById('ctx-menu');
+        if (!m) throw new Error('no #ctx-menu after show()');
+        /* offsetTop/Height are LAYOUT — untouched by the transform. getBoundingClientRect here would
+           measure the rotated start frame and report a box the user never sees. */
+        return { top: m.offsetTop, left: m.offsetLeft, h: m.offsetHeight, w: m.offsetWidth,
+                 anim: getComputedStyle(m).animationName, origin: getComputedStyle(m).transformOrigin };
+      };
+      const low = window.innerHeight - 30;
+      const first = at(40, low);
+      if (first.top + first.h > window.innerHeight) throw new Error('a menu opened near the bottom hangs off the screen on the FIRST open (top ' + first.top + ' + ' + first.h + ' > ' + window.innerHeight + ')');
+      const again = at(40, low);
+      if (again.top + again.h > window.innerHeight) throw new Error('a menu opened near the bottom hangs off the screen when RE-OPENED (top ' + again.top + ' + ' + again.h + ' > ' + window.innerHeight +
+        ') — the previous open\'s hinge class is still applying its rotated start frame, so the fit check measures a foreshortened box');
+      if (again.top !== first.top) throw new Error('the same menu landed at ' + first.top + ' then ' + again.top + ' — re-opening it moves it');
+
+      /* IT MUST ACTUALLY BE HINGING, or the clamp assertions above pass on a menu with no animation. */
+      if (!/hinge/.test(first.anim)) throw new Error('the menu is not running a hinge animation (' + first.anim + ')');
+      /* AND THE HINGE FOLLOWS THE CORNER THE CLAMP CHOSE — a menu flipped above your finger must swing
+         from its bottom edge, or it opens away from the thing you tapped. */
+      /* PARSED, NOT PATTERN-MATCHED. The first version of this line tested the origin string against a
+         regex and rejected "0px 105px" — which is the CORRECT answer, the bottom edge of a 105px menu.
+         A number this test cares about should be read as a number. */
+      const originY = o => parseFloat(String(o).split(/\s+/)[1] || '0');
+      if (!(originY(again.origin) > 1)) throw new Error('a menu pushed UP the screen still hinges from its top edge (origin ' +
+        again.origin + ') — it would swing away from the finger that opened it');
+      const high = at(40, 100);
+      if (originY(high.origin) !== 0) throw new Error('a menu with room below it should hinge from its TOP edge, got origin ' + high.origin);
+    } finally { try { FM.contextMenu.hide(); } catch (e) {} }
+    });
   });
 
   /* ═══ QUEUE 675 — THE NEW FILTERS MUST OCCUPY EMPTY GROUND ════════════════════════════════════
