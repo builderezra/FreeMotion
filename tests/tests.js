@@ -30170,7 +30170,15 @@
     /* CONTROLS — ordinary rows must be untouched. If these move, the override has leaked out of the
      * speed row and every scrubber in the app has changed feel. */
     if (FM._tickQuantum(0, 100, 1, '') !== 1) throw new Error('a 0-100 row no longer steps by 1');
-    if (FM._tickQuantum(-360, 360, 1, '°') !== 15) throw new Error('an angle row no longer steps by 15 degrees');
+    /* ⚠️ 5°, AND IT WAS 15° UNTIL v14.25 — a DELIBERATE change, not a leak (queue 635). He reported the
+       same feel a third time ("Pinch bulges slider jumps too much too fast"), so the notch budget went
+       from 100 to 400 and every wide row got finer: 195 coarsened parameters became 20. This control
+       still does its job — it fails if the speed row's forced quantum escapes into ordinary rows — and
+       the INVARIANT it was really protecting is asserted directly below rather than implied by a
+       number that was only ever a consequence of the budget. */
+    const ang = FM._tickQuantum(-360, 360, 1, '°');
+    if (ang !== 5) throw new Error('an angle row steps by ' + ang + ', expected 5 degrees');
+    if (45 % ang !== 0) throw new Error('an angle row steps by ' + ang + ', which cannot land exactly on 45 degrees — the degree branch exists to keep those landmarks reachable');
 
     /* AND THE RENDERED RULER MUST ACTUALLY USE IT — end to end, not "the row asks" and "the helper
      * works" as two separate facts. A first version asserted exactly those two and a mutation that made
@@ -46390,6 +46398,61 @@
     /* A sample that is genuinely hitching must still say SO, not be relabelled. */
     const bad = FM.perfProbe._verdict({ med: 40, worst: 400, late: 9, total: 120, appMs: 4, budget: 16.7, effective: 0.28 });
     if (!/STUTTER/i.test(bad)) throw new Error('a stuttering sample lost its stutter verdict to the new scale branch: ' + bad);
+  });
+
+  /* ═══ QUEUE 635 — SLIDERS THAT JUMP TOO FAR, TOO FAST ═════════════════════════════════════════
+   * Ezra: *"Pinch bulges slider jumps too much too fast, make its sliders more gradual"* — his THIRD
+   * report of one feel, after *"the speed slider goes WAY too fast, it goes up 10x at a time"* (#455)
+   * and #609.
+   * 🔑 `q` IS NOT A DRAWING DETAIL. The notches are real snap points (`min + n*q`) and the drag rate is
+   * `dx * q / TICK`, so a coarse quantum makes the value jump further AND move faster per pixel —
+   * both halves of his sentence, out of one number.
+   * 📐 MEASURED: **195 of 808 parameters were coarsened**, and Pinch / Bulge's Amount had a step of
+   * 0.02 given a quantum of 0.1 — five times its own step — because 150 notches was barely over the
+   * old 120 gate. The budget was simply far too tight. */
+  test('#635: a parameter keeps its own step unless the ruler would be unusable', { item: '635' }, function () {
+    const tq = FM._tickQuantum;
+    if (!tq) throw new Error('FM._tickQuantum is not exposed, so this measures a copy of the rule rather than the rule');
+    const defs = FM.fxRegistry.allIncludingHidden ? FM.fxRegistry.allIncludingHidden() : FM.fxRegistry.all();
+
+    /* THE REPORT ITSELF: every Pinch/Bulge slider must land on its own declared step. */
+    const bulge = defs.filter(d => (d.key || d.id || d.type) === 'bulge')[0];
+    if (!bulge) throw new Error('the bulge effect is missing');
+    for (const p of (bulge.params || [])) {
+      if (!(p.step > 0)) continue;
+      const q = tq(p.min, p.max, p.step, p.unit);
+      if (q > p.step * 1.001) throw new Error('Pinch/Bulge "' + p.label + '" still snaps to ' + q +
+        ' when its own step is ' + p.step + ' (' + (q / p.step).toFixed(0) + 'x coarser) — that is the jump he reported');
+    }
+
+    let coarse = 0, worstNotches = 0, illegal = [];
+    for (const d of defs) for (const p of (d.params || [])) {
+      if (typeof p.min !== 'number' || typeof p.max !== 'number' || !(p.step > 0)) continue;
+      const q = tq(p.min, p.max, p.step, p.unit);
+      const notches = Math.round((p.max - p.min) / q);
+      if (notches > worstNotches) worstNotches = notches;
+      if (q > p.step * 1.001) coarse++;
+      /* THE INVARIANT: q must stay a whole multiple of step, or a snap lands on a value the parameter
+         does not admit — the ruler would offer positions the effect cannot hold. */
+      const m = q / p.step;
+      if (Math.abs(m - Math.round(m)) > 1e-6) illegal.push((d.key || d.id || d.type) + '.' + p.key + ' q=' + q + ' step=' + p.step);
+    }
+    if (illegal.length) throw new Error('these quanta are not whole multiples of their step, so the ruler snaps to values the parameter cannot hold: ' + illegal.slice(0, 4).join(', '));
+
+    /* ⚠️ AND THE CAP MUST STILL EXIST. "Make it finer" taken to its limit gives Counter, whose 0-100,000
+       range at its true step is 100,000 notches — a ruler about 700,000px long that nobody can drag.
+       Raising the budget is not the same as removing it, and without this that difference is untested. */
+    if (worstNotches > 400) throw new Error('some parameter now draws ' + worstNotches +
+      ' notches — the budget is meant to bound the ruler, and a slider you cannot drag from end to end is the opposite of the fix');
+    const counter = defs.filter(d => (d.key || d.id || d.type) === 'counter')[0];
+    if (counter) {
+      const from = (counter.params || []).filter(p => p.key === 'from')[0];
+      if (from && from.step > 0 && tq(from.min, from.max, from.step, from.unit) <= from.step * 1.001)
+        throw new Error('Counter now uses its raw step over a 0-100,000 range — that is a 700,000px ruler, which is why the cap exists');
+    }
+    /* The whole point of raising the budget: far fewer rows are coarsened at all. Measured 195 before
+       and 20 after, so anything near the old figure means the change was reverted. */
+    if (coarse > 60) throw new Error(coarse + ' parameters are still coarsened away from their own step — it was 195 before this fix and 20 after, so this looks reverted');
   });
 
   /* ═══ QUEUE 634 — COPY BACKGROUND + PIXELATE PUT THE WHOLE COMP IN THE CORNER ═════════════════

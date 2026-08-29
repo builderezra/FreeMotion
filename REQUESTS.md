@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.24
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.25
 >
-> **State:** v14.24, 1073 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.25, 1074 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -23935,12 +23935,11 @@ re-opened #480, which I had marked done and had not fixed.
       rather than its own fill, and that the marker is still drawn where it belongs — otherwise a zero
       would prove the fixture broke rather than the bug being gone. Mutation-checked.
 
-- [ ] **635 — Pinch / Bulge's sliders jump too much, too fast — make them gradual.** (27 Aug, at v13.55.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **635 — Pinch / Bulge's sliders jump too much, too fast — make them gradual.** (27 Aug, at v13.55.)
       His words, verbatim:
       > Pinch bulges slider jumps too much too fast, make its sliders more gradual
 
-      1. [ ] **The Pinch/Bulge sliders must move in finer increments.**
+      1. [x] **The Pinch/Bulge sliders must move in finer increments.**  ✅ v14.25
       🔑 **THIS IS THE SAME MECHANISM AS #609 AND THE OLD SPEED COMPLAINT — read all three together,
       because a general fix may serve all of them.** `tickQuantum(min, max, step, unit)` in
       js/inspector.js coarsens the notch **so a ruler never exceeds ~100 notches**. That is right for a
@@ -23959,6 +23958,36 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **Do NOT hard-force a constant `q` for this row the way queue 455 did for speed** unless the
       general fix is genuinely unavailable — that is how the app ends up with a special case per row.
       **A rule that derives a sane notch from the range is worth more than a third exception.**
+
+
+      ═══ ✅ **29 AUG (v14.25) — THE ENTRY WAS RIGHT: ONE NUMBER, AND IT SERVED ALL THREE REPORTS.** ═══
+      📐 **MEASURED, exactly as this entry asked.** Pinch / Bulge's **Amount declares a step of 0.02 and
+      was being given a quantum of 0.1 — five times its own step.** Its span of 3 is 150 notches, which
+      was barely over the old gate of 120, so it got coarsened for no good reason.
+      🔑 **AND `q` IS NOT A DRAWING DETAIL, which is why one number explains both halves of your
+      sentence.** The notches are real snap points (`min + n·q`) *and* the drag rate is `dx · q / TICK`.
+      So a coarse quantum makes the value **jump further** AND **travel faster per pixel**. *"Jumps too
+      much, too fast"* is one cause, not two.
+      ✅ **THE BUDGET WENT FROM 100 NOTCHES TO 400**, and the whole family moved with it:
+      | | before | after |
+      |---|---|---|
+      | parameters coarsened away from their own step | **195 of 808** | **20** |
+      | Pinch/Bulge Amount | 5x its step | **its exact step** |
+      | Pinch/Bulge Radius | 2x | **its exact step** |
+      | angle / phase rows | 15x | 5x |
+      | Shake, Wiggle amount | 50x | 10x |
+      ⚠️ **THE CAP IS NOT REMOVED, and that distinction is tested.** Counter's 0–100,000 range at its
+      true step is 100,000 notches — a ruler about 700,000px long that nobody could drag from end to
+      end. Raising a budget and deleting it are different things, and without that assertion the
+      difference would be untested. The widest ruler in the app is now ~2800px.
+      🔒 **The invariant is asserted directly:** `q` must stay a whole multiple of the parameter's step,
+      or the ruler would snap to values the effect cannot hold.
+      🐛 **An existing #455 test went red, and updating it was the interesting part.** It asserted an
+      angle row steps by 15°. That number was never the point — its own comment says those lines are
+      CONTROLS against the speed row's forced quantum leaking into ordinary rows. The control stays;
+      the expected value is now 5°, and the thing it was really protecting — that 45° landmarks remain
+      exactly reachable — is asserted directly instead of being implied by a number that was only ever
+      a consequence of the budget.
 
 - [ ] **636 — A NEW LOADING INTRO, from a video he made in FreeMotion itself — with a way back.**
       **STATUS: 🟢 READY — nothing is stopping this**

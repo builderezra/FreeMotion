@@ -617,18 +617,36 @@ window.FM = window.FM || {};
     return rate;
   }
   FM._fineRate = fineRate;   // read by the suite
+  /* ⚠️ THE NOTCH BUDGET IS 400, AND IT USED TO BE 100 (queue 635 — the third report of one feel).
+   * Ezra: *"Pinch bulges slider jumps too much too fast, make its sliders more gradual"*. Before that,
+   * *"the speed slider goes WAY too fast, it goes up 10x at a time"* (queue 455) and queue 609.
+   * 🔑 `q` IS NOT A DRAWING DETAIL — it decides what you can land on AND how fast the drag moves. The
+   * notches are real snap points (`min + n*q`, see the note below) and the drag rate is `dx * q / TICK`,
+   * so a coarse `q` makes the value jump further AND travel faster per pixel. That is both halves of
+   * his sentence, from one number.
+   * 📐 MEASURED across the whole library: **195 of 808 parameters were being coarsened**, and Pinch /
+   * Bulge's Amount is a step of **0.02 given a quantum of 0.1 — five times its own step** — because a
+   * span of 3 at that step is 150 notches, barely over the old 120 gate.
+   * The cap is not wrong in principle: Counter's 0-100,000 range would be 100,000 notches at its true
+   * step, and that really is a ruler nobody can drag. It was simply far too tight. At 400 the widest
+   * ruler is 400 × TICK ≈ 2800px — the speed row already runs to 140,071px and works — and the family
+   * improves together: Amount and Radius get their exact step, phase goes 15x → 5x, Shake and Wiggle
+   * 50x → 10x. Nothing loses a landmark: `legal()` still forces q to be a whole multiple of step, and
+   * the degree branch still only offers divisors of 45. */
+  const NOTCH_BUDGET = 400;
   function tickQuantum(min, max, step, unit) {
-    // Notch quantum q: the param's step, unless that means >120 notches — then coarsen to a "nice"
-    // 1/2/5×10^k giving ≤100 notches. q is always an integer multiple of step so snaps stay legal.
+    // Notch quantum q: the param's step, unless that means more notches than the budget — then
+    // coarsen to a "nice" 1/2/5×10^k. q is always an integer multiple of step so snaps stay legal.
     const span = max - min;
-    if (!(step > 0)) step = span > 0 ? span / 100 : 1;
-    if (!(span > 0) || span / step <= 120) return step;
+    if (!(step > 0)) step = span > 0 ? span / NOTCH_BUDGET : 1;
+    if (!(span > 0) || span / step <= NOTCH_BUDGET) return step;
     const legal = q => { const m = q / step; return m >= 1 - 1e-6 && Math.abs(m - Math.round(m)) < 1e-6; };
     const snap = q => Math.round(q / step) * step;
-    if (unit === '°') { for (const q of [1, 5, 15, 45]) if (legal(q) && span / q <= 120) return snap(q); }   // divisors of 45 keep the 45° landmarks landable
-    for (let k = -3; k <= 6; k++) for (const m of [1, 2, 5]) { const q = m * Math.pow(10, k); if (legal(q) && span / q <= 100) return snap(q); }
-    return Math.ceil(span / 100 / step) * step;
+    if (unit === '°') { for (const q of [1, 5, 15, 45]) if (legal(q) && span / q <= NOTCH_BUDGET) return snap(q); }   // divisors of 45 keep the 45° landmarks landable
+    for (let k = -3; k <= 6; k++) for (const m of [1, 2, 5]) { const q = m * Math.pow(10, k); if (legal(q) && span / q <= NOTCH_BUDGET) return snap(q); }
+    return Math.ceil(span / NOTCH_BUDGET / step) * step;
   }
+  FM._tickQuantum = tickQuantum;   // seam: the suite measures the real rule rather than a copy of it
   // o: { min, max, step, unit, dflt, read(), apply(v), release() }. Returns the strip; strip._sync(v)
   /* ---- momentum, shared by every push-the-ruler control -------------------------------------
    * A flick keeps travelling and eases out, the way the timeline's scrub does. A slow deliberate
