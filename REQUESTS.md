@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.39
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.40
 >
-> **State:** v14.39, 1098 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.40, 1099 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -26655,7 +26655,7 @@ re-opened #480, which I had marked done and had not fixed.
       📸 **Picture of both button states sent 29 Aug.**
 
 - [ ] **654 — A first-time user could not work out how to LEAVE the audio edit menu.** (27 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
       > Make a note that my friend said he couldn't figure out how to get out of the audio edit menu
       🔑 **THIS IS THE FIRST REPORT IN THIS FILE FROM SOMEONE WHO IS NOT EZRA, and that makes it worth
@@ -26671,6 +26671,24 @@ re-opened #480, which I had marked done and had not fixed.
       traps you, and if it exits the whole project instead of the panel, that IS the bug.
       ⚠️ **Related:** #612 covers menu open/close animations; a panel that animates in from nowhere with
       no visible affordance is exactly how this happens.
+
+
+      ═══ 🔍 **29 AUG (v14.40) — I LOOKED FIRST, AS THIS ENTRY SAYS TO, AND FOUND A PLAIN BUG.** ═══
+      📐 **The only way out of that menu is the `‹` in the top bar — and its screen-reader label says
+      "Projects / file".** But in this state that button does not go to Projects at all: it deselects
+      the clip, which is to say **it closes the panel**. So the one control that gets your friend out
+      announces itself as the one that leaves the whole project. *"The exit is present but reads as
+      something else"* is the most common shape of "I couldn't get out", and this is that, literally.
+      ✅ **Fixed.** It now says **"Close clip options"** while the panel is open, **"Done selecting"** in
+      select mode, and **"Projects"** the rest of the time — set from the one place that already knows
+      which state you are in, so there is no second copy to drift. The test asserts **both directions**:
+      it must stop saying Projects while the panel is open, and go back to saying it when nothing is
+      selected — otherwise the lie has only moved.
+      🎨 **THE VISIBLE HALF IS YOUR CALL AND IS NOT SHIPPED.** Three exits drawn at 380px and sent to you
+      29 Aug: **A** a **Done** button on the panel's own back row (recommended — it reuses the header you
+      asked for in **#297**: *"the done button should be there if ur inside one of the effects sub
+      menus"*), **B** the top-bar arrow becoming an **✕**, **C** the back row naming where it goes.
+      **Nothing visual ships until you pick a letter.**
 
 - [ ] **655 — Groups get a small drop-down arrow on their timeline row. Remove it — he does not want the
       **STATUS: 🟢 READY — nothing is stopping this**

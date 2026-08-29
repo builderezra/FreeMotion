@@ -836,6 +836,23 @@ window.FM = window.FM || {};
     document.body.classList.toggle('sel-multi', n >= 2);
     document.body.classList.toggle('sel-mode', selOwns);
     document.body.classList.toggle('m-editing', phone && n === 1 && !selOwns);
+    /* ⚠️ AND THE BACK BUTTON MUST SAY WHAT IT ACTUALLY DOES (queue 654, v14.40). `#m-back` carries a
+       fixed `aria-label="Projects / file"` in index.html — but js/mobile.js branches on these very
+       classes and, in BOTH `sel-mode` and `m-editing`, that button does not go to Projects at all: it
+       deselects, which is to say it CLOSES THE PANEL. So the one control that gets you out of the
+       audio edit menu announces itself as the control that leaves the project.
+       This entry is the first report in the file from someone who is not Ezra — a stranger could not
+       find the way out — and "the exit is present but reads as something else" is the most common
+       shape of that complaint. A screen reader was being told the wrong thing outright.
+       Set from here because this is where the state is already decided; anywhere else would be a
+       second copy of the same three-way branch, which is the #116 failure. */
+    const mb = document.getElementById('m-back');
+    if (mb) {
+      mb.setAttribute('aria-label',
+        selOwns ? 'Done selecting'
+        : (phone && n === 1) ? 'Close clip options'
+        : 'Projects');
+    }
     // JS supplies the NUMBER; the stylesheet decides whether the label is on screen.
     const cnt = document.getElementById('m-selcount');
     /* "4 selected", not "4 layers selected", and it is a measurement rather than a style preference

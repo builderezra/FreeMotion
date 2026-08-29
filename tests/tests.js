@@ -53360,12 +53360,18 @@
        provide one. Checked in js/exporter.js rather than assumed — a suite that saved a file per run
        would fill his Downloads folder. */
     try {
-      P.width = 240; P.height = 240; P.duration = 4; P.fps = 30;
+      /* ⚠️ SIX SECONDS, NOT FOUR, AND THE MARGIN IS THE POINT. The recorder hands a batch to storage
+         every 60 chunks and only counts it once the WRITE has landed, asynchronously. At 4s/30fps the
+         export died at frame 90, i.e. one batch handed over and possibly not yet written — so the
+         second run found nothing to resume from and reported 0%. Measured: this test failed that way
+         once, and it is a race in the TEST, not in the feature. At 6s the crash lands past frame 135,
+         with two batches handed over many frames earlier. */
+      P.width = 240; P.height = 240; P.duration = 6; P.fps = 30;
       FM.scene.layers.length = 0;
       const L = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 120, shapeW: 180, shapeH: 180, fill: '#ff9a4f' });
-      L.start = 0; L.duration = 4; FM.scene.layers.push(L);
+      L.start = 0; L.duration = 6; FM.scene.layers.push(L);
       FM.refreshAll();
-      const OPTS = function () { return { scale: 1, fps: 30, bitrate: 900000, name: 'x47probe', from: 0, to: 4, outW: 240, outH: 240 }; };
+      const OPTS = function () { return { scale: 1, fps: 30, bitrate: 900000, name: 'x47probe', from: 0, to: 6, outW: 240, outH: 240 }; };
 
       // ── 1. an export that DIES part-way. Chunks are kept on an exception (only success and Cancel
       //      clear them), which is the whole premise of the feature.
@@ -53586,10 +53592,25 @@
   });
 
   test('653 — it refuses the cases where auditioning would be a lie', { item: '653' }, async function () {
-    const L = (FM.scene.layers || []).filter(l => l.type === 'video' && FM.media.get(l.id))[0];
-    if (!L) return;                       // no real clip in this run
+    /* ⚠️ THIS TEST BUILDS ITS OWN LAYER, and that is not tidiness — the first version of it looked for
+       an existing video layer with media and returned early when it found none. The suite has none, so
+       it asserted NOTHING and passed. Mutation-tested and it SURVIVED: deleting the reversed check
+       outright left the whole suite green. A green test over nothing is worse than no test, because it
+       reads as coverage.
+       No media record is needed, and that falls out of the order of the checks in audition(): all three
+       refusals are decided from the LAYER, before FM.media is consulted at all. So a bare layer is a
+       complete subject for them, and the test cannot go vacuous again. */
+    const L = FM.makeLayer('video', { name: 'x653 refusal probe' });
+    L.start = 0; L.duration = 1;
+    FM.scene.layers.push(L);
     const keep = { reversed: L.reversed, muted: L.muted, visible: L.visible };
     try {
+      // The control: with none of the three states set, it must NOT refuse for one of those reasons —
+      // otherwise a blanket refusal would pass every assertion below and prove nothing.
+      const base = FM.audioFxLive.audition(L);
+      if (base === 'reversed' || base === 'silent' || base === 'solo')
+        throw new Error('a plain layer was refused as "' + base + '" — the refusals fire on the wrong state, so the assertions below would pass for the wrong reason');
+      FM.audioFxLive.stopAudition();
       /* Each of these is a state where the clip is SILENT in the real project. Auditioning it anyway
          would be the app telling you what your project sounds like and being wrong — which is the
          defect #215 spent three months on, in a different medium. */
@@ -53602,15 +53623,19 @@
     } finally {
       L.reversed = keep.reversed; L.muted = keep.muted; L.visible = keep.visible;
       if (FM.audioFxLive.stopAudition) FM.audioFxLive.stopAudition();
+      const at = FM.scene.layers.indexOf(L); if (at >= 0) FM.scene.layers.splice(at, 1);
+      FM.selectLayer(null); FM.refreshAll();
     }
   });
 
   test('653 — the Hear button is on the expanded row, and it does not start by itself', { item: '653' }, async function () {
     /* His rule, in the entry: it must not auto-play when the row opens. A panel that starts making
        noise because you tapped it is a different feature from one that offers to. */
-    const src = String(FM.inspector && FM.inspector.refresh) + '';
-    const L = (FM.scene.layers || []).filter(l => l.type === 'video' && FM.media.get(l.id))[0];
-    if (!L) return;
+    /* Same hazard as the test above, same fix: build the subject rather than hunting for one. A layer
+       with no media is enough here — the row is rendered from layer.audioFx, not from the media rec. */
+    const L = FM.makeLayer('video', { name: 'x653 row probe' });
+    L.start = 0; L.duration = 1;
+    FM.scene.layers.push(L);
     const keepFx = L.audioFx;
     try {
       const reg = FM.audioFxRegistry;
@@ -53635,7 +53660,46 @@
     } finally {
       L.audioFx = keepFx;
       if (FM.audioFxLive.stopAudition) FM.audioFxLive.stopAudition();
-      FM.inspector.refresh();
+      const at = FM.scene.layers.indexOf(L); if (at >= 0) FM.scene.layers.splice(at, 1);
+      FM.selectLayer(null); FM.refreshAll(); FM.inspector.refresh();
+    }
+  });
+
+  test('654 — the button that closes the clip panel does not announce itself as Projects', { item: '654' }, async function () {
+    /* This entry is the FIRST report in the file from someone who is not Ezra: a stranger opened the
+       audio edit menu and could not find the way out. Before designing a new exit, the entry says to
+       look at the one that is already there — and it is mislabelled.
+       `#m-back` carries a fixed `aria-label="Projects / file"` in index.html, but js/mobile.js branches
+       on the body classes and in BOTH `sel-mode` and `m-editing` that button deselects, i.e. CLOSES THE
+       PANEL. So the one control that gets you out announces itself as the one that leaves the project.
+       "The exit is present but reads as something else" is the most common shape of "I couldn't get
+       out", and here a screen reader was being told the wrong thing outright. */
+    const mb = document.getElementById('m-back');
+    if (!mb) throw new Error('#m-back is gone — the phone header has no back control');
+    const keep = FM.scene.layers.slice();
+    try {
+      return await atPhoneWidth(async function () {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 40, shapeH: 40 });
+        L.start = 0; L.duration = 1;
+        FM.scene.layers.push(L);
+        FM.selectLayer(L.id);
+        await new Promise(r => setTimeout(r, 160));
+        if (!document.body.classList.contains('m-editing'))
+          throw new Error('selecting one layer at phone width did not enter m-editing, so this test is measuring the wrong state');
+        const label = mb.getAttribute('aria-label') || '';
+        if (/project/i.test(label))
+          throw new Error('while the clip panel is open, the button that CLOSES it still says "' + label + '" — that is the mislabel this entry is about');
+        if (!label.trim()) throw new Error('#m-back has no aria-label at all in m-editing — it is an icon-only button');
+        // …and it must go back to naming Projects once nothing is selected, or the fix has just moved the lie.
+        FM.selectLayer(null);
+        await new Promise(r => setTimeout(r, 160));
+        const idle = mb.getAttribute('aria-label') || '';
+        if (!/project/i.test(idle))
+          throw new Error('with nothing selected the back button no longer says Projects (it says "' + idle + '") — the label is now wrong in the other direction');
+      });
+    } finally {
+      FM.scene.layers.length = 0; keep.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); FM.refreshAll();
     }
   });
 })();
