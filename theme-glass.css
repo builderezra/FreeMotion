@@ -637,7 +637,16 @@ html[data-home="light"] .hm-sub { color: #5a6478; }
    Kept QUIETER than the title (18.4:1) and roughly level with the "edited …" line, so the hierarchy he
    is used to survives; it just has to be readable while it is quiet. */
 html[data-home="light"] .hm-mi { color: #5f6b7d; }
-html[data-home="light"] .hm-card-more { color: #55617a; background-color: rgba(16, 30, 52, .05); }
+/* v14.37, queue 652: the standing `background-color` is gone — that disc IS the "circle box around
+   them" he asked to be rid of. Only the ink stays, plus the light ground's own blue for the ring the
+   cursor brings, because the dark theme's pale cyan measured 1.37 contrast on a white card (see the
+   note on the queue-650 ring; the same mistake was one line away from being made twice). */
+html[data-home="light"] .hm-card-more {
+  color: #55617a;
+  --hm-more-rim: rgba(38, 118, 175, .55);
+  --hm-more-fill: rgba(38, 118, 175, .13);
+  --hm-more-glint: rgba(20, 92, 148, .85);
+}
 html[data-home="light"] .hm-thumb-draft { color: #7d8798; }
 
 /* THE TAB PILLS keep their shape and their selected-blue; only the ground under them changes, so the

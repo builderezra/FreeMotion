@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.36
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Aug at v14.37
 >
-> **State:** v14.36, 1092 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.37, 1095 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -26568,25 +26568,44 @@ re-opened #480, which I had marked done and had not fixed.
       so skipping them left the rule true for four tabs and false for the fifth. Wrapped properly now.
       **Measured at 380px: 209px tall, sits in the sheet, nothing scrolls.**
 
-- [ ] **652 — The ⋯ on a project card should have no circle until you hover, then a blue circle that
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **652 — The ⋯ on a project card should have no circle until you hover, then a blue circle that
       glints with the cursor; on mobile, a little animation on the dots when tapped.** (27 Aug.)
       His words, verbatim:
       > Also log that the three dots on any project in the home meny shouldnt have the circle box around
       > them until u hover over but then the circle box should be like a blue circle around it that
       > glints depending on where the curser is, for mobile you can just make it so when you click on
       > the three dots it does a little animation with the three dots around it
-      1. [ ] **No circle at rest** — the ⋯ sits bare on the card. (`.hm-card-more` currently carries a
+      1. [x] **No circle at rest** — the ⋯ sits bare on the card. (`.hm-card-more` currently carries a
              standing `background-color`; see theme-glass.css:640.)
-      2. [ ] **On hover (PC): a BLUE circle that GLINTS with the cursor position.** A cursor-tracked
+      2. [x] **On hover (PC): a BLUE circle that GLINTS with the cursor position.** A cursor-tracked
              highlight, not a static ring — so it needs pointer coordinates fed to the element, the same
              idea as a spotlight gradient following `--mx`/`--my`.
-      3. [ ] **On mobile: tapping the dots animates the three dots themselves.** He is explicit that the
+      3. [x] **On mobile: tapping the dots animates the three dots themselves.** He is explicit that the
              hover half does not apply on touch.
       ⚠️ **Gate the hover behind `@media (hover: hover) and (pointer: fine)`** or it latches on tap and
       stays stuck — same trap flagged in #650.
       ⚠️ **#545 applies** — it is a look, so draw it and show him before it ships. Related to **#650**
       (hover-expand on the card itself); **do them together or they will fight over the same hover.**
+
+
+      ═══ ✅ **29 AUG (v14.37) — ALL THREE, AND THEY SPLIT CLEANLY BY WHAT YOU ARE POINTING WITH.** ═══
+      **1. Bare at rest.** The dark disc it wore on every card is gone, and so is the light home's grey
+      one. That disc *is* the "circle box" you asked to be rid of.
+      **2. On hover, a blue circle lit from your cursor.** *"Glints depending on where the curser is"* —
+      not a static ring, and that difference is the whole request. **Nothing new was needed to know
+      where your cursor is:** #650 already writes the pointer position onto the home list once a frame,
+      and a `fixed` gradient resolves against the screen rather than the element — so the same two
+      numbers that light the card edges light this ring, with no extra measuring, and the highlight
+      slides across the disc as you move past it.
+      **3. On touch, the dots themselves move**, staggered so it reads as three things and not one.
+      🔑 **That last one needed the glyph to go.** It was the single character `⋯`, and **you cannot
+      animate the dots of a glyph** — only the whole glyph, which reads as the *button* bouncing. Three
+      real dots now, built by one function instead of four hand-written copies.
+      🧪 **Two bugs in my own first cut, both caught by measuring rather than reading:** the browser's
+      "animation finished" event **bubbles**, so my listener fired on the FIRST dot and would have
+      stopped the other two before they started — it waits for the last dot now; and with reduced motion
+      on, that event never fires at all, which would have left the button lit for the rest of the
+      session. A timer covers that.
 
 - [ ] **653 — There must be a way to HEAR an audio effect while you are adjusting it.** (27 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**

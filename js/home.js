@@ -853,6 +853,48 @@ window.FM = window.FM || {};
     return d;
   }
 
+  /* ⋯ AS THREE REAL DOTS (queue 652). Ezra: "for mobile you can just make it so when you click on the
+     three dots it does a little animation with the three dots around it".
+     It was the single character ⋯, and you cannot animate the dots of a glyph — only the whole glyph,
+     which is a different thing from what he asked for and reads as the BUTTON bouncing rather than the
+     dots doing something. Three spans can stagger.
+     Same shape everywhere: four call sites built this button by hand with the same three arguments, so
+     they are one function now — the alternative is the #116 failure where two copies of one control
+     drift and he has to report it twice.
+     ⚠️ The glyph is gone from the DOM, so an aria-label replaces the text a screen reader used to get.
+     Existing code finds this button by CLASS (`closest('.hm-card-more')`), never by its text — checked
+     before changing it, because a text lookup would have broken silently. */
+  function moreBtn() {
+    const b = el('button', 'hm-card-more');
+    b.setAttribute('aria-label', 'More');
+    b.appendChild(el('span', 'hm-dot'));
+    b.appendChild(el('span', 'hm-dot'));
+    b.appendChild(el('span', 'hm-dot'));
+    /* The class is added on POINTERDOWN, not on click: on a phone the menu opens on click, and by then
+       the sheet is on its way up and an animation underneath it is not seen. The CSS decides whether it
+       actually plays — it is gated to touch, because on a PC the cursor-lit ring is the feedback. */
+    var popT = null;
+    b.addEventListener('pointerdown', function () {
+      b.classList.remove('hm-more-pop');
+      void b.offsetWidth;                      // restart the animation on a second tap
+      b.classList.add('hm-more-pop');
+      /* ⚠️ A TIMER AS WELL AS THE EVENT, and both are needed — measured, not defensive habit.
+         Under `prefers-reduced-motion` the dots carry `animation: none`, so `animationend` NEVER FIRES
+         and the class would sit on the button for the rest of the session, holding the reduced-motion
+         fallback tint on. The same happens in any browser that has stopped animating a hidden tab. */
+      if (popT) clearTimeout(popT);
+      popT = setTimeout(function () { popT = null; b.classList.remove('hm-more-pop'); }, 700);
+    });
+    /* ⚠️ AND ONLY THE LAST DOT ENDS IT. `animationend` BUBBLES, and the three dots are staggered
+       0/60/120ms — so a listener that fired on the first one would strip the class 120ms before the
+       third dot had started, and two of the three would never move. The bug looks like "the animation
+       is subtle" rather than like a bug, which is why it is worth the guard. */
+    b.addEventListener('animationend', function (ev) {
+      if (ev.target === b.lastElementChild) { if (popT) { clearTimeout(popT); popT = null; } b.classList.remove('hm-more-pop'); }
+    });
+    return b;
+  }
+
   /* ---- Pinned items (queue 138) -----------------------------------------------------------------
    * Ezra: "if you press the three dots on a project or even template etc you can press pin and the
    * project will stay at the top … Make sure you can pin as many as you want."
@@ -1164,7 +1206,7 @@ window.FM = window.FM || {};
     mi(p.fps ? p.fps + 'fps' : '');       // older cards have no fps yet — it fills in when the project is next opened
     mi(p.layers != null ? p.layers + (p.layers === 1 ? ' layer' : ' layers') : '');
     const sub = el('div', 'hm-sub', subOverride || ('edited ' + ago(p.modified)));
-    const more = el('button', 'hm-card-more', '⋯');
+    const more = moreBtn();
     more.setAttribute('aria-label', 'Project actions');
     more.addEventListener('click', (ev) => {
       ev.stopPropagation();
@@ -1556,7 +1598,7 @@ window.FM = window.FM || {};
     body.appendChild(el('div', 'hm-name', t.name || 'Template'));
     body.appendChild(el('div', 'hm-meta', aspectLabel(t.width, t.height)));
     card.appendChild(body);
-    const more = el('button', 'hm-card-more', '⋯');
+    const more = moreBtn();
     more.addEventListener('click', (ev) => {
       ev.stopPropagation();
       const r = more.getBoundingClientRect();
@@ -1634,7 +1676,7 @@ window.FM = window.FM || {};
     const n = e.count || 0;
     body.appendChild(el('div', 'hm-meta', n + (n === 1 ? ' layer' : ' layers')));
     card.appendChild(body);
-    const more = el('button', 'hm-card-more', '⋯');
+    const more = moreBtn();
     more.addEventListener('click', (ev) => {
       ev.stopPropagation();
       const r = more.getBoundingClientRect();
@@ -1756,7 +1798,7 @@ window.FM = window.FM || {};
        he never got round to saving as an element, and that is his to decide. `discardDraft` is the
        right call rather than `remove` — remove() opens another project, or CREATES an "Untitled" when
        you delete the current one, which would manufacture the very thing queue 505 was about. */
-    const more = el('button', 'hm-card-more', '⋯');
+    const more = moreBtn();
     more.setAttribute('aria-label', 'Draft actions');
     more.addEventListener('click', (ev) => {
       ev.stopPropagation();

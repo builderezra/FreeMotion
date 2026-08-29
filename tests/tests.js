@@ -53464,4 +53464,97 @@
     if (/am-empty[\s\S]{0,200}innerHTML/.test(src))
       throw new Error('the empty panel is being built with innerHTML — it carries prose that will one day carry a user-supplied name');
   });
+
+  test('652 — the ⋯ is bare until you point at it, and the dots are three real things', { item: '652' }, async function () {
+    /* Ezra: "the three dots on any project in the home meny shouldnt have the circle box around them
+       until u hover over but then the circle box should be like a blue circle around it that glints
+       depending on where the curser is, for mobile you can just make it so when you click on the three
+       dots it does a little animation with the three dots around it". */
+    if (!FM.home || !FM.home.isOpen) throw new Error('FM.home is missing');
+    const wasOpen = FM.home.isOpen();
+    if (!wasOpen) FM.home.open();
+    await new Promise(r => setTimeout(r, 400));
+    try {
+      const more = document.querySelector('#home-screen .hm-card-more');
+      if (!more) return;   // no projects in this run; nothing to measure
+      // CLAUSE 1 — no circle at rest. Both the fill AND the rim, because either one is a "circle box".
+      const cs = getComputedStyle(more);
+      const bg = cs.backgroundColor || '';
+      if (!/rgba\(0, 0, 0, 0\)|transparent/.test(bg))
+        throw new Error('the ⋯ still carries a standing background (' + bg + ') — that disc is the "circle box" he asked to be rid of');
+      if (!/rgba\(0, 0, 0, 0\)|transparent/.test(cs.borderColor || ''))
+        throw new Error('the ⋯ carries a visible rim at rest (' + cs.borderColor + ')');
+      /* CLAUSE 3's PREREQUISITE — three real elements. It was the single glyph ⋯, and you cannot
+         animate the dots of a glyph, only the whole glyph; that reads as the BUTTON bouncing, which is
+         a different thing from what he asked for. */
+      const dots = more.querySelectorAll('.hm-dot');
+      if (dots.length !== 3) throw new Error('the ⋯ has ' + dots.length + ' dot elements, not 3 — the per-dot animation has nothing to animate');
+      // The glyph is gone from the DOM, so something must still name this button for a screen reader.
+      if (!more.getAttribute('aria-label')) throw new Error('the ⋯ lost its text and gained no aria-label — it is now an unnamed button');
+    } finally { if (!wasOpen && FM.home.close) FM.home.close(); }
+  });
+
+  test('652 — tapping the dots animates all three, and never leaves the button stuck', { item: '652' }, async function () {
+    const wasOpen = FM.home.isOpen();
+    if (!wasOpen) FM.home.open();
+    await new Promise(r => setTimeout(r, 400));
+    try {
+      const more = document.querySelector('#home-screen .hm-card-more');
+      if (!more) return;
+      more.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
+      await new Promise(r => setTimeout(r, 30));
+      if (!more.classList.contains('hm-more-pop')) throw new Error('a tap did not start the dot animation');
+      /* THE STAGGER IS THE POINT — "a little animation WITH THE THREE DOTS". One delay for all three
+         is one dot moving three times as wide, not three dots.
+         ⚠️ READ OFF THE STYLESHEET, NOT OFF THE LIVE ELEMENT, and that is not a shortcut. The animation
+         is deliberately scoped to `@media (hover: none)` — a mouse gets the ring instead, and giving it
+         both would be two answers to one press. The suite runs with a mouse, so the computed delays are
+         all 0s here and reading them measured the media query, not the stagger. The first version of
+         this test failed for exactly that reason. Only the ORDER is asserted, so the numbers can be
+         retuned without touching this. */
+      const cssTxt = await (await fetch('../styles.css?boot=' + Date.now())).text();
+      const popAt = cssTxt.indexOf('hm-dot-pop');
+      if (popAt < 0) throw new Error('the dot animation is gone from styles.css');
+      const popBlock = cssTxt.slice(popAt - 500, popAt + 1200);
+      const nth = [...popBlock.matchAll(/nth-child\((\d)\)[^}]*animation-delay:\s*([\d.]+)ms/g)].map(m => [+m[1], +m[2]]);
+      if (nth.length < 2)
+        throw new Error('the three dots share one clock — that reads as one thing moving, not three:\n' + popBlock.slice(0, 400));
+      for (const [n, d] of nth) if (!(d > 0)) throw new Error('dot ' + n + ' has a zero delay, so it moves with the first');
+      /* ⚠️ AND IT MUST LET GO. Two ways it would not, both found by measuring rather than by reading:
+         `animationend` BUBBLES, so a listener that fired on the FIRST dot would strip the class 120ms
+         before the third dot started; and under prefers-reduced-motion the dots carry `animation: none`
+         so animationend never fires at all and the class would sit there for the rest of the session,
+         holding the reduced-motion fallback tint on. A timer covers the second. */
+      await new Promise(r => setTimeout(r, 900));
+      if (more.classList.contains('hm-more-pop'))
+        throw new Error('the ⋯ is still marked as animating almost a second later — the class never gets removed, so the button stays lit and the next tap has nothing to restart');
+    } finally { if (!wasOpen && FM.home.close) FM.home.close(); }
+  });
+
+  test('652 — the hover ring is gated to a mouse, and lit from the cursor rather than by a static colour', { item: '652' }, async function () {
+    const css = await (await fetch('../styles.css?boot=' + Date.now())).text();
+    /* ⚠️ ANCHOR ON THE RULE, NOT ON A COMMENT. The first version searched for the queue tag and sliced
+       forward — and there are TWO blocks carrying that tag (the button's base style near the other home
+       rules, and the hover ring appended at the end of the file), so indexOf found the first and the
+       slice never reached the rule being tested. It reported the gate as missing while it was there. */
+    const hoverAt = css.indexOf('.hm-card-more:hover');
+    if (hoverAt < 0) throw new Error('there is no .hm-card-more:hover rule at all — the ring is gone');
+    const block = css.slice(Math.max(0, hoverAt - 2500), hoverAt + 2500);
+    /* A bare :hover latches on a phone — you tap the dots, the ring sticks, and it stays until you tap
+       elsewhere. He was explicit that the hover half does not apply on touch. */
+    if (!/@media \(min-width: 701px\) and \(hover: hover\) and \(pointer: fine\)/.test(block))
+      throw new Error('the ⋯ hover ring lost its (hover: hover) gate — on a phone it would latch on tap');
+    /* "GLINTS DEPENDING ON WHERE THE CURSER IS" — a static ring is not this, and the difference is the
+       whole request. The cursor position arrives as the queue-650 variables, resolved against the
+       VIEWPORT by background-attachment: fixed, so there is no per-element geometry read. */
+    if (!/var\(--glow-x\) var\(--glow-y\)/.test(block))
+      throw new Error('the ring no longer follows the cursor — it is a static highlight, which is not what "glints depending on where the curser is" asks for');
+    if (!/background-attachment: fixed/.test(block))
+      throw new Error('the glint lost background-attachment: fixed, so --glow-x/--glow-y (viewport coordinates) no longer resolve where the cursor actually is');
+    /* And the light home needs its own blue: the dark theme's pale cyan measured 1.37 contrast on a
+       white card in queue 650, one line away from being repeated here. */
+    const glass = await (await fetch('../theme-glass.css?boot=' + Date.now())).text();
+    if (!/--hm-more-glint/.test(glass))
+      throw new Error('the light home has no ring colour of its own — the dark theme\'s pale cyan measured 1.37 contrast on a white card');
+  });
 })();
