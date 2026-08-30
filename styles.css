@@ -9044,7 +9044,12 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
    already the lowest-contrast text in the editor, and putting it on a background that changes along
    its own length would make a measured problem worse. A fixed ground under the first ~110px keeps it
    readable whatever colour the arc happens to be there. */
-.clip.clip-kfcolor > .clip-name { position: relative; z-index: 2; }
+/* ⚠️ `.clip-label`, NOT `.clip-name` — the first version of this rule named a class that does not
+   exist on a clip, so it styled nothing. It LOOKED fine only because the label is a later sibling than
+   the ::before and painted above it by document order anyway; the z-index was doing no work and the
+   rule would have gone on doing no work the day that order changed. Caught by reading the element that
+   is actually created, not the one the rule assumed. */
+.clip.clip-kfcolor > .clip-label { position: relative; z-index: 2; }
 .clip.clip-kfcolor::before {
   content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 112px; z-index: 1;
   pointer-events: none; border-radius: inherit;

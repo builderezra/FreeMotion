@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.53
+> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.54
 >
-> **State:** v14.53, 1113 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.54, 1113 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -27663,3 +27663,9 @@ re-opened #480, which I had marked done and had not fixed.
       📊 **Measured live:** four keyframes → green/blue/purple/pink at 0, 41.67, 75, 100%.
       ❓**LOGGED FOR LATER, not asked now:** this is shape layers only. Text and video layers can carry
       keyframed colour too — say the word and it extends to them.
+      🐛 **v14.54 — TWO BUGS IN MY OWN v14.53 WORK, found by checking the element the code actually
+      creates rather than the one my rule assumed.** The dark fade was paired with a class name that
+      **does not exist on a clip**, so that half of the rule styled nothing — and it *looked* right only
+      because document order happened to save it. And the label was still choosing its ink by measuring
+      **one** colour, which is meaningless on an arc that can run from near-black to near-white. Both
+      fixed and both now asserted.

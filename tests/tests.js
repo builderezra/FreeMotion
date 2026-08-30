@@ -54306,6 +54306,19 @@
       const css = await (await fetch('../styles.css?boot=' + Date.now())).text();
       if (!/\.clip\.clip-kfcolor::before/.test(css))
         throw new Error('the dark fade behind the clip name is gone — that is option A, not the C he chose, and it puts the least readable text in the editor on a background that changes along its own length');
+      /* ⚠️ AND IT MUST NAME THE ELEMENT THAT EXISTS. The first version of this rule said `.clip-name`;
+         a clip's label is `.clip-label`, so it styled nothing. It looked correct only because the label
+         is a later sibling than the ::before and painted above it by document order anyway — the rule
+         was inert and would have stayed inert the day that order changed. */
+      if (!/\.clip\.clip-kfcolor > \.clip-label/.test(css))
+        throw new Error('the kfcolor rule no longer targets .clip-label — check the class the clip actually creates, not the one the rule assumes');
+      /* THE INK. On a gradient bar the label cannot take its colour from a measurement of ONE colour:
+         the arc may run from near-black to near-white, so the start colour says nothing about what is
+         under the text. Option C gives the label a fixed dark ground, so the ink is fixed to match it. */
+      const tlSrc = await (await fetch('../js/timeline.js?boot=' + Date.now())).text();
+      const tlCode = tlSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+      if (!/stops \? INK_LIGHT : labelInkFor\(col\)/.test(tlCode))
+        throw new Error('a keyframed-colour clip is choosing its label ink by measuring one colour again — meaningless on a gradient, and #674 already records that ink choice as the only measured contrast failure in the editor');
     } finally {
       FM.scene.layers.length = 0; keep.forEach(l => FM.scene.layers.push(l));
       FM.selectLayer(null); FM.refreshAll();

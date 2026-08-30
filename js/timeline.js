@@ -1582,7 +1582,16 @@ window.FM = window.FM || {};
     clabel.textContent = layer.name;
     // Ink is chosen per clip, not fixed white — that is what lets the bar above carry a genuinely
     // bright colour instead of being darkened until a white label survives on it.
-    const ink = labelInkFor(col);
+    /* ⚠️ ON A KEYFRAMED-COLOUR BAR THE INK CANNOT BE CHOSEN FROM ONE COLOUR (queue 679 + 674).
+     * `labelInkFor` picks light or dark ink by measuring the clip's SINGLE colour — which is right for
+     * a flat bar and meaningless for a gradient, because the colour under the label is only one point
+     * of an arc that may run from near-black to near-white. Picking from the start colour would make
+     * the label unreadable the moment the arc goes the other way.
+     * Option C's whole point is that the label gets a FIXED ground of its own — the dark fade behind
+     * it — so the honest answer is a fixed light ink to match that ground, not a measurement of a
+     * colour the text is not sitting on. #674 already records this ink-choice as the only measured
+     * contrast failure in the editor (1.10:1); this stops the gradient making a known problem worse. */
+    const ink = stops ? INK_LIGHT : labelInkFor(col);
     clabel.style.color = ink.color;
     clabel.style.textShadow = ink.shadow;
     clip.appendChild(clabel);
