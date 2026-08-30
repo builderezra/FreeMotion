@@ -1,9 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 31 Aug at v14.63
+> ## 📌 WHAT I NEED FROM YOU — updated 31 Aug at v14.64
 >
-> **State:** v14.63, 1133 tests green, tree clean. **#686 is CLOSED — all 13 bugs from the hunt you
-> asked for are fixed.** Next up: your motion blur (#687) and the light/dark memory (#688). **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.64, 1134 tests green, tree clean. **#686 is CLOSED — all 13 bugs from the hunt you
+> asked for are fixed — and so is #687, your motion blur on groups.** Next up: #688, the light/dark
+> memory, where the cause is found: the setting saves correctly and is never READ BACK. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -27822,8 +27823,10 @@ re-opened #480, which I had marked done and had not fixed.
       All three use it now, and the test guards **the callers**, because the helper was never what
       broke.
 
-- [ ] **687 — Motion blur does nothing on a GROUP that moves. His words, 30 Aug:**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **687 — Motion blur does nothing on a GROUP that moves. His words, 30 Aug:**  ✅ v14.64
+      **DONE — and there were TWO causes, either of which alone kept it dead.** Measured after the fix:
+      the moving group smears 100px → 132px, identical to the same movement on a plain layer, while a
+      STILL group stays at 100px — so it reads movement rather than blurring everything.
       > *"I have an issue where neither version of motion blur works on groups when I have them move"*
       **Read the source while blocked on a test run, and the Object-blur half is almost certainly this.**
       `drawLayer` RETURNS EARLY for a group — `js/compositor.js:12801`, *"invisible transform parent for
@@ -27851,6 +27854,13 @@ re-opened #480, which I had marked done and had not fixed.
       first run of this measurement proved nothing and said so rather than exonerating the group.)
       Fix shape, once that is answered: the proxy needs to carry the GROUP's transform (or the sampler
       needs to be told what moved), so "its own movement" is the movement the viewer can see.
+      **…and that reading was right but INCOMPLETE, which only a second measurement caught.** With the
+      proxy carrying `_ofGroup` and the blur asking the group how it moved, it STILL measured 100px.
+      The dispatch line itself read `if (scene && _ob && layer.type !== '_flat')` — object blur was
+      refused for flattened layers OUTRIGHT, so drawMotionBlur was never called for a group at all.
+      That exclusion arrived with the queue-335 migration carrying no stated reason, and it looked
+      harmless precisely because the blur would have done nothing anyway. Had I shipped on the strength
+      of the source reading alone, the fix would have been inert and would have looked done.
 
 - [ ] **688 — Light/dark preference is forgotten on reload, and the old loading animation should go.
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -27867,6 +27877,27 @@ re-opened #480, which I had marked done and had not fixed.
       2. [ ] **Get rid of the OLD loading screen animation.**
       3. [ ] **Dark mode gets the SAME loading transition light mode has** — not its own separate
              animation — *"it just transitions into dark the dark background… a black transition."*
+      ## ⚠️ REPRODUCED AND FOUND — clause 1 is a ONE-WORD bug, and my first diagnosis below was WRONG.
+      Measured in the browser: set the preference to dark, and `localStorage['fm.settings']` correctly
+      contains `"homeLight":false`. Reload, and `FM.settings.get('homeLight')` returns **true** with
+      `data-home="light"`. So it saves perfectly and is **thrown away on load** — not a paint-timing
+      flash, which is what I guessed first and it was wrong.
+      `load()` in `js/settings.js` copies saved booleans back through an EXPLICIT WHITELIST:
+      `['demoMode', 'showTouches', 'systemFonts'].forEach(...)`. **`homeLight` is not in it.** `save()`
+      serialises the whole state object, so the value is written; nothing ever reads it back, and it
+      resets to `DEFAULTS.homeLight` (true) on every launch. Adding `'homeLight'` to that array is the
+      whole fix. Checked the other keys: every other setting IS handled (theme and layout are ignored
+      deliberately, with comments saying why) — homeLight is the only one that was missed.
+      **And clause 3 is not a bug at all — it is a feature request, which changes what to build.** He is
+      not describing dark mode showing the light intro; he is ASKING for dark mode to use the light
+      mode's intro. `homeLight` currently controls two separate things at once — the colour scheme AND
+      which intro plays (the setting's own description says "the new intro") — so turning it off gets
+      you the OLD animation as well as the dark colours. What he wants is the new intro in dark mode,
+      transitioning to black instead of white. That means DECOUPLING the intro from the colour, which
+      is a different job from clause 1 and should not be bundled into the same one-word change.
+
+      ---
+      *(Superseded first guess, kept because it is the reasoning that led to the real one:)*
       **Read the source while blocked on a mutation run — and clauses 1 and 3 look like ONE bug.**
       The preference IS saved: it is `homeLight` inside `fm.settings`, written to localStorage by
       settings.js's `save()`. Nothing is losing it. What is wrong is WHEN it is applied.

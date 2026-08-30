@@ -55206,4 +55206,55 @@
       FM.refreshAll();
     }
   });
+
+  test('motion blur: a moving GROUP smears like any other moving layer', { item: '687' }, function () {
+    /* #687. Ezra: "I have an issue where neither version of motion blur works on groups when I have
+     * them move." Measured before touching anything: a 100px square at 140px/s smeared to 132px on a
+     * plain layer and to exactly 100px — not one pixel — inside a moving group.
+     * TWO causes, and either one alone would have kept it dead. (1) drawLayer hands a group's pixels
+     * back as a `_flat` proxy built with a brand-new STATIC transform, because the members were already
+     * drawn at their world positions and the motion is baked INTO the plate. Motion Blur (Object)
+     * smears a layer "along its OWN movement", so it asked the proxy and the proxy has never moved:
+     * the travel check returned 0 and it bailed. (2) the dispatch line refused `_flat` outright, so
+     * drawMotionBlur was never even called — an exclusion added with no stated reason, which reads as
+     * defensive precisely because the blur would have done nothing anyway.
+     * Three measurements, not one. The plain layer proves the effect works at all, the still group
+     * proves the fix did not simply turn blur on for everything, and only the middle one is the bug. */
+    const P = { width: 400, height: 400, fps: 30, duration: 10 };
+    const inkW = (sc) => {
+      const c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      FM.renderScene(g, sc, 1);
+      const d = g.getImageData(0, 0, P.width, P.height).data;
+      let lo = Infinity, hi = -Infinity;
+      for (let y = 0; y < P.height; y++) for (let x = 0; x < P.width; x++) {
+        if (d[(y * P.width + x) * 4 + 3] > 20) { if (x < lo) lo = x; if (x > hi) hi = x; }
+      }
+      return hi < lo ? 0 : (hi - lo + 1);
+    };
+    const OB = () => [{ type: 'objectblur', enabled: true, params: { shutter: 8, samples: 24, amount: 1, radius: 100 } }];
+    const moving = () => ({ kf: [{ t: 0, v: 60 }, { t: 2, v: 340 }] });   // 140px/s, so t=1 is mid-flight
+    const sq = (x) => { const s = FM.makeLayer('shape', { name: 'sq', shape: 'rect', x: x, y: 200, shapeW: 100, shapeH: 100 }); s.start = 0; s.duration = 10; return s; };
+    const plain = (fx) => { const s = sq(200); s.transform.x = moving(); s.effects = fx ? OB() : []; return { project: P, layers: [s] }; };
+    const grouped = (fx, move) => {
+      const G = FM.makeLayer('group', { name: 'g', x: 0, y: 0 }); G.start = 0; G.duration = 10;
+      if (move) G.transform.x = moving();
+      G.effects = fx ? OB() : [];
+      const s = sq(move ? 0 : 200); s.parent = G.id;
+      return { project: P, layers: [G, s] };
+    };
+
+    const pOff = inkW(plain(false)), pOn = inkW(plain(true));
+    if (pOff !== 100) throw new Error('the unblurred square measured ' + pOff + 'px, not 100 — the harness, not the feature');
+    if (pOn - pOff < 20) throw new Error('Motion Blur (Object) did not smear a plain moving layer either (' + pOff + ' -> ' + pOn + 'px), so this test cannot tell a fixed group from a broken one — the harness, not the feature');
+
+    const gOff = inkW(grouped(false, true)), gOn = inkW(grouped(true, true));
+    if (gOn - gOff < 20) throw new Error('a moving GROUP did not smear at all (' + gOff + ' -> ' + gOn + 'px) while the same movement smeared a plain layer to ' + pOn + 'px — the group is flattened into a proxy with a static transform, so the blur asks something that never moved');
+    if (Math.abs((gOn - gOff) - (pOn - pOff)) > 12) throw new Error('a moving group smeared by ' + (gOn - gOff) + 'px where the identical plain layer smeared by ' + (pOn - pOff) + 'px — the group is being blurred along the wrong motion, not merely blurred');
+
+    // …and a group that is NOT moving must stay sharp, or "blur everything" would pass as a fix.
+    const sOff = inkW(grouped(false, false)), sOn = inkW(grouped(true, false));
+    if (sOn - sOff > 6) throw new Error('a STILL group smeared by ' + (sOn - sOff) + 'px — the blur is no longer reading movement, it is just always on');
+  });
 })();

@@ -2530,7 +2530,14 @@ window.FM = window.FM || {};
      * violently shaking layer. So this early-out, asked "did it move?", said no and handed a shaking
      * layer straight back to the ordinary sharp draw. A layer carrying a mover skips it. */
     const _hasMoverFx = (layer.effects || []).some(e => e && e.enabled !== false && MOVER_FX[e.type]);
-    const _travel = layerMotionBetween(layer, t - dt / 2, t + dt / 2, scene);
+    /* A FLATTENED GROUP'S MOTION LIVES ON THE GROUP, NOT ON THE PLATE (#687). buildGroupUnit hands the
+     * members' pixels back as a proxy with a static transform, so every question below — did it move,
+     * where was it, where is it now — has to be asked of the group the plate stands for. Asked of the
+     * proxy they all answer "nowhere", which is why a moving group blurred by exactly zero pixels.
+     * `layer` still owns the EFFECTS (the proxy carries the group's own list), so only the geometry
+     * is redirected. */
+    const mSrc = layer._ofGroup || layer;
+    const _travel = layerMotionBetween(mSrc, t - dt / 2, t + dt / 2, scene);
     if (!_hasMoverFx && _travel != null && _travel * plateScale(ctx) < 0.75) return false;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const PW = P.width, PH = P.height, ps = plateScale(ctx);
@@ -2544,7 +2551,7 @@ window.FM = window.FM || {};
      * It also makes "transform blur ignores the footage" true by construction rather than by
      * comment — the content is decoded once, so a reversed or frame-blended clip can no longer
      * hand a different frame to each sub-sample. */
-    const Mt = layerCTM(layer, t, scene);
+    const Mt = layerCTM(mSrc, t, scene);
     if (!Mt) return false;                                   // no DOMMatrix support → no blur, never a wrong picture
     const det = Mt.a * Mt.d - Mt.b * Mt.c;
     if (!isFinite(det) || Math.abs(det) < 1e-9) return false;   // degenerate (scale 0) — nothing to smear
@@ -2650,7 +2657,7 @@ window.FM = window.FM || {};
           drawn++;
           continue;
         }
-        const Mk = layerCTM(layer, tau, scene);
+        const Mk = layerCTM(mSrc, tau, scene);
         if (!Mk) continue;
         const D = new DOMMatrix([Mk.a, Mk.b, Mk.c, Mk.d, Mk.e, Mk.f]).multiply(MtInv);
         actx.save();
@@ -12890,7 +12897,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        * effects INSIDE the smear rather than painted over it. That is the more correct picture and it
        * does change existing projects — the same trade Squish made. */
       const _ob = (layer.effects || []).filter(e => e && e.type === 'objectblur' && e.enabled !== false)[0];
-      if (scene && _ob && layer.type !== '_flat') { if (drawMotionBlur(ctx, layer, t, scene, _ob.params || {})) return; }
+      /* `_flat` USED TO BE EXCLUDED HERE, AND THAT IS WHY A GROUP NEVER BLURRED (#687). Ezra: "neither
+         version of motion blur works on groups when I have them move." A flattened group IS a `_flat`
+         proxy, so this line skipped it outright and drawMotionBlur was never even called. The exclusion
+         arrived with the queue-335 migration carrying no stated reason, and it reads as defensive: a
+         proxy is built with a STATIC transform, so the blur's travel check would have measured zero
+         movement and bailed anyway. Excluding it made that harmless instead of visible.
+         Both halves are fixed together, and either alone would be inert: the proxy now carries
+         `_ofGroup`, so drawMotionBlur asks the GROUP how it moved, and the gate no longer refuses to
+         ask. `motionflow` on the next line keeps its exclusion — Motion Blur (Content) blurs what moves
+         INSIDE the picture, and a flattened plate has no inside. */
+      if (scene && _ob) { if (drawMotionBlur(ctx, layer, t, scene, _ob.params || {})) return; }
       // Motion Blur (Content): blur ONLY what moves INSIDE the layer, never the layer's own transform.
       // Render the content at a neutral transform, blur it there, then composite with the REAL
       // transform — so panning/zooming/rotating the clip to reframe it never smears the picture.
@@ -13764,6 +13781,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     _mgA._fmGen = ++_gen;   // unit pixels change every frame — key downstream memos (gradeCanvas) off a generation
     const tmp = FM.makeLayer('_flat', { name: g.name, x: 0, y: 0 });
     tmp.id = g.id + ':flat';   // STABLE id per group — temporal effects (motionflow) key their cache on it
+    /* WHOSE MOVEMENT THIS PICTURE IS (#687). Ezra: "neither version of motion blur works on groups when
+       I have them move." This proxy is created with a brand-new STATIC transform, because the members
+       were already drawn at their world positions — the group's motion is baked INTO the plate. Motion
+       Blur (Object) smears a layer "along its OWN movement", so it asked the proxy how it was moving
+       and the proxy has never moved in its life: drawMotionBlur's travel check returned 0 and it bailed
+       before computing anything. The group is the thing that moved, so the proxy carries a pointer to
+       it and the blur asks that instead. Runtime-only by the underscore convention — a proxy is rebuilt
+       every frame and never saved. */
+    tmp._ofGroup = g;
     tmp._canvas = _mgA;
     tmp._canvasW = P.width; tmp._canvasH = P.height;   // the plate is target-scaled; this is the box it stands for
     tmp.start = t - 1; tmp.duration = 2;   // always inside its window at time t
