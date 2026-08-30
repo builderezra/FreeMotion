@@ -215,7 +215,11 @@ window.FM = window.FM || {};
     });
     /* Commit to history ONCE, when the field is left — not per keystroke, which would make undo walk
        back through the caption letter by letter. */
-    textIn.addEventListener('change', () => { if (FM.commitHistory) FM.commitHistory(); if (FM.storage) FM.storage.save(); });
+    textIn.addEventListener('change', () => {
+      /* queue 685: this used to call a function that does not exist in this codebase, guarded by an
+         `if`, so it failed silently — nothing was ever committed and one undo threw away everything
+         typed into the template. The real one is FM.history.commit. */
+      if (FM.history && FM.history.commit) FM.history.commit(); if (FM.storage) FM.storage.save(); });
     textWrap.appendChild(textIn);
 
     colorWrap = el('div', 'tfill-edit');
@@ -231,7 +235,11 @@ window.FM = window.FM || {};
       paint(+scrub.value || 0);
       refreshChip(l.id);
     });
-    colorIn.addEventListener('change', () => { if (FM.commitHistory) FM.commitHistory(); if (FM.storage) FM.storage.save(); });
+    colorIn.addEventListener('change', () => {
+      /* queue 685: this used to call a function that does not exist in this codebase, guarded by an
+         `if`, so it failed silently — nothing was ever committed and one undo threw away everything
+         typed into the template. The real one is FM.history.commit. */
+      if (FM.history && FM.history.commit) FM.history.commit(); if (FM.storage) FM.storage.save(); });
     colorWrap.appendChild(colorIn);
 
     btnReplace = el('button', 'tfill-replace', 'Replace Media'); btnReplace.type = 'button'; btnReplace.disabled = true;

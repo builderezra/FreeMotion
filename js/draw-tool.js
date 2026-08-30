@@ -319,6 +319,17 @@ window.FM = window.FM || {};
          The undo path at the bottom of this file already did both (`refreshAll` + `requestRender`), which
          is why undoing a stroke redrew correctly while drawing one did not. */
       if (FM.requestRender) FM.requestRender();
+      /* ⚠️ AND THE APP'S HISTORY HAS TO HEAR ABOUT IT TOO (queue 684) — the same asymmetry as queue 514
+       * one layer down. The FIRST stroke goes through `FM.addPathLayer`, which ends with
+       * `refreshAll()` AND `FM.history.commit()`. Every stroke after it takes this branch, and
+       * `refitPathLayer` is pure data mutation: it rewrites layer.subs and returns.
+       * 514 fixed the half of that which stopped the canvas repainting. The other half was never
+       * noticed: nothing committed, so the app's most recent snapshot stayed the one taken when stroke
+       * ONE was added. Draw a five-stroke sketch, press Done, then undo anything at all, and he lands
+       * on a sketch with only its first stroke — the other four gone, with no way back.
+       * The draw tool's own stroke-undo (histPast above) is unaffected; that is a separate, local
+       * stack for undoing WHILE drawing, and it was never the thing at risk. */
+      if (FM.history) FM.history.commit();
     }
     t.points = [];
     // Committing a layer SELECTS it, and on a phone a selection opens the inspector sheet over the

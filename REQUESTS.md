@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.56
+> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.57
 >
-> **State:** v14.56, 1117 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.57, 1121 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -27715,3 +27715,75 @@ re-opened #480, which I had marked done and had not fixed.
       ═══ ✅ **30 AUG (v14.56) — FIXED.** ═══
       One line, the same one import, duplicate, paste and replace-media all already have — placed
       **before** the history commit, so nothing can return between minting the record and persisting it.
+
+- [x] **682 — 🔴🔴 DATA LOSS: a keyframed effect COLOUR is deleted every time the project opens, and on
+      ✅ **VALIDATED and independently re-derived.** `safeFxParam` in `js/storage.js` handles `color`
+      **before** it checks whether the value is keyframed — a keyframed colour is an OBJECT, `safeColor`
+      says no, and the parameter is dropped. It runs on **every project load** and on **every undo**.
+      **Symptom:** he animates a Glow going red→blue, or Gradient Overlay's two stops, or a Drop Shadow —
+      closes the project and reopens it, or presses undo once for something unrelated, and **the
+      animation is gone**, replaced by the effect's default colour.
+
+      ═══ ✅ **30 AUG (v14.57) — FIXED.** The keyframe branch runs first for colours now, the same way
+      it already did for numbers. Each keyframe's value is still checked with the same safety test the
+      plain path uses, so a corrupt colour inside an animation is repaired rather than the whole
+      animation being thrown away — both directions tested.
+- [x] **683 — 🔴 DATA LOSS: ◆ says "add a keyframe" and DELETES one instead, at a different value.**
+      ✅ **VALIDATED.** `hasKeyframeAt` — which decides what the diamond button SAYS — uses a tolerance of
+      **1e-3 seconds**, while `toggleKeyframe` and `toggleProp`, which decide what it DOES, use
+      **half a frame** (≈16ms at 30fps). Between those two numbers the button offers to add and removes.
+      **Symptom:** he drags an animated clip or changes its speed, parks on a keyframe, presses ◆
+      expecting to add one — **it vanishes**. Pressing again puts one back at a slightly different value.
+
+      ═══ ✅ **30 AUG (v14.57) — FIXED.** The button and the action now ask the same question with the
+      same tolerance — half a frame, the one the action always used.
+- [x] **684 — 🔴 DATA LOSS: only the FIRST freehand stroke survives undo.** (30 Aug, bug hunt.)
+      ✅ **VALIDATED.** The first stroke goes through `FM.addPathLayer`, which commits history. **Every
+      stroke after it does not commit at all.**
+      **Symptom:** he draws a sketch with five strokes, presses Done, then presses undo once for anything
+      — and lands on a snapshot holding **only the first stroke**. The other four are gone.
+
+      ═══ ✅ **30 AUG (v14.57) — FIXED.** Every stroke commits now, not just the first. Your draw-tool
+      undo (the one that steps back a stroke while you are still drawing) is a separate stack and was
+      never at risk — this was only the app-level undo dropping four strokes out of five.
+- [x] **685 — 🔴 DATA LOSS: the template "Insert your Media" screen calls a function that does not
+      ✅ **VALIDATED.** `js/template-fill.js` calls **`FM.commitHistory()`** in two places. **There is no
+      such function** — the real one is `FM.history.commit()`. So nothing is ever committed.
+      **Symptom:** he opens a template, types his own words into a text slot and picks his own colour.
+      Back in the editor, **one undo throws all of it away**, because the last committed snapshot is from
+      before he filled anything in.
+
+      ═══ ✅ **30 AUG (v14.57) — FIXED.** It calls the history that exists. Worth noting it was guarded
+      by an `if`, which is why it failed in total silence for however long it has been there.
+- [ ] **686 — The rest of the 30 Aug bug hunt: 13 more confirmed defects, none of them data loss.**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      A hunt he asked for (*"go find some bugs"*) reported 23 findings; 17 survived an adversarial pass
+      that tried to kill each one line by line. Six were data loss (#680, #681, #682–#685). These are the
+      other eleven, worst first — **each one is confirmed in the source, not a hunch**:
+      1. [ ] **Keyframing the Chroma Key colour THROWS out of the renderer** — the preview freezes
+             mid-composite and everything after that layer stops drawing.
+      2. [ ] **Keyframed colours on Tint, Duotone, Threshold and Liquid Glass render BLACK** — they read
+             the raw parameter instead of evaluating it, so an animated colour becomes an object and the
+             layer turns solid black.
+      3. [ ] **The selection box, all five handles and the tap target ignore `layer.align`** — align a
+             text layer left or right and the blue outline jumps half a text-width away from the text.
+      4. [ ] **The text wrap handle uses the layer's own scale only** — inside a group, or with a moved
+             anchor, the column jumps to roughly double the width dragged.
+      5. [ ] **Line breaks computed before an imported font loads are cached forever** — the preview AND
+             the export keep the wrong wrap for the whole session.
+      6. [ ] **Copy Background on text cuts out the PRE-EFFECT string** — a Timecode layer cuts out the
+             literal text typed, not the time shown.
+      7. [ ] **Letter/word spacing is guarded by a presence check with no probe** — on a phone the
+             Spacing slider moves the number and changes nothing, which is #645's family exactly.
+      8. [ ] **"Speed so the clip starts at the playhead" scales keyframes about the wrong pivot** — the
+             animation stops matching the bar.
+      9. [ ] **`layer._fromPreset` is stripped when the project is saved**, so "Update <preset>" — the
+             whole point of #407 — disappears on the first reload.
+      10. [ ] **A video with no readable dimensions is filed in the library as a SONG, permanently** —
+             so a screen recording he imports is not where he would look for it.
+      11. [ ] **Replace media leaves the OLD clip's filmstrip on the timeline bar** — the canvas updates
+             and the bar does not, every time for image→image.
+      12. [ ] **Cancelling the Audio-tab file picker leaves the app stuck in audio-only mode** — the next
+             video imported comes in as a soundtrack with no picture.
+      13. [ ] **Press-hold-to-reorder an effect row is eaten by the sheet-dismiss swipe** — the panel
+             slides down instead of the effect moving.

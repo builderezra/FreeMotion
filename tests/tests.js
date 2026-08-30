@@ -54440,4 +54440,82 @@
     if (commitPos >= 0 && savePos > commitPos)
       throw new Error('the media write now happens after the history commit — put it before, so nothing can return between minting the record and persisting it');
   });
+
+  test('682 — a keyframed effect colour survives a project load and an undo', { item: '682' }, async function () {
+    /* 🔴 DATA LOSS. safeFxParam handled `color` BEFORE anything checked whether the value was
+       keyframed — and a keyframed colour is an OBJECT, so the string test failed it and the whole
+       parameter was dropped. That runs on every project load and on every undo, so animating a Glow
+       red→blue and reopening the project silently replaced it with the effect's default. */
+    if (!FM.storage || typeof FM.storage._sanitizeLayers !== 'function') throw new Error('FM.storage._sanitizeLayers is gone');
+    const animated = { kf: [{ t: 0, v: '#ff0000' }, { t: 2, v: '#0000ff' }] };
+    const layers = [{ id: 'x682', type: 'shape', start: 0, duration: 3,
+                      effects: [{ type: 'glow', enabled: true, params: { color: animated } }] }];
+    FM.storage._sanitizeLayers(layers);
+    const got = layers[0].effects && layers[0].effects[0] && layers[0].effects[0].params;
+    if (!got || got.color == null)
+      throw new Error('a keyframed effect colour was deleted by the sanitiser — this runs on every project open AND every undo, so his animation would vanish the next time he opened the file');
+    if (!FM.isAnimated(got.color))
+      throw new Error('the keyframed colour came back as a plain value (' + JSON.stringify(got.color) + ') — the animation is gone even though the key survived');
+    if ((got.color.kf || []).length !== 2)
+      throw new Error('the colour kept ' + (got.color.kf || []).length + ' of its 2 keyframes');
+    /* …and the repair the guard existed for must still happen, or this trades data loss for corruption. */
+    const bad = [{ id: 'y682', type: 'shape', start: 0, duration: 3,
+                   effects: [{ type: 'glow', enabled: true, params: { color: { kf: [{ t: 0, v: 'javascript:alert(1)' }, { t: 1, v: '#00ff00' }] } } }] }];
+    FM.storage._sanitizeLayers(bad);
+    const bp = bad[0].effects[0].params.color;
+    if (bp && bp.kf && bp.kf.some(k => String(k.v).indexOf('javascript:') === 0))
+      throw new Error('an unsafe colour survived inside a keyframe — the sanitiser must still repair the values, it just must not throw the whole animation away');
+  });
+
+  test('683 — the keyframe diamond does what it says, at the same tolerance', { item: '683' }, async function () {
+    /* 🔴 DATA LOSS. hasKeyframeAt — which decides what the ◆ button SAYS — used a tolerance of 1
+       millisecond, while toggleKeyframe and toggleProp, which decide what it DOES, both use half a
+       frame (~16ms at 30fps). Any keyframe in the gap made the button offer to ADD one and then delete
+       the one already there, taking its value with it. Reachable the moment a clip is dragged or its
+       speed changed, which is what moves keyframes off exact millisecond boundaries. */
+    if (typeof FM.hasKeyframeAt !== 'function' || typeof FM._halfFrame !== 'function') throw new Error('FM.hasKeyframeAt or FM._halfFrame is gone');
+    const half = FM._halfFrame();
+    if (!(half > 0.002)) return;                      // a tolerance this small makes the case untestable
+    const near = half * 0.5;                          // inside the ACTION's tolerance, far outside 1e-3
+    const p = { kf: [{ t: 1.0, v: 0 }, { t: 2.0, v: 1 }] };
+    if (!FM.hasKeyframeAt(p, 1.0 + near))
+      throw new Error('the button reports NO keyframe ' + (near * 1000).toFixed(1) + 'ms from one, while the toggle it triggers treats that as the SAME keyframe and deletes it — so it offers to add and removes instead');
+    if (FM.hasKeyframeAt(p, 1.0 + half * 4))
+      throw new Error('the button now reports a keyframe far outside the toggle tolerance — the two have drifted the other way');
+  });
+
+  test('684 — every freehand stroke reaches the app history, not just the first', { item: '684' }, async function () {
+    /* 🔴 DATA LOSS, and the same asymmetry queue 514 fixed one layer down. The FIRST stroke goes
+       through FM.addPathLayer, which ends with refreshAll() AND history.commit(). Every stroke after it
+       takes the refit branch, which is pure data mutation. 514 fixed the half that stopped the canvas
+       repainting; nothing committed, so the app's newest snapshot stayed the one from stroke ONE — draw
+       five strokes, press Done, undo anything, and four are gone with no way back.
+       Asserted against the source: driving five real strokes needs a live pointer on a canvas the suite
+       has no way to reproduce faithfully, and the missing call is one line whose absence IS the bug. */
+    const src = await (await fetch('../js/draw-tool.js?boot=' + Date.now())).text();
+    const i = src.indexOf('function commitStroke');
+    if (i < 0) throw new Error('commitStroke is gone');
+    const body = src.slice(i, i + 4000);
+    const refit = body.indexOf('refitPathLayer');
+    if (refit < 0) throw new Error('the multi-stroke branch is gone from commitStroke');
+    /* Comments stripped FIRST, then the window taken — the other way round, the 514 explanation
+       (about a thousand characters of it) ate the budget before the line being looked for. */
+    const tail = body.slice(refit).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').slice(0, 900);
+    if (!/FM\.history[\s\S]{0,40}\.commit\(\)/.test(tail))
+      throw new Error('a freehand stroke after the first still does not commit to the app history — undoing anything would drop back to the sketch as it was after stroke ONE');
+  });
+
+  test('685 — the template fill screen commits to the history that exists', { item: '685' }, async function () {
+    /* 🔴 DATA LOSS, and about as plain as they get: js/template-fill.js called FM.commitHistory(),
+       which DOES NOT EXIST in this codebase — the real one is FM.history.commit(). Guarded by
+       `if (FM.commitHistory)`, so it failed silently rather than throwing. Nothing was ever committed,
+       and one undo threw away everything typed into the template. */
+    if (typeof FM.commitHistory === 'function') return;   // if it ever becomes real, this is moot
+    const src = await (await fetch('../js/template-fill.js?boot=' + Date.now())).text();
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    if (/FM\.commitHistory\s*\(/.test(code))
+      throw new Error('js/template-fill.js still calls FM.commitHistory(), which does not exist — guarded, so it fails silently, and one undo throws away everything he typed into the template');
+    if (!/FM\.history[\s\S]{0,30}\.commit\(\)/.test(code))
+      throw new Error('the template fill screen no longer commits history at all, so what he types is still lost on the first undo');
+  });
 })();

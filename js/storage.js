@@ -735,7 +735,21 @@ window.FM = window.FM || {};
   // -> {keep:false} means leave the key ABSENT, which is not the same as writing the default (above).
   function safeFxParam(pd, v) {
     const ty = pd.type;
-    if (ty === 'color') return safeColor(v) ? { keep: true, value: v } : { keep: false };
+    /* ⚠️ A KEYFRAMED COLOUR IS AN OBJECT, AND THIS RAN BEFORE ANYTHING CHECKED FOR THAT (queue 682).
+     * `safeColor` is a string test, so an animated colour — `{kf:[{t,v}, …]}` — failed it and the whole
+     * parameter was DROPPED. This runs on every project load and on every undo, so animating a Glow
+     * red→blue and reopening the project silently replaced it with the effect's default.
+     * The keyframe branch has to come first for colours the same way it already does for numbers. Each
+     * keyframe's value is validated with the same `safeColor` the plain path uses, so a corrupt colour
+     * inside a keyframe is still repaired — the protection is kept, it just stopped being applied to
+     * the wrong shape of value. */
+    if (ty === 'color') {
+      if (FM.isAnimated && FM.isAnimated(v)) {
+        const kf = (v.kf || []).filter(k => k && typeof k.t === 'number' && isFinite(k.t) && safeColor(k.v));
+        return kf.length ? { keep: true, value: Object.assign({}, v, { kf: kf }) } : { keep: false };
+      }
+      return safeColor(v) ? { keep: true, value: v } : { keep: false };
+    }
     if (ty === 'layer') return (typeof v === 'string' && v.length <= FX_ID_MAX) ? { keep: true, value: v } : { keep: false };
     if (ty === 'toggle') return (typeof v === 'boolean' || v === 0 || v === 1) ? { keep: true, value: v } : { keep: false };
     if (ty === 'segment') {

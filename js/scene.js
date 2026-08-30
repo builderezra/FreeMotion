@@ -369,8 +369,16 @@ window.FM = window.FM || {};
   }
   FM.toggleKeyframe = toggleKeyframe;
 
+  /* ⚠️ THIS DECIDES WHAT THE ◆ BUTTON SAYS; toggleKeyframe DECIDES WHAT IT DOES — AND THEY USED
+   * DIFFERENT TOLERANCES (queue 683). This asked "is there a keyframe within 1 MILLISECOND", while
+   * toggleKeyframe and toggleProp both ask "within HALF A FRAME" (~16ms at 30fps). Every keyframe
+   * sitting in the gap between those two numbers made the button offer to ADD one and then DELETE the
+   * one that was already there — at a different value, because the existing keyframe's value went with
+   * it. Reachable the moment a clip is dragged or its speed changed, which moves keyframes off exact
+   * millisecond boundaries.
+   * One rule, one place: the same HALF_FRAME the action uses. */
   function hasKeyframeAt(p, time) {
-    return isAnimated(p) && p.kf.some(k => Math.abs(k.t - time) < 1e-3);
+    return isAnimated(p) && p.kf.some(k => Math.abs(k.t - time) < HALF_FRAME());
   }
   FM.hasKeyframeAt = hasKeyframeAt;
 
