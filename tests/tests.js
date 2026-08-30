@@ -54518,4 +54518,39 @@
     if (!/FM\.history[\s\S]{0,30}\.commit\(\)/.test(code))
       throw new Error('the template fill screen no longer commits history at all, so what he types is still lost on the first undo');
   });
+
+  test('686 — every effect dispatcher resolves a keyframed colour before the kernel sees it', { item: '686' }, async function () {
+    /* From the bug hunt. An animated colour is an OBJECT, and the kernels read colours as STRINGS —
+       so a keyframed Tint or Duotone rendered BLACK for the whole clip, a keyframed Threshold turned
+       the layer into a solid black rectangle, and a keyframed Chroma Key colour THREW out of the
+       renderer, freezing the preview mid-composite so everything after that layer stopped drawing.
+       ⚠️ THE HELPER ALREADY EXISTED. Queue 555 wrote resolveFxColors after exactly this bug in the
+       pixel path — its comment reads "an animated colour is an OBJECT and 39 kernels read colours as
+       strings". It was applied to the one dispatcher it was written for, and three others went on
+       reading raw params. That is the shape this session keeps turning up: the machinery is right and
+       only some of the callers got it. So this test guards the CALLERS, not the helper. */
+    if (typeof FM._resolveFxColors !== 'function') throw new Error('FM._resolveFxColors is gone — the keyframed-colour resolver every dispatcher depends on');
+    // 1. the helper itself still does its job, both ways
+    const animated = { kf: [{ t: 0, v: '#ff0000' }, { t: 2, v: '#0000ff' }] };
+    const got = FM._resolveFxColors({ color: animated, amount: 1 }, 0);
+    if (typeof got.color !== 'string' || got.color[0] !== '#')
+      throw new Error('resolveFxColors did not turn a keyframed colour into a hex string: ' + JSON.stringify(got.color));
+    if (got.amount !== 1) throw new Error('resolveFxColors disturbed a non-colour parameter');
+    const plain = { color: '#123456' };
+    if (FM._resolveFxColors(plain, 0) !== plain)
+      throw new Error('resolveFxColors copied a params object with no animated colour in it — it must return the original, or every frame allocates');
+    // 2. AND EVERY DISPATCHER MUST USE IT. This is the assertion that would have caught the bug.
+    const src = await (await fetch('../js/compositor.js?boot=' + Date.now())).text();
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    for (const [name, needle] of [
+      ['applyPostFx (Tint, Duotone, Threshold…)', /function applyPostFx[\s\S]{0,300}?resolveFxColors\(/],
+      ['the chroma-key path', /ck\.params[\s\S]{0,40}/],
+    ]) {
+      if (!needle.test(code)) throw new Error(name + ' no longer resolves keyframed colours before use');
+    }
+    if (/const p = ck\.params \|\| \{\};/.test(code))
+      throw new Error('the chroma-key path reads its params raw again — a keyframed key colour is an object, and chromaKey throws on it, taking the whole composite down with it');
+    if (/fn\(_cfA, bctx, W, H, bbox, fx\.params \|\| \{\}/.test(code))
+      throw new Error('the CANVAS effect dispatcher hands kernels raw params again — every kernel that reads a colour as a string gets the keyframe object instead');
+  });
 })();

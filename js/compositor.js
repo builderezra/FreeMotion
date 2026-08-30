@@ -2751,7 +2751,16 @@ window.FM = window.FM || {};
   }
 
   function applyPostFx(ctx, layer, t, scene, fx) {
-    const p = fx.params || {};
+    /* ⚠️ resolveFxColors, NOT the raw params (queue 686). An animated colour is an OBJECT, and the
+     * effects below read colours as STRINGS — so a keyframed Tint or Duotone colour arrived as
+     * `{kf:[…]}`, `hexToRGB` could make nothing of it, and the layer rendered BLACK for the whole clip.
+     * Threshold turned into a solid black rectangle the same way.
+     * The helper already existed for exactly this — queue 555 built it after the same bug in the PIXEL
+     * path, with the comment "an animated colour is an OBJECT and 39 kernels read colours as strings".
+     * It was simply never applied here, so the fix stopped at the one dispatcher it was written for
+     * while three others went on reading raw. That is the shape this session keeps finding: the
+     * machinery is right and only some of the callers got it. */
+    const p = resolveFxColors(fx.params || {}, t);
     if (fx.type === FM.FX_CONTAINER) return drawFilterContainer(ctx, layer, t, scene, fx);
     if (fx.type === 'rgbsplit') return drawRgbSplit(ctx, layer, t, scene, FM.evalProp(p.amount, t) || 0, fx);
     if (fx.type === 'pixelate') return drawPixelate(ctx, layer, t, scene, FM.evalProp(p.size, t) || 1, fx);
@@ -8505,7 +8514,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // comp-sized plate has already thrown away. Handed over as a callback so the plate machinery
     // stays in one place and nothing else pays for it — an effect that never calls it never builds one.
     const expand = (minM) => renderExpandedPlate(layer, fx, t, scene, ps, PW, PH, minM);
-    if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, fx.params || {}, t, FM.fxLocalTime(layer, t), layer, ps, expand, scene);   // `scene` is a trailing addition for roundcorners (queue 621), ignored by every other kernel   // layer = temporal-cache key (motionflow); _clipStart = a group proxy's REAL clock
+    // queue 686: resolveFxColors here too — Liquid Glass's tint and every other CANVAS kernel that
+    // reads a colour as a string was getting the raw keyframe object.
+    if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, resolveFxColors(fx.params || {}, t), t, FM.fxLocalTime(layer, t), layer, ps, expand, scene);   // `scene` is a trailing addition for roundcorners (queue 621), ignored by every other kernel   // layer = temporal-cache key (motionflow); _clipStart = a group proxy's REAL clock
     else bctx.drawImage(_cfA, 0, 0);   // empty / tainted → passthrough
     ctx.save();
     baseT(ctx);
@@ -13223,7 +13234,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const lk = layer.effects && layer.effects.find(e => e.type === 'lumakey' && e.enabled !== false);
         let keyed = false;
         if (ck && src) {
-          const p = ck.params || {};
+          const p = resolveFxColors(ck.params || {}, t);   // queue 686: a keyframed key colour is an object; chromaKey then threw and took the whole composite with it
           // evalProp, not the raw prop: a KEYFRAMED tolerance is an object → tol*441 = NaN → dist<NaN
           // is always false → the key silently does nothing the moment you animate it
           const tol = p.tolerance == null ? 0.3 : FM.evalProp(p.tolerance, t);

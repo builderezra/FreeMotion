@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.57
+> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.58
 >
-> **State:** v14.57, 1121 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.58, 1122 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -27760,9 +27760,9 @@ re-opened #480, which I had marked done and had not fixed.
       A hunt he asked for (*"go find some bugs"*) reported 23 findings; 17 survived an adversarial pass
       that tried to kill each one line by line. Six were data loss (#680, #681, #682–#685). These are the
       other eleven, worst first — **each one is confirmed in the source, not a hunch**:
-      1. [ ] **Keyframing the Chroma Key colour THROWS out of the renderer** — the preview freezes
+      1. [x] **Keyframing the Chroma Key colour THROWS out of the renderer** — the preview freezes  ✅ v14.58
              mid-composite and everything after that layer stops drawing.
-      2. [ ] **Keyframed colours on Tint, Duotone, Threshold and Liquid Glass render BLACK** — they read
+      2. [x] **Keyframed colours on Tint, Duotone, Threshold and Liquid Glass render BLACK** — they read  ✅ v14.58
              the raw parameter instead of evaluating it, so an animated colour becomes an object and the
              layer turns solid black.
       3. [ ] **The selection box, all five handles and the tap target ignore `layer.align`** — align a
@@ -27787,3 +27787,15 @@ re-opened #480, which I had marked done and had not fixed.
              video imported comes in as a soundtrack with no picture.
       13. [ ] **Press-hold-to-reorder an effect row is eaten by the sheet-dismiss swipe** — the panel
              slides down instead of the effect moving.
+
+
+      ═══ ✅ **30 AUG (v14.58) — CLAUSES 1 AND 2 FIXED, and they were one root cause.** ═══
+      An animated colour is an **object**; the effect kernels read colours as **strings**. So a
+      keyframed Tint or Duotone went black, a keyframed Threshold became a solid black rectangle, and a
+      keyframed Chroma Key **threw out of the renderer** — which is why the preview froze mid-composite
+      and everything after that layer stopped drawing.
+      🔑 **The fix already existed and only some callers had it.** #555 wrote the resolver after this
+      exact bug in the pixel path — its comment even says *"39 kernels read colours as strings"* — and
+      it was applied to the one dispatcher it was written for. **Three others went on reading raw.**
+      All three use it now, and the test guards **the callers**, because the helper was never what
+      broke.
