@@ -54553,4 +54553,202 @@
     if (/fn\(_cfA, bctx, W, H, bbox, fx\.params \|\| \{\}/.test(code))
       throw new Error('the CANVAS effect dispatcher hands kernels raw params again — every kernel that reads a colour as a string gets the keyframe object instead');
   });
+
+  test('text: the selection box wraps the letters on left- and right-aligned text', { item: 'q686-align-box' }, function () {
+    /* #686. drawLayer draws text with ctx.textAlign, so relative to the anchor the glyphs span
+     * [0, +w] on 'left' and [-w, 0] on 'right' — only 'center' is centred on it. The selection box,
+     * its five handles and the tap region assumed 'center' unconditionally, so on a left-aligned
+     * title the outline sat HALF A TEXT-WIDTH away from the text, and the tap target went with it:
+     * you pressed the letters and selected whatever was behind them.
+     *
+     * Measured against the RENDERED PIXELS, not against the maths, so a fix that merely agrees with
+     * itself cannot pass. 'center' is measured too and is the control: it was always right, so if it
+     * ever fails here the measurement is broken rather than the feature. */
+    const cv = document.getElementById('preview'), box = document.getElementById('select-box');
+    if (!cv || !box) throw new Error('need #preview and #select-box');
+    const P = FM.scene.project;
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time;
+    const w0 = P.width, h0 = P.height;
+    const hadEditing = document.body.classList.contains('text-editing');
+
+    const shoot = () => {
+      const c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      FM.renderScene(g, FM.scene, FM.time);
+      return g.getImageData(0, 0, P.width, P.height).data;
+    };
+
+    try {
+      document.body.classList.remove('text-editing');
+      // A REAL CANVAS TO DRAW ON. Whatever ran before this can leave the project at any size, and it
+      // left it at 64x48 — on which 80px text is clipped to 57px of ink and this test reported the
+      // feature broken when nothing was. The project size is not what is being tested, so pin it.
+      P.width = 1080; P.height = 1080;
+      FM.scene.layers.length = 0;
+      FM.time = 1;   // plate and shot must be the same instant, and inside the layer's window
+      // The empty-scene plate. Diffing against it finds the LETTERS whatever the background is —
+      // an alpha test would just find the project's own backdrop.
+      const plate = shoot();
+
+      const L = FM.makeLayer('text', { name: 'aligned', text: 'Wrapped', x: P.width / 2, y: P.height / 2, fontSize: 80 });
+      // Pin everything that could make the letters render as anything but seven plain glyphs. The
+      // first draft trusted makeLayer's defaults and measured 57px of ink — one character — because
+      // some earlier test in the suite had left an intro animation staggering in. Nothing here is
+      // part of what is being tested; it is all "hold the other variables still".
+      L.textAnim = { preset: 'none', unit: 'char', durIn: 0, durOut: 0, stagger: 0 };
+      L.start = 0; L.duration = 10; L.wrapWidth = 0; L.letterSpacing = 0; L.wordSpacing = 0;
+      L.fx = []; L.transitionIn = null; L.transitionOut = null;
+      FM.scene.layers.push(L);
+      FM.selectLayer(L.id);
+
+      const measure = (align) => {
+        L.align = align;
+        FM.selectLayer(L.id);   // the previous align's tap may have deselected — that is the point of it
+        FM.refreshAll();
+        if (FM.canvasEdit) FM.canvasEdit.update();
+        const d = shoot();
+        let lo = Infinity, hi = -Infinity, tp = Infinity, bt = -Infinity;
+        for (let y = 0; y < P.height; y++) {
+          for (let x = 0; x < P.width; x++) {
+            const i = (y * P.width + x) * 4;
+            if (Math.abs(d[i] - plate[i]) > 24 || Math.abs(d[i + 1] - plate[i + 1]) > 24 ||
+                Math.abs(d[i + 2] - plate[i + 2]) > 24 || Math.abs(d[i + 3] - plate[i + 3]) > 24) {
+              if (x < lo) lo = x; if (x > hi) hi = x;
+              if (y < tp) tp = y; if (y > bt) bt = y;
+            }
+          }
+        }
+        const r = cv.getBoundingClientRect(), b = box.getBoundingClientRect();
+        if (!(r.width > 0 && b.width > 0)) throw new Error('nothing to measure (canvas ' + Math.round(r.width) + ', box ' + Math.round(b.width) + ') — the harness, not the feature');
+        const toProj = sx => (sx - r.left) / r.width * P.width;
+        return { ink: hi < lo ? null : (lo + hi) / 2, inkLo: lo, inkY: (tp + bt) / 2, inkW: hi - lo, boxMid: (toProj(b.left) + toProj(b.right)) / 2, r };
+      };
+
+      // A stationary press on the SELECTED layer keeps it selected (and on a phone reopens the sheet);
+      // a press that misses it deselects. That branch runs off hitTest, which measures in layer units
+      // while the box measures in screen pixels — two different code paths off the same offset, so a
+      // sign or unit slip in one would sail straight past the box check above.
+      // The EXACT inverse of canvas-edit's eventToProject: it maps a press through the canvas backing
+      // store and the crop origin, not through the project size, so a mapping written from P.width
+      // lands somewhere else entirely the moment the preview is supersampled or showing a zoomed crop
+      // (the first draft did exactly that, and missed the letters on all three alignments).
+      const toClient = (px, py) => {
+        const r = cv.getBoundingClientRect(), sc = cv.__fmRS || 1;
+        return {
+          x: r.left + ((px - (cv.__fmOX || 0)) / (cv.width / sc)) * r.width,
+          y: r.top + ((py - (cv.__fmOY || 0)) / (cv.height / sc)) * r.height,
+        };
+      };
+      const tap = (clientX, clientY) => {
+        const o = { bubbles: true, cancelable: true, clientX, clientY, button: 0, buttons: 1, pointerId: 1, pointerType: 'mouse', isPrimary: true };
+        cv.dispatchEvent(new PointerEvent('pointerdown', o));
+        window.dispatchEvent(new PointerEvent('pointerup', o));
+      };
+
+      const bad = [];
+      ['center', 'left', 'right'].forEach(align => {
+        const m = measure(align);
+        if (m.ink == null || m.inkW < 0.5 * FM.layerSize(L).w) throw new Error('the ' + align + ' text did not render whole (ink ' + Math.round(m.inkW) + 'px vs a measured width of ' + Math.round(FM.layerSize(L).w) + 'px; text ' + JSON.stringify(L.text) + ', wrap ' + L.wrapWidth + ', t=' + FM.time + ', layer ' + L.start + '..' + (L.start + L.duration) + ', anim ' + (L.textAnim && L.textAnim.preset) + ', project ' + P.width + 'x' + P.height + ', font ' + L.fontSize + 'px ' + L.fontFamily + ') — the harness, not the feature');
+        // The box is measureText-wide and the ink is narrower by the side bearings, so the two
+        // centres never coincide exactly. A sixth of the text width is generous for that and still
+        // nowhere near the half-width the bug moved it by.
+        const off = Math.abs(m.boxMid - m.ink), tol = m.inkW / 6;
+        if (off > tol) bad.push(align + ': box centre ' + Math.round(m.boxMid) + ' vs letters ' + Math.round(m.ink) + ' — ' + Math.round(off) + 'px off (ink ' + Math.round(m.inkW) + 'px wide, allowed ' + Math.round(tol) + ')');
+
+        /* …and the tap region, pressed on the letters — but pressed on the FAR side of them, away
+         * from the anchor. The middle of the letters is no good as a probe: on a left-aligned layer
+         * it lands exactly on the edge of the region the bug computed, so a rounding error either way
+         * decides the result. The far side is unambiguously inside the letters and unambiguously
+         * outside the centred region the bug assumed. On a centred layer the far side IS the middle,
+         * which is why that case keeps working and stays the control. */
+        const frac = align === 'left' ? 0.8 : align === 'right' ? 0.2 : 0.5;
+        const probe = m.inkLo + frac * m.inkW;
+        FM.selectLayer(L.id);
+        const c = toClient(probe, m.inkY);
+        tap(c.x, c.y);
+        if (FM.scene.selectedId !== L.id) bad.push(align + ": a press in the middle of the letters missed the layer and deselected it");
+      });
+      if (bad.length) throw new Error('the selection box / tap region is not around the text — ' + bad.join(' | '));
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0);
+      FM.time = t0;
+      P.width = w0; P.height = h0;
+      if (hadEditing) document.body.classList.add('text-editing');
+      FM.refreshAll();
+    }
+  });
+
+  test('text: the wrap handle sizes the column in the layer own units, not the group scale', { item: 'q686-wrap-scale' }, function () {
+    /* #686. startHandle promotes cx/cy to WORLD coordinates through parentXform, then measures the
+     * finger distance in world pixels and divides it by the layer's OWN scale alone — the parent
+     * chain's scale and rotation were never asked for. Put a text layer in a group scaled 2x and drag
+     * the east wrap handle 300 project px: the column stored was 600, twice what was dragged, and it
+     * kept doubling with the group.
+     *
+     * The expected number here is worked out from first principles, NOT from parentXform — 300 world
+     * px through a 2x group is 150 layer px, and one border of a centred column is half of it, so 300.
+     * Deriving it from the same helper the fix uses would make this pass whatever the helper said. */
+    const cv = document.getElementById('preview'), box = document.getElementById('select-box');
+    if (!cv || !box) throw new Error('need #preview and #select-box');
+    const P = FM.scene.project;
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time;
+    const w0 = P.width, h0 = P.height;
+    const hadEditing = document.body.classList.contains('text-editing');
+
+    try {
+      document.body.classList.remove('text-editing');
+      P.width = 1080; P.height = 1080;
+      FM.time = 1;
+      FM.scene.layers.length = 0;
+
+      const G = FM.makeLayer('group', { name: 'twice', x: 0, y: 0, start: 0, duration: 10 });
+      G.transform.scale = 2; G.transform.rotation = 0;
+      const L = FM.makeLayer('text', { name: 'column', text: 'Wrapped', x: 100, y: 200, fontSize: 80 });
+      L.start = 0; L.duration = 10; L.wrapWidth = 0; L.align = 'center';
+      L.parent = G.id;
+      FM.scene.layers.push(G, L);
+      FM.selectLayer(L.id);
+      FM.refreshAll();
+      if (FM.canvasEdit) FM.canvasEdit.update();
+
+      const h = box.querySelector('.sb-e');
+      if (!h) throw new Error('no east wrap handle — the harness, not the feature');
+      const hr = h.getBoundingClientRect();
+      if (!(hr.width > 0)) throw new Error('the east wrap handle has no size, so it cannot be grabbed — the harness, not the feature');
+
+      // The same inverse of eventToProject the align test uses: a press maps through the canvas
+      // backing store and crop origin, never through P.width.
+      const toClient = (px, py) => {
+        const r = cv.getBoundingClientRect(), sc = cv.__fmRS || 1;
+        return {
+          x: r.left + ((px - (cv.__fmOX || 0)) / (cv.width / sc)) * r.width,
+          y: r.top + ((py - (cv.__fmOY || 0)) / (cv.height / sc)) * r.height,
+        };
+      };
+      // The layer's anchor in world coords: the group sits at 0,0 and doubles, so 100,200 -> 200,400.
+      const WX = 200, WY = 400;
+      const target = toClient(WX + 300, WY);
+      const o = (cx, cy) => ({ bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 0, buttons: 1, pointerId: 7, pointerType: 'mouse', isPrimary: true });
+
+      h.dispatchEvent(new PointerEvent('pointerdown', o(hr.left + hr.width / 2, hr.top + hr.height / 2)));
+      window.dispatchEvent(new PointerEvent('pointermove', o(target.x, target.y)));
+      window.dispatchEvent(new PointerEvent('pointerup', o(target.x, target.y)));
+
+      const got = Number(L.wrapWidth);
+      if (!(got > 0)) throw new Error('the drag set no wrap width at all (' + JSON.stringify(L.wrapWidth) + ') — the handle grab did not take, so this proves nothing about the maths');
+      if (Math.abs(got - 300) > 10) {
+        throw new Error('dragged the wrap handle 300px across a 2x group and the column came out ' + got +
+                        'px, not 300' + (Math.abs(got - 600) <= 10 ? ' — that is exactly double, the group scale is being ignored' : ''));
+      }
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0);
+      FM.time = t0;
+      P.width = w0; P.height = h0;
+      if (hadEditing) document.body.classList.add('text-editing');
+      FM.refreshAll();
+    }
+  });
 })();

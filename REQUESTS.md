@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.58
+> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.59
 >
-> **State:** v14.58, 1122 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.59, 1124 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -27765,10 +27765,14 @@ re-opened #480, which I had marked done and had not fixed.
       2. [x] **Keyframed colours on Tint, Duotone, Threshold and Liquid Glass render BLACK** — they read  ✅ v14.58
              the raw parameter instead of evaluating it, so an animated colour becomes an object and the
              layer turns solid black.
-      3. [ ] **The selection box, all five handles and the tap target ignore `layer.align`** — align a
+      3. [x] **The selection box, all five handles and the tap target ignore `layer.align`** — align a  ✅ v14.59
              text layer left or right and the blue outline jumps half a text-width away from the text.
-      4. [ ] **The text wrap handle uses the layer's own scale only** — inside a group, or with a moved
-             anchor, the column jumps to roughly double the width dragged.
+             Worse than looking wrong: the TAP TARGET moved with it, and a press that misses the
+             selected layer DESELECTS it, so pressing your own letters threw the selection away.
+      4. [x] **The text wrap handle uses the layer's own scale only** — inside a group, or with a moved  ✅ v14.59
+             anchor, the column jumps to roughly double the width dragged. Two independent causes, both
+             fixed: the parent chain's scale/rotation were never asked for, and the old halve-then-double
+             is only right for a centred anchor on centred text.
       5. [ ] **Line breaks computed before an imported font loads are cached forever** — the preview AND
              the export keep the wrong wrap for the whole session.
       6. [ ] **Copy Background on text cuts out the PRE-EFFECT string** — a Timecode layer cuts out the

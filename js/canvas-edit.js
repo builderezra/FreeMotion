@@ -117,6 +117,19 @@ window.FM = window.FM || {};
     return { w: m ? m.width : 100, h: m ? m.height : 100 };
   }
 
+  /* TEXT ALIGNMENT MOVES THE GLYPHS, AND ONLY THE COMPOSITOR KNEW IT (#686).
+   * drawLayer translates by (0.5 - anchorX)*w and then draws with ctx.textAlign, so relative to the
+   * anchor the letters span [-w/2, +w/2] on 'center' but [0, +w] on 'left' and [-w, 0] on 'right'.
+   * The selection box, its five handles and the tap region all assumed 'center' unconditionally, so
+   * on a left- or right-aligned text layer the outline sat HALF A TEXT-WIDTH away from the text it
+   * was outlining — and, worse than looking wrong, the tap target went with it: you pressed the
+   * letters and selected whatever was behind them. Only text has an align, so everything else is 0. */
+  function alignShift(layer, w) {
+    if (layer.type !== 'text') return 0;
+    const a = layer.align || 'center';
+    return a === 'left' ? w / 2 : a === 'right' ? -w / 2 : 0;
+  }
+
   // Accumulated PARENT transform of a layer (same root→leaf walk as the compositor's applyParentChain):
   // world = T + R(rot)·s·(parent-local). Without this, a parented layer's hit region / selection box /
   // drag mapping all sat at its raw local coords — detached from where the compositor actually drew it.
@@ -166,7 +179,8 @@ window.FM = window.FM || {};
     const s = layerSize(layer);
     const ax = (typeof tr.anchorX === 'number') ? tr.anchorX : 0.5;
     const ay = (typeof tr.anchorY === 'number') ? tr.anchorY : 0.5;
-    return rx >= -s.w * ax && rx <= s.w * (1 - ax) && ry >= -s.h * ay && ry <= s.h * (1 - ay);
+    const shx = alignShift(layer, s.w);
+    return rx >= -s.w * ax + shx && rx <= s.w * (1 - ax) + shx && ry >= -s.h * ay && ry <= s.h * (1 - ay);
   }
 
   function topHit(px, py) {
@@ -346,16 +360,35 @@ window.FM = window.FM || {};
         }
       }
       if (role === 'wrap') {
-        // Measured along the layer's OWN x axis, so the column still tracks the finger on a rotated
-        // layer. The distance is halved on the way in and doubled on the way out because the text is
-        // laid out about its centre — one side handle moves both borders, which is what keeps the
-        // column centred under the anchor instead of walking sideways as you drag.
-        const rad = (FM.evalProp(layer.transform.rotation, FM.time) || 0) * Math.PI / 180;
-        const sc0 = (FM.evalProp(layer.transform.scale, FM.time) || 1) *
-                    (layer.transform.scaleX != null ? FM.evalProp(layer.transform.scaleX, FM.time) : 1) || 1;
+        /* Measured along the layer's WORLD x axis, so the column tracks the finger on a rotated layer
+         * — and on a layer inside a GROUP. cx/cy above were already promoted to world coordinates
+         * through parentXform; the angle and the scale were not, so the finger distance was measured
+         * in world pixels and then divided by the layer's own scale alone. Inside a group at 2x that
+         * stored a column twice the width dragged, and inside a rotated group it walked off the axis
+         * entirely. Same walk, same numbers — it just was not being asked. (#686) */
+        const pw = layer.parent ? parentXform(layer, FM.time) : null;
+        const rad = ((FM.evalProp(layer.transform.rotation, FM.time) || 0) * Math.PI / 180) + (pw ? pw.rot : 0);
+        const sc0 = (((FM.evalProp(layer.transform.scale, FM.time) || 1) *
+                    (layer.transform.scaleX != null ? FM.evalProp(layer.transform.scaleX, FM.time) : 1)) || 1) * (pw ? pw.s : 1);
+        /* WHERE THE BORDER ACTUALLY IS. The old maths halved on the way in and doubled on the way out,
+         * which is right only for a centred anchor on centred text. drawLayer puts the column's centre
+         * at (0.5 - anchorX)*W from the anchor and then shifts it again by the alignment, so the two
+         * borders sit at W*(1 - ax + sgn) and W*(-ax + sgn). Solve for W with the coefficient of the
+         * border being dragged. At ax = 0.5 with centred text those are +0.5 and -0.5, i.e. exactly
+         * the old x2 — so nothing changes for the common layer, which is the point.
+         * A coefficient of ~0 means this border is pinned ON the anchor and cannot size the column
+         * (a left-aligned layer's west border): fall back to the opposite border so the drag still
+         * does the sensible thing rather than dividing by zero. */
+        const east = !!(e.currentTarget && e.currentTarget.classList && e.currentTarget.classList.contains('sb-e'));
+        const ax = (typeof layer.transform.anchorX === 'number') ? layer.transform.anchorX : 0.5;
+        const sgn = layer.align === 'left' ? 0.5 : layer.align === 'right' ? -0.5 : 0;
+        const kE = 1 - ax + sgn, kW = -ax + sgn;
+        let k = east ? kE : kW;
+        if (Math.abs(k) < 0.08) k = east ? kW : kE;
+        if (Math.abs(k) < 0.08) k = 0.5;
         const cur = Number(layer.wrapWidth);
         drag = {
-          mode: 'wrap', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, rad: rad, sc: sc0
+          mode: 'wrap', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, rad: rad, sc: sc0, k: k
         };
         // The handle already SITS on the border, so the column simply follows the finger — no offset
         // to carry. With no wrap set yet the handle sits at the text's natural width, so the first
@@ -482,13 +515,14 @@ window.FM = window.FM || {};
       FM.shiftTransform(L, 'x', Math.round(nx), FM.time);
       FM.shiftTransform(L, 'y', Math.round(ny), FM.time);
     } else if (drag.mode === 'wrap') {
-      // Project the finger onto the layer's own x axis, undo the layer's scale so the number stored is
-      // in the same project px the renderer measures in, and double it (the handle is one border of a
-      // centred column). Not a keyframable transform — wrapWidth is layout, so it is set directly and
-      // committed on pointer-up like any other one-shot edit.
+      // Project the finger onto the layer's WORLD x axis, undo the layer's world scale so the number
+      // stored is in the same project px the renderer measures in, then divide by the coefficient of
+      // the border being dragged (worked out at grab time, above — it is 0.5 for the ordinary centred
+      // case, which is the old "double it"). Not a keyframable transform — wrapWidth is layout, so it
+      // is set directly and committed on pointer-up like any other one-shot edit.
       const dx = p.x - drag.cx, dy = p.y - drag.cy;
       const local = Math.abs(dx * Math.cos(drag.rad) + dy * Math.sin(drag.rad)) / (Math.abs(drag.sc) || 1);
-      L.wrapWidth = Math.max(20, Math.round(local * 2));
+      L.wrapWidth = Math.max(20, Math.round(local / Math.abs(drag.k || 0.5)));
     } else if (drag.mode === 'scale') {
       const s = Math.max(0.02, Math.round(drag.startScale * (Math.hypot(p.x - drag.cx, p.y - drag.cy) / drag.startDist) * 1000) / 1000);
       if (drag.pivot) {
@@ -658,6 +692,13 @@ window.FM = window.FM || {};
       const sX = scX || 1e-6, sY = scY || 1e-6;
       tf += ' matrix(1,' + (sY * tanY / sX) + ',' + (sX * tanX / sY) + ',1,0,0)';
     }
+    // LAST in the chain on purpose. CSS applies a transform list right-to-left, so a trailing
+    // translate happens FIRST in element space and is then rotated and sheared by everything before
+    // it — which is exactly the compositor's order (it translates after R·S·K). Putting the offset on
+    // box.style.left instead would slide the box along the SCREEN axis, so it would only look right
+    // while the layer was unrotated.
+    const shPx = alignShift(layer, bw);
+    if (shPx) tf += ' translate(' + shPx + 'px,0)';
     box.style.transform = tf;
     /* THE SECTION THAT OWNS THE CANVAS TAKES THE BOX DOWN (queue 205). Move & Transform shows the
      * anchor instead — the thing everything rotates and scales around, and previously invisible
