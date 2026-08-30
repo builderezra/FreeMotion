@@ -55257,4 +55257,43 @@
     const sOff = inkW(grouped(false, false)), sOn = inkW(grouped(true, false));
     if (sOn - sOff > 6) throw new Error('a STILL group smeared by ' + (sOn - sOff) + 'px — the blur is no longer reading movement, it is just always on');
   });
+
+  test('settings: the light/dark choice survives a reload', { item: '688' }, function () {
+    /* #688. Ezra: "make it actually remember cause currently it forgets." It was not forgetting to
+     * SAVE — save() serialises the whole state object, and localStorage genuinely held
+     * `"homeLight":false`. load() restores booleans through an EXPLICIT WHITELIST, and homeLight was
+     * never added to it, so the value was written every time and read back never: it reset to the
+     * default on every launch. Measured before the fix: stored false, loaded true, data-home="light".
+     * Driven through the real FM.settings.init(), which is load() + apply() — the same pair that runs
+     * at boot — so this exercises the actual path rather than the whitelist in isolation. Both
+     * directions plus the absent case, because "always dark" and "always light" would each satisfy a
+     * one-sided test while still being broken. */
+    const KEY = 'fm.settings';
+    const saved0 = localStorage.getItem(KEY);
+    const home0 = document.documentElement.getAttribute('data-home');
+    const blob = (extra) => JSON.stringify(Object.assign({ sort: 'date', layerDuration: 5 }, extra));
+    const loadWith = (raw) => {
+      if (raw == null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, raw);
+      FM.settings.init();
+      return { got: FM.settings.get('homeLight'), attr: document.documentElement.getAttribute('data-home') };
+    };
+    try {
+      const dark = loadWith(blob({ homeLight: false }));
+      if (dark.got !== false) throw new Error('saved the dark look and it came back ' + JSON.stringify(dark.got) + ' — the preference is written to storage and never read out of it, so the app forgets it on every launch');
+      if (dark.attr !== 'dark') throw new Error('homeLight loaded as false but data-home is ' + JSON.stringify(dark.attr) + ' — the value is restored and then not applied');
+
+      const light = loadWith(blob({ homeLight: true }));
+      if (light.got !== true || light.attr !== 'light') throw new Error('saved the light look and got ' + JSON.stringify(light.got) + ' / ' + JSON.stringify(light.attr) + ' — restoring one direction only is not remembering');
+
+      /* An ABSENT key means "never chosen", not "chosen off". index.html's splash carries a duplicate
+         of this default and has a note about getting it wrong once — a first run fell back to false
+         and got the old intro while the rest of the app went light. */
+      const fresh = loadWith(null);
+      if (fresh.got !== true) throw new Error('a brand-new install with no saved settings defaulted to ' + JSON.stringify(fresh.got) + ' — an absent key means never chosen, and index.html duplicates this same default for the splash');
+    } finally {
+      if (saved0 == null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, saved0);
+      FM.settings.init();
+      if (home0) document.documentElement.setAttribute('data-home', home0);
+    }
+  });
 })();

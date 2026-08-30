@@ -69,7 +69,17 @@ window.FM = window.FM || {};
        * layout and nothing left for a stored value to select. An old settings blob still carrying
        * layout:'classic' is simply ignored rather than migrated, because there is no longer a second
        * thing it could mean. */
-      ['demoMode', 'showTouches', 'systemFonts'].forEach(k => { if (typeof saved[k] === 'boolean') state[k] = saved[k]; });
+      /* `homeLight` IS IN THIS LIST NOW, AND ITS ABSENCE WAS THE WHOLE OF #688 (Ezra: "make it actually
+         remember cause currently it forgets"). save() serialises the entire state object, so the value
+         was written to localStorage perfectly — and load() restores booleans through this EXPLICIT
+         WHITELIST, which nobody extended when the setting was added. So it was stored and never read
+         back, and reset to DEFAULTS.homeLight on every single launch.
+         MEASURED before and after: set it to dark, and localStorage held `"homeLight":false` while
+         FM.settings.get('homeLight') came back `true` on the next load, with data-home="light".
+         ⚠️ The splash in index.html reads the SAME key straight from localStorage, before this file
+         exists — so it honoured the choice correctly and then this file overrode it a moment later.
+         The dark intro followed by a light home screen was the two halves disagreeing, not two bugs. */
+      ['demoMode', 'showTouches', 'systemFonts', 'homeLight'].forEach(k => { if (typeof saved[k] === 'boolean') state[k] = saved[k]; });
       const d = +saved.layerDuration;
       if (isFinite(d) && d > 0 && d <= 60) state.layerDuration = d;
       // hand-editable storage, and this string is handed straight to a canvas fillStyle

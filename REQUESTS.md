@@ -1,10 +1,17 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 31 Aug at v14.64
+> ## 📌 WHAT I NEED FROM YOU — updated 31 Aug at v14.65
 >
-> **State:** v14.64, 1134 tests green, tree clean. **#686 is CLOSED — all 13 bugs from the hunt you
-> asked for are fixed — and so is #687, your motion blur on groups.** Next up: #688, the light/dark
-> memory, where the cause is found: the setting saves correctly and is never READ BACK. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.65, 1135 tests green, tree clean. **#686 CLOSED (all 13 bugs), #687 CLOSED (motion
+> blur on groups), and #688's forgetting is FIXED** — it saved perfectly and was never read back.
+>
+> **⚠️ ONE QUESTION FROM YOU FINISHES #688, and it takes one look at the intro.** Clauses 2 and 3 —
+> drop the old loading film, give dark mode the new one ending on black — are a DESIGN change, and
+> you told me never to ship a visual you have not seen. The new film ENDS ON PURE WHITE (it was made
+> for the light look), so playing it in dark mode needs the ending changed. **Is the logo in the new
+> intro a plain white/grey mark, or does it have colour in it?** If it is monochrome I can invert the
+> film in dark mode — same motion exactly, ends black. If it is coloured, inverting would mangle it,
+> so I would fade the white down to your dark ground over the last ~0.6s instead. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -27871,9 +27878,12 @@ re-opened #480, which I had marked done and had not fixed.
       > a light mode one but it just transitions into dark the dark background. It does a black
       > transition and yeah make it actually remember cause currently if it gets forgets I mean."*
       His clauses, ticked one at a time — this entry cannot be marked done while any is unticked:
-      1. [ ] **The light/dark choice must survive a reload.** *"make it actually remember cause
-             currently if it gets forgets"* — so it is being saved and not read back, read back too
-             late (after first paint), or written to the wrong key.
+      1. [x] **The light/dark choice must survive a reload.** *"make it actually remember cause  ✅ v14.65
+             currently if it gets forgets"* — **saved perfectly, never read back.** `load()` restores
+             booleans through an explicit whitelist and `homeLight` was not in it, so it reset to the
+             default on every launch. One word. The splash reads the same key straight from
+             localStorage before settings.js exists, so it honoured the choice and settings.js then
+             overrode it — the dark intro then light home was the two halves disagreeing.
       2. [ ] **Get rid of the OLD loading screen animation.**
       3. [ ] **Dark mode gets the SAME loading transition light mode has** — not its own separate
              animation — *"it just transitions into dark the dark background… a black transition."*
