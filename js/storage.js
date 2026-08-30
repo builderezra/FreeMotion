@@ -2096,11 +2096,28 @@ window.FM = window.FM || {};
   }
   async function registerFace(family, file) {
     if (!file || !window.FontFace) return false;
-    try { const ff = new FontFace(family, await file.arrayBuffer()); await ff.load(); document.fonts.add(ff); return true; }
+    try { const ff = new FontFace(family, await file.arrayBuffer()); await ff.load(); document.fonts.add(ff);
+      FM.fonts.faceLoaded();
+      return true; }
     catch (e) { return false; }
   }
 
   FM.fonts = {
+    /* EVERY LINE BREAK MEASURED BEFORE A FACE ARRIVES WAS MEASURED IN THE FALLBACK FONT, and
+     * FM.textLines caches wraps under a key built from ctx.font — which is the SAME STRING before and
+     * after the real face loads. Only measureText changes, so the key could not tell the two apart and
+     * the fallback's line breaks were served for the rest of the session, in the preview AND in the
+     * export. rehydrateAll has always called requestRender() here with a comment saying "so canvas
+     * text reflows"; the re-render fired and the cache handed it back the same wrong lines, which is
+     * the shape this whole queue keeps turning up — a guard that reads as protection and cannot fire.
+     * Bumping a generation is enough: it is part of the wrap key, so every cached wrap in the project
+     * is invalidated at once without walking the layers. Called from registerFace, the single place a
+     * face actually becomes available, rather than from each of its callers. (#686) */
+    faceLoaded() {
+      FM.fontGen = (FM.fontGen || 0) + 1;
+      if (FM.requestRender) FM.requestRender();
+      return FM.fontGen;
+    },
     list() { return readJSON(FONT_INDEX, []); },
     // Register every imported font not already live. Idempotent — safe on each boot / project switch;
     // only unregistered ids touch IDB. Re-renders once the faces are ready so canvas text reflows.

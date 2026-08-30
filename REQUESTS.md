@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.59
+> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.60
 >
-> **State:** v14.59, 1124 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.60, 1127 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -27773,12 +27773,19 @@ re-opened #480, which I had marked done and had not fixed.
              anchor, the column jumps to roughly double the width dragged. Two independent causes, both
              fixed: the parent chain's scale/rotation were never asked for, and the old halve-then-double
              is only right for a centred anchor on centred text.
-      5. [ ] **Line breaks computed before an imported font loads are cached forever** — the preview AND
-             the export keep the wrong wrap for the whole session.
-      6. [ ] **Copy Background on text cuts out the PRE-EFFECT string** — a Timecode layer cuts out the
-             literal text typed, not the time shown.
-      7. [ ] **Letter/word spacing is guarded by a presence check with no probe** — on a phone the
+      5. [x] **Line breaks computed before an imported font loads are cached forever** — the preview AND  ✅ v14.60
+             the export keep the wrong wrap for the whole session. The re-render on font-load already
+             existed; the cache ate it, because ctx.font reads the same before and after the face loads.
+      6. [x] **Copy Background on text cuts out the PRE-EFFECT string** — a Timecode layer cuts out the  ✅ v14.60
+             literal text typed, not the time shown. It was the only text-measuring path in the file
+             that skipped applyTextEffects.
+      7. [x] **Letter/word spacing is guarded by a presence check with no probe** — on a phone the  ✅ v14.60
              Spacing slider moves the number and changes nothing, which is #645's family exactly.
+             FM.textSpacingOK() measures it now, and the slider carries the same "does nothing here"
+             pill the effects stack uses. **Honest note:** on your phone canvas letter spacing IS
+             supported, so the pill will not appear — the defect fixed is that the app had no way to
+             tell you if it ever were not. The export uses the same plain 2D canvases as the preview,
+             so spacing can never apply in one and not the other.
       8. [ ] **"Speed so the clip starts at the playhead" scales keyframes about the wrong pivot** — the
              animation stops matching the bar.
       9. [ ] **`layer._fromPreset` is stripped when the project is saved**, so "Update <preset>" — the
@@ -27803,3 +27810,24 @@ re-opened #480, which I had marked done and had not fixed.
       it was applied to the one dispatcher it was written for. **Three others went on reading raw.**
       All three use it now, and the test guards **the callers**, because the helper was never what
       broke.
+
+- [ ] **687 — Motion blur does nothing on a GROUP that moves. His words, 30 Aug:**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      > *"I have an issue where neither version of motion blur works on groups when I have them move"*
+      **Read the source while blocked on a test run, and the Object-blur half is almost certainly this.**
+      `drawLayer` RETURNS EARLY for a group — `js/compositor.js:12801`, *"invisible transform parent for
+      its members"* — so a group never reaches the motion-blur dispatch 110 lines below it. A group's
+      effects instead run on a FLATTENED PROXY: `buildGroupUnit` draws the members onto one plate and
+      hands it back as `FM.makeLayer('_flat', { x: 0, y: 0 })` carrying the group's effects. **That proxy
+      has a brand-new static transform.** Motion Blur (Object)'s own description is *"smears the layer
+      along its OWN movement"* — so it asks the proxy how it is moving, and the proxy has never moved:
+      the group's motion is already baked INTO the plate. The file says as much about the cheap
+      sub-frame mode a few hundred lines up — *"useless for a mover — the mover's displacement sits
+      inside that one plate and is therefore identical in every slice."*
+      **Question for him, and it decides whether this is one bug or two:** Directional Blur *by design*
+      does not read movement — its own catalog line reads *"a fixed smear along an angle you choose…
+      a still clip blurs exactly as much as a moving one."* So if that one was on in the hope it would
+      follow the motion, it was never going to, group or not. If it applies NO smear at all on a group,
+      that is a second and separate defect. Ask before building.
+      Fix shape, once that is answered: the proxy needs to carry the GROUP's transform (or the sampler
+      needs to be told what moved), so "its own movement" is the movement the viewer can see.

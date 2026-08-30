@@ -5080,7 +5080,30 @@ window.FM = window.FM || {};
     sseg.append(bB, iB); styr.appendChild(sseg); body.appendChild(styr);
     if (layer.letterSpacing == null) layer.letterSpacing = 0;
     if (layer.lineHeight == null) layer.lineHeight = 1.15;
-    body.appendChild(rangeRow('Spacing', () => layer.letterSpacing, v => { layer.letterSpacing = v; }, -10, 60, 1));
+    /* AND IF IT CANNOT WORK HERE, SAY SO ON THE CONTROL ITSELF (#686). Letter spacing is drawn by
+     * ctx.letterSpacing, which not every browser's canvas has. Where it is missing this slider moved
+     * its number, wrote its value and re-rendered, and the letters did not budge — with nothing
+     * anywhere explaining why. That is #645 and #661's complaint word for word: the screen said one
+     * thing and the app did another. FM.textSpacingOK() MEASURES it rather than asking whether the
+     * property exists, and this reuses the same "does nothing here" pill the effects stack already
+     * uses for exactly this sentence, so it is one existing answer in a second place rather than a
+     * new one. Only the Spacing slider is tagged: the Text Spacing EFFECT also carries line height,
+     * which works everywhere, so tagging the whole effect dead would be a false warning — and a wrong
+     * warning is the same defect as a wrong reassurance. */
+    const spRow = rangeRow('Spacing', () => layer.letterSpacing, v => { layer.letterSpacing = v; }, -10, 60, 1);
+    const spOK = FM.textSpacingOK ? FM.textSpacingOK() : null;
+    if (spOK && !spOK.letter) {
+      /* UNDER the row, not inside the label and not on the row itself. Inside the label it would land
+       * in label.textContent, where other code matches rows by their exact label text; on the row it
+       * would compete for width with the scrub strip, which is the 380px overflow the effects stack
+       * already has a note about. Its own line costs nothing and cannot squeeze anything. */
+      const dt = el('span', 'fx-dead-tag', 'does nothing here');
+      dt.title = "This browser's canvas cannot space letters, so this slider will move but the text will not.";
+      dt.style.display = 'inline-block';
+      dt.style.margin = '2px 0 6px 6px';
+      spRow.appendChild(dt);
+    }
+    body.appendChild(spRow);
     body.appendChild(rangeRow('Line height', () => layer.lineHeight, v => { layer.lineHeight = v; }, 0.8, 2.5, 0.05));
     body.appendChild(rangeRow('Curve', () => layer.textCurve || 0, v => { layer.textCurve = v; }, -180, 180, 1));
     if (!layer.textAnim) layer.textAnim = { preset: 'none', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 };

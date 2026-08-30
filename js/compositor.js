@@ -1533,6 +1533,42 @@ window.FM = window.FM || {};
     return _ctxFilterOK;
   }
   FM.ctxFilterOK = ctxFilterOK;
+  /* CAN THIS DEVICE SPACE TEXT AT ALL — MEASURED, NOT ASKED (#686). Six sites guarded letter- and
+   * word-spacing with `'letterSpacing' in ctx`, which asks whether the PROPERTY EXISTS. That is not
+   * the same question as whether setting it does anything, and #645 is the entry that exists because
+   * the app answered the easy question and told him the hard one. The visible cost is the Spacing
+   * slider: it moves its number, writes its value, re-renders, and the letters do not budge — with
+   * nothing anywhere saying why, which is exactly the shape of #645 and #661.
+   * So: set it and MEASURE. Ten narrow glyphs at +20px is +180px or more if the property does
+   * anything at all; requiring half of that is proof no amount of font wobble can fake. Letter and
+   * word spacing are probed separately because they are separate properties and a device is entitled
+   * to have one and not the other. Cached like ctxFilterOK — this is asked from the frame loop. */
+  let _spacingOK = null;
+  function textSpacingOK() {
+    if (_spacingOK !== null) return _spacingOK;
+    _spacingOK = { letter: false, word: false };
+    try {
+      const c = document.createElement('canvas').getContext('2d');
+      if (!c) return _spacingOK;
+      c.font = '40px sans-serif';
+      if ('letterSpacing' in c) {
+        const s0 = c.letterSpacing;
+        const w0 = c.measureText('IIIIIIIIII').width;
+        c.letterSpacing = '20px';
+        _spacingOK.letter = (c.measureText('IIIIIIIIII').width - w0) > 100;
+        c.letterSpacing = s0 || '0px';
+      }
+      if ('wordSpacing' in c) {
+        const s0 = c.wordSpacing;
+        const w0 = c.measureText('a a a a a a a a a a').width;
+        c.wordSpacing = '20px';
+        _spacingOK.word = (c.measureText('a a a a a a a a a a').width - w0) > 100;
+        c.wordSpacing = s0 || '0px';
+      }
+    } catch (e) { _spacingOK = { letter: false, word: false }; }
+    return _spacingOK;
+  }
+  FM.textSpacingOK = textSpacingOK;
   /* The list of effects this device cannot render, for anything that wants to SAY so. Empty on a
      healthy device, so a caller can treat a non-empty answer as "tell him". */
   /* ⚠️ "UNAVAILABLE" HAS TO MEAN UNAVAILABLE, AND THIS FUNCTION STOPPED MEANING IT (queue 645/661).
@@ -10957,8 +10993,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       let src = (layer.captions && layer.captions.length) ? (FM.activeCaption(layer, t) || '') : (layer.text || '');
       const te = FM.applyTextEffects(layer, src, (layer.letterSpacing || 0), t, FM.scene);
       src = te.text;
-      if ('letterSpacing' in c) c.letterSpacing = te.letterSpacing + 'px';
-      if ('wordSpacing' in c) c.wordSpacing = (te.wordSpacing || 0) + 'px';
+      if (textSpacingOK().letter) c.letterSpacing = te.letterSpacing + 'px';
+      if (textSpacingOK().word) c.wordSpacing = (te.wordSpacing || 0) + 'px';
       const lines = FM.textLines(c, layer, src);
       const fs = layer.fontSize || 96, lh = fs * (te.lineHeight || 1.15), total = (lines.length - 1) * lh;
       let maxW = 1; lines.forEach(l => { maxW = Math.max(maxW, c.measureText(l).width); });
@@ -12243,7 +12279,19 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       a.textAlign = layer.align || 'center'; a.textBaseline = 'middle';
       a.font = (layer.italic ? 'italic ' : '') + (layer.bold ? '700 ' : '') + (layer.fontSize || 96) + 'px ' + (layer.fontFamily || 'sans-serif');
       let textSrc = (layer.captions && layer.captions.length) ? (FM.activeCaption(layer, t) || '') : (layer.text || '');
-      const lines = FM.textLines(a, layer, textSrc), lh = (layer.fontSize || 96) * (layer.lineHeight || 1.15), total = (lines.length - 1) * lh;
+      /* THE STRING ON SCREEN, NOT THE ONE TYPED (#686). This footprint is what Copy Background keeps
+       * of the backdrop, so it has to be the shape of the text the viewer can actually see. It read
+       * layer.text raw, which is the only text-measuring path in the file that skipped
+       * applyTextEffects — the draw pass, layerSize and fillBoxOf all run it. On a Timecode, Count Up,
+       * Randomizer or Text Progress layer the displayed string is not the typed one, so the backdrop
+       * was cut out in the shape of the placeholder somebody typed months ago, at a completely
+       * different width. Spacing and line height come from the same pass for the same reason: they
+       * change where the glyphs land, and a footprint that disagrees is a visible mis-cut. */
+      const te = FM.applyTextEffects(layer, textSrc, (layer.letterSpacing || 0), t, FM.scene);
+      textSrc = te.text;
+      if (textSpacingOK().letter) a.letterSpacing = te.letterSpacing + 'px';
+      if (textSpacingOK().word) a.wordSpacing = (te.wordSpacing || 0) + 'px';
+      const lines = FM.textLines(a, layer, textSrc), lh = (layer.fontSize || 96) * (te.lineHeight || 1.15), total = (lines.length - 1) * lh;
       lines.forEach((ln, i) => a.fillText(ln, 0, i * lh - total / 2));
     } else {
       // footprint = the VISIBLE frame (crop), not the full source — else Copy Background on a cropped
@@ -12949,8 +12997,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // displayed string + letter-spacing before layout — folded in layer order.
       const _tEff = FM.applyTextEffects(layer, textSrc, (layer.letterSpacing || 0), t, scene);
       textSrc = _tEff.text;
-      if ('letterSpacing' in ctx) ctx.letterSpacing = _tEff.letterSpacing + 'px';
-      if ('wordSpacing' in ctx) ctx.wordSpacing = (_tEff.wordSpacing || 0) + 'px';
+      if (textSpacingOK().letter) ctx.letterSpacing = _tEff.letterSpacing + 'px';
+      if (textSpacingOK().word) ctx.wordSpacing = (_tEff.wordSpacing || 0) + 'px';
       // AFTER applyTextEffects: Count Up, Randomizer and friends change the string, so wrapping the
       // pre-effect text would break the lines in the wrong places on every frame but the first.
       const lines = FM.textLines(ctx, layer, textSrc);
@@ -14107,7 +14155,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        that; this removes the cause. It also un-breaks grep, which treats any file containing a NUL
        as binary and silently reports NOTHING for it - on a 13,000-line file this repo navigates by
        grep. \u001f cannot appear in a font string or in user text, so the key is just as safe. */
-    const key = src + '\u001f' + ww + '\u001f' + ctx.font + '\u001f' + (ctx.letterSpacing || '') + '\u001f' + (ctx.wordSpacing || '');
+    /* FM.fontGen IS IN THE KEY BECAUSE ctx.font IS NOT ENOUGH. An imported face is referenced by a
+       generated token, so ctx.font reads identically before and after it loads — only measureText
+       changes. Without the generation, lines broken against the fallback stayed cached for the rest
+       of the session. FM.fonts.faceLoaded() bumps it. (#686) */
+    const key = src + '\u001f' + ww + '\u001f' + ctx.font + '\u001f' + (ctx.letterSpacing || '') + '\u001f' + (ctx.wordSpacing || '') + '\u001f' + (FM.fontGen || 0);
     const cache = layer ? (layer._wrapCache || (layer._wrapCache = [])) : null;
     if (cache) { for (let i = 0; i < cache.length; i++) if (cache[i].key === key) return cache[i].lines; }
 
@@ -14199,7 +14251,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // layer.text alone gives a 10px box that the hit-test/selection/align all read wrong. Measure the
       // widest caption (and its line count) instead, falling back to layer.text when there are none. (#4)
       const strs = (layer.captions && layer.captions.length) ? layer.captions.map(cap => cap.text || '') : [layer.text || ''];
-      if ('letterSpacing' in c) c.letterSpacing = (layer.letterSpacing || 0) + 'px';   // measureText answers for it; wrapping must too
+      if (textSpacingOK().letter) c.letterSpacing = (layer.letterSpacing || 0) + 'px';   // measureText answers for it; wrapping must too
       let w = 10, maxLines = 1;
       strs.forEach(s => { const lines = FM.textLines(c, layer, s); maxLines = Math.max(maxLines, lines.length); lines.forEach(l => { w = Math.max(w, c.measureText(l).width); }); });
       // With a wrap width set, the box IS the column the user dragged — not the widest line that

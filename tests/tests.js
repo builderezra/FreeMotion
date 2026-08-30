@@ -54751,4 +54751,149 @@
       FM.refreshAll();
     }
   });
+
+  test('text: an imported font arriving throws away the line breaks measured without it', { item: 'q686-font-wrap' }, async function () {
+    /* #686. FM.textLines caches wraps under a key built from ctx.font — but an imported face is
+     * referenced by a generated token, so ctx.font reads IDENTICALLY before and after the face loads.
+     * Only measureText changes. The key could not tell the two apart, so the line breaks worked out
+     * against the fallback font were served for the rest of the session, in the preview and in the
+     * export both. And fonts.rehydrateAll has always called requestRender() when faces arrive, with a
+     * comment saying "so canvas text reflows" — it fired, and the cache handed it back the same wrong
+     * lines. The re-render was never the missing piece.
+     *
+     * Nothing here touches the scene: the layer and the measuring context are both local. */
+    if (!FM.fonts || typeof FM.fonts.faceLoaded !== 'function') throw new Error('FM.fonts.faceLoaded is gone — nothing tells the wrap cache a face arrived');
+    const c = document.createElement('canvas').getContext('2d');
+    c.font = '40px sans-serif';
+    const L = FM.makeLayer('text', { name: 'wrapme', text: 'one two three four five six seven', fontSize: 40 });
+    L.wrapWidth = 120;
+
+    const a = FM.textLines(c, L, L.text);
+    if (!(a.length > 1)) throw new Error('the text did not wrap at all (' + a.length + ' line) — nothing is being cached, so this cannot tell a stale wrap from a fresh one');
+    const b = FM.textLines(c, L, L.text);
+    if (a !== b) throw new Error('the second call re-wrapped instead of hitting the cache — this test can no longer detect a STALE cache, because there is no cache');
+    const before = L._wrapCache.length;
+
+    // A face finishes loading. Every wrap measured up to this instant was measured in the wrong font.
+    FM.fonts.faceLoaded();
+    const d = FM.textLines(c, L, L.text);
+    if (d === a) throw new Error('a font finished loading and textLines handed back the very same cached lines — every line break measured against the fallback is now permanent for the session, in the preview and in the export');
+    if (L._wrapCache.length !== before + 1) throw new Error('expected a fresh cache entry after the font generation moved, got ' + L._wrapCache.length + ' (was ' + before + ')');
+
+    // …and the bump has to be wired to the one place a face actually becomes available, or the whole
+    // thing is a function nobody calls.
+    const src = await (await fetch('../js/storage.js?boot=' + Date.now())).text();
+    const reg = src.slice(src.indexOf('async function registerFace'));
+    const body = reg.slice(0, reg.indexOf('\n  }'));
+    if (body.indexOf('faceLoaded()') < 0) throw new Error('registerFace no longer tells anything that a face arrived, so the wrap cache will keep serving the fallback line breaks');
+  });
+
+  test('text: Copy Background cuts the backdrop to the string on screen, not the one typed', { item: 'q686-copybg-text' }, function () {
+    /* #686. The Copy Background footprint is what the effect keeps of the backdrop, so it has to be
+     * the shape of the text a viewer can actually see. It read layer.text raw — the only text
+     * measuring path in the file that skipped applyTextEffects; the draw pass, layerSize and
+     * fillBoxOf all run it. On a Timecode, Count Up, Randomizer or Text Progress layer the displayed
+     * string is not the typed one, so the backdrop was cut out in the shape of whatever placeholder
+     * had been typed, at a completely different width.
+     *
+     * Counted, not photographed: Copy Background over a full-frame plate is INVISIBLE by construction
+     * (it replaces the layer with a copy of exactly what is behind it), so there are no pixels to
+     * compare. What is observable is which string the footprint measures. Rendering the same layer
+     * with and without the effect isolates it: the difference between the two runs is precisely the
+     * footprint's own call. layerSize reads the raw text on both runs, which is why this counts the
+     * DIFFERENCE rather than looking for the raw string at all. */
+    const P = FM.scene.project;
+    const TYPED = 'ZZZZZZZZZZ';
+    const T = 1;
+
+    const mk = (withCopyBg) => {
+      const L = FM.makeLayer('text', { name: 'tc', text: TYPED, x: P.width / 2, y: P.height / 2, fontSize: 60 });
+      L.start = 0; L.duration = 10; L.wrapWidth = 0;
+      L.effects = [{ type: 'timecode', enabled: true, params: {} }];
+      if (withCopyBg) L.effects.push({ type: 'copybg', enabled: true, params: {} });
+      const plate = FM.makeLayer('shape', { name: 'plate', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: P.width, shapeH: P.height });
+      plate.start = 0; plate.duration = 10;
+      return { project: P, layers: [L, plate] };   // index 0 is topmost, so the text sits over the plate
+    };
+
+    // What the layer actually shows at T. Worked out with the app's own helper on purpose: this test
+    // is about whether the FOOTPRINT consults that helper, not about what the helper returns.
+    const probe = mk(false).layers[0];
+    const shown = FM.applyTextEffects(probe, TYPED, 0, T, FM.scene).text;
+    if (shown === TYPED) throw new Error('the Timecode effect did not change the string, so this test cannot tell the displayed text from the typed text — the harness, not the feature');
+
+    const orig = FM.textLines;
+    const runs = {};
+    try {
+      ['off', 'on'].forEach(which => {
+        const seen = [];
+        FM.textLines = function (c, layer, src) { seen.push(String(src == null ? '' : src)); return orig.apply(this, arguments); };
+        const cv = document.createElement('canvas'); cv.width = P.width; cv.height = P.height;
+        const g = cv.getContext('2d', { willReadFrequently: true });
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        FM.renderScene(g, mk(which === 'on'), T);
+        FM.textLines = orig;
+        runs[which] = seen;
+      });
+    } finally { FM.textLines = orig; }
+
+    /* With Copy Background ON the layer's own text is never drawn — it is replaced by the clipped
+     * backdrop — so that run makes FEWER measurements than the plain one, not more, and the ones it
+     * does make are the footprint's. The plain run is kept as the control: it proves the Timecode
+     * layer measures the displayed string when it draws normally, so a failure below is about the
+     * footprint specifically and not about text effects in general. */
+    const count = (arr, v) => arr.filter(x => x === v).length;
+    const show = a => JSON.stringify(a);
+    if (!runs.on.length) throw new Error('Copy Background measured no text at all, so the footprint never ran and this proves nothing — the harness, not the feature');
+    if (count(runs.off, shown) < 1) throw new Error('the plain render never measured the displayed string ' + JSON.stringify(shown) + ' (saw ' + show(runs.off) + ') — the control failed, so this is the harness, not the feature');
+
+    if (count(runs.on, TYPED) > 0) throw new Error('Copy Background measured the TYPED text ' + JSON.stringify(TYPED) + ' — the backdrop is being cut out in the shape of the placeholder instead of the ' + JSON.stringify(shown) + ' on screen (footprint saw ' + show(runs.on) + ')');
+    if (count(runs.on, shown) < 1) throw new Error('Copy Background never measured the displayed string ' + JSON.stringify(shown) + ' (footprint saw ' + show(runs.on) + '), so its footprint is not the shape of the text the viewer sees');
+  });
+
+  test('text: the Spacing slider says so when this browser cannot space letters', { item: 'q686-spacing-probe' }, async function () {
+    /* #686. Six sites guarded letter/word spacing with `'letterSpacing' in ctx` — a check that the
+     * PROPERTY EXISTS, which is not the question. Where canvas letter spacing is missing the Spacing
+     * slider moved its number, wrote its value and re-rendered, and the letters did not move, with
+     * nothing anywhere saying why. That is #645 and #661's complaint verbatim: the screen said one
+     * thing and the app did another.
+     *
+     * Two halves, and the second is the one that matters. FM.textSpacingOK() must MEASURE, and the
+     * control must SAY SO when the answer is no. */
+    if (typeof FM.textSpacingOK !== 'function') throw new Error('FM.textSpacingOK is gone — nothing measures whether spacing works, so nothing can tell him when it does not');
+    const ok = FM.textSpacingOK();
+    if (!ok || typeof ok.letter !== 'boolean' || typeof ok.word !== 'boolean') throw new Error('FM.textSpacingOK() must answer for letter AND word spacing separately — they are separate properties and a device may have one and not the other. Got ' + JSON.stringify(ok));
+    if (ok.letter !== true) throw new Error('the probe says this browser cannot space letters, but the suite runs in Chrome, which can — a probe that answers "no" everywhere would badge the slider dead on every device, which is the wrong-warning half of #661');
+
+    // It has to be a MEASUREMENT. A probe that merely re-asks `in` would pass every behavioural check
+    // above on this machine and still be the bug, so this reads the source.
+    const src = await (await fetch('../js/compositor.js?boot=' + Date.now())).text();
+    const at = src.indexOf('function textSpacingOK');
+    if (at < 0) throw new Error('textSpacingOK is not defined in compositor.js any more');
+    const body = src.slice(at, at + 1400);
+    if (body.indexOf('measureText') < 0) throw new Error('textSpacingOK no longer measures anything — it is a presence check again, which cannot tell "the property exists" from "setting it does something"');
+
+    if (typeof FM._textExtras !== 'function') throw new Error('FM._textExtras is gone — the text sheet has no builder');
+    const build = (probe) => {
+      const orig = FM.textSpacingOK;
+      if (probe) FM.textSpacingOK = probe;
+      try {
+        const host = document.createElement('div');
+        FM._textExtras({ type: 'text', text: 'Hi', letterSpacing: 0, lineHeight: 1.15, textCurve: 0, fontSize: 95 }, host, function () {});
+        const lbl = [].slice.call(host.querySelectorAll('label')).find(n => n.textContent.trim() === 'Spacing');
+        if (!lbl) throw new Error('the Spacing row is not in the text sheet at all (labels: ' + JSON.stringify([].slice.call(host.querySelectorAll('label')).map(n => n.textContent.trim())) + ') — the harness, not the feature');
+        const wrap = lbl.closest('.prop-wrap') || lbl.parentElement;
+        return { label: lbl.textContent.trim(), tag: wrap ? wrap.querySelector('.fx-dead-tag') : null };
+      } finally { FM.textSpacingOK = orig; }
+    };
+
+    const dead = build(() => ({ letter: false, word: false }));
+    if (!dead.tag) throw new Error('canvas letter spacing is unavailable and the Spacing slider says nothing about it — it moves its number and the text does not move, with no explanation, which is exactly #645');
+    if (dead.label !== 'Spacing') throw new Error('the badge landed inside the row label, which now reads ' + JSON.stringify(dead.label) + ' — other code matches rows by their exact label text');
+
+    // The control: a healthy device must NOT be told its slider is dead. A badge that is always
+    // there is the same defect wearing the other sign.
+    const live = build(() => ({ letter: true, word: true }));
+    if (live.tag) throw new Error('the Spacing slider is badged "does nothing here" on a device where spacing WORKS — a wrong warning is the same defect as a wrong reassurance (#661)');
+  });
 })();
