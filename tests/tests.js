@@ -55296,4 +55296,129 @@
       if (home0) document.documentElement.setAttribute('data-home', home0);
     }
   });
+
+  test('paste look: every property a card edits is a property that card pastes', { item: '689' }, async function () {
+    /* #689. applyStyle() copies each category through an explicit field list, and the comment on the
+     * category table says that list "must match the card (queue 369)". It had drifted from two of
+     * them, silently, because a whitelist has no way to notice an omission: the Text card's Caption
+     * background and the Outline & Shadows card's Trim Path and Repeater were all edited on the card
+     * and all left behind by Paste look. Measured through the real dialog before this was written.
+     *
+     * THE POINT OF THIS TEST IS THE FUTURE ONE. Fixing three properties fixes three properties; the
+     * comment claiming the lists already matched is what allowed the drift, so the claim has to be
+     * checked rather than asserted. Add a style property to either card and forget the paste list and
+     * this fails, naming it. */
+    const src = await (await fetch('../js/inspector.js?boot=' + Date.now())).text();
+    const between = (startNeedle, endRe, what) => {
+      const a = src.indexOf(startNeedle);
+      if (a < 0) throw new Error('could not find ' + what + ' (looked for ' + JSON.stringify(startNeedle) + ') — the harness, not the feature');
+      const rest = src.slice(a + startNeedle.length);
+      const m = endRe.exec(rest);
+      if (!m) throw new Error('could not find the end of ' + what + ' — the harness, not the feature');
+      return rest.slice(0, m.index);
+    };
+    // The properties a card WRITES — assignments only, because a read is not editing.
+    const writes = (block) => {
+      const out = new Set(), re = /layer\.([A-Za-z][A-Za-z0-9]*)\s*(?:=[^=]|\.[A-Za-z]+\s*=)/g;
+      let m; while ((m = re.exec(block))) out.add(m[1]);
+      return out;
+    };
+
+    const CARDS = [
+      { key: 'text', card: between('function buildTextExtras', /\n  \}\n/, 'the Customise Text card'),
+        paste: between('if (cats.text &&', /\n    \}\n/, "applyStyle's text branch"),
+        /* CONTENT, NOT STYLE. Paste look copies a LOOK; carrying the words across would overwrite what
+           the target layer says, which is not what any of these tick-boxes offer. */
+        exempt: { text: 'the words themselves', captions: 'the caption track — content, not style' } },
+      { key: 'border', card: between("} else if (key === 'border') {", /\n    \} else if \(key === /, 'the Outline & Shadows card'),
+        paste: between('if (cats.border)', /\n/, "applyStyle's border branch"),
+        exempt: {} },
+    ];
+
+    const bad = [];
+    CARDS.forEach(c => {
+      const w = writes(c.card);
+      if (!w.size) throw new Error('extracted no edited properties from ' + c.key + ' — the slicing is wrong, so this test proves nothing (harness, not feature)');
+      w.forEach(prop => {
+        if (c.exempt[prop]) return;
+        const pasted = c.paste.indexOf("'" + prop + "'") >= 0 || c.paste.indexOf('.' + prop) >= 0;
+        if (!pasted) bad.push(c.key + ' card edits `' + prop + '` and Paste look does not copy it');
+      });
+    });
+    if (bad.length) {
+      throw new Error('Paste look and the inspector cards have drifted apart again — ' + bad.join('; ') +
+        '. Either add it to applyStyle for that category, or add it to this test\'s `exempt` list with the reason it is content rather than style (#689).');
+    }
+
+    // …and the control: the guard must be able to FAIL. If the extraction silently matched nothing,
+    // every card would "pass" forever.
+    const probe = writes("layer.somethingNobodyPastes = 1; layer.stroke = 2;");
+    if (!probe.has('somethingNobodyPastes') || !probe.has('stroke')) throw new Error('the property extractor does not find plain assignments any more, so this whole test would pass on a card it never read');
+  });
+
+  test('paste look: the caption pill, trim path and repeater actually arrive', { item: '689' }, async function () {
+    /* #689, measured rather than read. The guard beside this one compares the cards to the paste lists
+     * in the SOURCE, which is the half that catches future drift — but a name can be present in a list
+     * and still not take effect. This drives the real Paste look dialog end to end: build a source
+     * carrying all of it, untick everything, tick one category, press Paste, read the target. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, clip0 = FM.clipboard;
+    const pasteOnly = async (title, target) => {
+      document.querySelectorAll('.ps-overlay').forEach(o => o.remove());
+      FM.openPasteStyle(target);
+      await sleep(160);
+      const cats = [].slice.call(document.querySelectorAll('.ps-overlay .ps-cat'));
+      if (!cats.length) throw new Error('the Paste look dialog has no category buttons — the harness, not the feature');
+      cats.forEach(b => { if (b.classList.contains('on')) b.click(); });
+      const want = cats.find(b => new RegExp(title, 'i').test(b.title));
+      if (!want) throw new Error('no "' + title + '" category in the dialog (saw ' + JSON.stringify(cats.map(b => b.title)) + ') — the harness, not the feature');
+      want.click();
+      const go = document.querySelector('.ps-overlay .ps-paste');
+      if (!go) throw new Error('the dialog has no Paste button — the harness, not the feature');
+      go.click();
+      await sleep(160);
+    };
+    try {
+      // ---- TEXT: the caption pill ----
+      FM.scene.layers.length = 0;
+      const tSrc = FM.makeLayer('text', { name: 'SRC', text: 'Source', x: 200, y: 300, fontSize: 70 });
+      tSrc.start = 0; tSrc.duration = 5; tSrc.captionBg = true; tSrc.italic = true;
+      const tDst = FM.makeLayer('text', { name: 'DST', text: 'Target', x: 200, y: 600, fontSize: 40 });
+      tDst.start = 0; tDst.duration = 5; tDst.captionBg = false; tDst.italic = false;
+      FM.scene.layers.push(tSrc, tDst);
+      FM.clipboard = [{ snapshot: JSON.parse(JSON.stringify(tSrc)) }];
+      FM.selectLayer(tDst.id); FM.refreshAll();
+      await pasteOnly('Text', tDst);
+      const t2 = FM.scene.layers.find(l => l.name === 'DST');
+      if (!t2.italic || t2.fontSize !== 70) throw new Error('the Text category pasted nothing at all (italic ' + t2.italic + ', size ' + t2.fontSize + ') — the harness, not the feature');
+      if (!t2.captionBg) throw new Error('Paste look copied the font and the slant and left the Caption background behind — it is a control on the very card that was ticked');
+
+      // ---- OUTLINE & SHADOWS: trim path and repeater ----
+      FM.scene.layers.length = 0;
+      const sSrc = FM.makeLayer('shape', { name: 'SRC', shape: 'rect', x: 200, y: 300, shapeW: 120, shapeH: 120 });
+      sSrc.start = 0; sSrc.duration = 5;
+      sSrc.stroke = { enabled: true, width: 9, color: '#ff0000' };
+      sSrc.shadow = { enabled: true, blur: 12, dx: 3, dy: 4, alpha: 1, color: '#000000' };
+      sSrc.trimPath = { enabled: true, start: 0.1, end: 0.6, offset: 0.2 };
+      sSrc.repeater = { enabled: true, copies: 4, offsetX: 30, offsetY: 10, rotation: 12, scale: 0.9, opacity: 0.8, anchorX: 0.5, anchorY: 0.5 };
+      const sDst = FM.makeLayer('shape', { name: 'DST', shape: 'rect', x: 200, y: 600, shapeW: 120, shapeH: 120 });
+      sDst.start = 0; sDst.duration = 5;
+      FM.scene.layers.push(sSrc, sDst);
+      FM.clipboard = [{ snapshot: JSON.parse(JSON.stringify(sSrc)) }];
+      FM.selectLayer(sDst.id); FM.refreshAll();
+      await pasteOnly('Outline', sDst);
+      const s2 = FM.scene.layers.find(l => l.name === 'DST');
+      if (!(s2.stroke && s2.stroke.enabled)) throw new Error('the Outline & Shadows category pasted nothing at all — the harness, not the feature');
+      const missing = [];
+      if (!(s2.trimPath && s2.trimPath.enabled)) missing.push('Trim Path');
+      if (!(s2.repeater && s2.repeater.enabled)) missing.push('Repeater');
+      if (missing.length) throw new Error('Paste look copied the outline and the shadow but left ' + missing.join(' and ') + ' behind — controls on the very card that was ticked');
+    } finally {
+      document.querySelectorAll('.ps-overlay').forEach(o => o.remove());
+      FM.clipboard = clip0;
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0);
+      FM.refreshAll();
+    }
+  });
 })();

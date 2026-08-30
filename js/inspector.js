@@ -2749,7 +2749,14 @@ window.FM = window.FM || {};
       if ('fillGradient' in src) target.fillGradient = clone(src.fillGradient);              // (carries the gradient's ox/oy)
       if ('colorGrade' in src) target.colorGrade = clone(src.colorGrade);
     }
-    if (cats.border) { target.stroke = clone(src.stroke); target.shadow = clone(src.shadow); }
+    /* trimPath AND repeater PASTE TOO (#689). The category table above says this list "must match the
+       card", and it had drifted: the Outline & Shadows card edits stroke, shadow, Trim Path and
+       Repeater, while this pasted the first two and dropped the other two without a word. Measured
+       through the real dialog — tick Outline & Shadows on a shape carrying all four and only half of
+       it arrives. Assigned unconditionally, exactly as stroke and shadow already are: this category
+       pastes the card wholesale, so a source with no repeater clears the target's, which is what the
+       existing two do and what "paste this card" has always meant here. */
+    if (cats.border) { target.stroke = clone(src.stroke); target.shadow = clone(src.shadow); target.trimPath = clone(src.trimPath); target.repeater = clone(src.repeater); }
     if (cats.blend) {
       target.blendMode = src.blendMode || 'normal';
       if (src.transform && 'opacity' in src.transform) target.transform.opacity = clone(src.transform.opacity);
@@ -2775,7 +2782,10 @@ window.FM = window.FM || {};
       target.transform = t;
     }
     if (cats.text && target.type === 'text' && src.type === 'text') {
-      ['fontFamily', 'fontSize', 'bold', 'italic', 'align', 'letterSpacing', 'lineHeight', 'textCurve'].forEach(k => { if (k in src) target[k] = src[k]; });
+      // captionBg IS ON THIS CARD (#689) — "Caption background" is a checkRow in buildTextExtras, and
+      // this list is supposed to mirror the card. It was pasting the font, the slant and the spacing
+      // and silently leaving the pill behind.
+      ['fontFamily', 'fontSize', 'bold', 'italic', 'align', 'letterSpacing', 'lineHeight', 'textCurve', 'captionBg'].forEach(k => { if (k in src) target[k] = src[k]; });
       if ('textAnim' in src) target.textAnim = clone(src.textAnim);
       if (src.color != null) target.color = clone(src.color);   // may be a keyframe object
     }

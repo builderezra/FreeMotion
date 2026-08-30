@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 31 Aug at v14.65
+> ## 📌 WHAT I NEED FROM YOU — updated 31 Aug at v14.66
 >
-> **State:** v14.65, 1135 tests green, tree clean. **#686 CLOSED (all 13 bugs), #687 CLOSED (motion
+> **State:** v14.66, 1137 tests green, tree clean. **#686 CLOSED (all 13 bugs), #687 CLOSED (motion
 > blur on groups), and #688's forgetting is FIXED** — it saved perfectly and was never read back.
 >
 > **⚠️ ONE QUESTION FROM YOU FINISHES #688, and it takes one look at the intro.** Clauses 2 and 3 —
@@ -27870,13 +27870,20 @@ re-opened #480, which I had marked done and had not fixed.
       of the source reading alone, the fix would have been inert and would have looked done.
 
 - [ ] **688 — Light/dark preference is forgotten on reload, and the old loading animation should go.
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, 30 Aug (verbatim):**
       > *"Make it so that when you save your preference of either light mode or dark mode it actually
       > remembers next time you load into the app and also get rid of the old loading screen animation
       > and just make it so like when you're in dark mode it does the same loading screen transition as
       > a light mode one but it just transitions into dark the dark background. It does a black
       > transition and yeah make it actually remember cause currently if it gets forgets I mean."*
+      **Clauses 2 and 3 are waiting on his answer — one line from him and they ship.** They are a
+      DESIGN change (his standing rule #545: no visual ships before he has seen it), and the question
+      is small: the new intro film ENDS ON PURE WHITE because it was made for the light look, so
+      playing it in dark mode needs its ending changed. **Is the logo in it monochrome, or coloured?**
+      Monochrome → invert the film in dark mode: same motion exactly, ends black. Coloured → inverting
+      would mangle it, so fade the white down to the dark ground over the last ~0.6s instead.
+      (Could not be previewed here: video decoding does not run in the headless browser pane.)
       His clauses, ticked one at a time — this entry cannot be marked done while any is unticked:
       1. [x] **The light/dark choice must survive a reload.** *"make it actually remember cause  ✅ v14.65
              currently if it gets forgets"* — **saved perfectly, never read back.** `load()` restores
@@ -27931,3 +27938,27 @@ re-opened #480, which I had marked done and had not fixed.
       the LIGHT loading screen, which is the opposite. `homeLight` also selects the intro ("the new
       intro" is in the setting's own description), so the intro may read the preference by a different
       route or at a different moment. Check the splash/intro path before assuming one fix covers both.
+
+- [x] **689 — Bug hunt (31 Aug, queue drained): Paste look silently drops three properties it says it
+      pastes.**  ✅ v14.66 Found by Claude, not reported — he said *"if ur running out of things to do go find
+      some bugs"*.
+      `applyStyle()` copies each category through an explicit field list, and the comment on the
+      category table says the list **"must match the card (queue 369)"**. It has drifted from two of
+      them. **Measured through the real Paste look dialog, not read off the source:**
+      | ticked category | property | on the card? | pasted? |
+      |---|---|---|---|
+      | Text | fontSize, italic, letterSpacing | yes | ✅ |
+      | Text | **captionBg** (Caption background) | **yes** | ❌ |
+      | Outline & Shadows | stroke, shadow | yes | ✅ |
+      | Outline & Shadows | **trimPath** (Trim Path) | **yes** | ❌ |
+      | Outline & Shadows | **repeater** (Repeater) | **yes** | ❌ |
+      Same shape as #686 clause 9 and #688 clause 1: an explicit whitelist that nobody extended when
+      the property was added, failing silently because a whitelist has no way to notice an omission.
+      1. [x] **`captionBg` pastes with the Text category.**  ✅ v14.66
+      2. [x] **`trimPath` pastes with Outline & Shadows.**  ✅ v14.66
+      3. [x] **`repeater` pastes with Outline & Shadows.**  ✅ v14.66
+      4. [x] **A test that compares each card's real property set against its paste list**, so the two  ✅ v14.66
+             cannot drift again — the comment claiming they match is what let this happen. It slices each
+             card out of inspector.js, extracts every property the card ASSIGNS, and requires each to be
+             pasted or explicitly exempted with a reason. Carries its own control, because a slicing test
+             that matched nothing would pass forever.
