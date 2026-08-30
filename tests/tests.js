@@ -54208,4 +54208,64 @@
       } catch (e) {}
     }
   });
+
+  test('678 — the add row lands ON the gap it opened, not a row past it', { item: '678' }, async function () {
+    /* Ezra: "play around with the draggable up and down add layer and timeline coz both often have a
+       lot of issues." Driving the drag by hand found nothing — the insertion index is correct at both
+       widths — because the defect lives in the 165ms LANDING ANIMATION, between the last drag frame and
+       the rebuild, which is the one window neither the app's tests nor a hand-driven probe sampled.
+       `gapTop` returned `below.top + shift`, the post-shift TOP of the row the marker lands ABOVE —
+       i.e. the FAR side of the gap — and `settle` used it as the marker's target top. The marker is
+       `h` tall and belongs on the NEAR side, so it was wrong by exactly one marker-height at every
+       position, in both directions, and even when dropping where you started.
+       🔑 The tell that this was a slip rather than an offset: the drop-at-the-very-bottom branch
+       already computed the right value, because `shiftFor` returns -h there and cancels it. So the one
+       place it looked right was the bottom of the list.
+       WHAT IT LOOKED LIKE: on release the row sails past the gap, lands on the row below, sits, then
+       snaps back — "it jumps at the end of every drag", which is queue 307's own complaint still alive
+       inside the code written to fix it.
+       ⚠️ ASSERTED WITHOUT WAITING ON THE ANIMATION, deliberately: the browser this suite runs in does
+       not advance CSS transitions reliably, so a test that sampled mid-glide would measure nothing.
+       The invariant is arithmetic — the settle TARGET must equal where the marker actually comes to
+       rest after the rebuild — and that needs no animation at all. */
+    /* ⚠️ THIS IS A SOURCE ASSERTION AND I AM SAYING SO RATHER THAN DRESSING IT UP. The first draft
+       checked for a seam that does not exist and returned early — a test that asserts nothing and
+       reports green, which is the exact failure a mutation caught in this suite earlier today. The
+       honest options were: expose the motion factory purely for this, or assert the arithmetic. The
+       arithmetic IS the bug — one missing `- h` — and it is one line, so it is asserted directly. */
+    const src = await (await fetch('../js/timeline.js?boot=' + Date.now())).text();
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const i = code.indexOf('const gapTop =');
+    if (i < 0) throw new Error('gapTop is gone — the add-row landing has no target arithmetic');
+    const block = code.slice(i, i + 420);
+    if (!/below\.top \+ shiftFor\(at, below\.idx, h\) - h/.test(block))
+      throw new Error('gapTop is back to returning `below.top + shift` — that is the post-shift top of the row the marker lands ABOVE, i.e. the FAR side of the gap, and settle() uses it as the marker\'s top. The marker would glide a full marker-height past the gap and snap back, which reads as "it jumps at the end of every drag".');
+    /* …and the bottom branch must NOT get the same subtraction: `shiftFor` already returns -h there,
+       so it is correct as written, and "fixing" it too would break the one case that always worked. */
+    if (/last\.bottom \+ shiftFor\(at, last\.idx, h\) - h/.test(block))
+      throw new Error('the drop-at-the-bottom branch has been given the same -h, but shiftFor already returns -h there — that case was always correct and is now a marker-height too high');
+  });
+
+  test('678 — a tap on the add-row grip is not treated as a drag', { item: '678' }, async function () {
+    /* THE SECOND HALF, and on a phone it is the one you would actually hit. `motion` is built on
+       POINTERDOWN in the grip path with no movement threshold, and `end()` settled whenever `motion`
+       existed — so simply TAPPING the ≡ grip ran the whole landing animation: every row took
+       `.row-part`, the marker glided a full row, held 165ms and snapped back, for a gesture that
+       changed nothing. The PC line path has always had this guard; the grip never did.
+       Asserted against the source, because the symptom is an animation this browser will not run. */
+    const src = await (await fetch('../js/timeline.js?boot=' + Date.now())).text();
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    /* ONE threshold for both paths. It used to be declared inside attachLineDrag, which is precisely
+       why the grip had none — so a second copy would be the bug coming back wearing a different name. */
+    const decls = (code.match(/const SLOP\s*=/g) || []).length;
+    if (decls !== 1)
+      throw new Error('SLOP is declared ' + decls + ' time(s) — it must be exactly one shared threshold, or the two drag paths disagree about what counts as a drag');
+    if (!/gripMoved/.test(code))
+      throw new Error('the grip drag has no movement flag again — a plain tap would run the whole settle animation for a gesture that changed nothing');
+    if (!/if \(gripMoved && motion\)/.test(code))
+      throw new Error('the grip still settles whenever motion exists, rather than only when the finger actually moved');
+    /* …and the marker must be released, not left mid-gesture, when it WAS only a tap. */
+    if (!/motion\.abort\(\)/.test(code))
+      throw new Error('a tap on the grip no longer aborts the motion it created, so the rows keep .row-part and the marker keeps its dragging state');
+  });
 })();

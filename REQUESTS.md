@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.51
+> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.52
 >
-> **State:** v14.51, 1110 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.52, 1112 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -27532,7 +27532,7 @@ re-opened #480, which I had marked done and had not fixed.
       you asked me to avoid**, so they are untouched and this is written down instead.
 
 - [ ] **676 — Opening the add menu opens it TWICE.** (30 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
       > also add to the list when you open the add menu it opens twice for some reason
       ⏳ **Logged the moment he said it.** Two shapes this could take and they need different fixes: the
@@ -27543,9 +27543,29 @@ re-opened #480, which I had marked done and had not fixed.
       for one tap, and how many times the body rebuilds. One open drawn twice is CSS; two opens is a
       listener.
 
+      ═══ 🔬 **30 AUG — MEASURED, AND IT IS NOT A DOUBLE TRIGGER. Which narrows it usefully.** ═══
+      📐 **Counted at 380px, from both ways in:** tapping the **add row** and tapping the **+ FAB**, each
+      with a full touch sequence (pointerdown → pointerup → click, the shape that catches a tap being
+      handled twice — that is #648's family and was the first suspect).
+      **Both give exactly ONE open and exactly ONE render.** The `open` class goes on once, the menu
+      body is built once, and there is one panel and one pager in the DOM afterwards.
+      ➡️ **So it is not two opens.** That rules out the listener half and leaves the CSS/animation half:
+      one open being *drawn* twice — the sheet sliding up, then sliding again.
+      ⚠️ **AND THAT IS THE HALF I CANNOT SEE HERE.** The browser this is developed in does not advance
+      CSS animations reliably — the same limitation that made the audio watcher and the drag-landing
+      unmeasurable today — so the exact thing being reported is the thing this environment cannot show.
+      ❓**ONE LINE FROM YOU SPLITS IT, and it is a description not a decision:** does the sheet **slide up
+      twice in a row**, or does it **open, close, and open again**? The first is one animation replaying
+      (a class being re-applied, or the sheet's measured top updating after it has already moved — its
+      position IS measured and published after opening, which is a live candidate). The second is two
+      gestures being seen. They need different fixes and I would rather not guess between them.
+      **JUMPED: measured as far as this environment allows; the remaining half needs one line from him
+      describing what "twice" looks like.** Recorded rather than silently reordered — he asked for the
+      drag work (#678) directly, and that is what was done in the same release.
+
 - [ ] **677 — 🔴 STILL NO AUDIO IN AN EXPORT — and this time the whole soundtrack was TWO SOUND
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       EFFECTS.** (30 Aug.)
-      **STATUS: 🟠 NEEDS ONE PASTE FROM YOUR PHONE — see the bottom.**
       His words, verbatim:
       > also i just exported a video with the same normal settings as usual and got no audio again, not
       > that it was a silent video but the video was locked on mute in my camera role coz audio was
@@ -27562,15 +27582,16 @@ re-opened #480, which I had marked done and had not fixed.
       · the finished file **decodes to 3.07s of audio at peak 0.937**, and the report reads
         `audio TRACK WRITTEN`.
       **So "sound effects only" does not break the path by itself.** Whatever this is, it is his device.
+      ⏳ **Waiting on your phone: a REAL-DEVICE report is the only thing that can name the cause, and
+      nothing further can be built here until it arrives.**
+      ❓ASK: export something with sound on your phone, then Settings → "Your last export" → Copy, and paste it — I reproduced your exact setup (two sound effects, nothing else) on desktop and it produced a working audio track, so only your device's report can say which of the six loss paths it was.
       ❓ **THE ONE THING THAT SETTLES IT, and it is a paste rather than an answer:** export something
       with sound on your phone, then **Settings → "Your last export" → Copy**, and send it. That report
       was **fixed in v14.35** — before that it could hand back a PREVIOUS export's verdict, which is a
       large part of why three months of asking never resolved this. It is trustworthy now, and it names
       which of the six loss paths it was.
 
-- [ ] **678 — Stress-test the draggable ADD-LAYER row and the draggable TIMELINE — he says both are
-      often buggy.** (30 Aug.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **678 — Stress-test the draggable ADD-LAYER row and the draggable TIMELINE — he says both are
       His words, verbatim:
       > play around with the draggable up and down add layer and timeline coz both often have a lot of
       > issues
@@ -27583,9 +27604,31 @@ re-opened #480, which I had marked done and had not fixed.
       unreachable. **So the bug lived in the width nothing tested, through three repairs that each came
       back green.** Anything found here must be checked at BOTH widths for that reason.
 
+
+      ═══ ✅ **30 AUG (v14.52) — YOU WERE RIGHT, AND THE FAULT WAS IN THE 165ms NOBODY WATCHES.** ═══
+      🚨 **1. The add row lands a whole row PAST the gap it opened.** On release it sails past, comes to
+      rest **on top of the row below**, sits there for the landing animation, then snaps back when the
+      list redraws. **The insertion index was always correct** — which is why nothing ever caught it —
+      so it reads purely as *"it jumps at the end of every drag"*. **That is your #307 complaint**
+      (*"it kind of just jumps and it's a bit shitty looking"*) **still alive inside the code that was
+      written to fix it.** One missing subtraction.
+      🔑 **The tell it was a slip:** dropping at the very BOTTOM of the list always looked right, because
+      that branch cancels the error by accident. Every other position was a row out.
+      🚨 **2. On a phone, TAPPING the ≡ grip runs the whole animation for nothing.** The drag arms on
+      touch-down with no movement threshold, so a tap made every row shuffle, the marker glide a full
+      row, hold, and snap back — for a gesture that changed nothing. The PC has always had that guard;
+      the grip never did, because the threshold was declared inside the *other* drag's function.
+      🧪 **Driving both drags by hand found NEITHER**, and that is worth recording: the index is correct
+      at both widths, the band resizes 1:1 and clamps properly, and at the smallest timeline every
+      layer-panel label still renders. **The bug lives in the landing animation** — the window between
+      the last drag frame and the redraw, which no test and no probe had ever sampled.
+      ⚠️ **Two things I nearly reported and did not**, because they were my measurement, not your app:
+      the line looks like it moves at 2× the cursor on a PC (that is the auto-scroll; it still lands
+      where you point), and it looked stuck mid-drag (my probe killed the gesture; cancel is handled).
+
 - [ ] **679 — 💡 HIS IDEA: a layer whose colour is KEYFRAMED should show that as colour ALONG its
-      timeline bar.** (30 Aug.)
       **STATUS: 🟢 READY — nothing is stopping this**
+      timeline bar.** (30 Aug.)
       His words, verbatim:
       > Have a genious idea, when you change the colour of a layer the layer colour on the timeline
       > changes, but what if you do key frames and the layer keeps changing colour? Make the layer on the

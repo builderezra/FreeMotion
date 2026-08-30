@@ -2374,8 +2374,12 @@ window.FM = window.FM || {};
    * threshold rather than a timer, because a timer makes a deliberate click feel slow and a slow drag
    * feel like a click. Below the threshold the pointerup fires the click; past it the drag takes over
    * and the click is swallowed, or every reposition would also open the menu. */
+  /* ONE THRESHOLD, BOTH DRAG PATHS (queue 678). It lived inside attachLineDrag, so the grip path had
+     no threshold at all and treated a tap as a drag. Hoisted rather than copied: two numbers that are
+     supposed to mean the same thing are exactly what #116 warns about. */
+  const SLOP = 4;
+
   function attachLineDrag(row, open) {
-    const SLOP = 4;
     let down = false, moved = false, y0 = 0, motion = null, wantAt = 0;
     /* THE LIST SCROLLS WITH YOU (queue 411). Ezra: "On pc trying to drag down the add layer doesn't drag
        the screen down with it so you have to let go and then swipe down then pick it up again which is
@@ -2528,9 +2532,23 @@ window.FM = window.FM || {};
       if (at < slot0 && idx >= at && idx < slot0) return h;    // …and the other way
       return 0;
     };
+    /* ⚠️ THIS RETURNED THE BOTTOM OF THE GAP AND `settle` USED IT AS THE TOP (queue 678, v14.52).
+     * `below.top + shiftFor(...)` is the post-shift TOP of the row the marker lands ABOVE — which is
+     * the far side of the opened gap. The marker is `h` tall and belongs on the near side, so the
+     * target is that minus `h`. Wrong by exactly one marker-height at every position, in both
+     * directions, and wrong even when you drop where you started.
+     * 🔑 THE TELL THAT THIS IS A SLIP AND NOT A DELIBERATE OFFSET: the OTHER branch — the drop-at-the-
+     * very-bottom case — already computes the correct value, because `shiftFor` returns -h there and
+     * cancels it. So the one place it looked right was the bottom of the list, and everywhere else it
+     * glided a row too far.
+     * WHAT IT LOOKED LIKE: on release the add row sails PAST the gap it just opened, lands on top of
+     * the row below, sits there for the 165ms settle, then snaps back when the rebuild runs. The
+     * insertion index was always correct — so it reads purely as "it jumps at the end of every drag",
+     * which is queue 307's complaint ("it kind of just jumps and it's a bit shitty looking") still
+     * alive inside the code written to fix it. */
     const gapTop = (at, h) => {
       const below = rows.filter(r => r.idx >= at)[0];
-      if (below) return below.top + shiftFor(at, below.idx, h);
+      if (below) return below.top + shiftFor(at, below.idx, h) - h;
       const last = rows[rows.length - 1];
       return last ? last.bottom + shiftFor(at, last.idx, h) : markerTop;
     };
@@ -2551,6 +2569,9 @@ window.FM = window.FM || {};
         rowEl.style.transform = 'translateY(' + Math.round(dy) + 'px)';
         rows.forEach(r => { r.el.style.transform = 'translateY(' + shiftFor(at, r.idx, h) + 'px)'; });
       },
+      // Exposed so a test can compare the settle TARGET with where the marker actually comes to rest
+      // after the rebuild. Those two must be the same number; that they were not is queue 678.
+      targetTopFor(at) { return gapTop(at, markerH()); },
       settle(at, done) {
         rowEl.classList.add('tl-addrow-settling');
         rowEl.style.transform = 'translateY(' + Math.round(gapTop(at, markerH()) - markerTop) + 'px)';
@@ -2565,9 +2586,18 @@ window.FM = window.FM || {};
     grip.className = 'tl-addrow-grip';
     grip.setAttribute('aria-label', 'Drag to choose where new layers go');
     grip.innerHTML = '<span></span><span></span><span></span>';
-    let dragging = false, motion = null, wantAt = 0, y0 = 0;
+    let dragging = false, motion = null, wantAt = 0, y0 = 0, gripMoved = false;
     const move = (e) => {
       if (!dragging) return;
+      /* ⚠️ A TAP IS NOT A DRAG (queue 678, v14.52). `motion` is built on POINTERDOWN here with no
+       * threshold, and `end()` settled whenever `motion` existed — so simply TAPPING the grip ran the
+       * whole landing animation: every row took `.row-part`, the marker glided a full row down, held
+       * for 165ms and snapped back, for a gesture that changed nothing. On a phone that is the most
+       * likely thing to do to a grip by accident, and it looks like the app lurching.
+       * The PC line path has always had this guard (`if (moved && motion)`); the grip never did. Same
+       * SLOP the line uses, so the two behave alike. */
+      if (!gripMoved && Math.abs(e.clientY - y0) < SLOP) return;
+      gripMoved = true;
       e.preventDefault();
       wantAt = motion ? motion.boundaryAt(e.clientY) : boundaryFor(e.clientY);
       if (motion) motion.to(wantAt, e.clientY - y0);
@@ -2595,8 +2625,9 @@ window.FM = window.FM || {};
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end);
       window.removeEventListener('pointercancel', end);
-      if (motion) { const m = motion; motion = null; m.settle(wantAt, finish); }
-      else { addDragging = false; row.classList.remove('tl-addrow-dragging'); FM.dragAddAt = null; if (FM.syncAddSwitch) FM.syncAddSwitch(); }
+      if (gripMoved && motion) { const m = motion; motion = null; m.settle(wantAt, finish); }
+      else { if (motion) { motion.abort(); motion = null; } addDragging = false; row.classList.remove('tl-addrow-dragging'); FM.dragAddAt = null; if (FM.syncAddSwitch) FM.syncAddSwitch(); }
+      gripMoved = false;
     };
     grip.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
