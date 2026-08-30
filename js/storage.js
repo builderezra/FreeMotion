@@ -1006,18 +1006,60 @@ window.FM = window.FM || {};
     if (FM.toast) FM.toast('Project file saved');
   };
 
+  /* ═══ WHAT IS WRONG WITH THIS FILE, IN WORDS (queue 673) ══════════════════════════════════════
+   * The import used to create the project FIRST and validate second, and `applyScene` returns FALSE
+   * rather than throwing when a file is malformed — with no `else` on that branch. So a bad file left
+   * you sitting in a brand-new EMPTY project named after it, with **no message at all**, and the
+   * project count went 1 → 2. A second bad file made 3.
+   * ⚠️ THAT READS EXACTLY LIKE "THE IMPORT DESTROYED MY PROJECT", which is the worst possible reading
+   * of what was actually a no-op. Silence is not neutral when the screen has visibly changed.
+   * This returns a REASON rather than a boolean because the reasons are genuinely different and the
+   * user can act on the difference: the wrong app's file, a truncated download, a file too big to
+   * open. `applyScene` keeps its own guard — it has other callers — but nothing now depends on that
+   * guard being the thing that speaks. */
+  FM.storage.sceneFileProblem = function (obj) {
+    if (!obj || typeof obj !== 'object') return 'That file is not a FreeMotion project.';
+    if (obj.app !== 'freemotion') return 'That is not a FreeMotion project file.';
+    if (!obj.project) return 'That project file is missing its canvas settings — it may be truncated or only half-downloaded.';
+    if (!Array.isArray(obj.layers)) return 'That project file has no layers list — it may be truncated or only half-downloaded.';
+    if (obj.layers.length > 2000) return 'That project has ' + obj.layers.length + ' layers, which is more than FreeMotion will open.';
+    return null;
+  };
+
+  /* Split out of importFile so the ORDER can be tested. The bug was never in the parsing or the
+     applying — it was that "create the project" happened before "is this file any good", and a file
+     input is not something a test can fill. */
+  FM.storage.importObject = async function (obj, onDone) {
+    const problem = FM.storage.sceneFileProblem(obj);
+    if (problem) { if (FM.toast) FM.toast(problem, 5000); return false; }
+    if (FM.projects) await FM.projects.create({ name: (obj.project && obj.project.name ? obj.project.name : 'Imported project'), width: obj.project && obj.project.width, height: obj.project && obj.project.height });
+    const ok = await FM.storage.applyScene(obj);
+    if (!ok) {
+      /* Belt and braces: sceneFileProblem should have caught everything applyScene refuses, but if the
+         two ever disagree the user must still be told rather than left in an empty project. */
+      if (FM.toast) FM.toast('That project file could not be opened.', 5000);
+      return false;
+    }
+    if (FM.history) FM.history.reset();
+    FM.storage.markDirty(); FM.storage.save();
+    if (FM.projects) FM.projects.touchCurrent(true);
+    if (FM.toast) FM.toast('Project imported');
+    if (onDone) onDone();
+    return true;
+  };
+
   FM.storage.importFile = function (onDone) {   // onDone runs ONLY on a successful import (not on picker-cancel)
     const input = document.createElement('input'); input.type = 'file'; input.accept = '.json,application/json'; input.style.display = 'none';
     input.addEventListener('change', async () => {
       const file = input.files && input.files[0]; input.remove();
       if (!file) return;
       try {
-        const obj = JSON.parse(await file.text());
-        if (obj.app !== 'freemotion') { if (FM.toast) FM.toast('Not a FreeMotion project file'); return; }
-        // Import into a NEW project — never overwrite whatever happens to be open. (#r1)
-        if (FM.projects) await FM.projects.create({ name: (obj.project && obj.project.name ? obj.project.name : 'Imported project'), width: obj.project && obj.project.width, height: obj.project && obj.project.height });
-        const ok = await FM.storage.applyScene(obj);
-        if (ok) { if (FM.history) FM.history.reset(); FM.storage.markDirty(); FM.storage.save(); if (FM.projects) FM.projects.touchCurrent(true); if (FM.toast) FM.toast('Project imported'); if (onDone) onDone(); }
+        let obj = null;
+        try { obj = JSON.parse(await file.text()); }
+        catch (e) { if (FM.toast) FM.toast('That file is not readable as a project — it may be truncated.', 5000); return; }
+        // Import into a NEW project — never overwrite whatever happens to be open. (#r1) …but only
+        // once the file has been checked, which is queue 673's whole point.
+        await FM.storage.importObject(obj, onDone);
       } catch (e) { if (FM.toast) FM.toast('Could not read that project file'); }
     });
     document.body.appendChild(input); input.click();

@@ -54160,4 +54160,52 @@
       }
     });
   });
+
+  test('673 — a malformed project file makes no junk project, and says what was wrong', { item: '673' }, async function () {
+    /* From the external QA pass, validated by reading before anything was changed: FM.projects.create()
+       ran BEFORE applyScene(), and applyScene RETURNS FALSE rather than throwing on a malformed file —
+       with no `else` on that branch. So a bad file left you in a brand-new EMPTY project named after
+       it, with no message at all, and the project count went 1 → 2. A second bad file made 3.
+       ⚠️ THAT READS EXACTLY LIKE "the import destroyed my project", which is the worst possible reading
+       of what was actually a no-op. Silence is not neutral when the screen has visibly changed.
+       Driven through importObject, which exists because the ORDER is the bug and a file input is not
+       something a test can fill. */
+    if (!FM.storage || typeof FM.storage.importObject !== 'function') throw new Error('FM.storage.importObject is gone — the import order is untestable again');
+    const realToast = FM.toast;
+    const said = [];
+    const count = () => (FM.projects && FM.projects.list ? (FM.projects.list() || []).length : 0);
+    try {
+      FM.toast = function (m) { said.push(String(m || '')); };
+      const before = count();
+      const bad = [
+        [{ app: 'freemotion', project: { name: 'no layers', width: 100, height: 100 } }, /layers list/i, 'a file with no layers array'],
+        [{ app: 'not-us', project: {}, layers: [] }, /not a FreeMotion/i, 'a file from another app'],
+        [{ app: 'freemotion', project: { name: 'huge', width: 100, height: 100 }, layers: new Array(2500).fill({ type: 'shape' }) }, /2500 layers/, 'an absurd layer count'],
+        [null, /not a FreeMotion project/i, 'nothing at all'],
+      ];
+      for (const [obj, wants, what] of bad) {
+        said.length = 0;
+        const ok = await FM.storage.importObject(obj);
+        if (ok) throw new Error('importing ' + what + ' reported success');
+        if (count() !== before)
+          throw new Error('importing ' + what + ' left ' + (count() - before) + ' junk project(s) behind — that is what reads as "the import destroyed my project"');
+        if (!said.length) throw new Error('importing ' + what + ' said NOTHING — the screen changes and no message explains it, which is the whole complaint');
+        if (!wants.test(said.join(' | ')))
+          throw new Error('importing ' + what + ' said "' + said.join(' | ') + '", which does not tell the user what was actually wrong');
+      }
+      /* THE CONTROL. Without it, a change that refused EVERY file would pass every assertion above and
+         look like a fix. */
+      said.length = 0;
+      const good = await FM.storage.importObject({ app: 'freemotion', project: { name: 'x673 good', width: 200, height: 200, duration: 3, fps: 30 }, layers: [] });
+      if (!good) throw new Error('a well-formed project file was refused: ' + said.join(' | '));
+      if (count() !== before + 1) throw new Error('a good import did not create its project');
+    } finally {
+      FM.toast = realToast;
+      // leave no probe projects behind
+      try {
+        const list = (FM.projects.list() || []).filter(p => /x673 good/.test(p.name || ''));
+        for (const p of list) if (FM.projects.remove) await FM.projects.remove(p.id);
+      } catch (e) {}
+    }
+  });
 })();

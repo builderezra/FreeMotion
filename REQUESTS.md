@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.50
+> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.51
 >
-> **State:** v14.50, 1109 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.51, 1110 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -27409,8 +27409,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **The 380px check every release runs could never have caught this** — the phone has its own
       layout. The new test sweeps the *band height* instead, which is the real input.
 
-- [ ] **673 — Malformed project import creates a junk project and says nothing.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **673 — Malformed project import creates a junk project and says nothing.**
       ✅ **VALIDATED BY READING** (`js/storage.js:996-1001`): `FM.projects.create()` runs BEFORE
       `applyScene()`, and `applyScene` returns `false` rather than throwing when the file has no
       `layers` array. There is no `else` on that branch — **so a bad file leaves you in a new empty
@@ -27419,6 +27418,24 @@ re-opened #480, which I had marked done and had not fixed.
       **It reads exactly like "the import destroyed my project"**, which is the worst possible reading
       of a no-op.
       ➡️ Validate before creating, and say what was wrong on the false branch.
+
+
+      ═══ ✅ **30 AUG (v14.51) — IT CHECKS THE FILE BEFORE IT MAKES ANYTHING NOW.** ═══
+      🔑 **The order was the whole bug.** The project got created first and the file was checked second
+      — and the check *returns false* rather than throwing, with nothing on that branch. So a bad file
+      left you in a **new, empty project named after it, with no message**, and your project count went
+      up. A second bad file made another one.
+      ⚠️ **That reads exactly like "the import destroyed my project"** — which is the worst possible
+      reading of something that actually did nothing. **Silence is not neutral when the screen has
+      visibly changed.**
+      ✅ **Now:** nothing is created until the file passes, and the failure **says which thing was
+      wrong** — another app's file, a truncated download, or one too big to open — because those are
+      different problems and you can act on the difference. A file that will not even parse gets its own
+      sentence instead of a shrug.
+      📊 **Measured across five files:** no-layers, wrong-app, 2500-layers and null all refuse with a
+      real reason and **leave your project count untouched**; a good file still imports.
+      🧪 That last one is in the test as a **control** — without it, a change that refused *every* file
+      would have passed every other assertion and looked like a fix.
 
 - [ ] **674 — The QA pass's remaining UI findings, and its own corrections.**
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
@@ -27513,3 +27530,75 @@ re-opened #480, which I had marked done and had not fixed.
       only sees brightness and colour spread, and Posterize is a STRUCTURAL effect it cannot see.
       **Condemning two existing filters on a metric too blunt to describe them is exactly the failure
       you asked me to avoid**, so they are untouched and this is written down instead.
+
+- [ ] **676 — Opening the add menu opens it TWICE.** (30 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > also add to the list when you open the add menu it opens twice for some reason
+      ⏳ **Logged the moment he said it.** Two shapes this could take and they need different fixes: the
+      sheet ANIMATING twice (one open, played over itself — the hinge added in #612 is new and is a
+      candidate), or the open HANDLER firing twice (a click and a pointer event both landing, the same
+      family as #648's tap/click double-toggle).
+      🔑 **Ask the DOM which it is before designing anything:** count how many times the open path runs
+      for one tap, and how many times the body rebuilds. One open drawn twice is CSS; two opens is a
+      listener.
+
+- [ ] **677 — 🔴 STILL NO AUDIO IN AN EXPORT — and this time the whole soundtrack was TWO SOUND
+      EFFECTS.** (30 Aug.)
+      **STATUS: 🟠 NEEDS ONE PASTE FROM YOUR PHONE — see the bottom.**
+      His words, verbatim:
+      > also i just exported a video with the same normal settings as usual and got no audio again, not
+      > that it was a silent video but the video was locked on mute in my camera role coz audio was
+      > entirely absent, in the video i only had two sound effects for audio and that was it
+      🔗 **This is #215 / #604 / #662 recurring — but it carries the most specific detail he has ever
+      given.** The whole soundtrack was **two sound effects** — the app's own generated ones, not
+      imported music — and the file came back with **no audio track at all**, which is why his camera
+      roll showed it as muted rather than merely silent.
+      🧪 **I REPRODUCED HIS EXACT SETUP ON DESKTOP AND IT WORKED, which is a finding rather than a
+      shrug.** Two sound effects added through the real `FM.sfx.add` path, nothing else with sound:
+      · they arrive as ordinary `video` layers carrying a real file (a WAV through the video loader), so
+        the mixer takes them — **no drops, nothing suppressed**;
+      · the mix has real signal — **raw peak 1.166**, turned down x0.853;
+      · the finished file **decodes to 3.07s of audio at peak 0.937**, and the report reads
+        `audio TRACK WRITTEN`.
+      **So "sound effects only" does not break the path by itself.** Whatever this is, it is his device.
+      ❓ **THE ONE THING THAT SETTLES IT, and it is a paste rather than an answer:** export something
+      with sound on your phone, then **Settings → "Your last export" → Copy**, and send it. That report
+      was **fixed in v14.35** — before that it could hand back a PREVIOUS export's verdict, which is a
+      large part of why three months of asking never resolved this. It is trustworthy now, and it names
+      which of the six loss paths it was.
+
+- [ ] **678 — Stress-test the draggable ADD-LAYER row and the draggable TIMELINE — he says both are
+      often buggy.** (30 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > play around with the draggable up and down add layer and timeline coz both often have a lot of
+      > issues
+      🔑 **This is a hunt, not a repair — he is pointing at an area, not reporting a symptom.** So the
+      deliverable is MEASUREMENTS: drive both drags for real at 380px and at a desktop width, and write
+      down what actually happens rather than what the code looks like it does.
+      ⚠️ **The add-row drag has form.** #521 records three separate repairs (#357, #443, #480) that were
+      all measured at 380px — the one width where the add row is a full-height track row — while on PC
+      it is a 7px LINE, every row below it sat a third of a row off, and dropping below the marker was
+      unreachable. **So the bug lived in the width nothing tested, through three repairs that each came
+      back green.** Anything found here must be checked at BOTH widths for that reason.
+
+- [ ] **679 — 💡 HIS IDEA: a layer whose colour is KEYFRAMED should show that as colour ALONG its
+      timeline bar.** (30 Aug.)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, verbatim:
+      > Have a genious idea, when you change the colour of a layer the layer colour on the timeline
+      > changes, but what if you do key frames and the layer keeps changing colour? Make the layer on the
+      > timeline also change colour, like the star of the layer will be green and you'll see it fade to
+      > blue later on the layer, not like an animation, still colours along the layer where it changes
+      🔑 **The key phrase is "not like an animation".** He does not want the bar to animate as the
+      playhead moves — he wants the bar to be a **static gradient of the colour over time**, so the whole
+      colour arc is readable at a glance without playing anything. That is a strip chart, not a preview.
+      ➡️ **Where it plugs in:** the clip already takes its colour from the layer, so the change is from a
+      flat fill to a `linear-gradient` built by sampling the animated colour property at each keyframe
+      and mapping keyframe TIME to a percentage along the bar.
+      ⚠️ **Two things to get right, both measurable:** the stops must be positioned by the clip's own
+      trim/speed mapping (a trimmed or speed-ramped clip's keyframes are not evenly spaced on screen),
+      and a layer with ONE colour or none must look exactly as it does today — a gradient with one stop
+      is a flat fill, so that should fall out, but it needs asserting rather than assuming.
+      ⚠️ **#545 applies** — it is a look, so draw it and show him before it ships.
