@@ -1,8 +1,9 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.62
+> ## 📌 WHAT I NEED FROM YOU — updated 31 Aug at v14.63
 >
-> **State:** v14.62, 1131 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.63, 1133 tests green, tree clean. **#686 is CLOSED — all 13 bugs from the hunt you
+> asked for are fixed.** Next up: your motion blur (#687) and the light/dark memory (#688). **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -27755,8 +27756,8 @@ re-opened #480, which I had marked done and had not fixed.
 
       ═══ ✅ **30 AUG (v14.57) — FIXED.** It calls the history that exists. Worth noting it was guarded
       by an `if`, which is why it failed in total silence for however long it has been there.
-- [ ] **686 — The rest of the 30 Aug bug hunt: 13 more confirmed defects, none of them data loss.**
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **686 — The rest of the 30 Aug bug hunt: 13 more confirmed defects, none of them data loss.**  ✅ v14.58–v14.63
+      **DONE — all thirteen fixed, each with a test that fails without it.**
       A hunt he asked for (*"go find some bugs"*) reported 23 findings; 17 survived an adversarial pass
       that tried to kill each one line by line. Six were data loss (#680, #681, #682–#685). These are the
       other eleven, worst first — **each one is confirmed in the source, not a hunch**:
@@ -27802,10 +27803,12 @@ re-opened #480, which I had marked done and had not fixed.
              and the bar does not, every time for image→image. The strip cache is keyed by layer.id,
              which a replace does not change, and every other part of its key is geometry that an
              image→image swap leaves identical. `layer.mediaRev` was already being kept for another bug.
-      12. [ ] **Cancelling the Audio-tab file picker leaves the app stuck in audio-only mode** — the next
-             video imported comes in as a soundtrack with no picture.
-      13. [ ] **Press-hold-to-reorder an effect row is eaten by the sheet-dismiss swipe** — the panel
-             slides down instead of the effect moving.
+      12. [x] **Cancelling the Audio-tab file picker leaves the app stuck in audio-only mode** — the next  ✅ v14.63
+             video imported comes in as a soundtrack with no picture. Fixed on all three routes into the
+             picker; the timeline's own "Import media…" bypasses the Add menu and would have been missed.
+      13. [x] **Press-hold-to-reorder an effect row is eaten by the sheet-dismiss swipe** — the panel  ✅ v14.63
+             slides down instead of the effect moving. The grip was already excluded; a press-hold
+             cannot be, because at pointerdown nobody knows yet what the gesture will become.
 
 
       ═══ ✅ **30 AUG (v14.58) — CLAUSES 1 AND 2 FIXED, and they were one root cause.** ═══

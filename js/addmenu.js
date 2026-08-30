@@ -32,9 +32,16 @@ window.FM = window.FM || {};
      is not treated as a video: `FM._wantAudioOnly` tells the importer that this batch was asked for from
      the Audio tab, and a video picked here has its SOUND taken out. */
   var ACCEPT_AUDIO = 'audio/*,video/*,.mp3,.m4a,.aac,.wav,.flac,.ogg,.oga,.opus,.aif,.aiff,.caf,.wma,.amr,.mp4,.mov,.m4v';
-  function pickFiles(accept) {
+  /* `wantAudio` IS ASSIGNED ON EVERY PICK, NOT SET ON ONE BRANCH (#686). The flag used to be raised by
+     audioImport() and cleared only by handleFiles() when files actually arrived — so DISMISSING the
+     Audio picker left it raised, and the next ordinary import turned a video into a soundtrack with no
+     picture. The comment below audioImport() had already named that outcome exactly, as the thing a
+     time-based clear would cause; consuming it on use has the same failure, reached by cancelling
+     instead of by waiting. Assigning it here means a stale `true` cannot survive the next pick at all. */
+  function pickFiles(accept, wantAudio) {
     var fi = document.getElementById('file-input');
     if (!fi) return;
+    FM._wantAudioOnly = !!wantAudio;
     fi.setAttribute('accept', accept || ACCEPT_ALL);
     fi.click();
     // restore on the next tick — the click has already opened the picker with the value above, and
@@ -42,13 +49,16 @@ window.FM = window.FM || {};
     setTimeout(function () { fi.setAttribute('accept', ACCEPT_ALL); }, 0);
   }
   FM._audioAccept = function () { return ACCEPT_AUDIO; };   // seam: the suite checks a video is reachable from the Audio tab
-  function fileImport() { pickFiles(ACCEPT_ALL); }
+  function fileImport() { pickFiles(ACCEPT_ALL, false); }
   function audioImport() {
     /* Stamped for ONE batch and consumed by handleFiles, not cleared on a timer: a picker can sit open
        for as long as the user likes, so anything time-based would either expire mid-choice or leak into
-       the next ordinary import and silently turn a video into a sound file. */
-    FM._wantAudioOnly = true;
-    pickFiles(ACCEPT_AUDIO);
+       the next ordinary import and silently turn a video into a sound file.
+       ⚠️ …and it leaked anyway, by the OTHER route the same sentence describes (#686): cancel the
+       picker and handleFiles never runs, so nothing ever consumes the stamp. pickFiles now assigns it
+       on every pick, and js/app.js clears it on the input's `cancel` event, so a dismissed picker
+       cannot hand the next import a soundtrack with no picture. */
+    pickFiles(ACCEPT_AUDIO, true);
   }
 
   function shp(kind, opts) { return function () { FM.addShapeLayer && FM.addShapeLayer(kind, opts); }; }

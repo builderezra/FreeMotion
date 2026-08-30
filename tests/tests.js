@@ -55121,4 +55121,89 @@
       if (FM.timeline) FM.timeline.rebuild();
     }
   });
+
+  test('import: cancelling the Audio picker does not turn the next import into a soundtrack', { item: 'q686-audio-cancel' }, async function () {
+    /* #686. FM._wantAudioOnly means "this batch was asked for from the Audio tab", and it was raised
+     * when the picker opened and cleared ONLY by handleFiles when files actually arrived. Dismiss the
+     * picker and handleFiles never runs, so the stamp sat there and the next ordinary import came in
+     * as a soundtrack with no picture. The comment above the write had already named that outcome —
+     * "leak into the next ordinary import and silently turn a video into a sound file" — as the thing
+     * a time-based clear would cause. Consuming it on use fails the same way, reached by cancelling. */
+    const fi = document.getElementById('file-input');
+    if (!fi) throw new Error('#file-input is gone — the harness, not the feature');
+    const was = FM._wantAudioOnly;
+    try {
+      FM._wantAudioOnly = true;                       // exactly what opening the Audio picker leaves behind
+      fi.dispatchEvent(new Event('cancel'));
+      if (FM._wantAudioOnly) throw new Error('dismissing the file picker left the Audio-tab stamp raised — the next video imported arrives as a soundtrack with no picture');
+    } finally { FM._wantAudioOnly = was; }
+
+    // …and the stamp must be ASSIGNED on every pick rather than raised on one branch, or a cancel that
+    // never fires its event (or any other route into the picker) leaks the same way.
+    const src = await (await fetch('../js/addmenu.js?boot=' + Date.now())).text();
+    const at = src.indexOf('function pickFiles');
+    if (at < 0) throw new Error('pickFiles is gone from addmenu.js');
+    const body = src.slice(at, at + 700);
+    if (!/FM\._wantAudioOnly\s*=\s*!!wantAudio/.test(body)) throw new Error('pickFiles no longer assigns FM._wantAudioOnly on every pick, so a stale Audio-tab stamp can survive into the next import');
+    const tl = await (await fetch('../js/timeline.js?boot=' + Date.now())).text();
+    const imp = tl.indexOf("label: 'Import media…'");
+    if (imp < 0) throw new Error("the timeline's Import media… item is gone");
+    if (!/_wantAudioOnly\s*=\s*false/.test(tl.slice(imp, imp + 260))) throw new Error("the timeline's Import media… clicks the file input DIRECTLY, bypassing the Add menu, so it must clear the Audio stamp itself or a stale one makes it a soundtrack");
+  });
+
+  test('effects: press-hold to reorder is not stolen by the sheet-dismiss swipe', { item: 'q686-reorder-sheet' }, async function () {
+    /* #686. js/mobile.js's swipe-down-to-dismiss excludes `.fx-grip` at pointerdown, and its comment
+     * records why, measured: the sheet called setPointerCapture(), every later move AND the pointerup
+     * were retargeted at the panel, endReorder never ran, and the drop was thrown away. The PRESS-HOLD
+     * path could not be excluded the same way — at pointerdown nobody knows yet whether the gesture
+     * becomes a reorder, because the hold does not fire for another 280ms, by which time the sheet has
+     * already armed. Queue 383's non-passive touchmove cannot cover it either: preventDefault stops the
+     * BROWSER's pan, and the dismiss is a JS listener on an ancestor, which preventDefault cannot
+     * silence. So the reorder announces itself and the sheet checks. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'Dragy', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200 });
+      L.start = 0; L.duration = 3;
+      L.effects = [{ type: 'blur', enabled: true }, { type: 'shake', enabled: true }];
+      FM.scene.layers.push(L);
+      FM.refreshAll();
+      FM.selectLayer(L.id);
+      FM.inspector.openCategory('effects');
+      await sleep(200);
+
+      const rows = [].slice.call(document.querySelectorAll('.fx-row'));
+      if (rows.length < 2) throw new Error('expected 2 effect rows, saw ' + rows.length + ' — the harness, not the feature');
+      const head = rows[0].querySelector('.fx-head');
+      if (!head) throw new Error('the effect row has no .fx-head to press — the harness, not the feature');
+      if (FM._fxReordering) throw new Error('something left FM._fxReordering raised before this test pressed anything — the harness, not the feature');
+
+      const r = head.getBoundingClientRect();
+      const at = (type, y) => head.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX: Math.round(r.left + r.width * 0.45), clientY: y, pointerId: 41, button: 0, isPrimary: true }));
+      at('pointerdown', Math.round(r.top + r.height / 2));   // away from the grip, so this is the press-hold path
+      await sleep(420);                                      // the hold is 280ms
+
+      if (!FM._fxReordering) throw new Error('a press-hold on an effect row started a reorder without telling anything — the bottom sheet cannot know to stand down, so its dismiss claims the drag and the panel slides shut instead of the effect moving');
+
+      window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 41, clientX: Math.round(r.left + r.width * 0.45), clientY: Math.round(r.top + r.height / 2) }));
+      head.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 41, clientX: Math.round(r.left + r.width * 0.45), clientY: Math.round(r.top + r.height / 2) }));
+      await sleep(60);
+      if (FM._fxReordering) throw new Error('the reorder flag stayed raised after the drag ended — the bottom sheet can now never be swiped closed');
+
+      // …and the sheet must actually consult it, BEFORE it claims the gesture. A flag nothing reads is
+      // the "reads as protection and cannot fire" shape this whole queue keeps turning up.
+      const mob = await (await fetch('../js/mobile.js?boot=' + Date.now())).text();
+      const om = mob.indexOf('function onMove');
+      if (om < 0) throw new Error('makeSwipeDown.onMove is gone from mobile.js');
+      const body = mob.slice(om, om + 900);
+      if (!/_fxReordering/.test(body)) throw new Error('the sheet-dismiss no longer checks whether an effect reorder is in progress, so it will claim the drag and close the panel instead');
+      if (body.indexOf('_fxReordering') > body.indexOf('claimed = true')) throw new Error('the sheet checks the reorder flag only AFTER it has already claimed the gesture — by then setPointerCapture has retargeted the pointerup and the drop is thrown away');
+    } finally {
+      FM._fxReordering = false;
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0);
+      FM.refreshAll();
+    }
+  });
 })();

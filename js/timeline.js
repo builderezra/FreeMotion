@@ -3823,7 +3823,7 @@ window.FM = window.FM || {};
         if (FM.clipboard && FM.clipboard.length) menu.push({ label: 'Paste (' + FM.clipboard.length + ')', action: () => FM.pasteClipboard && FM.pasteClipboard() });
         if (FM.kfClipboard && FM.kfClipboard.length) menu.push({ label: 'Paste keyframe(s) at playhead', action: () => pasteKfAtPlayhead() });
         menu.push({ sep: true });
-        menu.push({ label: 'Import media…', action: () => { const fi = document.getElementById('file-input'); if (fi) fi.click(); } });
+        menu.push({ label: 'Import media…', action: () => { FM._wantAudioOnly = false; const fi = document.getElementById('file-input'); if (fi) fi.click(); } });   // ordinary import: say so, or a stale Audio-tab stamp makes this a soundtrack (#686)
         FM.contextMenu.show(e.clientX, e.clientY, menu);
       });
       window.addEventListener('pointermove', (e) => {

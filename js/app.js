@@ -5202,6 +5202,12 @@ window.FM = window.FM || {};
     const fileInput = document.getElementById('file-input');
     document.getElementById('btn-import').addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', () => { handleFiles(Array.from(fileInput.files)); fileInput.value = ''; });
+    /* DISMISSING THE PICKER MUST UNSTAMP THE BATCH (#686). FM._wantAudioOnly says "this batch was asked
+       for from the Audio tab", and it was consumed only by handleFiles — which never runs if the picker
+       is cancelled. The stamp then sat there until the NEXT import, which arrived as a soundtrack with
+       no picture. This covers every route rather than just the Add menu's: the timeline's own "Import
+       media…" clicks this input directly, so a fix confined to pickFiles would have missed it. */
+    fileInput.addEventListener('cancel', () => { FM._wantAudioOnly = false; });
     const txtBtn = document.getElementById('btn-add-text');   // removed from the toolbar (dup of the Add menu) — guard it
     if (txtBtn) txtBtn.addEventListener('click', () => FM.addTextLayer());
     const addBtn = document.getElementById('btn-add-layer');

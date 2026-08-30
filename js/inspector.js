@@ -1238,6 +1238,17 @@ window.FM = window.FM || {};
       // own measured height, so a tall row shifts its siblings by exactly its own size.
       const list = row.parentNode; if (!list) return;
       mode = 'reorder'; row._g.moved = true;
+      /* TELL THE SHEET TO STAND DOWN (#686). js/mobile.js's swipe-down-to-dismiss already excludes
+         `.fx-grip` from claiming a gesture, because that handle carries touch-action:none and keeps
+         feeding pointermoves — its comment records the measured failure: the sheet called
+         setPointerCapture(), every later move AND the pointerup were retargeted at the panel, so
+         endReorder never ran and the drop was thrown away. The PRESS-HOLD path cannot be excluded the
+         same way: at pointerdown nobody knows yet whether this becomes a reorder, because the hold
+         does not fire for another 280ms — by which time the sheet has already armed itself. So the
+         reorder announces itself instead, and the sheet checks. Queue 383's non-passive touchmove
+         cannot cover this: preventDefault stops the BROWSER's own pan, and the sheet-dismiss is a JS
+         listener on an ancestor, which preventDefault does not silence. */
+      FM._fxReordering = true;
       rows = Array.prototype.slice.call(list.children);
       rects = rows.map(r => r.getBoundingClientRect());  // measured BEFORE transforms — robust to mixed heights (#9)
       slotH = (rects[idx] ? rects[idx].height : 44) + 7;
@@ -1264,6 +1275,7 @@ window.FM = window.FM || {};
       });
     }
     function endReorder() {
+      FM._fxReordering = false;
       _fxReorderAt = performance.now();   // …so the click that follows this drop cannot toggle the accordion
       if (rows) rows.forEach(r => { r.style.transform = ''; r.style.transition = ''; });
       row.classList.remove('fx-dragging'); row.style.transform = '';
@@ -1356,6 +1368,7 @@ window.FM = window.FM || {};
       try { head.releasePointerCapture(e.pointerId); } catch (_) {}
       if (aborted) { swDx = 0; swVx = 0; }   // pointercancel = the OS stole the gesture — it must NEVER count as a completed swipe-delete
       if (mode === 'swipe') endSwipe(e); else if (mode === 'reorder') endReorder();
+      FM._fxReordering = false;   // belt and braces: cleared on EVERY exit, so an aborted drag can never leave the sheet unable to close
       mode = null;
     };
     head.addEventListener('pointerup', finish);

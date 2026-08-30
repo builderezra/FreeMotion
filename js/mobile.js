@@ -118,6 +118,12 @@ window.FM = window.FM || {};
       }
       function onMove(e) {
         if (!active || e.pointerId !== pid) return;
+        /* AN EFFECT REORDER OUTRANKS THE DISMISS (#686). The list above excludes `.fx-grip` at
+           pointerdown, but a press-hold ANYWHERE on an effect row cannot be excluded there: the hold
+           does not fire for 280ms, so at pointerdown this handler cannot know what the gesture will
+           become, and it has already armed. Checked here instead, where the answer is known — and
+           only before `claimed`, so a dismiss already in flight still completes. */
+        if (!claimed && FM._fxReordering) { active = false; return; }
         var dy = e.clientY - startY, dx = e.clientX - startX;
         if (!claimed) {
           if (dy < -4) { active = false; return; }                 // upward → not a dismiss
