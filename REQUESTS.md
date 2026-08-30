@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.60
+> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.61
 >
-> **State:** v14.60, 1127 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.61, 1129 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -27786,10 +27786,14 @@ re-opened #480, which I had marked done and had not fixed.
              supported, so the pill will not appear — the defect fixed is that the app had no way to
              tell you if it ever were not. The export uses the same plain 2D canvases as the preview,
              so spacing can never apply in one and not the other.
-      8. [ ] **"Speed so the clip starts at the playhead" scales keyframes about the wrong pivot** — the
-             animation stops matching the bar.
-      9. [ ] **`layer._fromPreset` is stripped when the project is saved**, so "Update <preset>" — the
-             whole point of #407 — disappears on the first reload.
+      8. [x] **"Speed so the clip starts at the playhead" scales keyframes about the wrong pivot** — the  ✅ v14.61
+             animation stops matching the bar. Measured: a 2s clip with keyframes on its first and last
+             frame, re-timed to start at t=1, put them at 0.5 and 1.5 instead of 1 and 2 — the animation
+             finished half a second before the clip. It holds the RIGHT edge, so it now pivots there.
+      9. [x] **`layer._fromPreset` is stripped when the project is saved**, so "Update <preset>" — the  ✅ v14.61
+             whole point of #407 — disappears on the first reload. Renamed to `fromPreset`: the
+             underscore IS the codebase's mark for "never saved", so the name was the bug. The comment
+             above it claimed it saved with the project, which had never been true.
       10. [ ] **A video with no readable dimensions is filed in the library as a SONG, permanently** —
              so a screen recording he imports is not where he would look for it.
       11. [ ] **Replace media leaves the OLD clip's filmstrip on the timeline bar** — the canvas updates
@@ -27824,10 +27828,58 @@ re-opened #480, which I had marked done and had not fixed.
       the group's motion is already baked INTO the plate. The file says as much about the cheap
       sub-frame mode a few hundred lines up — *"useless for a mover — the mover's displacement sits
       inside that one plate and is therefore identical in every slice."*
-      **Question for him, and it decides whether this is one bug or two:** Directional Blur *by design*
-      does not read movement — its own catalog line reads *"a fixed smear along an angle you choose…
-      a still clip blurs exactly as much as a moving one."* So if that one was on in the hope it would
-      follow the motion, it was never going to, group or not. If it applies NO smear at all on a group,
-      that is a second and separate defect. Ask before building.
+      **MEASURED, so no question is needed after all.** A 100px square at 140px/s, ink width at t=1:
+
+      | case | no blur | with Motion Blur (Object) |
+      |---|---|---|
+      | plain layer moving | 100px | **132px** — it smears |
+      | **group moving** | 100px | **100px** — not one pixel |
+
+      Directional Blur on a group changes 21,600 pixels, identical to the same effect on a plain layer,
+      **so that half is NOT broken.** It simply never follows movement — its own catalog line reads
+      *"a fixed smear along an angle you choose… a still clip blurs exactly as much as a moving one."*
+      So "neither version works" is ONE real bug plus one effect doing exactly what it says: he had
+      Directional Blur on expecting it to trail the motion, and it never does that for anything.
+      (Both probes needed real params — with `params:{}` even the PLAIN layer does not blur, so the
+      first run of this measurement proved nothing and said so rather than exonerating the group.)
       Fix shape, once that is answered: the proxy needs to carry the GROUP's transform (or the sampler
       needs to be told what moved), so "its own movement" is the movement the viewer can see.
+
+- [ ] **688 — Light/dark preference is forgotten on reload, and the old loading animation should go.
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, 30 Aug (verbatim):**
+      > *"Make it so that when you save your preference of either light mode or dark mode it actually
+      > remembers next time you load into the app and also get rid of the old loading screen animation
+      > and just make it so like when you're in dark mode it does the same loading screen transition as
+      > a light mode one but it just transitions into dark the dark background. It does a black
+      > transition and yeah make it actually remember cause currently if it gets forgets I mean."*
+      His clauses, ticked one at a time — this entry cannot be marked done while any is unticked:
+      1. [ ] **The light/dark choice must survive a reload.** *"make it actually remember cause
+             currently if it gets forgets"* — so it is being saved and not read back, read back too
+             late (after first paint), or written to the wrong key.
+      2. [ ] **Get rid of the OLD loading screen animation.**
+      3. [ ] **Dark mode gets the SAME loading transition light mode has** — not its own separate
+             animation — *"it just transitions into dark the dark background… a black transition."*
+      **Read the source while blocked on a mutation run — and clauses 1 and 3 look like ONE bug.**
+      The preference IS saved: it is `homeLight` inside `fm.settings`, written to localStorage by
+      settings.js's `save()`. Nothing is losing it. What is wrong is WHEN it is applied.
+      `js/settings.js:95` sets `document.documentElement.setAttribute('data-home', …)` — and settings.js
+      loads at the BOTTOM of the body, after ~1.5MB of scripts. The light look is gated in CSS on
+      `html[data-home="light"]`, so until that line runs the attribute is ABSENT and the rules simply
+      do not apply. Every load therefore paints one look first and snaps to the real one afterwards.
+      🔑 **index.html already documents this exact failure — for the attribute NEXT TO IT.** Its opening
+      comment explains that `data-theme` had to be moved INTO THE MARKUP for precisely this reason:
+      *"every load painted the bare styles.css first and only snapped to the real appearance once
+      settings.js ran… the Alight-Motion-shaped app Ezra kept seeing flash on refresh, reported as #292
+      and again as #306."* `data-home` was never given the same treatment.
+      **Fix shape:** put `data-home` in the markup the way `data-theme` is — but it cannot be a constant,
+      because unlike the glass theme this one is a real preference, so it needs a tiny inline script in
+      `<head>` that reads `fm.settings` and stamps the attribute BEFORE first paint. index.html's own
+      note warns about the trap in testing it: by the time the suite runs, settings.js has long since
+      set the attribute, so a test reading `document.documentElement` passes either way and proves
+      nothing — **the guard has to read index.html AS SHIPPED.**
+      ⚠️ Still to pin down before building: which way round he actually sees it. The CSS gates LIGHT on
+      the attribute, so an absent attribute should paint DARK first — yet he describes dark mode getting
+      the LIGHT loading screen, which is the opposite. `homeLight` also selects the intro ("the new
+      intro" is in the setting's own description), so the intro may read the preference by a different
+      route or at a different moment. Check the splash/intro path before assuming one fix covers both.

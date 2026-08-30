@@ -39330,6 +39330,12 @@
       // or the test fails on the fixture rather than on the thing under test.
       viaPreview.id = viaButton.id;                       // apply() also rebases x/y off the CURRENT value
       viaPreview.clipColor = viaButton.clipColor;
+      /* …and `fromPreset`, which is a DELIBERATE difference rather than a fixture one: apply() is
+         applyTo() PLUS a note of where the look came from, and a preview tile is not an application,
+         so it must not claim provenance. That difference has always existed; until #686 the field was
+         called `_fromPreset` and jsonReplacer stripped it out of this very comparison, so the test
+         could not see it. It is asserted just below instead of being quietly levelled away. */
+      var provApply = null, provPreview = null;
       var layers0 = FM.scene.layers.slice();
       try {
         FM.scene.layers.push(viaButton); FM.selectLayer(viaButton.id);
@@ -39340,6 +39346,10 @@
       }
       FM.layerPresets.applyTo(data, viaPreview);
 
+      provApply = viaButton.fromPreset; provPreview = viaPreview.fromPreset;
+      if (provApply !== '__test_preset') throw new Error('the Apply button left no note of which preset the layer came from, so "Update <preset>" can never appear (#686)');
+      if (provPreview != null) throw new Error('a preview TILE claimed the layer came from a preset — a throwaway preview doc must not record provenance');
+      delete viaButton.fromPreset;   // levelled only AFTER being asserted, so the rest compares like for like
       var a = JSON.stringify(viaButton, FM.jsonReplacer), b = JSON.stringify(viaPreview, FM.jsonReplacer);
       if (a !== b) throw new Error('the preview path and the Apply path produced DIFFERENT layers — a preview that can disagree with its own button is worse than no preview.\nApply:   ' + a.slice(0, 300) + '\nPreview: ' + b.slice(0, 300));
       if (!(viaButton.effects && viaButton.effects.length === 1 && viaButton.effects[0].type === 'blur'))
@@ -43386,7 +43396,7 @@
 
       FM.layerPresets.save('rt-probe', src);
       FM.layerPresets.apply('rt-probe', dst);
-      if (dst._fromPreset !== 'rt-probe') throw new Error('applying a preset did not record where the look came from — there is nothing to update');
+      if (dst.fromPreset !== 'rt-probe') throw new Error('applying a preset did not record where the look came from — there is nothing to update');
 
       dst.transform.rotation = 77;                       // …the edit
       if (!FM.layerPresets.update('rt-probe', dst)) throw new Error('update() refused to write the layer back over its own preset');
@@ -54895,5 +54905,96 @@
     // there is the same defect wearing the other sign.
     const live = build(() => ({ letter: true, word: true }));
     if (live.tag) throw new Error('the Spacing slider is badged "does nothing here" on a device where spacing WORKS — a wrong warning is the same defect as a wrong reassurance (#661)');
+  });
+
+  test('speed: solving so the clip STARTS at the playhead keeps the animation glued to the bar', { item: 'q686-speed-pivot' }, async function () {
+    /* #686. The button's own tooltip promises "the end stays put", and the end does stay put — but the
+     * KEYFRAMES did not. FM.scaleLayerKeyframes defaults its pivot to layer.start, which is correct for
+     * every other caller (the speed slider and the trim grips all hold the LEFT edge). This one holds
+     * the RIGHT edge and slides the start, and it had already overwritten layer.start with the new one
+     * before scaling — so the keyframes were pivoted on the edge that MOVED, and measured from it too.
+     * A 2s clip re-timed to start at t=1 put its keyframes at 0.5 and 1.5: the animation finished half
+     * a second before the clip did, and its first keyframe no longer sat on its first frame.
+     * Driven through the real button, not by calling the maths, because the defect was in the CALL. */
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time;
+    const dur0 = FM.scene.project.duration;
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'sq', shape: 'rect', x: 200, y: 200, shapeW: 100, shapeH: 100 });
+      L.start = 0; L.duration = 2; L.speed = 1;
+      L.transform.x = { kf: [{ t: 0, v: 100, e: 'linear' }, { t: 2, v: 300, e: 'linear' }] };
+      FM.scene.layers.push(L);
+      FM.selectLayer(L.id);
+      FM.refreshAll();
+      FM.time = 1;   // the end stays at 2, the start comes to 1, so everything halves
+      FM.inspector.openCategory('speed');
+      await new Promise(r => setTimeout(r, 250));
+
+      const btn = [].slice.call(document.querySelectorAll('button[title]')).find(b => /STARTS at the playhead/.test(b.title));
+      if (!btn) throw new Error('the "clip STARTS at the playhead" button is not in the Speed panel — the harness, not the feature');
+      btn.click();
+      await new Promise(r => setTimeout(r, 200));
+
+      const end = L.start + L.duration;
+      const kf = L.transform.x.kf.map(k => Math.round(k.t * 1000) / 1000);
+      const near = (a, b) => Math.abs(a - b) < 0.02;
+      // The bar itself first: if this is wrong the keyframe check below is measuring the wrong thing.
+      if (!near(L.start, 1) || !near(end, 2)) throw new Error('the clip did not land where the button promises (start ' + L.start + ', end ' + end + ', expected 1 and 2) — the harness, not the feature');
+      // A keyframe that sat on the clip's first frame must still sit on its first frame, and one on
+      // its last frame must still sit on its last frame. That is what "the animation matches the bar"
+      // means, and it is the whole of the bug.
+      if (!near(kf[0], L.start) || !near(kf[kf.length - 1], end)) {
+        throw new Error('the animation came unglued from the bar: keyframes at ' + JSON.stringify(kf) +
+                        ' for a clip running ' + L.start + '..' + end +
+                        (near(kf[0], 0.5) && near(kf[1], 1.5) ? ' — pivoted on the edge that moved, so the animation ends half a second before the clip' : ''));
+      }
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0);
+      FM.time = t0;
+      FM.scene.project.duration = dur0;
+      FM.refreshAll();
+    }
+  });
+
+  test('presets: the layer remembers which preset it came from AFTER a save', { item: 'q686-frompreset' }, function () {
+    /* #686. Queue 407's second clause was his round trip: "open a preset, edit the layer, press this,
+     * and that preset now holds what you can see." The note of the origin was written to
+     * `layer.fromPreset`, and FM.jsonReplacer drops EVERY key beginning with an underscore — that
+     * prefix is this codebase's own mark for "runtime only, never saved". So the marker was thrown
+     * away by the very next save and the "Update <preset>" button was gone on the first reload. The
+     * comment above the write even claimed "it saves and reloads with the project like everything
+     * else", which had never been true.
+     * Driven through the real apply() and the real replacer, and it checks BOTH directions: the marker
+     * must survive, and an underscore-prefixed field must still be stripped — or the "fix" would just
+     * be a broken replacer, which would start saving every scratch field in the app. */
+    if (!FM.layerPresets || typeof FM.layerPresets.apply !== 'function') throw new Error('FM.layerPresets.apply is gone — the harness, not the feature');
+    const key = FM.layerPresets._key;
+    const saved0 = localStorage.getItem(key);
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const NAME = 'q686 probe preset';
+    try {
+      const src = FM.makeLayer('shape', { name: 'src', shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80 });
+      const dst = FM.makeLayer('shape', { name: 'dst', shape: 'rect', x: 200, y: 200, shapeW: 80, shapeH: 80 });
+      FM.scene.layers.length = 0; FM.scene.layers.push(src, dst);
+      FM.selectLayer(dst.id);
+      FM.layerPresets.save(NAME, src);
+      if (!FM.layerPresets.list().some(x => x.name === NAME)) throw new Error('the preset did not save, so nothing can be applied from it — the harness, not the feature');
+
+      FM.layerPresets.apply(NAME, dst);
+      const marker = dst.fromPreset;
+      if (marker !== NAME) throw new Error('applying a preset left no note of where the layer came from (got ' + JSON.stringify(marker) + '), so "Update ' + NAME + '" can never appear');
+
+      // THE SAVE. This is the exact serialiser the project is written with.
+      dst._scratch = 'runtime only';
+      const round = JSON.parse(JSON.stringify(dst, FM.jsonReplacer));
+      if (round.fromPreset !== NAME) throw new Error('the preset marker did not survive being saved (got ' + JSON.stringify(round.fromPreset) + ') — "Update <preset>" disappears on the first reload, which is the whole of queue 407 clause 2');
+      if ('_scratch' in round) throw new Error('an underscore-prefixed field survived the save too — the replacer has been broken rather than the field renamed, and every scratch value in the app is now being written into his projects');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0);
+      if (saved0 == null) localStorage.removeItem(key); else localStorage.setItem(key, saved0);
+      FM.refreshAll();
+    }
   });
 })();

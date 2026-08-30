@@ -523,8 +523,15 @@ window.FM = window.FM || {};
          it and then it automatically updates that preset." Without a note of the origin there is nothing to
          update — the layer arrives carrying a look with no idea whose it was.
          It is a plain field on the layer, so it saves and reloads with the project like everything else,
-         and applying a DIFFERENT preset overwrites it rather than accumulating. */
-      layer._fromPreset = name;
+         and applying a DIFFERENT preset overwrites it rather than accumulating.
+         ⚠️ AND THAT SENTENCE WAS FALSE FOR AS LONG AS IT HAS BEEN WRITTEN DOWN (#686). The field was
+         named `_fromPreset`, and FM.jsonReplacer drops EVERY key beginning with an underscore — that
+         prefix is the codebase's own mark for "runtime only, never saved". So the note of the origin
+         was thrown away by the next save, and "Update <preset>" — the entire point of queue 407's
+         second clause — was gone on the first reload. The fix is the NAME, not an exception in the
+         replacer: this value is meant to persist, so it must not wear the mark that means it does not.
+         Nothing needs migrating, because nothing was ever written to migrate. */
+      layer.fromPreset = name;
       afterFx();
       if (FM.canvasEdit) FM.canvasEdit.update();
     },
@@ -5399,7 +5406,16 @@ window.FM = window.FM || {};
         // duration actually put it, not to the playhead we were aiming at, or a clip clamped by its
         // source would end up somewhere neither edge was asked for.
         if (!toEnd) layer.start = end - layer.duration;
-        if (durBefore > 0 && FM.scaleLayerKeyframes) FM.scaleLayerKeyframes(layer, layer.duration / durBefore);
+        /* PIVOT ON THE EDGE THAT DID NOT MOVE (#686). scaleLayerKeyframes defaults its pivot to
+         * layer.start, which is right for every other caller — the speed slider and the trim grips all
+         * hold the LEFT edge. This one does not: "start at the playhead" holds the RIGHT edge and slides
+         * the start, and the line above has just overwritten layer.start with the new one. So the
+         * keyframes were pivoted on the edge that moved, and measured from it too, which is wrong twice
+         * over: a keyframe that sat on the clip's first frame no longer sat on its first frame, and the
+         * whole animation drifted out of step with the bar it belongs to. Pivoting on `end` is the same
+         * arithmetic as "offset from the OLD start, scaled, laid off the NEW start" — end is fixed by
+         * construction here, including after the source clamp, because start is derived from it. */
+        if (durBefore > 0 && FM.scaleLayerKeyframes) FM.scaleLayerKeyframes(layer, layer.duration / durBefore, toEnd ? layer.start : end);
         if (FM.refitGroupsFor) FM.refitGroupsFor(layer);   // queue 626 — the group follows its contents
         const newEnd = layer.start + layer.duration;
         if (newEnd > FM.scene.project.duration) FM.scene.project.duration = newEnd;
@@ -5728,7 +5744,7 @@ window.FM = window.FM || {};
       /* UPDATE THE PRESET THIS LAYER CAME FROM (queue 407 clause 2). It appears only when the layer was
          applied from one that still exists, so it is never a dead control — and it closes his round trip:
          open a preset, edit the layer, press this, and that preset now holds what you can see. */
-      const from = layer._fromPreset;
+      const from = layer.fromPreset;
       if (from && FM.layerPresets.list().some(x => x.name === from)) {
         const up = el('button', 'fx-act insp-preset-update', 'Update “' + from + '”');
         up.title = 'Write this layer’s current look + animations back over the “' + from + '” preset';
