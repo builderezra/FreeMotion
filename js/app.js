@@ -5161,7 +5161,7 @@ window.FM = window.FM || {};
       FM._warnOversizeAfterLanding(restored);
       // Seed the Media library from media already sitting in existing projects, THEN sweep — the
       // sweep's keep-set reads the library, so seeding first is what stops it eating those blobs.
-      if (FM.mediaLib) { FM.mediaLib.backfill(); FM.mediaLib.repairBackfilled(); }   // heal indexes poisoned before the fix
+      if (FM.mediaLib) { FM.mediaLib.backfill(); FM.mediaLib.repairBackfilled(); FM.mediaLib.repairMisfiledVideos(); }   // heal indexes poisoned before the fix
       if (FM.projects) FM.projects.pruneOrphans();   // boot sweep of orphaned media blobs
     }).catch(err => {
       // ONE unopenable document must never cost the user every OTHER project. FM.home.init() lives
@@ -5181,7 +5181,7 @@ window.FM = window.FM || {};
         FM.toast(up ? 'That project could not be opened — you are back at your projects'
                     : 'That project could not be opened. Reload the app to get back to your projects.', 6000);
       }, 600);
-      if (FM.mediaLib) { try { FM.mediaLib.backfill(); FM.mediaLib.repairBackfilled(); } catch (e) {} }
+      if (FM.mediaLib) { try { FM.mediaLib.backfill(); FM.mediaLib.repairBackfilled(); FM.mediaLib.repairMisfiledVideos(); } catch (e) {} }
     });
     // ‹ crumb pill exits the Edit Group view
 

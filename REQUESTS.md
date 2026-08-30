@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.61
+> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.62
 >
-> **State:** v14.61, 1129 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.62, 1131 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -27794,10 +27794,14 @@ re-opened #480, which I had marked done and had not fixed.
              whole point of #407 — disappears on the first reload. Renamed to `fromPreset`: the
              underscore IS the codebase's mark for "never saved", so the name was the bug. The comment
              above it claimed it saved with the project, which had never been true.
-      10. [ ] **A video with no readable dimensions is filed in the library as a SONG, permanently** —
-             so a screen recording he imports is not where he would look for it.
-      11. [ ] **Replace media leaves the OLD clip's filmstrip on the timeline bar** — the canvas updates
-             and the bar does not, every time for image→image.
+      10. [x] **A video with no readable dimensions is filed in the library as a SONG, permanently** —  ✅ v14.62
+             so a screen recording he imports is not where he would look for it. The File's own type was
+             the missing evidence. Rows already misfiled are repaired. (First attempt broke voice memos
+             — .webm is both audio and video — caught by an existing test, so the MIME type wins now.)
+      11. [x] **Replace media leaves the OLD clip's filmstrip on the timeline bar** — the canvas updates  ✅ v14.62
+             and the bar does not, every time for image→image. The strip cache is keyed by layer.id,
+             which a replace does not change, and every other part of its key is geometry that an
+             image→image swap leaves identical. `layer.mediaRev` was already being kept for another bug.
       12. [ ] **Cancelling the Audio-tab file picker leaves the app stuck in audio-only mode** — the next
              video imported comes in as a soundtrack with no picture.
       13. [ ] **Press-hold-to-reorder an effect row is eaten by the sheet-dismiss swipe** — the panel

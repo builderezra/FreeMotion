@@ -1631,7 +1631,18 @@ window.FM = window.FM || {};
           // on every tap/selection/keyframe edit, and re-allocating + re-blitting a ~1MB canvas per
           // video clip each time is what churns iOS Safari's canvas memory. During a pinch reuse the
           // cached strip at ANY width (CSS stretches it; the pinch-end rebuild re-crisps it).
-          const sKey = stripW + '|' + (layer.trimStart || 0) + '|' + layer.duration + '|' + (m.stripFrames ? m.stripFrames.length : -1);
+          /* mediaRev IS IN THE KEY BECAUSE NOTHING ELSE IN IT CHANGES ON A REPLACE (#686). stripCache is
+             keyed by layer.id, and "Replace media…" deliberately swaps the file UNDER THE SAME LAYER,
+             so the id is the one thing guaranteed not to move. Every other part of this key is
+             geometry: on an image→image swap the width, the trim and the duration are all untouched
+             (the duration re-clamp below only runs for a video), and an image always yields exactly
+             ONE strip frame — so the key was byte-identical before and after and the OLD canvas was
+             handed straight back. The canvas updated, the bar did not, every single time.
+             layer.mediaRev was already being incremented on every replace — it exists so the swap
+             lands in the undo history — and it is the only value in scope that actually tracks WHICH
+             FILE this is. Being part of the layer's saved state, it also means undo puts the old
+             strip back rather than leaving the new one behind. */
+          const sKey = stripW + '|' + (layer.trimStart || 0) + '|' + layer.duration + '|' + (m.stripFrames ? m.stripFrames.length : -1) + '|' + (layer.mediaRev || 0);
           const hit = stripCache.get(layer.id);
           let strip = (hit && (hit.key === sKey || pinch)) ? hit.canvas : null;
           if (!strip) {

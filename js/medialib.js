@@ -59,11 +59,32 @@ window.FM = window.FM || {};
       // A song imports through the VIDEO path (an mp3 is a <video> with a 0×0 picture), so `kind`
       // alone can't tell a track from a clip. Record it, so the Add menu can file songs under Audio
       // instead of burying them among the video thumbnails (Ezra).
-      const isAud = (rec.kind || 'image') !== 'image' && !(rec.width > 0 && rec.height > 0);
+      /* A DIMENSIONLESS VIDEO IS A MEASUREMENT THAT FAILED, NOT A SONG (#686). "No picture" was the
+       * only evidence used here, and it is not sufficient: js/media.js reports width from
+       * el.videoWidth, which is 0 whenever metadata has not arrived by the time finish() runs — the
+       * timeout path, and the MediaRecorder-webm path the file above already flags as "Infinity until
+       * forced". A screen recording is exactly that shape. The verdict was then written as an EXPLICIT
+       * `audio: true`, and isAudio() gives an explicit flag priority ON PURPOSE, so the row could
+       * never be healed: it sat under Add → Audio with a music note, permanently, and the clip was
+       * simply not where he would look for it.
+       * The corroborating evidence was in hand the whole time and never asked for — the File's own
+       * type and name. A file the OS calls a video is never filed as a song just because this app
+       * could not measure it. A file with no type and no dimensions still falls through to the old
+       * heuristic, because for that genuinely ambiguous case the old guess is the right one. */
+      /* ⚠️ THE MIME TYPE OUTRANKS THE EXTENSION, and .webm is why. It is a container used for BOTH
+       * audio and video, so a voice memo recorded in the app arrives as `audio/webm` with a .webm
+       * name — and an extension-first test calls that a video and buries his recordings in the Media
+       * tab. The existing voice-import test caught exactly that. The extension is the FALLBACK, for
+       * the case the type is missing or unhelpful; a file that states it is audio is audio. */
+      const fname = rec.file.name || '', ftype = rec.file.type || '';
+      const saysAudio = /^audio\//i.test(ftype);
+      const saysVideo = !saysAudio && (/^video\//i.test(ftype) || /\.(mp4|m4v|mov|webm|mkv|avi|3gp)$/i.test(fname));
+      const isAud = (rec.kind || 'image') !== 'image' && !(rec.width > 0 && rec.height > 0) && !saysVideo;
       const entry = {
         mid: newMid(), key: key, fp: fp,
         name: rec.file.name || (isAud ? 'Audio' : rec.kind === 'video' ? 'Video' : 'Photo'),
         kind: rec.kind || 'image',
+        type: ftype,
         audio: isAud,
         w: rec.width || 0, h: rec.height || 0,
         dur: rec.kind === 'video' ? (rec.duration || 0) : 0,
@@ -206,6 +227,27 @@ window.FM = window.FM || {};
       });
       if (n) writeIndex(list);
       try { localStorage.setItem('fm.medialibAudioFix', '1'); } catch (e) {}
+      return n;
+    },
+
+    /* …and the same repair for rows ALREADY written the wrong way (#686). An explicit `audio: true`
+       wins over every heuristic, by design, so a video misfiled once stays misfiled for good — his
+       library can already contain them. Same one-time-flag shape as repairBackfilled above, and it
+       decodes nothing: a stored name ending .mp4/.mov/.webm is enough to know the row is wrong,
+       and no real song has ever had one. */
+    repairMisfiledVideos() {
+      try { if (localStorage.getItem('fm.medialibVidFix')) return 0; } catch (e) { return 0; }
+      const list = readIndex();
+      let n = 0;
+      list.forEach(e => {
+        if (!e || e.audio !== true) return;
+        const nm = e.name || '', ty = e.type || '';
+        if (/^audio\//i.test(ty)) return;   // stated audio outranks any extension — see add() on .webm
+        if (!(/^video\//i.test(ty) || /\.(mp4|m4v|mov|webm|mkv|avi|3gp)$/i.test(nm))) return;
+        e.audio = false; n++;
+      });
+      if (n) writeIndex(list);
+      try { localStorage.setItem('fm.medialibVidFix', '1'); } catch (e) {}
       return n;
     },
 

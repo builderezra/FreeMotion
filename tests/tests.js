@@ -54997,4 +54997,128 @@
       FM.refreshAll();
     }
   });
+
+  test('library: a video whose size could not be read is not filed as a song', { item: 'q686-medialib-kind' }, function () {
+    /* #686. mediaLib.add() decided "song" from ONE piece of evidence — no picture dimensions — and
+     * that evidence is not sufficient. js/media.js reports width from el.videoWidth, which is 0
+     * whenever metadata has not arrived by the time it settles: the timeout path, and the
+     * MediaRecorder-webm path that file itself flags as "Infinity until forced". A screen recording is
+     * exactly that shape. The verdict was then written as an EXPLICIT audio:true, and isAudio() gives
+     * an explicit flag priority ON PURPOSE (a previous fix depends on that), so the row could never be
+     * healed — the clip sat under Add → Audio with a music note, for good.
+     * Both directions are asserted. A fix that filed everything as video would "pass" the first half
+     * and quietly bury his songs among the video thumbnails, which is the bug this all started as. */
+    const KEY = 'fm.medialib';
+    const saved0 = localStorage.getItem(KEY);
+    const fixFlag = localStorage.getItem('fm.medialibVidFix');
+    try {
+      localStorage.removeItem(KEY);
+      const file = (name, type) => ({ name: name, type: type, size: 1234, lastModified: 1 });
+      const add = (name, type, w, h) => {
+        const mid = FM.mediaLib.add({ kind: 'video', file: file(name, type), width: w, height: h, duration: 3 }, 'k_' + name);
+        if (!mid) throw new Error('mediaLib.add refused ' + name + ' — the harness, not the feature');
+        return FM.mediaLib.list().find(e => e.mid === mid);
+      };
+
+      // A screen recording that did not report its size in time.
+      const rec = add('screen recording.mp4', 'video/mp4', 0, 0);
+      if (FM.mediaLib.isAudio(rec)) throw new Error('a .mp4 whose dimensions were not readable was filed as a SONG — it will sit under Add > Audio with a music note and is not where he would look for it');
+
+      // A webm with no MIME type at all: the extension alone has to carry it.
+      const webm = add('capture.webm', '', 0, 0);
+      if (FM.mediaLib.isAudio(webm)) throw new Error('a .webm with no MIME type was filed as a song — the filename alone is enough to know better');
+
+      // A VOICE MEMO: audio/webm with a .webm name. The extension says video and the type says audio,
+      // and the type has to win — the first version of this fix tested the extension first and buried
+      // every in-app recording in the Media tab. An existing voice test caught it; this pins it here.
+      const memo = add('voice note.webm', 'audio/webm', 0, 0);
+      if (!FM.mediaLib.isAudio(memo)) throw new Error('an audio/webm voice recording was filed as a video — .webm carries both, so the MIME type has to outrank the extension');
+
+      // THE CONTROL, and it matters more than either: a real song must still be a song.
+      const song = add('a tune.mp3', 'audio/mpeg', 0, 0);
+      if (!FM.mediaLib.isAudio(song)) throw new Error('an mp3 stopped being filed as audio — songs are now buried among the video thumbnails, which is the complaint this whole feature came from');
+
+      // …and a row already written the wrong way gets corrected, since an explicit flag wins forever.
+      localStorage.removeItem('fm.medialibVidFix');
+      const list = FM.mediaLib.list();
+      const bad = list.find(e => e.mid === rec.mid);
+      bad.audio = true;                      // exactly what the old code wrote
+      const songRow = list.find(e => e.mid === song.mid);
+      localStorage.setItem(KEY, JSON.stringify(list));
+      if (!FM.mediaLib.isAudio(FM.mediaLib.list().find(e => e.mid === rec.mid))) throw new Error('could not stage a misfiled row, so the repair below proves nothing — the harness, not the feature');
+
+      FM.mediaLib.repairMisfiledVideos();
+      const after = FM.mediaLib.list();
+      if (FM.mediaLib.isAudio(after.find(e => e.mid === rec.mid))) throw new Error('a library already carrying a misfiled video keeps it forever — an explicit audio:true beats every heuristic by design, so nothing else can undo it');
+      if (!FM.mediaLib.isAudio(after.find(e => e.mid === songRow.mid))) throw new Error('the repair pass also un-filed a real song — it must only touch rows whose own name says video');
+    } finally {
+      if (saved0 == null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, saved0);
+      if (fixFlag == null) localStorage.removeItem('fm.medialibVidFix'); else localStorage.setItem('fm.medialibVidFix', fixFlag);
+    }
+  });
+
+  test('timeline: Replace media repaints the clip bar, it does not keep the old picture', { item: 'q686-replace-strip' }, async function () {
+    /* #686. "Replace media…" deliberately swaps the file UNDER THE SAME LAYER, so layer.id — which is
+     * what stripCache is keyed by — is the one thing guaranteed not to change. Every other part of the
+     * cache key is geometry: on an image→image swap the width, the trim and the duration are all
+     * untouched, and an image always yields exactly ONE strip frame. So the key came out byte-identical
+     * and the OLD canvas was handed straight back. The canvas updated and the bar did not, every time.
+     * Read as PIXELS off the real filmstrip, because "a canvas was rebuilt" is not the claim — the
+     * claim is that the bar shows the new picture. */
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const plate = (color) => {
+      const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+      const g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, 64, 64);
+      return c;
+    };
+    const wait = (ms) => new Promise(r => setTimeout(r, ms));
+    const stripPixel = async () => {
+      for (let i = 0; i < 40; i++) {
+        const cv = document.querySelector('.clip-filmstrip');
+        if (cv && cv.width > 0) {
+          try {
+            const d = cv.getContext('2d', { willReadFrequently: true }).getImageData(Math.floor(cv.width / 2), 16, 1, 1).data;
+            if (d[3] > 40) return [d[0], d[1], d[2]];
+          } catch (e) {}
+        }
+        await wait(60);
+        FM.timeline.rebuild();
+      }
+      return null;
+    };
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('image', { name: 'pic', x: 200, y: 200 });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers.push(L);
+      FM.media.set(L.id, { kind: 'image', el: plate('#ff0000'), width: 64, height: 64, duration: 0 });
+      FM.refreshAll();
+      FM.timeline.rebuild();
+
+      const before = await stripPixel();
+      if (!before) throw new Error('no filmstrip was painted at all, so there is nothing to compare — the harness, not the feature');
+      if (!(before[0] > 150 && before[2] < 90)) throw new Error('the first filmstrip is not the red plate that was loaded (got rgb ' + before + ') — the harness, not the feature');
+
+      // Exactly what FM.replaceMediaWith does to an image→image swap: a new record under the SAME
+      // layer id, the old strip frames released, and mediaRev stepped.
+      const old = FM.media.get(L.id);
+      if (FM.clearClipStrip) FM.clearClipStrip(old);
+      FM.media.set(L.id, { kind: 'image', el: plate('#0000ff'), width: 64, height: 64, duration: 0 });
+      L.mediaRev = (L.mediaRev || 0) + 1;
+      FM.refreshAll();
+      FM.timeline.rebuild();
+
+      const after = await stripPixel();
+      if (!after) throw new Error('the filmstrip vanished after the replace');
+      if (!(after[2] > 150 && after[0] < 90)) {
+        throw new Error('the clip bar still shows the OLD picture after Replace media (rgb ' + after + ', wanted blue)' +
+                        (after[0] > 150 ? ' — it is the red plate the layer no longer has: the strip cache is keyed by layer.id, which a replace does not change' : ''));
+      }
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0);
+      FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
 })();
