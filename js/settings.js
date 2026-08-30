@@ -507,6 +507,38 @@ window.FM = window.FM || {};
        * Same shape as "Your last export" directly above, for the same reason: a toast he might miss
        * is not a report, and these three entries have already proved that a number nobody can reach
        * is a number that changes nothing. */
+      /* ═══ LAST ERROR (queue 674) ═══════════════════════════════════════════════════════════════
+       * Same shape as the two reports below it, for the same reason those exist: a message he might
+       * miss is not a report. Until today a failed export alerted "Export failed: blit is not defined"
+       * — a variable name, on a phone, uncopyable. The sentence he sees now says what to try; the
+       * stack, the device and what he was doing live here.
+       * Only rendered when there IS one: an empty "Last error" block on a healthy install is a row of
+       * nothing that says something went wrong. */
+      let errText = '';
+      try { errText = localStorage.getItem('fm.lastError') || ''; } catch (e) {}
+      if (errText) {
+        const errWrap = el('div', 'set-row set-perf');
+        const errOut = el('pre', 'set-perf-out');
+        errOut.textContent = errText;
+        const errCopy = el('button', 'set-action', 'Copy'); errCopy.type = 'button';
+        errCopy.addEventListener('click', async () => {
+          try { await navigator.clipboard.writeText(errOut.textContent); if (FM.toast) FM.toast('Copied \u2014 paste it to me', 3000); }
+          catch (e) { try { const ta = document.createElement('textarea'); ta.value = errOut.textContent; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); if (FM.toast) FM.toast('Copied \u2014 paste it to me', 3000); } catch (e2) {} }
+        });
+        const errClear = el('button', 'set-action', 'Clear'); errClear.type = 'button';
+        errClear.addEventListener('click', () => {
+          try { localStorage.removeItem('fm.lastError'); } catch (e) {}
+          errWrap.remove(); if (FM.toast) FM.toast('Cleared');
+        });
+        const errHead = el('div', 'set-rowtext');
+        errHead.appendChild(el('div', 'set-label', 'Last error'));
+        errHead.appendChild(el('div', 'set-hint', 'Something went wrong recently. This is what happened, in full \u2014 send it to me and I can usually tell you why.'));
+        const errBtns = el('div', 'set-perf-btns');
+        errBtns.append(errCopy, errClear);
+        errWrap.append(errHead, errBtns, errOut);
+        body.appendChild(group(errWrap));
+      }
+
       const audWrap = el('div', 'set-row set-perf');
       const audOut = el('pre', 'set-perf-out');
       let audText = '';

@@ -54325,4 +54325,119 @@
       if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
     }
   });
+
+  test('674 — a failure tells him what to try, and keeps the technical detail where he can send it', { item: '674' }, async function () {
+    /* From the external QA pass, and it put the problem well: the SPECIFIC messages in js/app.js are
+       genuinely good, and the catch-alls undo them. Until this release a failed export on his phone
+       read "Export failed: blit is not defined" — a variable name, on a phone, with no way to copy it
+       and nothing he could do about it.
+       Two needs pulling opposite ways: he needs a sentence that suggests an action, and I need the
+       stack or the next report is "it just didn't work" again. So the sentence goes on screen and the
+       detail goes where his other two reports already live. */
+    if (typeof FM.reportError !== 'function') throw new Error('FM.reportError is gone — the catch-alls are back to alerting raw error text');
+    const realAlert = window.alert;
+    const keep = (function () { try { return localStorage.getItem('fm.lastError'); } catch (e) { return null; } })();
+    let said = null;
+    try {
+      try { localStorage.removeItem('fm.lastError'); } catch (e) {}
+      window.alert = function (m) { said = String(m || ''); };
+      FM.reportError('exporting a video', new Error('blit is not defined'),
+                     'The export stopped before it finished, and the file was not made.');
+      if (said == null) throw new Error('nothing was shown to the user at all');
+      /* THE POINT: the raw message must NOT be what he reads. */
+      if (/blit is not defined/.test(said))
+        throw new Error('the raw error text is still being put in front of him: ' + JSON.stringify(said));
+      if (!/stopped before it finished/.test(said))
+        throw new Error('he was not told what actually happened in plain words: ' + JSON.stringify(said));
+      if (!/Settings/.test(said))
+        throw new Error('he was not told where the detail is, so the report he could send me is invisible');
+      /* …AND THE DETAIL MUST SURVIVE. A human sentence with the cause thrown away is the other half of
+         the same bug: the next report would be "it just didn't work" again. */
+      let rep = '';
+      try { rep = localStorage.getItem('fm.lastError') || ''; } catch (e) {}
+      if (!rep) throw new Error('nothing was recorded, so there is nothing for him to copy');
+      for (const want of [/blit is not defined/, /while\s+exporting a video/, /device\s+\S/]) {
+        if (!want.test(rep)) throw new Error('the saved report is missing ' + want + ':\n' + rep);
+      }
+    } finally {
+      window.alert = realAlert;
+      try { if (keep == null) localStorage.removeItem('fm.lastError'); else localStorage.setItem('fm.lastError', keep); } catch (e) {}
+    }
+  });
+
+  test('674 — no catch-all puts a raw error message on screen', { item: '674' }, async function () {
+    /* The guard that stops this coming back. Asserted against the source because these branches only
+       run when something has genuinely gone wrong, which a test cannot arrange for each one. */
+    const src = await (await fetch('../js/app.js?boot=' + Date.now())).text();
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const bad = code.match(/alert\([^)]*\be\.message\b[^)]*\)/g) || [];
+    if (bad.length)
+      throw new Error('a catch-all is putting a raw error message in front of him again — ' + JSON.stringify(bad.slice(0, 2)) + '. Use FM.reportError(where, e, human): the sentence goes on screen, the stack goes to Settings.');
+  });
+
+  test('680 — undo does not drag a clip that starts before zero forward to 0', { item: '680' }, async function () {
+    /* 🔴 DATA LOSS, found by a bug hunt he asked for. A NEGATIVE START IS A DELIBERATE, SUPPORTED
+       STATE: js/timeline.js floors a clip drag at -(duration - 0.1) under the comment "AM: a clip can
+       be dragged PAST 0 into negative start — it keeps going", and this suite itself builds a
+       `start: -2` scene elsewhere as valid input.
+       But `history.restore()` runs the IMPORT sanitiser over every layer of the restored snapshot, and
+       that clamped start to a minimum of 0 — so ONE undo of an unrelated edit dragged every past-zero
+       clip in the project forward to 0. Redo could not recover it (redo sanitises identically) and
+       undo autosaves on the next line, so the wrong position reached disk immediately.
+       ⚠️ WHY THE EXISTING TEST DID NOT CATCH IT, which is the part worth keeping: it feeds -1e999,
+       i.e. -Infinity, which returns via the non-finite branch and NEVER REACHES THE CLAMP. That test
+       pins "must be finite" and passes identically with or without the negative floor. This one feeds
+       a FINITE negative, which is the value a real drag produces. */
+    if (!FM.storage || typeof FM.storage._sanitizeLayers !== 'function') throw new Error('FM.storage._sanitizeLayers is gone — history.restore runs it, so this invariant is unreachable');
+    const layers = [{ id: 'x680', type: 'shape', start: -4.9, duration: 5 }];
+    FM.storage._sanitizeLayers(layers);
+    if (layers[0].start === 0)
+      throw new Error('a clip deliberately dragged to start: -4.9 was clamped to 0 — one undo would do this to every past-zero clip in his project, redo could not bring it back, and it autosaves immediately');
+    if (Math.abs(layers[0].start - (-4.9)) > 1e-6)
+      throw new Error('a finite negative start came back as ' + layers[0].start + ' instead of -4.9');
+    /* …and the protection that mattered must survive: non-finite and absurd values still get repaired,
+       or this fix would have traded a data-loss bug for a corruption one. */
+    const bad = [{ id: 'a', type: 'shape', start: -1e999, duration: 5 },
+                 { id: 'b', type: 'shape', start: -999999, duration: 5 },
+                 { id: 'c', type: 'shape', start: 'nonsense', duration: 5 }];
+    FM.storage._sanitizeLayers(bad);
+    for (const l of bad) {
+      if (!isFinite(l.start)) throw new Error('a non-finite start survived sanitising on layer ' + l.id);
+      if (l.start < -3600) throw new Error('an absurd start (' + l.start + ') survived on layer ' + l.id);
+    }
+  });
+
+  test('681 — splitting a clip writes the new half media immediately, like every other path that makes one', { item: '681' }, async function () {
+    /* 🔴 DATA LOSS. Split mints a media record under the tail's FRESH layer id; nothing has that id in
+       IndexedDB yet, so only the 600ms debounced autosave can persist it. Every other path that mints
+       a record under a new id closes that window ON PURPOSE and says so — import's comment reads
+       "write the new media blob to IDB now, not on the 600ms debounce → survives a quick tab
+       background/close" — and duplicate, paste and replace-media do the same. Split was missed.
+       The flush on the way out makes it worse: pagehide/visibilitychange CANCEL the pending save and
+       write the scene document only, so the layer is recorded and its footage is not.
+       Asserted against the source: provoking it needs a real clip, a real split and a real
+       backgrounding inside a 600ms window, which is three things a test cannot arrange — but the
+       missing call is one line and its absence is exactly the bug. */
+    const src = await (await fetch('../js/app.js?boot=' + Date.now())).text();
+    /* Anchored on the DEFINITION, not the first mention — the first version searched for the name and
+       found a CALL site earlier in the file, so it sliced the wrong function and reported the fix
+       missing when it was present. */
+    const i = src.indexOf('FM.splitLayer = ');
+    if (i < 0) throw new Error('FM.splitLayer is gone');
+    /* The end anchor is the NEXT top-level assignment, found by pattern rather than by guessing a
+       name: the first version looked for `FM.splitAllAtPlayhead`, which does not exist in this file, so
+       it fell back to a fixed 6000-character window — and the line it was looking for sits about 8000
+       in. It reported the fix missing while the fix was right there. */
+    const after = src.slice(i + 20);
+    const m = /\n  FM\.[A-Za-z_$][\w$]*\s*=/.exec(after);
+    const body = src.slice(i, m ? i + 20 + m.index : i + 14000);
+    if (!/FM\.storage\.save\(\)/.test(body))
+      throw new Error('splitLayer no longer persists the new half immediately — if he backgrounds the app within 600ms of a cut, the tail half comes back with no footage while the project still lists it');
+    /* The order matters: the write has to happen before the history commit hands control back, or the
+       debounce is all that is left again. */
+    const savePos = body.search(/FM\.storage\.save\(\)/);
+    const commitPos = body.search(/FM\.history\.commit\(\)/);
+    if (commitPos >= 0 && savePos > commitPos)
+      throw new Error('the media write now happens after the history commit — put it before, so nothing can return between minting the record and persisting it');
+  });
 })();

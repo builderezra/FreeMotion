@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.54
+> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.56
 >
-> **State:** v14.54, 1113 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.56, 1117 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -27669,3 +27669,49 @@ re-opened #480, which I had marked done and had not fixed.
       because document order happened to save it. And the label was still choosing its ink by measuring
       **one** colour, which is meaningless on an arc that can run from near-black to near-white. Both
       fixed and both now asserted.
+
+- [x] **680 — 🔴🔴 DATA LOSS: UNDO drags every clip that starts before 0 forward to 0, permanently.**
+      ✅ **VALIDATED IN THE SOURCE, then independently re-derived by a second pass that tried to refute
+      it line by line and could not.**
+      🔑 **A negative start is a DELIBERATE, supported state, not corruption.** `js/timeline.js` floors a
+      clip drag at `-(duration - 0.1)` with the comment *"AM: a clip can be dragged PAST 0 into negative
+      start — it keeps going"*, and the move-to-playhead path repeats the same floor. The suite itself
+      builds a `start: -2` scene as valid input.
+      🚨 **But `history.restore()` runs the IMPORT sanitiser over every layer of the snapshot**, and that
+      sanitiser clamps `start` to a minimum of 0. So **one undo re-clamps the whole scene**, not just the
+      layer being undone. **Redo cannot bring it back** — redo sanitises identically — and `undo()` calls
+      autosave on the next line, so the wrong position is written to disk immediately.
+      **The ordinary project load does NOT run that sanitiser**, which is why the value survives reloads
+      and dies only here. Duplicate, `.fmotion.json` import and template insert do it too.
+      ⚠️ **Why no test caught it:** the only test feeding a negative start uses `-1e999`, which is
+      `-Infinity` — it never reaches the clamp, because the non-finite branch returns first. That test
+      pins *"must be finite"* and passes identically with or without the negative clamp.
+      **Symptom:** he slides a clip left past zero to hide its head, edits something else, presses undo —
+      and the first clip jumps to 0 with the composition out of sync, unrecoverably.
+
+
+      ═══ ✅ **30 AUG (v14.56) — FIXED.** ═══
+      The floor is **-3600 instead of 0**: still finite, still bounded, just bounded **symmetrically**.
+      The protection that mattered — repairing a broken or absurd value — is untouched, and the new test
+      feeds a **finite** negative, because that is what a real drag produces, plus three repair cases so
+      the fix cannot trade data loss for corruption.
+
+- [x] **681 — 🔴 DATA LOSS: SPLIT does not persist the new half's media, unlike every other path that
+      ✅ **VALIDATED IN THE SOURCE and re-derived by a refutation pass.**
+      Splitting a clip mints a **new media record under a fresh layer id**. Nothing has that id in
+      IndexedDB yet, so the only thing that can write it is the debounced autosave — **600ms**.
+      🔑 **Every other path that does this closes that window on purpose, with a comment saying so:**
+      import (*"write the new media blob to IDB now, not on the 600ms debounce → survives a quick tab
+      background/close"*), duplicate, paste and replace-media all write immediately. **Split is the one
+      that was missed.**
+      🚨 **And the flush on the way out makes it worse rather than better:** `pagehide` /
+      `visibilitychange` cancel the pending save and write the scene document **only** — so the layer is
+      recorded and its footage is not.
+      **Symptom:** he cuts a clip and within 600ms the phone locks, a notification pulls him out, or he
+      swipes away. He comes back to both halves on the timeline and **the second one has no footage** —
+      the project says there is a clip there and the store has nothing under that id.
+
+
+      ═══ ✅ **30 AUG (v14.56) — FIXED.** ═══
+      One line, the same one import, duplicate, paste and replace-media all already have — placed
+      **before** the history commit, so nothing can return between minting the record and persisting it.

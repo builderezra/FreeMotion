@@ -1205,6 +1205,36 @@ window.FM = window.FM || {};
       setTimeout(expire, ms);
     }
   };
+  /* ═══ A SENTENCE FOR HIM, THE DETAIL FOR ME (queue 674) ═══════════════════════════════════════
+   * The QA pass put it well: the SPECIFIC messages in this file are genuinely good, and the catch-alls
+   * undo them. Until today a failed export on his phone read **"Export failed: blit is not defined"** —
+   * a variable name, on a phone, with no way to copy it and nothing he could do about it.
+   * Two things are needed and they pull in opposite directions: he needs a sentence that tells him what
+   * to try, and I need the technical detail or the next report is "it just didn't work" again. So the
+   * sentence goes on screen and the detail goes where the other two reports already live — Settings,
+   * with a Copy button — which is a habit he already has rather than a new one.
+   * Written on EVERY failure, including ones that alert something specific, because the useful half of
+   * a report is the stack and the device, and those never reached him at all before. */
+  FM.reportError = function (where, err, human) {
+    try {
+      const e = err || {};
+      const rep = [
+        'FreeMotion error report',
+        'when       ' + new Date().toISOString(),
+        'while      ' + where,
+        'message    ' + (e.message || String(e)),
+        'name       ' + (e.name || '-'),
+        'device     ' + (navigator.userAgent || '').slice(0, 140),
+        'app        ' + ((document.querySelector('#ver, .ver, #ver-m') || {}).textContent || '').trim(),
+        '',
+        (e.stack || '(no stack)'),
+      ].join('\n');
+      localStorage.setItem('fm.lastError', rep);
+    } catch (_) {}
+    try { console.error(where, err); } catch (_) {}
+    if (human) alert(human + '\n\nIf this keeps happening: Settings \u2192 “Last error” \u2192 Copy, and send it to me.');
+  };
+
   FM.hideToast = function () {
     const t = document.getElementById('toast');
     if (t) { t.classList.add('hidden'); t.onclick = null; t.onkeydown = null; t.classList.remove('toast-tap'); }
@@ -3622,6 +3652,16 @@ window.FM = window.FM || {};
     FM.scene.selectedIds = [B.id];
     FM.refreshAll();
     FM.seekVideosToTime();
+    /* ⚠️ WRITE THE TAIL HALF'S MEDIA NOW, NOT ON THE 600ms DEBOUNCE (queue 681).
+     * `reloadMediaTo` mints a media record under the tail's FRESH layer id, and nothing has that id in
+     * IndexedDB yet — so the only thing that can persist it is the debounced autosave. Every other path
+     * that mints a record under a new id already closes that window on purpose: import says so in as
+     * many words ("survives a quick tab background/close"), and duplicate, paste and replace-media do
+     * the same. Split was the one that was missed.
+     * The flush on the way out makes it worse rather than better: pagehide/visibilitychange CANCEL the
+     * pending save and write the scene document only — so the layer would be recorded and its footage
+     * would not, and the tail half comes back empty. */
+    if (FM.storage && FM.storage.save) FM.storage.save();
     if (FM.history) FM.history.commit();
   };
 
@@ -3988,7 +4028,7 @@ window.FM = window.FM || {};
         // Never fail silently: an unusable file used to vanish without a word, which reads as the
         // importer being broken rather than the file being unsupported.
         else alert('Can’t use “' + file.name + '” — FreeMotion takes video, images and audio.');
-      } catch (e) { console.error(e); alert(e.message || 'Could not load ' + file.name); }
+      } catch (e) { FM.reportError('importing “' + (file && file.name || 'a file') + '”', e, 'FreeMotion could not open “' + (file && file.name || 'that file') + '”.\n\nIf it plays elsewhere on this device it is usually the format — try exporting it as MP4 (video) or WAV/M4A (audio) and importing that.'); }
     }
   }
 
@@ -4584,7 +4624,9 @@ window.FM = window.FM || {};
       else if (e.message === 'CANCELLED') { /* silent */ }
       else if (e.message === 'FRAMES_TOO_BIG') alert('That PNG sequence is too large to build in memory. Shorten the range, lower the frame rate, or drop the resolution and try again.');
       else if (e.message === 'NO_ZIP_WRITER') alert('The frame-sequence exporter failed to load. Please hard-refresh and try again.');
-      else { console.error(e); alert('Export failed: ' + e.message); }
+      /* queue 674: was `alert('Export failed: ' + e.message)`, which on his phone read "Export failed:
+         blit is not defined" — a variable name he can do nothing with and cannot copy. */
+      else FM.reportError('exporting a video', e, 'The export stopped before it finished, and the file was not made.\n\nWorth trying: a shorter range, a lower resolution, or closing other tabs — most export failures are the browser running out of memory.');
     } finally {
       if (soloRestore) { soloRestore.forEach(([l, v]) => { l.solo = v; }); FM.requestRender(); }
       bar.style.width = '0%';
@@ -5179,7 +5221,7 @@ window.FM = window.FM || {};
     const sampleBtn = document.getElementById('btn-sample');
     if (sampleBtn) sampleBtn.addEventListener('click', async () => {
       sampleBtn.disabled = true; sampleBtn.textContent = 'Recording…';
-      try { await FM.addSampleClip(); } catch (e) { console.error(e); alert('Sample clip failed: ' + e.message); }
+      try { await FM.addSampleClip(); } catch (e) { FM.reportError('adding the sample clip', e, 'The sample clip could not be built on this device.'); }
       sampleBtn.disabled = false; sampleBtn.textContent = 'Sample clip';
     });
     document.getElementById('btn-export').addEventListener('click', showExportDialog);

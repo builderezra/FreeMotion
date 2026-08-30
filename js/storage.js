@@ -891,7 +891,22 @@ window.FM = window.FM || {};
   }
   function sanitizeTiming(l) {
     if (!l) return;
-    l.start = num(l.start, 0, 3600, 0);
+    /* ⚠️ THE FLOOR IS -3600, NOT 0, AND THAT IS A DATA-LOSS FIX (queue 680).
+     * A NEGATIVE START IS A DELIBERATE, SUPPORTED STATE. js/timeline.js floors a clip drag at
+     * `-(duration - 0.1)` under the comment "AM: a clip can be dragged PAST 0 into negative start — it
+     * keeps going", the move-to-playhead path repeats that floor, and the suite itself builds a
+     * `start: -2` scene as valid input. Clamping it to 0 here did not repair corruption; it destroyed
+     * something he had deliberately done.
+     * AND UNDO IS WHERE IT BIT. `history.restore()` runs this sanitiser over EVERY layer of the restored
+     * snapshot — so one undo of an unrelated edit dragged every past-zero clip in the project forward
+     * to 0. Redo could not bring it back (redo sanitises identically) and undo autosaves on the next
+     * line, so the wrong position reached disk immediately. The ordinary project load does NOT run
+     * this, which is why the value survived reloads and died only on undo, duplicate or import.
+     * ⚠️ WHY NO TEST CAUGHT IT: the only test feeding a negative start uses -1e999, which is -Infinity
+     * and returns via the non-finite branch above without ever reaching the clamp. That test pins
+     * "must be finite" and passes identically with or without this floor.
+     * The protection that mattered is kept: still finite, still bounded, just bounded symmetrically. */
+    l.start = num(l.start, -3600, 3600, 0);
     l.duration = num(l.duration, 0.05, 3600, 1);       // 0 would be a clip that cannot be selected or seen
     if (l.trimStart != null) l.trimStart = num(l.trimStart, 0, 3600, 0);
     // …and the two that may legitimately be animated: repair a broken plain value, never touch a keyframed one.
