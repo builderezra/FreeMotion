@@ -216,6 +216,49 @@ window.FM = window.FM || {};
     return (layer.clipColorSet && layer.clipColor) || shapeClipColor(layer) || layer.clipColor || '#3a5a8c';
   }
   FM._clipColorOf = clipColorOf;
+
+  /* ═══ A KEYFRAMED COLOUR, DRAWN ALONG THE CLIP (queue 679) ════════════════════════════════════
+   * His idea, verbatim: "what if you do key frames and the layer keeps changing colour? Make the layer
+   * on the timeline also change colour, like the star of the layer will be green and you'll see it fade
+   * to blue later on the layer, NOT LIKE AN ANIMATION, still colours along the layer where it changes".
+   * The last clause is the whole design: he does not want the bar to animate as the playhead moves — he
+   * wants the entire colour arc readable at once, as a static strip. So this is a chart of colour over
+   * time, not a preview.
+   * ⚠️ THE STOPS ARE PLACED BY THE CLIP'S OWN CLOCK, NOT BY RAW KEYFRAME TIME. A keyframe sits at a
+   * scene time; the bar spans the clip's trimmed, speed-mapped extent. Mapping one to the other through
+   * the same fxLocalTime the renderer uses is what stops a trimmed or ramped clip drawing its colours
+   * in the wrong places — which would be worse than not drawing them at all, because it would look
+   * deliberate.
+   * Returns null when there is nothing to show, so a layer with one colour or none is untouched — his
+   * own requirement, and the thing most likely to break quietly. */
+  function clipColorStops(layer) {
+    if (!layer || layer.type !== 'shape') return null;
+    const mode = FM.fillModeOf ? FM.fillModeOf(layer) : 'solid';
+    if (mode === 'gradient' || mode === 'media') return null;   // those already carry their own paint
+    const p = layer.fill;
+    if (!FM.isAnimated || !FM.isAnimated(p)) return null;
+    const kf = (p.kf || []).slice().sort((a, b) => a.t - b.t);
+    if (kf.length < 2) return null;
+    const dur = Math.max(0.0001, layer.duration || 0);
+    const start = layer.start || 0;
+    const seen = [];
+    for (const k of kf) {
+      /* Keyframe times are LOCAL to the layer in this app's model (the same clock evalProp is asked
+         with at layer.start + local). Clamped rather than dropped: a keyframe just off the end still
+         tells you which way the colour was heading at the edge. */
+      const pct = Math.max(0, Math.min(100, (k.t / dur) * 100));
+      const col = FM.evalProp(p, k.t);
+      if (typeof col !== 'string' || col[0] !== '#') return null;   // not a colour track after all
+      seen.push({ pct: pct, col: col });
+    }
+    // Every stop the same colour is a flat fill wearing a gradient's clothes — say so and let the
+    // ordinary path draw it, or a static layer would gain a pointless second code path.
+    if (seen.every(x => x.col === seen[0].col)) return null;
+    if (seen[0].pct > 0) seen.unshift({ pct: 0, col: seen[0].col });
+    if (seen[seen.length - 1].pct < 100) seen.push({ pct: 100, col: seen[seen.length - 1].col });
+    return seen;
+  }
+  FM._clipColorStops = clipColorStops;   // suite seam
   const stripCache = new Map();    // layerId -> {key, canvas}: rendered filmstrip/waveform reuse across rebuilds
   const EASE_LABELS = { linear: 'Linear', easeIn: 'Ease In', easeOut: 'Ease Out', easeInOut: 'Ease In-Out', overshoot: 'Overshoot', anticipate: 'Anticipate' };
 
@@ -1514,7 +1557,21 @@ window.FM = window.FM || {};
     // A clip colour that was CHOSEN (clipColorSet) beats the shape's fill — it was set deliberately.
     // Every other clipColor is just the next entry off the spawn palette, so the fill wins over it.
     const col = clipColorOf(layer);
-    clip.style.background = 'linear-gradient(180deg, ' + shade(col, 8) + ', ' + shade(col, -20) + ')';
+    /* queue 679 option C, his pick. The horizontal colour arc goes UNDER the existing vertical shade,
+       which is kept at low alpha so a clip still reads as a raised bar rather than a flat swatch — the
+       shading is what gives the timeline its depth, and dropping it for the gradient would trade one
+       thing he likes for another. The dark fade behind the NAME is CSS (.clip-name's own ground): the
+       name already sits on the lowest-contrast surface in the editor, and putting it on a moving one
+       without that would make a measured problem worse. */
+    const stops = clipColorStops(layer);
+    if (stops) {
+      clip.classList.add('clip-kfcolor');
+      clip.style.background =
+        'linear-gradient(180deg, rgba(255,255,255,.10), rgba(0,0,0,.20)), ' +
+        'linear-gradient(90deg, ' + stops.map(x => x.col + ' ' + x.pct.toFixed(2) + '%').join(', ') + ')';
+    } else {
+      clip.style.background = 'linear-gradient(180deg, ' + shade(col, 8) + ', ' + shade(col, -20) + ')';
+    }
     clip.style.borderColor = shade(col, 24);
     clip.dataset.id = layer.id;
 

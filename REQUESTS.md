@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.52
+> ## 📌 WHAT I NEED FROM YOU — updated 30 Aug at v14.53
 >
-> **State:** v14.52, 1112 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
+> **State:** v14.53, 1113 tests green, tree clean. **The new light look is ON by default** — Settings → *New light look* turns it off.
 >
 > **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
 > complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
@@ -27626,8 +27626,7 @@ re-opened #480, which I had marked done and had not fixed.
       the line looks like it moves at 2× the cursor on a PC (that is the auto-scroll; it still lands
       where you point), and it looked stuck mid-drag (my probe killed the gesture; cancel is handled).
 
-- [ ] **679 — 💡 HIS IDEA: a layer whose colour is KEYFRAMED should show that as colour ALONG its
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **679 — 💡 HIS IDEA: a layer whose colour is KEYFRAMED should show that as colour ALONG its
       timeline bar.** (30 Aug.)
       His words, verbatim:
       > Have a genious idea, when you change the colour of a layer the layer colour on the timeline
@@ -27645,3 +27644,22 @@ re-opened #480, which I had marked done and had not fixed.
       and a layer with ONE colour or none must look exactly as it does today — a gradient with one stop
       is a flat fill, so that should fall out, but it needs asserting rather than assuming.
       ⚠️ **#545 applies** — it is a look, so draw it and show him before it ships.
+
+
+      ═══ ✅ **30 AUG (v14.53) — BUILT, OPTION C.** ═══
+      Your keyframed colour now draws as a **static arc along the clip** — the whole thing readable at
+      once, which is what *"not like an animation"* meant.
+      📐 **The stops are placed by the CLIP's clock, not raw keyframe time:** a keyframe at 3s on a 6s
+      clip lands at exactly 50% across the bar. Getting that wrong would draw your colours in the wrong
+      places and look deliberate rather than broken, so it is asserted.
+      🎨 **The dark fade behind the name is the difference between A and the C you picked**, and it
+      earns its place: the clip name is already the lowest-contrast text in the editor (1.10:1, logged
+      in #674), so putting it on a background that changes along its own length would have made a
+      measured problem worse.
+      ✅ **Your condition is the assertion that matters** — *a layer with one colour, or none, looks
+      exactly as it does today*. That is the half that breaks quietly, because a gradient with one stop
+      still renders. Three cases are tested: animated gets the arc, plain does not, and **keyframed-but-
+      never-actually-changing** does not either.
+      📊 **Measured live:** four keyframes → green/blue/purple/pink at 0, 41.67, 75, 100%.
+      ❓**LOGGED FOR LATER, not asked now:** this is shape layers only. Text and video layers can carry
+      keyframed colour too — say the word and it extends to them.

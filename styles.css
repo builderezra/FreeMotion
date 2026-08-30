@@ -9037,3 +9037,16 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
   box-shadow: 0 0 0 2px #eaf0f8, 0 0 8px rgba(41, 217, 187, .5), inset 0 0 0 3px var(--accent, #29d9bb);
 }
 #time-readout.on-thumb, #time-readout.thumb-hover { color: var(--accent, #29d9bb); }
+
+/* ===== A KEYFRAMED COLOUR, DRAWN ALONG THE CLIP (queue 679, option C — his pick) ================
+   The bar carries the whole colour arc, and the NAME gets a short dark fade to sit on. That fade is
+   the difference between option A and option C, and it is not decoration: the clip name's ink is
+   already the lowest-contrast text in the editor, and putting it on a background that changes along
+   its own length would make a measured problem worse. A fixed ground under the first ~110px keeps it
+   readable whatever colour the arc happens to be there. */
+.clip.clip-kfcolor > .clip-name { position: relative; z-index: 2; }
+.clip.clip-kfcolor::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 112px; z-index: 1;
+  pointer-events: none; border-radius: inherit;
+  background: linear-gradient(90deg, rgba(6, 12, 20, .72), rgba(6, 12, 20, 0));
+}

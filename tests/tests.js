@@ -54268,4 +54268,48 @@
     if (!/motion\.abort\(\)/.test(code))
       throw new Error('a tap on the grip no longer aborts the motion it created, so the rows keep .row-part and the marker keeps its dragging state');
   });
+
+  test('679 — a keyframed colour draws as a static arc along the clip, and a plain layer is untouched', { item: '679' }, async function () {
+    /* His idea: "what if you do key frames and the layer keeps changing colour? Make the layer on the
+       timeline also change colour… NOT LIKE AN ANIMATION, still colours along the layer where it
+       changes." That last clause is the design — the whole arc readable at once, as a chart, not a
+       preview that follows the playhead. He picked option C: the bar carries the arc, with a dark fade
+       behind the name.
+       ⚠️ THE ASSERTION THAT MATTERS MOST IS THE NEGATIVE ONE. "A layer with one colour, or none, looks
+       exactly as it does today" was his own condition, and it is the half that would break quietly —
+       a gradient with one stop still renders, so a static layer could silently take the new path and
+       nobody would see anything wrong until a colour looked off. */
+    if (typeof FM._clipColorStops !== 'function') throw new Error('FM._clipColorStops is gone — the keyframed-colour arc has no seam');
+    const keep = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      const mk = (name) => { const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 100, shapeH: 100, fill: '#22c55e' }); L.name = name; L.start = 0; L.duration = 6; FM.scene.layers.push(L); return L; };
+      // 1. AN ANIMATED COLOUR — stops must land at the keyframes' own share of the clip.
+      const A = mk('arc');
+      A.fill = { kf: [{ t: 0, v: '#22c55e' }, { t: 3, v: '#38bdf8' }, { t: 6, v: '#f472b6' }] };
+      const stops = FM._clipColorStops(A);
+      if (!stops) throw new Error('a layer with three colour keyframes produced no arc at all');
+      if (stops.length < 3) throw new Error('the arc has ' + stops.length + ' stops for 3 keyframes');
+      const mid = stops.find(x => Math.abs(x.pct - 50) < 0.6);
+      if (!mid) throw new Error('a keyframe at t=3 on a 6s clip is not at 50% across the bar — the stops are placed by the wrong clock, so the colours are drawn in the wrong places: ' + JSON.stringify(stops));
+      if (stops[0].pct !== 0 || stops[stops.length - 1].pct !== 100)
+        throw new Error('the arc does not span the whole bar (' + stops[0].pct + '% to ' + stops[stops.length - 1].pct + '%)');
+      // 2. A PLAIN LAYER — his own condition, and the half that breaks quietly.
+      const B = mk('plain');
+      if (FM._clipColorStops(B) !== null) throw new Error('a layer with ONE colour got the gradient path — he asked explicitly that it look exactly as it does today');
+      // 3. …and a keyframed property whose values never actually change is also flat.
+      const C = mk('same');
+      C.fill = { kf: [{ t: 0, v: '#22c55e' }, { t: 3, v: '#22c55e' }] };
+      if (FM._clipColorStops(C) !== null) throw new Error('a colour that is keyframed but never changes took the gradient path — that is a flat fill wearing a gradient\'s clothes');
+      // 4. THE NAME MUST KEEP A FIXED GROUND. That fade is the whole difference between his option A
+      //    and the C he picked, and the clip name is already the lowest-contrast text in the editor.
+      const css = await (await fetch('../styles.css?boot=' + Date.now())).text();
+      if (!/\.clip\.clip-kfcolor::before/.test(css))
+        throw new Error('the dark fade behind the clip name is gone — that is option A, not the C he chose, and it puts the least readable text in the editor on a background that changes along its own length');
+    } finally {
+      FM.scene.layers.length = 0; keep.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); FM.refreshAll();
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    }
+  });
 })();
