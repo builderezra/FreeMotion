@@ -903,7 +903,20 @@ window.FM = window.FM || {};
          independently — `fparam(p, 'style', 0, t)` falls back to 0 — so both paths say Pixel for old
          work and Smear for new. */
       { key: 'style', label: 'Style', options: [[0, 'Pixel'], [1, 'Smear'], [2, 'Echo'], [3, 'Blend']], def: 1, legacy: 0 },
-      { key: 'amount', label: 'Shutter', min: 0, max: 2, step: 0.05, def: 1 },
+      /* CEILING RAISED 2 → 6, AND THE DEFAULT 1 → 1.5 (queue 578 clause 2). Ezra, pre-approving both:
+         *"idc what the default is as long as it's noticeable and also has a higher max"*.
+         MEASURED before touching it, exactly as queue 540 did for Motion Blur (Object) — a 70px block
+         carried by an Orbit effect, ink area against the same block unblurred:
+             shutter 1 → +95%   ·   2 → +185%   ·   3 → +271%   ·   4 → +353%
+             shutter 6 → +468%  ·   8 → +501%   ·   12 → +340%  ← it goes BACKWARDS
+         It grows linearly to about 4 and flattens by 8; past that the smear thins below visibility and
+         the effect gets WORSE, so 6 is where the slider stops paying rather than an arbitrary number.
+         Render cost is flat across the whole range (6.2–8.0ms) because the sample count is its own
+         parameter — this buys reach for nothing.
+         ⚠️ A DEFAULT CHANGE CANNOT DISTURB HIS EXISTING CLIPS: makeInstance seeds every parameter, so a
+         placed effect carries its own saved `amount` and keeps reading it. Only newly added ones start
+         at 1.5 — which measures +140%, i.e. it reads without touching a slider, which is the ask. */
+      { key: 'amount', label: 'Shutter', min: 0, max: 6, step: 0.05, def: 1.5 },
       { key: 'samples', label: 'Quality', min: 4, max: 24, step: 1, def: 10 },
       { key: 'threshold', label: 'Threshold', min: 0, max: 0.4, step: 0.01, def: 0.05 },
       { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.05, def: 0.5 },

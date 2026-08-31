@@ -1,8 +1,9 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 31 Aug at v14.70
+> ## 📌 WHAT I NEED FROM YOU — updated 31 Aug at v14.71
 >
-> **State:** v14.70, 1140 tests green, tree clean. **The big one tonight: 32 effects were rendering at a
+> **State:** v14.71, 1141 tests green, tree clean. **#578 closed** — Motion Blur (Footage) now reaches
+> nearly 3x further, measured rather than guessed. **The big one tonight: 32 effects were rendering at a
 > different strength on screen than in your exported file** — worst on your phone, where the preview
 > plate is smallest. Fixed in one place. See #691. **You closed three items yourself** by telling me the
 > colour filters are good now — #593, #603 and #645, open since 26 Aug. **#686 CLOSED (all 13 bugs), #687 CLOSED (motion
@@ -25645,8 +25646,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ The maths is exposed as `FM.cropToCanvasRect` and **the test drives the real function**, not a
       copy of the formula; a copy keeps passing after the shipped one changes.
 
-- [ ] **578 — Motion Blur (Footage) needs real work, and must not default to the pixelated mode.** (26 Aug.)
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **578 — Motion Blur (Footage) needs real work, and must not default to the pixelated mode.**  ✅ v14.71 (26 Aug.)
       His words, verbatim:
       > The motion blur footage is kinda buns at the moment, needs a lot of work and also don’t default it to the pixelated blur, it looks awful
       **Two things, and the second is the quick one:**
@@ -25654,7 +25654,11 @@ re-opened #480, which I had marked done and had not fixed.
              Echo / Blend, from v2.49) currently starts on Pixel. ⚠️ **Changing a default does NOT change
              existing instances** — the renderer falls back to `legacy` for an absent key, so check which
              of those a saved project reads before touching it, or every clip he already made re-renders.
-      2. [ ] ✅ **ANSWERED BY EZRA 27 Aug — make it NOTICEABLE and raise the CEILING.**
+      2. [x] ✅ **ANSWERED BY EZRA 27 Aug — make it NOTICEABLE and raise the CEILING.**  ✅ v14.71
+         **DONE — ceiling 2 → 6, default 1 → 1.5, both measured.** Ink spread against the same block
+         unblurred: shutter 1 → +95%, 2 → +185%, 4 → +353%, 6 → +468%, 8 → +501%, 12 → +340% (it goes
+         BACKWARDS past 8 as the smear thins below visibility). 6 is where it stops paying. Cost is flat
+         across the range — the sample count is a separate parameter — so the reach was free.
          His words, verbatim:
          > idc what the default is as long as it’s noticeable and also has a higher max
          ➡️ **Two concrete changes, and he has pre-approved both:** (1) raise the DEFAULT `amount` until the

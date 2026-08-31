@@ -55593,4 +55593,48 @@
     const sixArg = function (d, W, H, p, t, ps) { return ps; };
     if (FM._pxToPlate({ type: 'boxblur' }, src, 0.3, 0.5, sixArg) !== src) throw new Error('a kernel that declares its own `ps` was scaled as well — that double-applies the plate scale');
   });
+
+  test('effects: Motion Blur (Footage) reaches further than it used to, and every bit of it pays', { item: '578' }, function () {
+    /* #578 clause 2, which he pre-approved in these words: "idc what the default is as long as it's
+     * noticeable and also has a higher max". The Shutter ceiling was 2. MEASURED on a 70px block
+     * carried by an Orbit effect — motionflow blurs movement INSIDE the picture, so a keyframed x-move
+     * is exactly what it does NOT see, and the first version of this measurement got 0 for that reason:
+     *     shutter 1 → +95%  ·  2 → +185%  ·  4 → +353%  ·  6 → +468%  ·  8 → +501%  ·  12 → +340%
+     * Linear to about 4, flat by 8, and past that the smear thins below visibility and goes BACKWARDS.
+     * So 6 is where the slider stops paying, not a number picked for roundness — and the cost is flat
+     * across the range because the sample count is a separate parameter.
+     * This test guards the two things that could quietly undo it: the ceiling being lowered again, and
+     * the reach beyond the OLD max of 2 turning out not to draw anything. */
+    const pd = (FM.fxRegistry.paramsOf('motionflow') || []).find(p => p.key === 'amount');
+    if (!pd) throw new Error('Motion Blur (Footage) has no Shutter parameter any more');
+    if (!(pd.max >= 6)) throw new Error('the Shutter ceiling is back down to ' + pd.max + ' — measured, it keeps paying to 6, so a lower max is a slider that stops short of what the effect can do');
+    if (!(pd.default >= 1.4)) throw new Error('the Shutter default is ' + pd.default + ' — he asked for it to be NOTICEABLE out of the box');
+
+    const P = { width: 420, height: 320, fps: 30, duration: 10 };
+    const build = (amount) => {
+      const l = FM.makeLayer('shape', { name: 'mover', shape: 'rect', x: 210, y: 160, shapeW: 70, shapeH: 70 });
+      l.start = 0; l.duration = 10;
+      const fx = [{ type: 'orbit', enabled: true, params: { radius: 70, speed: 2 } }];
+      if (amount != null) fx.push({ type: 'motionflow', enabled: true, params: { style: 1, amount: amount, samples: 10, threshold: 0.05, softness: 0.5 } });
+      l.effects = fx;
+      return { project: P, layers: [l] };
+    };
+    const shoot = (sc, t) => {
+      const c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      FM.renderScene(g, sc, t);
+      return g.getImageData(0, 0, P.width, P.height).data;
+    };
+    const ink = (d) => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 18) n++; return n; };
+    // The frame-to-frame history has to be warmed on ONE layer object, or there is no motion to read.
+    const at = (amount) => { const sc = build(amount); [0.80, 0.833, 0.867, 0.90, 0.933].forEach(t => shoot(sc, t)); return ink(shoot(sc, 0.9667)); };
+
+    const bare = at(null), two = at(2), five = at(5);
+    if (!(bare > 1000)) throw new Error('the unblurred block did not render (' + bare + 'px) — the harness, not the feature');
+    if (!(two > bare * 1.5)) throw new Error('Motion Blur (Footage) barely did anything even at the OLD maximum (' + bare + ' -> ' + two + ') — the harness, not the feature');
+    if (!(five > two * 1.3)) {
+      throw new Error('shutter 5 drew ' + five + ' against shutter 2\'s ' + two + ' — the range past the old ceiling of 2 is not buying anything, so raising the max just made the slider lie further');
+    }
+  });
 })();
