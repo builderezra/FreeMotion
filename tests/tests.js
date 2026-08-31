@@ -55782,4 +55782,108 @@
     if (!m) throw new Error('BOUNDED_FX is gone from compositor.js');
     if (m[1].indexOf('dropshadow') < 0) throw new Error('dropshadow left BOUNDED_FX, so no bbox reaches the kernel and all four of its loops walk the whole plate again — 38ms per frame on a small layer (#692)');
   });
+
+  test('effects: bounding the lens blur to the layer changes NOTHING about the picture', { item: '692' }, async function () {
+    /* #692, the third kernel and the most expensive in the app: 190.1ms on a 140x120 subject in a
+     * 1080x1920 plate, nearly all of it on empty pixels. Bounded, that same layer is 5.3ms — a 36x
+     * cut. A layer FILLING the frame is unchanged at ~160ms, which is correct: nothing to skip.
+     *
+     * Lens Blur is a GATHER — each output pixel averages a disc of radius r around itself — and it
+     * carries no state between pixels, so unlike the running-sum blurs BOTH axes can be bounded.
+     * Outside the layer's box grown by r, every tap in the disc is transparent, so the pixel would be
+     * written 0 over the 0 already there. Same proof obligation as the others, and the same test:
+     * identical pixels in, bounded and unbounded, byte-for-byte out.
+     * The fixture carries a BLOWN HIGHLIGHT because this kernel weights each tap by brightness — that
+     * bloom is the whole difference between defocus and bokeh, and a bounds error would show there
+     * first. */
+    const K = FM._pixelFx && FM._pixelFx.lensblur;
+    if (!K) throw new Error('the lens blur kernel is missing — the harness, not the feature');
+    const defs = {}; (FM.fxRegistry.paramsOf('lensblur') || []).forEach(p => { if (p.default !== undefined) defs[p.key] = p.default; });
+    const sum = (d) => { let a = 0, b = 0; for (let i = 0; i < d.length; i += 4) { a = (a + d[i] * 7 + d[i + 1] * 13 + d[i + 2] * 17 + d[i + 3] * 19) >>> 0; b = (b + a) >>> 0; } return a + ':' + b; };
+    const W = 220, H = 180;
+    const mk = (rx, ry, rw, rh) => {
+      const a = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        if (x >= rx && x < rx + rw && y >= ry && y < ry + rh) {
+          const edge = (x < rx + 2 || x >= rx + rw - 2 || y < ry + 2 || y >= ry + rh - 2);
+          const hot = (x > rx + rw * 0.6 && y < ry + rh * 0.35);      // a specular for the bloom to find
+          a[i] = hot ? 255 : 200; a[i + 1] = hot ? 250 : 90; a[i + 2] = hot ? 245 : 60; a[i + 3] = edge ? 140 : 255;
+        }
+      }
+      return a;
+    };
+    const CASES = [
+      { rx: 70, ry: 60, rw: 80, rh: 60, r: 10, label: 'centred' },
+      { rx: 0, ry: 0, rw: 60, rh: 50, r: 14, label: 'hard against the top-left corner' },
+      { rx: 170, ry: 140, rw: 50, rh: 40, r: 20, label: 'clipped by the bottom-right edge' },
+      { rx: 0, ry: 0, rw: 220, rh: 180, r: 8, label: 'fills the plate (nothing to skip)' },
+      { rx: 100, ry: 85, rw: 20, rh: 16, r: 30, label: 'maximum radius on a tiny layer' },
+      { rx: 110, ry: 90, rw: 2, rh: 1, r: 12, label: 'a 1px hairline' },
+    ];
+    const bad = [];
+    CASES.forEach(c => {
+      const params = Object.assign({}, defs, { radius: c.r });
+      const a = mk(c.rx, c.ry, c.rw, c.rh); K(a, W, H, params, 0.3, 1);
+      const b = mk(c.rx, c.ry, c.rw, c.rh); K(b, W, H, params, 0.3, 1, { x: c.rx, y: c.ry, w: c.rw, h: c.rh });
+      if (sum(a) !== sum(b)) bad.push(c.label);
+    });
+    if (bad.length) throw new Error('the bounded lens blur draws a DIFFERENT picture from the unbounded one on: ' + bad.join(', ') + ' — the skip is only safe while it is provably a skip');
+
+    const src = await (await fetch('../js/compositor.js?boot=' + Date.now())).text();
+    const m = /const BOUNDED_FX = \{([^}]*)\}/.exec(src);
+    if (!m) throw new Error('BOUNDED_FX is gone from compositor.js');
+    if (m[1].indexOf('lensblur') < 0) throw new Error('lensblur left BOUNDED_FX — the most expensive kernel in the app goes back to 190ms a frame on a small layer (#692)');
+  });
+
+  test('effects: bounding the hex tiles to the layer changes NOTHING about the picture', { item: '692' }, async function () {
+    /* #692, the fourth kernel: 97.7ms → 6.1ms on a 140x120 subject in a 1080x1920 plate, unchanged at
+     * ~81ms on a layer filling the frame. Hexagon Tiles is a gather like lensblur — each output pixel
+     * takes the colour of the hex cell it falls in, found by a 3x3 neighbour search, with no state
+     * carried between pixels — so BOTH axes bound. A pixel more than one tile from the layer falls in
+     * a cell whose centre is also off the layer, reads transparent, and writes transparent over
+     * transparent.
+     * ⚠️ This one names its bbox as a normal 7th PARAMETER, unlike boxblur/dropshadow/lensblur which
+     * must read `arguments[6]`. It can, because it already declares `ps` and scales its own tile size,
+     * so pxToPlate skips it either way. The others cannot: their arity has to stay below the slot
+     * pxToPlate checks or they lose the plate scaling in silence (#691). The difference is deliberate
+     * and both forms are commented where they sit. */
+    const K = FM._pixelFx && FM._pixelFx.hextiles;
+    if (!K) throw new Error('the hex tiles kernel is missing — the harness, not the feature');
+    const defs = {}; (FM.fxRegistry.paramsOf('hextiles') || []).forEach(p => { if (p.default !== undefined) defs[p.key] = p.default; });
+    const sum = (d) => { let a = 0, b = 0; for (let i = 0; i < d.length; i += 4) { a = (a + d[i] * 7 + d[i + 1] * 13 + d[i + 2] * 17 + d[i + 3] * 19) >>> 0; b = (b + a) >>> 0; } return a + ':' + b; };
+    const W = 240, H = 200;
+    const mk = (rx, ry, rw, rh) => {
+      const a = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        if (x >= rx && x < rx + rw && y >= ry && y < ry + rh) {
+          const edge = (x < rx + 2 || x >= rx + rw - 2 || y < ry + 2 || y >= ry + rh - 2);
+          a[i] = 180 + ((x * 5) % 70); a[i + 1] = 70 + ((y * 9) % 80); a[i + 2] = 110; a[i + 3] = edge ? 150 : 255;
+        }
+      }
+      return a;
+    };
+    const CASES = [
+      { rx: 80, ry: 70, rw: 80, rh: 60, size: 20, label: 'centred, default tile' },
+      { rx: 0, ry: 0, rw: 70, rh: 60, size: 20, label: 'hard against the top-left corner' },
+      { rx: 180, ry: 150, rw: 60, rh: 50, size: 30, label: 'clipped by the bottom-right edge' },
+      { rx: 0, ry: 0, rw: 240, rh: 200, size: 16, label: 'fills the plate (nothing to skip)' },
+      { rx: 110, ry: 95, rw: 20, rh: 16, size: 80, label: 'largest tile on a tiny layer' },
+      { rx: 120, ry: 100, rw: 2, rh: 1, size: 20, label: 'a 1px hairline' },
+      { rx: 80, ry: 70, rw: 80, rh: 60, size: 4, label: 'smallest tile' },
+    ];
+    const bad = [];
+    CASES.forEach(c => {
+      const params = Object.assign({}, defs, { size: c.size });
+      const a = mk(c.rx, c.ry, c.rw, c.rh); K(a, W, H, params, 0.3, 1);
+      const b = mk(c.rx, c.ry, c.rw, c.rh); K(b, W, H, params, 0.3, 1, { x: c.rx, y: c.ry, w: c.rw, h: c.rh });
+      if (sum(a) !== sum(b)) bad.push(c.label);
+    });
+    if (bad.length) throw new Error('the bounded hex tiles draws a DIFFERENT picture from the unbounded one on: ' + bad.join(', ') + ' — the skip is only safe while it is provably a skip');
+
+    const src = await (await fetch('../js/compositor.js?boot=' + Date.now())).text();
+    const m = /const BOUNDED_FX = \{([^}]*)\}/.exec(src);
+    if (!m || m[1].indexOf('hextiles') < 0) throw new Error('hextiles left BOUNDED_FX — back to 98ms a frame on a small layer (#692)');
+  });
 })();

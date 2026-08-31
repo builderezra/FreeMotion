@@ -1,8 +1,9 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.78
+> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.80
 >
-> **State:** v14.78, 1144 tests green, tree clean. **🟢 #692, the lag: blur AND drop shadow are FIXED.**
+> **State:** v14.80, 1146 tests green, tree clean. **Lens Blur 190ms → 5.3ms, Hex Tiles 98ms → 6.1ms** —
+> four of the heaviest effects bounded, all proved byte-identical. **🟢 #692, the lag: blur AND drop shadow are FIXED.**
 > The test scene that cost **106ms a frame now costs 27.9ms** — from three times over the 30fps budget
 > to under it, with the picture proved byte-identical across 19 fixtures. Other kernels still to do. **#578 closed** — Motion Blur (Footage) now reaches
 > nearly 3x further, measured rather than guessed. **The big one tonight: 32 effects were rendering at a
@@ -28113,6 +28114,12 @@ re-opened #480, which I had marked done and had not fixed.
       STARTED THIS ENTRY: 106.0ms → 27.9ms**, i.e. from three times over the 33.3ms budget to under it.
       Eleven fixtures proved identical, angles in all four quadrants because the offset can carry the
       shadow off any edge and a sign error would show on exactly one of them.
+      ✅ **LENS BLUR DONE — v14.79: 190.1ms → 5.3ms**, a 36x cut on the worst offender in the list. It
+      was the easiest of the three: a GATHER with no state between pixels, so BOTH axes bound rather
+      than one each. Six fixtures proved identical, the fixture carrying a blown highlight because this
+      kernel weights taps by brightness and a bounds error would show in the bloom first.
+      ✅ **HEX TILES DONE — v14.80: 97.7ms → 6.1ms.** Another gather, so both axes bound; seven fixtures
+      identical. Four kernels bounded now, 25+ fixtures between them.
       ⏭️ **STILL TO DO: the remaining pixel kernels** (each is the same pattern and each needs its own
       identity proof), and route 2 below, which would also remove the ~8-12ms floor that is the
       full-frame plate allocation and its getImageData/putImageData round trip.
@@ -28165,6 +28172,14 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ **Verified by staging the real failure** rather than reasoning about it: a suite run was killed
       mid-flight, leaving 9 stale processes; the next run printed *"(reaped 9 Chrome process(es) left
       behind by a killed run)"*, went green at 1144/1144, and left 0 behind.
+      🚨 **AND IT WAS WRONG ONCE, WITHIN THE HOUR — corrected in v14.80.** The first version said "two
+      suite runs never overlap (ship.sh runs them in sequence)". True of ship.sh's own two passes; FALSE
+      of the situation it runs in, because ship.sh is routinely BACKGROUNDED. A suite started while a
+      ship is in flight reaped the SHIPPING run's browser: 8 processes killed under a live ship.sh,
+      whose suite then reported `"lastTest": ""` and timed out at 1800s — the exact symptom the reap
+      exists to cure, caused by the reap. The v14.79 release did not land and had to be re-run.
+      **The fix does not assume, it asks:** if another `_cdp.py` is alive, some run owns those processes
+      and none are stale, so reap nothing. A leaked browser is cheap to leave for one more run.
       ⚠️ **No suite test for this, deliberately** — testing it means spawning and killing a browser,
       which is heavier and more fragile than the thing it guards. The reap IS the structural safeguard;
       this entry is its evidence.

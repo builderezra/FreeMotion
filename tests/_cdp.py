@@ -158,11 +158,26 @@ def main():
     # `"lastTest": ""` and timed out at 1800s, which reads exactly like a hung suite and is not one.
     # That cost a release and the time to diagnose it.
     #
-    # Reaping at STARTUP is the self-healing shape: two suite runs never overlap (ship.sh runs them in
-    # sequence), so any `fm-cdp-` process alive at this moment belongs to a run that is already over.
-    # Matching on the temp-profile prefix is what keeps this well away from the user's own browser, and
-    # signal 9 is passed as a number so no new import is needed.
+    # Reaping at STARTUP is the self-healing shape — but ONLY when this is the only run in flight.
+    #
+    # 🚨 THE FIRST VERSION OF THIS SAID "two suite runs never overlap (ship.sh runs them in sequence)"
+    # AND THAT WAS WRONG WITHIN THE HOUR. ship.sh's own two runs are sequential, yes — but ship.sh is
+    # routinely BACKGROUNDED (CLAUDE.md's timeout section is about exactly that), and a suite run
+    # started while one is in flight then reaps the SHIPPING run's browser and kills a release that was
+    # halfway through. Measured, 1 Sep: it killed 8 processes belonging to a live ship.sh, and the
+    # release had to be re-run.
+    #
+    # So the guard is not a timestamp heuristic — it is the direct question. If another _cdp.py is
+    # alive, some run owns those processes and NONE of them are stale, so reap nothing. A leaked
+    # Chrome is cheap to leave for one more run; killing a live one is not.
     try:
+        _others = subprocess.run(["pgrep", "-f", "_cdp.py"], capture_output=True, text=True)
+        _live = [int(x) for x in _others.stdout.split() if x.strip().isdigit() and int(x) != os.getpid()]
+    except Exception:
+        _live = [1]                              # cannot tell → assume company, reap nothing
+    try:
+        if _live:
+            raise RuntimeError("another suite run is in flight — its browser is not stale")
         _ps = subprocess.run(["pgrep", "-f", "fm-cdp-"], capture_output=True, text=True)
         _stale = [int(x) for x in _ps.stdout.split() if x.strip().isdigit() and int(x) != os.getpid()]
         for _pid in _stale:
