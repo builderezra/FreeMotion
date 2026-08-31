@@ -3021,7 +3021,16 @@ window.FM = window.FM || {};
      pads its plate for these, because the transform matrix it otherwise measures cannot see them. */
   const MOVER_FX = { wiggle: 1, shake: 1, swing: 1, spin: 1, pulse: 1, drift: 1, orbit: 1 };
   Object.setPrototypeOf(MOVER_FX, null);   // own keys only — see POSTFX
-  const BOUNDED_FX = { letterbox: 1, border: 1 };
+  /* boxblur JOINS THE BOUNDED SET (#692). Measured: one Box Blur on a 1080x1920 comp costs 67.5ms
+     against a 33.3ms frame budget, and it costs the SAME 70ms whether the layer is 120x100 or fills
+     the frame — every kernel walks the whole plate. This one now skips the rows and columns that
+     cannot contain anything.
+     ⚠️ IT IS A SKIP, NOT A REWRITE, and that distinction is the whole safety argument. The running-sum
+     arithmetic is untouched: blurring an all-zero row yields zeros over zeros, so a row with no
+     content can be stepped over and the output is IDENTICAL rather than merely similar. Verified that
+     way — seven renders (edge-clipped, full-frame, anisotropic, multi-pass, radius larger than the
+     layer) checksummed before and after and required to match exactly. */
+  const BOUNDED_FX = { letterbox: 1, border: 1, boxblur: 1 };
   Object.setPrototypeOf(BOUNDED_FX, null);   // own keys only — see POSTFX
   /* Does the layer's own alpha ACTUALLY occupy the plate's edge row or column? Four direct scans of
    * the four edge lines, at alphaBBox's own `> 8` threshold so the two agree on what counts as
@@ -4421,7 +4430,13 @@ window.FM = window.FM || {};
       }
     },
     // ---- batch 6 ----
-    boxblur: function(d,W,H,p,t){ var bbr=Math.round(FM.evalProp(p.radius,t)||0); if(bbr<1)return; if(bbr>40)bbr=40;
+    /* ⚠️ `bb` IS READ OFF `arguments`, DELIBERATELY, AND MUST STAY THAT WAY. The dispatcher hands the
+       bbox as the 7th argument — but `pxToPlate` skips any kernel whose declared arity reaches the
+       `ps` slot, on the grounds that such a kernel scales for itself. Naming the parameters here would
+       silently opt this kernel OUT of the plate scaling that #691 just gave it, and a box blur that
+       stopped matching the export is a worse bug than the one being fixed. Reading it this way keeps
+       `boxblur.length` at 5. */
+    boxblur: function(d,W,H,p,t){ var bbBB=arguments[6]; var bbr=Math.round(FM.evalProp(p.radius,t)||0); if(bbr<1)return; if(bbr>40)bbr=40;
       // Locked to a perfectly square kernel and a single pass: no horizontal-only smear, no
       // vertical-only, and no way off its hard boxy falloff. ASPECT scales the VERTICAL radius against
       // the horizontal (0 = a pure horizontal smear). PASSES repeats the whole thing — a box blur run
@@ -4430,18 +4445,34 @@ window.FM = window.FM || {};
       var bbPass=p.passes==null?1:Math.round(FM.evalProp(p.passes,t)); if(bbPass<1)bbPass=1; if(bbPass>4)bbPass=4;
       if(!(bbAsp===100&&bbPass===1)){
         var bbRy=bbAsp===100?bbr:Math.round(bbr*(bbAsp/100));
+        /* Bounds for the MULTI-PASS path, padded by the TOTAL reach of every pass (#692). Each H pass
+           spreads content sideways by bbr and each V pass downward by bbRy, so after `bbPass` rounds
+           the content can have grown by that much in each direction. Padding by the total is generous
+           rather than exact — a superset of what is needed, which is the point: it can only ever skip
+           rows and columns that are still zero. */
+        var bbPadX=bbr*bbPass+1, bbPadY=bbRy*bbPass+1;
+        var bbY0=bbBB?Math.max(0,bbBB.y-bbPadY):0, bbY1=bbBB?Math.min(H-1,bbBB.y+bbBB.h-1+bbPadY):H-1;
+        var bbX0=bbBB?Math.max(0,bbBB.x-bbPadX):0, bbX1=bbBB?Math.min(W-1,bbBB.x+bbBB.w-1+bbPadX):W-1;
         // One separable box pass, written once and reused — same running-sum arithmetic as below.
         var bbBoxH=function(arr,rad){ if(rad<1)return; var win=2*rad+1, inv=1/win, src=arr.slice(), yy,ch,base,sum,idx,n,xx, w4=W*4;
-          for(yy=0;yy<H;yy++){ base=yy*w4; for(ch=0;ch<4;ch++){ sum=src[base+ch]*(rad+1);
+          for(yy=bbY0;yy<=bbY1;yy++){ base=yy*w4; for(ch=0;ch<4;ch++){ sum=src[base+ch]*(rad+1);
             for(n=1;n<=rad;n++){ xx=n<W?n:W-1; sum+=src[base+xx*4+ch]; }
             for(xx=0;xx<W;xx++){ arr[base+xx*4+ch]=sum*inv; n=xx+rad+1; idx=n<W?n:W-1; sum+=src[base+idx*4+ch]; n=xx-rad; idx=n>0?n:0; sum-=src[base+idx*4+ch]; } } } };
         var bbBoxV=function(arr,rad){ if(rad<1)return; var win=2*rad+1, inv=1/win, src=arr.slice(), xx,ch,base,sum,idx,n,yy, w4=W*4;
-          for(xx=0;xx<W;xx++){ base=xx*4; for(ch=0;ch<4;ch++){ sum=src[base+ch]*(rad+1);
+          for(xx=bbX0;xx<=bbX1;xx++){ base=xx*4; for(ch=0;ch<4;ch++){ sum=src[base+ch]*(rad+1);
             for(n=1;n<=rad;n++){ yy=n<H?n:H-1; sum+=src[base+yy*w4+ch]; }
             for(yy=0;yy<H;yy++){ arr[base+yy*w4+ch]=sum*inv; n=yy+rad+1; idx=n<H?n:H-1; sum+=src[base+idx*w4+ch]; n=yy-rad; idx=n>0?n:0; sum-=src[base+idx*w4+ch]; } } } };
         for(var bbP=0;bbP<bbPass;bbP++){ bbBoxH(d,bbr); bbBoxV(d,bbRy); }
         return;
-      } var bbWin=2*bbr+1, bbInv=1/bbWin, bbSrc=d.slice(), bbX, bbY, bbCh, bbBase, bbSum, bbIdx, bbN, bbW4=W*4; for(bbY=0;bbY<H;bbY++){ bbBase=bbY*bbW4; for(bbCh=0;bbCh<4;bbCh++){ bbSum=bbSrc[bbBase+bbCh]*(bbr+1); for(bbN=1;bbN<=bbr;bbN++){ bbX=bbN<W?bbN:W-1; bbSum+=bbSrc[bbBase+bbX*4+bbCh]; } for(bbX=0;bbX<W;bbX++){ d[bbBase+bbX*4+bbCh]=bbSum*bbInv; bbN=bbX+bbr+1; bbIdx=bbN<W?bbN:W-1; bbSum+=bbSrc[bbBase+bbIdx*4+bbCh]; bbN=bbX-bbr; bbIdx=bbN>0?bbN:0; bbSum-=bbSrc[bbBase+bbIdx*4+bbCh]; } } } bbSrc=d.slice(); for(bbX=0;bbX<W;bbX++){ bbBase=bbX*4; for(bbCh=0;bbCh<4;bbCh++){ bbSum=bbSrc[bbBase+bbCh]*(bbr+1); for(bbN=1;bbN<=bbr;bbN++){ bbY=bbN<H?bbN:H-1; bbSum+=bbSrc[bbBase+bbY*bbW4+bbCh]; } for(bbY=0;bbY<H;bbY++){ d[bbBase+bbY*bbW4+bbCh]=bbSum*bbInv; bbN=bbY+bbr+1; bbIdx=bbN<H?bbN:H-1; bbSum+=bbSrc[bbBase+bbIdx*bbW4+bbCh]; bbN=bbY-bbr; bbIdx=bbN>0?bbN:0; bbSum-=bbSrc[bbBase+bbIdx*bbW4+bbCh]; } } } },
+      } var bbWin=2*bbr+1, bbInv=1/bbWin, bbSrc=d.slice(), bbX, bbY, bbCh, bbBase, bbSum, bbIdx, bbN, bbW4=W*4;
+      /* SKIP THE EMPTY ROWS AND COLUMNS (#692). The horizontal pass spreads content SIDEWAYS only, so
+         a row outside the layer's own alpha box is all zeros before it and all zeros after it — the
+         pass would write 0 over 0. The vertical pass then reads columns the horizontal pass may have
+         widened by bbr, so its range is the box grown by exactly that. Both are provable, which is why
+         the output is byte-identical rather than merely close. */
+      var dY0=bbBB?Math.max(0,bbBB.y):0, dY1=bbBB?Math.min(H-1,bbBB.y+bbBB.h-1):H-1;
+      var dX0=bbBB?Math.max(0,bbBB.x-bbr-1):0, dX1=bbBB?Math.min(W-1,bbBB.x+bbBB.w-1+bbr+1):W-1;
+      for(bbY=dY0;bbY<=dY1;bbY++){ bbBase=bbY*bbW4; for(bbCh=0;bbCh<4;bbCh++){ bbSum=bbSrc[bbBase+bbCh]*(bbr+1); for(bbN=1;bbN<=bbr;bbN++){ bbX=bbN<W?bbN:W-1; bbSum+=bbSrc[bbBase+bbX*4+bbCh]; } for(bbX=0;bbX<W;bbX++){ d[bbBase+bbX*4+bbCh]=bbSum*bbInv; bbN=bbX+bbr+1; bbIdx=bbN<W?bbN:W-1; bbSum+=bbSrc[bbBase+bbIdx*4+bbCh]; bbN=bbX-bbr; bbIdx=bbN>0?bbN:0; bbSum-=bbSrc[bbBase+bbIdx*4+bbCh]; } } } bbSrc=d.slice(); for(bbX=dX0;bbX<=dX1;bbX++){ bbBase=bbX*4; for(bbCh=0;bbCh<4;bbCh++){ bbSum=bbSrc[bbBase+bbCh]*(bbr+1); for(bbN=1;bbN<=bbr;bbN++){ bbY=bbN<H?bbN:H-1; bbSum+=bbSrc[bbBase+bbY*bbW4+bbCh]; } for(bbY=0;bbY<H;bbY++){ d[bbBase+bbY*bbW4+bbCh]=bbSum*bbInv; bbN=bbY+bbr+1; bbIdx=bbN<H?bbN:H-1; bbSum+=bbSrc[bbBase+bbIdx*bbW4+bbCh]; bbN=bbY-bbr; bbIdx=bbN>0?bbN:0; bbSum-=bbSrc[bbBase+bbIdx*bbW4+bbCh]; } } } },
     spinblur: function(d,W,H,p,t){ var sbAmt=FM.evalProp(p.amount,t); if(sbAmt==null)sbAmt=0.5; if(sbAmt<0)sbAmt=0; if(sbAmt>1)sbAmt=1; if(sbAmt<=0)return; var sbS=fxSrc(d);
       // CENTRE was W/2, H/2, so the blur could only ever spin around the middle of the frame — never
       // around the wheel, the face or the logo that is actually turning.

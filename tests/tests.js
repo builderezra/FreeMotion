@@ -55668,4 +55668,61 @@
       throw new Error('a 12px RGB Split on an ADJUSTMENT layer shifted ' + half.toFixed(1) + ' project px on a half plate against ' + full.toFixed(1) + ' on a full one — the preview and the export disagree, which is what #691 fixed for ordinary layers');
     }
   });
+
+  test('effects: bounding the box blur to the layer changes NOTHING about the picture', { item: '692' }, async function () {
+    /* #692. One Box Blur on a 1080x1920 comp cost 67.5ms against a 33.3ms frame budget, and it cost
+     * the SAME whether the layer was 120x100 or filled the frame — every pixel kernel walked the whole
+     * plate. Box Blur now skips the rows and columns that cannot contain anything: 69.9ms → 11.7ms on
+     * a small layer, and the seven-layer scene 67.5ms → 18.0ms, i.e. from twice over the frame budget
+     * to under it.
+     *
+     * IT IS A SKIP, NOT A REWRITE, AND THAT IS THE ENTIRE SAFETY ARGUMENT. Blurring an all-zero row
+     * writes zeros over zeros, so a row with no content can be stepped over and the result is
+     * IDENTICAL rather than merely similar. This test is that claim: same pixels in, bounded and
+     * unbounded, byte-for-byte the same out. If a future edit to those loops breaks the equivalence —
+     * an off-by-one in the padding, a running sum primed in the wrong place — this fails, and it fails
+     * on the cases that would otherwise fail silently and look like a rendering quirk.
+     * The horizontal pass spreads sideways only, so its rows are the layer's own alpha box; the
+     * vertical pass reads columns the horizontal one may have widened, so its range is that box grown
+     * by the radius. */
+    const K = FM._pixelFx && FM._pixelFx.boxblur;
+    if (!K) throw new Error('the box blur kernel is missing — the harness, not the feature');
+    const sum = (d) => { let a = 0, b = 0; for (let i = 0; i < d.length; i += 4) { a = (a + d[i] * 7 + d[i + 1] * 13 + d[i + 2] * 17 + d[i + 3] * 19) >>> 0; b = (b + a) >>> 0; } return a + ':' + b; };
+    const mk = (W, H, rx, ry, rw, rh) => {
+      const a = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        if (x >= rx && x < rx + rw && y >= ry && y < ry + rh) {
+          const edge = (x < rx + 2 || x >= rx + rw - 2 || y < ry + 2 || y >= ry + rh - 2);
+          a[i] = 200 + ((x * 7) % 55); a[i + 1] = 80 + ((y * 11) % 60); a[i + 2] = 60;
+          a[i + 3] = edge ? 140 : 255;                       // a soft rim, so alpha edges are exercised
+        }
+      }
+      return a;
+    };
+    const CASES = [
+      { W: 200, H: 160, rx: 60, ry: 50, rw: 80, rh: 60, r: 10, asp: 100, pass: 1, label: 'centred' },
+      { W: 200, H: 160, rx: 0, ry: 0, rw: 60, rh: 50, r: 10, asp: 100, pass: 1, label: 'hard against the top-left corner' },
+      { W: 200, H: 160, rx: 150, ry: 120, rw: 50, rh: 40, r: 14, asp: 100, pass: 1, label: 'clipped by the bottom-right edge' },
+      { W: 200, H: 160, rx: 0, ry: 0, rw: 200, rh: 160, r: 8, asp: 100, pass: 1, label: 'fills the plate (nothing to skip)' },
+      { W: 200, H: 160, rx: 40, ry: 40, rw: 100, rh: 80, r: 20, asp: 40, pass: 1, label: 'anisotropic' },
+      { W: 200, H: 160, rx: 40, ry: 40, rw: 100, rh: 80, r: 6, asp: 100, pass: 3, label: 'three passes' },
+      { W: 200, H: 160, rx: 90, ry: 70, rw: 20, rh: 16, r: 30, asp: 100, pass: 1, label: 'radius far larger than the layer' },
+      { W: 200, H: 160, rx: 95, ry: 79, rw: 2, rh: 1, r: 12, asp: 100, pass: 1, label: 'a 1px hairline' },
+    ];
+    const bad = [];
+    CASES.forEach(c => {
+      const params = { radius: c.r, aspect: c.asp, passes: c.pass };
+      const a = mk(c.W, c.H, c.rx, c.ry, c.rw, c.rh); K(a, c.W, c.H, params, 0.3, 1);
+      const b = mk(c.W, c.H, c.rx, c.ry, c.rw, c.rh); K(b, c.W, c.H, params, 0.3, 1, { x: c.rx, y: c.ry, w: c.rw, h: c.rh });
+      if (sum(a) !== sum(b)) bad.push(c.label);
+    });
+    if (bad.length) throw new Error('the bounded box blur draws a DIFFERENT picture from the unbounded one on: ' + bad.join(', ') + ' — the skip is only safe while it is provably a skip');
+
+    // …and the dispatcher must actually hand it a box, or the whole thing is a no-op that still costs.
+    const src = await (await fetch('../js/compositor.js?boot=' + Date.now())).text();
+    const m = /const BOUNDED_FX = \{([^}]*)\}/.exec(src);
+    if (!m) throw new Error('BOUNDED_FX is gone from compositor.js');
+    if (m[1].indexOf('boxblur') < 0) throw new Error('boxblur left BOUNDED_FX, so no bbox reaches the kernel and it walks the whole plate again — 67.5ms per frame for one blur (#692)');
+  });
 })();
