@@ -1,8 +1,9 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 31 Aug at v14.66
+> ## 📌 WHAT I NEED FROM YOU — updated 31 Aug at v14.67
 >
-> **State:** v14.66, 1137 tests green, tree clean. **#686 CLOSED (all 13 bugs), #687 CLOSED (motion
+> **State:** v14.67, 1137 tests green, tree clean. **You closed three items yourself** by telling me the
+> colour filters are good now — #593, #603 and #645, open since 26 Aug. **#686 CLOSED (all 13 bugs), #687 CLOSED (motion
 > blur on groups), and #688's forgetting is FIXED** — it saved perfectly and was never read back.
 >
 > **⚠️ ONE QUESTION FROM YOU FINISHES #688, and it takes one look at the intro.** Clauses 2 and 3 —
@@ -21825,8 +21826,12 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ A `desc` now sits on both tiles as data, so a visible subtitle can use it later — **that would be
       a change to the add menu's layout and wants his eye first (#545)**, so it was not slipped in here.
 
-- [ ] **593 — 🔴 THE BLACK/WHITE FILTER TILES SHOW IN FULL COLOUR — he was right and I measured the wrong surface.** (26 Aug, phone screenshot at v12.95.)
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **593 — 🔴 THE BLACK/WHITE FILTER TILES SHOW IN FULL COLOUR — he was right and I measured the wrong surface.** (26 Aug, phone screenshot at v12.95.)
+      ✅ **CLOSED 31 Aug — HE CONFIRMED IT ON HIS OWN DEVICE.** His words: *"not those effects like
+      brightness not working, they are good"*. The fix landed under #661 (v13.94–v14.02): a WebGL
+      shader replaces `ctx.filter` on a device that cannot run it, which is his phone. Three sessions
+      were spent proving it on desktop where the bug does not exist — the confirmation could only
+      ever come from him, and it has.
       His words, verbatim:
       > Not a single black and white filter actually make anything black and white
       **HIS SCREENSHOT SETTLES IT AND I WAS WRONG.** The BLACK / WHITE row shows **Platinum on a pink and
@@ -22087,8 +22092,12 @@ re-opened #480, which I had marked done and had not fixed.
       which was the complaint that actually bit — *"block you even seeing the text"* — and Spacing was
       your own request at v12.31. Say the word and I will drop the **Typewriter preset** in favour of
       `textprogress`, but that is the whole of the honest cut.
-- [ ] **603 — 🔴 "None of the black and white filters make anything black and white STILL", and the
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **603 — 🔴 "None of the black and white filters make anything black and white STILL", and the
+      ✅ **CLOSED 31 Aug — HE CONFIRMED IT ON HIS OWN DEVICE.** His words: *"not those effects like
+      brightness not working, they are good"*. The fix landed under #661 (v13.94–v14.02): a WebGL
+      shader replaces `ctx.filter` on a device that cannot run it, which is his phone. Three sessions
+      were spent proving it on desktop where the bug does not exist — the confirmation could only
+      ever come from him, and it has.
       Colouring effects "don’t work".** (27 Aug, phone screenshot at v13.43. He was angry, and the
       underlying complaint is legitimate.)
       His words, verbatim:
@@ -26293,8 +26302,12 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **#545:** he described the answer himself ("the little dots at the bottom"), so this shipped his
       own suggestion rather than a menu of alternatives. **Picture sent.** The other honest options were a
       fading right edge, a peeking part-tile, or a count — say the word.
-- [ ] **645 — 🔴🔴 THE BLACK-AND-WHITE FILTERS STILL DO NOT MAKE ANYTHING BLACK AND WHITE, and the
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **645 — 🔴🔴 THE BLACK-AND-WHITE FILTERS STILL DO NOT MAKE ANYTHING BLACK AND WHITE, and the
+      ✅ **CLOSED 31 Aug — HE CONFIRMED IT ON HIS OWN DEVICE.** His words: *"not those effects like
+      brightness not working, they are good"*. The fix landed under #661 (v13.94–v14.02): a WebGL
+      shader replaces `ctx.filter` on a device that cannot run it, which is his phone. Three sessions
+      were spent proving it on desktop where the bug does not exist — the confirmation could only
+      ever come from him, and it has.
       brightness / saturation filters are wrong too. HE HAS ASKED REPEATEDLY.** (27 Aug, at v13.69.)
       His words, verbatim:
       > If I have to ask you to fix the saturation on the filters where it makes them black-and-white on
@@ -27962,3 +27975,27 @@ re-opened #480, which I had marked done and had not fixed.
              card out of inspector.js, extracts every property the card ASSIGNS, and requires each to be
              pasted or explicitly exempted with a reason. Carries its own control, because a slicing test
              that matched nothing would pass forever.
+
+- [ ] **690 — Standing direction, 31 Aug (verbatim):**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      > *"Keep things going, dont stop, go re audit, find some bugs coz theres a shit load, and a lot of
+      > things ive asked are still issues ( not those effects like brightness not working, they are
+      > good). you can always find things to do to effects to polish them up and make them better same
+      > with filters and adding more filters and adding more effects if theres some good ideas."*
+      > *"No effort is too big to not be worth doing, if something needs doing and its a big project
+      > just do it"*
+      His clauses:
+      1. [x] **Re-audit the blocked pile**  ✅ done — `tools/asks.sh` says 42 wait on you and 39 of them
+             DO name a real question, so the pile is mostly honest; what was wrong was treating "has a
+             question" as "nothing else to do here". Three closed outright on your answer.
+      2. [ ] **Find bugs — "theres a shit load".** In progress: the effect sweep found 15 dead-slider
+             candidates and 12 were the instrument; the tool is fixed and 3 real weak sliders remain.
+      3. [ ] **Polish and improve the existing effects and filters.** Started: the Stroke Colour Width
+             slider offered 1-60px while the kernel clamped at 16, so 73%% of it did nothing. Lifted —
+             it costs nothing, the outline is an O(pixels) distance field. ✅ v14.67
+      4. [ ] **Add more filters and more effects where there is a good idea.**
+      5. [ ] **Size is not a reason to skip something** — *"if something needs doing and its a big
+             project just do it"*. So no more parking a thing because it is large.
+      ✅ **AND HE ANSWERED A STANDING QUESTION IN PASSING:** *"not those effects like brightness not
+      working, they are good"* — the colour/black-and-white family WORKS on his device now. That closes
+      #593, #603 and #645, which had been open since 26 Aug and cost three sessions of testing.

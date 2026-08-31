@@ -55421,4 +55421,41 @@
       FM.refreshAll();
     }
   });
+
+  test('effects: the Stroke Colour width slider works across its whole travel', { item: '482' }, function () {
+    /* #482, found by the effect sweep. The Width slider offers 1–60px and the kernel clamped it at 16:
+     * `if (st_w > 16) st_w = 16`. So 73% of that slider did nothing — drag it past 16 and the outline
+     * never got thicker, with no indication why. A control that names a number and then ignores it is
+     * the same defect as a dead one, just better disguised.
+     * The clamp cost nothing to lift: the outline is built from a two-pass chamfer distance field,
+     * which is O(pixels) and INDEPENDENT of the width. Measured on a 540x960 plate, a 60px stroke ran
+     * no slower than a 16px one. */
+    const P = FM._pixelFx;
+    if (!P || !P.stroke) throw new Error('the stroke kernel is missing — the harness, not the feature');
+    const W = 220, H = 220;
+    const subject = () => {
+      const a = new Uint8ClampedArray(W * H * 4), cx = W / 2, cy = H / 2, r = W * 0.18;
+      for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) {
+        const dx = x - cx, dy = y - cy;
+        a[i] = 220; a[i + 1] = 90; a[i + 2] = 60; a[i + 3] = (dx * dx + dy * dy <= r * r) ? 255 : 0;
+      }
+      return a;
+    };
+    const inkW = (d) => {
+      let lo = Infinity, hi = -Infinity;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { if (d[(y * W + x) * 4 + 3] > 20) { if (x < lo) lo = x; if (x > hi) hi = x; } }
+      return hi < lo ? 0 : (hi - lo + 1);
+    };
+    const at = (w) => { const d = subject(); P.stroke(d, W, H, { width: w, color: '#ffffff' }, 0.3, 1); return inkW(d); };
+
+    const bare = inkW(subject()), w8 = at(8), w16 = at(16), w40 = at(40);
+    if (!(w8 > bare + 8)) throw new Error('an 8px stroke did not widen the shape at all (' + bare + ' -> ' + w8 + ') — the harness, not the feature');
+    if (!(w16 > w8)) throw new Error('16px was no wider than 8px (' + w8 + ' -> ' + w16 + ') — the harness, not the feature');
+    if (!(w40 > w16 + 20)) {
+      throw new Error('a 40px stroke came out ' + w40 + 'px wide against 16px\'s ' + w16 + ' — the slider goes to 60 and the kernel is ignoring everything past 16, so most of the control does nothing');
+    }
+    // …and the slider's own maximum must be reachable, not merely "bigger than 16".
+    const w60 = at(60);
+    if (!(w60 > w40 + 20)) throw new Error('the top of the Width slider (60) drew ' + w60 + 'px against 40px\'s ' + w40 + ' — the last third of the travel is still dead');
+  });
 })();
