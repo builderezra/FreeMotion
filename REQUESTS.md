@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 31 Aug at v14.72
+> ## 📌 WHAT I NEED FROM YOU — updated 31 Aug at v14.73
 >
-> **State:** v14.72, 1142 tests green, tree clean. **#578 closed** — Motion Blur (Footage) now reaches
+> **State:** v14.73, 1142 tests green, tree clean. **#578 closed** — Motion Blur (Footage) now reaches
 > nearly 3x further, measured rather than guessed. **The big one tonight: 32 effects were rendering at a
 > different strength on screen than in your exported file** — worst on your phone, where the preview
 > plate is smallest. Fixed in one place. See #691. **You closed three items yourself** by telling me the
