@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 31 Aug at v14.69
+> ## 📌 WHAT I NEED FROM YOU — updated 31 Aug at v14.70
 >
-> **State:** v14.69, 1140 tests green, tree clean. **The big one tonight: 32 effects were rendering at a
+> **State:** v14.70, 1140 tests green, tree clean. **The big one tonight: 32 effects were rendering at a
 > different strength on screen than in your exported file** — worst on your phone, where the preview
 > plate is smallest. Fixed in one place. See #691. **You closed three items yourself** by telling me the
 > colour filters are good now — #593, #603 and #645, open since 26 Aug. **#686 CLOSED (all 13 bugs), #687 CLOSED (motion
@@ -26081,8 +26081,18 @@ re-opened #480, which I had marked done and had not fixed.
       held 0.500 for the first 100px of a 200px drag — seven samples — then stepped once. Stepping is
       right; sitting still for half a gesture is the complaint. So the job is to make the step land when
       the insertion point actually changes.
-      ⚠️ **STILL UNANSWERED and it matters: does the switch move AT ALL for him?** The probe was
-      synthetic. If his real drag never moves it, that is a different fault and this fix misses it.
+      ✅ **31 AUG — READ THE CODE AGAIN AT v14.69 AND THE MECHANISM IS ALREADY RIGHT.** `js/timeline.js`
+      sets `FM.dragAddAt` and calls `FM.syncAddSwitch()` on EVERY pointermove of a layer drag (:1430),
+      outside the `if (g !== lastGap)` block — so the switch is not waiting for a gap change to be told.
+      And the gap itself is chosen by NEAREST `gapTops[]` entry to the dragged block's top, which is
+      exactly "step when the insertion point actually changes": the flip lands as the block passes the
+      midpoint between two slots, not a row late. The v12.79 measurement predates queues 438, 480 and
+      502, all of which reworked this path.
+      ⚠️ **SO THE ONE THING LEFT IS HIS EYE, and it is the question that was always the real one: does
+      the switch move AT ALL for him?** The old probe was synthetic. Driving a real layer drag from the
+      test browser was attempted on 31 Aug and abandoned honestly rather than faked — the timeline
+      rendered a single row for six layers in that harness, so any number it produced would have
+      described the harness. **Do not block on this** (#591); it needs one glance on his phone.
       **Do not block on that** — he has said plainly he is not in a rush to answer (see #591).
       **"still" → this is #416**, whose request was: *"when you're dragging a layer the toggle button will
       change colour to the colour of that layer then when you press the toggle button while dragging a

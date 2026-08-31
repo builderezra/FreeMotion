@@ -35,8 +35,18 @@
         sliders measure 0.71 and 0.75, comfortably alive. The frame below now carries a full ramp band
         as well as the subject, so a shadow/highlight control has somewhere to act.
 
+     9. A SPATIAL PARAM MEASURED ON A FRAME SMALLER THAN ITS RANGE. This is the one-sided list's whole
+        story. Border Frame's inset runs to 200px and Pixel Sort's run length to 600 — on the 128x96
+        frame above, anything past a quarter of the slider already covers the picture, so the top half
+        measures 0 and reads as dead. PROVEN by a control rather than argued: Stroke Colour's `width`
+        appeared in that list the day AFTER it was fixed and measured working to 60px. Its upper half
+        scores 1.41 on a 112px frame and 24.78 on a 640px one; Border inset 0 then 17.32; Border radius
+        0 then 14.12; Long Shadow length 0 then 11.99. A one-sided verdict is now re-measured on a
+        frame big enough to hold the parameter before it is reported.
+
    The honest output of a run is a CANDIDATE list, not a finding. Each one still needs its kernel read.
-   Six of the six candidates chased so far have been the instrument. Read the kernel BEFORE reporting. */
+   EVERY candidate chased so far has been the instrument — twelve on the dead list, four more on the
+   one-sided list. Read the kernel BEFORE reporting, and check the frame can hold the parameter. */
 (function () {
   const R = FM.fxRegistry, P = FM._pixelFx, W = 128, H = 96;
   function frame() {
@@ -142,7 +152,35 @@
     o.overTime = +best.toFixed(2);
   });
   const dead = out.filter(o => (o.overTime !== undefined ? o.overTime : o.total) < 0.5);
-  const oneSided = out.filter(o => o.total >= 0.5 && Math.min(o.lower, o.upper) < o.total * 0.03);
+  /* …and a one-sided verdict is re-measured on a BIG frame first (fault 9). A spatial parameter whose
+     range is wider than the test frame saturates, and every survivor of the last run turned out to be
+     exactly that. 640x480 holds the widest range in the catalog (Pixel Sort's 600px run). */
+  function bigFrame(WB, HB) {
+    const a = new Uint8ClampedArray(WB * HB * 4), cx = WB / 2, cy = HB / 2, rx = WB * 0.3, ry = HB * 0.3;
+    for (let y = 0, i = 0; y < HB; y++) for (let x = 0; x < WB; x++, i += 4) {
+      const u = x / WB, v = y / HB;
+      a[i] = Math.round(255 * u); a[i + 1] = Math.round(230 * v); a[i + 2] = Math.round(200 * (1 - u * v) + 40);
+      const dx = (x - cx) / rx, dy = (y - cy) / ry;
+      a[i + 3] = (dx * dx + dy * dy <= 1) ? 255 : 0;
+    }
+    return a;
+  }
+  const oneSidedRaw = out.filter(o => o.total >= 0.5 && Math.min(o.lower, o.upper) < o.total * 0.03);
+  const oneSided = oneSidedRaw.filter(o => {
+    const WB = 640, HB = 480, ps2 = R.paramsOf(o.type) || [], pd = ps2.find(x => x.key === o.key);
+    if (!pd) return true;
+    const defs = {}; ps2.forEach(x => { if (x.default !== undefined) defs[x.key] = x.default; });
+    if (pd.overriddenBy && pd.liveWhen !== undefined) defs[pd.overriddenBy] = pd.liveWhen;
+    const sh = [];
+    for (let k = 0; k < N; k++) {
+      const d = bigFrame(WB, HB);
+      try { P[o.type](d, WB, HB, Object.assign({}, defs, { [o.key]: pd.min + (pd.max - pd.min) * FRAC[k] }), 0.37, 1); } catch (e) { return true; }
+      sh.push(d);
+    }
+    const lo = mad(sh[0], sh[1]) + mad(sh[1], sh[2]), hi = mad(sh[2], sh[3]) + mad(sh[3], sh[4]);
+    o.bigLower = +lo.toFixed(2); o.bigUpper = +hi.toFixed(2);
+    return Math.min(lo, hi) < (lo + hi) * 0.03;          // still one-sided with room to work
+  });
   console.log('swept', out.length, 'sliders ·', dead.length, 'candidates for dead ·', oneSided.length, 'one-sided');
   console.log('NOW VERIFY each candidate over time before believing it — see the header.');
   return { all: out, dead, oneSided };
