@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 31 Aug at v14.71
+> ## 📌 WHAT I NEED FROM YOU — updated 31 Aug at v14.72
 >
-> **State:** v14.71, 1141 tests green, tree clean. **#578 closed** — Motion Blur (Footage) now reaches
+> **State:** v14.72, 1142 tests green, tree clean. **#578 closed** — Motion Blur (Footage) now reaches
 > nearly 3x further, measured rather than guessed. **The big one tonight: 32 effects were rendering at a
 > different strength on screen than in your exported file** — worst on your phone, where the preview
 > plate is smallest. Fixed in one place. See #691. **You closed three items yourself** by telling me the
@@ -14184,6 +14184,34 @@ wait for them to report back."*
 
 - [ ] **482 — 🔵 THE BIG ONE, IF I WANT IT: go through EVERY effect and improve it.** (23 Aug.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ═══ 🔬 **31 AUG — 29 SLIDERS MEASURABLY STOP SHORT OF WHAT THEIR OWN EFFECT CAN DO.** ═══
+      Same shape as queue 540 (Motion Blur (Object), 4 → 12) and queue 578 (Motion Blur (Footage),
+      2 → 6, closed at v14.71): the ceiling was the SLIDER, not the algorithm. Each of these still
+      changes the picture substantially at 2x and again at 4x its current maximum:
+      | effect | slider | max today | still gains at 2x | and at 4x |
+      |---|---|---|---|---|
+      | Halftone Dots | size | 30px | 63.5 | 79.9 |
+      | Find Edges | amount | 4 | 34.4 | 52.8 |
+      | Lens Distortion | k1 | 0.8 | 30.0 | 27.7 |
+      | Dither | scale | 16px | 18.7 | 20.2 |
+      | Iridescence | bands | 10 | 18.5 | 19.1 |
+      | Emboss | amount | 3 | 17.7 | 31.5 |
+      | CRT | scale | 8px | 16.6 | 16.5 |
+      | Chunk Noise | size | 60px | 12.5 | 2.3 |
+      | Shockwave | strength | 120px | 11.8 | 10.1 |
+      (…29 in total; 79 before filtering, see the warning below.)
+      ⚠️ **THE FILTER MATTERS MORE THAN THE LIST.** The raw scan said 79, and most were the instrument
+      AGAIN: "the picture changes past the maximum" is NOT "the slider should go further". Levels'
+      `inwhite` maxes at 255 because that is the top of an 8-bit level; Spectral Map's `span` at 360
+      because that is a full circle; Hot Colour and Colourize at 100 because they are percentages. Past
+      a natural ceiling the maths degenerates — different, not more. Percentages, degrees, cyclic
+      controls and natural constants are excluded above.
+      ➡️ **THIS IS A DECISION FOR HIM, NOT A DEFECT TO FIX UNASKED.** Raising a ceiling only ADDS reach —
+      no existing project moves, because every placed effect carries its own saved value — but it
+      changes what an effect can BE, across 29 of them, and his standing rule (#545) is that no visual
+      change ships before he has seen it. He pre-approved it for Motion Blur (Footage) specifically
+      ("also has a higher max"); he has not for these. **One word — "raise them" — and it is an
+      afternoon's measured work.**
       His words, verbatim:
       > and if you wnat a big project u can go through every single effect and think of ways to improve it or give it more function is reasonable and just improve their quality,
       **This is him answering the standing "pick a feature" question with something else entirely** — not

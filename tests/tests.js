@@ -55637,4 +55637,35 @@
       throw new Error('shutter 5 drew ' + five + ' against shutter 2\'s ' + two + ' — the range past the old ceiling of 2 is not buying anything, so raising the max just made the slider lie further');
     }
   });
+
+  test('adjustment layers: RGB Split shifts by the same distance on a reduced plate', { item: '691' }, function () {
+    /* #691, second half. The per-layer kernel call was fixed to scale absolute-pixel parameters to the
+     * reduced preview plate — but an ADJUSTMENT layer grades everything beneath it through a different
+     * function, and that one passed a hardcoded scale of 1, so it kept the original bug. RGB Split is
+     * the one member of that set measured in pixels: `amount` and `green` are offsets. The caller had
+     * the scale in hand the whole time — it stamps `_adjCv.__fmRS = rs` two lines above the call. */
+    if (typeof FM._applyPixelFx !== 'function') throw new Error('FM._applyPixelFx seam is missing — the harness, not the feature');
+    const edge = (W, H) => {
+      const a = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) { const v = x < W / 2 ? 30 : 225; a[i] = v; a[i + 1] = v; a[i + 2] = v; a[i + 3] = 255; }
+      return a;
+    };
+    // How far the RED channel's edge moved away from the untouched green edge, in PROJECT pixels.
+    const shiftAt = (ps) => {
+      const W = Math.round(400 * ps), H = 40;
+      const d = edge(W, H);
+      FM._applyPixelFx(d, { type: 'rgbsplit', params: { amount: 12, angle: 0, radial: 0, green: 0 } }, 0.3, W, H, ps);
+      const row = H >> 1;
+      const cross = (c) => { for (let x = 1; x < W; x++) { const a0 = d[((row * W + x - 1) << 2) + c], a1 = d[((row * W + x) << 2) + c]; if (Math.abs(a1 - a0) > 60) return x; } return -1; };
+      const r = cross(0), g = cross(1);
+      if (r < 0 || g < 0) return null;
+      return Math.abs(r - g) / ps;                       // back into project pixels
+    };
+    const full = shiftAt(1), half = shiftAt(0.5);
+    if (full == null || half == null) throw new Error('the split did not move the red channel at all — the harness, not the feature');
+    if (!(full > 6)) throw new Error('a 12px RGB Split shifted red by only ' + full + ' project px at full plate — the harness, not the feature');
+    if (Math.abs(half - full) > full * 0.4) {
+      throw new Error('a 12px RGB Split on an ADJUSTMENT layer shifted ' + half.toFixed(1) + ' project px on a half plate against ' + full.toFixed(1) + ' on a full one — the preview and the export disagree, which is what #691 fixed for ordinary layers');
+    }
+  });
 })();

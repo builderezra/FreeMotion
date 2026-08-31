@@ -13456,16 +13456,23 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return out || p;
   }
   FM._resolveFxColors = resolveFxColors;   // suite seam
+  FM._applyPixelFx = function (d, fx, t, W, H, ps) { return applyPixelFx(d, fx, t, W, H, ps); };   // suite seam: the adjustment-layer pixel path
 
-  function applyPixelFx(d, fx, t, W, H) {
+  /* `ps` REACHES THE ADJUSTMENT PATH TOO (#691, second half). The per-layer kernel call was fixed to
+     scale absolute-pixel parameters to the reduced preview plate; THIS path — an adjustment layer
+     grading everything beneath it — hardcoded a scale of 1 and so kept the original bug. RGB Split is
+     the one PIXEL_ADJ member measured in pixels (`amount` and `green` are offsets), and the caller has
+     the scale in hand already: it stamps `_adjCv.__fmRS = rs` two lines before calling this. */
+  function applyPixelFx(d, fx, t, W, H, ps) {
+    const S = (ps > 0) ? ps : 1;
     const p = resolveFxColors(fx.params || {}, t);
     // Levels is the one grade people reach for on an adjustment layer — "set the black point for
     // everything below" — and its pixel pass is already byte-in/byte-out, so the adjustment path can
     // call it directly instead of carrying a second copy. (No overlap: none of the other PIXEL_ADJ
     // types live in PIXEL_FX; they have their own draw* functions.)
-    if (PIXEL_FX[fx.type]) { PIXEL_FX[fx.type](d, W, H, p, t, 1); return; }
+    if (PIXEL_FX[fx.type]) { PIXEL_FX[fx.type](d, W, H, pxToPlate(fx, p, t, S, PIXEL_FX[fx.type]), t, S); return; }
     if (fx.type === 'rgbsplit') {
-      const dd = Math.round(FM.evalProp(p.amount, t) || 0);
+      const dd = Math.round((FM.evalProp(p.amount, t) || 0) * S);   // project px → plate px (#691)
       if (dd > 0 && W && H) {
         // ANGLE frees the split from the horizontal axis (a vertical or diagonal tear was impossible),
         // RADIAL grows the offset toward the frame edge the way real lens fringing does, and GREEN
@@ -13473,7 +13480,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // horizontal-only shift exactly: angle 0 gives cos/sin of 1/0, radial 0 skips the scaling.
         const ang = (p.angle == null ? 0 : FM.evalProp(p.angle, t)) * Math.PI / 180;
         const rad = (p.radial == null ? 0 : FM.evalProp(p.radial, t)) / 100;
-        const gsh = p.green == null ? 0 : FM.evalProp(p.green, t);
+        const gsh = (p.green == null ? 0 : FM.evalProp(p.green, t)) * S;   // …and the green channel's own offset
         const ux = ang === 0 ? 1 : Math.cos(ang), uy = ang === 0 ? 0 : Math.sin(ang);
         const src = d.slice();
         const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy) || 1;
@@ -13538,7 +13545,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     a.drawImage(ctx.canvas, 0, 0);                 // snapshot current frame (background + layers below), now 1:1
     if (ppfx.length) {                             // per-pixel post-fx grade the whole snapshot, in stack order
       const img = a.getImageData(0, 0, cw, ch), d = img.data;
-      ppfx.forEach(fx => applyPixelFx(d, fx, t, cw, ch));
+      ppfx.forEach(fx => applyPixelFx(d, fx, t, cw, ch, rs));   // rs: the adjustment plate's own scale (#691)
       a.putImageData(img, 0, 0);
     }
     if (pixFx) {                                   // pixelate the whole scene below (down- then up-scale the snapshot)
