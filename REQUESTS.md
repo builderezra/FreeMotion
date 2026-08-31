@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 31 Aug at v14.73
+> ## 📌 WHAT I NEED FROM YOU — updated 31 Aug at v14.74
 >
-> **State:** v14.73, 1142 tests green, tree clean. **#578 closed** — Motion Blur (Footage) now reaches
+> **State:** v14.74, 1142 tests green, tree clean. **🔴 #692 is the big one: your LAG has a measured
+> cause.** Six rotating shapes and a text layer cost 0.1ms; ONE Box Blur costs 67.5ms, because every
+> pixel effect walks the whole frame no matter how small the layer is. Not fixed yet — see the entry. **#578 closed** — Motion Blur (Footage) now reaches
 > nearly 3x further, measured rather than guessed. **The big one tonight: 32 effects were rendering at a
 > different strength on screen than in your exported file** — worst on your phone, where the preview
 > plate is smallest. Fixed in one place. See #691. **You closed three items yourself** by telling me the
@@ -28071,3 +28073,37 @@ re-opened #480, which I had marked done and had not fixed.
       (`unit: 'px'`), so it is data the app owns rather than a judgement to repeat 32 times — and 32
       hand-edits would be 32 chances to get one wrong in a way no test would notice. A kernel that DOES
       take `ps` is skipped by its own declared argument count, or it would scale twice.
+
+- [ ] **692 — 🔴 THE LAG HAS A MEASURED CAUSE: every pixel effect walks the WHOLE FRAME no matter how
+      **STATUS: 🟢 READY — nothing is stopping this**
+      small the layer is.** Found 31 Aug under his standing brief (#690). Bears directly on #95, #125,
+      #202, #387 and the unnumbered "editing lags" — his single most repeated complaint.
+      **MEASURED on a 1080x1920 comp, median of 11 warmed renders through the real renderScene:**
+      | scene | ms |
+      |---|---|
+      | 6 rotating shapes + a text layer, no effects | **0.1** |
+      | …plus ONE Box Blur | **67.5** |
+      | …plus a Drop Shadow as well | **106.0** |
+      The layers are free. **Two pixel effects cost the entire frame budget three times over** (33.3ms
+      at 30fps), on a Mac — his phone is far worse, which is why the preview drops to a reduced plate.
+      🚨 **AND THE WORK DOES NOT SHRINK WITH THE LAYER:**
+      | layer size | Box Blur | Drop Shadow |
+      |---|---|---|
+      | 120x100 (0.6% of the frame) | 69.9ms | 38.2ms |
+      | 1080x1920 (the whole frame) | 76.2ms | 36.2ms |
+      A layer covering **0.6% of the frame costs the same as one filling it.**
+      🔑 **THE MECHANISM TO FIX IT ALREADY EXISTS AND IS USED BY TWO EFFECTS.** `BOUNDED_FX` is
+      `{ letterbox: 1, border: 1 }`; `fxBounds` scans the alpha and hands the kernel a bbox as its 7th
+      argument, and the note beside it records Border going **5.5ms → 4.0ms** from exactly this. Every
+      other kernel ignores the bbox and walks the plate.
+      ⚠️ **WHY IT WAS ONLY TWO, and the trap for anyone extending it: A BLUR SPREADS.** Bounding a blur
+      to the layer's alpha bbox would CLIP its own spill. Anything that spreads needs the bbox padded by
+      its own reach (radius for a blur; distance + softness for a shadow), and getting that margin wrong
+      shows up as a hard edge on the effect rather than as an error.
+      ➡️ **Two routes, and the second is the whole prize:**
+      1. **Per-kernel**, contained and safe: pass the padded bbox and restrict the loops. No coordinate
+         system changes. Box Blur and Drop Shadow alone are ~100ms of the 106.
+      2. **Plate-sized**, the real fix: `nestedPlate` sizes the plate from the whole target canvas.
+         Sizing it to the layer's bounds instead would fix EVERY kernel at once with no per-kernel
+         edits — and the machinery is already there, since `OX`/`OY` are threaded through `baseT` for
+         the viewport crop. Bigger, riskier, touches the most critical path in the app.
