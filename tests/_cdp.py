@@ -146,6 +146,35 @@ def main():
                           "lastTest": ""}))
         return 2
 
+    # ⚠️ REAP ANY CHROME A KILLED RUN LEFT BEHIND — the cleanup at the end of main() cannot do it, and
+    # that is exactly the point. Its `finally` terminates Chrome and deletes the profile, which is
+    # right for a run that ENDS; it never executes for a run that is KILLED, and this repo kills runs
+    # routinely. CLAUDE.md's own timeout section says ship.sh exceeds the Bash tool's 600s cap and
+    # either lands in the background or is SIGKILLed, and a mutation run that outlives its timeout goes
+    # the same way. Every one of those orphans a Chrome.
+    #
+    # MEASURED, 1 Sep, after a night of ~17 releases and their mutation runs: SIXTEEN stale `fm-cdp-`
+    # Chromes were still resident and the next suite never started at all — it reported
+    # `"lastTest": ""` and timed out at 1800s, which reads exactly like a hung suite and is not one.
+    # That cost a release and the time to diagnose it.
+    #
+    # Reaping at STARTUP is the self-healing shape: two suite runs never overlap (ship.sh runs them in
+    # sequence), so any `fm-cdp-` process alive at this moment belongs to a run that is already over.
+    # Matching on the temp-profile prefix is what keeps this well away from the user's own browser, and
+    # signal 9 is passed as a number so no new import is needed.
+    try:
+        _ps = subprocess.run(["pgrep", "-f", "fm-cdp-"], capture_output=True, text=True)
+        _stale = [int(x) for x in _ps.stdout.split() if x.strip().isdigit() and int(x) != os.getpid()]
+        for _pid in _stale:
+            try:
+                os.kill(_pid, 9)
+            except Exception:
+                pass
+        if _stale:
+            print("(reaped %d Chrome process(es) left behind by a killed run)" % len(_stale), file=sys.stderr)
+    except Exception:
+        pass                      # housekeeping must never stop a suite run
+
     dbg = free_port()
     profile = tempfile.mkdtemp(prefix="fm-cdp-")
     proc = launch(dbg, a.width, a.height, profile)

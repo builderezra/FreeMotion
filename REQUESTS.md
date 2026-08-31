@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.77
+> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.78
 >
-> **State:** v14.77, 1144 tests green, tree clean. **🟢 #692, the lag: blur AND drop shadow are FIXED.**
+> **State:** v14.78, 1144 tests green, tree clean. **🟢 #692, the lag: blur AND drop shadow are FIXED.**
 > The test scene that cost **106ms a frame now costs 27.9ms** — from three times over the 30fps budget
 > to under it, with the picture proved byte-identical across 19 fixtures. Other kernels still to do. **#578 closed** — Motion Blur (Footage) now reaches
 > nearly 3x further, measured rather than guessed. **The big one tonight: 32 effects were rendering at a
@@ -28076,6 +28076,10 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **692 — 🔴 THE LAG HAS A MEASURED CAUSE: every pixel effect walks the WHOLE FRAME no matter how
       **STATUS: 🟢 READY — nothing is stopping this**
+      **JUMPED: #693 went first because it BROKE THE BUILD.** The test harness had leaked sixteen
+      Chrome processes and the suite stopped starting at all — nothing could be verified or shipped,
+      including #692's own remaining work. That is the "the build was broken" case this gate names.
+      #692 is still the next thing to work, and it is a big one: 90 kernels, Lens Blur at 190ms.**
       small the layer is.** Found 31 Aug under his standing brief (#690). Bears directly on #95, #125,
       #202, #387 and the unnumbered "editing lags" — his single most repeated complaint.
       **MEASURED on a 1080x1920 comp, median of 11 warmed renders through the real renderScene:**
@@ -28142,3 +28146,25 @@ re-opened #480, which I had marked done and had not fixed.
          Sizing it to the layer's bounds instead would fix EVERY kernel at once with no per-kernel
          edits — and the machinery is already there, since `OX`/`OY` are threaded through `baseT` for
          the viewport crop. Bigger, riskier, touches the most critical path in the app.
+
+- [x] **693 — The test harness leaked a Chrome per KILLED run, and it eventually stopped the suite
+      starting at all.** Found 1 Sep when a release failed for no visible reason. ✅ v14.78
+      **DONE — reaped at startup, and verified in the case it exists for.**
+      `tests/_cdp.py` cleans up in a `finally`: terminate Chrome, wait, kill, delete the profile. That
+      is correct for a run that ENDS. **A `finally` never runs when the process is KILLED** — and this
+      repo kills runs routinely, as CLAUDE.md's own timeout section says: ship.sh exceeds the Bash
+      tool's 600s cap and is either backgrounded or SIGKILLed, and a mutation run that outlives its
+      timeout goes the same way.
+      **MEASURED: one killed run orphans TEN Chrome processes** (it spawns helpers). After a night of
+      ~17 releases and their mutation runs, sixteen were resident and the next suite **never started** —
+      it reported `"lastTest": ""` and timed out at 1800s, which reads exactly like a hung suite or a
+      regression and is neither. That cost a release and the time to diagnose it.
+      ✅ **Reaping at STARTUP is the self-healing shape**: two suite runs never overlap (ship.sh runs
+      them in sequence), so any `fm-cdp-` process alive when a run begins belongs to a run already over.
+      Matching the temp-profile prefix keeps it well clear of his own browser.
+      ✅ **Verified by staging the real failure** rather than reasoning about it: a suite run was killed
+      mid-flight, leaving 9 stale processes; the next run printed *"(reaped 9 Chrome process(es) left
+      behind by a killed run)"*, went green at 1144/1144, and left 0 behind.
+      ⚠️ **No suite test for this, deliberately** — testing it means spawning and killing a browser,
+      which is heavier and more fragile than the thing it guards. The reap IS the structural safeguard;
+      this entry is its evidence.
