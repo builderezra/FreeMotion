@@ -2858,6 +2858,51 @@ window.FM = window.FM || {};
    * quality tier already makes and it never reaches the export. */
   function plateScale(ctx) { return Math.min(1, ctx.canvas.__fmRS || 1); }
 
+  /* ═══ A PIXEL IS A PIXEL, EVEN WHEN THE PLATE IS SMALLER THAN THE PICTURE (#691) ═══════════════
+   * The preview renders into a REDUCED plate — the playback-quality tier, and on his phone the perf
+   * report has said "rendering at 28% scale". A kernel whose parameter is measured in ABSOLUTE PIXELS
+   * must therefore multiply it by that scale, or a 10px blur set by the user draws 10 PLATE pixels,
+   * which is 36 project pixels on a 0.28 plate. js/compositor.js has known this since the stroke
+   * kernel was fixed — its comment records the preview disagreeing with the export by +154% — and the
+   * kernel call below has passed `ps` ever since, with a comment saying exactly what it is for.
+   * 🚨 IT IS THE SIXTH ARGUMENT, AND 32 OF THE 79 KERNELS WITH A PIXEL-SIZED PARAMETER NEVER DECLARED
+   * IT. A function that does not name an argument does not get a warning; it silently ignores it. So
+   * a third of the effects rendered at one strength on screen and a different one in the file, and the
+   * difference is not subtle: MEASURED on a step edge, Box Blur at radius 10 blurs 18 project px on a
+   * full plate, 36 on a half plate and 72 on a quarter — and across 14 effects the drift between
+   * preview and export was LARGER THAN THE EFFECT ITSELF.
+   * Fixed HERE rather than in 32 kernels, for two reasons. The catalog already declares which
+   * parameters are absolute pixels — `unit: 'px'` — so the answer is data the app owns rather than a
+   * judgement to repeat 32 times; and 32 hand-edits is 32 chances to get one wrong in a way no test
+   * would notice. A kernel that DOES take `ps` is left alone (fn.length >= 6), or it would scale twice.
+   * The params are evaluated first because a keyframed value is an object, and an object cannot be
+   * multiplied — evalProp passes a plain number straight through, so a scaled number still reads
+   * correctly when the kernel evalProps it again. */
+  const _PX_KEYS = Object.create(null);
+  function pxParamKeys(type) {
+    if (_PX_KEYS[type]) return _PX_KEYS[type];
+    let keys = [];
+    try { keys = (FM.fxRegistry.paramsOf(type) || []).filter(p => p && p.unit === 'px').map(p => p.key); } catch (e) { keys = []; }
+    _PX_KEYS[type] = keys;
+    return keys;
+  }
+  function pxToPlate(fx, params, t, ps, fn) {
+    if (!(ps > 0) || ps === 1) return params;          // full plate — nothing to correct, and the common case
+    if (fn && fn.length >= 6) return params;           // the kernel already scales for itself
+    const keys = pxParamKeys(fx.type);
+    if (!keys.length) return params;
+    const out = Object.assign({}, params);
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      if (out[k] === undefined || out[k] === null) continue;
+      const v = FM.evalProp(out[k], t);
+      if (typeof v === 'number' && isFinite(v)) out[k] = v * ps;
+    }
+    return out;
+  }
+  FM._pxToPlate = pxToPlate;      // seam: the suite drives the real thing rather than a copy
+  FM._pxParamKeys = pxParamKeys;
+
   /* ---- THE REGION A NESTED PLATE SHOULD COVER (queue 323) ---------------------------------------
    * Every per-layer pass in this file renders a clean copy of the layer into a plate, does something
    * to it, and composites it back. Each of them sized that plate from the COMP and pinned its origin
@@ -3093,7 +3138,7 @@ window.FM = window.FM || {};
        * line was split: 39 of 240 thin-layer configurations vanished outright at ordinary preview
        * scales, and a 1px layer on an odd plate row vanished at scale 1 too, i.e. in the export. */
       // resolveFxColors: an animated colour is an OBJECT and 39 kernels read colours as strings (queue 555)
-      if (!bounded || bb) fn(img.data, W, H, resolveFxColors(fx.params || {}, t), t, ps, bb);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
+      if (!bounded || bb) fn(img.data, W, H, pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn), t, ps, bb);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
       pB.getContext('2d').putImageData(img, 0, 0);
       ctx.save();
       baseT(ctx);

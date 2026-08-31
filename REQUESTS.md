@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 31 Aug at v14.68
+> ## 📌 WHAT I NEED FROM YOU — updated 31 Aug at v14.69
 >
-> **State:** v14.68, 1139 tests green, tree clean. **You closed three items yourself** by telling me the
+> **State:** v14.69, 1140 tests green, tree clean. **The big one tonight: 32 effects were rendering at a
+> different strength on screen than in your exported file** — worst on your phone, where the preview
+> plate is smallest. Fixed in one place. See #691. **You closed three items yourself** by telling me the
 > colour filters are good now — #593, #603 and #645, open since 26 Aug. **#686 CLOSED (all 13 bugs), #687 CLOSED (motion
 > blur on groups), and #688's forgetting is FIXED** — it saved perfectly and was never read back.
 >
@@ -27977,7 +27979,11 @@ re-opened #480, which I had marked done and had not fixed.
              that matched nothing would pass forever.
 
 - [ ] **690 — Standing direction, 31 Aug (verbatim):**
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **JUMPED: #690 is a standing brief, not a task with an end — "keep things going, dont stop,
+      go find some bugs, polish the effects". It stays open on purpose, and the numbered items found
+      while WORKING it (#691 onward) close on their own. Working #690 is what produced them, so it
+      must not hold the queue behind itself.**
       > *"Keep things going, dont stop, go re audit, find some bugs coz theres a shit load, and a lot of
       > things ive asked are still issues ( not those effects like brightness not working, they are
       > good). you can always find things to do to effects to polish them up and make them better same
@@ -27999,3 +28005,27 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ **AND HE ANSWERED A STANDING QUESTION IN PASSING:** *"not those effects like brightness not
       working, they are good"* — the colour/black-and-white family WORKS on his device now. That closes
       #593, #603 and #645, which had been open since 26 Aug and cost three sessions of testing.
+
+- [x] **691 — Bug hunt (31 Aug): 32 effects rendered at a different strength in the PREVIEW than in the
+      EXPORT.** Found by Claude under his standing brief (#690). ✅ v14.69
+      **DONE — fixed centrally, and measured before and after.**
+      The preview renders into a REDUCED plate (the playback-quality tier; his own perf report says
+      *"rendering at 28% scale"*). A kernel whose parameter is in ABSOLUTE PIXELS must multiply it by
+      that scale, or a 10px blur draws 10 PLATE px — 36 project px on a 0.28 plate. The kernel call has
+      passed `ps` for exactly this since the stroke fix, whose comment records a **+154%** mismatch.
+      🚨 **It is the SIXTH ARGUMENT, and 32 of the 79 kernels with a pixel-sized parameter never
+      declared it.** A function that does not name an argument gets no warning — it silently ignores it.
+      | measured, Box Blur radius 10 on a step edge | full plate | half | quarter |
+      |---|---|---|---|
+      | before | 18 project px | **36** | **72** |
+      | after | 18 | 20 | 24 |
+      Across 14 effects the drift between preview and export was **larger than the effect itself**.
+      After the fix almost all sit at the 0.60 baseline that resampling alone produces: Long Shadow
+      0.44, Matte Choker 0.54, Light Glow 0.65, Inner Blur 0.68, Grid 0.71, Drop Shadow 0.73, Glow Scan
+      0.73 (from 5.47, 4.72, …, 7.12). Sharpen and Grunge keep a residual and that one is INHERENT —
+      a sub-pixel sharpen radius and a procedural noise field generated at half resolution cannot be
+      resolution-invariant, which is what a lower-res preview IS.
+      🔑 **Fixed in ONE place, not 32.** The catalog already declares which params are absolute pixels
+      (`unit: 'px'`), so it is data the app owns rather than a judgement to repeat 32 times — and 32
+      hand-edits would be 32 chances to get one wrong in a way no test would notice. A kernel that DOES
+      take `ps` is skipped by its own declared argument count, or it would scale twice.

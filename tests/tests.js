@@ -55547,4 +55547,50 @@
         '. Either the control is broken, or its range promises something the kernel does not honour — the Stroke Colour Width slider offered 1-60px while the kernel clamped at 16 (#482).');
     }
   });
+
+  test('effects: a pixel-sized setting means the same thing on a reduced preview plate', { item: '691' }, function () {
+    /* #691. The preview renders into a REDUCED plate — the playback-quality tier, and his phone's perf
+     * report says "rendering at 28% scale". A kernel whose parameter is in ABSOLUTE PIXELS has to
+     * multiply it by that scale, or a 10px blur draws 10 PLATE pixels, which is 36 project pixels on a
+     * 0.28 plate. The kernel call has passed `ps` for exactly this since the stroke kernel was fixed;
+     * it is the SIXTH argument, and 32 of the 79 kernels with a pixel-sized parameter never declared
+     * it — and a function that does not name an argument silently ignores it.
+     * Measured on a step edge before the fix: radius 10 blurred 18 project px at full plate, 36 at
+     * half and 72 at quarter. */
+    const P = FM._pixelFx;
+    if (!P || !P.boxblur || typeof FM._pxToPlate !== 'function') throw new Error('the pixel kernels or FM._pxToPlate are missing — the harness, not the feature');
+
+    const edge = (W, H) => {
+      const a = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) { const v = x < W / 2 ? 0 : 255; a[i] = v; a[i + 1] = v; a[i + 2] = v; a[i + 3] = 255; }
+      return a;
+    };
+    const width = (d, W, H) => { const y = H >> 1; let lo = -1, hi = -1;
+      for (let x = 0; x < W; x++) { const v = d[((y * W + x) << 2)]; if (lo < 0 && v > 20) lo = x; if (v < 235) hi = x; }
+      return hi - lo + 1; };
+    // The real path: pxToPlate, then the kernel, exactly as drawPixelEffect calls them.
+    const blurAt = (ps) => {
+      const W = Math.round(400 * ps), H = W, d = edge(W, H);
+      const params = { radius: 10, passes: 1, aspect: 100 };
+      P.boxblur(d, W, H, FM._pxToPlate({ type: 'boxblur' }, params, 0.3, ps, P.boxblur), 0.3, ps);
+      return width(d, W, H) / ps;                       // back into PROJECT pixels
+    };
+    const full = blurAt(1), half = blurAt(0.5), quarter = blurAt(0.25);
+    if (!(full > 12)) throw new Error('a radius-10 box blur did not blur the edge at full plate (' + full + 'px) — the harness, not the feature');
+    // Generous, because a plate rounds the radius to whole pixels and dividing back multiplies that
+    // rounding — but nowhere near the 2x and 4x the bug produced.
+    if (half > full * 1.45) throw new Error('a 10px blur drew ' + half.toFixed(1) + ' project px on a HALF plate against ' + full + ' on a full one — the preview is showing a different picture from the export, which is what the user gets on a phone');
+    if (quarter > full * 1.9) throw new Error('a 10px blur drew ' + quarter.toFixed(1) + ' project px on a QUARTER plate against ' + full + ' on a full one — the reduced preview plate is not being accounted for');
+
+    // …and the helper itself: scale the pixel ones, leave everything else exactly alone.
+    const src = { radius: 10, passes: 3, aspect: 100 };
+    const out = FM._pxToPlate({ type: 'boxblur' }, src, 0.3, 0.5, P.boxblur);
+    if (out.radius !== 5) throw new Error('a px parameter was not scaled to the plate (radius came out ' + out.radius + ', wanted 5)');
+    if (out.passes !== 3 || out.aspect !== 100) throw new Error('a NON-pixel parameter was scaled too (' + JSON.stringify(out) + ') — only `unit: px` means absolute pixels; a count or a percentage must not move');
+    const same = FM._pxToPlate({ type: 'boxblur' }, src, 0.3, 1, P.boxblur);
+    if (same !== src) throw new Error('a full plate must hand the params straight back, untouched and unallocated');
+    // A kernel that takes `ps` itself must be left alone or it scales twice.
+    const sixArg = function (d, W, H, p, t, ps) { return ps; };
+    if (FM._pxToPlate({ type: 'boxblur' }, src, 0.3, 0.5, sixArg) !== src) throw new Error('a kernel that declares its own `ps` was scaled as well — that double-applies the plate scale');
+  });
 })();
