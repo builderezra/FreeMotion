@@ -55458,4 +55458,93 @@
     const w60 = at(60);
     if (!(w60 > w40 + 20)) throw new Error('the top of the Width slider (60) drew ' + w60 + 'px against 40px\'s ' + w40 + ' — the last third of the travel is still dead');
   });
+
+  test('effects: no effect slider is completely inert', { item: '482' }, function () {
+    /* #482, and the structural half of it. tools/fx-sweep.js has ranked these sliders for a while, but
+     * a tool somebody has to remember to run is not a guarantee — the Stroke Colour Width slider sat
+     * with 73% of its travel doing nothing until a run happened to be made. This asserts the floor:
+     * NO parameter may be completely inert.
+     *
+     * The threshold is deliberately "did not move a single pixel worth mentioning" rather than the
+     * sweep's own 0.5 "looks weak" line. A weak slider is a taste question and would make this test
+     * argue about polish; a slider that changes NOTHING is a defect by any reading, and a test that
+     * cried wolf about the first kind would be ignored when it caught the second.
+     *
+     * Every way this measurement lies is in fx-sweep.js's header — eight of them, each found the hard
+     * way. The three that matter here are carried over: sample UNEVENLY (even fractions alias against
+     * a periodic parameter — Sunburst's rotation scored a perfect 0.00 that way), unlock a param its
+     * own effect is gating (`overriddenBy`/`liveWhen`), and give a colour- or tone-selective control a
+     * frame it can actually act on. */
+    const R = FM.fxRegistry, P = FM._pixelFx;
+    if (!R || !P) throw new Error('the effect registry or the pixel kernels are missing — the harness, not the feature');
+    const W = 96, H = 72, FRAC = [0, 0.17, 0.41, 0.66, 0.93];
+
+    const subject = () => {                       // a subject on transparency, with a soft rim and real extremes
+      const a = new Uint8ClampedArray(W * H * 4), cx = W / 2, cy = H / 2, rx = W * 0.34, ry = H * 0.38;
+      for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) {
+        const u = x / W, v = y / H;
+        let r = Math.round(255 * u), g = Math.round(255 * v), b = Math.round(200 * (1 - u * v) + 40);
+        if (((x >> 4) + (y >> 4)) & 1) { r = Math.min(255, r + 40); g = Math.max(0, g - 30); }
+        if (y > H * 0.66) { const q = Math.round(255 * (x / (W - 1))); r = q; g = q; b = q; }
+        const dx = (x - cx) / rx, dy = (y - cy) / ry, d = dx * dx + dy * dy;
+        a[i] = r; a[i + 1] = g; a[i + 2] = b;
+        a[i + 3] = (y > H * 0.66) ? 255 : (d <= 1 ? (d > 0.82 ? 170 : 255) : 0);
+      }
+      return a;
+    };
+    const hues = () => {                          // saturated hue sweep, for colour-selective controls
+      const a = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) {
+        const h = (x / W) * 360, l = 0.3 + 0.45 * (y / H), c = (1 - Math.abs(2 * l - 1)) * 0.95;
+        const hp = h / 60, xx = c * (1 - Math.abs(hp % 2 - 1));
+        let r = 0, g = 0, b = 0;
+        if (hp < 1) { r = c; g = xx; } else if (hp < 2) { r = xx; g = c; } else if (hp < 3) { g = c; b = xx; }
+        else if (hp < 4) { g = xx; b = c; } else if (hp < 5) { r = xx; b = c; } else { r = c; b = xx; }
+        const m = l - c / 2;
+        a[i] = Math.round((r + m) * 255); a[i + 1] = Math.round((g + m) * 255); a[i + 2] = Math.round((b + m) * 255); a[i + 3] = 255;
+      }
+      return a;
+    };
+    const FRAMES = [subject, hues];
+    const mad = (A, B) => { let s = 0; for (let i = 0; i < A.length; i++) s += Math.abs(A[i] - B[i]); return s / A.length; };
+
+    const dead = [];
+    let checked = 0;
+    R.all().forEach(fx => {
+      if (!P[fx.type]) return;
+      const ps = R.paramsOf(fx.type) || [];
+      const defs = {}; ps.forEach(p => { if (p.default !== undefined) defs[p.key] = p.default; });
+      ps.filter(p => typeof p.min === 'number' && typeof p.max === 'number' && p.max > p.min).forEach(p => {
+        checked++;
+        const base = Object.assign({}, defs);
+        if (p.overriddenBy && p.liveWhen !== undefined) base[p.overriddenBy] = p.liveWhen;
+        let best = 0;
+        for (const mk of FRAMES) {
+          /* FIVE TIMES, NOT TWO, and the first draft of this test proved why: Blink's `min` (how far it
+             dims to) scored a flat 0.000 on t = 0.37 and 1.4 because BOTH land in the blink's "on"
+             phase, where the dim level has nothing to do. That is fault 4 out of fx-sweep.js's header
+             catching the very test written to enforce it. These are the same five the tool uses. */
+          for (const t of [0, 0.23, 0.61, 1.4, 2.7]) {
+            const shots = [];
+            for (let k = 0; k < FRAC.length; k++) {
+              const d = mk();
+              try { P[fx.type](d, W, H, Object.assign({}, base, { [p.key]: p.min + (p.max - p.min) * FRAC[k] }), t, 1); }
+              catch (e) { return; }               // a kernel that throws on this fixture is not this test's subject
+              shots.push(d);
+            }
+            let tot = 0; for (let k = 1; k < shots.length; k++) tot += mad(shots[k - 1], shots[k]);
+            if (tot > best) best = tot;
+            if (best >= 0.05) return;             // alive — stop paying for it
+          }
+        }
+        if (best < 0.05) dead.push(fx.label + ' · ' + p.key + ' (' + best.toFixed(3) + ')');
+      });
+    });
+
+    if (checked < 200) throw new Error('only ' + checked + ' sliders were reachable — the registry did not enumerate properly, so a pass here would mean nothing (harness, not feature)');
+    if (dead.length) {
+      throw new Error(dead.length + ' effect slider(s) do not change the picture ANYWHERE across their travel: ' + dead.join(', ') +
+        '. Either the control is broken, or its range promises something the kernel does not honour — the Stroke Colour Width slider offered 1-60px while the kernel clamped at 16 (#482).');
+    }
+  });
 })();

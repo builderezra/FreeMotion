@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 31 Aug at v14.67
+> ## 📌 WHAT I NEED FROM YOU — updated 31 Aug at v14.68
 >
-> **State:** v14.67, 1137 tests green, tree clean. **You closed three items yourself** by telling me the
+> **State:** v14.68, 1139 tests green, tree clean. **You closed three items yourself** by telling me the
 > colour filters are good now — #593, #603 and #645, open since 26 Aug. **#686 CLOSED (all 13 bugs), #687 CLOSED (motion
 > blur on groups), and #688's forgetting is FIXED** — it saved perfectly and was never read back.
 >
