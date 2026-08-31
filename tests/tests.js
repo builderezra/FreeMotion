@@ -55725,4 +55725,61 @@
     if (!m) throw new Error('BOUNDED_FX is gone from compositor.js');
     if (m[1].indexOf('boxblur') < 0) throw new Error('boxblur left BOUNDED_FX, so no bbox reaches the kernel and it walks the whole plate again — 67.5ms per frame for one blur (#692)');
   });
+
+  test('effects: bounding the drop shadow to the layer changes NOTHING about the picture', { item: '692' }, async function () {
+    /* #692, the second kernel. Drop Shadow has FOUR full-frame loops — build the shifted alpha, blur it
+     * horizontally, blur it vertically, composite it under the layer — and each ran over the whole
+     * plate however small the layer was: 38.2ms on a 120x100 layer against 36.2ms on one filling the
+     * frame. Bounded, the small one is 8.5ms, and the scene that started #692 (six rotating shapes, a
+     * text layer, one blur and one shadow) went 106.0ms → 27.9ms: from three times over the 33.3ms
+     * frame budget to under it.
+     *
+     * The shadow can only occupy the layer's box SHIFTED by the offset and GROWN by the softness;
+     * outside that the working buffer is a fresh Float32Array still full of zeros, so skipping and
+     * writing zero are the same act. As with boxblur the blur passes restrict ROWS ONLY (horizontal)
+     * and COLUMNS ONLY (vertical) — never the axis a running sum walks — so no accumulator's priming
+     * moves. This test is the claim: same pixels in, bounded and unbounded, byte-for-byte out.
+     * The angles matter and are all four quadrants: the offset can carry the shadow off ANY edge, and
+     * a sign error in the bounds would show on exactly one of them. */
+    const K = FM._pixelFx && FM._pixelFx.dropshadow;
+    if (!K) throw new Error('the drop shadow kernel is missing — the harness, not the feature');
+    const sum = (d) => { let a = 0, b = 0; for (let i = 0; i < d.length; i += 4) { a = (a + d[i] * 7 + d[i + 1] * 13 + d[i + 2] * 17 + d[i + 3] * 19) >>> 0; b = (b + a) >>> 0; } return a + ':' + b; };
+    const mk = (W, H, rx, ry, rw, rh) => {
+      const a = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        if (x >= rx && x < rx + rw && y >= ry && y < ry + rh) {
+          const edge = (x < rx + 2 || x >= rx + rw - 2 || y < ry + 2 || y >= ry + rh - 2);
+          a[i] = 200; a[i + 1] = 90; a[i + 2] = 60; a[i + 3] = edge ? 140 : 255;
+        }
+      }
+      return a;
+    };
+    const CASES = [
+      { rx: 70, ry: 60, rw: 80, rh: 60, dist: 18, ang: 135, soft: 6, label: 'centred, default' },
+      { rx: 70, ry: 60, rw: 80, rh: 60, dist: 18, ang: 315, soft: 6, label: 'opposite angle' },
+      { rx: 70, ry: 60, rw: 80, rh: 60, dist: 18, ang: 45, soft: 6, label: 'up and to the right' },
+      { rx: 70, ry: 60, rw: 80, rh: 60, dist: 18, ang: 225, soft: 6, label: 'down and to the left' },
+      { rx: 0, ry: 0, rw: 60, rh: 50, dist: 30, ang: 135, soft: 12, label: 'in the corner, shadow falls off the plate' },
+      { rx: 160, ry: 130, rw: 60, rh: 50, dist: 40, ang: 315, soft: 10, label: 'clipped, shadow off the opposite edge' },
+      { rx: 70, ry: 60, rw: 80, rh: 60, dist: 0, ang: 135, soft: 8, label: 'distance 0' },
+      { rx: 70, ry: 60, rw: 80, rh: 60, dist: 18, ang: 135, soft: 0, label: 'softness 0, so no blur pass at all' },
+      { rx: 70, ry: 60, rw: 80, rh: 60, dist: 60, ang: 90, soft: 20, label: 'maximum distance and softness' },
+      { rx: 0, ry: 0, rw: 220, rh: 180, dist: 18, ang: 135, soft: 6, label: 'fills the plate (nothing to skip)' },
+      { rx: 110, ry: 90, rw: 2, rh: 1, dist: 18, ang: 135, soft: 6, label: 'a 1px hairline' },
+    ];
+    const W = 220, H = 180, bad = [];
+    CASES.forEach(c => {
+      const params = { distance: c.dist, angle: c.ang, softness: c.soft, color: '#000000' };
+      const a = mk(W, H, c.rx, c.ry, c.rw, c.rh); K(a, W, H, params, 0.3, 1);
+      const b = mk(W, H, c.rx, c.ry, c.rw, c.rh); K(b, W, H, params, 0.3, 1, { x: c.rx, y: c.ry, w: c.rw, h: c.rh });
+      if (sum(a) !== sum(b)) bad.push(c.label);
+    });
+    if (bad.length) throw new Error('the bounded drop shadow draws a DIFFERENT picture from the unbounded one on: ' + bad.join(', ') + ' — the skip is only safe while it is provably a skip');
+
+    const src = await (await fetch('../js/compositor.js?boot=' + Date.now())).text();
+    const m = /const BOUNDED_FX = \{([^}]*)\}/.exec(src);
+    if (!m) throw new Error('BOUNDED_FX is gone from compositor.js');
+    if (m[1].indexOf('dropshadow') < 0) throw new Error('dropshadow left BOUNDED_FX, so no bbox reaches the kernel and all four of its loops walk the whole plate again — 38ms per frame on a small layer (#692)');
+  });
 })();

@@ -1,10 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.75
+> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.76
 >
-> **State:** v14.75, 1143 tests green, tree clean. **🟢 #692, the lag: the box blur is FIXED.** A test
-> scene that cost 67.5ms a frame now costs 18.0ms — from twice over the 30fps budget to under it, with
-> the picture proved byte-identical. Drop Shadow and the other kernels are still to do. **#578 closed** — Motion Blur (Footage) now reaches
+> **State:** v14.76, 1144 tests green, tree clean. **🟢 #692, the lag: blur AND drop shadow are FIXED.**
+> The test scene that cost **106ms a frame now costs 27.9ms** — from three times over the 30fps budget
+> to under it, with the picture proved byte-identical across 19 fixtures. Other kernels still to do. **#578 closed** — Motion Blur (Footage) now reaches
 > nearly 3x further, measured rather than guessed. **The big one tonight: 32 effects were rendering at a
 > different strength on screen than in your exported file** — worst on your phone, where the preview
 > plate is smallest. Fixed in one place. See #691. **You closed three items yourself** by telling me the
@@ -28105,9 +28105,13 @@ re-opened #480, which I had marked done and had not fixed.
       frame is unchanged at ~72ms, which is correct: there is nothing to skip there. Proved identical
       rather than assumed — eight fixtures (corner, clipped, full-plate, anisotropic, three-pass, radius
       >> layer, 1px hairline) checksummed bounded vs unbounded, and that equivalence is now a test.
-      ⏭️ **STILL TO DO: Drop Shadow (~38ms) and the rest of the pixel kernels**, and route 2 below, which
-      would also remove the ~11.7ms floor that is the full-frame plate allocation and its
-      getImageData/putImageData round trip.
+      ✅ **DROP SHADOW DONE TOO — v14.76.** 38.2ms → **8.5ms** on a 120x100 layer, and **THE SCENE THAT
+      STARTED THIS ENTRY: 106.0ms → 27.9ms**, i.e. from three times over the 33.3ms budget to under it.
+      Eleven fixtures proved identical, angles in all four quadrants because the offset can carry the
+      shadow off any edge and a sign error would show on exactly one of them.
+      ⏭️ **STILL TO DO: the remaining pixel kernels** (each is the same pattern and each needs its own
+      identity proof), and route 2 below, which would also remove the ~8-12ms floor that is the
+      full-frame plate allocation and its getImageData/putImageData round trip.
       ➡️ **Two routes, and the second is the whole prize:**
       1. **Per-kernel**, contained and safe: pass the padded bbox and restrict the loops. No coordinate
          system changes. Box Blur and Drop Shadow alone are ~100ms of the 106.
