@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.76
+> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.77
 >
-> **State:** v14.76, 1144 tests green, tree clean. **🟢 #692, the lag: blur AND drop shadow are FIXED.**
+> **State:** v14.77, 1144 tests green, tree clean. **🟢 #692, the lag: blur AND drop shadow are FIXED.**
 > The test scene that cost **106ms a frame now costs 27.9ms** — from three times over the 30fps budget
 > to under it, with the picture proved byte-identical across 19 fixtures. Other kernels still to do. **#578 closed** — Motion Blur (Footage) now reaches
 > nearly 3x further, measured rather than guessed. **The big one tonight: 32 effects were rendering at a
@@ -28112,6 +28112,29 @@ re-opened #480, which I had marked done and had not fixed.
       ⏭️ **STILL TO DO: the remaining pixel kernels** (each is the same pattern and each needs its own
       identity proof), and route 2 below, which would also remove the ~8-12ms floor that is the
       full-frame plate allocation and its getImageData/putImageData round trip.
+      ═══ 📐 **1 SEP — HOW BIG THE REST IS, AND A BETTER ROUTE 2 THAN THE ONE FIRST WRITTEN DOWN** ═══
+      **Measured: 92 kernels cost over 4ms** on a 140x120 subject in a 1080x1920 plate. Lens Blur
+      **190ms**. Spin Streaks 180ms. Zoom Streaks 170ms. Spin Blur 118. Edge Glow 117. Tilt Shift 108.
+      Matte Choker 100. Nearly all of it is arithmetic on empty pixels.
+      **Bounding 92 kernels one at a time is not the answer** — each needs its own identity proof, and
+      that is a session each.
+      🔑 **BETTER: CROP THE IMAGEDATA, NOT THE PLATE.** `drawPixelEffect` does
+      `actx.getImageData(0,0,W,H)` → kernel → `putImageData(img,0,0)`. Ask for a CROPPED rectangle
+      instead, run the kernel on that smaller buffer, and put it back at its offset. One change in the
+      dispatcher, no per-kernel edits, and — crucially — **it does not touch the canvas coordinate
+      system**, which `__fmOX/__fmOY` and the viewport crop depend on. It also removes the ~8–12ms floor
+      that the two bounded kernels still pay, because that floor IS the full-frame getImageData round
+      trip.
+      ⚠️ **TWO THINGS MAKE IT UNSAFE IF DONE BLINDLY, and both are checkable:**
+      1. **Centre-based effects break.** Zoom Blur, Spin Blur, Vignette and friends compute their centre
+         as `W/2, H/2`. Crop the buffer and their centre moves to the crop's centre. So this needs a
+         POSITION-INDEPENDENT list, each member admitted only when the identity test passes for it —
+         the same classification problem, but concentrated in ONE place instead of 92.
+      2. **The crop margin is effect-specific.** A blur spreads by its radius, a streak by its length.
+         The catalog already knows: take the margin from that effect's own `unit: 'px'` parameters
+         (the same data `pxToPlate` uses), with a safety factor. Effects that sample the WHOLE frame
+         radially have no such margin — and those are exactly the centre-based ones excluded above, so
+         the two rules cover each other.
       ➡️ **Two routes, and the second is the whole prize:**
       1. **Per-kernel**, contained and safe: pass the padded bbox and restrict the loops. No coordinate
          system changes. Box Blur and Drop Shadow alone are ~100ms of the 106.
