@@ -40290,6 +40290,109 @@
       throw new Error('slices were produced with motion blur switched off');
   });
 
+  test('“This frame (PNG)” honours the Resolution and the isolated layer (queue 705)', { item: '705' }, async function () {
+    /* Queue 705, found 2 Sep by the five-lens audit. "This frame (PNG)" is a FORMAT INSIDE the export
+     * dialog, so the Resolution rung and "Export just this layer" sit right above it on screen — and both
+     * were ignored. `runExport` returns at the frame branch before either is read, and `snapshotPNG`
+     * built its canvas at the project size unconditionally.
+     * MEASURED: a 2160x3840 project with Resolution set to "720p" saved a 2160x3840 PNG — four times the
+     * area he chose, with the control that said otherwise still on screen. Same shape as everything else
+     * in this batch: a control that looks live and does nothing.
+     * ⚠️ THE SCALE IS NOT CLAMPED TO 1, deliberately. Every rung the dialog builds today is a downscale,
+     * so a clamp would be invisible now and would silently ignore an upscale rung the day one was added
+     * — reintroducing this very bug. It is clamped against an impossible allocation instead. */
+    if (typeof FM.snapshotPNG !== 'function') throw new Error('FM.snapshotPNG is missing');
+    const keep = FM.scene.layers.slice();
+    const P = FM.scene.project;
+    const w0 = P.width, h0 = P.height;
+    const realToBlob = HTMLCanvasElement.prototype.toBlob;
+    let seen = null, bg0;
+    try {
+      P.width = 800; P.height = 600;
+      /* ⚠️ TRANSPARENT BACKGROUND, or this measures nothing. renderScene paints the project background
+         first, so every pixel comes back opaque and "is this half empty?" answers yes for the whole
+         frame whatever solo did. Measured while getting it wrong: 26800 lit pixels on the side that was
+         supposed to be empty — exactly half the sampled frame, i.e. the background itself. */
+      bg0 = P.background; P.background = null;
+      const A = FM.makeLayer('shape', { shape: 'rect', x: 200, y: 300, shapeW: 200, shapeH: 200, fill: '#c05030' });
+      const B = FM.makeLayer('shape', { shape: 'rect', x: 600, y: 300, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+      A.start = B.start = 0; A.duration = B.duration = 4;
+      FM.scene.layers.length = 0; FM.scene.layers.push(A, B);
+
+      /* Intercept at toBlob: it is the last point that still knows the canvas, and it keeps the test off
+         the download path entirely — no anchor click, no object URL, nothing to clean up. */
+      HTMLCanvasElement.prototype.toBlob = function () { seen = { w: this.width, h: this.height, cv: this }; };
+
+      seen = null; FM.snapshotPNG();
+      if (!seen) throw new Error('snapshotPNG never reached toBlob — the harness, not the feature');
+      if (seen.w !== 800 || seen.h !== 600) throw new Error('with no options the PNG is ' + seen.w + 'x' + seen.h + ', not the project size — the plain toolbar snapshot must be unchanged');
+
+      seen = null; FM.snapshotPNG({ scale: 0.5 });
+      if (!seen) throw new Error('snapshotPNG never reached toBlob at scale 0.5');
+      if (seen.w !== 400 || seen.h !== 300) throw new Error('Resolution was ignored: asked for half, got ' + seen.w + 'x' + seen.h + ' — the rung is on screen above the format and must mean something (queue 705)');
+
+      /* AND THE ISOLATED LAYER. Rendering only B must leave A's half of the frame empty — checked on the
+         pixels, because a solo that silently does nothing is exactly what this item is about. */
+      seen = null; FM.snapshotPNG({ soloId: B.id });
+      if (!seen) throw new Error('snapshotPNG never reached toBlob with a soloId');
+      const d = seen.cv.getContext('2d').getImageData(0, 0, seen.w, seen.h).data;
+      const lit = (x0, x1) => { let n = 0; for (let y = 0; y < seen.h; y += 3) for (let x = x0; x < x1; x += 3) if (d[((y * seen.w + x) << 2) + 3] > 20) n++; return n; };
+      const leftLit = lit(0, Math.floor(seen.w / 2)), rightLit = lit(Math.floor(seen.w / 2), seen.w);
+      if (!(rightLit > 20)) throw new Error('isolating the right-hand layer produced an empty frame (' + rightLit + ' lit) — the harness, not the feature');
+      if (leftLit > 0) throw new Error('“Export just this layer” was ignored: the other layer still drew ' + leftLit + ' pixels into the PNG (queue 705)');
+
+      /* ═══ AND THE PART THAT IS ACTUALLY THE BUG ═══════════════════════════════════════════════
+         Everything above calls snapshotPNG DIRECTLY with options, which tests what it does when it is
+         given them — not that the export dialog GIVES them. The bug was the dialog returning before it
+         read either control, so all of the above passed while the bug was live: a mutation reverting the
+         call site to `snapshotPNG()` SURVIVED the first version of this test.
+         So drive the real path: set the controls, press the real Export button, and see what arrives. */
+      const realSnap = FM.snapshotPNG;
+      let got = null;
+      const fmt = document.getElementById('exp-format'), res = document.getElementById('exp-res'), go = document.getElementById('exp-go');
+      if (!fmt || !res || !go) throw new Error('the export dialog controls are not in the DOM — the harness, not the feature');
+      /* ⚠️ PUT THE DIALOG BACK. These are real, shared controls: leaving the format on "frame" broke
+         queue 215's silent-export warning test two tests later, which is the kind of cross-test damage
+         that reads as an unrelated regression. */
+      const fmt0 = fmt.value, res0 = res.value;
+      /* …AND THE PERSISTED PREFERENCE. Pressing Export runs `expPrefsSave()`, which writes the chosen
+         format to localStorage — so leaving it as "frame" made the NEXT dialog open on PNG, and queue
+         215's silent-export warning (which only applies to video) correctly said nothing. That read as
+         an unrelated regression two tests later. Restoring the controls alone was not enough. */
+      const PK = 'fm.exportPrefs';
+      let prefs0 = null; try { prefs0 = localStorage.getItem(PK); } catch (e) {}
+      let addedOpt = null;
+      try {
+        FM.snapshotPNG = (opts) => { got = opts || {}; };
+        const optVals = Array.prototype.map.call(res.options, o2 => o2.value);
+        if (optVals.indexOf('0.5') < 0) {
+          addedOpt = document.createElement('option'); addedOpt.value = '0.5'; addedOpt.textContent = 'half';
+          res.appendChild(addedOpt);
+        }
+        fmt.value = 'frame'; res.value = '0.5';
+        go.click();
+        await sleep(120);
+        if (!got) throw new Error('pressing Export with "This frame (PNG)" never reached snapshotPNG — the harness, not the feature');
+        if (got.scale !== 0.5) throw new Error('the export dialog handed the still scale ' + JSON.stringify(got.scale) + ' when Resolution said 0.5 — the branch returns before it reads the control, which IS the bug (queue 705)');
+        if (!('soloId' in got)) throw new Error('the export dialog did not pass the isolated layer through at all, so "Export just this layer" cannot reach a PNG (queue 705)');
+      } finally {
+        FM.snapshotPNG = realSnap;
+        if (addedOpt && addedOpt.parentNode) addedOpt.parentNode.removeChild(addedOpt);
+        fmt.value = fmt0; res.value = res0;
+        try { if (prefs0 == null) localStorage.removeItem(PK); else localStorage.setItem(PK, prefs0); } catch (e) {}
+      }
+
+      /* …and the solo flags must be PUT BACK, or a still would leave the project soloed behind it. */
+      if (FM.scene.layers.some(l => l.solo)) throw new Error('snapshotPNG left a layer soloed after rendering — the project is changed by taking a picture of it');
+      if (typeof FM._exportSoloPrep !== 'function') throw new Error('FM._exportSoloPrep is gone — the still would have to re-derive how to isolate a layer, which is how the group case got missed the first time');
+    } finally {
+      HTMLCanvasElement.prototype.toBlob = realToBlob;
+      P.width = w0; P.height = h0; P.background = bg0;
+      FM.scene.layers.length = 0; keep.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null);
+    }
+  });
+
   test('the loading pill gives up instead of spinning forever (queue 704)', { item: '704' }, async function () {
     /* Queue 704, found 2 Sep by the five-lens audit and confirmed by measurement.
      * `pending()` counts a video/image/audio layer that has NO media record — correctly, because that is

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v14.92
+> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v14.93
 >
-> **State:** v14.92, 1156 tests green, tree clean. **✅ YOU ANSWERED FOUR QUESTIONS — all logged in
+> **State:** v14.93, 1157 tests green, tree clean. **✅ YOU ANSWERED FOUR QUESTIONS — all logged in
 > their own entries: the 219ms goes ahead WITH a tick box keeping the old rim; the intro logo has colour
 > so the film fades to your dark ground instead of inverting; the camera shutter goes to 12; text stays
 > at 160pt.** **⚡ THE LAG WORK IS FINISHED, and the reason it is
@@ -28878,4 +28878,27 @@ re-opened #480, which I had marked done and had not fixed.
       📌 **And the clock resets** when a layer becomes ready or leaves the scene, so re-importing the same
       clip gets its full grace again. There is a test for that specifically: a permanent give-up per layer
       id would mean re-adding a file never showed a spinner at all.
+
+- [x] **705 — "This frame (PNG)" ignored the Resolution you picked AND the layer you isolated.** Found
+      and fixed 2 Sep, v14.93, by the five-lens audit.
+      JUMPED: a user-visible correctness fault found by the audit, measurable without your device.
+      **Both controls sit on screen directly above the format that ignored them.** The export code
+      returns at the PNG branch before it reads either, and the snapshot built its canvas at the project
+      size with no layer filter. **Measured: a 2160×3840 project with Resolution set to "720p" saved a
+      2160×3840 PNG** — four times the area chosen, with the control that said otherwise still visible.
+      ✅ Both honoured now, and the isolation reuses `exportSoloPrep` — the video export's own function.
+      My first attempt set the solo flags by hand and was already wrong: soloing a **group** has to solo
+      its descendants too. One definition of "isolate a layer for export", used by both.
+      ⚠️ **I nearly reintroduced this very bug while fixing it.** The scale was clamped to 1 — invisible
+      today, since every rung is a downscale, and silently ignoring an upscale rung the day one is added.
+      Clamped against an impossible allocation instead.
+      🔴 **AND MY TEST WAS TESTING THE WRONG HALF — the mutation is the only reason I know.** It called
+      the snapshot directly WITH options, proving what that function does when given them. **The bug was
+      the dialog never giving them.** Reverting the call site survived the whole suite. It now presses the
+      real Export button and checks what arrives. Same lesson as v14.83's dead assertion, one level up:
+      **testing your own reconstruction of the input instead of the product's.**
+      ⚠️ Fixing that surfaced two pieces of cross-test damage, both of which would have read as unrelated
+      regressions: the test left the format select on "frame" (breaking #215's silent-export warning two
+      tests later), and pressing Export **persists** the format, so the next dialog opened on PNG.
+      Restoring the controls was not enough; the saved preference had to go back too.
 

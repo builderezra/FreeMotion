@@ -3115,11 +3115,43 @@ window.FM = window.FM || {};
   };
 
   // Export the current frame as a PNG (clean render, no onion/overlays).
-  FM.snapshotPNG = function () {
+  /* ⚠️ IT HONOURS THE EXPORT DIALOG'S CHOICES NOW (queue 705). "This frame (PNG)" is a format INSIDE the
+   * export dialog, so the Resolution rung and "Export just this layer" sit right above it — and both were
+   * ignored, because `runExport` returns at the frame branch before either is read and this built its
+   * canvas at the project size unconditionally. Measured: a 2160x3840 project with Resolution set to
+   * "720p" saved a 2160x3840 PNG — four times the area he asked for, with the control that said otherwise
+   * still on screen.
+   * `opts` is optional so the toolbar's own snapshot button keeps behaving exactly as it did.
+   * The scale is applied by rendering at full size and drawing down, rather than rendering into a
+   * smaller canvas: `renderScene` reads the project's dimensions in several places, and a still is not
+   * worth the risk of teaching it a second meaning for them. */
+  FM.snapshotPNG = function (opts) {
     const P = FM.scene.project;
     const t = FM.frameExportTime(FM.time);
-    const c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
-    FM.renderScene(c.getContext('2d'), FM.scene, t);
+    const o = opts || {};
+    /* ⚠️ NOT CLAMPED TO 1. Every rung the dialog builds today is a DOWNSCALE, so a `Math.min(1, …)`
+       would be invisible — and would silently ignore an upscale rung the moment one was added, which is
+       the exact bug this change exists to fix. Clamped against an impossible ALLOCATION instead: 64
+       megapixels is far past any rung and still well inside what a canvas will give you, where a 4x of a
+       4K project would be ~530 MB and a brick. */
+    let sc = (typeof o.scale === 'number' && isFinite(o.scale) && o.scale > 0) ? o.scale : 1;
+    const MAXPX = 64e6;
+    if (P.width * P.height * sc * sc > MAXPX) sc = Math.sqrt(MAXPX / (P.width * P.height));
+    const full = document.createElement('canvas'); full.width = P.width; full.height = P.height;
+    /* Isolate through `exportSoloPrep`, the SAME function the video export uses, rather than setting
+       `solo` flags here. Written by hand first and it was already wrong: soloing a GROUP has to solo its
+       descendants too, which that function does and a one-liner does not. One definition of "isolate a
+       layer for export", used by both. */
+    const soloTarget = o.soloId ? FM.layerById(FM.scene, o.soloId) : null;
+    const soloRestore = soloTarget ? exportSoloPrep(soloTarget) : null;
+    try { FM.renderScene(full.getContext('2d'), FM.scene, t); }
+    finally { if (soloRestore) soloRestore.forEach(([l, v]) => { l.solo = v; }); }
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(P.width * sc));
+    c.height = Math.max(1, Math.round(P.height * sc));
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(full, 0, 0, c.width, c.height);
     const base = (P.name || 'frame').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() || 'frame';
     c.toBlob(blob => {
       if (!blob) return;
@@ -4515,7 +4547,12 @@ window.FM = window.FM || {};
        skipped at five later points. (Ezra: "The button to save a frame as a PNG should just be inside
        of the export menu when you press the export button.") */
     if (((document.getElementById('exp-format') || {}).value) === 'frame') {
-      if (FM.snapshotPNG) FM.snapshotPNG();
+      /* Read the two controls that are on screen above this one, instead of returning past them
+         (queue 705). Custom sizes are a containment problem rather than a scale, so a still takes the
+         project's own size there — the rungs are what this is for. */
+      const _rv = (document.getElementById('exp-res') || {}).value;
+      const _sc = (_rv && _rv !== 'custom') ? (parseFloat(_rv) || 1) : 1;
+      if (FM.snapshotPNG) FM.snapshotPNG({ scale: _sc, soloId: expSoloId });
       else if (FM.toast) FM.toast('Frame capture unavailable');
       return;
     }
