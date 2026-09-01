@@ -56030,6 +56030,17 @@
     const PARAMS = {
       boxblur: { radius: 10 }, dropshadow: { distance: 12, softness: 8 }, lensblur: { radius: 10 },
       hextiles: { size: 20 }, tiltshift: { center: 0.5, softness: 0.5 }, mattechoker: { choke: -4, feather: 4 },
+      radialshadow: { reach: 40, x: 50, y: 35 }, edgeglow: { amount: 1.5, radius: 12, source: 1 },
+    };
+    /* ⚠️ TWO OF THESE ARE NOT ROW/COLUMN SKIPS AND THEIR DEFAULTS PROVE ALMOST NOTHING ABOUT THEM.
+       Radial Shadow's bound is GEOMETRY — the layer's box scaled about the light — so it has to be
+       swept over light positions, including outside the frame. Edge Glow's pad comes from its RADIUS
+       and its field from its SOURCE mode. Swept below: 270 and 180 combinations respectively, every one
+       byte-identical, which is the only reason either is in BOUNDED_FX. */
+    const SWEEPS = {
+      radialshadow: [].concat.apply([], [[50, 35], [0, 0], [100, 100], [50, -40], [-30, 50], [140, 20], [99.9, 0.1]]
+        .map(L => [1, 40, 100].map(R => ({ reach: R, x: L[0], y: L[1] })))),
+      edgeglow: [].concat.apply([], [1, 12, 60].map(R => [0, 1, 2].map(S => ({ amount: 1.5, radius: R, source: S })))),
     };
     const body = (d) => { for (let y = 120; y < 200; y++) { const r = y * W; for (let x = 170; x < 250; x++) { const i = (r + x) * 4; d[i] = 232; d[i + 1] = 163; d[i + 2] = 61; d[i + 3] = 255; } } };
     const SHAPES = {
@@ -56068,13 +56079,15 @@
         }
         if (!box) { bad.push('"' + name + '" on a clean plate got NO box — the bounding is silently off for it'); return; }
         kernels.forEach(k => {
-          const a = mk(), b = mk();
-          try { P[k](a, W, H, PARAMS[k], 0.3, 1); } catch (e) { bad.push(k + ' threw unbounded on "' + name + '"'); return; }
-          try { P[k](b, W, H, PARAMS[k], 0.3, 1, box); } catch (e) { bad.push(k + ' threw bounded on "' + name + '"'); return; }
-          let diff = 0, mx = 0;
-          for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) { diff++; const dd = Math.abs(a[i] - b[i]); if (dd > mx) mx = dd; }
-          clean++;
-          if (diff) bad.push(k + ' on "' + name + '": ' + diff + ' bytes differ, max delta ' + mx);
+          (SWEEPS[k] || [PARAMS[k]]).forEach(q => {
+            const a = mk(), b = mk();
+            try { P[k](a, W, H, q, 0.3, 1); } catch (e) { bad.push(k + ' threw unbounded on "' + name + '"'); return; }
+            try { P[k](b, W, H, q, 0.3, 1, box); } catch (e) { bad.push(k + ' threw bounded on "' + name + '"'); return; }
+            let diff = 0, mx = 0;
+            for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) { diff++; const dd = Math.abs(a[i] - b[i]); if (dd > mx) mx = dd; }
+            clean++;
+            if (diff) bad.push(k + ' on "' + name + '" ' + JSON.stringify(q) + ': ' + diff + ' bytes differ, max delta ' + mx);
+          });
         });
       });
     });

@@ -3030,7 +3030,7 @@ window.FM = window.FM || {};
      content can be stepped over and the output is IDENTICAL rather than merely similar. Verified that
      way — seven renders (edge-clipped, full-frame, anisotropic, multi-pass, radius larger than the
      layer) checksummed before and after and required to match exactly. */
-  const BOUNDED_FX = { letterbox: 1, border: 1, boxblur: 1, dropshadow: 1, lensblur: 1, hextiles: 1, tiltshift: 1, mattechoker: 1 };
+  const BOUNDED_FX = { letterbox: 1, border: 1, boxblur: 1, dropshadow: 1, lensblur: 1, hextiles: 1, tiltshift: 1, mattechoker: 1, radialshadow: 1, edgeglow: 1 };
   Object.setPrototypeOf(BOUNDED_FX, null);   // own keys only — see POSTFX
   /* Does the layer's own alpha ACTUALLY occupy the plate's edge row or column? Four direct scans of
    * the four edge lines, at alphaBBox's own `> 8` threshold so the two agree on what counts as
@@ -4873,7 +4873,18 @@ window.FM = window.FM || {};
      * silhouette, one box pass, radius 3 — the original kernel, byte for byte at ps 1. Touching any
      * control writes `source` and moves that instance onto the new engine, which is what touching a
      * control is supposed to mean. */
-    edgeglow: function (d, W, H, p, t, ps) {
+    edgeglow: function (d, W, H, p, t, ps, egBB) {
+      /* SKIP WHAT THE GLOW CANNOT REACH (#692) — 53.2ms at its defaults on a 180x150 subject in a
+         1080x1920 plate. The glow is a separable box blur of an edge field, so it cannot travel further
+         than egRad in total; padding the layer's box by that (plus 1 for the 3x3 Sobel, plus slack) is a
+         superset of everything it can touch. Each pass bounds ONLY the axis its running sum does not
+         walk — rows for the horizontal pass, columns for the vertical one.
+         ⚠️ IT DOES WRITE COLOUR UNDER ZERO ALPHA — that is what a glow outside the layer IS — but past
+         the padded box the blurred field is 0, so the screen blend writes 0 over 0 and it is a genuine
+         skip. That is precisely the distinction Inner Blur fails: its writes never fall to zero.
+         Unlike the other bounded kernels the bbox is a NAMED 7th parameter rather than `arguments[6]`,
+         and that is safe here specifically because this kernel already declares `ps` — its arity is past
+         what pxToPlate checks either way, so naming it changes nothing (#691). */
       /* Both fallbacks here USED to be unreachable, and between them a params-less instance drew
        * absolutely nothing (measured: 0 pixels changed). evalProp(undefined) returns 0, not null, so
        * `if (egAmt == null) egAmt = 1.5` never fired and Amount defaulted to 0; hexToRGB(undefined)
@@ -4892,6 +4903,9 @@ window.FM = window.FM || {};
       if (!(egRadP >= 1)) egRadP = 3; if (egRadP > 60) egRadP = 60;
       var egRad = Math.max(1, Math.round(egRadP * egS));              // -> PLATE px
       var egN = W * H, egi, egx, egy, egp;
+      var egPad = egRad + 3;                 // total blur reach + the Sobel neighbourhood + slack
+      var egY0 = egBB ? Math.max(0, egBB.y - egPad) : 0, egY1 = egBB ? Math.min(H - 1, egBB.y + egBB.h - 1 + egPad) : H - 1;
+      var egX0 = egBB ? Math.max(0, egBB.x - egPad) : 0, egX1 = egBB ? Math.min(W - 1, egBB.x + egBB.w - 1 + egPad) : W - 1;
 
       // --- edge field ---------------------------------------------------------------------------
       // Sobel magnitude of `src` into `out`; take=1 keeps whichever of the two sources is stronger.
@@ -4899,9 +4913,9 @@ window.FM = window.FM || {};
       // in every setting.
       function egSobel(src, out, take) {
         var y, x, xm, xp, r0, r1, r2, TL, Tv, TR, Lv, Rv, BL, Bv, BR, gx, gy, m;
-        for (y = 0; y < H; y++) {
+        for (y = egY0; y <= egY1; y++) {
           r0 = (y > 0 ? y - 1 : 0) * W; r1 = y * W; r2 = (y < H - 1 ? y + 1 : H - 1) * W;
-          for (x = 0; x < W; x++) {
+          for (x = egX0; x <= egX1; x++) {
             xm = x > 0 ? x - 1 : 0; xp = x < W - 1 ? x + 1 : W - 1;
             TL = src[r0 + xm]; Tv = src[r0 + x]; TR = src[r0 + xp];
             Lv = src[r1 + xm]; Rv = src[r1 + xp];
@@ -4944,7 +4958,7 @@ window.FM = window.FM || {};
       for (egPi = 0; egPi < egPasses; egPi++) egRp.push(Math.max(1, egBase + (egPi < egRem ? 1 : 0)));
       for (egPi = 0; egPi < egPasses; egPi++) {
         var egR = egRp[egPi], egDiv = egR * 2 + 1, egk, egj, egAcc, egRow, egc;
-        for (egy = 0; egy < H; egy++) {
+        for (egy = egY0; egy <= egY1; egy++) {
           egAcc = 0; egRow = egy * W;
           for (egk = -egR; egk <= egR; egk++) { egc = egk < 0 ? 0 : (egk > W - 1 ? W - 1 : egk); egAcc += egE[egRow + egc]; }
           for (egx = 0; egx < W; egx++) {
@@ -4953,7 +4967,7 @@ window.FM = window.FM || {};
             egAcc += egE[egRow + (egin > W - 1 ? W - 1 : egin)] - egE[egRow + (egout < 0 ? 0 : egout)];
           }
         }
-        for (egx = 0; egx < W; egx++) {
+        for (egx = egX0; egx <= egX1; egx++) {
           egAcc = 0;
           for (egj = -egR; egj <= egR; egj++) { egc = egj < 0 ? 0 : (egj > H - 1 ? H - 1 : egj); egAcc += egField[egc * W + egx]; }
           for (egy = 0; egy < H; egy++) {
@@ -4973,7 +4987,8 @@ window.FM = window.FM || {};
        * alpha at ps 1 and 3920 at ps 0.34, a 52% brighter preview than the export. One factor of ps
        * cancels it exactly, and is a no-op at ps 1 (export, thumbnails, a 1:1 preview). */
       var egcr = egCol[0], egcg = egCol[1], egcb = egCol[2], egBloom = (egSrc !== 1);
-      for (egi = 0; egi < egN; egi++) {
+      for (var egyy = egY0; egyy <= egY1; egyy++) for (var egxx = egX0; egxx <= egX1; egxx++) {
+        egi = egyy * W + egxx;
         egp = egi * 4;
         var ega0 = d[egp + 3];
         if (ega0 <= 0 && !egBloom) continue;
@@ -5974,7 +5989,36 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Radial Shadow: point-light shadow — each transparent pixel marches a few taps back toward the
     // light; if opaque content sits between it and the light, it's in shadow. Strength fades with tap
     // distance so the shadow softens as it throws further. Paints only transparent px (like longshadow).
-    radialshadow: function(d,W,H,p,t){ var rsR=FM.evalProp(p.reach,t); if(rsR==null)rsR=40; rsR=Math.max(0,Math.min(100,rsR)); if(rsR<=0)return; var rsX=FM.evalProp(p.x,t); if(rsX==null)rsX=50; var rsY=FM.evalProp(p.y,t); if(rsY==null)rsY=35; var rsLx=W*rsX/100, rsLy=H*rsY/100, rsC=hexToRGB(p.color)||[0,0,0]; var rsS=fxSrc(d), rsTaps=10, rsK=rsR/100*0.9; for(var rsy=0;rsy<H;rsy++){ var rsRow=rsy*W; for(var rsx=0;rsx<W;rsx++){ var rsi=(rsRow+rsx)*4; if(rsS[rsi+3]>0)continue; var rsDx=rsx-rsLx, rsDy=rsy-rsLy, rsHit=0; for(var rsn=1;rsn<=rsTaps;rsn++){ var rsF=1/(1+rsK*rsn/rsTaps); var rsSx=Math.round(rsLx+rsDx*rsF), rsSy=Math.round(rsLy+rsDy*rsF); if(rsSx<0||rsSx>=W||rsSy<0||rsSy>=H)continue; var rsA=rsS[(rsSy*W+rsSx)*4+3]; if(rsA>0){ rsHit=rsA*(1-(rsn-1)/rsTaps); break; } } if(rsHit>0){ d[rsi]=rsC[0]; d[rsi+1]=rsC[1]; d[rsi+2]=rsC[2]; d[rsi+3]=Math.min(200,rsHit); } } } },
+    radialshadow: function(d,W,H,p,t){ var rsBB=arguments[6];
+      /* SKIP WHAT THE SHADOW CANNOT REACH (#692) — 75.5ms at its defaults on a 180x150 subject in a
+         1080x1920 plate, the fifth most expensive kernel in the catalog.
+         Not a row/column skip: this projects AWAY FROM A LIGHT, so the reachable region is the layer's
+         box SCALED ABOUT THE LIGHT. Each output pixel walks back toward the light through samples at
+         F = 1/(1 + rsK*n/rsTaps), and it lights up only where one of those samples lands on opaque
+         content. Invert that: a pixel can only be lit if it sits at Light + (S - Light)/F for some S
+         inside the box, so the reachable set is the box scaled about the light by 1/F, with F running
+         between 1/(1 + rsK/rsTaps) and 1/(1 + rsK). Scaling about a point is linear, so the extremes
+         are the endpoints and the bounding box is just the box's corners taken at both.
+         Two things make this exact rather than approximate: the kernel writes ONLY where the source is
+         transparent (`if(rsS[rsi+3]>0) continue`), so it can never touch the layer itself; and since
+         v14.84 the incoming box is exact at `alpha > 0`, so no faint caster is missed. A caster at
+         alpha 3 throws a FULL-STRENGTH shadow here — the old `alpha > 8` box would have dropped it. */
+      var rsR=FM.evalProp(p.reach,t); if(rsR==null)rsR=40; rsR=Math.max(0,Math.min(100,rsR)); if(rsR<=0)return; var rsX=FM.evalProp(p.x,t); if(rsX==null)rsX=50; var rsY=FM.evalProp(p.y,t); if(rsY==null)rsY=35; var rsLx=W*rsX/100, rsLy=H*rsY/100, rsC=hexToRGB(p.color)||[0,0,0]; var rsS=fxSrc(d), rsTaps=10, rsK=rsR/100*0.9;
+      var rsY0=0, rsY1=H-1, rsX0=0, rsX1=W-1;
+      if(rsBB && isFinite(rsLx) && isFinite(rsLy) && isFinite(rsK)){
+        var rsSmax=1+rsK, rsBx0=rsBB.x, rsBy0=rsBB.y, rsBx1=rsBB.x+rsBB.w-1, rsBy1=rsBB.y+rsBB.h-1;
+        var rsMinX=Infinity, rsMaxX=-Infinity, rsMinY=Infinity, rsMaxY=-Infinity;
+        var rsCx=[rsBx0,rsBx1], rsCy=[rsBy0,rsBy1], rsSs=[1,rsSmax];
+        for(var rsA2=0;rsA2<2;rsA2++) for(var rsB2=0;rsB2<2;rsB2++) for(var rsC2=0;rsC2<2;rsC2++){
+          var rsPx=rsLx+(rsCx[rsA2]-rsLx)*rsSs[rsC2], rsPy=rsLy+(rsCy[rsB2]-rsLy)*rsSs[rsC2];
+          if(rsPx<rsMinX)rsMinX=rsPx; if(rsPx>rsMaxX)rsMaxX=rsPx;
+          if(rsPy<rsMinY)rsMinY=rsPy; if(rsPy>rsMaxY)rsMaxY=rsPy;
+        }
+        // one pixel of slack each way for the Math.round inside the tap loop
+        rsX0=Math.max(0,Math.floor(rsMinX)-1); rsX1=Math.min(W-1,Math.ceil(rsMaxX)+1);
+        rsY0=Math.max(0,Math.floor(rsMinY)-1); rsY1=Math.min(H-1,Math.ceil(rsMaxY)+1);
+      }
+      for(var rsy=rsY0;rsy<=rsY1;rsy++){ var rsRow=rsy*W; for(var rsx=rsX0;rsx<=rsX1;rsx++){ var rsi=(rsRow+rsx)*4; if(rsS[rsi+3]>0)continue; var rsDx=rsx-rsLx, rsDy=rsy-rsLy, rsHit=0; for(var rsn=1;rsn<=rsTaps;rsn++){ var rsF=1/(1+rsK*rsn/rsTaps); var rsSx=Math.round(rsLx+rsDx*rsF), rsSy=Math.round(rsLy+rsDy*rsF); if(rsSx<0||rsSx>=W||rsSy<0||rsSy>=H)continue; var rsA=rsS[(rsSy*W+rsSx)*4+3]; if(rsA>0){ rsHit=rsA*(1-(rsn-1)/rsTaps); break; } } if(rsHit>0){ d[rsi]=rsC[0]; d[rsi+1]=rsC[1]; d[rsi+2]=rsC[2]; d[rsi+3]=Math.min(200,rsHit); } } } },
     // Voronoi Cells: stained-glass mosaic — jittered-grid seeds (hash-based, deterministic so preview
     // and export match), each pixel takes its nearest seed's colour; near-equidistant borders darken by
     // Edge. O(9) neighbour checks per pixel, no seed list scan.

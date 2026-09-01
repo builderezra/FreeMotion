@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.84
+> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.85
 >
-> **State:** v14.84, 1152 tests green, tree clean. **🔴 I SHIPPED A BUG THREE RELEASES RUNNING AND HAVE
+> **State:** v14.85, 1152 tests green, tree clean. **⚡ TWO MORE EFFECTS OFF THE LAG LIST** — Radial
+> Shadow (75.5ms) and Edge Glow (53.2ms), both now costing almost nothing on a small layer. Eight
+> effects bounded in total; your test scene started this at 106ms a frame. **🔴 I SHIPPED A BUG THREE RELEASES RUNNING AND HAVE
 > FIXED IT — and then found two more of the same kind by asking the whole question instead of patching
 > one hole at a time. All three are closed.** The speed work in v14.79–v14.82 works by telling each effect which parts of the frame it
 > can skip. The box it was given was computed by checking every SECOND row and every SECOND column — so
@@ -28226,7 +28228,48 @@ re-opened #480, which I had marked done and had not fixed.
       frame, deliberately. Bounding it there would have quietly removed that from any project already
       using it: the one case in this whole item where the skip is not a skip. The suite drives both
       signs and asserts the negative one still writes alpha far outside the box.
-      ⏭️ **WHAT IS LEFT IS THE RADIAL FAMILY, and it needs different maths.** Zoom Streaks 88ms, Zoom
+      ✅ **ROUND 4, v14.85 — the two the review left open are DONE. 128.7ms between them.**
+      | effect | was | now |
+      |---|---|---|
+      | Radial Shadow | 75.5ms | **out of the top eight** |
+      | Edge Glow | 53.2ms | **out of the top eight** |
+      **Radial Shadow is not a row/column skip at all.** It projects AWAY FROM A LIGHT, so the region it
+      can reach is the layer's box **scaled about the light**. Each output pixel walks back toward the
+      light and lights up only where a sample lands on solid content — invert that and the reachable set
+      is the box scaled by the sample range; scaling about a point is linear, so the corners at both
+      extremes give the box. **Swept over 270 light and reach combinations**, including lights at the
+      corners and outside the frame: every one byte-identical.
+      📌 **And it only works because of v14.84.** A caster at **alpha 3 throws a FULL-STRENGTH shadow**
+      here — the old `alpha > 8` box would have dropped it silently. The two fixes had to land in that
+      order.
+      **Edge Glow** is a separable blur of an edge field, so it cannot travel further than its radius.
+      It DOES write colour into transparent pixels — that is what a glow outside the layer is — but past
+      the padded box the field is 0, so it writes 0 over 0 and the skip is genuine. **That is exactly the
+      line Inner Blur fails**: its writes never fall to zero. 180 radius/source/bloom combinations, all
+      identical.
+
+      ⏭️ **THE REST OF THE RADIAL FAMILY — ANSWERED 1 Sep by a ten-agent adversarial review, and for two
+      of them the answer is NO, permanently.** Five analysts each derived a reachable-region bound; five adversaries each tried to
+      break it. **All five proposals were refuted**, and the split is worth keeping because it stops the
+      next session re-deriving them:
+      | effect | cost | verdict |
+      |---|---|---|
+      | Zoom Blur | 87.8ms | ❌ **never** — writes AND reads colour under zero alpha, the Inner Blur shape |
+      | Spin Blur | 76.7ms | ❌ **never** — same; it "both consumes and re-emits the invisible colour" |
+      | Zoom Streaks | 88.3ms | 🟡 refuted only on the STRIDE, which v14.83 fixed — worth re-deriving |
+      | Radial Shadow | 75.5ms | 🟡 same; its reach formula was verified correct over 668 random trials |
+      | Spin Streaks | 87.8ms | 🟡 same family as Zoom Streaks |
+      ⚠️ **AND A TEMPTING WRONG IDEA, written down so it is not "discovered" later.** Now that `fxBounds`
+      refuses to bound a DIRTY plate, it looks like the standard could relax to "identical wherever alpha
+      is above zero" — which would let Inner Blur, Zoom Blur and Spin Blur all be bounded, worth ~200ms.
+      **It is unsound.** Bounded and unbounded would create DIFFERENT invisible colour, and a later blur
+      pulls transparent neighbours into VISIBLE pixels — so the difference surfaces one effect
+      downstream. The three stay unbounded.
+      📌 The reviewers also flagged that the proposals were not `isFinite`-guarded: a NaN in a centre or
+      amount makes a bounded kernel paint NOTHING while the unbounded one still paints. Worth a guard
+      when these are picked up.
+
+      ⏭️ **The original note: it needs different maths.** Zoom Streaks 88ms, Zoom
       Blur 88, Spin Streaks 88, Spin Blur 77, Radial Shadow 76 — 417ms between them. They smear about a
       CENTRE, so a row/column skip does not describe their reach. It is still boundable: the region a
       zoom smear can touch is the layer's box scaled about the centre by the sample range, and a spin's
