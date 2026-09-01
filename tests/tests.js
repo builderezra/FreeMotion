@@ -55995,93 +55995,101 @@
   });
 
   test('effects: every bounded kernel is safe on the box the RENDERER actually computes', { item: '692' }, function () {
-    /* ⚠️ THIS IS THE TEST THAT WAS MISSING, and its absence shipped a real bug for four days
-     * (v14.79-v14.82, found 1 Sep). Every identity test for a bounded kernel computed the bounding box
-     * ITSELF, exactly. The renderer does not: it calls `fxBounds`, which used a scan sampling every 2nd
-     * ROW AND every 2nd COLUMN. Bounded and unbounded therefore agreed perfectly on a box no user ever
-     * gets, and diverged badly on the real one. **A test that builds its own version of the input is
-     * testing something the product does not do.**
+    /* ⚠️ THE TEST THAT WAS MISSING, and its absence shipped a real bug for four days (v14.79-v14.82).
+     * Every identity test for a bounded kernel computed the bounding box ITSELF. The renderer does not —
+     * it calls `fxBounds`. So bounded and unbounded agreed perfectly on a box no user ever gets, and
+     * diverged badly on the real one. **A test that builds its own version of the input is testing
+     * something the product does not do.**
      *
-     * The case is ordinary, not exotic: a layer with a CHUNKY BODY plus a 1px feature on an odd line —
-     * a text descender, a 1px underline, a hairline divider. The body kept the strided scan non-null so
-     * its exact fallback never fired, and the hairline sat outside the box by however far it happened to
-     * be. Padding cannot fix a DETACHED miss.
-     * MEASURED before the fix, 420x320 plate, 80x80 body, 1px stem below it:
-     *     column 205 (ODD)  box 80x80  — boxblur 9900 bytes wrong (max delta 243), lensblur 4408,
-     *                                    dropshadow 1836, hextiles 312, tiltshift 292, mattechoker 91
-     *     column 204 (EVEN) box 80x180 — all six byte-identical
-     * The even column is the control that isolates the stride as the sole cause, and it is kept below
-     * for exactly that reason: without it a harness that simply never diverges would pass this. */
+     * THREE SEPARATE WAYS THE BOX WAS WRONG, each found only after the previous was patched, which is
+     * why this is a MATRIX rather than another single case:
+     *   1. THE STRIDE — the scan sampled every 2nd row and column, so a 1px feature on an odd line fell
+     *      outside the box. Measured: boxblur 9900 bytes wrong (max delta 243), lensblur 4408,
+     *      dropshadow 1836, hextiles 312, tiltshift 292, mattechoker 91. Move the same hairline to an
+     *      EVEN column and all six are byte-identical — which is why both columns are kept below.
+     *   2. THE THRESHOLD — the exact scan tested `alpha > 8`, so on a FEATHERED layer the whole outer
+     *      fringe was outside the box. Measured on a clean plate: lensblur 8865 bytes wrong with a max
+     *      channel delta over 100, boxblur 6201, dropshadow 1631.
+     *   3. THE DIRTY PLATE — several kernels read and write RGB UNDER ZERO ALPHA, so outside the layer
+     *      is not "zeros in, zeros out". A canvas cannot produce that state (it stores premultiplied),
+     *      but the effect chain mutates one ImageData in place without going back through a canvas:
+     *      measured, a clean plate through Inner Blur comes out with 1024 coloured-but-transparent
+     *      pixels, and everything stacked after it receives them. Box Blur, Lens Blur and Hex Tiles then
+     *      diverged by ~370,000 bytes. `fxBounds` returns NULL on a dirty plate now, so those stacks run
+     *      unbounded and correct.
+     * The dirty rows below therefore assert "no box", which is the right answer, not a failure. */
     const P = FM._pixelFx, FB = FM._fxBounds, T = FM._FX_TABLES;
     if (typeof FB !== 'function') throw new Error('FM._fxBounds is not exposed — this test would have to build its own box, which is the mistake it exists to prevent');
     if (!T || !T.BOUNDED_FX) throw new Error('BOUNDED_FX is not exposed');
     const W = 420, H = 320;
-    const plate = (col) => {
-      const c = offscreen(W, H), g = c.getContext('2d', { willReadFrequently: true });
-      g.clearRect(0, 0, W, H);
-      g.fillStyle = '#e8a33d';
-      g.fillRect(170, 120, 80, 80);          // the body
-      g.fillRect(col, 200, 1, 100);          // a 1px stem hanging below it — a descender, a rule
-      return g.getImageData(0, 0, W, H);
-    };
-    const trueBox = (img) => {
-      const d = img.data; let minX = W, minY = H, maxX = -1, maxY = -1;
-      for (let y = 0; y < H; y++) { const row = y * W * 4;
-        for (let x = 0; x < W; x++) if (d[row + x * 4 + 3] > 8) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; } }
-      return maxX < 0 ? null : { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
-    };
-    /* ⚠️ LETTERBOX AND BORDER ARE IN BOUNDED_FX BUT ARE NOT IN THIS TEST, and the distinction matters.
-       They are the only two entries whose bbox is SEMANTIC rather than an optimisation: the box tells
-       them what to FRAME, so bounded and unbounded are supposed to differ — one bars the layer, the
-       other bars the whole frame, which is the entire point of queue 630 and the `fx-bounded-frame`
-       tests that cover them. Measured when they were briefly included here: 61240 and 19088 bytes
-       differ, on the EVEN column too, which is the giveaway that it is not a stride problem.
-       Everything else in the table is a pure skip and must be byte-identical. */
+    /* Letterbox and Border are in BOUNDED_FX but excluded: their bbox is SEMANTIC, not an optimisation —
+       the box tells them what to FRAME, so bounded and unbounded are supposed to differ. Measured when
+       they were briefly included: 61240 and 19088 bytes, on the EVEN column too, which is the giveaway
+       that it is not a stride problem. `fx-bounded-frame` covers them properly. */
     const SEMANTIC = { letterbox: 1, border: 1 };
     const PARAMS = {
       boxblur: { radius: 10 }, dropshadow: { distance: 12, softness: 8 }, lensblur: { radius: 10 },
       hextiles: { size: 20 }, tiltshift: { center: 0.5, softness: 0.5 }, mattechoker: { choke: -4, feather: 4 },
     };
-    const bad = [], covered = [];
-    [205, 204].forEach(col => {
-      const img = plate(col), box = FB(img.data, W, H), tb = trueBox(img);
-      if (!box || !tb) { bad.push('col ' + col + ': no box at all'); return; }
-      /* The renderer's box must CONTAIN every drawn pixel. This is the root assertion — everything
-         below is downstream of it. */
-      if (!(box.x <= tb.x && box.y <= tb.y && box.x + box.w >= tb.x + tb.w && box.y + box.h >= tb.y + tb.h)) {
-        bad.push('col ' + col + ': fxBounds returned ' + JSON.stringify(box) + ' but the content is ' + JSON.stringify(tb) + ' — drawn pixels lie OUTSIDE the box a bounded kernel is told it may skip');
-        return;
-      }
-      Object.keys(T.BOUNDED_FX).forEach(type => {
-        if (SEMANTIC[type]) return;
-        const K = P[type]; if (!K || !PARAMS[type]) return;
-        covered.push(type);
-        const a = plate(col).data, b = plate(col).data;
-        try { K(a, W, H, PARAMS[type], 0.3, 1); } catch (e) { bad.push(type + ' threw unbounded: ' + e.message); return; }
-        try { K(b, W, H, PARAMS[type], 0.3, 1, box); } catch (e) { bad.push(type + ' threw bounded: ' + e.message); return; }
-        let diff = 0, mx = 0;
-        for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) { diff++; const dd = Math.abs(a[i] - b[i]); if (dd > mx) mx = dd; }
-        if (diff) bad.push(type + ' on col ' + col + ': ' + diff + ' bytes differ, max delta ' + mx);
+    const body = (d) => { for (let y = 120; y < 200; y++) { const r = y * W; for (let x = 170; x < 250; x++) { const i = (r + x) * 4; d[i] = 232; d[i + 1] = 163; d[i + 2] = 61; d[i + 3] = 255; } } };
+    const SHAPES = {
+      'plain body': d => body(d),
+      'hairline on an ODD column': d => { body(d); for (let y = 200; y < 300; y++) { const i = (y * W + 205) * 4; d[i] = 232; d[i + 1] = 163; d[i + 2] = 61; d[i + 3] = 255; } },
+      'hairline on an EVEN column': d => { body(d); for (let y = 200; y < 300; y++) { const i = (y * W + 204) * 4; d[i] = 232; d[i + 1] = 163; d[i + 2] = 61; d[i + 3] = 255; } },
+      'hairline on an ODD row': d => { body(d); for (let x = 60; x < 300; x++) { const i = (41 * W + x) * 4; d[i] = 232; d[i + 1] = 163; d[i + 2] = 61; d[i + 3] = 255; } },
+      'a barely-visible block (alpha 3)': d => { body(d); for (let y = 250; y < 290; y++) { const r = y * W; for (let x = 60; x < 110; x++) { const i = (r + x) * 4; d[i] = 232; d[i + 1] = 163; d[i + 2] = 61; d[i + 3] = 3; } } },
+      /* A REAL feather: RGB stays 0 where alpha is 0, because a canvas stores premultiplied and cannot
+         hold colour there. Writing colour under alpha 0 made an earlier version of this fixture
+         permanently "dirty" and its clean column meaningless. */
+      'a feathered edge': d => { for (let y = 110; y < 210; y++) { const r = y * W; for (let x = 160; x < 260; x++) { const dx = (x - 210) / 50, dy = (y - 160) / 50, rr = Math.sqrt(dx * dx + dy * dy); const a = rr >= 1 ? 0 : Math.round(255 * (1 - rr) * (1 - rr)); const i = (r + x) * 4; if (a) { d[i] = 232; d[i + 1] = 163; d[i + 2] = 61; } d[i + 3] = a; } } },
+      'touching the frame edge': d => { for (let y = 0; y < 80; y++) { const r = y * W; for (let x = 0; x < 90; x++) { const i = (r + x) * 4; d[i] = 232; d[i + 1] = 163; d[i + 2] = 61; d[i + 3] = 255; } } },
+    };
+    const kernels = Object.keys(T.BOUNDED_FX).filter(k => !SEMANTIC[k] && P[k] && PARAMS[k]);
+    if (kernels.length < 4) throw new Error('only ' + kernels.length + ' bounded kernels are being exercised — BOUNDED_FX or the params table has drifted, so a green run means nothing');
+    Object.keys(T.BOUNDED_FX).forEach(k => { if (!SEMANTIC[k] && P[k] && !PARAMS[k]) throw new Error(k + ' joined BOUNDED_FX with no entry in this test\'s params table, so it is not being checked at all'); });
+
+    const bad = [];
+    let clean = 0, refused = 0;
+    Object.keys(SHAPES).forEach(name => {
+      [false, true].forEach(dirty => {
+        const mk = () => {
+          const d = new Uint8ClampedArray(W * H * 4);
+          // "dirty" = colour under zero alpha, the state the in-place effect chain really creates
+          if (dirty) for (let q = 0; q < W * H; q++) { const j = q * 4; d[j] = (q * 3) & 255; d[j + 1] = (q * 11) & 255; d[j + 2] = (q * 29) & 255; d[j + 3] = 0; }
+          SHAPES[name](d);
+          return d;
+        };
+        const box = FB(mk(), W, H);
+        if (dirty) {
+          // The RIGHT answer on a dirty plate is no box at all — bounding there is not a skip.
+          if (box) bad.push('"' + name + '" on a DIRTY plate still returned a box ' + JSON.stringify(box) + ' — a kernel that reads colour under zero alpha would then skip pixels that are not invariant');
+          else refused++;
+          return;
+        }
+        if (!box) { bad.push('"' + name + '" on a clean plate got NO box — the bounding is silently off for it'); return; }
+        kernels.forEach(k => {
+          const a = mk(), b = mk();
+          try { P[k](a, W, H, PARAMS[k], 0.3, 1); } catch (e) { bad.push(k + ' threw unbounded on "' + name + '"'); return; }
+          try { P[k](b, W, H, PARAMS[k], 0.3, 1, box); } catch (e) { bad.push(k + ' threw bounded on "' + name + '"'); return; }
+          let diff = 0, mx = 0;
+          for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) { diff++; const dd = Math.abs(a[i] - b[i]); if (dd > mx) mx = dd; }
+          clean++;
+          if (diff) bad.push(k + ' on "' + name + '": ' + diff + ' bytes differ, max delta ' + mx);
+        });
       });
     });
-    /* …and every non-semantic member of BOUNDED_FX must be covered, or a kernel could join the table
-       and never be checked here — the silent gap this whole test exists to close. */
-    Object.keys(T.BOUNDED_FX).forEach(type => {
-      if (SEMANTIC[type] || !P[type]) return;
-      if (!PARAMS[type]) bad.push(type + ' is in BOUNDED_FX but has no entry in this test\'s params table, so it is not being checked at all');
-    });
-    if (!covered.length) throw new Error('no bounded kernel was exercised — BOUNDED_FX or the params table has drifted, so a green run here means nothing');
-    if (bad.length) throw new Error('a bounded kernel changes the picture on the box the renderer really computes: ' + bad.slice(0, 6).join(' · '));
+    if (!clean) throw new Error('no clean-plate comparison ran at all');
+    if (!refused) throw new Error('no dirty plate was refused a box — the dirty detection is not running, so the third failure mode is uncovered');
+    if (bad.length) throw new Error(bad.length + ' problem(s) on the box the renderer really computes: ' + bad.slice(0, 5).join(' · '));
 
-    /* AND THE COST OF BEING EXACT, so a future "optimisation" back to a strided scan has to argue with
-       a number. Measured 1.60ms for a small layer in a 1080x1920 plate, against the ~400ms the bounding
-       saves. This asserts only that it has not become pathological. */
+    /* AND WHAT BEING EXACT COSTS, so a future "optimisation" back to a strided or thresholded scan has
+       to argue with a number. Measured 3.20ms for a small layer in a 1080x1920 plate, paid once per
+       bounded effect per frame, against wins of 50-190ms per kernel. */
     const big = 1080, tall = 1920;
-    const bc = offscreen(big, tall), bg = bc.getContext('2d', { willReadFrequently: true });
-    bg.clearRect(0, 0, big, tall); bg.fillStyle = '#e8a33d'; bg.fillRect(90, 120, 180, 150);
-    const bd = bg.getImageData(0, 0, big, tall).data;
+    const bd = new Uint8ClampedArray(big * tall * 4);
+    for (let y = 120; y < 270; y++) { const r = y * big; for (let x = 90; x < 270; x++) { const i = (r + x) * 4; bd[i] = 232; bd[i + 1] = 163; bd[i + 2] = 61; bd[i + 3] = 255; } }
     const t0 = performance.now(); FB(bd, big, tall); const ms = performance.now() - t0;
-    if (ms > 20) throw new Error('fxBounds took ' + ms.toFixed(1) + 'ms on a 1080x1920 plate — an exact scan is worth 1.6ms against the 400ms the bounding saves, but not this');
+    if (ms > 25) throw new Error('fxBounds took ' + ms.toFixed(1) + 'ms on a 1080x1920 plate — 3.2ms is worth paying against a 50-190ms saving, but not this');
   });
 
   test('effects: bounding the box blur to the layer changes NOTHING about the picture', { item: '692' }, async function () {

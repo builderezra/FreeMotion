@@ -1,0 +1,76 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:11px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:900px;height:120px;border:0"></iframe>
+<script>
+/* THE WHOLE QUESTION AT ONCE, instead of one hole at a time.
+   Every kernel in BOUNDED_FX, against the box the RENDERER computes, across every way the box has been
+   found wrong so far — and every way a plate can be dirty. Three holes were found one at a time today
+   (a stride, a clean fixture, an alpha threshold) and each was patched separately; this asks the whole
+   matrix so what is left is known rather than hoped. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w=document.getElementById('a').contentWindow, n=0;
+  (function wait(){ if(!(w.FM&&w.FM._fxBounds&&w.FM._pixelFx)){ if(n++>600) return say('FM never came up'); return setTimeout(wait,50);} setTimeout(function(){run(w);},700); })();
+});
+function run(w){
+ try{
+  var FM=w.FM, T=FM._FX_TABLES, W=420, H=320;
+  var PARAMS={boxblur:{radius:10},dropshadow:{distance:12,softness:8},lensblur:{radius:10},
+              hextiles:{size:20},tiltshift:{center:0.5,softness:0.5},mattechoker:{choke:-4,feather:4}};
+  function base(dirty){
+    var d=new Uint8ClampedArray(W*H*4);
+    if(dirty) for(var q=0;q<W*H;q++){ var j=q*4; d[j]=(q*3)&255; d[j+1]=(q*11)&255; d[j+2]=(q*29)&255; d[j+3]=0; }
+    return d;
+  }
+  function body(d){ for(var y=120;y<200;y++){ var r=y*W; for(var x=170;x<250;x++){ var i=(r+x)*4; d[i]=232;d[i+1]=163;d[i+2]=61;d[i+3]=255; } } }
+  var SHAPES={
+    'plain body':        function(d){ body(d); },
+    'odd-col hairline':  function(d){ body(d); for(var y=200;y<300;y++){ var i=(y*W+205)*4; d[i]=232;d[i+1]=163;d[i+2]=61;d[i+3]=255; } },
+    'odd-row hairline':  function(d){ body(d); for(var x=60;x<300;x++){ var i=(41*W+x)*4; d[i]=232;d[i+1]=163;d[i+2]=61;d[i+3]=255; } },
+    'faint block a=3':   function(d){ body(d); for(var y=250;y<290;y++){ var r=y*W; for(var x=60;x<110;x++){ var i=(r+x)*4; d[i]=232;d[i+1]=163;d[i+2]=61;d[i+3]=3; } } },
+    'feathered edge':    function(d){ for(var y=110;y<210;y++){ var r=y*W; for(var x=160;x<260;x++){
+                            var dx=(x-210)/50, dy=(y-160)/50, rr=Math.sqrt(dx*dx+dy*dy);
+                            var a=rr>=1?0:Math.round(255*(1-rr)*(1-rr)); var i=(r+x)*4;
+                            /* RGB stays 0 where alpha is 0 — a canvas stores premultiplied, so a real
+                               feathered layer CANNOT carry colour there. Writing it made this fixture
+                               permanently "dirty" and the clean column meaningless. */
+                            if(a){ d[i]=232;d[i+1]=163;d[i+2]=61; } d[i+3]=a; } } },
+    'edge-touching':     function(d){ for(var y=0;y<80;y++){ var r=y*W; for(var x=0;x<90;x++){ var i=(r+x)*4; d[i]=232;d[i+1]=163;d[i+2]=61;d[i+3]=255; } } }
+  };
+  var kernels=Object.keys(T.BOUNDED_FX).filter(function(k){ return k!=='letterbox'&&k!=='border'&&FM._pixelFx[k]&&PARAMS[k]; });
+  say('kernels under test: '+kernels.join(', '));
+  say('(letterbox and border excluded — their bbox is semantic, not a skip)');
+  say('');
+  say('shape              plate   ' + kernels.map(function(k){return k.slice(0,9).padEnd(10);}).join(''));
+  var fails=0, cells=0;
+  Object.keys(SHAPES).forEach(function(sn){
+    [false,true].forEach(function(dirty){
+      var row='  '+sn.padEnd(19)+(dirty?'dirty ':'clean ')+'  ';
+      kernels.forEach(function(k){
+        var mk=function(){ var d=base(dirty); SHAPES[sn](d); return d; };
+        var probe=mk(), box=FM._fxBounds(probe,W,H);
+        if(!box){ row+='(no box) '; return; }
+        var A=mk(), B=mk(), K=FM._pixelFx[k];
+        try{ K(A,W,H,PARAMS[k],0.3,1); K(B,W,H,PARAMS[k],0.3,1,box); }catch(e){ row+='THREW     '; fails++; return; }
+        var diff=0,mx=0; for(var i=0;i<A.length;i++) if(A[i]!==B[i]){ diff++; var dd=Math.abs(A[i]-B[i]); if(dd>mx)mx=dd; }
+        cells++;
+        if(diff){ fails++; row+=('x'+(mx>=100?'!':'')+diff).slice(0,9).padEnd(10); }
+        else row+='ok'.padEnd(10);
+      });
+      say(row);
+    });
+  });
+  say('');
+  var BW=1080,BH=1920;
+  var bp=new Uint8ClampedArray(BW*BH*4);
+  for(var yy=120;yy<270;yy++){ var rr2=yy*BW; for(var xx=90;xx<270;xx++){ var ii=(rr2+xx)*4; bp[ii]=232;bp[ii+1]=163;bp[ii+2]=61;bp[ii+3]=255; } }
+  var bt=1e9; for(var t=0;t<7;t++){ var t0=performance.now(); FM._fxBounds(bp,BW,BH); var ms=performance.now()-t0; if(ms<bt)bt=ms; }
+  say('');
+  say('cost of the scan on a 180x150 layer in a 1080x1920 plate: '+bt.toFixed(2)+'ms (once per effect per frame)');
+  say(fails? ('❌ '+fails+' of '+(cells+fails)+' cells diverge  (x<n> = n bytes differ; ! = max delta >= 100)')
+           : ('✅ all '+cells+' cells byte-identical'));
+  window.__done=1;
+ }catch(e){ say('threw: '+(e&&e.message)); window.__done=1; }
+}
+</script></body></html>

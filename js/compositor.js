@@ -3066,6 +3066,51 @@ window.FM = window.FM || {};
     }
     return { l: l, r: r, t: t, b: b };
   }
+  /* ONE PASS THAT ANSWERS BOTH QUESTIONS A BOUND DEPENDS ON (#692, 1 Sep).
+   *
+   * A bbox is a promise that everything outside it is UNCHANGED by the kernel. Three separate ways that
+   * promise was broken turned up in one day, each found only after the previous was patched, so this
+   * settles all of them in the one scan the box already costs:
+   *
+   *   1. THE STRIDE. `alphaBBox` samples every 2nd row and column, so a 1px feature on an odd line falls
+   *      outside the box. Fixed by scanning exactly — measured 9900 bytes wrong in a box blur.
+   *   2. THE THRESHOLD. `alphaBBoxExact` tests `alpha > 8`, so content fainter than that is outside the
+   *      box by construction. On a FEATHERED layer — a soft mask, a glow, any anti-aliased curve — that
+   *      is the whole outer fringe. Measured on a clean plate, feathered edge: lensblur 8865 bytes wrong
+   *      with a max channel delta over 100, boxblur 6201, dropshadow 1631. This scans at `alpha > 0`.
+   *   3. THE DIRTY PLATE. Several kernels read and write RGB UNDER ZERO ALPHA, so outside the layer is
+   *      not "zeros in, zeros out" and no bound is a skip. A canvas cannot produce that state — it stores
+   *      premultiplied, so alpha 0 always reads back as 0,0,0 — but the effect chain mutates one
+   *      ImageData in place, kernel after kernel, without going back through a canvas. MEASURED: a clean
+   *      plate through Inner Blur comes out with 1024 coloured-but-transparent pixels, and every effect
+   *      stacked after it receives them. Box Blur, Lens Blur and Hex Tiles then diverge by ~370,000 bytes
+   *      with max deltas over 100. So when the plate is dirty this returns NULL and the kernel runs
+   *      unbounded — correct, and it only costs the saving on the stacks that actually create the state.
+   *
+   * Detecting it is free here because the scan is already touching every pixel it needs. Returning null
+   * rather than a wider box is deliberate: the dirty region can be the entire plate, so there is no box
+   * that would be both correct and worth having. */
+  function fxBoundsScan(d, W, H) {
+    let minX = W, minY = H, maxX = -1, maxY = -1;
+    for (let y = 0; y < H; y++) {
+      const row = y * W * 4;
+      for (let x = 0; x < W; x++) {
+        const i = row + x * 4, a = d[i + 3];
+        if (a === 0) {
+          // colour under zero alpha: invisible on screen, but the NEXT kernel in the stack reads it
+          if (d[i] !== 0 || d[i + 1] !== 0 || d[i + 2] !== 0) return null;
+          continue;
+        }
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+    if (maxX < 0) return null;
+    return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+  }
+  FM._fxBoundsScan = fxBoundsScan;   // seam: the suite drives the real scan, not a copy of it
   function fxBounds(d, W, H) {
     let x0, y0, x1, y1;
     /* ⚠️ EXACT, ALWAYS — and the strided scan that used to run here shipped a real bug for four days
@@ -3091,8 +3136,8 @@ window.FM = window.FM || {};
      * full pass — and it is bought against a saving of roughly 400ms, which is not a close call.
      * `alphaBBox` itself stays: other callers use it for framing decisions where a 2px stride is
      * harmless, and it is not this function's business to change them. */
-    const ex = alphaBBoxExact(d, W, H);
-    if (!ex) return null;                                        // the layer drew nothing: no bounds, no effect
+    const ex = fxBoundsScan(d, W, H);
+    if (!ex) return null;                     // nothing drawn, or the plate is dirty — see fxBoundsScan
     x0 = ex.x; y0 = ex.y; x1 = ex.x + ex.w; y1 = ex.y + ex.h;    // exact bounds carry no pad to strip
     /* SNAP to any frame edge the layer's content genuinely reaches. The snap is load-bearing for
      * backward compatibility: on a full-frame layer alphaBBox clamps at 0 and W-1, so stripping the

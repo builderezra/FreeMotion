@@ -1,9 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.83
+> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.84
 >
-> **State:** v14.83, 1152 tests green, tree clean. **🔴 I SHIPPED A BUG THREE RELEASES RUNNING AND HAVE
-> FIXED IT.** The speed work in v14.79–v14.82 works by telling each effect which parts of the frame it
+> **State:** v14.84, 1152 tests green, tree clean. **🔴 I SHIPPED A BUG THREE RELEASES RUNNING AND HAVE
+> FIXED IT — and then found two more of the same kind by asking the whole question instead of patching
+> one hole at a time. All three are closed.** The speed work in v14.79–v14.82 works by telling each effect which parts of the frame it
 > can skip. The box it was given was computed by checking every SECOND row and every SECOND column — so
 > a layer with a solid body plus a **1px feature on an odd line** (a text descender, a hairline rule, a
 > 1px underline) put that feature outside the box, and it silently lost its blur, shadow or tilt-shift
@@ -28458,4 +28459,38 @@ re-opened #480, which I had marked done and had not fixed.
       had one, better.** Deleted rather than tuned — two tests for one property drift apart, and the
       older one has the measurements and the history behind it. Mine was still arguing with its own
       control threshold while queue 675's was catching real duplicates.
+
+- [x] **698 — The bounding is CORRECT now, not just fast: two more ways the box missed content, found by
+      asking the whole question at once.** Shipped v14.84.
+      JUMPED: same defect class as #696, in code shipped this week — correctness outranks the queue.
+      #696 fixed ONE way the box could be wrong (a scan that sampled every 2nd row and column). Patching
+      it one hole at a time is what let the next two hide, so this time the harness asks **six kernels ×
+      seven layer shapes × clean and dirty pixel states**, against the box the renderer really computes.
+      🔴 **THE THRESHOLD.** The exact scan tested `alpha > 8`, so anything fainter was outside the box by
+      construction — and on a **feathered layer** (a soft mask, a glow, any anti-aliased curve) that is
+      the entire outer fringe. Not exotic content; most of what you make. Measured on a clean plate:
+      Lens Blur **8865 bytes wrong** with a max channel delta over 100, Box Blur 6201, Drop Shadow 1631.
+      Now `alpha > 0`.
+      🔴 **THE DIRTY PLATE, and the mechanism is the interesting part.** Some kernels write colour into
+      FULLY TRANSPARENT pixels. A canvas physically cannot store that — it keeps pixels premultiplied, so
+      transparent always reads back as black — **but the effect chain passes ONE pixel buffer from effect
+      to effect without going back through a canvas.** Measured: a clean plate through Inner Blur comes
+      out carrying **1024 coloured-but-invisible pixels**, and everything stacked after it inherits them.
+      Box Blur, Lens Blur and Hex Tiles then diverge by **~370,000 bytes** with max deltas over 100.
+      v14.82 already refused to bound Inner Blur *because* it writes under transparency — what was missed
+      is that it poisons the plate for its NEIGHBOURS. `fxBounds` returns nothing on a dirty plate now, so
+      those stacks run unbounded and correct, and only they pay for it.
+      ✅ **One scan answers both questions**, since it was already touching the pixels. Cost **3.20ms** per
+      bounded effect per frame on a small layer at 1080x1920, paid only by effects that benefit:
+      | effect | before all this | now, all-in |
+      |---|---|---|
+      | Lens Blur | 190.1ms | **8.5ms** |
+      | Tilt Shift | 84.7ms | **22.8ms** |
+      | Box Blur | 69.9ms | **14.9ms** |
+      ⚠️ **My fixture was wrong for the fifth time today** — the feathered-edge case wrote colour under
+      zero alpha, which a canvas cannot do, so it was permanently "dirty" and its clean column proved
+      nothing. Both new guarantees are mutation-proven, and the pattern is now in the cross-session
+      memory: **a fixture that does not contain the thing distinguishing the cases cannot tell them
+      apart.** Five instances in one session, every one caught by a mutation or an implausible number
+      and none by reading the code.
 
