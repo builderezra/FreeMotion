@@ -16,7 +16,19 @@ window.FM = window.FM || {};
   'use strict';
 
   // The real kinetic-typography presets (compositor.js + inspector.js). The validator snaps to these.
-  const TEXT_PRESETS = ['none', 'fade', 'fade-up', 'typewriter', 'pop', 'slide'];
+  /* ⚠️ ALL TWELVE, and it was SIX until 1 Sep (queue 700). This is the one hand-written vocabulary in a
+   * file whose own header promises the prompt "can never drift from the code" — and it is the one that
+   * drifted. Queue 573 took the Text panel from five animations to eleven (v12.89) and this list was not
+   * touched, so the six newer ones did not exist as far as the AI was concerned.
+   * TWO harms, and the first needs no misbehaviour from the model: the capability digest below is built
+   * from this array, so the model was told only six presets exist and could never produce Drop, Spin,
+   * Zoom in from big, Stretch, Wave or Jitter. The second is worse because it is silent — ask for one
+   * anyway and `snap(o.preset, FM.AI_TEXT_PRESETS, 'fade')` in js/ai-ops.js rewrites it to 'fade' and
+   * then reports the op APPLIED with no dropped-reason, so the text cross-fades and nothing says why.
+   * The source of truth is the Animate dropdown in js/inspector.js and the branches in js/compositor.js;
+   * a test now holds this array to it rather than a comment asking the next reader to check. */
+  const TEXT_PRESETS = ['none', 'fade', 'fade-up', 'typewriter', 'pop', 'slide',
+                        'drop', 'spin', 'zoom-out', 'stretch', 'wave', 'jitter'];
   FM.AI_TEXT_PRESETS = TEXT_PRESETS;
 
   // The closed set of operation names the AI may emit. Mirrored by ai-ops.js handlers.

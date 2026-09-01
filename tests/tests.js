@@ -55994,6 +55994,44 @@
     if (m[1].indexOf('innerblur') >= 0) throw new Error('innerblur joined BOUNDED_FX — it writes colour to fully transparent pixels, so a bbox skip is not a skip and the next kernel in the stack reads the difference back');
   });
 
+  test('the AI knows every text animation the Text panel offers (queue 700)', { item: '700' }, async function () {
+    /* Queue 700. `TEXT_PRESETS` in js/ai-manifest.js listed six animations; the Animate dropdown offers
+     * twelve and the compositor implements all twelve. Queue 573 took it from five to eleven (v12.89) and
+     * this array was never touched.
+     * TWO harms. The capability digest is built from this array, so the model was told only six exist and
+     * could never produce Drop, Spin, Zoom in from big, Stretch, Wave or Jitter. And if it named one
+     * anyway, `snap(o.preset, FM.AI_TEXT_PRESETS, 'fade')` rewrote it to 'fade' and then reported the op
+     * APPLIED with no dropped-reason — so the text cross-faded and nothing said why.
+     * ⚠️ THE LIST IS COMPARED TO ITS SOURCE, NOT TO A COPY. A hard-coded twelve here would drift the same
+     * way the original did — that is the whole failure. The inspector's dropdown is sliced out of the
+     * source, and the slice asserts its own plausibility first, because a source-slicing test that
+     * silently matches nothing passes forever. */
+    if (!Array.isArray(FM.AI_TEXT_PRESETS)) throw new Error('FM.AI_TEXT_PRESETS is missing');
+    let src = '';
+    try { src = await (await fetch('js/inspector.js', { cache: 'no-store' })).text(); }
+    catch (e) { throw new Error('could not read js/inspector.js: ' + e.message); }
+    if (src.length < 50000) throw new Error('js/inspector.js came back as ' + src.length + ' chars — not the file, so this proves nothing');
+
+    const m = /\[\['none', 'None'\][\s\S]{0,700}?\]\]\.forEach/.exec(src);
+    if (!m) throw new Error('could not find the Animate dropdown in js/inspector.js — the slice is broken, not the code');
+    const offered = (m[0].match(/\['([a-z-]+)',/g) || []).map(x => x.slice(2, -2));
+    if (offered.length < 8) throw new Error('the sliced Animate dropdown has only ' + offered.length + ' options — the slice is broken, so a green run means nothing');
+
+    const missing = offered.filter(k => FM.AI_TEXT_PRESETS.indexOf(k) < 0);
+    if (missing.length) throw new Error('the Text panel offers ' + offered.length + ' animations and the AI knows ' + FM.AI_TEXT_PRESETS.length + ' — it cannot produce ' + JSON.stringify(missing) + ', and if it names one anyway the validator silently rewrites it to "fade" and reports the op APPLIED (queue 700)');
+    const extra = FM.AI_TEXT_PRESETS.filter(k => offered.indexOf(k) < 0);
+    if (extra.length) throw new Error('the AI is told about ' + JSON.stringify(extra) + ', which the Text panel does not offer — it would emit a preset nothing renders');
+
+    /* AND THE PROMPT ITSELF. The array being right is no use if the digest the model reads was built
+       from something else. */
+    const digest = (FM.aiManifest && FM.aiManifest.digest) || '';
+    if (digest) {
+      const line = /textAnim presets: ([^.\n]*)/.exec(digest);
+      if (!line) throw new Error('the capability digest no longer names the textAnim presets, so the model is not told about them at all');
+      offered.forEach(k => { if (line[1].indexOf(k) < 0) throw new Error('the prompt the model reads does not mention the "' + k + '" animation, so it can never ask for it'); });
+    }
+  });
+
   test('effects: every bounded kernel is safe on the box the RENDERER actually computes', { item: '692' }, function () {
     /* ⚠️ THE TEST THAT WAS MISSING, and its absence shipped a real bug for four days (v14.79-v14.82).
      * Every identity test for a bounded kernel computed the bounding box ITSELF. The renderer does not —

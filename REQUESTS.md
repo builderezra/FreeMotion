@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.86
+> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.87
 >
-> **State:** v14.86, 1152 tests green, tree clean. **⚡ THE LAG WORK IS FINISHED, and the reason it is
+> **State:** v14.87, 1153 tests green, tree clean. **⚡ THE LAG WORK IS FINISHED, and the reason it is
 > finished is that the three most expensive effects left are the three that CANNOT be sped up this way.**
 > Ten effects bounded. Across all 105 of them on a small layer in a full-size project: **1316ms → 998ms**.
 > The two biggest in the whole app — Spin Streaks and Zoom Streaks — are gone from the top ten, and what
@@ -28579,6 +28579,10 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       one and swipes does nothing at all — no trim, no scrub, no scroll.** (Found and MEASURED 1 Sep.
       Fix attempted, verified working, then withdrawn — see the end. Not shipped.)
+      **JUMPED: the fix for this was written, measured working, and deliberately withdrawn — see the end
+      of this entry. It is not blocked on you and it is not done; it needs a careful session with a clear
+      head, because it touches the gesture layer he uses every day.** #700 shipped ahead of it because it
+      was a one-line correctness fault with a repro needing no device.
       📐 **Measured at 380px on a 4-clip project**, the identical 60px swipe:
       | started on | playhead | timeline scroll |
       |---|---|---|
@@ -28614,4 +28618,23 @@ re-opened #480, which I had marked done and had not fixed.
       body) is what makes it trustworthy. Three earlier versions of that probe had a DEAD control —
       a point scrolled off screen, a dispatch to an SVG child, a stale element after a rebuild — and
       every one would have "confirmed" a bug that was not there.
+
+- [x] **700 — The AI knew SIX of your twelve text animations, and quietly turned the other six into a
+      cross-fade.** Found by the 1 Sep bug hunt, fixed v14.87.
+      JUMPED: a one-line correctness fault found by tonight's audit, with a repro that needs no API key.
+      `TEXT_PRESETS` in `js/ai-manifest.js` listed none/fade/fade-up/typewriter/pop/slide. Your Animate
+      dropdown offers **twelve** and the renderer implements all twelve — **#573 took it from five to
+      eleven back in v12.89** and this array was never touched.
+      **Two harms, and the first needs nothing to go wrong at all:** the description of its own abilities
+      that the AI reads is built from this array, so it was told six exist and **could never produce Drop,
+      Spin, Zoom in from big, Stretch, Wave or Jitter**. The second is the quiet one — ask for one anyway
+      and the validator rewrote it to `fade` and then **reported the change as applied**, so your title
+      cross-faded and nothing said why.
+      ⚠️ **The file's own header promises the AI's vocabulary "can never drift from the code."** This was
+      the one hand-written list in it, and it is the one that drifted — the same shape as #686's lost
+      preset marker, #688's forgotten light/dark setting and #689's dropped Paste-look properties.
+      ✅ The durable half is a test that **slices the dropdown out of `js/inspector.js`** and holds the
+      AI's list to it, rather than a second hard-coded twelve that would drift the same way. It asserts
+      its own slice is plausible first, and separately checks the prompt the model actually reads — the
+      array being right is no use if the prompt was built from something else.
 
