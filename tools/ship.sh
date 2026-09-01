@@ -380,6 +380,45 @@ if [ -n "$GONE" ] && ! printf '%s' "$MSG" | grep -q 'DROPS TEST:'; then
   exit 1
 fi
 
+# ─── NO REQUEST MAY VANISH WITHOUT SAYING SO (2 Sep) ────────────────────────────────────────────
+# The twin of the gate above, and it exists because the thing it prevents ALREADY HAPPENED. On 1 Sep,
+# v14.89 — a release about the camera's motion-blur shutter — deleted queue 703 from REQUESTS.md. That
+# entry held one of HIS OWN VERBATIM INSTRUCTIONS: "Dont stop looping, keep it going, have a failsafe
+# incase the loop fails". Nothing in that commit mentioned it. Nothing went red. The file is prose, and
+# prose has no test.
+# CLAUDE.md already names this as the worst thing that can happen here — "quietly dropping a request is
+# the exact failure this file exists to prevent" — and until today the only thing enforcing it was care,
+# which is exactly what this repo has learned not to rely on.
+# It was caught a day later by tools/next.sh, and only indirectly: that script flags a NUMBER with no
+# entry, so it saw a hole at 703 rather than a deletion. That is luck dressed as detection — it would
+# have said nothing at all had the entry been the highest-numbered one, or unnumbered.
+# Deleting an entry is occasionally legitimate (a renumber, a merge into a neighbour — three such have
+# happened and all three came back). So this is not forbidden, it is DECLARED, the same shape as the
+# test gate: put "DROPS REQUEST:" in the commit message and it passes, which turns a silent deletion
+# into a line in the log.
+REQ_GONE="$(git show HEAD:REQUESTS.md 2>/dev/null | grep -oE '^- \[[ x]\] \*\*[0-9]+[a-z]?' | grep -oE '[0-9]+[a-z]?$' | sort -u > /tmp/fm_req_before.txt
+grep -oE '^- \[[ x]\] \*\*[0-9]+[a-z]?' REQUESTS.md | grep -oE '[0-9]+[a-z]?$' | sort -u > /tmp/fm_req_after.txt
+comm -23 /tmp/fm_req_before.txt /tmp/fm_req_after.txt)"
+# ⚠️ AND THE GATE MUST PROVE IT CAN SEE. A pattern that matches NOTHING reports no losses and waves
+# every deletion through — the failure is silence, which is the one thing no one notices. If the entry
+# header format in REQUESTS.md ever drifts from this regex, that is what happens, so count first.
+REQ_SEEN="$(wc -l < /tmp/fm_req_before.txt | tr -d ' ')"
+if [ "${REQ_SEEN:-0}" -lt 100 ]; then
+  echo "❌ the REQUESTS.md entry gate matched only $REQ_SEEN entries in HEAD — it expects hundreds."
+  echo "   The header format has drifted from the pattern, so this gate is blind and would pass"
+  echo "   ANY deletion silently. Fix the regex in tools/ship.sh before shipping."
+  exit 1
+fi
+if [ -n "$REQ_GONE" ] && ! printf '%s' "$MSG" | grep -q 'DROPS REQUEST:'; then
+  echo "❌ these REQUESTS.md entries exist in HEAD and are GONE from the working tree:"
+  printf '%s\n' "$REQ_GONE" | sed 's/^/   · #/'
+  echo
+  echo "   A request that vanishes is not deprioritised, it is UNREACHABLE — and he cannot see that it"
+  echo "   went. This is how #703 lost his own words: \"Dont stop looping… have a failsafe\"."
+  echo "   If the removal is deliberate, say so: put \"DROPS REQUEST: <why>\" in the commit message."
+  exit 1
+fi
+
 PHONE_RELEVANT="$(git diff --cached --name-only; git diff --name-only)"
 if printf '%s' "$PHONE_RELEVANT" | grep -qE '^(styles\.css|index\.html|js/)'; then
   echo "→ running the suite again at PHONE width (380px)…"

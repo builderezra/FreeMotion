@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v14.94
+> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v14.95
 >
-> **State:** v14.94, 1158 tests green, tree clean. **⚡ INNER BLUR IS 4.5x FASTER (51.1ms → 11.3ms)
+> **State:** v14.95, 1158 tests green, tree clean. **⚡ INNER BLUR IS 4.5x FASTER (51.1ms → 11.3ms)
 > and NOTHING ON SCREEN CHANGED** — measured, zero visible bytes different. The "Colour past the edge"
 > option you asked for keeps the old look one tap away. **✅ YOU ANSWERED FOUR QUESTIONS — all logged in
 > their own entries: the 219ms goes ahead WITH a tick box keeping the old rim; the intro logo has colour
@@ -28870,6 +28870,21 @@ re-opened #480, which I had marked done and had not fixed.
       the same as not having seen them. Raise them again only if he asks, or if one of them starts
       blocking something he has actually asked for.
       ➡️ **The standing steer is #591's**: there is plenty to build without him. Work the authorised list.
+
+- [ ] **703 — Standing instruction, 1 Sep (verbatim):**
+      **STATUS: 📌 NOTE — nothing to build**
+      > Dont stop looping, keep it going, have a failsafe incase the loop fails
+      **The failsafe is a RECURRING cron, not a chain of one-shot wakeups**, and that is from experience:
+      a one-shot chain died silently once and nothing ran for 1h48m, because a one-shot that never fires
+      leaves nothing behind to notice. A recurring schedule self-heals — miss one firing and the next one
+      still comes.
+      ⚠️ **THIS ENTRY WAS DELETED ONCE — on 1 Sep, by v14.89, a release about the camera shutter that had
+      nothing to do with it.** Nothing in that commit message mentioned it. It was found on 2 Sep by
+      `tools/next.sh`, which noticed the number 703 was allocated and had no entry, and an audit of all
+      1131 commits that have ever touched this file found it was the ONLY request ever lost that way.
+      **A gate now refuses any release that removes an entry** unless the commit says `DROPS REQUEST:`,
+      because "quietly dropping a request is the exact failure this file exists to prevent" and until
+      today the only thing preventing it was care.
 
 - [x] **704 — The loading spinner could run FOREVER, and a 120ms timer with it.** Found and fixed 2 Sep,
       v14.92, by the five-lens audit.
