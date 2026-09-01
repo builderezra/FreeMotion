@@ -3068,21 +3068,32 @@ window.FM = window.FM || {};
   }
   function fxBounds(d, W, H) {
     let x0, y0, x1, y1;
-    const bb = alphaBBox(d, W, H);
-    if (bb) {
-      x0 = bb.x + 2; y0 = bb.y + 2;                              // strip alphaBBox's 2px pad, exactly as roundcorners does at :4864
-      x1 = bb.x + bb.w - 2; y1 = bb.y + bb.h - 2;                // …and these are the EXCLUSIVE far edges
-    } else {
-      /* alphaBBox samples every 2nd ROW and every 2nd COLUMN, so a layer under 2 plate px thick
-       * that happens to land entirely on odd lines reads as "drew nothing" — a hairline divider, a
-       * text underline, any 1px rule, and any thin layer at all once a reduced preview plate has
-       * shrunk it into that band. Retry exactly instead of giving up. The full pass only ever runs
-       * where the strided scan already found zero, so it costs nothing that was being saved, and it
-       * is the difference between a hairline getting its frame and a hairline being dropped. */
-      const ex = alphaBBoxExact(d, W, H);
-      if (!ex) return null;                                      // the layer drew nothing: no bounds, no effect
-      x0 = ex.x; y0 = ex.y; x1 = ex.x + ex.w; y1 = ex.y + ex.h;  // exact bounds carry no pad to strip
-    }
+    /* ⚠️ EXACT, ALWAYS — and the strided scan that used to run here shipped a real bug for four days
+     * (v14.79 to v14.82, fixed 1 Sep). This box is what tells a bounded kernel which rows and columns
+     * it may skip, so anything the box misses loses its effect outright.
+     *
+     * `alphaBBox` samples every 2nd ROW **and every 2nd COLUMN**. The old code below understood half
+     * of that: it fell back to an exact scan when the strided one found NOTHING, which covers a lone
+     * hairline. It does not cover the ordinary case — a layer with a CHUNKY BODY *and* a 1px feature
+     * on an odd line. The body keeps the strided result non-null, the fallback never fires, and the
+     * hairline sits outside the box by however far it happens to be. Padding cannot fix that: the
+     * missed feature is DETACHED, not merely a shaved edge.
+     * MEASURED on a 420x320 plate, an 80x80 body plus a 1px stem hanging below it:
+     *     stem on column 205 (ODD)   box 80x80  — the stem is outside it entirely
+     *       boxblur 9900 bytes wrong (max delta 243) · lensblur 4408 · dropshadow 1836 · hextiles 312
+     *       · tiltshift 292 · mattechoker 91 (max delta 255)
+     *     stem on column 204 (EVEN)  box 80x180 — every one of the six byte-identical.
+     * That is every kernel bounded to date, and it is what a text descender, a 1px underline or a
+     * hairline divider does on an odd line: the body gets its blur and the hairline does not.
+     *
+     * So the strided scan is gone from this path. The exact one already early-exits its row search
+     * from both ends and narrows the column scan to the rows it found, so the cost is a fraction of a
+     * full pass — and it is bought against a saving of roughly 400ms, which is not a close call.
+     * `alphaBBox` itself stays: other callers use it for framing decisions where a 2px stride is
+     * harmless, and it is not this function's business to change them. */
+    const ex = alphaBBoxExact(d, W, H);
+    if (!ex) return null;                                        // the layer drew nothing: no bounds, no effect
+    x0 = ex.x; y0 = ex.y; x1 = ex.x + ex.w; y1 = ex.y + ex.h;    // exact bounds carry no pad to strip
     /* SNAP to any frame edge the layer's content genuinely reaches. The snap is load-bearing for
      * backward compatibility: on a full-frame layer alphaBBox clamps at 0 and W-1, so stripping the
      * pad would inset the box by 2px and every existing full-frame Letterbox/Border would shift.
@@ -13561,6 +13572,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // in the app that are NOT entries in one of these tables — they run on the media path, ahead of the
   // draw, so nothing in the suite could reach them and neither had a test. Both now take controls that
   // feed a repaint cache, which is exactly the kind of thing that needs one.
+  /* Seam for the suite (#692, 1 Sep). The identity tests for every bounded kernel used to compute the
+   * bbox THEMSELVES, exactly — which is not the box the app passes, and that gap is precisely how the
+   * strided-scan bug shipped for four days: bounded and unbounded agreed on a perfect box and diverged
+   * badly on the real one. A test must ask for the box the renderer would actually hand the kernel. */
+  FM._fxBounds = fxBounds;
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
   /* ⚠️ AN ANIMATED COLOUR IS AN OBJECT, AND THIRTY-NINE KERNELS READ COLOURS AS STRINGS (queue 555).
      Ezra: "Colours for every effect like gradient overly should be key frame able".

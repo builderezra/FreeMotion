@@ -37389,6 +37389,14 @@
     });
   });
 
+  /* NO "no two filters are the same look" TEST HERE — queue 675 already has one, and it is better.
+   * One was written on 1 Sep before finding it, measuring pairwise distance across the tile previews.
+   * The suite answered immediately: queue 675's version caught a new Kodachrome sitting 9.4 from the
+   * existing Ultraviolet, while the new one was still arguing with its own control threshold. Deleted
+   * rather than tuned — two tests for one property drift apart, and the older one has the measurements
+   * and the history behind it. Look for `#675: every added filter sits somewhere the existing set does
+   * not`. */
+
   test('filters tab: adding a filter returns you to the stack with it open', { item: 'fx-library' }, async function () {
     /* THE TAP NO LONGER ADDS (queue 464, v11.42). Ezra asked for filters to work like the effects menu —
        toggle a selection, then press Add — *"so I can see them all quickly and not have to add then
@@ -55984,6 +55992,96 @@
       if (m[1].indexOf(k) < 0) throw new Error(k + ' left BOUNDED_FX, so no bbox reaches it and it walks the whole plate again (#692)');
     }
     if (m[1].indexOf('innerblur') >= 0) throw new Error('innerblur joined BOUNDED_FX — it writes colour to fully transparent pixels, so a bbox skip is not a skip and the next kernel in the stack reads the difference back');
+  });
+
+  test('effects: every bounded kernel is safe on the box the RENDERER actually computes', { item: '692' }, function () {
+    /* ⚠️ THIS IS THE TEST THAT WAS MISSING, and its absence shipped a real bug for four days
+     * (v14.79-v14.82, found 1 Sep). Every identity test for a bounded kernel computed the bounding box
+     * ITSELF, exactly. The renderer does not: it calls `fxBounds`, which used a scan sampling every 2nd
+     * ROW AND every 2nd COLUMN. Bounded and unbounded therefore agreed perfectly on a box no user ever
+     * gets, and diverged badly on the real one. **A test that builds its own version of the input is
+     * testing something the product does not do.**
+     *
+     * The case is ordinary, not exotic: a layer with a CHUNKY BODY plus a 1px feature on an odd line —
+     * a text descender, a 1px underline, a hairline divider. The body kept the strided scan non-null so
+     * its exact fallback never fired, and the hairline sat outside the box by however far it happened to
+     * be. Padding cannot fix a DETACHED miss.
+     * MEASURED before the fix, 420x320 plate, 80x80 body, 1px stem below it:
+     *     column 205 (ODD)  box 80x80  — boxblur 9900 bytes wrong (max delta 243), lensblur 4408,
+     *                                    dropshadow 1836, hextiles 312, tiltshift 292, mattechoker 91
+     *     column 204 (EVEN) box 80x180 — all six byte-identical
+     * The even column is the control that isolates the stride as the sole cause, and it is kept below
+     * for exactly that reason: without it a harness that simply never diverges would pass this. */
+    const P = FM._pixelFx, FB = FM._fxBounds, T = FM._FX_TABLES;
+    if (typeof FB !== 'function') throw new Error('FM._fxBounds is not exposed — this test would have to build its own box, which is the mistake it exists to prevent');
+    if (!T || !T.BOUNDED_FX) throw new Error('BOUNDED_FX is not exposed');
+    const W = 420, H = 320;
+    const plate = (col) => {
+      const c = offscreen(W, H), g = c.getContext('2d', { willReadFrequently: true });
+      g.clearRect(0, 0, W, H);
+      g.fillStyle = '#e8a33d';
+      g.fillRect(170, 120, 80, 80);          // the body
+      g.fillRect(col, 200, 1, 100);          // a 1px stem hanging below it — a descender, a rule
+      return g.getImageData(0, 0, W, H);
+    };
+    const trueBox = (img) => {
+      const d = img.data; let minX = W, minY = H, maxX = -1, maxY = -1;
+      for (let y = 0; y < H; y++) { const row = y * W * 4;
+        for (let x = 0; x < W; x++) if (d[row + x * 4 + 3] > 8) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; } }
+      return maxX < 0 ? null : { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+    };
+    /* ⚠️ LETTERBOX AND BORDER ARE IN BOUNDED_FX BUT ARE NOT IN THIS TEST, and the distinction matters.
+       They are the only two entries whose bbox is SEMANTIC rather than an optimisation: the box tells
+       them what to FRAME, so bounded and unbounded are supposed to differ — one bars the layer, the
+       other bars the whole frame, which is the entire point of queue 630 and the `fx-bounded-frame`
+       tests that cover them. Measured when they were briefly included here: 61240 and 19088 bytes
+       differ, on the EVEN column too, which is the giveaway that it is not a stride problem.
+       Everything else in the table is a pure skip and must be byte-identical. */
+    const SEMANTIC = { letterbox: 1, border: 1 };
+    const PARAMS = {
+      boxblur: { radius: 10 }, dropshadow: { distance: 12, softness: 8 }, lensblur: { radius: 10 },
+      hextiles: { size: 20 }, tiltshift: { center: 0.5, softness: 0.5 }, mattechoker: { choke: -4, feather: 4 },
+    };
+    const bad = [], covered = [];
+    [205, 204].forEach(col => {
+      const img = plate(col), box = FB(img.data, W, H), tb = trueBox(img);
+      if (!box || !tb) { bad.push('col ' + col + ': no box at all'); return; }
+      /* The renderer's box must CONTAIN every drawn pixel. This is the root assertion — everything
+         below is downstream of it. */
+      if (!(box.x <= tb.x && box.y <= tb.y && box.x + box.w >= tb.x + tb.w && box.y + box.h >= tb.y + tb.h)) {
+        bad.push('col ' + col + ': fxBounds returned ' + JSON.stringify(box) + ' but the content is ' + JSON.stringify(tb) + ' — drawn pixels lie OUTSIDE the box a bounded kernel is told it may skip');
+        return;
+      }
+      Object.keys(T.BOUNDED_FX).forEach(type => {
+        if (SEMANTIC[type]) return;
+        const K = P[type]; if (!K || !PARAMS[type]) return;
+        covered.push(type);
+        const a = plate(col).data, b = plate(col).data;
+        try { K(a, W, H, PARAMS[type], 0.3, 1); } catch (e) { bad.push(type + ' threw unbounded: ' + e.message); return; }
+        try { K(b, W, H, PARAMS[type], 0.3, 1, box); } catch (e) { bad.push(type + ' threw bounded: ' + e.message); return; }
+        let diff = 0, mx = 0;
+        for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) { diff++; const dd = Math.abs(a[i] - b[i]); if (dd > mx) mx = dd; }
+        if (diff) bad.push(type + ' on col ' + col + ': ' + diff + ' bytes differ, max delta ' + mx);
+      });
+    });
+    /* …and every non-semantic member of BOUNDED_FX must be covered, or a kernel could join the table
+       and never be checked here — the silent gap this whole test exists to close. */
+    Object.keys(T.BOUNDED_FX).forEach(type => {
+      if (SEMANTIC[type] || !P[type]) return;
+      if (!PARAMS[type]) bad.push(type + ' is in BOUNDED_FX but has no entry in this test\'s params table, so it is not being checked at all');
+    });
+    if (!covered.length) throw new Error('no bounded kernel was exercised — BOUNDED_FX or the params table has drifted, so a green run here means nothing');
+    if (bad.length) throw new Error('a bounded kernel changes the picture on the box the renderer really computes: ' + bad.slice(0, 6).join(' · '));
+
+    /* AND THE COST OF BEING EXACT, so a future "optimisation" back to a strided scan has to argue with
+       a number. Measured 1.60ms for a small layer in a 1080x1920 plate, against the ~400ms the bounding
+       saves. This asserts only that it has not become pathological. */
+    const big = 1080, tall = 1920;
+    const bc = offscreen(big, tall), bg = bc.getContext('2d', { willReadFrequently: true });
+    bg.clearRect(0, 0, big, tall); bg.fillStyle = '#e8a33d'; bg.fillRect(90, 120, 180, 150);
+    const bd = bg.getImageData(0, 0, big, tall).data;
+    const t0 = performance.now(); FB(bd, big, tall); const ms = performance.now() - t0;
+    if (ms > 20) throw new Error('fxBounds took ' + ms.toFixed(1) + 'ms on a 1080x1920 plate — an exact scan is worth 1.6ms against the 400ms the bounding saves, but not this');
   });
 
   test('effects: bounding the box blur to the layer changes NOTHING about the picture', { item: '692' }, async function () {

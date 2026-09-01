@@ -492,6 +492,22 @@ window.FM = window.FM || {};
        No subject repeats inside any of their sections. */
     midnight:   'tesla',   ultraviolet: 'towers', matte: 'shore',
     ember:      'bush',    copperplate: 'pair',
+    /* THE EIGHT ADDED 1 Sep (queue 690, "adding more filters"), under the same two standing rules:
+       **no cars outside the tuff group** (his v9.82 correction, still binding) and each subject picked
+       for what that particular grade needs to bite on, never by rotation.
+       · blueprint reduces the picture to line work, so it needs HARD MAN-MADE EDGES to find — 'city'.
+       · riso is two-ink zine printing, and printing is of people — 'pair'.
+       · infrared is a false-colour FOLIAGE response, so it needs foliage — 'bush'. That is the whole
+         point of the look and no other subject shows it.
+       · xerox crushes to toner, so it needs strong tonal separation rather than colour — 'ramp'.
+       · acidwash flattens colour into bands, so it needs mid-saturation to push — 'dusk'.
+       · moonlight is day-for-night, so it needs an open DAYLIT scene to convert — 'sunpath'.
+       · lowkey sinks most of the frame away, so it needs warmth already in it and dark to sink into — 'bush'.
+       · datamosh is the tenth TUFF look, so it DOES take a car, and 'revuelto' is the one that keeps
+         the section's no-two-cars-touching rule at four columns and at two: it sits under overdrive
+         (huracan) and beside midnight (tesla), touching neither. */
+    blueprint:  'city',    riso:   'pair',     infrared:  'bush',   xerox: 'ramp',
+    acidwash:   'dusk',    moonlight: 'sunpath', lowkey:  'bush',   datamosh: 'revuelto',
   };
   Object.setPrototypeOf(FILTER_SUBJECT, null);   // an id like 'constructor' must miss, not inherit
 

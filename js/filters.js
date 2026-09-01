@@ -351,6 +351,87 @@ window.FM = window.FM || {};
                 e('duotone', { amount: 1, color: '#0d1b3d', color2: '#ffc078' }),
                 e('highlightsshadows', { highlights: 16, shadows: -18 }),
                 e('filmgrain', { amount: 14, size: 2 })] },
+    // ---- added 1 Sep (queue 690: "adding more filters") -------------------------------------
+    /* THREE OF THESE ARE IMPOSSIBLE AT THE OLD CEILINGS — Blueprint needs Find Edges past 4,
+       Risograph needs a 40px halftone dot past 30, and Datamosh needs Compression Crunch's blocks
+       past 40 and Glitch's slices past 60. That is the honest argument for v14.81's raise: it did
+       not just lengthen sliders, it made looks reachable that were not. */
+    { id: 'blueprint', name: 'Blueprint', section: 'stylised',
+      desc: 'Drafting paper — the picture reduced to pale line work on deep blue.',
+      effects: [e('grayscale', { amount: 1 }), e('contrast', { amount: 1.35 }),
+                e('edge', { amount: 9, threshold: 6 }),
+                e('duotone', { amount: 1, color: '#0a2a6b', color2: '#e6efff' })] },
+    { id: 'riso', name: 'Risograph', section: 'stylised',
+      desc: 'Two-ink zine printing — coarse dots in pink and blue, slightly off-register.',
+      effects: [e('contrast', { amount: 1.18 }), e('saturate', { amount: 0.6 }),
+                e('halftone', { size: 40 }),
+                e('duotone', { amount: 0.88, color: '#1b2f8f', color2: '#ff5aa8' }),
+                e('filmgrain', { amount: 16, size: 2 })] },
+    { id: 'infrared', name: 'Infrared', section: 'stylised',
+      desc: 'False-colour film — foliage burns red, skin goes waxy, the sky drops away behind it.',
+      /* ⚠️ REWORKED BEFORE IT SHIPPED. The first version was a hue rotation and rendered as a mild
+         purple wash — nothing anyone would call infrared. Real IR film is a CHANNEL response, not a
+         hue spin: it is the red record that blows out. Driving colorbalance hard does that; the hue
+         version and a solarised one were both rendered beside it and lost. */
+      effects: [e('contrast', { amount: 1.3 }), e('saturate', { amount: 2.2 }),
+                e('colorbalance', { red: 70, green: -45, blue: 20 }),
+                e('highlightsshadows', { highlights: -18, shadows: 14 }),
+                e('vignette', { amount: 0.32, size: 38 })] },
+    { id: 'xerox', name: 'Photocopy', section: 'mono',
+      desc: 'Run through the office copier one time too many — crushed to dots and toner.',
+      /* ⚠️ EXPOSURE RAISED FROM 1.08 TO 1.4, and queue 675 is why. At 1.08 it settled at a mid grey and
+         measured 9.5 from Copperplate — both are near-colourless, so LUMA is the only axis separating
+         them, and a mid grey is where every monochrome look ends up. It is also wrong about photocopies:
+         a copier BLOWS OUT, it does not sit in the middle. Raising the exposure is both the fix and the
+         more honest version of the look. */
+      effects: [e('grayscale', { amount: 1 }), e('brightness', { amount: 1.4 }),
+                e('contrast', { amount: 2.4 }),
+                e('dither', { levels: 2, scale: 2, mono: 1 }), e('filmgrain', { amount: 18, size: 1 })] },
+    /* STYLISED, not vivid, and the reason is structural rather than taxonomic: queue 565's dots test
+       needs at least one filter row that does NOT overflow, and `vivid` was one of only two sections
+       short enough to fit. Adding a fifth tile there broke it. Acid Wash is a posterised graphic look,
+       so stylised is an honest home for it anyway. */
+    { id: 'acidwash', name: 'Acid Wash', section: 'stylised',
+      desc: 'Colour turned past believable and flattened into hard poster bands.',
+      /* The first version kept a glow and six bands at 90% mix, which read as faint stripes rather
+         than as a poster. Fewer bands at full mix and more saturation is what makes it a LOOK. */
+      effects: [e('contrast', { amount: 1.35 }), e('saturate', { amount: 3 }),   // 3 is the Saturation ceiling; 3.5 was dropped by validation
+                e('hue', { deg: 52 }), e('posterize', { levels: 4, mix: 1, channels: 0 })] },
+    { id: 'moonlight', name: 'Moonlight', section: 'cinematic',
+      desc: 'Day for night — the colour drained out and what is left tinted the colour of moonlight.',
+      /* ⚠️ REWORKED BEFORE IT SHIPPED. Dimming and cooling alone (brightness .86, temperature -36)
+         rendered as daylight with a blue cast, which is the thing day-for-night is supposed to avoid.
+         What sells it is DRAINING THE COLOUR and then tinting what is left, so a duotone at partial
+         strength does the work the temperature slider could not. Two darker/glowier versions were
+         rendered beside it and both still read as day. */
+      effects: [e('brightness', { amount: 0.5 }), e('contrast', { amount: 1.25 }),
+                e('saturate', { amount: 0.25 }),
+                e('duotone', { amount: 0.55, color: '#060d24', color2: '#9fc4ff' }),
+                e('vignette', { amount: 0.5, size: 32 })] },
+    { id: 'lowkey', name: 'Low Key', section: 'cinematic',
+      desc: 'Lit for the dark — most of the frame sinks away and what is left is warm and hard-edged.',
+      /* ⚠️ THIS WAS "KODACHROME" AND THE NAME IS THE THING THAT CHANGED, not just the numbers.
+         Queue 675's duplicate check refused it twice: the first version measured 9.4 from the existing
+         Ultraviolet and my correction made it WORSE at 2.8, because I was guessing at a metric I had not
+         read. Reading it (mean luma and colour spread on a flat #c05030) and SEARCHING the space instead
+         showed why: warm-and-saturated is already occupied by Golden Hour, Sunbaked, Poppy, Ember and
+         Ultraviolet. Kodachrome had nowhere distinct to stand.
+         Five candidates measured against all 45 others, nearest neighbour each:
+             restrained+dark 9.9 (bloodline) · cool slide 9.6 (acidwash) · deep green-blue 9.1 (neonnight)
+             bright low-sat 16.9 (dreamy)    · VERY DARK WARM 18.0 (thermal)  <- this one
+         So it is named for what it actually is. A near-duplicate wearing a famous name would make the
+         list harder to search, which is exactly what queue 675 exists to prevent. */
+      effects: [e('brightness', { amount: 0.72 }), e('contrast', { amount: 1.5 }),
+                e('saturate', { amount: 1.05 }), e('temperature', { amount: 14, tint: 4 }),
+                e('highlightsshadows', { highlights: -20, shadows: -18 })] },
+    { id: 'datamosh', name: 'Datamosh', section: 'tuff',
+      desc: 'The file giving up — colour torn into big blocks and the frame slipping sideways.',
+      effects: [e('contrast', { amount: 1.1 }), e('saturate', { amount: 1.25 }),
+                e('compresscrunch', { quality: 0.08, blocksize: 90, chromablock: 180, ringing: 0.7, fry: 0.6 }),
+                e('glitch', { amount: 0.34, bands: 90, split: 5 }),
+                /* Tuff carries the flash — his second half of that request, and the suite holds every
+                   filter in the section to it. */
+                e('flashdark', { amount: 0.3, speed: 14, soft: 0.25, floor: 0.35 })] },
   ];
 
   /* Validate a definition against the LIVE registry and build a real container instance from it.

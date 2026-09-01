@@ -1,0 +1,83 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#0d0f14">
+<div id="out" style="padding:18px;font:13px/1.5 -apple-system,system-ui,sans-serif;color:#e6e9ef">
+<div style="font-size:19px;font-weight:650;margin-bottom:2px">Eight new filters</div>
+<div style="color:#8a93a6;margin-bottom:16px">Rendered at 1080x720 — your real project width. Three are only possible at v14.81's raised ceilings.</div>
+<div id="grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px"></div>
+<pre id="o" style="color:#9fb;font:11px ui-monospace;margin-top:18px;white-space:pre-wrap"></pre>
+</div>
+<iframe id="a" src="../index.html" style="width:1000px;height:60px;border:0;opacity:0;position:absolute;left:-9999px"></iframe>
+<script>
+var lines=[]; function log(s){ lines.push(s); document.getElementById("o").textContent=lines.join('\n'); }
+var NEW=['blueprint','riso','infrared','xerox','acidwash','moonlight','lowkey','datamosh'];
+var VARIANTS=[];
+document.getElementById('a').addEventListener('load', function () {
+  var w=document.getElementById('a').contentWindow, n=0;
+  (function wait(){ if(!(w.FM&&w.FM.filters&&w.FM.renderScene&&w.FM.makeLayer)){ if(n++>600) return log('FM never came up'); return setTimeout(wait,50);} setTimeout(function(){run(w);},900); })();
+});
+function run(w){
+ try{
+  var FM=w.FM, TW=1080, TH=720;   // HIS project width — a px-sized look judged on a small tile is a lie
+  var P={width:TW,height:TH,fps:30,duration:5};
+  /* A subject with skin-ish tones, saturated colour, a bright sky and deep shadow — enough for a
+     grade, a halftone and an edge-finder all to have something to act on. */
+  function paint(g){
+    var sky=g.createLinearGradient(0,0,0,TH*0.6);
+    sky.addColorStop(0,'#2b5f9e'); sky.addColorStop(1,'#bcd8f0'); g.fillStyle=sky; g.fillRect(0,0,TW,TH*0.62);
+    g.fillStyle='#e8b872'; g.beginPath(); g.arc(TW*0.78,TH*0.2,26,0,7); g.fill();
+    var gr=g.createLinearGradient(0,TH*0.55,0,TH); gr.addColorStop(0,'#3f6b3a'); gr.addColorStop(1,'#16240f');
+    g.fillStyle=gr; g.fillRect(0,TH*0.55,TW,TH*0.45);
+    g.fillStyle='#c98d6a'; g.beginPath(); g.ellipse(TW*0.33,TH*0.56,30,38,0,0,7); g.fill();
+    g.fillStyle='#8e5a3f'; g.beginPath(); g.ellipse(TW*0.33,TH*0.44,20,22,0,0,7); g.fill();
+    g.fillStyle='#d33b3b'; g.fillRect(TW*0.06,TH*0.72,54,30);
+    g.fillStyle='#f2f4f7'; g.fillRect(TW*0.66,TH*0.74,70,22);
+    g.fillStyle='#111'; g.fillRect(TW*0.66,TH*0.82,70,6);
+    for(var i=0;i<TW;i+=9){ g.fillStyle='rgba(255,255,255,0.05)'; g.fillRect(i,TH*0.62,4,3); }
+  }
+  function tile(title, sub, fx){
+    var box=document.createElement('div');
+    var c=document.createElement('canvas'); c.width=TW; c.height=TH;
+    c.style.cssText='width:100%;border-radius:8px;display:block;background:#000';
+    var g=c.getContext('2d',{willReadFrequently:true});
+    paint(g);
+    if(fx&&fx.length){
+      var L=FM.makeLayer('shape',{shape:'rect',x:TW/2,y:TH/2,shapeW:TW,shapeH:TH,fill:'#000'});
+      L.start=0; L.duration=5; L.effects=fx;
+      // render the painted picture THROUGH the effect stack using the app's own pixel path
+      var src=g.getImageData(0,0,TW,TH);
+      var tmp=document.createElement('canvas'); tmp.width=TW; tmp.height=TH;
+      tmp.getContext('2d').putImageData(src,0,0);
+      L.type='image'; L._probeImg=tmp;
+      try { FM.applyEffectsToImageData ? FM.applyEffectsToImageData(src,fx,0.4) : applyManually(FM,src,fx); } catch(e){ log('render fail '+title+': '+e.message); }
+      g.putImageData(src,0,0);
+    }
+    box.appendChild(c);
+    var t=document.createElement('div'); t.style.cssText='margin-top:6px;font-weight:600';
+    t.textContent=title; box.appendChild(t);
+    var d=document.createElement('div'); d.style.cssText='color:#8a93a6;font-size:11.5px'; d.textContent=sub;
+    box.appendChild(d);
+    document.getElementById('grid').appendChild(box);
+  }
+  function applyManually(FM,img,fx){
+    var Pf=FM._pixelFx, W=img.width, H=img.height, bb={x:0,y:0,w:W,h:H};
+    fx.forEach(function(e){
+      var q=Object.assign({}, e.params||{});
+      if(Pf[e.type]) { Pf[e.type](img.data,W,H,q,0.4,1,bb); return; }
+      if(FM._applyPixelFx) { try { FM._applyPixelFx(img.data,{type:e.type,params:q},0.4,W,H,1); } catch(x){} }
+    });
+  }
+  tile('Original','no filter',null);
+  VARIANTS.forEach(function(v){ tile(v[0], v[1], v[2]); });
+  var all=FM.filters.all();
+  NEW.forEach(function(id){
+    var def=all.filter(function(f){return f.id===id;})[0];
+    if(!def){ log('❌ '+id+' is not in the library at all'); return; }
+    var inst=FM.filters.makeInstance(id);
+    var got=(inst&&inst.effects||[]).length, want=def.effects.length;
+    log((got===want?'✅ ':'❌ ')+def.name.padEnd(12)+' '+got+'/'+want+' effects survived validation'+(got===want?'':'  <-- a type or param does not exist'));
+    tile(def.name, def.section+' · '+def.effects.map(function(e){return e.type;}).join(', '), (inst&&inst.effects)||def.effects);
+  });
+  window.__done=1;
+ }catch(e){ log('threw: '+(e&&e.message)); window.__done=1; }
+}
+</script></body></html>

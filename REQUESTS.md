@@ -1,9 +1,22 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.82
+> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.83
 >
-> **State:** v14.82, 1151 tests green, tree clean. **⚡ THE LAG: TWO MORE EFFECTS STOPPED CHARGING YOU
-> FOR THE WHOLE FRAME.** Tilt Shift **84.7ms → 19.6ms** and Matte Choker **41.4 → under 15**, on a small
+> **State:** v14.83, 1152 tests green, tree clean. **🔴 I SHIPPED A BUG THREE RELEASES RUNNING AND HAVE
+> FIXED IT.** The speed work in v14.79–v14.82 works by telling each effect which parts of the frame it
+> can skip. The box it was given was computed by checking every SECOND row and every SECOND column — so
+> a layer with a solid body plus a **1px feature on an odd line** (a text descender, a hairline rule, a
+> 1px underline) put that feature outside the box, and it silently lost its blur, shadow or tilt-shift
+> while the rest of the layer kept it. All six effects I had sped up were affected. Move the same
+> hairline one pixel across and every one of them is perfect again, which is how I knew what it was.
+> **Found by sending the NEXT batch of effects out to be attacked** — one of the reviewers tested an
+> already-shipped effect as a control and it failed too. I verified that myself before believing it.
+> Fixed: exact bounds always, 1.6ms on a small layer against the ~400ms the skipping saves.
+>
+> **🎨 AND EIGHT NEW FILTERS** — Blueprint, Risograph, Infrared, Photocopy, Acid Wash, Moonlight, Low Key
+> and Datamosh, 38 → 46. Three are only possible because of the raised ceilings. You have the picture.
+>
+> **Earlier today — ⚡ THE LAG: TWO MORE EFFECTS STOPPED CHARGING YOU FOR THE WHOLE FRAME.** Tilt Shift **84.7ms → 19.6ms** and Matte Choker **41.4 → under 15**, on a small
 > layer in a 1080x1920 project. A third, Inner Blur, was made fast and then deliberately put back — it
 > paints colour into fully see-through pixels, and the next effect in your stack can read that back. A 30fps frame is 33ms, so Tilt Shift
 > alone used to cost you two and a half frames. 45 fixtures proved the picture is byte-for-byte the same. **🎚️ YOU SAID "RAISE THEM" AND 30 EFFECT CEILINGS WENT UP.**
@@ -28379,4 +28392,70 @@ re-opened #480, which I had marked done and had not fixed.
       for the layer version: *"needs to be able to be stronger, the cranks should be able to crank more,
       currently the strongest setting is only subtle"*. Same complaint, same feature, one half done.
       **Say the word and the camera one goes to 12 too.**
+
+- [x] **696 — 🔴 THE SPEED WORK IN v14.79–v14.82 HAD A REAL BUG, and a 1px line on an odd row lost its
+      effect.** Found and fixed 1 Sep, v14.83.
+      JUMPED: a correctness fault in code I shipped this week — it outranks the queue by the same rule a
+      broken build does.
+      **What it was.** Those releases make effects fast by handing each one a box saying "everything
+      outside this is empty, skip it". `fxBounds` built that box with a scan sampling **every 2nd row
+      AND every 2nd column**. It handled the obvious case — a layer that is ONLY a hairline reads as
+      empty, and there was already a fallback for that. It did not handle the ordinary one: a layer with
+      a **chunky body plus a 1px feature on an odd line**. The body keeps the strided scan non-empty, so
+      the fallback never fires, and the hairline sits outside the box by however far it happens to be.
+      Padding cannot fix that — the missed feature is DETACHED, not a shaved edge.
+      📐 **Measured**, 420x320 plate, an 80x80 body with a 1px stem hanging below it:
+      | stem column | box returned | what breaks |
+      |---|---|---|
+      | 205 (**odd**) | 80x80 — the stem is outside | boxblur 9900 bytes wrong (max delta 243) · lensblur 4408 · dropshadow 1836 · hextiles 312 · tiltshift 292 · mattechoker 91 |
+      | 204 (even) | 80x180 | **all six byte-identical** |
+      That is every effect bounded to date. In your projects it is a text descender, a 1px underline or
+      a hairline divider keeping its sharpness while the layer around it blurs.
+      🔎 **HOW IT WAS FOUND, because the method is the point.** I sent the NEXT five effects out to five
+      analysts and five adversaries whose only job was to break their proposals. All five were rejected —
+      but one adversary went further and ran an **already-shipped** kernel through its fixture as a
+      control. It failed too. I reproduced that independently before acting on it.
+      ⚠️ **WHY MY TESTS MISSED IT, and this is the part worth keeping.** Every identity test computed the
+      bounding box ITSELF, exactly. The renderer does not. So bounded and unbounded agreed perfectly on a
+      box no user ever gets, and diverged badly on the real one. **A test that builds its own version of
+      the input is testing something the product does not do.** `FM._fxBounds` is a seam now, the new
+      test asks the renderer for the box, and the even-column case is kept as the control that isolates
+      the cause.
+      ✅ **The fix**: exact bounds always. Measured 1.60ms for a small layer in a 1080x1920 plate and
+      0.00ms for a full-frame one, against the ~400ms the bounding saves. The test asserts that cost has
+      not become pathological, so a future "optimisation" back to a strided scan has to argue with a number.
+
+- [x] **697 — Eight new filters (queue 690, "adding more filters"). Shipped v14.83, 38 → 46.**
+      JUMPED: this is #690, his standing brief, which explicitly names adding filters.
+      **Blueprint · Risograph · Infrared · Photocopy · Acid Wash · Moonlight · Low Key · Datamosh.**
+      **Three are only possible because of v14.81's raised ceilings** — Blueprint needs Find Edges past
+      4, Risograph a halftone dot past 30px, Datamosh compression blocks past 40 and glitch slices past
+      60. That is the honest payoff for that release: it did not just make sliders longer, it made looks
+      reachable that were not.
+      🎨 **Three were rejected and reworked before you saw them** — rendered, judged, replaced: Moonlight
+      read as daylight with a blue cast, Infrared as a mild purple wash, Acid Wash as faint stripes.
+      Three variants of each were rendered side by side and the winner picked.
+      ⚠️ **And I nearly judged them on the wrong picture.** The first contact sheet was 300px wide; your
+      projects are 1080. A 40px halftone dot is 7 dots across my tile and 27 across yours — Risograph
+      looked like pop-art polka dots and I was about to throw out a good filter. Everything is rendered
+      at 1080 now.
+      ✅ **THE SUITE CAUGHT FOUR MORE THINGS I HAD NOT**, which is the real story of this entry:
+      · Acid Wash's saturation was **3.5 where the ceiling is 3** — silently dropped by validation, so
+        the filter would have shipped weaker than written and nothing would have said so;
+      · **Kodachrome was a near-duplicate of the existing Ultraviolet** (9.4 on queue 675's own measure).
+        I guessed at a fix and made it **worse** (2.8), then read the metric instead of guessing and
+        searched the space: warm-and-saturated is already occupied by Golden Hour, Sunbaked, Poppy, Ember
+        and Ultraviolet. Five candidates measured against all 45 others; the only genuinely empty ground
+        was very-dark-and-warm. **It is called Low Key now** — named for where it actually sits, because
+        a near-duplicate wearing a famous name makes the list harder to search, which is exactly what
+        queue 675 exists to prevent;
+      · **Photocopy sat 9.5 from Copperplate** — both near-colourless, so luma is the only axis
+        separating them. Raising its exposure fixed it AND is truer to the look: a copier blows out, it
+        does not sit in the middle;
+      · all eight lacked the demo photograph queue 359 requires, and adding a fifth tile to `vivid` broke
+        queue 565's dots test, which needs one row that still FITS. Acid Wash moved to Stylised.
+      ⚠️ **I also wrote a "no two filters are the same look" test before discovering queue 675 already
+      had one, better.** Deleted rather than tuned — two tests for one property drift apart, and the
+      older one has the measurements and the history behind it. Mine was still arguing with its own
+      control threshold while queue 675's was catching real duplicates.
 
