@@ -28416,6 +28416,25 @@ re-opened #480, which I had marked done and had not fixed.
         filling the frame has a box that IS the frame.
       **60 matrix cells and 1,440 swept combinations, all byte-identical**, both bounds mutation-proven.
 
+      ⚠️ **DESIGN CORRECTED 2 Sep, BEFORE ANY CODE — my own description of the fix was wrong and would
+      have broken two of the three effects.**
+      I had written it as *"stop writing under transparency"*, i.e. skip any pixel whose source alpha is
+      0. That is right for **Inner Blur**, which writes RGB only and never touches alpha. It is WRONG for
+      **Zoom Blur** and **Spin Blur**: both write `d[i+3]` as well — the averaged alpha IS their outward
+      smear, the visible part of the effect. Skipping transparent pixels would have deleted it.
+      ✅ **The correct rule is one step finer: do not write RGB where the RESULTING alpha is zero.**
+      · Zoom Blur / Spin Blur — always write the alpha, write RGB only when that alpha is above 0.
+      · Inner Blur — it leaves alpha alone, so the test is the pixel's existing alpha.
+      Every visible pixel is unchanged by that rule; only colour hidden under full transparency stops
+      being written, which is exactly the thing that made these three unboundable.
+      ⚠️ **The option he asked for is still needed, and this is why:** a blur stacked directly after one
+      of them currently averages that hidden colour into visible pixels. With the colour gone it averages
+      **zero** instead — so the faint rim does not merely disappear, it changes. That is the one visible
+      difference, and it is what the before/after picture has to show him.
+      ⏭️ **NOT STARTED — deliberately.** This changes rendered output in a narrow case, it needs a
+      before/after of an Inner Blur under a Box Blur put in front of him, and it wants a fresh session
+      rather than the tail of a very long one. The design above is the whole of it; the analysis is done.
+
       ✅ **HE ANSWERED, 1 Sep: "Do it, but keep the rim as an option."** So all three get fast AND the
       old behaviour stays reachable — a tick box that restores writing under transparency, for anyone who
       composed around the faint dark rim. That is the more conservative half of the choice and it is the
