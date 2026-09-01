@@ -3030,7 +3030,7 @@ window.FM = window.FM || {};
      content can be stepped over and the output is IDENTICAL rather than merely similar. Verified that
      way — seven renders (edge-clipped, full-frame, anisotropic, multi-pass, radius larger than the
      layer) checksummed before and after and required to match exactly. */
-  const BOUNDED_FX = { letterbox: 1, border: 1, boxblur: 1, dropshadow: 1, lensblur: 1, hextiles: 1, tiltshift: 1, mattechoker: 1, radialshadow: 1, edgeglow: 1 };
+  const BOUNDED_FX = { letterbox: 1, border: 1, boxblur: 1, dropshadow: 1, lensblur: 1, hextiles: 1, tiltshift: 1, mattechoker: 1, radialshadow: 1, edgeglow: 1, zoomstreaks: 1, spinstreaks: 1 };
   Object.setPrototypeOf(BOUNDED_FX, null);   // own keys only — see POSTFX
   /* Does the layer's own alpha ACTUALLY occupy the plate's edge row or column? Four direct scans of
    * the four edge lines, at alphaBBox's own `> 8` threshold so the two agree on what counts as
@@ -5500,7 +5500,17 @@ window.FM = window.FM || {};
    look; nothing visible is lost by changing it, because at a p95 of 2 there was nothing to see. */
 var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var eeSr=255-(255-d[eei])*(255-eeR*eeAdd)/255; var eeSg=255-(255-d[eei+1])*(255-eeG*eeAdd)/255; var eeSb=255-(255-d[eei+2])*(255-eeB*eeAdd)/255; d[eei]=eeSr; d[eei+1]=eeSg; d[eei+2]=eeSb; } } },
     glowscan: function(d,W,H,p,t){ var gsSpeed=FM.evalProp(p.speed,t); if(gsSpeed==null)gsSpeed=1.5; if(gsSpeed<0)gsSpeed=0; if(gsSpeed>8)gsSpeed=8; var gsWidth=FM.evalProp(p.width,t); if(gsWidth==null)gsWidth=60; if(gsWidth<10)gsWidth=10; if(gsWidth>200)gsWidth=200; var gsCol=hexToRGB(p.color); var gsCr=gsCol[0],gsCg=gsCol[1],gsCb=gsCol[2]; var gsSigma=gsWidth*0.5; if(gsSigma<0.5)gsSigma=0.5; var gsDen=2*gsSigma*gsSigma; var gsPhase=(t*gsSpeed)%1; if(gsPhase<0)gsPhase+=1; var gsScanY=gsPhase*H; var gsW4=W*4; for(var gsY=0;gsY<H;gsY++){ var gsDist=Math.abs(gsY-gsScanY); var gsAlt=H-gsDist; if(gsAlt<gsDist)gsDist=gsAlt; var gsBr=Math.exp(-(gsDist*gsDist)/gsDen); if(gsBr<0.002)continue; var gsAddR=gsCr*gsBr,gsAddG=gsCg*gsBr,gsAddB=gsCb*gsBr; var gsRow=gsY*gsW4; for(var gsX=0;gsX<W;gsX++){ var gsI=gsRow+gsX*4; if(d[gsI+3]<=0)continue; var gsR=d[gsI],gsG=d[gsI+1],gsB=d[gsI+2]; d[gsI]=255-(255-gsR)*(255-gsAddR)/255; d[gsI+1]=255-(255-gsG)*(255-gsAddG)/255; d[gsI+2]=255-(255-gsB)*(255-gsAddB)/255; } } },
-    spinstreaks: function(d,W,H,p,t){ var ssAmt=FM.evalProp(p.amount,t); if(ssAmt==null) ssAmt=0.5; if(ssAmt<0) ssAmt=0; if(ssAmt>1) ssAmt=1; if(ssAmt<=0.001) return; var ssSrc=fxSrc(d);
+    spinstreaks: function(d,W,H,p,t){ var ssBB=arguments[6];
+      /* SKIP WHAT THE STREAKS CANNOT REACH (#692) — 99.6ms at its defaults on a 180x150 subject in a
+         1080x1920 plate, the most expensive kernel in the catalog once the others were bounded.
+         Geometry again, and this time a ROTATION. A tap reads `s - c = R(-kD)·(p - c)`, so inverting it,
+         a pixel can only be lit if `p = c + R(+kD)·(S - c)` for some S inside the layer's box. The taps
+         are at exactly `ssN` discrete angles, so the reachable set is exactly the union of the box
+         rotated by each of them — and the bounding box of the four corners taken at all `ssN` angles is
+         a superset by construction, not an approximation.
+         Nothing outside it is written to anything but zero: the kernel writes a weighted AVERAGE of its
+         taps, and where every tap is transparent that average is 0 over an already-0 pixel. */
+      var ssAmt=FM.evalProp(p.amount,t); if(ssAmt==null) ssAmt=0.5; if(ssAmt<0) ssAmt=0; if(ssAmt>1) ssAmt=1; if(ssAmt<=0.001) return; var ssSrc=fxSrc(d);
       // CENTRE was W/2, H/2. DECAY was the hardcoded 0.6 in 1/(1+k*0.6): at 0 every tap weighs the same
       // and the streak becomes a long even comet tail, at 2 it collapses to a tight ghost right behind
       // the subject. 0.6 read from the param is the same double as the literal, so the default is exact.
@@ -5523,7 +5533,33 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          used for tilt shift. See the test for why exact equality is not reachable here. */
       var ssCos=new Float64Array(ssN), ssSin=new Float64Array(ssN), ssWts=new Float64Array(ssN), ssWtot=0;
       for(var ssP=0; ssP<ssN; ssP++){ var ssAng=ssP*ssDa; ssCos[ssP]=Math.cos(ssAng); ssSin[ssP]=Math.sin(ssAng); ssWts[ssP]=1/(1+ssP*ssDec); ssWtot+=ssWts[ssP]; }
-      for(var ssY=0; ssY<H; ssY++){ for(var ssX=0; ssX<W; ssX++){ var ssDx=ssX-ssCx, ssDy=ssY-ssCy; var ssAccR=0, ssAccG=0, ssAccB=0, ssAccA=0; for(var ssK=0; ssK<ssN; ssK++){ var ssWt=ssWts[ssK]; var ssCk=ssCos[ssK], ssSk=ssSin[ssK]; var ssSx=ssCx + ssDx*ssCk + ssDy*ssSk; var ssSy=ssCy + ssDy*ssCk - ssDx*ssSk; var ssXi=ssSx<0?0:(ssSx>W-1?W-1:(ssSx|0)); var ssYi=ssSy<0?0:(ssSy>H-1?H-1:(ssSy|0)); var ssIdx=ssYi*ssW4 + ssXi*4; ssAccR+=ssSrc[ssIdx]*ssWt; ssAccG+=ssSrc[ssIdx+1]*ssWt; ssAccB+=ssSrc[ssIdx+2]*ssWt; ssAccA+=ssSrc[ssIdx+3]*ssWt; } var ssOut=(ssY*W+ssX)*4; d[ssOut]=ssAccR/ssWtot; d[ssOut+1]=ssAccG/ssWtot; d[ssOut+2]=ssAccB/ssWtot; d[ssOut+3]=ssAccA/ssWtot; } } },
+      var ssY0=0, ssY1=H-1, ssX0=0, ssX1=W-1;
+       /* ⚠️ NOT WHEN THE LAYER TOUCHES A FRAME EDGE. A tap whose sample falls outside the frame is
+          CLAMPED to the border rather than dropped, so if the layer is ON that border a pixel arbitrarily
+          far away can still read it — the reachable set stops being the rotated/scaled box and becomes
+          unbounded along that edge. Measured: 12 of 450 swept combinations differed, every one of them
+          the edge-touching fixture with the centre at the corner, up to a 128-value channel error.
+          Nothing is lost that was worth having: a layer filling the frame has a box that IS the frame. */
+     if(ssBB && isFinite(ssCx) && isFinite(ssCy) &&
+        ssBB.x > 0 && ssBB.y > 0 && ssBB.x + ssBB.w < W && ssBB.y + ssBB.h < H){
+       var ssBx0=ssBB.x, ssBy0=ssBB.y, ssBx1=ssBB.x+ssBB.w-1, ssBy1=ssBB.y+ssBB.h-1;
+       var ssMnx=Infinity, ssMxx=-Infinity, ssMny=Infinity, ssMxy=-Infinity;
+       var ssXs=[ssBx0,ssBx1], ssYs=[ssBy0,ssBy1];
+       for(var ssQ=0; ssQ<ssN; ssQ++){
+         var ssC2=ssCos[ssQ], ssS2=ssSin[ssQ];
+         for(var ssU=0;ssU<2;ssU++) for(var ssV=0;ssV<2;ssV++){
+           var ssRx=ssXs[ssU]-ssCx, ssRy=ssYs[ssV]-ssCy;
+           var ssPx=ssCx + ssC2*ssRx - ssS2*ssRy;      // R(+kD), the inverse of the tap's R(-kD)
+           var ssPy=ssCy + ssS2*ssRx + ssC2*ssRy;
+           if(ssPx<ssMnx)ssMnx=ssPx; if(ssPx>ssMxx)ssMxx=ssPx;
+           if(ssPy<ssMny)ssMny=ssPy; if(ssPy>ssMxy)ssMxy=ssPy;
+         }
+       }
+       // a rotation preserves distance, so the tap's truncation costs about a pixel; 3 is slack
+       ssX0=Math.max(0,Math.floor(ssMnx)-3); ssX1=Math.min(W-1,Math.ceil(ssMxx)+3);
+       ssY0=Math.max(0,Math.floor(ssMny)-3); ssY1=Math.min(H-1,Math.ceil(ssMxy)+3);
+     }
+     for(var ssY=ssY0; ssY<=ssY1; ssY++){ for(var ssX=ssX0; ssX<=ssX1; ssX++){ var ssDx=ssX-ssCx, ssDy=ssY-ssCy; var ssAccR=0, ssAccG=0, ssAccB=0, ssAccA=0; for(var ssK=0; ssK<ssN; ssK++){ var ssWt=ssWts[ssK]; var ssCk=ssCos[ssK], ssSk=ssSin[ssK]; var ssSx=ssCx + ssDx*ssCk + ssDy*ssSk; var ssSy=ssCy + ssDy*ssCk - ssDx*ssSk; var ssXi=ssSx<0?0:(ssSx>W-1?W-1:(ssSx|0)); var ssYi=ssSy<0?0:(ssSy>H-1?H-1:(ssSy|0)); var ssIdx=ssYi*ssW4 + ssXi*4; ssAccR+=ssSrc[ssIdx]*ssWt; ssAccG+=ssSrc[ssIdx+1]*ssWt; ssAccB+=ssSrc[ssIdx+2]*ssWt; ssAccA+=ssSrc[ssIdx+3]*ssWt; } var ssOut=(ssY*W+ssX)*4; d[ssOut]=ssAccR/ssWtot; d[ssOut+1]=ssAccG/ssWtot; d[ssOut+2]=ssAccB/ssWtot; d[ssOut+3]=ssAccA/ssWtot; } } },
     /* FRACTAL RIDGES. Three octaves of value noise, each folded to a ridge (1 - |2n-1|) and summed
      * at the fixed weights 0.5 / 0.3 / 0.2. The catalogue entry above says what this looked like
      * before the rework and what was measured; this block is about the three rules it has to obey.
@@ -5712,14 +5748,54 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     },
     smoothbevel: function(d,W,H,p,t){ var sb_depth=FM.evalProp(p.depth,t); if(sb_depth==null) sb_depth=6; sb_depth=Math.max(1,Math.min(20,Math.round(sb_depth))); var sb_str=FM.evalProp(p.strength,t); if(sb_str==null) sb_str=1; sb_str=Math.max(0,Math.min(2,sb_str)); var sb_N=W*H, sb_i, sb_x, sb_y, sb_idx; var sb_mask=new Float32Array(sb_N); for(sb_i=0; sb_i<sb_N; sb_i++){ sb_mask[sb_i]=(d[sb_i*4+3]>0)?1:0; } var sb_tmp=new Float32Array(sb_N); var sb_soft=new Float32Array(sb_N); var sb_r=sb_depth, sb_win=sb_r*2+1; var sb_inv=1/sb_win; var sb_acc, sb_k; for(sb_y=0; sb_y<H; sb_y++){ var sb_rowo=sb_y*W; sb_acc=sb_mask[sb_rowo]*(sb_r+1); for(sb_k=1; sb_k<=sb_r; sb_k++){ sb_acc+=sb_mask[sb_rowo+Math.min(sb_k,W-1)]; } for(sb_x=0; sb_x<W; sb_x++){ sb_tmp[sb_rowo+sb_x]=sb_acc*sb_inv; var sb_ox=sb_x-sb_r; if(sb_ox<0) sb_ox=0; var sb_nx=sb_x+sb_r+1; if(sb_nx>W-1) sb_nx=W-1; sb_acc+=sb_mask[sb_rowo+sb_nx]-sb_mask[sb_rowo+sb_ox]; } } for(sb_x=0; sb_x<W; sb_x++){ sb_acc=sb_tmp[sb_x]*(sb_r+1); for(sb_k=1; sb_k<=sb_r; sb_k++){ sb_acc+=sb_tmp[Math.min(sb_k,H-1)*W+sb_x]; } for(sb_y=0; sb_y<H; sb_y++){ sb_soft[sb_y*W+sb_x]=sb_acc*sb_inv; var sb_oy=sb_y-sb_r; if(sb_oy<0) sb_oy=0; var sb_ny=sb_y+sb_r+1; if(sb_ny>H-1) sb_ny=H-1; sb_acc+=sb_tmp[sb_ny*W+sb_x]-sb_tmp[sb_oy*W+sb_x]; } } var sb_lx=-0.7071, sb_ly=-0.7071; for(sb_y=0; sb_y<H; sb_y++){ for(sb_x=0; sb_x<W; sb_x++){ sb_i=sb_y*W+sb_x; sb_idx=sb_i*4; if(d[sb_idx+3]<=0) continue; var sb_s=sb_soft[sb_i]; var sb_band=4*sb_s*(1-sb_s); if(sb_band<=0) continue; if(sb_band>1) sb_band=1; var sb_xm=sb_x>0?sb_x-1:0, sb_xp=sb_x<W-1?sb_x+1:W-1; var sb_ym=sb_y>0?sb_y-1:0, sb_yp=sb_y<H-1?sb_y+1:H-1; var sb_gx=sb_soft[sb_y*W+sb_xp]-sb_soft[sb_y*W+sb_xm]; var sb_gy=sb_soft[sb_yp*W+sb_x]-sb_soft[sb_ym*W+sb_x]; var sb_dot=sb_gx*sb_lx+sb_gy*sb_ly; var sb_term=sb_dot*sb_str*sb_band*255*3; var sb_rr=d[sb_idx]+sb_term; var sb_gg=d[sb_idx+1]+sb_term; var sb_bb=d[sb_idx+2]+sb_term; d[sb_idx]=sb_rr<0?0:(sb_rr>255?255:sb_rr); d[sb_idx+1]=sb_gg<0?0:(sb_gg>255?255:sb_gg); d[sb_idx+2]=sb_bb<0?0:(sb_bb>255?255:sb_bb); } } },
     // ---- batch 18 (blur / proc / drawing pixel) ----
-    zoomstreaks: function(d,W,H,p,t){ var zs_amt=FM.evalProp(p.amount,t); if(zs_amt==null) zs_amt=0.5; if(zs_amt<0) zs_amt=0; if(zs_amt>1) zs_amt=1; var zs_s=fxSrc(d);
+    zoomstreaks: function(d,W,H,p,t){ var zsBB=arguments[6];
+      /* SKIP WHAT THE STREAKS CANNOT REACH (#692) — 89.8ms at its defaults on a 180x150 subject in a
+         1080x1920 plate, the most expensive kernel left. Like Radial Shadow this is GEOMETRY, not a
+         row/column skip.
+         Each tap samples `x + (cx - x)*f`, i.e. a point between the pixel and the centre at fraction
+         f = (k/steps)*strength. Invert it: a pixel can only light up if some sample lands on content, so
+         x = cx + (S - cx)/(1 - f) for some S inside the layer's box. f runs up to `strength`, so the
+         reachable set is the box SCALED AWAY FROM THE CENTRE by at most 1/(1 - strength).
+         At the default Amount that is 2.1x — a large win on a small layer. At the maximum it is 10x,
+         which on a full-size plate is the whole frame, and the bound simply stops helping rather than
+         becoming wrong. Nothing is written where the weight sum is zero, so outside that region it is a
+         pure skip. */
+      var zs_amt=FM.evalProp(p.amount,t); if(zs_amt==null) zs_amt=0.5; if(zs_amt<0) zs_amt=0; if(zs_amt>1) zs_amt=1; var zs_s=fxSrc(d);
       // CENTRE was W/2, H/2 — rays always came out of the middle of the frame rather than out of the
       // light in the shot. THRESHOLD gates which pixels are allowed to streak at all: legacy weights
       // every tap by (lum/255)^2, which is small for a mid-tone but not zero, so ten thousand mid-tones
       // each contributing a little added up to a grey haze over the whole picture instead of rays.
       var zs_cx=wCx(p,t,W,W/2), zs_cy=wCy(p,t,H,H/2); var zs_w4=W*4; var zs_steps=10; var zs_strength=0.16+0.74*zs_amt;
       var zs_thrP=p.threshold==null?0:FM.evalProp(p.threshold,t); if(zs_thrP<0)zs_thrP=0; if(zs_thrP>100)zs_thrP=100;
-      var zs_gate=zs_thrP>0, zs_thr=zs_thrP/100, zs_span=zs_gate?(1-zs_thr):1; for(var zs_y=0; zs_y<H; zs_y++){ for(var zs_x=0; zs_x<W; zs_x++){ var zs_i=(zs_y*zs_w4)+(zs_x*4); var zs_dx=zs_cx-zs_x; var zs_dy=zs_cy-zs_y; var zs_ar=0, zs_ag=0, zs_ab=0, zs_wsum=0; for(var zs_k=1; zs_k<=zs_steps; zs_k++){ var zs_f=(zs_k/zs_steps)*zs_strength; var zs_sx=zs_x+zs_dx*zs_f; var zs_sy=zs_y+zs_dy*zs_f; var zs_ix=zs_sx|0; var zs_iy=zs_sy|0; if(zs_ix<0) zs_ix=0; else if(zs_ix>W-1) zs_ix=W-1; if(zs_iy<0) zs_iy=0; else if(zs_iy>H-1) zs_iy=H-1; var zs_si=(zs_iy*zs_w4)+(zs_ix*4); var zs_r=zs_s[zs_si], zs_g=zs_s[zs_si+1], zs_b=zs_s[zs_si+2], zs_a=zs_s[zs_si+3]; var zs_lum=(zs_r*0.299+zs_g*0.587+zs_b*0.114)*(zs_a/255); var zs_decay=1-(zs_k/(zs_steps+1)); var zs_bw=(zs_lum/255); if(zs_gate){ zs_bw = zs_bw<=zs_thr ? 0 : (zs_span<=0?1:(zs_bw-zs_thr)/zs_span); } zs_bw=zs_bw*zs_bw; var zs_wt=zs_bw*zs_decay; zs_ar+=zs_r*zs_wt; zs_ag+=zs_g*zs_wt; zs_ab+=zs_b*zs_wt; zs_wsum+=zs_wt; } if(zs_wsum>0){ var zs_norm=zs_strength/(zs_steps); zs_ar=zs_ar*zs_norm; zs_ag=zs_ag*zs_norm; zs_ab=zs_ab*zs_norm; if(zs_ar>255) zs_ar=255; if(zs_ag>255) zs_ag=255; if(zs_ab>255) zs_ab=255; var zs_br=d[zs_i], zs_bg=d[zs_i+1], zs_bb=d[zs_i+2]; d[zs_i]=255-((255-zs_br)*(255-zs_ar))/255; d[zs_i+1]=255-((255-zs_bg)*(255-zs_ag))/255; d[zs_i+2]=255-((255-zs_bb)*(255-zs_ab))/255; var zs_aaa=d[zs_i+3]; var zs_streakA=(zs_ar>zs_ag?(zs_ar>zs_ab?zs_ar:zs_ab):(zs_ag>zs_ab?zs_ag:zs_ab)); if(zs_streakA>zs_aaa) d[zs_i+3]=zs_streakA<255?zs_streakA:255; } } } },
+      var zs_gate=zs_thrP>0, zs_thr=zs_thrP/100, zs_span=zs_gate?(1-zs_thr):1;
+      var zs_y0=0, zs_y1=H-1, zs_x0=0, zs_x1=W-1;
+      /* ⚠️ NOT WHEN THE LAYER TOUCHES A FRAME EDGE. A tap whose sample falls outside the frame is
+         CLAMPED to the border rather than dropped, so if the layer is ON that border a pixel arbitrarily
+         far away can still read it — the reachable set stops being the rotated/scaled box and becomes
+         unbounded along that edge. Measured: 12 of 450 swept combinations differed, every one of them
+         the edge-touching fixture with the centre at the corner, up to a 128-value channel error.
+         Nothing is lost that was worth having: a layer filling the frame has a box that IS the frame. */
+      if(zsBB && isFinite(zs_cx) && isFinite(zs_cy) && zs_strength<1 &&
+         zsBB.x > 0 && zsBB.y > 0 && zsBB.x + zsBB.w < W && zsBB.y + zsBB.h < H){
+        var zs_sc=1/(1-zs_strength);
+        var zs_bx0=zsBB.x, zs_by0=zsBB.y, zs_bx1=zsBB.x+zsBB.w-1, zs_by1=zsBB.y+zsBB.h-1;
+        var zs_mnx=Infinity, zs_mxx=-Infinity, zs_mny=Infinity, zs_mxy=-Infinity;
+        var zs_cxs=[zs_bx0,zs_bx1], zs_cys=[zs_by0,zs_by1], zs_ss=[1,zs_sc];
+        for(var zs_a=0;zs_a<2;zs_a++) for(var zs_b=0;zs_b<2;zs_b++) for(var zs_c=0;zs_c<2;zs_c++){
+          var zs_px=zs_cx+(zs_cxs[zs_a]-zs_cx)*zs_ss[zs_c], zs_py=zs_cy+(zs_cys[zs_b]-zs_cy)*zs_ss[zs_c];
+          if(zs_px<zs_mnx)zs_mnx=zs_px; if(zs_px>zs_mxx)zs_mxx=zs_px;
+          if(zs_py<zs_mny)zs_mny=zs_py; if(zs_py>zs_mxy)zs_mxy=zs_py;
+        }
+        /* ⚠️ THE SLACK HAS TO BE SCALED, and 2px was not enough. The tap TRUNCATES its sample to a
+           pixel (`zs_sx|0`), so a sample landing just outside the box can truncate back INTO it — and
+           that one-pixel error maps back to 1/(1-f) pixels of output, the same factor the box was
+           expanded by. Measured with a flat 2px slack: 4 of 540 swept combinations differed by one
+           code value, all at Amount 0.75 where the factor is 3.5. */
+        var zs_sl=Math.ceil(zs_sc)+2;
+        zs_x0=Math.max(0,Math.floor(zs_mnx)-zs_sl); zs_x1=Math.min(W-1,Math.ceil(zs_mxx)+zs_sl);
+        zs_y0=Math.max(0,Math.floor(zs_mny)-zs_sl); zs_y1=Math.min(H-1,Math.ceil(zs_mxy)+zs_sl);
+      }
+      for(var zs_y=zs_y0; zs_y<=zs_y1; zs_y++){ for(var zs_x=zs_x0; zs_x<=zs_x1; zs_x++){ var zs_i=(zs_y*zs_w4)+(zs_x*4); var zs_dx=zs_cx-zs_x; var zs_dy=zs_cy-zs_y; var zs_ar=0, zs_ag=0, zs_ab=0, zs_wsum=0; for(var zs_k=1; zs_k<=zs_steps; zs_k++){ var zs_f=(zs_k/zs_steps)*zs_strength; var zs_sx=zs_x+zs_dx*zs_f; var zs_sy=zs_y+zs_dy*zs_f; var zs_ix=zs_sx|0; var zs_iy=zs_sy|0; if(zs_ix<0) zs_ix=0; else if(zs_ix>W-1) zs_ix=W-1; if(zs_iy<0) zs_iy=0; else if(zs_iy>H-1) zs_iy=H-1; var zs_si=(zs_iy*zs_w4)+(zs_ix*4); var zs_r=zs_s[zs_si], zs_g=zs_s[zs_si+1], zs_b=zs_s[zs_si+2], zs_a=zs_s[zs_si+3]; var zs_lum=(zs_r*0.299+zs_g*0.587+zs_b*0.114)*(zs_a/255); var zs_decay=1-(zs_k/(zs_steps+1)); var zs_bw=(zs_lum/255); if(zs_gate){ zs_bw = zs_bw<=zs_thr ? 0 : (zs_span<=0?1:(zs_bw-zs_thr)/zs_span); } zs_bw=zs_bw*zs_bw; var zs_wt=zs_bw*zs_decay; zs_ar+=zs_r*zs_wt; zs_ag+=zs_g*zs_wt; zs_ab+=zs_b*zs_wt; zs_wsum+=zs_wt; } if(zs_wsum>0){ var zs_norm=zs_strength/(zs_steps); zs_ar=zs_ar*zs_norm; zs_ag=zs_ag*zs_norm; zs_ab=zs_ab*zs_norm; if(zs_ar>255) zs_ar=255; if(zs_ag>255) zs_ag=255; if(zs_ab>255) zs_ab=255; var zs_br=d[zs_i], zs_bg=d[zs_i+1], zs_bb=d[zs_i+2]; d[zs_i]=255-((255-zs_br)*(255-zs_ar))/255; d[zs_i+1]=255-((255-zs_bg)*(255-zs_ag))/255; d[zs_i+2]=255-((255-zs_bb)*(255-zs_ab))/255; var zs_aaa=d[zs_i+3]; var zs_streakA=(zs_ar>zs_ag?(zs_ar>zs_ab?zs_ar:zs_ab):(zs_ag>zs_ab?zs_ag:zs_ab)); if(zs_streakA>zs_aaa) d[zs_i+3]=zs_streakA<255?zs_streakA:255; } } } },
     innerblur: function(d,W,H,p,t){
       /* ⚠️ THIS ONE CANNOT BE BOUNDED, and the reason is worth keeping (#692, 1 Sep). At 42.9ms on a
          small layer it was the obvious next candidate after Tilt Shift, and the bound was written,
@@ -6014,9 +6090,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           if(rsPx<rsMinX)rsMinX=rsPx; if(rsPx>rsMaxX)rsMaxX=rsPx;
           if(rsPy<rsMinY)rsMinY=rsPy; if(rsPy>rsMaxY)rsMaxY=rsPy;
         }
-        // one pixel of slack each way for the Math.round inside the tap loop
-        rsX0=Math.max(0,Math.floor(rsMinX)-1); rsX1=Math.min(W-1,Math.ceil(rsMaxX)+1);
-        rsY0=Math.max(0,Math.floor(rsMinY)-1); rsY1=Math.min(H-1,Math.ceil(rsMaxY)+1);
+        /* Slack for the Math.round inside the tap loop, SCALED by the same factor the box was
+           expanded by — a one-pixel rounding at the sample maps back to `rsSmax` pixels of output.
+           A flat 1px was enough for every case swept here, but Zoom Streaks proved the general form
+           with a measured failure, so this uses it rather than relying on a smaller scale factor. */
+        var rsSl=Math.ceil(rsSmax)+2;
+        rsX0=Math.max(0,Math.floor(rsMinX)-rsSl); rsX1=Math.min(W-1,Math.ceil(rsMaxX)+rsSl);
+        rsY0=Math.max(0,Math.floor(rsMinY)-rsSl); rsY1=Math.min(H-1,Math.ceil(rsMaxY)+rsSl);
       }
       for(var rsy=rsY0;rsy<=rsY1;rsy++){ var rsRow=rsy*W; for(var rsx=rsX0;rsx<=rsX1;rsx++){ var rsi=(rsRow+rsx)*4; if(rsS[rsi+3]>0)continue; var rsDx=rsx-rsLx, rsDy=rsy-rsLy, rsHit=0; for(var rsn=1;rsn<=rsTaps;rsn++){ var rsF=1/(1+rsK*rsn/rsTaps); var rsSx=Math.round(rsLx+rsDx*rsF), rsSy=Math.round(rsLy+rsDy*rsF); if(rsSx<0||rsSx>=W||rsSy<0||rsSy>=H)continue; var rsA=rsS[(rsSy*W+rsSx)*4+3]; if(rsA>0){ rsHit=rsA*(1-(rsn-1)/rsTaps); break; } } if(rsHit>0){ d[rsi]=rsC[0]; d[rsi+1]=rsC[1]; d[rsi+2]=rsC[2]; d[rsi+3]=Math.min(200,rsHit); } } } },
     // Voronoi Cells: stained-glass mosaic — jittered-grid seeds (hash-based, deterministic so preview

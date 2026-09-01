@@ -56031,6 +56031,8 @@
       boxblur: { radius: 10 }, dropshadow: { distance: 12, softness: 8 }, lensblur: { radius: 10 },
       hextiles: { size: 20 }, tiltshift: { center: 0.5, softness: 0.5 }, mattechoker: { choke: -4, feather: 4 },
       radialshadow: { reach: 40, x: 50, y: 35 }, edgeglow: { amount: 1.5, radius: 12, source: 1 },
+      zoomstreaks: { amount: 0.5, centerx: 50, centery: 50, threshold: 0 },
+      spinstreaks: { amount: 0.5, centerx: 50, centery: 50, decay: 0.6 },
     };
     /* ⚠️ TWO OF THESE ARE NOT ROW/COLUMN SKIPS AND THEIR DEFAULTS PROVE ALMOST NOTHING ABOUT THEM.
        Radial Shadow's bound is GEOMETRY — the layer's box scaled about the light — so it has to be
@@ -56041,6 +56043,13 @@
       radialshadow: [].concat.apply([], [[50, 35], [0, 0], [100, 100], [50, -40], [-30, 50], [140, 20], [99.9, 0.1]]
         .map(L => [1, 40, 100].map(R => ({ reach: R, x: L[0], y: L[1] })))),
       edgeglow: [].concat.apply([], [1, 12, 60].map(R => [0, 1, 2].map(S => ({ amount: 1.5, radius: R, source: S })))),
+      /* Zoom Streaks scales the box AWAY from a centre by 1/(1 - strength) — 2.1x at the default, 10x at
+         the maximum. Spin Streaks rotates it through the tap angles. Both are swept over centres inside,
+         at, and outside the frame, because a centre outside is where the tap CLAMP starts to matter. */
+      zoomstreaks: [].concat.apply([], [[50, 50], [0, 0], [100, 100], [130, -20]]
+        .map(C => [0, 0.5, 1].map(A => ({ amount: A, centerx: C[0], centery: C[1], threshold: 0 })))),
+      spinstreaks: [].concat.apply([], [[50, 50], [0, 0], [100, 100], [130, -20]]
+        .map(C => [0.05, 0.5, 1].map(A => ({ amount: A, centerx: C[0], centery: C[1], decay: 0.6 })))),
     };
     const body = (d) => { for (let y = 120; y < 200; y++) { const r = y * W; for (let x = 170; x < 250; x++) { const i = (r + x) * 4; d[i] = 232; d[i + 1] = 163; d[i + 2] = 61; d[i + 3] = 255; } } };
     const SHAPES = {

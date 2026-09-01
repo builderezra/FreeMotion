@@ -1,10 +1,13 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.85
+> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.86
 >
-> **State:** v14.85, 1152 tests green, tree clean. **⚡ TWO MORE EFFECTS OFF THE LAG LIST** — Radial
-> Shadow (75.5ms) and Edge Glow (53.2ms), both now costing almost nothing on a small layer. Eight
-> effects bounded in total; your test scene started this at 106ms a frame. **🔴 I SHIPPED A BUG THREE RELEASES RUNNING AND HAVE
+> **State:** v14.86, 1152 tests green, tree clean. **⚡ THE LAG WORK IS FINISHED, and the reason it is
+> finished is that the three most expensive effects left are the three that CANNOT be sped up this way.**
+> Ten effects bounded. Across all 105 of them on a small layer in a full-size project: **1316ms → 998ms**.
+> The two biggest in the whole app — Spin Streaks and Zoom Streaks — are gone from the top ten, and what
+> sits there now is Zoom Blur, Spin Blur and Inner Blur, all three permanently refused because they paint
+> colour into see-through pixels and read it back. Your test scene started this at 106ms a frame. **🔴 I SHIPPED A BUG THREE RELEASES RUNNING AND HAVE
 > FIXED IT — and then found two more of the same kind by asking the whole question instead of patching
 > one hole at a time. All three are closed.** The speed work in v14.79–v14.82 works by telling each effect which parts of the frame it
 > can skip. The box it was given was computed by checking every SECOND row and every SECOND column — so
@@ -28192,7 +28195,7 @@ re-opened #480, which I had marked done and had not fixed.
       take `ps` is skipped by its own declared argument count, or it would scale twice.
 
 - [ ] **692 — 🔴 THE LAG HAS A MEASURED CAUSE: every pixel effect walks the WHOLE FRAME no matter how
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       ✅ **ROUND 3 — v14.82, three more kernels, and the list re-ranked first rather than trusted.**
       Re-measured every one of the 105 pixel kernels at its OWN defaults on a 180x150 subject in a
       1080x1920 plate — the actual shape of the lag, where the layer covers 1.3% of the frame — instead
@@ -28248,8 +28251,43 @@ re-opened #480, which I had marked done and had not fixed.
       line Inner Blur fails**: its writes never fall to zero. 180 radius/source/bloom combinations, all
       identical.
 
-      ⏭️ **THE REST OF THE RADIAL FAMILY — ANSWERED 1 Sep by a ten-agent adversarial review, and for two
-      of them the answer is NO, permanently.** Five analysts each derived a reachable-region bound; five adversaries each tried to
+      ✅ **ROUND 5, v14.86 — THE LAST TWO THAT COULD BE, AND THAT CLOSES THE ACTIONABLE LIST.**
+      Zoom Streaks **89.8ms** and Spin Streaks **99.6ms** — the two most expensive kernels in the whole
+      app — both out of the top ten. **Across all 105 pixel effects: 1316ms → 998ms.**
+      Geometry again. Zoom Streaks samples `x + (cx - x)*f`, so inverting it a pixel can only light up
+      if it sits at `cx + (S - cx)/(1 - f)` for some S in the box — **the box scaled AWAY from the
+      centre**, 2.1x at the default and 10x at the maximum, where the bound stops helping rather than
+      becoming wrong. Spin Streaks reads `s - c = R(-kD)(p - c)`, so the reachable set is the union of
+      the box rotated by each of the ten tap angles: a superset by construction.
+      ⚠️ **Two things the sweeps caught that reading would not have.**
+      · **The slack has to be SCALED.** A tap truncates its sample to a whole pixel, so a sample landing
+        just outside the box can truncate back INTO it — and that one-pixel error maps back to 1/(1-f)
+        pixels of output. With a flat 2px slack, **4 of 540** combinations differed by one code value,
+        all at Amount 0.75 where the factor is 3.5. Radial Shadow was given the same corrected form even
+        though its smaller factor had already passed.
+      · **Not when the layer touches a frame edge.** A tap whose sample falls outside the frame is
+        **CLAMPED to the border** rather than dropped, so a layer sitting ON that border can be read by
+        a pixel arbitrarily far away and the reachable set stops being bounded at all. **12 of 450**
+        combinations differed, up to a 128-value channel error, every one with the centre at a corner.
+        Both kernels decline to bound in that case now, and nothing worth having is lost: a layer
+        filling the frame has a box that IS the frame.
+      **60 matrix cells and 1,440 swept combinations, all byte-identical**, both bounds mutation-proven.
+
+      🟠 **THE ONE THING LEFT IS A DECISION FOR YOU, NOT A PROBLEM TO SOLVE — and it is worth ~219ms.**
+      Inner Blur (46.8ms), Zoom Blur (86.9ms) and Spin Blur (86.1ms) are now the three most expensive
+      effects in the app, and they are the three that cannot be bounded **as they currently behave**.
+      All three paint colour into FULLY TRANSPARENT pixels and read it back. Nothing on screen shows it —
+      a transparent pixel's colour never reaches the picture — but the next effect in your stack can
+      read it, so skipping those pixels is not a free skip.
+      **They could all be made 3–5x faster by having them stop writing under transparency.** That is a
+      change to what the effect DOES, not to what it costs, and it would alter the picture in one narrow
+      case: a blur stacked directly after one of them currently pulls that hidden colour into the visible
+      image, usually as a faint dark rim. Inner Blur's own "Edge" tick box exists precisely because that
+      rim was there, so somebody may have composed around it.
+      ➡️ **Say the word and all three get fast.** The risk is small and the win is the largest single one
+      left in the effects engine.
+
+      ⏭️ **Everything else that could be bounded, is — answered 1 Sep by a ten-agent adversarial review.** Five analysts each derived a reachable-region bound; five adversaries each tried to
       break it. **All five proposals were refuted**, and the split is worth keeping because it stops the
       next session re-deriving them:
       | effect | cost | verdict |
