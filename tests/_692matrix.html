@@ -17,7 +17,7 @@ function run(w){
  try{
   var FM=w.FM, T=FM._FX_TABLES, W=420, H=320;
   var PARAMS={boxblur:{radius:10},dropshadow:{distance:12,softness:8},lensblur:{radius:10},
-              hextiles:{size:20},tiltshift:{center:0.5,softness:0.5},mattechoker:{choke:-4,feather:4},radialshadow:{reach:40,x:50,y:35},edgeglow:{amount:1.5,radius:12,source:1},zoomstreaks:{amount:0.5,centerx:50,centery:50,threshold:0},spinstreaks:{amount:0.5,centerx:50,centery:50,decay:0.6}};
+              hextiles:{size:20},tiltshift:{center:0.5,softness:0.5},mattechoker:{choke:-4,feather:4},radialshadow:{reach:40,x:50,y:35},edgeglow:{amount:1.5,radius:12,source:1},zoomstreaks:{amount:0.5,centerx:50,centery:50,threshold:0},spinstreaks:{amount:0.5,centerx:50,centery:50,decay:0.6},innerblur:{radius:8}};
   function base(dirty){
     var d=new Uint8ClampedArray(W*H*4);
     if(dirty) for(var q=0;q<W*H;q++){ var j=q*4; d[j]=(q*3)&255; d[j+1]=(q*11)&255; d[j+2]=(q*29)&255; d[j+3]=0; }

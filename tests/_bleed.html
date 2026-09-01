@@ -1,0 +1,61 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:11px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:900px;height:120px;border:0"></iframe>
+<script>
+/* Two promises to check before this ships:
+   1. NOTHING VISIBLE CHANGED. bleed off vs on must be identical wherever alpha > 0.
+   2. It is actually faster, and bleed ON still behaves as it always did (bounded == unbounded, because
+      the kernel declines the bbox in that mode). */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w=document.getElementById('a').contentWindow, n=0;
+  (function wait(){ if(!(w.FM&&w.FM._pixelFx&&w.FM._fxBounds)){ if(n++>600) return say('FM never came up'); return setTimeout(wait,50);} setTimeout(function(){run(w);},700); })();
+});
+function run(w){
+ try{
+  var FM=w.FM, K=FM._pixelFx.innerblur, W=420,H=320;
+  function plate(){
+    var d=new Uint8ClampedArray(W*H*4);
+    for(var y=110;y<210;y++){ var r=y*W; for(var x=160;x<260;x++){
+      var dx=(x-210)/50, dy=(y-160)/50, rr=Math.sqrt(dx*dx+dy*dy);
+      var a=rr>=1?0:Math.round(255*(1-rr)*(1-rr)); var i=(r+x)*4;
+      if(a){ d[i]=232;d[i+1]=163;d[i+2]=61; } d[i+3]=a; } }
+    return d;
+  }
+  // 1. VISIBLE IDENTITY
+  var A=plate(), B=plate();
+  K(A,W,H,{radius:8,bleed:0},0.3,1);
+  K(B,W,H,{radius:8,bleed:1},0.3,1);
+  var visDiff=0, hidDiff=0, mx=0;
+  for(var i=0;i<A.length;i+=4){
+    var vis=(A[i+3]>0)||(B[i+3]>0);
+    for(var c=0;c<4;c++){ if(A[i+c]!==B[i+c]){ if(vis){visDiff++; var dd=Math.abs(A[i+c]-B[i+c]); if(dd>mx)mx=dd;} else hidDiff++; } }
+  }
+  say('bleed OFF vs ON, on a feathered layer:');
+  say('   bytes differing where anything is VISIBLE : ' + visDiff + (visDiff?('  max ' + mx):'  ✅ nothing on screen changed'));
+  say('   bytes differing under FULL transparency   : ' + hidDiff + '  (invisible; this is the whole point)');
+  // 2. bleed ON must still be bound-safe (it declines the bbox)
+  var C=plate(), D2=plate(), box=FM._fxBounds(plate(),W,H);
+  K(C,W,H,{radius:8,bleed:1},0.3,1);
+  K(D2,W,H,{radius:8,bleed:1},0.3,1,box);
+  var onDiff=0; for(var j=0;j<C.length;j++) if(C[j]!==D2[j]) onDiff++;
+  say('');
+  say('   bleed ON, bounded vs unbounded: ' + (onDiff? ('❌ '+onDiff+' differ') : '✅ identical (it declines the box, as designed)'));
+  // 3. speed
+  var BW=1080,BH=1920;
+  function big(){ var d=new Uint8ClampedArray(BW*BH*4);
+    for(var y=120;y<270;y++){ var r=y*BW; for(var x=90;x<270;x++){ var i=(r+x)*4; d[i]=232;d[i+1]=163;d[i+2]=61;d[i+3]=255; } } return d; }
+  function ms(params, withBox){
+    var bp=big(), bx=withBox?FM._fxBounds(big(),BW,BH):null, best=1e9;
+    for(var k=0;k<3;k++){ var dd=big(), t0=performance.now(); K(dd,BW,BH,params,0.3,1,bx); var e=performance.now()-t0; if(e<best)best=e; }
+    return best;
+  }
+  say('');
+  say('   on a 180x150 subject in a 1080x1920 plate:');
+  say('     bleed ON  (old behaviour, unbounded) : ' + ms({radius:8,bleed:1}, true).toFixed(1) + 'ms');
+  say('     bleed OFF (default, bounded)         : ' + ms({radius:8,bleed:0}, true).toFixed(1) + 'ms');
+  window.__done=1;
+ }catch(e){ say('threw: '+(e&&e.message)); window.__done=1; }
+}
+</script></body></html>

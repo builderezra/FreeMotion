@@ -40393,6 +40393,76 @@
     }
   });
 
+  test('Inner Blur stops painting under transparency, and nothing on screen changes (queue 692)', { item: '692' }, function () {
+    /* Queue 692's last round, and Ezra chose its shape: "Do it, but keep the rim as an option."
+     * Inner Blur wrote colour into FULLY TRANSPARENT pixels. Invisible by definition — but the next
+     * effect in the stack is not blind to it: a blur placed after this one averages those hidden pixels
+     * into visible ones and picks up a faint rim from them. It is also why this effect could never be
+     * bounded: outside the layer was not "zeros in, zeros out", so a skip was not a skip.
+     * ⚠️ MY FIRST DESCRIPTION OF THE FIX WAS WRONG and is worth keeping here, because it reads as
+     * obviously right: "skip any pixel whose source alpha is 0". That is fine for THIS effect, which
+     * never touches alpha — and it would have DELETED Zoom Blur and Spin Blur's visible output, because
+     * both write the alpha channel and that averaged alpha IS their outward smear. The rule is one step
+     * finer: do not write colour where the RESULTING alpha is zero.
+     * MEASURED: 51.1ms unbounded -> 11.3ms bounded on a 180x150 subject in a 1080x1920 plate. */
+    const K = FM._pixelFx && FM._pixelFx.innerblur;
+    if (!K) throw new Error('the innerblur kernel is missing');
+    const pd = (FM.fxRegistry.paramsOf('innerblur') || []).filter(p => p.key === 'bleed')[0];
+    if (!pd) throw new Error('Inner Blur has no “Colour past the edge” option — he asked for the old look to stay reachable');
+    /* the registry normalises the catalog's `def` to `default` — read what it exposes, not the raw key */
+    const dflt = (pd.default !== undefined) ? pd.default : pd.def;
+    if (dflt !== 0) throw new Error('the option defaults to ' + dflt + ' — it must default to OFF, which is the fast path');
+
+    const W = 420, H = 320;
+    /* A FEATHERED layer, deliberately: a hard-edged one has almost no partially-transparent band, so
+       "nothing visible changed" would be true of a fixture that could not show a change either way. */
+    const plate = () => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 110; y < 210; y++) { const r = y * W;
+        for (let x = 160; x < 260; x++) {
+          const dx = (x - 210) / 50, dy = (y - 160) / 50, rr = Math.sqrt(dx * dx + dy * dy);
+          const a = rr >= 1 ? 0 : Math.round(255 * (1 - rr) * (1 - rr)); const i = (r + x) * 4;
+          if (a) { d[i] = 232; d[i + 1] = 163; d[i + 2] = 61; } d[i + 3] = a;
+        } }
+      return d;
+    };
+    /* ⚠️ INNER BLUR HAS TWO CODE PATHS AND BOTH WRITE. The default settings take a single-pass fast
+       path; anything else — extra passes, a vertical amount, "Ignore outside" — takes a separate
+       multi-pass one with its own write loop. Testing only the defaults left the second gate unverified,
+       and a mutation that removed it SURVIVED the whole suite. Both are driven here. */
+    const MODES = [
+      { label: 'fast path (defaults)', q: { radius: 8 } },
+      { label: 'multi-pass (3 passes)', q: { radius: 8, passes: 3 } },
+      { label: 'multi-pass (Ignore outside on)', q: { radius: 8, edge: 1 } },
+      { label: 'multi-pass (vertical amount)', q: { radius: 8, aspect: 40 } },
+    ];
+    MODES.forEach(mo => {
+      const A = plate(), B = plate();
+      K(A, W, H, Object.assign({}, mo.q, { bleed: 0 }), 0.3, 1);
+      K(B, W, H, Object.assign({}, mo.q, { bleed: 1 }), 0.3, 1);
+      let vis = 0, hidden = 0;
+      for (let i = 0; i < A.length; i += 4) {
+        const shows = A[i + 3] > 0 || B[i + 3] > 0;
+        for (let c = 0; c < 4; c++) if (A[i + c] !== B[i + c]) { if (shows) vis++; else hidden++; }
+      }
+      if (vis) throw new Error(vis + ' bytes differ where something is VISIBLE between the two modes on the ' + mo.label + ' — the promise is that nothing on screen changes, only colour hidden under full transparency');
+      /* THE CONTROL, per path: it must differ SOMEWHERE, or that path's gate does nothing and "nothing
+         visible changed" is equally true of a switch that was never wired up there. */
+      if (!hidden) throw new Error('on the ' + mo.label + ' the two modes are byte-identical everywhere, so that path\'s gate is inert — nothing hidden is being skipped and nothing was made faster there');
+    });
+
+    /* AND WITH IT ON, THE OLD BEHAVIOUR MUST BE INTACT — including declining the bbox, since colour
+       under transparency makes a skip unsafe again. */
+    if (typeof FM._fxBounds !== 'function') throw new Error('FM._fxBounds is not exposed');
+    const box = FM._fxBounds(plate(), W, H);
+    const C = plate(), D = plate();
+    K(C, W, H, { radius: 8, bleed: 1 }, 0.3, 1);
+    K(D, W, H, { radius: 8, bleed: 1 }, 0.3, 1, box);
+    let onDiff = 0;
+    for (let i = 0; i < C.length; i++) if (C[i] !== D[i]) onDiff++;
+    if (onDiff) throw new Error('with the old look ON, handing it a bounding box changed ' + onDiff + ' bytes — in that mode it must ignore the box, because its writes under transparency make a skip unsafe');
+  });
+
   test('the loading pill gives up instead of spinning forever (queue 704)', { item: '704' }, async function () {
     /* Queue 704, found 2 Sep by the five-lens audit and confirmed by measurement.
      * `pending()` counts a video/image/audio layer that has NO media record — correctly, because that is
@@ -56170,7 +56240,11 @@
     for (const k of ['tiltshift', 'mattechoker']) {
       if (m[1].indexOf(k) < 0) throw new Error(k + ' left BOUNDED_FX, so no bbox reaches it and it walks the whole plate again (#692)');
     }
-    if (m[1].indexOf('innerblur') >= 0) throw new Error('innerblur joined BOUNDED_FX — it writes colour to fully transparent pixels, so a bbox skip is not a skip and the next kernel in the stack reads the difference back');
+    /* ⚠️ THIS GUARD USED TO SAY THE OPPOSITE, and the change is the point of queue 692's last round.
+       Inner Blur was kept OUT of BOUNDED_FX because it wrote colour to fully transparent pixels, so a
+       skip there was not a skip. It no longer does that by default — see its `bleed` option, which Ezra
+       chose the shape of — so it is bounded now, and with `bleed` ON it declines the box itself. */
+    if (m[1].indexOf('innerblur') < 0) throw new Error('innerblur left BOUNDED_FX — with its hidden writes gated off it is safe to bound, and unbounded it costs 51ms on a small layer against 11ms bounded');
   });
 
   test('a parameterised easing survives being saved as a preset and being split (queue 701)', { item: '701' }, function () {
@@ -56330,6 +56404,7 @@
       boxblur: { radius: 10 }, dropshadow: { distance: 12, softness: 8 }, lensblur: { radius: 10 },
       hextiles: { size: 20 }, tiltshift: { center: 0.5, softness: 0.5 }, mattechoker: { choke: -4, feather: 4 },
       radialshadow: { reach: 40, x: 50, y: 35 }, edgeglow: { amount: 1.5, radius: 12, source: 1 },
+      innerblur: { radius: 8 },
       zoomstreaks: { amount: 0.5, centerx: 50, centery: 50, threshold: 0 },
       spinstreaks: { amount: 0.5, centerx: 50, centery: 50, decay: 0.6 },
     };

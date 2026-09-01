@@ -689,6 +689,15 @@ window.FM = window.FM || {};
     { type: 'innerblur', label: 'Inner Blur', params: [
       { key: 'radius', label: 'Radius', min: 0, max: 30, step: 1, def: 8, unit: 'px' },
       { key: 'edge', label: 'Ignore outside', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      /* ⚠️ THE SWITCH THAT MAKES THIS EFFECT CHEAP (queue 692). Off — the default — it stops writing
+         colour into pixels that are FULLY TRANSPARENT. Nothing on screen changes: that colour is
+         invisible by definition. What changes is the NEXT effect in the stack, because a blur placed
+         after this one averages those hidden pixels into visible ones and picks up a faint rim from
+         them. Leaving them alone is also what lets this effect skip the parts of the frame the layer
+         does not cover at all, which is where the speed comes from.
+         On restores the old behaviour exactly, for a project composed around that rim. Ezra chose this
+         shape: "Do it, but keep the rim as an option." */
+    { key: 'bleed', label: 'Colour past the edge', def: 0, options: [[0, 'Off (faster)'], [1, 'On (old look)']] },
       { key: 'aspect', label: 'Vertical amount', min: 0, max: 200, step: 5, def: 100, unit: '%' },
       { key: 'passes', label: 'Smoothness', min: 1, max: 4, step: 1, def: 1 },
     ] },
@@ -3030,7 +3039,7 @@ window.FM = window.FM || {};
      content can be stepped over and the output is IDENTICAL rather than merely similar. Verified that
      way — seven renders (edge-clipped, full-frame, anisotropic, multi-pass, radius larger than the
      layer) checksummed before and after and required to match exactly. */
-  const BOUNDED_FX = { letterbox: 1, border: 1, boxblur: 1, dropshadow: 1, lensblur: 1, hextiles: 1, tiltshift: 1, mattechoker: 1, radialshadow: 1, edgeglow: 1, zoomstreaks: 1, spinstreaks: 1 };
+  const BOUNDED_FX = { letterbox: 1, border: 1, boxblur: 1, dropshadow: 1, lensblur: 1, hextiles: 1, tiltshift: 1, mattechoker: 1, radialshadow: 1, edgeglow: 1, zoomstreaks: 1, spinstreaks: 1, innerblur: 1 };
   Object.setPrototypeOf(BOUNDED_FX, null);   // own keys only — see POSTFX
   /* Does the layer's own alpha ACTUALLY occupy the plate's edge row or column? Four direct scans of
    * the four edge lines, at alphaBBox's own `> 8` threshold so the two agree on what counts as
@@ -5823,6 +5832,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var ibEdge=(p.edge==null?0:(Math.round(FM.evalProp(p.edge,t))|0))===1;
       var ibAsp=p.aspect==null?100:FM.evalProp(p.aspect,t); if(ibAsp<0)ibAsp=0; if(ibAsp>200)ibAsp=200;
       var ibPass=p.passes==null?1:Math.round(FM.evalProp(p.passes,t)); if(ibPass<1)ibPass=1; if(ibPass>4)ibPass=4;
+      /* `bleed` ON keeps the old writes AND declines the bbox: with colour going under transparency the
+         region outside the layer is not "zeros in, zeros out", so a skip there would not be a skip. */
+      var ibBleed=(p.bleed==null?0:(Math.round(FM.evalProp(p.bleed,t))|0))===1;
+      var ibBB=ibBleed?null:arguments[6];
+      var ibPadX=ib_r+1, ibPadY=Math.max(1,ibAsp===100?ib_r:Math.round(ib_r*(ibAsp/100)))*ibPass+1;
+      var ibY0=ibBB?Math.max(0,ibBB.y-ibPadY):0, ibY1=ibBB?Math.min(H-1,ibBB.y+ibBB.h-1+ibPadY):H-1;
+      var ibX0=ibBB?Math.max(0,ibBB.x-ibPadX*ibPass):0, ibX1=ibBB?Math.min(W-1,ibBB.x+ibBB.w-1+ibPadX*ibPass):W-1;
       if(ibEdge||ibAsp!==100||ibPass!==1){
         var ibRy=ibAsp===100?ib_r:Math.round(ib_r*(ibAsp/100));
         var ibN=W*H;
@@ -5833,10 +5849,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         for(q=0;q<ibN;q++){ ii=q*4; var av=ibEdge?(d[ii+3]/255):1;
           pr[q]=d[ii]*av; pg[q]=d[ii+1]*av; pb[q]=d[ii+2]*av; pa[q]=av; }
         var boxRun=function(buf,rad,horiz){ if(rad<1)return; var win=2*rad+1, inv=1/win, src=buf.slice(), a,b,base,sum,idx,n,k;
-          if(horiz){ for(a=0;a<H;a++){ base=a*W; sum=src[base]*(rad+1);
+          if(horiz){ for(a=ibY0;a<=ibY1;a++){ base=a*W; sum=src[base]*(rad+1);
               for(n=1;n<=rad;n++){ k=n<W?n:W-1; sum+=src[base+k]; }
               for(b=0;b<W;b++){ buf[base+b]=sum*inv; n=b+rad+1; idx=n<W?n:W-1; sum+=src[base+idx]; n=b-rad; idx=n>0?n:0; sum-=src[base+idx]; } } }
-          else { for(b=0;b<W;b++){ sum=src[b]*(rad+1);
+          else { for(b=ibX0;b<=ibX1;b++){ sum=src[b]*(rad+1);
               for(n=1;n<=rad;n++){ k=n<H?n:H-1; sum+=src[k*W+b]; }
               for(a=0;a<H;a++){ buf[a*W+b]=sum*inv; n=a+rad+1; idx=n<H?n:H-1; sum+=src[idx*W+b]; n=a-rad; idx=n>0?n:0; sum-=src[idx*W+b]; } } } };
         for(var pn=0;pn<ibPass;pn++){
@@ -5844,10 +5860,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           boxRun(pr,ibRy,false); boxRun(pg,ibRy,false); boxRun(pb,ibRy,false); if(ibEdge)boxRun(pa,ibRy,false);
         }
         for(q=0;q<ibN;q++){ ii=q*4; var wv=ibEdge?pa[q]:1;
+          if(!ibBleed && d[ii+3]===0) continue;   // invisible pixel: leave it alone (queue 692)
           if(wv>0.0001){ d[ii]=pr[q]/wv; d[ii+1]=pg[q]/wv; d[ii+2]=pb[q]/wv; } }
         return;
       }
-      var ib_w4=W*4; var ib_n=W*H; var ib_div=ib_r*2+1; var ib_tmp=new Float32Array(ib_n*3); var x,y,ch,acc,xx,yy,si,di; var ib_src=d; for(y=0;y<H;y++){ var ib_row=y*W; for(ch=0;ch<3;ch++){ acc=0; for(xx=-ib_r;xx<=ib_r;xx++){ var cx0=xx<0?0:(xx>=W?W-1:xx); acc+=ib_src[((ib_row+cx0)*4)+ch]; } for(x=0;x<W;x++){ ib_tmp[(ib_row+x)*3+ch]=acc/ib_div; var ib_xout=x-ib_r; var ib_xin=x+ib_r+1; var ib_co=ib_xout<0?0:(ib_xout>=W?W-1:ib_xout); var ib_ci=ib_xin<0?0:(ib_xin>=W?W-1:ib_xin); acc+=ib_src[((ib_row+ib_ci)*4)+ch]-ib_src[((ib_row+ib_co)*4)+ch]; } } } for(x=0;x<W;x++){ for(ch=0;ch<3;ch++){ acc=0; for(yy=-ib_r;yy<=ib_r;yy++){ var cy0=yy<0?0:(yy>=H?H-1:yy); acc+=ib_tmp[(cy0*W+x)*3+ch]; } for(y=0;y<H;y++){ di=((y*W+x)*4)+ch; d[di]=acc/ib_div; var ib_yout=y-ib_r; var ib_yin=y+ib_r+1; var ib_ro=ib_yout<0?0:(ib_yout>=H?H-1:ib_yout); var ib_ri=ib_yin<0?0:(ib_yin>=H?H-1:ib_yin); acc+=ib_tmp[(ib_ri*W+x)*3+ch]-ib_tmp[(ib_ro*W+x)*3+ch]; } } } },
+      var ib_w4=W*4; var ib_n=W*H; var ib_div=ib_r*2+1; var ib_tmp=new Float32Array(ib_n*3); var x,y,ch,acc,xx,yy,si,di; var ib_src=d; for(y=ibY0;y<=ibY1;y++){ var ib_row=y*W; for(ch=0;ch<3;ch++){ acc=0; for(xx=-ib_r;xx<=ib_r;xx++){ var cx0=xx<0?0:(xx>=W?W-1:xx); acc+=ib_src[((ib_row+cx0)*4)+ch]; } for(x=0;x<W;x++){ ib_tmp[(ib_row+x)*3+ch]=acc/ib_div; var ib_xout=x-ib_r; var ib_xin=x+ib_r+1; var ib_co=ib_xout<0?0:(ib_xout>=W?W-1:ib_xout); var ib_ci=ib_xin<0?0:(ib_xin>=W?W-1:ib_xin); acc+=ib_src[((ib_row+ib_ci)*4)+ch]-ib_src[((ib_row+ib_co)*4)+ch]; } } } for(x=ibX0;x<=ibX1;x++){ for(ch=0;ch<3;ch++){ acc=0; for(yy=-ib_r;yy<=ib_r;yy++){ var cy0=yy<0?0:(yy>=H?H-1:yy); acc+=ib_tmp[(cy0*W+x)*3+ch]; } for(y=0;y<H;y++){ di=((y*W+x)*4)+ch; if(ibBleed || d[((y*W+x)*4)+3]!==0) d[di]=acc/ib_div; var ib_yout=y-ib_r; var ib_yin=y+ib_r+1; var ib_ro=ib_yout<0?0:(ib_yout>=H?H-1:ib_yout); var ib_ri=ib_yin<0?0:(ib_yin>=H?H-1:ib_yin); acc+=ib_tmp[(ib_ri*W+x)*3+ch]-ib_tmp[(ib_ro*W+x)*3+ch]; } } } },
     contourstrips: function(d,W,H,p,t){
       /* The alternating strong/weak strip opacities were hardcoded at 1.0 and 0.4 and the bands always
          began at pure black, so the recolour was all-or-nothing and always landed in the same places.

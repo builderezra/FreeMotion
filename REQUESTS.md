@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v14.93
+> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v14.94
 >
-> **State:** v14.93, 1157 tests green, tree clean. **✅ YOU ANSWERED FOUR QUESTIONS — all logged in
+> **State:** v14.94, 1158 tests green, tree clean. **⚡ INNER BLUR IS 4.5x FASTER (51.1ms → 11.3ms)
+> and NOTHING ON SCREEN CHANGED** — measured, zero visible bytes different. The "Colour past the edge"
+> option you asked for keeps the old look one tap away. **✅ YOU ANSWERED FOUR QUESTIONS — all logged in
 > their own entries: the 219ms goes ahead WITH a tick box keeping the old rim; the intro logo has colour
 > so the film fades to your dark ground instead of inverting; the camera shutter goes to 12; text stays
 > at 160pt.** **⚡ THE LAG WORK IS FINISHED, and the reason it is
@@ -28431,9 +28433,20 @@ re-opened #480, which I had marked done and had not fixed.
       of them currently averages that hidden colour into visible pixels. With the colour gone it averages
       **zero** instead — so the faint rim does not merely disappear, it changes. That is the one visible
       difference, and it is what the before/after picture has to show him.
-      ⏭️ **NOT STARTED — deliberately.** This changes rendered output in a narrow case, it needs a
-      before/after of an Inner Blur under a Box Blur put in front of him, and it wants a fresh session
-      rather than the tail of a very long one. The design above is the whole of it; the analysis is done.
+      ✅ **INNER BLUR DONE, v14.94 — 51.1ms → 11.3ms, and nothing on screen changed.** Measured on a
+      feathered layer: **zero** bytes differ where anything is visible between the two modes, and 9704
+      differ under full transparency, which is the entire point. The new option **"Colour past the edge"**
+      defaults to Off (fast); On restores the old behaviour exactly, including declining the bounding box,
+      because with those writes back a skip is unsafe again.
+      ⚠️ **The test drives BOTH of Inner Blur's code paths, and it did not at first.** Default settings
+      take a fast single-pass route; extra passes, a vertical amount or "Ignore outside" take a separate
+      multi-pass one with its own write loop. A mutation deleting the multi-pass gate **survived the whole
+      suite**. Each path now carries its own control: nothing visible may change, **and something hidden
+      must** — without the second half, a path whose gate was never wired up looks identical to one that
+      works.
+      ⏭️ **ZOOM BLUR AND SPIN BLUR REMAIN**, under the corrected rule above. They are the harder two
+      precisely because they write alpha, so the gate has to be on the RESULTING alpha rather than the
+      source's.
 
       ✅ **HE ANSWERED, 1 Sep: "Do it, but keep the rim as an option."** So all three get fast AND the
       old behaviour stays reachable — a tick box that restores writing under transparency, for anyone who
