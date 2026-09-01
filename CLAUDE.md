@@ -70,6 +70,14 @@ by remembering:
 ```bash
 tools/mutate.sh <file> "<old>" "<new>" ["expected failing test"]
 ```
+
+⚠️ **AND DO NOT WRITE A `pgrep` WAIT-LOOP FOR IT.** `until ... ! pgrep -f "tools/mutate.sh" ...` matches
+**its own command line** — the string is right there in the argv being evaluated — so the condition never
+goes false. Six of these were found still spinning hours after their jobs had finished (1 Sep; Ezra
+spotted them, not me). Nothing was corrupted, because every result had been read from the job's own
+output file, but they burned CPU and buried what was genuinely in flight.
+**Wait on the lock file, which cannot match itself:** `until [ ! -f .mutation-in-progress ]; do sleep 15; done`
+— or better, do not write a waiter at all: `run_in_background: true` already notifies on completion.
 Restores the file **on a trap**, so the tree cannot be left mutated by a timeout, a Ctrl-C or a kill —
 which happened. **Refuses if the old string was not found**, because a mutation that silently did not
 apply produces a green run that looks like proof and is not. Holds `.mutation-in-progress` so nothing

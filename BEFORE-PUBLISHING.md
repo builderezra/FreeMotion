@@ -4,6 +4,26 @@
 promote, a demo video, a tutorial series). Delete this file only when the work below is actually
 finished — not when it's planned.
 
+## 🔴 ADDED 1 Sep — THE EFFECT NAMES AND THEIR ORDER (queue 484)
+
+His words, and it is the first item here he has framed as legal exposure rather than as polish:
+
+> i want every effect to be named different to what it is in alight motion and also have different
+> ordering to avoid getting taken down by aligiht motion for copying and so far this isnt done
+
+He is right that it is not done — queue 484 has only ever renamed the handful that were *obviously*
+copied. This is **all ~198 effect names and the category order**.
+
+**Do the measuring before any renaming.** Some of these are generic craft terms — Blur, Levels,
+Vignette, Drop Shadow — that every editor in the category uses because they are what the thing is
+called. Renaming those makes the app worse and protects nothing. What matters is the names that are
+distinctively Alight Motion's, and the ORDER, which is a creative arrangement rather than a fact.
+
+⚠️ **AND THE ONE THING THAT CAN BREAK EVERY EXISTING PROJECT:** a saved project references effects by
+their **type id**, not their label. The ids must not move even when the labels do — or a rename quietly
+empties every project he has made. Any renaming pass is a label-only change plus a migration, and that
+is why it cannot be done quickly.
+
 ## Why this exists
 
 FreeMotion's UI was deliberately built by copying Alight Motion, screenshot by screenshot, because

@@ -2129,8 +2129,10 @@ better still, keep working inside the turn rather than parking work for a later 
       and this entry exists because desktop numbers have been mistaken for evidence three times. What
       this rules out is a *new* regression from tonight — it says nothing about the lag you already had.
 
-- [ ] **125 — Timeline scrolling still lags badly, with barely any layers — and he is right that I keep
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **125 — Timeline scrolling still lags badly, with barely any layers — and he is right that I keep
+      ✅ **CLOSED 1 Sep — HE CONFIRMED IT ON HIS OWN DEVICE.** Asked directly which phone complaints
+      still feel bad, he did NOT tick the timeline scroll. It measured **136ms a frame before v13.96 and
+      17.6ms after**, and the only thing that could ever settle it was his thumb. It is settled.
       ❓ASK: does the timeline scroll feel better on your phone since v13.96? It measured 136ms a frame before and 17.6ms after.
       not fixing it.**
       ═══ 🚨 **28 AUG (v13.89) — THE SCROLL WAS NEVER MEASURED, AND THE NUMBER THAT SAID IT WAS FINE WAS
@@ -3302,6 +3304,11 @@ better still, keep working inside the turn rather than parking work for a later 
 
 - [ ] **95 — Phone: timeline still laggy AND audio does not play smoothly (tested with a voice memo).**
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ✅ **THE LAG HALF IS CLOSED 1 Sep — HE CONFIRMED IT.** Asked which phone complaints still feel
+      bad, he did not tick the timeline lag or playback stutter. **The AUDIO half of this entry is NOT
+      closed by that** — "audio does not play smoothly" is a different symptom from lag, and the question
+      he answered was about feel, not sound. That half still waits on the Settings → "Your last
+      playback" → Copy report, same as #96 and #663. **Do not close this entry on the lag answer alone.**
       His words: *"Timeline on my phone is still really laggy and the audios don't play smoothly, I just
       tested adding a voice memo."* This is a REAL-DEVICE report, and that matters: the two measured
       causes behind the earlier lag item were fixed at v6.33 and the desktop numbers came back fine, so
@@ -10458,6 +10465,8 @@ better still, keep working inside the turn rather than parking work for a later 
 
 - [ ] **342 — Opening an element just dumps it into the current project; you cannot edit it. The whole
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ✅ **ANSWERED 1 Sep by the same choice as #505: "The element opens as its own document."** Not a
+      preview, not a temporary draft — a real round trip. See #505 for the decision and its consequences.
       Elements feature needs real work.** (17 Aug.) His words, verbatim: *"When you open an element as
       well in the element section it just adds the element to ur open project, you can't even open it as
       a project and edit it. You need to put a lot more effort into the elements feature"*.
@@ -13991,6 +14000,29 @@ wait for them to report back."*
 
 - [ ] **484 — 🚨 Rename the effects whose names are obviously copied from Alight Motion, and add the ones AM has that we lack (under our own names).** (23 Aug.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      🔴🔴 **HIS ANSWER, 1 Sep, AND IT IS MUCH BIGGER THAN THE QUESTION I ASKED. Verbatim:**
+      > what is a flowing ribbon even? im so confused and also i want every effect to be named different to what it is in alight motion and also have different ordering to avoid getting taken down by aligiht motion for copying and so far this isnt done
+      **Three things, and the second is the one that matters.**
+      1. **My question was bad and I should not have asked it.** "Should Silk Ribbon be a shape or an
+         effect?" is unanswerable if you have never seen a silk ribbon effect — and his standing rule
+         (#545) is DRAW IT AND SHOW HIM. Re-ask only with a picture, or not at all.
+      2. 🔴 **EVERY effect must be renamed away from Alight Motion, AND the ordering must differ — to
+         avoid being taken down for copying. His words: "so far this isnt done."** This is not the
+         handful of obvious names this entry was scoped to. It is **all ~198 effects and the category
+         order**, and it is the first time he has framed it as legal exposure rather than polish.
+      3. He is right that it is not done. This entry has only ever renamed the ones that were *obviously*
+         copied.
+      ⚠️ **THIS BELONGS WITH [BEFORE-PUBLISHING.md](BEFORE-PUBLISHING.md), which already tracks what was
+      copied from Alight Motion and says the UI must be made our own before any public release.** The
+      effect NAMES and the category ORDER now join that list, and this is the first hard requirement in
+      it rather than a taste call — a takedown is not a design opinion.
+      ⏭️ **SHAPE OF THE WORK, before any renaming happens:** (a) list every effect name and category
+      order beside Alight Motion's, so what is actually shared is measured rather than assumed — some
+      names are generic craft terms (Blur, Levels, Vignette) that nobody owns and renaming them would
+      make the app worse for nothing; (b) bring him the list of genuinely copied ones with proposed
+      names; (c) rename in one pass with the saved-project migration, since every stored project
+      references effects BY TYPE ID — the ids must not move even if the labels do, or every existing
+      project breaks. **That last point is the whole risk and it is why this cannot be a quick pass.**
       ❓ASK: Silk Ribbon is the last item in clause 2 — should a flowing ribbon be A a SHAPE in Add → Shape beside your banner and flag (recommended) · B an effect · C skip it? Everything else in clause 2 is done or turned out to already exist.
       ➡️ **NOT BLOCKED — already authorised verbatim:** *"names where we are obviously copying should be changed"*. The "waiting on one word" gate here is self-imposed, and the one genuinely ambiguous name is our own coinage with nobody to ask. **Act: ship the label-only renames and let him veto individual ones after.**
       His words, verbatim:
@@ -15749,8 +15781,10 @@ wait for them to report back."*
       **Ties to #369**, which renames this whole card to Outline & Shadows — these should ship together so
       the card is renamed and correct in one go rather than renamed while still missing half its controls.
 
-- [ ] **387 — 🚨 PHONE: pressing on a layer to scrub is still laggy, and PLAYBACK is a buggy mess while
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **387 — 🚨 PHONE: pressing on a layer to scrub is still laggy, and PLAYBACK is a buggy mess while
+      ✅ **CLOSED 1 Sep — HE CONFIRMED IT ON HIS OWN DEVICE.** Asked directly which phone complaints
+      still feel bad, he did NOT tick scrubbing or playback. Three sessions went into measuring this on a
+      Mac where it does not happen; the confirmation could only ever come from him, and it has.
       scrubbing is fine.** (18 Aug, *"On mobile"*.) His words, verbatim: *"The issue of scrubbing when
       pressing on a layer being laggy for some reason is still an issue, so you need to be careful where you
       place ur finger on the timeline to avoid slowness."* and *"And also for some reason a video will
@@ -16139,8 +16173,11 @@ wait for them to report back."*
       not get updated when another entry does the work**, which is exactly how a finished job keeps
       advertising itself as outstanding.
 
-- [ ] **469 — The keyframe diamonds are 18×18 on a phone. Do you want them easier to hit?**
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **469 — The keyframe diamonds are 18×18 on a phone. Do you want them easier to hit?**
+      ✅ **CLOSED 1 Sep — HE SAID NO.** Asked whether he wanted the 18x18 keyframe diamonds easier to
+      hit, including an option that kept them looking identical and only grew the invisible tap area:
+      **"No, they're fine."** Not a deferral — he has used them and they work for him. Do not re-raise
+      this on the strength of the 44x44 guidance; he has answered it with his thumb.
       **WAITING ON EZRA — a one-word answer, and it is a taste call, not a bug.**
       (22 Aug — found by a bug hunt of the 380px layout, not reported by him. He has never complained
       about this, which is worth stating up front: it is a measurement, not a symptom.)
@@ -16244,6 +16281,16 @@ wait for them to report back."*
 
 - [ ] **392 — Text to voice: a button and a whole feature.** (18 Aug, phone screenshot at v9.87 with the
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      🔴 **HE ANSWERED, 1 Sep, and the answer is DELETE. Verbatim:**
+      > if it doesnt show up at export delete it
+      **It does not show up at export and cannot** — the browser's speech synthesis plays through the
+      speakers and is not capturable, so a Text to Voice line is always missing from the finished file.
+      So the feature comes OUT, rather than staying as a preview that quietly lies about what will be in
+      the export. **Record a voiceover already does the exportable version of this job** and stays.
+      ⏭️ **TO BUILD:** remove the Text to Voice entry, its panel and its speech calls; leave no dead
+      button behind; and make sure nothing in a saved project references it (a project that stored a
+      TTS line must load without error, ignoring it). A test that the feature is gone AND that Record a
+      voiceover still produces a real audio layer.
       ❓ASK: Text to Voice speaks aloud but can never reach an export — A leave it as is and use Record a voiceover for anything exported (recommended) · B add cloud TTS with your own key, so the voice becomes a real audio layer (a small bill, and your text leaves the device) · C move it into the audio and text effects menus, as you suggested.
       strip under the text clip circled.) His words, verbatim: *"Where I outlined add a button that says
       text to voice and make a whole menu and feature for this"*.
@@ -18274,6 +18321,14 @@ wait for them to report back."*
       Both directions mutation-checked. Ezra: worth a quick confirm on the phone.
 - [ ] **454 — PRESETS ARE FOR EFFECTS ONLY. Strip every other meaning of the word.** (21 Aug, from his
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      🔄 **HE CHANGED HIS MIND, 1 Sep. Verbatim:**
+      > Actually u are right to keep both options to save effect presets and full layer preseets i change my mind
+      **So nothing is stripped and nothing is renamed.** Both savers stay: effect presets AND full-layer
+      presets. The original instruction — *"PRESETS ARE FOR EFFECTS ONLY. Strip every other meaning of
+      the word."* — is withdrawn by him, and this entry is closed on his word rather than by building
+      anything. **Do not act on the original wording later**: it reads as an unambiguous order and it has
+      been reversed, which is exactly the kind of thing a future session would otherwise "discover" and
+      obey.
       ❓ASK: "Save look + animations" is the ONLY way to copy a movement onto another layer, and deleting it takes your saved whole-look presets with it — A delete it entirely, as you literally said · B (recommended) keep it, stop calling it a preset: rename to "Copy look & motion…" and move it out of the Presets card, so "preset" means effects only · C cut it to effects only, which just duplicates "Save effects only".
       phone, with a screenshot of the New Project sheet.) His words, verbatim: *"I'm putting my foot
       down, presets are just for effects not anything else, if it says preset remove any other function
@@ -19559,6 +19614,10 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **505 — 🚨 ELEMENTS AND TEMPLATES MUST BE EDITABLE IN THEIR OWN SECTIONS, NOT TURNED INTO PROJECTS. He has asked for this repeatedly and is fed up.** (24 Aug.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ✅ **HE ANSWERED, 1 Sep: "The element opens as its own document."** So an element or template
+      opens like a project — edit it, save it back — rather than being dumped into whatever you have open.
+      That is the biggest of the three options and it is the one that makes elements maintainable instead
+      of write-once. #342 is the same decision and is answered by it.
       ⚠️ **The "NEEDS YOU" that used to sit here was stale** — the question it referred to (design A vs B)
       was answered by a review, not by him. Nothing is outstanding from him on this entry.
       His words, verbatim:
@@ -19696,6 +19755,11 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **508 — Opening a project is janky: the card should glide out left while the project comes in from the right.** (24 Aug.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      🔴 **STILL BAD — HE CONFIRMED IT ON HIS DEVICE, 1 Sep.** Asked which phone complaints still feel
+      wrong, he ticked this one. It measures smooth here even with sixteen cards on screen, so **the next
+      step is a reading from HIS device, not more work on this Mac** — that is what the last three
+      attempts got wrong. Instrument the open-project transition the way the playback watchdog works:
+      record the frame times on his phone, put them behind Settings → Copy, and ask him for one paste.
       ❓ASK: is opening a project still janky on your phone at v14.10? It measures smooth here even with sixteen cards on screen, so if it is still bad it is your device and the next step is a reading from it.
       ═══ ✅ **28 AUG (v14.10) — MEASURED AT LAST, AND IT RULES THINGS OUT.** ═══
       **This entry was SKIPPED once for want of a measurement and that was right** — the preview pane
@@ -21443,6 +21507,13 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **553 — 🔴 Leaving and re-opening a project leaves the app half-drawn: the home screen and the editor are BOTH on screen at once, side by side. Plus a black bar at the bottom.** (25 Aug, phone screenshot at v12.43.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      🔴 **STILL HAPPENING — HE CONFIRMED IT ON HIS DEVICE, 1 Sep.** Asked which phone complaints still
+      feel wrong, he ticked "app comes back half-drawn". So the home screen and the editor really are
+      both being drawn at once when he returns to the app, and it is not a stale memory of an old build.
+      ⏭️ That makes this a REPRODUCIBLE-ON-HIS-PHONE bug rather than an unconfirmed report: it happens on
+      resume, which is a lifecycle path (visibilitychange / pageshow / a PWA resume) that a desktop test
+      never exercises. Start there rather than in the drawing code. The black-bar half of this entry was
+      never investigated and is measurable without him.
       ❓ASK: the app coming back with the home screen and the editor both drawn at once — seen it since late August? Y or N. (Do not wait on this: the black-bar half of the entry was never investigated and is measurable without you.)
       His words, verbatim:
       > Leaving and opening a project glitches the app out like this
@@ -21649,6 +21720,16 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **560 — Masks still don't behave like effects and still have their own separate menu.** (25 Aug, phone screenshot at v12.44.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ✅ **HE ANSWERED, 1 Sep, and he picked the big one. Verbatim:**
+      > I want masks as an effect and work with effects, like layering them with the other effects and it works the same as an effect. But keeping the function
+      **So: interleave properly.** A mask becomes an ordinary member of the effect stack — draggable
+      above or below any effect, ordered with them, behaving like them — **while keeping everything a
+      mask currently does**. That last clause is the constraint that matters: this is a re-ordering of
+      the render path, not a re-design of masking.
+      ⚠️ It is a render-path job across ~8 files and the highest-risk change in the queue, so it wants
+      its own session and byte-identity evidence for the cases that do NOT move (a mask with no effects,
+      an effect with no mask, and the current mask-then-effects order, which must render exactly as it
+      does today).
       ❓ASK: masks look and behave like effects now; the one thing left is that you cannot drag a mask ABOVE or BELOW an effect — they only reorder among themselves. A yes, interleave them properly (a render-path job across 8 files) · B (recommended) no, I never try that · C do it, but bundled with the next render-path job.
       ✅ **THE MENU IS GONE — v12.76. The entry REMAINS OPEN on one question for you, at the bottom.**
       His words, verbatim:
@@ -21817,6 +21898,19 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **564 — 🎨 The Outline & Shadows sub-panel works but looks bad. Make it actually look good.** (25 Aug, phone screenshot at v12.51.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      🔄 **HIS ANSWER, 1 Sep, AND IT IS A DIFFERENT PROBLEM FROM THE ONE I ASKED ABOUT. Verbatim:**
+      > Right now it's good but the issue is that you can only edit one section at a time, you figure out the best fix for this that isn't cluttering the screen and making it hard to find stuff and figure stuff out. I'll just tell you if what you did is bad after it is done
+      **So the LOOK is fine and the three layout options I offered were all answering the wrong question.**
+      The real complaint is the accordion: **only one section can be open at a time**, so setting an
+      outline and then a shadow means closing one to reach the other, and you can never see both sets of
+      values together.
+      ⚠️ **He has delegated the solution and pre-agreed to judge it after** — *"you figure out the best
+      fix… I'll just tell you if what you did is bad."* That is licence to build, not licence to skip
+      showing him: his standing rule (#545) is that he sees a visual change before it ships, and he has
+      just said he will react to it once done. **So: build it, send him the picture, and expect a verdict.**
+      ⏭️ The constraint he named is the hard part — *"isn't cluttering the screen and making it hard to
+      find stuff"*. Letting every section be open at once is the obvious fix and the wrong one on a
+      380px phone. Worth measuring the panel's height at 380px with all sections expanded before choosing.
       His words, verbatim:
       > The function of this section is good it’s just the form I hate, make it actually look good
       **He is explicit that this is FORM ONLY — the behaviour is right and must not change.** So this is
@@ -28662,6 +28756,28 @@ re-opened #480, which I had marked done and had not fixed.
       AI's list to it, rather than a second hard-coded twelve that would drift the same way. It asserts
       its own slice is plausible first, and separately checks the prompt the model actually reads — the
       array being right is no use if the prompt was built from something else.
+
+- [x] **701 — A Bounce easing came back as a plain ease after saving a preset or splitting a clip.**
+      Shipped v14.88. (Found 1 Sep by the five-lens bug hunt.)
+      JUMPED: a silent data-loss fault found by tonight's audit, in the same field, from two independent
+      directions — worth taking while the evidence was in hand.
+      **What it was.** `kf.ez` is the parameterised easing the graph editor writes — `{fam, preset, p}`
+      for Bounce, Elastic, Steps and the rest — and the evaluator gives it priority **over** both `bez`
+      and a plain named ease. **Three places rebuilt a keyframe field by field and copied everything
+      except `ez`:** the preset saver, and the clip split twice (the keyframe it captures at the seam and
+      the one it writes back).
+      🔴 **It did not degrade gracefully.** It fell back to whatever plain `e` said, which is deliberately
+      left at `easeInOut` for readers that predate `ez` — so **the animation stayed and only the FEEL
+      changed.** A bounce became a smooth ease. That is the hardest kind of loss to notice: nothing is
+      missing, nothing errors, it just stops feeling right.
+      ✅ **Fixed in all three, and `ez` is VALIDATED rather than trusted on the preset path** (fam and
+      preset must be strings, every number in `p` finite) because that path reads from localStorage.
+      📌 **Two independent audits landed on the same field**, which is why it was believed before it was
+      checked — and the graph editor's own copy/paste always carried it correctly, which is asserted in
+      the test as the control.
+      ⚠️ **Fifth instance of the same shape** — an explicit field list that drifted from what it mirrors
+      (#686, #688, #689, #700, and this). The test therefore slices the copiers out of the source rather
+      than asserting the field list in a comment, because a comment is what failed here.
 
 - [ ] **702 — Standing instruction, 1 Sep (verbatim):**
       **STATUS: 📌 NOTE — nothing to build**
