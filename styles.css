@@ -4166,7 +4166,6 @@ body.white-chrome #time-readout:active {
   #inspector { padding: 2px 12px 18px; }
 }
 
-
 /* ---- Add Effect browser: AM parity ---- */
 /* Phone: categories as a 2-col wall of tiles (label over count), like AM */
 @media (max-width: 700px) {
@@ -4954,7 +4953,6 @@ body.hm-selecting .hm-pin { display: none; }
 
 /* In a project with no groups the reserved column is dead strip rather than alignment, so it goes
    entirely — display:none, which removes the box, not just the paint (queue 295). */
-
 
 /* THE ACTUAL FIX. Every item in the head was `flex: 0 0 auto`, so when the content needed 82px in a
    72px box nothing could give and the surplus went outside the box — onto the timeline. The thumbnail
@@ -6444,7 +6442,6 @@ body.fm-pushing #toast { z-index: 213; }
    short name like "Angle" a comfortable target rather than a nub. */
 .fx-scrub-row > .fx-scrub-label.kf-selectable { flex: 0 1 auto; margin-right: auto; align-self: center; }
 
-
 /* ---- Liquid Glass controls — the shared material (v6.09) --------------------------------------
    One rule for the four controls that used to wear the logo's crystal renders. See the --lg-* token
    block at the top for why each layer is here. Appended at the end of the file so it lands after the
@@ -7375,7 +7372,6 @@ body.fm-pushing #toast { z-index: 213; }
 /* The NAME can be any length someone types; it truncates and the size never does. Reversed, a long
    name would push "1080×1920 · 30 fps" out of the row and the preset would be unidentifiable. */
 
-
 /* New project: the same presets as chips. A ROW that scrolls sideways rather than a wrapping grid —
    on a 380px phone the dialog is already tall enough to scroll, and letting eight presets add eight
    rows to it would push Create off the bottom. */
@@ -8039,9 +8035,6 @@ body.fm-pushing #toast { z-index: 213; }
     overflow: hidden; flex: none;
     max-height: calc(var(--cat-h) - 2 * var(--cat-pad) - var(--cat-inner-gap) - var(--cat-ico));
   }
-  /* The one per-type row that exists today. `:has()` is already used elsewhere in this file for exactly
-     this kind of state-dependent layout. */
-  body #inspector-panel:has(.tts-row) { --insp-extra: 48px; }   /* a long label crops; the card's ring does not */
   body #inspector-panel .cat-ico svg { width: var(--cat-ico); height: var(--cat-ico); }
   /* The label follows, or a 14px icon sits under text as tall as it is. Its line-height tightens with
      it — at three rows, 1.3 line-height is another 10px of nothing. */
@@ -8300,7 +8293,6 @@ html[data-theme="glass"] .addmenu-card--rainbow > .addmenu-ic { color: #ffffff; 
   .tfill-top { align-self: center; }
 }
 
-
 /* THE + BUTTONS' COLOURS MOVE (queue 398). Ezra: "Make the colours in the new add button actually move in
    a subtle but satisfying way." Both of them, because v10.30 (#384) made the home + and the timeline + the
    same disc on purpose — animating one would split a pair that was deliberately joined.
@@ -8400,40 +8392,8 @@ body:has(#el-browser:not(.hidden)) #view-bar { display: none; }
    The button sits in the strip directly under the clip, ABOVE the trim/split trio, which is where
    Ezra drew it. Full width and captioned rather than another icon in the strip: it opens a menu
    rather than doing something instantly, and the three below it are already an icon row. */
-.tts-row { padding: 0 12px 8px; }
-.tts-open {
-  width: 100%; display: flex; align-items: center; justify-content: center; gap: 9px;
-  height: 40px; padding: 0 14px; border-radius: 11px;
-  background: var(--panel-2, #182430); border: 1px solid var(--line, #24323f);
-  color: var(--text); font-size: 13.5px; font-weight: 600;
-}
-.tts-open svg { width: 19px; height: 19px; flex: 0 0 auto; }
-.tts-open:active { filter: brightness(1.25); }
-.tts-open-cap { line-height: 1; }
 
-.tts-preview {
-  margin: 2px 0 14px; padding: 11px 13px; border-radius: 10px;
-  background: var(--panel-2, #182430); border: 1px solid var(--line, #24323f);
-  color: var(--text); font-size: 13.5px; line-height: 1.45;
-  max-height: 116px; overflow-y: auto; overflow-wrap: anywhere;
-}
-.tts-preview-empty { color: var(--text-faint); font-style: italic; }
-.tts-field { margin-bottom: 14px; }
-.tts-label { display: block; font-size: 11.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--text-faint); margin-bottom: 6px; }
-.tts-slider-head { display: flex; align-items: baseline; justify-content: space-between; }
-.tts-val { font-size: 12.5px; color: var(--text); font-variant-numeric: tabular-nums; }
 /* max-width:100% or a long voice name stretches the select and scrolls the whole panel sideways. */
-.tts-select { width: 100%; max-width: 100%; height: 38px; padding: 0 10px; border-radius: 10px; background: var(--panel-2, #182430); border: 1px solid var(--line, #24323f); color: var(--text); font-size: 13px; }
-.tts-range { width: 100%; }
-.tts-play {
-  width: 100%; display: flex; align-items: center; justify-content: center; gap: 9px;
-  height: 44px; border-radius: 12px; margin-top: 2px;
-  background: var(--accent, #35c5f0); border: none; color: #06202b; font-size: 14px; font-weight: 700;
-}
-.tts-play svg { width: 18px; height: 18px; flex: 0 0 auto; }
-.tts-play.on { background: var(--danger, #ff5d6c); color: #2b0509; }
-.tts-play:disabled { opacity: .45; }
-.tts-note { margin-top: 12px; }
 
 /* ---- THE TRIM READOUT (queue 153) ---------------------------------------------------------------
    Ezra, with an Alight Motion screenshot: *"it tells you all of this information and also shows on
@@ -8484,7 +8444,6 @@ body:has(#el-browser:not(.hidden)) #view-bar { display: none; }
   line-height: 1.35;
 }
 
-
 /* Queue 215 — the "this export will be silent" pre-flight warning in the export dialog. Deliberately
    a persistent block in the card rather than a toast: a toast about a render you have not started yet
    is gone by the time you press the button. */
@@ -8498,7 +8457,6 @@ body:has(#el-browser:not(.hidden)) #view-bar { display: none; }
 
 /* Queue 392 — the way OUT of the text-to-speech dead end, next to the note explaining it. Full width
    so it reads as the panel's suggested next step rather than a stray control. */
-.tts-rec { display: block; width: 100%; margin-top: 8px; min-height: 40px; }
 
 /* Queue 490 — the oversize note inside Canvas settings. Sized to be read at a glance and to wrap
    comfortably at 380px; `.hidden` already handles display, this only paints it. */
@@ -8556,7 +8514,6 @@ body:has(#el-browser:not(.hidden)) #view-bar { display: none; }
   #pause-fx.on { animation: fm-pausefade .62s linear forwards; }
   @keyframes fm-pausefade { 0%, 62% { opacity: 1; } 100% { opacity: 0; } }
 }
-
 
 /* ---- MENUS THAT POP OUT OF THEIR BUTTON (queue 548) --------------------------------------------
    Ezra: "i want their respective menus to pop out from the button like the settings cog one does …

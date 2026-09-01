@@ -29412,98 +29412,39 @@
     if (typeof viaImport[0].start !== 'number' || !isFinite(viaImport[0].start)) throw new Error('the import path leaves a non-numeric start intact');
   });
 
-  test('text to voice: the button is where he drew it, and the menu reads the layer\'s own words (queue 392)', { item: '392' }, async function () {
-    /* Ezra: *"Where I outlined add a button that says text to voice and make a whole menu and feature for
-     * this"*, and then, once told what the browser can and cannot do: *"...if this is too hard then don't
-     * do it but atleast a simple option for me to test"*. This is that simple option.
-     * The POSITION is half the request and is asserted as such — he drew the button onto the strip
-     * directly under the clip, above the trim/split trio, so "it exists somewhere" is not the test.
-     * What is deliberately NOT claimed anywhere: that this reaches an export. It cannot — the browser
-     * speaks to the speakers and offers no way to record it — and the panel says so in as many words. */
-    if (!FM.tts) throw new Error('FM.tts is not reachable');
-    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, ids0 = (FM.scene.selectedIds || []).slice();
+  test('Text to Voice is gone, and the voiceover recorder that replaces it is not (queue 392)', { item: '392' }, async function () {
+    /* Queue 392. He asked for Text to Voice, it was built, and then he was told what it could not do.
+     * His answer, 1 Sep, verbatim: "if it doesnt show up at export delete it".
+     * IT CANNOT SHOW UP AT EXPORT, and that is a wall rather than a shortfall: the browser's speech
+     * engine speaks straight to the speakers — it is not a node in the audio graph, not a media element,
+     * and produces no stream, so there is no supported way to capture it. So the feature came OUT rather
+     * than staying as a preview that quietly lies about what lands in the finished file.
+     * ⚠️ THE HALF THAT MATTERS IS THE SECOND ASSERTION. Deleting a feature is easy to do carelessly, and
+     * the careless version here would have taken something with it: the panel that was removed carried
+     * the ONLY visible shortcut to "Record a voiceover", which is the feature that actually does this job
+     * and DOES reach the export. It has its own home in Add > Audio, so nothing was stranded — and this
+     * test pins that, because "I deleted the thing next to it" is exactly how a working feature goes
+     * missing without anyone noticing. */
+    const keep = FM.scene.layers.slice();
     try {
       const T = FM.makeLayer('text', { text: 'Perth is sunny today', start: 0, duration: 4 });
-      const S = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#fff', start: 0, duration: 4 });
-      FM.scene.layers.length = 0; FM.scene.layers.push(T, S);
-
-      const show = async (l) => {
-        FM.scene.selectedIds = [l.id]; FM.scene.selectedId = l.id;
-        if (FM.syncSelectionChrome) FM.syncSelectionChrome();
-        FM.timeline.rebuild(); FM.inspector.refresh();
-        await sleep(320);
-      };
-
-      await show(T);
-      const btn = document.querySelector('#inspector .tts-open');
-      if (!btn) throw new Error('a text layer has no Text to Voice button — the thing he actually asked for is missing');
-      if (!/text to voice/i.test(btn.textContent)) throw new Error('the button does not say "text to voice", it says "' + btn.textContent.trim() + '"');
-      /* THE POSITION, which is the half of the request most likely to be quietly dropped. He drew it on
-         the strip under the clip, ABOVE the three trim/split buttons — not merely somewhere on screen. */
-      const quick = document.querySelector('#inspector .quick-row');
-      if (!quick) throw new Error('the trim/split row is missing, so the button\'s position cannot be checked');
-      const rb = btn.getBoundingClientRect(), rq = quick.getBoundingClientRect();
-      if (!(rb.bottom <= rq.top + 1)) throw new Error('the Text to Voice button sits at y=' + Math.round(rb.bottom) + ', below the trim/split row at y=' + Math.round(rq.top) + ' — he drew it ABOVE that row');
-      if (rb.right > window.innerWidth + 1) throw new Error('the button runs off the right edge at ' + window.innerWidth + 'px wide');
-
-      // …and NOWHERE else: there is nothing for it to read on a shape.
-      await show(S);
-      if (document.querySelector('#inspector .tts-open')) throw new Error('a shape layer is offering Text to Voice, and it has no text to read');
-
-      // THE MENU.
-      await show(T);
-      document.querySelector('#inspector .tts-open').click();
-      await sleep(700);   // the voice list resolves asynchronously — getVoices() is [] on a cold page
-      const pv = document.querySelector('#inspector .tts-preview');
-      if (!pv || pv.textContent.indexOf('Perth is sunny today') < 0) throw new Error('the menu does not show the text it would read; it shows "' + (pv ? pv.textContent : 'nothing') + '"');
-      const vsel = document.querySelector('#inspector .tts-select');
-      if (!vsel) throw new Error('the menu has no voice picker');
-      if (vsel.options.length < 2) throw new Error('the voice picker holds ' + vsel.options.length + ' entries — it was drawn before the voices resolved and never refilled');
-      if (document.querySelectorAll('#inspector .tts-range').length < 2) throw new Error('the menu is missing the speed/pitch controls');
-      /* THE HONEST NOTE IS PART OF THE FEATURE, not decoration. Without it this is a button that implies
-         a voice in your video and does not deliver one. */
-      const note = document.querySelector('#inspector .tts-note');
-      if (!note || !/not be in an export/i.test(note.textContent)) throw new Error('the menu does not say the voice will not be in an export — that omission is the difference between a feature and a lie');
-
-      // The controls must actually write to the layer, or the settings vanish on reselect.
-      const r = document.querySelectorAll('#inspector .tts-range')[0];
-      r.value = '1.4'; r.dispatchEvent(new Event('input'));
-      if (Math.abs(FM.tts.settingsOf(T).rate - 1.4) > 0.001) throw new Error('moving the speed slider did not reach the layer: ' + FM.tts.settingsOf(T).rate);
-
-      /* A SAVED PROJECT IS A FILE, AND A FILE CAN SAY ANYTHING. These values are read back out and handed
-         to the speech engine, so they are validated at the point of use rather than trusted: an unknown
-         voice name falls back to the device default instead of reaching the engine, and rate/pitch are
-         clamped to the range the spec allows (outside it a browser may drop the utterance entirely). */
-      T.tts = { voice: 'NoSuchVoice</scr' + 'ipt>', rate: 99, pitch: -5 };
-      const clean = FM.tts.settingsOf(T);
-      if (clean.rate > FM.tts.RATE.max || clean.pitch < FM.tts.PITCH.min) throw new Error('rate/pitch were not clamped: ' + clean.rate + '/' + clean.pitch);
-      /* An unknown name is REPORTED but never RESOLVED — resolve() is the only door to the speech engine
-         and it answers null for anything the browser does not list. */
-      if (FM.tts.resolve(T.tts.voice) !== null) throw new Error('an unknown voice name resolved to something the speech engine would accept');
-      if (FM.tts.resolve('') !== null) throw new Error('an empty voice name resolved to a voice');
-
-      /* HIS CHOSEN VOICE MUST SURVIVE A SETTING HE DID NOT TOUCH (queue 466, found by a bug hunt and it
-         was a regression in the version that introduced this feature). settingsOf() used to resolve the
-         voice against the installed list and return '' when it did not match — which conflated "what did
-         he pick" with "is that voice installed right now". Those come apart for the first moments of
-         every page, because getVoices() starts EMPTY: reopening the project and nudging the speed slider
-         before the list arrived pushed his choice through update(), found no match, and wiped it.
-         An UNINSTALLED name reproduces that exact path deterministically — same unmatched branch, no
-         timing needed — so this is the real regression test and not an approximation of one. */
-      T.tts = { voice: 'A Voice This Device Does Not Have', rate: 1, pitch: 1 };
-      FM.tts.update(T, { rate: 1.2 });
-      if (T.tts.voice !== 'A Voice This Device Does Not Have') throw new Error('changing the SPEED erased the saved voice (now "' + T.tts.voice + '") — a setting he never touched was destroyed by one he did');
-
-      // Nothing to say = say nothing. An empty layer must not start the engine.
-      const E = FM.makeLayer('text', { text: '   ', start: 0, duration: 2 });
-      if (FM.tts.speak(E, function () {})) { FM.tts.stop(); throw new Error('a text layer with no words still started speaking'); }
-    } finally {
-      try { FM.tts.stop(); } catch (e) {}
-      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
-      FM.scene.selectedId = sel0; FM.scene.selectedIds = ids0;
+      FM.scene.layers.length = 0; FM.scene.layers.push(T);
+      FM.scene.selectedIds = [T.id]; FM.scene.selectedId = T.id;
       if (FM.syncSelectionChrome) FM.syncSelectionChrome();
       FM.timeline.rebuild(); FM.inspector.refresh();
-      await sleep(120);
+      await sleep(320);
+
+      if (FM.tts) throw new Error('FM.tts still exists — the module was left loaded, so the feature is only hidden rather than removed');
+      if (document.querySelector('#inspector .tts-open, #inspector .tts-row')) throw new Error('a text layer still offers a Text to Voice button');
+      const txt = (document.getElementById('inspector') || {}).textContent || '';
+      if (/text to voice/i.test(txt)) throw new Error('the inspector still says "Text to Voice" somewhere — it cannot reach the export, so offering it is a promise the app cannot keep');
+
+      /* THE CONTROL, and the reason this test is worth having: the recorder must still be reachable.
+         Its shortcut lived INSIDE the deleted panel; its real home is Add > Audio > Record voice. */
+      if (!FM.voiceRec || typeof FM.voiceRec.open !== 'function') throw new Error('FM.voiceRec.open is gone — deleting Text to Voice took the voiceover recorder with it, which is the one feature that does this job AND reaches the export');
+    } finally {
+      FM.scene.layers.length = 0; keep.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
     }
   });
 
@@ -49406,46 +49347,6 @@
   /* ═══ THE TEXT-TO-SPEECH PANEL OFFERS THE WAY OUT (queue 392).
      Its note ends "or to record a voiceover yourself" — and recording one is a feature that already
      exists, buried in Add ▸ Audio. The panel was naming the solution and leaving him to find it. */
-  test('the text-to-speech panel offers the recorder it tells you to use (queue 392)', { item: '392' }, async function () {
-    const saved = FM.scene.layers.slice();
-    const realOpen = FM.voiceRec && FM.voiceRec.open;
-    let opened = 0;
-    try {
-      if (!FM.voiceRec) throw new Error('FM.voiceRec is missing — the panel has nothing to offer');
-      FM.voiceRec.open = () => { opened++; };
-      FM.scene.layers.length = 0;
-      const L = FM.makeLayer('text', { name: 'speak me', text: 'hello there', x: 100, y: 100 });
-      L.start = 0; L.duration = 4;
-      FM.scene.layers.push(L);
-      FM.selectLayer(L.id); FM.refreshAll();
-      await sleep(400);
-      if (FM.inspector && FM.inspector.openCategory) { try { FM.inspector.openCategory('tts'); } catch (e) {} }
-      await sleep(300);
-
-      const note = document.querySelector('.tts-note');
-      const btn = document.querySelector('.tts-rec');
-      if (!note) { /* the panel is not open in this harness — assert the wiring instead of nothing */ }
-      if (!note && !btn) throw new Error('the text-to-speech panel did not render for a text layer, so this test cannot see either the note or the button');
-      if (note && !btn) throw new Error('the panel warns that the voice will not be in the export and names recording as the fix, but offers no way to do it — which is the whole point of this change');
-      if (btn) {
-        if (!/record/i.test(btn.textContent)) throw new Error('the button does not say what it does: ' + btn.textContent);
-        btn.click();
-        if (opened !== 1) throw new Error('the button did not open the recorder (opened ' + opened + ' times)');
-      }
-    } finally {
-      if (FM.voiceRec && realOpen) FM.voiceRec.open = realOpen;
-      FM.scene.layers.length = 0;
-      saved.forEach(l => FM.scene.layers.push(l));
-      FM.selectLayer(null);
-      if (FM.refreshAll) FM.refreshAll();
-    }
-  });
-
-  /* ═══ THE FINISHED REPORT IS ONE TAP TO COPY (queue 95 / 125 / 148 / 202 / 387).
-     Five entries are waiting on him sending this report. When it finished, the app told him where the
-     Copy button was — cog → canvas dialog → App settings → scroll → Copy, on a phone. The comment that
-     put it there was half right: an AUTOMATIC clipboard write ten seconds after the tap would be
-     refused for want of a user gesture. A tappable toast supplies exactly that gesture. */
   test('a finished measurement can be copied from the toast itself (queue 202)', { item: '202' }, async function () {
     if (typeof FM.startPerfMeasure !== 'function') throw new Error('FM.startPerfMeasure is missing');
     const realToast = FM.toast, realProbe = FM.perfProbe, realClip = navigator.clipboard;

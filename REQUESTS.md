@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.89
+> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.90
 >
-> **State:** v14.89, 1155 tests green, tree clean. **✅ YOU ANSWERED FOUR QUESTIONS — all logged in
+> **State:** v14.90, 1154 tests green, tree clean. **✅ YOU ANSWERED FOUR QUESTIONS — all logged in
 > their own entries: the 219ms goes ahead WITH a tick box keeping the old rim; the intro logo has colour
 > so the film fades to your dark ground instead of inverting; the camera shutter goes to 12; text stays
 > at 160pt.** **⚡ THE LAG WORK IS FINISHED, and the reason it is
@@ -10465,6 +10465,10 @@ better still, keep working inside the turn rather than parking work for a later 
 
 - [ ] **342 — Opening an element just dumps it into the current project; you cannot edit it. The whole
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **JUMPED by #392, and legitimately: he gave a DIRECT instruction on 1 Sep — "if it doesnt show up
+      at export delete it" — which is the one thing this file says jumps the queue. #342 is authorised
+      and next, but it is a feature (an element opening as its own document), not a deletion, and it
+      wants a session rather than the tail of one.**
       ✅ **ANSWERED 1 Sep by the same choice as #505: "The element opens as its own document."** Not a
       preview, not a temporary draft — a real round trip. See #505 for the decision and its consequences.
       Elements feature needs real work.** (17 Aug.) His words, verbatim: *"When you open an element as
@@ -16282,8 +16286,20 @@ wait for them to report back."*
       which takes the identical unmatched branch, so it fails deterministically. Mutation-checked by
       restoring the old behaviour.
 
-- [ ] **392 — Text to voice: a button and a whole feature.** (18 Aug, phone screenshot at v9.87 with the
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **392 — Text to voice: a button and a whole feature.** (18 Aug, phone screenshot at v9.87 with the
+      ✅ **DONE v14.90 — the feature is removed.** js/tts.js (196 lines), the button and panel, three
+      call sites, 20 CSS rules and the script tag.
+      ⚠️ **Three things checked before cutting, each of which turns a clean deletion into a mess:**
+      · **nothing in storage or scene referenced it**, so no saved project can break and there is no
+        migration to get wrong;
+      · **the CSS was not contiguous** — `.tts-*` ran 8403–8436 and then `.tts-rec` sat alone at 8501,
+        so a line-range delete would have taken the trim HUD and the export warning with it. Removed by
+        SELECTOR instead;
+      · **the deleted panel carried the only visible shortcut to Record a voiceover** — the feature that
+        actually does this job and DOES reach the export. It has its own home in Add ▸ Audio, so nothing
+        was stranded, and the replacement test pins it. "I deleted the thing next to it" is exactly how a
+        working feature goes missing unnoticed.
+
       🔴 **HE ANSWERED, 1 Sep, and the answer is DELETE. Verbatim:**
       > if it doesnt show up at export delete it
       **It does not show up at export and cannot** — the browser's speech synthesis plays through the
