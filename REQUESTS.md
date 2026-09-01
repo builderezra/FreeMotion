@@ -1,8 +1,12 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.81
+> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.82
 >
-> **State:** v14.81, 1147 tests green, tree clean. **🎚️ YOU SAID "RAISE THEM" AND 30 EFFECT CEILINGS WENT UP.**
+> **State:** v14.82, 1151 tests green, tree clean. **⚡ THE LAG: TWO MORE EFFECTS STOPPED CHARGING YOU
+> FOR THE WHOLE FRAME.** Tilt Shift **84.7ms → 19.6ms** and Matte Choker **41.4 → under 15**, on a small
+> layer in a 1080x1920 project. A third, Inner Blur, was made fast and then deliberately put back — it
+> paints colour into fully see-through pixels, and the next effect in your stack can read that back. A 30fps frame is 33ms, so Tilt Shift
+> alone used to cost you two and a half frames. 45 fixtures proved the picture is byte-for-byte the same. **🎚️ YOU SAID "RAISE THEM" AND 30 EFFECT CEILINGS WENT UP.**
 > Find Edges 4 → 24, Halftone dots 30 → 120px, Chunk Noise blocks 60 → 300px, Iridescence 10 → 60 bands,
 > Lens Distortion ±0.8 → ±3, Gamma 4 → 10, Exposure ±3 → ±5 EV, Emboss 3 → 18, Glitch 60 → 240 slices,
 > Shockwave 120 → 600px, Vibrance 2 → 8, Border 60 → 180px, and 18 more. **Nothing in a project you have
@@ -28173,6 +28177,47 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **692 — 🔴 THE LAG HAS A MEASURED CAUSE: every pixel effect walks the WHOLE FRAME no matter how
       **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **ROUND 3 — v14.82, three more kernels, and the list re-ranked first rather than trusted.**
+      Re-measured every one of the 105 pixel kernels at its OWN defaults on a 180x150 subject in a
+      1080x1920 plate — the actual shape of the lag, where the layer covers 1.3% of the frame — instead
+      of working from last week's numbers:
+      | effect | was | now |
+      |---|---|---|
+      | Tilt Shift | 84.7ms | **19.6ms** |
+      | Matte Choker | 41.4ms | **under 15ms** |
+      | Inner Blur | 42.9ms | *bounded, measured at under 15 — and then REVERTED, see below* |
+      A 30fps frame is 33.3ms, so **Tilt Shift alone cost two and a half frames**. The four bounded in
+      v14.79–v14.80 now cost 14.6ms between them, down from about 400.
+      **60 fixtures proved byte-identical** against each kernel's own unbounded path — corner, clipped
+      left, clipped low, full plate and a 1px hairline, each at defaults, all-max and all-min, on a clean
+      plate AND on one carrying colour under zero alpha — with a control on every kernel proving the
+      comparison can see a difference at all.
+      🔴 **INNER BLUR CAME BACK OUT, and that is the useful half of this round.** It writes COLOUR TO
+      FULLY TRANSPARENT PIXELS, so outside the layer is not "zeros in, zeros out" and no bound is a pure
+      skip — over a million bytes differ per fixture once the plate carries RGB under zero alpha.
+      Invisible on screen; **not invisible to the next effect in the stack**, because a plain Box Blur
+      averages all four channels and reads that colour straight back out from under the transparency.
+      Bounding it would mean it had to stop writing under transparency first, and that changes what the
+      effect DOES rather than what it costs.
+      ⚠️ **The harness was lying until that point, and a mutation is the only reason I know.** The first
+      identity fixture had CLEAN ZEROS outside the layer — where a far-too-tight bound is
+      indistinguishable from a correct one, because zeros in give zeros out whatever the padding.
+      Setting Tilt Shift's pad to 0 **survived the whole suite**. The fixture now dirties the plate,
+      which catches that mutation and is exactly what exposed Inner Blur. Same shape as v14.81's dead
+      assertion one layer down: **a fixture that does not contain the thing distinguishing the cases
+      cannot tell them apart.**
+      ⚠️ **MATTE CHOKER IS GATED ON THE CONTRAST SIGN, NOT ON THE BBOX, and it would have been a silent
+      disaster.** Its final loop writes alpha to EVERY pixel as `(a - 127.5) * mcK + 127.5`. At NEGATIVE
+      contrast `mcK < 1`, so a fully transparent pixel comes out ABOVE ZERO — the effect fogs the whole
+      frame, deliberately. Bounding it there would have quietly removed that from any project already
+      using it: the one case in this whole item where the skip is not a skip. The suite drives both
+      signs and asserts the negative one still writes alpha far outside the box.
+      ⏭️ **WHAT IS LEFT IS THE RADIAL FAMILY, and it needs different maths.** Zoom Streaks 88ms, Zoom
+      Blur 88, Spin Streaks 88, Spin Blur 77, Radial Shadow 76 — 417ms between them. They smear about a
+      CENTRE, so a row/column skip does not describe their reach. It is still boundable: the region a
+      zoom smear can touch is the layer's box scaled about the centre by the sample range, and a spin's
+      is the box swept through the maximum angle. Both are computable bounding boxes; neither is a
+      one-line change. Next round.
       **JUMPED: #693 went first because it BROKE THE BUILD.** The test harness had leaked sixteen
       Chrome processes and the suite stopped starting at all — nothing could be verified or shipped,
       including #692's own remaining work. That is the "the build was broken" case this gate names.

@@ -1,0 +1,86 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:11px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:900px;height:700px;border:0"></iframe>
+<script>
+/* #692 — a bounded kernel must be BYTE-IDENTICAL to the same kernel with no bbox. The unbounded path
+   is still in the code (every bound is `bb ? ... : full frame`), so the reference is the kernel itself
+   rather than a remembered picture. Five fixtures per kernel, chosen for the ways a bound goes wrong:
+   a subject in a corner, one clipped by the frame edge, one filling the plate, extreme parameters,
+   and a hairline 1px sliver. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n=0;
+  (function wait(){ if(!(w.FM&&w.FM._pixelFx)){ if(n++>500) return say('FM never came up'); return setTimeout(wait,50);} setTimeout(function(){run(w);},700); })();
+});
+var UNDER = ['tiltshift','mattechoker'];
+function run(w){
+  var P=w.FM._pixelFx, R=w.FM.fxRegistry;
+  var W=640, H=800;
+  /* `dirty` puts RGB UNDER ZERO ALPHA outside the box — a real plate state, because several kernels
+     (innerblur among them) write colour to fully transparent pixels. With clean zeros outside, a bound
+     that is too tight is INDISTINGUISHABLE from a correct one: zeros in, zeros out. That is exactly
+     what let a `tsPad = 0` mutation survive. */
+  function frame(box, dirty){
+    var a=new Uint8ClampedArray(W*H*4);
+    if(dirty){ for(var q=0;q<W*H;q++){ var j=q*4; a[j]=(q*3)&255; a[j+1]=(q*11)&255; a[j+2]=(q*29)&255; a[j+3]=0; } }
+    for(var y=Math.max(0,box.y); y<Math.min(H,box.y+box.h); y++){ var row=y*W;
+      for(var x=Math.max(0,box.x); x<Math.min(W,box.x+box.w); x++){ var i=(row+x)*4;
+        a[i]=((x*7+y)&255); a[i+1]=((y*5)&255); a[i+2]=((x^y)&255); a[i+3]=255; } }
+    return a;
+  }
+  function alphaBox(a){
+    var x0=W,y0=H,x1=-1,y1=-1;
+    for(var y=0;y<H;y++){ var row=y*W;
+      for(var x=0;x<W;x++){ if(a[(row+x)*4+3]>0){ if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y; } } }
+    return x1<0?null:{x:x0,y:y0,w:x1-x0+1,h:y1-y0+1};
+  }
+  var FIX=[
+    {n:'corner',       box:{x:40,y:60,w:180,h:150}},
+    {n:'clipped left', box:{x:-70,y:300,w:200,h:160}},
+    {n:'clipped low',  box:{x:300,y:H-90,w:200,h:200}},
+    {n:'full plate',   box:{x:0,y:0,w:W,h:H}},
+    {n:'hairline',     box:{x:120,y:400,w:1,h:220}}
+  ];
+  var bad=0, checked=0;
+  UNDER.forEach(function(type){
+    var fn=P[type]; if(!fn){ say('❌ no kernel '+type); bad++; return; }
+    var ps=R.paramsOf(type)||[];
+    var base={}; ps.forEach(function(x){ if(x.default!==undefined) base[x.key]=x.default; });
+    var VARIANTS=[{n:'defaults',q:base}];
+    var ext={}, ext2={};
+    ps.forEach(function(x){ if(typeof x.max==='number'){ ext[x.key]=x.max; ext2[x.key]=x.min; } });
+    VARIANTS.push({n:'all max',q:Object.assign({},base,ext)});
+    VARIANTS.push({n:'all min',q:Object.assign({},base,ext2)});
+    say('=== '+type+' ===');
+    FIX.forEach(function(f){
+      VARIANTS.forEach(function(v){
+       [false,true].forEach(function(dirty){
+        var src=frame(f.box, dirty), bb=alphaBox(src);
+        if(!bb){ say('   '+f.n+' — empty fixture, skipped'); return; }
+        var A=src.slice(), B=src.slice();
+        try { fn(A,W,H,v.q,0.37,1,null); } catch(e){ say('   ❌ unbounded threw: '+e.message); bad++; return; }
+        try { fn(B,W,H,v.q,0.37,1,bb);  } catch(e){ say('   ❌ bounded threw: '+e.message); bad++; return; }
+        var diff=0, first=-1;
+        for(var i=0;i<A.length;i++) if(A[i]!==B[i]){ diff++; if(first<0) first=i; }
+        checked++;
+        var tag=(dirty?'dirty ':'clean ');
+        if(diff){ bad++; say('   ❌ '+tag+f.n.padEnd(13)+v.n.padEnd(10)+diff+' bytes differ (first at px '+((first/4)|0)+')'); }
+        else     say('   ✅ '+tag+f.n.padEnd(13)+v.n.padEnd(10)+'identical');
+       });
+      });
+    });
+    /* THE CONTROL: the comparison must be able to SEE a difference, or "identical" is worthless. */
+    var src=frame(FIX[0].box), A=src.slice(), B=src.slice();
+    fn(A,W,H,base,0.37,1,null);
+    var q2=Object.assign({},base); ps.forEach(function(x){ if(typeof x.max==='number') q2[x.key]=x.max; });
+    fn(B,W,H,q2,0.37,1,null);
+    var d2=0; for(var i=0;i<A.length;i++) if(A[i]!==B[i]) d2++;
+    say('   control: defaults vs all-max differ by '+d2+' bytes '+(d2>0?'✅ (the comparison works)':'❌ THE COMPARISON IS BLIND'));
+    if(!d2) bad++;
+  });
+  say('');
+  say(bad? ('❌ '+bad+' FAILURES') : '✅ all '+checked+' fixtures byte-identical, and the comparison is proven able to see a difference');
+  window.__done=1;
+}
+</script></body></html>

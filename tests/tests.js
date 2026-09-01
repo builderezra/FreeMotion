@@ -55904,6 +55904,88 @@
     }
   });
 
+  test('effects: Tilt Shift and Matte Choker bound to the layer without changing it', { item: '692' }, async function () {
+    /* #692, the next tier, measured on 1 Sep at each effect's DEFAULTS on a 180x150 subject in a
+     * 1080x1920 plate — the shape of the lag, where the layer covers 1.3% of the frame:
+     *     Tilt Shift  84.7ms -> 19.6ms        Matte Choker  41.4ms -> under 15ms
+     * Against a 33.3ms frame budget, Tilt Shift alone was two and a half frames.
+     *
+     * ⚠️ THE FIXTURE MUST CARRY RGB UNDER ZERO ALPHA, and that is the whole reason this test is worth
+     * anything. With clean zeros outside the layer, a bound that is far too tight is INDISTINGUISHABLE
+     * from a correct one — zeros in, zeros out, whatever the padding. Measured: a mutation setting Tilt
+     * Shift's pad to 0 SURVIVED the first version of this test. On a dirtied plate it is caught.
+     *
+     * ⚠️ INNER BLUR IS DELIBERATELY ABSENT. It was bounded, measured at under 15ms from 42.9, and taken
+     * back out: it writes COLOUR TO FULLY TRANSPARENT PIXELS, so outside the layer is not "zeros in,
+     * zeros out" and no bound is a pure skip. Over a million bytes differ on a dirty plate. Invisible in
+     * the composite, but the next kernel in the stack can read it back — a plain box blur averages all
+     * four channels. Bounding it would need it to stop writing under transparency first, which changes
+     * what the effect DOES rather than what it costs.
+     *
+     * ⚠️ MATTE CHOKER IS GATED ON THE CONTRAST SIGN, NOT ON THE BBOX. Its last loop writes alpha to
+     * every pixel as (a - 127.5) * mcK + 127.5, and at NEGATIVE contrast mcK < 1, so a fully transparent
+     * pixel comes out ABOVE ZERO — it fogs the whole frame, on purpose. A bbox bound there would erase
+     * that on projects already using it, so both signs are driven below. */
+    const P = FM._pixelFx;
+    for (const k of ['tiltshift', 'mattechoker']) if (!P || !P[k]) throw new Error('the ' + k + ' kernel is missing — the harness, not the feature');
+    const sum = (d) => { let a = 0, b = 0; for (let i = 0; i < d.length; i += 4) { a = (a + d[i] * 7 + d[i + 1] * 13 + d[i + 2] * 17 + d[i + 3] * 19) >>> 0; b = (b + a) >>> 0; } return a + ':' + b; };
+    const mk = (W, H, rx, ry, rw, rh, dirty) => {
+      const a = new Uint8ClampedArray(W * H * 4);
+      if (dirty) for (let q = 0; q < W * H; q++) { const j = q * 4; a[j] = (q * 3) & 255; a[j + 1] = (q * 11) & 255; a[j + 2] = (q * 29) & 255; a[j + 3] = 0; }
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        if (x >= rx && x < rx + rw && y >= ry && y < ry + rh) {
+          const edge = (x < rx + 2 || x >= rx + rw - 2 || y < ry + 2 || y >= ry + rh - 2);
+          a[i] = 200 + ((x * 7) % 55); a[i + 1] = 80 + ((y * 11) % 60); a[i + 2] = (x ^ y) & 255;
+          a[i + 3] = edge ? 140 : 255;
+        }
+      }
+      return a;
+    };
+    const BOXES = [
+      { W: 200, H: 260, rx: 60, ry: 50, rw: 80, rh: 60, label: 'centred' },
+      { W: 200, H: 260, rx: 0, ry: 0, rw: 60, rh: 50, label: 'hard against the top-left corner' },
+      { W: 200, H: 260, rx: 150, ry: 220, rw: 50, rh: 40, label: 'clipped by the bottom-right edge' },
+      { W: 200, H: 260, rx: 0, ry: 0, rw: 200, rh: 260, label: 'fills the plate (nothing to skip)' },
+      { W: 200, H: 260, rx: 95, ry: 130, rw: 1, rh: 40, label: 'a 1px hairline' },
+    ];
+    const PARAMS = {
+      tiltshift:   [{ center: 0.5, softness: 0.5 }, { center: 0, softness: 0 }, { center: 1, softness: 1 }],
+      mattechoker: [{ choke: -4 }, { choke: 20, feather: 20, contrast: 1 }, { choke: -20, feather: 8, contrast: -1 }],
+    };
+    const bad = [];
+    for (const type of ['tiltshift', 'mattechoker']) {
+      for (const c of BOXES) for (const q of PARAMS[type]) for (const dirty of [false, true]) {
+        const a = mk(c.W, c.H, c.rx, c.ry, c.rw, c.rh, dirty); P[type](a, c.W, c.H, q, 0.3, 1);
+        const b = mk(c.W, c.H, c.rx, c.ry, c.rw, c.rh, dirty); P[type](b, c.W, c.H, q, 0.3, 1, { x: c.rx, y: c.ry, w: c.rw, h: c.rh });
+        if (sum(a) !== sum(b)) bad.push(type + ' / ' + (dirty ? 'dirty' : 'clean') + ' / ' + c.label + ' / ' + JSON.stringify(q));
+      }
+    }
+    if (bad.length) throw new Error('a bounded kernel draws a DIFFERENT picture from the unbounded one on: ' + bad.slice(0, 4).join(' · ') + ' — the skip is only safe while it is provably a skip');
+
+    /* THE CONTROL. Every case above compares two runs of the same kernel, so one that quietly did
+       NOTHING would pass all of them. Prove the checksum can tell two pictures apart. */
+    const cw = 200, ch = 260;
+    const p1 = mk(cw, ch, 60, 50, 80, 60, false); P.tiltshift(p1, cw, ch, { center: 0.5, softness: 0 }, 0.3, 1);
+    const p2 = mk(cw, ch, 60, 50, 80, 60, false); P.tiltshift(p2, cw, ch, { center: 0.5, softness: 1 }, 0.3, 1);
+    if (sum(p1) === sum(p2)) throw new Error('two very different Tilt Shift settings checksum the same — the comparison is blind, so every "identical" above means nothing');
+
+    /* AND MATTE CHOKER AT NEGATIVE CONTRAST MUST STILL REACH OUTSIDE THE LAYER. */
+    const fw = 200, fh = 260, far = ((10 * fw + 10) * 4) + 3;
+    const f = mk(fw, fh, 120, 180, 40, 40, false);
+    if (f[far] !== 0) throw new Error('the fixture is not transparent where this checks — the harness, not the feature');
+    P.mattechoker(f, fw, fh, { choke: -4, feather: 4, contrast: -1 }, 0.3, 1, { x: 120, y: 180, w: 40, h: 40 });
+    if (!(f[far] > 0)) throw new Error('Matte Choker at NEGATIVE contrast no longer writes alpha outside the layer box — it is supposed to fog the whole frame there, and bounding it silently removes that from projects that use it');
+
+    const src = await (await fetch('../js/compositor.js?boot=' + Date.now())).text();
+    const m = /const BOUNDED_FX = \{([^}]*)\}/.exec(src);
+    if (!m) throw new Error('BOUNDED_FX is gone from compositor.js');
+    for (const k of ['tiltshift', 'mattechoker']) {
+      if (m[1].indexOf(k) < 0) throw new Error(k + ' left BOUNDED_FX, so no bbox reaches it and it walks the whole plate again (#692)');
+    }
+    if (m[1].indexOf('innerblur') >= 0) throw new Error('innerblur joined BOUNDED_FX — it writes colour to fully transparent pixels, so a bbox skip is not a skip and the next kernel in the stack reads the difference back');
+  });
+
   test('effects: bounding the box blur to the layer changes NOTHING about the picture', { item: '692' }, async function () {
     /* #692. One Box Blur on a 1080x1920 comp cost 67.5ms against a 33.3ms frame budget, and it cost
      * the SAME whether the layer was 120x100 or filled the frame — every pixel kernel walked the whole

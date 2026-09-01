@@ -3030,7 +3030,7 @@ window.FM = window.FM || {};
      content can be stepped over and the output is IDENTICAL rather than merely similar. Verified that
      way — seven renders (edge-clipped, full-frame, anisotropic, multi-pass, radius larger than the
      layer) checksummed before and after and required to match exactly. */
-  const BOUNDED_FX = { letterbox: 1, border: 1, boxblur: 1, dropshadow: 1, lensblur: 1, hextiles: 1 };
+  const BOUNDED_FX = { letterbox: 1, border: 1, boxblur: 1, dropshadow: 1, lensblur: 1, hextiles: 1, tiltshift: 1, mattechoker: 1 };
   Object.setPrototypeOf(BOUNDED_FX, null);   // own keys only — see POSTFX
   /* Does the layer's own alpha ACTUALLY occupy the plate's edge row or column? Four direct scans of
    * the four edge lines, at alphaBBox's own `> 8` threshold so the two agree on what counts as
@@ -5070,14 +5070,30 @@ window.FM = window.FM || {};
        rather than shrinking the window, so the count was always 17, and that is reproduced exactly).
        Pixel identity against the old implementation is asserted in the suite, not assumed. */
     tiltshift: function(d,W,H,p,t){
+      /* SKIP WHAT THE LAYER DOES NOT COVER (#692). Measured at its defaults on a 180x150 subject in a
+         1080x1920 plate: 84.7ms, the third most expensive kernel in the catalog, for a layer covering
+         1.3% of the frame.
+         This one bounds EXACTLY rather than generously, because the final mix already refuses to write
+         anywhere alpha is 0 — so nothing outside the layer's own alpha box was ever going to change.
+           · the mix reads tsBlur only INSIDE the box  -> the vertical pass needs those columns only;
+           · tsBlur at row y reads tsTmp rows y±tsR    -> the horizontal pass needs the box ± tsR rows.
+         Both passes still WALK their full axis, because each carries a running sum whose value at the
+         box depends on every step before it. Bounding the axis a running sum walks is the one mistake
+         that would change the picture; `bb` comes off `arguments` for boxblur's reason — `center` and
+         `softness` are not px, but naming a 7th parameter would still push the arity past what
+         pxToPlate checks, and this file has been bitten by that once already (#691). */
+      var tsBB=arguments[6];
       var tsCenter=FM.evalProp(p.center,t); if(tsCenter==null)tsCenter=0.5; tsCenter=tsCenter<0?0:(tsCenter>1?1:tsCenter);
       var tsSoft=FM.evalProp(p.softness,t); if(tsSoft==null)tsSoft=0.5; tsSoft=tsSoft<0?0:(tsSoft>1?1:tsSoft);
       var tsW4=W*4, tsLen=d.length, tsR=8, tsWin=tsR*2+1;
+      var tsPad=tsR+1;
+      var tsY0=tsBB?Math.max(0,tsBB.y-tsPad):0, tsY1=tsBB?Math.min(H-1,tsBB.y+tsBB.h-1+tsPad):H-1;
+      var tsX0=tsBB?Math.max(0,tsBB.x):0,       tsX1=tsBB?Math.min(W-1,tsBB.x+tsBB.w-1):W-1;
       var tsSrc=fxSrc(d); var tsTmp=new Float32Array(tsLen); var tsBlur=new Float32Array(tsLen);
       var tsx,tsy,tsc,tsi,tsBase,tsRow,tsSum;
       /* HORIZONTAL, by running sum. The window starts already filled with the clamped left edge, which
          is what the tap loop's index clamping produced. */
-      for(tsy=0;tsy<H;tsy++){
+      for(tsy=tsY0;tsy<=tsY1;tsy++){
         tsRow=tsy*tsW4;
         for(tsc=0;tsc<4;tsc++){
           tsSum=0;
@@ -5091,7 +5107,7 @@ window.FM = window.FM || {};
         }
       }
       // VERTICAL, the same way down each column.
-      for(tsx=0;tsx<W;tsx++){
+      for(tsx=tsX0;tsx<=tsX1;tsx++){
         var tsCol=tsx*4;
         for(tsc=0;tsc<4;tsc++){
           tsSum=0;
@@ -5105,10 +5121,10 @@ window.FM = window.FM || {};
         }
       }
       var tsLine=tsCenter*H; var tsDenom=0.05+(1-tsSoft)*0.5; if(tsDenom<0.0001)tsDenom=0.0001;
-      for(tsy=0;tsy<H;tsy++){
+      for(tsy=tsY0;tsy<=tsY1;tsy++){
         var tsDist=Math.abs(tsy-tsLine)/H; var tsBw=tsDist/tsDenom; if(tsBw<0)tsBw=0; else if(tsBw>1)tsBw=1;
         var tsInv=1-tsBw; var tsRowI=tsy*tsW4;
-        for(tsx=0;tsx<W;tsx++){
+        for(tsx=tsX0;tsx<=tsX1;tsx++){
           tsi=tsRowI+tsx*4;
           if(d[tsi+3]>0){
             d[tsi]=tsSrc[tsi]*tsInv+tsBlur[tsi]*tsBw;
@@ -5245,7 +5261,7 @@ window.FM = window.FM || {};
     wipe: function(d, W, H, p, t){ var wp_prog = FM.evalProp(p.progress, t); if(wp_prog===null||wp_prog===undefined) wp_prog=0.5; if(wp_prog<0) wp_prog=0; if(wp_prog>1) wp_prog=1; var wp_ang = FM.evalProp(p.angle, t); if(wp_ang===null||wp_ang===undefined) wp_ang=0; var wp_rad = wp_ang*Math.PI/180; var wp_dx = Math.cos(wp_rad); var wp_dy = Math.sin(wp_rad); var wp_cx = W*0.5; var wp_cy = H*0.5; var wp_den = Math.abs(W*wp_dx)+Math.abs(H*wp_dy); if(wp_den<1e-6) wp_den=1e-6; var wp_inv = 1/wp_den; for(var wp_y=0; wp_y<H; wp_y++){ var wp_row = wp_y*W; var wp_py = (wp_y-wp_cy)*wp_dy; for(var wp_x=0; wp_x<W; wp_x++){ var wp_proj = ((wp_x-wp_cx)*wp_dx + wp_py)*wp_inv + 0.5; if(wp_proj > wp_prog){ d[(wp_row+wp_x)*4+3] = 0; } } } },
     radialwipe: function(d, W, H, p, t){ var rw_prog = FM.evalProp(p.progress, t); if(rw_prog===null||rw_prog===undefined) rw_prog=0.5; if(rw_prog<0) rw_prog=0; if(rw_prog>1) rw_prog=1; var rw_start = FM.evalProp(p.start, t); if(rw_start===null||rw_start===undefined) rw_start=0; var rw_TAU = Math.PI*2; var rw_startRad = (rw_start*Math.PI/180) % rw_TAU; if(rw_startRad<0) rw_startRad += rw_TAU; var rw_cx = W/2, rw_cy = H/2; for(var rw_y=0; rw_y<H; rw_y++){ var rw_dy = rw_y - rw_cy; var rw_row = rw_y*W; for(var rw_x=0; rw_x<W; rw_x++){ var rw_dx = rw_x - rw_cx; var rw_ang = Math.atan2(rw_dy, rw_dx); var rw_frac = (rw_ang - rw_startRad) % rw_TAU; if(rw_frac<0) rw_frac += rw_TAU; rw_frac = rw_frac / rw_TAU; if(rw_frac > rw_prog){ d[(rw_row + rw_x)*4 + 3] = 0; } } } },
     solidmatte: function(d,W,H,p,t){ var sm_amt=FM.evalProp(p.amount,t); if(sm_amt==null) sm_amt=1; if(sm_amt<0) sm_amt=0; if(sm_amt>1) sm_amt=1; var sm_col=hexToRGB(p.color); var sm_cr=sm_col[0], sm_cg=sm_col[1], sm_cb=sm_col[2]; var sm_n=W*H, sm_i=0; for(var sm_k=0; sm_k<sm_n; sm_k++){ if(d[sm_i+3]>0){ d[sm_i]=d[sm_i]+(sm_cr-d[sm_i])*sm_amt; d[sm_i+1]=d[sm_i+1]+(sm_cg-d[sm_i+1])*sm_amt; d[sm_i+2]=d[sm_i+2]+(sm_cb-d[sm_i+2])*sm_amt; } sm_i+=4; } },
-    mattechoker: function(d,W,H,p,t){
+    mattechoker: function(d,W,H,p,t){ var mcBB=arguments[6];
       /* Erode/dilate ran on whole pixels with a hard square kernel and no post-softening, so a choked
          matte kept stair-stepped edges and the standard choke-THEN-feather workflow needed a second
          effect stacked on top. FEATHER does the softening here; CONTRAST re-hardens the alpha ramp
@@ -5253,14 +5269,26 @@ window.FM = window.FM || {};
       var mk_fe=p.feather==null?0:FM.evalProp(p.feather,t); if(mk_fe<0)mk_fe=0; if(mk_fe>20)mk_fe=20;
       var mk_ct=p.contrast==null?0:FM.evalProp(p.contrast,t); if(mk_ct<-1)mk_ct=-1; if(mk_ct>1)mk_ct=1;
       var mc_choke=FM.evalProp(p.choke,t); if(mc_choke==null) mc_choke=-4; mc_choke=Math.round(mc_choke); if(mc_choke<-20) mc_choke=-20; if(mc_choke>20) mc_choke=20; if(mc_choke===0 && mk_fe===0 && mk_ct===0) return;   // nothing asked for at all
-      if(mc_choke===0){ mc_choke=0; } var mc_r=Math.abs(mc_choke); var mc_erode=mc_choke<0; var mc_N=W*H; var mc_a=new Float32Array(mc_N); var mc_b=new Float32Array(mc_N); var mc_i, mc_x, mc_y, mc_w4=W*4; for(mc_i=0; mc_i<mc_N; mc_i++){ mc_a[mc_i]=d[mc_i*4+3]; } var mc_win=mc_r*2+1; for(mc_y=0; mc_y<H; mc_y++){ var mc_row=mc_y*W; for(mc_x=0; mc_x<W; mc_x++){ var mc_lo=mc_x-mc_r; var mc_hi=mc_x+mc_r; if(mc_lo<0) mc_lo=0; if(mc_hi>W-1) mc_hi=W-1; var mc_acc=mc_a[mc_row+mc_lo]; var mc_k; if(mc_erode){ for(mc_k=mc_lo+1; mc_k<=mc_hi; mc_k++){ var mc_v=mc_a[mc_row+mc_k]; if(mc_v<mc_acc) mc_acc=mc_v; } } else { for(mc_k=mc_lo+1; mc_k<=mc_hi; mc_k++){ var mc_v2=mc_a[mc_row+mc_k]; if(mc_v2>mc_acc) mc_acc=mc_v2; } } mc_b[mc_row+mc_x]=mc_acc; } } for(mc_x=0; mc_x<W; mc_x++){ for(mc_y=0; mc_y<H; mc_y++){ var mc_lo2=mc_y-mc_r; var mc_hi2=mc_y+mc_r; if(mc_lo2<0) mc_lo2=0; if(mc_hi2>H-1) mc_hi2=H-1; var mc_acc2=mc_b[mc_lo2*W+mc_x]; var mc_j; if(mc_erode){ for(mc_j=mc_lo2+1; mc_j<=mc_hi2; mc_j++){ var mc_u=mc_b[mc_j*W+mc_x]; if(mc_u<mc_acc2) mc_acc2=mc_u; } } else { for(mc_j=mc_lo2+1; mc_j<=mc_hi2; mc_j++){ var mc_u2=mc_b[mc_j*W+mc_x]; if(mc_u2>mc_acc2) mc_acc2=mc_u2; } } var mc_av=mc_acc2; if(mc_av<0) mc_av=0; if(mc_av>255) mc_av=255; mc_a[mc_y*W+mc_x]=mc_av; } }
+      /* SKIP WHAT THE LAYER DOES NOT COVER (#692) — 41.4ms at its defaults, and the choke is a
+         WINDOW SCAN rather than a running sum, so it costs 2r+1 taps per pixel across the whole plate.
+         ⚠️ BOUNDING IS ONLY LEGAL WHEN CONTRAST IS >= 0. The final loop writes alpha to EVERY pixel as
+         (a - 127.5) * mcK + 127.5, and at NEGATIVE contrast mcK < 1, so a fully transparent pixel comes
+         out at 127.5(1 - mcK), which is above zero — the effect genuinely fogs the entire frame, on
+         purpose. A bound there would erase that, everywhere outside the layer, on projects that already
+         use it. So the gate is the contrast sign, not the bbox. */
+      var mcBound = mcBB && mk_ct >= 0;
+      if(mc_choke===0){ mc_choke=0; } var mc_r=Math.abs(mc_choke); var mc_erode=mc_choke<0; var mc_N=W*H; var mc_a=new Float32Array(mc_N); var mc_b=new Float32Array(mc_N); var mc_i, mc_x, mc_y, mc_w4=W*4; for(mc_i=0; mc_i<mc_N; mc_i++){ mc_a[mc_i]=d[mc_i*4+3]; } var mc_win=mc_r*2+1;
+      var mcPad=mc_r+Math.round(mk_fe)+1;
+      var mcY0=mcBound?Math.max(0,mcBB.y-mcPad):0, mcY1=mcBound?Math.min(H-1,mcBB.y+mcBB.h-1+mcPad):H-1;
+      var mcX0=mcBound?Math.max(0,mcBB.x-mcPad):0, mcX1=mcBound?Math.min(W-1,mcBB.x+mcBB.w-1+mcPad):W-1;
+      for(mc_y=mcY0; mc_y<=mcY1; mc_y++){ var mc_row=mc_y*W; for(mc_x=0; mc_x<W; mc_x++){ var mc_lo=mc_x-mc_r; var mc_hi=mc_x+mc_r; if(mc_lo<0) mc_lo=0; if(mc_hi>W-1) mc_hi=W-1; var mc_acc=mc_a[mc_row+mc_lo]; var mc_k; if(mc_erode){ for(mc_k=mc_lo+1; mc_k<=mc_hi; mc_k++){ var mc_v=mc_a[mc_row+mc_k]; if(mc_v<mc_acc) mc_acc=mc_v; } } else { for(mc_k=mc_lo+1; mc_k<=mc_hi; mc_k++){ var mc_v2=mc_a[mc_row+mc_k]; if(mc_v2>mc_acc) mc_acc=mc_v2; } } mc_b[mc_row+mc_x]=mc_acc; } } for(mc_x=mcX0; mc_x<=mcX1; mc_x++){ for(mc_y=0; mc_y<H; mc_y++){ var mc_lo2=mc_y-mc_r; var mc_hi2=mc_y+mc_r; if(mc_lo2<0) mc_lo2=0; if(mc_hi2>H-1) mc_hi2=H-1; var mc_acc2=mc_b[mc_lo2*W+mc_x]; var mc_j; if(mc_erode){ for(mc_j=mc_lo2+1; mc_j<=mc_hi2; mc_j++){ var mc_u=mc_b[mc_j*W+mc_x]; if(mc_u<mc_acc2) mc_acc2=mc_u; } } else { for(mc_j=mc_lo2+1; mc_j<=mc_hi2; mc_j++){ var mc_u2=mc_b[mc_j*W+mc_x]; if(mc_u2>mc_acc2) mc_acc2=mc_u2; } } var mc_av=mc_acc2; if(mc_av<0) mc_av=0; if(mc_av>255) mc_av=255; mc_a[mc_y*W+mc_x]=mc_av; } }
       if(mk_fe>0){                                  // choke THEN feather, in one effect
         var kR=Math.round(mk_fe), kW=kR*2+1, kI=1/kW, kT=new Float32Array(mc_N), kx, ky, kq, ks, kidx;
-        for(ky=0; ky<H; ky++){ var kRow=ky*W; ks=0;
+        for(ky=mcY0; ky<=mcY1; ky++){ var kRow=ky*W; ks=0;
           for(kq=-kR; kq<=kR; kq++){ kidx=kq<0?0:(kq>=W?W-1:kq); ks+=mc_a[kRow+kidx]; }
           for(kx=0; kx<W; kx++){ kT[kRow+kx]=ks*kI;
             var kA=kx+kR+1; kA=kA>=W?W-1:kA; var kB=kx-kR; kB=kB<0?0:kB; ks+=mc_a[kRow+kA]-mc_a[kRow+kB]; } }
-        for(kx=0; kx<W; kx++){ ks=0;
+        for(kx=mcX0; kx<=mcX1; kx++){ ks=0;
           for(kq=-kR; kq<=kR; kq++){ kidx=kq<0?0:(kq>=H?H-1:kq); ks+=kT[kidx*W+kx]; }
           for(ky=0; ky<H; ky++){ mc_a[ky*W+kx]=ks*kI;
             var kAy=ky+kR+1; kAy=kAy>=H?H-1:kAy; var kBy=ky-kR; kBy=kBy<0?0:kBy; ks+=kT[kAy*W+kx]-kT[kBy*W+kx]; } }
@@ -5268,9 +5296,13 @@ window.FM = window.FM || {};
       /* CONTRAST re-hardens the ramp about the half-alpha point, which is what recovers a crisp edge
          after feathering; negative softens it further. Zero leaves every value untouched. */
       var mcK=mk_ct===0?0:(mk_ct>0?1+mk_ct*6:1+mk_ct*0.9);
-      for(mc_i=0; mc_i<mc_N; mc_i++){ var mv=mc_a[mc_i];
+      if(mcBound){ for(mc_y=mcY0; mc_y<=mcY1; mc_y++){ var mcWrow=mc_y*W;
+          for(mc_x=mcX0; mc_x<=mcX1; mc_x++){ var mvi=mcWrow+mc_x, mvb=mc_a[mvi];
+            if(mcK){ mvb=(mvb-127.5)*mcK+127.5; if(mvb<0)mvb=0; else if(mvb>255)mvb=255; }
+            d[mvi*4+3]=mvb; } }
+      } else { for(mc_i=0; mc_i<mc_N; mc_i++){ var mv=mc_a[mc_i];
         if(mcK){ mv=(mv-127.5)*mcK+127.5; if(mv<0)mv=0; else if(mv>255)mv=255; }
-        d[mc_i*4+3]=mv; } },
+        d[mc_i*4+3]=mv; } } },
     mattefringe: function(d, W, H, p, t, ps){
       /* The fringe was painted as an OPAQUE flat band with a hard inner and outer edge, so it always
          read as a pasted-on sticker rather than a rim light. OPACITY lets it sit under the artwork's
@@ -5617,7 +5649,23 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var zs_cx=wCx(p,t,W,W/2), zs_cy=wCy(p,t,H,H/2); var zs_w4=W*4; var zs_steps=10; var zs_strength=0.16+0.74*zs_amt;
       var zs_thrP=p.threshold==null?0:FM.evalProp(p.threshold,t); if(zs_thrP<0)zs_thrP=0; if(zs_thrP>100)zs_thrP=100;
       var zs_gate=zs_thrP>0, zs_thr=zs_thrP/100, zs_span=zs_gate?(1-zs_thr):1; for(var zs_y=0; zs_y<H; zs_y++){ for(var zs_x=0; zs_x<W; zs_x++){ var zs_i=(zs_y*zs_w4)+(zs_x*4); var zs_dx=zs_cx-zs_x; var zs_dy=zs_cy-zs_y; var zs_ar=0, zs_ag=0, zs_ab=0, zs_wsum=0; for(var zs_k=1; zs_k<=zs_steps; zs_k++){ var zs_f=(zs_k/zs_steps)*zs_strength; var zs_sx=zs_x+zs_dx*zs_f; var zs_sy=zs_y+zs_dy*zs_f; var zs_ix=zs_sx|0; var zs_iy=zs_sy|0; if(zs_ix<0) zs_ix=0; else if(zs_ix>W-1) zs_ix=W-1; if(zs_iy<0) zs_iy=0; else if(zs_iy>H-1) zs_iy=H-1; var zs_si=(zs_iy*zs_w4)+(zs_ix*4); var zs_r=zs_s[zs_si], zs_g=zs_s[zs_si+1], zs_b=zs_s[zs_si+2], zs_a=zs_s[zs_si+3]; var zs_lum=(zs_r*0.299+zs_g*0.587+zs_b*0.114)*(zs_a/255); var zs_decay=1-(zs_k/(zs_steps+1)); var zs_bw=(zs_lum/255); if(zs_gate){ zs_bw = zs_bw<=zs_thr ? 0 : (zs_span<=0?1:(zs_bw-zs_thr)/zs_span); } zs_bw=zs_bw*zs_bw; var zs_wt=zs_bw*zs_decay; zs_ar+=zs_r*zs_wt; zs_ag+=zs_g*zs_wt; zs_ab+=zs_b*zs_wt; zs_wsum+=zs_wt; } if(zs_wsum>0){ var zs_norm=zs_strength/(zs_steps); zs_ar=zs_ar*zs_norm; zs_ag=zs_ag*zs_norm; zs_ab=zs_ab*zs_norm; if(zs_ar>255) zs_ar=255; if(zs_ag>255) zs_ag=255; if(zs_ab>255) zs_ab=255; var zs_br=d[zs_i], zs_bg=d[zs_i+1], zs_bb=d[zs_i+2]; d[zs_i]=255-((255-zs_br)*(255-zs_ar))/255; d[zs_i+1]=255-((255-zs_bg)*(255-zs_ag))/255; d[zs_i+2]=255-((255-zs_bb)*(255-zs_ab))/255; var zs_aaa=d[zs_i+3]; var zs_streakA=(zs_ar>zs_ag?(zs_ar>zs_ab?zs_ar:zs_ab):(zs_ag>zs_ab?zs_ag:zs_ab)); if(zs_streakA>zs_aaa) d[zs_i+3]=zs_streakA<255?zs_streakA:255; } } } },
-    innerblur: function(d,W,H,p,t){ var ib_r=FM.evalProp(p.radius,t); if(ib_r==null) ib_r=8; ib_r=ib_r|0; if(ib_r<0) ib_r=0; if(ib_r>30) ib_r=30; if(ib_r<1) return;
+    innerblur: function(d,W,H,p,t){
+      /* ⚠️ THIS ONE CANNOT BE BOUNDED, and the reason is worth keeping (#692, 1 Sep). At 42.9ms on a
+         small layer it was the obvious next candidate after Tilt Shift, and the bound was written,
+         measured at under 15ms, and then REMOVED — because it is not a skip.
+         Unlike Tilt Shift, whose final mix refuses to write where alpha is 0, this writes COLOUR TO
+         FULLY TRANSPARENT PIXELS: the divide at the end runs for every pixel when Edge is off. So the
+         region outside the layer is not "zeros in, zeros out" — whatever RGB sits under zero alpha
+         gets blurred and rewritten, and any bound changes what lands there. Invisible in the composite,
+         but NOT invisible to the next kernel in the stack: a plain box blur averages all four channels,
+         so it reads that colour back out from under the transparency.
+         Measured, on a plate carrying RGB under zero alpha: over a million bytes differ across every
+         fixture. On a CLEAN plate it is byte-identical, which is exactly why the first version of the
+         identity harness passed it — the fixture had zeros outside the box, and zeros in give zeros
+         out whatever the bound. The harness now dirties the plate for this reason.
+         To bound it, it would first have to stop writing under transparency, and that is a change to
+         what the effect DOES rather than to what it costs. */
+      var ib_r=FM.evalProp(p.radius,t); if(ib_r==null) ib_r=8; ib_r=ib_r|0; if(ib_r<0) ib_r=0; if(ib_r>30) ib_r=30; if(ib_r<1) return;
       // EDGE is a bug fix wearing a control. The blur below averages RGB and IGNORES alpha, so near
       // the edge of a shape it happily averages in the transparent-black pixels outside it — leaving a
       // dark rim just inside every edge that has nothing to do with the artwork. Turning EDGE on
