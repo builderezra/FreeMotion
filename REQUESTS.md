@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.91
+> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v14.92
 >
-> **State:** v14.91, 1155 tests green, tree clean. **✅ YOU ANSWERED FOUR QUESTIONS — all logged in
+> **State:** v14.92, 1156 tests green, tree clean. **✅ YOU ANSWERED FOUR QUESTIONS — all logged in
 > their own entries: the 219ms goes ahead WITH a tick box keeping the old rim; the intro logo has colour
 > so the film fades to your dark ground instead of inverting; the camera shutter goes to 12; text stays
 > at 160pt.** **⚡ THE LAG WORK IS FINISHED, and the reason it is
@@ -28857,3 +28857,25 @@ re-opened #480, which I had marked done and had not fixed.
       the same as not having seen them. Raise them again only if he asks, or if one of them starts
       blocking something he has actually asked for.
       ➡️ **The standing steer is #591's**: there is plenty to build without him. Work the authorised list.
+
+- [x] **704 — The loading spinner could run FOREVER, and a 120ms timer with it.** Found and fixed 2 Sep,
+      v14.92, by the five-lens audit.
+      JUMPED: a correctness fault found by tonight's audit, measurable and fixable without your device.
+      **What it was.** A video, image or audio layer with **no media record** counts as "loading" — which
+      is right, because that is the earliest part of loading. But nothing ever removed it from that list,
+      so a clip whose media never arrives was loading **forever**: the pill read *"Loading <clip>"*
+      indefinitely and the poll behind it fired every 120ms. On your phone that is a spinner that never
+      stops **and** a timer that never lets the app go idle — a battery cost with nothing to show for it.
+      **It needs nothing exotic to reach:** a project whose media was lost — a cleared store, a failed
+      import, or #129's clip with no picture — is exactly this shape on disk.
+      📐 **Measured with a control before anything was changed:** no layers → pill off; a video layer with
+      no media record → pill on, still on six seconds later.
+      ✅ **It gives up after 25 seconds**, and the number is generous on purpose. The no-record window
+      normally closes in well under a second; the slowest legitimate case is a large 4K file decoding on a
+      phone, and giving up too early would replace a stuck spinner with a **missing** one, which is worse.
+      📌 **Giving up only stops CLAIMING** — the layer is untouched and still lights the pill if it ever
+      arrives, and the honest reporting of a clip with no picture lives in #129's panel, not here.
+      📌 **And the clock resets** when a layer becomes ready or leaves the scene, so re-importing the same
+      clip gets its full grace again. There is a test for that specifically: a permanent give-up per layer
+      id would mean re-adding a file never showed a spinner at all.
+

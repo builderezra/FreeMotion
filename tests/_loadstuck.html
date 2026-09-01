@@ -1,0 +1,58 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:12px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:900px;height:200px;border:0"></iframe>
+<script>
+/* A video/image/audio layer with NO media record counts as "loading" forever: pending() pushes it on
+   `!m`, and tick() only stops when the list empties. Is that reachable, and does the poll really never
+   stop? A project whose media was lost — a cleared store, a failed import, queue 129's clip with no
+   video — leaves exactly that shape on disk. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+document.getElementById('a').addEventListener('load', function () {
+  var w=document.getElementById('a').contentWindow, n=0;
+  (function wait(){ if(!(w.FM&&w.FM.loadingDot&&w.FM.scene)){ if(n++>500) return say('FM never came up'); return setTimeout(wait,50);} setTimeout(function(){run(w);},700); })();
+});
+async function run(w){
+ try{
+  var FM=w.FM, D=w.document;
+  if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+  var keep=FM.scene.layers.slice();
+
+  /* CONTROL FIRST: with no such layer, the pill must be off and the poll stopped. If it is already on,
+     nothing below distinguishes the bug from the starting state. */
+  FM.scene.layers.length=0; FM.loadingDot.check(); await sleep(300);
+  var dot=D.getElementById('loading-dot');
+  say('control (no layers): pill on = ' + !!(dot && dot.classList.contains('on')) + ', pending = ' + FM.loadingDot.pending().length);
+  if (dot && dot.classList.contains('on')) { say('⚠️ the pill is already on with no layers — harness broken'); w.__done=1; window.__done=1; return; }
+
+  // a video layer whose media record never arrives — exactly what a lost/failed import leaves behind
+  var L=FM.makeLayer('video',{name:'lost clip'});
+  L.start=0; L.duration=4;
+  FM.scene.layers.push(L);
+  say('');
+  say('added a video layer with NO media record (FM.media.get -> ' + JSON.stringify(FM.media.get(L.id)||null) + ')');
+  FM.loadingDot.check();
+  await sleep(400);
+  dot=D.getElementById('loading-dot');
+  var on1=!!(dot && dot.classList.contains('on'));
+  var lbl=(dot && dot.querySelector('.ld-label') || {}).textContent || '';
+  say('  after 0.4s: pill on = ' + on1 + '   says "' + lbl + '"   pending = ' + FM.loadingDot.pending().length);
+
+  /* fast-forward past the give-up rather than waiting 25s: move the clock the module reads. */
+  var realNow=w.Date.now; var jump=Date.now()+30000; w.Date.now=function(){ return jump; };
+  FM.loadingDot.check(); await sleep(400); w.Date.now=realNow;
+  dot=D.getElementById('loading-dot');
+  var on2=!!(dot && dot.classList.contains('on'));
+  say('  after the 25s grace: pill on = ' + on2 + '   pending = ' + FM.loadingDot.pending().length);
+  say('');
+  if(on1 && on2) say('➡️ STILL BROKEN: it never gives up. The pill claims the clip is loading forever, and the\n   120ms poll keeps running — on a phone that is a spinner that never stops and a timer that\n   never lets the app go idle.');
+  else if(!on1) say('the pill did not come on at all — not the shape claimed');
+  else say('✅ FIXED: it showed the spinner, then gave up — pill off, poll stopped.');
+
+  FM.scene.layers.length=0; keep.forEach(function(l){FM.scene.layers.push(l);});
+  FM.loadingDot.check();
+  window.__done=1;
+ }catch(e){ say('threw: '+(e&&e.message)); window.__done=1; }
+}
+</script></body></html>

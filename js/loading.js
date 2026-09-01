@@ -29,21 +29,42 @@ window.FM = window.FM || {};
   'use strict';
 
   var POLL_MS = 120;
-  var timer = 0, el = null;
+  /* ⚠️ AND A POINT AT WHICH IT GIVES UP (queue 704). Without one, a layer whose media never arrives is
+   * "loading" FOREVER: `pending()` counts a video/image/audio layer with no record at all, `tick()` only
+   * stops when that list empties, and nothing else ever removes it. MEASURED: a video layer with no
+   * media record leaves the pill reading "Loading lost clip" and the 120ms poll running indefinitely —
+   * on a phone, a spinner that never stops and a timer that never lets the app go idle.
+   * It is reachable without anything exotic: a project whose media was lost (a cleared store, a failed
+   * import, queue 129's clip with no picture) is exactly this shape on disk.
+   * 25s is deliberately generous. The no-record window is the EARLIEST part of loading and normally
+   * closes in well under a second; the slowest legitimate case is a large 4K file being decoded on a
+   * phone, and this has to sit clearly past that. Giving up only stops CLAIMING it is loading — the
+   * layer is untouched, and the honest reporting of a clip with no picture already lives in queue 129's
+   * "A clip with no picture" panel rather than here. */
+  var GIVE_UP_MS = 25000;
+  var timer = 0, el = null, since = Object.create(null);
 
   function pending() {
-    var sc = FM.scene, out = [];
-    if (!sc || !sc.layers || !FM.media) return out;
+    var sc = FM.scene, out = [], now = Date.now(), live = Object.create(null);
+    if (!sc || !sc.layers || !FM.media) { since = Object.create(null); return out; }
     sc.layers.forEach(function (l) {
       if (!l || (l.type !== 'video' && l.type !== 'image' && l.type !== 'audio')) return;
       var m = FM.media.get(l.id);
+      var waiting;
       // No record at all means the media is still being decoded into one — that is loading too, and it
       // is the earliest part of the window.
-      if (!m) { out.push(l); return; }
-      var e = m.el;
-      if (!e) return;                                  // canvas-backed records (elements, drawings) are ready by construction
-      if (typeof e.readyState === 'number' && e.readyState < 2) out.push(l);
+      if (!m) waiting = true;
+      else if (!m.el) waiting = false;                 // canvas-backed records (elements, drawings) are ready by construction
+      else waiting = (typeof m.el.readyState === 'number' && m.el.readyState < 2);
+      if (!waiting) return;                            // ready: its clock is dropped below, so a re-load starts fresh
+      live[l.id] = 1;
+      if (since[l.id] == null) since[l.id] = now;
+      // STOP CLAIMING, do not stop trying: the layer is untouched and will still light up if it ever
+      // arrives — this only ends the spinner and the poll behind it.
+      if (now - since[l.id] < GIVE_UP_MS) out.push(l);
     });
+    // forget layers that are ready or gone, so a clip re-added later gets its full grace again
+    Object.keys(since).forEach(function (k) { if (!live[k]) delete since[k]; });
     return out;
   }
 

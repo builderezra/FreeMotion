@@ -40290,6 +40290,59 @@
       throw new Error('slices were produced with motion blur switched off');
   });
 
+  test('the loading pill gives up instead of spinning forever (queue 704)', { item: '704' }, async function () {
+    /* Queue 704, found 2 Sep by the five-lens audit and confirmed by measurement.
+     * `pending()` counts a video/image/audio layer that has NO media record — correctly, because that is
+     * the earliest part of loading — and `tick()` only stops when that list empties. Nothing else ever
+     * removed a layer from it, so a clip whose media never arrives was "loading" FOREVER: the pill read
+     * "Loading <clip>" indefinitely and the 120ms poll ran behind it, which on a phone is a spinner that
+     * never stops and a timer that never lets the app go idle.
+     * It needs nothing exotic to reach: a project whose media was lost — a cleared store, a failed
+     * import, queue 129's clip with no picture — is exactly this shape on disk.
+     * GIVING UP ONLY STOPS CLAIMING. The layer is untouched and still lights the pill if it ever
+     * arrives; the honest reporting of a clip with no picture lives in queue 129's panel, not here. */
+    if (!FM.loadingDot || !FM.loadingDot.pending) throw new Error('FM.loadingDot.pending is not exposed');
+    const keep = FM.scene.layers.slice();
+    const realNow = Date.now;
+    try {
+      FM.scene.layers.length = 0;
+      FM.loadingDot.check();
+      /* THE CONTROL: with nothing to load, the pill must be OFF. If it is already on, "it turned off"
+         below proves nothing at all. */
+      if (FM.loadingDot.pending().length) throw new Error('something was already pending with no layers — the harness, not the feature');
+
+      const L = FM.makeLayer('video', { name: 'lost clip' });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers.push(L);
+      if (FM.media && FM.media.get(L.id)) throw new Error('the probe layer somehow has a media record — this test needs one WITHOUT');
+
+      // …it must be counted as loading at first. A give-up that fires instantly would break real loads.
+      if (FM.loadingDot.pending().length !== 1) throw new Error('a video layer with no media record is not counted as loading at all, so the pill would never appear for a real clip either');
+
+      /* …and it must STILL be counted a few seconds in. The window has to be generous: the slowest
+         legitimate case is a large 4K file decoding on a phone, and giving up on that would replace a
+         stuck spinner with a missing one. */
+      Date.now = () => realNow.call(Date) + 5000;
+      if (FM.loadingDot.pending().length !== 1) throw new Error('it gave up after 5 seconds — a big clip decoding on a phone takes longer than that, so a real load would lose its spinner');
+
+      // …and it must give up eventually.
+      Date.now = () => realNow.call(Date) + 60000;
+      if (FM.loadingDot.pending().length !== 0) throw new Error('a clip whose media never arrives is STILL counted as loading a minute later — the pill spins forever and the 120ms poll never stops (queue 704)');
+
+      /* AND THE CLOCK MUST RESET when the layer goes away, or a clip re-added later would inherit an
+         expired grace and never show a spinner at all. */
+      FM.scene.layers.length = 0;
+      FM.loadingDot.pending();                      // lets it forget the departed layer
+      Date.now = realNow;
+      FM.scene.layers.push(L);
+      if (FM.loadingDot.pending().length !== 1) throw new Error('a clip re-added after one gave up is not counted as loading — the give-up is permanent per layer id, so re-importing the same clip would never show a spinner');
+    } finally {
+      Date.now = realNow;
+      FM.scene.layers.length = 0; keep.forEach(l => FM.scene.layers.push(l));
+      if (FM.loadingDot.check) FM.loadingDot.check();
+    }
+  });
+
   test('updating a template edits it in place instead of forking it (queue 505 clause 4)', { item: '505' }, async function () {
     /* Queue 505 clause 4 — "Elements AND templates", the half that was never done. Elements got an
      * in-place update in v12.26/v12.27; templates still went through `save()`, which MINTS A NEW ID, and
