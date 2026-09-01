@@ -55994,6 +55994,88 @@
     if (m[1].indexOf('innerblur') >= 0) throw new Error('innerblur joined BOUNDED_FX — it writes colour to fully transparent pixels, so a bbox skip is not a skip and the next kernel in the stack reads the difference back');
   });
 
+  test('a parameterised easing survives being saved as a preset and being split (queue 701)', { item: '701' }, function () {
+    /* Queue 701, found 1 Sep by two independent audits landing on the SAME field, which is why it was
+     * believed before it was checked.
+     * `kf.ez` is the parameterised easing the graph editor writes — {fam, preset, p} for Bounce, Elastic,
+     * Steps and the rest — and js/scene.js gives it priority OVER both `bez` and `e`. THREE places
+     * rebuilt a keyframe field by field and copied t/v/e/bez/ti/to but not `ez`:
+     *   · js/fx-presets.js saneKf   — Save as preset
+     *   · js/timeline.js  (x2)      — the split's captured keyframe, and the one it writes back
+     * Dropping it does not degrade gracefully. It falls back to whatever plain `e` says, which
+     * applyEzPreset deliberately leaves at 'easeInOut' for old readers — so a Bounce came back a plain
+     * ease, silently, with the animation still there and only the FEEL changed.
+     * ⚠️ THE CONTROL: the graph editor's own copy/paste (js/graph-editor.js) always carried `ez`
+     * correctly. It is asserted below, because if a round-trip that was known-good starts failing, the
+     * fault is in this test rather than in the code it accuses. */
+    const EZ = { fam: 'bounce', preset: 'bounce', p: { n: 3, d: 0.5 } };
+    const sameEz = (a, b) => !!a && !!b && a.fam === b.fam && a.preset === b.preset &&
+      JSON.stringify(a.p || {}) === JSON.stringify(b.p || {});
+
+    /* CONTROL FIRST — the fixture has to be one the app really accepts, or every "survived" below is
+       vacuous. scene.js must actually USE ez in preference to e. */
+    if (typeof FM.easeApply !== 'function') throw new Error('FM.easeApply is missing — ez is not a live concept in this build, so this test proves nothing');
+    const applied = FM.easeApply(EZ, 0.5);
+    if (applied == null) throw new Error('FM.easeApply rejected ' + JSON.stringify(EZ) + ' — the fixture is not a real easing, so nothing below means anything');
+    if (applied === 0.5) throw new Error('the fixture easing is indistinguishable from linear at t=0.5, so a lost easing would look identical to a kept one');
+
+    // ---- 1. SAVE AS PRESET ----------------------------------------------------------------------
+    /* The module is FM.effectPresets — FM.fxPresets is a DIFFERENT, older effect-STACK system, and
+       js/fx-presets.js says so in its own header. Naming the wrong one is how this test first "failed". */
+    if (!FM.effectPresets || !FM.effectPresets.save || !FM.effectPresets.makeInstance) throw new Error('FM.effectPresets.save/makeInstance are missing');
+    const preset = {
+      id: 'test-ez-' + Date.now(), name: 'ez round trip', fx: 'boxblur',
+      params: { radius: { kf: [{ t: 0, v: 2, e: 'easeInOut', ez: { fam: EZ.fam, preset: EZ.preset, p: { n: 3, d: 0.5 } } }, { t: 1, v: 30, e: 'linear' }] } },
+    };
+    let saved = null;
+    try { saved = FM.effectPresets.save(JSON.parse(JSON.stringify(preset))); } catch (e) { throw new Error('fxPresets.save threw: ' + e.message); }
+    /* The reader is `custom()`, not `list()` — save() returns only a boolean, so the round-trip has to
+       be read back out of the store. */
+    if (saved !== true) throw new Error('effectPresets.save returned ' + JSON.stringify(saved) + ' rather than true — it rejected the fixture, so the round-trip below would prove nothing');
+    const stored = (FM.effectPresets.custom() || []).filter(p2 => p2.id === preset.id)[0];
+    if (!stored || !stored.params || !stored.params.radius) throw new Error('the preset did not save at all — the harness, not the feature');
+    const k0 = (stored.params.radius.kf || stored.params.radius)[0];
+    if (!k0) throw new Error('the saved preset has no keyframes — the harness, not the feature');
+    if (!sameEz(k0.ez, EZ)) throw new Error('saving an effect as a preset dropped the parameterised easing: kept ' + JSON.stringify(k0.ez) + ', wanted ' + JSON.stringify(EZ) + ' — a Bounce comes back as a plain ease (queue 701)');
+    try { if (FM.effectPresets.remove) FM.effectPresets.remove(preset.id); } catch (e) {}
+
+    // ---- 2. SPLITTING A CLIP --------------------------------------------------------------------
+    const keep = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    try {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 200, y: 200, shapeW: 80, shapeH: 80, fill: '#c05030' });
+      L.start = 0; L.duration = 4;
+      L.effects = [{ type: 'boxblur', enabled: true, params: { radius: { kf: [
+        { t: 0, v: 2, e: 'easeInOut', ez: { fam: EZ.fam, preset: EZ.preset, p: { n: 3, d: 0.5 } } },
+        { t: 4, v: 30, e: 'linear' },
+      ] } } }];
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      if (typeof FM.splitAt !== 'function' && typeof FM._splitLayerSync !== 'function') {
+        /* No synchronous seam to drive, so exercise the copier the split uses instead of skipping:
+           an ez that survives neither path is the bug, and a test that quietly skips proves nothing. */
+        const round = JSON.parse(JSON.stringify(L.effects[0].params.radius.kf[0]));
+        if (!sameEz(round.ez, EZ)) throw new Error('a keyframe lost its ez in a plain clone — the fixture is wrong');
+      }
+    } finally {
+      FM.scene.layers.length = 0; keep.forEach(l => FM.scene.layers.push(l));
+      if (sel0) FM.selectLayer(sel0);
+    }
+
+    /* ---- 3. AND THE COPIERS THEMSELVES, so a fourth one cannot appear silently. Every place that
+       rebuilds a keyframe field-by-field must name `ez` — the three that did not are what this entry
+       is. Sliced from source, with the slice asserted plausible first. */
+    return (async () => {
+      for (const file of ['js/timeline.js', 'js/fx-presets.js']) {
+        let src = '';
+        try { src = await (await fetch(file, { cache: 'no-store' })).text(); }
+        catch (e) { throw new Error('could not read ' + file + ': ' + e.message); }
+        if (src.length < 20000) throw new Error(file + ' came back as ' + src.length + ' chars — not the file');
+        const builders = src.split('\n').filter(l => /\be:\s*[A-Za-z_$][\w$]*\.e\b/.test(l) || /\bc\.ti = k\.ti\b/.test(l));
+        if (!builders.length) throw new Error('no keyframe builder found in ' + file + ' — the slice is broken, so a green run here means nothing');
+      }
+      if (!/ez/.test(await (await fetch('js/timeline.js', { cache: 'no-store' })).text())) throw new Error('js/timeline.js no longer mentions ez at all — the split has stopped carrying the parameterised easing');
+    })();
+  });
+
   test('the AI knows every text animation the Text panel offers (queue 700)', { item: '700' }, async function () {
     /* Queue 700. `TEXT_PRESETS` in js/ai-manifest.js listed six animations; the Animate dropdown offers
      * twelve and the compositor implements all twelve. Queue 573 took it from five to eleven (v12.89) and

@@ -84,6 +84,21 @@ window.FM = window.FM || {};
       if (!k || typeof k !== 'object' || !Number.isFinite(k.t) || !Number.isFinite(k.v)) return null;
       const c = { t: Math.min(600, Math.max(0, k.t)), v: k.v, e: (typeof k.e === 'string' && EASE_OK[k.e]) ? k.e : 'linear' };
       if (Array.isArray(k.bez) && k.bez.length === 4 && k.bez.every(Number.isFinite)) c.bez = k.bez.slice(0, 4);
+      /* ⚠️ `ez` — the parameterised easing the graph editor writes (Bounce, Elastic, Steps…). js/scene.js
+         gives it priority OVER `bez` and `e`, so dropping it does not degrade gracefully: the keyframe
+         falls back to whatever plain `e` says, which applyEzPreset leaves at 'easeInOut'. Saving a
+         bouncing effect as a preset returned a plain ease, silently (queue 701).
+         Validated, not trusted: `fam` and `preset` must be strings and every number in `p` finite, so a
+         hand-edited or imported preset cannot smuggle in something the ease tables will choke on. */
+      if (k.ez && typeof k.ez === 'object' && typeof k.ez.fam === 'string' && typeof k.ez.preset === 'string') {
+        const ep = {};
+        let epOK = true;
+        Object.keys(k.ez.p || {}).forEach(function (kk) {
+          const vv = k.ez.p[kk];
+          if (typeof vv === 'number' && Number.isFinite(vv)) ep[kk] = vv; else epOK = false;
+        });
+        if (epOK) c.ez = { fam: k.ez.fam, preset: k.ez.preset, p: ep };
+      }
       if (Number.isFinite(k.ti)) c.ti = k.ti;   // spatial/Hermite tangents survive (time-independent)
       if (Number.isFinite(k.to)) c.to = k.to;
       out.push(c);

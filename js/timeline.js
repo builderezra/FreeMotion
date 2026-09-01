@@ -418,7 +418,13 @@ window.FM = window.FM || {};
       if (k) {
         const key = propKey(layer, p);
         if (key) {
-          const en = { key: key, v: Array.isArray(k.v) ? JSON.parse(JSON.stringify(k.v)) : k.v, e: k.e, bez: k.bez ? k.bez.slice() : null };
+          /* ⚠️ `ez` TOO. It is the PARAMETERISED easing the graph editor writes ({fam, preset, p} — Bounce,
+             Elastic, Steps and the rest), and js/scene.js gives it priority OVER both `bez` and `e`, so
+             dropping it does not fall back to something close: it falls back to whatever plain `e`
+             happens to say, which applyEzPreset leaves at 'easeInOut'. A Bounce silently becomes an
+             ease. Found 1 Sep by two independent audits landing on the same field (queue 701). */
+          const en = { key: key, v: Array.isArray(k.v) ? JSON.parse(JSON.stringify(k.v)) : k.v, e: k.e, bez: k.bez ? k.bez.slice() : null,
+                       ez: k.ez ? { fam: k.ez.fam, preset: k.ez.preset, p: Object.assign({}, k.ez.p || {}) } : null };
           const ft = lastFxType(); if (ft) en.fxType = ft;   // so paste can refuse a different effect
           // spatial motion-path tangents ride along — dropping them turned a smoothed keyframe into a kink on paste
           if (typeof k.ti === 'number' && isFinite(k.ti)) en.ti = k.ti;
@@ -454,9 +460,11 @@ window.FM = window.FM || {};
         hit.v = vv; hit.e = en.e; if (en.bez) hit.bez = en.bez.slice(); else delete hit.bez;
         if (en.ti != null) hit.ti = en.ti; else delete hit.ti;
         if (en.to != null) hit.to = en.to; else delete hit.to;
+        if (en.ez) hit.ez = { fam: en.ez.fam, preset: en.ez.preset, p: Object.assign({}, en.ez.p || {}) }; else delete hit.ez;
       } else {
         const nk = { t: t, v: vv, e: en.e };
         if (en.bez) nk.bez = en.bez.slice();
+        if (en.ez) nk.ez = { fam: en.ez.fam, preset: en.ez.preset, p: Object.assign({}, en.ez.p || {}) };
         if (en.ti != null) nk.ti = en.ti;
         if (en.to != null) nk.to = en.to;
         p.kf.push(nk); p.kf.sort((a, b) => a.t - b.t);

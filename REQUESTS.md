@@ -1,8 +1,11 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.87
+> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.88
 >
-> **State:** v14.87, 1153 tests green, tree clean. **⚡ THE LAG WORK IS FINISHED, and the reason it is
+> **State:** v14.88, 1154 tests green, tree clean. **✅ YOU ANSWERED FOUR QUESTIONS — all logged in
+> their own entries: the 219ms goes ahead WITH a tick box keeping the old rim; the intro logo has colour
+> so the film fades to your dark ground instead of inverting; the camera shutter goes to 12; text stays
+> at 160pt.** **⚡ THE LAG WORK IS FINISHED, and the reason it is
 > finished is that the three most expensive effects left are the three that CANNOT be sped up this way.**
 > Ten effects bounded. Across all 105 of them on a small layer in a full-size project: **1316ms → 998ms**.
 > The two biggest in the whole app — Spin Streaks and Zoom Streaks — are gone from the top ten, and what
@@ -3027,6 +3030,9 @@ better still, keep working inside the turn rather than parking work for a later 
       new report with new evidence rather than this one.
 - [ ] **98 — Add Text could be better (phone screenshot at v6.60).** His words: *"add text could be
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ✅ **HE ANSWERED THE SIZE QUESTION, 1 Sep: "160pt — what you have now."** So the default STAYS.
+      The three-way picture sent 28 Aug offered 160 / 216 / 270 and he kept his own. That clause is
+      closed — do not re-open it or re-ask; the rest of #98's clauses are unaffected.
       ❓ASK: how big should text start? A 160pt (what you have) · B 216pt (recommended) · C 270pt. The picture was sent 28 Aug.
       ═══ 🎨 **28 AUG (v13.93) — THE OPTIONS ARE DRAWN AND SENT. This is the last thing in the entry.** ═══
       **Everything else in #98 is closed:** (a)/(b) are iOS Safari's own keyboard accessory bar — settled
@@ -28033,6 +28039,10 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **688 — Light/dark preference is forgotten on reload, and the old loading animation should go.
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      ✅ **HE ANSWERED, 1 Sep: "It has colour in it."** So inverting the film for dark mode is out — it
+      would mangle the logo's colours. **The plan is therefore: keep the film exactly as it is and fade
+      the white ending down to the dark background over the last ~0.6s**, so dark mode gets the same
+      motion and lands on your dark ground instead of a white flash. Clauses 2 and 3 are unblocked.
       His words, 30 Aug (verbatim):**
       > *"Make it so that when you save your preference of either light mode or dark mode it actually
       > remembers next time you load into the app and also get rid of the old loading screen animation
@@ -28273,7 +28283,17 @@ re-opened #480, which I had marked done and had not fixed.
         filling the frame has a box that IS the frame.
       **60 matrix cells and 1,440 swept combinations, all byte-identical**, both bounds mutation-proven.
 
-      🟠 **THE ONE THING LEFT IS A DECISION FOR YOU, NOT A PROBLEM TO SOLVE — and it is worth ~219ms.**
+      ✅ **HE ANSWERED, 1 Sep: "Do it, but keep the rim as an option."** So all three get fast AND the
+      old behaviour stays reachable — a tick box that restores writing under transparency, for anyone who
+      composed around the faint dark rim. That is the more conservative half of the choice and it is the
+      right one: the rim is not hypothetical, Inner Blur's existing "Edge" control exists because of it.
+      **TO BUILD:** (a) gate the under-transparency writes in innerblur / zoomblur / spinblur behind a
+      new per-effect option defaulting to OFF (fast); (b) when it is ON, refuse the bbox for that kernel,
+      exactly as the dirty-plate path already does; (c) prove byte-identity in BOTH states across the
+      #692 matrix; (d) render a before/after of the one stack that changes — a Box Blur directly after an
+      Inner Blur — and send it to him, since that is the only visible difference.
+
+      🟠 **THE DECISION, NOW ANSWERED — it is worth ~219ms.**
       Inner Blur (46.8ms), Zoom Blur (86.9ms) and Spin Blur (86.1ms) are now the three most expensive
       effects in the app, and they are the three that cannot be bounded **as they currently behave**.
       All three paint colour into FULLY TRANSPARENT pixels and read it back. Nothing on screen shows it —
@@ -28473,7 +28493,12 @@ re-opened #480, which I had marked done and had not fixed.
       1 and its control offers 0–1, on the physical-honesty argument that queue 379 explicitly threw out
       for the layer version: *"needs to be able to be stronger, the cranks should be able to crank more,
       currently the strongest setting is only subtle"*. Same complaint, same feature, one half done.
-      **Say the word and the camera one goes to 12 too.**
+      ✅ **HE SAID THE WORD, 1 Sep: "Raise it to 12 as well."** So `camBlurSlices`' clamp and both of
+      the camera control's ranges go to 12, matching the layer version. Nothing in an existing project
+      moves — every saved shutter keeps its value; the slider just reaches further.
+      📌 **And the two stale clamps under it get fixed in the same pass**, since they are the same
+      number: `js/storage.js`'s save-file migration still says 4 (its comment cites queue 379) and
+      `js/ai-ops.js` still says 2, so the AI cannot reach the top 83% of a slider it is writing to.
 
 - [x] **696 — 🔴 THE SPEED WORK IN v14.79–v14.82 HAD A REAL BUG, and a 1px line on an odd row lost its
       effect.** Found and fixed 1 Sep, v14.83.
@@ -28637,4 +28662,19 @@ re-opened #480, which I had marked done and had not fixed.
       AI's list to it, rather than a second hard-coded twelve that would drift the same way. It asserts
       its own slice is plausible first, and separately checks the prompt the model actually reads — the
       array being right is no use if the prompt was built from something else.
+
+- [ ] **702 — Standing instruction, 1 Sep (verbatim):**
+      **STATUS: 📌 NOTE — nothing to build**
+      > Ask all the questions you have for me and log answers i give properly
+      **His answers are logged into the entry each question belongs to**, not collected here — a decision
+      recorded away from the work it decides is a decision nobody finds again. This entry is the index of
+      what was asked and where the answer went.
+
+- [ ] **703 — Standing instruction, 1 Sep (verbatim):**
+      **STATUS: 📌 NOTE — nothing to build**
+      > Dont stop looping, keep it going, have a failsafe incase the loop fails
+      **The failsafe is a RECURRING cron, not a chain of one-shot wakeups**, and that is from experience:
+      a one-shot chain died silently once and nothing ran for 1h48m, because a one-shot that never fires
+      leaves nothing behind to notice. A recurring schedule self-heals — miss one firing and the next one
+      still comes.
 
