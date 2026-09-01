@@ -1,0 +1,124 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:11px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:380px;height:820px;border:0"></iframe>
+<script>
+/* PHONE. A finger that lands on a clip's trim grip and swipes: does anything happen at all?
+   The grip's pointerdown calls stopPropagation() and only ARMS a 300ms timer for touch; a >8px travel
+   disarms it. If the gesture is then not picked up as a scroll or a scrub, the strip is simply dead.
+   CONTROL: the identical swipe starting mid-clip, which must scrub. If the control does nothing either,
+   the harness is broken and nothing below means anything. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n=0;
+  (function wait(){ if(!(w.FM&&w.FM.scene&&w.FM.timeline)){ if(n++>600) return say('FM never came up'); return setTimeout(wait,50);} setTimeout(function(){run(w);},1200); })();
+});
+async function run(w){
+ try{
+  var FM=w.FM, D=w.document;
+  if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+  await sleep(300);
+  for(var i=0;i<4;i++){
+    var L=FM.makeLayer('shape',{shape:'rect',x:200+i*20,y:300,shapeW:120,shapeH:90,fill:'#c0503'+i});
+    L.start=i*2; L.duration=2.5; FM.scene.layers.push(L);
+  }
+  FM.refreshAll && FM.refreshAll(); await sleep(500);
+  FM.setTime && FM.setTime(6); await sleep(200);
+
+  var clips=[].slice.call(D.querySelectorAll('.clip'));
+  var grips=[].slice.call(D.querySelectorAll('.clip-grip'));
+  say('rendered '+clips.length+' clips and '+grips.length+' grips');
+  var _t=D.getElementById('timeline');
+  say('timeline scrollWidth '+_t.scrollWidth+' in clientWidth '+_t.clientWidth+
+      (_t.scrollWidth>_t.clientWidth+4 ? '  (scrollable ✓)' : '  ⚠️ NOT SCROLLABLE — a scroll test would prove nothing'));
+  if(!grips.length){ say('no grips — cannot test'); w.__done=1; window.__done=1; return; }
+  var tl=D.getElementById('timeline');
+
+  function swipe(x,y,dx,tgt){
+    var opts={pointerId:1,pointerType:'touch',isPrimary:true,bubbles:true,cancelable:true,clientX:x,clientY:y,button:0,buttons:1};
+    /* Dispatch on the element under test, NOT elementFromPoint — that returned an SVG child inside the
+       clip, whose handler chain is not the one under test, and the control read as dead. */
+    var el=tgt;
+    el.dispatchEvent(new w.PointerEvent('pointerdown',opts));
+    for(var k=1;k<=8;k++){
+      var o2=Object.assign({},opts,{clientX:x+dx*k/8});
+      el.dispatchEvent(new w.PointerEvent('pointermove',o2));
+      w.dispatchEvent(new w.PointerEvent('pointermove',o2));
+    }
+    var o3=Object.assign({},opts,{clientX:x+dx,buttons:0});
+    el.dispatchEvent(new w.PointerEvent('pointerup',o3));
+    w.dispatchEvent(new w.PointerEvent('pointerup',o3));
+    return el;
+  }
+  /* ⚠️ MEASURE THE RECT AFTER SETTING THE SCROLL, not before. The first version took the clip's
+     position while the timeline was scrolled elsewhere and sampled at x = -187, which is off screen —
+     elementFromPoint returned null and the run died before proving anything. */
+  async function trial(name,pick,dx){
+    FM.setTime(0); tl.scrollLeft=0; await sleep(250);
+    var t2=pick(); if(!t2||!t2.el){ say('  '+name+': target not found'); return false; }
+    var r=t2.el.getBoundingClientRect();
+    var x=t2.ox!=null ? r.left+t2.ox : (r.left+r.right)/2, y=(r.top+r.bottom)/2;
+    if(x<2||x>378||y<2){ say('  '+name+': target off screen at '+x.toFixed(0)+','+y.toFixed(0)); return false; }
+    var t0=FM.time, s0=tl.scrollLeft;
+    var L0=FM.scene.layers.map(function(l){return l.start+'/'+l.duration;}).join(',');
+    var el=swipe(x,y,dx,t2.el);
+    await sleep(400);
+    var moved=(Math.abs(FM.time-t0)>0.02)||(Math.abs(tl.scrollLeft-s0)>3);
+    var trimmed=FM.scene.layers.map(function(l){return l.start+'/'+l.duration;}).join(',')!==L0;
+    say('  '+name.padEnd(26)+' on <'+(el.className||el.tagName)+'>');
+    say('     time '+t0.toFixed(3)+' -> '+FM.time.toFixed(3)+'   scroll '+s0+' -> '+tl.scrollLeft+
+        '   trimmed: '+(trimmed?'yes':'no')+'   ANY EFFECT: '+((moved||trimmed)?'✅ yes':'❌ NOTHING HAPPENED'));
+    return moved||trimmed;
+  }
+  FM.setTime(0); tl.scrollLeft=0; await sleep(250);
+  var c0=D.querySelectorAll('.clip')[1].getBoundingClientRect();
+  say('');
+  say('clip 2 spans x '+c0.left.toFixed(0)+'..'+c0.right.toFixed(0));
+  say('');
+  /* Both sampled just inside the clip's LEFT edge so neither falls off a 380px screen: the control at
+     +40px (clip body), the grip at its own centre (~+5px). Same clip, same row, same swipe. */
+  var mid = await trial('CONTROL: swipe in clip body',
+        function(){ return { el: D.querySelectorAll('.clip')[1], ox: 40 }; }, -60);
+  var grip = await trial('swipe starting ON a grip',
+        function(){ var c=D.querySelectorAll('.clip')[1]; return { el: c && c.querySelector('.clip-grip') }; }, -60);
+  /* AND THE GRIP MUST STILL TRIM — that is what it is for. Hold still past the 300ms arm, then drag. */
+  async function holdTrim(name, pointerType, holdMs){
+    /* Put the clips back and rebuild first — the previous trial's trim changes the layer AND rebuilds
+       the timeline, so a stale element reference reads as "no grip" and looks like a broken mouse path. */
+    FM.scene.layers.forEach(function(l,ix){ l.start=ix*2; l.duration=2.5; });
+    FM.selectLayer && FM.selectLayer(null);
+    FM.refreshAll && FM.refreshAll();
+    FM.setTime(0); tl.scrollLeft=0; await sleep(400);
+    var c=D.querySelectorAll('.clip')[1]; var gEl=c && c.querySelector('.clip-grip');
+    if(!gEl){ say('  '+name+': no grip'); return false; }
+    var L=FM.scene.layers.slice().sort(function(a,b){return a.start-b.start;})[1];
+    var before=L.start+'/'+L.duration;
+    var r=gEl.getBoundingClientRect(), x=(r.left+r.right)/2, y=(r.top+r.bottom)/2;
+    var opts={pointerId:7,pointerType:pointerType,isPrimary:true,bubbles:true,cancelable:true,clientX:x,clientY:y,button:0,buttons:1};
+    gEl.dispatchEvent(new w.PointerEvent('pointerdown',opts));
+    await sleep(holdMs);                                  // settle, so the arm fires
+    for(var k=1;k<=6;k++){
+      var o2=Object.assign({},opts,{clientX:x+30*k/6});
+      gEl.dispatchEvent(new w.PointerEvent('pointermove',o2));
+      w.dispatchEvent(new w.PointerEvent('pointermove',o2));
+    }
+    var o3=Object.assign({},opts,{clientX:x+30,buttons:0});
+    gEl.dispatchEvent(new w.PointerEvent('pointerup',o3)); w.dispatchEvent(new w.PointerEvent('pointerup',o3));
+    await sleep(300);
+    var after=L.start+'/'+L.duration;
+    say('  '+name.padEnd(34)+before+' -> '+after+'   '+(before!==after?'✅ TRIMMED':'❌ did not trim'));
+    return before!==after;
+  }
+  say('');
+  var t1 = await holdTrim('touch: hold 380ms then drag','touch',380);
+  var t2 = await holdTrim('mouse: drag immediately','mouse',0);
+  say('');
+  if(!mid) say('⚠️ THE CONTROL DID NOTHING — the harness is broken, ignore everything above.');
+  else if(!t1||!t2) say('🔴 THE FIX BROKE TRIMMING — touch '+(t1?'ok':'DEAD')+', mouse '+(t2?'ok':'DEAD'));
+  else if(!grip) say('➡️ CONFIRMED: the same swipe is dead when it starts on a grip. On a phone that is a\n   strip at each end of every clip where dragging the timeline simply does not work.');
+  else say('➡️ Swiping from a grip now moves the timeline, AND the grip still trims by touch and by mouse.');
+  window.__done=1;
+ }catch(e){ say('threw: '+(e&&e.message)); window.__done=1; }
+}
+</script></body></html>

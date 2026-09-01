@@ -28575,3 +28575,43 @@ re-opened #480, which I had marked done and had not fixed.
       apart.** Five instances in one session, every one caught by a mutation or an implausible number
       and none by reading the code.
 
+- [ ] **699 — 🔴 PHONE: the trim grip at each end of every clip is a DEAD STRIP. A finger that lands on
+      **STATUS: 🟢 READY — nothing is stopping this**
+      one and swipes does nothing at all — no trim, no scrub, no scroll.** (Found and MEASURED 1 Sep.
+      Fix attempted, verified working, then withdrawn — see the end. Not shipped.)
+      📐 **Measured at 380px on a 4-clip project**, the identical 60px swipe:
+      | started on | playhead | timeline scroll |
+      |---|---|---|
+      | the clip body | 0.00s → **7.01s** | 0 → **440px** |
+      | a trim grip | 1.28s → **1.28s** | 81 → **81** |
+      Nothing moved, nothing trimmed. The strip is ~13px at both ends of every clip.
+      **The cause, and it is the shape everything else this week has been.** The touch path only ARMS a
+      300ms timer and a >8px travel disarms it — correct, because a finger that travels was scrolling,
+      not grabbing. But the handler also calls `stopPropagation`, which stops the CLIP's own pointerdown
+      running, and that is what creates `clipTap` — the thing the window pointermove uses to scrub and
+      scroll. `#timeline` is `touch-action: none`, so the browser will not scroll it natively either. The
+      gesture is simply swallowed. **The comment directly above it argues for the opposite**: *"brushing
+      a grip mid-scroll would stop the scroll dead — trading a wrong trim for a stuck timeline."* That is
+      exactly what it does.
+      ✅ **THE FIX IS KNOWN AND WAS PROVEN TO WORK.** Hand the gesture to the clip at the moment the
+      finger proves it was scrolling — replaying the ORIGINAL down point so the scrub anchors where the
+      finger landed — and mark it a drag, since a finger past 8px is not a press-hold. Verified at 380px:
+      swiping from a grip moved the timeline 435px, **and the grip still trimmed by touch (hold 380ms)
+      and by mouse.** All three behaviours confirmed together.
+      ⚠️ **WITHDRAWN ANYWAY, and this is the honest part.** Queue 577's test kept failing with *"left a
+      timeline gesture live after finishing"* — first `clipTap` and `clipMove`, then `clipMove` alone,
+      then `clipTap` alone as I narrowed it. Three attempts, each fixing the previous symptom and
+      surfacing another. The timeline's gesture state (`clipTap`, `clipMove`, `trimDrag`, `cueDrag`,
+      `scrub`) is more interlocked than I could safely perturb at the end of a long session, and a
+      half-understood change to the gesture layer is exactly the kind of thing that breaks something he
+      relies on. **The fix is reverted; nothing shipped.**
+      ➡️ **To finish it, start here**: instrument which of the five gesture globals survives queue 577's
+      sub-tests A, B and C individually, rather than reasoning about the handler chain — that is the step
+      I kept skipping. The caption cue chips (`startCue`, `beginCue` in js/timeline.js) already solve the
+      same problem correctly for the same reason and are the model to copy; their comment states the
+      rule outright: *"Move first and the clip scrubs."*
+      📌 `tests/_grip.html` is kept — it reproduces the bug, and its CONTROL (the same swipe in the clip
+      body) is what makes it trustworthy. Three earlier versions of that probe had a DEAD control —
+      a point scrolled off screen, a dispatch to an SVG child, a stale element after a rebuild — and
+      every one would have "confirmed" a bug that was not there.
+
