@@ -40290,6 +40290,67 @@
       throw new Error('slices were produced with motion blur switched off');
   });
 
+  test('updating a template edits it in place instead of forking it (queue 505 clause 4)', { item: '505' }, async function () {
+    /* Queue 505 clause 4 — "Elements AND templates", the half that was never done. Elements got an
+     * in-place update in v12.26/v12.27; templates still went through `save()`, which MINTS A NEW ID, and
+     * then spent four compensations papering over it: delete the old pack, re-splice the index so the
+     * card did not jump, rewrite every project's `fromTemplate` pointer, and patch the live scene. Each
+     * is a window where a crash leaves the library inconsistent, and the user-visible result was the same
+     * one he reported for elements — press update and you get a SECOND template.
+     * Same key, same id, same index entry now. Nothing points anywhere new, so there is nothing to
+     * repoint, and the four compensations are gone rather than made more careful.
+     *
+     * ⚠️ AND THE SHARED PACKER IS THE OTHER HALF OF THIS ITEM. The entry asked, in as many words, not to
+     * hand-copy the element round trip — "if both stores end up with a hand-copied round trip, the next
+     * bug has to be fixed twice". It already had to be. All four routes go through `packFromProject` now,
+     * and merging them immediately exposed a real difference the copies had been hiding: a TEMPLATE may
+     * be saved from a project with NO LAYERS (a blank starting point — a size, a duration, a background)
+     * while an ELEMENT may not. Two existing tests caught it the moment the packer imposed the element's
+     * rule on both, which is why the refusal now sits with the caller that holds the opinion. */
+    if (!FM.templates || !FM.templates.updateFrom) throw new Error('FM.templates.updateFrom is missing');
+    if (typeof FM._packFromProject !== 'function') throw new Error('FM._packFromProject is not exposed — this test would have to copy the packer, which is the mistake it exists to prevent');
+
+    const before = FM.templates.list().slice();
+    const pid = FM.scene && FM.scene.project ? null : null;
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 50, shapeH: 50, fill: '#c05030' });
+    L.start = 0; L.duration = 3;
+    const keep = FM.scene.layers.slice();
+    let tid = null;
+    try {
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.storage.flushSync();
+      if (!(await FM.templates.save('roundtrip probe'))) throw new Error('could not save the probe template — the harness, not the feature');
+      const made = FM.templates.list().filter(t => !before.some(b => b.id === t.id));
+      if (made.length !== 1) throw new Error('saving made ' + made.length + ' templates — the harness, not the feature');
+      tid = made[0].id;
+      const countBefore = FM.templates.list().length;
+
+      /* Change the document, then UPDATE. A fork would add a second template and change the id. */
+      const L2 = FM.makeLayer('shape', { shape: 'ellipse', x: 200, y: 200, shapeW: 40, shapeH: 40, fill: '#3a7bd5' });
+      L2.start = 0; L2.duration = 3;
+      FM.scene.layers.push(L2);
+      FM.storage.flushSync();
+      if (!(await FM.templates.updateFrom(tid))) throw new Error('templates.updateFrom returned false');
+
+      const after = FM.templates.list();
+      if (after.length !== countBefore) throw new Error('updating a template changed the library from ' + countBefore + ' to ' + after.length + ' — it FORKED instead of editing, which is the whole of this finding');
+      const still = after.filter(t => t.id === tid)[0];
+      if (!still) throw new Error('the template id ' + tid + ' is gone after an update — it was minted anew, so every project pointing at it now points at nothing');
+      if (still.count !== undefined && still.count !== null && still.count === before.count) throw new Error('the index entry did not pick up the edit');
+      /* MOST RECENTLY EDITED FIRST, the rule the Elements list got in v12.27. */
+      if (after[0].id !== tid) throw new Error('the template just edited is at position ' + after.findIndex(t => t.id === tid) + ', not the top');
+
+      /* AND THE CONTENTS REALLY MOVED — otherwise "same id, same list" would pass on a no-op. */
+      const pack = await FM.templates.getPack(tid);
+      if (!pack) throw new Error('the updated template has no pack');
+      if (!(pack.layers.length === 2)) throw new Error('the updated pack has ' + pack.layers.length + ' layers, expected the 2 the project now holds — the write did not land, so "same id" proves nothing');
+    } finally {
+      if (tid && FM.templates.remove) { try { await FM.templates.remove(tid); } catch (e) {} }
+      FM.scene.layers.length = 0; keep.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); FM.storage.flushSync();
+    }
+  });
+
   test('the camera shutter reaches 12, and every place that clamps it agrees (queue 695)', { item: '695' }, async function () {
     /* Queue 695. The LAYER's motion blur shutter was raised 1 -> 4 (queue 379) and 4 -> 12 (queue 540)
      * after Ezra said "needs to be able to be stronger, the cranks should be able to crank more,

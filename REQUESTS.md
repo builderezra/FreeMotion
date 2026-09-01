@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.90
+> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.91
 >
-> **State:** v14.90, 1154 tests green, tree clean. **✅ YOU ANSWERED FOUR QUESTIONS — all logged in
+> **State:** v14.91, 1155 tests green, tree clean. **✅ YOU ANSWERED FOUR QUESTIONS — all logged in
 > their own entries: the 219ms goes ahead WITH a tick box keeping the old rim; the intro logo has colour
 > so the film fades to your dark ground instead of inverting; the camera shutter goes to 12; text stays
 > at 160pt.** **⚡ THE LAG WORK IS FINISHED, and the reason it is
@@ -19720,7 +19720,27 @@ re-opened #480, which I had marked done and had not fixed.
       3. [x] ✅ **v12.27 — "just opening you having every layer selected"** — check what the editor looks like on
              arrival. If every layer is selected, that is `insert()` doing what it does for an insert
              (select what you just added) being wrong for an EDIT, where nothing should be selected yet.
-      4. [ ] 🔴 **TEMPLATES — the whole other half of his sentence, and the reason this entry is still open.**
+      4. [ ] 🟡 **TEMPLATES — HALF DONE v14.91. The UPDATE path is in; opening one for editing is not.**
+             ✅ **`templates.updateFrom` edits in place now.** It used to call `save()`, which mints a NEW
+             id, then paper over it in four places — delete the old pack, re-splice the index so the card
+             did not jump, rewrite every project's `fromTemplate` pointer, patch the live scene. Same key,
+             same id, same index entry now; nothing points anywhere new, so all four compensations are
+             DELETED rather than made more careful. It floats to the top on edit, the rule the Elements
+             list got in v12.27.
+             ✅ **And the "do not hand-copy" instruction below is honoured**: all four save/update routes
+             share one `packFromProject`. Merging them exposed a real difference the copies had hidden —
+             a TEMPLATE may be saved from a project with NO layers (a blank starting point), an ELEMENT
+             may not — which two existing tests caught the moment the shared packer imposed the element's
+             rule on both. The refusal now sits with the caller that holds it.
+             ⏭️ **STILL TO DO: `templates.openForEdit` and the exit flow.** Templates still open through
+             `useAsNew`, which makes a real project. Needed: the editing session carrying the template's
+             id, and an exit that saves, returns to the **Templates** tab, floats the edited one to the
+             top, and clears the workspace — in that order, because a discard refuses to delete the
+             document you are standing in. `elements.openForEdit` is the shape to follow, and its own
+             comments record the two traps it fell into first (a stranded draft per element, and
+             arriving with every layer selected).
+
+      4b. [ ] 🔴 **The original note, kept because it is still the specification:**
              He said *"Elements **and** templates"*. Everything above is elements only. Templates still go
              through `useAsNew`, which makes a project, and saving back to a template mints a NEW id and
              then papers over it in four places — the same mint-then-patch shape elements had before v12.26.

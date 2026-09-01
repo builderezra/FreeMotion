@@ -1692,39 +1692,60 @@ window.FM = window.FM || {};
     },
   };
 
+  /* ═══ ONE PACKER FOR BOTH LIBRARIES (queue 505 clause 4) ═══════════════════════════════════════
+   * Templates and elements are the same object in two stores: a set of layers plus the media files
+   * they reference, keyed by layer id. Four routes built that pack with four copies of the same
+   * media-gathering loop — `templates.save`, `templates.updateFrom`, `elements.saveFromProject` and
+   * `elements.updateFrom` — and the entry for this queue item says why that matters: *"Do not copy the
+   * element code across. If both stores end up with a hand-copied round trip, the next bug has to be
+   * fixed twice."* It already had to be: the memory-vs-IDB rule below is subtle (a CLOSED project's
+   * files are only in IndexedDB, the OPEN one's are only in memory until it flushes) and getting it
+   * wrong loses the media silently.
+   * `wantProject` is the one real difference: a template carries the project object so it can become a
+   * new project, an element carries only layers because it is dropped INTO one. */
+  async function packFromProject(projectId, wantProject) {
+    const id = projectId || curId();
+    if (id === curId()) FM.storage.flushSync();     // the doc on disk must be what he just saw
+    const doc = readJSON('fm.proj.' + id, null); if (!doc) return null;
+    /* ⚠️ AN EMPTY LAYER LIST IS NOT THE PACKER'S BUSINESS, and assuming it was broke template saving
+       the moment these four routes were merged. An ELEMENT with no layers is meaningless, so
+       `elements.*` refuses it. A TEMPLATE with no layers is a legitimate blank starting point — a size,
+       a duration, a background — and `templates.save` has always allowed it. Two tests caught it
+       instantly. The refusal belongs to the caller that has an opinion, not to the shared step. */
+    const layers = doc.layers || [];
+    const pack = { layers: JSON.parse(JSON.stringify(layers)), media: {} };
+    if (wantProject) {
+      pack.project = JSON.parse(JSON.stringify(doc.project));
+      /* A TEMPLATE MUST NOT CARRY THE NOTES (queue 214) — "I want each projects notes only for that
+         project" — nor the came-from pointer (queue 408), which would make an update loop. Stripped
+         here so both the save and the update route obey it; the update route used to inherit this only
+         by going through save(), which is exactly the coupling this helper replaces. */
+      delete pack.project.notes;
+      delete pack.project.fromTemplate;
+    }
+    try {
+      const db = await openDB();
+      for (const l of pack.layers) {
+        const mem = (id === curId()) ? FM.media.get(l.id) : null;
+        if (mem && mem.file) pack.media[l.id] = { file: mem.file, kind: mem.kind };
+        else { const rec = await idbGet(db, l.id); if (rec && rec.file) pack.media[l.id] = { file: rec.file, kind: rec.kind }; }
+      }
+      db.close();
+    } catch (e) { return null; }
+    return { pack: pack, srcId: id };
+  }
+  FM._packFromProject = packFromProject;   // seam: the suite drives the real packer, not a copy
+
   FM.templates = {
     list() { return readJSON(TPL_INDEX, []); },
     // Save a whole project (by id, default current) as a reusable template.
     async save(name, projectId) {
-      const id = projectId || curId();
-      if (id === curId()) FM.storage.flushSync();
-      const doc = readJSON('fm.proj.' + id, null); if (!doc) return false;
+      const got = await packFromProject(projectId, true);   // wantProject: a template becomes a project
+      if (!got) return false;
       const tid = newId('t');
-      // pack media Files: from memory for the current project, from IDB for a closed one
-      const pack = { project: JSON.parse(JSON.stringify(doc.project)), layers: JSON.parse(JSON.stringify(doc.layers || [])), media: {} };
-      /* A TEMPLATE MUST NOT CARRY THE NOTES (queue 214). Ezra: "Currently the notes carry across
-       * projects, I want each projects notes only for that project."
-       * Reproduced by measurement, and this is the path it comes down: notes live on
-       * scene.project.notes exactly as designed, and creating, opening and duplicating a project all
-       * behave — but a template packs the whole project object, so `useAsNew` handed every new
-       * project the notes of whoever made the template. That is not a stale cache or a global; it is
-       * a copy, and it is the only route that produced his symptom.
-       * The line drawn here, deliberately: a DUPLICATE keeps its notes (it is a copy of that project,
-       * and losing your notes when you duplicate would be its own bug), while a TEMPLATE does not (it
-       * is a reusable starting point, and "remember to fix the audio at 0:12" belongs to one project
-       * and means nothing in the next). Stripped at SAVE, so templates already on disk are cleaned as
-       * they are re-saved and nothing has to be migrated. */
-      delete pack.project.notes;
-      delete pack.project.fromTemplate;   // …and never inherit the "came from" pointer (queue 408): a
-                                          // template made from a project is its own thing, not that
-                                          // project's parent, and carrying it would make an update loop.
+      const pack = got.pack, id = got.srcId;
       try {
         const db = await openDB();
-        for (const l of pack.layers) {
-          const mem = (id === curId()) ? FM.media.get(l.id) : null;
-          if (mem && mem.file) pack.media[l.id] = { file: mem.file, kind: mem.kind };
-          else { const rec = await idbGet(db, l.id); if (rec && rec.file) pack.media[l.id] = { file: rec.file, kind: rec.kind }; }
-        }
         await idbPut(db, 'tpl:' + tid, pack);
         db.close();
       } catch (e) { return false; }
@@ -1847,28 +1868,36 @@ window.FM = window.FM || {};
        starting point other projects were built from; silently rewriting it whenever one of its children
        changed would be a change nobody asked for and nobody could see. It keeps the template's NAME and
        its place in the list — only the contents are replaced. */
+    /* ═══ UPDATE A TEMPLATE IN PLACE (queue 505 clause 4) ═══════════════════════════════════════
+     * This used to call `save()`, which MINTS A NEW ID, and then spend four compensations papering over
+     * it: delete the old pack, re-splice the index so the card did not jump, rewrite every project's
+     * `fromTemplate` pointer, and patch the live scene. Each of those is a window where a crash leaves
+     * the library inconsistent — and it is the same mint-then-patch shape elements had before v12.26.
+     * Same key, same index position, same id: only the contents, the layer count and the thumbnail
+     * move. Nothing points anywhere new, so there is nothing to repoint.
+     * Built on the shared packer above rather than copied from `elements.updateFrom`, which is what
+     * this queue item explicitly asked for. */
     async updateFrom(tid, projectId) {
-      const meta = this.list().find(t => t.id === tid);
-      if (!meta) return false;
-      const ok = await this.save(meta.name, projectId || curId());
-      if (!ok) return false;
-      /* save() unshifts a NEW entry, so the old one has to go or the list grows a duplicate every time
-         you press update. The fresh entry inherits the name; this drops the previous id and keeps the
-         new one where the old one sat, so the card does not jump to the top of the list under your finger. */
       const idx = this.list();
-      const fresh = idx[0];
-      const rest = idx.filter(t => t.id !== tid && t !== fresh);
-      const at = Math.max(0, idx.findIndex(t => t.id === tid));
-      rest.splice(Math.min(at, rest.length), 0, fresh);
-      writeJSON(TPL_INDEX, rest);
-      try { const db = await openDB(); await idbDel(db, 'tpl:' + tid); db.close(); } catch (e) {}
-      // …and every project that pointed at the old id now points at the new one
+      const at = idx.findIndex(t => t.id === tid);
+      if (at < 0) return false;                      // deleted while it was being edited — refuse BEFORE writing
+      const got = await packFromProject(projectId, true);
+      if (!got) return false;
       try {
-        const pidx = FM.projects.list(); let moved = false;
-        pidx.forEach(p => { if (p.fromTemplate === tid) { p.fromTemplate = fresh.id; moved = true; } });
-        if (moved) FM.projects.saveIndex(pidx);
-      } catch (e) {}
-      if (FM.scene && FM.scene.project && FM.scene.project.fromTemplate === tid) FM.scene.project.fromTemplate = fresh.id;
+        const db = await openDB();
+        await idbPut(db, 'tpl:' + tid, got.pack);    // SAME key — this is the update
+        db.close();
+      } catch (e) { return false; }
+      /* The pack IS the template. If the index write fails the edit has still landed, so report success
+         and leave the card's count/thumbnail stale — it self-heals on the next save. Returning false
+         would make the caller keep a workspace for a template that is already up to date. */
+      idx[at].count = got.pack.layers.length;
+      const th = (await FM.projects.getThumb(got.srcId)) || (got.srcId === curId() ? makeThumb() : null);
+      if (th) idx[at].thumb = th;
+      // MOST RECENTLY EDITED FIRST — the same rule the Elements list got in v12.27, and his words for it:
+      // "the element is at the top of the element list because you just edited it".
+      idx.unshift(idx.splice(at, 1)[0]);
+      writeJSON(TPL_INDEX, idx);
       return true;
     },
     // Insert a template's layers INTO the current project at the playhead.
@@ -1908,19 +1937,12 @@ window.FM = window.FM || {};
     // thing you can drop into any edit. Media comes from IDB for a closed project (packLayers only
     // knows the in-memory map, which is empty for anything but the project that is currently open).
     async saveFromProject(projectId, name) {
-      const id = projectId || curId();
-      if (id === curId()) FM.storage.flushSync();
-      const doc = readJSON('fm.proj.' + id, null); if (!doc) return false;
-      const layers = doc.layers || []; if (!layers.length) return false;
+      const got = await packFromProject(projectId, false);  // an element is layers only — it is dropped INTO a project
+      if (!got || !got.pack.layers.length) return false;    // an element with no layers is meaningless
       const eid = newId('e');
-      const pack = { layers: JSON.parse(JSON.stringify(layers)), media: {} };
+      const pack = got.pack, id = got.srcId;
       try {
         const db = await openDB();
-        for (const l of pack.layers) {
-          const mem = (id === curId()) ? FM.media.get(l.id) : null;
-          if (mem && mem.file) pack.media[l.id] = { file: mem.file, kind: mem.kind };
-          else { const rec = await idbGet(db, l.id); if (rec && rec.file) pack.media[l.id] = { file: rec.file, kind: rec.kind }; }
-        }
         await idbPut(db, 'elem:' + eid, pack);
         db.close();
       } catch (e) { return false; }
@@ -2016,18 +2038,11 @@ window.FM = window.FM || {};
       const idx = this.list();
       const at = idx.findIndex(e => e.id === eid);
       if (at < 0) return false;                      // element deleted while it was being edited — refuse BEFORE writing anything
-      const id = projectId || curId();
-      if (id === curId()) FM.storage.flushSync();    // the draft on disk must be what he just saw
-      const doc = readJSON('fm.proj.' + id, null); if (!doc) return false;
-      const layers = doc.layers || []; if (!layers.length) return false;
-      const pack = { layers: JSON.parse(JSON.stringify(layers)), media: {} };
+      const got = await packFromProject(projectId, false);
+      if (!got || !got.pack.layers.length) return false;    // an element with no layers is meaningless
+      const pack = got.pack, id = got.srcId;
       try {
         const db = await openDB();
-        for (const l of pack.layers) {
-          const mem = (id === curId()) ? FM.media.get(l.id) : null;
-          if (mem && mem.file) pack.media[l.id] = { file: mem.file, kind: mem.kind };
-          else { const rec = await idbGet(db, l.id); if (rec && rec.file) pack.media[l.id] = { file: rec.file, kind: rec.kind }; }
-        }
         await idbPut(db, 'elem:' + eid, pack);       // SAME key — this is the update
         db.close();
       } catch (e) { return false; }
