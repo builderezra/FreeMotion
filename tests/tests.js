@@ -26276,6 +26276,76 @@
     if (gone.length) throw new Error(gone.length + ' effect(s) erase the layer at a single slider extreme: ' + gone.slice(0, 8).join(' · '));
   });
 
+  /* ---------------- queue 482: a raised ceiling must not be dead space ----------------
+   * On 1 Sep Ezra said "raise them" and 30 slider maximums went up, some by 6x. That creates a NEW
+   * failure this suite had no way to see: a ceiling raised PAST the point the effect still responds,
+   * leaving the top of the slider inert. The old fault was a slider that stopped short; the cure for
+   * it can produce a slider that goes nowhere, and to him both read identically — dragging and
+   * nothing happening.
+   *
+   * So this asserts the property rather than the numbers: for each raised control, the UPPER HALF of
+   * whatever range it now declares must still move the picture. Lower a max and the test still
+   * passes (the property holds); raise one too far and it fires.
+   *
+   * THREE THINGS THAT WOULD MAKE THIS GREEN AND WORTHLESS, all of them mistakes made while building
+   * the scan this came from (see tools/fx-sweep.js, which lists nine):
+   *   1. A FRAME SMALLER THAN THE RANGE. Chunk Noise now reaches 300px blocks. On a small fixture the
+   *      whole top half covers the frame identically and reads dead. Measured at his own 1080x1350.
+   *   2. NO CONTROL ON THE METRIC. A measurement that can only return "alive" proves nothing, so the
+   *      null case — the same value against itself — is asserted to read exactly 0 first.
+   *   3. A TRANSPARENT FIXTURE. Every kernel here begins `if (d[i+3] === 0) continue`, so an empty
+   *      frame makes every effect look inert. The fixture below is opaque with real tonal extremes. */
+
+  test('every raised effect ceiling still moves the picture in its top half (queue 482)', { item: 'fx-raised-live' }, function () {
+    const R = FM.fxRegistry, P = FM._pixelFx;
+    /* The controls raised on 1 Sep. Named, not derived — the point is to hold THESE to the property. */
+    const RAISED = [
+      ['halftone', 'size'], ['dither', 'scale'], ['dither', 'levels'], ['lensdistort', 'k1'],
+      ['lensdistort', 'k2'], ['iridescence', 'bands'], ['glitch', 'bands'], ['glitch', 'split'],
+      ['crt', 'scale'], ['blocknoise', 'size'], ['blocknoise', 'aspect'], ['noise', 'size'],
+      ['edge', 'amount'], ['compresscrunch', 'blocksize'], ['compresscrunch', 'chromablock'],
+      ['filmgrain', 'size'], ['shockwave', 'strength'], ['emboss', 'amount'], ['vhstape', 'wobble'],
+      ['dispersion', 'scale'], ['dispersion', 'distance'], ['gamma', 'gamma'], ['gamma', 'red'],
+      ['gamma', 'green'], ['gamma', 'blue'], ['levels', 'gamma'], ['vibrance', 'amount'],
+      ['exposure', 'stops'], ['exposure', 'offset'], ['border', 'width'],
+    ];
+    const W = 1080, H = 1350;                                  // TRAP 1: his project size, not a toy
+    const fixture = () => {
+      const a = new Uint8ClampedArray(W * H * 4), cx = W / 2, cy = H / 2, rx = W * 0.33, ry = H * 0.3;
+      for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) {
+        const u = x / W, v = y / H;
+        a[i] = Math.round(255 * u); a[i + 1] = Math.round(230 * v); a[i + 2] = Math.round(200 * (1 - u * v) + 40);
+        if (y > H * 0.8) { const L = Math.round(255 * (x / (W - 1))); a[i] = L; a[i + 1] = L; a[i + 2] = L; }
+        const dx = (x - cx) / rx, dy = (y - cy) / ry;
+        a[i + 3] = (y > H * 0.8) ? 255 : (dx * dx + dy * dy <= 1 ? 255 : 0);   // TRAP 3: real opaque area
+      }
+      return a;
+    };
+    const mad = (A, B) => { let s = 0; for (let i = 0; i < A.length; i++) s += Math.abs(A[i] - B[i]); return s / A.length; };
+    const shot = (type, q) => { const d = fixture(); P[type](d, W, H, q, 0.37, 1); return d; };
+
+    const dead = [], missing = [];
+    let checked = 0, nullChecked = 0;
+    RAISED.forEach(([type, key]) => {
+      if (!P[type]) { missing.push(type + ' — no kernel'); return; }
+      let ps = []; try { ps = R.paramsOf(type) || []; } catch (e) { missing.push(type + ' — paramsOf threw'); return; }
+      const pd = ps.find(x => x.key === key);
+      if (!pd || typeof pd.min !== 'number' || typeof pd.max !== 'number') { missing.push(type + '.' + key + ' — the raised param is gone'); return; }
+      const defs = {}; ps.forEach(x => { if (x.default !== undefined) defs[x.key] = x.default; });
+      if (pd.overriddenBy && pd.liveWhen !== undefined) defs[pd.overriddenBy] = pd.liveWhen;
+      const at = v => shot(type, Object.assign({}, defs, { [key]: v }));
+      const mid = at(pd.min + (pd.max - pd.min) * 0.5), top = at(pd.max);
+      /* TRAP 2: prove the metric can read zero before believing a non-zero reading. */
+      if (nullChecked < 3) { nullChecked++; if (mad(top, at(pd.max)) !== 0) throw new Error(type + '.' + key + ' renders differently from itself — this measurement is not repeatable, so nothing below it means anything'); }
+      checked++;
+      const moved = mad(mid, top);
+      if (moved < 0.5) dead.push(type + '.' + key + ' (' + pd.min + '..' + pd.max + ') moved ' + moved.toFixed(2));
+    });
+    if (missing.length) throw new Error('the raise list no longer matches the catalog: ' + missing.join(' · '));
+    if (checked !== RAISED.length) throw new Error('only ' + checked + ' of ' + RAISED.length + ' raised sliders were measured');
+    if (dead.length) throw new Error(dead.length + ' raised ceiling(s) are dead space — the top half of the slider does nothing: ' + dead.join(' · '));
+  });
+
   /* ---------------- queue 265: the keyframe rails had almost no coverage ----------------
    * Found by a mutation aimed at the new Edit Points ◆ landing on the CROP panel's instead, because
    * `left.appendChild(kfBtn)` appears four times in inspector.js and I had not anchored uniquely. It
@@ -55592,6 +55662,171 @@
     // A kernel that takes `ps` itself must be left alone or it scales twice.
     const sixArg = function (d, W, H, p, t, ps) { return ps; };
     if (FM._pxToPlate({ type: 'boxblur' }, src, 0.3, 0.5, sixArg) !== src) throw new Error('a kernel that declares its own `ps` was scaled as well — that double-applies the plate scale');
+  });
+
+  test('Motion Blur (Object) is an ordinary effect you can find and adjust (queue 695)', { item: '695' }, async function () {
+    /* Queue 695 was investigated on 1 Sep and IS NOT A BUG — this test is what the investigation was
+     * worth keeping. Three functions described a different, older design and cost the best part of an
+     * hour: `objectBlurTile()` and `enableObjectBlur()` in js/fx-browser.js built a hand-made
+     * pseudo-tile that set the legacy `layer.motionBlur` flag, and `motionBlurBlock()` in
+     * js/inspector.js built its Shutter row clamped to 1. All three had been unreachable since queue
+     * 335 made Motion Blur (Object) a real registry effect; all three are now deleted.
+     * What was never verified, in all that time, is the thing that actually matters — so it is here:
+     * the effect is FINDABLE where a person would look, and the Shutter it arrives with is the raised
+     * one, not the ceiling the dead copy carried. */
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 40, shapeH: 30, fill: '#c04070', start: 0, duration: 5 });
+    const keep = FM.scene.layers.slice();
+    FM.scene.layers.push(L); FM.selectLayer(L.id); FM.inspector.refresh(); await sleep(40);
+    try {
+      FM.fxBrowser.open(); await sleep(90);
+      /* `_openCategory` is the seam that takes a key — `open(key)` does something else entirely and
+         showed the 3D grid, which an earlier version of this test read as "the tile is missing". */
+      FM.fxBrowser._openCategory('blur'); await sleep(180);
+      const ids = Array.prototype.slice.call(document.querySelectorAll('.fxb-tile')).map(n => n.dataset.fxid);
+      // THE CONTROL: an ordinary blur must be on screen, or we are not looking at the blur category.
+      if (ids.indexOf('boxblur') < 0) throw new Error('the blur category is not on screen (tiles: ' + JSON.stringify(ids) + ') — the harness, not the feature');
+      if (ids.indexOf('objectblur') < 0) throw new Error('Motion Blur (Object) is not in the blur category, so there is nowhere to find it. Tiles: ' + JSON.stringify(ids));
+      if (ids.indexOf('_objblur') >= 0) throw new Error('the old `_objblur` pseudo-tile is back — it sets the legacy flag, which has no controls until the project is reloaded');
+    } finally {
+      try { if (FM.fxBrowser.isOpen && FM.fxBrowser.isOpen()) FM.fxBrowser.close(); } catch (e) {}
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(30);
+    }
+
+    const pd = (FM.fxRegistry.paramsOf('objectblur') || []).filter(p => p.key === 'shutter')[0];
+    if (!pd) throw new Error('Motion Blur (Object) has no Shutter parameter at all');
+    if (!(pd.max >= 12)) throw new Error('its Shutter ceiling is ' + pd.max + ' — queue 540 measured it paying to 12');
+
+    /* AND THE DEAD COPIES MUST STAY DEAD. Each clamped or routed around the raised ceiling, so a
+       re-wired one would quietly reinstate an old maximum. Both files are checked, with a length
+       assertion first because a fetch that fails would otherwise pass this forever. */
+    for (const [file, gone] of [['js/inspector.js', /function motionBlurBlock/], ['js/fx-browser.js', /function (objectBlurTile|enableObjectBlur)/]]) {
+      let src = '';
+      try { src = await (await fetch(file, { cache: 'no-store' })).text(); }
+      catch (e) { throw new Error('could not read ' + file + ': ' + e.message); }
+      if (src.length < 40000) throw new Error(file + ' came back as ' + src.length + ' chars — not the file, so this proves nothing');
+      if (gone.test(src)) throw new Error(file + ' has brought back a dead Motion Blur (Object) control — it carries an old Shutter ceiling and a route that has not existed since queue 335');
+    }
+  });
+
+  test('effects: a canvas effect sized in pixels means the same thing on a reduced plate', { item: '691b' }, function () {
+    /* #691's SECOND HALF, found 1 Sep by re-running its own audit against the OTHER dispatcher.
+     * That fix cured the 79 PIXEL_FX kernels through a shared helper. CANVAS_FX kernels are draw-call
+     * effects and each is expected to scale ITSELF — a contract nothing checked. Two of the 38 never
+     * did: Motion Blur (`distance`) and Raster Extrude (`depth`), both offsetting a drawImage by an
+     * absolute number of PLATE pixels. On his phone's 28% plate a 20px smear drew 71 project px on
+     * screen and 20 in the exported file.
+     *
+     * ⚠️ THE FIRST VERSION OF THIS TEST WAS DEAD, and the mutation check is the only reason anyone
+     * knows. It measured the whole lit band — from the first non-transparent pixel to the last — and
+     * that band is mostly the SUBJECT, which scales correctly. The un-scaled smear was diluted by it
+     * to a 9% difference at half plate (220 project px against 240) and sailed under a 40% threshold.
+     * MEASURED with the fix reverted: 220 / 240 / 280 across full, half and quarter plate — visibly
+     * wrong, and invisible to the assertion.
+     * The cure is to measure ONLY the part that is supposed to move: the distance the smear reaches
+     * PAST the subject's own known edge. Same numbers, isolated: 20 / 20 / 20 correct, 20 / 40 / 80
+     * broken. **A measurement that contains a correctly-scaling term cannot see a wrongly-scaling one.** */
+    const T = FM._FX_TABLES;
+    if (!T || !T.CANVAS_FX || !T.CANVAS_FX.motionblur) throw new Error('CANVAS_FX.motionblur is missing — the harness, not the feature');
+
+    /* A hard vertical edge at the halfway mark. The blur reaches LEFT of it by half the distance;
+       that reach, alone, is the number under test. */
+    const reach = (ps) => {
+      const W = Math.round(400 * ps), H = Math.round(120 * ps), edge = W / 2;
+      const src = document.createElement('canvas'); src.width = W; src.height = H;
+      const sg = src.getContext('2d');
+      sg.fillStyle = '#fff'; sg.fillRect(edge, 0, W - edge, H);
+      const dst = document.createElement('canvas'); dst.width = W; dst.height = H;
+      const dg = dst.getContext('2d', { willReadFrequently: true });
+      T.CANVAS_FX.motionblur(src, dg, W, H, { x: 0, y: 0, w: W, h: H }, { distance: 40, angle: 0 }, 0.3, 0.3, null, ps);
+      const d = dg.getImageData(0, 0, W, H).data, y = H >> 1;
+      let lo = -1;
+      for (let x = 0; x < W && lo < 0; x++) if (d[((y * W + x) << 2) + 3] > 12) lo = x;
+      if (lo < 0) return 0;
+      return (edge - lo) / ps;                        // how far it reached, in PROJECT pixels
+    };
+    const full = reach(1), half = reach(0.5), quarter = reach(0.25);
+    if (!(full > 12)) throw new Error('a 40px motion blur reached only ' + full.toFixed(1) + ' project px past the edge at full plate — the harness, not the feature');
+    if (half > full * 1.35) throw new Error('Motion Blur reached ' + half.toFixed(1) + ' project px on a HALF plate against ' + full.toFixed(1) + ' at full — the preview is showing a different blur from the export');
+    if (quarter > full * 1.6) throw new Error('Motion Blur reached ' + quarter.toFixed(1) + ' project px on a QUARTER plate against ' + full.toFixed(1) + ' at full — the reduced preview plate is not being accounted for');
+
+    /* Raster Extrude, measured the same isolated way: the stack reaches PAST the square's own right
+       edge, and only that overhang is under test. Including the square would dilute it exactly as
+       above — with the fix reverted the whole-extent version reads 240 against 300, a 1.25x gap that
+       a sane threshold lets through; the overhang alone reads 60 against 120. */
+    const overhang = (ps) => {
+      const W = Math.round(400 * ps), H = Math.round(400 * ps);
+      const right = Math.round(W * 0.45);
+      const src = document.createElement('canvas'); src.width = W; src.height = H;
+      const sg = src.getContext('2d');
+      sg.fillStyle = '#fff'; sg.fillRect(Math.round(W * 0.3), Math.round(H * 0.3), right - Math.round(W * 0.3), Math.round(H * 0.4));
+      const dst = document.createElement('canvas'); dst.width = W; dst.height = H;
+      const dg = dst.getContext('2d', { willReadFrequently: true });
+      T.CANVAS_FX.rasterextrude(src, dg, W, H, { x: 0, y: 0, w: W, h: H }, { depth: 60, angle: 0, darken: 0.5 }, 0.3, 0.3, null, ps);
+      const d = dg.getImageData(0, 0, W, H).data, y = H >> 1;
+      let hi = 0;
+      for (let x = 0; x < W; x++) if (d[((y * W + x) << 2) + 3] > 12) hi = x;
+      if (hi >= W - 1) throw new Error('the extrude ran off the edge of the fixture at ps ' + ps + ' — the measurement is clipped, so it proves nothing');
+      return (hi - right) / ps;                       // the overhang alone, in PROJECT pixels
+    };
+    const eFull = overhang(1), eHalf = overhang(0.5);
+    if (!(eFull > 30)) throw new Error('a depth-60 extrude overhung only ' + eFull.toFixed(1) + ' project px at full plate — the harness, not the feature');
+    if (eHalf > eFull * 1.35) throw new Error('Raster Extrude overhung ' + eHalf.toFixed(1) + ' project px on a HALF plate against ' + eFull.toFixed(1) + ' at full — its depth is in plate pixels, not project pixels');
+  });
+
+  test('effects: no canvas effect has a pixel-sized setting it never scales to the plate', { item: '691b' }, async function () {
+    /* The measurement above proves the two that were broken. This is the STRUCTURAL half: it reads
+     * the source and holds every CANVAS_FX kernel to the contract, so the next one written with a
+     * `unit: 'px'` control cannot ship ignoring the plate. Ezra's rule — a safeguard is a script that
+     * refuses, not a note asking the next person to remember.
+     *
+     * ⚠️ A SOURCE-SLICING TEST THAT MATCHES NOTHING PASSES FOREVER, so every join is asserted before
+     * the verdict: the catalog must yield a plausible number of px-param effects, the kernel table
+     * must be found by name and yield a plausible number of kernels, and Motion Blur — known to carry
+     * a px `distance` — must be among the kernels actually checked. Renaming CANVAS_FX now fails the
+     * test instead of quietly emptying it. */
+    let src = '';
+    try { src = await (await fetch('js/compositor.js', { cache: 'no-store' })).text(); }
+    catch (e) { throw new Error('could not read js/compositor.js: ' + e.message); }
+    if (src.length < 100000) throw new Error('js/compositor.js came back as ' + src.length + ' chars — that is not the file, so nothing below proves anything');
+
+    const cut = (open, from) => { const close = open === '{' ? '}' : ']'; let d = 0;
+      for (let k = from; k < src.length; k++) { const c = src[k]; if (c === open) d++; else if (c === close) { d--; if (!d) return k; } } return -1; };
+
+    // Every effect with a px-sized parameter, straight out of the catalog text.
+    const pxOf = {};
+    const typeRe = /type: '([a-z0-9]+)'/g;
+    let m;
+    while ((m = typeRe.exec(src))) {
+      const j2 = src.indexOf('params: [', m.index);
+      if (j2 < 0 || j2 - m.index > 900) continue;
+      const end = cut('[', j2 + 8);
+      if (end < 0) continue;
+      const px = (src.slice(j2 + 8, end + 1).match(/key: '[^']+'[^{}]*unit: 'px'/g) || []).map(x => x.match(/key: '([^']+)'/)[1]);
+      if (px.length) pxOf[m[1]] = px;
+    }
+    if (Object.keys(pxOf).length < 30) throw new Error('only ' + Object.keys(pxOf).length + ' effects with a px parameter were found in the catalog — the slice is broken, not the code');
+
+    const tbl = src.indexOf('const CANVAS_FX = {');
+    if (tbl < 0) throw new Error('the CANVAS_FX table was not found by name — this test is slicing nothing');
+    const open = src.indexOf('{', tbl);
+    const body = src.slice(open, cut('{', open) + 1);
+    const kRe = /\n    ([a-z0-9]+): function \(([^)]*)\) \{/g;
+    const offenders = [], checked = [];
+    let n = 0;
+    while ((m = kRe.exec(body))) {
+      n++;
+      const name = m[1], args = m[2].split(',').map(a => a.trim());
+      if (!pxOf[name]) continue;
+      checked.push(name);
+      const kOpen = body.indexOf('{', m.index + m[0].length - 1);
+      let d = 0, kEnd = -1;
+      for (let k = kOpen; k < body.length; k++) { const c = body[k]; if (c === '{') d++; else if (c === '}') { d--; if (!d) { kEnd = k; break; } } }
+      const kb = body.slice(m.index, kEnd + 1);
+      if (args.indexOf('ps') < 0 || !/\bps\b/.test(kb)) offenders.push(name + ' (' + pxOf[name].join(', ') + ')');
+    }
+    if (n < 25) throw new Error('only ' + n + ' CANVAS_FX kernels were sliced out — the table changed shape and this test is no longer covering it');
+    if (checked.indexOf('motionblur') < 0) throw new Error('Motion Blur — which has a px `distance` — was not among the ' + checked.length + ' kernels checked, so the catalog/kernel join is broken and a green run here means nothing');
+    if (offenders.length) throw new Error(offenders.length + ' canvas effect(s) have a pixel-sized setting and never scale it to the plate, so the preview and the export disagree: ' + offenders.join(' · '));
   });
 
   test('effects: Motion Blur (Footage) reaches further than it used to, and every bit of it pays', { item: '578' }, function () {

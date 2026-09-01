@@ -1,0 +1,111 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:11px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:900px;height:700px;border:0"></iframe>
+<script>
+/* #482 — "raise them". WHERE should each slider's maximum actually be?
+   Not "double everything": walk the multiplier up and stop at the last value that still EARNS its
+   place. Three ways this measurement lies, and all three were hit building it:
+     A. DIFFERENCE IS NOT REACH. The first run put Fractal Ridges' SEED in the raise list — seed 999
+        vs 3996 renders a different picture, obviously, and that says nothing about range. Same for
+        every speed/rate/drift/phase: "more" has no meaning, only "different". Excluded by name, and
+        the seed is the proof the exclusion was needed rather than the argument for it.
+     B. FLAT BLACK AND WHITE IS NOT COLLAPSE. The first degeneration test convicted Halftone Dots for
+        rendering pure black and white pixels — which is what a halftone IS. Replaced with the
+        question that actually matters: does the output still DEPEND ON THE PICTURE? Rendered on two
+        very different frames, a collapsed effect gives the same answer to both.
+     C. A SPATIAL RANGE WIDER THAN THE TEST FRAME SATURATES (fx-sweep fault 9), so 640x480. */
+var out = [];
+function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.fxRegistry && w.FM._pixelFx)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait, 50); }
+    setTimeout(function(){ run(w); }, 600);
+  })();
+});
+function run(w) {
+  var R = w.FM.fxRegistry, P = w.FM._pixelFx, W = 640, H = 480;
+  function frameA() {
+    var a = new Uint8ClampedArray(W*H*4), cx=W/2, cy=H/2, rx=W*0.32, ry=H*0.34;
+    for (var y=0,i=0;y<H;y++) for (var x=0;x<W;x++,i+=4){
+      var u=x/W, v=y/H;
+      var r=Math.round(255*u), g=Math.round(230*v), b=Math.round(200*(1-u*v)+40);
+      if (((x>>5)+(y>>5))&1){ r=Math.min(255,r+40); g=Math.max(0,g-30); }
+      if (y > H*0.72){ var L=Math.round(255*(x/(W-1))); r=L; g=L; b=L; }
+      var dx=(x-cx)/rx, dy=(y-cy)/ry, d=dx*dx+dy*dy;
+      a[i]=r; a[i+1]=g; a[i+2]=b;
+      a[i+3] = (y > H*0.72) ? 255 : (d<=1 ? (d>0.82?170:255) : 0);
+    }
+    return a;
+  }
+  function frameB() {                       // a deliberately UNLIKE picture, for the dependence test
+    var a = new Uint8ClampedArray(W*H*4);
+    for (var y=0,i=0;y<H;y++) for (var x=0;x<W;x++,i+=4){
+      var s = Math.sin(x*0.06)*Math.cos(y*0.05);
+      a[i]=Math.round(128+120*s); a[i+1]=Math.round(128-110*s); a[i+2]=Math.round(128+90*Math.sin(y*0.09));
+      a[i+3]=255;
+    }
+    return a;
+  }
+  function mad(A,B){ var s=0; for (var i=0;i<A.length;i++) s+=Math.abs(A[i]-B[i]); return s/A.length; }
+  function spread(A){                        // uniformity: mean |pixel - mean| over drawn pixels
+    var n=0, sr=0; for (var i=0;i<A.length;i+=4){ if(A[i+3]<8) continue; n++; sr+=(A[i]+A[i+1]+A[i+2])/3; }
+    if (!n) return 0; var m=sr/n, s=0;
+    for (var i=0;i<A.length;i+=4){ if(A[i+3]<8) continue; s+=Math.abs((A[i]+A[i+1]+A[i+2])/3-m); }
+    return s/n;
+  }
+  function shot(type,q,t,mk){ var d=(mk||frameA)(); try { P[type](d,W,H,q,t,1); } catch(e){ return null; } return d; }
+  var CYCLIC = {'°':1,'%':1,'s':1,'fps':1,'Hz':1,'px/s':1};
+  var NATURAL = {1:1,100:1,180:1,255:1,360:1};
+  /* (A) a bigger number here is a DIFFERENT result, not a STRONGER one */
+  var NOT_MAGNITUDE = /seed|speed|rate|phase|drift|roll|freq|jitter$|wander/i;
+  var MULT = [1, 1.5, 2, 3, 4, 6, 8];
+  var rows = [], skipped = 0, notMag = 0;
+  R.all().forEach(function(fx){
+    if (!P[fx.type]) return;
+    var ps = R.paramsOf(fx.type) || [];
+    var defs = {}; ps.forEach(function(p){ if (p.default !== undefined) defs[p.key] = p.default; });
+    ps.forEach(function(p){
+      if (typeof p.min !== 'number' || typeof p.max !== 'number' || p.max <= 0 || p.max <= p.min) return;
+      if (CYCLIC[p.unit]) { skipped++; return; }
+      if (NATURAL[p.max])  { skipped++; return; }
+      if (NOT_MAGNITUDE.test(p.key)) { notMag++; return; }
+      var base = Object.assign({}, defs);
+      if (p.overriddenBy && p.liveWhen !== undefined) base[p.overriddenBy] = p.liveWhen;
+      var prev = null, gains = [], best = 1, bestWhy = '';
+      for (var k=0;k<MULT.length;k++){
+        var v = p.max * MULT[k];
+        var s = shot(fx.type, Object.assign({},base,{[p.key]: v}), 0.37);
+        if (!s) { bestWhy = 'threw'; break; }
+        if (prev){
+          var gain = mad(prev, s);
+          gains.push(+gain.toFixed(2));
+          if (gain < 2) { bestWhy = 'gain fell to ' + gain.toFixed(2); break; }
+          var sB = shot(fx.type, Object.assign({},base,{[p.key]: v}), 0.37, frameB);
+          var dep = sB ? mad(s, sB) : 0;             // (B) does it still depend on the picture?
+          if (dep < 4) { bestWhy = 'stopped depending on the picture (' + dep.toFixed(1) + ')'; break; }
+          if (spread(s) < 3) { bestWhy = 'went uniform'; break; }
+          best = MULT[k];
+        }
+        prev = s;
+      }
+      if (best > 1) rows.push({ label: fx.label, type: fx.type, key: p.key, unit: p.unit||'',
+                                max: p.max, mult: best, to: +(p.max*best).toFixed(3),
+                                gains: gains, why: bestWhy || 'ran out of multipliers' });
+    });
+  });
+  say('scanned · ' + skipped + ' skipped (%, °, s, fps, Hz, px/s, or a natural constant) · ' +
+      notMag + ' skipped as not-a-magnitude (seed/speed/rate/phase/drift/roll)');
+  say(rows.length + ' sliders earn a higher maximum:');
+  say('');
+  rows.sort(function(x,y){ return y.mult-x.mult || y.gains[0]-x.gains[0]; }).forEach(function(r){
+    say('  ' + (r.label+' · '+r.key).padEnd(36) + String(r.max).padStart(7) + (r.unit||'') +
+        '  ->' + String(r.to).padStart(8) + '  (' + r.mult + 'x)  gains ' + r.gains.join(' ') +
+        '  | stopped: ' + r.why);
+  });
+  say('');
+  say('JSON ' + JSON.stringify(rows.map(function(r){return [r.type,r.key,r.max,r.to,r.mult];})));
+  window.__done = 1;
+}
+</script></body></html>

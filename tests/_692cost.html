@@ -1,0 +1,57 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:11px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:900px;height:700px;border:0"></iframe>
+<script>
+/* #692 — RANK the pixel kernels by what they cost in the situation that actually lags: a SMALL layer
+   in a FULL-SIZE plate. Four are bounded already (boxblur, dropshadow, lensblur, hextiles); this says
+   which to do next, measured today rather than from a week-old list. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n=0;
+  (function wait(){ if(!(w.FM&&w.FM._pixelFx&&w.FM.fxRegistry)){ if(n++>500) return say('FM never came up'); return setTimeout(wait,50);} setTimeout(function(){run(w);},700); })();
+});
+function run(w){
+  var P=w.FM._pixelFx, R=w.FM.fxRegistry, T=w.FM._FX_TABLES||{};
+  var W=1080, H=1920;                       // his plate
+  var LW=180, LH=150, LX=90, LY=120;        // a small subject in the corner, like a logo or a caption
+  function frame(){
+    var a=new Uint8ClampedArray(W*H*4);
+    for(var y=LY;y<LY+LH;y++){ var row=y*W;
+      for(var x=LX;x<LX+LW;x++){ var i=(row+x)*4;
+        a[i]=((x*7)&255); a[i+1]=((y*5)&255); a[i+2]=180; a[i+3]=255; } }
+    return a;
+  }
+  var bb={x:LX,y:LY,w:LW,h:LH};
+  var bounded = T.BOUNDED_FX || {};
+  var rows=[];
+  R.all().forEach(function(fx){
+    var fn=P[fx.type]; if(!fn) return;
+    var ps=R.paramsOf(fx.type)||[], q={};
+    ps.forEach(function(p){ if(p.default!==undefined) q[p.key]=p.default; });
+    var d=frame();
+    try { fn(d,W,H,q,0.37,1,bb); } catch(e){ return; }     // warm
+    var best=1e9;
+    for(var k=0;k<3;k++){
+      var dd=frame(), t0=performance.now();
+      try { fn(dd,W,H,q,0.37,1,bb); } catch(e){ return; }
+      var ms=performance.now()-t0; if(ms<best) best=ms;
+    }
+    rows.push({label:fx.label, type:fx.type, ms:+best.toFixed(1), done:!!bounded[fx.type]});
+  });
+  rows.sort(function(a,b){ return b.ms-a.ms; });
+  var total=rows.reduce(function(a,r){return a+r.ms;},0);
+  say('Every pixel effect at its DEFAULTS, on a 180x150 subject in a 1080x1920 plate.');
+  say('That is the lag case: the layer covers 1.3% of the frame and most kernels walk all of it.');
+  say('');
+  say('  cost      effect                          bounded already?');
+  rows.slice(0,26).forEach(function(r){
+    say('  ' + (r.ms.toFixed(1)+'ms').padStart(8) + '   ' + r.label.padEnd(30) + (r.done?'✅ yes':''));
+  });
+  say('');
+  var doneMs = rows.filter(function(r){return r.done;}).reduce(function(a,r){return a+r.ms;},0);
+  say('  ' + rows.length + ' kernels measured · total ' + total.toFixed(0) + 'ms · the 4 already bounded now cost ' + doneMs.toFixed(1) + 'ms between them');
+  say('  a 30fps frame budget is 33ms');
+  window.__done=1;
+}
+</script></body></html>

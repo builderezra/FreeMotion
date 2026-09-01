@@ -116,10 +116,10 @@ window.FM = window.FM || {};
       { key: 'mode', label: 'Flips on', def: 0, options: [[0, 'Each colour'], [1, 'Brightness']] },
     ] },
     { type: 'gamma', label: 'Gamma', params: [
-      { key: 'gamma', label: 'Gamma', min: 0.2, max: 4, step: 0.05, def: 1.8 },
-      { key: 'red', label: 'Red', min: 0.3, max: 3, step: 0.02, def: 1 },
-      { key: 'green', label: 'Green', min: 0.3, max: 3, step: 0.02, def: 1 },
-      { key: 'blue', label: 'Blue', min: 0.3, max: 3, step: 0.02, def: 1 },
+      { key: 'gamma', label: 'Gamma', min: 0.1, max: 10, step: 0.05, def: 1.8 },
+      { key: 'red', label: 'Red', min: 0.2, max: 5, step: 0.02, def: 1 },
+      { key: 'green', label: 'Green', min: 0.2, max: 5, step: 0.02, def: 1 },
+      { key: 'blue', label: 'Blue', min: 0.2, max: 5, step: 0.02, def: 1 },
     ] },
     { type: 'temperature', label: 'Colour Temperature', params: [
       { key: 'amount', label: 'Temperature', min: -100, max: 100, step: 1, def: 40 },
@@ -129,7 +129,7 @@ window.FM = window.FM || {};
     { type: 'noise', label: 'Noise', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 35, unit: '%' },
       { key: 'speed', label: 'Speed', min: 0, max: 60, step: 1, def: 24, unit: 'Hz' },
-      { key: 'size', label: 'Grain size', min: 1, max: 8, step: 0.5, def: 1 },
+      { key: 'size', label: 'Grain size', min: 1, max: 48, step: 0.5, def: 1 },
       /* Queue 319: *"give the noise effect a toggle to circle noise or square noise"*. Square is the
          default because it is what the effect has always done — a grain is a whole cell of the grid —
          and changing what an existing project renders as is not a rename. Round punches the cell down
@@ -147,7 +147,7 @@ window.FM = window.FM || {};
     ] },
     // ---- batch 2 ----
     { type: 'vibrance', label: 'Vibrance', params: [
-      { key: 'amount', label: 'Amount', min: 0, max: 2, step: 0.02, def: 1.6 },
+      { key: 'amount', label: 'Amount', min: 0, max: 8, step: 0.02, def: 1.6 },
       { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'highlights', label: 'Protect highlights', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
@@ -164,13 +164,13 @@ window.FM = window.FM || {};
       { key: 'high', label: 'High', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     { type: 'dither', label: 'Dither', params: [
-      { key: 'levels', label: 'Levels', min: 2, max: 8, step: 1, def: 4 },
-      { key: 'scale', label: 'Cell size', min: 1, max: 16, step: 1, def: 1, unit: 'px' },
+      { key: 'levels', label: 'Levels', min: 2, max: 32, step: 1, def: 4 },
+      { key: 'scale', label: 'Cell size', min: 1, max: 64, step: 1, def: 1, unit: 'px' },
       { key: 'matrix', label: 'Pattern', def: 1, options: [[0, 'Coarse 2×2'], [1, 'Classic 4×4'], [2, 'Fine 8×8']] },
       { key: 'mono', label: 'Output', def: 0, options: [[0, 'Colour'], [1, 'Mono']] },
     ] },
     { type: 'halftone', label: 'Halftone Dots', params: [
-      { key: 'size', label: 'Dot pitch', min: 2, max: 30, step: 1, def: 8, unit: 'px' },
+      { key: 'size', label: 'Dot pitch', min: 2, max: 120, step: 1, def: 8, unit: 'px' },
       { key: 'angle', label: 'Screen angle', min: 0, max: 90, step: 1, def: 0, unit: '°' },
       { key: 'gain', label: 'Ink gain', min: 0.5, max: 2.5, step: 0.05, def: 1.45, unit: '×' },
       { key: 'shape', label: 'Dot shape', def: 0, options: [[0, 'Round'], [1, 'Square'], [2, 'Diamond']] },
@@ -203,20 +203,20 @@ window.FM = window.FM || {};
     ] },
     // ---- batch 4 ----
     { type: 'edge', label: 'Find Edges', params: [
-      { key: 'amount', label: 'Amount', min: 0.5, max: 4, step: 0.05, def: 1.5 },
+      { key: 'amount', label: 'Amount', min: 0.5, max: 24, step: 0.05, def: 1.5 },
       { key: 'polarity', label: 'Lines', def: 0, options: [[0, 'White on black'], [1, 'Black on white']] },
       { key: 'threshold', label: 'Ignore below', min: 0, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     { type: 'emboss', label: 'Emboss', params: [
-      { key: 'amount', label: 'Depth', min: 0, max: 3, step: 0.05, def: 1 },
+      { key: 'amount', label: 'Depth', min: 0, max: 18, step: 0.05, def: 1 },
       { key: 'angle', label: 'Light angle', min: 0, max: 360, step: 1, def: 135, unit: '°' },
       { key: 'mono', label: 'Output', def: 0, options: [[0, 'Colour'], [1, 'Grey']] },
       { key: 'blend', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     { type: 'exposure', label: 'Exposure', params: [
-      { key: 'stops', label: 'Stops', min: -3, max: 3, step: 0.05, def: 0.8, unit: ' EV' },
-      { key: 'offset', label: 'Black point', min: -50, max: 50, step: 1, def: 0 },
+      { key: 'stops', label: 'Stops', min: -5, max: 5, step: 0.05, def: 0.8, unit: ' EV' },
+      { key: 'offset', label: 'Black point', min: -150, max: 150, step: 1, def: 0 },
       { key: 'rolloff', label: 'Highlight rolloff', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
     { type: 'fisheye', label: 'Fisheye', params: [
@@ -248,9 +248,9 @@ window.FM = window.FM || {};
     ] },
     { type: 'glitch', label: 'Glitch', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
-      { key: 'bands', label: 'Slices', min: 2, max: 60, step: 1, def: 14 },
+      { key: 'bands', label: 'Slices', min: 2, max: 240, step: 1, def: 14 },
       { key: 'speed', label: 'Re-roll', min: 0, max: 30, step: 1, def: 10, unit: 'Hz' },
-      { key: 'split', label: 'RGB tear', min: 0, max: 3, step: 0.1, def: 1, unit: '×' },
+      { key: 'split', label: 'RGB tear', min: 0, max: 20, step: 0.1, def: 1, unit: '×' },
     ] },
     { type: 'zoomblur', label: 'Zoom Blur', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -260,7 +260,7 @@ window.FM = window.FM || {};
     ] },
     { type: 'crt', label: 'CRT', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.7 },
-      { key: 'scale', label: 'Cell size', min: 1, max: 8, step: 1, def: 1, unit: 'px' },
+      { key: 'scale', label: 'Cell size', min: 1, max: 40, step: 1, def: 1, unit: 'px' },
       { key: 'scanline', label: 'Scanlines', min: 0, max: 1, step: 0.02, def: 0.45 },
       { key: 'mask', label: 'Phosphor mask', min: 0, max: 1, step: 0.02, def: 0.18 },
     ] },
@@ -401,7 +401,7 @@ window.FM = window.FM || {};
     ] },
     { type: 'filmgrain', label: 'Film Grain', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 40, unit: '%' },
-      { key: 'size', label: 'Grain size', min: 1, max: 6, step: 0.5, def: 2 },        // real grain clumps — it is not one pixel
+      { key: 'size', label: 'Grain size', min: 1, max: 24, step: 0.5, def: 2 },        // real grain clumps — it is not one pixel
       /* ROUND GRAIN (queue 109). Ezra: "The film grain effect should have a circle option, instead of
          just squares, and also the preview image should show the circle version."
          He is right about the physics as well as the look — a grain is a silver halide particle, not a
@@ -418,8 +418,8 @@ window.FM = window.FM || {};
     ] },
     { type: 'blocknoise', label: 'Chunk Noise', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
-      { key: 'size', label: 'Block size', min: 1, max: 60, step: 1, def: 6, unit: 'px' },
-      { key: 'aspect', label: 'Block aspect', min: 0.1, max: 6, step: 0.05, def: 1 },
+      { key: 'size', label: 'Block size', min: 1, max: 300, step: 1, def: 6, unit: 'px' },
+      { key: 'aspect', label: 'Block aspect', min: 0.05, max: 20, step: 0.05, def: 1 },
       { key: 'speed', label: 'Speed', min: 0, max: 30, step: 0.5, def: 8, unit: 'Hz' },
     ] },
     { type: 'starfield', label: 'Starfield', color: true, defColor: '#ffffff', colorLabel: 'Star', params: [
@@ -490,7 +490,7 @@ window.FM = window.FM || {};
     { type: 'iridescence', label: 'Iridescence', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.7 },
       { key: 'scale', label: 'Scale', min: 10, max: 500, step: 5, def: 100, unit: '%' },
-      { key: 'bands', label: 'Bands', min: 0.5, max: 10, step: 0.1, def: 3 },
+      { key: 'bands', label: 'Bands', min: 0.5, max: 60, step: 0.1, def: 3 },
       { key: 'blur', label: 'Blur', min: 0, max: 60, step: 1, def: 0, unit: 'px' },
       { key: 'motion', label: 'Motion', min: 0, max: 100, step: 1, def: 25, legacy: 0, unit: '%' },
       { key: 'speed', label: 'Drift', min: -4, max: 4, step: 0.1, def: 0 },
@@ -791,7 +791,7 @@ window.FM = window.FM || {};
       { key: 'metric', label: 'Bars sized to', options: [[0, 'Layer'], [1, 'Frame']], def: 0, legacy: 1 },
     ] },
     { type: 'border', label: 'Border Frame', color: true, defColor: '#ffffff', colorLabel: 'Border', params: [
-      { key: 'width', label: 'Width', min: 1, max: 60, step: 1, def: 10, unit: 'px' },
+      { key: 'width', label: 'Width', min: 1, max: 180, step: 1, def: 10, unit: 'px' },
       { key: 'inset', label: 'Inset', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
       { key: 'radius', label: 'Corner radius', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
       { key: 'opacity', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%' },
@@ -1114,7 +1114,7 @@ window.FM = window.FM || {};
       { key: 'channel', label: 'Channel', options: [[0, 'RGB'], [1, 'Red'], [2, 'Green'], [3, 'Blue']], def: 0 },
       { key: 'inblack', label: 'Input black', min: 0, max: 254, step: 1, def: 14 },
       { key: 'inwhite', label: 'Input white', min: 1, max: 255, step: 1, def: 236 },
-      { key: 'gamma', label: 'Gamma', min: 0.1, max: 4, step: 0.02, def: 1 },
+      { key: 'gamma', label: 'Gamma', min: 0.1, max: 10, step: 0.02, def: 1 },
       { key: 'outblack', label: 'Output black', min: 0, max: 255, step: 1, def: 0 },
       { key: 'outwhite', label: 'Output white', min: 0, max: 255, step: 1, def: 255 },
     ] },
@@ -1142,7 +1142,7 @@ window.FM = window.FM || {};
     { type: 'shockwave', label: 'Shockwave', desc: 'A single pressure ring that expands out of a point and leaves the frame. Keyframe the Radius — that is the whole move.', params: [
       { key: 'radius', label: 'Radius', min: 0, max: 150, step: 1, def: 40, unit: '%' },
       { key: 'width', label: 'Band', min: 1, max: 60, step: 1, def: 12, unit: '%' },
-      { key: 'strength', label: 'Strength', min: 0, max: 120, step: 1, def: 40, unit: 'px' },
+      { key: 'strength', label: 'Strength', min: 0, max: 600, step: 1, def: 40, unit: 'px' },
       { key: 'rim', label: 'Rim light', min: 0, max: 1, step: 0.02, def: 0.4 },
       { key: 'chroma', label: 'Chroma split', min: 0, max: 1, step: 0.02, def: 0.35 },
       { key: 'x', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
@@ -1214,8 +1214,8 @@ window.FM = window.FM || {};
     { type: 'dispersion', label: 'Dispersion', desc: 'The layer tears apart along a noise front and blows away, glowing at the leading edge. Keyframe Progress 0 → 1 and that is the whole transition.', params: [
       { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.45 },
       { key: 'direction', label: 'Direction', min: 0, max: 360, step: 1, def: 0, unit: '°' },
-      { key: 'distance', label: 'Travel', min: 0, max: 400, step: 5, def: 90, unit: 'px' },
-      { key: 'scale', label: 'Grain', min: 2, max: 200, step: 1, def: 26, unit: 'px' },
+      { key: 'distance', label: 'Travel', min: 0, max: 1200, step: 5, def: 90, unit: 'px' },
+      { key: 'scale', label: 'Grain', min: 2, max: 900, step: 1, def: 26, unit: 'px' },
       { key: 'softness', label: 'Edge', min: 0.05, max: 1, step: 0.02, def: 0.35 },
       { key: 'glow', label: 'Embers', min: 0, max: 1, step: 0.02, def: 0.6 },
     ], color: true, defColor: '#ff9a3c', colorLabel: 'Ember' },
@@ -1226,7 +1226,7 @@ window.FM = window.FM || {};
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.7 },
       { key: 'chromableed', label: 'Colour smear', min: 0, max: 90, step: 1, def: 26, unit: 'px' },
       { key: 'halo', label: 'Edge ringing', min: 0, max: 1, step: 0.02, def: 0.5 },
-      { key: 'wobble', label: 'Line wobble', min: 0, max: 20, step: 0.5, def: 3, unit: 'px' },
+      { key: 'wobble', label: 'Line wobble', min: 0, max: 120, step: 0.5, def: 3, unit: 'px' },
       { key: 'tracking', label: 'Tracking band', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'trackspeed', label: 'Band speed', min: 0, max: 3, step: 0.05, def: 0.4, unit: 'Hz' },
       { key: 'headswitch', label: 'Head switch', min: 0, max: 1, step: 0.02, def: 0.6 },
@@ -1237,8 +1237,8 @@ window.FM = window.FM || {};
     // the exact opposite, and is why neither of them reads as a re-uploaded video.
     { type: 'compresscrunch', label: 'Compression Crunch', desc: 'Convincing over-compression: colour collapses into blocks and flat areas band, while edges stay razor sharp. Fry pushes it into meme territory.', params: [
       { key: 'quality', label: 'Quality', min: 0, max: 1, step: 0.02, def: 0.3 },
-      { key: 'blocksize', label: 'Block size', min: 2, max: 40, step: 1, def: 8, unit: 'px' },
-      { key: 'chromablock', label: 'Colour block', min: 2, max: 80, step: 1, def: 16, unit: 'px' },
+      { key: 'blocksize', label: 'Block size', min: 2, max: 200, step: 1, def: 8, unit: 'px' },
+      { key: 'chromablock', label: 'Colour block', min: 2, max: 400, step: 1, def: 16, unit: 'px' },
       { key: 'ringing', label: 'Ringing', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'fry', label: 'Fry', min: 0, max: 1, step: 0.02, def: 0.25 },
     ] },
@@ -1256,8 +1256,8 @@ window.FM = window.FM || {};
     // footage as well as bend a flat shot, and it carries the radial colour fringing that comes with
     // real glass — strongest at the corners, zero at the centre.
     { type: 'lensdistort', label: 'Lens Distortion', desc: 'Real lens geometry — barrel or pincushion by a k1/k2 polynomial, with colour fringing that grows toward the corners the way glass does. Straightens wide-angle footage as well as bends a flat shot.', params: [
-      { key: 'k1', label: 'Barrel', min: -0.8, max: 0.8, step: 0.01, def: 0.18 },
-      { key: 'k2', label: 'Corner falloff', min: -0.5, max: 0.5, step: 0.01, def: 0 },
+      { key: 'k1', label: 'Barrel', min: -3, max: 3, step: 0.01, def: 0.18 },
+      { key: 'k2', label: 'Corner falloff', min: -2, max: 2, step: 0.01, def: 0 },
       // Bending a rectangle outward pulls in content from beyond the frame, which does not exist —
       // every tool that does this has a resize control for exactly that reason. Default it to just
       // cover the k1 default so the effect does not land looking broken.
@@ -9871,11 +9871,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B.drawImage(A, 0, 0);
       B.restore();
     },
-    rasterextrude: function (A, B, W, H, bb, p, t) {
+    rasterextrude: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+      /* Same as motionblur above: `depth` is project pixels, the loop steps one PLATE pixel at a time,
+       * so on a reduced preview the extrusion ran ~3.5x deeper than the export. Scaling the depth
+       * scales the step COUNT with it, which is right — the total offset stays depth project px and a
+       * smaller plate simply gets a coarser stack, which is what a reduced plate is for. */
+      const PS = (ps > 0) ? ps : 1;
       const depth = Math.max(0, Math.min(100, fparam(p, 'depth', 40, t)));
       const ang = fparam(p, 'angle', 225, t) * Math.PI / 180;
       const dk = clamp01(fparam(p, 'darken', 0.55, t));
-      const steps = Math.round(depth);
+      const steps = Math.round(depth * PS);
       if (!steps) { B.drawImage(A, 0, 0); return; }
       if (!_reC) _reC = document.createElement('canvas');
       _reC.width = W; _reC.height = H;
@@ -10086,10 +10091,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // draws (k-th draw at 1/(k+1) accumulates a true average) — same geometry as the old per-pixel
     // kernel at ~1/30th the cost. Bonus: the smear now extends naturally past the silhouette edge
     // (the old kernel only wrote where alpha already existed).
-    motionblur: function (A, B, W, H, bb, p, t) {
+    motionblur: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+      /* Distance is in PROJECT pixels but this draws into the PLATE, which the preview shrinks (his
+       * phone reports 28%). Unscaled, a 20px smear drew 20 plate px = 71 project px on screen and 20
+       * in the exported file — #691's bug, in the effect named Motion Blur. Clamp first (60 is the
+       * slider's ceiling, a project-space number), THEN scale, so the early-out below still means
+       * "he asked for no blur" rather than "the plate made it sub-pixel". */
+      const PS = (ps > 0) ? ps : 1;
       let dist = FM.evalProp(p.distance, t); if (dist == null) dist = 20;
       dist = Math.max(0, Math.min(60, dist));
       if (dist < 1) { B.drawImage(A, 0, 0); return; }
+      dist *= PS;
       let ang = FM.evalProp(p.angle, t); if (ang == null) ang = 0;
       const rad = Math.max(0, Math.min(360, ang)) * Math.PI / 180;
       const dx = Math.cos(rad), dy = Math.sin(rad), step = dist / 8;

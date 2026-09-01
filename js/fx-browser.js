@@ -515,46 +515,16 @@ window.FM = window.FM || {};
   // which blurs movement INSIDE the clip, and Directional Blur, which ignores movement entirely.
   // Same pseudo-entry trick as Mask: this drives layer.motionBlur rather than pushing an effect
   // instance, so every existing project keeps rendering and exporting exactly as before.
-  function enableObjectBlur(quiet) {
-    const layer = (FM.scene && _layer) ? FM.scene.layers.find(l => l.id === _layer.id) : null;
-    if (!layer) { if (!quiet) FM.fxBrowser.close(); return; }
-    if (!layer.motionBlur || typeof layer.motionBlur !== 'object') layer.motionBlur = { enabled: false, shutter: 0.5, samples: 8 };
-    const already = !!layer.motionBlur.enabled;
-    layer.motionBlur.enabled = true;
-    if (!quiet) FM.fxBrowser.close();
-    if (FM.inspector) FM.inspector.refresh();
-    if (FM.requestRender) FM.requestRender();
-    if (!already && FM.history) FM.history.commit();
-    if (FM.toast && !quiet) FM.toast(already ? 'Motion Blur (Object) is already on — its shutter is in Position / Scale'
-                                              : 'Motion Blur (Object) on — smears this layer’s own movement', 2200);
-    return true;
-  }
-  function objectBlurTile(onStarChange) {
-    const wrap = el('button', 'fxb-tile');
-    wrap.title = 'Motion Blur (Object) — smears the layer’s OWN movement (position, scale, rotation)';
-    const t = el('div', 'fxb-thumb'); t.dataset.cat = 'blur';
-    /* 2x raster, 96-unit drawing (v6.16). These two tiles are hand-drawn rather than rendered by
-       fx-thumbs, so they need the same resolution bump by hand — otherwise they are the only soft
-       thumbnails in a grid of sharp ones. g.scale keeps every coordinate below in 96-space. */
-    const cv = el('canvas', 'fxb-thumb-cv'); cv.width = 192; cv.height = 192;
-    const g = cv.getContext('2d'); g.scale(2, 2);
-    g.fillStyle = '#1c2536'; g.fillRect(0, 0, 96, 96);
-    // a square trailing its own ghosts — the thing the effect actually does
-    for (let i = 6; i >= 0; i--) {
-      g.globalAlpha = (1 - i / 7) * 0.85;
-      g.fillStyle = '#2fd0b5';
-      g.fillRect(20 + i * 6, 34, 28, 28);
-    }
-    g.globalAlpha = 1;
-    cv.classList.add('ready');
-    t.appendChild(cv);
-    wrap.appendChild(t);
-    wrap.appendChild(el('span', 'fxb-tile-name', 'Motion Blur (Object)'));
-    wrap.appendChild(starFor('_objblur', onStarChange));
-    wrap.dataset.fxid = '_objblur';
-    wrap.addEventListener('click', () => { if (sheetMode()) togglePick('_objblur'); else enableObjectBlur(); });
-    return wrap;
-  }
+  /* Motion Blur (Object) has NO pseudo-entry here, and that is finished business — see the note on
+   * `_objblur` above: queue 335 made it a real registry effect, so it is an ordinary tile in the blur
+   * category with an ordinary effect card, and its Shutter comes from the catalog (which reaches 12).
+   * `objectBlurTile()` and `enableObjectBlur()` were left behind by that change and sat here unrendered
+   * and uncalled until 1 Sep. They are deleted rather than annotated because reading them cost a
+   * session the best part of an hour chasing a bug that did not exist: they described a desktop route
+   * that set the legacy `layer.motionBlur` flag, which nothing has done since queue 335.
+   * `ID_ALIAS` STAYS — a favourite saved under the old `_objblur` id is still in someone's
+   * localStorage, and that mapping is the only thing that keeps it working. */
+
 
   // Build whatever tile an id names — a registry effect or one of the two pseudo-entries. This is what
   // lets the Favourites page hold a favourited Mask / Motion Blur (Object) instead of dropping it. (#62)

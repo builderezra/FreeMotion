@@ -1,0 +1,62 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:11px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:900px;height:700px;border:0"></iframe>
+<script>
+/* #482 verify — every RAISED slider rendered at its new min AND its new max.
+   The scan proved the values still change the picture. This proves the ENDS are safe:
+   no throw, no NaN, no blank frame, no runaway cost. A raised ceiling that hangs the app or
+   renders nothing is worse than the ceiling. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n=0;
+  (function wait(){ if(!(w.FM&&w.FM.fxRegistry&&w.FM._pixelFx)){ if(n++>400) return say('FM never came up'); return setTimeout(wait,50);} setTimeout(function(){run(w);},600); })();
+});
+var CHANGED = [["halftone","size"],["dither","scale"],["dither","levels"],["lensdistort","k1"],["lensdistort","k2"],
+["iridescence","bands"],["glitch","bands"],["glitch","split"],["crt","scale"],["blocknoise","size"],
+["blocknoise","aspect"],["noise","size"],["edge","amount"],["compresscrunch","blocksize"],["compresscrunch","chromablock"],
+["filmgrain","size"],["shockwave","strength"],["emboss","amount"],["vhstape","wobble"],["dispersion","scale"],
+["dispersion","distance"],["gamma","gamma"],["gamma","red"],["gamma","green"],["gamma","blue"],
+["levels","gamma"],["vibrance","amount"],["exposure","stops"],["exposure","offset"],["border","width"]];
+function run(w){
+  var R=w.FM.fxRegistry, P=w.FM._pixelFx, W=1080, H=1350;      // HIS project size, not a toy frame
+  function frame(){
+    var a=new Uint8ClampedArray(W*H*4), cx=W/2, cy=H/2, rx=W*0.33, ry=H*0.3;
+    for(var y=0,i=0;y<H;y++)for(var x=0;x<W;x++,i+=4){
+      var u=x/W,v=y/H;
+      a[i]=Math.round(255*u); a[i+1]=Math.round(230*v); a[i+2]=Math.round(200*(1-u*v)+40);
+      if(y>H*0.8){var L=Math.round(255*(x/(W-1)));a[i]=L;a[i+1]=L;a[i+2]=L;}
+      var dx=(x-cx)/rx,dy=(y-cy)/ry,d=dx*dx+dy*dy;
+      a[i+3]=(y>H*0.8)?255:(d<=1?(d>0.85?170:255):0);
+    }
+    return a;
+  }
+  var bad=0, slow=[];
+  CHANGED.forEach(function(pair){
+    var type=pair[0], key=pair[1];
+    var fx=R.all().find(function(f){return f.type===type;});
+    var ps=R.paramsOf(type)||[], pd=ps.find(function(x){return x.key===key;});
+    if(!pd){ say('❌ '+type+'.'+key+' — param is GONE'); bad++; return; }
+    var defs={}; ps.forEach(function(x){ if(x.default!==undefined) defs[x.key]=x.default; });
+    if(pd.overriddenBy && pd.liveWhen!==undefined) defs[pd.overriddenBy]=pd.liveWhen;
+    [['min',pd.min],['max',pd.max]].forEach(function(e){
+      var d=frame(), t0=performance.now(), err=null;
+      try { P[type](d,W,H,Object.assign({},defs,{[key]:e[1]}),0.37,1); } catch(ex){ err=ex.message; }
+      var ms=performance.now()-t0;
+      if(err){ say('❌ '+fx.label+' · '+key+' @'+e[0]+' '+e[1]+' THREW: '+err); bad++; return; }
+      var nan=0, drawn=0, sum=0;
+      for(var i=0;i<d.length;i+=4){ if(!isFinite(d[i])||!isFinite(d[i+1])||!isFinite(d[i+2])) nan++;
+        if(d[i+3]>8){ drawn++; sum+=(d[i]+d[i+1]+d[i+2])/3; } }
+      if(nan){ say('❌ '+fx.label+' · '+key+' @'+e[0]+' '+e[1]+' produced '+nan+' NaN pixels'); bad++; return; }
+      if(drawn<1000){ say('❌ '+fx.label+' · '+key+' @'+e[0]+' '+e[1]+' erased the layer ('+drawn+' pixels left)'); bad++; return; }
+      if(ms>60) slow.push(fx.label+' · '+key+' @'+e[0]+' '+e[1]+' = '+ms.toFixed(0)+'ms');
+      say('   ok  '+(fx.label+' · '+key).padEnd(34)+e[0].padEnd(4)+String(e[1]).padStart(7)+'   '+ms.toFixed(1).padStart(7)+'ms   drawn '+drawn);
+    });
+  });
+  say('');
+  if(slow.length){ say('⚠️ over 60ms at 1080x1350 (a frame budget is 33ms):'); slow.forEach(function(s){say('   '+s);}); }
+  else say('✅ every raised end renders under 60ms at 1080x1350');
+  say(bad? ('❌ '+bad+' FAILURES') : '✅ all '+CHANGED.length+' raised sliders render safely at BOTH new ends');
+  window.__done=1;
+}
+</script></body></html>

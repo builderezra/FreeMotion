@@ -13,9 +13,30 @@ FILE="$1"; OLD="$2"; NEW="$3"; EXPECT="${4:-}"
 [ -f "$FILE" ] || { echo "mutate: no such file: $FILE"; exit 2; }
 BAK="$(mktemp)"; LOCK=".mutation-in-progress"
 cp "$FILE" "$BAK"
-restore() { cp "$BAK" "$FILE"; rm -f "$BAK" "$LOCK"; }
+# ---- THE RESTORE MUST NOT EAT SOMEBODY ELSE'S WORK ---------------------------------------------
+# Added 1 Sep, after it did exactly that. `restore` was a blind `cp "$BAK" "$FILE"`, so ANY edit made
+# to the target while this script held the backup was silently discarded on exit — and a mutation run
+# takes eight minutes, which is plenty of time to keep working in the same file. It happened while two
+# plate-scaling fixes sat in js/compositor.js: the trap would have thrown both away with no message,
+# and the only trace would have been the fixes "not working" later.
+# The lockfile warned about BROWSER checks and said nothing about EDITS, which is the same shape as
+# every other bug this repo has found lately — a guard whose stated scope was narrower than its reach.
+# So: remember what this script last WROTE, and if the file on disk is not that, the difference came
+# from somewhere else. Rescue it beside the file and say so loudly rather than restoring over it.
+EXPECTED_SHA="$(shasum "$FILE" | cut -d' ' -f1)"
+restore() {
+  local now; now="$(shasum "$FILE" 2>/dev/null | cut -d' ' -f1)"
+  if [ -n "$now" ] && [ "$now" != "$EXPECTED_SHA" ]; then
+    cp "$FILE" "$FILE.rescued"
+    echo ""
+    echo "⚠️  $FILE CHANGED WHILE THIS MUTATION HELD IT — those edits are NOT the mutation."
+    echo "   Saved them to $FILE.rescued before restoring. Diff it against $FILE and re-apply"
+    echo "   anything you meant to keep; then delete the .rescued copy."
+  fi
+  cp "$BAK" "$FILE"; rm -f "$BAK" "$LOCK"
+}
 trap restore EXIT INT TERM
-echo "MUTATION IN PROGRESS on $FILE — do not run a browser check now" > "$LOCK"
+echo "MUTATION IN PROGRESS on $FILE — do not run a browser check OR EDIT THIS FILE now" > "$LOCK"
 
 # ---- THE BASELINE GATE -------------------------------------------------------------------------
 # A mutation result is MEANINGLESS unless the suite was green before it. If the test you are checking
@@ -94,6 +115,9 @@ PY
 # to the same harmless prefix, so old == new. The not-found gate was satisfied (the prefix really is
 # there), the ambiguity gate was satisfied (it occurs once), and the verdict was still wrong.
 # Comparing the file against its own backup catches that and every other silent no-op, whatever caused it.
+# The mutation is a write this script MADE, so it becomes the new expected content — otherwise the
+# rescue above would fire on every run and cry wolf about the mutation itself.
+EXPECTED_SHA="$(shasum "$FILE" | cut -d' ' -f1)"
 if cmp -s "$FILE" "$BAK"; then
   echo "mutate: the file is BYTE-IDENTICAL after the replace - the mutation changed nothing, so a green"
   echo "        run proves nothing about the test. Usually old and new are the same text."

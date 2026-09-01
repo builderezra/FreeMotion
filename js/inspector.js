@@ -5309,50 +5309,15 @@ window.FM = window.FM || {};
     body.appendChild(el('div', 'insp-hint', 'A layer at the near distance is untouched; at the far distance it is the fog colour outright; between the two it fades across. The wash clips to each layer’s own shape, so text stays text.'));
   }
 
-  /* TRANSFORM motion blur — the blur that reads the CLIP's own movement.
-   * This has been unreachable since v2.66: the checkbox and its two rows were pulled out of Edit
-   * Shape to match Alight Motion and never re-homed, so layer.motionBlur rendered and exported but
-   * nothing in the app could switch it on. (Ezra: "the normal one that isn't just for the content
-   * currently is broken asf" — he was reaching the EFFECT called Motion Blur, which is a hand-aimed
-   * smear and now says so on the tin.) Move & Transform is where it belongs: it is a property of how
-   * the layer moves, not a look you bolt on.
-   * Hidden on groups and cameras rather than shipped dead — drawGroupUnit never copies the flag onto
-   * the unit it draws, and the camera drives the composite instead of being drawn as a layer.
-   */
-  function motionBlurBlock(layer) {
-    if (!layer || layer.type === 'group' || layer.type === 'camera' || layer.type === 'null') return null;
-    if (!layer.motionBlur || typeof layer.motionBlur !== 'object') layer.motionBlur = { enabled: false, shutter: 0.5, samples: 8 };
-    const mb = layer.motionBlur;
-    // OFF = render nothing. This block lives in EFFECTS now, and an effect you have not added should
-    // not occupy a card there — it is switched on from + Add Effect → Motion Blur (Object), the same
-    // as every other effect. (It used to be a checkbox in Move & Transform, which is exactly why Ezra
-    // could not find it: "I'm only seeing motion blur footage".)
-    if (!mb.enabled) return null;
-    const wrap = el('div', 'insp-section');
-    const head = el('div', 'insp-sec-title', 'Motion Blur (Object)');
-    // × is how you turn it OFF now that the checkbox is gone — same gesture as removing an effect.
-    const rm = el('button', 'insp-sec-x', '×');
-    rm.type = 'button'; rm.title = 'Remove Motion Blur (Object)';
-    rm.addEventListener('click', () => { mb.enabled = false; FM.requestRender(); FM.inspector.refresh(); commitH(); });
-    head.appendChild(rm);
-    wrap.appendChild(head);
-    // The app's own value boxes, not bare <input type=range> (v5.54). Ezra: "some effects don't use
-    // the slider format that we should have, and also the sliders on those ones can be finicky, like
-    // this one." A 0..1 Shutter on a raw range input has almost no usable travel — a whole shutter
-    // angle lives in a couple of hundred pixels — where mtVBox gives the same drag-to-scrub-with-glide
-    // and tap-to-type as every other number in the app.
-    const mbVals = el('div', 'mt-values');
-    const bShut = mtVBox('Shutter', () => (mb.shutter != null ? mb.shutter : 0.5),
-      v => { mb.shutter = Math.max(0, Math.min(1, v)); FM.requestRender(); },
-      { dp: 2, scrub: 0.004, min: 0, max: 1 });
-    const bSamp = mtVBox('Samples', () => Math.round(mb.samples || 8),
-      v => { mb.samples = Math.max(2, Math.min(24, Math.round(v))); FM.requestRender(); },
-      { dp: 0, scrub: 0.08, min: 2, max: 24 });
-    mbVals.append(bShut, bSamp);
-    wrap.appendChild(mbVals);
-    wrap.appendChild(el('div', 'insp-hint', 'Shutter is how long the shutter stays open — 0.5 is the 180° shutter film uses. Samples is how many slices are averaged: more is smoother and slower. A clip that is not moving costs nothing. This smears the layer\u2019s OWN movement — its position, scale and rotation keyframes. Movement made by an effect (Orbit, Wiggle, Spin\u2026) or by the camera is not its own movement, and needs Motion Blur (Footage) instead.'));
-    return wrap;
-  }
+  /* TRANSFORM motion blur — Motion Blur (Object) — has NO block here any more, deliberately.
+   * `motionBlurBlock()` lived here and built its Shutter and Samples rows, and it had lost its last
+   * caller, so the effect rendered with nothing to adjust while its own toast pointed at a panel that
+   * did not have it either (queue 695, 1 Sep). It is an ORDINARY EFFECT now — `js/fx-browser.js` adds a
+   * real `objectblur` instance, exactly as sheet mode and the save-file migration already did — so the
+   * generic effect card draws its controls from the catalog, where Shutter reaches 12.
+   * The dead copy is gone rather than re-wired: it clamped Shutter to 1, which queue 379 raised to 4
+   * and queue 540 to 12, so re-connecting it would have quietly reinstated the old ceiling. */
+
 
   function buildCategory(key, layer, body) {
     if (key === 'cameraopts') { camPanel(layer, body); return; }
