@@ -272,7 +272,7 @@ window.FM = window.FM || {};
           case 'setMotionBlur': {
             layer = resolveExisting(ref, false);
             if (!layer) { drop(o.op, ref, 'unknown ref'); break; }
-            layer.motionBlur = { enabled: bool(o.enabled, true), shutter: clamp(num(o.shutter, 0.5), 0.1, 2), samples: Math.round(clamp(num(o.samples, 8), 2, 32)) };
+            layer.motionBlur = { enabled: bool(o.enabled, true), shutter: clamp(num(o.shutter, 0.5), 0.1, 12)   /* 12, not 2 — the AI could not reach the top 83% of a slider it was writing to (queue 695) */, samples: Math.round(clamp(num(o.samples, 8), 2, 32)) };
             ok(o.op, ref); break;
           }
 

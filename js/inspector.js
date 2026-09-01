@@ -5228,7 +5228,7 @@ window.FM = window.FM || {};
       body.appendChild(checkRow('Motion blur', !!mb.enabled, v => { mb.enabled = !!v; FM.requestRender(); FM.inspector.refresh(); commitH(); }));
       if (mb.enabled) {
         body.appendChild(rangeRow('Shutter', () => (mb.shutter != null ? mb.shutter : 0.5),
-          v => { mb.shutter = Math.max(0, Math.min(1, v)); FM.requestRender(); }, 0, 1, 0.01));
+          v => { mb.shutter = Math.max(0, Math.min(12, v)); FM.requestRender(); }, 0, 12, 0.05));   // 12: queue 695, matching the layer version
         body.appendChild(rangeRow('Samples', () => Math.round(mb.samples || 8),
           v => { mb.samples = Math.max(2, Math.min(32, Math.round(v))); FM.requestRender(); }, 2, 32, 1));
       }

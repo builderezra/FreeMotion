@@ -791,7 +791,11 @@ window.FM = window.FM || {};
       if (!l.effects.some(e => e && e.type === 'objectblur')) {
         // Both params written explicitly — sanitizeEffects keeps only params that are PRESENT, so an
         // empty object would render at the kernel's fallbacks and silently reset everyone's settings.
-        const sh = typeof mb.shutter === 'number' && isFinite(mb.shutter) ? Math.max(0, Math.min(4, mb.shutter)) : 0.5;   // ceiling matches the renderer (queue 379)
+        /* ⚠️ 12, and it was 4 — a stale clamp on a number that had moved twice under it. The comment
+           said "ceiling matches the renderer (queue 379)" and stopped being true at queue 540, which
+           raised the renderer to 12. Nothing caught it because a migration that quietly lowers a value
+           still produces a working project. Found 1 Sep alongside queue 695. */
+        const sh = typeof mb.shutter === 'number' && isFinite(mb.shutter) ? Math.max(0, Math.min(12, mb.shutter)) : 0.5;
         const sa = typeof mb.samples === 'number' && isFinite(mb.samples) ? Math.max(2, Math.min(32, Math.round(mb.samples))) : 8;
         l.effects.unshift({ type: 'objectblur', enabled: true, params: { shutter: sh, samples: sa } });
       }

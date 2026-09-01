@@ -40349,6 +40349,67 @@
       throw new Error('slices were produced with motion blur switched off');
   });
 
+  test('the camera shutter reaches 12, and every place that clamps it agrees (queue 695)', { item: '695' }, async function () {
+    /* Queue 695. The LAYER's motion blur shutter was raised 1 -> 4 (queue 379) and 4 -> 12 (queue 540)
+     * after Ezra said "needs to be able to be stronger, the cranks should be able to crank more,
+     * currently the strongest setting is only subtle". The CAMERA's was never touched — it stayed at 1
+     * on the argument that a real shutter cannot stay open longer than a frame, which is exactly the
+     * argument queue 379 threw out. Asked directly on 1 Sep, he said raise it.
+     *
+     * ⚠️ ONE NUMBER, FIVE PLACES, AND THREE OF THEM DISAGREED. That is the real finding and it is why
+     * this test checks the clamps rather than just the behaviour:
+     *   · the layer effect's catalog max        12   (queue 540)
+     *   · drawMotionBlur                        12
+     *   · camBlurSlices                          1   <- never raised
+     *   · the save-file migration in storage.js  4   <- stale, its comment still cited queue 379
+     *   · the AI writer in ai-ops.js             2   <- the AI could not reach the top 83% of a slider
+     *                                                   it was writing to
+     * A clamp that quietly LOWERS a value still produces a working project, which is why none of them
+     * ever went red. Same shape as queue 700 and 701: an assertion in a comment, drifting. */
+    if (!FM._camBlurSlices) throw new Error('FM._camBlurSlices is not exposed');
+
+    /* ---- 1. THE RAISED RANGE MUST ACTUALLY BUY SOMETHING. A bigger number that smears no harder is a
+       slider that lies further, which is the thing queue 482 exists to prevent. */
+    const moving = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 600, e: 'linear' }] };
+    const smearAt = (shutter) => {
+      const c = offscreen(320, 240), sc = camScene(moving);
+      sc.cam.motionBlur = { enabled: true, shutter: shutter, samples: 24 };
+      FM.renderScene(c.getContext('2d'), sc.scene, 0.5);
+      return softCount(c);
+    };
+    const one = smearAt(1), six = smearAt(6);
+    if (!(one > 40)) throw new Error('a shutter of 1 barely smeared at all (' + one + ' soft pixels) — the harness, not the feature');
+    if (!(six > one * 1.3)) throw new Error('shutter 6 smeared ' + six + ' against shutter 1\'s ' + one + ' — the range past the old ceiling of 1 buys nothing, so raising the clamp only made the slider lie further (queue 695)');
+
+    /* ---- 2. AND EVERY CLAMP ON THAT NUMBER MUST AGREE. Sliced from source, because the bug was three
+       hard-coded numbers drifting apart — asserting it in one place would repeat the mistake. */
+    const pd = (FM.fxRegistry.paramsOf('objectblur') || []).filter(p2 => p2.key === 'shutter')[0];
+    if (!pd) throw new Error('Motion Blur (Object) has no Shutter parameter');
+    const CEIL = pd.max;
+    if (!(CEIL >= 12)) throw new Error('the layer shutter ceiling is back down to ' + CEIL + ' (queue 540 measured it paying to 12)');
+
+    const WANT = [
+      ['js/compositor.js', /Math\.max\(0, Math\.min\((\d+), _num\(mb\.shutter/g, 'the renderers'],
+      ['js/storage.js', /Math\.min\((\d+), mb\.shutter\)/g, "the save-file migration"],
+      ['js/ai-ops.js', /shutter: clamp\(num\(o\.shutter, [\d.]+\), [\d.]+, (\d+)\)/g, 'the AI writer'],
+      ['js/inspector.js', /mb\.shutter = Math\.max\(0, Math\.min\((\d+), v\)\)/g, "the camera's own control"],
+    ];
+    const bad = [];
+    let found = 0;
+    for (const [file, re, what] of WANT) {
+      let src = '';
+      try { src = await (await fetch(file, { cache: 'no-store' })).text(); }
+      catch (e) { throw new Error('could not read ' + file + ': ' + e.message); }
+      if (src.length < 20000) throw new Error(file + ' came back as ' + src.length + ' chars — not the file, so this proves nothing');
+      const hits = Array.from(src.matchAll(re)).map(m => Number(m[1]));
+      if (!hits.length) throw new Error('no shutter clamp found in ' + file + ' (' + what + ') — the slice is broken, not the code, and a green run here would mean nothing');
+      found += hits.length;
+      hits.forEach(v => { if (v !== CEIL) bad.push(what + ' in ' + file + ' clamps the shutter to ' + v + ', the catalog says ' + CEIL); });
+    }
+    if (found < 4) throw new Error('only ' + found + ' shutter clamps were found across the four files — the slices have drifted, so this is no longer covering them');
+    if (bad.length) throw new Error('one number, ' + (bad.length + 1) + ' places, and they disagree: ' + bad.join(' · ') + ' — a clamp that quietly LOWERS a value still produces a working project, which is why nothing goes red (queue 695)');
+  });
+
   /* THE WORST OF THE THREE WAYS A SOUNDTRACK WAS LOST (queue 215). The audio track used to be DECLARED
      when the muxer was built and ENCODED at the very end. If that encode threw, the swallow that caught
      it shipped a file whose header advertises an audio track that was never fed — which plays silently

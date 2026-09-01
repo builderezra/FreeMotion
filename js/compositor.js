@@ -14213,7 +14213,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const P = (scene && scene.project) || null; if (!P) return null;
     const _num = (v, d) => { const n = FM.evalProp(v, t); return isFinite(n) ? n : d; };
     const fps = P.fps || 30;
-    const dt = Math.max(0, Math.min(1, _num(mb.shutter, 0.5))) / fps;
+    /* 12, not 1 — queue 695, answered by him on 1 Sep. The LAYER version was raised 1 -> 4 (queue 379)
+         and 4 -> 12 (queue 540) after he said "needs to be able to be stronger, the cranks should be able
+         to crank more, currently the strongest setting is only subtle". The CAMERA one was never touched,
+         on the argument that a real shutter cannot stay open longer than a frame — which is the exact
+         argument queue 379 threw out. Asked directly, he said raise it. Nothing in an existing project
+         moves: every saved shutter keeps its value, the slider just reaches further. */
+    const dt = Math.max(0, Math.min(12, _num(mb.shutter, 0.5))) / fps;
     if (!(dt > 0)) return null;
     const maxN = Math.max(2, Math.min(32, Math.round(_num(mb.samples, 8))));
     const a = camAt(t - dt / 2), b = camAt(t + dt / 2);

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.88
+> ## 📌 WHAT I NEED FROM YOU — updated 1 Sep at v14.89
 >
-> **State:** v14.88, 1154 tests green, tree clean. **✅ YOU ANSWERED FOUR QUESTIONS — all logged in
+> **State:** v14.89, 1155 tests green, tree clean. **✅ YOU ANSWERED FOUR QUESTIONS — all logged in
 > their own entries: the 219ms goes ahead WITH a tick box keeping the old rim; the intro logo has colour
 > so the film fades to your dark ground instead of inverting; the camera shutter goes to 12; text stays
 > at 160pt.** **⚡ THE LAG WORK IS FINISHED, and the reason it is
@@ -15802,7 +15802,10 @@ wait for them to report back."*
       1. [x] ✅ **Scrubbing by pressing ON a layer is laggy** (same as #351). **CLOSED by measurement at
              v10.71 — see the reading below.** #351's fix shipped at v10.01, after the v9.83 he reported
              this on, and the two gesture paths now measure identical.
-      2. [ ] Playback is buggy on mobile where scrubbing is not — chase the PLAYBACK path, not the renderer.
+      2. [x] Playback is buggy on mobile where scrubbing is not — chase the PLAYBACK path, not the renderer.
+         ✅ **Closed by his own answer, 1 Sep.** Asked which phone complaints still feel bad, the option
+         named BOTH halves — "Pressing play / scrubbing still wrong" — and he did not tick it. So playback
+         is no longer a buggy mess on his phone either, not just scrubbing.
              ⏸️ **Blocked on Ezra:** profiled at v10.62 and does not reproduce in Chrome at any throttle;
              it needs a clip off his own phone or a screen recording.
              🔎 **22 Aug — A CANDIDATE CAUSE SHIPPED SINCE, AND IT FITS THE ASYMMETRY EXACTLY. Worth
@@ -28587,6 +28590,15 @@ re-opened #480, which I had marked done and had not fixed.
       1 and its control offers 0–1, on the physical-honesty argument that queue 379 explicitly threw out
       for the layer version: *"needs to be able to be stronger, the cranks should be able to crank more,
       currently the strongest setting is only subtle"*. Same complaint, same feature, one half done.
+      ✅ **DONE v14.89 — and it turned out to be one number clamped in FIVE places, three of them
+      disagreeing.** The catalog said 12, `drawMotionBlur` said 12, `camBlurSlices` said **1**, the
+      save-file migration said **4** (its comment still citing queue 379), and the AI writer said **2**.
+      A clamp that quietly LOWERS a value still produces a working project, which is why nothing ever
+      went red. All five agree now. The test checks that shutter 6 measurably smears harder than 1 — a
+      bigger number that smears no harder is just a slider that lies further — and that the five clamps
+      match, sliced from source rather than asserted in one spot, since the bug WAS hard-coded numbers
+      drifting apart.
+
       ✅ **HE SAID THE WORD, 1 Sep: "Raise it to 12 as well."** So `camBlurSlices`' clamp and both of
       the camera control's ranges go to 12, matching the layer version. Nothing in an existing project
       moves — every saved shutter keeps its value; the slider just reaches further.
@@ -28782,15 +28794,11 @@ re-opened #480, which I had marked done and had not fixed.
 - [ ] **702 — Standing instruction, 1 Sep (verbatim):**
       **STATUS: 📌 NOTE — nothing to build**
       > Ask all the questions you have for me and log answers i give properly
-      **His answers are logged into the entry each question belongs to**, not collected here — a decision
-      recorded away from the work it decides is a decision nobody finds again. This entry is the index of
-      what was asked and where the answer went.
-
-- [ ] **703 — Standing instruction, 1 Sep (verbatim):**
-      **STATUS: 📌 NOTE — nothing to build**
-      > Dont stop looping, keep it going, have a failsafe incase the loop fails
-      **The failsafe is a RECURRING cron, not a chain of one-shot wakeups**, and that is from experience:
-      a one-shot chain died silently once and nothing ran for 1h48m, because a one-shot that never fires
-      leaves nothing behind to notice. A recurring schedule self-heals — miss one firing and the next one
-      still comes.
-
+      **…and then, after two batches: "Hold the questions for another time and keep going without
+      stopping."** So the asking is DONE for now. 12 questions were answered and logged; ~40 items still
+      name something they need from him, and they wait.
+      ⚠️ **Do not re-ask the four he dismissed** (#406 preset-saver home, #539 Squish-vs-Shake, #418 the
+      undo/redo picture, #587 the benchmark lines) — he saw them and chose not to answer, which is not
+      the same as not having seen them. Raise them again only if he asks, or if one of them starts
+      blocking something he has actually asked for.
+      ➡️ **The standing steer is #591's**: there is plenty to build without him. Work the authorised list.
