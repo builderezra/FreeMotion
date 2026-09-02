@@ -2531,7 +2531,13 @@ body.white-chrome #time-readout:active {
    to run down the tracks, and hiding overflow would chop it off at the ruler's bottom edge. A clip that
    is tight on the left and OPEN at the bottom does both jobs — the negative bottom inset extends the
    clip region downward rather than cutting it. */
-#tl-ruler { clip-path: inset(0 0 -600px 0); }
+/* …AND CLIPPED ON THE LEFT AT THE HEAD DIVIDER (queue 429, 2 Sep). Ezra, 21 Aug: *"the bookmarks still don't
+   get cut off there and show up there when they should get cut off"*. Over a layer the sticky head hides the
+   line (queue 348), but the add row's + cell is transparent on purpose (queue 567 keeps its dashes crossing
+   the divider) and below the last row there is nothing — measured at 380px, scrolled: two lines running down
+   the head side. In ruler coordinates the divider is at scrollLeft (the ruler starts where the head ends), so
+   timeline.js writes `--tl-clipx` = scrollLeft on every scroll and the left inset follows it. */
+#tl-ruler { clip-path: inset(0 0 -600px var(--tl-clipx, 0px)); }
 /* the pinned thumbnail-frame marker: smaller + accent-coloured, so it reads as distinct from benchmarks */
 .tl-marker.thumb { margin-left: -3px; border-left-width: 3px; border-right-width: 3px; border-top: 5px solid var(--accent); z-index: 4; }
 .tl-marker.thumb::after { left: -0.5px; height: 9px; background: rgba(41,217,187,.55); }   /* SHORT stub, not a full-height line — it's a pin, not a benchmark ruler line */

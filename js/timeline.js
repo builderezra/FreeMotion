@@ -806,6 +806,21 @@ window.FM = window.FM || {};
   }
   let _rulerAt = null, _rulerRAF = 0;   // the window the ruler was last drawn for
 
+  /* THE BOOKMARK LINES STOP AT THE HEAD DIVIDER (queue 429, clause 1 — the half that survived). Ezra,
+   * 21 Aug: *"the bookmarks still don't get cut off there and show up there when they should get cut off"*.
+   * The pins live on the ruler and their drop-lines overflow down over the tracks. Queue 348 put the
+   * layer heads ABOVE them (z 8 > the ruler row's 7), so over a layer the head hides the line — but the
+   * head column is not opaque everywhere: the add row's + cell is transparent (its dashes cross the
+   * divider on purpose, queue 567) and below the last row there is nothing at all. Measured 2 Sep at
+   * 380px, scrolled: two lines running down the head side through the + cell and the empty area.
+   * Occluding is out — an opaque cell on the add row would hide the dashes 567 asked to keep — so the
+   * ruler is CLIPPED instead: everything left of the divider, in ruler coordinates, is scrollLeft (the
+   * ruler starts where the head ends). The bound has to follow the scroll, so it is written from the
+   * scroll listener too — one custom-property write, no layout read. The clip's bottom edge is pushed a
+   * viewport below the ruler so the lines' full length (queue 536 clause 4) is untouched. */
+  function syncMarkerClip() {
+    if (rulerEl && timelineEl) rulerEl.style.setProperty('--tl-clipx', Math.max(0, timelineEl.scrollLeft) + 'px');
+  }
   function buildRuler() {
     const dur = viewDur(), pps = pxPerSec(), f = fps();
     // FRAME NOTCHES: a fine tick per frame (thinned so they stay >=5px apart; denser as you zoom in).
@@ -852,6 +867,7 @@ window.FM = window.FM || {};
       const h = pb ? Math.max(0, Math.round(pb.bottom - rb.top - 7)) : 0;
       if (h) rulerEl.style.setProperty('--tl-mark-h', h + 'px');
     })();
+    syncMarkerClip();
     (FM.scene.project.markers || []).forEach(mk => {
       const el = document.createElement('div');
       el.className = 'tl-marker' + (mk.thumb ? ' thumb' : '');   // the pinned thumbnail-frame marker is a smaller distinct pin
@@ -3724,6 +3740,7 @@ window.FM = window.FM || {};
        * them. Repaints only when the view has left the margin the last paint covered — during a normal
        * flick that is a handful of repaints, not one per frame — and coalesces onto a rAF. */
       if (timelineEl) timelineEl.addEventListener('scroll', () => {
+        syncMarkerClip();                                            // one style write; see buildRuler
         if (_rulerRAF || !_rulerAt || _rulerAt.all) return;
         const w = rulerWindow();
         const covered = w.a >= _rulerAt.a && w.b <= _rulerAt.b;

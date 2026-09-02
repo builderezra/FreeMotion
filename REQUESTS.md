@@ -1,1311 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v15.02
->
-> **State:** v15.02, 1166 tests green, tree clean. **A read-only audit logged 42 new items (#718–#759) — twelve are real bugs, several lose
-> keyframes or presets silently; they queue behind your three (#715–#717).** **MASKS NOW LAYER WITH THE EFFECTS (#560)** — drag a mask row above an
-> effect in the Effects list and it becomes a member of the stack; effects above it spill past it, effects below are cut. **⚡ INNER BLUR IS 4.5x FASTER (51.1ms → 11.3ms)
-> and NOTHING ON SCREEN CHANGED** — measured, zero visible bytes different. The "Colour past the edge"
-> option you asked for keeps the old look one tap away. **✅ YOU ANSWERED FOUR QUESTIONS — all logged in
-> their own entries: the 219ms goes ahead WITH a tick box keeping the old rim; the intro logo has colour
-> so the film fades to your dark ground instead of inverting; the camera shutter goes to 12; text stays
-> at 160pt.** **⚡ THE LAG WORK IS FINISHED, and the reason it is
-> finished is that the three most expensive effects left are the three that CANNOT be sped up this way.**
-> Ten effects bounded. Across all 105 of them on a small layer in a full-size project: **1316ms → 998ms**.
-> The two biggest in the whole app — Spin Streaks and Zoom Streaks — are gone from the top ten, and what
-> sits there now is Zoom Blur, Spin Blur and Inner Blur, all three permanently refused because they paint
-> colour into see-through pixels and read it back. Your test scene started this at 106ms a frame. **🔴 I SHIPPED A BUG THREE RELEASES RUNNING AND HAVE
-> FIXED IT — and then found two more of the same kind by asking the whole question instead of patching
-> one hole at a time. All three are closed.** The speed work in v14.79–v14.82 works by telling each effect which parts of the frame it
-> can skip. The box it was given was computed by checking every SECOND row and every SECOND column — so
-> a layer with a solid body plus a **1px feature on an odd line** (a text descender, a hairline rule, a
-> 1px underline) put that feature outside the box, and it silently lost its blur, shadow or tilt-shift
-> while the rest of the layer kept it. All six effects I had sped up were affected. Move the same
-> hairline one pixel across and every one of them is perfect again, which is how I knew what it was.
-> **Found by sending the NEXT batch of effects out to be attacked** — one of the reviewers tested an
-> already-shipped effect as a control and it failed too. I verified that myself before believing it.
-> Fixed: exact bounds always, 1.6ms on a small layer against the ~400ms the skipping saves.
->
-> **🎨 AND EIGHT NEW FILTERS** — Blueprint, Risograph, Infrared, Photocopy, Acid Wash, Moonlight, Low Key
-> and Datamosh, 38 → 46. Three are only possible because of the raised ceilings. You have the picture.
->
-> **Earlier today — ⚡ THE LAG: TWO MORE EFFECTS STOPPED CHARGING YOU FOR THE WHOLE FRAME.** Tilt Shift **84.7ms → 19.6ms** and Matte Choker **41.4 → under 15**, on a small
-> layer in a 1080x1920 project. A third, Inner Blur, was made fast and then deliberately put back — it
-> paints colour into fully see-through pixels, and the next effect in your stack can read that back. A 30fps frame is 33ms, so Tilt Shift
-> alone used to cost you two and a half frames. 45 fixtures proved the picture is byte-for-byte the same. **🎚️ YOU SAID "RAISE THEM" AND 30 EFFECT CEILINGS WENT UP.**
-> Find Edges 4 → 24, Halftone dots 30 → 120px, Chunk Noise blocks 60 → 300px, Iridescence 10 → 60 bands,
-> Lens Distortion ±0.8 → ±3, Gamma 4 → 10, Exposure ±3 → ±5 EV, Emboss 3 → 18, Glitch 60 → 240 slices,
-> Shockwave 120 → 600px, Vibrance 2 → 8, Border 60 → 180px, and 18 more. **Nothing in a project you have
-> already made moves** — every effect you placed keeps the value you gave it; the slider just goes further now.
-> Each one was walked past its old maximum until it stopped earning the extra range, rather than blanket-doubled.
->
-> **Also fixed: two more effects were rendering at a different strength on screen than in your export.**
-> One of them is **Motion Blur** — on your phone's reduced preview a 20px smear drew 71 project pixels on
-> screen and 20 in the finished file. Raster Extrude had it too. That is last night's #691 bug in the half
-> of the code its audit never asked about.
->
-> ⚠️ **And I spent an hour chasing a bug that does not exist, so you know where the time went.** Three
-> functions in the code describe an older design and read as *"Motion Blur (Object) has no Shutter you can
-> adjust"*. It does — it is an ordinary effect, in the Blur list, with an ordinary Shutter that now reaches
-> 12. My test kept accusing a route I already knew was fine, which is exactly the signal that means the tool
-> is wrong, and I fixed the tool three times before I listened. The 105 dead lines are deleted so it cannot
-> happen to the next session, and the check nobody had ever written is now in the suite. **Lens Blur 190ms → 5.3ms, Hex Tiles 98ms → 6.1ms** —
-> four of the heaviest effects bounded, all proved byte-identical. **🟢 #692, the lag: blur AND drop shadow are FIXED.**
-> The test scene that cost **106ms a frame now costs 27.9ms** — from three times over the 30fps budget
-> to under it, with the picture proved byte-identical across 19 fixtures. Other kernels still to do. **#578 closed** — Motion Blur (Footage) now reaches
-> nearly 3x further, measured rather than guessed. **The big one tonight: 32 effects were rendering at a
-> different strength on screen than in your exported file** — worst on your phone, where the preview
-> plate is smallest. Fixed in one place. See #691. **You closed three items yourself** by telling me the
-> colour filters are good now — #593, #603 and #645, open since 26 Aug. **#686 CLOSED (all 13 bugs), #687 CLOSED (motion
-> blur on groups), and #688's forgetting is FIXED** — it saved perfectly and was never read back.
->
-> **⚠️ ONE QUESTION FROM YOU FINISHES #688, and it takes one look at the intro.** Clauses 2 and 3 —
-> drop the old loading film, give dark mode the new one ending on black — are a DESIGN change, and
-> you told me never to ship a visual you have not seen. The new film ENDS ON PURE WHITE (it was made
-> for the light look), so playing it in dark mode needs the ending changed. **Is the logo in the new
-> intro a plain white/grey mark, or does it have colour in it?** If it is monochrome I can invert the
-> film in dark mode — same motion exactly, ends black. If it is coloured, inverting would mangle it,
-> so I would fade the white down to your dark ground over the last ~0.6s instead. **The new light look is ON by default** — Settings → *New light look* turns it off.
->
-> **🔊 ONE THING I NEED FROM YOU, AND IT TAKES 15 SECONDS — it unblocks three of your oldest
-> complaints at once.** You said the sound "cuts in and out" on your phone. Your #95, #96 and #663 all
-> end on the same line: *this needs a number from your phone.* I have measured everything measurable
-> on this Mac, including at a sixth of its speed, and none of it does what you describe.
-> **So the app now watches it.** Play something with sound on your phone until it misbehaves, press
-> stop, then go to **Settings → "Your last playback" → Copy** and paste that to me. It records whether
-> the sound actually kept playing, how many times it stopped, and what the app saw when it did.
-> ⚠️ **And I nearly gave you a broken instrument.** The first version counted every ordinary clip
-> ending as "something stopped my audio" — it would have shown you a screenful of faults on a
-> perfectly healthy project and sent me chasing a bug that did not exist. A review caught it before it
-> reached you. It now works out for itself whether a stop was normal, instead of being told.
->
-> **⚡ AND v14.12 FINISHED IT — STACKING EFFECTS IS THE PART THAT WAS STILL SLOW, AND IT IS 35x NOW.**
-> Everything below was measured with ONE effect. Your real projects stack them, and until today each
-> effect handed its picture back down to the browser so the next one could send it up again — every
-> effect after the first paying a full round trip for a picture the graphics card already had.
-> **Three stacked warps at your own 1080x1350: 117 ms → 3.3 ms.** That is 35x against the old path and
-> **2.15x on top of** the win described below. **The frame is not just close, it is identical** — 0 of
-> 1,458,000 pixels differ.
-> 🔑 **AND THE NUMBER THAT MATTERS MOST IS NOT A SPEEDUP AT ALL.** I ran five stacked effects with the
-> processor deliberately slowed to a sixth of its speed — roughly a phone. **The old path went from
-> 292 ms to 1642 ms. The new one went from 5.5 ms to 5.1 ms: it did not get slower at all.**
-> **The drawing is not happening on the processor any more, so how fast the processor is has stopped
-> mattering.** ⚠️ Being straight with you about the limit: I can slow a processor down, but the
-> graphics chip in that test is this Mac's, not your phone's — so 5.1 ms is not a promise about your
-> phone. What it does say is that the work moved off the slow part and onto the part that isn't.
-> ❓ **So the one question left on your oldest complaint is sharper than "does it feel better":**
-> **does a layer with several effects stacked on it still crawl on your phone?**
->
-> **⚡ THE BIGGEST SPEED WIN THIS PROJECT HAS EVER HAD — and it is on your oldest complaint.**
-> "Editing lags, and gets bad fast" is the oldest thing on your list. After three months of making the
-> maths faster, the honest answer was that the gap was about 50x and the best single win had been 11x —
-> **so no more tuning was ever going to fix it.** The effects run on the CPU, one pixel at a time, in
-> JavaScript.
-> **They can run on your GRAPHICS CARD instead**, and it turns out that fits your no-build-step rule
-> perfectly, because a shader is just a piece of text.
-> 📐 **Measured on a real frame at your own 1080x1350, with one Twirl: 39.8 ms → 2.0 ms. Twenty times
-> faster, and the same picture** (0.1% of pixels differ, all of them on an edge).
-> **✅ AND FIVE MORE ARE NOW DONE TOO (v13.82), including the one that proves the point:**
-> **Kaleidoscope 49.5× · Radial Repeat 35.5× · Ripple 24.1× · Grid Repeat 13.1× · Twirl 11.7× · Wave 9.7×.**
-> That entry had said for months that it needed about **50×** and that nothing could get there.
-> Kaleidoscope is **49.5×**.
-> ⚠️ **Eighteen of twenty-one warp effects so far**, and the last three are stopping deliberately — they carry number-scrambling maths the graphics-card language cannot express directly, and getting them subtly wrong is worse than leaving them fast-enough. They still use the old path,
-> and anything without a graphics card falls back to exactly what it does today — nothing can break.
-> **And here is the number that actually answers your complaint, measured at PHONE speed** (the same
-> browser, the same machine, one switch — so nothing else can be taking the credit):
-> **a project like yours went from 3.8 frames a second to 24.4.** Worst frame 380 ms → 67 ms.
-> At desktop speed it is 14.9 → 60.3 fps, which is the screen's own limit.
-> **The "timeline is laggy" part was never the timeline** — a timeline rebuild costs 3.7 ms even on a
-> throttled phone. It was always the picture, and the picture is now eight times cheaper to draw.
->
-> **✅ GROUPS ZOOM FROM THE MIDDLE NOW, AND YOU CAN SEE THE ANCHOR (#630 — both halves).** You said
-> *"they just zoom into the corners and not the middle and I can't find where the anchor even is."*
-> There genuinely was no anchor to find: every group is created at (0,0) and the renderer scaled the
-> whole group about that point — the top-left corner of your project. A group now grows around its
-> middle, and **the anchor dot shows on the canvas** like it does on a normal layer.
-> 🚨 **And fixing the first half quietly broke something you would have hit within a minute:** the
-> selection box — which is also the thing your FINGER hits — was left behind, and sat **455px away**
-> from any group you had scaled. Handles and taps in empty space. Found by measuring rather than by
-> you reporting it, and fixed in the same release.
->
-> **🔊 OVERLAPPING SOUNDS NO LONGER DISTORT (#604, the half I could actually fix).** Two ordinary
-> sounds at normal volume added up past the maximum a video file can hold, so they hard-clipped and
-> buzzed — worse with every extra layer. That fits your *"it played good the first time but it was
-> inconsistent and would cut in and out"* better than anything else I have found.
-> 🛑 **This is NOT the "no audio" bug and I am not claiming it is.** That one is still down to one
-> thing only you can do: **export something short with sound on the PC, then drag the .mp4 into a
-> Chrome tab and press play.** Sound → the file is fine and your camera roll is dropping it. No sound
-> → it is the project or your browser, and the app will name the reason.
->
-> **⚡ YOUR BIGGEST ISSUE — THE EFFECTS THAT DO NOTHING ON YOUR PHONE. Here is what it actually was.**
-> Your screenshot showed seven effects badged "no change at this value". **That badge was lying, and it
-> contradicts itself** — for Grayscale to say that, the app must have decided your square was NOT grey,
-> and grayscale on a non-grey square must change it. Both cannot be true. The only explanation is that
-> the drawing feature those nine effects rely on **does nothing on your phone, silently**.
-> ➡️ **The app has known this was possible for weeks and was writing the answer into a diagnostics
-> screen you would have to go hunting for.** It says so in the effects browser now.
-> ✅ **AND THEY NOW WORK ANYWAY.** Brightness, Contrast, Saturation, Hue, Grayscale, Sepia and Invert
-> are drawn with the graphics card when that feature is missing — the same trick as this morning's speed
-> work. Proven by making a healthy browser pretend to be broken, so the exact path your phone takes is
-> tested here rather than only by you.
-> ✅ **Blur and Glow work now too (v13.98, v14.02) — ALL NINE are covered.** Glow was the awkward one:
-> it is a shadow drawn *behind* the layer rather than a filter over it, so it is the blurred silhouette
-> tinted and composited underneath, once per pass. And I still cannot prove this is YOUR fault line: if the effects work
-> for you now it was the device; if not, the readout now names the real reason.
->
-> **🎨 ONE LETTER FROM YOU CLOSES #98 — I have sent you a picture.** How big should text be when you
-> add it? **A** is what you have now, **B** is my recommendation, **C** is the biggest. Nothing is
-> changed until you say. Everything else in that entry turned out to be closed already: the two tick
-> buttons are Safari's own keyboard bar (your photo settled that), and the "225pt but tiny" complaint
-> was measured — the number and the picture agree.
->
-> **📮 EVERYTHING THAT IS WAITING ON A WORD FROM YOU IS NOW IN ONE PLACE: `./tools/asks.sh`.**
-> **44 of your 81 open items are waiting on an answer**, and until now those questions were scattered
-> through this file — one inside each entry, with no way to see them together. Part of the honest answer
-> to *"why are you so selective"* is that several of them were waiting on a word you were never shown you
-> owed. The tool reads the entries rather than keeping a list, so it cannot go stale.
-> ⚠️ **And it found something that is MY fault: 19 of those 44 did not say what they are waiting for.**
-> An item marked "waiting on Ezra" that never wrote down the question can sit forever and nobody notices.
-> **An entry now has to SAY SO in one agreed place** — a line reading `❓ASK:` — because guessing the
-> question out of prose is what missed those 19 in the first place. Six are filled in already, including
-> **#98** (your letter on the text size), **#125** (does the scroll feel better) and **#406** (the
-> acknowledgement you asked me to chase you for).
-> 🚨 **AND READING THE REST FOUND SOMETHING WORSE: SIX OF THEM WERE NEVER WAITING ON YOU AT ALL.**
-> **#395** you answered with a rule (*"i dont see why not having all the options… if its a bad idea for
-> any reason then no"*) and the reason your rule asked for was already measured and sitting in the entry.
-> **#406's** first half is settled by your own *"if we just have two buttons for the same thing"*.
-> **#418** is built and ticked — only the picture never arrived. **#484** you authorised word for word.
-> **#508** contains no question. **#552** is built and the text is stale.
-> **That is six items parked against you that I could have moved.** They now say what to do instead.
->
-> **📋 YOUR NEXT SILENT EXPORT CAN END THIS — one tap.** Settings → **"Your last export"** → Copy →
-> send it to me. It says whether a soundtrack was written, which of the five reasons dropped it, and
-> **whether your phone's browser can encode audio at all** — which is now the main suspect, because you
-> told me today the export bug is mobile-only and your PC is fine. That one sentence retired a theory
-> both entries had been built on for weeks.
->
-> **🔇 AND I FOUND OUT WHY YOU NEVER SAW A "NO AUDIO" WARNING — THEY WERE BEHIND THE EXPORT SCREEN.**
-> The app has five separate warnings for a lost soundtrack, built over five rounds of chasing this. All
-> five appear as a little pop-up at the bottom — and that pop-up sits UNDERNEATH the full-screen
-> "Exporting…" panel, which is up for the entire export. So they have all been firing into a layer you
-> could not see.
-> ➡️ **That matters more than it sounds:** "no warning appeared" was used as evidence that the problem
-> was deep in the file-writing, and a month was spent proving the file-writing was fine. It was fine.
-> ✅ **Now the export screen itself says it while rendering, and the "Export ready" card tells you
-> "Sound ✓" or "NO SOUND — <reason>" right next to the file size** — on the screen you are looking at
-> when you press Save to camera roll.
->
-> **🎵 AND YOUR SONG BUG HAS A FOURTH REAL CAUSE — found by building an MP3 by hand.** #96 had been
-> stuck for months on "we cannot make an mp3 to test with, so send me the file". It turns out an mp3
-> needs no encoder — it is just a list of frames, and a hand-built one can lie about its length by any
-> amount you like. With one: **the file is 10.4 seconds, Chrome's player says 29.4, and the app believed
-> Chrome.** So a song imported as a clip **19 seconds longer than the sound in it** — the tail is silence
-> you cannot explain, and pressing play with the playhead in that tail does nothing at all.
-> **Fixed: the app now believes the decoder, which measured it correctly in 15 milliseconds.**
-> ⚠️ I still cannot prove this is the bug you hit — but it is on the exact file type we suspected and it
-> produces exactly what you described.
->
-> **✅ #602 IS CLOSED.** The text panel stopped covering your preview back in v13.52. The other half —
-> *"they're kinda pointless coz effects do the same thing"* — I checked against all 199 effects instead
-> of guessing: **only Spacing and Animate→Typewriter are real duplicates.** Line height and Curve have
-> no equivalent anywhere in the app, and Spacing was your own request. So nothing was removed.
-> ➡️ **One offer, open whenever:** say the word and Typewriter goes (the `textprogress` effect does it
-> better — by word, with a caret). I did not delete a control you might be using without asking.
->
-> **✅ TIMELINE SWIPING IS FIXED — it now feels the same at every zoom.** You were exactly right: the
-> swipe limits were measured in SECONDS while the feel is a PIXELS thing, so zooming out made your
-> flick get capped and then stop dead while it was still moving. Measured across three zoom levels, the
-> limits are now identical in pixels — they used to vary 16x. **The glide length you liked is unchanged.**
-> ⚠️ **A confession worth having:** I built it right, tested it against a CACHED file, saw the old
-> numbers, and reverted a working fix — then found the stale cache. Your own notes warn about exactly
-> that. Re-applied and verified properly.
-> ❓ **Two one-word answers still open:** which way the drag handle looks off, and whether that saved
-> camera-roll video has sound in another app.
->
-> **✅ The + orb has your blue ring** — the same blue as your pinned cards, copied from them so it
-> cannot be slightly off. (I could not get the + on screen here to photograph it, so if it looks wrong
-> that is a one-line change.)
-> **📥 Your four newest are logged word-for-word: 611 ring · 612 menu animations · 613 the + shape ·
-> 614 timeline swiping.**
-> **🔴 614 already has its CAUSE, found while writing it down:** the swipe's speed cap and stop-threshold
-> are measured in SECONDS, but how a swipe feels is a PIXELS thing — and zoom is the conversion between
-> them. Zoomed out, your finger speed becomes a huge time-velocity, gets capped, then trips the "stop
-> now" threshold while still visibly moving. **That is both halves of what you described, from one unit
-> mismatch, and it is a small fix with a proper test.**
-> ❓ **Still one word from you:** which direction the layer drag handle looks off-centre.
->
-> **🔎 Your black-and-white complaint: I have now measured every part of it, and nothing is broken.**
-> The effects work, the filters work, the picker tiles work, and the live preview works and updates on
-> every tap — I checked all four. **Your picture stays colourful because Sepia and Invert sit AFTER
-> Grayscale and put the colour back.** That is what those effects do in that order, and the app was
-> showing you the truth the whole time.
-> ➡️ **What would genuinely help is the app SAYING that** — "Grayscale is applied, but Sepia and Invert
-> after it are adding colour back". I have built and verified the groundwork for it this release.
-> **Try it this way:** put Grayscale LAST in the stack and it will go black and white.
->
-> **🔊 YOUR EXPORT DOES CONTAIN SOUND — I proved it, and it moves the blame.** I ran a real export with
-> real audio and looked inside the finished file: **the AAC audio track is there.** So FreeMotion is
-> making a video WITH sound, and it is being lost when it gets SAVED — exactly where you said it was.
-> **That also kills a theory we have carried for weeks** (that the audio never made it into the file).
-> ➡️ **Next test is small:** save that same file, re-open it, look again. Gone → our save code. Still
-> there → your camera roll or the player is dropping it, and the fault is not in FreeMotion at all.
-> **✅ Also done: the add-layer drag handle now lines up exactly with the layer ones** (both at 360px,
-> 0.0 offset) — design untouched, only the position moved.
->
-> **✅ Three of your things done this round:** the playhead knob is **blue at rest, yellow only on a
-> benchmark**; the Visual/Filters/Audio row fills its bar and stays put when you scroll; and the
-> **benchmark lines no longer draw over your left icon column**.
-> **⏱️ And I found why I have been slow.** 99 commits yesterday, **51 of them pure notes** — and every
-> single one runs your test suite (4 min for notes, 9 for code). **That is about ten of twenty hours
-> spent watching a progress bar.** There is now a gate that refuses a notes-only release within 12
-> minutes of the last one, so they pile up and ride out together. This release is three items in one run
-> instead of three runs.
-> ➡️ **Next: your export with no audio** — the only thing on the list stopping you finishing a video.
->
-> **✅ Your Visual / Filters / Audio row is fixed — all three things you said, in one go.** The buttons now
-> stretch across the whole bar (84px each instead of bunched in the middle), and the row **stays at the
-> top when you scroll** instead of disappearing.
-> ➡️ **Next: why tapping an effect shows you nothing.** Your badges mean *picked*, not *applied* — they
-> only land when you leave the browser, so standing in that menu watching an unchanged preview is exactly
-> what a broken app looks like. **That is the real bug behind three of your reports.**
->
-> **✅ Everything you sent is logged word for word, and I am working down the list oldest first.**
-> **#129 done:** you said *"I have no idea"* about the file type — fair, so **the app works it out itself
-> now.** When a clip lands with no picture it tells you the file's actual name, type and whether the
-> browser claims it can play it, instead of what it used to do: **assert it was H.265 without checking.**
-> That guess was wrong often enough to send you re-exporting for nothing.
-> ➡️ **Next: your export with no audio** (#604/#215) — the most serious thing on the list, now confirmed
-> on your phone AND your PC.
->
-> **🔬 I finally found out which of my motion-blur tests was lying — and it means I removed a fix that
-> WAS working.** I built a check that simply asks: are the two frames this effect compares actually
-> different? **The test I used to justify undoing the fix was handing it the SAME frame twice**, so of
-> course it found no motion and no improvement.
-> ↩️ **CORRECTION, an hour later: the fix should NOT go back in. Re-measured properly, and the revert was
-> right.** The original code already produced the wider, softer result — my "before" number was never the
-> old code, it was the effect switched OFF. **Your app is in the correct state and I am leaving it alone.**
-> ✅ **And the real answer on Motion Blur: it is NOT broken.** Smear widens a moving object by ~7px and
-> Echo by ~12px on footage moving 12.7px per frame. **So "kinda buns" is about it being too SUBTLE, not
-> about it failing** — which is a taste call for you, not a bug for me.
-> ⚠️ **I have now been wrong about this five times.** The check that settles it is permanent and takes
-> one line, and every one of those five would have been caught by it.
->
-> **↩️ I TOLD YOU THREE TIMES THAT I HAD FIXED MOTION BLUR. I HAD NOT — and I have taken it back out.**
-> The "1.5x wider, softer edge" I reported was measured with a broken test: my measuring code was
-> drawing frames while your app was ALSO drawing the same layer at a different moment, which wipes the
-> memory this effect needs. Re-measured properly, the change was worth **one pixel**. So it is reverted
-> rather than left in your app as machinery that does nothing.
-> ⚠️ **Your original complaint is still real and still open:** Smear genuinely does almost nothing at its
-> normal setting. **Echo, on the other hand, works well** (a clear trail). So whatever the fix is, it was
-> not that one. **Nothing you make looks different because of this** — it never did.
->
-> **🧩 TILES + SHAKE (#582) — I found why it looks bad, and NOTHING IS BROKEN, so this one is your call.**
-> Tiles "Extend" repeats your layer's content outward to fill the frame. Your text line is only ~50px
-> tall, so it repeats **18 times down the screen** and turns into noise. Add Shake first and the content
-> gets bigger, so it only repeats 6 times — and suddenly it looks right. **Same effect, same settings.**
-> ❓ **Pick one and I will do it:**
-> **(a) cap the repeats** at about 6 so it can never turn to mush *(my recommendation)* · **(b) a minimum
-> tile size**, so thin things repeat fewer and larger · **(c) leave it** and use the Count slider.
-> ⚠️ **I have not touched it, because any of these changes every Tiles you have already placed.**
->
-> **🎬 MOTION BLUR (FOOTAGE) NOW ACTUALLY BLURS — your *"kinda buns"* report.** It was drawing your sharp
-> frame at full strength and laying a faint haze over it, so at the normal setting it did **nothing you
-> could see**: on test footage the moving object came out 111 px wide against 110 px with the effect
-> switched OFF. You had to shove Amount to 3 before it read at all.
-> **It now removes the moving object before laying its smear down** — which is what a motion blur is
-> supposed to do. Same footage, same default: 117 px, and the hard core of the object drops from 42 to
-> 26 while the soft band goes 7 → 59.
-> ⚠️ **Honest: I set myself a pass mark of 118 px and got 117.** It is a real, visible improvement and it
-> misses my own target by a pixel, so there is likely a bit more to get. Static parts of the picture are
-> untouched and it punches no holes — both checked.
-> ❓ **Worth a look when you can:** it should now read at the DEFAULT Amount. If it is too strong, that is
-> a one-number change.
->
-> **✅ SHIPPED the preview change you saw the picture of — every effect is now ~1.5x faster.** Your preview
-> was being drawn 1.5x bigger than your screen can show; it is now 1.25x. **At the size you actually look
-> at it I could not tell the two apart** — you saw that comparison.
-> ⚠️ **One number I owe you a correction on: I said 1.76x. Measured properly through the real drawing
-> path it is 1.49x.** My first figure came from timing the maths alone rather than the whole job.
-> **Exports are untouched.** If the preview ever looks soft to you, say the word and this goes back in one
-> line — and there is already a "detail" playback-quality setting that restores full sharpness.
->
-> **🎯 I found the biggest speed lever in the app and it is ONE NUMBER — but it is a look-vs-speed call,
-> so it is yours to make and I will show you a picture first.**
-> Your preview is drawn **1.5x bigger than your screen can actually show**, then shrunk down. That is on
-> purpose — it keeps edges crisp. **But it means every effect does 2.2x more work than the screen needs.**
-> | setting | speed |
-> |---|---|
-> | 1.5x — today | — |
-> | **1.25x** | **1.76x faster** (recommended) |
-> | 1.0x | 2.48x faster |
-> **That 1.76x applies to ALL 198 effects at once**, which is bigger than nearly everything I did today
-> one effect at a time. Your exported videos are not affected at all — this is preview only, and it
-> changes back in one word.
-> ❓ **Next tick I will send you the same frame at all three so you can see whether the difference is even
-> visible.**
->
-> **🚨 I measured the real scale of the problem and it changes what is worth doing.** At YOUR project size
-> (1080x1350), a single warp effect costs **half a second to three-quarters of a second per frame** —
-> Kaleidoscope 762 ms, Glass 481 ms. An empty scene is 1.6 ms.
-> **Today's best speed-up was 2.73x. That gap needs something like 50x.** So the seven effects I sped up
-> are real, but **tuning the maths cannot fix this on its own** and I do not want to keep implying it can.
-> ✅ **The thing that actually saves you already exists in your app:** it draws effects at a smaller size
-> and scales them up, and drops quality automatically when it is struggling. **That is why it works at
-> all on your phone.** So the valuable work now is making sure that kicks in when it should and looks
-> right when it does — not shaving more off the maths.
->
-> **✅ Re-measured everything from scratch and the wins are confirmed.** Grid Repeat — which was the most
-> expensive effect in your app — has dropped out of the fifteen dearest entirely, and so have Ripple and
-> Inner Pinch. Twirl went from 27 ms to 16.
-> ⚠️ **One honest caveat:** that whole-list scan is good for telling me WHICH effects are dear, but it is
-> too rough to measure how much a change helped — two of its numbers disagree with the careful
-> measurements. **So the wins I have quoted you come from the careful method, not that scan.**
->
-> **⚡ Inner Pinch 1.96x and Ripple 1.83x, both pixel-for-pixel identical.** Six of your dearest effects
-> are now faster.
-> **And one that surprised me: the same change made BULGE SLOWER** — 0.74x — so I took it out. Bulge
-> skips most pixels early, and for it the tidying-up cost more than it saved. **I had written down that
-> this trick always pays. It does not, and that is now corrected rather than left as a rule that would
-> mislead the next go.**
->
-> **⚡ Kaleidoscope 1.53x and Radial Repeat 1.82x, both pixel-for-pixel identical.** Same cause as Grid
-> Repeat: they were looking up their settings for every pixel instead of once a frame.
-> **That is now the four most expensive effects in your app all sped up** — Grid Repeat 2.73x,
-> Kaleidoscope 1.53x, Radial Repeat 1.82x, and Fractal Warp 11x — **with the picture unchanged in every
-> case except Twirl**, where I told you about the one-pixel trade.
->
-> **⚡ GRID REPEAT — the most expensive effect in the app — is 2.73x faster, and the picture is EXACTLY
-> the same. 15.3 ms → 5.6 ms.** It was looking up its four settings for every single pixel.
-> **The interesting part is what I did NOT do.** A second trick would have made it faster still, but it
-> shifted **18 in every 100 pixels** by one. On a tiling effect that means whole tiles jumping, so I
-> threw it away — and the plain version turned out to be **faster anyway** (2.73x vs 1.74x) as well as
-> perfect. **Nothing about your grids will look different, they will just draw quicker.**
->
-> **✅ Re-measured properly, and the good news is that both speed wins are REAL — confirmed by a clean
-> run that the tool certified as untainted.** Twirl has dropped out of the fifteen most expensive
-> effects entirely, and Fractal Warp fell from 28 ms to 20 ms.
-> **So where your lag actually lives, in order:** Grid Repeat, Kaleidoscope, Raster Extrude, Radial
-> Repeat, Bend, Inner Pinch. That is the list I will work down, and this time it is measured at the
-> right size with the quality drift ruled out.
->
-> **⚠️ Second correction in a row, and this one is on my measuring, not the app.** Your app protects
-> itself by quietly lowering render quality when it is working hard — which is good, and it is why the
-> phone stays usable. **But it means my speed tests got faster the longer I ran them**, because the app
-> had shrunk the picture underneath me. Same effect measured **565 ms early and 75 ms later, with no code
-> change at all.**
-> ✅ **The two real wins still stand** — Twirl's 1.89x was measured a way this cannot affect, and Fractal
-> Warp's 11x is far too big to be explained by it. **But the exact effect timings I have quoted you are
-> not reliable, and I would rather say so than keep quoting them.**
-> 🔒 The tool now checks the quality setting at both ends of a run and **refuses to publish a ranking if
-> it moved.**
->
-> **⚠️ I have to take back part of what I told you about which effects are slow.** The ranking of all
-> 198 was measured at the wrong size — it used a leftover **480x480** project instead of your
-> **1080x1350**. At your real size the order changes a lot: the effect I called 3rd worst (Raster
-> Extrude) is actually cheap, while **Ripple and Bulge are the real monsters at ~565 ms and ~514 ms a
-> frame.**
-> **Why it flips:** some effects do their work pixel by pixel, so they get four times more expensive when
-> the picture is four times bigger. Others hand the work to the graphics chip and barely notice. **The
-> bigger your project, the more the first kind dominates — and yours is big.**
-> ✅ **Fractal Warp (11x) and Twirl (1.89x) are still real wins.** The measuring tool now sets the size
-> itself so this cannot happen again.
->
-> **⚡ TWIRL — the single most expensive effect in the app — is now 1.89x faster.** It was doing a piece
-> of trigonometry per pixel (`atan2`) that turns out not to be needed at all: it was measuring the
-> pixel's angle, adding a swirl, then rebuilding the point — which is just **rotating** the pixel around
-> the centre, and rotating needs no angle measurement.
-> ⚠️ **Small honest cost, and I want you to know rather than discover it:** the new maths reaches the
-> same place by a different route, so about **4 in 100 pixels read from the pixel next door**. Invisible
-> in practice on a warp, but it is a real change, not a free one.
-> ✅ **I tried the same trick on Curl and THREW IT AWAY** — only 1.11x there, which does not justify
-> moving any pixels. Kept only the free part.
->
-> **⚡ FIRST REAL SPEED WIN ON THE MOBILE LAG: Fractal Warp is 11x faster.** 930.9 ms → 83.2 ms on a
-> frame at your 1080x1350. It was working out six settings — amount, evolve, scale, detail and the rest —
-> **once for every pixel, 1.46 million times a frame**, when none of them can change within a frame.
-> Now it works them out once. Tunnel and Curl got the same treatment (both verified correct; their
-> speed-up is small enough that I will not claim it).
-> ⚠️ **Honest limit: this is one effect of the eleven expensive ones.** What made Fractal Warp win so
-> big was that it also did a dozen DIVISIONS per pixel. The others are dominated by trigonometry
-> instead, which needs a different trick — that is the next piece of work, and I know what it is.
->
-> **🎯 THE MOBILE LAG NOW HAS A CULPRIT AND A FIX, AND IT IS ONE JOB DONE ELEVEN TIMES.** I ranked all
-> **198 effects** by what they actually cost. **37 of them are expensive**, and the eleven dearest are all
-> the same KIND of thing — the warping ones (Grid Repeat, Kaleidoscope, Curl, Twirl, Bend, Ripple, Tunnel
-> and friends). Each bends the picture pixel by pixel.
-> **We already solved exactly this once:** Turbulent Displace used to be the worst effect in the app and
-> v12.30 made it **4.2x faster** by working the warp out on a coarse grid and smoothly filling in between.
-> **The same trick should work on all eleven** — so this is one proven technique ported, not eleven
-> investigations.
-> ✅ **Also ruled out: stacking is not the problem.** Five effects together cost slightly LESS than the
-> five measured separately, so there is no hidden penalty for piling them up — the individual warps are
-> just heavy.
->
-> **🔒 One thing I got wrong today, and it is now locked shut.** I told you that measurement table
-> was in the entry. It was not — one of my edits failed silently and everything after it carried on as
-> if it had worked, so the release, the commit and my message to you all described something that was
-> not in the file. **Fixed, and the door is bolted: a failed edit now leaves a marker and `ship.sh`
-> refuses to release until it is dealt with.**
->
-> **⚡ "Editing lags" — your oldest item. I found a way to measure your PHONE, and it moves the blame.**
-> That entry has said for months that I can only measure on a desktop. Turns out Chrome will run the app
-> at a phone's speed on purpose, so now I have real numbers.
-> **The editing itself is fine on a phone** — tapping a layer, scrubbing, the timeline all stay quick
-> even at 6x slower. **What is slow is DRAWING the picture when effects stack up**: five effects on six
-> layers gives 45 fps here and **17 fps at phone speed**. Your app also quietly drops its own quality to
-> cope, which is working as intended and is why it stays usable.
-> ❓ **So the question for you got much more specific:** does a project with **one or two effects feel
-> fine, while a heavy one crawls?** If yes, that matches the measurement exactly and I know where to dig
-> next — stacked effect cost, not the editor.
->
-> **📹 #129 — your blank screen-recording clip. I checked the old explanation and it may be wrong.**
-> For months this entry has said the cause is H.265 video the browser cannot decode. **I finally asked a
-> browser directly: it says it CAN decode H.265 — but flatly refuses `.mov` files.** iPhone screen
-> recordings are `.mov`. So it may be the file WRAPPER rather than the video inside it, which needs a
-> completely different fix.
-> ❓ **That turns a hard question into an easy one: is the file `.mov` or `.mp4`?** Your camera roll
-> shows it. **`.mov` means one fix, `.mp4` means another** — and either answer beats the guess that has
-> been sitting in this entry since August.
->
-> **🔴 I WAS WRONG THAT I HAD RUN OUT OF WORK — and the mistake is worth telling you about.**
-> I kept checking the three items the tool calls "ready" and never opened the **thirty-two it calls
-> blocked**. They are not all waiting on you. Several are **your oldest bug reports**, filed months ago
-> and quietly parked:
-> · **#129** — a 2-second screen recording adds a clip with **no video**
-> · **#202** — one simple video layer **lags badly and does not load properly**
-> · **#96** — adding a song is buggy and sometimes **will not play at all**
-> · **#95 / #125** — the timeline lagging on your phone with barely any layers
-> **Some of those were parked because nobody could load a video in a test. I worked out how to do that
-> tonight**, so #129 and #202 are testable for the first time. **That is what I am doing next — your
-> oldest reports, not anything I invented.**
->
-> **📍 I have run out of work that does not need you — checked by hand, twice.** The last loose
-> thread (a Squish setting that looked dead) turned out to be fine: "Floor" is just too gentle at the
-> default strength, and moves plenty once you turn it up. No bug, and it is written down so nobody
-> re-investigates it later.
-> **The loop keeps running. But from here I would be inventing work rather than doing yours.**
->
-> **✅ THE "ARE ANY EFFECTS SILENTLY BROKEN" HUNT IS FINISHED — and the answer is reassuring.** Of the
-> eight suspects: **five had a real gap and now say what they need**, two were already labelled, and the
-> rest were my testing rather than your app. **Squish is fine too** — it moves hundreds of pixels on a
-> shape; my earlier readings used the wrong subject.
-> **Net: two real bugs found and fixed, five effects given a missing label, and around twenty-five false
-> accusations caught before any of them reached your screen.**
->
-> **🧹 The list of "effects that might be silently broken" is down from eight to ONE.** Two more
-> turned out to be my testing rather than your app: effects that compare one frame to the last cannot be
-> measured by jumping around the timeline, which is what I was doing. Rendered properly they both work
-> fine. **Only Squish is still unexplained**, and it is probably part of the Squish item you already
-> raised — so it goes there rather than becoming a separate thing.
->
-> **🎯 The effect-sweep finally produced a real fix.** Two effects (Luma Matte and Compound Blur)
-> do nothing until you point them at another layer — and neither said so. They now carry the same
-> **"Needs a setting"** label the others do.
-> **The good part: I did not hard-code their names.** The app now works it out by asking each effect
-> whether it needs a source and hasn't got one — which immediately caught **three more** I had not
-> found by testing, and will catch any future one for free.
->
-> **🔓 I got unstuck on my own item by building a video from scratch.** #599 had been parked on "I
-> cannot test this without real footage" — turns out the browser can RECORD one, so the app now gets a
-> genuine moving video clip in a test. **That reason for stopping is gone permanently**, and several
-> entries had leaned on it.
-> **First result, with the safety check passing: three effects that should work on a moving clip did
-> nothing** — but three others in that list need a SECOND layer to work at all, so they prove nothing
-> and I am not counting them. **Three candidates, still not calling them broken.**
->
-> **📍 EVERYTHING I CAN BUILD WITHOUT YOU IS BUILT.** I went through the remaining items by hand
-> rather than trusting the counter, and all four it calls "ready" are actually waiting on you:
-> · **#578 and #582** — both are *"it looks bad"*, and I cannot tell whether a change improved a look.
-> · **#592** — measured twice, the edge lands exactly right here.
-> · **#599** — mine, and it needs a real video clip to judge, which I cannot make in a test.
->
-> **The two fastest unblocks, if you get a minute:**
-> **1.** One screenshot with the timeline **zoomed all the way out** — that likely closes **#587 and
-> #592** together.
-> **2.** **#593** — open the filter menu, close it, open it again: do the black-and-white tiles come
-> good? That is the last real bug outstanding.
->
-> **🔧 #600 fixed — the tap box now matches what is actually tappable.** It was the row's own focus
-> outline being drawn at the row's size while the tap area had grown past it. The box is drawn on the
-> bigger element now, so the two cannot drift apart again.
->
-> **📉 #601 — the opacity curve was NOT missing, and that is my fault not yours.** You asked for it
-> once before and I added it — but only showing once you have keyframed the property, so it could never
-> open an empty editor. **Hidden and missing look exactly the same**, so you reported it again, fairly.
-> **It is now always there, greyed out until you add a keyframe, and it tells you that.**
-> 🐛 **And it turned up a real bug: the "greyed out" style did not exist.** Two other buttons — the crop
-> curve and the motion path — have been pretending to grey out since they were written and never did.
-> They looked normal and silently ignored taps. Fixed for all three.
->
-> **⚡ #582 — your "I completely broke the app" stack is roughly TWICE as fast.** At the default setting
-> it went from **102ms a frame to 52ms**; at 16 samples, from 169ms to 48ms. Nothing was ever crashing —
-> it was Motion Blur re-rendering everything beneath it once per sample, with no limit on how many.
-> **I capped it at 6 for shakes**, because a shake jitters randomly rather than sweeping, so extra
-> samples buy far less than they do on a real camera move. **A proper keyframed move is untouched.**
-> **If the shake now looks steppy to you, say so — it is one number.**
->
-> **⭐ #581 DONE — fave a custom filter and it goes to the top, like the built-in ones.** Save a filter
-> you have changed, star it, and it appears in Favourites under **the name you typed**. The part that
-> mattered: the code that reads your saved favourites used to throw away anything it did not recognise,
-> so a custom one would have **appeared and then vanished on reload**. Fixed, and the test checks it
-> comes back after a fresh read rather than just that it shows up once.
->
-> **🔎 #581 is now fully designed and starts as a build next tick.** Reading it end to end found
-> the thing that would have quietly broken it: **the code that reads your saved favourites throws away
-> any id it does not recognise** — so a favourited custom filter would appear when you starred it and be
-> **gone on reload**, with nothing to explain why. That is the real work, and it is now written down
-> along with the one function that makes the rest of it fall out for free.
->
-> **🔴 YOU WERE RIGHT ABOUT THE ORDER AND I HAVE WRITTEN IT DOWN.** #599 was **my own idea**, not
-> your request, and I spent four ticks on it while **#581, #583 and #585 — yours, and older — waited.**
-> "It is blocked on his answer" was not good enough: **#581 had a build I could have done** using the
-> default I had already recommended to you. **Work I invent should wait LONGER than yours, not shorter.**
-> That is now a rule in LOOP.md rather than an apology.
->
-> **📉 #601 logged — you are right that Opacity has no easing curve.** It is the one property you
-> can keyframe but cannot shape, which is odd given a fade is the most common thing anyone animates.
-> **Next up is #581**, the oldest of yours I can actually build.
->
-> **🔴 You caught a regression of MINE and you are right — #600.** When I made the whole bottom of
-> the timeline tappable for you, I moved the *listener* and left the *dashed box* marking the old,
-> smaller area. Measured: the box stops at 744, the tappable area runs to 820 — **76px that works but is
-> not drawn**, which is the very gap you asked me to close in the first place. **The box is what moves,
-> not the tap area** — shrinking it back would undo your own request. I have not yet found which state
-> draws that box, so I stopped rather than guess.
->
-> **✅ THE CHECK FINALLY RAN PROPERLY — fourth try, and the safety net passed for the first time.** Using
-> a page of text as the test picture (letter edges give the fine detail my earlier flat shapes lacked),
-> all twelve known-good effects came back alive. **Of 198 effects, eight do nothing on a single still
-> layer.** I am NOT calling those broken — most need something one layer cannot give: another layer to
-> read, or video frames to compare. **Two of them do look like real gaps** (the ones needing frame-to-
-> frame change), and each survivor gets judged on its own rather than batched, because batching is
-> exactly the mistake this took three tries to stop making.
->
-> **✅ THIRD TRY: the safety check worked and stopped me before I could get it wrong again.** I added a
-> control — ten effects I KNOW work, which must come back alive or the whole check is void. Nine did,
-> strongly, including the exact ones my earlier attempts wrongly called broken. **One did not, so the
-> sweep was declared invalid and never ran.** That is the first honest result this has produced, and it
-> cost nothing. The remaining problem is known and written down: my test picture needs fine DETAIL as
-> well as light and dark.
->
-> **🛑 SECOND SWEEP ALSO WRONG — caught it again, and I have stopped trying tonight.** This one
-> called **brightness, saturate, grayscale and sepia** dead, which is nonsense, so it refuted itself. Two
-> mistakes of mine: the effect landed on the near-black background instead of the subject (my helper kept
-> grabbing the newest layer, since new ones go in at the front), and my threshold was bigger than the
-> change I was looking for. **The real lesson is written down: a check that can accuse working code needs
-> a CONTROL inside it** — effects known to work, asserted alive — so a broken sweep fails loudly instead
-> of producing a believable list. Neither attempt had one. Third try will.
-> **Scoreline so far: two real finds (#597, #598), two false alarms caught before they reached you.**
->
-> **🛑 I nearly told you 20 effects were broken. They are not — my test was.** I swept all 198
-> effects looking for more silent ones, on a plain coloured square, and 20 came back doing nothing.
-> Checked before believing it: **Posterize turning one colour into one colour IS nothing. Mirror on a
-> centred square IS nothing. Vignette darkens corners my square did not reach.** The effects are fine;
-> the subject was wrong. **A proper sweep needs a photograph**, and the app already has the right ones —
-> logged as #599 with the method written down so the next pass does it correctly.
->
-> **🔎 Swept again, found another.** **Both Motion Blurs do nothing on a layer that never moves** —
-> 0 pixels — and the effects browser said nothing when you picked them. It says so now. The app already
-> knew: Motion Blur (Object)'s own description ends *"It does nothing on a layer that is not moving"* —
-> it was just written where you only read it AFTER choosing. **Two found by looking, in two ticks.**
->
-> **🔎 I went looking for the NEXT one instead of waiting for you to find it — and there was one.**
-> **Focus blur was dead on a flat scene too**, exactly like Field of view, one tab across in the same
-> panel: 0 pixels with everything at one depth, 39,542 once a layer has some. It says so now, in the same
-> words and colour. **You have reported this family three times; that is the fourth, caught before you
-> hit it.**
->
-> **📷 #595 — the camera now tells you when it cannot do anything.** If every layer sits at the same
-> depth it says so, and tells you where Z is. It disappears as soon as one layer has depth. **Your
-> sliders were never broken** — I was wrong about that and the correction is in the entry.
->
-> **💡 #596 — the app now tells you what those two layers are for, at the moment you add one.**
-> Controller: an invisible handle — parent layers to it and move them all together. Adjustment: its
-> effects apply to everything BELOW it, so one grade covers the whole video. **You should not have had to
-> ask** — every effect in the app carries a description and those two carried nothing.
->
-> **🔴 #595 — I WAS WRONG, and you decided based on it. The depth control already exists.**
-> Z is the third number in the Move panel, right beside X and Y — measured, it reads `400.0X 540.0Y
-> 0.0Z`. And it works: **put one layer at Z 900 and your Field of view changes 77,759 pixels.** The
-> camera was never broken and neither was the renderer.
-> **What was true is the smaller half:** your scene was one image layer, so everything sat at the same
-> depth and the lens genuinely had nothing to work with — **and nothing told you that.**
-> **So there is nothing to build for depth; give a layer a Z and the camera comes alive.** What is left
-> is making the camera panel SAY so when your scene is flat. Sorry for the wrong steer.
->
-> **🎥 #595 — you are right, and I found exactly why.** Field of view and Distance change **zero
-> pixels** (I checked with your two values; moving a layer for comparison changed 70,687). **But the
-> sliders are not broken.** The camera works out the lens correctly — what is missing is that **no layer
-> in FreeMotion can be at a different depth.** Every layer sits at the same Z, and a lens cannot change a
-> flat scene, any more than a telephoto changes a photograph of a photograph.
-> **The panel even promises parallax it cannot deliver.** Two ways forward and it is your call: I can
-> make the camera panel SAY they do nothing until layers have depth (cheap, stops you chasing a dead
-> control), or add a real depth control to layers — the renderer is already written for it, so that is a
-> UI job rather than a rewrite. **Which?**
->
-> **🔝 #594 — Tuff is the second filter row now, right under Cinematic.** It was last because of my
-> reasoning, not yours — I had put it there as "newest and most specific". Nothing else moved and no
-> section was lost.
->
-> **👀 THREE OF YOUR REPORTS IN A ROW DO NOT REPRODUCE HERE — #587, #592, and #593 — and that
-> pattern is now the interesting thing.** Each one I have measured carefully and each comes back clean in
-> my preview while your phone plainly shows otherwise. **The likeliest single explanation is that your
-> timeline is at a different ZOOM, or your phone loses timing races mine never does.** Rather than guess
-> at a fourth theory each time: **if you can tell me the zoom level, or send one screenshot with the
-> timeline zoomed all the way out, it would probably settle two of the three at once.**
->
-> **❓ #587 — I still cannot make the benchmark lines appear in the sidebar.** I staged the scrolled case
-> this time: a benchmark sitting right inside the sidebar's column, screenshotted — **nothing there.**
-> **One line from you would settle it: was the timeline zoomed out when you saw it, or was that a
-> project with several layers?** That is the one variable I cannot guess at, and I would rather ask than
-> invent a fourth theory.
->
-> **🟡 #586 + #590 — the whole playhead lights up on a benchmark now, and the hold-menu is gone.**
-> The line was already going yellow; the round head was not, which is the bit you were looking at.
-> And both "Rename marker" and "Remove marker" are gone, as you said. **Removing still works** — park on
-> a benchmark and tap the playhead's head — and I checked that actually works before deleting the menu,
-> rather than trusting the note that said it did.
->
-> **🎧 #585 — the four audio categories have icons now, and the picture is above.** EQ / Filter is
-> three faders, Space / Stereo is sound spreading outward, Dynamics is a signal squeezed between two
-> rails, Character is a clean wave going square. Drawn in the same hand as the effects menu's icons —
-> same weight, same box — and checked at **26px, the size they actually appear at**, not just blown up.
-> **Say the word on any of the four and I will redraw it.**
->
-> **📐 #584 — the wasted band is gone.** ✕, the Visual/Filters/Audio tabs and the search button now
-> share one row, exactly as you drew it, and the effects start **40px higher**. Worth knowing: you had
-> asked for this once before *for PC*, it was built then, and I had gated it to PC only because you said
-> "on pc" — the phone was never told. Nothing new was invented here; the gate just came off.
->
-> **🏷️ #583 — the button says "Save effects only as preset" now, and I owe you the reason it is not
-> exactly your words.** Your button has a twin, *"Save look + animations…"*, and you asked once before
-> for the two to say what each one keeps — because an older pair both read as "save a preset" and you
-> could not tell which kept the layer's motion. The bare "Save as preset" loses that, and the tests
-> caught it. **Say the word and you can have the short label**, at the cost of that contrast.
->
-> **🛡️ Found and fixed silent data loss while starting #581.** Saving a FILTER with "Save this effect
-> as preset…" stored an **empty shell** — the preset saved, loaded and listed with the right name, and
-> the effects inside it were simply gone. No error. You would only have found out much later, when the
-> preset did nothing. Filters now save with their contents intact. **#581 itself is not finished** — the
-> favourites row still has nowhere to show a custom filter — but the thing that would have made it
-> lose your work is gone.
->
-> **🖼️ #580 — there is a "Crop to canvas" button beside Free crop now.** It crops the clip to your
-> project's shape, centred, so it fills the canvas with no bars — and it only ever removes picture,
-> never stretches it. Reset still works on it like any other crop.
->
-> **🖤 #579 — you now have SIX black-and-white filters instead of three:** Platinum (bright and
-> airy), Ink (almost pure black and white), Fog (flat grey haze), alongside Silver, Noir and Newsprint.
-> **But I owe you a correction:** I told you earlier that the "Blackout" filter was broken because it
-> did not go black and white. **It is not a black-and-white filter** — it lives in the Tuff section and
-> only pulls colour back on purpose. Silver, Noir and Newsprint all desaturate perfectly; I measured
-> them. **What is fair is that "Blackout" SOUNDS like a black-and-white filter.** Want it renamed?
->
-> **🌫️ #578 — Motion Blur (Footage) no longer starts on the pixelated mode.** New ones start on
-> **Smear**, which softens rather than breaking into blocks. **Clips you have already made are
-> untouched** — that was the risky part, and they keep rendering exactly as before.
-> **The second half of that request is still open on purpose.** You said it "needs a lot of work" and
-> I would only be guessing at slider values. **If you send me a clip that looks bad, or just say which
-> way it is wrong — too soft, too blocky, ghosting, too slow — I can measure it.** No rush.
->
-> **⏱️ #577 — the hold before a clip can be trimmed is 550ms → 300ms.** Checked that a scroll still
-> cannot start a trim by accident: it never depended on the wait anyway — moving your finger 8px cancels
-> it outright, so the shorter hold gives up nothing. A quick tap still does nothing either.
-> **The Add menu's long-press and the Presets card use the same 550ms and I have NOT changed those** —
-> say the word if they should follow.
->
-> **📝 #576 — the text options are no longer buried.** It was a stacking collision, not a layout
-> slip: the panel opened at y63 while the box showing your words covers y57–145 and sits on a higher
-> layer, so the options were not just hidden, they were **unclickable** — a tap landed on the text box.
-> They now open below it, which was your second suggestion. I did not simply raise them above it,
-> because that hides your own words behind the options — the same problem the other way round.
->
-> **↔ #575 — you can now DRAG a caption longer.** Each cue row has a grip: drag right to extend, left to
-> shorten, about a second per 50px. Nothing was ever refusing to extend them — there was just no handle,
-> only two little number boxes. It can now run over the next caption too, and both show, because that
-> was fixed last tick.
->
-> **💬 #574 — stacked captions now BOTH show.** The cause was one line: the app kept only the
-> latest-starting caption and threw the other away before it ever reached the screen, which is why the
-> editor let you stack them and nothing appeared. They now stack as lines, so they keep your font,
-> alignment and animation. A normal one-at-a-time caption track is completely unchanged.
->
-> **✨ #573 — your text animations went from FIVE to ELEVEN.** New: **Drop in, Spin in, Zoom in from
-> big, Stretch**, and two that are a different kind of thing entirely — **Wave** and **Jitter**, which
-> **keep moving for the whole layer** instead of playing once and stopping. Nothing in there was
-> possible before (text could not even rotate). I measured each new one against the closest one you
-> already had so you are not getting the same effect twice under a new name — that mistake has been made
-> here before with a sound.
->
-> **🎨 #571 IS FULLY DONE — press the empty timeline and it lights up from your finger.** The colour
-> depends on WHERE you press, like you asked ("based on what button you press"), so every part of the
-> screen has its own and the same spot always gives the same one. **One honest caveat: I could not watch
-> it move.** The preview pane was throttled (0 animation frames in 450ms), so I checked the look by
-> freezing it at five points of its flight and photographing that. **If the motion feels wrong on your
-> phone, tell me — that is the one part I could not test.** My first go was also too big and I shrank it
-> by half after looking at it; you asked for a "nice little" reaction and the first one was not little.
->
-> **🔴 #572 IS DONE — and the answer is not the one you have been given three times.** Your effects
-> are not broken. On PURE WHITE, Brightness, Contrast, Grayscale, Saturation and Hue Shift **cannot do
-> anything** — brightness ×1.3 of 255 is still 255. Sepia, Invert and Glow do work on it, and all eight
-> work fine the moment the layer has a colour. **The real bug was that the app already knew and only told
-> you AFTER you had added them.** Now the browser tile says **"does nothing here"** before you spend the
-> pick, with the reason on it. Nothing about the effects themselves was changed — there was nothing
-> wrong with them.
->
-> **✅ Got your two answers — #570 "stepped" and #590 "the whole thing goes". Both logged, neither
-> re-asked.** And noted, verbatim: *"I'm not in a rush to answer every question coz you still have hours
-> of work in the things that you can do."* Fair. Questions go in the entries from now on, not at the top
-> of every reply — logged as **#591** so it sticks.
->
-> **✅ #590 ANSWERED — thanks.** *"The whole thing goes I don't want to name benchmarks."* The popup
-> and renaming both go; removing a marker stays on the playhead head. Queued with **#586** and **#587**
-> so all three marker jobs happen in one pass rather than three that disagree.
->
-> **🔴 #569 was hiding DATA LOSS.** You said Paste look does not always work. It was worse than that:
-> the **Effects** tile was ticked ON by default even when the layer you copied had **no effects**, and
-> pasting it **deleted the effects on the layer you pasted onto** — while the toast said "Pasted style".
-> Fixed, and the tiles now only offer what can really be pasted, with labels and a reason when one is
-> greyed out.
->
-> **✅ #568 IS DONE — all three clauses, and all three were real.** The circle was 1px off the line
-> (three pixels on your screen), the ring was a DARK blue-grey against a white line which is why it
-> looked like two things, and the old white arrow was still being drawn underneath. Centred, recoloured
-> to the line's exact white at the line's exact width, arrow gone.
->
-> **✅ YOU CAUGHT ME JUMPING THE QUEUE, AND YOU WERE RIGHT.** You said: *"you just started doing new
-> stuff with way older things un finished."* I had started #588 — the newest thing on the list — while
-> #568 onwards sat untouched. It shipped anyway only because it was already written and it is a fix to
-> something I had got wrong twice before, not new work. **It is the last one that jumps.**
->
-> **The audit you asked for, done with the tool rather than my memory (`./tools/next.sh`):**
-> · **Everything you have said is logged** — 22 messages since #568, all present, all verbatim, nothing
->   missing. `INBOX.md` is empty too.
-> · **60 items open.** But only **22 are actionable** — **28 are blocked waiting on a decision from
->   YOU**, 4 you put on hold, 1 needs its own session, 5 are standing notes with nothing to build.
-> · **The next actionable item is #568**, and everything older than it is in that blocked/held pile —
->   so the order has been right up to tonight's slip.
-> · **That 28 is the real problem, not the order.** Nearly half your list cannot move without you. When
->   you have a spare ten minutes, answering a batch of those unblocks more than anything I can build.
->
-> **🔴 THE ONE THAT MATTERS MOST — #582, "I completely broke the app".** Motion Blur + Shake + Tiles
-> on one layer. That is at the TOP of what I do next, ahead of everything cosmetic, and I have not
-> touched it yet — it needs reproducing with the console open before anyone guesses. You also said those
-> three "NEED to all be added and work because that's a main feature", and that is quoted in the entry so
-> it does not get treated as an edge case.
->
-> **📥 You sent 19 things tonight. All logged verbatim, none forgotten:** #568 playhead circle · #569
-> Paste look · #570 drag not updating the switch · #571 empty-project screen · #572 the effects answer
-> (measured — see below) · #573 more text effects · #574 two captions at once · #575 extending caption
-> texts · #576 text options hidden behind the preview box · #577 the 550ms hold · #578 Motion Blur
-> (Footage) · #579 saturation / black-and-white filters · #580 crop to canvas size · #581 favouriting a
-> custom filter · #582 the break · #583 "Save as preset" · #584 the wasted row in the effects browser · #585 icons on the
-> audio category tiles · #586 hovering a benchmark turning the playhead yellow · #587 benchmark lines
-> still drawing through the layer sidebar.
->
-> **🔎 One real bug found while checking #579: the "Blackout" filter does not actually desaturate** —
-> measured, it leaves a colour spread of 25.5 where "Noir" gets to 0. Your words were right. Saturation
-> and Grayscale themselves are fine (46.7 → 0 on a coloured shape); they do nothing on WHITE, which is
-> #572's warning problem, not a broken effect.
->
-> **🔎 v12.81 — I have an ANSWER on the effects, and it is not the one I gave you before (#572).**
-> I measured your exact case — white text, the eight you picked. **Brightness, Contrast and Grayscale
-> change literally zero pixels on it. Sepia, Invert and Glow change thousands.** A white SHAPE behaves
-> identically, so it is nothing to do with text: **those three cannot move pure white.** Brightness ×1.3
-> on 255 is still 255.
-> **So the effects are fine — and that is not good enough as an answer, because here is the actual bug:
-> the app already knows, and only tells you AFTER you have added them.** Put those three on that layer
-> and the effects LIST says "does nothing here" on all three. Your screenshot is the BROWSER, where you
-> picked eight and nothing warned you at all. **That is what I am fixing — the warning moves to the tile,
-> before you spend the pick.** Logged as #572, and I have not touched the effects themselves.
->
-> **✅ v12.80 — the three things you sent tonight that were my fault, fixed.**
-> · **The play pill (#526).** You were right and I had matched the wrong thing: the buttons either side
->   are 34px boxes with **no border at all**, so nothing on that row is 34px to look at — what you SEE is
->   their 21×21 glyphs. The pill is 21px now, dead level with them.
-> · **The add row (#567).** The dashes run over the left divider again. The right side still stops at the
->   end of the project, as you asked.
-> · **Filter rows (#565).** Rows with more than fits now show little dots underneath — same dots the shape
->   grid uses. Rows that fit show nothing.
->
-> **📥 Everything else you sent is logged and waiting its turn:** **#568** (playhead circle — centre it,
-> blend it into the line, lose the old white arrow), **#569** (Paste look menu), **#570** (dragging a
-> layer not updating the switch live), **#571** (the empty-project screen: the odd blue line, the dead
-> strip at the bottom, and the colourful tap reaction). I have not started any of them.
->
-> **✅ v12.79 — there is a Bell now (#563), in Audio ▸ Sound effects ▸ Interface.** I built it as a struck
-> bell rather than another chime, because there was already a "Ding" and the easy version would have been
-> the same sound twice — this one has a clapper strike, inharmonic partials, and it darkens as it rings
-> out (still ringing at 1 second, where the Ding has gone).
-> **🔎 Found while doing it:** **Reverse swell and Glass break clip when you press ▶.** Only on the
-> preview — added to a project they are fine, because that path gets normalised and the ▶ does not. It is
-> logged as **#566** rather than quietly changed, since it alters how two of your existing sounds play.
->
-> **✅ v12.78 — the ▶ on sound effects works (#562).** It was not flaky: **all 29 of them were broken**,
-> every one throwing on its first line, and the error was being swallowed so nothing ever said so. The
-> preview was handing the recipes a fake audio context; the real one takes its output as an argument the
-> preview just was not passing. **All 29 now measure as audible.** Failures also get reported now instead
-> of failing silently — that silence is the only reason this lasted.
->
-> **✅ v12.77 — zooming no longer breaks the edit points (#561), and you were right that it was not just
-> them.** At 4× the handle overlay was **four times too big and 720×1200 out of place**, so the points sat
-> nowhere near your shape. **The mask editor had exactly the same fault**, which I only found because you
-> said "and probably other stuff" — so I swept the rest too. The selection box and the drawing overlay
-> were already fine. It is the third time this same bug has been written out by hand, so the rule now
-> lives in one place and a test refuses a fourth copy.
->
-> **✅ v12.76 — masks are in the effects list now, not their own menu (#560).** A mask is a row like any
-> other: same card, same chevron in the same column, same eye and bin, and **+ Add Effect / Copy / Paste
-> sit below it** instead of above it. It also fixes something I only found by looking — **a mask's arrow
-> never rotated when you opened it**, because it was missing the wrapper the effect rows use.
-> 🟠 **One thing left, and it is your call:** you still cannot drag a mask above or below an *effect* —
-> only among other masks. Making that work means moving masks into the effect stack properly, which
-> touches the render path in 30 places. **Say "migrate masks" if you want it.**
->
-> **✅ v12.75 — the wipe sliders are four times finer (#559).** You said they "do too much too fast so I
-> can't be precise". I measured before changing anything, and it was not what the note in the list
-> assumed: the effect responds evenly across the whole slider, nothing is wasted. The problem was that
-> **7px of finger movement jumped 2% of the picture**. It now moves 0.5%. **The range is exactly what it
-> was**, so nothing you have already made will look different — every position the old slider could hold
-> still exists.
->
-> **✅ v12.74 — the line by the add-layer row is no longer cut short (#550).** You said *"where the arrows
-> are the line is like cut short for no reason"*, and I had parked it because a previous round could not
-> tell which line you meant. **I measured the phone screen instead of asking you again**, and there was
-> exactly one break in that line anywhere: on the add-layer row it was **21px tall in a 40px row**, a
-> pixel out sideways, with a 2px gap below it. Every other row had the full 41px. It now runs the whole
-> row at the same x as the rest, and meets the next row with no gap. The ＋ has not moved.
->
-> **✅ v12.73 — the four menus at the right of the transport row now pop out of their buttons (#548).**
-> Shortcuts, Notes, Settings and Export. Each one hangs off the button you pressed with a comic tail
-> pointing back at it, and each opens with an animation instead of just appearing. **The notepad got its
-> own**, like you asked — it flips open over its top edge, the way you turn back the cover of a pad.
-> The settings cog kept its own animation on purpose: it already worked and two tests pin it, so it just
-> gained the tail. **Picture below** — say the word if you want the tail bigger, or a different opening.
->
-> **✅ v12.72 — Squish in corners (#539, the corner part).** You said it "doesn't even work in corners very
-> well". It now squashes properly into one: a ball goes **125×125 → 104×104**, 37% less area, and rolling
-> into the corner reads as one smooth motion instead of the deformation quietly fading out. A ball against
-> a single wall looks **exactly** as it did before — I checked that first, because changing it would have
-> re-cut every project you have already made. **The other three parts of #539 are still open** (the shake
-> jitter, and the layer picker) — those are bigger and I have not rushed them in behind this.
->
-> **🛠️ v12.71 — I caught myself breaking your oldest-first rule, so I made it impossible.** You told me
-> once to *"figure out a way to remember"* — and remembering is what failed. Twice in one day: I shipped
-> three items while six older ones were sitting there ready, then jumped another one while writing the
-> fix. The tool that lists them was right every time; I just did not obey it. **Now the ship script
-> refuses to release an item while an older workable one is open.** If you ever tell me to do something
-> right now, I write the reason into the skipped item and you can read it there.
->
-> **✅ v12.70 — dragging a clip past the end (#524).** Measuring it again was worth it: the clip does not
-> freeze there, **it runs backwards** — it slid all the way back to where it started while my finger kept
-> going right. The auto-scroll was still scrolling with nowhere left to go. Fixed, and **the project now
-> stretches while you drag** instead of jumping when you let go, so you can watch the timeline grow under
-> the clip. **It still stops after one clip-length** — that limit is your own earlier complaint about
-> clips stranded far out in empty space, and I would not undo one of your requests to satisfy another
-> without asking. **Say the word and I will take the limit off entirely.**
->
-> **You said keep grinding and don't ask, so I have.** Three items in one release from here on — the test
-> suite was eating ~35 minutes per item and that was the whole slowness. Same tests, same gates, a
-> quarter of the waiting. Nothing was dropped to get there.
->
-> **✅ v12.69 — deleting a layer now leaves nothing selected (#556).** Both ways of deleting, not just the
-> one — the toolbar button and the layer's own menu. You land back on the timeline instead of having the
-> previous layer's options open over the screen you were trying to get to.
->
-> **✅ v12.69 — Opacity has its easing curve (#557).** It shows up once the opacity is actually animated,
-> because a curve edits the bit BETWEEN two keyframes and there is nothing to edit until there are two.
-> Building it turned up a worse bug next door: **back was broken inside every easing curve** — it looked
-> like nothing happened, twice, with no way out. Fixed.
->
-> **✅ v12.69 — Lens Flare has colours (#558).** Two of them: **Flare** for the round core and **Rays** for
-> the six streaks, separately — so you can do the warm-core/cold-streak look, not just tint the lot. Both
-> keyframe. Existing flares look exactly the same as before.
->
-> **✅ v12.68 — picking a filter now shows it on YOUR canvas (#554).** The little tiles always previewed;
-> your actual picture never did. Pick one and the whole composition updates live, pick a second and they
-> stack, un-pick and it goes back exactly. Nothing is written to the project until you press Add.
->
-> **✅ v12.67 — effect colours keyframe now (#555).** Gradient Overlay's Start and End have a ◆ like
-> everything else, and so does every other effect's colour. The animation machinery was already there —
-> what was missing is that the effects themselves ignored an animated colour and quietly used their own
-> default, so a ◆ would have looked like it worked and done nothing.
->
-> **🛡️ v12.67 — the half-drawn app (#553).** I could not reproduce it in 8 stress cycles, so I have not
-> "fixed" it — but I found a real hole: the guard that rescues a stuck transition doesn't cover the exact
-> state you photographed. There's now one that does, so it can't stay stuck. **The black bar I have not
-> touched** — I've never seen it.
->
-> **✅ v12.66 — the layer no longer vanishes at the end of itself (#549).** Your 00:04:00 screenshot. It
-> was the last instant falling just outside the clip. It now holds the picture **whenever nothing else is
-> there to take over** — the end of the project, or a gap — and at a proper cut the NEW clip still owns
-> the frame, as it should. Your exports are byte-identical; the fix is on the preview only.
->
-> **✅ v12.66 — the add-layer row (#550 part, #551).** The blue tint and dashes now stop at the divider
-> instead of running through it (the ＋ stays put), and the bar ends where your PROJECT ends rather than
-> at the screen edge — so it doubles as the end marker you wanted. **One bit I could not do:** you said a
-> line is "cut short where the arrows are" and I cannot tell which line you mean — the divider and the ≡
-> arrows are at opposite ends of the row. Circle it again when you get a sec.
->
-> **🔎 v12.65 — I found out WHY Squish dies in a corner (#539), and it is not what I told you an hour ago.**
-> From the outside it looks like the effect does nothing there. It actually runs completely — it sees the
-> ball pressing into both walls — and produces an identical picture. The squash you can SEE is the bulge
-> sideways, and in a corner there is nowhere to bulge, so it comes out looking untouched. That also
-> explains the fade you noticed: sliding down the wall it goes 236 → 230 → 210 → 160 → nothing.
-> **I have not fixed it**, because the fix is a taste call: should a corner squash the ball flatter, or
-> should a corner legitimately hold it rigid? Your call. The measuring tool is now built in either way.
->
-> **✅ v12.64 — motion blur cranks much further (#540).** I measured it before changing anything: the
-> effect was still getting stronger right up to the old maximum, so the limit was the slider and not the
-> blur. Shutter now goes to **12** instead of 4 and samples to 48 — a fast object smears **3.2× its own
-> width** now, against 1.8× before. **Your existing projects are untouched**: the defaults did not move,
-> so you only pay the extra render cost when you actually crank it.
->
-> **✅ v12.63 — tap the canvas with the effects menu open and it pauses (#538).** A pause button blooms
-> over the picture and fades away. Only in that menu, as you asked — everywhere else a canvas tap still
-> just selects and drags.
->
-> **✅ v12.62 — Gradient Overlay got blending, and a fair bit more (#537).** Eight blend modes — screen
-> for glows, multiply for burns, overlay and soft light for a colour cast. Plus **Radial and Conic** as
-> well as linear, a **Midpoint** to bias where the two colours meet, and **Dither** to kill the banding
-> that makes a wide subtle gradient look cheap. Anything you have already made with it looks identical —
-> the new controls only do something once you move them.
->
-> **✅ v12.61 — your play button loops again, and the bookmark is a real button now (#536).** All four
-> things you listed. Holding the time pill starts looped playback like it used to — setting the thumbnail
-> had been left on it by mistake, and that has moved to the bookmark button where you asked. That button
-> was genuinely invisible (no background, no border, just an empty tap area), so it is a proper disc now.
-> And the bookmark lines stopped short because their length was hardcoded to 320 pixels — measured now,
-> so they reach the bottom at any timeline height.
->
-> **✅ v12.60 — the add-layer switch (#533).** You were right that something was off, and it was already
-> fixed — by the drag work two days after you reported it. Before that the switch leaned one way while
-> you dragged and then snapped back when you let go, because the live value and the applied value were
-> two different numbers. They are one number now. I measured both gestures to be sure.
->
-> **✅ v12.60 — Convert to Outline (#534).** It says **"Flatten to One Outline — coming soon"** now and
-> explains itself. The look it used to do did not need building — it is already an effect and it works.
-> **But you were still right that you could not find it: it is called "Stroke Colour"**, which says
-> nothing about outlines. Say the word and I will rename it.
->
-> **✅ v12.59 — the effects you select DO work, and I found why they look like they don't (#529).** I
-> drove every path: picking, the numbers, the live preview, Done, Back, the X, switching tabs — all fine,
-> on shapes and on photos. **But four effects change nothing at all until you give them a setting**
-> (Dark Glow, Replace Colour, HSL Bands, Match Grade) — they need a colour, a grade, a band to move. Pick
-> those and the canvas does not budge, which looks exactly like being ignored. They now say **"Needs a
-> setting"** on the tile. Your "8 Invert before 7 Glow" was not a bug — the number is the order you
-> tapped, not the order they sit in.
->
-> **✅ v12.59 — green screen swatch (#530)** — `#00b140`, the broadcast standard. Changed in the
-> new-project dialog too, which had its own copy of the same row.
->
-> **✅ v12.59 — the gap after adding a layer (#531).** Same cause as the text-editor one: adding a layer
-> skips the code that docks the panel under your clip, so it sat wrong until you tapped something. It
-> measured *stale for 1.4 seconds*, so it was never going to fix itself.
->
-> **🟠 TWO SMALL THINGS.** (1) **Export something with sound and tell me whether a message appears** —
-> why is two paragraphs down. (2) **Pick A, B or C for the Outline & Shadows panel (#564)** — I sent you
-> the three drawn at phone size; nothing ships until you choose.
->
-> **🟠 AND A THIRD, because two of your own instructions disagree and I will not guess (#524).**
-> Dragging a clip right stops dead at the project end. I reproduced it: the clip freezes under your
-> finger, and the project only grows when you let go. **But that stop exists because you asked for it** —
-> you reported the opposite once, with a screenshot: *"when you drag a layer to the right too far it
-> breaks the project timeline… it just keeps going past the timeline"*, a clip stranded out in empty
-> space. Both complaints are real and they cannot both be fully satisfied.
-> · **A (recommended)** — keep a limit, but the timeline **grows as you drag** instead of on release, so
->   you see the project extending under the clip rather than the clip freezing.
-> · **B** — no limit at all. Literally what you asked, and it brings back the stranded-clip problem.
-> · **C** — a bigger limit, roughly twice as far in one go, then it stops.
->
-> **✅ v12.58 — the gap above the effects menu (#528).** It was not where it looked. When the menu opens
-> it is already flush with the canvas — I measured it on your 440px screen at four project shapes. The gap
-> only opens when the **canvas moves while the menu is up** — rotating, the keyboard appearing, changing
-> the project size — because it was measuring once and never again. It re-measures now, and it can no
-> longer land even a hairline low.
->
-> **✅ v12.57 — that "No audio effects yet" line is gone (#527).** It sat right above a button saying
-> "+ Add Audio Effect", so it was telling you something the button already said. I checked the Visual and
-> Filters tabs first, as the note said to — they never had it, so nothing to ask you about.
->
-> **✅ v12.56 — the play pill lines up with the buttons either side of it (#526).** It was 24.5px tall
-> against their 34px boxes, so its outline sat about 5px inside them top and bottom. Now 0.00px out at
-> 380, 320 and desktop. **One judgement call you can overrule in a word:** "the lines on the other
-> buttons" could mean their boxes (what I matched) or their icon strokes, which are a smaller 21px band.
-> I matched the boxes. Say "icons" and it is a one-number change.
->
-> **✅ v12.55 — old element drafts can be deleted now (#525).** The Elements tab was collecting leftover
-> workspaces with no way to bin them. Nothing is deleted automatically — some may hold work you never
-> saved, so it is your call.
->
-> **✅ v12.54 — the text edit screen now disappears the moment you deselect the layer (#523).** No more
-> blue tick to get out of it. What you typed is kept — you asked for the screen to go, not the words.
->
-> **✅ v12.53 — on your phone the drag handle now goes away when a layer is selected (#522).** Your
-> reasoning was the fix: with one row on screen there is nothing to drag it past. Your PC is untouched.
->
-> **✅ v12.51 — you can drop a layer BELOW the add row (#521). You were right that it had never worked.**
-> You said *"I've asked a similar thing to this many times before, and I don't know if you've fixed it or
-> even tried yet."* Three entries claimed a fix. Here is why none of them landed: **every one was measured
-> on your phone.** On the phone the add row is a normal-height row and the maths was correct. On PC it is
-> a 7-pixel line, and the drag was still giving it a full row's worth of space — so every row below it sat
-> a third of a row away from where the drag thought it was. Aim just under the line, land on top of it.
-> Measured at your PC width: the whole band from the line down through three quarters of the next row put
-> the layer above the marker. Fixed, and the guard now forces a PC width so it cannot hide there again.
->
-> **✅ v12.52 — I finally MEASURED your silent export, and it was somewhere nobody had looked.**
-> Your "no message" answer pointed at the muxer. So I built a harness that opens the exported file, counts
-> the audio it really contains, and then **listens to it**. The muxer is fine — a normal export carries
-> real sound. What no one had ever checked is whether that sound is loud enough to hear. **Three ways your
-> file can come out silent with nothing said:** a clip that is **muted**; a clip at **zero volume**; and
-> the nasty one — **soloing a shape**, which silences every sound in the project, because solo is
-> project-wide and a shape has no sound to solo. In all three you get a perfect audio track full of
-> nothing. All three now tell you, by name, before the render finishes.
-> **What I need from you:** export something with sound and see if a message appears. If one does, it names
-> the cause and this is done. **If you get silence and STILL no message, that is genuinely new** — it rules
-> out every known cause and sends me back to the muxer with real evidence.
-> I am not claiming this was your bug. I am claiming the next one answers itself.
->
-> **✅ v12.49 — editing text no longer leaves the option cards live behind the editor (#519).** The phone
-> has hidden them for ages; the desktop layout never got the rule, so nine cards sat there tappable.
->
-> **✅ v12.48 — the text layer's menu (#518).** Text is the one layer type with a "Text to Voice" row, and
-> the card grid's height sum did not know about it — so the bottom row ran 46px past the panel at every
-> size. It fits now, and at the very smallest band it scrolls rather than hiding anything.
->
-> **✅ v12.47 — the PC card outlines (#517), and "clipping" was literally right.** Each card was hiding
-> its own glow: the ring is drawn one pixel outside the card, and the card had been told to hide anything
-> overflowing it. The corners got sliced square because the ring's radius is bigger than the clip's.
-> ⚠️ One thing I could NOT check here: the blue cursor glow moving with the pointer — its fade is a CSS
-> transition and this preview pane does not run them. If the two glows still read badly together on your
-> screen, tell me and that half stays open.
->
-> **✅ v12.46 — the bin and the slab behind it (#516).** The dark slab is an outlined container now, and
-> the bin is calm at rest and turns red the instant you hover or press it.
-> ⚠️ **Both reverse things you asked for earlier** — the slab was dark because you asked for it darker,
-> and the bin was red because you asked for it red "so it's obvious". You picked both from pictures of
-> the real buttons, so the newer answer wins — but you should know, and **either is one line to undo**.
-> ⚠️ **Your phone's bin changed too**, even though you only mentioned PC: a test of ours says one red for
-> one action across both layouts, and it was right — red on phone and neutral on desktop is worse than
-> either. They move together.
->
-> **✅ v12.45 — press an eye and drag down the column to hide a whole run of layers (#515).** Works with a
-> finger and with the mouse held down. The first eye you press decides the intent and every row you cross
-> is set to that, so dragging back does not undo it — and the whole sweep is a single undo step.
->
-> **📝 Everything you sent today is logged: 549-559.** Two of them point at the same gap and I have noted
-> it as one job rather than two — **#555** (colours should keyframe) and **#557** (Opacity has a keyframe
-> diamond but no curve). The keyframe controls are not applied evenly across the app's rows, so that
-> wants one audit pass rather than fixing a row per report.
->
-> **📊 WHERE THE LIST STANDS: 468 requests logged, 413 done, 55 open.** Of the 55 — **32 I can build now**,
-> **17 are waiting on you**, 4 are notes, 2 unmarked. **The five OLDEST are all waiting on you**, which is
-> why the loop keeps starting further down:
-> · **one tap unblocks three of them** — play something that lags, wait for the toast, tap it, send me
->   the text (the lag entries, #95 and #125);
-> · **#96** — the song that would not play: the file, or just its format and rough length;
-> · **#98** — a photo showing whether that second ✓ row sits flush on the keyboard.
->
-> **✅ v12.44 — the sketching screen on PC (#513 + #535).** The toolbar was pinned to the bottom of the
-> window with 268px of black between it and the canvas; it sits under the canvas now, and drawing gets
-> the whole window so the canvas grew from 578 to 746px tall. The "Draw on the canvas" line is gone.
->
-> **✅ v12.43 — YOU CAN SEE WHAT YOU ARE DRAWING AGAIN (#514).** The second and every later stroke now
-> appears the moment you lift the pen. One missing line: strokes after the first updated the drawing and
-> the timeline thumbnail but never asked the canvas to repaint, and the overlay they were drawn on is
-> wiped on commit — so they were on screen nowhere until you pressed Done.
->
-> **📝 Four new ones logged: 549** (a layer vanishes at its exact last frame — your two screenshots are
-> the proof), **550** and **551** (the add-layer row's outline and where it should end), **552** (continue
-> a drawing + a progression slider so it animates itself on).
->
-> **✅ #511 IS FULLY DONE (v12.38–v12.42), and "inconsistent and random" was THREE separate bugs** — two
-> different drag ceilings 82px apart, a raised menu that got stuck with its handle hidden, and a handle
-> that kept resizing off stray mouse moves after its pointer was lost. All found by driving the drag
-> through orderings rather than reading it, which is the sweep you asked for.
-> **✅ #547 too** — the Director menu reaches the top of the screen now, and the "cut off by the timeline"
-> half was measured at three band heights and is fine: it scrolls, nothing is lost.
-> **📝 #548 logged** — the four transport menus popping out of their buttons with comic-style tails. That
-> one is a design job, so you will get drawn options before anything ships.
->
-> **✅ v12.40 + v12.41 — the Director menu (#511 clauses 3 and 4).** It was running the full height of the
-> window and burying 38.7% of the timeline; it stops above the band now and follows it when you drag it.
-> And it has the prism background you picked — sky, violet, mint from the top-right corner.
->
-> **✅ v12.39 — the second cause of the inspector being "inconsistent and random" (#511).** Raise the add
-> menu, then tap a layer, and the panel stayed floating over the canvas showing the wrong thing — with
-> its drag handle hidden, so there was no way to lower it. Found by driving the drag through orderings,
-> which is the sweep you asked for; the sweep also confirmed the arithmetic itself is consistent.
->
-> **✅ v12.38 — the inspector drag limit (#512). You had it exactly right.** Dragging the panel alone
-> stopped 82px short of where dragging it with the timeline reached. Two ceilings had been written down
-> separately; they are tied together now so they cannot drift again. This is also the first concrete
-> piece of #511's "inconsistent and random" — same panel, same gesture family.
->
-> **✅ v12.37 — you were right about the play row's numbers (#509), and right to hedge.** On a PC they
-> are dead centre; on a phone the pill stretches and the digits were sitting 71px to the left of it.
->
-> **⛔ #508 (the janky project-open animation) I could NOT work this tick and did not guess at.** The
-> preview pane was genuinely hidden — rAF fired 0 frames in 1.6s and a control animation never moved —
-> so nothing about smoothness was measurable. Picking a nicer easing curve by eye is exactly the trap
-> #125 documents, so it is skipped with the reason recorded rather than half-done.
->
-> **✅ v12.36 — a THIRD cause found for "the song won't play at all" (#96).** A file whose length the
-> browser will not report could import as a clip with NO length — nothing to play. Audio now asks the
-> decoder instead of guessing. It matches your symptom exactly, on the file type this entry already
-> suspected, but I still cannot prove it was YOUR bug: if it happens again, send the file.
->
-> **✅ v12.35 — THE MEDIA AND AUDIO MENUS ON PC ARE FIXED (#542).** The add menu was not being held
-> inside the inspector panel at all, so everything past the fold spilled out and was clipped by the app
-> shell — unreachable by any gesture, not merely ugly. Two smaller faults came out with it: pages were
-> being filled for four columns while the CSS draws five, and the row count came from a phone
-> measurement. Your phone is untouched.
->
-> **✅ v12.34 — the template icon is finally settled (#546, and it closes #432 and #510 with it).** You
-> picked the stamp: a dashed master with a solid copy in front. Fourth attempt at this icon, first one
-> you have chosen — and the difference was that this time you could SEE them.
->
-> **📐 There is now a "FreeMotion Design System" project on claude.ai** with the icon options in it, so
-> design work lives somewhere you can open from your phone instead of a file on my machine. That was the
-> real problem with #432: I "showed" you four icons that only existed here.
->
-> **⚠️ #542 is diagnosed but NOT fixed** — the Media/Audio menus on PC. One line forces those two tabs to
-> three rows whatever the height, and three was measured on a phone. That is next.
->
-> **✅ v12.33 — the two icons you picked (#543).** Sample clip is a real clapperboard; AI Scene is a
-> drawn sparkle pair instead of the emoji. You were right about the lines: the crossbar ran exactly
-> along the box's own edges and the caps grew past them.
->
-> **✅ v12.32 — THE TIMELINE BUG IS FIXED, AND YOU DID NOT BREAK IT.** Grabbing a layer by its ≡ handle
-> and then having the pointer taken away (a right-click, an app switch) left the rows stacked on top of
-> each other AND stopped the timeline redrawing for the rest of the session. Reproduced first try.
->
-> **⚠️ #542 IS LOGGED BUT NOT FIXED YET** — the Media and Audio menus on PC. That is next.
->
-> **✅ v12.31 — Text Spacing finally does WORD SPACING and LINE HEIGHT.** Both were named as "still
-> open" in the oldest entry on this list and then sat there; they are a text-layout change rather than
-> another slider, which is why they kept getting skipped. Both default to changing nothing, so nothing
-> you already made moves.
->
-> **✅ v12.30 — THE LAST SLOW EFFECT IS FIXED.** Turbulent Displace was the only one left costing more
-> than 150 ms a frame at your project size; it is now 35.8 ms, 4.2x faster. Nothing in the effect list
-> costs more than a frame on its own any more. That closes the only thing still actionable in the
-> OLDEST entry on this list — "editing lags, and gets bad fast" — apart from your own verdict on
-> whether the phone FEELS better, which I cannot measure for you.
->
-> **✅ v12.29 — THE TWO + BUTTONS ARE FINALLY DIFFERENT (#456 / #507).** Home is cool — sky, mint,
-> periwinkle, violet — and it now MOVES, which it never did: it was the one you called out as not
-> animated and it genuinely was not. In-project is warm — gold, orange, hot pink, violet — and it no
-> longer only spins; it turns on 22s while its colour breathes on 9s, so the two never line up.
-> **Part of why this sat for four days is uglier than "I forgot": a test I wrote demanded they be
-> IDENTICAL.** Queue 384 asked for them to look like "siblings", I read that as *the same gradient*,
-> and that inference then blocked what you asked for. It is rewritten to guard what 384 actually
-> wanted (both real, both multi-coloured) without forcing sameness.
->
-> **Also logged: #537** — Gradient Overlay needs blend modes "and other stuff that you can think of".
->
-> **Your four new requests are logged: 481** (PC browser layout), **482** (improve every effect),
-> **483** (undo/redo ring), **484** (rename the AM-copied effect names + add what they have).
->
-> **⚠️ Two things changed the picture on 23 Aug, and neither is flattering to me.**
-> I pointed 60 agents at everything I shipped this week and told them to attack it, then made every
-> finding survive an independent attempt to prove it wrong. **14 held up.** They are logged as
-> **485–496** at the bottom of this file. One is already fixed (Contour Lines was doing ~200x the work
-> it needed on every frame — 3.1x slower playback, invisible because the picture came out identical).
-> And **#480 is RE-OPENED**: I told you the add-layer drag was fixed at v11.94 and it was not — the fix
-> measures the drop position in on-screen rows and then uses it as a position in the real layer list,
-> so the moment a group is collapsed the two disagree. Your symptom never went away.
->
-> **Nine new requests logged 24 Aug: 498–508.** Two are already done (#498 the cut-off Canvas row,
-> #499 the marker wipe). **#456 is unblocked** — you asked why nothing had happened with the two +
-> buttons, and the honest answer is that I parked a decision you had already made. That was my
-> mistake, not a missing answer from you.
-> **7 items I can build without you now**, working oldest-first: 500, 501, 502, 503, 504, 505, 507, 508.
-> **#505 (elements/templates editable in their own sections) is the big one** and I am treating it as
-> such — it goes with #342 and #340, which say the same thing.
->
-> ⚠️ **24 Aug: HALF THIS LIST WAS INVISIBLE TO MY OWN TOOL, and that is on me.** The script that picks
-> what to work on next was hiding 14 open items. Two bugs in it, both mine: it stamped "NEEDS YOU —
-> waiting on your answer" onto an entry and then READ ITS OWN STAMP back as proof you were still
-> being waited on — so once an item was marked as needing you, it could never become workable again.
-> And because this file keeps its history on purpose, the words that once placed a block sit in it
-> forever: **#456 was invisible because of a note I wrote, even after you chased me about it.** Both
-> are fixed with self-tests, and actionable items went 13 → 27.
->
-> ### 🥇 IF YOU ONLY DO ONE THING, DO THE FIRST OF THESE
-> 0. **Five seconds: drag a layer onto the add-layer row and tell me if it sticks.** I have now told
->    you this was fixed three times (#357, #443, and my own v11.94 two days ago). v12.03 fixes a real,
->    proven fault that the earlier attempts missed — but given that record you should not take my word
->    for it, and a yes/no from you is worth more than another test I write.
-> 1. **✅ THE LAG REPORT IS FIXED — PLEASE TAP IT NOW. This is the most useful thing you can do.**
->    Play something that lags or sounds scratchy, wait for the toast, **tap it**, then tap the second toast
->    to copy, and send me the text. **That one tap unblocks FIVE entries** (95, 125, 148, 202, 387) that
->    have been stuck for weeks on a measurement only your phone can take.
->    I asked you to hold off because the review found **three faults in the report itself** — all three are
->    now fixed (#489 v12.10, #491 v12.12, #493 v12.14). To be blunt about what they were: the audio line
->    could read **746 per second when the truth was 2.5**, and past 4 it states flatly that the problem is
->    ours; the sync-error figures came from a window that had closed before the sample started; and after
->    every seek the latency v11.70 removed was being added back into the worst-case number. Any report you
->    had sent me before today could have pointed me at the wrong thing entirely.
-> 2. **"Got it"** — closes #406, the one you asked me to keep reminding you about.
-> 3. **A feature name — Corner Pin, LUT import, or Curves** — or "none". All 105 effect upgrades are
->    built; these three are what is left. Each is a proper build, and I have not started one because
->    guessing wrong costs days on the wrong thing.
->
-> *(Everything below is a letter or one word, and none of it is urgent. The three above are.)*
->
-> **Earlier this block claimed "none of these are buildable by me" for sixteen ticks. That was wrong**,
-> you said so, and two hand audits proved it — the work that came out of them is in the releases since.
->
-> **The fastest ones. A letter or one word each, and each unblocks real work:**
->
-> | # | The question | If you can't decide |
-> |---|---|---|
-> | **469** | Are the ◆ keyframe buttons fiddly to tap on your phone? **A** leave them · **B** same look, bigger invisible target · **C** visibly bigger | **B** if you've ever mis-tapped one, **A** if not |
-> | **460** | ✅ **Answered — see below.** All 43 work; your **flat magenta rectangle on a black background** cannot show several of them (Channel Remap swaps red and blue, which are *identical* in that magenta; Long Shadow's black shadow lands on a black background; Halation needs a highlight). Try them on a photo or a gradient. **#477** will make the app say this itself | — |
-> | **432** | The template icon — **the five options are now pictured in the chat** (they had only ever been described in words, which is why this sat). **A** stacked cards · **B** ⭐ frame + play · **C** folded card · **D** frame + sparkle · or "none of these" | **B** — it is the only one that still reads at 24px |
-> | **456** | The Create buttons — **the four options are now pictured in the chat** (they had only been described, which is why this sat). **A** ⭐ warm + counter-sweep · **B** drifting pools · **C** breathing hue · **D** comet *(keeps the current colours, so it fails your "different colours" ask on its own)* · or a mix | **A** — only one with a clearly different palette AND real movement |
-> | **250** | Does the slam Easter egg still look wrong on PC? Nothing measurable is broken now | Just "yes" or "fixed" |
-> | **395** | MP3 export: worth shipping a ~100 KB encoder library for? | **No** unless you actually need MP3 |
-> | **392** | Text to Voice is in — is it good enough? And for a voice that's IN the export: cloud voices (key + your text leaves the device) or record your own? | **Record your own** — fully local, and it solves the real job |
-> | **387** | ~~is scrubbing fine and playback bad?~~ **You already answered this in the report** — *"a video will playback fine when scrubbing but actually pressing play is a buggy mess"*. The real question: **does pressing play still feel wrong after v11.70?** It fixed a pitch-up that happens on play and never on scrub | Just "better" or "same" |
-> | **98** | Text starts at 8.3% of the frame height (160pt on a 1080x1920). Measured — the readout is honest, it is just a small default. **A** leave it · **B** ⭐ bigger, ~12% (a title you can read on a phone) · **C** bigger still, ~15% | **B** |
-> | **342** | Elements: pick one — **A** preview before adding *(recommended)* · **B** organise/rename/folders · **C** edit an element and have projects using it update · **D** share as files · **E** nothing, it's fine | **A**, or **E** if it already does what you wanted |
-> | **406** | 🔔 **You asked me to keep reminding you to acknowledge this one.** The answer: there are **three** preset savers, not two — one effect · effects-only · **whole look, the only one that carries ANIMATION**. So they are NOT duplicates and nothing was deleted. Just say "got it" | — |
-> | **406b** | And which menu did you want preset-saving OUT of? **A** ⭐ the layer ⋯ menu · **B** an effect row's ⋯ · **C** the Effects card button | **A** — it's the only one in a crowded ⋯ menu, and the Presets card still has it |
-> | **454** | You said presets are for effects ONLY. The one left is "Save whole look as preset…" — **it is the only way to copy an ANIMATION onto another layer.** **A** delete it (what you literally asked) · **B** ⭐ keep it but rename it "Copy look & motion to…" so "preset" means one thing | **B** — same goal, nothing lost |
-> | **429a** | Past the end of your project, which should stop? **A** ⭐ the ruler's tick lines · **B** the add row's dashed wash · **C** the lane shading · **D** the head divider *(you asked for D — picking it undoes that)* | **A** |
-> | **429b** | ⏱️ **30 seconds on your phone, and it closes a bug I can't test here.** Swipe the timeline in Safari — does the little **+** still jump down as the toolbar hides? A fix shipped at v10.67; headless Chrome has no toolbar, so it physically cannot tell the fix from the bug | Just "still moves" or "fine now" |
-> | **215** | If an export ever comes out silent again, what should the warning say? | I'll write it — just say "you write it" |
-> | **425** | PC: does **copy** move to the right with the other three? You asked for copy on the LEFT a day earlier, so your two instructions disagree — **A** move it · **B** leave it | **B** — you asked for that spot more recently |
-> | **395** | MP3 needs a ~100 KB library, the first third-party code in the app — **A** ship it · **B** leave it | **B** — WAV and M4A already cover it |
->
-> **Two only your phone can answer, and both are about work already finished:**
-> - **"Editing lags"** — every measured cause and the memory leak are FIXED. Does it actually feel
->   better on your device now? It stays open until you say.
-> - **An animated reverb** (new in v11.45) — does it stutter while you *preview* it? The export is
->   proven correct; the live smoothness is a thing only your ears can judge.
->
-> **The rest** (95, 96, 98, 125, 129, 148, 179, 206, 361, 406, 418, 425, 429, 431, 454, and the visual
-> identity pass) are further down with their line numbers — most want a screenshot or a "does this still
-> happen on your phone".
->
-> **Nothing is being quietly dropped.** Everything above is written up in full below, with what was
-> measured and what is still unknown. If you'd rather I just picked defaults and shipped, say so and I
-> will — the recommendations in the right-hand column are what I'd choose.
->
-> ⚠️ **22 Aug — three entries were sitting in the queue with EVERY clause ticked**, so they read as work
-> to me and as unfinished to you, and were neither. 343 was genuinely finished and is now closed; 395 and
-> 425 each had a real question buried inside a *ticked* clause where nothing could see it — both are rows
-> above now. `tools/next.sh` refuses to stay quiet about this shape from now on.
->
-> ⚠️ **One row above is still an OPEN question rather than a pick-one (215), which is not what you
-> asked for.** (391 was one; it turned out to be a restatement of 98 — you said so — and its last open
-> piece is now measured and offered as a pick-one above.) (387 was one, and worse than that — it was asking you to repeat something you
-> had already said in your own report. Fixed 22 Aug.) You said *"I just want options. Yu can just say recommended next to the best
-> option"*. 342 was one of those and is fixed; the other three get the same treatment as each comes up
-> the list. If a question here ever reads as homework, that is a bug in how I asked it, not something
-> for you to solve.
+> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v15.03
+>
+> **State:** v15.03, 1167 tests green, tree clean. **Bookmark lines now stop at the divider at ANY scroll** (#429 clause 1 and #587 — one bug; the add row's dashes crossing the line stay, as you asked in #567). **Your seven messages today are logged verbatim** (#760–#766) and queued in order behind #715–#717. The 42 audit findings I logged this afternoon (#718–#759) now rank BEHIND everything in your own words — structural and self-tested, not a promise — after you caught the loop working out of order.
+> **Waiting on you — one letter or one paste each, and none of it stops the loop** (`tools/next.sh` lists these under their own heading now, so they cannot hide and cannot be handed out as work): #418 a letter from the undo/redo picture I sent (A recommended) · #425 A/B, copy moving right · #454 A/B/C · #482 a category or "no" · #484 A/B/C, Silk Ribbon · #544 which things get the design pass · #564 A/B/C · #570 smooth / stepped / leave · #624 a/b/c · #654 A/B/C · #342 A–E · #406 which menu · #95 / #96 / #663 the **Your last playback** paste · #215 / #604 / #677 the **Your last export** paste (or the Chrome check) · #129 the **clip with no picture** paste · the oldest lag item, a **Measure** report · #592 a screenshot if the overshoot is still there.
+> **Next, in order:** #505 (templates open for editing, the way elements do now), #508 (a frame-time report of the project-open slide you can paste from your phone), #539, #553 (the app coming back half-drawn), #606, #642, #657, #674, #688, #690, #692, #706, #712, then #715–#717 and #760–#766, then the audit findings.
 
 
 **This file is the record of everything Ezra has asked for.** Every request goes in here the moment
@@ -14252,6 +12951,7 @@ wait for them to report back."*
       guess. ❓**Should a flowing ribbon be an EFFECT, or a SHAPE in Add → Shape beside the banner and
       flag you already have?** It behaves like a shape, and the effects list is the thing you have said
       is hard to search. **A: Add → Shape (recommended) · B: an effect · C: skip it.**
+        ⏸ **2 Sep — BUILT OUT UNTIL HE picks A, B or C for Silk Ribbon** (A = a shape under Add → Shape beside the banner and flag — recommended · B = an effect · C = skip it). Every other clause in this entry shipped. Re-checked today for strict oldest-first: this line is what is left.
 
 - [x] **481 — PC effects browser: shrink the featured tiles, move Visual/Filters/Audio up beside the search and X, and make the category icons FIT.** ✅ **ALL FOUR DONE v12.04.** (23 Aug, two PC screenshots at v12.01.)
       Measured on a 1440px screen, where the browser docks into the inspector as a **346px column** — it
@@ -14463,6 +13163,7 @@ wait for them to report back."*
       Generative 19 · Stylize 19 · 3D 18 · Drawing/Edge 16 · Keying 11 · Opacity 7 · Text 6 ·
       Repetition 5), or "no" parks it. Meanwhile I will keep running rounds like this one — mechanical,
       no guessing — because they need nothing from you.
+        ⏸ **2 Sep — BUILT OUT UNTIL HE names the first category to judge by eye, or says "no"** (Colouring 43 · Warping 28 · Blur 19 · Generative 19 · Stylize 19 · 3D 18 · Drawing/Edge 16 · Keying 11 · Opacity 7 · Text 6 · Repetition 5). Three mechanical rounds shipped (v12.17–v12.19: slider travel, defaults visible, both effect tables walked) and their tests stand; the audit of 2 Sep (#718–#759) is the mechanical work that remains and is queued in its own entries. What is left here is the subjective half, which only his eye can do. Re-checked today for strict oldest-first: this line is what is left.
 
 - [x] **483 — The undo/redo icons need more polish: the start and end of the circle are too close.** ✅ **DONE v12.06.** (23 Aug.)
       You were reading the ARC, and you were right — v11.93 had enlarged the arrowhead and never touched
@@ -17234,10 +15935,10 @@ wait for them to report back."*
       will be the text saying tap here to add layer"). The empty-state panel is likewise left alone: it is
       the big centred + from #354, which he asked for and likes.
 
-- [ ] **418 — Make the undo/redo buttons look more like [an image he sent], with thinner lines.**
+- [x] **418 — Make the undo/redo buttons look more like [an image he sent], with thinner lines.**
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       ➡️ **NOT BLOCKED — it is BUILT.** Both clauses are ticked and the glyphs are live in index.html at stroke-width 1.8, matching the transport row. The only thing outstanding is the reference picture, which never arrived. **Act: close it, or re-ask for the picture — not both.**
-      ❓ASK: re-send the undo/redo picture — it never arrived in the inbox, so there is nothing to match.
+      ✅ ~~ASK: re-send the undo/redo picture~~ — it arrived 21 Aug and is described below; the ask was stale (struck 2 Sep).
       ✅ **BOTH CLAUSES BUILT (v11.73). The entry REMAINS OPEN for one reason only, stated plainly:
       I have never seen the picture you were asking me to match.** Your images were not reaching the
       inbox — a text file cannot carry one — so the icons were built from your written description, and
@@ -17294,6 +15995,9 @@ wait for them to report back."*
       **So the shape is right and the WEIGHT is wrong** — he wants that exact ring-plus-triangle-head
       form, drawn with a THINNER stroke than the reference. This is his second time asking about these
       buttons, so treat the icon geometry as the deliverable, not the button chrome.
+      ⏸ **2 Sep — BUILT OUT UNTIL HE picks a letter from the picture sent today** (`tests/_undo418.html`, rendered and sent to the chat): **A** as shipped, stroke 1.8, matches the row (recommended — it is his own clause 2) · **B** 1.45 · **C** 1.15 · **D** his reference weight. The pair has been built since v11.73; what was missing was his eye on it, and #545 says show, not ask — so this is the picture. Re-checked today for strict oldest-first: this line is what is left.
+      ✅ **CLOSED 2 Sep — his answer (#767): "you already made the undo redo lines look good."** Option A, as shipped since v11.73, stands. Nothing changes in the app.
+
 - [x] **419 — ✅ **DONE v11.33.** Rotation, X tilt and Y tilt share their keyframes and interfere with each other; they need
       to be independent.** (19 Aug, phone screenshot at v10.22 with all three readouts circled, plus the
       ◆ keyframe button on the left rail circled.) His words, verbatim:
@@ -17532,6 +16236,7 @@ wait for them to report back."*
       tracks — moving controls between them changes each side's content width. That is fine BY DESIGN now
       (minmax(0,1fr) means the tracks stay equal regardless), but `playhead-play-centre` is the test that
       proves it and must stay green.
+      ⏸ **2 Sep — BUILT OUT UNTIL HE picks A or B** on clause 3 (A = copy moves right with the rest, switch and all · B = copy stays left, where #373 put it one day earlier — recommended). Two of his own instructions point opposite ways, so this cannot be decided for him without overwriting one. Re-checked today for strict oldest-first: this line is what is left.
 
 - [x] **426 — Extending the Add panel pushes the page dots off the bottom.** ✅ **CLOSED 21 Aug — he said "fixed".** (The header used to carry a `STAYS OPEN` note; that was written BEFORE he answered and is kept below in the history rather than in the title. A guard shipped in v10.65 and the bug was never reproduced — ticking it would claim a fix I cannot prove.** (19 Aug, PC screenshot at
       v10.32.) His words, verbatim:
@@ -17715,7 +16420,7 @@ wait for them to report back."*
       > After this cut off point I don't want the lines or special colouring. And also the little plus button is moving around and stuff when I swipe on the time line, should be stiff
 
       **Clauses:**
-      1. [ ] **Past the cut-off point: no lines, no special colouring.** "This cut off point" refers to
+      1. [x] **Past the cut-off point: no lines, no special colouring.** ✅ **v15.03 — the bookmark lines now stop at the head divider at ANY scroll** (the add-row half is his own later revocation, #567, and stays). **REMAINS OPEN for clause 2.** "This cut off point" refers to
              something he was looking at and did not name — almost certainly the END of the project on the
              timeline, past which the ruler keeps drawing its notches and the lane keeps its treatment.
              ⚠️ He sent no screenshot with this one, so CHECK what is actually drawn past the last clip /
@@ -17890,6 +16595,13 @@ wait for them to report back."*
       ⚠️ Verify which side he means by looking at the built page rather than reasoning from this note —
       but the screenshot is unambiguous that the ⊕ and the blue fill are on the head-column side and he
       has circled them as wrong.
+      📐 **2 Sep — MEASURED at 380px with the timeline scrolled (`scrollLeft` 251, two layers, markers at 1.6s/1.9s/4.5s), and HE IS RIGHT ON BOTH HALVES OF CLAUSE 1, still:**
+      · ~~The add row's dashed box and tint cross the divider~~ — **they do, and that is HIS LATER INSTRUCTION, not a bug.** Queue 567 (26 Aug, five days after this entry's answer): *"I actually kinda preferred it how it was when it went over the line of the left, the right side being cut off is good but can you undo what I said?"* — so `x0 = 0` in buildAddRow is deliberate and the add-row half of clause 1 is SUPERSEDED by #567. Not touching it. (First draft of this note called it a bug; corrected within the same hour, before anything was built.)
+      · **The bookmark DROP-LINES paint down the head side of the divider** wherever no track head covers them: `elementFromPoint` at the two in-head markers returned `tl-headspace` at the pin tip (hidden, good) but the lines were visible through the add row's + cell and the whole empty area below the last track (there is nothing sticky there to occlude them). #348 fixed the lines over the layer heads (z 8) and stopped there.
+      **So what is left of clause 1 is the BOOKMARK LINES only.** An opaque head cell on the add row would hide the dashes #567 asked to keep, so occlusion is out; the lines are clipped at the divider instead — the ruler already rebuilds on every scroll, so the clip's left bound rides on that.
+      Clause 2 (the + moving on swipe) is unchanged: BUILT OUT UNTIL HE checks on his phone whether it still moves in the installed app — the harness cannot see `svh` vs `vh`.
+      ✅ **v15.03 — CLAUSE 1 BUILT (the half #567 left standing).** `#tl-ruler`'s clip-path already existed (#608) with a LEFT inset of 0 — which in ruler coordinates is the ruler's own edge, so it held at scroll 0 and nowhere else. The left inset now follows `scrollLeft` (`--tl-clipx`, one custom-property write from the scroll listener, no layout read), so a pin's drop-line is cut at the divider wherever the timeline is scrolled, while the add row's dashes (#567) and the lines' full length (#536) are untouched. Verified at 380px in the pane: the two in-head lines are gone from the + cell and the empty area, the lane line still draws. Test `timeline (#429)` hit-tests both directions in BOTH layouts (phone and PC, via the frame-width helpers) and was mutation-checked against #608's exact old rule. **Clause 2 (the + moving on swipe) REMAINS OPEN — BUILT OUT UNTIL HE checks it on his phone in the installed app.**
+
 - [x] **430 — 🚨 The offline cache grows forever, and it shares a storage budget with his media.**
       ✅ **DONE v10.69**, verified functionally and with the offline check both before and after.
       (20 Aug, found while auditing the service worker for #306 — not reported by Ezra, and he has not
@@ -18422,6 +17134,8 @@ wait for them to report back."*
       Verified at 380px: the New Project sheet now runs Name → Aspect ratio with no gap, fits the
       viewport, and the word "preset" appears nowhere in it. Suite green at 793 — three smaller on
       purpose, because the tests guarding the deleted feature went with it.
+        ⏸ **2 Sep — BUILT OUT UNTIL HE picks A, B or C** on the last clause (A = remove "Save whole look as preset…" — his literal words · B = keep it, rename it "Copy look & motion to…" and move it out of the Presets card — recommended · C = cut it to effects only). Everything else in this entry shipped; nothing is deleted until he picks. Re-checked today for strict oldest-first: this line is what is left.
+
 - [x] **455 — ✅ **DONE v11.35.** The speed slider moves in enormous jumps; slow it right down.** (21 Aug, from his phone.)
       His words, verbatim: *"The speed slider goes WAY too fast, it goes up 10x at a time, slow this way
       the fuck down"*.
@@ -21239,6 +19953,7 @@ re-opened #480, which I had marked done and had not fixed.
       deliberately not started).
       ⚠️ **If it turns into the identity pass, raise BEFORE-PUBLISHING.md first** — that is the standing
       rule, and it is his call when to spend time on it rather than mine.
+        ⏸ **2 Sep — BUILT OUT UNTIL HE names WHICH things get the Claude Design pass** (candidates already logged: #543 the AI Scene / sample-clip icons · #510/#432 the template button · BEFORE-PUBLISHING.md, the whole identity — that last one is his call to start, per the standing rule). The pause he asked for happened; what remains is the list. Re-checked today for strict oldest-first: this line is what is left.
 
 - [ ] **545 — 🔒 STANDING RULE: use Claude Design for every future design request.** (24 Aug.)
       **STATUS: ⏸️ HELD — you asked to leave this**
@@ -21923,7 +20638,7 @@ re-opened #480, which I had marked done and had not fixed.
       **Say "migrate masks" and I will do it properly. If you never try to drag one past an effect, there
       is nothing else left here.**
 
-- [x] **561 — 🔴 Zooming the project breaks the edit points, and probably more.** (25 Aug.) — **DONE v12.77.**
+- [ ] **561 — 🔴 Zooming the project breaks the edit points, and probably more.** (25 Aug.) — ~~DONE v12.77~~ **🔁 RE-OPENED 2 Sep: still wrong on his phone at v15.02 (#769).**
       His words, verbatim:
       > Zooming in the project bugs out the edit points and probably other stuff
       **A coordinate-space bug, and this app has had exactly this one before:** queue 165.3/v8.00 records
@@ -21969,7 +20684,23 @@ re-opened #480, which I had marked done and had not fixed.
       divides the *screen* rect by the wrapper's own render ratio, which keeps the box right AND the
       backing store at screen resolution. **Measured after: ratio 0.999–1.000 and offset 0,0 at 0.5x, 1x,
       2x and 4x, with the backing store growing 499 → 996 → 1032 so the handles stay sharp.**
-
+      🔁 **RE-OPENED 2 Sep, his words (#769):** *"The lines when editing points for some reason STILLLLLLL even tho I told you to fix
+      still don't line up with the actual object when you zoom in the canvas"* — phone, v15.02, canvas at 200% and panned, Customise
+      Points open on the Person shape: the whole overlay (squares, rings, handles, lines) sits below-right of the figure, off its
+      outline, handle lines running off the stage. Screenshot: `scratchpad/769-points-zoom.png`.
+      So whatever v12.77 fixed, the case he actually uses — **zoomed AND panned, on the phone** — is not it. Measure that exact state
+      before touching anything: put a shape's edit points up at 200% with a pan, and compare an anchor's screen position to the
+      shape's rendered outline at the same point. UNBLOCKED — nothing is needed from him; the screenshot is the spec.
+      📐 **2 Sep — REPRODUCED IN THE PANE AT 380px, HIS WAY ROUND, AND THE CAUSE IS READ, NOT GUESSED.** `pointEdit.start()` RESETS the
+      viewport on entry (its own comment: "a zoomed viewport double-scales it"), so on the phone the zoom always comes AFTER the editor
+      opens. Staged exactly that — start, then 200% with a pan — and the preview became a **crop** (app.js `previewCrop`, above 1.35x)
+      whose pixel (0,0) is project **(331, 652)**. `eventToProject` has always ADDED that origin back for a touch, so taps land right;
+      every overlay DREW its points as `project × dispScale` from origin 0. Sampled the overlay's own pixels: **ink 30855 where the old
+      formula draws the corner, 0 where the corner actually is — 105×206 screen px apart**. v12.77 fixed the overlay's BOX (double zoom)
+      and never touched its CONTENTS. `mask-tool.js` has the identical line (`map = p => [p[0]*k, p[1]*k]`). Fix: one shared
+      `FM.projectToOverlay(cv, x, y)` — the inverse of `eventToProject` — used by both; a pixel test at 3x with a pan reads the overlay
+      both ways (ink at the true corner, none at the old position). The editor still resets your zoom when it OPENS — that is a separate
+      annoyance and is not what he reported; noted, not changed.
 
 - [x] **562 — Previewing a sound effect in the Sound Effects menu does nothing.** (25 Aug.) — **DONE v12.78.**
       His words, verbatim:
@@ -22092,6 +20823,7 @@ re-opened #480, which I had marked done and had not fixed.
       panels change without him asking. The five sites are inspector.js:5313, 5327, 5342, 5368, 5396.
       ⚠️ **One detail to fix once he picks:** the Trim-path glyph (a partial stroke) reads as a broken
       corner at 30px. It needs redrawing at the size it ships at — the #432 trap exactly.
+        ⏸ **2 Sep — BUILT OUT UNTIL HE picks A, B or C** for the Outline & Shadows rows (the three options are drawn above; the Trim-path glyph gets redrawn at 30px once he picks, whichever it is). Re-checked today for strict oldest-first: this line is what is left.
 
 - [x] **595 — 🔴 Field of view and Distance do nothing on a camera layer.** (26 Aug, two phone screenshots at v12.98.) — ✅ **DONE v13.04 — the camera now SAYS when it cannot act**
       His words, verbatim:
@@ -22783,6 +21515,8 @@ re-opened #480, which I had marked done and had not fixed.
       export something short with sound on the PC, **drag the exported .mp4 into a Chrome tab and press
       play**. Sound → the file is good and the loss is in the camera-roll import or the player. No sound
       → it is the project or the environment, and the mixer's own drop report will name it.
+        ⏸ **2 Sep — BUILT OUT UNTIL HE does the one check above** (export something short with sound on the PC, drag the .mp4 into a Chrome tab, press play — sound or no sound decides which half this is). The mixer's own drop report is in Settings → Your last export; #215 waits on the same paste. Re-checked today for strict oldest-first: this line is what is left.
+
 - [x] **605 — The Visual / Filters / Audio buttons are too small and sit in a weird position.** ✅ **DONE v13.45.**
       (27 Aug, annotated phone screenshot at v13.43.)
       His words, verbatim:
@@ -23745,6 +22479,7 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **The shape he wants, from his own screenshot back then:** Alight Motion's *Insert your
       Media* screen — the template's slots listed, each one tapped to drop in your own clip, and THEN it
       becomes a project. Not a fork you then have to hunt through.
+        ⏸ **2 Sep — BUILT OUT UNTIL HE has seen the fill-in sheet** — and one change he should know about before he looks: his 1 Sep answer on #505 ("the element opens as its own document", asked for elements AND templates) makes the PRIMARY tap on a template card open it for EDITING; the swap-your-media flow this entry asked for stays exactly as built, one tap away under ⋯ → **New project from template**. "Pressing a template just forks it into a project" is therefore over either way: the tap no longer forks anything. Re-checked today for strict oldest-first: this line is what is left.
 
 - [x] **620 — The magnet button should switch off snapping on the CANVAS too, not just the timeline.** ✅ **DONE v13.69.**
       (27 Aug, at v13.51.)
@@ -24018,6 +22753,7 @@ re-opened #480, which I had marked done and had not fixed.
       thumbnail column on the left of the timeline) and whatever raises the inspector's category grid.
       **#617's diagnosis is a nearby precedent** — select mode is `projects tab only` on Home; the
       timeline's own select/hold behaviour is separate code and worth reading together.
+        ⏸ **2 Sep — BUILT OUT UNTIL HE picks (a), (b) or (c)** — (a) and (c) are exact opposites, so this cannot be guessed. Re-checked today for strict oldest-first: this line is what is left.
 
 - [x] **625 — Keyframes duplicate when you try to move them, and sometimes cannot be deleted.** ✅ **DONE v13.75.**
       (27 Aug, at v13.51.)
@@ -25327,6 +24063,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **DO NOT undo #551 or #567 while fixing this.** #551 put the right edge at the project's end and
       he explicitly kept it (*"the right side being cut off is good"*); #567 restored the LEFT edge
       running over the divider. This is a small correction to the right edge's arithmetic, not a revisit.
+        ⏸ **2 Sep — BUILT OUT UNTIL HE sends one screenshot of the overshoot at v15.03 or later, with the timeline zoomed as he had it.** Two staged states measured ZERO overshoot (441/441, 378/378); the third — a project longer than its content — cannot be staged. #587 was parked on the same zoom question and turned out to be a different bug (fixed v15.03); this one is not that. Re-checked today for strict oldest-first: this line is what is left.
 
 - [ ] **591 — Standing steer: stop waiting on his answers, there is plenty I can already do.** (26 Aug.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
@@ -25346,6 +24083,7 @@ re-opened #480, which I had marked done and had not fixed.
          not raised again unless he asks.
       🔗 This sharpens LOOP rule 8 (surface every open question) rather than cancelling it: the
       questions still get recorded, they just stop being the headline.
+        Nothing to build here — this is the receipt for a standing steer, already in LOOP.md rule 8 and CLAUDE.md; it does not hold the queue.
 
 - [x] **590 — Get rid of the hold-a-benchmark popup (Rename / Remove marker).** (26 Aug, phone screenshot at v12.83.) — ✅ **DONE v13.01, all four clauses**
       His words, verbatim:
@@ -25514,7 +24252,7 @@ re-opened #480, which I had marked done and had not fixed.
       🔗 Related to **#568** (the playhead's circle needing to blend with its line) — same object, so
       **check them together** rather than styling the playhead twice.
 
-- [ ] **587 — Benchmark lines still draw through the layer sidebar.** (26 Aug, annotated close-up at v12.81.)
+- [x] **587 — Benchmark lines still draw through the layer sidebar.** ✅ **FIXED v15.03 — the same defect as #429 clause 1.** (26 Aug, annotated close-up at v12.81.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
       > Benchmarks still show in this side bar
@@ -25555,6 +24293,7 @@ re-opened #480, which I had marked done and had not fixed.
       **JUMPED: #586 and #590 are the same object and were done together; this one did not reproduce in
       the state I could measure**, and guessing at a z-index for a symptom I cannot see would be exactly
       the tuning-before-reproducing this file warns about. **It is next, with the two steps above.**
+        ✅ **FIXED v15.03 (with #429 clause 1 — it was one bug).** Reproduced 2 Sep at 380px, timeline scrolled to 251, markers at 1.6s/1.9s: the drop-lines ran down the head side **through the add row's + cell and the empty strip under the last row** — exactly where his arrows pointed ("and at the add row above it"). The v13.01 probes looked at `.track-head`, which IS opaque and does cover the line; the visible parts are where no head exists. Cause: #608 clipped `#tl-ruler` with a LEFT inset of 0, which in ruler coordinates is the ruler's own edge — right at scroll 0, wrong at every other scroll. The inset now follows `scrollLeft`. Two notes for the record: the question this was parked on (zoom vs many layers) turned out not to matter — any scroll that puts a marker under the head shows it; and the earlier claim that `elementFromPoint` "can never" see a `::after` line was wrong — the pseudo-element's box hit-tests to its owner, which is how the new two-way test proves both that the in-head lines are gone and that the lane lines are not.
 
 - [x] **582 — 🔴 THE APP BROKE: Motion Blur + Shake + Tiles together, and those three need real work.** ✅ **ALL THREE CLAUSES DONE (v12.97 / v13.15 / v13.51 / v13.54).** (26 Aug, v12.81.)
       His words, verbatim:
@@ -26522,6 +25261,7 @@ re-opened #480, which I had marked done and had not fixed.
       · **Stepped, but finer.** Keep the integer meaning and just make sure it never sits still for half
         a drag. Honest to what the control does; still reads as laggy on a short list.
       · **Leave it.** It is accurate and it agrees with the drop; only the feel is at issue.
+        ⏸ **2 Sep — BUILT OUT UNTIL HE picks: Smooth (recommended) · Stepped but finer · Leave it.** The switch is accurate and agrees with the drop; only the feel is at issue and that is a taste call. Re-checked today for strict oldest-first: this line is what is left.
 
 - [x] **569 — The "Paste look" menu must always work, and only offer what can actually be pasted.** (26 Aug, phone screenshot at v12.79.) — ✅ **DONE v12.84, both clauses**
       His words, verbatim:
@@ -27106,6 +25846,7 @@ re-opened #480, which I had marked done and had not fixed.
       asked for in **#297**: *"the done button should be there if ur inside one of the effects sub
       menus"*), **B** the top-bar arrow becoming an **✕**, **C** the back row naming where it goes.
       **Nothing visual ships until you pick a letter.**
+        ⏸ **2 Sep — BUILT OUT UNTIL HE picks A, B or C** for the audio panel's exit (drawn at 380px and sent 29 Aug; A, a Done button on the panel's own back row, is recommended because it is the header he asked for in #297). The invisible half shipped. Re-checked today for strict oldest-first: this line is what is left.
 
 - [x] **655 — Groups get a small drop-down arrow on their timeline row. Remove it — he does not want the
       feature, and it GLITCHES THE TIMELINE when a group is added.** (27 Aug, phone screenshot at v13.69.)
@@ -27551,6 +26292,7 @@ re-opened #480, which I had marked done and had not fixed.
       worse than none — it would send us chasing your phone for a fault that was not there.
       ❓ **So the ask stands and it is real:** play it on your phone until it cuts out, press stop, then
       **Settings → Your last playback → Copy**.
+        ⏸ **2 Sep — BUILT OUT UNTIL HE pastes "Your last playback"** (play on the phone until the sound cuts out, stop, Settings → Your last playback → Copy) — the same paste #95 and #96 wait on; the watcher that records it is tested both ways. Re-checked today for strict oldest-first: this line is what is left.
 
 - [x] **664 — Line height and Curve should BE effects, and add more text effects.** (28 Aug — answering
       #602's standing offer, and the answer is the opposite of what was offered.)
@@ -27979,6 +26721,7 @@ re-opened #480, which I had marked done and had not fixed.
       **JUMPED: measured as far as this environment allows; the remaining half needs one line from him
       describing what "twice" looks like.** Recorded rather than silently reordered — he asked for the
       drag work (#678) directly, and that is what was done in the same release.
+        ⏸ **2 Sep — BUILT OUT UNTIL HE describes what "twice" looks like** (does the sheet slide up, close, and slide up again — or does it open and a second copy land on top?). The two candidates need different fixes; #706 (2 Sep, "the add layer on mobile still has the glitch that opens up twice now") is the same report and carries the same ask. Re-checked today for strict oldest-first: this line is what is left.
 
 - [ ] **677 — 🔴 STILL NO AUDIO IN AN EXPORT — and this time the whole soundtrack was TWO SOUND
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
@@ -28007,6 +26750,7 @@ re-opened #480, which I had marked done and had not fixed.
       was **fixed in v14.35** — before that it could hand back a PREVIOUS export's verdict, which is a
       large part of why three months of asking never resolved this. It is trustworthy now, and it names
       which of the six loss paths it was.
+        ⏸ **2 Sep — BUILT OUT UNTIL HE pastes "Your last export"** (export something with sound on the phone, Settings → Your last export → Copy) — trustworthy since v14.35, names which of the six loss paths it was; #215 and #604 wait on the same paste. Re-checked today for strict oldest-first: this line is what is left.
 
 - [x] **678 — Stress-test the draggable ADD-LAYER row and the draggable TIMELINE — he says both are
       His words, verbatim:
@@ -28289,10 +27033,10 @@ re-opened #480, which I had marked done and had not fixed.
       > and just make it so like when you're in dark mode it does the same loading screen transition as
       > a light mode one but it just transitions into dark the dark background. It does a black
       > transition and yeah make it actually remember cause currently if it gets forgets I mean."*
-      **Clauses 2 and 3 are waiting on his answer — one line from him and they ship.** They are a
+      ~~**Clauses 2 and 3 are waiting on his answer — one line from him and they ship.**~~ (he answered 1 Sep — UNBLOCKED) They are a
       DESIGN change (his standing rule #545: no visual ships before he has seen it), and the question
       is small: the new intro film ENDS ON PURE WHITE because it was made for the light look, so
-      playing it in dark mode needs its ending changed. **Is the logo in it monochrome, or coloured?**
+      playing it in dark mode needs its ending changed. ~~**Is the logo in it monochrome, or coloured?**~~ (answered 1 Sep: coloured — see above; struck 2 Sep so the entry reads as the answered item it is)
       Monochrome → invert the film in dark mode: same motion exactly, ends black. Coloured → inverting
       would mangle it, so fade the white down to the dark ground over the last ~0.6s instead.
       (Could not be previewed here: video decoding does not run in the headless browser pane.)
@@ -29375,6 +28119,7 @@ re-opened #480, which I had marked done and had not fixed.
       build them on demand as tiles scroll into view (the file says it already does the latter for scrolling; the
       overview return mounts them all at once). A test can pin it: after a cold Back, the main thread must yield
       within 100ms (a `setTimeout(0)` fires), and the tiles finish painting later.
+        📐 **2 Sep — MEASURED IN THE PANE (a real GPU, not SwiftShader): opened the effects browser fresh, entered Distort (41 tiles), pressed Back to the 12-tile overview — the click held the main thread for 3ms, the first `setTimeout(0)` fired at 65ms, every overview tile was painted by 200ms.** Renderer reported as ANGLE Metal. So the 30s was the headless software renderer paying for strips, and on hardware there is no stall to fix. The chunked-mount idea stays written down; nothing is built on a symptom that hardware does not show. **Still BUILT OUT UNTIL HE says whether his phone stalls on that Back** — it is the one device this cannot speak for.
 
 - [ ] **713 — Standing instruction, 2 Sep (verbatim):**
       **STATUS: 📌 NOTE — nothing to build**
@@ -29928,3 +28673,34 @@ re-opened #480, which I had marked done and had not fixed.
       dated line saying exactly what is left and why it needs him — and #715's prepared change waits its turn.
       Structural part, already in place today: audit findings (#718–#759, mine) rank after everything in his own
       words in `tools/_classify.py` (self-tested), `next.sh` and ship.sh's gate, so my notes cannot jump his requests.
+
+
+- [x] **767 — "you already made the undo redo lines look good, im worried ur working on finished stuff"** (2 Sep) ✅ **acted on: #418 closed, and the worry is answered below.**
+      His words: *"you already made the undo redo lines look good, im worried ur working on finished stuff"*
+      **What it answers:** #418 — the undo/redo pair as shipped (option A) is what he wants; closed on this line.
+      **What was actually happening, honestly:** after *"do it in order like i asked"* (#766) the loop went back to the top of the
+      list and walked the oldest open items one by one. Each was either built (#429/#587, the bookmark lines — shipped
+      v15.03) or given a dated line saying exactly what it waits for from him, so it stops being re-read every tick.
+      #418 was one of those: its entry said "built since v11.73, waiting on his eye", and the standing rule (#545) says
+      show, not ask — so one picture was sent. That was the only cost on a finished item, and it is why it can close now.
+      Nothing else finished was rebuilt. The structural part — items whose buildable half is done leave the work queue
+      under their own heading — is exactly so this cannot recur.
+
+
+- [ ] **768 — PHONE: scrubbing with a layer selected is jumpy, not smooth** (2 Sep)
+      **STATUS: 🟢 READY — nothing is stopping this. Queued in order behind #715–#717 and #760–#766.**
+      His words: *"Scrubbing when you have a layer selected mobile is jumpy and not smooth"*
+      Read as: dragging the playhead / scrubbing the timeline on the phone is smooth with NOTHING selected and stutters
+      once a layer is selected — so the cost is in what selection adds per scrub frame (the selection overlay and
+      handles redrawn on the canvas, the inspector's live values refreshing, keyframe dots on the clip), not in the
+      scrub itself. Measure before touching: frame gaps through a scrub at 380px with and without a selection, and
+      which of those three moves the number. Nothing to ask him; the two states are stageable here.
+
+
+- [x] **769 — "The lines when editing points … STILLLLLLL … don't line up with the actual object when you zoom in the canvas"** (2 Sep, phone screenshot at v15.02) ✅ **logged and redirected on arrival: this is #561 re-opened, not a new item.**
+      His words: *"The lines when editing points for some reason STILLLLLLL even tho I told you to fix still don't line up with the actual object when you zoom in the canvas"*
+      His screenshot: the Person shape at **200%** canvas zoom, panned; Customise Points open; the point squares, hollow rings, curve
+      handles and their connecting lines sit as a cluster BELOW-RIGHT of the figure's chest, not on its outline — several
+      handle lines even run off the bottom of the stage. Saved as `scratchpad/769-points-zoom.png`.
+      "Still" is right: #561 (*"Zooming the project breaks the edit points"*) was ticked DONE at v12.77. It is RE-OPENED there,
+      with this report, so it is worked at #561's place in the queue — fixed, not here. Tracked in #561.

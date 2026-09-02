@@ -198,6 +198,21 @@ meant to enforce it was the thing causing it.
 prints a total so a shrinking list is visible. It also parses letter-suffixed numbers like `31b` —
 the first version of the script mis-sorted that one to the bottom, which is the same bug again.
 
+**Two more rules live in `tools/_classify.py` since 2 Sep, both self-tested, both born the same afternoon:**
+- **His words before my findings.** An entry whose HEADER carries `(hunt HIGH #n)` / `(hunt MEDIUM #n)` is an
+  audit finding of mine, and it sorts AFTER every request in his own words whatever its number. 42 audit items
+  were numbered minutes before five of his messages arrived; by raw number they would have held the queue
+  against him — the inverse of what oldest-first is for. `next.sh` lists them under their own divider; ship.sh's
+  gate reads the same tier (`key_of`).
+- **`BUILT OUT UNTIL HE …`** in an entry's tail means every half that does not need him is built, and the line
+  says what it waits for (a paste, a letter). The classifier files it as `built out — waiting on him`: listed
+  by `next.sh` under its own heading every tick, never handed out as work, never hidden. A later `ANSWERED BY
+  EZRA` / `HE ANSWERED` / `UNBLOCKED` lifts it, exactly like a block. It exists because the three oldest items
+  were 500-line entries whose only remaining line was "paste this", re-read on every tick — or skipped by feel,
+  which is what he caught: *"you arent logging stuff and doing it in order like i asked"*. (Do NOT write
+  "Nothing to build until he …" — that phrase matches the standing-note detector and hides the entry; the
+  self-test caught it.)
+
 The only things that jump the queue are what HE explicitly says to do now ("do this asap", "right now
 you need to…"), and a genuine emergency like a broken build. If an old item is blocked on a decision
 from him, say so and move to the next-oldest — do not treat blocked as done.

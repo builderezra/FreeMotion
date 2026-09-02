@@ -215,7 +215,8 @@ closes = sorted(closes)
 nxt = C.next_up(md)
 if nxt and closes:
     num, suf, head = nxt
-    late = [n for n in closes if C.sort_key(n, '') > C.sort_key(num, suf)]
+    # key_of, not sort_key: the tier (his words before my audit findings, 2 Sep) is read from the entry
+    late = [n for n in closes if C.key_of(md, n) > C.key_of(md, num, suf)]
     if late:
         name = 'an UNNUMBERED entry — those predate the numbering, so they are the oldest in the file' \
                if num is None else '#%d%s' % (num, suf)

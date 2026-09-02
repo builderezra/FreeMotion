@@ -1,0 +1,53 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>#418 — undo / redo weight options</title>
+<style>
+  body { margin: 0; background: #0b0f14; color: #cfd6df; font: 13px/1.35 -apple-system, system-ui, sans-serif; padding: 16px 18px; max-width: 740px; }
+  h1 { font-size: 15px; margin: 0 0 4px; color: #fff; }
+  p { margin: 0 0 12px; color: #8b95a3; }
+  .opt { display: block; padding: 10px 14px; border: 1px solid #1c2530; border-radius: 12px; margin-bottom: 8px; background: #0f151c; }
+  .lab { margin-bottom: 8px; }
+  .lab b, .lab span { display: inline; }
+  .lab b { margin-right: 8px; }
+  .opt.rec { border-color: #3b82f6; }
+  .lab b { display: block; color: #fff; font-size: 14px; }
+  .lab span { color: #8b95a3; font-size: 12px; }
+  .lab .rec { color: #60a5fa; font-weight: 600; font-size: 12px; }
+  .sizes { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+  .row { display: flex; align-items: center; gap: 4px; background: #121a23; border: 1px solid #1c2530; border-radius: 8px; padding: 4px 8px; }
+  .row.big { padding: 8px 14px; gap: 10px; }
+  .row .n { font-size: 11px; color: #56606d; width: 34px; text-align: right; margin-right: 4px; }
+  svg { display: block; color: #d9e0ea; }
+  .ctx { display: flex; align-items: center; gap: 4px; }
+  .ctx .g { color: #8b95a3; }
+</style>
+<h1>#418 — undo / redo: “look more like this but with skinnier lines”</h1>
+<p>Same ring-and-triangle shape in every row (≈300° sweep, solid head, undo anticlockwise / redo clockwise). Only the line weight changes. The 24px column is the size they ship at, drawn between the neighbours they sit with on the transport row (skip-to-start and play) so “matches everything else on that row” can be judged, not guessed.</p>
+<div id="sheet"></div>
+<script>
+  const ring = (undo) => undo ? 'M6.64 7.97 A7 7 0 1 0 17.36 7.97' : 'M17.36 7.97 A7 7 0 1 1 6.64 7.97';
+  const headPts = (undo) => undo ? [[14.47, 4.53], [19.66, 6.05], [15.06, 9.90]] : [[9.53, 4.53], [4.34, 6.05], [8.94, 9.90]];
+  const head = (undo, k) => {          // k scales the triangle about its centroid so a thin ring gets a lighter head
+    const p = headPts(undo), cx = (p[0][0] + p[1][0] + p[2][0]) / 3, cy = (p[0][1] + p[1][1] + p[2][1]) / 3;
+    return 'M' + p.map(([x, y]) => (cx + (x - cx) * k).toFixed(2) + ' ' + (cy + (y - cy) * k).toFixed(2)).join(' L') + ' Z';
+  };
+  const icon = (undo, sw, k, px) => `<svg viewBox="0 0 24 24" width="${px}" height="${px}" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"><path d="${ring(undo)}"/><path d="${head(undo, k)}" fill="currentColor" stroke="none"/></svg>`;
+  // the neighbours on the row, at the row's own weight (1.8), so the pair is judged in context
+  const toStart = (px) => `<svg viewBox="0 0 24 24" width="${px}" height="${px}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="g"><path d="M6 5v14"/><path d="M18 6 9 12l9 6z"/></svg>`;
+  const play = (px) => `<svg viewBox="0 0 24 24" width="${px}" height="${px}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" class="g"><path d="M8 5.5v13l10-6.5z"/></svg>`;
+  const opts = [
+    { name: 'A — as shipped (v11.73)', sw: 1.8, k: 1.0, note: 'stroke 1.8, the same weight as every other icon on the row — his clause 2: "make the lines thinner tho so it matches everything else on that row"', rec: true },
+    { name: 'B — skinnier', sw: 1.45, k: 0.9, note: 'stroke 1.45 with the head trimmed to match; lighter than the row' },
+    { name: 'C — hairline', sw: 1.15, k: 0.8, note: 'stroke 1.15, head trimmed further; reads as a different family from the row at 24px' },
+    { name: 'D — his reference weight', sw: 2.6, k: 1.15, note: 'the picture he sent, roughly — thick ring, heavy head. Here only so "skinnier than this" has its "this" on the page' },
+  ];
+  document.getElementById('sheet').innerHTML = opts.map(o => `
+    <div class="opt${o.rec ? ' rec' : ''}">
+      <div class="lab"><b>${o.name}</b>${o.rec ? '<span class="rec">recommended — it is what his own clause 2 asked for</span><br>' : ''}<span>${o.note}</span></div>
+      <div class="sizes">
+        <div class="row"><span class="n">24px</span><span class="ctx">${toStart(24)}${play(24)}</span>&nbsp;${icon(true, o.sw, o.k, 24)}${icon(false, o.sw, o.k, 24)}</div>
+        <div class="row big"><span class="n">48px</span>${icon(true, o.sw, o.k, 48)}${icon(false, o.sw, o.k, 48)}</div>
+        <div class="row big"><span class="n">96px</span>${icon(true, o.sw, o.k, 96)}${icon(false, o.sw, o.k, 96)}</div>
+      </div>
+    </div>`).join('');
+</script>

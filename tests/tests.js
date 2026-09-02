@@ -20247,6 +20247,87 @@
     }
   });
 
+  /* Queue 429 clause 1, the half that survived queue 567 (v15.03). Ezra, 21 Aug: "the bookmarks still don't
+   * get cut off there and show up there when they should get cut off" — "there" being the head divider.
+   * Queue 608 clipped #tl-ruler with a LEFT inset of 0, which in ruler coordinates is the ruler's own edge,
+   * so it held at scroll 0 and nowhere else; measured 2 Sep at 380px with the timeline scrolled, two pins'
+   * drop-lines ran down the head side through the add row's + cell and the empty area under the last row.
+   * The left inset now follows scrollLeft. This test scrolls, then hit-tests below the ruler where NO opaque
+   * head can be covering for the clip — the add row's centre and the empty strip under the last row — and
+   * asserts both directions: no line from a pin that sits inside the head column, and a line from one that
+   * sits in the lane (so "clip everything" cannot pass). Pins are laid every 0.25s so some land on each side
+   * whatever the zoom and viewport are. */
+  test('timeline (#429): bookmark drop-lines stop at the head divider at any scroll', { item: 'marker-clip-429' }, async function () {
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    var tl = document.getElementById('timeline'), ruler = document.getElementById('tl-ruler');
+    if (!tl || !ruler) throw new Error('#timeline / #tl-ruler missing');
+    var saved = FM.scene, savedSel = FM.scene.selectedId, savedSL = tl.scrollLeft, savedST = tl.scrollTop;
+    // The suite's frame starts on the home screen, which sits OVER the timeline — a probe through it
+    // sees #splash, not the ruler. Other timeline tests close it and put it back; so does this one.
+    var homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen) FM.home.close();
+      // Under `?only=` this is the first test to run, before the boot intro has taken #splash down —
+      // and a probe through the splash sees the splash. Skip it the way a finger would, then wait it out.
+      var sk = document.getElementById('splash-skip'); if (sk) { try { sk.click(); } catch (e) {} }
+      for (var w8 = 0; w8 < 60 && document.getElementById('splash'); w8++) await sleep(100);
+      if (document.getElementById('splash')) throw new Error('setup: #splash is still covering the app after 6s — nothing below it can be hit-tested');
+      var L1 = FM.makeLayer('shape', { name: 'A', shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#f00', start: 0, duration: 4 });
+      var L2 = FM.makeLayer('shape', { name: 'B', shape: 'rect', x: 80, y: 40, shapeW: 20, shapeH: 20, fill: '#0f0', start: 0, duration: 4 });
+      FM.scene = scene([L1, L2], { project: { width: 320, height: 240, fps: 30, duration: 12, background: '#000' } });
+      var marks = []; for (var t0 = 0.25; t0 < 12; t0 += 0.25) marks.push({ t: t0, label: 'm' });
+      FM.scene.project.markers = marks;
+      // Both layouts, because the add row is a full row on the phone and a 7px line on PC, and the
+      // empty strip under the last row differs too — the clip has to hold in each.
+      var probe = async function (layout) {
+      FM.refreshAll(); await sleep(220);
+      tl.scrollLeft = 1e6; tl.scrollTop = 1e6; await sleep(260);              // as far right (and down) as it goes
+      if (!(tl.scrollLeft > 20)) throw new Error('setup: the timeline would not scroll (' + tl.scrollLeft + ') — nothing to clip against');
+      var head = document.querySelector('.tl-headspace').getBoundingClientRect(), tlr = tl.getBoundingClientRect();
+      var tracks = document.getElementById('tl-tracks').getBoundingClientRect();
+      var pins = [].slice.call(document.querySelectorAll('.tl-marker'));
+      var px = function (m) { return Math.round(m.getBoundingClientRect().left + 5); };
+      var inHead = pins.filter(function (m) { var x = px(m); return x >= head.left + 2 && x < head.right - 2; });
+      var inLane = pins.filter(function (m) { var x = px(m); return x > head.right + 10 && x < tlr.right - 10; });
+      if (!inHead.length || !inLane.length) throw new Error('setup (' + layout + '): need a pin on each side of the divider; head has ' + inHead.length + ', lane has ' + inLane.length + ' (head right edge ' + Math.round(head.right) + ')');
+      // where to look: only places with NO opaque head to do the clip's job for it
+      var ys = [];
+      var add = document.querySelector('.tl-addrow');
+      if (add) { var ar = add.getBoundingClientRect(); if (ar.bottom <= tlr.bottom + 1 && ar.height > 4) ys.push(Math.round(ar.top + ar.height / 2)); }
+      var yEmpty = Math.min(tracks.bottom, tlr.bottom) - 6;
+      if (yEmpty > head.bottom + 4) ys.push(Math.round(yEmpty));
+      if (!ys.length) throw new Error('setup: nowhere below the ruler is free of an opaque head to probe');
+      var isLine = function (el) { return !!(el && el.closest && el.closest('.tl-marker')); };
+      // The line is ONE pixel wide at a fractional x, so a single rounded probe can miss it by a pixel
+      // (it did, on the desktop pass). Look at x-1, x, x+1: any hit counts, in both directions.
+      var lineAt = function (x, y) { return [-1, 0, 1].some(function (d) { return isLine(document.elementFromPoint(x + d, y)); }); };
+      inHead.forEach(function (m) {
+        var x = px(m);
+        ys.forEach(function (y) {
+          if (lineAt(x, y)) throw new Error('[' + layout + '] a bookmark line at x=' + x + ' — INSIDE the head column (right edge ' + Math.round(head.right) + ') — is painted at y=' + y + ' with the timeline scrolled to ' + tl.scrollLeft + ': it shows on the head side of the divider (#429; #608 clipped at scroll 0 only)');
+        });
+      });
+      var lx = px(inLane[0]), hit = ys.some(function (y) { return lineAt(lx, y); });
+      if (!hit) {
+        var rr = ruler.getBoundingClientRect(), desc = function (e) { return e ? (e.id ? '#' + e.id : '') + '.' + String(e.className).slice(0, 30) : 'null'; };
+        var stacks = ys.map(function (y) { return y + ':' + document.elementsFromPoint(lx, y).slice(0, 4).map(desc).join('>'); }).join(' | ');
+        throw new Error('[' + layout + '] the lane pin at x=' + lx + ' has no line below the ruler (probed y=' + ys.join('/') + ') — the clip is hiding the lines it must leave alone. ' +
+          'geometry: vw ' + innerWidth + ', ruler ' + [rr.left, rr.top, rr.right, rr.bottom].map(Math.round).join(',') + ', mark-h ' + ruler.style.getPropertyValue('--tl-mark-h') + ', timeline ' + Math.round(tlr.top) + '-' + Math.round(tlr.bottom) + ', tracks bottom ' + Math.round(tracks.bottom) + ', add row ' + (add ? add.className + ' ' + Math.round(add.getBoundingClientRect().top) + '-' + Math.round(add.getBoundingClientRect().bottom) : 'none') + ', clip ' + getComputedStyle(ruler).clipPath + ', stacks ' + stacks);
+      }
+      var cp = getComputedStyle(ruler).clipPath;
+      if (!/inset\(/.test(cp)) throw new Error('#tl-ruler clip-path is "' + cp + '" — the divider clip is gone');
+      };
+      await atPhoneWidth(function () { return probe('phone'); });
+      await atWideWidth(function () { return probe('pc'); });
+    } finally {
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      tl.scrollLeft = savedSL; tl.scrollTop = savedST;   // BOTH axes — leaving it scrolled to the bottom made the add-row edge test read 0px (v15.03's first ship)
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+      await sleep(60);
+    }
+  });
+
   /* Queue 73 (v6.21). Ezra: "currently the names of layers follow and stay on screen, I want them to
    * just stay at the start of the layer and not move along with you." The label used to track the
    * clip's VISIBLE left edge, so it slid along the bar as you scrolled and never left the screen.
@@ -39391,6 +39472,11 @@
 
   async function run() {
     var results = [];
+    /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
+     * the suite is injected, while #splash is still covering the app — a hit-test through it sees the splash,
+     * and the #429 test failed three times for exactly that. The full suite never noticed because the tests
+     * ahead of any probe outlast the intro. Waited out here, once, for every run: up to 6s, usually none. */
+    for (var _w = 0; _w < 60 && document.getElementById('splash'); _w++) await new Promise(function (r) { setTimeout(r, 100); });
     /* `?only=<substring>` runs the matching tests alone (2 Sep). Diagnosing one test under a hand-applied
      * mutation cost a five-minute suite per attempt before this existed. The summary is stamped FILTERED so
      * neither ship.sh nor mutate.sh — which never pass a filter — could ever read a partial run as green. */
