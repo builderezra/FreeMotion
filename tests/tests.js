@@ -88,7 +88,7 @@
   var T = [];
   function test(name, opts, fn) {
     if (typeof opts === 'function') { fn = opts; opts = {}; }
-    T.push({ name: name, pending: !!opts.pending, item: opts.item || '', fn: fn });
+    T.push({ name: name, pending: !!opts.pending, item: opts.item || '', fn: fn , budgetMs: (opts && opts.budgetMs) || 0});
   }
 
   /* A NAME WITH A DOUBLE QUOTE IN IT TRUNCATES ITS OWN FAILURE REPORT, and this is a note turned into
@@ -1334,9 +1334,13 @@
       byName('Drop').click();
       if (!(L2.shadow.dx > 0 && L2.shadow.dy > 0)) throw new Error('tapping Drop did not offset the shadow (' + L2.shadow.dx + ',' + L2.shadow.dy + ')');
       FM.inspector.openCategory('border');
+      // The SHADOW's Style row — the one that offers Soft/Drop. The first "Style" label on the panel can be
+      // another section's row, which is exactly what the old `|| styleRow` fallback had been papering over.
       const soft2 = [].slice.call(document.querySelectorAll('#inspector .prop-row, .insp-body .prop-row'))
-        .filter(r => /^Style$/.test(((r.querySelector('label') || {}).textContent || '').trim()))[0];
-      const softBtn = [].slice.call((soft2 || styleRow).querySelectorAll('button')).filter(b => /^soft$/i.test((b.textContent || '').trim()))[0];
+        .filter(r => /^Style$/.test(((r.querySelector('label') || {}).textContent || '').trim()))
+        .filter(r => [].slice.call(r.querySelectorAll('button')).some(b => /^soft$/i.test((b.textContent || '').trim())))[0];
+      // no stale fallback to `styleRow` (2 Sep audit)
+      const softBtn = [].slice.call(attached(soft2, 'the shadow’s Style row after opening Border').querySelectorAll('button')).filter(b => /^soft$/i.test((b.textContent || '').trim()))[0];
       softBtn.click();
       if ((L2.shadow.dx || 0) !== 0 || (L2.shadow.dy || 0) !== 0) throw new Error('tapping Soft did not bring the shadow back under the layer (' + L2.shadow.dx + ',' + L2.shadow.dy + ')');
     } finally {
@@ -2056,8 +2060,9 @@
         if (!addMoved) throw new Error('the add row never moved while the rows around it parted — it is not a slot in the reorder model, so a drop on it does nothing and a drop below it lands a row off');
         // …and it must not be left behind. It carries row-part and an inline transform now, so a cleanup
         // that only queried .track-row would strand it there for the rest of the session.
-        if (addRow.style.transform || addRow.classList.contains('row-part')) {
-          throw new Error('the add row kept its drag transform/class after the drop (' + addRow.style.transform + ' / ' + addRow.className + ')');
+        const addRowNow = attached(document.querySelector('.tl-addrow'), 'add row after the drop');   // the drop rebuilt it (2 Sep audit)
+        if (addRowNow.style.transform || addRowNow.classList.contains('row-part')) {
+          throw new Error('the add row kept its drag transform/class after the drop (' + addRowNow.style.transform + ' / ' + addRowNow.className + ')');
         }
       }, 380);
     } finally {
@@ -2450,8 +2455,9 @@
       FM._camTab = 'view';
       if (FM.inspector && FM.inspector.openCategory) FM.inspector.openCategory('cameraopts');
       await sleep(650);
-      if (!/depth/i.test(warn.textContent)) throw new Error('the camera warning does not mention depth: ' + JSON.stringify(warn.textContent.slice(0, 60)));
-      if (!/\bZ\b/.test(warn.textContent)) throw new Error('the warning names the problem but not the CONTROL that fixes it — Z sits beside X and Y in Move & Transform, and saying so is the difference between a diagnosis and an instruction');
+      const warn2 = attached(document.querySelector('.insp-hint-warn'), 'view-tab warning after re-opening the category');   // two refresh()es stale (2 Sep audit)
+      if (!/depth/i.test(warn2.textContent)) throw new Error('the camera warning does not mention depth: ' + JSON.stringify(warn2.textContent.slice(0, 60)));
+      if (!/\bZ\b/.test(warn2.textContent)) throw new Error('the warning names the problem but not the CONTROL that fixes it — Z sits beside X and Y in Move & Transform, and saying so is the difference between a diagnosis and an instruction');
 
       // --- CONTROL: one layer with depth, and it must stop warning. ---
       L[1].transform.z = 900;
@@ -2965,6 +2971,37 @@
    * check reported a leak. The probe this came from lists "a stale element after a rebuild" as one of
    * three DEAD CONTROLS it has already been bitten by; this is the fourth.
    * Use this anywhere a test holds an element across something that can rebuild. */
+  /* ⚠️ A SYNTHETIC POINTER EVENT ON A DETACHED ELEMENT IS A TEST TALKING TO ITSELF — and it PASSES.
+   * 2 Sep 2026: FOUR tests in one day were found dispatching into orphans. Queue 577 held a grip across
+   * three sub-tests after the first one's release rebuilt the timeline; queue 336 asked an orphan whether its
+   * colour had cleared; a queue-699 sub-case assumed a rebuild that never happened; a queue-707 sub-case
+   * clicked a button the release had just replaced and blamed the shield it was testing. Every one of them
+   * was GREEN, because an orphan keeps its own listeners and classes, and an event dispatched on it never
+   * passes through `document` — so document-level guards (the click shield) cannot see it either.
+   * `attached(el, what)` above is the cure a test can remember to use. This is the cure that does not need
+   * remembering: dispatching a pointer/mouse/touch event on an Element that is not in the document THROWS,
+   * naming the element. The app itself never dispatches synthetic pointer events on detached nodes, so
+   * anything this catches is a test. Narrowed to gesture events on purpose — `change`/`input`/custom events
+   * are fired on nodes mid-construction by ordinary code and are not the failure this exists for. */
+  (function guardDetachedDispatch() {
+    if (window.__fmDetachedGuard) return;
+    window.__fmDetachedGuard = true;
+    const GESTURE = /^(pointer|mouse|touch|click$|dblclick$|contextmenu$)/;
+    const _dispatch = EventTarget.prototype.dispatchEvent;
+    EventTarget.prototype.dispatchEvent = function (ev) {
+      if (ev && GESTURE.test(ev.type) && this instanceof Element && !this.isConnected && !window.__fmAllowDetached) {
+        const cls = (this.className && this.className.baseVal !== undefined) ? this.className.baseVal : this.className;
+        // Recorded as well as thrown: a throw inside a callback the test never awaits is swallowed, and the
+        // per-test hygiene check below reads this list so the test is failed BY NAME instead of hanging.
+        (window.__fmDetachedHits = window.__fmDetachedHits || []).push({ test: window.__fmLastTest, type: ev.type, el: this.tagName.toLowerCase() + (cls ? '.' + String(cls).trim().split(/\s+/).join('.') : '') });   // CSS-style, no <…>: the results page renders messages as HTML
+        /* RECORD, DO NOT THROW (2 Sep, after the first version threw): a throw here lands inside whatever code
+           dispatched the event — often an app callback the test never awaits — and turned a should-fail into a
+           45-second hang per test. The hit is charged to the running test by the hygiene block in run(), which
+           fails it by name with the element; that is the whole point, and it cannot stall anything. */
+      }
+      return _dispatch.call(this, ev);
+    };
+  })();
   function attached(el, what) {
     if (!el) throw new Error('no ' + what + ' to act on');
     if (!document.contains(el)) throw new Error('the ' + what + ' is DETACHED — a rebuild replaced it, so dispatching here would exercise an orphan and prove nothing about what is on screen');
@@ -6031,7 +6068,7 @@
       //    three of them — the button stayed lifted and the card kept its placement.
       if (document.querySelector('.pop-tail')) throw new Error(c.name + ': the tail outlived the menu');
       if (b.classList.contains('pop-src')) throw new Error(c.name + ': the button is still lifted above a scrim that has gone');
-      if (card.classList.contains('pop-card')) throw new Error(c.name + ': the card kept its pop placement after closing, so the next open measures the old one');
+      if (document.contains(card) && card.classList.contains('pop-card')) throw new Error(c.name + ': the card kept its pop placement after closing, so the next open measures the old one');
     }
 
     // 6. THE NOTEPAD'S IS ITS OWN — the one clause where he asked for invention, not consistency.
@@ -6317,7 +6354,7 @@
       ownBack.click(); await sleep(250);
       if (FM._opaEasing) throw new Error('the sub-view\'s own back button left FM._opaEasing set');
 
-      ease2.click(); await sleep(300);
+      attached(opacityRow().querySelector('.kf-ease-btn'), 'easing button after the sub-view closed').click(); await sleep(300);   // ease2 is stale (2 Sep audit)
       if (!FM._opaEasing) throw new Error('could not re-open the easing editor to test the app-level back');
       if (FM.inspector && FM.inspector.back) { FM.inspector.back(); await sleep(250); }
       if (FM._opaEasing) throw new Error('FM.inspector.back() left FM._opaEasing set — the flag survives, and because this sub-view is gated on the flag alone it redraws itself, so back appears to do nothing');
@@ -14497,7 +14534,8 @@
 
       // Drag it. DOWN pushes the layer away, so z grows — the pad drags the object, not the number.
       const z0 = FM.evalProp(L.transform.z, FM.time) || 0;
-      const ev = (type, y, buttons) => zpad.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, pointerType: 'mouse', clientX: 100, clientY: y, buttons: buttons == null ? 1 : buttons }));
+      // the pad re-renders between taps, so `zpad` goes stale — re-acquire it at every dispatch (guard catch, 2 Sep)
+      const ev = (type, y, buttons) => attached(document.querySelector('.mt-zpad'), 'Z pad').dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, pointerType: 'mouse', clientX: 100, clientY: y, buttons: buttons == null ? 1 : buttons }));
       ev('pointerdown', 100); ev('pointermove', 160); ev('pointerup', 160, 0);
       const zDown = FM.evalProp(L.transform.z, FM.time) || 0;
       if (!(zDown > z0)) throw new Error('swiping DOWN on the Z pad did not push the layer away (z ' + z0 + ' → ' + zDown + ')');
@@ -14956,7 +14994,10 @@
       // accordion shut (Ezra: "if I only have two effects and I try to drag the top one down it just
       // closes the menu") — dropping rebuilds every row, so the per-row "was dragged" flag the toggle
       // checked belonged to a node that no longer existed.
-      head.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      // ⚠️ DELIBERATELY on the OLD head: this test reproduces the browser's compat click landing on the node
+      // the drop just replaced. The detached-dispatch guard would refuse it, so it opts in for this one line.
+      window.__fmAllowDetached = true;
+      try { head.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); } finally { window.__fmAllowDetached = false; }
       await sleep(80);
       // NOTE: no assertion here about the editor staying open. A synthetic click dispatched on the
       // pre-rebuild node still carries the old row's "was dragged" flag, so it can never reproduce the
@@ -18576,13 +18617,17 @@
       const clips = [].slice.call(document.querySelectorAll('#tl-tracks .clip[data-id]'));
       if (!clips.length) throw new Error('the timeline built no clips to right-click');
       const seen = [];
-      for (const clip of clips) {
-        const layer = FM.layerById(FM.scene, clip.dataset.id);
+      for (const clip0 of clips) {
+        const layer = FM.layerById(FM.scene, clip0.dataset.id);
         if (!layer) continue;
         seen.push(layer.type);
-        const head = clip.closest('.track-row') && clip.closest('.track-row').querySelector('.track-head');
-        if (!head) throw new Error('a ' + layer.type + ' row has no .track-head to right-click');
-        for (const [where, node] of [['clip', clip], ['row head', head]]) {
+        // the first right-click's selectLayer rebuilds the timeline; every later iteration must re-query (2 Sep audit)
+        const clip = attached(document.querySelector('#tl-tracks .clip[data-id="' + layer.id + '"]'), 'clip ' + layer.type);
+        if (!(clip.closest('.track-row') && clip.closest('.track-row').querySelector('.track-head'))) throw new Error('a ' + layer.type + ' row has no .track-head to right-click');
+        for (const where of ['clip', 'row head']) {
+          // the clip's own context menu selects the layer and rebuilds the timeline, so the head is looked up AFTER that
+          const fresh = attached(document.querySelector('#tl-tracks .clip[data-id="' + layer.id + '"]'), 'clip ' + layer.type + ' (' + where + ')');
+          const node = where === 'clip' ? fresh : attached(fresh.closest('.track-row').querySelector('.track-head'), 'row head of ' + layer.type);
           FM.contextMenu.hide();
           await sleep(20);
           const q = node.getBoundingClientRect();
@@ -30193,11 +30238,11 @@
 
       const reset = async () => { [A, B, C].forEach(l => { l.start = 0; }); FM.refreshAll(); FM.inspector.refresh(); await sleep(220); };
 
-      await reset(); down.click(); await sleep(260);
+      await reset(); attached(find(/one after another, down/i), '"down" button after reset()').click(); await sleep(260);
       if (!(A.start === 0 && B.start === 1 && C.start === 3)) {
         throw new Error('down chained to A@' + A.start + ' B@' + B.start + ' C@' + C.start + ', expected 0 / 1 / 3');
       }
-      await reset(); up.click(); await sleep(260);
+      await reset(); attached(find(/one after another, up/i), '"up" button after reset()').click(); await sleep(260);
       if (!(C.start === 0 && B.start === 3 && A.start === 5)) {
         throw new Error('up chained to C@' + C.start + ' B@' + B.start + ' A@' + A.start + ', expected 0 / 3 / 5');
       }
@@ -36903,7 +36948,7 @@
       // …and it must ask for the boost stage, or it would be inaudible above unity
       if (!FM.audioFxLive.needsBoost(L)) throw new Error('the layer is at 1000% but was not routed for boost — the preview would still play it at 100%');
       // the strip's ruler must span the whole range too, or the scrub cannot reach what the box shows
-      const ruler = strip.querySelector('.fx-scrub-ticks');
+      const ruler = attached(document.querySelector('.vol-panel .vol-strip'), 'volume strip after refresh()').querySelector('.fx-scrub-ticks');   // `strip` is stale (2 Sep audit)
       if (!ruler) throw new Error('the scrub ruler has no tick track');
       if (!(parseFloat(ruler.style.width) > 400)) throw new Error('the ruler is only ' + ruler.style.width + ' wide — it is still built for a 0-100 range');
     } finally {
@@ -37033,6 +37078,10 @@
       box.dispatchEvent(new Event('change', { bubbles: true }));
       await frame();
       if (!(L.speed >= 999)) throw new Error('1000x was refused — speed came out as ' + L.speed + ' (the old cap was 4x)');
+      // the first change ran rebuild() + inspector.refresh(), so `box` is an orphan now — re-find it (2 Sep audit)
+      box = null;
+      document.querySelectorAll('.spd-center .prop-row--scrub').forEach(function (r) { var lb = r.querySelector('label'); if (lb && /speed/i.test(lb.textContent)) box = r.querySelector('.fx-scrub-val'); });
+      box = attached(box, 'speed box after the first change');
       box.value = '1';                                        // 0.01x
       box.dispatchEvent(new Event('change', { bubbles: true }));
       await frame();
@@ -39160,9 +39209,16 @@
      * mutation cost a five-minute suite per attempt before this existed. The summary is stamped FILTERED so
      * neither ship.sh nor mutate.sh — which never pass a filter — could ever read a partial run as green. */
     // tests.js is evaluated INSIDE the app frame, so the runner page's query lives on window.top.
-    var only = null; try { only = new URLSearchParams((window.top || window).location.search).get('only') || new URLSearchParams(location.search).get('only'); } catch (e) {}
-    var LIST = only ? T.filter(function (t) { return String(t.name).indexOf(only) >= 0; }) : T;
-    if (only) window.__fmFiltered = 'FILTERED(only=' + only + ', ' + LIST.length + ' of ' + T.length + ')';
+    var qs = null; try { qs = new URLSearchParams((window.top || window).location.search); if (!qs.get('only') && !qs.get('upto') && !qs.get('after')) qs = new URLSearchParams(location.search); } catch (e) {}
+    var only = qs && qs.get('only'), upto = qs && qs.get('upto'), after = qs && qs.get('after');
+    var LIST = T;
+    // `?after=<substring>&upto=<substring>` runs the tests in suite ORDER between two names (exclusive / inclusive),
+    // for bisecting a test that only misbehaves after certain others have run (2 Sep: one hung for 45s in the full
+    // suite and passed alone). `?only=` keeps its substring meaning. All three stamp the summary FILTERED.
+    if (after) { var ia = -1; T.forEach(function (t, i) { if (ia < 0 && String(t.name).indexOf(after) >= 0) ia = i; }); LIST = ia >= 0 ? LIST.slice(ia + 1) : LIST; }
+    if (upto) { var iu = -1; LIST.forEach(function (t, i) { if (iu < 0 && String(t.name).indexOf(upto) >= 0) iu = i; }); LIST = iu >= 0 ? LIST.slice(0, iu + 1) : LIST; }
+    if (only) LIST = LIST.filter(function (t) { return String(t.name).indexOf(only) >= 0; });
+    if (only || upto || after) window.__fmFiltered = 'FILTERED(' + [only && 'only=' + only, after && 'after=' + after, upto && 'upto=' + upto].filter(Boolean).join(' ') + ', ' + LIST.length + ' of ' + T.length + ')';
     for (var i = 0; i < LIST.length; i++) {
       var t = LIST[i], ok = true, err = null;
       /* _cdp.py has always READ this on a timeout to report which test hung (tests/_cdp.py:159) and
@@ -39171,8 +39227,27 @@
        * specifically at risk of (FILTERS-DESIGN.md §1: a flattened container re-enters the same
        * compositor kernel and never terminates). */
       window.__fmLastTest = t.name;
-      try { var r = t.fn(); if (r && typeof r.then === 'function') await r; }
+      window.__fmDetachedHits = []; window.__fmStep = '';
+      var _t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+      /* A HUNG TEST IS A NAMED FAILURE, NOT A SILENT STALL (2 Sep). A throw inside a callback a test does not
+       * await — a timer, a rAF, a dropped promise — used to leave its outer promise pending for ever; the
+       * runner then waited on nothing and ship.sh reported "the suite did not run". 45s is far past the
+       * longest honest test (the soak runs take ~12s) and far short of the runner's own limit. */
+      var hangTimer = 0, budget = (t.budgetMs > 0) ? t.budgetMs : 45000;   // a long-by-design test declares its own budget
+      try { var r = t.fn(); if (r && typeof r.then === 'function') await Promise.race([r, new Promise(function (_, rej) { hangTimer = setTimeout(function () { rej(new Error('timed out after ' + Math.round(budget / 1000) + 's (last step: ' + (window.__fmStep || 'none set') + ') — an await that never settles (a throw inside a callback the test did not await), or a test that has grown past its budget; a long-by-design test declares budgetMs in its options')); }, budget); })]); }
       catch (e) { ok = false; err = String((e && e.message) || e); }
+      finally {
+        if (hangTimer) clearTimeout(hangTimer);
+        // the eight slowest tests so far, readable by the runner on a timeout — the suite doubled in length
+        // on 2 Sep and nothing could say which tests had grown
+        var _ms = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - _t0);
+        window.__fmSlow = (window.__fmSlow || []).concat([[_ms, t.name]]).sort(function (a, b) { return b[0] - a[0]; }).slice(0, 8);
+      }
+      if (window.__fmDetachedHits && window.__fmDetachedHits.length) {
+        var hits = window.__fmDetachedHits.map(function (h) { return h.type + ' on ' + h.el; }).join(', ');
+        if (ok) { ok = false; err = 'dispatched a gesture event on a DETACHED element: ' + hits + ' — a rebuild replaced it; re-acquire it (see attached())'; }
+        else err += ' [also dispatched on a detached element: ' + hits + ']';
+      }
       /* HYGIENE, charged to the test that caused it. A timeline gesture that outlives the test which
        * started it is invisible state — nothing on screen says so and the timeline does not complain —
        * and the next test inherits a drag it never began. It cost a five-step bisect to find when the
@@ -39190,6 +39265,7 @@
     }
     var reg = results.filter(function (r) { return !r.pending; });
     if (window.__fmFiltered) results.__filtered = window.__fmFiltered;
+    results.__slowest = window.__fmSlow || [];   // the eight slowest tests of this run (ms, name)
     var pend = results.filter(function (r) { return r.pending; });
     return {
       regressionPass: reg.filter(function (r) { return r.ok; }).length,
@@ -42966,14 +43042,22 @@
    * The FIRST clause turned out to be the same bug as queue 360's Done button and is asserted here too:
    * with effects picked, Done must ADD them. It used to call close() and nothing else, so the whole
    * numbered selection was discarded — "the effects I have selected do nothing", exactly. */
-  test('every tile in the browser picks instead of applying, and Done adds what you picked (queue 333)', { item: 'fx-sweep' }, async function () {
+  test('every tile in the browser picks instead of applying, and Done adds what you picked (queue 333)', { item: 'fx-sweep', budgetMs: 240000 }, async function () {
+    /* budgetMs 240s, NOT the 45s default (2 Sep): this test visits every tile in every category and each return
+     * to the overview re-renders that category's thumbnails SYNCHRONOUSLY — measured 6.9s for blur and 30.3s for
+     * distort on a cold cache (tests/_rt… probe, Runtime.evaluate stalled for exactly those spans). In the full suite
+     * an earlier test has warmed the cache and this takes ~49s; alone it is cold and takes minutes. Both are the
+     * same test being honest about a real cost — see queue 712 for the app side of it. */
     await atPhoneWidth(async function () {
       var L = FM.scene.layers[0];
-      if (!L) throw new Error('no layer to work from');
+      if (!L) {   // stand alone: this test used to depend on whatever an earlier test had left (2 Sep)
+        L = FM.makeLayer('shape', { shape: 'rect', x: 200, y: 300, shapeW: 120, shapeH: 90, fill: '#c05030' }); L.start = 0; L.duration = 3;
+        FM.scene.layers.push(L); FM.refreshAll(); await sleep(150);
+      }
       FM.selectLayer(L.id);
       L.effects = [];
-      FM.fxBrowser.open(L);
-      await sleep(220);
+      window.__fmStep = 'open browser'; FM.fxBrowser.open(L);
+      await sleep(220); window.__fmStep = 'browser opened';
       if (!FM.fxBrowser.isOpen()) throw new Error('the effects browser did not open');
 
       var bad = [], swept = 0, seen = {};
@@ -42985,10 +43069,12 @@
         // and passing on nothing. It has already caught exactly that once.
 
         for (var ci = 0; ci < cats.length; ci++) {
+          window.__fmStep = 'category ' + ci + '/' + cats.length + ' (' + cats[ci] + ')';
           FM.fxBrowser._openCategory(cats[ci]);
           await sleep(90);
           var tiles = [].slice.call(document.querySelectorAll('#fx-browser .fxb-catview [data-fxid]'));
           for (var ti = 0; ti < tiles.length; ti++) {
+            window.__fmStep = 'category ' + ci + ' tile ' + ti + '/' + tiles.length;
             var id = tiles[ti].dataset.fxid;
             if (seen[id]) continue;          // favourites/recents repeat a tile; one verdict per effect
             seen[id] = 1;
@@ -43002,9 +43088,13 @@
               bad.push(id + ' did not select at all');
             }
           }
+          var _tb = Math.round(performance.now());
+          window.__fmStep = 'category ' + ci + ' back: clicking @' + _tb;
           var back = document.querySelector('#fx-browser .fxb-catview .fxb-back');
           if (back) back.click();
+          window.__fmStep = 'category ' + ci + ' back: click returned after ' + Math.round(performance.now() - _tb) + 'ms, sleeping';
           await sleep(60);
+          window.__fmStep = 'category ' + ci + ' back: done after ' + Math.round(performance.now() - _tb) + 'ms';
         }
         if (swept < 40) throw new Error('only swept ' + swept + ' tiles — the sweep is not reaching the grid');
         if (bad.length) throw new Error(bad.length + ' of ' + swept + ' tiles misbehave: ' + bad.slice(0, 8).join('; '));
@@ -43024,6 +43114,7 @@
         if (!(FM._fxPreview && FM._fxPreview.list && FM._fxPreview.list.length)) {
           throw new Error('picked “' + pid + '” and nothing reached the live preview — the badge is the only thing that changed');
         }
+        window.__fmStep = 'Done button';
         var doneBtn = document.querySelector('#fx-browser .fxb-subdone');
         if (!doneBtn) throw new Error('the category view has no Done button');
         doneBtn.click();

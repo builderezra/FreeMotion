@@ -228,11 +228,24 @@ def main():
                                      "return f&&f.contentWindow&&f.contentWindow.__fmLastTest||'';})()") or ""
             except Exception:
                 pass
+            slow = []
+            try:
+                slow = cdp.eval("(function(){var f=document.querySelector('iframe');"
+                                "return (f&&f.contentWindow&&f.contentWindow.__fmSlow)||[];})()") or []
+            except Exception:
+                pass
+            # the eight slowest tests so far (ms, name): on 2 Sep the suite silently doubled in length and this
+            # was the only way to say which tests had grown
             print(json.dumps({"ok": False, "error": "suite did not finish within %ds" % a.timeout,
-                              "lastTest": last_seen}))
+                              "lastTest": last_seen, "slowest": slow}))
             return 2
 
         data = json.loads(payload)
+        try:
+            data["slowest"] = cdp.eval("(function(){var f=document.querySelector('iframe');"
+                                       "return (f&&f.contentWindow&&f.contentWindow.__fmSlow)||[];})()") or []
+        except Exception:
+            data["slowest"] = []
         green = "✓" in data["sum"] and "Error" not in data["sum"]
         if a.quiet:
             # --quiet trims the PASSING noise, never the failures. It used to print the summary alone,
@@ -242,7 +255,7 @@ def main():
             for row in data["fails"]:
                 print("   FAIL: " + row.replace("\n", " ")[:300])
         else:
-            print(json.dumps({"ok": green, "summary": data["sum"], "failures": data["fails"]},
+            print(json.dumps({"ok": green, "summary": data["sum"], "failures": data["fails"], "slowest": data.get("slowest", [])},
                              indent=1, ensure_ascii=False))
         return 0 if green else 1
     finally:

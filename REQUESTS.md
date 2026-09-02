@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v14.97
+> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v14.98
 >
-> **State:** v14.97, 1160 tests green, tree clean. **⚡ INNER BLUR IS 4.5x FASTER (51.1ms → 11.3ms)
+> **State:** v14.98, 1160 tests green, tree clean. **⚡ INNER BLUR IS 4.5x FASTER (51.1ms → 11.3ms)
 > and NOTHING ON SCREEN CHANGED** — measured, zero visible bytes different. The "Colour past the edge"
 > option you asked for keeps the old look one tap away. **✅ YOU ANSWERED FOUR QUESTIONS — all logged in
 > their own entries: the 219ms goes ahead WITH a tick box keeping the old rim; the intro logo has colour
@@ -21778,8 +21778,9 @@ re-opened #480, which I had marked done and had not fixed.
       it for a day and kept the entry reading as blocked; the stale-ask detector added in v14.97 found it on its
       first run.**
       **JUMPED: #707 (a phone trim runaway plus a phantom click, both measured to the cause) was found, fixed and
-      re-measured while this entry was still mis-marked as blocked. This is a multi-file render-path job and
-      it starts next.**
+      re-measured while this entry was still mis-marked as blocked — and #711 (suite hygiene: ten tests that could
+      not fail, plus the guard that stops an eleventh) went ahead too, because this entry's safety rests on that
+      suite. This is a multi-file render-path job and it starts next.**
       🧭 **THE PLAN (2 Sep, read from the code before writing anything — CLAUDE.md: plan before big edits).**
       #360 sized "masks as registry effects" at 30 call sites / 8 files. There is a smaller shape that gives him
       exactly what he asked for — *"layering them with the other effects… works the same as an effect. But
@@ -29269,6 +29270,47 @@ re-opened #480, which I had marked done and had not fixed.
       707 failure message; then fix either the test's isolation or the shield's re-arm semantics (probably: never
       SHORTEN an active shield). A test whose verdict depends on what ran before it is the class this whole day
       was about, so it gets its own number rather than a footnote.
+- [x] **711 — Suite hygiene: ten tests pass by talking to elements that are no longer on screen, and nothing
+      stops the eleventh.** Found 2 Sep by a 14-agent read-only scan of `tests/tests.js` (his standing OK for
+      workflows, #708), after the same pattern bit four tests in one day while fixing #699 and #707: an element is
+      captured, something rebuilds the timeline or inspector (`selectLayer`, `rebuild`, `refreshAll`,
+      `inspector.refresh`, a release path), and the test keeps asserting on — or dispatching into — the orphan.
+      An orphan keeps its own listeners and classes, so its assertions pass; and an event dispatched on it never
+      reaches `document`, so document-level guards (the click shield) cannot see it either.
+      **Two halves, both structural:**
+      1. [x] **The suite wraps `EventTarget.prototype.dispatchEvent`** so a pointer/mouse/touch/click event on an
+             Element that is not in the document THROWS, naming the element. Narrowed to gesture events —
+             `change`/`input`/custom events are fired on nodes mid-construction by ordinary code. A test that needs
+             an orphan on purpose (the accordion test at ≈14956 reproduces the browser's compat click on the node a
+             drop just replaced) opts in with `window.__fmAllowDetached` for that one line, and says why.
+      2. [x] **The ten sites the scan named are fixed** by re-acquiring through `attached(el, what)` — the add-row
+             drop (≈2059), the camera warning after a second `openCategory` (≈2453), the volume strip's ruler after
+             `refresh()` (≈36903), a closed notepad card that is detached rather than "still placed" (≈6031), the
+             easing button after the sub-view round-trip (≈6317), the speed box after its first `change` (≈37034),
+             the stagger buttons after each `reset()` (≈30193), the right-click loop's clip and head per iteration
+             (≈18580), the accordion click (opt-in, ≈14956), and the Style row's silent `|| styleRow` fallback
+             (≈1339). Line numbers as of the scan; the fixes are anchored on text.
+      **JUMPED: this goes ahead of #560 on purpose. Ten tests that cannot fail are a suite-integrity fault — the
+      nearest thing this repo has to a broken build — and #560 is a render-path change whose safety rests on the
+      suite. Tests only; no shipped source changes.**
+
+- [ ] **712 — Returning from a category in the effects browser can freeze the app for 30 seconds while it
+      **STATUS: 🟢 READY — nothing is stopping this**
+      re-renders thumbnails on the main thread.** Found 2 Sep, MEASURED, not inferred: with the thumbnail cache cold,
+      a CDP `Runtime.evaluate` against the app stalled for **6.9s** after Back from *blur* and **30.3s** after Back
+      from *distort* (`scratchpad/hang333b.py`, sampling every 2s) — the click itself returned in 0ms, no effects were
+      added, and the browser stayed open; the main thread was simply busy building tiles. `js/fx-thumbs.js` says the
+      cache is lazy and kept for the session (~23MB) and that moving effects cache a 10-frame strip; the distort
+      category has ~20 warps, several animated, so a cold return there is ~20 strips at once, synchronously.
+      **What a user sees:** first open of the browser after a reload, browse a big category, tap Back — the phone
+      stops for up to half a minute. Later visits are instant because the cache is warm, which is why this has
+      hidden. Found because test 333 (which visits every tile) pays this cold when run alone.
+      ➡️ **Fix shape:** render thumbnails off the click — chunk the mounts across frames (rAF, a few per frame) or
+      build them on demand as tiles scroll into view (the file says it already does the latter for scrolling; the
+      overview return mounts them all at once). A test can pin it: after a cold Back, the main thread must yield
+      within 100ms (a `setTimeout(0)` fires), and the tiles finish painting later.
+
+
 
 
 
