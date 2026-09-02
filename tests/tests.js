@@ -3478,6 +3478,21 @@
     if (differ.length) throw new Error(differ.length + ' recipe(s) render differently on a second run: ' + differ.slice(0, 6).join(', ') + ' — a preview that differs from the added clip, and a peak test that flips (queue 709)');
   });
 
+  test('710: the click shield is never shortened by a later, shorter re-arm', { item: '710' }, function () {
+    /* Queue 710. Every touch release re-arms the shield; with a plain assignment a 300ms re-arm could cut off a
+     * longer one still running. Extend or keep, never shrink. The seam drops it afterwards so this test cannot
+     * leave a live shield swallowing the next test's clicks. */
+    try {
+      FM._shieldClicks(1000);
+      FM._shieldClicks(300);
+      const left = FM._clickShieldLeft();
+      if (!(left > 900)) throw new Error('a 300ms re-arm SHORTENED a 1000ms shield to ' + Math.round(left) + 'ms — the next tap can cut a shield short (queue 710)');
+      FM._shieldClicks(1500);
+      if (!(FM._clickShieldLeft() > 1400)) throw new Error('a longer re-arm did not extend the shield');
+    } finally { FM._clickShieldReset(); }
+    if (FM._clickShieldLeft() !== 0) throw new Error('the reset seam left the shield armed');
+  });
+
   test('576: the text editor options open BELOW the box showing what you typed', { item: '576' }, async function () {
     /* Queue 576. Ezra: "All of the text edit options now get blocked by the part that shows you what you
      * typed, fix this so they push it down or go below it, whatever's best."

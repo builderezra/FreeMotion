@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v15.00
+> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v15.01
 >
-> **State:** v15.00, 1165 tests green, tree clean. **MASKS NOW LAYER WITH THE EFFECTS (#560)** — drag a mask row above an
+> **State:** v15.01, 1166 tests green, tree clean. **MASKS NOW LAYER WITH THE EFFECTS (#560)** — drag a mask row above an
 > effect in the Effects list and it becomes a member of the stack; effects above it spill past it, effects below are cut. **⚡ INNER BLUR IS 4.5x FASTER (51.1ms → 11.3ms)
 > and NOTHING ON SCREEN CHANGED** — measured, zero visible bytes different. The "Colour past the edge"
 > option you asked for keeps the old look one tap away. **✅ YOU ANSWERED FOUR QUESTIONS — all logged in
@@ -29291,8 +29291,7 @@ re-opened #480, which I had marked done and had not fixed.
       source differs by ~1.0. The test compares within 1e-5 — a thousand times above the jitter, a hundred thousand
       below the fault — and says so in its comment. Glass break's peak test passes alone now, stably.
 
-- [ ] **710 — An ORDER-DEPENDENT test: the 707 click-shield control catches its mutation alone and not in the full
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **710 — An ORDER-DEPENDENT test: the 707 click-shield control catches its mutation alone and not in the full
       suite.** Found 2 Sep. Mutation M-d makes the click shield permanent (`shieldClicks(1e9)` on a touch trim
       release). Run alone via the new `tests/run.html?only=707:%20a%20trim`, the test fails exactly as designed:
       *"the click shield never lifted … (2 -> 2)"*. In mutate.sh's FULL-suite run the same mutation SURVIVED — every
@@ -29306,6 +29305,16 @@ re-opened #480, which I had marked done and had not fixed.
       707 failure message; then fix either the test's isolation or the shield's re-arm semantics (probably: never
       SHORTEN an active shield). A test whose verdict depends on what ran before it is the class this whole day
       was about, so it gets its own number rather than a footnote.
+      ✅ **RESOLVED 2 Sep — the reading came back unambiguous.** The FULL suite under the hand-applied permanent
+      shield (`scratchpad/710_diagnose.sh`, 1500s budget): **1089/1165**, and the 707 test fails BY NAME — *"the
+      click shield never lifted … shield had 999,999,979ms left at release and 999,999,526ms at the late click"* —
+      with 76 collateral failures, which is exactly what a permanent shield does to a suite full of clicks. **So the
+      control was never order-dependent.** The one SURVIVED came from the sub-case's FIRST version, which clicked
+      the *detached* "Trim start to playhead" button the release had just replaced: a click dispatched on an orphan
+      never passes through `document`, so the shield's capture listener could not see it, the orphan's own handler
+      ran, and the "late click worked" — a false pass. That was fixed in v14.98 (re-acquire after release) and the
+      detached-dispatch guard now fails that class by name. The `never shorten an active shield` hardening ships
+      here anyway, with its own test and proof, because a shield the next tap can cut short is not a shield.
 - [x] **711 — Suite hygiene: ten tests pass by talking to elements that are no longer on screen, and nothing
       stops the eleventh.** Found 2 Sep by a 14-agent read-only scan of `tests/tests.js` (his standing OK for
       workflows, #708), after the same pattern bit four tests in one day while fixing #699 and #707: an element is

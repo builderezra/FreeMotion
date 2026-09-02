@@ -32,7 +32,11 @@ window.FM = window.FM || {};
      ends, clicks are swallowed for a moment. 300ms is far past the synthesized click (same task as the
      touchend) and well short of any deliberate tap. */
   let clickShieldUntil = 0;
-  function shieldClicks(ms) { clickShieldUntil = (typeof performance !== 'undefined' ? performance.now() : Date.now()) + (ms || 300); }
+  /* NEVER SHORTEN AN ACTIVE SHIELD (queue 710). Every touch release re-arms this; a plain assignment let a later,
+     shorter re-arm cut an earlier one off. Extend or keep, never shrink — a shield the next tap can cut short is
+     not a shield. */
+  function shieldClicks(ms) { const until = (typeof performance !== 'undefined' ? performance.now() : Date.now()) + (ms || 300); if (until > clickShieldUntil) clickShieldUntil = until; }
+  FM._clickShieldReset = function () { clickShieldUntil = 0; };   // seam: a test that arms a long shield must be able to drop it
   FM._shieldClicks = shieldClicks;   // seam
   FM._clickShieldLeft = () => Math.max(0, clickShieldUntil - (typeof performance !== 'undefined' ? performance.now() : Date.now()));   // seam: ms of shield remaining
   document.addEventListener('click', (e) => {
