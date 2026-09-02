@@ -3129,6 +3129,155 @@
     }
   });
 
+  test('707: a trim that ends near the edge follows the finger, and one pushed to the edge still auto-scrolls', { item: '707' }, async function () {
+    /* Queue 707. MEASURED 2 Sep at 380px (tests/_rt707.py), real touch and synthetic alike: a +30px drag on a
+     * grip that started near the screen edge landed +1.23s to +1.7s from where it began, against the +0.48s the
+     * finger asked for — correct for ~15px, then compounding every frame. The trim's edge auto-scroll armed
+     * because the finger was merely INSIDE the 46px zone, then scrolled up to 22px a frame and re-applied the
+     * trim through the scroll-aware delta on each tick. On a phone a grip is routinely born in that zone.
+     * ⚠️ PACED AT 30ms BETWEEN MOVES. The suite's other grip tests fire every move inside one frame, before a
+     * single rAF tick, which is exactly why none of them could see this. The pacing IS the fixture.
+     * ⚠️ BOTH WAYS. A: born inside the zone → must land within two frames of the finger. B: travelling INTO the
+     * zone from outside → must still auto-scroll, because that is the Alight Motion behaviour he has and this
+     * fix must not take it away. A test with only A passes for a fix that simply deletes the auto-scroll. */
+    const layers0 = FM.scene.layers.slice();
+    try {
+      return await atPhoneWidth(async function () {
+        FM.scene.layers.length = 0;
+        for (let i = 0; i < 4; i++) {
+          const L = FM.makeLayer('shape', { shape: 'rect', x: 200 + i * 20, y: 300, shapeW: 120, shapeH: 90, fill: '#c05030' });
+          L.start = i * 2; L.duration = 2.5; FM.scene.layers.push(L);
+        }
+        FM.scene.project.duration = 10;
+        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+        FM.setTime(0);
+        const tl = document.getElementById('timeline'); tl.scrollLeft = 0; await sleep(360);
+        const fps = FM.scene.project.fps || 30;
+        const ev = (el, t, x, y, b, id) => el.dispatchEvent(new PointerEvent(t, { pointerId: id, pointerType: 'touch', isPrimary: true, bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, buttons: b }));
+        const inner = () => attached(document.getElementById('tl-inner'), '#tl-inner');
+        const drawnPps = () => { const c0 = document.querySelectorAll('#tl-tracks .clip')[0]; const L0 = FM.scene.layers.slice().sort((a, b) => a.start - b.start)[0]; return c0.getBoundingClientRect().width / L0.duration; };
+
+        // ── A: a grip born INSIDE the zone, dragged +30px with the loop given time to tick ──────────────
+        const clip1 = attached(document.querySelectorAll('#tl-tracks .clip')[1], 'clip 1');
+        const gA = attached(clip1.querySelector('.clip-grip.left'), 'clip 1’s left grip');
+        const rA = gA.getBoundingClientRect(), tlr = tl.getBoundingClientRect();
+        const ax = (rA.left + rA.right) / 2, ay = (rA.top + rA.bottom) / 2;
+        // The drag must END inside the OLD 46px zone (where the runaway armed) and OUTSIDE the new one.
+        const zone = FM._trimZonePx(tlr);
+        if (!(ax + 30 > tlr.right - 46)) throw new Error('fixture: the drag ends at x=' + (ax + 30).toFixed(0) + ', short of where the old 46px zone began (' + (tlr.right - 46).toFixed(0) + ') — it could never have run away, so it proves nothing');
+        if (!(ax + 30 < tlr.right - zone)) throw new Error('fixture: the drag ends inside the CURRENT zone (' + zone + 'px), so auto-scroll is legitimately expected — pick a shorter drag');
+        const LA = FM.scene.layers.slice().sort((a, b) => a.start - b.start)[1];
+        const pps = drawnPps(), startA = LA.start;
+        ev(gA, 'pointerdown', ax, ay, 1, 21);
+        await sleep(FM._trimArmMs + 80);
+        if (!gA.classList.contains('armed')) throw new Error('fixture: the hold did not arm, so the drag below is not a trim');
+        for (let k = 1; k <= 6; k++) { ev(inner(), 'pointermove', ax + 30 * k / 6, ay, 1, 21); window.dispatchEvent(new PointerEvent('pointermove', { pointerId: 21, pointerType: 'touch', isPrimary: true, bubbles: true, cancelable: true, clientX: ax + 30 * k / 6, clientY: ay, button: 0, buttons: 1 })); await sleep(30); }
+        await sleep(120);                                                   // more ticks, if the loop is running
+        const landedA = LA.start;
+        ev(inner(), 'pointerup', ax + 30, ay, 0, 21); await sleep(160); FM.timeline._abortGestures();
+        const expectedA = startA + 30 / pps;
+        if (Math.abs(landedA - expectedA) > 2 / fps + 1e-6) throw new Error('a grip born inside the edge zone, dragged +30px with the loop allowed to tick, landed at ' + landedA.toFixed(3) + 's against the finger’s ' + expectedA.toFixed(3) + 's — the edge auto-scroll armed on mere presence and re-trimmed every frame; on a phone 30px of finger became seconds of clip (queue 707)');
+
+        // ── B: a grip that TRAVELS INTO the zone must still auto-scroll (the AM behaviour is kept) ───────
+        FM.scene.layers.forEach((l, ix) => { l.start = ix * 2; l.duration = 2.5; });
+        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); FM.setTime(0); tl.scrollLeft = 0; await sleep(360);
+        // Park clip 1's LEFT grip well outside the zone (x≈200) by scrolling, so the drag has to TRAVEL in.
+        const tlr2 = tl.getBoundingClientRect();
+        const gB0 = attached(document.querySelectorAll('#tl-tracks .clip')[1].querySelector('.clip-grip.left'), 'clip 1’s left grip');
+        const rB0 = gB0.getBoundingClientRect();
+        tl.scrollLeft = Math.max(0, Math.round((rB0.left + rB0.right) / 2 - 200)); await sleep(250);
+        const gB = attached(document.querySelectorAll('#tl-tracks .clip')[1].querySelector('.clip-grip.left'), 'clip 1’s left grip after scrolling');
+        const rB = gB.getBoundingClientRect();
+        const bx = (rB.left + rB.right) / 2, by = (rB.top + rB.bottom) / 2;
+        const zone2 = FM._trimZonePx(tlr2);
+        if (!(bx < tlr2.right - zone2 - 20)) throw new Error('fixture: the grip at x=' + bx.toFixed(0) + ' is already inside the zone (starts at ' + (tlr2.right - zone2).toFixed(0) + '), so this cannot test travelling INTO it');
+        const s0 = tl.scrollLeft;
+        ev(gB, 'pointerdown', bx, by, 1, 22);
+        await sleep(FM._trimArmMs + 80);
+        if (!gB.classList.contains('armed')) throw new Error('fixture: the hold did not arm (B)');
+        const target = tlr2.right - 10;
+        for (let k = 1; k <= 6; k++) { const x = bx + (target - bx) * k / 6; ev(inner(), 'pointermove', x, by, 1, 22); window.dispatchEvent(new PointerEvent('pointermove', { pointerId: 22, pointerType: 'touch', isPrimary: true, bubbles: true, cancelable: true, clientX: x, clientY: by, button: 0, buttons: 1 })); await sleep(30); }
+        await sleep(280);                                                   // hold at the edge: the loop should run
+        const scrolled = tl.scrollLeft - s0;
+        ev(inner(), 'pointerup', target, by, 0, 22); await sleep(160); FM.timeline._abortGestures();
+        if (!(scrolled > 8)) throw new Error('a trim that travelled INTO the edge zone and held there did not auto-scroll (scrollLeft moved ' + scrolled.toFixed(1) + 'px) — the fix for queue 707 must not take away "drag to the edge and keep going"');
+
+        /* ── C: THE PHANTOM CLICK. Arming a trim opens the edit sheet under the finger; the browser's
+         * compatibility click at release then lands on whatever the sheet put there. Measured: a 3px tremor
+         * put it on .qr-nudge and the clip jumped to the playhead with nothing dragged. BOTH WAYS: a click on
+         * the sheet's "Trim start to playhead" button 10ms after a touch trim release must do nothing; the
+         * same click 400ms later must work — a shield that never lifts would make the sheet dead. */
+        FM.scene.layers.forEach((l, ix) => { l.start = ix * 2; l.duration = 2.5; });
+        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); FM.setTime(0); tl.scrollLeft = 0; await sleep(360);
+        const gC = attached(document.querySelectorAll('#tl-tracks .clip')[1].querySelector('.clip-grip.left'), 'clip 1’s left grip');
+        const LC = FM.scene.layers.slice().sort((a, b) => a.start - b.start)[1];
+        // The quick row shows "Trim start to playhead" only while the playhead is INSIDE the clip (past it,
+        // it shows the move/extend pair — see queue 338). Park the playhead inside BEFORE the hold.
+        FM.setTime(LC.start + 0.5); await sleep(120);
+        const rC = gC.getBoundingClientRect(), cx = (rC.left + rC.right) / 2, cy = (rC.top + rC.bottom) / 2;
+        ev(gC, 'pointerdown', cx, cy, 1, 23);
+        await sleep(FM._trimArmMs + 80);
+        if (!gC.classList.contains('armed')) throw new Error('fixture: the hold did not arm (C)');
+        const btn = document.querySelector('#inspector .qr-trim');
+        if (!btn || !document.contains(btn)) {
+          const have = [].slice.call(document.querySelectorAll('#inspector .quick-row button, #inspector .qr-btn')).map(b => b.className + (b.title ? '[' + b.title + ']' : '')).join(', ');
+          throw new Error('fixture: arming did not put the edit sheet’s "Trim start to playhead" button on screen (sheet holds: ' + (have || 'no quick-row buttons at all') + '), so there is nothing for a phantom click to hit — this sub-case cannot run');
+        }
+        ev(inner(), 'pointerup', cx, cy, 0, 23); await sleep(10);
+        const shieldAfter = FM._clickShieldLeft();
+        if (shieldAfter < 200) throw new Error('the touch trim release did not arm the click shield (' + Math.round(shieldAfter) + 'ms left) — the release did not go through the trimDrag branch of the window pointerup, so the sheet under the finger is unprotected (queue 707)');
+        /* ⚠️ RE-ACQUIRE THE BUTTON AFTER THE RELEASE. The trim's release path refreshes the inspector and
+         * replaces this button; a click dispatched on the DETACHED original never passes through `document`,
+         * so the shield's capture listener cannot see it and the orphan's own handler runs. The first
+         * version of this sub-case did exactly that and blamed the shield. A real browser only ever clicks
+         * what is on screen — attached() keeps this test honest about the same thing. */
+        const before = LC.start;
+        attached(document.querySelector('#inspector .qr-trim'), 'the sheet’s "Trim start to playhead" button after release').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: cx, clientY: cy }));
+        await sleep(30);
+        const afterPhantom = LC.start;
+        if (afterPhantom !== before) throw new Error('a click 10ms after a touch trim release reached the edit sheet and moved the clip’s start ' + before + ' -> ' + afterPhantom + ' — the sheet opened under the finger when the trim armed, and lifting the finger pressed its button (queue 707)');
+        await sleep(420);
+        const shieldLate = FM._clickShieldLeft();
+        attached(document.querySelector('#inspector .qr-trim'), 'the same button 400ms later').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: cx, clientY: cy }));
+        await sleep(30);
+        const afterReal = LC.start;
+        FM.timeline._abortGestures();
+        if (afterReal === before) throw new Error('the click shield never lifted: a deliberate press on the sheet 400ms after the trim did nothing (' + before + ' -> ' + afterReal + '; shield had ' + Math.round(shieldAfter) + 'ms left at release and ' + Math.round(shieldLate) + 'ms at the late click)');
+
+        /* ── D: A GRIP BORN INSIDE THE ZONE. A finger that lands at the very edge and rests there must not
+         * scroll on its own — only a finger that has actually dragged (≥6px) may arm the loop. Both ways: a
+         * 2px tremor and a 300ms rest must leave scrollLeft alone; an 8px push must then scroll. */
+        FM.scene.layers.forEach((l, ix) => { l.start = ix * 2; l.duration = 2.5; });
+        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); FM.setTime(0); await sleep(200);
+        const tlr3 = tl.getBoundingClientRect(), zone3 = FM._trimZonePx(tlr3);
+        const gD0 = attached(document.querySelectorAll('#tl-tracks .clip')[2].querySelector('.clip-grip.left'), 'clip 2’s left grip');
+        const want = tlr3.right - zone3 + Math.round(zone3 * 0.4);          // 40% into the zone
+        tl.scrollLeft = Math.max(0, Math.round(gD0.getBoundingClientRect().left + gD0.getBoundingClientRect().width / 2 - want));
+        await sleep(250);
+        const gD = attached(document.querySelectorAll('#tl-tracks .clip')[2].querySelector('.clip-grip.left'), 'clip 2’s left grip after scrolling');
+        const rD = gD.getBoundingClientRect(), dx0 = (rD.left + rD.right) / 2, dy0 = (rD.top + rD.bottom) / 2;
+        if (!(dx0 > tlr3.right - zone3 && dx0 < tlr3.right - 2)) throw new Error('fixture: could not park a grip inside the auto-scroll zone (grip at x=' + dx0.toFixed(0) + ', zone ' + (tlr3.right - zone3).toFixed(0) + '..' + tlr3.right.toFixed(0) + ') — this sub-case is not testing a grip born in the zone');
+        const sD0 = tl.scrollLeft;
+        ev(gD, 'pointerdown', dx0, dy0, 1, 24);
+        await sleep(FM._trimArmMs + 80);
+        if (!gD.classList.contains('armed')) throw new Error('fixture: the hold did not arm (D)');
+        ev(inner(), 'pointermove', dx0 + 2, dy0, 1, 24); window.dispatchEvent(new PointerEvent('pointermove', { pointerId: 24, pointerType: 'touch', isPrimary: true, bubbles: true, cancelable: true, clientX: dx0 + 2, clientY: dy0, button: 0, buttons: 1 }));
+        await sleep(300);
+        const restScroll = tl.scrollLeft - sD0;
+        for (let k = 1; k <= 4; k++) { const x = dx0 + 2 + 8 * k / 4; ev(inner(), 'pointermove', x, dy0, 1, 24); window.dispatchEvent(new PointerEvent('pointermove', { pointerId: 24, pointerType: 'touch', isPrimary: true, bubbles: true, cancelable: true, clientX: x, clientY: dy0, button: 0, buttons: 1 })); await sleep(30); }
+        await sleep(280);
+        const pushScroll = tl.scrollLeft - sD0;
+        ev(inner(), 'pointerup', dx0 + 10, dy0, 0, 24); await sleep(160); FM.timeline._abortGestures();
+        if (Math.abs(restScroll) > 1) throw new Error('a grip grabbed INSIDE the edge zone auto-scrolled ' + restScroll.toFixed(1) + 'px from a 2px tremor and a rest — a finger that has not dragged must not trim on its own (queue 707)');
+        if (!(pushScroll > 8)) throw new Error('pushing the same grip 8px toward the edge did not auto-scroll (' + pushScroll.toFixed(1) + 'px) — the intent gate is too strict and took away drag-to-the-edge-and-keep-going');
+      });
+    } finally {
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('576: the text editor options open BELOW the box showing what you typed', { item: '576' }, async function () {
     /* Queue 576. Ezra: "All of the text edit options now get blocked by the part that shows you what you
      * typed, fix this so they push it down or go below it, whatever's best."
@@ -39007,8 +39156,15 @@
 
   async function run() {
     var results = [];
-    for (var i = 0; i < T.length; i++) {
-      var t = T[i], ok = true, err = null;
+    /* `?only=<substring>` runs the matching tests alone (2 Sep). Diagnosing one test under a hand-applied
+     * mutation cost a five-minute suite per attempt before this existed. The summary is stamped FILTERED so
+     * neither ship.sh nor mutate.sh — which never pass a filter — could ever read a partial run as green. */
+    // tests.js is evaluated INSIDE the app frame, so the runner page's query lives on window.top.
+    var only = null; try { only = new URLSearchParams((window.top || window).location.search).get('only') || new URLSearchParams(location.search).get('only'); } catch (e) {}
+    var LIST = only ? T.filter(function (t) { return String(t.name).indexOf(only) >= 0; }) : T;
+    if (only) window.__fmFiltered = 'FILTERED(only=' + only + ', ' + LIST.length + ' of ' + T.length + ')';
+    for (var i = 0; i < LIST.length; i++) {
+      var t = LIST[i], ok = true, err = null;
       /* _cdp.py has always READ this on a timeout to report which test hung (tests/_cdp.py:159) and
        * nothing ever WROTE it, so a hang printed lastTest:"" and told you nothing. One line, and it
        * pays for itself the first time something loops forever — which the filters work ahead is
@@ -39033,6 +39189,7 @@
       results.push({ name: t.name, item: t.item, pending: t.pending, ok: ok, error: err });
     }
     var reg = results.filter(function (r) { return !r.pending; });
+    if (window.__fmFiltered) results.__filtered = window.__fmFiltered;
     var pend = results.filter(function (r) { return r.pending; });
     return {
       regressionPass: reg.filter(function (r) { return r.ok; }).length,

@@ -66,6 +66,13 @@ by remembering:
   Every rule in it cures a real bug — an answered item gone unreachable, a hold that would not lift, five
   real items hidden by a phrase in a note about them — and nothing else in the repo would notice if one
   stopped working. The symptom is silence, which is why it needs a test rather than a reader.
+- **`tools/next.sh` shouts `!! STALE ASKS` when an entry records his answer and still carries an open
+  `❓ASK:` line.** Added 2 Sep after #98 sat in "blocked on Ezra" for a day with his answer written in full
+  two lines above the question it answered; on its first run it found #560 the same way, answered on 1 Sep.
+  Striking the ask is a thing a session has to remember, so the tool names the contradiction instead. It
+  does NOT reclassify — an unrelated answer must not promote an entry (#250) — and the classifier now also
+  credits an uppercase **`HE ANSWERED`** as an answer, which is how both entries had recorded it. When the
+  banner fires: strike the ask (`~~…~~` or a ✅ prefix) or say plainly the answer was to something else.
 
 ```bash
 tools/mutate.sh <file> "<old>" "<new>" ["expected failing test"]

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v14.96
+> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v14.97
 >
-> **State:** v14.96, 1159 tests green, tree clean. **⚡ INNER BLUR IS 4.5x FASTER (51.1ms → 11.3ms)
+> **State:** v14.97, 1160 tests green, tree clean. **⚡ INNER BLUR IS 4.5x FASTER (51.1ms → 11.3ms)
 > and NOTHING ON SCREEN CHANGED** — measured, zero visible bytes different. The "Colour past the edge"
 > option you asked for keeps the old look one tap away. **✅ YOU ANSWERED FOUR QUESTIONS — all logged in
 > their own entries: the 219ms goes ahead WITH a tick box keeping the old rim; the intro logo has colour
@@ -3032,12 +3032,13 @@ better still, keep working inside the turn rather than parking work for a later 
       then freehand has also gained undo/redo (v7.77), an eraser (v7.78), a zoom that survives entry
       (v8.00–8.01) and a clamped two-finger pan (v8.02–8.03), so if it feels broken again it will be a
       new report with new evidence rather than this one.
-- [ ] **98 — Add Text could be better (phone screenshot at v6.60).** His words: *"add text could be
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **98 — Add Text could be better (phone screenshot at v6.60).** His words: *"add text could be
       ✅ **HE ANSWERED THE SIZE QUESTION, 1 Sep: "160pt — what you have now."** So the default STAYS.
       The three-way picture sent 28 Aug offered 160 / 216 / 270 and he kept his own. That clause is
       closed — do not re-open it or re-ask; the rest of #98's clauses are unaffected.
-      ❓ASK: how big should text start? A 160pt (what you have) · B 216pt (recommended) · C 270pt. The picture was sent 28 Aug.
+      ✅ ~~ASK: how big should text start? A 160pt · B 216pt · C 270pt~~ **ANSWERED 1 Sep: "160pt — what you have now."** This line
+      sat here as an open question for a day after he had answered it, and it alone kept the entry reading as
+      blocked — every other clause below is closed. Ticked 2 Sep at v14.97 with no change to the app.
       ═══ 🎨 **28 AUG (v13.93) — THE OPTIONS ARE DRAWN AND SENT. This is the last thing in the entry.** ═══
       **Everything else in #98 is closed:** (a)/(b) are iOS Safari's own keyboard accessory bar — settled
       by his own photo on 27 Aug and not our DOM at all; (c)'s *"225pt renders tiny"* was measured and
@@ -21760,8 +21761,8 @@ re-opened #480, which I had marked done and had not fixed.
       `overflow: hidden` strip, and the page does not scroll sideways.
 
 - [ ] **560 — Masks still don't behave like effects and still have their own separate menu.** (25 Aug, phone screenshot at v12.44.)
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
-      ✅ **HE ANSWERED, 1 Sep, and he picked the big one. Verbatim:**
+      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **ANSWERED BY EZRA (HE ANSWERED), 1 Sep, and he picked the big one. Verbatim:**
       > I want masks as an effect and work with effects, like layering them with the other effects and it works the same as an effect. But keeping the function
       **So: interleave properly.** A mask becomes an ordinary member of the effect stack — draggable
       above or below any effect, ordered with them, behaving like them — **while keeping everything a
@@ -21771,7 +21772,74 @@ re-opened #480, which I had marked done and had not fixed.
       its own session and byte-identity evidence for the cases that do NOT move (a mask with no effects,
       an effect with no mask, and the current mask-then-effects order, which must render exactly as it
       does today).
-      ❓ASK: masks look and behave like effects now; the one thing left is that you cannot drag a mask ABOVE or BELOW an effect — they only reorder among themselves. A yes, interleave them properly (a render-path job across 8 files) · B (recommended) no, I never try that · C do it, but bundled with the next render-path job.
+      ✅ ~~ASK: masks look and behave like effects now; the one thing left is that you cannot drag a mask ABOVE or BELOW an effect — they only reorder among themselves. A yes, interleave them properly (a render-path job across 8 files) · B (recommended) no, I never try that · C do it, but bundled with the next render-path job.~~
+      **ANSWERED — it is the 1 Sep answer quoted at the top of this entry: masks work "the same as an effect",
+      "layering them with the other effects" — that IS "yes, interleave them properly". This ASK sat unstruck beside
+      it for a day and kept the entry reading as blocked; the stale-ask detector added in v14.97 found it on its
+      first run.**
+      **JUMPED: #707 (a phone trim runaway plus a phantom click, both measured to the cause) was found, fixed and
+      re-measured while this entry was still mis-marked as blocked. This is a multi-file render-path job and
+      it starts next.**
+      🧭 **THE PLAN (2 Sep, read from the code before writing anything — CLAUDE.md: plan before big edits).**
+      #360 sized "masks as registry effects" at 30 call sites / 8 files. There is a smaller shape that gives him
+      exactly what he asked for — *"layering them with the other effects… works the same as an effect. But
+      keeping the function"* — without moving the mask model at all:
+      **An ORDERING MARKER in the effect stack.** `layer.masks` stays the source of truth for mask DATA (paths,
+      keyframes, feather — every call site that reads it keeps working). A mask that has been placed among the
+      effects is represented in `layer.effects` by `{ type: 'penmask', maskId }` — a marker, not a copy.
+      · **Compositor** (`js/compositor.js`): `POSTFX` admits types by table (~2731) → add `penmask`. `applyPostFx`
+        dispatches by `fx.type` (~2818) → `drawPenMaskAt(ctx, layer, t, scene, fx)`: the existing idiom "render
+        the layer with THIS effect removed" (`Object.assign({}, layer, { effects: effects.filter(e => e !== fx),
+        blendMode:'normal', … })`, as at 3213/7171), stencil the plate with `maskAlphaAt` for the ONE referenced
+        mask, blit at opacity/blend — i.e. `drawPenMaskLayer` generalised to one mask at one position. The
+        outermost wrap (`hasPenMask` → `drawPenMaskLayer`) keeps applying only the UNMARKED masks. A project
+        with no markers takes today's exact path — **byte-identity for legacy is by construction, not by test**
+        (the tests still pin it).
+      · **Inspector** (`js/inspector.js`): `attachFxGestures(row, head, layer, fx, idx, stack)` already takes a
+        pluggable `stack = { list, after }` — `MASK_STACK` (~2598) is one. The merged list IS `layer.effects`;
+        a marker renders as the mask row it points at (same chevron/eye/bin/gestures as today). Unmarked
+        (legacy) masks show at the outermost end; dragging one past an effect CREATES its marker at the drop
+        position. "+ Add mask" adds the mask AND a marker at the top, so a new mask behaves like an effect from
+        the start. The separate MASKS block goes; nothing else in the panel changes.
+      · **Storage** (`js/storage.js` ~676): sanitise markers — type `penmask`, `maskId` a string that exists in
+        `layer.masks`, no duplicates — and drop dangling ones. Masks already carry ids (`masks.js:28`).
+      · **Not touched:** scene.js keyframe collection, mask-tool.js, fx-browser.js, masks.js's alpha builder.
+      **Tests, before the code:** (1) byte-identity through the real compositor for a mask with no effects, an
+      effect with no mask, and mask+effects with no marker — against a render captured on the tree BEFORE the
+      change (`tests/_560before.html` writes the PNGs; the suite compares); (2) interleave semantics: `[glow,
+      penmask(m), blur]` — the glow painted OUTSIDE the mask must survive (it is outer), the blur's spill must
+      not (it is inner); measured in pixels, not asserted from structure; (3) storage round-trip keeps marker
+      order and drops a dangling id; (4) the merged list's drag writes the marker where the row landed.
+      **~4 files, not 8; the render path changes only for layers that carry a marker.**
+      🔎 **REVIEW FINDINGS THE DESIGN MUST HANDLE (2 Sep — a 14-agent read-only audit of every `.masks` /
+      `.effects` call site against the plan above; its four HIGH findings survived adversarial refutation).**
+      Several change the plan: storage's `sane()` would ERASE every marker on load (item 1); the mask-alpha UNION
+      means a marked `add` mask becomes an INTERSECTION (item 6 — decision below); the inspector's reorder already
+      splices ONE array with a merged-DOM index (item 7 — a pre-existing bug, masks mis-reorder today on any layer
+      that also has effects); `applyPostFx` has no default, so an undispatched type draws NOTHING (item 5).
+      1. `js/storage.js:832-847` — `sane()` returns null for any unregistered type (`FM.fxRegistry.get('penmask')` → null) and, if registered, rebuilds `{type, enabled, params}` dropping `maskId`. Every open/undo/import/duplicate/paste erases markers → mask silently reverts to outermost. Smallest change: a `if (f.type === 'penmask')` branch BEFORE line 835 that returns `{ type:'penmask', maskId:f.maskId }` iff `Array.isArray(l.masks) && l.masks.some(m => m.id === f.maskId)` and not already seen in this stack, else null (drops on `{effects}` holders, cues, groups — inspector.js:395, storage.js:815).
+      2. `js/storage.js:979-983` and `:364` — `sanitizeEffects` runs BEFORE `sanitizeMasks` (which drops/re-ids masks at 681/685) and alone on ordinary load. Move `sanitizeMasks(l)` above `sanitizeEffects(l)` at 979-983 and add it to the load loop at 364, or the marker check validates against ids that are about to change.
+      3. `js/compositor.js:2447-2449, 2489, 2496` — `hasPenMask` reads all enabled masks and `drawPenMaskLayer` stencils with ALL of them then renders the inner layer with `masks: null` (markers dangle inside). Change: `unmarked = masks with no marker in layer.effects`; `hasPenMask` = unmarked non-empty; `maskAlphaAt(Object.assign({}, layer, { masks: unmarked }))`; inner clone gets `masks: markedSubset` (not null).
+      4. `js/compositor.js:3213` (pattern repeated at 6826, 7171, …) — recursion clones strip only the effect. `drawPenMaskAt`'s clone must remove BOTH its marker from `effects` AND its mask from `masks`, else the mask becomes "unmarked" in the inner plate and `hasPenMask` at 13254 stencils it a second time (feather/opacity squared, one extra plate per marker).
+      5. `js/compositor.js:2818-2853` — `applyPostFx` has no default; a POSTFX type without a dispatch line draws ZERO pixels (magnifybg precedent, comment at 1070). Add the `fx.type === 'penmask'` line, and make `drawPenMaskAt` ALWAYS render (mask disabled/empty/dangling → draw the clone with the marker removed, never early-return). Add a test that walks `Object.keys(POSTFX)` against `applyPostFx` coverage.
+      6. `js/masks.js:149-152, 183` — `buildMaskAlpha` unions add-masks in one buffer; a per-marker stencil chains as destination-in, so two `add` masks with one marked become an INTERSECTION (non-overlapping shapes → layer vanishes). Decide: marker carries a run of consecutive masks (`maskIds`), or the entry states the new semantics and a fixture pins add+add.
+      7. `js/inspector.js:1252-1286` (`attachFxGestures`) — reorder measures the MERGED `.fx-list` DOM but splices ONE array with a DOM index; already wrong for mask rows on any layer with effects (Mask 2 above Mask 1 = no-op while effect rows shift), and nothing can "create a marker". Change: map DOM rows → `(list, index)`; when an unmarked mask row's `toIdx` lands above an effect row, splice `{type:'penmask', maskId}` into `layer.effects` at that index.
+      8. `js/inspector.js:2655, 1322` (mask delete) and `:1477, 1219` (effect-row delete) — deleting a mask leaves its marker dangling; deleting a marker leaves the mask applied outermost. Smallest: one `reconcileMarkers(layer)` (drop dangling, dedupe) called from `afterMasks` and `afterFx`; marker-row delete deletes the mask too.
+      9. `js/fx-browser.js:466-469` + `js/inspector.js:1918-1924` — the only add route pushes to `layer.masks` with no marker, and `effectsSection` appends unmarked masks AFTER all effect rows, so the row shows "after everything" while rendering outermost. Either push a marker on add, or insert unmarked mask rows ABOVE the effect rows at 1924 so position matches render order.
+      10. `js/inspector.js:556, 5733, 2808` — layer-preset apply, fx-preset apply and Paste look assign `layer.effects =` wholesale, discarding the target's own markers while `layer.masks` stays. Call `reconcileMarkers` (item 8) after each write, or re-insert markers for surviving masks.
+      11. Two `enabled` flags — `storage.js:846` stamps `enabled` onto the marker; effect eye writes `fx.enabled` (`inspector.js:1488`), mask eye writes `mask.enabled` (`:2639`); `postFxOrder` filters on the stack entry (`compositor.js:2778`). Pick one: marker never carries `enabled`, its row's eye writes `mask.enabled`, `drawPenMaskAt` honours `mask.enabled` (null alpha → render without), and `hasPenMask`'s marker scan ignores `enabled`.
+      12. `js/inspector.js:1918, 1393, 1170, 1156-1161, 977/6392` — without a type branch a marker renders as an effect row labelled `penmask` ("No adjustable parameters") with the ⋯ menu: Duplicate mints a same-`maskId` twin, "Apply to this cue only" moves it into a masks-less cue, and the easing sub-view does `fx.params[k]` on it (TypeError). Add `fx.type === 'penmask' ? markerRow(...) : fxRow(...)` at 1918 with no ⋯ menu; guard 6392 with `&& fx.params`.
+      13. `js/compositor.js:13193, 13902` — adjustment layers return before post-fx dispatch, so a marker on one is never dispatched; if `hasPenMask` now means unmarked-only, the local grade silently goes full-frame. Smallest: `applyAdjustment` applies ALL masks regardless of markers (or `maskableLayer` refuses to create markers on `adjustment`).
+      14. `js/compositor.js:3280-3281` (`drawFilterContainer`) — a marker inside a Filter's `effects` is spliced into plate B while plate A (`rest`) treats the mask as unmarked, so both plates are masked and Strength cannot fade it. Exclude markers from `kids` at 3280 (and have the sanitiser refuse markers in container children).
+      15. `js/compositor.js:2465-2485` — `drawPenMaskAt` must take plate and mask canvas from `_pmPool` with `_pmDepth++`/`finally _pmDepth--` around its nested `drawLayer`, as `drawPenMaskLayer` does; the matte/compound-blur/displace paths render other masked layers mid-flight.
+      16. `js/ai-ops.js:27, 332` and `js/ai-manifest.js:43` — if `penmask` is added to `FM.EFFECTS` to make `fxRegistry.get` resolve, the AI is told about it and `addEffect` writes a marker with no `maskId`. Keep it out of `FM.EFFECTS` (handle by shape in the sanitiser and `fxRow`), or filter `hidden`/marker defs in both places.
+      17. `js/compositor.js:1878-1904` — `fxOverriddenOnLayer` would print the literal word "penmask" in the "overridden by" hint; filter markers from `after`.
+      18. `js/compositor.js:13294` vs `:13299, 2630` — object motion blur runs outermost and strips only `objectblur`, so a marked mask is stenciled per sub-frame (smeared edge) while an unmarked one is applied after averaging (crisp). Consistent with the design; needs a fixture and a line in the entry.
+      🧭 **Decisions taken (he can overturn any):** each marker is an INDEPENDENT stencil — that is what "a mask
+      as an effect" means; unmarked masks keep today's union; a marker never carries `enabled` (its row's eye
+      writes `mask.enabled`); markers are refused inside Filter containers and on adjustment layers; one
+      `reconcileMarkers(layer)` runs after every write to `layer.effects` or `layer.masks`. **Confirms the entry's
+      own warning: a session of its own, tests first, byte-identity captured BEFORE the first edit.**
       ✅ **THE MENU IS GONE — v12.76. The entry REMAINS OPEN on one question for you, at the bottom.**
       His words, verbatim:
       > Masks still don’t work like effects and have their own menu fix this
@@ -21809,7 +21877,7 @@ re-opened #480, which I had marked done and had not fixed.
       📐 Measured after: one list, chevrons aligned to the pixel, card styling identical, the row still
       opens with Mode / Feather / Opacity / Invert, and the eye still toggles the mask.
 
-      🟠 **WHAT IS STILL DIFFERENT, AND IT NEEDS ONE WORD FROM YOU.** The STORAGE is unchanged — masks are
+      ✅ **ANSWERED 1 Sep — the quote at the top of this entry is the one word ("works the same as an effect"). WHAT WAS STILL DIFFERENT, AND WAITED ON THAT ANSWER:** The STORAGE is unchanged — masks are
       still `layer.masks`, and the compositor applies them at a different stage from the effect stack. You
       will not see that anywhere **except in one place: you cannot drag a mask above or below an EFFECT.**
       It reorders among masks only. Interleaving them is meaningless until the model moves, and moving it
@@ -28271,7 +28339,7 @@ re-opened #480, which I had marked done and had not fixed.
              that matched nothing would pass forever.
 
 - [ ] **690 — Standing direction, 31 Aug, RESTATED 1 Sep (verbatim):**
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: 🟢 READY — nothing is stopping this**
       > raise them and just keep going with whatever you can like bug fixing and stuff. Im sure you can find things to do
       **31 Aug:**
       **JUMPED: #690 is a standing brief, not a task with an end — "keep things going, dont stop,
@@ -29052,8 +29120,7 @@ re-opened #480, which I had marked done and had not fixed.
       animation's end. The cheap, low-risk experiment is `#add-sheet.open { transition: none }` while the
       hinge is active — it changes nothing in Chrome and removes the only second motion in the CSS.
 
-- [ ] **707 — PHONE (real touch): a trim from a grip lands SECONDS from where the finger is.** Found 2 Sep
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **707 — PHONE (real touch): a trim from a grip lands SECONDS from where the finger is.** Found 2 Sep
       while finishing #699, with trusted CDP touch (`Input.dispatchTouchEvent`) at 380px — NOT the synthetic
       events the suite uses, which cannot see it. Pre-existing: identical on HEAD before #699's change.
       | gesture on the LEFT grip of a 2.0–4.5s clip | expected | measured |
@@ -29129,6 +29196,82 @@ re-opened #480, which I had marked done and had not fixed.
       frame and cannot see this) that starts inside the zone must land within a frame of the finger (+30px →
       ≈2.48s, not 3.23); a drag that crosses into the zone from outside must still auto-scroll. The 3px→0
       case gets its own probe of what `applyTrimAt` receives.
+      ✅ **DONE, v14.97 — both faults measured to the cause, then fixed, then re-measured.**
+      **(1) The runaway — MEASURED to the term.** `FM._lastTrim` (a new seam inside `applyTrimAt`) showed the
+      scroll term `scrollLeft − startScroll` growing 0, 0, 3, 13, 28, 50 while the finger moved 5px a step,
+      and `dt = (finger + scroll) / pps` reproduced every landing. The first fix ("arm only after the finger was
+      seen outside the zone") **changed nothing** — this grip WAS outside at x=321 and travelled in at 336; the
+      rule was aimed at the wrong thing and the re-measurement said so before it shipped. The real fault is the
+      zone's SIZE: 46px is 12% of a 380px screen. **Fix:** the zone is `min(46, 6% of the viewport)` — 23px on a
+      phone, unchanged on desktop — and only a finger that has dragged ≥6px can arm it. **After:** +30px → 2.50
+      on both paths, scroll term 0 (2.467 snapped to clip 0's end — the legitimate 7px snap).
+      **(2) The 3px → t=0 retime was NOT the trim code at all.** `FM._lastTrim` stayed null through the whole
+      gesture; the clip changed at release; wrapping every public `FM.*` on the release path found nothing.
+      What did it: **arming selects the layer, selecting opens the docked edit sheet UNDER THE FINGER, and the
+      browser's compatibility `mouseup`/`click` at release hit-test into it.** Measured with a capture-phase
+      logger — no tremor: `click → .quick-row` (a gap, harmless); 3px tremor: `click → .qr-btn.qr-nudge` (the
+      move/extend nudge from #338) → start jumps to the playhead → `0/4.5`. That is why it looked random. On a
+      phone, lifting a finger after a trim pressed whatever button the sheet had put there. **Fix:** clicks are
+      shielded for 300ms after a touch gesture on the timeline ends (trim release, tap-select). A two-way test:
+      a click on "Trim start to playhead" 10ms after a touch trim release must do nothing; the same click 400ms
+      later must work.
+      📌 Kept: `tests/_rt707.py` (the paced drag with per-move internals) and the bisect probes it grew from.
+      🔬 **Mutation notes.** Reverting the zone to a flat 46px is caught — by the test's PRECONDITION rather than
+      its landing assertion: with a 46px zone the fixture's +30px drag is inside the zone by definition, so the
+      test refuses with *"the drag ends inside the current zone, so auto-scroll is legitimately expected"*. That
+      refusal IS the bug statement (the zone is too big for an ordinary drag on a phone), so it counts, and it is
+      said here so nobody reads "CAUGHT" as "the landing assertion fired". Removing the drag-intent gate is caught
+      by sub-case D ("a grip grabbed INSIDE the edge zone auto-scrolled 180px from a 2px tremor"); removing the
+      shield is caught by sub-case C. **Making the shield permanent (the control) is caught when the 707 test runs
+      ALONE and SURVIVED once in the full suite — see #710.** Not claimed here.
+
+- [ ] **708 — Standing instruction, 2 Sep (verbatim):**
+      **STATUS: 📌 NOTE — nothing to build**
+      > U can use workflows if you want just evaluate if it's needed
+      **How it is applied:** a workflow (a fan-out of parallel agents) is used when the job is genuinely
+      parallel or adversarial and reading alone has already failed — e.g. the #699 review, whose agents caught
+      with real touch a regression every probe of mine had missed. It is NOT used for a single edit, a ship, or
+      anything a few reads settle. Agents in a workflow are told: read-only, no browsers, no suite runs — an
+      earlier batch of them navigated my measurement tab and left servers behind. Evaluated per task, and the
+      evaluation is said out loud when one is launched.
+
+- [ ] **709 — A FLAKY TEST: `562: every sound effect actually makes a sound when previewed` failed once on an
+      **STATUS: 🟢 READY — nothing is stopping this**
+      unchanged audio path.** Seen 2 Sep during #707's mutation batch: the baseline run was green, and the very next
+      run (a mutation in `js/timeline.js`'s trim zone — nothing to do with audio) failed it with *"Glass break
+      1.009 — clips on the ▶, where nothing is normalised"*. Same code, two verdicts, so the sound-effect recipe's
+      peak is not deterministic run to run (a random seed in the synthesis? timing of the preview render?) and sits
+      within 1% of the clip threshold. A flaky test is a real bug: it can block a ship for nothing, and it teaches
+      the reader to re-run instead of read — which is how a real regression gets waved through. ➡️ Find the
+      nondeterminism in the Glass-break recipe (or the measurement), pin it, and either normalise the recipe with
+      headroom or measure the peak the same way each run. Do not widen the threshold to make it pass.
+      🔎 **CAUSE — and a correction to what I first wrote here.** I first blamed `js/sfx.js:288–294`, which places
+      shards with `Math.random()`; that recipe is **Sparkle**, not Glass break. Glass break (:376) places its
+      shards with fixed offsets exactly as its comment says — but its opening crack is `noiseBuffer(ctx, d,
+      'white')`, and `noiseBuffer` (:37) fills every sample from `Math.random()`. So the crack differs on every
+      render, the peak sits at ~1.0 ± 1%, and the test is a coin flip. The comment's promise — *"the same effect
+      renders the same twice"* — is false for every recipe that uses `noiseBuffer` (Sparkle breaks it a second
+      way). ➡️ **Fix:** a seeded PRNG inside `noiseBuffer` (deterministic noise; the cache-consistency the comment
+      wants) and fixed offsets in Sparkle; then check Glass break's peak has headroom rather than luck.
+
+- [ ] **710 — An ORDER-DEPENDENT test: the 707 click-shield control catches its mutation alone and not in the full
+      **STATUS: 🟢 READY — nothing is stopping this**
+      suite.** Found 2 Sep. Mutation M-d makes the click shield permanent (`shieldClicks(1e9)` on a touch trim
+      release). Run alone via the new `tests/run.html?only=707:%20a%20trim`, the test fails exactly as designed:
+      *"the click shield never lifted … (2 -> 2)"*. In mutate.sh's FULL-suite run the same mutation SURVIVED — every
+      test green — and a second full run under it did not finish in 420s. A headless replica of the sub-case under
+      the hand-applied mutation also fails correctly (shield 999,999,528ms at the late click, start unchanged). So
+      something that runs BEFORE the 707 test in the suite changes what its release does — a leftover gesture, a
+      capture-phase listener installed by an earlier test, or a re-arm of the shield by the tap-select branch
+      (`shieldClicks(300)` overwrites rather than extends). The test now records the shield it saw at release and
+      at the late click and refuses if the release did not arm it at all, so the next full run under the mutation
+      names the branch. ➡️ Run the full suite under the hand-applied mutation with `--timeout 1800` and read the
+      707 failure message; then fix either the test's isolation or the shield's re-arm semantics (probably: never
+      SHORTEN an active shield). A test whose verdict depends on what ran before it is the class this whole day
+      was about, so it gets its own number rather than a footnote.
+
+
+
 
 
 

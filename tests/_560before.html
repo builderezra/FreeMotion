@@ -1,0 +1,47 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:11px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:380px;height:820px;border:0"></iframe>
+<script>
+/* Queue 560 — BYTE-IDENTITY CAPTURE. Run this on the tree BEFORE masks join the effect stack, and again after.
+   Each case renders through the real compositor (FM.renderScene) into a 320x240 frame and prints a hash of the
+   pixels. Cases (a) (b) (c) must hash identically before and after — nothing about them moves. Case (d) is the
+   same layer as (c) but with the mask MARKED between the two effects; it only exists after the change and must
+   differ from (c) in a measurable way (the outer effect's spill survives the mask, the inner one's does not). */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent=out.join('\n'); }
+function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+function fnv(d){ var h=0x811c9dc5>>>0; for (var i=0;i<d.length;i++){ h^=d[i]; h=Math.imul(h,16777619)>>>0; } return ('00000000'+h.toString(16)).slice(-8); }
+document.getElementById('a').addEventListener('load', function(){
+  var w=document.getElementById('a').contentWindow, n=0;
+  (function wait(){ if(!(w.FM&&w.FM.scene&&w.FM.renderScene&&w.FM.masks)){ if(n++>600) return say('FM never came up'); return setTimeout(wait,50);} setTimeout(function(){run(w);},1200); })();
+});
+async function run(w){
+ try{
+  var FM=w.FM, D=w.document;
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen()) FM.home.close(); await sleep(300);
+  FM.scene.project.width=320; FM.scene.project.height=240; FM.scene.project.duration=4;
+  var W=320,H=240;
+  function shape(){ var L=FM.makeLayer('shape',{shape:'rect',x:160,y:120,shapeW:140,shapeH:100,fill:'#d84a2a'}); L.start=0; L.duration=4; return L; }
+  function mask(){ var m=FM.masks.make('add'); m.path=[[110,70],[230,70],[230,190],[110,190]]; m.feather=6; return m; }   // a window smaller than the shape
+  function fx(id, params){ var e=FM.fxRegistry.makeInstance(id); if(!e) throw new Error('no effect '+id); Object.assign(e.params, params||{}); return e; }
+  function render(L){
+    FM.scene.layers.length=0; FM.scene.layers.push(L); FM.selectLayer(null);
+    var cv=D.createElement('canvas'); cv.width=W; cv.height=H; var ctx=cv.getContext('2d');
+    FM.renderScene(ctx, FM.scene, 1.0);
+    var d=ctx.getImageData(0,0,W,H).data, lit=0; for(var i=3;i<d.length;i+=4) if(d[i]>8) lit++;
+    return { hash: fnv(d), lit: lit, png: cv.toDataURL('image/png').length };
+  }
+  var cases={};
+  var a=shape(); a.masks=[mask()]; cases.a_mask_only=render(a);
+  var b=shape(); b.effects=[fx('dropshadow',{distance:18,blur:10})]; cases.b_effect_only=render(b);
+  var c=shape(); c.masks=[mask()]; c.effects=[fx('dropshadow',{distance:18,blur:10}), fx('boxblur',{amount:8})]; cases.c_mask_and_effects_legacy=render(c);
+  var e=shape(); cases.e_bare=render(e);
+  say('tree: '+(D.querySelector('.ver')||{}).textContent+'   frame 320x240 at t=1.0');
+  Object.keys(cases).forEach(function(k){ say('  '+k.padEnd(28)+' hash '+cases[k].hash+'   lit px '+cases[k].lit+'   png bytes '+cases[k].png); });
+  say(''); say('SANITY: a (mask) must light FEWER px than e (bare); c must light fewer than b.');
+  say(cases.a_mask_only.lit < cases.e_bare.lit ? '  ✅ the mask cuts the shape ('+cases.a_mask_only.lit+' < '+cases.e_bare.lit+')' : '  ⚠️ the mask did nothing — the fixture is not exercising masking');
+  say(cases.c_mask_and_effects_legacy.lit < cases.b_effect_only.lit ? '  ✅ mask outermost cuts the effects too ('+cases.c_mask_and_effects_legacy.lit+' < '+cases.b_effect_only.lit+')' : '  ⚠️ the mask did not cut the shadow — check the legacy order');
+  window.__560=cases; w.__done=1; window.__done=1;
+ }catch(err){ say('threw: '+(err&&err.message)); window.__done=1; }
+}
+</script></body></html>

@@ -22,6 +22,22 @@ window.FM = window.FM || {};
   let userScrollAt = 0, scrollSettle = 0;   // user-scroll grace window: while swiping, the finger owns scrollLeft
   const TRIM_EDGE = 46;     // px from a viewport edge that triggers auto-scroll while trimming
   let trimScrollRAF = 0;
+  /* ⚠️ THE PHANTOM CLICK — queue 707, measured 2 Sep with real touch. Holding a trim grip on a phone arms the
+     trim, and arming selects the layer, and selecting opens the docked edit sheet — UNDER THE FINGER. When
+     the finger lifts, the browser dispatches its compatibility `mouseup` and `click` at the release point,
+     and they hit-test into the sheet that was not there when the finger landed. A 3px tremor put that click
+     on `.qr-nudge` and the clip's start jumped to the playhead: 2/2.5 became 0/4.5 with nothing dragged;
+     without the tremor it landed on a row gap and nothing happened, which is why it looked random. The trim
+     code never ran (FM._lastTrim stayed null); the SHEET did it. So: after a touch gesture on the timeline
+     ends, clicks are swallowed for a moment. 300ms is far past the synthesized click (same task as the
+     touchend) and well short of any deliberate tap. */
+  let clickShieldUntil = 0;
+  function shieldClicks(ms) { clickShieldUntil = (typeof performance !== 'undefined' ? performance.now() : Date.now()) + (ms || 300); }
+  FM._shieldClicks = shieldClicks;   // seam
+  FM._clickShieldLeft = () => Math.max(0, clickShieldUntil - (typeof performance !== 'undefined' ? performance.now() : Date.now()));   // seam: ms of shield remaining
+  document.addEventListener('click', (e) => {
+    if ((typeof performance !== 'undefined' ? performance.now() : Date.now()) < clickShieldUntil) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
   /* The same thing for dragging a clip BODY (queue 115). Ezra: "when dragging a layer and you get to
    * the end of the screen, make it so the screen moves so you can keep dragging… like how we have the
    * selecting multiple layers tool." Separate handle from the trim one because both can never be live
@@ -1844,7 +1860,7 @@ window.FM = window.FM || {};
         // `caps` is the cue list AS IT WAS AT THE GRAB — every move recomputes from the original, the
         // same way `start`/`dur`/`trim` above do. Shifting the live list per move would compound.
         touchGesture();   // queue 541: a gesture that never gets stamped looks stale to rebuild() the instant it starts
-        trimDrag = { layer: layer, edge: edge, startX: e.clientX, lastX: e.clientX, startScroll: timelineEl ? timelineEl.scrollLeft : 0, start: layer.start, dur: layer.duration, trim: layer.trimStart, srcDur: (m && m.duration) ? m.duration : Infinity, type: layer.type, sup: snappedTargetsOf(layer), caps: Array.isArray(layer.captions) ? layer.captions.map(c => ({ ...c })) : null };
+        trimDrag = { layer: layer, edge: edge, startX: e.clientX, lastX: e.clientX, _scrollFrames: 0, startScroll: timelineEl ? timelineEl.scrollLeft : 0, start: layer.start, dur: layer.duration, trim: layer.trimStart, srcDur: (m && m.duration) ? m.duration : Infinity, type: layer.type, sup: snappedTargetsOf(layer), caps: Array.isArray(layer.captions) ? layer.captions.map(c => ({ ...c })) : null };
         FM.selectLayer(layer.id);
         if (FM.playing) FM.pause();
       };
@@ -3193,6 +3209,9 @@ window.FM = window.FM || {};
     const L = trimDrag.layer, ramped = FM.isAnimated(L.speed), sp = ramped ? 1 : (L.speed || 1);
     const movingEdge = trimDrag.edge === 'right' ? (trimDrag.start + trimDrag.dur + dt) : (trimDrag.start + dt);
     const se = snapEdge(L, movingEdge, pps, trimDrag.sup);
+    /* Seam: the last trim step, as the code saw it. A real-touch probe (queue 707) watched a 3px release
+       retime a clip to t=0 and nothing outside this function could say which term did it. */
+    FM._lastTrim = { clientX: clientX, startX: trimDrag.startX, scrollLeft: timelineEl.scrollLeft, startScroll: trimDrag.startScroll, pps: pps, dt: dt, movingEdge: movingEdge, snapped: se.snapped, guide: se.guide, edge: trimDrag.edge };
     if (se.snapped) { dt += (se.guide - movingEdge); showSnap(se.guide); }
     else {
       hideSnap();
@@ -3550,16 +3569,20 @@ window.FM = window.FM || {};
     clipScrollRAF = requestAnimationFrame(clipEdgeScroll);
   }
 
+  // The trim auto-scroll zone for THIS viewport: TRIM_EDGE on a desktop, 6% of the width on a phone (queue 707).
+  function trimZonePx(rect) { return Math.min(TRIM_EDGE, Math.max(12, Math.round(rect.width * 0.06))); }
+  FM._trimZonePx = trimZonePx;   // seam: the test reads the real zone rather than copying 6%
   // While a trim finger sits near a viewport edge, scroll the timeline so the clip can keep extending past
   // the screen (AM behaviour). Re-arms via rAF until the finger leaves the edge or the drag ends.
   function trimEdgeScroll() {
     trimScrollRAF = 0;
     if (!trimDrag || !timelineEl) return;
-    const rect = timelineEl.getBoundingClientRect();
+    if (++trimDrag._scrollFrames > CLIP_SCROLL_MAX) return;   // the same brake as clipEdgeScroll, for the same reason (queue 524 / 707)
+    const rect = timelineEl.getBoundingClientRect(), zone = trimZonePx(rect);
     const x = trimDrag.lastX, headRight = rect.left + HEAD_W, MAX = 22;
     let v = 0;
-    if (x > rect.right - TRIM_EDGE) v = Math.min(MAX, ((x - (rect.right - TRIM_EDGE)) / TRIM_EDGE) * MAX);
-    else if (x < headRight + TRIM_EDGE) v = -Math.min(MAX, (((headRight + TRIM_EDGE) - x) / TRIM_EDGE) * MAX);
+    if (x > rect.right - zone) v = Math.min(MAX, ((x - (rect.right - zone)) / zone) * MAX);
+    else if (x < headRight + zone) v = -Math.min(MAX, (((headRight + zone) - x) / zone) * MAX);
     if (v === 0) return;
     if (v > 0 && innerEl) {   // ensure room to the right before scrolling into it
       const need = timelineEl.scrollLeft + timelineEl.clientWidth + v + 120;
@@ -4032,7 +4055,22 @@ window.FM = window.FM || {};
           applyTrimAt(e.clientX);
           // Near a viewport edge? Start the auto-scroll loop so the clip can keep extending past the screen.
           const rect = timelineEl.getBoundingClientRect();
-          if ((e.clientX > rect.right - TRIM_EDGE || e.clientX < rect.left + HEAD_W + TRIM_EDGE) && !trimScrollRAF) {
+          const zone = trimZonePx(rect);
+          const inZone = (e.clientX > rect.right - zone || e.clientX < rect.left + HEAD_W + zone);
+          /* ⚠️ THE ZONE SCALES WITH THE SCREEN, AND ONLY A FINGER THAT HAS DRAGGED CAN ARM IT — queue 707.
+             TRIM_EDGE is 46px: 3.6% of a 1280px desktop, 12% of a 380px phone. On the phone an ordinary
+             trim entered it 13px into the drag, the loop scrolled up to 22px a frame, and the scroll-aware
+             delta added every scrolled pixel to the trim — MEASURED 2 Sep (tests/_rt707.py, real touch and
+             paced synthetic alike): finger +5,+10,+15,+20,+25,+30px; scroll term 0,0,3,13,28,50; clip
+             2.07, 2.17, 2.30, 2.50, 2.83, 3.27 — 30px of finger became 1.27s of clip, and tests/_grip.html
+             could not see it because its moves all land inside one frame. A first fix ("arm only after
+             the finger was seen outside the zone") changed nothing, because this drag WAS outside at 321 and
+             travelled in at 336 — the measurement is what showed the rule was aimed at the wrong thing.
+             So: the zone is min(TRIM_EDGE, 6% of the viewport) — 23px on a phone, 46px on a desktop — and a
+             finger that has not moved 6px since it landed cannot arm it (a grab-and-rest at the very edge
+             stays where it is; a grab-and-push extends past the screen, which is the AM behaviour he has). */
+          const dragged = Math.abs(e.clientX - trimDrag.startX) >= 6;
+          if (inZone && dragged && !trimScrollRAF) {
             trimScrollRAF = requestAnimationFrame(trimEdgeScroll);
           }
           return;
@@ -4128,6 +4166,7 @@ window.FM = window.FM || {};
         dragging = false; scrub = null;
         if (clipTap) {
           const ct = clipTap; clipTap = null;
+          shieldClicks(300);   // a tap that selects opens the sheet under the finger too (queue 707)
           if (ct.holdTimer) clearTimeout(ct.holdTimer);
           // a deliberate tap selects (opens the property menu); in select-mode it TOGGLES membership
           // like head taps do — the big clip bar collapsing a painted multi-selection was maddening
@@ -4177,6 +4216,7 @@ window.FM = window.FM || {};
           return;
         }
         if (trimDrag) {
+          if (e.pointerType !== 'mouse') shieldClicks(300);   // the edit sheet opened under this finger when the trim armed (queue 707)
           if (FM.autoFitDuration) FM.autoFitDuration();   // fit comp to clips after a trim
           trimDrag = null; hideSnap(); hideTrimHud();
           FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit();

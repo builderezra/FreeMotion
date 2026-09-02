@@ -114,6 +114,27 @@ if [ -n "$NEWGAP" ]; then
   echo
 fi
 
+# AN ANSWERED QUESTION STILL WRITTEN AS A QUESTION (2 Sep). #98 recorded his answer in full and kept its
+# "❓ASK:" line; the classifier read the ask, not the answer, and an item with nothing left to do sat in
+# "blocked on Ezra" for a day. stale_asks() in tools/_classify.py names the contradiction; it is self-tested.
+STALE="$(python3 - "$F" <<'PYS'
+import io, sys
+sys.path.insert(0, 'tools')
+import _classify as C
+for num, ask in C.stale_asks(io.open(sys.argv[1], encoding='utf-8').read()):
+    print('   #%s  %s' % (num, ask))
+PYS
+)"
+if [ -n "$STALE" ]; then
+  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  echo "!! STALE ASKS — these entries RECORD HIS ANSWER and still carry an open ❓ASK line, so they read as"
+  echo "!! blocked when they may be done. Strike the ask (~~…~~ or a ✅ prefix) or say the answer was to"
+  echo "!! something else. #98 sat unreachable for a day this way."
+  printf '%s\n' "$STALE"
+  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  echo
+fi
+
 # AN ENTRY TICKED [x] THAT SAYS IT IS STILL OPEN (22 Aug). #426 was marked DONE while its own header read
 # "⚠️ STAYS OPEN. A guard shipped in v10.65, but the bug was never reproduced" — so every queue tool here,
 # which matches ^- \[ \], could not see it. Not deprioritised: UNREACHABLE, for weeks, and found only

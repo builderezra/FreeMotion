@@ -82,7 +82,10 @@ def classify(body):
     # Six entries he had just answered still counted as blocked, and every oldest-first listing
     # skipped them: answered, and unreachable. Held still wins (he can answer and still say "not
     # yet"), and so does a standing note, which never had work in it.
-    answered = 'ANSWERED BY EZRA' in body
+    # 'HE ANSWERED' in capitals counts too (2 Sep): two entries (#98, #560) recorded his answer that way,
+    # got no credit, and sat as blocked for a day each. Lowercase prose ("he answered a different question")
+    # deliberately does NOT count — see the #250 case below.
+    answered = ('ANSWERED BY EZRA' in body) or ('HE ANSWERED' in body)
     # A HOLD CAN BE LIFTED, and the words that placed it stay in the entry forever (this file keeps its
     # history on purpose). #419 carried "⚠️ HELD AT HIS REQUEST — Log don't do yet" from 18 Aug and was
     # still reading as held after he said "just make it what I want" on the 21st. Held rightly outranks
@@ -122,7 +125,7 @@ def classify(body):
     # Blocking prose written AFTER his last answer has not been superseded by it — nothing came later.
     # So the answer only silences what precedes it. When there is no answer, `tail` is the whole body and
     # this is exactly the old rule.
-    tail = body.rsplit('ANSWERED BY EZRA', 1)[-1] if answered else body
+    tail = re.split(r'ANSWERED BY EZRA|HE ANSWERED', body)[-1] if answered else body   # after his LAST answer, whichever wording
     return ('only long-term ideas left' if hedged_only else
             'standing note (no build)' if _standing(body) else
             'held by Ezra' if (HELD.search(body) and not lifted) else
@@ -315,6 +318,28 @@ def next_up(md):
     return None if best is None else (best[1], best[2], best[3])
 
 
+# ── STALE ASKS ────────────────────────────────────────────────────────────────────────────────────
+# AN ANSWERED QUESTION THAT IS STILL WRITTEN AS A QUESTION KEEPS THE ENTRY BLOCKED (2 Sep). #98's last
+# open clause was the default text size. He answered it on 1 Sep — "160pt — what you have now" — and the
+# entry recorded that answer in full. It ALSO still carried the line "❓ASK: how big should text start?",
+# because striking the ask is a thing a session has to remember, and the answer had been written as "HE
+# ANSWERED", not the literal "ANSWERED BY EZRA" the rule above credits. So an item with nothing left to do
+# sat in "blocked on Ezra" for a day, and every oldest-first listing walked past it.
+# This does NOT reclassify (the #250 case shows an unrelated answer must not promote an entry). It NAMES
+# the contradiction — an unstruck ❓ASK beside any record of an answer — so next.sh can shout it, and the
+# fix is one edit: strike the ask, or say plainly that the answer was to something else.
+_ASK = re.compile(r'^\s*❓\s*ASK', re.M)
+_ANSWERED = re.compile(r'ANSWERED BY EZRA|HE ANSWERED|EZRA ANSWERED|He answered|he answered', re.M)
+def stale_asks(md):
+    out = []
+    for chunk in re.split(r'(?m)^(?=- \[[ x]\] \*\*)', md):
+        m = re.match(r'- \[( |x)\] \*\*(\d+[a-z]?)?', chunk)
+        if not m or m.group(1) == 'x': continue
+        asks = [l for l in chunk.split('\n') if _ASK.match(l) and '~~' not in l and not l.lstrip().startswith('✅')]
+        if asks and _ANSWERED.search(chunk):
+            out.append((m.group(2) or '(unnumbered)', asks[0].strip()[:110]))
+    return out
+
 # ── SELF-TEST ───────────────────────────────────────────────────────────────────────────────────────
 # `python3 tools/_classify.py` and it checks its own rules. tools/ship.sh runs this and REFUSES to
 # push when it fails, because every rule in this file was written to cure a specific bug and nothing
@@ -363,6 +388,10 @@ _CASES = [
      'a lifted hold is workable again (#419 stayed held after "just make it what I want")'),
     ('- [ ] **7 — x** ANSWERED BY EZRA: yes\nWAITING ON EZRA to look at it', 'blocked on Ezra',
      'looking is not answering (#250: fixed, needs only his eye, promoted by an unrelated answer)'),
+    ('- [ ] **3b — x** it is your call.\n✅ HE ANSWERED, 1 Sep: do it', 'ACTIONABLE',
+     'an uppercase HE ANSWERED is an answer (2 Sep: #98 and #560 each sat blocked a day for the wording)'),
+    ('- [ ] **3c — x** it is your call.\nhe answered a different question about it', 'blocked on Ezra',
+     'lowercase prose about answering is NOT the marker — an unrelated answer must not promote an entry'),
     ('- [ ] **8 — Standing reminder** about the thing', 'standing note (no build)',
      'a standing note in the HEADER is not work'),
     # The phrase must sit in the BODY here, not the header — that distinction IS the rule. Writing this
@@ -492,6 +521,19 @@ _DIFF = [
      [(648, ''), (650, '')], 'two closes in one release, in order'),
 ]
 
+_STALE_CASES = [
+    ("- [ ] **98 — x**\n      ✅ HE ANSWERED THE SIZE QUESTION, 1 Sep: 160pt.\n      ❓ASK: how big should text start?", True,
+     "an unstruck ❓ASK beside a recorded answer is stale — #98 sat blocked for a day this way"),
+    ("- [ ] **99 — x**\n      ❓ASK: which file failed?", False,
+     "an open ask with no answer recorded is simply open"),
+    ("- [ ] **98 — x**\n      ✅ ~~ASK: how big should text start?~~ ANSWERED 1 Sep: 160pt.", False,
+     "a struck ask is not stale — striking it is the fix"),
+    ("- [x] **98 — x**\n      HE ANSWERED it.\n      ❓ASK: how big?", False,
+     "a closed entry is nobody's queue; do not shout about it"),
+    ("- [ ] **7 — x**\n      He answered a different question about it.\n      ✅ ASK (struck): resolved", False,
+     "an ask already marked ✅ does not count as open"),
+]
+
 if __name__ == '__main__':
     import sys as _s
     bad = 0
@@ -525,4 +567,13 @@ if __name__ == '__main__':
     if bad:
         print('\n%d of %d classifier rules are broken. Each one was a real bug; do not push this.' % (bad, _total))
         _s.exit(1)
-    print('classifier self-test: %d/%d ok' % (_total, _total))
+    # the stale-ask detector's own cases (2 Sep) — a rule with no test is a rule that rots
+    sbad = 0
+    for body, expect, why in _STALE_CASES:
+        got = bool(stale_asks(body))
+        if got != expect:
+            sbad += 1; print('STALE-ASK RULE BROKEN: expected %s, got %s — %s' % (expect, got, why))
+    if sbad:
+        print('\n%d stale-ask rule(s) broken; do not push this.' % sbad)
+        _s.exit(1)
+    print('classifier self-test: %d/%d ok (+%d stale-ask cases)' % (_total, _total, len(_STALE_CASES)))
