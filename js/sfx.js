@@ -28,13 +28,20 @@ window.FM = window.FM || {};
   // ---- little DSP helpers -----------------------------------------------------------------------
   // Every recipe below is written against these, so the catalogue reads as sound design rather than
   // as Web Audio boilerplate.
+  /* SEEDED, NOT Math.random (queue 709). This file's own promise — "the same effect renders the same twice" —
+     was false for every recipe that used this buffer: each render drew fresh noise, so a preview and its added
+     clip differed, and Glass break's peak sat at 1.0 ± 1% and failed its test one run in several. mulberry32
+     seeded from the request itself (length, colour, rate) gives identical samples for identical requests and
+     different noise for different buffers, which is all the ear ever needed. */
+  function seeded(seed) { let a = seed >>> 0; return function () { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
   function noiseBuffer(ctx, secs, colour) {
     const n = Math.max(1, Math.floor(secs * ctx.sampleRate));
     const buf = ctx.createBuffer(1, n, ctx.sampleRate);
     const d = buf.getChannelData(0);
+    const rnd = seeded(n * 31 + (colour === 'brown' ? 7 : colour === 'pink' ? 11 : 3) + Math.floor(ctx.sampleRate / 100));
     let last = 0;
     for (let i = 0; i < n; i++) {
-      const w = Math.random() * 2 - 1;
+      const w = rnd() * 2 - 1;
       // 'brown' integrates white noise: far more low end, which is what makes a whoosh feel like air
       // rather than like static.
       if (colour === 'brown') { last = (last + 0.02 * w) / 1.02; d[i] = last * 3.5; }
@@ -284,14 +291,17 @@ window.FM = window.FM || {};
     {
       id: 'sparkle', level: 0.75, name: 'Sparkle', cat: 'Texture', dur: 1.2,
       render(ctx, t0, d, out) {
+        // fixed offsets, not Math.random — the same effect renders the same twice (queue 709; Glass break's rule)
+        const SPARK = [0.03, 0.61, 0.22, 0.48, 0.09, 0.67, 0.35, 0.14, 0.55, 0.27, 0.42, 0.69, 0.18, 0.51];
+        const PITCH = [0.72, 0.18, 0.44, 0.91, 0.06, 0.63, 0.29, 0.85, 0.37, 0.12, 0.58, 0.77, 0.23, 0.49];
         for (let i = 0; i < 14; i++) {
-          const at = t0 + Math.random() * d * 0.7;
+          const at = t0 + SPARK[i] * d;
           const o = ctx.createOscillator(); o.type = 'sine';
-          o.frequency.value = 1800 + Math.random() * 3600;
+          o.frequency.value = 1800 + PITCH[i] * 3600;
           const g = ctx.createGain();
           g.gain.setValueAtTime(0, at);
           g.gain.linearRampToValueAtTime(0.16, at + 0.004);
-          g.gain.exponentialRampToValueAtTime(0.0001, at + 0.22 + Math.random() * 0.2);
+          g.gain.exponentialRampToValueAtTime(0.0001, at + 0.22 + PITCH[(i + 5) % 14] * 0.2);
           o.connect(g); g.connect(out);
           o.start(at); o.stop(Math.min(t0 + d, at + 0.5));
         }

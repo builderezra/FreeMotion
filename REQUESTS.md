@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v14.99
+> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v15.00
 >
-> **State:** v14.99, 1164 tests green, tree clean. **MASKS NOW LAYER WITH THE EFFECTS (#560)** — drag a mask row above an
+> **State:** v15.00, 1165 tests green, tree clean. **MASKS NOW LAYER WITH THE EFFECTS (#560)** — drag a mask row above an
 > effect in the Effects list and it becomes a member of the stack; effects above it spill past it, effects below are cut. **⚡ INNER BLUR IS 4.5x FASTER (51.1ms → 11.3ms)
 > and NOTHING ON SCREEN CHANGED** — measured, zero visible bytes different. The "Colour past the edge"
 > option you asked for keeps the old look one tap away. **✅ YOU ANSWERED FOUR QUESTIONS — all logged in
@@ -29262,8 +29262,7 @@ re-opened #480, which I had marked done and had not fixed.
       earlier batch of them navigated my measurement tab and left servers behind. Evaluated per task, and the
       evaluation is said out loud when one is launched.
 
-- [ ] **709 — A FLAKY TEST: `562: every sound effect actually makes a sound when previewed` failed once on an
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **709 — A FLAKY TEST: `562: every sound effect actually makes a sound when previewed` failed once on an
       unchanged audio path.** Seen 2 Sep during #707's mutation batch: the baseline run was green, and the very next
       run (a mutation in `js/timeline.js`'s trim zone — nothing to do with audio) failed it with *"Glass break
       1.009 — clips on the ▶, where nothing is normalised"*. Same code, two verdicts, so the sound-effect recipe's
@@ -29286,6 +29285,11 @@ re-opened #480, which I had marked done and had not fixed.
       pitch and decay. The test renders EVERY recipe twice through an OfflineAudioContext and requires the two
       buffers to match sample for sample — the file's own promise, held to every recipe rather than argued for one.
       Then re-check Glass break's peak against the ▶ threshold with headroom, not luck.
+      📐 **MEASURED after the fix (2 Sep):** with no `Math.random()` left in the file, four oscillator-heavy recipes
+      (Bell, Sparkle, Glass break, Success) still rendered differently twice — but by max |Δ| **1.19e-7 / 2.98e-8 /
+      2.98e-8 / 5.96e-8**: single-precision jitter in Chrome's oscillator rendering, not the recipes. A random noise
+      source differs by ~1.0. The test compares within 1e-5 — a thousand times above the jitter, a hundred thousand
+      below the fault — and says so in its comment. Glass break's peak test passes alone now, stably.
 
 - [ ] **710 — An ORDER-DEPENDENT test: the 707 click-shield control catches its mutation alone and not in the full
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -29334,9 +29338,18 @@ re-opened #480, which I had marked done and had not fixed.
       added, and the browser stayed open; the main thread was simply busy building tiles. `js/fx-thumbs.js` says the
       cache is lazy and kept for the session (~23MB) and that moving effects cache a 10-frame strip; the distort
       category has ~20 warps, several animated, so a cold return there is ~20 strips at once, synchronously.
-      **What a user sees:** first open of the browser after a reload, browse a big category, tap Back — the phone
-      stops for up to half a minute. Later visits are instant because the cache is warm, which is why this has
-      hidden. Found because test 333 (which visits every tile) pays this cold when run alone.
+      ⚠️ **CORRECTION, same day, after reading the scheduler:** `fx-thumbs.js` already renders ONE tile per animation
+      frame (`pump()`, one `generate(key)` per rAF), so the block is not "all tiles at once" — it is each MOVING tile's
+      10-frame strip being rendered synchronously inside its tick, and the 30.3s was measured in HEADLESS Chrome with
+      SwiftShader, where every GPU warp is software-rendered. On his phone the warps run on the GPU and the per-frame
+      cost is unmeasured — probably far smaller. **So this is not yet a known phone freeze**; it is a known headless
+      one, which is what makes test 333 slow and cold-sensitive. Before anything is built: time a cold Back from
+      *distort* on a real device (or at least with GPU Chrome). If it is short there, the only fix worth doing is
+      splitting a strip's frames across ticks (a time budget in `pump()`), for the suite's sake and for weak phones.
+      Found because test 333 (which visits every tile) pays this cold when run alone.
+      ❓ASK (logged, not blocking — only your phone can answer it): open the effects browser fresh after a reload,
+      scroll into *Distort*, tap Back — does the app stall for more than a moment? If it is instant, this stays a
+      suite-only cost; if it stalls, it is the fix described above.
       ➡️ **Fix shape:** render thumbnails off the click — chunk the mounts across frames (rAF, a few per frame) or
       build them on demand as tiles scroll into view (the file says it already does the latter for scrolling; the
       overview return mounts them all at once). A test can pin it: after a cold Back, the main thread must yield

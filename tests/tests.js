@@ -3446,6 +3446,38 @@
     }
   });
 
+  test('709: every sound effect renders the same twice — the file promises it, and Glass break was a coin flip', { item: '709' }, async function () {
+    /* Queue 709. Test 562 failed once on an unchanged audio path: "Glass break 1.009 — clips on the ▶", green the
+     * run before and after. The cause: noiseBuffer filled every sample from Math.random(), so each render drew
+     * different noise and the peak wandered around 1.0. The comment above Glass break's recipe promises the same
+     * effect renders the same twice; this holds every recipe to it — a sound that changes between renders is a
+     * preview that lies about what was added, and a test that flips is a test nobody trusts. */
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) return;
+    const defs = (FM.sfx && typeof FM.sfx.list === 'function') ? (FM.sfx.list() || []) : [];
+    if (defs.length < 10) throw new Error('found only ' + defs.length + ' sound-effect recipes to render');
+    const render = async (def) => {
+      const ctx = new OAC(1, Math.ceil((def.dur + 0.2) * 22050), 22050);
+      const trim = ctx.createGain(); trim.connect(ctx.destination);
+      def.render(ctx, 0.01, def.dur, trim);
+      const b = await ctx.startRendering();
+      return b.getChannelData(0);
+    };
+    /* TOL = 1e-5, SET FROM MEASUREMENT (2 Sep). With every Math.random gone, four oscillator-heavy recipes still
+     * differed on a second render — Bell in 58% of its samples — by max |Δ| 1.19e-7, 2.98e-8, 2.98e-8 and 5.96e-8:
+     * single-precision jitter inside the engine's oscillator rendering, not the recipes. A random noise source
+     * differs by ~1.0 per sample and random spark timing by far more, so 1e-5 sits a thousand times above the
+     * jitter and a hundred thousand below the fault. Exact equality would have failed every honest recipe. */
+    const TOL = 1e-5;
+    const differ = [];
+    for (const def of defs) {
+      const a = await render(def), b = await render(def);
+      let n = 0, mx = 0; for (let i = 0; i < a.length; i++) { const dd = Math.abs(a[i] - b[i]); if (dd > TOL) n++; if (dd > mx) mx = dd; }
+      if (n) differ.push(def.name + ' (' + n + ' of ' + a.length + ' samples, max |Δ| ' + mx.toExponential(2) + ')');
+    }
+    if (differ.length) throw new Error(differ.length + ' recipe(s) render differently on a second run: ' + differ.slice(0, 6).join(', ') + ' — a preview that differs from the added clip, and a peak test that flips (queue 709)');
+  });
+
   test('576: the text editor options open BELOW the box showing what you typed', { item: '576' }, async function () {
     /* Queue 576. Ezra: "All of the text edit options now get blocked by the part that shows you what you
      * typed, fix this so they push it down or go below it, whatever's best."

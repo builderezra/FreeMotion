@@ -147,6 +147,19 @@ Two things that made it worse, both worth avoiding:
   on disk, so a measurement taken then describes the MUTATION, not the code. That has already produced
   one confidently wrong reading.
 
+### Run ONE test, or a slice, instead of the whole suite (2 Sep)
+
+```bash
+python3 tests/_cdp.py --url 'http://localhost:8777/tests/run.html?only=<substring of the test name>'
+```
+`?after=<name>&upto=<name>` runs a slice in suite order — for bisecting a test that only misbehaves after
+certain others have run. The summary is stamped FILTERED so no gate can mistake a partial run for green. Every
+test has a 45s budget (a long-by-design one declares `budgetMs` in its options), a hung await fails BY NAME with
+the test's last `window.__fmStep` marker, and every run reports its eight slowest tests — on 2 Sep a legitimate
+92-second test looked like a hang for an hour because none of this existed. Dispatching a synthetic
+pointer/mouse/touch/click event on an element that is not in the document fails the test that did it; re-acquire
+the element (`attached(el, what)`) after anything that rebuilds.
+
 ## ⚠️ THE LOOP LIVES IN [LOOP.md](LOOP.md) — he should not be pasting it
 
 He said it himself on 20 Aug: *"the following loop thing doesnt seem to be working properly"*. It was
