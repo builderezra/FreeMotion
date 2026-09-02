@@ -1805,6 +1805,10 @@ window.FM = window.FM || {};
       const grip = document.createElement('div');
       grip.className = 'clip-grip ' + edge;
       grip.title = 'Trim ' + edge + ' edge';
+      /* (No "re-mark armed on rebuild" here, and this note is so nobody adds one. rebuild() DEFERS while a
+         trim is live — queue 541, `rebuildPending` — and the one path that proceeds, a gesture dead for
+         STALE_MS, clears trimDrag as wreckage first. A rebuilt grip can never belong to a live trim, so the
+         line was unreachable; it was added on 2 Sep for a "lost blue" that measurement then disproved.) */
       /* A TRIM MUST BE HELD BEFORE IT WILL DRAG (queue 336). Ezra: *"To extend out a clip you should have
          to hold down on the arrows first because currently accidentally touching for a second moves it
          but you should have to hold down for a second and to signify it can move now the colour of the
@@ -1831,7 +1835,9 @@ window.FM = window.FM || {};
       const ARM_MS = 300;
       FM._trimArmMs = ARM_MS;   // seam: the suite reads the real number rather than hard-coding a copy
       let armTimer = null, armAt = null;
-      const disarm = () => { if (armTimer) { clearTimeout(armTimer); armTimer = null; } armAt = null; grip.classList.remove('armed'); };
+      let armWatch = null;   // the window-level watchers of the pending touch hold, so disarm() can drop them
+      const unwatch = () => { if (!armWatch) return; if (armWatch.move) window.removeEventListener('pointermove', armWatch.move, true); window.removeEventListener('pointerup', armWatch.end, true); window.removeEventListener('pointercancel', armWatch.end, true); armWatch = null; };
+      const disarm = () => { if (armTimer) { clearTimeout(armTimer); armTimer = null; } armAt = null; unwatch(); grip.classList.remove('armed'); };
       const beginTrim = (e) => {
         try { grip.setPointerCapture(e.pointerId); } catch (_) {}   // keep the drag alive if the mouse leaves the window
         const m = FM.media.get(layer.id);
@@ -1843,30 +1849,89 @@ window.FM = window.FM || {};
         if (FM.playing) FM.pause();
       };
       grip.addEventListener('pointerdown', (e) => {
-        e.stopPropagation(); e.preventDefault();
+        const isTouch = (e.pointerType === 'touch' || e.pointerType === 'pen');
+        /* ⚠️ TOUCH MUST NOT SEIZE THE GESTURE HERE — queue 699. This used to stopPropagation()
+           unconditionally, which meant the CLIP's own pointerdown never ran and `clipTap` — the thing
+           the window pointermove uses to scrub and to scroll — was never created. `#timeline` is
+           touch-action:none, so the browser would not scroll it natively either. The result, MEASURED at
+           380px: the ~13px grip at each end of every clip was a DEAD STRIP. An identical 60px swipe moved
+           the playhead 1.28s -> 7.01s and the scroll 0 -> 440px from the clip body, and 0.00s / 0px from
+           a grip. No trim, no scrub, no scroll — the gesture was simply swallowed.
+           The comment below argues for exactly the opposite of what the code did: "brushing a grip
+           mid-scroll would stop the scroll dead — trading a wrong trim for a stuck timeline."
+           THE CAPTION CUE CHIPS ALREADY SOLVE THIS, and this is their model copied verbatim (#136,
+           `startCue`/`beginCue`): the CLIP is the default owner, a finger has to SETTLE to take the
+           grip, and the winner is decided by the CLOCK — 300ms here against the clip's own 350ms — not
+           by a race or a stopPropagation. Their comment states the rule: "Move first and the clip
+           scrubs." A mouse still seizes immediately; a desktop press on a 13px target is unambiguous and
+           cannot happen mid-scroll, and desktop scrolling is the wheel, which none of this touches.
+           ⚠️ AN EARLIER ATTEMPT AT THIS REPLAYED the original pointerdown onto the clip once the finger
+           proved it was scrolling. It worked, and it was withdrawn: it MANUFACTURED gesture state
+           outside the normal path and left `clipTap`/`clipMove` live after the gesture ended, which
+           queue 577's hygiene check caught three times. Not taking the gesture in the first place adds
+           no state at all — `clipTap` is created by the clip's own handler and cleared by the same
+           window pointerup that clears it for every other row. */
+        if (!isTouch) { e.stopPropagation(); e.preventDefault(); }
         if (e.pointerType === 'mouse' && e.button !== 0) return;
         if (layer.locked || pinch) return;   // locked: no trims; pinch fingers never start a trim
         /* Expressed as "guard FINGERS", not "exempt mice". Keyed the other way round it also caught
            every pointer whose type is unset — synthetic events, and anything a browser reports oddly —
            and silently put them behind a hold they can never satisfy. A trim that simply stops working
            for an input nobody thought about is a worse failure than the graze this guards against. */
-        if (e.pointerType !== 'touch' && e.pointerType !== 'pen') { beginTrim(e); return; }
+        if (!isTouch) { beginTrim(e); return; }
         disarm();
-        armAt = { x: e.clientX, y: e.clientY };
-        const at = { clientX: e.clientX, pointerId: e.pointerId };   // the event object is recycled; the two fields it needs are not
+        const x0 = e.clientX, y0 = e.clientY, pid = e.pointerId;
+        armAt = { x: x0, y: y0 };
+        const at = { clientX: x0, pointerId: pid };   // the event object is recycled; the two fields it needs are not
+        /* ⚠️ THE WATCHERS LIVE ON WINDOW, IN THE CAPTURE PHASE, FILTERED BY POINTER ID — not on the grip.
+           This is the half of the cue-chip model the first version of this fix did NOT copy, and it is
+           the half that matters. Because the clip's handler now runs, it calls
+           `innerEl.setPointerCapture(pid)` and the browser RETARGETS every later event for that finger to
+           #tl-inner. An element-level listener on the grip is then simply out of the path: it never sees
+           the move, so the 8px slop check is dead — and worse, Chrome fires a boundary `pointerleave` on
+           the grip at the instant capture transfers, and the old `pointerleave -> disarm` killed the hold
+           the moment a real finger twitched. MEASURED with trusted CDP touch, 2 Sep: a 3px tremor during
+           the hold left the grip un-armed and the gesture became a CLIP MOVE at 350ms — a destructive
+           retime from a finger that was trying to trim. Synthetic PointerEvents cannot be captured
+           (`setPointerCapture` throws for them, swallowed), so the suite and both hand probes measured a
+           world with no capture in it and passed. Window + capture-phase + pointerId is what survives
+           someone else capturing the pointer; `startCue` says exactly this in its own comment. */
+        const move = (ev) => { if (ev.pointerId !== pid) return; if (Math.abs(ev.clientX - x0) > 8 || Math.abs(ev.clientY - y0) > 8) disarm(); };   // travelling → it was a scroll all along
+        const end = (ev) => { if (ev.pointerId === pid) disarm(); };
+        armWatch = { move, end };
+        window.addEventListener('pointermove', move, true);
+        window.addEventListener('pointerup', end, true);
+        window.addEventListener('pointercancel', end, true);
         armTimer = setTimeout(() => {
-          armTimer = null;
+          armTimer = null; unwatch();
           if (layer.locked || pinch) return;
+          /* AN ORPHAN CAN NEVER TRIM. A rebuild() during the hold (a waveform arriving, a selection
+             elsewhere) destroys this grip; the finger is now over a NEW element that never saw a
+             pointerdown, and a trim started from here would retime a clip nobody is touching. Structural,
+             not a hope: the check is on the element itself. (Found by the 2 Sep review of this change.) */
+          if (!grip.isConnected) return;
+          /* The clip's pending gesture has to be TORN DOWN, not left running — its own hold timer is
+             50ms behind this one and would otherwise fire mid-trim and grab the clip as well. Lifted from
+             `beginCue`. Guarded to THIS finger on THIS clip: an unguarded null here could swallow a fresh
+             tap on a different clip, which is the same cross-clip fault the clip's own hold timer already
+             guards against with `clipTap.layer !== layer`. */
+          if (clipTap && clipTap.pointerId === pid && clipTap.layer === layer) { if (clipTap.holdTimer) clearTimeout(clipTap.holdTimer); clipTap = null; }
           grip.classList.add('armed');     // the colour change IS the signal that it is live now
           beginTrim(at);
+          if (navigator.vibrate) { try { navigator.vibrate(10); } catch (err) {} }   // the cue chips do; same gesture, same tell
+          /* Armed is a state of the FINGER, so it ends when the finger does. The move watcher is gone
+             (a trim is supposed to travel), but the release still has to take the colour back — the old
+             element-level pointerup did that, and queue 336's test holds it to it. Window-level for the
+             same reason as above: by now #tl-inner or this grip has the pointer captured. */
+          const released = (ev) => { if (ev.pointerId !== pid) return; unwatch(); grip.classList.remove('armed'); };
+          armWatch = { move: null, end: released };
+          window.addEventListener('pointerup', released, true);
+          window.addEventListener('pointercancel', released, true);
         }, ARM_MS);
       });
-      // A finger that TRAVELS was scrolling, not grabbing. 8px, so a resting thumb's tremor still arms.
-      grip.addEventListener('pointermove', (e) => {
-        if (!armTimer || !armAt) return;
-        if (Math.abs(e.clientX - armAt.x) > 8 || Math.abs(e.clientY - armAt.y) > 8) disarm();
-      });
-      ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => grip.addEventListener(ev, disarm));
+      /* No element-level pointermove / pointerup / pointerleave watchers here any more — see the block
+         above for why they were dead on a real finger and lethal on a twitching one. A MOUSE never arms
+         (it trims at once), so it never needed them. */
       clip.appendChild(grip);
     });
     // SLIP (Canva-style): the clip keeps its exact place and length on the timeline — dragging the
@@ -3578,11 +3643,16 @@ window.FM = window.FM || {};
       if (slipDrag) live.push('slipDrag');
       if (cueDrag) live.push('cueDrag');
       if (clipTap) live.push('clipTap');
+      /* A finger still in the pinch tracker after a test is leaked state too, and the nastiest kind: every
+         later one-finger gesture then reads as a pinch's SECOND finger, and three unrelated flick/drag/hold
+         tests fail saying their fixtures made no gesture. That is exactly how it surfaced on 2 Sep (queue
+         699's orphan sub-case pressed and never lifted). Named here so it is charged to the culprit. */
+      if (pointers.size) live.push('pointers:' + pointers.size);
       return { any: live.length > 0, live: live };
     },
     // …and the way to end one. abortGestures already exists for pinches and rebuilds; the suite needs
     // it so one test's leaked drag cannot be charged to the next test that runs.
-    _abortGestures: function () { abortGestures(); },
+    _abortGestures: function () { abortGestures(); pointers.clear(); pinch = null; },   // the suite's reset: fingers too, or one leak poisons every gesture test after it
     // The scrub glide's tuning, exposed so the suite can pin the effect sliders to it — see queue 116.
     /* maxV/stopAt are DERIVED per zoom now (queue 614) — reporting the old seconds constants here
        would be a seam that lies. friction is unchanged and is what the glide-parity test compares. */

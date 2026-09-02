@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v14.95
+> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v14.96
 >
-> **State:** v14.95, 1158 tests green, tree clean. **⚡ INNER BLUR IS 4.5x FASTER (51.1ms → 11.3ms)
+> **State:** v14.96, 1159 tests green, tree clean. **⚡ INNER BLUR IS 4.5x FASTER (51.1ms → 11.3ms)
 > and NOTHING ON SCREEN CHANGED** — measured, zero visible bytes different. The "Colour past the edge"
 > option you asked for keeps the old look one tap away. **✅ YOU ANSWERED FOUR QUESTIONS — all logged in
 > their own entries: the 219ms goes ahead WITH a tick box keeping the old rim; the intro logo has colour
@@ -28774,10 +28774,9 @@ re-opened #480, which I had marked done and had not fixed.
       apart.** Five instances in one session, every one caught by a mutation or an implausible number
       and none by reading the code.
 
-- [ ] **699 — 🔴 PHONE: the trim grip at each end of every clip is a DEAD STRIP. A finger that lands on
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **699 — 🔴 PHONE: the trim grip at each end of every clip is a DEAD STRIP. A finger that lands on
       one and swipes does nothing at all — no trim, no scrub, no scroll.** (Found and MEASURED 1 Sep.
-      Fix attempted, verified working, then withdrawn — see the end. Not shipped.)
+      Fixed 2 Sep, v14.96.)
       **JUMPED: the fix for this was written, measured working, and deliberately withdrawn — see the end
       of this entry. It is not blocked on you and it is not done; it needs a careful session with a clear
       head, because it touches the gesture layer he uses every day.** #700 shipped ahead of it because it
@@ -28817,6 +28816,85 @@ re-opened #480, which I had marked done and had not fixed.
       body) is what makes it trustworthy. Three earlier versions of that probe had a DEAD control —
       a point scrolled off screen, a dispatch to an SVG child, a stale element after a rebuild — and
       every one would have "confirmed" a bug that was not there.
+
+      ✅ **FIXED, v14.96 — and the fix was a DELETION, not the addition I tried last time.**
+      | the same 60px swipe at 380px | before | after |
+      |---|---|---|
+      | starting in the clip body (control) | 0 → 0.967s, 0 → 60.5px | unchanged |
+      | **starting on a trim grip** | **0.00s, 0px — dead** | **0.967s, 60.5px — identical to the control** |
+      | touch: hold past 300ms, then drag | trims | still trims |
+      | mouse: press and drag | trims | still trims |
+      **Nothing is left live in the gesture layer after any of the four** — that is the property that
+      withdrew the first attempt, and it is now measured rather than argued.
+      **What changed:** the grip stopped calling `stopPropagation()` on touch, and its hold-watchers moved
+      from the grip element to the WINDOW (capture phase, filtered by pointer id). The CLIP is the default
+      owner again, and a finger that SETTLES for 300ms hands the gesture over — the grip's timer beating the
+      clip's own 350ms, so the winner is decided by the clock. This is the caption cue chips' model
+      (`startCue`/`beginCue`, #136) copied IN FULL; they had already solved the identical problem when cue
+      chips blanketed a captions row: *"Move first and the clip scrubs."* The withdrawn attempt REPLAYED the
+      pointerdown onto the clip after the fact, which manufactured gesture state outside the normal path.
+      🔴 **MY FIRST VERSION OF THIS FIX WAS BROKEN ON A REAL PHONE, AND EVERY PROBE I RAN SAID IT WAS FINE.**
+      It copied only half the cue model — it let the gesture through but kept the grip's own
+      `pointermove`/`pointerleave` listeners. Once the clip's handler runs it calls
+      `innerEl.setPointerCapture()`, and the browser then delivers every later event for that finger to
+      `#tl-inner`, not the grip — so the grip's 8px slop check was out of the path, and Chrome's boundary
+      `pointerleave` at the instant of capture DISARMED the hold. **Measured with trusted CDP touch: a 3px
+      finger tremor during the hold left the trim un-armed and the gesture became a CLIP MOVE at 350ms** — a
+      destructive retime from a finger that was trying to trim. Synthetic `PointerEvent`s cannot be captured
+      (`setPointerCapture` throws for a made-up id; the app swallows it), so the suite, `tests/_grip.html`
+      and `tests/_699state.html` all measured a world with no pointer capture in it and passed. **Caught by
+      the adversarial review workflow, not by me** — five of six traces called it, and every refutation
+      attempt CONFIRMED it with real touch against a pre-change control.
+      📐 **Real touch, 380px, trusted `Input.dispatchTouchEvent`, before → after:**
+      | gesture | HEAD (before) | first fix (broken) | shipped fix |
+      |---|---|---|---|
+      | 60px swipe from a grip | 0.00s, 0px — dead | moves | **1.6s, 101px** ✅ |
+      | hold, still, release | arms | arms | arms ✅ |
+      | hold, **3px tremor**, release | arms | **not armed → CLIP MOVE** 🔴 | **arms** ✅ |
+      | hold, 6px tremor, release | arms | not armed → scrub | **arms** ✅ |
+      | hold + 30px drag | trims | trims | trims ✅ |
+      | gesture state left live | none | none | none ✅ |
+      ⚠️ **The dead strip is WIDER than the grip on a real device.** A finger landing 6px outside the 9px
+      grip still had `clip-grip` as its pointerdown target — Chrome's touch-target adjustment snaps a nearby
+      touch onto small targets. So the strip he feels is the grip plus a halo, at both ends of every clip.
+      🧭 Two more guards from the review, both structural: **an orphan can never trim** (the arm timer
+      checks `grip.isConnected`, so a rebuild mid-hold cannot start a trim on a clip nobody is touching),
+      and the clipTap teardown is **limited to this finger on this clip** (`pointerId` + `layer`), the same
+      cross-clip guard the clip's own hold timer already carries.
+      ➡️ **The suite can now see this class**: the #699 test has a sub-case that EMULATES capture — the
+      boundary `pointerleave` on the grip, then a 3px tremor delivered to `#tl-inner` — and requires the
+      hold to arm anyway. The first fix fails it; the shipped one passes. A real-touch runner is the proper
+      structural answer (see #707), but this stops the exact regression recurring silently.
+      📌 **#707** (a real-touch trim lands SECONDS from the finger; pre-existing, identical on HEAD and
+      after) was found by the same probe and logged separately rather than folded in here.
+      🎨 **#336's BLUE — a fix I wrote, then measured out of existence.** I claimed arming rebuilt the timeline
+      and lost the blue for zero frames, added a "re-mark armed on rebuild" line, and wrote a test for it.
+      **Mutation M3 (delete the line) SURVIVED — twice.** The second time, the sub-case's own fixture check
+      said why: **`rebuild()` DEFERS while a trim is live** (queue 541, `rebuildPending`), so no rebuild can
+      land mid-trim at all, and the one path that proceeds — a gesture dead for 1.2s — clears `trimDrag` as
+      wreckage first. The line was unreachable. **Removed, with a note so nobody re-adds it.** The blue was never
+      at risk; #336's real flaw was asking a DETACHED grip whether the colour had cleared after release, and it
+      now asks the one on screen. Two lessons kept: a guard that survives its mutation is not a guard, and a
+      sub-case that checks its own fixture is what stops a false story shipping as a fix.
+      🔴 **AND IT EXPOSED A TEST THAT HAD BEEN PROVING NOTHING SINCE THE DAY IT WAS WRITTEN.** The suite
+      went red with *"left a timeline gesture live (clipMove, clipTap)"* — the same message as last time,
+      which is exactly why I withdrew instead of finishing. This time I INSTRUMENTED it rather than
+      reasoning about the handler chain, which is what this entry said to do:
+      **queue 577's test grabs the trim grip ONCE and reuses it for three sub-tests. The first one's hold
+      calls `beginTrim` → `selectLayer()`, which rebuilds the timeline and DETACHES that element**
+      (`document.contains(grip)` → false). B and C then dispatched into an orphan. Their own assertions
+      still passed, because the orphan carries its own listeners — so for two of its three cases that
+      test was not touching the widget on screen at all. It only became visible now because events in a
+      detached tree cannot reach `window`, so the handler that clears `clipTap` never ran and the clip's
+      350ms hold turned the orphan into a `clipMove`. Reproduced deliberately in `tests/_699state.html`
+      before changing anything.
+      **577 re-acquires the grip for every sub-test now, and `attached(el, what)` — a shared guard that
+      throws on a detached node — is in the suite** so the next test to hold an element across a rebuild
+      says so instead of passing quietly. The probe's own comment already listed *"a stale element after
+      a rebuild"* as one of three dead controls it had been bitten by. This is the fourth.
+      📌 `tests/_grip.html` also had to be fixed before it could measure anything: it pushed four layers
+      onto a project that finished loading afterwards and replaced the array, so it **rendered one clip
+      while its output described four**. It refuses to continue now unless it built what it claims.
 
 - [x] **700 — The AI knew SIX of your twelve text animations, and quietly turned the other six into a
       cross-fade.** Found by the 1 Sep bug hunt, fixed v14.87.
@@ -28929,4 +29007,128 @@ re-opened #480, which I had marked done and had not fixed.
       regressions: the test left the format select on "frame" (breaking #215's silent-export warning two
       tests later), and pressing Export **persists** the format, so the next dialog opened on PNG.
       Restoring the controls was not enough; the saved preference had to go back too.
+
+- [ ] **706 — PHONE: the Add (layer) menu opens TWICE.** Logged 2 Sep, mid-task, verbatim:
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      > btw the add layer on mobile still has the glitch that opens up twice now
+      **"Still"** — he is saying this was reported before and is not fixed. Nothing under "twice" /
+      "double" / "opens" in this file describes the Add menu doing that, so either it was logged in other
+      words or it was never written down; if an earlier entry turns up, link it here rather than closing
+      either one. **"Now"** may mean it started recently — the last releases that touched the Add menu's
+      open path are worth diffing first. Logged while finishing #699; waits its turn.
+      🔎 **Read so far (2 Sep, while #699's mutations ran — no measurement yet):**
+      · `openAdd()` (`js/mobile.js:365`) has exactly three callers and they exclude each other by design: the
+        FAB's `click`, the add-row's `click` (which `stopPropagation`s), and an empty-timeline `click` that
+        skips `.tl-addrow`. Nothing in the JS opens it twice per tap on paper.
+      · **The likely "now": v14.30 (#612, 29 Aug — "the hinge, on his pick")** added
+        `#add-sheet.open { animation: fm-hinge-up 360ms … both }` (styles.css ~8753). Its comment says *"the
+        slide is REPLACED by the swing rather than layered on top of it, because a sheet that translates
+        AND hinges reads as two animations disagreeing"* — and the original slide is still there:
+        `#add-sheet { transform: translateY(100%); transition: transform .22s ease }` + `.open { transform:
+        translateY(0) }` (~4125). **Two motions declared on one property; the comment describes the code
+        that was intended, not the code that shipped** — the same shape as five other finds this week.
+      ➡️ **Next: measure, don't guess.** `tests/_rt706.py 8777 [empty]` taps the FAB,
+      the add row and the empty area with REAL touch, counts `openAdd()` calls per tap and samples the
+      sheet's top edge every 30ms — a reopen or mid-flight re-render shows as a reversal. If Chrome shows one
+      clean motion, the glitch may be iOS-specific (`perspective`+`rotateX` on a `position:fixed` sheet) and
+      the cheap experiment is to drop the redundant transition while the hinge is active.
+      📐 **MEASURED 2 Sep, real touch in Chrome at 380px — NO double open by any route I can find:**
+      | tap | `openAdd()` calls | `.open` flips | sheet top edge |
+      |---|---|---|---|
+      | add row, project with a layer | 1 | 0 | 1102 → 380, one monotonic motion |
+      | add row, EMPTY project | 1 | 0 | one motion |
+      | empty timeline area, EMPTY project | 1 | 0 | one motion |
+      | add row again WHILE THE SHEET IS OPEN (layer) | 0 | 0 | untouched — the row sits under the sheet |
+      | add row again WHILE OPEN (empty) | 0 (`closeAdd` 1) | 0 | closes and stays closed |
+      The `+` FAB is `display:none` on the phone (styles.css ~3547), so "add layer on mobile" can only be the
+      add row or the empty area — both open the sheet exactly once here. The two-motions-on-one-property
+      finding above is real in the CSS but Chrome renders it as one motion (the keyframe owns `transform`
+      for its 360ms and `fill: both` holds the end frame, so the underlying transition never shows).
+      ❓ **QUESTION FOR EZRA (logged, not blocking):** which button, and what does "twice" look like — the
+      sheet slides up, drops, slides up again? Or the layer gets added twice? Or the EDIT sheet opens after
+      the add? A 3-second screen recording would settle it in one look. Until then the best guess is
+      **iOS Safari-specific**: a `perspective()`+`rotateX()` keyframe on a `position:fixed` sheet that also
+      carries a `transform` transition is exactly the combination Safari is known to re-run at the
+      animation's end. The cheap, low-risk experiment is `#add-sheet.open { transition: none }` while the
+      hinge is active — it changes nothing in Chrome and removes the only second motion in the CSS.
+
+- [ ] **707 — PHONE (real touch): a trim from a grip lands SECONDS from where the finger is.** Found 2 Sep
+      **STATUS: 🟢 READY — nothing is stopping this**
+      while finishing #699, with trusted CDP touch (`Input.dispatchTouchEvent`) at 380px — NOT the synthetic
+      events the suite uses, which cannot see it. Pre-existing: identical on HEAD before #699's change.
+      | gesture on the LEFT grip of a 2.0–4.5s clip | expected | measured |
+      |---|---|---|
+      | hold, 3px tremor, release without dragging | nothing | **2/2.5 → 0/4.5** — the edge went to t=0 |
+      | hold, drag +30px (≈0.48s at this zoom) | ≈2.5/2.0 | **3.7/0.8** (+1.7s) |
+      | hold still, drag +30px | ≈2.5/2.0 | **3.4/1.1** (+1.4s) |
+      | the SAME 30px drag with synthetic events (`tests/_grip.html`) | ≈2.5/2.0 | **2.5/2.0 ✅** |
+      `timelineEl.scrollLeft` stayed 0 throughout (measured at down, post-arm and release), so it is not the
+      scroll-aware delta. `applyTrimAt` computes `dt` from the finger (≈0 for 3px) and then `snapEdge()` moves
+      the edge to a guide — and the guide it picks is seconds away. Something differs between the real path and
+      the synthetic one after arming: real touch actually captures the pointer, and `beginTrim → selectLayer()`
+      opens the phone inspector sheet on a trusted gesture, which may re-lay-out the timeline (`pxPerSec`) under
+      the drag. **Not chased further inside #699** — it is on the same lines but a separate fault. ➡️ Start by
+      logging `pps`, `trimDrag.startX`, the candidate snap guides and the chosen one inside `applyTrimAt`
+      during the real-touch probe (`scratchpad/rt2.py`, `realtouch.py` — copy them into `tests/` first).
+      ⚠️ **The whole class is invisible to the suite**: synthetic `PointerEvent`s make `setPointerCapture`
+      throw, so no test in the file has ever exercised the captured-pointer path a phone actually takes.
+      #699 adds one test that EMULATES capture (boundary `pointerleave`, moves routed to `#tl-inner`); a
+      real-touch runner would be the structural answer. Only a note until then.
+      🧭 **HYPOTHESIS (2 Sep, from the code — NOT yet measured):** `snapEdge` uses a radius of **`7 / pps`
+      seconds** and `applyTrimAt` a delta of **`px / pps`**, with `pps = pxPerSec() = laneViewW()/SPAN·zoom` —
+      the timeline's LIVE width. The measured +1.7s for a 30px drag implies pps ≈ 18 where the layout had
+      ≈ 63 at touch-down, and the 3px case snapping to t=0 needs pps < 3.3 at that instant. So the scale is
+      **shrinking during the gesture**. Arming calls `beginTrim → FM.selectLayer()`, which on a phone opens
+      the edit sheet; if that re-lays-out the timeline (the lane narrowing over an animation), every move
+      is computed against a pps smaller than the one the clip was drawn with, and the snap radius grows
+      with it. Synthetic events never showed it because an untrusted gesture may not open the sheet at all.
+      ➡️ **To confirm in one run:** log `pxPerSec()`, `laneViewW()` and `#timeline`'s width at touch-down,
+      at arm and at each move in `tests/_rt2.py`'s hold+drag case. If pps falls mid-trim, the fix is to
+      capture `pps` (or the anchor in TIME) once at arm and trim against that, exactly as `clipTap` already
+      anchors on `baseTime` rather than on scroll for the same reason (see `onDown`'s comment).
+      · `laneViewW()` HAS a freeze (`_laneFrozen`) — but it is held only for the duration of one
+        `rebuild()` pass so a single rebuild is internally consistent; **no gesture pins the scale across a
+        drag.** And `beginTrim → selectLayer()` on a phone toggles `body.m-editing` (`app.js:852`, one clip
+        selected), which mobile.js says *"drives --head-w and the docked sheet"* — `HEAD_W` is re-read on
+        that very rebuild and subtracted inside `laneViewW()`. That is the candidate for what moves `pps`
+        under the finger, and it is exactly the thing the measurement above will show or rule out.
+      📐 **MEASURED 2 Sep (`tests/_rt707.py`) — THE HYPOTHESIS ABOVE IS WRONG, and the real mechanism is
+      better news.** The drawn scale (clip 0's width ÷ its duration) stayed **62.8 px/s at every step** of the
+      drag, real touch and synthetic alike; `#timeline` stayed 380px and `--head-w` 66px. Nothing shrinks.
+      **But BOTH paths overshoot, synthetic included:**
+      | finger | expected start | real touch | synthetic (the suite's path) |
+      |---|---|---|---|
+      | +5px | 2.08 | 2.07 | 2.07 |
+      | +10px | 2.16 | 2.17 | 2.17 |
+      | +15px | 2.24 | 2.30 | 2.27 |
+      | +20px | 2.32 | **2.50** (snapped to clip 0's end) | **2.50** |
+      | +25px | 2.40 | **2.90** | **2.77** |
+      | +30px | 2.48 | **3.43** → 3.70 on release | **3.23** |
+      Correct for ~15px, then the error COMPOUNDS move by move. That is the signature of the scroll-aware
+      delta — `dt = (clientX − startX) + (scrollLeft − startScroll)` — fed by the trim's own EDGE AUTO-SCROLL:
+      on a 380px screen the grip sits near the right edge by construction (clip 1 starts at x=316), so the
+      auto-scroll runs between moves and every tick adds trim the finger never made. `tests/_grip.html` did not
+      see it because its six moves fire inside one frame, before a single auto-scroll tick. **So this is NOT a
+      real-touch-only bug — the suite can reproduce it with a paced drag**, which is the structural answer
+      #707 was waiting for. ⏭️ The **3px-tremor → start=0** case is still unexplained; the scroll term was 0
+      there. A `NaN` start clamped by `Math.max(0, …)` would produce exactly `0/4.5` — check what `clientX`
+      `applyTrimAt` receives on that release-time move before believing it.
+      🔧 **CONFIRMED IN THE CODE (2 Sep).** `TRIM_EDGE = 46` px from the viewport edge (`js/timeline.js:23`).
+      The window pointermove arms `trimEdgeScroll()` whenever the finger is inside that zone (`:4038`); on a
+      380px screen the zone begins at x=334, and clip 1's grip crossed it between +10 and +20px — exactly
+      where the table above starts compounding. The loop then scrolls up to 22px per frame and calls
+      `applyTrimAt(lastX)` every frame, whose scroll-aware delta grows by the scrolled amount each time. It
+      has ONE brake (no scroll → stop). The clip-MOVE loop beside it gained four brakes in queue 524, with a
+      comment that reads like a description of this: *"a feature whose failure mode is 'a loop nobody is
+      watching'"*. Nothing about the trim loop was measured on a narrow screen when it shipped.
+      ➡️ **FIX DESIGN (after #699 ships; this is the next item up):** arm the auto-scroll only when the finger
+      has TRAVELLED INTO the zone from outside it during this drag — never when the drag begins inside it.
+      That keeps the AM behaviour he has ("drag to the edge and keep going, the clip extends past the
+      screen") and makes a stationary finger unable to trim on its own. Cap frames as queue 524 does.
+      **Tests, both ways:** a PACED synthetic drag (30ms between moves — `tests/_grip.html`'s fire inside one
+      frame and cannot see this) that starts inside the zone must land within a frame of the finger (+30px →
+      ≈2.48s, not 3.23); a drag that crosses into the zone from outside must still auto-scroll. The 3px→0
+      case gets its own probe of what `applyTrimAt` receives.
+
+
 

@@ -8,7 +8,7 @@
    disarms it. If the gesture is then not picked up as a scroll or a scrub, the strip is simply dead.
    CONTROL: the identical swipe starting mid-clip, which must scrub. If the control does nothing either,
    the harness is broken and nothing below means anything. */
-var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+var out=[], LEAKS=[]; function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
 function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
 document.getElementById('a').addEventListener('load', function () {
   var w = document.getElementById('a').contentWindow, n=0;
@@ -19,16 +19,34 @@ async function run(w){
   var FM=w.FM, D=w.document;
   if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
   await sleep(300);
+  /* ⚠️ CLEAR FIRST, AND CHECK THE COUNT. On 2 Sep this pushed 4 layers onto whatever the app had
+     already booted with and rendered ONE clip — the project finishes loading after home.close() and
+     replaced the array underneath. The probe then measured a one-clip timeline while its own output
+     described a four-clip one, and every number below would have been about the wrong fixture. */
+  FM.scene.layers.length = 0;
   for(var i=0;i<4;i++){
     var L=FM.makeLayer('shape',{shape:'rect',x:200+i*20,y:300,shapeW:120,shapeH:90,fill:'#c0503'+i});
     L.start=i*2; L.duration=2.5; FM.scene.layers.push(L);
   }
-  FM.refreshAll && FM.refreshAll(); await sleep(500);
+  FM.scene.project.duration = 10;
+  FM.refreshAll && FM.refreshAll();
+  FM.timeline && FM.timeline.rebuild && FM.timeline.rebuild();
+  await sleep(600);
   FM.setTime && FM.setTime(6); await sleep(200);
 
   var clips=[].slice.call(D.querySelectorAll('.clip'));
   var grips=[].slice.call(D.querySelectorAll('.clip-grip'));
   say('rendered '+clips.length+' clips and '+grips.length+' grips');
+  if(clips.length!==4){ say('⚠️ FIXTURE FAILED — expected 4 clips, got '+clips.length+'. Nothing below is trustworthy.'); window.__done=1; return; }
+
+  /* THE INSTRUMENTATION queue 699 asked for: which of the five gesture globals is still live once a
+     gesture has ended. An earlier version of this fix left clipTap/clipMove behind and the suite's
+     per-test hygiene check caught it three times; reasoning about the handler chain is what kept
+     failing, so this MEASURES it instead. */
+  function liveState(){
+    try{ var d=FM.timeline._dragState&&FM.timeline._dragState(); return d&&d.any ? d.live.join('+') : 'none'; }
+    catch(e){ return 'unavailable('+e.message+')'; }
+  }
   var _t=D.getElementById('timeline');
   say('timeline scrollWidth '+_t.scrollWidth+' in clientWidth '+_t.clientWidth+
       (_t.scrollWidth>_t.clientWidth+4 ? '  (scrollable ✓)' : '  ⚠️ NOT SCROLLABLE — a scroll test would prove nothing'));
@@ -66,9 +84,12 @@ async function run(w){
     await sleep(400);
     var moved=(Math.abs(FM.time-t0)>0.02)||(Math.abs(tl.scrollLeft-s0)>3);
     var trimmed=FM.scene.layers.map(function(l){return l.start+'/'+l.duration;}).join(',')!==L0;
+    var leak=liveState();
     say('  '+name.padEnd(26)+' on <'+(el.className||el.tagName)+'>');
     say('     time '+t0.toFixed(3)+' -> '+FM.time.toFixed(3)+'   scroll '+s0+' -> '+tl.scrollLeft+
         '   trimmed: '+(trimmed?'yes':'no')+'   ANY EFFECT: '+((moved||trimmed)?'✅ yes':'❌ NOTHING HAPPENED'));
+    say('     gesture state left live afterwards: '+leak+(leak==='none'?' ✅':' 🔴 LEAK'));
+    if(leak!=='none') LEAKS.push(name+' -> '+leak);
     return moved||trimmed;
   }
   FM.setTime(0); tl.scrollLeft=0; await sleep(250);
@@ -107,7 +128,10 @@ async function run(w){
     gEl.dispatchEvent(new w.PointerEvent('pointerup',o3)); w.dispatchEvent(new w.PointerEvent('pointerup',o3));
     await sleep(300);
     var after=L.start+'/'+L.duration;
-    say('  '+name.padEnd(34)+before+' -> '+after+'   '+(before!==after?'✅ TRIMMED':'❌ did not trim'));
+    var leak=liveState();
+    say('  '+name.padEnd(34)+before+' -> '+after+'   '+(before!==after?'✅ TRIMMED':'❌ did not trim')+
+        '   left live: '+leak+(leak==='none'?' ✅':' 🔴 LEAK'));
+    if(leak!=='none') LEAKS.push(name+' -> '+leak);
     return before!==after;
   }
   say('');
@@ -118,6 +142,9 @@ async function run(w){
   else if(!t1||!t2) say('🔴 THE FIX BROKE TRIMMING — touch '+(t1?'ok':'DEAD')+', mouse '+(t2?'ok':'DEAD'));
   else if(!grip) say('➡️ CONFIRMED: the same swipe is dead when it starts on a grip. On a phone that is a\n   strip at each end of every clip where dragging the timeline simply does not work.');
   else say('➡️ Swiping from a grip now moves the timeline, AND the grip still trims by touch and by mouse.');
+  say('');
+  if(LEAKS.length) say('🔴 GESTURE STATE LEAKED after '+LEAKS.length+' gesture(s) — the suite fails the test that\n   leaves one behind, and this is exactly what withdrew the first attempt:\n   '+LEAKS.join('\n   '));
+  else say('✅ NO GESTURE STATE LEFT LIVE after any of the four gestures above.');
   window.__done=1;
  }catch(e){ say('threw: '+(e&&e.message)); window.__done=1; }
 }

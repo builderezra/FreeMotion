@@ -1,0 +1,107 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:11px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:380px;height:820px;border:0"></iframe>
+<script>
+/* Queue 699 review probe — CROSS-CLIP reach of the arm timer's new clipTap teardown.
+   Scenario under test (the reviewer's): hold clip B's grip; a rebuild() lands mid-hold and DETACHES
+   the grip (so its own pointerup/pointerleave disarm can never fire); the finger lifts (the real
+   pointerup goes to the surviving #tl-inner / window, not to the removed grip); a NEW tap starts on
+   a DIFFERENT clip A; then the orphaned 300ms arm timer fires.
+   Prints the five gesture globals and the selection at every step. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent=out.join('\n'); }
+function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+document.getElementById('a').addEventListener('load', function(){
+  var w=document.getElementById('a').contentWindow, n=0;
+  (function wait(){ if(!(w.FM&&w.FM.scene&&w.FM.timeline)){ if(n++>600) return say('FM never came up'); return setTimeout(wait,50);} setTimeout(function(){run(w);},1200); })();
+});
+async function run(w){
+ try{
+  var FM=w.FM, D=w.document, T0=0, A=null, B=null;
+  function st(){ try{ var d=FM.timeline._dragState(); return d.any?d.live.join('+'):'none'; }catch(e){ return 'ERR '+e.message; } }
+  function sel(){ var s=FM.scene.selectedId; return s==null?'None':(s===A.id?'A':(s===B.id?'B':'other')); }
+  function mark(tag){ say('   t+'+String(Math.round(performance.now()-T0)).padStart(4)+'ms  '+tag.padEnd(34)+'drag='+st().padEnd(18)+'sel='+sel()); }
+  function ev(el,t,x,y,b,pid){ el.dispatchEvent(new w.PointerEvent(t,{bubbles:true,cancelable:true,clientX:x,clientY:y,pointerId:pid,pointerType:'touch',isPrimary:true,button:0,buttons:b})); }
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen()) FM.home.close();
+  await sleep(300);
+
+  FM.scene.layers.length=0;
+  A=FM.makeLayer('shape',{name:'A',shape:'rect',x:400,y:600,shapeW:200,shapeH:200,fill:'#3a7bd5'});
+  B=FM.makeLayer('shape',{name:'B',shape:'rect',x:700,y:900,shapeW:200,shapeH:200,fill:'#c05030'});
+  A.start=0; A.duration=3; B.start=0; B.duration=3;
+  FM.scene.layers.push(A); FM.scene.layers.push(B);
+  FM.scene.project.duration=6;
+  FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+  await sleep(400);
+
+  function findClip(L){ var all=[].slice.call(D.querySelectorAll('.clip')); for(var i=0;i<all.length;i++){ if(all[i].dataset && all[i].dataset.id===L.id) return all[i]; } return null; }
+  var clipB=findClip(B);
+  var clipA=findClip(A);
+  if(!clipA||!clipB){ say('fixture failed: clipA='+!!clipA+' clipB='+!!clipB); w.__done=1; window.__done=1; return; }
+  var grip=clipB.querySelector('.clip-grip');
+  if(!grip){ say('no grip on clip B'); w.__done=1; window.__done=1; return; }
+  var ARM=FM._trimArmMs;
+  var gr=grip.getBoundingClientRect(), gx=gr.left+gr.width/2, gy=gr.top+gr.height/2;
+  var ar=clipA.getBoundingClientRect(), ax=(ar.left+ar.right)/2, ay=(ar.top+ar.bottom)/2;
+  say('ARM_MS='+ARM+'   B grip at '+gx.toFixed(0)+','+gy.toFixed(0)+'   A body at '+ax.toFixed(0)+','+ay.toFixed(0));
+  say('start:  drag='+st()+'  sel='+sel());
+
+  say('');
+  say('SCENARIO — hold B.grip; rebuild at t+100 (grip detached); the finger then travels and lifts');
+  say('           at t+150 (so the release does NOT select B and every row stays on screen);');
+  say('           tap A body at t+200; the orphaned arm timer is due at t+'+ARM+'.');
+  var inner=D.getElementById('tl-inner');
+  T0=performance.now();
+  ev(grip,'pointerdown',gx,gy,1,5);                mark('B.grip pointerdown (pid 5)');
+  await sleep(100);
+  FM.timeline.rebuild();                            mark('rebuild()  [grip attached? '+D.contains(grip)+']');
+  await sleep(20);
+  /* The finger travels. On a real phone the clip captured the pointer on #tl-inner, so these moves go
+     THERE and never reach the grip; here the grip is detached anyway, so it cannot see them either. */
+  for(var k=1;k<=3;k++){ var mx=gx+10*k;
+    ev(inner,'pointermove',mx,gy,1,5); w.dispatchEvent(new w.PointerEvent('pointermove',{bubbles:true,cancelable:true,clientX:mx,clientY:gy,pointerId:5,pointerType:'touch',isPrimary:true,button:0,buttons:1}));
+  }
+  mark('finger travelled 30px');
+  await sleep(30);
+  w.dispatchEvent(new w.PointerEvent('pointerup',{bubbles:true,cancelable:true,clientX:gx+30,clientY:gy,pointerId:5,pointerType:'touch',isPrimary:true,button:0,buttons:0}));
+  mark('finger UP (window; grip is gone)');
+  await sleep(50);
+  clipA=findClip(A);
+  say('   [clips on screen: '+[].slice.call(D.querySelectorAll('.clip')).map(function(c){return c.dataset.id===A.id?'A':(c.dataset.id===B.id?'B':(c.dataset.id||'?'));}).join(',')+']');
+  if(!clipA){ say('   A has no clip element on screen — cannot tap it'); w.__done=1; window.__done=1; return; }
+  ar=clipA.getBoundingClientRect(); ax=(ar.left+ar.right)/2; ay=(ar.top+ar.bottom)/2;
+  ev(clipA,'pointerdown',ax,ay,1,6);                mark('A body pointerdown (pid 6)');
+  await sleep(40);                                  mark('BEFORE the arm timer is due');
+  await sleep(90);                                  mark('AFTER  the arm timer was due');
+  await sleep(150);
+  w.dispatchEvent(new w.PointerEvent('pointerup',{bubbles:true,cancelable:true,clientX:ax,clientY:ay,pointerId:6,pointerType:'touch',isPrimary:true,button:0,buttons:0}));
+  mark('A finger UP  <-- did the tap select A?');
+  await sleep(250);                                 mark('250ms later');
+
+  say('');
+  say('RESULT: the tap on A '+(FM.scene.selectedId===A.id?'SELECTED A ✅':'was SWALLOWED (sel='+sel()+') 🔴'));
+  say('        leftover gesture state: '+st());
+  say('        B: start='+B.start.toFixed(3)+' dur='+B.duration.toFixed(3));
+
+  /* CONTROL — a plain tap on A with nothing else going on. If A is not selected HERE, the harness's
+     dispatch is broken and the scenario above proves nothing. */
+  FM.timeline._abortGestures();
+  A.start=0; A.duration=3; B.start=0; B.duration=3;
+  FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); await sleep(300);
+  clipA=findClip(A);
+  if(!clipA){ say('control: A has no clip'); w.__done=1; window.__done=1; return; }
+  ar=clipA.getBoundingClientRect(); ax=(ar.left+ar.right)/2; ay=(ar.top+ar.bottom)/2;
+  say(''); say('CONTROL — a plain tap on A, nothing else in flight');
+  T0=performance.now();
+  ev(clipA,'pointerdown',ax,ay,1,6);                mark('A body pointerdown (pid 6)');
+  await sleep(150);
+  w.dispatchEvent(new w.PointerEvent('pointerup',{bubbles:true,cancelable:true,clientX:ax,clientY:ay,pointerId:6,pointerType:'touch',isPrimary:true,button:0,buttons:0}));
+  mark('A finger UP');
+  await sleep(200);                                 mark('200ms later');
+  say('CONTROL RESULT: tap on A '+(FM.scene.selectedId===A.id?'SELECTED A ✅ (harness sound)':'did NOT select A — HARNESS BROKEN, ignore the scenario above'));
+
+  say(''); say('done.');
+  w.__done=1; window.__done=1;
+ }catch(e){ say('threw: '+(e&&e.message)+'\n'+(e&&e.stack)); w.__done=1; window.__done=1; }
+}
+</script></body></html>

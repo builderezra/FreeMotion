@@ -2910,29 +2910,217 @@
         FM.scene.project.duration = 6;
         FM.selectLayer(L.id); FM.refreshAll(); FM.timeline.rebuild();
         await sleep(300);
-        const grip = document.querySelector('#tl-tracks .clip-grip');
-        if (!grip) throw new Error('no trim grip on the clip to hold');
-        const r = grip.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-        const pe = function (t, x, y, b) { grip.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 5, pointerType: 'touch', isPrimary: true, button: 0, buttons: b })); };
+        /* ⚠️ EVERY SUB-TEST RE-ACQUIRES THE GRIP — do not hoist this back out (queue 699, 2 Sep).
+         * This used to grab the element ONCE. Sub-test A's hold calls beginTrim -> selectLayer(), which
+         * rebuilds the timeline and DETACHES that node, so B and C dispatched into an orphan and proved
+         * nothing about the widget on screen. Their assertions passed anyway, because the orphan still
+         * carries its own listeners. `attached()` above is the guard; the reset also puts the clip back,
+         * since A can retime it and B would otherwise start from a different clip. */
+        const pe = function (el, t, x, y, b) { el.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 5, pointerType: 'touch', isPrimary: true, button: 0, buttons: b })); };
+        const freshGrip = async function () {
+          L.start = 0; L.duration = 3;
+          FM.refreshAll(); FM.timeline.rebuild();
+          await sleep(220);
+          const g = attached(document.querySelector('#tl-tracks .clip-grip'), 'trim grip');
+          const rr = g.getBoundingClientRect();
+          return { g: g, cx: rr.left + rr.width / 2, cy: rr.top + rr.height / 2 };
+        };
 
         // A — a still hold just past the threshold must arm.
-        pe('pointerdown', cx, cy, 1); await sleep(ARM + 60);
-        const armed = grip.classList.contains('armed');
-        pe('pointerup', cx, cy, 0); await sleep(80);
+        let G = await freshGrip();
+        pe(G.g, 'pointerdown', G.cx, G.cy, 1); await sleep(ARM + 60);
+        const armed = G.g.classList.contains('armed');
+        pe(G.g, 'pointerup', G.cx, G.cy, 0); await sleep(80);
         if (!armed) throw new Error('holding the grip for ' + (ARM + 60) + 'ms did not arm the trim — the hold is longer than FM._trimArmMs claims (queue 577)');
 
         // B — the SAFETY property. Scrolling during the hold must never arm it.
-        pe('pointerdown', cx, cy, 1); await sleep(Math.min(90, ARM / 3));
-        pe('pointermove', cx, cy + 20, 1); await sleep(ARM + 60);
-        const armedScrolling = grip.classList.contains('armed');
-        pe('pointerup', cx, cy + 20, 0); await sleep(80);
+        G = await freshGrip();
+        pe(G.g, 'pointerdown', G.cx, G.cy, 1); await sleep(Math.min(90, ARM / 3));
+        pe(G.g, 'pointermove', G.cx, G.cy + 20, 1); await sleep(ARM + 60);
+        const armedScrolling = G.g.classList.contains('armed');
+        pe(G.g, 'pointerup', G.cx, G.cy + 20, 0); await sleep(80);
         if (armedScrolling) throw new Error('a 20px scroll during the hold ARMED the trim — that is the fault the hold exists to prevent, and shortening it must not trade it away (queue 577, queue 336)');
 
         // C — and a quick tap must still do nothing.
-        pe('pointerdown', cx, cy, 1); await sleep(100);
-        const armedTap = grip.classList.contains('armed');
-        pe('pointerup', cx, cy, 0);
+        G = await freshGrip();
+        pe(G.g, 'pointerdown', G.cx, G.cy, 1); await sleep(100);
+        const armedTap = G.g.classList.contains('armed');
+        pe(G.g, 'pointerup', G.cx, G.cy, 0); await sleep(60);
         if (armedTap) throw new Error('a 100ms tap armed the trim — that is inside ordinary tap range, so a graze would start trimming');
+      });
+    } finally {
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
+  /* ⚠️ A DISPATCH INTO A DETACHED NODE PROVES NOTHING, AND LOOKS LIKE IT PROVED SOMETHING.
+   * Found 2 Sep by queue 699. Queue 577's test grabbed a trim grip ONCE and reused it for three
+   * sub-tests; the first one's hold calls beginTrim -> selectLayer(), which REBUILDS the timeline and
+   * destroys that element. The next two dispatched into an orphaned subtree. Their own assertions still
+   * passed — the orphan's listeners are still attached to it — so nothing said the widget under test had
+   * not been on screen for two of the three cases. It only surfaced because events in a detached tree
+   * cannot reach `window`, so the handler that clears the gesture never ran and the suite's hygiene
+   * check reported a leak. The probe this came from lists "a stale element after a rebuild" as one of
+   * three DEAD CONTROLS it has already been bitten by; this is the fourth.
+   * Use this anywhere a test holds an element across something that can rebuild. */
+  function attached(el, what) {
+    if (!el) throw new Error('no ' + what + ' to act on');
+    if (!document.contains(el)) throw new Error('the ' + what + ' is DETACHED — a rebuild replaced it, so dispatching here would exercise an orphan and prove nothing about what is on screen');
+    return el;
+  }
+
+  test('699: a swipe that starts on a trim grip drags the timeline, exactly like one on the clip body', { item: '699' }, async function () {
+    /* Queue 699. MEASURED at 380px before the fix: the identical 60px swipe moved the playhead
+     * 1.28s -> 7.01s and the scroll 0 -> 440px when it started on the clip BODY, and 1.28 -> 1.28 /
+     * 81 -> 81 when it started on a trim grip. The ~13px strip at each end of every clip was DEAD —
+     * no trim, no scrub, no scroll. The grip's pointerdown called stopPropagation() unconditionally, so
+     * the clip's own handler never ran and `clipTap` — the object the window pointermove uses to scrub
+     * and to scroll — was never created; #timeline is touch-action:none, so nothing scrolled natively
+     * either. The gesture was simply swallowed.
+     * ⚠️ THE CONTROL IS THE POINT OF THIS TEST, not decoration. It asserts the grip swipe does what the
+     * CLIP-BODY swipe does, measured in the same run — not that it exceeds some absolute threshold. A
+     * threshold passes on a timeline that cannot scroll at all, and three earlier versions of the probe
+     * this came from had a dead control (a point scrolled off screen, a dispatch to an SVG child, a
+     * stale element after a rebuild) and would each have "confirmed" a bug that was not there. If the
+     * control stops moving, this test fails as a broken harness rather than quietly passing.
+     * ⚠️ AND IT PINS BOTH HALVES. Letting the swipe through must not cost the trim: a still hold past
+     * FM._trimArmMs still has to arm and retime the clip. A fix that made the strip scrollable by
+     * disabling the grip would pass the first half and is exactly what must not ship. */
+    const layers0 = FM.scene.layers.slice();
+    try {
+      return await atPhoneWidth(async function () {
+        FM.scene.layers.length = 0;
+        for (let i = 0; i < 4; i++) {
+          const L = FM.makeLayer('shape', { shape: 'rect', x: 200 + i * 20, y: 300, shapeW: 120, shapeH: 90, fill: '#c05030' });
+          L.start = i * 2; L.duration = 2.5; FM.scene.layers.push(L);
+        }
+        FM.scene.project.duration = 10;
+        FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(400);
+
+        const tl = document.getElementById('timeline');
+        if (!tl) throw new Error('no #timeline');
+        if (!(tl.scrollWidth > tl.clientWidth + 4)) throw new Error('the timeline does not overflow its width, so a scroll test would prove nothing (scrollWidth ' + tl.scrollWidth + ' vs ' + tl.clientWidth + ')');
+        const clips = document.querySelectorAll('#tl-tracks .clip');
+        if (clips.length !== 4) throw new Error('fixture built ' + clips.length + ' clips, not 4 — nothing measured here would be about the project this test describes');
+
+        // One 60px swipe, dispatched on the element under test. The app listens for pointermove on the
+        // window, so every move goes to both — the same way a real finger reaches both.
+        const swipe = (el, x, y, dx) => {
+          const o = { pointerId: 11, pointerType: 'touch', isPrimary: true, bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, buttons: 1 };
+          el.dispatchEvent(new PointerEvent('pointerdown', o));
+          for (let k = 1; k <= 8; k++) {
+            const m = Object.assign({}, o, { clientX: x + dx * k / 8 });
+            el.dispatchEvent(new PointerEvent('pointermove', m));
+            window.dispatchEvent(new PointerEvent('pointermove', m));
+          }
+          const u = Object.assign({}, o, { clientX: x + dx, buttons: 0 });
+          el.dispatchEvent(new PointerEvent('pointerup', u));
+          window.dispatchEvent(new PointerEvent('pointerup', u));
+        };
+        const trial = async (el, ox) => {
+          FM.setTime(0); tl.scrollLeft = 0; await sleep(220);
+          const r = el.getBoundingClientRect();
+          const x = ox != null ? r.left + ox : (r.left + r.right) / 2, y = (r.top + r.bottom) / 2;
+          if (x < 2 || x > 378 || y < 2) throw new Error('sample point ' + x.toFixed(0) + ',' + y.toFixed(0) + ' is off a 380px screen — the measurement would be meaningless');
+          const t0 = FM.time, s0 = tl.scrollLeft;
+          swipe(el, x, y, -60);
+          await sleep(320);
+          return Math.abs(FM.time - t0) + Math.abs(tl.scrollLeft - s0) / 100;
+        };
+
+        const body = await trial(clips[1], 40);
+        if (body < 0.05) throw new Error('the CONTROL swipe in the clip body moved nothing (' + body.toFixed(3) + ') — the harness is broken, so the grip result below would mean nothing');
+
+        const grip = document.querySelectorAll('#tl-tracks .clip')[1].querySelector('.clip-grip');
+        if (!grip) throw new Error('the clip has no trim grip to swipe from');
+        const onGrip = await trial(grip, null);
+        if (onGrip < body * 0.5) throw new Error('a swipe starting ON a trim grip moved ' + onGrip.toFixed(3) + ' against the clip body’s ' + body.toFixed(3) + ' — the grip is a dead strip: on a phone that is ~13px at each end of every clip where dragging the timeline does nothing (queue 699)');
+
+        // …and the trim still works. Restore, rebuild, re-acquire — a stale grip element reads as a
+        // dead mouse path and would accuse the fix of breaking something it did not touch.
+        FM.scene.layers.forEach((l, ix) => { l.start = ix * 2; l.duration = 2.5; });
+        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+        FM.setTime(0); tl.scrollLeft = 0; await sleep(360);
+        const g2 = document.querySelectorAll('#tl-tracks .clip')[1].querySelector('.clip-grip');
+        if (!g2) throw new Error('no trim grip after the rebuild');
+        const L1 = FM.scene.layers.slice().sort((a, b) => a.start - b.start)[1];
+        const before = L1.start + '/' + L1.duration;
+        const r2 = g2.getBoundingClientRect(), gx = (r2.left + r2.right) / 2, gy = (r2.top + r2.bottom) / 2;
+        const o2 = { pointerId: 12, pointerType: 'touch', isPrimary: true, bubbles: true, cancelable: true, clientX: gx, clientY: gy, button: 0, buttons: 1 };
+        g2.dispatchEvent(new PointerEvent('pointerdown', o2));
+        await sleep(FM._trimArmMs + 80);                     // settle, so the arm fires
+        for (let k = 1; k <= 6; k++) {
+          const m = Object.assign({}, o2, { clientX: gx + 30 * k / 6 });
+          g2.dispatchEvent(new PointerEvent('pointermove', m));
+          window.dispatchEvent(new PointerEvent('pointermove', m));
+        }
+        const u2 = Object.assign({}, o2, { clientX: gx + 30, buttons: 0 });
+        g2.dispatchEvent(new PointerEvent('pointerup', u2));
+        window.dispatchEvent(new PointerEvent('pointerup', u2));
+        await sleep(260);
+        if (L1.start + '/' + L1.duration === before) throw new Error('letting the swipe through cost the trim: a still hold past ' + FM._trimArmMs + 'ms no longer retimes the clip (was ' + before + ')');
+
+        /* ⚠️ AND NOW WHAT A REAL PHONE DOES, WHICH NOTHING ABOVE DOES. Synthetic PointerEvents cannot be
+         * captured — `setPointerCapture` throws NotFoundError for a made-up pointerId and the app swallows
+         * it — so every touch test in this file runs in a world with no pointer capture, and that world
+         * does not exist on a phone. On a real finger the clip's handler captures the pointer to #tl-inner,
+         * the browser fires a boundary `pointerleave` on the grip at that instant, and every later event
+         * for that finger is delivered to #tl-inner, not the grip. The first version of the queue-699 fix
+         * kept the grip's element-level `pointerleave -> disarm`, passed this whole file, and on trusted
+         * CDP touch a 3px tremor turned the hold into a CLIP MOVE. This sub-case EMULATES capture: the
+         * boundary leave on the grip, then a 3px tremor delivered to #tl-inner. The hold must still arm. */
+        FM.scene.layers.forEach((l, ix) => { l.start = ix * 2; l.duration = 2.5; });
+        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+        FM.setTime(0); tl.scrollLeft = 0; await sleep(360);
+        const g3 = attached(document.querySelectorAll('#tl-tracks .clip')[1].querySelector('.clip-grip'), 'trim grip');
+        const inner = attached(document.getElementById('tl-inner'), '#tl-inner (where a captured pointer\u2019s events go)');
+        const r3 = g3.getBoundingClientRect(), hx = (r3.left + r3.right) / 2, hy = (r3.top + r3.bottom) / 2;
+        const o3 = { pointerId: 13, pointerType: 'touch', isPrimary: true, bubbles: true, cancelable: true, clientX: hx, clientY: hy, button: 0, buttons: 1 };
+        g3.dispatchEvent(new PointerEvent('pointerdown', o3));
+        // what Chrome does the moment #tl-inner takes capture:
+        g3.dispatchEvent(new PointerEvent('pointerout', Object.assign({}, o3, { bubbles: true })));
+        g3.dispatchEvent(new PointerEvent('pointerleave', Object.assign({}, o3, { bubbles: false })));
+        await sleep(100);
+        // a 3px tremor — inside the 8px slop — delivered where a captured pointer's events actually go
+        inner.dispatchEvent(new PointerEvent('pointermove', Object.assign({}, o3, { clientX: hx + 3 })));
+        await sleep(FM._trimArmMs + 80);
+        const armedUnderCapture = g3.classList.contains('armed');
+        const u3 = Object.assign({}, o3, { clientX: hx + 3, buttons: 0 });
+        inner.dispatchEvent(new PointerEvent('pointerup', u3));
+        await sleep(120);
+        if (!armedUnderCapture) throw new Error('with the pointer CAPTURED by #tl-inner (as it is on every real phone) and a 3px tremor, the trim did not arm — the grip\u2019s watchers are element-level and the boundary pointerleave disarmed it; on a device this hold becomes a clip MOVE (queue 699)');
+
+        /* AN ORPHAN CAN NEVER TRIM. A rebuild during the hold (a waveform arriving, a selection elsewhere)
+         * destroys the grip; its 300ms timer is still pending and, with no guard, would start a trim on a
+         * clip nobody is touching. The finger is over a NEW element that never saw a pointerdown. */
+        FM.scene.layers.forEach((l, ix) => { l.start = ix * 2; l.duration = 2.5; });
+        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+        FM.setTime(0); tl.scrollLeft = 0; await sleep(300);
+        const g4 = attached(document.querySelectorAll('#tl-tracks .clip')[1].querySelector('.clip-grip'), 'trim grip');
+        const L4 = FM.scene.layers.slice().sort((a, b) => a.start - b.start)[1];
+        const before4 = L4.start + '/' + L4.duration;
+        const r4 = g4.getBoundingClientRect();
+        g4.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 14, pointerType: 'touch', isPrimary: true, bubbles: true, cancelable: true, clientX: (r4.left + r4.right) / 2, clientY: (r4.top + r4.bottom) / 2, button: 0, buttons: 1 }));
+        await sleep(100);
+        FM.timeline.rebuild();                                   // the world moves on under the finger
+        if (document.contains(g4)) throw new Error('the rebuild did not replace the grip, so this sub-case is not testing an orphan');
+        await sleep(FM._trimArmMs + 120);                        // the orphan\u2019s timer fires in here
+        const orphanState = FM.timeline._dragState();
+        /* THE FINGER LIFTS — on whatever is under it now, which is the rebuilt timeline, not the orphan.
+         * The first version of this sub-case never sent the pointerup. The pinch tracker then held pointer
+         * 14 for the rest of the run and every later one-finger gesture counted as a pinch\u2019s second
+         * finger: three flick/drag/hold tests far from here failed saying their fixtures produced no
+         * gesture. They were right. _dragState() now reports a stale pointer so that leak is charged to the
+         * test that made it. */
+        attached(document.getElementById('tl-inner'), '#tl-inner').dispatchEvent(new PointerEvent('pointerup', { pointerId: 14, pointerType: 'touch', isPrimary: true, bubbles: true, cancelable: true, clientX: (r4.left + r4.right) / 2, clientY: (r4.top + r4.bottom) / 2, button: 0, buttons: 0 }));
+        await sleep(40);
+        FM.timeline._abortGestures();
+        if (orphanState.live.indexOf('trimDrag') >= 0) throw new Error('a grip that had been REMOVED from the timeline still started a trim when its hold timer fired — a rebuild mid-hold retimes a clip nobody is touching (queue 699)');
+        if (document.querySelector('#tl-tracks .clip-grip.armed')) throw new Error('an orphaned hold timer armed a grip on screen that never saw the finger');
+        if (L4.start + '/' + L4.duration !== before4) throw new Error('an orphaned hold retimed the clip: ' + before4 + ' -> ' + L4.start + '/' + L4.duration);
       });
     } finally {
       FM.scene.layers.length = 0;
@@ -42875,11 +43063,18 @@
       // 2 — a real hold arms it, and says so.
       grip.dispatchEvent(mk('pointerdown'));
       await sleep(700);
-      if (!grip.classList.contains('armed')) throw new Error('held for 700ms and the grip never armed');
+      /* ⚠️ RE-ACQUIRE — ask the grip that is ON SCREEN, not the one this test grabbed (queue 699, 2 Sep).
+       * Arming calls beginTrim() -> selectLayer(), which REBUILDS the timeline and replaces this element.
+       * For a year this line asked the detached original, which still carried the class it was given a
+       * moment before it was thrown away — while the grip a user could actually see was rebuilt WITHOUT
+       * it, so the blue he asked for here was painted for zero frames. `attached()` refuses a stale node. */
+      grip = attached(document.querySelector('.clip.sel .clip-grip.right'), 'right trim grip after arming');
+      if (!grip.classList.contains('armed')) throw new Error('held for 700ms and the grip ON SCREEN is not armed — the rebuild that arming triggers threw the colour away (queue 336, found by queue 699)');
       var cs = getComputedStyle(grip).backgroundColor;
       if (/^rgba?\(\s*255,\s*255,\s*255/.test(cs)) throw new Error('the armed grip is still white — nothing signals that it is live: ' + cs);
       grip.dispatchEvent(mk('pointerup', { buttons: 0 }));
-      await sleep(60);
+      await sleep(160);
+      grip = attached(document.querySelector('.clip.sel .clip-grip.right'), 'right trim grip after release');
       if (grip.classList.contains('armed')) throw new Error('the grip stayed armed after the finger lifted');
 
       // 3 — a MOUSE trims immediately: no hold, no wait.

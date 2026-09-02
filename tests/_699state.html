@@ -1,0 +1,107 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:11px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:380px;height:820px;border:0"></iframe>
+<script>
+/* Queue 699, the step the entry says I kept skipping: DO NOT REASON ABOUT THE HANDLER CHAIN —
+   instrument it. Queue 577's test leaks "clipMove, clipTap" after the fix, exactly as it did for the
+   withdrawn attempt. This replays 577's sub-tests A, B and C VERBATIM (same fixture, same pointerId,
+   same sleeps, same dispatch target) and prints which of the five gesture globals is live at every
+   step, so the answer is read rather than guessed. */
+var out=[]; function say(s){ out.push(s); document.getElementById('o').textContent=out.join('\n'); }
+function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+document.getElementById('a').addEventListener('load', function(){
+  var w=document.getElementById('a').contentWindow, n=0;
+  (function wait(){ if(!(w.FM&&w.FM.scene&&w.FM.timeline)){ if(n++>600) return say('FM never came up'); return setTimeout(wait,50);} setTimeout(function(){run(w);},1200); })();
+});
+async function run(w){
+ try{
+  var FM=w.FM, D=w.document, T0=0;
+  function st(){ try{ var d=FM.timeline._dragState(); return d.any?d.live.join('+'):'none'; }catch(e){ return 'ERR '+e.message; } }
+  function mark(tag){ say('      t+'+String(Math.round(performance.now()-T0)).padStart(4)+'ms  '+tag.padEnd(30)+st()); }
+  if(FM.home&&FM.home.isOpen&&FM.home.isOpen()) FM.home.close();
+  await sleep(300);
+
+  // ── 577's fixture, verbatim ──────────────────────────────────────────────
+  FM.scene.layers.length=0;
+  var L=FM.makeLayer('shape',{name:'X',shape:'rect',x:540,y:960,shapeW:200,shapeH:200,fill:'#3a7bd5'});
+  L.start=0; L.duration=3; FM.scene.layers.push(L);
+  FM.scene.project.duration=6;
+  FM.selectLayer(L.id); FM.refreshAll(); FM.timeline.rebuild();
+  await sleep(300);
+  var grip=D.querySelector('#tl-tracks .clip-grip');
+  if(!grip){ say('no grip'); w.__done=1; return; }
+  var ARM=FM._trimArmMs;
+  var r=grip.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2;
+  say('ARM_MS='+ARM+'   grip at '+cx.toFixed(0)+','+cy.toFixed(0));
+  var pe=function(t,x,y,b){ grip.dispatchEvent(new w.PointerEvent(t,{bubbles:true,cancelable:true,clientX:x,clientY:y,pointerId:5,pointerType:'touch',isPrimary:true,button:0,buttons:b})); };
+
+  // ── A ────────────────────────────────────────────────────────────────────
+  say(''); say('A — still hold past the threshold, then release (must arm)');
+  T0=performance.now();
+  pe('pointerdown',cx,cy,1); mark('after pointerdown');
+  await sleep(ARM-40); mark('just BEFORE the arm');
+  await sleep(80); mark('just AFTER the arm ('+ARM+'ms)');
+  await sleep(40); mark('after the clip 350ms hold');
+  pe('pointerup',cx,cy,0); mark('after pointerup');
+  await sleep(120); mark('120ms later');
+  if(st()!=='none') say('      🔴 A LEAKS: '+st());
+
+  FM.timeline._abortGestures(); L.start=0; L.duration=3; FM.refreshAll(); FM.timeline.rebuild(); await sleep(250);
+  grip=D.querySelector('#tl-tracks .clip-grip');
+  r=grip.getBoundingClientRect(); cx=r.left+r.width/2; cy=r.top+r.height/2;
+
+  // ── B ────────────────────────────────────────────────────────────────────
+  say(''); say('B — scroll during the hold (must NOT arm)');
+  T0=performance.now();
+  pe('pointerdown',cx,cy,1); mark('after pointerdown');
+  await sleep(Math.min(90,ARM/3)); mark('before the 20px move');
+  pe('pointermove',cx,cy+20,1); mark('after the 20px move');
+  await sleep(ARM+60); mark('after arm-time + clip hold');
+  pe('pointerup',cx,cy+20,0); mark('after pointerup');
+  await sleep(120); mark('120ms later');
+  if(st()!=='none') say('      🔴 B LEAKS: '+st());
+
+  FM.timeline._abortGestures(); L.start=0; L.duration=3; FM.refreshAll(); FM.timeline.rebuild(); await sleep(250);
+  grip=D.querySelector('#tl-tracks .clip-grip');
+  r=grip.getBoundingClientRect(); cx=r.left+r.width/2; cy=r.top+r.height/2;
+
+  // ── C ────────────────────────────────────────────────────────────────────
+  say(''); say('C — a 100ms tap (must do nothing). NOTE: 577 does NOT sleep after this pointerup,');
+  say('    so whatever is live at "after pointerup" is what the hygiene check sees.');
+  T0=performance.now();
+  pe('pointerdown',cx,cy,1); mark('after pointerdown');
+  await sleep(100); mark('after 100ms');
+  pe('pointerup',cx,cy,0); mark('after pointerup  <-- 577 CHECKS HERE');
+  if(st()!=='none') say('      🔴 C LEAKS AT THE MOMENT 577 CHECKS: '+st());
+  await sleep(400); mark('400ms later (clip hold would have fired)');
+  if(st()!=='none') say('      🔴 C LEAKS LATER TOO: '+st());
+
+  // ── D — 577 VERBATIM: one grip reference reused across A, B and C ────────
+  /* THE DIFFERENCE FROM ABOVE, and the hypothesis. 577 grabs `grip` ONCE and reuses it for all three
+     sub-tests. A's hold calls beginTrim -> FM.selectLayer(), which REBUILDS the timeline and destroys
+     that element. B and C then dispatch into a DETACHED subtree, whose events cannot bubble to window
+     — so the window pointerup that clears clipTap never runs, and the clip's 350ms hold timer turns the
+     orphan into a clipMove. That is exactly the pair the suite reports: "clipMove, clipTap". */
+  FM.timeline._abortGestures(); L.start=0; L.duration=3; FM.refreshAll(); FM.timeline.rebuild(); await sleep(250);
+  var g=D.querySelector('#tl-tracks .clip-grip');
+  var rr=g.getBoundingClientRect(), gx=rr.left+rr.width/2, gy=rr.top+rr.height/2;
+  var pe2=function(t,x,y,b){ g.dispatchEvent(new w.PointerEvent(t,{bubbles:true,cancelable:true,clientX:x,clientY:y,pointerId:5,pointerType:'touch',isPrimary:true,button:0,buttons:b})); };
+  say(''); say('D — 577 verbatim: the SAME grip element reused for A, B and C');
+  T0=performance.now();
+  say('      still in the document before A: '+D.contains(g));
+  pe2('pointerdown',gx,gy,1); await sleep(ARM+60); pe2('pointerup',gx,gy,0); await sleep(80);
+  mark('after A'); say('      still in the document after A:  '+D.contains(g)+(D.contains(g)?'':'  <-- DETACHED, so B and C below dispatch into nothing'));
+  pe2('pointerdown',gx,gy,1); await sleep(Math.min(90,ARM/3));
+  pe2('pointermove',gx,gy+20,1); await sleep(ARM+60);
+  pe2('pointerup',gx,gy+20,0); await sleep(80); mark('after B');
+  pe2('pointerdown',gx,gy,1); await sleep(100); pe2('pointerup',gx,gy,0);
+  mark('after C  <-- what 577 leaves behind');
+  if(st()!=='none') say('      🔴 REPRODUCED THE SUITE FAILURE: '+st());
+  else say('      ✅ no leak — the hypothesis is wrong, look elsewhere');
+
+  say(''); say('done.');
+  w.__done=1; window.__done=1;
+ }catch(e){ say('threw: '+(e&&e.message)); window.__done=1; }
+}
+</script></body></html>
