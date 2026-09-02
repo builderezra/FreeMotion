@@ -37945,9 +37945,17 @@
       cat.closest('[class*=cat]').click(); await sleep(140);
       var btn = document.querySelector('.insp-filter-shortcut');
       if (!btn) throw new Error('Colouring has no shortcut to filters');
-      // "at the top" — nothing of the panel's own content may precede it.
-      var prev = btn.previousElementSibling;
-      if (prev) throw new Error('the shortcut is not first in the panel; "' + (prev.textContent || prev.className).slice(0, 40) + '" is above it');
+      /* ON THE HEADER ROW, SMALL (queue 714). He drew a line along "‹ Colouring" and circled the full-width button:
+       * "make the filters button on pc and mobile in the colouring menu smaller and fit on the row that i drew a
+       * line on". So: same row as the back link (tops within 6px), to its right, and no wider than half the panel.
+       * Runs at both suite widths, which is his "pc and mobile". */
+      var back = document.querySelector('#inspector .cat-back, #inspector-panel .cat-back');
+      if (!back) throw new Error('no back link on the Colouring panel to share a row with');
+      var rb = btn.getBoundingClientRect(), rk = back.getBoundingClientRect(), panel = (document.getElementById('inspector') || document.body).getBoundingClientRect();
+      if (Math.abs((rb.top + rb.height / 2) - (rk.top + rk.height / 2)) > 6) throw new Error('the Filters shortcut is not on the "‹ Colouring" row (button centre y ' + Math.round(rb.top + rb.height / 2) + ', back link ' + Math.round(rk.top + rk.height / 2) + ') — he drew the line along that row (queue 714)');
+      if (rb.left < rk.right - 2) throw new Error('the Filters shortcut overlaps or sits left of the back link');
+      if (rb.width > panel.width * 0.5) throw new Error('the Filters shortcut is ' + Math.round(rb.width) + 'px wide on a ' + Math.round(panel.width) + 'px panel — he asked for it smaller (queue 714)');
+      if (rb.height < 30) throw new Error('the shortcut is ' + Math.round(rb.height) + 'px tall — under a thumb-sized target');
       /* It GOES to the Filters subsection (queue 220) — he asked for "a shortcut button to go to
          filters", a place to look, not a menu that adds one where it stands. */
       btn.click(); await sleep(220);

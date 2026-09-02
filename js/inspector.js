@@ -2301,6 +2301,14 @@ window.FM = window.FM || {};
      (app.js) and 'Edit path' (the mask row). He named three and got three; changing the rest would be me
      deciding how his app reads. They are one line each and the entry flags them so he can say "those too"
      in one word. */
+  /* The shortcut to the Filters subsection (queue 220: it GOES there rather than adding one — a shortcut takes you
+     somewhere to look before you choose). Compact and on the Colouring header row since queue 714. */
+  function filterShortcut() {
+    const fb = el('button', 'fx-add-btn insp-filter-shortcut', '✦ Filters →');
+    fb.title = 'Ready-made looks — Cinematic, Retro, Glow, Stylised';
+    fb.addEventListener('click', () => FM.inspector.openCategory('filters'));
+    return fb;
+  }
   function elementLabel(layer) {
     if (layer.type === 'text' || layer.type === 'caption') return 'Customise Text';
     if (FM.isPointShape && FM.isPointShape(layer)) return 'Customise Points';
@@ -5833,15 +5841,8 @@ window.FM = window.FM || {};
          colour decision most of the time, and this is the panel you are already in when you decide the
          clip needs a look rather than a slider. Same picker as "+ Add Effect"'s neighbour, so there is
          one filter menu in the app rather than two that drift apart. */
-      if (FM.filters && FM.filters.all().length) {
-        const fb = el('button', 'fx-add-btn insp-filter-shortcut', '✦ Filters →');
-        fb.title = 'Ready-made looks — Cinematic, Retro, Glow, Stylised';
-        // GOES to the Filters subsection rather than adding one from here (queue 220). He asked for
-        // "a shortcut button to go to filters" and got a button that added one, which is a different
-        // thing: a shortcut takes you somewhere to look before you choose.
-        fb.addEventListener('click', () => FM.inspector.openCategory('filters'));
-        body.appendChild(fb);
-      }
+      // The Filters shortcut now sits on the HEADER row beside "‹ Colouring" (queue 714) — see filterShortcut()
+      // and the header branch in refresh(). It used to be a full-width row here, first in the body.
       // EVERY layer gets AM's fill selector (None / Solid / Gradient / Media). On a video/image/
       // group, picking Solid (etc.) fully overwrites the content with that fill; None shows the
       // content as-is. A solid colour fills flat — gradients are their own tab, never an accident.
@@ -6479,6 +6480,16 @@ window.FM = window.FM || {};
           back.classList.add('cat-back-flex');
           head.appendChild(back);
           head.appendChild(FM._inspectorCropToggles(layer));
+          root.appendChild(head);
+        } else if (view === 'color' && FM.filters && FM.filters.all().length) {
+          /* QUEUE 714. Ezra, with a screenshot of the full-width "✦ Filters →" row circled and a line drawn along
+             the "‹ Colouring" row: "make the filters button on pc and mobile in the colouring menu smaller and fit
+             on the row that i drew a line on". Same head-row the crop toggles already use, so the back link and
+             the shortcut share one line on both layouts; the compact size is CSS on .cat-head-row. */
+          const head = el('div', 'cat-head-row');
+          back.classList.add('cat-back-flex');
+          head.appendChild(back);
+          head.appendChild(filterShortcut());
           root.appendChild(head);
         } else {
           root.appendChild(back);

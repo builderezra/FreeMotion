@@ -339,8 +339,15 @@ for i, ln in enumerate(open(sys.argv[1], encoding='utf-8'), 1):
     if not m:
         continue                      # unnumbered — already listed above
     n, suf, title = int(m.group(1)), m.group(2), m.group(3).strip()
-    rows.append((n, suf, i, re.sub(r'\*\*', '', title)[:70]))
-for n, suf, i, title in sorted(rows):
+    # HIS WORDS BEFORE MY FINDINGS (2 Sep): an audit finding — "(hunt HIGH #n)" in the header — lists
+    # after every request in his own words, whatever its number. Same tier the gate in ship.sh uses,
+    # from the same function, so the list he reads and the order that ships cannot disagree.
+    rows.append((sys.path.insert(0, 'tools') or __import__('_classify').sort_key(n, suf, __import__('_classify').is_audit(ln)), n, suf, i, re.sub(r'\*\*', '', title)[:70]))
+shown_tier = None
+for key, n, suf, i, title in sorted(rows):
+    if key[0] == 2 and shown_tier != 2:
+        print('--- audit findings (mine, not his words) — queued behind everything above ---')
+    shown_tier = key[0]
     print('%s%s\t(line %d)\t%s' % (n, suf, i, title))
 PY
 
@@ -368,8 +375,9 @@ starts = [i for i, l in enumerate(lines) if re.match(r'^- \[[ x]\] ', l)]
 # verdict into REQUESTS.md for Ezra to read. Two copies of this rule would drift, and a rule living in
 # two places is the most expensive bug shape in this project.
 sys.path.insert(0, 'tools')
-from _classify import classify, BUCKETS
+from _classify import classify, BUCKETS, is_audit
 buckets = {k: [] for k in BUCKETS}
+audit_tags = []
 for n, i in enumerate(starts):
     if not lines[i].startswith('- [ ] '): continue
     end = starts[n + 1] if n + 1 < len(starts) else len(lines)
@@ -379,15 +387,24 @@ for n, i in enumerate(starts):
     title = re.sub(r'\*\*', '', lines[i][6:])[:64]
     key = classify(body)
     buckets[key].append((tag, title, i + 1))
-for k in ('ACTIONABLE', 'blocked on Ezra', 'held by Ezra', 'needs its own session', 'standing note (no build)', 'only long-term ideas left'):
-    print('%-22s %d' % (k + ':', len(buckets[k])))
+    if is_audit(body): audit_tags.append(tag)        # my findings list after his words (2 Sep)
+for k in ('ACTIONABLE', 'blocked on Ezra', 'built out — waiting on him', 'held by Ezra', 'needs its own session', 'standing note (no build)', 'only long-term ideas left'):
+    print('%-28s %d' % (k + ':', len(buckets[k])))
+# BUILT OUT, LISTED — NEVER HIDDEN (2 Sep). These are older than everything in the work queue below and
+# each says in its own tail what it is waiting for from him. They are printed here every tick so a
+# reader sees them; they are not handed out as work because the entry says there is none.
+bo = buckets['built out — waiting on him']
+if bo:
+    print('\n⏸ BUILT OUT — nothing to build until he answers (%d, oldest first; the entry says what it needs):' % len(bo))
+    for tag, title, ln in sorted(bo, key=lambda r: (0, 0) if not r[0][0].isdigit() else (1, int(''.join(c for c in r[0] if c.isdigit())))):
+        print('  %-6s line %-6d %s' % (tag, ln, title))
 # ⚠️ THIS LIST INCLUDES ITEMS BLOCKED ON HIM, ON PURPOSE (queue 660). It used to show ACTIONABLE only,
 # and the classifier files 43 of 76 open items as blocked — so more than half the list was invisible and
 # the loop worked the newest third while reporting that it was oldest-first. #47, #95, #96, #98, #125,
 # #129, #148 and #202 were all open and unreachable. His instruction is that a question NEVER stops the
 # loop: write it in the entry, build the half that does not depend on it, move on. So blocked is work.
 from _classify import work_queue
-wq = work_queue(buckets)
+wq = work_queue(buckets, audit_tags)
 if wq:
     print('\nSTART HERE (oldest first) — but READ THE CODE BEFORE YOU BUILD:')
     print('  On 20 Aug THREE open entries turned out to be already done — 395 (audio export shipped')

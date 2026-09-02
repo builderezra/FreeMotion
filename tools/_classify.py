@@ -58,7 +58,7 @@ CLAUSE  = re.compile(r'^\s*\d+\. \[ \]')
 HEDGED  = re.compile(r'\(long term\)|\(Idea|potentially|eventually|one day', re.I)
 
 
-BUCKETS = ['ACTIONABLE', 'blocked on Ezra', 'held by Ezra', 'needs its own session',
+BUCKETS = ['ACTIONABLE', 'blocked on Ezra', 'built out — waiting on him', 'held by Ezra', 'needs its own session',
            'standing note (no build)', 'only long-term ideas left']
 
 
@@ -129,6 +129,7 @@ def classify(body):
     return ('only long-term ideas left' if hedged_only else
             'standing note (no build)' if _standing(body) else
             'held by Ezra' if (HELD.search(body) and not lifted) else
+            'built out — waiting on him' if (not unblocked and BUILT_OUT.search(tail)) else
             'blocked on Ezra' if (not unblocked and (needs_eye or BLOCKED.search(tail))) else
             'needs its own session' if BIG.search(body) else 'ACTIONABLE')
 
@@ -151,6 +152,20 @@ NUM   = re.compile(r'^- \[ \] \*\*(\d+)([a-z]?) ')
 # inferred, so it is declared — put `JUMPED:` in the skipped entry with the reason, and the gate honours
 # it. A reason written down is the point: it turns a silent reordering into a line he can read.
 JUMPED = re.compile(r'JUMPED:')
+
+# ── BUILT OUT: EVERYTHING THAT DOES NOT NEED HIM IS DONE, AND THE ENTRY SAYS SO (2 Sep) ─────────────
+# His 28 Aug rule (queue 660) makes a blocked item still WORK — build the half that does not need the
+# answer. Right. But the three oldest items in the file (an unnumbered lag report, #95, #96) had that
+# half built on 29 Aug: the instrument exists, and each entry ends "15 seconds from you: paste it". Every
+# loop tick since then has re-read 500 lines to rediscover that, or — worse — skipped them as "blocked"
+# by feel, which is what he caught on 2 Sep ("you arent doing it in order like i asked").
+# So the state gets a phrase the tool honours, written WITH the date and the ask: an entry whose tail says
+# BUILT OUT UNTIL HE … leaves the work queue and is listed under its own heading instead — never
+# hidden, because a hidden item is the failure this file exists to prevent. An answer from him after the
+# phrase lifts it (same tail rule as BLOCKED); UNBLOCKED lifts it too.
+# (The first wording was "NOTHING TO BUILD UNTIL HE" — and its own self-test caught it matching STANDING_BODY's
+# "Nothing to build", which would have filed all three entries as standing notes: hidden, the exact failure.)
+BUILT_OUT = re.compile(r'BUILT OUT UNTIL (HE|YOU|EZRA)\b')
 
 
 # ── WHICH UNTICKED CLAUSES INSIDE A DONE ENTRY ARE ACTUALLY A MISS ─────────────────────────────────
@@ -241,12 +256,38 @@ def entries(md):
     return out
 
 
-def sort_key(num, suffix):
+# ── HIS WORDS BEFORE MY FINDINGS (2 Sep) ──────────────────────────────────────────────────────────
+# A read-only audit logged 42 items (#718–#759) and FIVE of his own messages arrived minutes later
+# (#760–#764). By raw number the audit sat ahead of him, and the ordering gate would have REFUSED to
+# ship his requests until my findings were done — the exact inverse of what oldest-first is for ("I want
+# the oldest things in the list done first" is about HIS list not rotting, not about my notes to
+# myself). Writing JUMPED: into 42 entries would have released them from the queue forever; this keeps
+# them queued, in order, behind everything in his own words. The marker is read from the HEADER line
+# only: an entry of his that mentions an audit item in its prose is still his.
+AUDIT = re.compile(r'\(hunt (?:HIGH|MEDIUM|LOW) #\d+\)')
+
+
+def sort_key(num, suffix, audit=False):
     """Unnumbered items sort FIRST — they predate the numbering, so they are the oldest. Letter
        suffixes sort inside their number (#31b after #31), which the first version of next.sh got
-       wrong by sorting it to the bottom."""
+       wrong by sorting it to the bottom. Audit findings sort AFTER every request in his own words."""
     if num is None: return (0, 0, '')
-    return (1, num, suffix)
+    return (2 if audit else 1, num, suffix)
+
+
+def is_audit(body):
+    return bool(AUDIT.search(body.split('\n', 1)[0]))
+
+
+def key_of(md, num, suf=''):
+    """The sort key of entry #num in md, ticked or not — the gate asks about entries a release has
+       JUST ticked, so it cannot use the open-only readers. -1 / None is an unnumbered entry."""
+    if num is None or num == -1: return (0, 0, '')
+    for body in entries(md):
+        m = re.match(r'- \[[ x]\] \*\*(\d+)([a-z]?)[ —]', body)
+        if m and int(m.group(1)) == num and m.group(2) == (suf or ''):
+            return sort_key(num, suf or '', is_audit(body))
+    return sort_key(num, suf or '')
 
 
 
@@ -312,7 +353,7 @@ def next_up(md):
         m = NUM.match(body)
         num = int(m.group(1)) if m else None
         suf = m.group(2) if m else ''
-        k = sort_key(num, suf)
+        k = sort_key(num, suf, is_audit(body))
         if best is None or k < best[0]:
             best = (k, num, suf, body.split('\n', 1)[0])
     return None if best is None else (best[1], best[2], best[3])
@@ -392,6 +433,15 @@ _CASES = [
      'an uppercase HE ANSWERED is an answer (2 Sep: #98 and #560 each sat blocked a day for the wording)'),
     ('- [ ] **3c — x** it is your call.\nhe answered a different question about it', 'blocked on Ezra',
      'lowercase prose about answering is NOT the marker — an unrelated answer must not promote an entry'),
+    ('- [ ] **95 — x**\n      ➡️ what I need from you: paste the report\n      ⏸ 2 Sep: BUILT OUT UNTIL HE pastes it.',
+     'built out — waiting on him',
+     'an entry that SAYS its buildable half is built leaves the work queue (2 Sep: three 500-line entries re-read every tick)'),
+    ('- [ ] **95 — x**\n      ⏸ BUILT OUT UNTIL HE pastes it.\n      ANSWERED BY EZRA: here is the paste …',
+     'ACTIONABLE',
+     'his answer AFTER the built-out line lifts it — the paste is the thing it was waiting for'),
+    ('- [ ] **95 — x**\n      ⏸ BUILT OUT UNTIL HE pastes it.\n      UNBLOCKED 3 Sep: he said skip the paste and guess.',
+     'ACTIONABLE',
+     'UNBLOCKED lifts a built-out line like it lifts a block'),
     ('- [ ] **8 — Standing reminder** about the thing', 'standing note (no build)',
      'a standing note in the HEADER is not work'),
     # The phrase must sit in the BODY here, not the header — that distinction IS the rule. Writing this
@@ -448,6 +498,53 @@ _ORDER = [
       nothing is stopping this""",
      (20, ''),
      'a declared JUMPED: skip releases the queue; without it, #10 would still be next'),
+    # HIS WORDS BEFORE MY FINDINGS (2 Sep). 42 audit items were numbered minutes before five of his own
+    # messages arrived; by raw number they would have held the queue against him.
+    ("""- [ ] **718 — undo wipes the draw-from keyframes** (hunt HIGH #1)
+      nothing is stopping this
+- [ ] **760 — bigger shape buttons, in his own words**
+      nothing is stopping this""",
+     (760, ''),
+     'an audit finding numbered LOWER does not hold the queue against a request in his own words'),
+    ("""- [ ] **730 — a later finding** (hunt MEDIUM #13)
+      nothing is stopping this
+- [ ] **718 — an earlier finding** (hunt HIGH #1)
+      nothing is stopping this""",
+     (718, ''),
+     'audit findings keep oldest-first AMONG THEMSELVES — the tier reorders his against mine, nothing else'),
+    ("""- [ ] **718 — a finding** (hunt HIGH #1)
+      nothing is stopping this
+- [ ] **761 — his request**
+      the body mentions (hunt HIGH #1) in passing, which must not demote it""",
+     (761, ''),
+     'the marker counts in the HEADER only — a request of his that mentions an audit item is still his'),
+    ("""- [ ] **an old one with no number**
+      nothing is stopping this
+- [ ] **760 — his**
+      nothing is stopping this
+- [ ] **718 — finding** (hunt HIGH #1)
+      nothing is stopping this""",
+     (None, ''),
+     'an unnumbered entry still outranks everything, his and mine alike'),
+]
+
+# The gate ranks the item a release has JUST TICKED against next_up. Each case: (file, closed, expect late?)
+_KEY = [
+    ("""- [ ] **718 — finding** (hunt HIGH #1)
+      nothing is stopping this
+- [x] **760 — his**
+      done""", 760, False,
+     'closing his #760 while audit #718 is open is IN ORDER — his words before my findings'),
+    ("""- [ ] **718 — finding** (hunt HIGH #1)
+      nothing is stopping this
+- [x] **730 — later finding** (hunt MEDIUM #13)
+      done""", 730, True,
+     'closing audit #730 while audit #718 is open is OUT of order — the tier does not free my own list'),
+    ("""- [ ] **715 — his, older**
+      nothing is stopping this
+- [x] **718 — finding** (hunt HIGH #1)
+      done""", 718, True,
+     'closing a finding while an older request of his is open is OUT of order'),
 ]
 
 
@@ -469,17 +566,19 @@ _ORDER = [
 WORKABLE = ('ACTIONABLE', 'blocked on Ezra')
 
 
-def work_queue(buckets):
+def work_queue(buckets, audit=()):
     """buckets = {bucket_name: [(tag, title, line), ...]}. Returns [(tag, title, line, bucket), ...]
-    oldest first — unnumbered entries before every number, letter suffixes sorted inside their number."""
+    oldest first — unnumbered entries before every number, letter suffixes sorted inside their number,
+    and tags in `audit` (my findings, not his words) after all of them."""
     items = []
     for k in WORKABLE:
         for row in buckets.get(k, []):
             items.append((row[0], row[1], row[2], k))
+    audit = set(str(a) for a in audit)
 
     def key(t):
         m = re.match(r'(\d+)([a-z]?)$', str(t[0]))
-        return (1, int(m.group(1)), m.group(2)) if m else (0, 0, '')
+        return sort_key(int(m.group(1)), m.group(2), str(t[0]) in audit) if m else (0, 0, '')
     return sorted(items, key=key)
 
 
@@ -502,6 +601,14 @@ _WORK = [
     ({'ACTIONABLE': [('610', 'border', 5)], 'held by Ezra': [('206', 'shape edit points', 1)]},
      ['610'],
      'an item HE held must not be handed back as work — that would be ignoring him, not obeying him'),
+    ({'ACTIONABLE': [('610', 'border', 5)], 'built out — waiting on him': [('95', 'audio paste', 1)]},
+     ['610'],
+     'a built-out item is not work either — it is listed under its own heading, never handed out and never hidden'),
+    # HIS WORDS BEFORE MY FINDINGS: the listing he reads must show the same order the gate enforces.
+    ({'ACTIONABLE': [('718', 'a finding', 1), ('760', 'his request', 2)], 'blocked on Ezra': [],
+      'audit': ['718']},
+     ['760', '718'],
+     'an audit finding lists AFTER his request even though its number is lower'),
 ]
 
 
@@ -549,7 +656,7 @@ if __name__ == '__main__':
             bad += 1
             print('FAIL: next_up expected %-14s got %-14s — %s' % (want, got2, why))
     for buckets, want, why in _WORK:
-        got = [r[0] for r in work_queue(buckets)]
+        got = [r[0] for r in work_queue(buckets, buckets.get('audit', ()))]
         if got != want:
             bad += 1
             print('FAIL: work_queue expected %-22s got %-22s — %s' % (want, got, why))
@@ -563,7 +670,13 @@ if __name__ == '__main__':
         if got != want:
             bad += 1
             print('FAIL: closed_in_diff expected %-16s got %-16s — %s' % (want, got, why))
-    _total = len(_CASES) + len(_ORDER) + len(_WORK) + len(_LIVE) + len(_DIFF)
+    for md, closed, want, why in _KEY:
+        nxt = next_up(md)
+        got = key_of(md, closed) > key_of(md, nxt[0], nxt[1])
+        if got != want:
+            bad += 1
+            print('FAIL: key_of late expected %-5s got %-5s — %s' % (want, got, why))
+    _total = len(_CASES) + len(_ORDER) + len(_WORK) + len(_LIVE) + len(_DIFF) + len(_KEY)
     if bad:
         print('\n%d of %d classifier rules are broken. Each one was a real bug; do not push this.' % (bad, _total))
         _s.exit(1)

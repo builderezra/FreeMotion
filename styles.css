@@ -6987,6 +6987,12 @@ body.fm-pushing #toast { z-index: 213; }
   font-weight: 600;
 }
 
+/* On the Colouring header row (queue 714): a small pill on the right of "‹ Colouring", not a full-width row.
+   .fx-add-btn's width:100% / margin-top:10px / padding:13px are all for the body version; every one is undone
+   here. The row is min-height 40px so the pill stays a thumb-sized target on the phone. */
+.cat-head-row .insp-filter-shortcut { width: auto; flex: none; margin: 0 14px 0 0; padding: 7px 12px; min-height: 34px; font-size: 12.5px; border-radius: 9px; white-space: nowrap; }
+.cat-head-row { min-height: 40px; }
+
 /* ---- the Filters subsection (queue 113, step 5) -----------------------------------------------
    A browse list, not a grid: each row has to carry a name, a sentence, and the effects the look is
    made of, and three lines of text do not fit in a thumbnail-sized tile at 380px. When filter
