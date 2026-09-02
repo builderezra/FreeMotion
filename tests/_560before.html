@@ -20,27 +20,39 @@ async function run(w){
   var FM=w.FM, D=w.document;
   if(FM.home&&FM.home.isOpen&&FM.home.isOpen()) FM.home.close(); await sleep(300);
   FM.scene.project.width=320; FM.scene.project.height=240; FM.scene.project.duration=4;
+  /* TRANSPARENT ground, or every pixel is lit and the metric says nothing (the first run lit all 76,800). */
+  ['bg','background','bgColor','bgc'].forEach(function(k){ if (k in FM.scene.project) FM.scene.project[k]='transparent'; });
+  FM.scene.project.bg='transparent';
   var W=320,H=240;
   function shape(){ var L=FM.makeLayer('shape',{shape:'rect',x:160,y:120,shapeW:140,shapeH:100,fill:'#d84a2a'}); L.start=0; L.duration=4; return L; }
   function mask(){ var m=FM.masks.make('add'); m.path=[[110,70],[230,70],[230,190],[110,190]]; m.feather=6; return m; }   // a window smaller than the shape
-  function fx(id, params){ var e=FM.fxRegistry.makeInstance(id); if(!e) throw new Error('no effect '+id); Object.assign(e.params, params||{}); return e; }
+  /* SELF-ADAPTING: every numeric parameter is pushed to its declared max, so the effect MUST show — the first run
+     guessed keys (distance/blur) that did not exist and the effect rendered nothing, hashing equal to bare. */
+  function fx(id){ var e=FM.fxRegistry.makeInstance(id); if(!e) throw new Error('no effect '+id);
+    var spec=FM.fxRegistry.paramsOf(id)||[]; var set=[];
+    spec.forEach(function(pd){ if(typeof pd.max==='number' && typeof pd.min==='number' && pd.key!=='seed'){ var v=pd.min+(pd.max-pd.min)*0.75; e.params[pd.key]=v; set.push(pd.key+'='+(+v.toFixed(2))); } });
+    say('  '+id+' params: '+(set.join(' ')||'(none numeric)')); return e; }
   function render(L){
     FM.scene.layers.length=0; FM.scene.layers.push(L); FM.selectLayer(null);
     var cv=D.createElement('canvas'); cv.width=W; cv.height=H; var ctx=cv.getContext('2d');
     FM.renderScene(ctx, FM.scene, 1.0);
-    var d=ctx.getImageData(0,0,W,H).data, lit=0; for(var i=3;i<d.length;i+=4) if(d[i]>8) lit++;
-    return { hash: fnv(d), lit: lit, png: cv.toDataURL('image/png').length };
+    var d=ctx.getImageData(0,0,W,H).data, lit=0, red=0; for(var i=0;i<d.length;i+=4){ if(d[i+3]>8) lit++; if(d[i]>150 && d[i+1]<120 && d[i+2]<100 && d[i+3]>8) red++; }
+    return { hash: fnv(d), lit: lit, red: red, png: cv.toDataURL('image/png').length };
   }
   var cases={};
   var a=shape(); a.masks=[mask()]; cases.a_mask_only=render(a);
-  var b=shape(); b.effects=[fx('dropshadow',{distance:18,blur:10})]; cases.b_effect_only=render(b);
-  var c=shape(); c.masks=[mask()]; c.effects=[fx('dropshadow',{distance:18,blur:10}), fx('boxblur',{amount:8})]; cases.c_mask_and_effects_legacy=render(c);
+  var b=shape(); b.effects=[fx('dropshadow')]; cases.b_effect_only=render(b);
+  var c=shape(); c.masks=[mask()]; c.effects=[fx('dropshadow'), fx('boxblur')]; cases.c_mask_and_effects_legacy=render(c);
   var e=shape(); cases.e_bare=render(e);
   say('tree: '+(D.querySelector('.ver')||{}).textContent+'   frame 320x240 at t=1.0');
-  Object.keys(cases).forEach(function(k){ say('  '+k.padEnd(28)+' hash '+cases[k].hash+'   lit px '+cases[k].lit+'   png bytes '+cases[k].png); });
-  say(''); say('SANITY: a (mask) must light FEWER px than e (bare); c must light fewer than b.');
-  say(cases.a_mask_only.lit < cases.e_bare.lit ? '  ✅ the mask cuts the shape ('+cases.a_mask_only.lit+' < '+cases.e_bare.lit+')' : '  ⚠️ the mask did nothing — the fixture is not exercising masking');
-  say(cases.c_mask_and_effects_legacy.lit < cases.b_effect_only.lit ? '  ✅ mask outermost cuts the effects too ('+cases.c_mask_and_effects_legacy.lit+' < '+cases.b_effect_only.lit+')' : '  ⚠️ the mask did not cut the shadow — check the legacy order');
+  Object.keys(cases).forEach(function(k){ say('  '+k.padEnd(28)+' hash '+cases[k].hash+'   lit '+cases[k].lit+'   red '+cases[k].red+'   png '+cases[k].png); });
+  say(''); say('SANITY — each fixture must be DISTINGUISHABLE, or the byte-identity claim is empty:');
+  var ok=true; function chk(c,m){ say((c?'  ✅ ':'  ⚠️ ')+m); if(!c) ok=false; }
+  chk(cases.e_bare.lit>0 && cases.e_bare.lit<W*H, 'the ground is transparent (bare lights '+cases.e_bare.lit+' of '+(W*H)+')');
+  chk(cases.a_mask_only.hash!==cases.e_bare.hash && cases.a_mask_only.red<cases.e_bare.red, 'the mask cuts the shape (red '+cases.a_mask_only.red+' < '+cases.e_bare.red+')');
+  chk(cases.b_effect_only.hash!==cases.e_bare.hash && cases.b_effect_only.lit>cases.e_bare.lit, 'the effect paints outside the shape (lit '+cases.b_effect_only.lit+' > '+cases.e_bare.lit+')');
+  chk(cases.c_mask_and_effects_legacy.hash!==cases.b_effect_only.hash && cases.c_mask_and_effects_legacy.lit<cases.b_effect_only.lit, 'mask outermost cuts the effects too (lit '+cases.c_mask_and_effects_legacy.lit+' < '+cases.b_effect_only.lit+')');
+  say(ok ? '\n✅ FIXTURE VALID — these hashes are the BEFORE record for queue 560.' : '\n🔴 FIXTURE INVALID — do not record these hashes.');
   window.__560=cases; w.__done=1; window.__done=1;
  }catch(err){ say('threw: '+(err&&err.message)); window.__done=1; }
 }

@@ -1915,13 +1915,25 @@ window.FM = window.FM || {};
   function effectsSection(layer) {
     const s = section('Effects');
     const list = el('div', 'fx-list');
-    (layer.effects || []).forEach((fx, idx) => list.appendChild(fxRow(layer, fx, idx)));
+    /* QUEUE 560 — rows in render order: every effect-stack entry (a mask MARKER renders as its mask's row), then
+       the masks with no marker, which the compositor applies outermost. All on one stack — see mergedStack. */
+    _merged.delete(layer);
+    const ST = mergedStack(layer), ML = mergedList(layer), canMask = maskableLayer(layer);
+    (layer.effects || []).forEach((fx, idx) => {
+      if (fx && fx.type === 'penmask') {
+        const mk = (Array.isArray(layer.masks) ? layer.masks : []).filter(x => x && x.id === fx.maskId)[0];
+        if (mk && canMask) maskRows(layer, [mk], ST, ML.length).forEach(r => list.appendChild(r));
+        return;
+      }
+      list.appendChild(fxRow(layer, fx, idx, ST));
+    });
     /* MASKS GO IN THE SAME LIST (queue 560) — see the note above `maskRows`. They used to be appended
        after this whole section, below Copy / Paste / Save, under their own "Masks" heading, which is the
        "own menu" he is pointing at. Only when the layer actually has one: an empty heading explaining
        itself was removed once already and should not come back by another route. */
-    if (maskableLayer(layer) && Array.isArray(layer.masks) && layer.masks.length) {
-      maskRows(layer).forEach(r => list.appendChild(r));
+    if (canMask && Array.isArray(layer.masks) && layer.masks.length) {
+      const un = unmarkedMasksOf(layer);
+      if (un.length) maskRows(layer, un, ST, ML.length).forEach(r => list.appendChild(r));   // unmarked = outermost, so they sit last
     }
     s.appendChild(list);
     /* THE CUE'S OWN STACK, under the track's (queue 151). Shown only on a caption track while a cue is
@@ -2582,6 +2594,7 @@ window.FM = window.FM || {};
     p.kf.push({ t: t, v: clonePts(pts), e: 'linear' }); p.kf.sort((a, b) => a.t - b.t);
   }
   function afterMasks(layer) {
+    if (FM.reconcileMaskMarkers) FM.reconcileMaskMarkers(layer);   // a deleted mask takes its marker with it (queue 560)
     if (layer.masks && !layer.masks.length) delete layer.masks;   // empty === absent → stay byte-for-byte diff-free
     commitH(); FM.requestRender(); FM.inspector.refresh(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
   }
@@ -2596,6 +2609,50 @@ window.FM = window.FM || {};
      its list through a `stack` descriptor and deletes by OBJECT IDENTITY rather than by index, so it
      takes masks unchanged. This is the same two-key descriptor the audio stack uses. */
   const MASK_STACK = { list: l => (Array.isArray(l.masks) ? l.masks : []), after: afterMasks };
+  /* ── QUEUE 560: ONE LIST FOR EFFECTS AND MASKS ────────────────────────────────────────────────────
+     His words: "layering them with the other effects and it works the same as an effect. But keeping the
+     function." A mask placed among the effects is an ORDERING MARKER `{ type: 'penmask', maskId }` in
+     layer.effects (the compositor applies that one mask at that position); layer.masks stays the data.
+     The rows on screen are, in order: every entry of layer.effects (a marker renders as its mask's row),
+     then the masks that have NO marker — which the compositor still applies outermost, so the row order IS
+     the render order. attachFxGestures measures the WHOLE .fx-list and splices ONE array at the DOM index,
+     so every row here shares this stack, whose list is that merged order. Its `after` reads the spliced
+     list back: an effect or marker keeps its place; an unmarked mask that now sits ABOVE any effect has
+     been dragged INTO the stack and gets a marker there; a mask no longer in the list at all was swiped
+     away and is deleted (for a marker row that means the mask, not just the marker). Before this, a mask
+     row's reorder spliced layer.masks at a DOM index measured over the merged list — wrong on any layer
+     that also had effects (the 2 Sep audit, item 7). */
+  const _merged = new WeakMap();
+  const isMaskObj = x => !!(x && (Array.isArray(x.path) || (x.path && Array.isArray(x.path.kf))));
+  function markedIdsOf(layer) { const ids = new Set(); (layer.effects || []).forEach(e => { if (e && e.type === 'penmask' && typeof e.maskId === 'string') ids.add(e.maskId); }); return ids; }
+  function unmarkedMasksOf(layer) { const ids = markedIdsOf(layer); return (Array.isArray(layer.masks) ? layer.masks : []).filter(x => x && !ids.has(x.id)); }
+  function mergedList(layer) {
+    let m = _merged.get(layer);
+    if (!m) { m = (layer.effects || []).slice().concat(unmarkedMasksOf(layer)); _merged.set(layer, m); }
+    return m;
+  }
+  function reconcileMarkers(layer) {
+    if (!Array.isArray(layer.effects)) return;
+    const have = new Set((Array.isArray(layer.masks) ? layer.masks : []).filter(Boolean).map(x => x.id)), seen = new Set();
+    layer.effects = layer.effects.filter(e => { if (!e || e.type !== 'penmask') return true; if (!have.has(e.maskId) || seen.has(e.maskId)) return false; seen.add(e.maskId); return true; });
+  }
+  FM.reconcileMaskMarkers = reconcileMarkers;
+  function applyMerged(layer) {
+    const m = _merged.get(layer) || mergedList(layer); _merged.delete(layer);
+    let lastFx = -1; m.forEach((x, i) => { if (!isMaskObj(x)) lastFx = i; });
+    const effects = [];
+    m.forEach((x, i) => {
+      if (!isMaskObj(x)) effects.push(x);                                             // an effect, or a marker already in the stack
+      else if (i < lastFx && layer.type !== 'adjustment') effects.push({ type: 'penmask', maskId: x.id });   // dragged INTO the stack (adjustment layers never dispatch post-fx — audit item 13)
+    });
+    const keep = new Set(m.filter(isMaskObj).map(x => x.id).concat(effects.filter(e => e && e.type === 'penmask').map(e => e.maskId)));
+    if (Array.isArray(layer.masks)) layer.masks = layer.masks.filter(x => x && keep.has(x.id));
+    layer.effects = effects;
+    reconcileMarkers(layer);
+    if (layer.masks && !layer.masks.length) delete layer.masks;
+    afterFx();
+  }
+  function mergedStack(layer) { return { list: () => mergedList(layer), after: () => applyMerged(layer) }; }
 
   /* ONE LIST, NOT TWO (queue 560). Ezra: "Masks still don't work like effects and have their own menu
      fix this" — his screenshot shows a MASKS heading sitting below the effect list, below even Copy /
@@ -2611,10 +2668,13 @@ window.FM = window.FM || {};
      migration: 30 call sites across 8 files, and the compositor applies masks at a different stage from
      the effect stack. This is the UI half — one list, one row treatment, one way in — which is what he
      is looking at. */
-  function maskRows(layer) {
+  function maskRows(layer, which, stack, rowCount) {
     const rows = [];
     const masks = Array.isArray(layer.masks) ? layer.masks : [];   // caller only calls this when it's non-empty
-    masks.forEach((mask, idx) => {
+    const show = Array.isArray(which) ? which : masks;                 // queue 560: a subset (one marker's mask, or the unmarked ones)
+    const st = stack || MASK_STACK, merged = stack ? mergedList(layer) : null;
+    show.forEach((mask) => {
+      const idx = masks.indexOf(mask);                                  // 'Mask N' keeps its number wherever the row sits
       /* `_expanded` is SAFE to hang on a mask, and it was worth checking before doing it: the mask
          sanitiser (js/storage.js:550) rebuilds every mask from a whitelist of eight keys, so a UI flag
          cannot reach a saved project — the same guarantee `fx._expanded` already relies on. */
@@ -2632,7 +2692,7 @@ window.FM = window.FM || {};
         FM.inspector.refresh();
       };
       head.addEventListener('click', (e) => { if (e.target.closest('.fx-icon-btn')) return; toggleMask(); });
-      if (masks.length > 1) head.appendChild(el('span', 'fx-grip', '\u283f'));   // press-hold to reorder
+      if ((rowCount != null ? rowCount : masks.length) > 1) head.appendChild(el('span', 'fx-grip', '\u283f'));   // press-hold to reorder
       const eye = el('button', 'fx-icon-btn fx-eye' + (mask.enabled === false ? ' off' : ''));
       eye.title = mask.enabled === false ? 'Mask off — enable' : 'Mask on — disable';
       eye.innerHTML = svgIcon('M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6');
@@ -2683,7 +2743,7 @@ window.FM = window.FM || {};
         edit.addEventListener('click', () => { if (FM.maskTool && FM.maskTool.open) FM.maskTool.open(layer.id, mask.id); else if (FM.toast) FM.toast('Mask editor unavailable'); });
         bodyEl.appendChild(edit);
       }
-      attachFxGestures(item, head, layer, mask, idx, MASK_STACK);   // swipe-left = delete · press-hold + drag = reorder
+      attachFxGestures(item, head, layer, mask, merged ? merged.indexOf(mask) : idx, st);   // swipe-left = delete · press-hold + drag = reorder — the index is the row's place in the list the stack splices
       rows.push(item);
     });
     return rows;
@@ -6165,6 +6225,7 @@ window.FM = window.FM || {};
   FM._presetIcoSrc = function () { return ICO_PRESETS; };
 
   FM.inspector = {
+    _mergedStack: mergedStack,   // seam: the 560 tests drive the merged effects+masks list without a pointer drag
     /* Open the Effects card on a particular side (queue 317). The full-screen browsers own two of the
        three sides and have nowhere to put the third — Filters is a list of ready-made looks, not a grid
        of effect tiles — so they hand it back here rather than each growing their own copy of it.

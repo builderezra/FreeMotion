@@ -1,8 +1,9 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v14.98
+> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v14.99
 >
-> **State:** v14.98, 1160 tests green, tree clean. **⚡ INNER BLUR IS 4.5x FASTER (51.1ms → 11.3ms)
+> **State:** v14.99, 1164 tests green, tree clean. **MASKS NOW LAYER WITH THE EFFECTS (#560)** — drag a mask row above an
+> effect in the Effects list and it becomes a member of the stack; effects above it spill past it, effects below are cut. **⚡ INNER BLUR IS 4.5x FASTER (51.1ms → 11.3ms)
 > and NOTHING ON SCREEN CHANGED** — measured, zero visible bytes different. The "Colour past the edge"
 > option you asked for keeps the old look one tap away. **✅ YOU ANSWERED FOUR QUESTIONS — all logged in
 > their own entries: the 219ms goes ahead WITH a tick box keeping the old rim; the intro logo has colour
@@ -21760,8 +21761,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **Verified at 380px:** the row fits the panel at 332px, the 1400px ruler sits inside an
       `overflow: hidden` strip, and the page does not scroll sideways.
 
-- [ ] **560 — Masks still don't behave like effects and still have their own separate menu.** (25 Aug, phone screenshot at v12.44.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **560 — Masks still don't behave like effects and still have their own separate menu.** (25 Aug, phone screenshot at v12.44.)
       ✅ **ANSWERED BY EZRA (HE ANSWERED), 1 Sep, and he picked the big one. Verbatim:**
       > I want masks as an effect and work with effects, like layering them with the other effects and it works the same as an effect. But keeping the function
       **So: interleave properly.** A mask becomes an ordinary member of the effect stack — draggable
@@ -21841,6 +21841,32 @@ re-opened #480, which I had marked done and had not fixed.
       writes `mask.enabled`); markers are refused inside Filter containers and on adjustment layers; one
       `reconcileMarkers(layer)` runs after every write to `layer.effects` or `layer.masks`. **Confirms the entry's
       own warning: a session of its own, tests first, byte-identity captured BEFORE the first edit.**
+      📐 **BEFORE RECORD, captured 2 Sep on v14.98 (`tests/_560before.html`, 320×240, t=1.0, transparent ground,
+      dropshadow distance 45 / angle 270 / softness 15, boxblur radius 30 / aspect 150 / passes 3.25):**
+      `a_mask_only 3d706b17` · `b_effect_only f9704b85` · `c_mask_and_effects_legacy 93b87b39` · `e_bare 50905765`.
+      The harness refused its first two fixtures (opaque ground lit every pixel; guessed effect keys rendered
+      nothing and hashed equal to bare) — the record above is from the third, with all four distinguishability
+      checks green. These are the constants the suite test holds the compositor to.
+      ✅ **COMPOSITOR + STORAGE HALVES DONE (2 Sep, unshipped until the inspector half joins them):** `penmask` in
+      `POSTFX`, dispatched by `applyPostFx` to `drawPenMaskAt` (the existing stencil body generalised to one mask at
+      one position); `hasPenMask`/`drawPenMaskLayer` handle UNMARKED masks only, and the inner clone keeps the
+      marked ones so their markers still resolve; `sane()` keeps a valid marker as exactly `{type, maskId}`, drops
+      dangling/duplicate/nested ones; masks are sanitised BEFORE effects on both the load and save paths (audit
+      items 1, 2, 3, 4, 5, 14, 15). **Four suite tests green:** byte-identity to the v14.98 hashes with controls;
+      marker-first > marker-middle > marker-last in pixels lit, and marker-last byte-identical to the legacy wrap;
+      a dangling marker renders exactly as if absent; the sanitiser's five rules. **Next: the inspector half** —
+      marker rows in the effect list at their index, unmarked masks after, drag-into-effects creating a marker,
+      swipe-delete removing the mask, "+ Add mask" adding a marker, `reconcileMarkers` after every wholesale write.
+      ✅ **INSPECTOR HALF DONE (2 Sep):** one `.fx-list` in render order — every effect-stack entry (a marker shows as
+      its mask's row, numbered by `layer.masks`), then the unmarked masks; every row shares one merged stack whose
+      `after` reads the spliced list back: an unmarked mask now above an effect gets a marker there, a mask missing
+      from the list is deleted (a marker row swiped away deletes its mask), adjustment layers never get markers;
+      `reconcileMaskMarkers` runs from `afterMasks`, the merged `after`, and the preset writer; "+ Add mask" appends
+      a marker (outermost — byte-identical, and draggable from the first moment); the override hint skips markers.
+      **This also fixes the pre-existing reorder fault the audit found (item 7): a mask row's drag spliced
+      `layer.masks` at an index measured over the merged DOM.** Fifth test green: DOM order, drag-in, swipe, reconcile.
+      ⏭️ Full suite, four mutation proofs (dispatch removed · sanitiser branch nulled · drag-in disabled · inner clone
+      keeps its mask), then ship.
       ✅ **THE MENU IS GONE — v12.76. The entry REMAINS OPEN on one question for you, at the bottom.**
       His words, verbatim:
       > Masks still don’t work like effects and have their own menu fix this
@@ -29254,6 +29280,12 @@ re-opened #480, which I had marked done and had not fixed.
       renders the same twice"* — is false for every recipe that uses `noiseBuffer` (Sparkle breaks it a second
       way). ➡️ **Fix:** a seeded PRNG inside `noiseBuffer` (deterministic noise; the cache-consistency the comment
       wants) and fixed offsets in Sparkle; then check Glass break's peak has headroom rather than luck.
+      📝 **DRAFTED 2 Sep, to apply once #560 ships** (`scratchpad/709_apply.py`, `709_test.js`): `noiseBuffer` draws
+      from a mulberry32 generator seeded by the request itself (sample count, colour, rate) — identical requests give
+      identical samples, different buffers still differ; Sparkle's fourteen sparks take fixed offset tables for time,
+      pitch and decay. The test renders EVERY recipe twice through an OfflineAudioContext and requires the two
+      buffers to match sample for sample — the file's own promise, held to every recipe rather than argued for one.
+      Then re-check Glass break's peak against the ▶ threshold with headroom, not luck.
 
 - [ ] **710 — An ORDER-DEPENDENT test: the 707 click-shield control catches its mutation alone and not in the full
       **STATUS: 🟢 READY — nothing is stopping this**

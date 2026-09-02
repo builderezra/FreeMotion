@@ -1880,7 +1880,7 @@ window.FM = window.FM || {};
     const hex = flatColorOf(layer);
     if (!hex) return null;
     const time = (typeof t === 'number' && isFinite(t)) ? t : 0;
-    const live = (layer.effects || []).filter(e => e && e.enabled !== false);
+    const live = (layer.effects || []).filter(e => e && e.enabled !== false && e.type !== 'penmask');   // a mask marker is not an effect that could undo anything (queue 560)
     if (live.indexOf(inst) < 0) return null;
     // Only meaningful if something actually FOLLOWS it — otherwise fxDeadOnLayer is the right question.
     if (live.indexOf(inst) === live.length - 1) return null;
@@ -2444,9 +2444,24 @@ window.FM = window.FM || {};
   // pen, per contract), keep only the pixels inside FM.buildMaskAlpha's coverage (destination-in),
   // then blit at the layer's real opacity + blend. A layer with no enabled pen mask never reaches
   // here (the drawLayer guard skips it), so byte-identical for legacy projects.
+  /* QUEUE 560 — a mask can be a MEMBER of the effect stack. A marker `{ type: 'penmask', maskId }` in
+     layer.effects applies that one mask at that position (drawPenMaskAt, dispatched by applyPostFx like any
+     other post-fx pass). layer.masks stays the data. Masks with NO marker keep the behaviour below — the
+     outermost union wrap — so a project without markers takes exactly the path it took before: the same
+     truth for hasPenMask, the same stencil, the same clone. Byte-identity for legacy is by construction and
+     is pinned by the 560 tests against hashes captured on v14.98. */
+  function markedMaskIds(layer) {
+    const ids = new Set();
+    (layer.effects || []).forEach(function (e) { if (e && e.type === 'penmask' && typeof e.maskId === 'string') ids.add(e.maskId); });
+    return ids;
+  }
+  function unmarkedMasks(layer) {
+    const ids = markedMaskIds(layer);
+    return (layer.masks || []).filter(function (m) { return m && !ids.has(m.id); });
+  }
   function hasPenMask(layer) {
-    return typeof FM.buildMaskAlpha === 'function' && layer.masks && layer.masks.length &&
-      layer.masks.some(function (m) { return m && m.enabled; });
+    if (typeof FM.buildMaskAlpha !== 'function' || !layer.masks || !layer.masks.length) return false;
+    return unmarkedMasks(layer).some(function (m) { return m && m.enabled; });
   }
   /* RE-ENTRANCY. drawPenMaskLayer holds TWO buffers alive across step 1's nested drawLayer: the
    * in-flight plate, and the mask alpha it will stencil with in step 2. That nested draw re-enters
@@ -2484,16 +2499,19 @@ window.FM = window.FM || {};
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const d = _pmDepth++;
     try {
-      const maskCanvas = maskAlphaAt(layer, t, W, H, d, ps);
+      const ids = markedMaskIds(layer);
+      const unmarked = (layer.masks || []).filter(function (m) { return m && !ids.has(m.id); });
+      const marked = (layer.masks || []).filter(function (m) { return m && ids.has(m.id); });
+      const maskCanvas = maskAlphaAt(ids.size ? Object.assign({}, layer, { masks: unmarked }) : layer, t, W, H, d, ps);   // unmarked only (queue 560)
       // No drawable coverage (all masks empty / off) → render the layer as if it had none.
-      if (!maskCanvas) { drawLayer(ctx, Object.assign({}, layer, { masks: null }), t, scene); return; }
+      if (!maskCanvas) { drawLayer(ctx, Object.assign({}, layer, { masks: marked.length ? marked : null }), t, scene); return; }
       const off = pmSlot(d).plate; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }   // cleared below
       off.__fmRS = ps; off.__fmOX = OX; off.__fmOY = OY;   // the nested drawLayer renders through baseT
       const octx = off.getContext('2d');
       baseT(octx); octx.clearRect(OX, OY, PWp, PHp);
       octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; octx.filter = 'none';
       // 1) draw the layer content (pen masks off, full opacity, normal blend) into the offscreen
-      const tmp = Object.assign({}, layer, { masks: null, blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+      const tmp = Object.assign({}, layer, { masks: marked.length ? marked : null, blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });   // markers inside still find their masks (queue 560)
       drawLayer(octx, tmp, t, scene);
       // 2) keep only pixels inside the pen-mask alpha (frame space — no layer transform)
       octx.save();
@@ -2520,6 +2538,51 @@ window.FM = window.FM || {};
   // (per-sub-frame decode would need a full forward frame cache). Transform blur is the common use.
   // Depth-indexed pool, like _pfPool: a nested blur (a blurred layer inside a blurred group) would
   // otherwise clear the outer call's workspace mid-flight.
+  /* The marker's own pass (queue 560): the layer WITHOUT this marker and WITHOUT its mask is rendered to a
+     plate — effects below the marker end up inside it, effects above it run later, outside — then the plate is
+     stencilled with that ONE mask and blitted at the layer's opacity/blend, exactly as drawPenMaskLayer does
+     for the unmarked set. A marker whose mask is missing or disabled still DRAWS the inner layer: an
+     undispatched or early-returning post-fx pass paints nothing (the magnifybg precedent). */
+  function drawPenMaskAt(ctx, layer, t, scene, fx) {
+    const m = (layer.masks || []).filter(function (x) { return x && x.id === fx.maskId; })[0];
+    const inner = Object.assign({}, layer, {
+      effects: (layer.effects || []).filter(function (e) { return e !== fx; }),
+      masks: (layer.masks || []).filter(function (x) { return x !== m; })
+    });
+    if (!m || m.enabled === false) { drawLayer(ctx, inner, t, scene); return; }
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
+    if (opacity <= 0) return;
+    const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    const _np = nestedPlate(ctx, P), ps = _np.ps, OX = _np.OX, OY = _np.OY;
+    const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
+    const d = _pmDepth++;
+    try {
+      const maskCanvas = maskAlphaAt(Object.assign({}, layer, { masks: [m] }), t, W, H, d, ps);
+      if (!maskCanvas) { drawLayer(ctx, inner, t, scene); return; }
+      const tmp = Object.assign({}, inner, { blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+      const off = pmSlot(d).plate; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }
+      off.__fmRS = ps; off.__fmOX = OX; off.__fmOY = OY;
+      const octx = off.getContext('2d');
+      baseT(octx); octx.clearRect(OX, OY, PWp, PHp);
+      octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; octx.filter = 'none';
+      drawLayer(octx, tmp, t, scene);
+      octx.save();
+      baseT(octx);
+      octx.globalAlpha = 1; octx.globalCompositeOperation = 'destination-in'; octx.filter = 'none';
+      try { octx.drawImage(maskCanvas, OX, OY, PWp, PHp); } catch (e) {}
+      octx.restore();
+      octx.globalCompositeOperation = 'source-over';
+      ctx.save();
+      baseT(ctx);
+      ctx.globalAlpha = opacity;
+      ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+      ctx.filter = 'none';
+      try { ctx.drawImage(off, OX, OY, PWp, PHp); } catch (e) {}
+      ctx.restore();
+    } finally { _pmDepth--; }
+  }
+  FM._postFxTypes = function () { return Object.keys(POSTFX); };   // seam: a test can walk the dispatch table
+
   const _mbPool = []; let _mbDepth = 0;
   // Returns TRUE when it drew the layer, FALSE when there was nothing to blur and the caller should
   // fall through to the ordinary single draw.
@@ -2728,7 +2791,7 @@ window.FM = window.FM || {};
   // Each draw* renders a clean copy of the layer with THIS effect instance removed (recursing
   // inward through the remaining post-fx), then applies its own transform — so they compose in
   // array order regardless of type.
-  const POSTFX = { filter: 1, rgbsplit: 1, pixelate: 1, posterize: 1, mirror: 1, tint: 1, threshold: 1, duotone: 1,
+  const POSTFX = { penmask: 1, filter: 1, rgbsplit: 1, pixelate: 1, posterize: 1, mirror: 1, tint: 1, threshold: 1, duotone: 1,
     solarize: 1, gamma: 1, temperature: 1, noise: 1, scanlines: 1,
     vibrance: 1, sharpen: 1, thermal: 1, dither: 1, halftone: 1,
     wave: 1, ripple: 1, twirl: 1, bulge: 1,
@@ -2816,6 +2879,7 @@ window.FM = window.FM || {};
   }
 
   function applyPostFx(ctx, layer, t, scene, fx) {
+    if (fx.type === 'penmask') return drawPenMaskAt(ctx, layer, t, scene, fx);   // a mask marker carries no params (queue 560)
     /* ⚠️ resolveFxColors, NOT the raw params (queue 686). An animated colour is an OBJECT, and the
      * effects below read colours as STRINGS — so a keyframed Tint or Duotone colour arrived as
      * `{kf:[…]}`, `hexToRGB` could make nothing of it, and the layer rendered BLACK for the whole clip.

@@ -361,7 +361,7 @@ window.FM = window.FM || {};
       /* …AND THE VALUE-LEVEL SAFETY CHECKS, on every load (bug hunt, 21 Aug). `sanitizeEffects` alone
          left a remote `fillImage` URL intact through a save and reopen, and the compositor assigns that
          straight to `Image.src`. Cheap enough to run on every layer of every open. */
-      FM.scene.layers.forEach(l => { if (l) { sanitizeEffects(l); sanitizeUnsafeValues(l); } });
+      FM.scene.layers.forEach(l => { if (l) { sanitizeMasks(l); /* masks FIRST — a marker is validated against their ids (queue 560) */ sanitizeEffects(l); sanitizeUnsafeValues(l); } });
       // BEFORE anything walks the graph. A document saved by a pre-v5.06 build can carry a parent
       // cycle; every parent walk below (refreshAll → the timeline, the layers panel, the compositor)
       // then throws, and because that throw happens inside this promise the boot .then() never runs:
@@ -768,6 +768,7 @@ window.FM = window.FM || {};
     return { keep: false };
   }
   function sanitizeEffects(l) {
+    const seenMarkers = new Set();   // one marker per mask (queue 560)
     /* MOTION BLUR (OBJECT): FLAG → EFFECT (queue 335). It used to be `layer.motionBlur`, layer state
      * rather than a stack entry, which is why it could never go inside a Filter. Every project he has
      * already made carries the flag, and there is NO scene versioning and no other load-time layer
@@ -829,6 +830,18 @@ window.FM = window.FM || {};
       // exists for. Two levels would cost 2^depth full rasterisations, each holding a comp-sized plate
       // pair (~16.6MB at 1080x1920), against depth counters in the compositor that are not capped.
       if (container && depth > 0) return null;
+      /* A MASK MARKER (queue 560) is `{ type: 'penmask', maskId }` and nothing else: no params, no enabled — the
+         mask's own eye owns that. Kept only when its mask exists on this layer and no earlier marker already
+         claims it; never inside a Filter container, whose two plates would each apply it. Everything else
+         about it is rebuilt from scratch, so a UI flag or a stray field can never reach a saved project. */
+      if (f.type === 'penmask') {
+        if (depth > 0) return null;
+        const id = (typeof f.maskId === 'string' && f.maskId && f.maskId.length <= 64) ? f.maskId : '';
+        if (!id || !Array.isArray(l.masks) || !l.masks.some(m => m && m.id === id) || seenMarkers.has(id)) return null;
+        seenMarkers.add(id);
+        return { type: 'penmask', maskId: id };
+      }
+
       const reg = FM.fxRegistry.get(f.type);
       // The round-trip IS the own-property guarantee: a get() that walked the prototype chain returns
       // something whose own .type cannot match what was asked for.
@@ -976,11 +989,11 @@ window.FM = window.FM || {};
   function sanitizeImportedLayers(layers) {
     (layers || []).forEach(l => {
       if (!l) return;
-      sanitizeEffects(l);
+      sanitizeMasks(l);
       sanitizeAudioFx(l);
       sanitizeTrimRepeater(l);
       sanitizeBehaviors(l);
-      sanitizeMasks(l);
+      sanitizeEffects(l);   // after the masks — queue 560
       sanitizeCamera(l);
       sanitizeUnsafeValues(l);
       sanitizeTiming(l);

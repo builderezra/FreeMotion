@@ -3315,6 +3315,137 @@
     }
   });
 
+  /* ── QUEUE 560: masks as members of the effect stack ─────────────────────────────────────────────────────
+   * His words (1 Sep): "I want masks as an effect and work with effects, like layering them with the other
+   * effects and it works the same as an effect. But keeping the function". The design (REQUESTS #560): a mask
+   * placed among the effects is an ORDERING MARKER `{ type: 'penmask', maskId }` in layer.effects; layer.masks
+   * stays the data. Unmarked masks keep today's outermost union wrap, so a project with no markers renders
+   * BYTE-IDENTICALLY — pinned below against hashes captured on v14.98 BEFORE the first edit. */
+  function fixture560(build) {
+    // 320x240, transparent ground, one red rect; `build(L, mask, fx)` shapes the layer. Returns pixel facts.
+    const BGK = ['background', 'bg', 'bgColor', 'bgc'];   // the renderer reads project.background (app.js:6282); the rest are belt-and-braces
+    const P = FM.scene.project, saved = { w: P.width, h: P.height, d: P.duration, bgs: BGK.map(k => [k, k in P, P[k]]), layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    try {
+      P.width = 320; P.height = 240; P.duration = 4; BGK.forEach(k => { P[k] = 'transparent'; });
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 140, shapeH: 100, fill: '#d84a2a' }); L.start = 0; L.duration = 4;
+      const mask = FM.masks.make('add'); mask.path = [[110, 70], [230, 70], [230, 190], [110, 190]]; mask.feather = 6;
+      const fx = (id) => { const e = FM.fxRegistry.makeInstance(id); if (!e) throw new Error('no effect ' + id);
+        (FM.fxRegistry.paramsOf(id) || []).forEach(pd => { if (typeof pd.max === 'number' && typeof pd.min === 'number' && pd.key !== 'seed') e.params[pd.key] = pd.min + (pd.max - pd.min) * 0.75; }); return e; };
+      build(L, mask, fx);
+      FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.scene.selectedId = null;
+      const cv = document.createElement('canvas'); cv.width = 320; cv.height = 240; const ctx = cv.getContext('2d');
+      FM.renderScene(ctx, FM.scene, 1.0);
+      const d = ctx.getImageData(0, 0, 320, 240).data; let h = 0x811c9dc5 >>> 0, lit = 0, red = 0;
+      for (let i = 0; i < d.length; i++) { h ^= d[i]; h = Math.imul(h, 16777619) >>> 0; }
+      for (let i = 0; i < d.length; i += 4) { if (d[i + 3] > 8) lit++; if (d[i] > 150 && d[i + 1] < 120 && d[i + 2] < 100 && d[i + 3] > 8) red++; }
+      return { hash: ('00000000' + h.toString(16)).slice(-8), lit: lit, red: red };
+    } finally {
+      P.width = saved.w; P.height = saved.h; P.duration = saved.d; saved.bgs.forEach(([k, had, v]) => { if (had) P[k] = v; else delete P[k]; });
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
+    }
+  }
+  const BEFORE_560 = { a_mask_only: '3d706b17', b_effect_only: 'f9704b85', c_mask_and_effects_legacy: '93b87b39', e_bare: '50905765' };
+
+  test('560: a project with no mask markers renders byte-identically to the day before masks joined the effect stack', { item: '560' }, function () {
+    const e = fixture560(function () {});
+    const a = fixture560(function (L, m) { L.masks = [m]; });
+    const b = fixture560(function (L, m, fx) { L.effects = [fx('dropshadow')]; });
+    const c = fixture560(function (L, m, fx) { L.masks = [m]; L.effects = [fx('dropshadow'), fx('boxblur')]; });
+    // CONTROLS FIRST — a fixture that cannot tell right from wrong would pass this whole test on the wrong tree.
+    if (!(e.lit > 0 && e.lit < 320 * 240)) throw new Error('fixture: the ground is not transparent (bare lights ' + e.lit + ' of 76800)');
+    if (!(a.hash !== e.hash && a.red < e.red)) throw new Error('fixture: the mask does not cut the shape (red ' + a.red + ' vs ' + e.red + ')');
+    if (!(b.hash !== e.hash && b.lit > e.lit)) throw new Error('fixture: the effect paints nothing outside the shape');
+    if (!(c.hash !== b.hash && c.lit < b.lit)) throw new Error('fixture: the outermost mask does not cut the effects');
+    const got = { a_mask_only: a.hash, b_effect_only: b.hash, c_mask_and_effects_legacy: c.hash, e_bare: e.hash };
+    const diff = Object.keys(BEFORE_560).filter(k => got[k] !== BEFORE_560[k]);
+    if (diff.length) throw new Error('a layer with NO mask markers renders differently from v14.98: ' + diff.map(k => k + ' ' + BEFORE_560[k] + ' -> ' + got[k]).join(', ') + ' — the legacy path must be byte-identical; only layers that carry a marker may change (queue 560)');
+  });
+
+  test('560: a mask marker cuts the effects BELOW it and leaves the ones ABOVE it — and outermost it equals the legacy wrap exactly', { item: '560' }, function () {
+    const legacy = fixture560(function (L, m, fx) { L.masks = [m]; L.effects = [fx('dropshadow'), fx('boxblur')]; });
+    const mk = (m) => ({ type: 'penmask', maskId: m.id });
+    const first = fixture560(function (L, m, fx) { L.masks = [m]; L.effects = [mk(m), fx('dropshadow'), fx('boxblur')]; });
+    const middle = fixture560(function (L, m, fx) { L.masks = [m]; L.effects = [fx('dropshadow'), mk(m), fx('boxblur')]; });
+    const last = fixture560(function (L, m, fx) { L.masks = [m]; L.effects = [fx('dropshadow'), fx('boxblur'), mk(m)]; });
+    const bare = fixture560(function (L, m, fx) { L.effects = [fx('dropshadow'), fx('boxblur')]; });
+    if (last.hash !== legacy.hash) throw new Error('a marker in the OUTERMOST position (' + last.hash + ') does not render like the legacy unmarked wrap (' + legacy.hash + ') — the two must be the same picture, or moving a mask into the stack changes what he already has');
+    if (!(first.lit > middle.lit && middle.lit > last.lit)) throw new Error('moving the marker outward must cut MORE: innermost lit ' + first.lit + ', middle ' + middle.lit + ', outermost ' + last.lit + ' — the effects above a marker should spill past the mask, the ones below should not');
+    if (first.hash === middle.hash || middle.hash === last.hash) throw new Error('two marker positions rendered identically — the position is not being honoured');
+    if (!(first.lit < bare.lit)) throw new Error('even innermost, the mask should cut SOMETHING (lit ' + first.lit + ' vs unmasked ' + bare.lit + ')');
+    // a marker whose mask is gone must still DRAW — an undispatched POSTFX type draws nothing (the magnifybg precedent)
+    const dangling = fixture560(function (L, m, fx) { L.masks = []; L.effects = [fx('dropshadow'), { type: 'penmask', maskId: 'no-such-mask' }, fx('boxblur')]; });
+    if (dangling.hash !== bare.hash) throw new Error('a dangling marker changed the picture (' + dangling.hash + ' vs ' + bare.hash + ') — it must render exactly as if it were not there');
+  });
+
+  test('560: the sanitiser keeps a valid mask marker in place, drops a dangling or duplicate one, refuses one inside a Filter, and the registry never learns the type', { item: '560' }, function () {
+    const m = FM.masks.make('add'); m.path = [[10, 10], [50, 10], [50, 50], [10, 50]];
+    const box = FM.fxRegistry.makeInstance('boxblur'), sh = FM.fxRegistry.makeInstance('dropshadow');
+    const l = { masks: [m], effects: [sh, { type: 'penmask', maskId: m.id, enabled: false, params: { junk: 1 } }, box, { type: 'penmask', maskId: 'nope' }, { type: 'penmask', maskId: m.id }] };
+    FM.storage._sanitizeEffects(l);
+    const types = l.effects.map(e => e.type);
+    if (types.join(',') !== 'dropshadow,penmask,boxblur') throw new Error('sanitised stack is ' + types.join(',') + ' — expected the valid marker kept in place, the dangling and duplicate ones dropped');
+    const mk = l.effects[1];
+    if (Object.keys(mk).sort().join(',') !== 'maskId,type') throw new Error('a marker must be exactly { type, maskId } after sanitising — got keys ' + Object.keys(mk).join(','));
+    if (mk.maskId !== m.id) throw new Error('the marker lost its maskId');
+    // no masks at all → every marker is dangling
+    const l2 = { effects: [{ type: 'penmask', maskId: m.id }, FM.fxRegistry.makeInstance('boxblur')] };
+    FM.storage._sanitizeEffects(l2);
+    if (l2.effects.length !== 1 || l2.effects[0].type !== 'boxblur') throw new Error('a marker on a layer with no masks survived sanitising');
+    // inside a Filter container a marker is refused
+    if (FM.FX_CONTAINER) {
+      const filt = FM.filters && FM.filters.makeInstance ? (FM.filters.makeInstance('vhs') || FM.filters.makeInstance(FM.filters.all()[0].id)) : null;
+      if (filt) {
+        filt.effects = (filt.effects || []).concat([{ type: 'penmask', maskId: m.id }]);
+        const l3 = { masks: [m], effects: [filt] };
+        FM.storage._sanitizeEffects(l3);
+        const inner = (l3.effects[0] && l3.effects[0].effects) || [];
+        if (inner.some(e => e.type === 'penmask')) throw new Error('a mask marker survived inside a Filter container — the container splits the plate and a mask inside it would be applied twice');
+      }
+    }
+    if (FM.fxRegistry.get('penmask')) throw new Error('penmask is registered as an effect — the AI manifest would offer it and addEffect would write a marker with no mask');
+    if ((FM.EFFECTS || []).some(e => e && e.type === 'penmask')) throw new Error('penmask is in FM.EFFECTS');
+  });
+
+  test('560: masks and effects are ONE list in render order, a mask dragged above an effect becomes a member of the stack, and a swiped marker takes its mask with it', { item: '560' }, async function () {
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 200, y: 300, shapeW: 120, shapeH: 90, fill: '#c05030' }); L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      const m1 = FM.masks.make('add'); m1.path = [[10, 10], [60, 10], [60, 60], [10, 60]];
+      const m2 = FM.masks.make('add'); m2.path = [[20, 20], [80, 20], [80, 80], [20, 80]];
+      const sh = FM.fxRegistry.makeInstance('dropshadow'), bl = FM.fxRegistry.makeInstance('boxblur');
+      L.masks = [m1, m2]; L.effects = [sh, { type: 'penmask', maskId: m1.id }, bl];
+      FM.selectLayer(L.id); FM.inspector.openCategory('effects'); FM.refreshAll(); await sleep(250);
+      // (a) the rows are the render order: shadow, Mask 1 (marked, between), blur, then Mask 2 (unmarked, outermost)
+      const rows = [].slice.call(document.querySelectorAll('#inspector .fx-list > .fx-row'));
+      const kinds = rows.map(r => r.classList.contains('mask-item') ? 'mask' : 'fx');
+      if (kinds.join(',') !== 'fx,mask,fx,mask') throw new Error('the effects list shows ' + kinds.join(',') + ' — expected fx,mask,fx,mask: the marked mask sits at its place in the stack and the unmarked one after everything (queue 560)');
+      const names = rows.filter(r => r.classList.contains('mask-item')).map(r => (r.querySelector('.mask-name') || {}).textContent);
+      if (names.join('|') !== 'Mask 1|Mask 2') throw new Error('mask rows are named ' + names.join('|') + ' — numbering must follow layer.masks, not the row position');
+      if (document.querySelector('#inspector .fx-list .fx-row.mask-item .fx-grip') == null) throw new Error('a mask row in a list of four has no reorder grip');
+      // (b) drag Mask 2 (unmarked) to the top: it must become a marker at index 0
+      const st = FM.inspector._mergedStack(L); let list = st.list();
+      if (list.length !== 4) throw new Error('the merged list has ' + list.length + ' entries, not 4');
+      const i2 = list.indexOf(m2); if (i2 !== 3) throw new Error('the unmarked mask is at merged index ' + i2 + ', expected 3 (last)');
+      list.splice(i2, 1); list.splice(0, 0, m2); st.after(); await sleep(250);
+      if (!(L.effects[0] && L.effects[0].type === 'penmask' && L.effects[0].maskId === m2.id)) throw new Error('dragging an unmarked mask above the effects did not make it a member of the stack: effects[0] is ' + JSON.stringify(L.effects[0]));
+      if (L.effects.length !== 4 || L.effects.filter(e => e.type === 'penmask').length !== 2) throw new Error('after the drag the stack is ' + L.effects.map(e => e.type).join(',') + ' — expected penmask,dropshadow,penmask,boxblur');
+      if (!(L.masks && L.masks.length === 2)) throw new Error('the drag changed layer.masks (' + (L.masks || []).length + ') — the data must not move, only the order');
+      // (c) swipe Mask 1's MARKER row away: the mask itself must go, not just the marker
+      const st2 = FM.inspector._mergedStack(L); list = st2.list();
+      const mk1 = list.filter(e => e && e.type === 'penmask' && e.maskId === m1.id)[0]; if (!mk1) throw new Error('no marker for Mask 1 in the merged list');
+      list.splice(list.indexOf(mk1), 1); st2.after(); await sleep(250);
+      if ((L.masks || []).some(x => x.id === m1.id)) throw new Error('swiping the marker row away left the mask behind — a mask row that vanishes must delete the mask, as any effect row does');
+      if (L.effects.some(e => e.type === 'penmask' && e.maskId === m1.id)) throw new Error('the deleted mask still has a marker');
+      // (d) deleting a mask by the data path reconciles its marker
+      L.masks = (L.masks || []).filter(x => x.id !== m2.id); FM.reconcileMaskMarkers(L);
+      if (L.effects.some(e => e.type === 'penmask')) throw new Error('a marker outlived its mask after reconcile — it would dangle into the next save');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = sel0;
+      FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
   test('576: the text editor options open BELOW the box showing what you typed', { item: '576' }, async function () {
     /* Queue 576. Ezra: "All of the text edit options now get blocked by the part that shows you what you
      * typed, fix this so they push it down or go below it, whatever's best."

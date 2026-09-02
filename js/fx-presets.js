@@ -292,6 +292,7 @@ window.FM = window.FM || {};
          drops them. Asking it is correct, and asking a not-yet-populated instance is circular. */
       if (Array.isArray(preset.effects) && preset.effects.length) {
         inst.effects = JSON.parse(JSON.stringify(preset.effects));
+        if (FM.reconcileMaskMarkers) FM.reconcileMaskMarkers(inst);   // a preset's mask markers point at masks the target may not have (queue 560)
       }
       // Value-checked, not just name-checked (queue 218). Returns null rather than an effect the
       // sanitiser threw out — landing a half-rebuilt one would be worse than not landing it.

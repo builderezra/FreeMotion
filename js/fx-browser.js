@@ -467,6 +467,9 @@ window.FM = window.FM || {};
     const m = (FM.masks && FM.masks.make) ? FM.masks.make('add')
       : { id: 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), enabled: true, mode: 'add', feather: 0, opacity: 1, invert: false, closed: true, path: [] };
     layer.masks.push(m);
+    // queue 560: born as a member of the effect stack, outermost — which renders exactly like an unmarked mask and
+    // makes it draggable among the effects from its first moment. Adjustment layers never dispatch post-fx, so not there.
+    if (layer.type !== 'adjustment') { if (!Array.isArray(layer.effects)) layer.effects = []; layer.effects.push({ type: 'penmask', maskId: m.id }); }
     if (!quiet) FM.fxBrowser.close();
     if (FM.inspector) FM.inspector.refresh();
     if (FM.timeline) FM.timeline.rebuild();
