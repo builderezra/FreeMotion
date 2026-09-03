@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.20
+> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.21
 >
-> **State:** v15.20, 1190 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
+> **State:** v15.21, 1191 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
 > **Four pictures are in the chat waiting for one letter each** (nothing visual ships before you pick): **#642** the home background A–D · **#763** the skip-button gap (6/12/18) and the play button A–D · **#765** the split/jump buttons' look 1–3 · and **#760's people shapes** come next, drawn the same way. Everything else waiting on you is a paste or a letter, listed by `tools/next.sh` under its own heading so it cannot hide: #425 A/B · #454 A/B/C · #482 a category · #484 A/B/C · #539 A/B/C · #544 which things · #564 A/B/C · #570 smooth/stepped/leave · #624 a/b/c · #654 A/B/C · #406 which menu · #674 (b)/(c) · #95/#96/#663 the **Your last playback** paste · #215/#604/#677 the **Your last export** paste · #129 the **clip with no picture** paste · the oldest lag item, a **Measure** report · #657 a sample while scrubbing · #676/#706 what "twice" looks like · #712 whether Back from a category stalls · #592 a screenshot.
 > **Next, in order, each already built and proved, shipping one by one:** #508 (a frame-time report of the project-open slide from your phone), #553 (coming back to the app half-drawn), #606, #674 (clip names over filmstrips), #688 (one intro film, dark mode lands on dark), #706 (the add sheet's one motion), #715 (PC sliders glide), #716 (the cursor glow box), #717 (copy/paste button lit), #762 (tap again closes), #764 (dragged add row on top); then #760, #765, #768 and the audit findings.
 
@@ -28678,9 +28678,10 @@ re-opened #480, which I had marked done and had not fixed.
       buttons will be placed differently and might look off if u just move it"*
       His clauses, ticked one at a time — the entry cannot close while any is open:
       1. [ ] **"move the split and jump buttons that show up when u have a layer selected to the right side of the add
-         menu being horizontal"** — the trio that appears beside the playhead when a layer is selected goes to the right
-         end of the horizontal add row on PC. ❓ (logged, not blocking) "the add menu being horizontal" — read as the
-         PC's horizontal add-layer row; if he meant the transport row, it is one move.
+         menu being horizontal"** — ⚠️ **CORRECTED BY HIM, 3 Sep (#772): NOT the add-layer row.** He meant the left-hand
+         editing panel's vertical edge — where it meets the timeline — with the three buttons stacked vertically there.
+         The reading below and the placement in the sent sheet were the mix-up; a new sheet of options is #772's job.
+         ~~(read as the PC's horizontal add-layer row; if he meant the transport row, it is one move.)~~
       2. [ ] **"put a little letter icon on each one resembling the shortcut button to do that action. A will be cut all
          the way to the left and jump to left, S will be split down the middle, D will be Jump to the right."**
       3. [x] ✅ **v15.10 on the keyboard** (the lettered buttons follow your pick) — **"for the split ones when hovering over a layer they will be the same, but the others will have to change
@@ -28693,7 +28694,7 @@ re-opened #480, which I had marked done and had not fixed.
       6. [ ] **"u will have to redesign how they all look maybe, coz now the buttons will be placed differently and
          might look off if u just move it"** — design → #545: draw the row as options, at ship size, send the picture,
          let him pick before it ships.
-      🎨 **3 Sep — CLAUSE 6 DRAWN AND SENT (#545)** (`scratchpad/split765.html`, rendered and sent to the chat): today's floating trio, then three looks for the three lettered buttons at the right end of the PC add row — 1 keycaps (recommended: the letter IS the label), 2 quiet outlined tags, 3 glyph with a corner badge. Clauses 1–5 (the placement, the A/S/D letters, A/D following the side of the hovered clip, S extending when not hovering, the old buttons removed) are the same in all three and are built the moment he picks, in his chosen look — one build, not one per guess. **Waits on his pick: 1, 2 or 3, or "none".** Where the code lives, for that build: the trio is `#tl-trim` (L/R/S) plus the move/extend pair in `syncTrim`/`clipToolSide` (timeline.js ~4440–4500); the PC add row is `.tl-addrow--line`; A and D as bare keys are free (only ⌘A / ⌘D are bound today, app.js ~6475/6495).
+      🎨 **3 Sep — CLAUSE 6 DRAWN AND SENT (#545) — ⚠️ SUPERSEDED: it placed the buttons on the add row, which #772 corrects; a new sheet follows** (`scratchpad/split765.html`, rendered and sent to the chat): today's floating trio, then three looks for the three lettered buttons at the right end of the PC add row — 1 keycaps (recommended: the letter IS the label), 2 quiet outlined tags, 3 glyph with a corner badge. Clauses 1–5 (the placement, the A/S/D letters, A/D following the side of the hovered clip, S extending when not hovering, the old buttons removed) are the same in all three and are built the moment he picks, in his chosen look — one build, not one per guess. **Waits on his pick: 1, 2 or 3, or "none".** Where the code lives, for that build: the trio is `#tl-trim` (L/R/S) plus the move/extend pair in `syncTrim`/`clipToolSide` (timeline.js ~4440–4500); the PC add row is `.tl-addrow--line`; A and D as bare keys are free (only ⌘A / ⌘D are bound today, app.js ~6475/6495).
         ✅ **v15.10 — CLAUSES 3 + 4 SHIPPED ON THE KEYBOARD, and half of 2: A / S / D work now, on PC and on a phone with a keyboard.** Playhead INSIDE the selected clip: **A** cuts away the left part, **S** splits (as it always did), **D** cuts away the right part. Playhead OUTSIDE: **S** stretches the near edge out to the playhead whichever side it is on; **A** brings the clip left to the playhead when the playhead is on the left, **D** brings it right when on the right; the letter for the other side does nothing. The buttons and the keys share one body per action (`js/timeline.js`, clipKeyAction), so they cannot drift apart, and the ? overlay lists all three. Nine-press test, inside and both outsides, with the two wrong-side letters as the control; two mutations caught (the side letters swapped; A cutting the wrong part).
         ❓ (logged, not blocking) **My reading of "a is always resembling of the left and d for the right":** off the clip, A only acts when the playhead is LEFT of the clip and D only when it is RIGHT — the other letter is inert. If you meant A = *the left edge* to the playhead and D = *the right edge*, whichever side the playhead is on, say so and it is one line.
         ⏸ **BUILT OUT UNTIL HE picks a look for the three lettered buttons (1 / 2 / 3 in the chat, #545).** Clauses 1 (the buttons at the right end of the PC add row), the button half of 2 (the letter on each), 5 (the playhead trio and nudge pair removed on PC) and 6 (the look) all ship together the moment he picks — moving the buttons with a look he has not seen is exactly what #545 forbids. The phone keeps its playhead buttons either way.
@@ -28762,3 +28763,65 @@ re-opened #480, which I had marked done and had not fixed.
       save-back that cannot happen, and the delete-confirm names the wrong noun. Fix: say "its template was deleted — open it to keep the
       work, or delete this draft", pick the noun from `ofTemplate` / `ofElement`, or have `templates.remove` discard that template's
       workspace after the confirm.
+
+- [ ] **772 — PC: the split / jump (A · S · D) buttons go on the LEFT, stacked vertically on the edge where the editing panel meets the timeline — not on the add-layer row.** Logged 3 Sep, the moment he said it, verbatim:
+      **STATUS: ⏸ BUILT OUT UNTIL HE picks a look — the options are drawn and sent; nothing ships before the pick (#545)**
+      His words, in full: *"So with the split buttons, I didn't mean for you to put them on the ad layer. I meant on PC for you to put
+      them on the like not the layer like the layer on the timeline. I meant the menu on the left side and like on the vertical like
+      edge of it where the cut-off between the timeline and the adding menu is like the editing panel on the left side of the timeline
+      I meant for you to put them all their vertically but you put them on the ad layer so it was a mixup of communication"*
+      His clauses, ticked one at a time:
+      1. [ ] **"not… the layer on the timeline"** — the add-layer row is the wrong place; nothing goes there.
+      2. [ ] **"the menu on the left side… on the vertical edge of it where the cut-off between the timeline and the adding menu is…
+         the editing panel on the left side of the timeline… put them all there vertically"** — a vertical column of the three
+         lettered buttons on the boundary between the left-hand editing panel and the timeline, on PC.
+      3. [x] Draw it as options at ship size, send the picture, let him pick (#545); then build the placement + look together
+         with #765's remaining clauses.
+      ❓ (logged, not blocking) "the adding menu" here — read as the left-hand panel that holds the add controls in the Studio
+      layout; the sheet will show the edge he means, so a wrong reading is one picture away from being corrected.
+      🎨 **3 Sep — DRAWN AND SENT (#545)** (`scratchpad/split772.html`, rendered and sent to the chat): A Keycap Rail · B Seam Tabs · C Docked Key Rail. Each option is drawn at the MEASURED geometry — 1280×760, the seam at x=307, a 40px transport row above the tracks — at ship size in both states (playhead inside the clip: cut-left / split / cut-right; playhead left of it: jump-left / extend / an inert, dimmed D), and again at 2× so the letters and glyphs can be judged.
+      ⏸ **BUILT OUT UNTIL HE picks a letter.** The keys already work (v15.10). What ships on his pick is the placement and the look together with #765's clauses 1, 2, 5 and 6: the column goes on the seam, each button carries its letter, and the floating trio by the playhead is REMOVED on PC ("they annoying asf") while the phone keeps it.
+
+- [x] **773 — PHONE: the add menu no longer slides down when you swipe it away or tap to close — it just disappears.** Logged 3 Sep, verbatim: ✅ DONE v15.21.
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words: *"Also on mobile the pop-up ad menu like when you press on the Adelaide and then the menu that pops up to add stuff
+      when you swipe down to swipe it away or just like tap to close it it doesn't slide down on the screen anymore. It just disappears
+      which is tacky make it actually slide down when you slide your finger down."*
+      His clauses:
+      1. [x] **"when you swipe down to swipe it away… it doesn't slide down… it just disappears"** — the swipe-to-dismiss must slide
+         the sheet down and off, following the finger.
+      2. [x] **"or just like tap to close it"** — a tap-to-close must slide it down too, not cut to nothing.
+      3. [x] **"make it actually slide down when you slide your finger down"** — the sheet tracks the finger on the way down.
+      🔎 First suspect, written before looking: v15.08 (#706) set `transition: none` on the OPEN sheet so its hinge keyframe would not
+      replay on iOS — if the close path relied on that transition, this is the regression, and it is mine.
+        ✅ **v15.21 — it slides again, and a swipe carries on from where your finger let go.** The suspect written above was the cause: v15.08 took the slide transition off the OPEN sheet so its hinge would not replay on iOS, and removing `.open` on close took the hinge with it — a transition does not start from a value an animation was holding, so the sheet cut to nothing (measured: full height on the first frame). The swipe release also cleared the finger's offset first. Now the close holds the sheet where it is with the motion off, commits that frame, and releases it a frame later under the base slide; a swipe passes its offset in. Test samples the transform mid-close for both paths; two mutations caught (the release made immediate; the swipe offset dropped).
+
+- [x] **774 — "make sure you're logging these New requests and not doing them straight away and you're doing stuff in order from oldest first"** (3 Sep, standing) ✅ done on arrival.
+      **STATUS: ✅ acted on the moment it arrived; kept as the standing rule it restates (#506, #532, #713, #766)**
+      His words: *"Also make sure you're logging these New requests and not doing them straight away and you're doing stuff in order
+      from oldest first"*
+      What happened: #772, #773, this and #775 were written down verbatim before any work on any of them. The order is not remembered,
+      it is enforced: `tools/next.sh` and ship.sh's queue gate rank his words ahead of my audit findings whatever their number (the
+      rule his #766 produced), so the release chain that was working the audit list stops at its next ship until these four have
+      had their turn in order — #772 (a picture for him to pick from, then parked on his pick), #773, #775 — and then resumes.
+
+- [ ] **775 — Go through the menus on PC (and the effects / filters switching on PC and phone), open and close them, and fix what behaves weirdly — the timeline-vs-add-menu separation on PC still has issues.** Logged 3 Sep, verbatim:
+      **STATUS: 🟢 READY — nothing is stopping this**
+      His words, in full: *"On PC, you're gonna have to go through a A bunch of the menus and stuff tried tapping on them and closing
+      them and opening them and see when they behave weirdly because right now, there is a bunch of things that behave weirdly, like,
+      still, like I told you, to fix the timeline being separate to the ad menu on PC and not have any issues, but it actually still
+      does have a lot of issues -- -- dropping. -- which are pretty pretty simple to fix. I would reckon. And also when you, like, open
+      up the effects menu and stuff, it sometimes bugs out and, like, weird things happen. And, like, when you switch to, like, the
+      filters menu from the effects menu and stuff on PC and on mobile and stuff, So I just tested it all out and make sure none of it's
+      actually bugging out or having any issues."*
+      His clauses, ticked one at a time:
+      1. [ ] **"go through a bunch of the menus… tapping on them and closing them and opening them and see when they behave weirdly"**
+         — a systematic open / close / re-open pass over every PC menu, recording each misbehaviour with its steps.
+      2. [ ] **"the timeline being separate to the ad menu on PC… still does have a lot of issues — dropping"** — the PC timeline /
+         add-menu separation (#710 family): find the remaining issues, "dropping" included, and fix them.
+      3. [ ] **"when you open up the effects menu… it sometimes bugs out and weird things happen"** — the effects browser on PC.
+      4. [ ] **"when you switch to the filters menu from the effects menu… on PC and on mobile"** — the Visual / Filters / Audio
+         switching, both layouts.
+      5. [ ] **"make sure none of it's actually bugging out or having any issues"** — re-test the whole set after the fixes.
+      🔎 Method, decided now so it is not improvised later: drive the real app in the headless browser at desktop width and at 380px,
+      one menu family per pass, every finding re-checked before it is called a bug; each confirmed bug becomes its own fix with a test.

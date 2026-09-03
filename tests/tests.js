@@ -53951,6 +53951,55 @@
     }
   });
 
+  /* ═══ 773: THE ADD SHEET SLIDES DOWN WHEN CLOSED — BY A TAP, AND BY A SWIPE FROM WHERE THE FINGER LEFT IT. Measured
+     before: translateY jumped to the full height on the first frame after the tap (a cut), and a swipe release snapped
+     the sheet back to the top before closing. Now the transform is sampled mid-close: strictly between the start and the
+     bottom on the way down, at the bottom afterwards; the swipe continues from the finger's offset, never back to 0. */
+  test('773: closing the add sheet slides it down — tap-to-close animates, and a swipe release continues from the finger', { item: '773', budgetMs: 20000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const sheet = document.getElementById('add-sheet'), fab = document.getElementById('add-fab');
+    if (!sheet || !fab) throw new Error('#add-sheet / #add-fab missing');
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const ty = () => { const m = new DOMMatrixReadOnly(getComputedStyle(sheet).transform); return m.m42; };
+    try {
+      if (hadHome) FM.home.close();
+      await atPhoneWidth(async function () {
+        if (sheet.classList.contains('open')) { fab.click(); await sleep(500); }
+        fab.click(); await sleep(700);
+        if (!sheet.classList.contains('open') || Math.abs(ty()) > 1) throw new Error('setup: the sheet did not open (open=' + sheet.classList.contains('open') + ', translateY ' + ty() + ')');
+        const h = sheet.getBoundingClientRect().height;
+        const grab = sheet.querySelector('.sheet-grab'); if (!grab) throw new Error('setup: no .sheet-grab');
+        // 1. tap to close
+        grab.click();
+        await sleep(90);
+        const mid = ty();
+        if (!(mid > 8 && mid < h - 8)) throw new Error('90ms after a tap on the grab the sheet is at translateY ' + Math.round(mid) + 'px of ' + Math.round(h) + ' — it cut instead of sliding down');
+        await sleep(450);
+        if (Math.abs(ty() - h) > 2) throw new Error('the closed sheet did not end at the bottom (' + Math.round(ty()) + ' of ' + Math.round(h) + ')');
+        // 2. swipe down on the grab, release past the threshold: the slide continues from the finger
+        fab.click(); await sleep(700);
+        if (!sheet.classList.contains('open')) throw new Error('setup: the sheet did not reopen');
+        const gr = grab.getBoundingClientRect(), x = gr.left + gr.width / 2, y0 = gr.top + gr.height / 2, drag = Math.round(h * 0.45);
+        const pe = (t, cy, b) => grab.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 21, pointerType: 'touch', isPrimary: true, clientX: x, clientY: cy, buttons: b }));
+        pe('pointerdown', y0, 1);
+        for (let i = 1; i <= 6; i++) { pe('pointermove', y0 + drag * i / 6, 1); await sleep(30); }
+        const held = ty();
+        if (!(held > drag * 0.8)) throw new Error('the sheet did not follow the finger (' + Math.round(held) + 'px for a ' + drag + 'px drag) — the hinge keyframe\'s fill still owns transform after it ends, so the drag moves nothing; "make it actually slide down when you slide your finger down"');
+        window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 21, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y0 + drag, buttons: 0 }));
+        await sleep(60);
+        const after = ty();
+        if (!(after >= drag - 4)) throw new Error('60ms after releasing a ' + drag + 'px swipe the sheet is at ' + Math.round(after) + 'px — it snapped back toward the top before closing instead of continuing down from the finger');
+        if (!(after < h - 4)) throw new Error('60ms after releasing the swipe the sheet is already at the bottom (' + Math.round(after) + ' of ' + Math.round(h) + ') — a cut, not a slide');
+        await sleep(450);
+        if (Math.abs(ty() - h) > 2 || sheet.classList.contains('open')) throw new Error('the swiped sheet did not end closed at the bottom');
+      });
+    } finally {
+      try { if (sheet.classList.contains('open') && FM._addSheetClose) FM._addSheetClose(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

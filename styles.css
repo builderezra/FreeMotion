@@ -4133,6 +4133,7 @@ body.white-chrome #time-readout:active {
     overscroll-behavior: contain; padding-bottom: max(18px, env(safe-area-inset-bottom));
   }
   #add-sheet.open { transform: translateY(0); }
+  #add-sheet.closing { pointer-events: none; }   /* queue 773: on its way down — see mobile.js closeAdd */
   .sheet-grab {
     display: flex; align-items: center; justify-content: center;
     width: 100%; padding: 10px 0 4px; border: 0; background: transparent; cursor: pointer;

@@ -127,7 +127,7 @@ window.FM = window.FM || {};
         var dy = e.clientY - startY, dx = e.clientX - startX;
         if (!claimed) {
           if (dy < -4) { active = false; return; }                 // upward → not a dismiss
-          if (dy > 6 && dy > Math.abs(dx)) { claimed = true; panel.style.transition = 'none'; try { panel.setPointerCapture(pid); } catch (_) {} }
+          if (dy > 6 && dy > Math.abs(dx)) { claimed = true; panel.style.transition = 'none'; panel.style.animation = 'none'; try { panel.setPointerCapture(pid); } catch (_) {} }   // queue 773: the hinge keyframe (fill both) still OWNED transform after it ended, so the finger moved nothing — a claimed drag switches it off
           else return;
         }
         if (e.cancelable) e.preventDefault();
@@ -140,9 +140,10 @@ window.FM = window.FM || {};
         try { panel.releasePointerCapture(pid); } catch (_) {}
         panel.style.transition = '';
         panel.style.transform = '';
+        panel.style.animation = '';   // queue 773: and hands transform back once the finger is off
         if (!wasClaimed || aborted) return;   // pointercancel = the OS stole the gesture → snap back, NEVER dismiss/deselect
         panel._swiped = true;
-        if ((lastY - startY) > 0.33 * h || vy > 0.5) dismiss();      // far enough OR fast flick → close
+        if ((lastY - startY) > 0.33 * h || vy > 0.5) dismiss(Math.max(0, lastY - startY));      // far enough OR fast flick → close — from where the finger left it (queue 773)
       }
       panel.addEventListener('pointerdown', onDown);
       window.addEventListener('pointermove', onMove, { passive: false });
@@ -362,8 +363,37 @@ window.FM = window.FM || {};
       var b = stage.getBoundingClientRect().bottom;
       addSheet.style.setProperty('--add-sheet-top', Math.max(0, Math.round(b)) + 'px');
     }
-    function openAdd() { close(); redrawAdd(); syncAddSheetTop(); addSheet.classList.add('open'); document.body.classList.add('add-open'); }
-    function closeAdd() { addSheet.classList.remove('open'); document.body.classList.remove('add-open'); }
+    function openAdd() {
+      close(); redrawAdd(); syncAddSheetTop();
+      if (addSheet._closeTimer) { clearTimeout(addSheet._closeTimer); addSheet._closeTimer = 0; }   // reopened mid-close: cancel the release
+      addSheet.classList.remove('closing'); addSheet.style.transition = ''; addSheet.style.transform = '';
+      addSheet.classList.add('open'); document.body.classList.add('add-open');
+    }
+    /* THE CLOSE SLIDES DOWN (queue 773). Ezra: "when you swipe down to swipe it away or just like tap to close it it doesn't
+       slide down on the screen anymore. It just disappears which is tacky make it actually slide down when you slide your
+       finger down." Removing `.open` takes the hinge keyframe (queue 706, v15.08) with it, and a transition does not start
+       from a value an animation was holding — so the sheet cut to nothing (measured: translateY 404px on the very first
+       frame after the tap). And a swipe's release cleared the finger's offset first, snapping the sheet back to the top.
+       So: hold the sheet where it is — the finger's offset, or the top — with the motion off and the hinge gone, commit
+       that frame, and release it one frame later so the base rule's translateY(100%) + .22s transition carry it down. */
+    function closeAdd(fromY) {
+      if (!addSheet.classList.contains('open')) { document.body.classList.remove('add-open'); return; }
+      var y = Math.max(0, +fromY || 0);
+      addSheet.classList.add('closing');
+      addSheet.style.transition = 'none';
+      addSheet.style.transform = 'translateY(' + y + 'px)';
+      addSheet.classList.remove('open');
+      void addSheet.offsetHeight;   // commit the held frame before releasing it
+      document.body.classList.remove('add-open');
+      requestAnimationFrame(function () {
+        if (addSheet.classList.contains('open')) return;   // reopened in between — openAdd already tidied
+        addSheet.style.transition = ''; addSheet.style.transform = '';
+        var done = function () { addSheet.classList.remove('closing'); addSheet.removeEventListener('transitionend', done); addSheet._closeTimer = 0; };
+        addSheet.addEventListener('transitionend', done);
+        addSheet._closeTimer = setTimeout(done, 400);
+      });
+    }
+    FM._addSheetClose = closeAdd;   // suite seam (queue 773)
     if (addFab) addFab.addEventListener('click', function () { addSheet.classList.contains('open') ? closeAdd() : openAdd(); });
     if (addGrab) addGrab.addEventListener('click', function () { if (addSheet._swiped) { addSheet._swiped = false; return; } closeAdd(); });
     if (addSheet) makeSwipeDown(addSheet, addGrab, closeAdd, null);
