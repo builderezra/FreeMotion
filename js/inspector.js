@@ -2959,7 +2959,7 @@ window.FM = window.FM || {};
         if (!(has('color') || has('fill') || 'fillMode' in src || src.fillImage || src.fillGradient || src.colorGrade)) return 'The copied layer has no colouring to paste';
         return null;
       case 'border':
-        if (!(src.stroke || src.shadow)) return 'The copied layer has no outline or shadow';
+        if (!(src.stroke || src.shadow || src.trimPath || src.repeater)) return 'The copied layer has no outline, shadow, trim path or repeater';   // queue 737: the paste itself carries all four (see the Border branch of pasteStyle)
         return null;
       case 'transform':
         if (!src.transform) return 'The copied layer has no position or scale to paste';
@@ -6295,6 +6295,7 @@ window.FM = window.FM || {};
 
   FM.inspector = {
     currentView() { return view; },   // read by the scrub probe (queue 768): which panel was open while he scrubbed
+    _styleBlockedReason: styleBlockedReason,   // suite seam (queue 737)
     _mergedStack: mergedStack,   // seam: the 560 tests drive the merged effects+masks list without a pointer drag
     /* Open the Effects card on a particular side (queue 317). The full-screen browsers own two of the
        three sides and have nowhere to put the third — Filters is a list of ready-made looks, not a grid

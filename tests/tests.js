@@ -54271,6 +54271,28 @@
     }
   });
 
+  /* ═══ 737 (hunt MEDIUM #20): THE BORDER PASTE GATE ADMITS WHAT THE BORDER PASTE CARRIES. pasteStyle copies stroke,
+     shadow, trimPath and repeater; the gate refused a source that had only a trim path or only a repeater. Through
+     the real gate: trim-path-only and repeater-only pass, stroke-only still passes, nothing-at-all is still refused. */
+  test('737: Paste look → Border is offered for a layer whose only border feature is a trim path or a repeater', { item: '737' }, async function () {
+    const why = FM.inspector._styleBlockedReason;
+    if (!why) throw new Error('FM.inspector._styleBlockedReason seam missing');
+    const cat = { key: 'border' }, target = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 10, shapeH: 10, fill: '#fff' });
+    /* ⚠️ A BARE LAYER IS NOT BARE: makeLayer gives every shape a `stroke` object ({enabled:false,…}), so a source built
+       the ordinary way always satisfies the old gate and the control below could never fail. Strip the four border
+       features first, then add back exactly the one under test. */
+    const src = (extra) => { const l = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 10, shapeH: 10, fill: '#fff' });
+      delete l.stroke; delete l.shadow; delete l.trimPath; delete l.repeater; return Object.assign(l, extra); };
+    const r1 = why(cat, src({ trimPath: { start: 0, end: 0.5 } }), target);
+    if (r1) throw new Error('a source whose only border feature is a trim path is refused: "' + r1 + '" — but the paste carries trimPath');
+    const r2 = why(cat, src({ repeater: { copies: 3, offset: 10 } }), target);
+    if (r2) throw new Error('a source whose only border feature is a repeater is refused: "' + r2 + '"');
+    const r3 = why(cat, src({ stroke: { width: 2, color: '#000' } }), target);
+    if (r3) throw new Error('control: a stroke-only source is refused: "' + r3 + '"');
+    const r4 = why(cat, src({}), target);
+    if (!r4) throw new Error('control: a source with no border feature at all was allowed through');
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel
