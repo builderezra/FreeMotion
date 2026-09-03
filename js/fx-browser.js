@@ -185,7 +185,7 @@ window.FM = window.FM || {};
     let inst;
     if (preset && FM.effectPresets) {
       const st = layer.start || 0, du = layer.duration || 0;
-      const ph = (typeof FM.time === 'number') ? FM.time : st;
+      const ph = (typeof _anchorTime === 'number') ? _anchorTime : ((typeof FM.time === 'number') ? FM.time : st);   // queue 722: where he PARKED it, not where the loop is
       const anchor = (ph >= st && ph < st + du - 0.01) ? ph : st;
       inst = FM.effectPresets.makeInstance(preset, anchor);
     } else if (seed) {
@@ -338,6 +338,11 @@ window.FM = window.FM || {};
      sheet LEFT THE LAYER ISOLATED with every other layer invisible. Found by closing it and looking,
      not by reading the code. */
   let _loopTimer = 0, _isoWas = null, _isoHeld = false, _loopFrom = 0;
+  /* THE PARKED PLAYHEAD (queue 722, hunt HIGH #5). The sheet's preview loop drives FM.time from the moment the browser
+     opens, and a preset's keyframes were anchored at FM.time when its row was tapped — wherever the loop happened to
+     be, a different point from the one the row's thumbnail previewed. "Park the playhead on the beat, add Beat Slam,
+     the hit lands there" is the promise; this is the time he parked it at, captured before the loop takes the clock. */
+  let _anchorTime = null;
   function stopPreview() {
     if (_loopTimer) { clearInterval(_loopTimer); _loopTimer = 0; }
     FM._fxPreview = null;
@@ -1558,6 +1563,7 @@ window.FM = window.FM || {};
        got a category view containing an empty grid. A sweep written against that reaches zero tiles and
        passes every assertion it makes about the tiles it reached. Resolving the key here means the
        wrong call is impossible rather than merely documented. */
+    _addEffect: function (id, preset) { return addEffect(id, preset); },   // suite seam (queue 722)
     _openCategory: function (cat) {
       const c = (cat && typeof cat === 'object') ? cat : (FM.fxRegistry.categories() || []).filter(x => x.key === cat)[0];
       if (!c) throw new Error('no such effect category: ' + cat);
@@ -1620,6 +1626,7 @@ window.FM = window.FM || {};
       if (!_layer) { if (FM.toast) FM.toast('Select a layer first', 1400); return; }
       searchInput.value = ''; searchInput.classList.add('hidden');
       _picked = [];
+      _anchorTime = (typeof FM.time === 'number') ? FM.time : null;   // queue 722: BEFORE restartPreview() moves the clock
       const sheet = FM.fxSheet(root);      // the sheet (queue 277, and PC too since 303) — geometry defined once, up top
       root.classList.remove('hidden');
       rebuild();
@@ -1637,7 +1644,7 @@ window.FM = window.FM || {};
     close: function () {
       _into = null; if (!root) return;
       root.classList.add('hidden');
-      _picked = []; FM.fxSheet(root, false);
+      _picked = []; _anchorTime = null; FM.fxSheet(root, false);
       stopPreview(); stopAuto();
       if (FM.fxThumbs) FM.fxThumbs.stopAll();
       root.querySelectorAll('.fxb-catview').forEach(v => v.remove());

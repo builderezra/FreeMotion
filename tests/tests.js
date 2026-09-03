@@ -53799,6 +53799,43 @@
     }
   });
 
+  /* ═══ 722 (hunt HIGH #5): A PRESET'S KEYFRAMES LAND AT THE PARKED PLAYHEAD, NOT WHERE THE PREVIEW LOOP IS.
+     Park at 2s inside a 0–6s clip, open the browser (the sheet's loop resets the clock to the clip start and runs),
+     move the clock to 4.5s as the loop would, apply a shipped animated preset through the real addEffect: its
+     earliest keyframe must sit at 2s + the preset's own first time — not 4.5s, not 0. */
+  test('722: a preset applied from the browser anchors its keyframes at the playhead he parked, not the preview loop', { item: '722' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.fxBrowser || !FM.fxBrowser._addEffect) throw new Error('FM.fxBrowser._addEffect seam missing');
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const kfMin = (params) => { let m = Infinity; Object.keys(params || {}).forEach(k => { const v = params[k]; if (v && Array.isArray(v.kf)) v.kf.forEach(f => { if (f.t < m) m = f.t; }); }); return m; };
+    try {
+      if (hadHome) FM.home.close();
+      const L = FM.makeLayer('shape', { name: 's722', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#f80', start: 0, duration: 6 });
+      FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 8, background: '#000000' } });
+      FM.selectLayer(L.id); FM.refreshAll();
+      const preset = (FM.EFFECT_PRESETS || []).find(p => isFinite(kfMin(p.params)) && FM.fxRegistry.supportsLayer && FM.fxRegistry.supportsLayer(p.fx, L));
+      if (!preset) throw new Error('setup: no shipped preset with keyframes that a shape layer can take');
+      const own = kfMin(preset.params);
+      if (FM.pause) FM.pause(); FM.setTime(2); await sleep(40);
+      FM.fxBrowser.open(L); await sleep(200);
+      FM.setTime(4.5); await sleep(30);   // where the preview loop might be at the tap
+      const n0 = (L.effects || []).length;
+      FM.fxBrowser._addEffect(preset.fx, preset); await sleep(80);
+      const inst = (L.effects || [])[n0];
+      if (!inst) throw new Error('the preset was not applied (' + (L.effects || []).length + ' effects)');
+      const got = kfMin(inst.params);
+      if (!isFinite(got)) throw new Error('the applied preset has no keyframes: ' + JSON.stringify(inst.params).slice(0, 200));
+      if (Math.abs(got - (2 + own)) > 0.02) throw new Error('the preset\'s first keyframe landed at ' + got.toFixed(3) + 's; he parked the playhead at 2s (+' + own + ' of the preset\'s own), and the loop was at 4.5s — it took the loop\'s time' + (Math.abs(got - (4.5 + own)) < 0.02 ? ' (exactly)' : ''));
+    } finally {
+      try { FM.fxBrowser.close(); } catch (e) {}
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel
