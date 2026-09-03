@@ -54000,6 +54000,44 @@
     }
   });
 
+  /* ═══ 728 (hunt HIGH #11, a regression of v14.99): A MASK ROW INSIDE THE EFFECT STACK CAN BE SWIPED AWAY. The
+     merged list holds the mask's MARKER there, the gestures were handed the mask object, indexOf gave −1 and the
+     swipe animated away then came back. The real gesture on the real row: mask marked between two effects, swipe
+     left on its head → the mask is gone, its marker is gone, both effects remain (the control). */
+  test('728: swiping a mask row that sits inside the effect stack deletes the mask, and leaves the effects alone', { item: '728' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const L = FM.makeLayer('shape', { name: 's728', shape: 'rect', x: 200, y: 200, shapeW: 200, shapeH: 200, fill: '#48f', start: 0, duration: 4 });
+      const regs = (FM.fxRegistry.all() || []).filter(r => FM.fxRegistry.supportsLayer(r.type || r.id, L) && !FM.isFxContainer(FM.fxRegistry.makeInstance(r.type || r.id) || {}));
+      if (regs.length < 2) throw new Error('setup: fewer than two plain effects a shape can take');
+      const a = FM.fxRegistry.makeInstance(regs[0].type || regs[0].id), b = FM.fxRegistry.makeInstance(regs[1].type || regs[1].id);
+      const mask = FM.masks.make();
+      L.masks = [mask]; L.effects = [a, { type: 'penmask', maskId: mask.id }, b];
+      FM.scene = scene([L]); FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.openCategory('effects'); await sleep(200);
+      const row = [...document.querySelectorAll('.mask-item')][0];
+      if (!row) throw new Error('setup: the marked mask has no row in the effect stack');
+      const head = row.querySelector('.mask-item-head');
+      if (!head) throw new Error('setup: the mask row has no head');
+      const r = head.getBoundingClientRect(); const x0 = Math.round(r.left + r.width * 0.7), y = Math.round(r.top + r.height / 2);
+      const ev = (type, cx) => head.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 9, pointerType: 'touch', isPrimary: true, clientX: cx, clientY: y, buttons: type === 'pointerup' ? 0 : 1 }));
+      ev('pointerdown', x0);
+      for (let k = 1; k <= 8; k++) ev('pointermove', x0 - k * 22);
+      ev('pointerup', x0 - 8 * 22);
+      await sleep(700);
+      if ((L.masks || []).length !== 0) throw new Error('a left swipe on a mask row inside the stack left the mask in place — the gesture was given the mask object, not its marker (index −1), so it animated away and came back');
+      if ((L.effects || []).some(e => e && e.type === 'penmask')) throw new Error('the mask is gone but its marker is still in the effect stack');
+      if ((L.effects || []).length !== 2 || L.effects[0] !== a || L.effects[1] !== b) throw new Error('control: the two effects around the mask were disturbed: ' + JSON.stringify((L.effects || []).map(e => e && e.type)));
+    } finally {
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

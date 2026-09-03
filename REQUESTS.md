@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.21
+> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.22
 >
-> **State:** v15.21, 1191 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
+> **State:** v15.22, 1192 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
 > **Four pictures are in the chat waiting for one letter each** (nothing visual ships before you pick): **#642** the home background A–D · **#763** the skip-button gap (6/12/18) and the play button A–D · **#765** the split/jump buttons' look 1–3 · and **#760's people shapes** come next, drawn the same way. Everything else waiting on you is a paste or a letter, listed by `tools/next.sh` under its own heading so it cannot hide: #425 A/B · #454 A/B/C · #482 a category · #484 A/B/C · #539 A/B/C · #544 which things · #564 A/B/C · #570 smooth/stepped/leave · #624 a/b/c · #654 A/B/C · #406 which menu · #674 (b)/(c) · #95/#96/#663 the **Your last playback** paste · #215/#604/#677 the **Your last export** paste · #129 the **clip with no picture** paste · the oldest lag item, a **Measure** report · #657 a sample while scrubbing · #676/#706 what "twice" looks like · #712 whether Back from a category stalls · #592 a screenshot.
 > **Next, in order, each already built and proved, shipping one by one:** #508 (a frame-time report of the project-open slide from your phone), #553 (coming back to the app half-drawn), #606, #674 (clip names over filmstrips), #688 (one intro film, dark mode lands on dark), #706 (the add sheet's one motion), #715 (PC sliders glide), #716 (the cursor glow box), #717 (copy/paste button lit), #762 (tap again closes), #764 (dragged add row on top); then #760, #765, #768 and the audit findings.
 
@@ -28315,7 +28315,7 @@ re-opened #480, which I had marked done and had not fixed.
       - User sees: duplicate a tuned reverb → stock reverb, keyframes gone.
         ✅ **v15.20 — audio Duplicate deep-copies the effect, as the visual stack's Duplicate has since v-whenever.** It built a fresh default instance — byte-for-byte the Reset item beside it — so a tuned, keyframed effect duplicated as stock. Test through the real ⋯ menu on a real audio row: the copy carries the keyframes and is its own object. Mutation (makeInstance again) caught.
 
-- [ ] **728 — js/inspector.js:2746 — swipe-delete and drag-reorder are dead on a mask row that sits in the effect stack** (hunt HIGH #11) **⚠️ A REGRESSION OF MINE, v14.99 — the #560 test spliced the merged list by hand and never drove the gesture; fixture-must-distinguish, again.**
+- [x] **728 — js/inspector.js:2746 — swipe-delete and drag-reorder are dead on a mask row that sits in the effect stack** (hunt HIGH #11) **⚠️ A REGRESSION OF MINE, v14.99 — the #560 test spliced the merged list by hand and never drove the gesture; fixture-must-distinguish, again.** ✅ DONE v15.22.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
@@ -28326,6 +28326,7 @@ re-opened #480, which I had marked done and had not fixed.
       - Fix: when `stack` is set, resolve the marker (`merged.find(e => e && e.type==='penmask' && e.maskId===mask.id)`) and pass it as `fx`, with `stack.after` deleting the mask when its marker leaves the list; add a gesture-driven test on a marker row.
       - User sees: swipe a mask row inside the stack → it animates away and reappears; press-hold drag makes siblings jump and drops it back where it was. Only the bin button (2715) works.
       **JUMPED: this is a break I shipped two hours ago in a feature he can reach today, so it goes right after his own three (#715–#717) and ahead of the older hunt items.**
+        ✅ **v15.22 — inside the stack the row's gestures stand for its MARKER, the entry the merged list actually holds.** Handing them the mask object gave indexOf −1, so a swipe animated away and came back and a drag shuffled the wrong rows — my own regression from v14.99, whose test spliced the list by hand and never drove the gesture. Test drives the real swipe on a mask marked between two effects: mask and marker gone, both effects untouched. Mutation (the mask object again) caught.
 
 - [ ] **729 — js/inspector.js:1763-1764 — filter preview outlives the Filters tab, and reaches export** (hunt HIGH #12)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -28806,7 +28807,7 @@ re-opened #480, which I had marked done and had not fixed.
       had their turn in order — #772 (a picture for him to pick from, then parked on his pick), #773, #775 — and then resumes.
 
 - [ ] **775 — Go through the menus on PC (and the effects / filters switching on PC and phone), open and close them, and fix what behaves weirdly — the timeline-vs-add-menu separation on PC still has issues.** Logged 3 Sep, verbatim:
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: ⏸ BUILT OUT UNTIL HE picks A / B / C for the narrow-window row — clause 1 is done and found the bug; clauses 2–5 continue after the pick**
       His words, in full: *"On PC, you're gonna have to go through a A bunch of the menus and stuff tried tapping on them and closing
       them and opening them and see when they behave weirdly because right now, there is a bunch of things that behave weirdly, like,
       still, like I told you, to fix the timeline being separate to the ad menu on PC and not have any issues, but it actually still
@@ -28815,7 +28816,7 @@ re-opened #480, which I had marked done and had not fixed.
       filters menu from the effects menu and stuff on PC and on mobile and stuff, So I just tested it all out and make sure none of it's
       actually bugging out or having any issues."*
       His clauses, ticked one at a time:
-      1. [ ] **"go through a bunch of the menus… tapping on them and closing them and opening them and see when they behave weirdly"**
+      1. [x] **"go through a bunch of the menus… tapping on them and closing them and opening them and see when they behave weirdly"**
          — a systematic open / close / re-open pass over every PC menu, recording each misbehaviour with its steps.
       2. [ ] **"the timeline being separate to the ad menu on PC… still does have a lot of issues — dropping"** — the PC timeline /
          add-menu separation (#710 family): find the remaining issues, "dropping" included, and fix them.
@@ -28825,3 +28826,48 @@ re-opened #480, which I had marked done and had not fixed.
       5. [ ] **"make sure none of it's actually bugging out or having any issues"** — re-test the whole set after the fixes.
       🔎 Method, decided now so it is not improvised later: drive the real app in the headless browser at desktop width and at 380px,
       one menu family per pass, every finding re-checked before it is called a bug; each confirmed bug becomes its own fix with a test.
+      ═══ 🔬 **MEASURED 4 Sep — CLAUSE 1 DONE, AND IT FOUND A REAL ONE (clauses 2–5 still open).** ═══
+      **What I did.** Drove the live app on PC and (a) opened, closed and re-opened every menu — add panel, layer
+      actions, ⋯ layer options, canvas dialog, Notes, view options, the effects browser, the inspector categories;
+      (b) ran 130 randomly interleaved actions checking after every one for console errors, a blank inspector, orphan
+      menus, lost timeline rows and leaked body classes; (c) drove the real drag gestures — reorder by the handle, a
+      clip along the timeline, a clip across the panel seam, the add row; (d) walked Visual / Filters / Audio both
+      ways, by the API and by clicking the real buttons, before and after using the effects browser; (e) swept the
+      window from 1440px down to 820px asking, of every visible button, whether a click at its own centre actually
+      lands on it.
+      **(a)–(d) came back clean.** Zero console errors, nothing left on screen, every menu re-opens, the tabs switch
+      correctly, the drags all work. Roughly a dozen apparent findings along the way were **my instrument, not the
+      app** (dismissing with a plain click when the menus close on pointerdown; press-holding a track head when
+      reorder uses its own handle; tapping `.fxb-card` when a category's tiles are `.fxb-tile`; tapping the commit
+      bar's first button, which is Clear, not "Add N effects"). Each was checked against the source before being
+      believed, and each was mine.
+      **(e) IS THE BUG, and it is his "weird things happen".** The PC transport row keeps two clusters
+      ABSOLUTELY positioned at its ends — `#t-home` (Back to projects) on the left and `#t-far` (version label ·
+      view options · export · cog · help) on the right — so that they hang off the ends without pushing the play
+      button off centre (the reason is written at styles.css `@media (min-width: 701px)`). They do not move when the
+      window narrows, but the controls in the middle do. Below roughly **1050px wide they slide underneath**, and a
+      click lands on whatever is on top. Measured, with a real click at each button's own centre:
+
+      | window | what is no longer clickable | what gets the click instead |
+      |---|---|---|
+      | 1280, 1100 | nothing | — |
+      | 1000 | Layer options (⋯), Delete layer | the **version label** |
+      | 950 | Layer actions, Delete layer, Layer options | **Back to projects**, the version label, **Help** |
+      | 860 | Add-row switch, Parent, Delete layer, Layer options | Help, the version label, the far cluster |
+
+      **Proved end to end at 950px: clicking the centre of “Layer actions” closes the project and lands on the
+      projects screen**, because `#btn-back` is sitting on top of it. That is a click you did not ask for, on a
+      button you cannot see, and it throws away where you were.
+      ⚠️ **The fix needs one decision from him, so it is drawn rather than guessed (#545).** At 860px the row simply
+      holds more than fits: the right cluster alone is 263px and the middle needs about 320px. Reserving the space
+      is not enough on its own — measured — so something has to give below ~1000px. The options are in the chat.
+      🎨 **4 Sep — DRAWN AND SENT (#545)** (`scratchpad/narrow775.html`): the row at 950px as it would look under each
+      option — **A** drop the version label and the ? button (recommended: the two nobody presses, nothing else moves),
+      **B** fold help / view options / settings into one ⋯, **C** use the phone row below ~1050px. Nothing ships before
+      the pick; the fix is a visible change to his PC row and #545 forbids shipping one he has not seen.
+      ⏸ **BUILT OUT UNTIL HE picks A, B or C for the narrow-window transport row.** Clause 1 is done and found the
+      defect; clauses 2–5 (the timeline/add-menu separation, the effects browser, the tab switching, the re-test)
+      resume the moment he picks, since the fix touches the same row.
+
+
+

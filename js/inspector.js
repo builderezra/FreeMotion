@@ -2788,7 +2788,14 @@ window.FM = window.FM || {};
         edit.addEventListener('click', () => { if (FM.maskTool && FM.maskTool.open) FM.maskTool.open(layer.id, mask.id); else if (FM.toast) FM.toast('Mask editor unavailable'); });
         bodyEl.appendChild(edit);
       }
-      attachFxGestures(item, head, layer, mask, merged ? merged.indexOf(mask) : idx, st);   // swipe-left = delete · press-hold + drag = reorder — the index is the row's place in the list the stack splices
+      /* INSIDE THE STACK THE ROW STANDS FOR ITS MARKER (queue 728, hunt HIGH #11 — a regression of v14.99). The merged
+         list holds `{ type: 'penmask', maskId }` for a mask that sits among the effects, not the mask object, so handing
+         the gestures the mask gave them an index of −1: a swipe animated the row away and refreshed it straight back,
+         a press-hold drag shuffled the wrong rows and dropped it where it was. The gestures get the entry the list
+         actually contains; applyMerged() already deletes a mask whose marker has left the list and keeps one that
+         was only moved. An unmarked mask is still itself. */
+      const entry = merged ? (merged.indexOf(mask) >= 0 ? mask : (merged.find(e => e && e.type === 'penmask' && e.maskId === mask.id) || mask)) : mask;
+      attachFxGestures(item, head, layer, entry, merged ? merged.indexOf(entry) : idx, st);   // swipe-left = delete · press-hold + drag = reorder — the index is the row's place in the list the stack splices
       rows.push(item);
     });
     return rows;
