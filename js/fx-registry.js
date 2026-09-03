@@ -583,6 +583,10 @@ window.FM = window.FM || {};
 
   FM.fxRegistry = {
     get: function (id) { return REG[id] || null; },
+    // THE GATES, READABLE (queue 733, hunt MEDIUM #16). The AI digest and the AI op path carried hand-written copies of
+    // these three tables and had drifted from them (vignette still media-only, six of ten text effects named, a 16-item
+    // adjustment whitelist described as "colour/blur/pixel grades"). They read this now.
+    gates: function () { return { mediaOnly: Object.keys(MEDIA_ONLY), textOnly: Object.keys(TEXT_ONLY), adjOk: Object.keys(ADJ_OK) }; },
     all: function () { return (FM.EFFECTS || []).map(d => REG[d.type]).filter(e => e && !e.hidden); },
     byCategory: function (catKey) { return (FM.EFFECTS || []).map(d => REG[d.type]).filter(e => e && !e.hidden && e.category === catKey); },
     // …and the unfiltered view, for the paths that must resolve a hidden type by name (the load path,

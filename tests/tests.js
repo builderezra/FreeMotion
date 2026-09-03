@@ -54150,6 +54150,47 @@
     }
   });
 
+  /* ═══ 733 (hunt MEDIUM #16): THE AI DIGEST AND THE AI OPS AGREE WITH THE ENGINE. (a) the gate sentence comes from
+     the registry: no vignette-is-media-only, every text-only effect named, every adjustment-ok effect named; (e) an
+     effect that takes a source layer says so; (c) fps is clamped 1..120, not snapped to six rates; (d) setProp
+     start/duration grow the project as the digest promises; (f) lineHeight, text curve and durOut clamp to the
+     panel's ranges. Real digest, real applyOps. */
+  test('733: the AI digest is generated from the registry gates, and the ops clamp to the panel and grow the project', { item: '733' }, async function () {
+    if (!FM.aiManifest || !FM.aiOps || !FM.aiOps.applyOps || !FM.fxRegistry.gates) throw new Error('aiManifest / aiOps.applyOps / fxRegistry.gates missing');
+    const d = String(FM.aiManifest.digest);
+    const g = FM.fxRegistry.gates();
+    if (/vignette work on MEDIA only|lumakey\/vignette/.test(d)) throw new Error('the digest still says vignette is media-only — it has worked everywhere since v2.86');
+    const textPart = (/text effects \(([^)]*)\)/.exec(d) || [])[1] || '';
+    const missingT = g.textOnly.filter(k => textPart.indexOf(k) < 0);
+    if (missingT.length) throw new Error('the digest names ' + textPart.split(',').length + ' text-only effects; the registry has ' + g.textOnly.length + ' — missing ' + missingT.join(', '));
+    const missingA = g.adjOk.filter(k => d.indexOf(k) < 0);
+    if (missingA.length) throw new Error('the digest does not name these adjustment-layer effects the registry allows: ' + missingA.join(', '));
+    if ((FM.EFFECTS || []).some(e => e.layer) && d.indexOf('source(layer id)') < 0) throw new Error('an effect takes a source layer and the digest never advertises the source param');
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    try {
+      const T = FM.makeLayer('text', { name: 't733', text: 'hi', x: 540, y: 960, start: 0, duration: 4 });
+      FM.scene = scene([T], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+      const P = FM.scene.project;
+      const run = (o) => FM.aiOps.applyOps([Object.assign({ ref: T.id, layer: T.id }, o)]);
+      run({ op: 'setProject', fps: 24 });
+      if (P.fps !== 24) throw new Error('fps 24 became ' + P.fps + ' — snapped to a rate the UI does not force (Custom offers 1..120)');
+      run({ op: 'setProject', fps: 500 });
+      if (P.fps !== 120) throw new Error('fps 500 became ' + P.fps + ', not the 120 ceiling');
+      run({ op: 'setProp', path: 'duration', value: 9 });
+      if (Math.abs(T.duration - 9) > 1e-6) throw new Error('setup: setProp duration did not apply (' + T.duration + ')');
+      if (P.duration < 9 - 1e-6) throw new Error('setProp duration 9 left the project at ' + P.duration + 's — the digest promises it grows to fit');
+      run({ op: 'setProp', path: 'lineHeight', value: 3 });
+      if (Math.abs(T.lineHeight - 2.5) > 1e-6) throw new Error('lineHeight 3 became ' + T.lineHeight + ' — the panel tops out at 2.5');
+      run({ op: 'setTextCurve', degrees: 300 });
+      if (Math.abs((T.textCurve || 0) - 180) > 1e-6) throw new Error('text curve 300 became ' + T.textCurve + ' — the panel tops out at 180');
+      run({ op: 'setTextAnim', preset: 'fade', unit: 'char', durIn: 0.5, durOut: 5, stagger: 0.04 });
+      if (!T.textAnim || Math.abs(T.textAnim.durOut - 3) > 1e-6) throw new Error('durOut 5 became ' + (T.textAnim && T.textAnim.durOut) + ' — the panel tops out at 3');
+    } finally {
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.26
+> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.27
 >
-> **State:** v15.26, 1196 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
+> **State:** v15.27, 1197 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
 > **Four pictures are in the chat waiting for one letter each** (nothing visual ships before you pick): **#642** the home background A–D · **#763** the skip-button gap (6/12/18) and the play button A–D · **#765** the split/jump buttons' look 1–3 · and **#760's people shapes** come next, drawn the same way. Everything else waiting on you is a paste or a letter, listed by `tools/next.sh` under its own heading so it cannot hide: #425 A/B · #454 A/B/C · #482 a category · #484 A/B/C · #539 A/B/C · #544 which things · #564 A/B/C · #570 smooth/stepped/leave · #624 a/b/c · #654 A/B/C · #406 which menu · #674 (b)/(c) · #95/#96/#663 the **Your last playback** paste · #215/#604/#677 the **Your last export** paste · #129 the **clip with no picture** paste · the oldest lag item, a **Measure** report · #657 a sample while scrubbing · #676/#706 what "twice" looks like · #712 whether Back from a category stalls · #592 a screenshot.
 > **Next, in order, each already built and proved, shipping one by one:** #508 (a frame-time report of the project-open slide from your phone), #553 (coming back to the app half-drawn), #606, #674 (clip names over filmstrips), #688 (one intro film, dark mode lands on dark), #706 (the add sheet's one motion), #715 (PC sliders glide), #716 (the cursor glow box), #717 (copy/paste button lit), #762 (tap again closes), #764 (dragged add row on top); then #760, #765, #768 and the audit findings.
 
@@ -28373,7 +28373,7 @@ re-opened #480, which I had marked done and had not fixed.
       - Fix: apply the same filter in elements.insert.
         ✅ **v15.26 — elements.insert drops the pack's camera when the scene already has one, the guard templates.insertInto has carried since queue 617.** The element path puts its layers first, so its camera was the one the composite found. Test saves an element with a camera, inserts it over a scene with its own, one camera remains and it is the scene's; the element's shape still lands. Mutation (the guard off) caught.
 
-- [ ] **733 — AI digest drift — js/ai-manifest.js:74, 78, 43-65; js/ai-ops.js:28, 83-84, 145, 54/236/244** (hunt MEDIUM #16)
+- [x] **733 — AI digest drift — js/ai-manifest.js:74, 78, 43-65; js/ai-ops.js:28, 83-84, 145, 54/236/244** (hunt MEDIUM #16) ✅ DONE v15.27.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
@@ -28385,6 +28385,7 @@ re-opened #480, which I had marked done and had not fixed.
       - 16d. ai-manifest.js:78 "project duration grows to fit" — only createLayer/addCaptionTrack grow it; setProp start/duration (83-84) do not. Fix: grow in setProp or fix the sentence.
       - 16e. `source` layer param (fx-registry.js:230, accepted at ai-ops.js:325-326) is absent from effectVocab. Fix: emit it.
       - 16f. AI clamps wider than the panel: lineHeight 0.5..4 vs 0.8..2.5 (inspector.js:5088), textCurve ±360 vs ±180 (5089), durOut 0..10 vs 0..3 (5114). Fix: align.
+        ✅ **v15.27 — the digest reads the registry's gates and the ops match the panel.** (a/b) fx-registry.gates() exposes MEDIA_ONLY / TEXT_ONLY / ADJ_OK and the digest's gate sentence is generated from them — no more vignette-is-media-only, all ten text effects, the real adjustment whitelist; (c) fps clamps to 1..120 instead of snapping 24 to 25; (d) setProp start/duration grow the project as the digest promises; (e) the source param is advertised; (f) lineHeight 0.8..2.5, text curve ±180, durOut 0..3 like the panel. Real-digest, real-applyOps test; two mutations caught.
 
 - [ ] **734 — js/compositor.js:1365 — Chroma Key Tolerance 0 reads as 0.3** (hunt MEDIUM #17)
       **STATUS: 🟢 READY — nothing is stopping this**

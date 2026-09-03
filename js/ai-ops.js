@@ -20,12 +20,14 @@ window.FM = window.FM || {};
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
   function clampNum(v, lo, hi, dflt) { var n = num(v, dflt); return n == null ? null : clamp(n, lo, hi); }
   function bool(v, dflt) { return typeof v === 'boolean' ? v : dflt; }
+  // queue 733 (16d): the digest promises "the project duration grows to fit" — createLayer did, setProp start/duration did not
+  function growProject(layer) { var P = FM.scene && FM.scene.project; if (P && layer) P.duration = Math.max(P.duration || 0, (layer.start || 0) + (layer.duration || 0)); }
   function str(v, max) { if (typeof v !== 'string') return null; return max ? v.slice(0, max) : v; }
   function snap(v, list, dflt) { return list.indexOf(v) >= 0 ? v : dflt; }
   function nearest(v, opts) { var n = num(v, opts[0]); var best = opts[0], bd = Infinity; opts.forEach(function (o) { var d = Math.abs(o - n); if (d < bd) { bd = d; best = o; } }); return best; }
 
   function effectDef(type) { for (var i = 0; i < FM.EFFECTS.length; i++) if (FM.EFFECTS[i].type === type) return FM.EFFECTS[i]; return null; }
-  var MEDIA_ONLY_FX = { chromakey: 1, lumakey: 1, vignette: 1 };
+  var MEDIA_ONLY_FX = { chromakey: 1, lumakey: 1 };   // queue 733: vignette has worked on every layer since v2.86 (fx-registry.js); this is only the fallback when the registry's supportsLayer is absent
 
   // transform.* sub-keys and their clamp ranges (rotation/z are unbounded). scaleX/scaleY/skewX/skewY/z
   // are first-class animatable channels since the Move & Transform rebuild — the compositor reads them
@@ -51,7 +53,7 @@ window.FM = window.FM || {};
     switch (path) {
       case 'fontSize': { var fs = clampNum(value, 1, 2000); if (fs == null) return false; layer.fontSize = fs; return true; }
       case 'letterSpacing': { var ls = clampNum(value, -200, 400); if (ls == null) return false; layer.letterSpacing = ls; return true; }
-      case 'lineHeight': { var lh = clampNum(value, 0.5, 4); if (lh == null) return false; layer.lineHeight = lh; return true; }
+      case 'lineHeight': { var lh = clampNum(value, 0.8, 2.5); if (lh == null) return false; layer.lineHeight = lh; return true; }   // queue 733 (16f): the panel's range
       case 'color': { var c = hex(value, null); if (!c) return false; layer.color = c; return true; }
       case 'fill': { var f = hex(value, null); if (!f) return false; layer.fill = f; return true; }
       // clipColorSet marks this as a DELIBERATE choice, so it outranks a shape's own fill on the bar.
@@ -80,8 +82,8 @@ window.FM = window.FM || {};
       case 'fadeOut': { var fo = clampNum(value, 0, 60); if (fo == null) return false; layer.fadeOut = fo; return true; }
       case 'speed': { var sp = clampNum(value, 0.0625, 16); if (sp == null) return false; layer.speed = sp; return true; }
       case 'trimStart': { var ts = clampNum(value, 0, 600); if (ts == null) return false; layer.trimStart = ts; return true; }
-      case 'start': { var st = clampNum(value, 0, 600); if (st == null) return false; layer.start = st; return true; }
-      case 'duration': { var du = clampNum(value, 0.05, 600); if (du == null) return false; layer.duration = du; return true; }
+      case 'start': { var st = clampNum(value, 0, 600); if (st == null) return false; layer.start = st; growProject(layer); return true; }
+      case 'duration': { var du = clampNum(value, 0.05, 600); if (du == null) return false; layer.duration = du; growProject(layer); return true; }
       default: return false;
     }
   }
@@ -142,7 +144,7 @@ window.FM = window.FM || {};
               var h = o.height != null ? Math.round(clamp(num(o.height, P.height), 16, 7680) / 2) * 2 : P.height;
               if (w !== P.width || h !== P.height) { P.width = w; P.height = h; changed = true; }
             }
-            if (o.fps != null) P.fps = nearest(o.fps, [15, 25, 30, 50, 60, 120]);   // the rates the UI actually offers (queue 118 dropped 24, added 15 and 120) — the AI should not land on one you cannot then re-pick
+            if (o.fps != null) P.fps = clamp(Math.round(num(o.fps, P.fps || 30)), 1, 120);   // queue 733 (16c): the UI offers Custom 1..120 (index.html, home.js) — snapping 24 to 25 landed on a rate he never chose   // the rates the UI actually offers (queue 118 dropped 24, added 15 and 120) — the AI should not land on one you cannot then re-pick
             if (o.duration != null) P.duration = clamp(num(o.duration, P.duration), 0.1, 600);
             if (o.background != null) { var bg = hex(o.background, null); if (bg) P.background = bg; }
             if (o.name != null) { var pn = str(o.name, 80); if (pn != null) P.name = pn; }
@@ -162,7 +164,7 @@ window.FM = window.FM || {};
             layer.bold = bool(o.bold, false);
             layer.italic = bool(o.italic, false);
             if (o.letterSpacing != null) layer.letterSpacing = clamp(num(o.letterSpacing, 0), -200, 400);
-            if (o.lineHeight != null) layer.lineHeight = clamp(num(o.lineHeight, 1.15), 0.5, 4);
+            if (o.lineHeight != null) layer.lineHeight = clamp(num(o.lineHeight, 1.15), 0.8, 2.5);   // queue 733 (16f)
             ok(o.op, ref); break;
           }
 
@@ -233,7 +235,7 @@ window.FM = window.FM || {};
             layer.textAnim = {
               preset: snap(o.preset, FM.AI_TEXT_PRESETS, 'fade'),
               unit: snap(o.unit, ['char', 'word', 'line'], 'char'),
-              durIn: clamp(num(o.durIn, 0.6), 0, 10), durOut: clamp(num(o.durOut, 0), 0, 10), stagger: clamp(num(o.stagger, 0.04), 0, 2),
+              durIn: clamp(num(o.durIn, 0.6), 0, 10), durOut: clamp(num(o.durOut, 0), 0, 3), stagger: clamp(num(o.stagger, 0.04), 0, 2),
             };
             ok(o.op, ref); break;
           }
@@ -241,7 +243,7 @@ window.FM = window.FM || {};
           case 'setTextCurve': {
             layer = resolveExisting(ref, false);
             if (!layer || layer.type !== 'text') { drop(o.op, ref, 'textCurve needs text ref'); break; }
-            layer.textCurve = clamp(num(o.degrees, 0), -360, 360); ok(o.op, ref); break;
+            layer.textCurve = clamp(num(o.degrees, 0), -180, 180); ok(o.op, ref); break;   // queue 733 (16f): the panel's range
           }
 
           case 'setColorGrade': {

@@ -58,11 +58,19 @@ window.FM = window.FM || {};
         p = e.param + '(' + e.min + '..' + e.max + ', def ' + e.def + ')';
       } else { p = ''; }
       var col = e.color ? (', color hex' + (e.color2 ? ' + color2 hex' : '')) : '';
-      return e.type + ' [' + p + col + ']';
+      var src = e.layer ? ', source(layer id)' : '';   // queue 733 (16e): the registry accepts a source layer for these, and ai-ops applies it — say so
+      return e.type + ' [' + p + col + src + ']';
     }).join('; ');
   }
 
   // A compact, complete capability digest for the system prompt. Generated from live constants.
+  /* THE GATE SENTENCE IS GENERATED (queue 733, hunt MEDIUM #16a/b). The hand-written one said vignette was media-only
+     (it has not been since v2.86), named six of the ten text-only effects, and called a 16-item whitelist "colour/blur/
+     pixel grades". Read from fx-registry.gates(), so it cannot drift again. */
+  function gateSentence() {
+    var g = (FM.fxRegistry && FM.fxRegistry.gates) ? FM.fxRegistry.gates() : { mediaOnly: ['chromakey', 'lumakey'], textOnly: [], adjOk: [] };
+    return g.mediaOnly.join('/') + ' work on MEDIA only; text effects (' + g.textOnly.join(', ') + ') need a TEXT layer; an adjustment layer only takes ' + (g.adjOk.length ? g.adjOk.join(', ') : 'colour/blur/pixel grades') + ' (no geometry warps or text effects).';
+  }
   function buildDigest() {
     return [
       'FREEMOTION SCENE CAPABILITIES (what you can build).',
@@ -71,7 +79,7 @@ window.FM = window.FM || {};
       'TRANSFORM channels (setProp transform.* or keyframe any of them): x, y, scale (uniform), scaleX/scaleY (non-uniform multipliers on scale, e.g. squash & stretch), rotation(deg), skewX/skewY(deg, -80..80), z (planar DEPTH: +z recedes/shrinks, -z approaches/enlarges), opacity(0..1). anchorX/anchorY(0..1) can be SET but never keyframed.',
       'LAYER TYPES you can create: text, shape (rect|ellipse|line|arc|polygon|triangle|star|heart|plus|pie|semicircle|ring|arrow|chevron|trapezoid|parallelogram), camera (one per scene; pan/zoom via its x/y/scale/rotation; neutral = centre, scale 1), adjustment (grades everything BELOW it), null (invisible rig control). You CANNOT create video/image layers — only reference existing media by id for retiming/grading.',
       'TEXT: text, fontSize, color(hex), fontFamily, align(left|center|right), bold, italic, letterSpacing, lineHeight, stroke, gradient fill, text curve, and kinetic textAnim presets: ' + TEXT_PRESETS.join(', ') + '.',
-      'EFFECTS (addEffect, type + params): ' + effectVocab() + '. chromakey/lumakey/vignette work on MEDIA only; text effects (counter, timecode, textprogress, textspacing, texttransform, textrandomizer) need a TEXT layer; an adjustment layer only takes colour/blur/pixel grades (no geometry warps or text effects).',
+      'EFFECTS (addEffect, type + params): ' + effectVocab() + '. ' + gateSentence(),
       'BLEND MODES: ' + FM.BLEND_MODES.join(', ') + '.',
       'KEYFRAMES (addKeyframe): animate any transform channel (transform.x/y/scale/scaleX/scaleY/skewX/skewY/rotation/z/opacity) or a numeric effect param over time. keys = [{t(seconds), v(value), e(easing)}]; easings: ' + FM.EASE_NAMES.join(', ') + '; or bezPreset: ' + Object.keys(FM.EASE_PRESETS).join(', ') + '. loopMode: none|cycle|pingpong. Keys are sorted for you.',
       'RIG: setParent(ref → parentRef) so a layer inherits another\'s motion (cycles are rejected). wiggle (procedural jitter), motion blur, drop shadow, colour grade, masks are all available.',
