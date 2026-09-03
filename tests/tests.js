@@ -53687,6 +53687,61 @@
     }
   });
 
+  /* ═══ 719 (hunt HIGH #2): RESET AND CROP TO CANVAS KEEP A KEYFRAMED CROP'S KEYFRAMES. Both buttons replaced
+     layer.crop wholesale, so every {kf:[…]} on x/y/w/h vanished in one tap. Now each writes per field through
+     FM.setProp, as the scrubbers do: a keyframed field gets a key AT THE PLAYHEAD with the button's value, its
+     other keys survive; a plain field is simply set (the control). Real buttons in the real crop section. */
+  test('719: Reset and Crop to canvas keep a keyframed crop\'s keyframes, keying the playhead, and still set a plain crop', { item: '719' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+    const made = []; let L = null;
+    const setup = async (crop) => {
+      L = FM.makeLayer('image', { name: 'c719', x: 100, y: 100, start: 0, duration: 4 }); made.push(L.id);
+      FM.media.set(L.id, { kind: 'image', el: document.createElement('canvas'), width: 400, height: 300, duration: 0 });
+      L.crop = crop;
+      FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+      FM.selectLayer(L.id); if (FM.pause) FM.pause(); FM.setTime(1); FM.refreshAll();
+      FM.inspector.openCategory('element'); FM.inspector.refresh(); await sleep(160);
+    };
+    const keyAt = (p, t) => p && Array.isArray(p.kf) ? p.kf.find(k => Math.abs(k.t - t) < 0.02) : null;
+    try {
+      if (hadHome) FM.home.close();
+      await setup({ x: kf(0, 100), y: 0, w: kf(400, 200), h: 300 });
+      const cb = document.querySelector('.es-cropcanvas');
+      if (!cb) throw new Error('setup: no Crop to canvas button — is the crop section up for an image layer?');
+      cb.click(); await sleep(120);
+      if (!L.crop.w || !Array.isArray(L.crop.w.kf)) throw new Error('Crop to canvas wiped the keyframes on w: ' + JSON.stringify(L.crop.w));
+      if (!L.crop.x || !Array.isArray(L.crop.x.kf)) throw new Error('Crop to canvas wiped the keyframes on x: ' + JSON.stringify(L.crop.x));
+      const want = FM.cropToCanvasRect(400, 300, 1080, 1920);
+      const k1 = keyAt(L.crop.w, 1);
+      if (!k1) throw new Error('Crop to canvas did not land a keyframe at the playhead (1s): ' + JSON.stringify(L.crop.w.kf));
+      if (Math.abs(k1.v - want.w) > 0.5) throw new Error('the keyframe at the playhead holds ' + k1.v + ', not the canvas-shaped width ' + want.w);
+      if (L.crop.w.kf.length !== 3) throw new Error('expected the two keyframes plus one at the playhead on w, got ' + L.crop.w.kf.length);
+      if (L.crop.h !== want.h) throw new Error('the plain field h was not set to ' + want.h + ' (got ' + L.crop.h + ')');
+      await setup({ x: kf(0, 100), y: 0, w: kf(300, 200), h: 300 });
+      const rb = document.querySelector('.es-cropreset');
+      if (!rb) throw new Error('setup: no Reset button — the layer is cropped at the playhead, so it should show');
+      rb.click(); await sleep(120);
+      if (!L.crop.w || !Array.isArray(L.crop.w.kf)) throw new Error('Reset wiped the keyframes on w: ' + JSON.stringify(L.crop.w));
+      const r1 = keyAt(L.crop.w, 1);
+      if (!r1 || Math.abs(r1.v - 400) > 0.5) throw new Error('Reset did not key the full width at the playhead: ' + JSON.stringify(L.crop.w.kf));
+      if (!keyAt(L.crop.x, 1) || Math.abs(keyAt(L.crop.x, 1).v) > 0.5) throw new Error('Reset did not key x back to 0 at the playhead: ' + JSON.stringify(L.crop.x));
+      await setup({ x: 10, y: 10, w: 300, h: 200 });
+      const rb2 = document.querySelector('.es-cropreset');
+      if (!rb2) throw new Error('setup: no Reset button for the plain crop');
+      rb2.click(); await sleep(120);
+      if (L.crop.x !== 0 || L.crop.y !== 0 || L.crop.w !== 400 || L.crop.h !== 300) throw new Error('control: Reset on a plain crop did not set the full frame: ' + JSON.stringify(L.crop));
+    } finally {
+      try { made.forEach(id => { if (FM.media.delete) FM.media.delete(id); }); } catch (e) {}
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel
@@ -55193,21 +55248,29 @@
 
       // ── 1. an export that DIES part-way. Chunks are kept on an exception (only success and Cancel
       //      clear them), which is the whole premise of the feature.
-      let died = false;
-      try {
-        await FM.exporter.run(Object.assign(OPTS(), {
-          onProgress: function (p) { if (p > 0.92) throw new Error('SIMULATED CRASH'); },
-          onReady: async function () {},
-        }));
-      } catch (e) { died = /SIMULATED CRASH/.test(String(e && e.message || e)); }
-      if (!died) throw new Error('the export did not stop where this test stopped it — the rest of this measures nothing');
+      /* THE THIRD ATTEMPT AT THE RACE (v15.12, seen red in a full run that was green twice before): the crash point is
+         tried at 92%, then 96%, then 98.5% — each time reading back whether a part actually LANDED — and only if none of
+         the three left anything on disk does the precondition below say so. The honest error is kept; it just stops
+         being the outcome of one unlucky race. */
+      let died = false, job = null, parts = 0;
+      for (const cut of [0.92, 0.96, 0.985]) {
+        died = false;
+        try {
+          await FM.exporter.run(Object.assign(OPTS(), {
+            onProgress: function (p) { if (p > cut) throw new Error('SIMULATED CRASH'); },
+            onReady: async function () {},
+          }));
+        } catch (e) { died = /SIMULATED CRASH/.test(String(e && e.message || e)); }
+        if (!died) throw new Error('the export did not stop where this test stopped it — the rest of this measures nothing');
+        job = null;
+        try { job = await FM.storage.readMedia(FM.exportResume.JOB_KEY); } catch (e) {}
+        parts = job ? (job.parts | 0) : 0;
+        if (parts) break;
+      }
 
       /* THE PRECONDITION, asserted rather than assumed. `written` is the count of parts confirmed on
          disk; if it is zero the crash beat the encoder and there is genuinely nothing to resume from,
          which is a fact about this run, not about the feature. */
-      let job = null;
-      try { job = await FM.storage.readMedia(FM.exportResume.JOB_KEY); } catch (e) {}
-      const parts = job ? (job.parts | 0) : 0;
       if (!parts)
         throw new Error('the crashed export saved no parts, so there is nothing for a resume to pick up and this test cannot reach its subject. That is the HARNESS falling short, not the feature: chunks arrive from the encoder asynchronously, so dying at 92% of the frame loop is still not a guarantee that 60 of them have been written. Raise the crash point or lengthen the render.');
 

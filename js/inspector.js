@@ -4097,6 +4097,15 @@ window.FM = window.FM || {};
   };
   function cropMediaOf(layer) { const m = FM.media && FM.media.get(layer.id); return (m && m.width && m.height) ? m : null; }
   function ensureCrop(layer) { const m = cropMediaOf(layer); if (!m) return null; if (!layer.crop) layer.crop = { x: 0, y: 0, w: m.width, h: m.height }; return m; }
+  /* RESET AND CROP TO CANVAS WRITE THE RECT PER FIELD, like the scrubbers (queue 719, hunt HIGH #2). They did
+     `layer.crop = {…}` — a whole-object replace — so a keyframed crop (the hint under the buttons says "Crop is
+     keyframed") lost every keyframe on x, y, w and h in one tap, silently, with only undo to bring them back.
+     Through FM.setProp a plain field is set and a keyframed one gets a key at the playhead: exactly what
+     dragging the width scrubber does, so the two buttons and the scrubbers are one behaviour again. */
+  function writeCropRect(layer, r) {
+    if (!ensureCrop(layer)) { layer.crop = { x: r.x, y: r.y, w: r.w, h: r.h }; return; }
+    ['x', 'y', 'w', 'h'].forEach(k => FM.setProp(layer.crop, k, r[k], FM.time));
+  }
 
   // The two top-right controls (aspect lock + size origin). Built here so the inspector header can
   // place them at the far top-right, matching AM. Toggling re-renders the panel + canvas.
@@ -4240,7 +4249,7 @@ window.FM = window.FM || {};
     canvasBtn.title = 'Crop to the project’s shape, centred — so the layer fills the canvas with no bars';
     canvasBtn.addEventListener('click', () => {
       const P = FM.scene && FM.scene.project;
-      layer.crop = FM.cropToCanvasRect(MW, MH, P && P.width, P && P.height);
+      writeCropRect(layer, FM.cropToCanvasRect(MW, MH, P && P.width, P && P.height));   // queue 719: per field — a keyframed crop keeps its keyframes
       FM.requestRender();
       if (FM.canvasEdit) FM.canvasEdit.update();
       FM.inspector.refresh();
@@ -4251,7 +4260,7 @@ window.FM = window.FM || {};
     if (!(cr0.w >= MW - 0.5 && cr0.h >= MH - 0.5)) {   // show Reset only when actually cropped
       const resetBtn = el('button', 'btn es-cropreset', 'Reset');
       resetBtn.title = 'Show the whole frame again';
-      resetBtn.addEventListener('click', () => { layer.crop = { x: 0, y: 0, w: MW, h: MH }; FM.requestRender(); if (FM.canvasEdit) FM.canvasEdit.update(); FM.inspector.refresh(); commitH(); });
+      resetBtn.addEventListener('click', () => { writeCropRect(layer, { x: 0, y: 0, w: MW, h: MH }); FM.requestRender(); if (FM.canvasEdit) FM.canvasEdit.update(); FM.inspector.refresh(); commitH(); });
       tools.appendChild(resetBtn);
     }
     center.appendChild(tools);
