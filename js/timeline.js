@@ -70,6 +70,87 @@ window.FM = window.FM || {};
     const lastEnd = Math.max.apply(null, layers.map(l => l.start + l.duration));
     return FM.time >= lastEnd ? 1 : -1;
   }
+  /* ═══ THE CLIP OPERATIONS BEHIND THE BUTTONS AND THE KEYS (queue 765). One body each, so a key and its button
+   * can never disagree. Playhead INSIDE the selected clip(s): trim the start, split, trim the end. OUTSIDE: move
+   * the block to the playhead, or stretch its near edge out to meet it. Each returns true when something changed.
+   * The bodies are the ones the buttons had; they moved here unchanged. */
+  function clipCutTargets() { return clipToolTargets().filter(l => FM.time > l.start + 1e-4 && FM.time < l.start + l.duration - 1e-4); }
+  function clipAfterCut() { FM.refreshAll(); if (FM.history) FM.history.commit(); }
+  function clipTrimStart() {
+    const ls = clipCutTargets(); if (!ls.length) return false;
+    ls.forEach(l => {
+      const cut = FM.time - l.start;
+      l.start = FM.time; l.duration -= cut;
+      if (l.type === 'video' && !l.reversed) l.trimStart = (l.trimStart || 0) + (FM.layerSourceAdvance ? FM.layerSourceAdvance(l, cut) : cut * (l.speed || 1));
+    });
+    clipAfterCut(); return true;
+  }
+  function clipTrimEnd() {
+    const ls = clipCutTargets(); if (!ls.length) return false;
+    ls.forEach(l => { l.duration = FM.time - l.start; });
+    clipAfterCut(); return true;
+  }
+  async function clipSplit() {
+    const ls = clipCutTargets(); if (!ls.length) return false;
+    for (const l of ls) await FM.splitLayer(l.id);
+    return true;
+  }
+  function clipNudge(one, many) {
+    const targets = clipToolTargets();
+    if (!targets.length) return false;
+    if (targets.length === 1 ? one(targets[0], FM.time) : many(targets, FM.time)) {
+      FM.requestRender(); FM.timeline.rebuild();
+      if (FM.inspector) FM.inspector.refresh();
+      if (FM.history) FM.history.commit();
+      return true;
+    }
+    if (FM.toast) FM.toast('No more source to extend into', 1500);
+    return false;
+  }
+  /* Many clips move as a BLOCK and every clip keeps its offset from it. Snapping them all to one start would
+     destroy the timing between them, which is the opposite of what a multi-select is for. Copied from the
+     inspector row this replaced (inspector.js alignRow) rather than re-derived, so the two cannot disagree. */
+  function clipMoveToPlayhead() {
+    return clipNudge(
+      (l, t) => FM.moveClipTo(l, t),
+      (ls, t) => {
+        const firstStart = Math.min.apply(null, ls.map(l => l.start));
+        const lastEnd = Math.max.apply(null, ls.map(l => l.start + l.duration));
+        const d = t - (t >= lastEnd ? lastEnd : firstStart);
+        if (!d) return false;
+        ls.forEach(l => { l.start += d; if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(l, d); });
+        return true;
+      });
+  }
+  function clipExtendToPlayhead() {
+    return clipNudge(
+      (l, t) => FM.extendClipTo(l, t),
+      (ls, t) => ls.reduce((moved, l) => (FM.extendClipTo(l, t) ? true : moved), false));
+  }
+  /* ═══ A / S / D (queue 765, clauses 2–4). His words: "A will be cut all the way to the left and jump to left, S will
+   * be split down the middle, D will be Jump to the right. also for the split ones when hovering over a layer they
+   * will be the same, but the others will have to change based on what side of the layer u are on. coz a is always
+   * resmbling of the left and d for the right. Make it so if ur not hovering over the clip tho and you press s no
+   * matter which side it will extend the clip to the playhead. while a and d just bring it to the playhead."
+   * Read as: playhead INSIDE the selected clip → A cuts away the left part, S splits, D cuts away the right part —
+   * the same whichever way round. Playhead OUTSIDE → S stretches the near edge out to it, whichever side it is on;
+   * A brings the clip LEFT to it when the playhead is on the left, D brings it RIGHT when on the right, and the
+   * letter for the other side does nothing (A is always the left, D always the right). The reading is logged in
+   * REQUESTS.md #765 as a question he can correct. Returns true when something changed. */
+  function clipKeyAction(k) {
+    const targets = clipToolTargets();
+    if (!targets.length) return false;
+    const side = clipToolSide(targets);
+    if (side === 0) {
+      if (k === 'a') return clipTrimStart();
+      if (k === 'd') return clipTrimEnd();
+      if (k === 's') { clipSplit(); return true; }
+      return false;
+    }
+    if (k === 's') return clipExtendToPlayhead();
+    if ((k === 'a' && side < 0) || (k === 'd' && side > 0)) return clipMoveToPlayhead();
+    return false;
+  }
   function fps() { return FM.scene.project.fps || 30; }
   function snapT(t) { const f = fps(); return Math.round(t * f) / f; }
   // The current time sits at TRUE SCREEN CENTRE (v4.97). Ezra: "i meant i want the play head and
@@ -4337,35 +4418,8 @@ window.FM = window.FM || {};
       const nudge = document.getElementById('tl-nudge');
       if (nudge) {
         const L = document.getElementById('tl-nudge-l'), R = document.getElementById('tl-nudge-r');
-        const act = (one, many) => () => {
-          const targets = clipToolTargets();
-          if (!targets.length) return;
-          if (targets.length === 1 ? one(targets[0], FM.time) : many(targets, FM.time)) {
-            FM.requestRender(); FM.timeline.rebuild();
-            if (FM.inspector) FM.inspector.refresh();
-            if (FM.history) FM.history.commit();
-          } else if (FM.toast) FM.toast('No more source to extend into', 1500);
-        };
-        /* MOVE takes the selection as a BLOCK: the near edge of the whole group lands on the playhead
-           and every clip keeps its offset from it. Snapping them all to one start would destroy the
-           timing between them, which is the opposite of what a multi-select is for. Copied from the
-           inspector row this replaces (inspector.js alignRow) rather than re-derived, so the two can
-           never disagree about what the button means. */
-        L.addEventListener('click', act(
-          (l, t) => FM.moveClipTo(l, t),
-          (ls, t) => {
-            const firstStart = Math.min.apply(null, ls.map(l => l.start));
-            const lastEnd = Math.max.apply(null, ls.map(l => l.start + l.duration));
-            const d = t - (t >= lastEnd ? lastEnd : firstStart);
-            if (!d) return false;
-            ls.forEach(l => { l.start += d; if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(l, d); });
-            return true;
-          }));
-        // EXTEND stays per-clip: each one's nearest edge reaches the playhead, so clips either side of
-        // it grow toward it from their own direction and all meet there.
-        R.addEventListener('click', act(
-          (l, t) => FM.extendClipTo(l, t),
-          (ls, t) => ls.reduce((moved, l) => (FM.extendClipTo(l, t) ? true : moved), false)));
+        L.addEventListener('click', () => { clipMoveToPlayhead(); });     // queue 765: one body, shared with the A / D keys
+        R.addEventListener('click', () => { clipExtendToPlayhead(); });   // …and with S off the clip
       }
       // re-read --head-w on resize so the slimmer phone track-head keeps clip-x / scrub math correct
       let resizeRebuildTimer = 0;
@@ -4504,6 +4558,7 @@ window.FM = window.FM || {};
     // playhead sits INSIDE the selected clip (side === 0), which is precisely when trimming or
     // splitting there is meaningful — and precisely when the nudge pair is hidden, so exactly one of
     // the two groups is ever on screen.
+    clipKey(k) { return clipKeyAction(k); },   // queue 765: A / S / D from the keyboard (js/app.js) — see clipKeyAction
     syncTrim() {
       const box = document.getElementById('tl-trim');
       if (!box) return;
@@ -4532,31 +4587,9 @@ window.FM = window.FM || {};
       L.innerHTML = ico('M6 4v16M6 4h4M6 20h4M14 4v16');    // drop everything BEFORE the playhead
       R.innerHTML = ico('M18 4v16M18 4h-4M18 20h-4M10 4v16'); // drop everything AFTER the playhead
       S.innerHTML = ico('M12 3v18M16 8l4 4-4 4M8 8l-4 4 4 4'); // split at the playhead
-      const after = () => { FM.refreshAll(); if (FM.history) FM.history.commit(); };
-      // Every clip the playhead is actually inside — the ones it is off are skipped rather than
-      // silently mangled, exactly as the inspector row did.
-      const cutTargets = () => clipToolTargets().filter(l => FM.time > l.start + 1e-4 && FM.time < l.start + l.duration - 1e-4);
-      L.addEventListener('click', () => {
-        const ls = cutTargets(); if (!ls.length) return;
-        ls.forEach(l => {
-          const cut = FM.time - l.start;
-          l.start = FM.time; l.duration -= cut;
-          // Same source-trim rule the inspector used: forward clips advance trimStart by the dropped
-          // wall-time × speed; a reversed clip anchors its trim to the source tail and keeps it.
-          if (l.type === 'video' && !l.reversed) l.trimStart = (l.trimStart || 0) + (FM.layerSourceAdvance ? FM.layerSourceAdvance(l, cut) : cut * (l.speed || 1));
-        });
-        after();
-      });
-      R.addEventListener('click', () => {
-        const ls = cutTargets(); if (!ls.length) return;
-        ls.forEach(l => { l.duration = FM.time - l.start; });
-        after();
-      });
-      S.addEventListener('click', async () => {
-        // Sequential, not Promise.all: splitLayer clones media, and doing several at once is the one
-        // way this can hand two clips the same backing record.
-        for (const l of cutTargets()) await FM.splitLayer(l.id);
-      });
+      L.addEventListener('click', () => { clipTrimStart(); });   // queue 765: one body, shared with the A key
+      R.addEventListener('click', () => { clipTrimEnd(); });     // …D
+      S.addEventListener('click', () => { clipSplit(); });       // …S
     },
 
     updatePlayhead() {

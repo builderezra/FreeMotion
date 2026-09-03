@@ -53588,6 +53588,68 @@
     }
   });
 
+  /* ═══ 765 (the keyboard half): A / S / D ON THE SELECTED CLIP, INSIDE AND OUTSIDE. Nine presses through the
+     real window keydown path, each on a fresh clip at 2–6s of a 12s project: inside (playhead 4s) A keeps the
+     right, D keeps the left, S splits; left of it (1s) S extends the start, A moves it left, D does nothing;
+     right of it (9s) D moves it right, S extends the end, A does nothing. The two "does nothing" cases are the
+     control: A is always the left-hand letter and D the right, so the wrong-side letter must stay inert. */
+  test('765: A / S / D cut, split or move the selected clip at the playhead, inside and outside', { item: '765' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const key = (code) => window.dispatchEvent(new KeyboardEvent('keydown', { key: code.slice(3).toLowerCase(), code: code, bubbles: true, cancelable: true }));
+    const fresh = () => {
+      const L = FM.makeLayer('shape', { name: 's765', shape: 'rect', x: 100, y: 100, shapeW: 50, shapeH: 50, fill: '#0ff', start: 2, duration: 4 });
+      // a silent floor layer 0–12s keeps the project 12s long: refreshAll fits the project to the last clip's end, and a
+      // playhead that cannot reach 9s would make the right-of-clip cases no-ops (it did — the first run of this test)
+      const floor = FM.makeLayer('shape', { name: 'floor765', shape: 'rect', x: -500, y: -500, shapeW: 10, shapeH: 10, fill: '#000', start: 0, duration: 12 });
+      FM.scene = scene([floor, L], { project: { width: 1080, height: 1920, fps: 30, duration: 12, background: '#000000' } });
+      FM.selectLayer(L.id); FM.refreshAll(); return L;
+    };
+    /* Placing the playhead has to survive whatever an earlier test left moving — a timeline fling still gliding
+       moves FM.time on every frame (it passed alone and failed in the full run at the very first placement). */
+    const at = async (t) => {
+      for (let tries = 0; tries < 4; tries++) {
+        if (FM.pause) FM.pause();
+        if (FM.timeline && FM.timeline._clearFling) FM.timeline._clearFling();
+        FM.setTime(t); await sleep(60);
+        if (Math.abs(FM.time - t) <= 0.01) return;
+      }
+      throw new Error('setup: the playhead could not be placed at ' + t + 's (it reads ' + FM.time + '; project duration ' + FM.scene.project.duration + ')');
+    };
+    const near = (a, b) => Math.abs(a - b) <= 1e-3;
+    const shape = (L) => 'start ' + L.start + ', end ' + (L.start + L.duration);
+    try {
+      if (hadHome) FM.home.close();
+      await atWideWidth(async function () {
+        let L;
+        L = fresh(); await at(4); key('KeyA'); await sleep(80);
+        if (!near(L.start, 4) || !near(L.duration, 2)) throw new Error('inside the clip, A did not cut away the left part: ' + shape(L));
+        L = fresh(); await at(4); key('KeyD'); await sleep(80);
+        if (!near(L.start, 2) || !near(L.duration, 2)) throw new Error('inside the clip, D did not cut away the right part: ' + shape(L));
+        L = fresh(); await at(4); key('KeyS'); await sleep(250);
+        { const n = FM.scene.layers.filter(l => l.name !== 'floor765').length; if (n !== 2) throw new Error('inside the clip, S did not split it: ' + n + ' clip layer(s) besides the floor'); }
+        L = fresh(); await at(1); key('KeyS'); await sleep(80);
+        if (!near(L.start, 1) || !near(L.start + L.duration, 6)) throw new Error('left of the clip, S did not extend its start to the playhead: ' + shape(L));
+        L = fresh(); await at(1); key('KeyA'); await sleep(80);
+        if (!near(L.start, 1) || !near(L.duration, 4)) throw new Error('left of the clip, A did not bring it left to the playhead: ' + shape(L));
+        L = fresh(); await at(1); key('KeyD'); await sleep(80);
+        if (!near(L.start, 2) || !near(L.duration, 4)) throw new Error('left of the clip, D is the RIGHT-hand letter and must do nothing, but: ' + shape(L));
+        L = fresh(); await at(9); key('KeyD'); await sleep(80);
+        if (!near(L.start + L.duration, 9) || !near(L.duration, 4)) throw new Error('right of the clip, D did not bring it right to the playhead: ' + shape(L));
+        L = fresh(); await at(9); key('KeyS'); await sleep(80);
+        if (!near(L.start, 2) || !near(L.start + L.duration, 9)) throw new Error('right of the clip, S did not extend its end to the playhead: ' + shape(L));
+        L = fresh(); await at(9); key('KeyA'); await sleep(80);
+        if (!near(L.start, 2) || !near(L.duration, 4)) throw new Error('right of the clip, A is the LEFT-hand letter and must do nothing, but: ' + shape(L));
+      });
+    } finally {
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

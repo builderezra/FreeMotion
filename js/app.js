@@ -6596,7 +6596,13 @@ window.FM = window.FM || {};
         if (FM.tracker && FM.tracker.isPicking && FM.tracker.isPicking()) { FM.tracker.cancel(); return; }
         if (FM.inspector && FM.inspector.back) FM.inspector.back();
       }
-      else if (e.code === 'KeyS') { e.preventDefault(); if (FM.scene.selectedId) FM.splitLayer(FM.scene.selectedId); }
+      else if (e.code === 'KeyA' || e.code === 'KeyS' || e.code === 'KeyD') {
+        /* A / S / D on the selected clip (queue 765). S at the playhead inside a clip is the split it always was;
+           A and D cut away the left / right part there, and off the clip S extends it to the playhead while A / D
+           bring it there from the left / right. One body per action in js/timeline.js, shared with the buttons. */
+        e.preventDefault(); if (e.repeat) return;
+        if (FM.timeline && FM.timeline.clipKey) FM.timeline.clipKey(e.code === 'KeyA' ? 'a' : e.code === 'KeyS' ? 's' : 'd');
+      }
       else if (e.code === 'Backspace' || e.code === 'Delete') { e.preventDefault(); FM.deleteSelected(); }
     });
     window.addEventListener('keyup', e => {
