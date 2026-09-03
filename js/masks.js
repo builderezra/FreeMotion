@@ -76,8 +76,12 @@ window.FM = window.FM || {};
       const a = kf[i], b = kf[i + 1];
       if (t >= a.t && t <= b.t) {
         const av = kfPts(a), bv = kfPts(b);
-        if (b.e === 'hold') return av;                          // step: hold the earlier verts until b
-        if (!av.length || av.length !== bv.length) return av;   // topology change (or empty) -> SNAP, no interp
+        /* AT the later keyframe the step has happened (queue 720, hunt HIGH #3): the loop matches `t <= b.t`, so at
+           t === b.t this returned the EARLIER verts — the same off-by-one scene.js:91 fixed for evalProp. Snap to a
+           hold or vertex-count-changing mask keyframe and the canvas showed the shape before it; open the editor,
+           move one point, and the keyframe was silently overwritten with the old shape. */
+        if (b.e === 'hold') return (t >= b.t) ? bv : av;                          // step: hold the earlier verts UNTIL b, then b
+        if (!av.length || av.length !== bv.length) return (t >= b.t) ? bv : av;   // topology change (or empty) -> SNAP, and at b it IS b
         const span = b.t - a.t;
         let f = span <= 0 ? 1 : (t - a.t) / span;
         f = easeF(b, f);

@@ -53742,6 +53742,25 @@
     }
   });
 
+  /* ═══ 720 (hunt HIGH #3): AT A HOLD OR TOPOLOGY-CHANGING MASK KEYFRAME, THE PATH IS THAT KEYFRAME'S.
+     The loop matched t <= b.t and returned the earlier verts, so snapping to the keyframe showed the shape before
+     it — and the editor then saved that old shape over it. Four keyframes: A(3 pts) → B(3, hold) → C(4) → D(4).
+     Just before B still A; AT B it is B; just before C still B (a count change snaps); AT C it is C; between C
+     and D it interpolates (the control that nothing else moved). */
+  test('720: a mask path evaluates to the hold / topology keyframe itself at that keyframe\'s time', { item: '720' }, async function () {
+    if (!FM.evalMaskPath) throw new Error('FM.evalMaskPath missing');
+    const A = [[0, 0], [10, 0], [10, 10]], B = [[0, 0], [20, 0], [20, 20]], C = [[0, 0], [30, 0], [30, 30], [0, 30]], D = [[0, 0], [40, 0], [40, 40], [0, 40]];
+    const mask = { path: { kf: [{ t: 0, v: A, e: 'linear' }, { t: 2, v: B, e: 'hold' }, { t: 4, v: C, e: 'linear' }, { t: 6, v: D, e: 'linear' }] } };
+    const at = (t) => FM.evalMaskPath(mask, t);
+    const same = (p, q) => p.length === q.length && p.every((pt, i) => Math.abs(pt[0] - q[i][0]) < 1e-6 && Math.abs(pt[1] - q[i][1]) < 1e-6);
+    if (!same(at(1.99), A)) throw new Error('just before the hold keyframe the path should still be A: ' + JSON.stringify(at(1.99)));
+    if (!same(at(2), B)) throw new Error('AT the hold keyframe (t=2) the path is the earlier shape A, not B — snapping there shows the shape before it: ' + JSON.stringify(at(2)));
+    if (!same(at(3.99), B)) throw new Error('just before the count-changing keyframe the path should still be B (snap, no interpolation): ' + JSON.stringify(at(3.99)));
+    if (!same(at(4), C)) throw new Error('AT the count-changing keyframe (t=4) the path is B, not C: ' + JSON.stringify(at(4)));
+    const mid = at(5);
+    if (mid.length !== 4 || Math.abs(mid[1][0] - 35) > 1e-6) throw new Error('control: between C and D at t=5 the path should interpolate to x=35: ' + JSON.stringify(mid));
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

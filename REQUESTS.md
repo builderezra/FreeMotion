@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.12
+> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.13
 >
-> **State:** v15.12, 1183 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
+> **State:** v15.13, 1184 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
 > **Four pictures are in the chat waiting for one letter each** (nothing visual ships before you pick): **#642** the home background A–D · **#763** the skip-button gap (6/12/18) and the play button A–D · **#765** the split/jump buttons' look 1–3 · and **#760's people shapes** come next, drawn the same way. Everything else waiting on you is a paste or a letter, listed by `tools/next.sh` under its own heading so it cannot hide: #425 A/B · #454 A/B/C · #482 a category · #484 A/B/C · #539 A/B/C · #544 which things · #564 A/B/C · #570 smooth/stepped/leave · #624 a/b/c · #654 A/B/C · #406 which menu · #674 (b)/(c) · #95/#96/#663 the **Your last playback** paste · #215/#604/#677 the **Your last export** paste · #129 the **clip with no picture** paste · the oldest lag item, a **Measure** report · #657 a sample while scrubbing · #676/#706 what "twice" looks like · #712 whether Back from a category stalls · #592 a screenshot.
 > **Next, in order, each already built and proved, shipping one by one:** #508 (a frame-time report of the project-open slide from your phone), #553 (coming back to the app half-drawn), #606, #674 (clip names over filmstrips), #688 (one intro film, dark mode lands on dark), #706 (the add sheet's one motion), #715 (PC sliders glide), #716 (the cursor glow box), #717 (copy/paste button lit), #762 (tap again closes), #764 (dragged add row on top); then #760, #765, #768 and the audit findings.
 
@@ -28218,7 +28218,7 @@ re-opened #480, which I had marked done and had not fixed.
       - User sees: keyframed crop → tap Reset or Crop to canvas → all crop keyframes vanish silently; only undo remains.
         ✅ **v15.12 — both buttons write the rect per field through FM.setProp, as the scrubbers always did.** A keyframed x / y / w / h keeps its keyframes and gets one at the playhead holding the button's value; a plain field is simply set. Test drives the real buttons in the real crop section on a keyframed crop (Crop to canvas, then Reset) with a plain crop as the control; two mutations (each button back to the whole-object write) caught.
 
-- [ ] **720 — js/masks.js:79-80 — evalMaskPath returns the PREVIOUS keyframe at a hold/topology keyframe, then the editor overwrites it** (hunt HIGH #3)
+- [x] **720 — js/masks.js:79-80 — evalMaskPath returns the PREVIOUS keyframe at a hold/topology keyframe, then the editor overwrites it** (hunt HIGH #3) ✅ DONE v15.13.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
@@ -28228,6 +28228,7 @@ re-opened #480, which I had marked done and had not fixed.
       - Actual: loop matches `t <= b.t` and returns `av` for hold and for count-mismatch — at `t === b.t` that is the earlier keyframe. scene.js:91 fixed exactly this: `if (b.e === 'hold') return (t >= b.t) ? b.v : a.v`. mask-tool.js:46 seeds from evalMaskPath; flush() (91-92) finds the kf at t and writes `hit.v = v` — the hold keyframe gets the previous keyframe's vertices.
       - Fix: `if (b.e === 'hold') return (t >= b.t) ? bv : av;` and `if (!av.length || av.length !== bv.length) return (t >= b.t) ? bv : av;`.
       - User sees: snap to a middle hold (or vertex-count-changing) mask keyframe → canvas shows the shape BEFORE it; open the editor, move one point → that keyframe is silently replaced with the old shape. Undo entry looks like a point drag.
+        ✅ **v15.13 — the same off-by-one scene.js fixed for evalProp.** At `t === b.t` the loop returned the EARLIER verts for a hold or vertex-count-changing keyframe; now it returns that keyframe's own. Test: four keyframes, asserted just before and AT each of the hold and the topology change, with an interpolating pair as the control. Mutation (the hold line back) caught.
 
 - [ ] **721 — js/fx-presets.js:84 — keyframed colours are dropped from presets; validation also deletes stored presets** (hunt HIGH #4)
       **STATUS: 🟢 READY — nothing is stopping this**
