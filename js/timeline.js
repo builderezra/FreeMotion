@@ -344,10 +344,13 @@ window.FM = window.FM || {};
     const start = layer.start || 0;
     const seen = [];
     for (const k of kf) {
-      /* Keyframe times are LOCAL to the layer in this app's model (the same clock evalProp is asked
-         with at layer.start + local). Clamped rather than dropped: a keyframe just off the end still
-         tells you which way the colour was heading at the edge. */
-      const pct = Math.max(0, Math.min(100, (k.t / dur) * 100));
+      /* Keyframe times are ABSOLUTE project seconds in this app (shapeClipColor below says so, and the
+         compositor evaluates a fill at scene time) — the comment that stood here claimed the opposite and the
+         line under it believed it (queue 724, hunt HIGH #7): `k.t / dur` drew a clip starting at 2s with its arc
+         late and squashed, and a clip starting a duration or more in as one solid colour. The bar's own clock
+         is the clip's start. Clamped rather than dropped: a keyframe just off either end still tells you which
+         way the colour was heading at that edge. */
+      const pct = Math.max(0, Math.min(100, ((k.t - start) / dur) * 100));
       const col = FM.evalProp(p, k.t);
       if (typeof col !== 'string' || col[0] !== '#') return null;   // not a colour track after all
       seen.push({ pct: pct, col: col });

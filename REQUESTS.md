@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.16
+> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.17
 >
-> **State:** v15.16, 1187 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
+> **State:** v15.17, 1188 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
 > **Four pictures are in the chat waiting for one letter each** (nothing visual ships before you pick): **#642** the home background A–D · **#763** the skip-button gap (6/12/18) and the play button A–D · **#765** the split/jump buttons' look 1–3 · and **#760's people shapes** come next, drawn the same way. Everything else waiting on you is a paste or a letter, listed by `tools/next.sh` under its own heading so it cannot hide: #425 A/B · #454 A/B/C · #482 a category · #484 A/B/C · #539 A/B/C · #544 which things · #564 A/B/C · #570 smooth/stepped/leave · #624 a/b/c · #654 A/B/C · #406 which menu · #674 (b)/(c) · #95/#96/#663 the **Your last playback** paste · #215/#604/#677 the **Your last export** paste · #129 the **clip with no picture** paste · the oldest lag item, a **Measure** report · #657 a sample while scrubbing · #676/#706 what "twice" looks like · #712 whether Back from a category stalls · #592 a screenshot.
 > **Next, in order, each already built and proved, shipping one by one:** #508 (a frame-time report of the project-open slide from your phone), #553 (coming back to the app half-drawn), #606, #674 (clip names over filmstrips), #688 (one intro film, dark mode lands on dark), #706 (the add sheet's one motion), #715 (PC sliders glide), #716 (the cursor glow box), #717 (copy/paste button lit), #762 (tap again closes), #764 (dragged add row on top); then #760, #765, #768 and the audit findings.
 
@@ -28266,7 +28266,7 @@ re-opened #480, which I had marked done and had not fixed.
       - User sees: type/scrub Anchor X to 150% → pinned at 100%, readout snaps back.
         ✅ **v15.16 — setAnchor clamps to the boxes' −400…500%, not 0…1.** v9.93 widened only the boxes; every route (boxes, pad, Centre) still came through the 0…1 clamp, so 150% snapped back to 100%. Test through the real closure: 150% sticks, −450% clamps to −400%, an in-range value is untouched. Mutation (the 0…1 clamp back) caught.
 
-- [ ] **724 — js/timeline.js:263, 266-269 — clipColorStops uses raw absolute keyframe time** (hunt HIGH #7)
+- [x] **724 — js/timeline.js:263, 266-269 — clipColorStops uses raw absolute keyframe time** (hunt HIGH #7) ✅ DONE v15.17.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
@@ -28276,6 +28276,7 @@ re-opened #480, which I had marked done and had not fixed.
       - Actual: `pct = (k.t / dur) * 100`; `const start = layer.start || 0` is declared and never used; fxLocalTime never called. Keyframe times are absolute project time everywhere else (555, 2101, 4195-4198, inspector.js:1059). 266 and 555 contradict each other in the same file; 266 is wrong. Suite fixture (tests.js:55246) uses start = 0, the one case where both agree.
       - Fix: `(k.t - start) / dur` (and route through fxLocalTime if speed/trim should count, as the comment promises); fix the 266 comment; add a test with start ≠ 0.
       - User sees: colour-keyframed shape clip starting at 2 s draws its arc late and squashed; a clip starting ≥ one duration in draws as a solid first colour.
+        ✅ **v15.17 — the stops are placed from the clip's start.** Keyframe times are absolute project seconds; the comment above the line claimed they were local and `k.t / dur` believed it, so a clip starting at 2s drew its arc late and squashed and one starting a duration in drew as a solid colour. Test: clips starting at 2s and 8s give 0 / 50 / 100 %, with the start-0 clip as the control. Mutation (raw time again) caught.
 
 - [ ] **725 — js/timeline.js:859, 865-874, 4324-4325, 4333, 3827; styles.css:2538 — marker rename still reachable by double-click** (hunt HIGH #8)
       **STATUS: 🟢 READY — nothing is stopping this**

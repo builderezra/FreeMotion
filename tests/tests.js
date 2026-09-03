@@ -53864,6 +53864,28 @@
     }
   });
 
+  /* ═══ 724 (hunt HIGH #7): THE COLOUR ARC IS PLACED FROM THE CLIP'S START, NOT FROM PROJECT ZERO. Keyframe
+     times are absolute seconds; the stop maths divided the raw time by the duration, so a clip starting at 2s
+     drew its arc late and squashed and one starting a whole duration in drew as a solid colour. Two clips,
+     starts 2s and 8s, keyframes at their own start / middle / end → stops at 0 / 50 / 100 %, with the start-0
+     case as the control that the maths still agrees with the older test. */
+  test('724: a keyframed colour arc on a clip that starts late is drawn from the clip start (0 / 50 / 100 %)', { item: '724' }, async function () {
+    if (typeof FM._clipColorStops !== 'function') throw new Error('FM._clipColorStops seam is gone');
+    const mk = (start, dur) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 100, shapeH: 100, fill: '#ff0000' });
+      L.start = start; L.duration = dur;
+      L.fill = { kf: [{ t: start, v: '#ff0000' }, { t: start + dur / 2, v: '#00ff00' }, { t: start + dur, v: '#0000ff' }] };
+      return L;
+    };
+    const pcts = (L) => { const st = FM._clipColorStops(L); if (!st) throw new Error('no stops for a three-colour clip starting at ' + L.start); return st.map(x => Math.round(x.pct)); };
+    const a = pcts(mk(2, 4));
+    if (a.join(',') !== '0,50,100') throw new Error('a clip starting at 2s draws its arc at ' + a.join('/') + '% — the stops are placed from project zero, not the clip start (late and squashed)');
+    const b = pcts(mk(8, 4));
+    if (b.join(',') !== '0,50,100') throw new Error('a clip starting at 8s (two durations in) draws its arc at ' + b.join('/') + '% — that is the solid-first-colour bug');
+    const c = pcts(mk(0, 6));
+    if (c.join(',') !== '0,50,100') throw new Error('control: the start-0 clip changed: ' + c.join('/'));
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel
