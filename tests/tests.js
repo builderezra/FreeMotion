@@ -53761,6 +53761,44 @@
     if (mid.length !== 4 || Math.abs(mid[1][0] - 35) > 1e-6) throw new Error('control: between C and D at t=5 the path should interpolate to x=35: ' + JSON.stringify(mid));
   });
 
+  /* ═══ 721 (hunt HIGH #4): A KEYFRAMED COLOUR SURVIVES SAVING A PRESET, AND SAVING NEVER DELETES OTHER ENTRIES.
+     saneKf demanded a finite number of every keyframe value, so a colour param's '#rrggbb' list was nulled and the
+     param dropped — a cycling glow came back static under a "Saved" toast. And save()/remove() rebuilt the stored
+     list from the VALIDATED view, so any entry that failed to parse was deleted from disk by touching another one.
+     Two-way on the first (a colour list kept, a non-colour param still refuses a string keyframe); the second seeds
+     an opaque entry on disk and saves something else. */
+  test('721: a colour keyframe list survives saving a preset, and saving one preset does not delete an unparseable other', { item: '721' }, async function () {
+    if (!FM.effectPresets || !FM.effectPresets._storageKey) throw new Error('FM.effectPresets._storageKey seam missing');
+    const KEY = FM.effectPresets._storageKey;
+    const reg = (FM.fxRegistry.all() || []).find(r => (r.params || []).some(p => p.type === 'color') && (r.params || []).some(p => p.type !== 'color' && p.type !== 'layer'));
+    if (!reg) throw new Error('setup: no effect with both a colour param and a numeric one');
+    const colorKey = reg.params.find(p => p.type === 'color').key, numKey = reg.params.find(p => p.type !== 'color' && p.type !== 'layer').key;
+    const fx = reg.type || reg.id;
+    let before = null; try { before = localStorage.getItem(KEY); } catch (e) {}
+    try {
+      const opaque = { id: 'opaque721', fx: 'no-such-effect-721', name: 'From another build', params: { x: 1 } };
+      localStorage.setItem(KEY, JSON.stringify([opaque]));
+      const pr = { id: 'colour721', fx: fx, name: 'Cycling', params: {} };
+      pr.params[colorKey] = { kf: [{ t: 0, v: '#ff0000', e: 'linear' }, { t: 1, v: '#0000ff', e: 'linear' }] };
+      if (!FM.effectPresets.save(pr)) throw new Error('save() refused a preset whose only animation is a colour cycle');
+      const mine = FM.effectPresets.for(fx).mine.find(p => p.id === 'colour721');
+      if (!mine) throw new Error('the saved preset is not listed for ' + fx);
+      const c = mine.params[colorKey];
+      if (!c || !Array.isArray(c.kf) || c.kf.length !== 2 || c.kf[1].v !== '#0000ff') throw new Error('the colour keyframes were dropped on save: ' + JSON.stringify(mine.params));
+      const raw = JSON.parse(localStorage.getItem(KEY) || '[]');
+      if (!raw.some(x => x && x.id === 'opaque721')) throw new Error('saving a preset DELETED an entry it could not parse (the other-build preset is gone from disk): ' + JSON.stringify(raw.map(x => x && x.id)));
+      const bad = { id: 'bad721', fx: fx, name: 'Bad', params: {} };
+      bad.params[numKey] = { kf: [{ t: 0, v: '#ff0000', e: 'linear' }] };
+      if (FM.effectPresets.save(bad)) throw new Error('control: a STRING keyframe on a non-colour param was accepted');
+      FM.effectPresets.remove('colour721');
+      const raw2 = JSON.parse(localStorage.getItem(KEY) || '[]');
+      if (!raw2.some(x => x && x.id === 'opaque721')) throw new Error('removing a preset DELETED the unparseable entry beside it');
+      if (raw2.some(x => x && x.id === 'colour721')) throw new Error('remove() did not remove the preset it was asked to');
+    } finally {
+      try { if (before === null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, before); } catch (e) {}
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

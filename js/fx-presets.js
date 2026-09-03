@@ -72,7 +72,7 @@ window.FM = window.FM || {};
   let _why = '';      // why the last sanePreset() returned null
   let _note = '';     // what save() last put on screen (so callers don't toast over it)
   let _trimmedId = ''; // id of the preset capture() trimmed, for the save() that follows
-  function saneKf(raw) {
+  function saneKf(raw, kind) {   // kind: the param's registry type — a 'color' param keyframes STRINGS (queue 721)
     if (!Array.isArray(raw) || !raw.length) return null;
     // Over-long lists used to return null, which DROPPED the param, which could make sanePreset
     // return null — binning the entire preset over one greedy parameter, without a word. Keep the
@@ -81,7 +81,11 @@ window.FM = window.FM || {};
     const out = [];
     for (let i = 0; i < raw.length; i++) {
       const k = raw[i];
-      if (!k || typeof k !== 'object' || !Number.isFinite(k.t) || !Number.isFinite(k.v)) return null;
+      /* A COLOUR KEYFRAME IS A STRING (queue 721, hunt HIGH #4). Colours keyframe (fx-registry.js), and this line
+         demanded a finite number of every value — so a glow whose colour cycles came back from Save as a static
+         default colour, under a "Saved" toast. Accept '#rrggbb' / '#rrggbbaa' on a colour param; numbers elsewhere. */
+      const vOk = !!k && typeof k === 'object' && (Number.isFinite(k.v) || (kind === 'color' && typeof k.v === 'string' && /^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(k.v)));
+      if (!k || typeof k !== 'object' || !Number.isFinite(k.t) || !vOk) return null;
       const c = { t: Math.min(600, Math.max(0, k.t)), v: k.v, e: (typeof k.e === 'string' && EASE_OK[k.e]) ? k.e : 'linear' };
       if (Array.isArray(k.bez) && k.bez.length === 4 && k.bez.every(Number.isFinite)) c.bez = k.bez.slice(0, 4);
       /* ⚠️ `ez` — the parameterised easing the graph editor writes (Bounce, Elastic, Steps…). js/scene.js
@@ -135,7 +139,7 @@ window.FM = window.FM || {};
       if (typeof v === 'number' && Number.isFinite(v)) params[key] = v;
       else if (typeof v === 'string' && v.length <= 32) params[key] = v;
       else if (v && typeof v === 'object' && Array.isArray(v.kf)) {
-        const kf = saneKf(v.kf);
+        const kf = saneKf(v.kf, kinds[key]);
         /* CARRY loopMode, ON A WHITELIST. This rebuilt an animated parameter as `{ kf: kf }` and nothing
          * else — but FM.evalProp reads `loopMode` off that same object to keep repeating past the last
          * keyframe, so a looping animation came out of a preset frozen on its final value. Measured: a
@@ -174,6 +178,14 @@ window.FM = window.FM || {};
   // Returns whether the write actually landed. It used to swallow the failure and return undefined,
   // so save() reported success after a quota error and the caller's "Saved" toast painted straight
   // over the "Storage full" one.
+  /* THE RAW STORE, for save/remove (queue 721). readCustom() runs every entry through the validator, which is
+     right for SHOWING presets — but save() and remove() used it to rebuild the stored list, so an entry that merely
+     failed to parse today (an effect this build does not have, a colour keyframe before the fix above) was silently
+     deleted from disk by saving or removing a DIFFERENT preset. The list on disk is rewritten from the raw array;
+     entries that do not validate are carried through opaque and unshown, never dropped. */
+  function readRaw() {
+    try { const a = JSON.parse(localStorage.getItem(KEY) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; }
+  }
   function writeCustom(arr) {
     try { localStorage.setItem(KEY, JSON.stringify(arr)); return true; }
     catch (e) { if (FM.toast) FM.toast('Storage full — preset not saved', 3200); return false; }
@@ -251,7 +263,7 @@ window.FM = window.FM || {};
       const clamped = _clamped || (p && _trimmedId === p.id);
       _trimmedId = '';
       if (!p) { if (FM.toast) FM.toast('Couldn’t save that preset — ' + (why || 'it didn’t validate'), 3600); return false; }
-      const arr = readCustom().filter(x => x.id !== p.id).slice(0, MAX_PRESETS - 1);
+      const arr = readRaw().filter(x => !(x && x.id === p.id)).slice(0, MAX_PRESETS - 1);   // queue 721: raw, so nothing else on disk is lost
       arr.unshift(p);
       if (!writeCustom(arr)) return false;   // writeCustom has already said why
       if (clamped) {
@@ -263,7 +275,8 @@ window.FM = window.FM || {};
     /* What save() already put on screen, '' if nothing — so a caller's own "Saved" toast doesn't
        paint over the more specific message this one just showed. */
     lastNote: function () { return _note; },
-    remove: function (id) { writeCustom(readCustom().filter(p => p.id !== id)); },
+    remove: function (id) { writeCustom(readRaw().filter(p => !(p && p.id === id))); },   // queue 721: raw, see readRaw
+    _storageKey: KEY,   // suite seam (queue 721): the test reads the raw list back
 
     /* Preset → ONE normal effect instance. Starts from registry defaults (forward-compat: params the
      * preset predates get their schema defaults), overlays the preset, shifts kf to atTime. */
