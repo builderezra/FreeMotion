@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.29
+> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.30
 >
-> **State:** v15.29, 1199 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
+> **State:** v15.30, 1200 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
 > **Four pictures are in the chat waiting for one letter each** (nothing visual ships before you pick): **#642** the home background A–D · **#763** the skip-button gap (6/12/18) and the play button A–D · **#765** the split/jump buttons' look 1–3 · and **#760's people shapes** come next, drawn the same way. Everything else waiting on you is a paste or a letter, listed by `tools/next.sh` under its own heading so it cannot hide: #425 A/B · #454 A/B/C · #482 a category · #484 A/B/C · #539 A/B/C · #544 which things · #564 A/B/C · #570 smooth/stepped/leave · #624 a/b/c · #654 A/B/C · #406 which menu · #674 (b)/(c) · #95/#96/#663 the **Your last playback** paste · #215/#604/#677 the **Your last export** paste · #129 the **clip with no picture** paste · the oldest lag item, a **Measure** report · #657 a sample while scrubbing · #676/#706 what "twice" looks like · #712 whether Back from a category stalls · #592 a screenshot.
 > **Next, in order, each already built and proved, shipping one by one:** #508 (a frame-time report of the project-open slide from your phone), #553 (coming back to the app half-drawn), #606, #674 (clip names over filmstrips), #688 (one intro film, dark mode lands on dark), #706 (the add sheet's one motion), #715 (PC sliders glide), #716 (the cursor glow box), #717 (copy/paste button lit), #762 (tap again closes), #764 (dragged add row on top); then #760, #765, #768 and the audit findings.
 
@@ -28405,13 +28405,14 @@ re-opened #480, which I had marked done and had not fixed.
       - Compares raw `soft` (0), then rewrites to 0.0001 and stores that. Fix: normalise before the compare, or store the raw value. Cost only (full per-pixel pass every redraw).
         ✅ **v15.29 — softness is normalised before the memo compare, so a pass at Softness 0 is a hit on the second redraw.** The compare saw the raw 0 and the store held 0.0001, a full per-pixel pass on every redraw. Test counts computes through a seam on the real function, with a changed softness as the control. Mutation caught.
 
-- [ ] **736 — js/inspector.js:4588 — rotate dial reads the magnet once** (hunt MEDIUM #19)
+- [x] **736 — js/inspector.js:4588 — rotate dial reads the magnet once** (hunt MEDIUM #19) ✅ DONE v15.30.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
       (v)
       - `SNAP_TOL = magnetOn() ? 7 : 0` at build time; timeline.js:3711-3714 never refreshes the inspector. The other three sites (3858, 4526, 4723) read it live. Fix: `const snapTol = () => magnetOn() ? 7 : 0` inside the gesture.
+        ✅ **v15.30 — the dial's snap tolerance is a function read on every move, not a value read at build.** The timeline's magnet toggle never rebuilds the panel, so a build-time read held the old answer all session; the other three snap sites already read it live. Test builds the dial with the magnet on, toggles it off with no rebuild, drags 43° and gets 43, then back on and gets 45 (control). Mutation (read once again) caught.
 
 - [ ] **737 — js/inspector.js:2900 — paste gate ignores trimPath/repeater that 2819 pastes** (hunt MEDIUM #20)
       **STATUS: 🟢 READY — nothing is stopping this**

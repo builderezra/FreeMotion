@@ -54221,6 +54221,56 @@
     if (FM._fxStats.lkCompute - n0 !== 2) throw new Error('control: a changed softness did not recompute (' + (FM._fxStats.lkCompute - n0) + ' computes in all)');
   });
 
+  /* ═══ 736 (hunt MEDIUM #19): THE ROTATE DIAL READS THE MAGNET LIVE. Its tolerance was read once when the panel was
+     built, and the timeline's magnet toggle never rebuilds the panel — so turning the magnet off left the dial
+     snapping to 45° for the rest of the session. Build the dial with the magnet on, toggle it off WITHOUT rebuilding,
+     drag 43° → 43, not 45; toggle it back on, drag 43° again → 45 (the control that the live read snaps). */
+  test('736: the rotate dial honours a magnet toggled after the panel was built', { item: '736' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedSel = FM.scene.selectedId, mode0 = FM._mtMode;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const snapBtn = document.getElementById('btn-snap');
+    if (!snapBtn || !FM.timeline || !FM.timeline.isSnapping) throw new Error('setup: #btn-snap / FM.timeline.isSnapping missing');
+    const snap0 = FM.timeline.isSnapping();
+    const setSnap = async (on) => { if (FM.timeline.isSnapping() !== on) { snapBtn.click(); await sleep(60); } if (FM.timeline.isSnapping() !== on) throw new Error('setup: could not set the magnet ' + (on ? 'on' : 'off')); };
+    try {
+      if (hadHome) FM.home.close();
+      await atWideWidth(async function () {
+        const L = FM.makeLayer('shape', { name: 's736', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#fc8', start: 0, duration: 4 });
+        FM.scene = scene([L]); FM.selectLayer(L.id); FM.refreshAll();
+        await setSnap(true);
+        FM._mtMode = 'rotate'; FM.inspector.openCategory('transform'); FM.inspector.refresh(); await sleep(200);
+        const ring = document.querySelector('.mt-dial-ring');
+        if (!ring || !(ring.getBoundingClientRect().width > 0)) throw new Error('setup: no laid-out .mt-dial-ring');
+        const drag = async (deg) => {
+          const r = ring.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2, rad = r.width / 2 - 2;
+          const at = (a) => ({ bubbles: true, cancelable: true, pointerId: 5, pointerType: 'touch', isPrimary: true, buttons: 1, clientX: cx + rad * Math.cos(a * Math.PI / 180), clientY: cy + rad * Math.sin(a * Math.PI / 180) });
+          ring.dispatchEvent(new PointerEvent('pointerdown', at(0)));
+          for (let k = 1; k <= 8; k++) ring.dispatchEvent(new PointerEvent('pointermove', at(deg * k / 8)));
+          ring.dispatchEvent(new PointerEvent('pointerup', Object.assign(at(deg), { buttons: 0 })));
+          await sleep(60);
+          const v = FM.evalProp(L.transform.rotation, FM.time) || 0;
+          return Math.abs(v);
+        };
+        await setSnap(false);   // toggled AFTER the dial was built, no rebuild
+        const off = await drag(43);
+        if (Math.abs(off - 45) < 0.01) throw new Error('with the magnet turned off after the dial was built, a 43° drag still snapped to 45° — the dial read the magnet once, at build time');
+        if (Math.abs(off - 43) > 1.5) throw new Error('setup: a 43° drag with the magnet off landed on ' + off + '°');
+        L.transform.rotation = 0;
+        await setSnap(true);    // back on, still no rebuild
+        const on = await drag(43);
+        if (Math.abs(on - 45) > 0.01) throw new Error('control: with the magnet on, a 43° drag should snap to 45°, got ' + on + '°');
+      });
+    } finally {
+      try { await setSnap(snap0); } catch (e) {}
+      FM._mtMode = mode0;
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

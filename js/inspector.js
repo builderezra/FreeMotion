@@ -4656,7 +4656,7 @@ window.FM = window.FM || {};
        * The angle is accumulated RAW and only snapped on the way out, never written back into rd.acc.
        * Snapping the accumulator would make the drag creep: each move would start from the snapped
        * value, so eight notches of travel would land you somewhere other than 360°. */
-      const SNAP_DEG = 45, SNAP_TOL = magnetOn() ? 7 : 0;   // magnet off → tolerance 0, so nothing holds (queue 620)
+      const SNAP_DEG = 45, snapTol = () => (magnetOn() ? 7 : 0);   // magnet off → tolerance 0, so nothing holds (queue 620) — read LIVE (queue 736): the timeline's magnet toggle never refreshes this panel, so a build-time read held the old answer for the rest of the session
       let lastNotch = null;
       ring.addEventListener('pointermove', e => {
         if (!rd) return;
@@ -4664,7 +4664,7 @@ window.FM = window.FM || {};
         const a = ang(e); let d = a - rd.a; d -= 360 * Math.round(d / 360); rd.acc += d; rd.a = a;
         const raw = rd.v + rd.acc;
         const notch = Math.round(raw / SNAP_DEG) * SNAP_DEG;
-        const held = Math.abs(raw - notch) <= SNAP_TOL;
+        const held = Math.abs(raw - notch) <= snapTol();
         if (held && notch !== lastNotch) {   // one tick per notch ENTERED, not per frame while inside it
           lastNotch = notch;
           if (navigator.vibrate) { try { navigator.vibrate(9); } catch (_) {} }
