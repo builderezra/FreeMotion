@@ -4729,7 +4729,11 @@ window.FM = window.FM || {};
       const getA = k => { const v = layer.transform[k]; return typeof v === 'number' ? v : (FM.evalProp(v, FM.time) != null ? FM.evalProp(v, FM.time) : 0.5); };
       const setAnchor = (ax, ay) => {
         const oldX = getA('anchorX'), oldY = getA('anchorY');
-        const nx = Math.max(0, Math.min(1, ax)), ny = Math.max(0, Math.min(1, ay));
+        /* THE BOXES' RANGE, NOT 0..1 (queue 723, hunt HIGH #6). Queue 345 (v9.93) widened the Anchor boxes to −400…500%
+           so the pivot could sit outside the layer, and the note there says the anchor is no longer trapped — but every
+           route (boxes, pad, Centre) came through this clamp, which still pinned it to 0…1: type 150% and the readout
+           snapped back to 100%. The clamp now matches the boxes. */
+        const nx = Math.max(-4, Math.min(5, ax)), ny = Math.max(-4, Math.min(5, ay));
         layer.transform.anchorX = Math.round(nx * 1000) / 1000;
         layer.transform.anchorY = Math.round(ny * 1000) / 1000;
         // Keep it visually still. The anchor moved (nx-oldX) of the layer's SCALED width — but that
@@ -4766,6 +4770,7 @@ window.FM = window.FM || {};
          shoulder). Checked before widening, per the entry's own warning: the compositor never clamped
          it — `anchorX(tr)` only defaults a missing value and passes anything finite through — so this
          was purely these two boxes. */
+      FM.inspector._setAnchor = setAnchor;   // suite seam (queue 723): the closure the boxes, the pad and Centre all go through
       const bax = mtVBox('Anchor X', () => getA('anchorX') * 100, v => setAnchor(v / 100, getA('anchorY')), { dp: 1, unit: '%', scrub: 0.3, min: -400, max: 500, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
       const bay = mtVBox('Anchor Y', () => getA('anchorY') * 100, v => setAnchor(getA('anchorX'), v / 100), { dp: 1, unit: '%', scrub: 0.3, min: -400, max: 500, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
       refreshables.push(bax, bay); values.append(bax, bay);

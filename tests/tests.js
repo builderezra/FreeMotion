@@ -53836,6 +53836,34 @@
     }
   });
 
+  /* ═══ 723 (hunt HIGH #6): THE ANCHOR CAN LEAVE THE LAYER. v9.93 widened the boxes to −400…500% but setAnchor,
+     which every route goes through, still clamped to 0…1. Through the real closure (seam set when the anchor mode
+     renders): 150% sticks, −450% clamps to the boxes' floor of −400%, and an in-range value is untouched. */
+  test('723: setAnchor accepts an anchor outside the layer, clamped only to the boxes\' −400…500% range', { item: '723' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedSel = FM.scene.selectedId, mode0 = FM._mtMode;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const L = FM.makeLayer('shape', { name: 's723', shape: 'rect', x: 400, y: 600, shapeW: 200, shapeH: 200, fill: '#8f8', start: 0, duration: 4 });
+      FM.scene = scene([L]); FM.selectLayer(L.id); FM.refreshAll();
+      FM._mtMode = 'anchor'; FM.inspector.openCategory('transform'); FM.inspector.refresh(); await sleep(200);
+      if (!FM.inspector._setAnchor) throw new Error('setup: the anchor mode did not render (no _setAnchor seam) — is the transform category open in anchor mode?');
+      FM.inspector._setAnchor(1.5, 0.5); await sleep(30);
+      if (Math.abs(L.transform.anchorX - 1.5) > 1e-3) throw new Error('Anchor X 150% was pinned to ' + (L.transform.anchorX * 100) + '% — the anchor is still trapped in the layer');
+      FM.inspector._setAnchor(-4.5, 0.5); await sleep(30);
+      if (Math.abs(L.transform.anchorX + 4) > 1e-3) throw new Error('Anchor X −450% should clamp to the boxes\' floor −400%, got ' + (L.transform.anchorX * 100) + '%');
+      FM.inspector._setAnchor(0.25, 0.75); await sleep(30);
+      if (Math.abs(L.transform.anchorX - 0.25) > 1e-3 || Math.abs(L.transform.anchorY - 0.75) > 1e-3) throw new Error('control: an in-range anchor was altered: ' + L.transform.anchorX + ', ' + L.transform.anchorY);
+    } finally {
+      FM._mtMode = mode0;
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel
