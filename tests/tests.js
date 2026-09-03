@@ -54117,6 +54117,39 @@
     if (!near(cam.focus.blur, 8)) throw new Error('control: focus blur is a strength, not a distance, and was changed to ' + cam.focus.blur);
   });
 
+  /* ═══ 732 (hunt MEDIUM #15): INSERTING AN ELEMENT THAT CARRIES A CAMERA INTO A SCENE THAT HAS ONE KEEPS ONE
+     CAMERA. The template path filtered; the element path did not, and it puts the element's layers first, so the
+     element's camera silently became THE camera. The element's other layers still land (the control). */
+  test('732: inserting an element with a camera into a scene that already has one does not add a second camera', { item: '732', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.elements || !FM.elements.save || !FM.elements.insert) throw new Error('FM.elements save/insert missing');
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    let eid = null;
+    try {
+      const cam = FM.makeLayer('camera', { name: 'elcam732', x: 540, y: 960 });
+      const sh = FM.makeLayer('shape', { name: 'elshape732', shape: 'rect', x: 100, y: 100, shapeW: 50, shapeH: 50, fill: '#0ff' });
+      const before = (FM.elements.list() || []).map(e => e.id);
+      const ok = await FM.elements.save('ZZ test element 732', [cam, sh]);
+      if (!ok) throw new Error('setup: the element did not save');
+      const ent = (FM.elements.list() || []).find(e => before.indexOf(e.id) < 0 && /732/.test(e.name || ''));
+      if (!ent) throw new Error('setup: the saved element is not listed');
+      eid = ent.id;
+      const mine = FM.makeLayer('camera', { name: 'mycam732', x: 540, y: 960 });
+      const bg = FM.makeLayer('shape', { name: 'bg732', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#333' });
+      FM.scene = scene([mine, bg]); FM.selectLayer(null); FM.refreshAll(); await sleep(50);
+      await FM.elements.insert(eid); await sleep(150);
+      const cams = FM.scene.layers.filter(l => l.type === 'camera');
+      if (cams.length !== 1) throw new Error('the scene now has ' + cams.length + ' cameras — the element\'s came in ahead of mine, and the composite uses the first it finds');
+      if (cams[0].name !== 'mycam732') throw new Error('the surviving camera is the element\'s, not the scene\'s own');
+      if (!FM.scene.layers.some(l => l.name === 'elshape732')) throw new Error('control: the element\'s shape did not land');
+    } finally {
+      try { if (eid && FM.elements.remove) await FM.elements.remove(eid); else if (eid && FM.elements.delete) await FM.elements.delete(eid); } catch (e) {}
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      await sleep(60);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

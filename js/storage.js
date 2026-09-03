@@ -2215,6 +2215,9 @@ window.FM = window.FM || {};
       try { const db = await openDB(); pack = await idbGet(db, 'elem:' + eid); db.close(); } catch (e) {}
       if (!pack) return false;
       const re = reIdLayers(pack.layers);
+      // ONE CAMERA PER SCENE, here too (queue 732, hunt MEDIUM #15). templates.insertInto has had this guard since queue 617; an element
+      // pack can carry a camera as well, and this path put the element's layers FIRST, so its camera was the one the composite found.
+      if (FM.scene.layers.some(l => l.type === 'camera')) re.layers = re.layers.filter(l => l.type !== 'camera');
       const t0 = Math.min.apply(null, re.layers.length ? re.layers.map(l => l.start || 0) : [0]);
       re.layers.forEach(l => { const d = FM.time - t0; l.start = (l.start || 0) + d; if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(l, d); });   // keyframes are absolute time — inserted animation rides to the playhead
       FM.scene.layers = re.layers.concat(FM.scene.layers);
