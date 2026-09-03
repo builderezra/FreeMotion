@@ -53150,6 +53150,42 @@
     }
   });
 
+  /* ═══ 508 (v15.05): THE OPEN-PROJECT TRANSITION IS MEASURED ON THE DEVICE THAT RUNS IT.
+     Three reports of a janky open, zero reproductions here — so the app records every frame of the push
+     and writes a report he can paste. This drives a real push at phone width (the push is phone-only) and
+     asserts the report appears, is about THIS open (the key is cleared first, so a stale one cannot pass),
+     and carries the numbers the diagnosis needs. It does not assert smoothness — that is the reading, not
+     the instrument. */
+  test('508: opening a project from Home writes a frame-time report he can paste', { item: '508', budgetMs: 30000 }, async function () {
+    if (!FM.home || !FM.home.open || !FM.home.close) throw new Error('FM.home is missing');
+    if (!FM._openProbe) throw new Error('FM._openProbe is missing — nothing records the open-project frames');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wasOpen = !!(FM.home.isOpen && FM.home.isOpen());
+    const gate = FM.home._pushAllowed;
+    try {
+      try { localStorage.removeItem('fm.lastOpenReport'); } catch (e) {}
+      await atPhoneWidth(async function () {
+        if (typeof gate === 'function') FM.home._pushAllowed = () => true;   // the 900px frame would otherwise refuse the push
+        if (!FM.home.isOpen()) { FM.home.open(); await sleep(200); }
+        const card = document.querySelector('#home-screen .hm-card');
+        FM.home.close({ push: true, lead: card || undefined });
+        await sleep(1600);                                     // 380 + 520ms of push, 400ms of tail, then slack
+      });
+      const rep = FM._openProbe.last();
+      if (!rep) throw new Error('no open-project report was written after a real push — the probe never ran, so his phone would have nothing to paste');
+      const frames = /frames\s+(\d+) over (\d+)ms/.exec(rep);
+      if (!frames) throw new Error('the report has no frame count line:\n' + rep);
+      if (+frames[1] < 12) throw new Error('only ' + frames[1] + ' frames were sampled across a ' + frames[2] + 'ms open — the probe stopped early, so a hitch late in the open (the editor\'s first build) would never be seen');
+      if (!/frame gap\s+median [\d.]+ms, worst [\d.]+ms/.test(rep)) throw new Error('the report has no gap line — the numbers the diagnosis needs are missing:\n' + rep);
+      if (!/long frames\s+\d+ over 33ms/.test(rep)) throw new Error('the report does not count long frames:\n' + rep);
+      if (!/verdict/.test(rep)) throw new Error('the report has no one-line verdict for him to read first:\n' + rep);
+    } finally {
+      if (typeof gate === 'function') FM.home._pushAllowed = gate;
+      try { if (wasOpen && !FM.home.isOpen()) FM.home.open(); else if (!wasOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep(120);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

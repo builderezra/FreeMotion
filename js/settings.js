@@ -574,6 +574,35 @@ window.FM = window.FM || {};
       audWrap.append(audHead, audBtns, audOut);
       body.appendChild(group(audWrap));
 
+      /* ═══ "YOUR LAST PROJECT OPEN" (queue 508) ═══════════════════════════════════════
+       * The open-project transition measures smooth on this machine and he says it is janky on his
+       * phone — three times. home.js records every frame of the push on HIS device now; this is the
+       * one place that reading can be read back and pasted. Same shape as the two rows above. */
+      const opWrap = el('div', 'set-row set-perf');
+      const opOut = el('pre', 'set-perf-out');
+      let opText = '';
+      try { opText = localStorage.getItem('fm.lastOpenReport') || ''; } catch (e) {}
+      opOut.textContent = opText || 'Nothing yet \u2014 this fills in the next time you open a project from Home.';
+      const opCopy = el('button', 'set-action', 'Copy'); opCopy.type = 'button'; opCopy.disabled = !opText;
+      opCopy.addEventListener('click', async () => {
+        const text = opOut.textContent;
+        try { await navigator.clipboard.writeText(text); if (FM.toast) FM.toast('Copied \u2014 paste it to me', 3000); }
+        catch (e) {
+          try {
+            const r = document.createRange(); r.selectNodeContents(opOut);
+            const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+            if (FM.toast) FM.toast('Selected \u2014 use Copy from the menu', 3000);
+          } catch (e2) {}
+        }
+      });
+      const opHead = el('div', 'set-rowtext');
+      opHead.appendChild(el('div', 'set-label', 'Your last project open'));
+      opHead.appendChild(el('div', 'set-hint', 'How smoothly the last project opened from Home \u2014 every frame of the slide, and which ones ran long. If opening feels janky on your phone, open one, come here, Copy, and paste it to me.'));
+      const opBtns = el('div', 'set-perf-btns');
+      opBtns.append(opCopy);
+      opWrap.append(opHead, opBtns, opOut);
+      body.appendChild(group(opWrap));
+
       /* ═══ "A CLIP WITH NO PICTURE" (queue 129) ═════════════════════════════════════════════════
        * That entry's last question is put to HIM — "what does the FILE say, .mov or .mp4? A .mov
        * points at the container, an .mp4 at the codec, and the two need different fixes." The app

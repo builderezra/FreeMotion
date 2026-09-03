@@ -123,6 +123,53 @@ window.FM = window.FM || {};
      cannot drift apart — this number also drives the backstop timer, and a backstop that fires before
      the animation it guards leaves a stranded transform on #app. */
   const PUSH_MS = 380;
+  /* ═══ THE OPEN-PROJECT FRAME PROBE (queue 508). Ezra, three times: "the animation when opening a
+   * project still looks really janky" — and on 1 Sep he confirmed it on his phone at v14.10, where the
+   * same transition measures 0 frames over 33ms out of 56 on this Mac, with sixteen cards, with and
+   * without the card blur. #95, #125 and #387 hit the same wall: a lag that only exists on his device
+   * cannot be fixed by measuring here. So, the playback watchdog's answer — instrument it ON his phone
+   * and put the reading behind Settings → Copy. Every rAF timestamp from the moment the push starts
+   * (the card begins to glide) until 400ms after the home screen is gone (the editor's first build lands
+   * inside that tail, which is the suspect the entry names) is recorded, and the report says how many
+   * frames were long, how long, and WHEN — so "phase 2 joining while the editor builds" is a number, not
+   * a theory. Nothing here changes the transition. */
+  const OPEN_TAIL_MS = 400;
+  const openProbe = (function () {
+    let t = [], raf = 0, live = false, tailUntil = 0, meta = null;
+    function tick(now) {
+      t.push(now);
+      if (live || now < tailUntil) raf = requestAnimationFrame(tick);
+      else { raf = 0; finish(); }
+    }
+    function begin(info) {
+      if (raf) cancelAnimationFrame(raf);
+      t = []; live = true; tailUntil = 0; meta = info || {};
+      raf = requestAnimationFrame(tick);
+    }
+    function settle() { if (!live) return; live = false; tailUntil = performance.now() + OPEN_TAIL_MS; }
+    function cancel() { if (raf) cancelAnimationFrame(raf); raf = 0; live = false; t = []; }
+    function finish() {
+      if (t.length < 2) return;
+      const gaps = []; for (let i = 1; i < t.length; i++) gaps.push(t[i] - t[i - 1]);
+      const sorted = gaps.slice().sort((a, b) => a - b);
+      const med = sorted[Math.floor(sorted.length / 2)];
+      const worst = sorted[sorted.length - 1];
+      const long = []; gaps.forEach((g, i) => { if (g > 33) long.push(Math.round(t[i] - t[0]) + 'ms:' + Math.round(g)); });
+      const ver = (document.querySelector('.brand .ver') || {}).textContent || '';
+      const lines = [
+        'FreeMotion open-project report ' + new Date().toISOString().replace('T', ' ').slice(0, 19) + (ver ? ' ' + ver.trim() : ''),
+        'device      ' + innerWidth + 'x' + innerHeight + ' @' + (devicePixelRatio || 1) + 'x  hidden=' + document.hidden + '  ' + (navigator.userAgent || '').replace(/Mozilla\/5\.0 /, '').slice(0, 90),
+        'scene       cards on screen ' + (meta.cards == null ? '?' : meta.cards) + ', layers in the project ' + (meta.layers == null ? '?' : meta.layers),
+        'frames      ' + t.length + ' over ' + Math.round(t[t.length - 1] - t[0]) + 'ms (push ' + (meta.pushMs || '?') + 'ms + ' + OPEN_TAIL_MS + 'ms tail)',
+        'frame gap   median ' + med.toFixed(1) + 'ms, worst ' + worst.toFixed(1) + 'ms',
+        'long frames ' + long.length + ' over 33ms' + (long.length ? '  at ' + long.slice(0, 12).join(' ') + (long.length > 12 ? ' …' : '') : ''),
+        'verdict     ' + (worst <= 34 ? 'smooth here' : long.length <= 1 ? 'one hitch' : 'janky: ' + long.length + ' long frames'),
+      ];
+      try { localStorage.setItem('fm.lastOpenReport', lines.join('\n')); } catch (e) {}
+    }
+    return { begin: begin, settle: settle, cancel: cancel, last: function () { try { return localStorage.getItem('fm.lastOpenReport') || ''; } catch (e) { return ''; } } };
+  })();
+  FM._openProbe = openProbe;   // seam: the suite drives a push and reads the report back
   /* THE PROJECT ARRIVES MORE SLOWLY THAN THE LIST LEAVES (queue 459). Ezra: *"I want it so the project
      swipes to the left first with a smooth animation that is well designed, and then after it does the
      swipe to the left the project opens from the right smoothly and slowly, currently it's very cutty
@@ -308,6 +355,7 @@ window.FM = window.FM || {};
     endPop();
     const app = document.getElementById('app');
     if (root) { root.classList.remove('fm-push-out'); if (hide) root.classList.add('hidden'); }
+    if (hide) openProbe.settle(); else openProbe.cancel();   // queue 508: keep sampling through the editor's first build; an unwind is not an open
     if (app) { app.classList.remove('fm-push-in', 'fm-push-wait'); app.removeEventListener('animationend', onAppPushEnd); }
     document.body.classList.remove('fm-pushing');
     if (pushLead) {
@@ -530,6 +578,7 @@ window.FM = window.FM || {};
     }
     if (pushTimer) endPush(false);           // a second push on top of a running one: restart it
     pushOutAt = Date.now();                  // phase 2 measures its wait from here (queue 459)
+    openProbe.begin({ cards: root ? root.querySelectorAll('.hm-card').length : null, layers: FM.scene && FM.scene.layers ? FM.scene.layers.length : null, pushMs: PUSH_MS + PUSH_IN_MS });   // queue 508
     /* Armed HERE, at the moment the editor is parked, and cleared only by endPush — see STRANDED_MS.
        Every other timer in this file is shared or conditional; this one exists so that no path, however
        it fails, can leave both screens on screen. */

@@ -1,10 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v15.04
+> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.05
 >
-> **State:** v15.04, 1169 tests green, tree clean. **Bookmark lines now stop at the divider at ANY scroll** (#429 clause 1 and #587 — one bug; the add row's dashes crossing the line stay, as you asked in #567). **Your seven messages today are logged verbatim** (#760–#766) and queued in order behind #715–#717. The 42 audit findings I logged this afternoon (#718–#759) now rank BEHIND everything in your own words — structural and self-tested, not a promise — after you caught the loop working out of order.
-> **Waiting on you — one letter or one paste each, and none of it stops the loop** (`tools/next.sh` lists these under their own heading now, so they cannot hide and cannot be handed out as work): #418 a letter from the undo/redo picture I sent (A recommended) · #425 A/B, copy moving right · #454 A/B/C · #482 a category or "no" · #484 A/B/C, Silk Ribbon · #544 which things get the design pass · #564 A/B/C · #570 smooth / stepped / leave · #624 a/b/c · #654 A/B/C · #342 A–E · #406 which menu · #95 / #96 / #663 the **Your last playback** paste · #215 / #604 / #677 the **Your last export** paste (or the Chrome check) · #129 the **clip with no picture** paste · the oldest lag item, a **Measure** report · #592 a screenshot if the overshoot is still there.
-> **Next, in order:** #505 (templates open for editing, the way elements do now), #508 (a frame-time report of the project-open slide you can paste from your phone), #539, #553 (the app coming back half-drawn), #606, #642, #657, #674, #688, #690, #692, #706, #712, then #715–#717 and #760–#766, then the audit findings.
+> **State:** v15.05, 1170 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
+> **Four pictures are in the chat waiting for one letter each** (nothing visual ships before you pick): **#642** the home background A–D · **#763** the skip-button gap (6/12/18) and the play button A–D · **#765** the split/jump buttons' look 1–3 · and **#760's people shapes** come next, drawn the same way. Everything else waiting on you is a paste or a letter, listed by `tools/next.sh` under its own heading so it cannot hide: #425 A/B · #454 A/B/C · #482 a category · #484 A/B/C · #539 A/B/C · #544 which things · #564 A/B/C · #570 smooth/stepped/leave · #624 a/b/c · #654 A/B/C · #406 which menu · #674 (b)/(c) · #95/#96/#663 the **Your last playback** paste · #215/#604/#677 the **Your last export** paste · #129 the **clip with no picture** paste · the oldest lag item, a **Measure** report · #657 a sample while scrubbing · #676/#706 what "twice" looks like · #712 whether Back from a category stalls · #592 a screenshot.
+> **Next, in order, each already built and proved, shipping one by one:** #508 (a frame-time report of the project-open slide from your phone), #553 (coming back to the app half-drawn), #606, #674 (clip names over filmstrips), #688 (one intro film, dark mode lands on dark), #706 (the add sheet's one motion), #715 (PC sliders glide), #716 (the cursor glow box), #717 (copy/paste button lit), #762 (tap again closes), #764 (dragged add row on top); then #760, #765, #768 and the audit findings.
 
 
 **This file is the record of everything Ezra has asked for.** Every request goes in here the moment
@@ -18530,7 +18530,7 @@ re-opened #480, which I had marked done and had not fixed.
       step is a reading from HIS device, not more work on this Mac** — that is what the last three
       attempts got wrong. Instrument the open-project transition the way the playback watchdog works:
       record the frame times on his phone, put them behind Settings → Copy, and ask him for one paste.
-      ❓ASK: is opening a project still janky on your phone at v14.10? It measures smooth here even with sixteen cards on screen, so if it is still bad it is your device and the next step is a reading from it.
+      ✅ ~~ASK: is opening a project still janky on your phone at v14.10?~~ HE ANSWERED 1 Sep: yes, still bad — and the instrument for it is built (below).
       ═══ ✅ **28 AUG (v14.10) — MEASURED AT LAST, AND IT RULES THINGS OUT.** ═══
       **This entry was SKIPPED once for want of a measurement and that was right** — the preview pane
       reported `document.hidden` true and rAF fired 0 frames in 1.6s, so nothing about smoothness could
@@ -18595,6 +18595,7 @@ re-opened #480, which I had marked done and had not fixed.
       while the editor slides IN from the right, with no stall in between. **The suspect named above —
       phase 2 joining while the editor does its first build — is where to look first**, because a curve
       cannot smooth over a frame that never rendered.
+        ✅ **v15.05 — THE INSTRUMENT IS BUILT, the step this entry named.** Every push from Home now records its frames on the device that runs it — from the moment the card starts to glide until 400ms after the home screen is gone (the editor's first build lands in that tail, the suspect named above) — and writes a report to **Settings → Your last project open → Copy**: frames, span, median and worst gap, every frame over 33ms with its time, cards on screen, layers in the project, viewport and renderer, and a one-line verdict. Test `508:` drives a real push at phone width and reads the report back. Nothing about the transition itself changed. **BUILT OUT UNTIL HE opens a project on his phone and pastes that report** — it will say which frames ran long instead of the next guess.
 
 - [x] **509 — The play row's numbers may not be centred.** (24 Aug.)
       ✅ **Measured, and your hedge was the accurate part.** On a desktop you would have been wrong: at
@@ -28628,7 +28629,7 @@ re-opened #480, which I had marked done and had not fixed.
          request → #545: draw several real options, render them at the size they ship at AND big, send the picture,
          mark one recommended, and ship nothing until he picks. He has said "if any" — he may pick none, and that is a
          valid outcome.
-
+      🎨 **3 Sep — BOTH CLAUSES DRAWN AND SENT (#545)** (`scratchpad/play763.html`, rendered and sent to the chat). What the sheet found first: on PC the play button IS the timecode pill (`#time-readout`, tap to play, 21px), and the skips sit 4px INSIDE its box on purpose (queue 526, negative margins) — so "too close" is that design. Clause 1: three gaps — 6px as shipped, 12px (the negative margins removed; recommended), 18px. Clause 2: four play designs at ship size and 2×, idle and playing — A as shipped (recommended, it is what he said matches the row), B the pill with a ▶/⏸ glyph, C a round play button with the time beside it, D the pill filling blue while playing. **BUILT OUT UNTIL HE picks a gap and a letter, or says "none"** — nothing visual ships before that.
 
 - [ ] **764 — A layer being dragged in the timeline renders BEHIND the other layers; it must show on top** (2 Sep, PC, with a screenshot mid-drag)
       **STATUS: 🟢 READY — nothing is stopping this. Queued behind the items above.**
@@ -28668,6 +28669,7 @@ re-opened #480, which I had marked done and had not fixed.
       6. [ ] **"u will have to redesign how they all look maybe, coz now the buttons will be placed differently and
          might look off if u just move it"** — design → #545: draw the row as options, at ship size, send the picture,
          let him pick before it ships.
+      🎨 **3 Sep — CLAUSE 6 DRAWN AND SENT (#545)** (`scratchpad/split765.html`, rendered and sent to the chat): today's floating trio, then three looks for the three lettered buttons at the right end of the PC add row — 1 keycaps (recommended: the letter IS the label), 2 quiet outlined tags, 3 glyph with a corner badge. Clauses 1–5 (the placement, the A/S/D letters, A/D following the side of the hovered clip, S extending when not hovering, the old buttons removed) are the same in all three and are built the moment he picks, in his chosen look — one build, not one per guess. **Waits on his pick: 1, 2 or 3, or "none".** Where the code lives, for that build: the trio is `#tl-trim` (L/R/S) plus the move/extend pair in `syncTrim`/`clipToolSide` (timeline.js ~4440–4500); the PC add row is `.tl-addrow--line`; A and D as bare keys are free (only ⌘A / ⌘D are bound today, app.js ~6475/6495).
 
 - [ ] **766 — "you arent logging stuff and doing it in order like i asked"** (2 Sep, standing correction)
       **STATUS: ✅ acted on the moment it arrived; kept as the standing rule it restates**
