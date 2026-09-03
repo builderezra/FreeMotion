@@ -2546,7 +2546,6 @@ body.white-chrome #time-readout:active {
 /* the pinned thumbnail-frame marker: smaller + accent-coloured, so it reads as distinct from benchmarks */
 .tl-marker.thumb { margin-left: -3px; border-left-width: 3px; border-right-width: 3px; border-top: 5px solid var(--accent); z-index: 4; }
 .tl-marker.thumb::after { left: -0.5px; height: 9px; background: rgba(41,217,187,.55); }   /* SHORT stub, not a full-height line — it's a pin, not a benchmark ruler line */
-.marker-edit { position: absolute; top: 1px; transform: translateX(-50%); width: 88px; z-index: 12; background: var(--panel-3); border: 1px solid var(--kf); color: var(--text); border-radius: 5px; padding: 1px 5px; font-size: 11px; }
 /* ROOM UNDER THE LAST ROW (queue 409 clauses 2-4). Ezra: "there should be some space at the bottom just
    to push up the last layer and not have it at the dead bottom, only if you're at the bottom of the screen
    tho" — and, crucially: "if you try to drag something from the dead bottom rn it just makes you close the

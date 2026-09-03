@@ -956,22 +956,13 @@ window.FM = window.FM || {};
       const el = document.createElement('div');
       el.className = 'tl-marker' + (mk.thumb ? ' thumb' : '');   // the pinned thumbnail-frame marker is a smaller distinct pin
       el.style.left = (PAD + mk.t * pps) + 'px';
-      el.title = mk.thumb ? ('Thumbnail frame @ ' + mk.t.toFixed(2) + 's') : ((mk.label || 'Marker') + ' @ ' + mk.t.toFixed(2) + 's  (double-click to rename)');
+      el.title = mk.thumb ? ('Thumbnail frame @ ' + mk.t.toFixed(2) + 's') : ((mk.label || 'Marker') + ' @ ' + mk.t.toFixed(2) + 's');
       // Hovering a benchmark lights the timecode chip yellow. The marker's own glow is pure CSS
       // (:hover); only the chip needs JS, because CSS can't reach across to it. Separate class from
       // the parked-on-a-marker state so updateReadout's toggle can't clobber a live hover. (#61)
       el.addEventListener('pointerenter', () => markHover(true, !!mk.thumb));
       el.addEventListener('pointerleave', () => markHover(false, !!mk.thumb));
-      el.addEventListener('dblclick', (ev) => {
-        ev.stopPropagation();
-        const input = document.createElement('input');
-        input.className = 'marker-edit'; input.value = mk.label || ''; input.style.left = (PAD + mk.t * pps) + 'px';
-        const commit = () => { if (!input.parentNode) return; mk.label = input.value.trim() || 'Marker'; input.remove(); FM.timeline.rebuild(); if (FM.history) FM.history.commit(); };
-        input.addEventListener('pointerdown', (pv) => pv.stopPropagation());
-        input.addEventListener('keydown', (kv) => { kv.stopPropagation(); if (kv.key === 'Enter') commit(); else if (kv.key === 'Escape') { input.remove(); FM.timeline.rebuild(); } });
-        input.addEventListener('blur', commit);
-        rulerEl.appendChild(input); input.focus(); input.select();
-      });
+      // No double-click rename here any more (queue 725 / #590: "Rename is removed outright, including any other route").
       rulerEl.appendChild(el);
     });
     // A rebuild replaces the marker elements, so a pointerleave for the old one never arrives and
@@ -3969,7 +3960,7 @@ window.FM = window.FM || {};
       // keyframes, track heads and markers own their own pointers, so let those through untouched.
       timelineEl.addEventListener('pointerdown', (e) => {
         if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
-        if (e.target.closest('.clip, .clip-grip, .kf-dot, .track-head, .tl-marker, .marker-edit, input, button, select, textarea')) return;
+        if (e.target.closest('.clip, .clip-grip, .kf-dot, .track-head, .tl-marker, input, button, select, textarea')) return;
         onDown(e);
       });
       // right-click ruler → add / remove a marker
@@ -4440,16 +4431,13 @@ window.FM = window.FM || {};
       // A rebuild mid-gesture rips the DOM out from under an active drag (frozen kf-dot, wiped
       // marker-rename input) — an async filmstrip/waveform arrival or resize can fire one at any
       // moment. Defer it; the gesture's own release path (or the marker's commit) flushes it.
-      const ae = document.activeElement;
-      const editingMarker = !!(ae && ae.classList && ae.classList.contains('marker-edit'));
-      if (clipMove || trimDrag || kfDrag || slipDrag || reorderActive || editingMarker) {
+      if (clipMove || trimDrag || kfDrag || slipDrag || reorderActive) {
         /* …UNLESS THE GESTURE IS DEAD (queue 541 — see the note on `gestureStamp`). A drag whose pointer
            was lost leaves its flag set forever, and this refusal is what makes that permanent rather
            than momentary. A live drag touches the stamp on every pointermove — including the ones
            autoscroll generates — so a stamp this old means nobody is holding anything.
-           The marker rename is deliberately NOT recovered this way: it is held by keyboard FOCUS, not
-           by a pointer, so sitting still for two seconds mid-rename is completely normal. */
-        const stale = !editingMarker && (((typeof performance !== 'undefined' ? performance.now() : Date.now()) - gestureStamp) > STALE_MS);
+           (The marker rename that used to be excepted here — held by keyboard focus — is gone: queue 725 / #590.) */
+        const stale = (((typeof performance !== 'undefined' ? performance.now() : Date.now()) - gestureStamp) > STALE_MS);
         if (!stale) { rebuildPending = true; return; }   // slipDrag too — a mid-slip rebuild tore down the lane holding the ghost
         recoverStuckGesture();
       }

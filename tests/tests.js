@@ -53886,6 +53886,38 @@
     if (c.join(',') !== '0,50,100') throw new Error('control: the start-0 clip changed: ' + c.join('/'));
   });
 
+  /* ═══ 725 (hunt HIGH #8): NO ROUTE RENAMES A MARKER. #590 said "Rename is removed outright, including any
+     other route" — and the PC double-click still opened an inline box, the tooltip still invited it, and the
+     stylesheet still dressed it. A real marker, a real dblclick: no box appears, the tooltip does not say
+     double-click, and neither source carries the class. */
+  test('725: double-clicking a marker no longer opens a rename box, and no source still carries one', { item: '725' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const L = FM.makeLayer('shape', { name: 's725', shape: 'rect', x: 100, y: 100, shapeW: 50, shapeH: 50, fill: '#fff', start: 0, duration: 4 });
+      FM.scene = scene([L]); FM.selectLayer(null); if (FM.pause) FM.pause(); FM.setTime(1.5); FM.refreshAll();
+      if (!FM.toggleMarkerAtPlayhead) throw new Error('FM.toggleMarkerAtPlayhead missing');
+      FM.toggleMarkerAtPlayhead(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild(); await sleep(150);
+      const mk = document.querySelector('#tl-ruler .tl-marker, #timeline .tl-marker, .tl-marker');
+      if (!mk) throw new Error('setup: no marker element after toggling one at 1.5s');
+      if (/double-click/i.test(mk.title || '')) throw new Error('the marker tooltip still invites a rename: "' + mk.title + '"');
+      mk.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true })); await sleep(120);
+      if (document.querySelector('.marker-edit')) throw new Error('double-clicking a marker opened a rename box — #590 removed renaming outright');
+      const tl = await fetch('js/timeline.js', { cache: 'no-store' }).then(r => r.text());
+      if (/marker-edit|editingMarker/.test(tl)) throw new Error('js/timeline.js still carries a marker-rename route (marker-edit / editingMarker)');
+      const css = await fetch('styles.css', { cache: 'no-store' }).then(r => r.text());
+      if (/\.marker-edit/.test(css)) throw new Error('styles.css still styles .marker-edit');
+    } finally {
+      try { document.querySelectorAll('.marker-edit').forEach(e => e.remove()); } catch (e) {}
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel
