@@ -1328,6 +1328,7 @@ window.FM = window.FM || {};
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
   // recompute when the source frame and params are unchanged (static images, paused/scrub
   // redraws, repeated renders of one frame). Stats exposed for verification.
+  FM._chromaKey = function (src, w, h, keyHex, tol, filterStr, soft) { return chromaKey(src, w, h, keyHex, tol, filterStr, soft); };   // suite seam (queue 734)
   FM._fxStats = { ckCompute: 0, lkCompute: 0, plates: 0 };   // plates: expanded plates rendered (queue 730 — the suite counts them)
   // Bumped whenever a reused offscreen canvas (grade/key/blend) is (re)computed, so srcToken varies for
   // it. Without this, a canvas's object identity is constant while its pixels change every frame, and any
@@ -1362,7 +1363,7 @@ window.FM = window.FM || {};
     try { img = octx.getImageData(0, 0, w, h); } catch (e) { return src; }  // tainted-canvas guard
     const d = img.data;
     const kr = parseInt(keyHex.slice(1, 3), 16), kg = parseInt(keyHex.slice(3, 5), 16), kb = parseInt(keyHex.slice(5, 7), 16);
-    const thr = (tol || 0.3) * 441;
+    const thr = (tol == null ? 0.3 : tol) * 441;   // queue 734: 0 is a value — `tol || 0.3` turned a keyframe landing on 0 back into the default on its last frame
     // The key was a binary cut — inside the tolerance sphere alpha went to 0, one step outside it the
     // pixel was untouched — so every keyed edge came out jagged and aliased and the ONLY control was
     // how much to cut. SOFTNESS ramps alpha across a band just outside the sphere, which is where a

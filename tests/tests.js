@@ -54191,6 +54191,20 @@
     }
   });
 
+  /* ═══ 734 (hunt MEDIUM #17): CHROMA KEY TOLERANCE 0 MEANS 0, NOT 0.3. `tol || 0.3` read a real zero as absent, so a
+     keyframe animating the tolerance down to 0 snapped back to the default on its last frame. A pixel 55 units off the
+     key colour stays opaque at tolerance 0 and is keyed at 0.5 (the control). */
+  test('734: a chroma-key tolerance of 0 keys nothing, and 0.5 still keys (the control)', { item: '734' }, async function () {
+    if (!FM._chromaKey) throw new Error('FM._chromaKey seam missing');
+    const src = document.createElement('canvas'); src.width = 2; src.height = 1;
+    const sc = src.getContext('2d'); sc.fillStyle = '#00ff00'; sc.fillRect(0, 0, 1, 1); sc.fillStyle = 'rgb(0,200,0)'; sc.fillRect(1, 0, 1, 1);
+    const alphaAt = (out, x) => out.getContext('2d').getImageData(x, 0, 1, 1).data[3];
+    const at0 = FM._chromaKey(src, 2, 1, '#00ff00', 0, 'none', 0);
+    if (alphaAt(at0, 1) !== 255) throw new Error('at tolerance 0 a pixel 55 units off the key was keyed out (alpha ' + alphaAt(at0, 1) + ') — 0 was read as the 0.3 default');
+    const at5 = FM._chromaKey(src, 2, 1, '#00ff00', 0.5, 'none', 0);
+    if (alphaAt(at5, 1) !== 0) throw new Error('control: at tolerance 0.5 the near-key pixel was not keyed (alpha ' + alphaAt(at5, 1) + ')');
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel
