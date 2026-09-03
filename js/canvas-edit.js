@@ -98,6 +98,22 @@ window.FM = window.FM || {};
     return r;
   };
 
+  /* PROJECT → OVERLAY PIXELS — THE INVERSE OF eventToProject, AND THE HALF THAT WAS MISSING (queue 561,
+   * re-opened 2 Sep). Ezra: "The lines when editing points … STILLLLLLL … don't line up with the actual
+   * object when you zoom in the canvas". Above 1.35x the preview canvas is a CROP of the comp (app.js
+   * previewCrop): its pixel (0,0) is project (__fmOX, __fmOY), not (0,0). eventToProject below has always
+   * ADDED that origin back when reading a touch — so taps landed on the right point — but every overlay
+   * DREW its points as `project × dispScale` from origin 0, so the drawing was displaced by the crop origin
+   * whenever the zoom made a crop, i.e. exactly when he was zoomed and panned. v12.77 fixed the overlay's
+   * BOX (placeOverlayOnCanvas) and missed its CONTENTS. Measured 2 Sep at 200% with a pan: crop origin
+   * (331, 652), the point box drawn 105×206 screen px away from the shape, no ink where the corner was.
+   * One function, so it cannot be written a third way. */
+  FM.projectToOverlay = function (cv, x, y) {
+    const c = cv || canvas;
+    const ds = FM.previewDispScale ? FM.previewDispScale() : 1;
+    return { x: (x - (c.__fmOX || 0)) * ds, y: (y - (c.__fmOY || 0)) * ds };
+  };
+
   function eventToProject(e) {
     const r = canvas.getBoundingClientRect();
     const sc = canvas.__fmRS || 1;

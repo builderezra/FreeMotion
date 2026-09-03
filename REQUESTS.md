@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v15.03
+> ## 📌 WHAT I NEED FROM YOU — updated 2 Sep at v15.04
 >
-> **State:** v15.03, 1167 tests green, tree clean. **Bookmark lines now stop at the divider at ANY scroll** (#429 clause 1 and #587 — one bug; the add row's dashes crossing the line stay, as you asked in #567). **Your seven messages today are logged verbatim** (#760–#766) and queued in order behind #715–#717. The 42 audit findings I logged this afternoon (#718–#759) now rank BEHIND everything in your own words — structural and self-tested, not a promise — after you caught the loop working out of order.
+> **State:** v15.04, 1169 tests green, tree clean. **Bookmark lines now stop at the divider at ANY scroll** (#429 clause 1 and #587 — one bug; the add row's dashes crossing the line stay, as you asked in #567). **Your seven messages today are logged verbatim** (#760–#766) and queued in order behind #715–#717. The 42 audit findings I logged this afternoon (#718–#759) now rank BEHIND everything in your own words — structural and self-tested, not a promise — after you caught the loop working out of order.
 > **Waiting on you — one letter or one paste each, and none of it stops the loop** (`tools/next.sh` lists these under their own heading now, so they cannot hide and cannot be handed out as work): #418 a letter from the undo/redo picture I sent (A recommended) · #425 A/B, copy moving right · #454 A/B/C · #482 a category or "no" · #484 A/B/C, Silk Ribbon · #544 which things get the design pass · #564 A/B/C · #570 smooth / stepped / leave · #624 a/b/c · #654 A/B/C · #342 A–E · #406 which menu · #95 / #96 / #663 the **Your last playback** paste · #215 / #604 / #677 the **Your last export** paste (or the Chrome check) · #129 the **clip with no picture** paste · the oldest lag item, a **Measure** report · #592 a screenshot if the overshoot is still there.
 > **Next, in order:** #505 (templates open for editing, the way elements do now), #508 (a frame-time report of the project-open slide you can paste from your phone), #539, #553 (the app coming back half-drawn), #606, #642, #657, #674, #688, #690, #692, #706, #712, then #715–#717 and #760–#766, then the audit findings.
 
@@ -9172,7 +9172,7 @@ better still, keep working inside the turn rather than parking work for a later 
       Three assertions, mutation-checked: it moves at phone width, it moves on desktop, the keyframes carry
       no `background-position`, and it is paused with a project open.
 
-- [ ] **342 — Opening an element just dumps it into the current project; you cannot edit it. The whole
+- [x] **342 — Opening an element just dumps it into the current project; you cannot edit it. The whole
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       **JUMPED by #392, and legitimately: he gave a DIRECT instruction on 1 Sep — "if it doesnt show up
       at export delete it" — which is the one thing this file says jumps the queue. #342 is authorised
@@ -9283,6 +9283,7 @@ better still, keep working inside the turn rather than parking work for a later 
       **E is not a cop-out answer** — it closes the entry honestly, and it is genuinely possible that what
       he wanted is already there. **One letter closes or directs this.**
       ⏸ **2 Sep — BUILT OUT UNTIL HE picks a letter, A–E** (A = edit in place, B = open a copy, C = live link, D = share as files (=#343), E = it is fine now). Clauses 1–2 shipped and the cheap part of A shipped; the pick decides whether anything else is built at all. Re-checked today for strict oldest-first: this line is what is left.
+        ✅ **CLOSED v15.04 — he picked A without naming a letter.** His 1 Sep answer on #505 — *"The element opens as its own document"* — IS option A here (edit in place, save back), and it is now true of elements (v12.26/v12.27) and templates (v15.04). Clauses 1–2 shipped earlier; clause 3 was the pick, and this is it. The BUILT OUT line above is superseded by that answer.
 
 - [x] **343 — Templates: swap the media for your own, and eventually let people make and share them.** ✅ **DONE — all four clauses (v9.97 / v11.71).**
       🔴 **REPORTED NOT DONE, 27 Aug — see #619.** He says pressing a template still just forks a
@@ -18359,7 +18360,7 @@ re-opened #480, which I had marked done and had not fixed.
       background no longer restarts. **The first-open animation is untouched**; that one is yours (#207)
       and it should still play when you open Home.
 
-- [ ] **505 — 🚨 ELEMENTS AND TEMPLATES MUST BE EDITABLE IN THEIR OWN SECTIONS, NOT TURNED INTO PROJECTS. He has asked for this repeatedly and is fed up.** (24 Aug.)
+- [x] **505 — 🚨 ELEMENTS AND TEMPLATES MUST BE EDITABLE IN THEIR OWN SECTIONS, NOT TURNED INTO PROJECTS. He has asked for this repeatedly and is fed up.** (24 Aug.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       ✅ **HE ANSWERED, 1 Sep: "The element opens as its own document."** So an element or template
       opens like a project — edit it, save it back — rather than being dumped into whatever you have open.
@@ -18448,7 +18449,7 @@ re-opened #480, which I had marked done and had not fixed.
       3. [x] ✅ **v12.27 — "just opening you having every layer selected"** — check what the editor looks like on
              arrival. If every layer is selected, that is `insert()` doing what it does for an insert
              (select what you just added) being wrong for an EDIT, where nothing should be selected yet.
-      4. [ ] 🟡 **TEMPLATES — HALF DONE v14.91. The UPDATE path is in; opening one for editing is not.**
+      4. [x] ✅ **v15.04 — TEMPLATES DONE.** ~~🟡 TEMPLATES — HALF DONE v14.91. The UPDATE path is in; opening one for editing is not.**
              ✅ **`templates.updateFrom` edits in place now.** It used to call `save()`, which mints a NEW
              id, then paper over it in four places — delete the old pack, re-splice the index so the card
              did not jump, rewrite every project's `fromTemplate` pointer, patch the live scene. Same key,
@@ -18468,7 +18469,7 @@ re-opened #480, which I had marked done and had not fixed.
              comments record the two traps it fell into first (a stranded draft per element, and
              arriving with every layer selected).
 
-      4b. [ ] 🔴 **The original note, kept because it is still the specification:**
+      4b. [x] ✅ **v15.04 — met.** ~~🔴 The original note, kept because it is still the specification:~~
              He said *"Elements **and** templates"*. Everything above is elements only. Templates still go
              through `useAsNew`, which makes a project, and saving back to a template mints a NEW id and
              then papers over it in four places — the same mint-then-patch shape elements had before v12.26.
@@ -18482,6 +18483,8 @@ re-opened #480, which I had marked done and had not fixed.
              ⚠️ **And the same trap applies:** the boot orphan-sweep builds its keep-list from `fm.proj.*`
              only, so template media must not be moved out of that namespace — that risk is what killed
              design A for elements and it kills it here too.
+        🔍 **2 Sep — ADVERSARIALLY REVIEWED BEFORE SHIPPING (four lenses, two refuters per finding, none refuted), and it found real ways to lose a template.** Fixed in the same release: (1) a crash while the workspace was still hydrating left a `layers: []` stub on disk that carried `ofTemplate`, and the next Home would have written that EMPTY stub over the template — the stub no longer carries the pointer (it goes on after the pack is adopted), `commitDraft` refuses when the flush did not land (quota, stale rev) and refuses an empty workspace against a template that has layers; (2) `hydratePack` stored a clip's bytes only after a successful decode, so a clip this phone cannot play would have been dropped from the template on save-back — bytes are stored first now, for elements and templates alike; (3) a project file exported from inside a workspace carried `ofTemplate`/`returnTo` and importing it would have overwritten the template — stripped on import, and `_adopt` strips stale pointers from packs saved before this; (4) a workspace left over from before the template was updated elsewhere would have written the OLD contents back — the index carries `rev` and a stale workspace re-adopts the current pack; (5) a failed commit now says so and lands on Templates; a double tap cannot mint two workspaces; the card's size/duration follow an in-place edit; the element path's landing list skips template workspaces. The test now goes through Home for the commit, asserts he lands on the project he came from, and covers the flush-failure and empty-workspace refusals. Two findings outside this diff are logged as #770 and #771.
+        ✅ **v15.04 — TEMPLATES DONE, the way elements were done in v12.26/v12.27, and this entry closes.** Tapping a template card now opens the template's OWN workspace (`templates.openForEdit`: one per template, reused on the next tap, hidden from Projects, shown as a draft card under Templates), editing it is editing the template, and going Home writes it back in place (`templates.commitDraft` → `updateFrom`, same id, floats to the top) and puts the workspace away — switch away first, then discard, the order the element path learned. "New project from template" (with the fill-in sheet, #619) stays one tap away under the card's ⋯. The template pack is stripped of the editing session's own pointers, or every project later made from it would have written itself back over the template on coming Home — that trap is asserted by the test. His acceptance test, in his words for elements, now runs for templates too: tap it, change it, come back — one template, changed, no new project anywhere. Three mutation proofs: the crop-origin revert (caught), the pack stripping (caught), and the flush guard — which SURVIVED the full suite once while the same test alone caught it: in the full run a reused, half-discarded workspace made openForEdit hand the case an empty workspace, so the empty-workspace rule refused first and the flush guard was never reached. The case now starts from a known state and asserts the workspace holds layers before stubbing the flush; re-proved in the full suite.
 
 - [ ] **506 — Standing instruction: log everything he says, and work the list in order.** (24 Aug.)
       **STATUS: 📌 NOTE — nothing to build**
@@ -19776,6 +19779,7 @@ re-opened #480, which I had marked done and had not fixed.
       **CLAUSES 2 and 3 (the layer picker + "affect every layer") NOT STARTED** — they need collision
       against arbitrary shapes, which he himself called very complicated, and they should not be rushed in
       behind a corner bug that is still open.
+        ⏸ **2 Sep — clause 1 waits on his pick, A, B or C** (deliberately NOT the built-out phrase: clauses 2 and 3 below are work and must stay in the queue) (A = damp the squash over time, extra renders per frame on the phone · B = squash against the un-shaken position, which the pixel-warp movers cannot report · C = leave it, recommended — it already composes, the strobe is the shake doing what a shake does). Clause 4 shipped. **Clauses 2 and 3 (the layer picker and "affect every layer") are real work and stay in the queue** — collision against arbitrary shapes, his own "very complicated"; not skipped for size (#690 clause 5), just not rushed behind a pick. Re-checked today for strict oldest-first.
 
 - [x] **540 — Motion blur needs to go much further than it currently can.** (24 Aug.) ✅ v12.64
       His words, verbatim:
@@ -20638,7 +20642,7 @@ re-opened #480, which I had marked done and had not fixed.
       **Say "migrate masks" and I will do it properly. If you never try to drag one past an effect, there
       is nothing else left here.**
 
-- [ ] **561 — 🔴 Zooming the project breaks the edit points, and probably more.** (25 Aug.) — ~~DONE v12.77~~ **🔁 RE-OPENED 2 Sep: still wrong on his phone at v15.02 (#769).**
+- [x] **561 — 🔴 Zooming the project breaks the edit points, and probably more.** (25 Aug.) — ~~DONE v12.77~~ ~~🔁 RE-OPENED 2 Sep~~ **✅ FIXED AGAIN v15.04 — the drawing, not just the box.**
       His words, verbatim:
       > Zooming in the project bugs out the edit points and probably other stuff
       **A coordinate-space bug, and this app has had exactly this one before:** queue 165.3/v8.00 records
@@ -20701,6 +20705,8 @@ re-opened #480, which I had marked done and had not fixed.
       `FM.projectToOverlay(cv, x, y)` — the inverse of `eventToProject` — used by both; a pixel test at 3x with a pan reads the overlay
       both ways (ink at the true corner, none at the old position). The editor still resets your zoom when it OPENS — that is a separate
       annoyance and is not what he reported; noted, not changed.
+      🔍 **2 Sep — REVIEWED: the test's oracle was the function under test.** It now derives the expected overlay position from the wrap's rect and the comp fraction, checks `FM.projectToOverlay` against that, and probes the mask overlay the same way (its half had no test). The review also found the same displacement in the CROP tool (`crop-tool.js srcDisp`) — fixed here — and in the motion-path and tracker overlays, logged as #770.
+      ✅ **v15.04 — FIXED, this time the CONTENTS.** `FM.projectToOverlay(cv, x, y)` in canvas-edit.js is the inverse of `eventToProject` and subtracts the cropped preview's origin; the point editor and the mask tool both draw through it. Pixel test `561:` stages his exact case at 3x with a pan and reads the overlay's own ink both ways; mutation-checked by putting the old `project × scale` back (caught). What he will see: open Customise Points, pinch to zoom, pan — the squares, rings and handle lines sit ON the outline. The zoom still resets when the editor first opens (its own guard); not what he reported, left alone and noted.
 
 - [x] **562 — Previewing a sound effect in the Sound Effects menu does nothing.** (25 Aug.) — **DONE v12.78.**
       His words, verbatim:
@@ -23672,6 +23678,7 @@ re-opened #480, which I had marked done and had not fixed.
       design and layout that you can create for the background"*. **#545 applies — you asked to be SHOWN
       alternatives, not handed one**, so that wants drawn options like the menu-motion page, not a
       guess shipped over the top of the look you already have.
+        🎨 **3 Sep — CLAUSE 3 DRAWN AND SENT (#545): four backgrounds on a phone-sized home mock, same three hues — A as shipped (recommended), B an aurora ribbon, C one deep glow, D the pools with grain and darker corners** (`scratchpad/home642.html`, rendered and sent to the chat). Clauses 1–2 shipped earlier. **BUILT OUT UNTIL HE picks A, B, C, D or "none"** — the pick is the only thing left, and nothing visual ships before it.
 
 - [x] **643 — The wordmark has a pale GHOST of the old logo behind it, and the white shadow looks
       tacky. ✅ BOTH FIXED v13.65 — the "different M" was a real bug, not a matter of taste.**
@@ -26003,6 +26010,7 @@ re-opened #480, which I had marked done and had not fixed.
       percentage means nothing to him, "softer while playing" is the same fact in his words — plus where
       the switch is. ⚠️ **It does not cry wolf above 75%**, because a report that hedges on every sample
       stops being read: that is the same failure the queue's own half-done warning had this morning.
+        ⏸ **3 Sep — BUILT OUT UNTIL HE pastes a 10-second sample taken WHILE SCRUBBING** (press play AND drag the playhead, then Settings → what's slow → Copy). The report itself was corrected — it now says the smoothness was bought at what scale and what that looks like — and everything measurable here is measured; the half he complains about most is the half no sample has covered yet. Re-checked for strict oldest-first: this line is what is left.
 
 - [x] **658 — Hovering the thumbnail benchmark should turn the playhead FULLY blue.** (28 Aug, at v13.79,
       two phone screenshots.)
@@ -26617,6 +26625,7 @@ re-opened #480, which I had marked done and had not fixed.
       scanned for toast nodes and `alert()` creates none). **Do not chase either.**
       ⚠️ **Two items it flags as NOT REPRODUCED and I have not checked:** concurrent reverse-cache warms
       fighting over one toast, and an inverted comment at `js/app.js:3371` about the media library.
+        📐 **3 Sep — RE-READ AGAINST THE TREE, so its turn is a build, not a read.** The export alert was already humanised (app.js carries the queue-674 note at the site); the other catch-all is checked below. The clip-name ink is STILL overridden inline (`clabel.style.color = ink.color`, timeline.js ~1639) over the CSS rule that was written to be legible on any filmstrip (`.clip-label { color: #fff; text-shadow … }`) — buildable without him: keep the tinted ink only on solid-colour bars and leave white-on-shadow over filmstrips, with a contrast test. Text wrapping at 160pt is #98's decision (answered: 160pt stays). What only he can answer are (b) whether the transport buttons' tap area grows to 44px and (c) — those two stay as the ask; nothing else here waits on him.
 
 - [x] **675 — Re-check every FILTER, make sure each is the best version of itself, and add more.**
       (29 Aug.)
@@ -28695,7 +28704,9 @@ re-opened #480, which I had marked done and had not fixed.
       handles redrawn on the canvas, the inspector's live values refreshing, keyframe dots on the clip), not in the
       scrub itself. Measure before touching: frame gaps through a scrub at 380px with and without a selection, and
       which of those three moves the number. Nothing to ask him; the two states are stageable here.
-
+      📐 **2 Sep — NOT MEASURED YET, said plainly.** A first probe dispatched a synthetic touch drag on the ruler and time moved by 0 in every state, so its per-move numbers (0.2ms with nothing selected, ~1ms with a shape selected) describe a gesture that never engaged, not a scrub. The scrub is a RELATIVE grab on `#timeline` itself (`onDown` → `beginScrub`, axis-locked after 5px, timeline.js ~3842 / ~4133); the next probe must drive that path and confirm `FM.time` moved before any frame gap is believed.
+      📐 **2 Sep, second probe — THE GESTURE ENGAGED (time moved 2.8s per drag) and on this machine at 380px it is smooth either way:** 39–40 frames per 30-step drag, median 16.7ms, worst 18.4ms, **0 frames over 33ms**, with nothing selected, with a shape selected (inspector grid open), and again with nothing. So the stutter he feels is not in the scrub path itself here. Two things his phone has that this probe did not: a real captured touch pointer, and — more likely — a CATEGORY open under the selection (Position / Scale, Colouring…) whose rows refresh their live values on every scrub frame. Next probe: the same drag with Position / Scale open, then with an animated layer (keyframes) selected, and if still flat here, the open-project frame probe's pattern (#508) — record frames on HIS device behind Settings → Copy.
+      📐 **Third probe, same session — Position / Scale open under the selection: still flat** (40 frames, median 16.7ms, worst 18.5ms, 0 over 33). So every state stageable here is smooth, and the entry is honest about what that means: the jank is on HIS device, not reproducible on this Mac — the same wall as #95, #125, #387 and #508. **What is buildable without him:** the #508 frame probe's pattern applied to the scrub — record every frame of a scrub on the device, with what was selected and which panel was open, behind Settings → Copy — so the next paste names the cost instead of the next guess. That is the plan for this entry's turn.
 
 - [x] **769 — "The lines when editing points … STILLLLLLL … don't line up with the actual object when you zoom in the canvas"** (2 Sep, phone screenshot at v15.02) ✅ **logged and redirected on arrival: this is #561 re-opened, not a new item.**
       His words: *"The lines when editing points for some reason STILLLLLLL even tho I told you to fix still don't line up with the actual object when you zoom in the canvas"*
@@ -28704,3 +28715,20 @@ re-opened #480, which I had marked done and had not fixed.
       handle lines even run off the bottom of the stage. Saved as `scratchpad/769-points-zoom.png`.
       "Still" is right: #561 (*"Zooming the project breaks the edit points"*) was ticked DONE at v12.77. It is RE-OPENED there,
       with this report, so it is worked at #561's place in the queue — fixed, not here. Tracked in #561.
+
+
+- [ ] **770 — The motion-path and tracker overlays ignore the zoomed preview's crop origin, like the point editor did** (hunt MEDIUM #43)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Found 2 Sep by the adversarial review of v15.04's diff, two refuters each, neither refuted. `js/motion-path.js:87` maps points with
+      its own `ox/oy` and writes screen px into the zoomed wrap; `js/tracker.js:186` draws its seed box from origin 0 and sizes itself in
+      screen px inside the wrap. Both are the #561 bug in two more places: above 1.35x the preview is a crop whose (0,0) is project
+      (`__fmOX`, `__fmOY`). Fix: place each overlay with `FM.placeOverlayOnCanvas` and map with `FM.projectToOverlay` (v15.04's shared
+      pair), and cover each with the same overlay ink probe the point editor has. Not folded into v15.04 because each overlay has its own
+      placement code to read first.
+
+- [ ] **771 — A template draft card whose template was deleted still promises "close it to save your changes back"** (hunt LOW #44)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      From the same review. `js/home.js` draft card: when `p.ofTemplate` no longer resolves to a template, the subtitle still promises a
+      save-back that cannot happen, and the delete-confirm names the wrong noun. Fix: say "its template was deleted — open it to keep the
+      work, or delete this draft", pick the noun from `ofTemplate` / `ofElement`, or have `templates.remove` discard that template's
+      workspace after the confirm.

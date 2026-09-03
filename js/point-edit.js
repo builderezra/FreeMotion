@@ -126,7 +126,8 @@ window.FM = window.FM || {};
        one unit under the dpr transform is still one SCREEN css pixel — the unit `dispScale()` and every
        hit test in this file already work in. */
     const ds = dispScale();
-    const map = p => { const q = toCanvas(l, p[0], p[1]); return [q.x * ds, q.y * ds]; };
+    // through the crop origin (queue 561, re-opened): a zoomed preview's (0,0) is not project (0,0)
+    const map = p => { const q = toCanvas(l, p[0], p[1]); const o = FM.projectToOverlay(cv, q.x, q.y); return [o.x, o.y]; };
     const subs = subsOf(l);
     g.lineWidth = 1.25; g.strokeStyle = 'rgba(41,217,187,.9)';
     subs.forEach((pts, si) => {

@@ -112,7 +112,7 @@ window.FM = window.FM || {};
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, r.width, r.height);
     const k = dispScale();
-    const map = p => [p[0] * k, p[1] * k];
+    const map = p => { const o = FM.projectToOverlay(cv, p[0], p[1]); return [o.x, o.y]; };   // queue 561: through the crop origin, same as the point editor
     if (!pts.length) return;
     // filled preview of the reveal region (real curve, smooth flags honoured)
     g.beginPath();

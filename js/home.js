@@ -1463,7 +1463,7 @@ window.FM = window.FM || {};
          of. Route by what the id actually IS. `discardDraftAnyway` is the same call the card's own ⋯
          menu uses, so bulk and single delete cannot drift apart, and it carries the switch-away that
          queue 617 clause 4 needed. */
-      const draftIds = new Set((FM.projects.list() || []).filter(x => x.elementDraft).map(x => x.id));
+      const draftIds = new Set((FM.projects.list() || []).filter(x => x.elementDraft || x.templateDraft).map(x => x.id));
       for (const id of ids) {
         if (draftIds.has(id)) await FM.projects.discardDraftAnyway(id);
         else await K.store.remove(id);
@@ -1618,6 +1618,25 @@ window.FM = window.FM || {};
       ]);
     });
     more.setAttribute('aria-label', 'Template actions');
+    /* ⚠️ TAPPING A TEMPLATE NOW EDITS THAT TEMPLATE (queue 505 clause 4). Ezra, 1 Sep: "The element opens
+       as its own document" — asked as "Elements AND templates", and templates were the half left over.
+       The tap used to run `use()` below (mint a project, then the fill-in sheet), which is his "pressing a
+       template just creates itself as a project". That path is still one tap away on the ⋯ menu as
+       "New project from template"; the card itself opens the template's own workspace, and going Home
+       writes the edit back into the same template — `templates.openForEdit` / `commitDraft`, the
+       element pair's shape. */
+    let editing = false;   // two quick taps must not mint two workspaces (review, 2 Sep)
+    async function edit() {
+      if (editing) return;
+      editing = true;
+      holdPress();
+      try {
+        const pid = await FM.templates.openForEdit(t.id);
+        if (!pid) { if (FM.toast) FM.toast('That template’s data is missing — save it again'); return; }
+        FM.home.close({ push: true, lead: card });
+        if (FM.toast) FM.toast('Editing “' + (t.name || 'template') + '” — your changes save back to it when you go Home', 3600);
+      } finally { clearPress(true); editing = false; }
+    }
     async function use() {
       holdPress();   // building a project out of a template is the same long async wait as opening one
       if (FM.toast) FM.toast('Creating project…');
@@ -1655,7 +1674,7 @@ window.FM = window.FM || {};
         } else if (FM.toast) FM.toast('Could not load that template');
       } finally { clearPress(true); }   // eased: on the push path startPush already took it, so this only runs when nothing happened
     }
-    if (selectify(card, th, t.id, use)) card.appendChild(more);
+    if (selectify(card, th, t.id, edit)) card.appendChild(more);
     keyActivate(card);
     return card;
   }
@@ -1790,7 +1809,11 @@ window.FM = window.FM || {};
        guess dressed as a fact — and the guess would be wrong every time he had just started one. They
        share the honest label they already had; what is new is that he can now throw either away. */
     const ofName = p.ofElement && ((FM.elements && FM.elements.list ? FM.elements.list() : []).find(e => e.id === p.ofElement) || {}).name;
-    body.appendChild(el('div', 'hm-sub', p.ofElement
+    // …or a TEMPLATE (queue 505 clause 4) — same card, same "close it to save" promise, its own noun
+    const ofTpl = p.ofTemplate && ((FM.templates && FM.templates.list ? FM.templates.list() : []).find(t => t.id === p.ofTemplate) || {}).name;
+    body.appendChild(el('div', 'hm-sub', p.ofTemplate
+      ? ('Editing ' + (ofTpl ? '“' + ofTpl + '”' : 'a template') + ' — close it to save your changes back')
+      : p.ofElement
       ? ('Editing ' + (ofName ? '“' + ofName + '”' : 'an element') + ' — close it to save your changes back')
       : 'Draft — open it, build it, then ⋯ → Save as element'));
     card.appendChild(body);
@@ -1817,7 +1840,7 @@ window.FM = window.FM || {};
            draft may be a sketch he never wants filed, and minting elements he did not ask for is the
            failure #505 is about. The instruction is now true; whether it should happen by itself is a
            separate question and his to answer. */
-        { label: 'Save as element…', action: async () => {
+        p.ofTemplate ? null : { label: 'Save as element…', action: async () => {
           const n = prompt('Element name:', p.name || 'My element');
           if (!n || !n.trim()) return;
           const ok = await FM.elements.saveFromProject(p.id, n.trim());
@@ -1843,7 +1866,7 @@ window.FM = window.FM || {};
           }
           render();
         } },
-      ]);
+      ].filter(Boolean));
     });
     /* ⚠️ THE ⋯ IS APPENDED ONLY WHEN NOT SELECTING, exactly as projectCard does it — the tick occupies
        that same corner, and two overlapping controls in one corner on a phone is a coin flip about
@@ -2061,7 +2084,7 @@ window.FM = window.FM || {};
       /* Element DRAFTS are not projects and do not belong in this list (queue 340) — they are the
          workspace a new element is built in, and showing them here is the whole of his complaint that
          "it just creates a new project". They appear under Elements instead. */
-      const list = pinSort('projects', FM.projects.list().filter(p => !p.elementDraft).slice().sort(byName
+      const list = pinSort('projects', FM.projects.list().filter(p => !p.elementDraft && !p.templateDraft).slice().sort(byName
         ? (a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { numeric: true, sensitivity: 'base' })
         : (a, b) => (b.modified || 0) - (a.modified || 0)), p => p.id);
       if (query) {
@@ -2110,6 +2133,9 @@ window.FM = window.FM || {};
       }
       if (!list.length) grid.appendChild(emptyState('◱', 'No templates yet', 'Tap + to save a project as one, or use a project’s ⋯ menu.'));
       list.forEach(t => { shownIds.push(t.id); grid.appendChild(templateCard(t)); });
+      // A template being edited has a workspace (queue 505 clause 4); it is hidden from Projects, so it
+      // has to be visible HERE or a failed commit would leave it nowhere he can see or delete it.
+      (FM.projects.list() || []).filter(p => p.templateDraft).forEach(p => { shownIds.push(p.id); grid.appendChild(elementDraftCard(p)); });
     } else {
       // ELEMENTS — same shape as the templates branch, including the forgiving name search.
       let list = pinSort('elements', FM.elements.list(), e => e.id);
@@ -2503,6 +2529,7 @@ window.FM = window.FM || {};
          a visible stall), and this does IndexedDB work. Same fire-and-re-render idiom as
          migrateThumbs two lines below. */
       const draftingElement = !!(FM.scene && FM.scene.project && FM.scene.project.ofElement);
+      const draftingTemplate = !!(FM.scene && FM.scene.project && FM.scene.project.ofTemplate);   // queue 505 clause 4 — the template twin
       if (selectMode) { selectMode = false; selected.clear(); }
       // First open of the session only — this is the arrival, not a screen you keep re-entering.
       const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -2519,6 +2546,14 @@ window.FM = window.FM || {};
            in front when he gets back. It was dropping him on Projects. */
         FM.elements.commitDraft().then((ok) => {
           if (ok) tab = 'elements';
+          if (root && !root.classList.contains('hidden')) render();
+        }).catch(() => {});
+      }
+      if (draftingTemplate && FM.templates && FM.templates.commitDraft) {
+        // Same funnel, same landing rule: he was editing a template, so Templates is where he gets back to.
+        FM.templates.commitDraft().then((ok) => {
+          tab = 'templates';                       // either way he lands where the template — or its kept draft — is
+          if (!ok && FM.toast) FM.toast('Could not save that edit back to the template — your work is kept as a draft under Templates', 4600);
           if (root && !root.classList.contains('hidden')) render();
         }).catch(() => {});
       }

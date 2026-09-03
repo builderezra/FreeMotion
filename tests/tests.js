@@ -52959,6 +52959,197 @@
     }
   });
 
+  /* ═══ 505 clause 4 (v15.04): TEMPLATES — the same acceptance test he gave for elements, in his words:
+     tap it, change it, come back — one template, changed, no new project anywhere. Plus the poison check
+     the template pack needs and the element pack did not: the template's stored project must NOT carry the
+     editing session's `ofTemplate` / `returnTo`, or every project later made from it would write itself
+     back over the template on coming Home. */
+  test('505: editing a template updates that template and leaves no project behind', { item: '505' }, async function () {
+    const T = FM.templates;
+    if (!T || typeof T.openForEdit !== 'function' || typeof T.commitDraft !== 'function') throw new Error('FM.templates.openForEdit / commitDraft are missing — a template still cannot be edited in place');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const keepLayers = FM.scene.layers.slice();
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const visible = () => FM.projects.list().filter(p => !p.elementDraft && !p.templateDraft).length;
+    let tid = null;
+    try {
+      if (hadHome) FM.home.close();
+      await sleep(120);
+      const P = FM.scene.project;
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 't505', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: 120, shapeH: 120, fill: '#00ccff' });
+      L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      FM.refreshAll(); FM.storage.markDirty(); await FM.storage.save();
+      await sleep(200);
+      const pid0 = FM.projects.currentId();
+      if (!pid0) throw new Error('no current project to save a template from');
+      if (!await T.save('T505 fixture', pid0)) throw new Error('could not create the fixture template');
+      await sleep(150);
+      if (!await T.save('T505 decoy', pid0)) throw new Error('could not create the decoy template');   // so "moves to the top" is observable
+      await sleep(150);
+      const mine = T.list().filter(x => x.name === 'T505 fixture');
+      if (mine.length !== 1) throw new Error('expected exactly one fixture template, got ' + mine.length);
+      tid = mine[0].id;
+      const packBefore = await T.getPack(tid);
+      const countBefore = packBefore.layers.length, templatesBefore = T.list().length, visibleBefore = visible();
+      const draftsBefore = FM.projects.list().filter(p => p.templateDraft).length;
+
+      /* ── TAP IT ── */
+      const pid = await T.openForEdit(tid);
+      if (!pid) throw new Error('tapping the template did not open it for editing');
+      await sleep(300);
+      const openedSelected = !!FM.scene.selectedId || (FM.scene.selectedIds || []).length > 0;
+      if (FM.scene.project.ofTemplate !== tid) throw new Error('the editing session does not know which template it came from (ofTemplate = ' + FM.scene.project.ofTemplate + ')');
+      if (visible() !== visibleBefore) throw new Error('opening a template for editing added ' + (visible() - visibleBefore) + ' project(s) to the Projects list — "pressing a template just creates itself as a project"');
+      if (!FM.scene.layers.length) throw new Error('the editor opened with no layers, so the template was never loaded and nothing below measures an edit');
+      await T.openForEdit(tid); await sleep(200);
+      if (FM.projects.list().filter(p => p.templateDraft).length > draftsBefore + 1) throw new Error('tapping the same template twice made two workspaces — they pile up');
+
+      /* ── CHANGE IT ── */
+      const before = FM.scene.layers.length;
+      const L2 = FM.makeLayer('shape', { name: 't505-added', shape: 'ellipse', x: P.width / 2, y: P.height / 2, shapeW: 60, shapeH: 60, fill: '#ff00aa' });
+      L2.start = 0; L2.duration = 3; FM.scene.layers.push(L2);
+      FM.refreshAll(); FM.storage.markDirty(); await FM.storage.save();
+      await sleep(250);
+      if (FM.scene.layers.length !== before + 1) throw new Error('the edit did not take, so the round trip below proves nothing');
+
+      /* ── COME BACK — through the real door. Going Home is what commits (home.js), so this opens Home and waits
+         for the template's pack to change, rather than calling commitDraft directly (the review's point: the test
+         never touched home.js). */
+      const packBeforeCommit = await T.getPack(tid);
+      FM.home.open();
+      let after = null, waited = 0;
+      while (waited < 4000) { await sleep(100); waited += 100; const pk = await T.getPack(tid); if (pk && pk.layers.length !== packBeforeCommit.layers.length) break; }
+      await sleep(300);
+      after = T.list();
+      if (after.length !== templatesBefore) throw new Error('the library went from ' + templatesBefore + ' templates to ' + after.length + ' — editing forked it instead of updating it');
+      if (after.findIndex(x => x.id === tid) !== 0) throw new Error('the template he just edited is not at the top of the Templates list');
+      const pack = await T.getPack(tid);
+      if (!pack || !Array.isArray(pack.layers)) throw new Error('the template has no stored data any more — the edit destroyed it');
+      if (pack.layers.length !== countBefore + 1) throw new Error('the template itself still holds ' + pack.layers.length + ' layers, not ' + (countBefore + 1) + ' — the edit was written somewhere else');
+      if (pack.project && (pack.project.ofTemplate || pack.project.returnTo || pack.project.ofElement)) {
+        throw new Error('the template\'s stored project carries the editing session\'s pointers (' + JSON.stringify({ ofTemplate: pack.project.ofTemplate, returnTo: pack.project.returnTo }) + ') — every project made from it would write itself back over the template on coming Home');
+      }
+      if (visible() !== visibleBefore) throw new Error('a project appeared in his library (' + visibleBefore + ' → ' + visible() + ')');
+      if (FM.projects.list().some(p => p.templateDraft && p.ofTemplate === tid)) throw new Error('the workspace was left behind after coming home');
+      if (!FM.projects.currentId()) throw new Error('coming back from a template edit left no project open');
+      if (FM.projects.currentId() !== pid0) throw new Error('coming Home landed on ' + FM.projects.currentId() + ', not the project he came from (' + pid0 + ')');
+      if (openedSelected) throw new Error('opening a template for editing arrived with layers selected');
+      /* ── THE GUARD THE REVIEW ASKED FOR: a flush that does not land must keep the draft and leave the template alone. */
+      /* Start this case from a known state: no workspace for this template may exist (in the full suite a
+         reused or half-discarded one made openForEdit hand back an EMPTY workspace, commitDraft refused it on the
+         empty-workspace rule instead, and the flush guard was never exercised — a mutation removing the guard
+         survived the suite while the same test alone caught it). */
+      for (const p of FM.projects.list().filter(p => p.templateDraft && p.ofTemplate === tid)) { try { await FM.projects.discardDraftAnyway(p.id); } catch (e) {} }
+      if (FM.projects.currentId() !== pid0) { await FM.projects.open(pid0); await sleep(150); }
+      const pidE = await T.openForEdit(tid); await sleep(300);
+      if (!pidE) throw new Error('could not reopen the template for the flush-failure case');
+      if (FM.projects.currentId() !== pidE) throw new Error('setup: the reopened workspace is not the current project');
+      if (!FM.scene.layers.length) throw new Error('setup: the reopened workspace has no layers — the flush guard below would never be reached (the empty-workspace rule refuses first)');
+      if (FM.scene.project.ofTemplate !== tid) throw new Error('setup: the reopened workspace does not carry ofTemplate');
+      const packBeforeFail = await T.getPack(tid);
+      const realFlush = FM.storage.flushSync; FM.storage.flushSync = () => false;
+      let okFail;
+      try { okFail = await T.commitDraft(); } finally { FM.storage.flushSync = realFlush; }
+      if (okFail) throw new Error('commitDraft reported success although the flush did not land — it would have packed a stale on-disk doc over the template');
+      const packAfterFail = await T.getPack(tid);
+      if (!packAfterFail || packAfterFail.layers.length !== packBeforeFail.layers.length) throw new Error('a failed flush still changed the template (' + packBeforeFail.layers.length + ' → ' + (packAfterFail && packAfterFail.layers.length) + ' layers)');
+      if (!FM.projects.list().some(p => p.templateDraft && p.ofTemplate === tid)) throw new Error('the draft was discarded after a failed flush — his edits went with it');
+      /* ── AND AN EMPTY WORKSPACE NEVER REPLACES A TEMPLATE THAT HAS LAYERS (the crash-during-hydration stub). */
+      FM.scene.layers.length = 0; FM.refreshAll(); FM.storage.markDirty(); await FM.storage.save(); await sleep(100);
+      const okEmpty = await T.commitDraft();
+      const packAfterEmpty = await T.getPack(tid);
+      if (okEmpty || !packAfterEmpty || packAfterEmpty.layers.length !== packBeforeFail.layers.length) throw new Error('an EMPTY workspace was written over a template with ' + packBeforeFail.layers.length + ' layers (ok=' + okEmpty + ', now ' + (packAfterEmpty && packAfterEmpty.layers.length) + ') — the stub a crash leaves behind would wipe the template');
+      await FM.projects.open(pid0); await sleep(150);
+    } finally {
+      try { if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      try { if (pid0 && FM.projects.currentId() !== pid0) await FM.projects.open(pid0); } catch (e) {}
+      try { for (const p of FM.projects.list().filter(p => p.templateDraft && p.ofTemplate === tid)) await FM.projects.discardDraftAnyway(p.id); } catch (e) {}
+      try { if (tid) await T.remove(tid); } catch (e) {}
+      try { for (const x of T.list().filter(x => x.name === 'T505 decoy' || x.name === 'T505 fixture')) await T.remove(x.id); } catch (e) {}
+      FM.scene.layers = keepLayers; FM.selectLayer(null); FM.refreshAll();
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  /* ═══ 561, RE-OPENED (v15.04): THE POINT EDITOR'S DRAWING FOLLOWS THE ZOOMED PREVIEW'S CROP ORIGIN.
+     His case, staged exactly: open Customise Points, THEN zoom to 200% and pan (start() resets the viewport,
+     so on the phone the zoom always comes after). Above 1.35x the preview is a crop whose pixel (0,0) is
+     project (__fmOX, __fmOY). The test reads the OVERLAY'S OWN PIXELS: ink where the shape's corner truly is
+     inside the overlay, and none where the old `project × scale` formula drew it — two-way, so neither
+     "draw nothing" nor "draw everywhere" can pass. Phone width, where the stage is small enough that 3x
+     makes a crop with a nonzero origin; the crop is asserted before anything is believed. */
+  test('561: the point editor draws its points on the shape when the canvas is zoomed and panned', { item: '561' }, async function () {
+    if (!FM.pointEdit || !FM.projectToOverlay) throw new Error('FM.pointEdit / FM.projectToOverlay missing');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      await atPhoneWidth(async function () {
+        // The comp is declared HERE and the shape sized from it — the first version read the OLD project's size
+        // before scene() swapped in a smaller comp, so the shape sat outside the comp and every corner was
+        // "outside the crop". Centred shape, zoom about the centre: a centred 3x crop already has a nonzero
+        // origin (its (0,0) is a third of the way into the comp), and the shape stays inside it at any frame size.
+        const P = { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' };
+        const L = FM.makeLayer('shape', { name: 't561', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: Math.round(P.width * 0.22), shapeH: Math.round(P.height * 0.14), fill: '#ff4488', start: 0, duration: 4 });
+        FM.scene = scene([L], { project: P }); FM.selectLayer(L.id); FM.refreshAll(); await sleep(200);
+        FM.pointEdit.start(L.id); await sleep(250);
+        FM.viewport.scale = 3; FM.viewport.x = 0; FM.viewport.y = 0; FM.viewport.apply(); await sleep(400);
+        const cv = document.getElementById('preview'), ov = document.getElementById('pe-overlay');
+        if (!cv || !ov) throw new Error('setup: no #preview / #pe-overlay after starting the point editor');
+        const OX = cv.__fmOX || 0, OY = cv.__fmOY || 0;
+        if (!cv.__fmCrop || !(OX > 0 || OY > 0)) throw new Error('setup: the zoomed preview did not become a crop with an offset origin (crop ' + cv.__fmCrop + ', origin ' + OX + ',' + OY + ') — the case this test exists for was not staged');
+        const ds = FM.previewDispScale();
+        const corner = FM.pointEdit._toCanvas(L, 0, 0);
+        /* THE ORACLE DOES NOT GO THROUGH THE HELPER (the review's point). #canvas-wrap spans the whole comp, so a
+           project point's screen position is the wrap's rect scaled by its comp fraction; the overlay covers the
+           preview's rect, so overlay px = screen − preview.left. Nothing here reads __fmOX or dispScale. */
+        const wr = document.getElementById('canvas-wrap').getBoundingClientRect(), pr = cv.getBoundingClientRect();
+        const truePx = { x: wr.left + corner.x / P.width * wr.width - pr.left, y: wr.top + corner.y / P.height * wr.height - pr.top };
+        const viaHelper = FM.projectToOverlay(cv, corner.x, corner.y);
+        if (Math.hypot(viaHelper.x - truePx.x, viaHelper.y - truePx.y) > 2) throw new Error('FM.projectToOverlay disagrees with the geometry by ' + Math.round(Math.hypot(viaHelper.x - truePx.x, viaHelper.y - truePx.y)) + 'px');
+        const oldPx = { x: corner.x * ds, y: corner.y * ds };
+        const g = ov.getContext('2d'), dpr = window.devicePixelRatio || 1;
+        const ink = (px) => {
+          const x = Math.round(px.x * dpr), y = Math.round(px.y * dpr);
+          if (x < 6 || y < 6 || x >= ov.width - 6 || y >= ov.height - 6) return null;    // off the overlay — nothing to read
+          const d = g.getImageData(x - 5, y - 5, 11, 11).data; let a = 0; for (let i = 3; i < d.length; i += 4) a += d[i]; return a;
+        };
+        const at = ink(truePx);
+        if (at === null) throw new Error('setup: the shape\'s corner is outside the cropped preview (' + Math.round(truePx.x) + ',' + Math.round(truePx.y) + ') — move the pan');
+        if (!(at > 0)) throw new Error('no ink on the overlay where the shape\'s corner is (' + Math.round(truePx.x) + ',' + Math.round(truePx.y) + ' overlay px; crop origin ' + Math.round(OX) + ',' + Math.round(OY) + ') — the point box is drawn somewhere else, which is "the lines don\'t line up with the actual object when you zoom in"');
+        const far = Math.hypot(oldPx.x - truePx.x, oldPx.y - truePx.y);
+        const wrong = ink(oldPx);
+        if (far > 14 && wrong !== null && wrong > 0) throw new Error('ink at the OLD formula\'s position (' + Math.round(oldPx.x) + ',' + Math.round(oldPx.y) + '), ' + Math.round(far) + 'px from the corner — the crop origin is being ignored again');
+        /* ── THE MASK TOOL, same crop, same probe (the review: reverting its half left the suite green). */
+        FM.pointEdit.stop(); await sleep(150);
+        const mx0 = Math.round(P.width * 0.45), my0 = Math.round(P.height * 0.47);
+        L.masks = [{ id: 'm561', name: 'm', enabled: true, mode: 'add', path: [[mx0, my0], [mx0 + 160, my0], [mx0 + 160, my0 + 120], [mx0, my0 + 120]], closed: true }];
+        FM.maskTool.open(L.id, 'm561'); await sleep(250);
+        FM.viewport.scale = 3; FM.viewport.x = 0; FM.viewport.y = 0; FM.viewport.apply(); await sleep(400);
+        const mo = document.getElementById('mask-overlay');
+        if (!mo) throw new Error('setup: the mask tool drew no #mask-overlay');
+        const wr2 = document.getElementById('canvas-wrap').getBoundingClientRect(), pr2 = cv.getBoundingClientRect();
+        const mTrue = { x: wr2.left + mx0 / P.width * wr2.width - pr2.left, y: wr2.top + my0 / P.height * wr2.height - pr2.top };
+        const mg = mo.getContext('2d');
+        const mink = (px) => { const x = Math.round(px.x * dpr), y = Math.round(px.y * dpr); if (x < 6 || y < 6 || x >= mo.width - 6 || y >= mo.height - 6) return null; const d = mg.getImageData(x - 5, y - 5, 11, 11).data; let a = 0; for (let i = 3; i < d.length; i += 4) a += d[i]; return a; };
+        const mAt = mink(mTrue);
+        if (mAt === null) throw new Error('setup: the mask\'s first point is outside the cropped preview');
+        if (!(mAt > 0)) throw new Error('no ink on the mask overlay where the mask\'s first point is (' + Math.round(mTrue.x) + ',' + Math.round(mTrue.y) + ') — the mask editor is drawn off the shape when zoomed');
+        try { FM.maskTool.stop(); } catch (e) {}
+      });
+    } finally {
+      try { FM.pointEdit.stop(); } catch (e) {}
+      try { FM.viewport.reset(); } catch (e) {}
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

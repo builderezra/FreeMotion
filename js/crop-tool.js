@@ -33,7 +33,8 @@ window.FM = window.FM || {};
   function dispScale() { return FM.previewDispScale ? FM.previewDispScale() : 1; }
   function evtToCanvas(e) { return FM.eventToProject(e); }
   // source px → overlay display px (via canvas px × dispScale)
-  function srcDisp(sx, sy) { const l = layer(), k = dispScale(); const q = toCanvas(l, sx / MW, sy / MH); return { x: q.x * k, y: q.y * k }; }
+  // through the crop origin (queue 561): a zoomed preview's (0,0) is project (__fmOX, __fmOY), and the hit test already agrees
+  function srcDisp(sx, sy) { const l = layer(); const q = toCanvas(l, sx / MW, sy / MH); return FM.projectToOverlay(preview(), q.x, q.y); }
   // pointer → source px
   function evtSrc(e) { const l = layer(), p = evtToCanvas(e), loc = toLocal(l, p.x, p.y); return { x: loc.u * MW, y: loc.v * MH }; }
 

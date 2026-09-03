@@ -1015,6 +1015,9 @@ window.FM = window.FM || {};
     // "drop stale media" loop here actively deleted the other project's blobs). Fresh ids need
     // no clearing at all; embedded media is rehydrated under the new ids below.
     const re = reIdLayers(obj.layers);
+    /* A file exported from INSIDE an element or template workspace carries that session's pointers; imported
+       later, Home would write the imported project back over the element/template (review, 2 Sep). Strip them. */
+    ['ofTemplate', 'ofElement', 'returnTo'].forEach(k => { try { delete obj.project[k]; } catch (e) {} });
     FM.scene.project = obj.project;
     FM.scene.layers = re.layers;
     repairAndAnnounce(FM.scene.layers, false);   // an imported .fmotion.json is untrusted input: a cycle in it is a hang, not a render
@@ -1178,13 +1181,18 @@ window.FM = window.FM || {};
       const newLayerId = idMap[oldId];
       const md = media[oldId];
       if (!newLayerId || !md || !md.file) continue;
+      /* THE BYTES FIRST, THE DECODE SECOND (review of v15.04, 2 Sep). This used to store the blob only after a
+         successful decode, so a clip this device cannot play (a codec Safari lacks, a size-probe timeout on a big
+         file) was in neither FM.media nor IDB — and the next save-back (an element or template edited in place)
+         packed the layer WITHOUT its media and overwrote the original: the file gone for good, on a device that
+         never showed it. Stored first, the layer merely shows blank here and the file survives every round trip. */
+      try { if (db) await idbPut(db, newLayerId, { file: md.file, kind: md.kind }); } catch (e) {}
       try {
         const rec = md.kind === 'video' ? await FM.loadVideoFile(md.file) : await FM.loadImageFile(md.file);
         FM.media.set(newLayerId, rec);
         if (rec.kind === 'video' && rec.el) rec.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); });
         if (FM.wireVideoRepaint) FM.wireVideoRepaint(rec);
-        if (db) await idbPut(db, newLayerId, { file: md.file, kind: md.kind });
-      } catch (e) { /* that layer loads media-less */ }
+      } catch (e) { /* that layer loads media-less here; its file is kept above */ }
     }
     if (db) db.close();
     FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1);
@@ -1517,6 +1525,12 @@ window.FM = window.FM || {};
          — the same two-place trick `fromTemplate` uses. Without it the editing session cannot know
          which element it came from, which is the whole reason saving could only ever mint a new one. */
       if (opts.ofElement) fresh.project.ofElement = opts.ofElement;
+      /* ⚠️ NOT `ofTemplate` — deliberately. The element twin stamps ofElement on this create-time stub; a template
+         must not, because the stub (`layers: []`) is what a crash during hydration leaves on disk, and Home's
+         commit reads `project.ofTemplate` to decide whether to write the open doc BACK OVER THE TEMPLATE. With the
+         pointer here, a relaunch after such a crash wiped the template to empty (review, 2 Sep). openForEdit puts
+         ofTemplate on the project only AFTER the pack is adopted, so a half-hydrated workspace is never committable.
+         The INDEX record still carries it (below) for the card's label and the one-workspace-per-template reuse. */
       writeJSON('fm.proj.' + id, { project: fresh.project, layers: [], selectedId: null, selectedIds: [] });
       const idx = this.list();
       /* `elementDraft` marks a project that exists only as a WORKSPACE for building an element (queue
@@ -1527,6 +1541,8 @@ window.FM = window.FM || {};
       const rec = { id: id, name: fresh.project.name, created: Date.now(), modified: Date.now(), width: fresh.project.width, height: fresh.project.height, fps: fresh.project.fps, duration: fresh.project.duration, thumb: null };
       if (opts.elementDraft) rec.elementDraft = true;
       if (opts.ofElement) rec.ofElement = opts.ofElement;   // …and on the index, so Home can label the card without reading every doc
+      if (opts.templateDraft) rec.templateDraft = true;      // a workspace EDITING a template (queue 505 clause 4): hidden from Projects, shown under Templates
+      if (opts.ofTemplate) rec.ofTemplate = opts.ofTemplate;
       idx.unshift(rec);
       this.saveIndex(idx);
       await this.open(id);
@@ -1612,7 +1628,7 @@ window.FM = window.FM || {};
       if (id !== curId()) return { ok: await this.discardDraft(id), why: '' };
       if (FM.storage && FM.storage.flushSync) FM.storage.flushSync();
       const others = this.list().filter(p => p.id !== id);
-      const target = (others.filter(p => !p.elementDraft)[0] || others[0] || {}).id;
+      const target = (others.filter(p => !p.elementDraft && !p.templateDraft)[0] || others[0] || {}).id;
       if (!target) return { ok: false, why: 'last' };
       await this.open(target);
       const ok = await this.discardDraft(id);
@@ -1735,6 +1751,14 @@ window.FM = window.FM || {};
          by going through save(), which is exactly the coupling this helper replaces. */
       delete pack.project.notes;
       delete pack.project.fromTemplate;
+      /* …NOR THE EDITING SESSION'S OWN POINTERS (queue 505 clause 4). A template draft's doc carries
+         `ofTemplate` and `returnTo` so Home knows where to write back and where to land. If they were
+         packed, every project later made FROM that template would arrive believing it was a template
+         edit, and coming Home would write the project back over the template. Stripped at the one
+         place both save routes pass through. */
+      delete pack.project.ofTemplate;
+      delete pack.project.ofElement;
+      delete pack.project.returnTo;
     }
     try {
       const db = await openDB();
@@ -1858,23 +1882,107 @@ window.FM = window.FM || {};
          is the way BACK, and there was nothing recording where the project came from to go back to.
          Kept on the project object, so it saves and reloads with the doc, AND mirrored onto the index entry
          so the Home card can offer the update without reading every project's document to find out. */
-      FM.scene.project = Object.assign(JSON.parse(JSON.stringify(pack.project)), { name: FM.scene.project.name, notes: [], fromTemplate: tid });
-      /* CLAMP AGAIN, BECAUSE THIS LINE JUST THREW THE FIRST CLAMP AWAY (queue 470).
-         `projects.create()` above clamps the width/height it is handed — and then the assign replaces the
-         whole project object with the pack's RAW one, so a template carrying 16000x16000 at 999fps landed
-         in the live scene unclamped and `autosave()` below wrote it to disk. Measured, end to end, through
-         this exact call. What that costs is in clampProjectDims' own note: ~1GB per canvas, an OOM crash
-         on open, and — being the current project — a crash again on every relaunch. A brick. */
-      clampProjectDims(FM.scene.project);
-      const re = reIdLayers(pack.layers);
-      FM.scene.layers = re.layers;
-      await hydratePack(re.layers, pack.media, re.map);
+      await this._adopt(pack, { name: FM.scene.project.name, notes: [], fromTemplate: tid });
       try { const idx = FM.projects.list(); const e = idx.find(x => x.id === pid); if (e) { e.fromTemplate = tid; FM.projects.saveIndex(idx); } } catch (e) {}
       if (FM.resizeCanvas) FM.resizeCanvas();
       if (FM.refreshAll) FM.refreshAll();
       if (FM.history) FM.history.reset();
       FM.storage.autosave();
       return pid;
+    },
+    /* PUT A TEMPLATE'S CONTENTS INTO THE OPEN DOCUMENT — the one step useAsNew and openForEdit share, so
+       the two cannot drift (queue 505's own instruction: "do not hand-copy"). `extra` is what the caller
+       needs on the project object AFTER the pack's project replaces it — the assign below throws away
+       everything create() stamped, which is also why the clamp has to run again:
+       CLAMP AGAIN, BECAUSE THIS LINE JUST THREW THE FIRST CLAMP AWAY (queue 470). `projects.create()`
+       clamps the width/height it is handed — and then the assign replaces the whole project object with
+       the pack's RAW one, so a template carrying 16000x16000 at 999fps landed in the live scene unclamped
+       and autosave wrote it to disk. Measured, end to end. What that costs is in clampProjectDims' own
+       note: ~1GB per canvas, an OOM crash on open, and — being the current project — again on every
+       relaunch. A brick. */
+    async _adopt(pack, extra) {
+      const proj = JSON.parse(JSON.stringify(pack.project));
+      // packs saved before v15.04 may carry a session's pointers; the way OUT strips them as the way in now does
+      ['ofTemplate', 'ofElement', 'returnTo', 'fromTemplate'].forEach(k => { delete proj[k]; });
+      FM.scene.project = Object.assign(proj, extra || {});
+      clampProjectDims(FM.scene.project);
+      const re = reIdLayers(pack.layers);
+      FM.scene.layers = re.layers;
+      await hydratePack(re.layers, pack.media, re.map);
+    },
+    /* ═══ OPEN A TEMPLATE FOR EDITING (queue 505 clause 4) — the shape `elements.openForEdit` settled on.
+       Ezra, 1 Sep: "The element opens as its own document" — and his words were "Elements AND templates".
+       Tapping a template card used to run useAsNew, which mints a real project you then have to save
+       back by hand (and until v14.91 that save minted a NEW template). This opens the template's OWN
+       workspace: one per template, reused on the next tap, hidden from Projects, carrying the template's
+       id on the doc so coming Home (`commitDraft`) can write it back in place and put the workspace away.
+       No insert step can fail here — the pack is fetched BEFORE the workspace is minted, so a missing
+       pack returns null without stranding a draft (the trap queue 617 found in the element path). */
+    async openForEdit(tid) {
+      const meta = this.list().find(t => t.id === tid);
+      if (!meta) return null;
+      const pack = await this.getPack(tid);
+      if (!pack) return null;
+      const rev = meta.rev || 0;
+      const existing = FM.projects.list().find(p => p.templateDraft && p.ofTemplate === tid);
+      if (existing) {
+        await FM.projects.open(existing.id);
+        /* THE TEMPLATE MOVED ON WHILE THIS WORKSPACE SAT (review, 2 Sep): "Update template from project" on some
+           other project bumps `rev`; a workspace built from the older pack would, on Home, write the OLD contents
+           back over the NEW ones. Re-adopt the current pack instead — the workspace was stale by definition. */
+        if ((FM.scene.project.ofTemplateRev || 0) !== rev) {
+          await this._adopt(pack, Object.assign({ name: meta.name || 'Template', notes: [], ofTemplate: tid, ofTemplateRev: rev }, FM.scene.project.returnTo ? { returnTo: FM.scene.project.returnTo } : {}));
+          if (FM.selectLayer) FM.selectLayer(null); FM.scene.selectedIds = [];
+          if (FM.resizeCanvas) FM.resizeCanvas(); if (FM.refreshAll) FM.refreshAll(); if (FM.history) FM.history.reset();
+          if (FM.storage) { FM.storage.markDirty(); await FM.storage.save(); }
+        }
+        return existing.id;
+      }
+      const returnTo = curId();
+      const pid = await FM.projects.create({ name: meta.name || 'Template', width: pack.project.width, height: pack.project.height, templateDraft: true, ofTemplate: tid });
+      if (!pid) return null;
+      // the pack's project replaces the doc's, so the session's own pointers ride in as `extra`
+      await this._adopt(pack, Object.assign({ name: meta.name || 'Template', notes: [], ofTemplate: tid, ofTemplateRev: rev }, returnTo ? { returnTo: returnTo } : {}));
+      /* ⚠️ ARRIVE WITH NOTHING SELECTED — the element path's lesson ("it's just opening you having every
+         layer selected"). Nothing here selects, but say it explicitly so a later change cannot. */
+      if (FM.selectLayer) FM.selectLayer(null);
+      FM.scene.selectedIds = [];
+      if (FM.selectMode) FM.selectMode = false;
+      if (FM.syncSelectionChrome) FM.syncSelectionChrome();
+      if (FM.resizeCanvas) FM.resizeCanvas();
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.history) FM.history.reset();
+      if (FM.storage) { FM.storage.markDirty(); await FM.storage.save(); }
+      return pid;
+    },
+    /* SAVE THE EDIT BACK AND PUT THE WORKSPACE AWAY — `elements.commitDraft`'s order, for the same
+       reasons written there: flush first; a template deleted mid-edit keeps the draft; a failed write
+       keeps the draft; nowhere to land keeps the draft; and switch away BEFORE discarding, because
+       discardDraft refuses to delete the document you are standing in. */
+    async commitDraft() {
+      const P = FM.scene && FM.scene.project;
+      const tid = P && P.ofTemplate;
+      if (!tid) return false;
+      const pid = curId();
+      if (!pid) return false;
+      /* THE FLUSH MUST LAND (review, 2 Sep). writeScene returns false on quota or a stale rev; the old code ignored
+         it and went on to pack the doc ON DISK — which, after a failed write, is an older or empty version — and
+         write that over the template, then discard the draft that held his real edits. Keep the draft instead. */
+      if (FM.storage && FM.storage.flushSync && !FM.storage.flushSync()) return false;
+      if (!this.list().some(t => t.id === tid)) return false;
+      /* AND AN EMPTY WORKSPACE NEVER REPLACES A TEMPLATE THAT HAS LAYERS. A blank template is legitimate, so
+         updateFrom allows an empty pack; a workspace that is empty while the template is not is a stub (a crash
+         before hydration finished) or a refusal above that something later bypassed — not an edit. */
+      const live = (FM.scene.layers || []).length;
+      if (!live) { const cur = await this.getPack(tid); if (cur && cur.layers && cur.layers.length) return false; }
+      const ok = await this.updateFrom(tid, pid);
+      if (!ok) return false;
+      const list = FM.projects.list().filter(p => !p.elementDraft && !p.templateDraft && p.id !== pid);
+      const back = (P.returnTo && list.some(p => p.id === P.returnTo)) ? P.returnTo : (list[0] && list[0].id);
+      if (!back) return true;
+      await FM.projects.open(back);
+      await FM.projects.discardDraft(pid);
+      return true;
     },
     /* WRITE A PROJECT BACK OVER THE TEMPLATE IT CAME FROM (queue 408 clause 2). Same shape as the preset
        round trip in queue 407, and the same judgement: ONE TAP rather than automatic. A template is a
@@ -1905,6 +2013,9 @@ window.FM = window.FM || {};
          and leave the card's count/thumbnail stale — it self-heals on the next save. Returning false
          would make the caller keep a workspace for a template that is already up to date. */
       idx[at].count = got.pack.layers.length;
+      // the card's own three numbers — templates.save writes them, so an in-place edit must too (review, 2 Sep)
+      if (got.pack.project) { idx[at].width = got.pack.project.width; idx[at].height = got.pack.project.height; idx[at].duration = got.pack.project.duration; }
+      idx[at].rev = (idx[at].rev || 0) + 1;   // a workspace built from an older pack re-adopts on reuse (openForEdit)
       const th = (await FM.projects.getThumb(got.srcId)) || (got.srcId === curId() ? makeThumb() : null);
       if (th) idx[at].thumb = th;
       // MOST RECENTLY EDITED FIRST — the same rule the Elements list got in v12.27, and his words for it:
@@ -2040,7 +2151,7 @@ window.FM = window.FM || {};
       if (!this.list().some(e => e.id === eid)) return false;     // deleted mid-edit — keep the draft
       const ok = await this.updateFrom(eid, pid);
       if (!ok) return false;                                       // failed write — keep the draft
-      const list = FM.projects.list().filter(p => !p.elementDraft && p.id !== pid);
+      const list = FM.projects.list().filter(p => !p.elementDraft && !p.templateDraft && p.id !== pid);   // a template workspace is not somewhere to land either
       const back = (P.returnTo && list.some(p => p.id === P.returnTo)) ? P.returnTo : (list[0] && list[0].id);
       if (!back) return true;                                      // nowhere to land — edit saved, draft kept
       await FM.projects.open(back);
