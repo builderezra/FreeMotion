@@ -54038,6 +54038,46 @@
     }
   });
 
+  /* ═══ 729 (hunt HIGH #12): THE FILTER PREVIEW DIES WITH THE FILTERS VIEW, AND NEVER REACHES AN EXPORT. Tick a
+     tile (real click) so a preview is live, then leave by back() → gone; tick again, change layer → gone; and the
+     compositor's one answer for a previewed stack is null while FM._exporting is set (control: non-null before). */
+  test('729: leaving the Filters view clears the filter preview, and the compositor ignores a preview during export', { item: '729' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.fxPreviewListFor) throw new Error('FM.fxPreviewListFor is missing — the compositor has no single guarded read');
+    const saved = FM.scene, savedSel = FM.scene.selectedId, exp0 = FM._exporting, pv0 = FM._fxPreview;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const L = FM.makeLayer('shape', { name: 's729', shape: 'rect', x: 200, y: 200, shapeW: 200, shapeH: 200, fill: '#8f4', start: 0, duration: 4 });
+      const M = FM.makeLayer('shape', { name: 's729b', shape: 'rect', x: 500, y: 500, shapeW: 100, shapeH: 100, fill: '#f84', start: 0, duration: 4 });
+      FM.scene = scene([L, M]); FM.selectLayer(L.id); FM.refreshAll();
+      const tick = async () => {
+        FM.inspector.openCategory('filters'); FM.inspector.refresh(); await sleep(200);
+        const tile = document.querySelector('.flt-tile');
+        if (!tile) throw new Error('setup: no filter tile in the Filters view');
+        tile.click(); await sleep(120);
+        if (!FM._fxPreview || FM._fxPreview.id !== L.id) throw new Error('setup: ticking a tile did not start a preview on the layer');
+      };
+      await tick();
+      FM.inspector.back(); await sleep(120);
+      if (FM._fxPreview) throw new Error('back() out of the Filters view left the preview rendering on the layer');
+      await tick();
+      FM.selectLayer(M.id); FM.refreshAll(); FM.inspector.refresh(); await sleep(150);
+      if (FM._fxPreview) throw new Error('changing layer left the previous layer\'s filter preview live');
+      FM._fxPreview = { id: L.id, list: [{ type: 'preview729' }] };
+      FM._exporting = false;
+      if (!FM.fxPreviewListFor(L)) throw new Error('control: a live preview for the layer is not returned when not exporting');
+      FM._exporting = true;
+      if (FM.fxPreviewListFor(L)) throw new Error('the previewed stack is returned during an export — a preview left behind would render into the file');
+    } finally {
+      FM._exporting = exp0; FM._fxPreview = pv0 || null;
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

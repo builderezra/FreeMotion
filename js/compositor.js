@@ -1626,6 +1626,14 @@ window.FM = window.FM || {};
      their own copy: the timeline's glide was retuned and the sliders' was not, and he had to ask
      twice. Three copies is worse. So the sentence is written ONCE, here, beside the predicate it is
      about, and the callers print what they are given. */
+  /* THE PREVIEWED FILTER STACK FOR A LAYER, OR NULL (queue 729, hunt HIGH #12). Both places that consumed FM._fxPreview
+     did so with no export guard, so a preview left behind (see inspector.js clearFilterPreview) rendered into an export.
+     An export is never a preview. */
+  FM.fxPreviewListFor = function (layer) {
+    if (FM._exporting) return null;
+    const pv = FM._fxPreview;
+    return (pv && layer && pv.id === layer.id && pv.list && pv.list.length) ? pv.list : null;
+  };
   FM.fxHealth = function () {
     const ctx = ctxFilterOK();
     const gl = !!(FM.glColor && FM.glColor.available && FM.glColor.available());
@@ -1651,8 +1659,7 @@ window.FM = window.FM || {};
      * takes to undo the whole thing. It goes through this function because this function is already
      * the single answer to "which effects does this layer render with at time t", so the preview cannot
      * disagree with the real stack about ordering or about anything else. */
-    const pv = FM._fxPreview;
-    const pre = (pv && layer && pv.id === layer.id && pv.list && pv.list.length) ? pv.list : null;
+    const pre = FM.fxPreviewListFor(layer);   // queue 729: one answer for both reads, and never during an export
     let base = pre ? own.concat(pre) : own;
     /* …and a MEDIA layer's Outline, which is the same alpha-outline effect a GROUP's border already
        becomes (queue 386 clause 1). Ezra: "Outlines should still be a toggle option on videos and clips,
@@ -13225,10 +13232,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        longer just about captions: effectiveFx now answers for both, and a layer being previewed has no
        captions in the ordinary case, so gating on captions alone meant the preview never reached the
        frame. `_cueFx` still guards the recursion for both. */
-    const _pvOn = (function () {
-      const pv = FM._fxPreview;
-      return !!(pv && layer && pv.id === layer.id && pv.list && pv.list.length);
-    })();
+    const _pvOn = !!FM.fxPreviewListFor(layer);   // queue 729: the same answer the stack above uses
     /* …AND A MEDIA LAYER WHOSE OUTLINE IS ON (queue 386 clause 1, fixed 22 Aug). `effectiveFx` has
        translated that toggle into the alpha `stroke` effect since v10.64 — but this gate is the ONLY
        render-path caller of it, and it only opened for a caption track or a live effect preview. An

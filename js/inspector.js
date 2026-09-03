@@ -2278,6 +2278,16 @@ window.FM = window.FM || {};
   // separate 'audiofx' view would have had to be kept in sync with all three.
   let fxTab = 'visual';
   let _fltPicks = [];   // filters toggled but not yet added (queue 464); cleared whenever the view changes
+  /* ONE LEAVE PATH (queue 729, hunt HIGH #12). The note above says the preview is "cleared on commit and on leaving the
+     tab" — only Add and the tile/Clear paths cleared FM._fxPreview; openCategory dropped the picks but not the preview,
+     and back(), a layer change, the ‹ back button and the Visual/Audio/Filters toggle cleared neither. So ticking filter
+     tiles and leaving without Add kept rendering the preview on that layer, and a re-entry showed stale ticks. Every way
+     out calls this.
+     ⚠️ IT LIVES HERE, BESIDE THE STATE IT CLEARS, AND NOT beside restartFilterPreview() where it reads more naturally.
+     Those helpers are indented at module level but are NESTED inside the filters view builder, so a function declared
+     among them is invisible to openCategory / back / refresh — "clearFilterPreview is not defined", thrown from the
+     refresh that runs on every selection change. Indentation is not scope; `_fltPicks` is the anchor that is. */
+  const clearFilterPreview = () => { _fltPicks = []; FM._fxPreview = null; };
 
   // Order mirrors Alight Motion's property menu (Color & Fill leads, Move & Transform 4th, Effects last).
   const CATEGORIES = [
@@ -5871,7 +5881,7 @@ window.FM = window.FM || {};
       // the one at the top of the Add Effect browser. It leads the panel so the answer to "where did
       // Audio Effects go" is the first thing on screen.
       const tab = fxTabFor(layer);
-      body.appendChild(fxModeToggle(layer, tab, k => { fxTab = k; FM._fxEasing = null; FM.inspector.refresh(); }));
+      body.appendChild(fxModeToggle(layer, tab, k => { clearFilterPreview(); fxTab = k; FM._fxEasing = null; FM.inspector.refresh(); }));   // queue 729
       // An unknown audio answer rendered as available; settle it and demote the toggle if it's a no.
       probeAudioSide(layer, id => { const cur = FM.selectedLayer(FM.scene); if (cur && cur.id === id && view === 'effects') FM.inspector.refresh(); });
       if (tab === 'filters') {
@@ -6319,7 +6329,7 @@ window.FM = window.FM || {};
     // 'audiofx' is no longer a view of its own (queue 45) — it is the Effects card's audio TAB. The
     // key is still accepted because it is what the Volume panel's "Audio effects…" button and the
     // audio browser ask for, and because a project/session could have persisted it.
-    openCategory(key) { _fltPicks = [];   // leaving the filters view drops an uncommitted selection, the same way the effects browser's close() clears its own (queue 464)
+    openCategory(key) { clearFilterPreview();   // queue 729: leaving the filters view drops an uncommitted selection AND its preview, the same way the effects browser's close() clears its own (queue 464)
       if (key === 'audiofx') { fxTab = 'audio'; key = 'effects'; } else if (key === 'filters') { fxTab = 'filters'; key = 'effects'; } else if (key === 'effects') { fxTab = 'visual'; } const layer = FM.selectedLayer(FM.scene); view = viewAllowed(layer, key) ? key : 'home'; kfNavSync(); FM._mtAxis = 'xy'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._opaEasing = null; FM._fxEasing = null; FM._cropEasing = false; this.refresh();
       /* The canvas overlay has to be told (queue 205). Opening a section that owns the canvas changes
          whether the selection box should be showing, and nothing else was going to ask — the overlay
@@ -6350,6 +6360,7 @@ window.FM = window.FM || {};
     back() {
       const layer = FM.selectedLayer(FM.scene);
       if (!layer) return false;
+      clearFilterPreview();   // queue 729: any way out of the filters view drops its preview
       /* ⚠️ `_opaEasing` BELONGS IN THIS GUARD, not just in the body below (queue 557). The body has
          always cleared all six; the CONDITION listed five. The opacity curve is the only one of them
          gated on its flag ALONE rather than on a `view`, so with just that editor open this test failed
@@ -6415,7 +6426,7 @@ window.FM = window.FM || {};
         return;
       }
       if (title) title.textContent = 'Inspector';
-      if (layer.id !== lastLayerId) { view = 'home'; lastLayerId = layer.id; kfClearSel(); FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._opaEasing = null; FM._fxEasing = null; FM._cropEasing = false; FM._camTab = 'view'; fxTab = 'visual'; }
+      if (layer.id !== lastLayerId) { view = 'home'; clearFilterPreview(); lastLayerId = layer.id; kfClearSel(); FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._opaEasing = null; FM._fxEasing = null; FM._cropEasing = false; FM._camTab = 'view'; fxTab = 'visual'; }
       if (view !== 'home' && !viewAllowed(layer, view)) { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._opaEasing = null; FM._fxEasing = null; FM._cropEasing = false; FM._camTab = 'view'; }   // a category that doesn't apply to this layer (e.g. after a media replace) → drop to the grid
       // Every numbered category is a SINGLE-layer editor — it builds from the primary layer and writes
       // to it alone. Left open while a second clip is selected it silently edits one of them, so
@@ -6531,7 +6542,7 @@ window.FM = window.FM || {};
         const cat = CATEGORIES.find(c => c.key === view);
         const backLabel = (view === 'element') ? elementLabel(layer) : (cat ? cat.label : 'Back');
         const back = el('button', 'cat-back', '‹  ' + backLabel);
-        back.addEventListener('click', () => { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._opaEasing = null; FM._fxEasing = null; FM._cropEasing = false; FM.inspector.refresh(); });
+        back.addEventListener('click', () => { view = 'home'; clearFilterPreview(); FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._opaEasing = null; FM._fxEasing = null; FM._cropEasing = false; FM.inspector.refresh(); });
         // AM shows the crop controls (aspect lock + size origin) at the top-RIGHT of the Edit Shape
         // header — put them on the header row for media so they sit far right, not buried in the body.
         if (view === 'element' && (layer.type === 'video' || layer.type === 'image') && FM._inspectorCropToggles) {
