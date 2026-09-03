@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.24
+> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.25
 >
-> **State:** v15.24, 1194 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
+> **State:** v15.25, 1195 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
 > **Four pictures are in the chat waiting for one letter each** (nothing visual ships before you pick): **#642** the home background A–D · **#763** the skip-button gap (6/12/18) and the play button A–D · **#765** the split/jump buttons' look 1–3 · and **#760's people shapes** come next, drawn the same way. Everything else waiting on you is a paste or a letter, listed by `tools/next.sh` under its own heading so it cannot hide: #425 A/B · #454 A/B/C · #482 a category · #484 A/B/C · #539 A/B/C · #544 which things · #564 A/B/C · #570 smooth/stepped/leave · #624 a/b/c · #654 A/B/C · #406 which menu · #674 (b)/(c) · #95/#96/#663 the **Your last playback** paste · #215/#604/#677 the **Your last export** paste · #129 the **clip with no picture** paste · the oldest lag item, a **Measure** report · #657 a sample while scrubbing · #676/#706 what "twice" looks like · #712 whether Back from a category stalls · #592 a screenshot.
 > **Next, in order, each already built and proved, shipping one by one:** #508 (a frame-time report of the project-open slide from your phone), #553 (coming back to the app half-drawn), #606, #674 (clip names over filmstrips), #688 (one intro film, dark mode lands on dark), #706 (the add sheet's one motion), #715 (PC sliders glide), #716 (the cursor glow box), #717 (copy/paste button lit), #762 (tap again closes), #764 (dragged add row on top); then #760, #765, #768 and the audit findings.
 
@@ -28351,7 +28351,7 @@ re-opened #480, which I had marked done and had not fixed.
       - Fix: remove wiggle/drift/orbit from CFX_NO_BBOX (8867's own trailing note did this for `tiles`), or pass null instead of the placeholder. Perf only; pixels unchanged.
         ✅ **v15.24 — wiggle, drift and orbit get a real bbox from the fast alpha scan instead of the full-frame placeholder, so their `near` tests mean something.** With the placeholder every frame paid for a second full plate; a mid-frame wiggling shape now renders one plate, one on the edge still expands (the control). Perf only, pixels unchanged. Mutation (wiggle back in the list) caught.
 
-- [ ] **731 — js/scene.js:1023, 1057 — resize scales every layer's z but not the camera's focus/fog planes** (hunt MEDIUM #14)
+- [x] **731 — js/scene.js:1023, 1057 — resize scales every layer's z but not the camera's focus/fog planes** (hunt MEDIUM #14) ✅ DONE v15.25.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
@@ -28360,6 +28360,7 @@ re-opened #480, which I had marked done and had not fixed.
       - Claim: "Only three kinds of value live in absolute PROJECT pixels."
       - Actual: `each(L.transform,'z', v => v*k)`; nothing touches focus.distance/dof or fog.near/far (compositor.js:14072, 14082 compare z against them). grep for focus/fog in scene.js: none.
       - Fix: map the four camera fields by k; add to the header's list.
+        ✅ **v15.25 — a resize maps the camera's focus distance, DOF width and fog near / far by the same factor as every layer's z.** They are measured against z in the compositor and were the only project-pixel values the resize skipped, so focus and fog landed on the wrong layers afterwards; blur strength stays. Test doubles the project on a camera with a keyframed fog far; mutation (distance unscaled) caught.
 
 - [ ] **732 — js/storage.js:2105 — elements.insert has no camera filter** (hunt MEDIUM #15)
       **STATUS: 🟢 READY — nothing is stopping this**

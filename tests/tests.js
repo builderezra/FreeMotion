@@ -54097,6 +54097,26 @@
     if (edge < 1) throw new Error('control: a wiggling shape ON the left edge rendered no expanded plate — the plate path is broken, so the first assertion proves nothing');
   });
 
+  /* ═══ 731 (hunt MEDIUM #14): A RESIZE SCALES THE CAMERA'S FOCUS AND FOG PLANES WITH EVERY LAYER'S Z. Doubling the
+     project: focus distance 500 → 1000, DOF width 100 → 200, fog 200/1200 → 400/2400; a layer's z 300 → 600 is the
+     control that z was already scaled; the focus BLUR strength stays 8 (not a distance). */
+  test('731: resizing the project scales the camera\'s focus distance, DOF width and fog planes like every layer\'s z', { item: '731' }, async function () {
+    if (!FM.rescaleProjectContents) throw new Error('FM.rescaleProjectContents missing');
+    const cam = FM.makeLayer('camera', { name: 'cam731', x: 540, y: 960 });
+    cam.focus = { enabled: true, distance: 500, dof: 100, blur: 8 };
+    cam.fog = { enabled: true, near: 200, far: { kf: [{ t: 0, v: 1200, e: 'linear' }, { t: 2, v: 1600, e: 'linear' }] }, color: '#ffffff' };
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 540, y: 960, shapeW: 100, shapeH: 100, fill: '#fff' });
+    L.transform.z = 300;
+    FM.rescaleProjectContents([cam, L], 1080, 1920, 2160, 3840);
+    const near = (a, b) => Math.abs(a - b) < 1e-6;
+    if (!near(L.transform.z, 600)) throw new Error('control: the layer z was not doubled (' + L.transform.z + ')');
+    if (!near(cam.focus.distance, 1000)) throw new Error('focus distance was not scaled with the project: ' + cam.focus.distance + ' (the focus now lands on the wrong layers)');
+    if (!near(cam.focus.dof, 200)) throw new Error('DOF width was not scaled: ' + cam.focus.dof);
+    if (!near(cam.fog.near, 400)) throw new Error('fog near was not scaled: ' + cam.fog.near);
+    if (!cam.fog.far.kf || !near(cam.fog.far.kf[0].v, 2400) || !near(cam.fog.far.kf[1].v, 3200)) throw new Error('an animated fog far was not scaled at every key: ' + JSON.stringify(cam.fog.far));
+    if (!near(cam.focus.blur, 8)) throw new Error('control: focus blur is a strength, not a distance, and was changed to ' + cam.focus.blur);
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

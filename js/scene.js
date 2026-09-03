@@ -1003,7 +1003,7 @@ window.FM = window.FM || {};
    *
    * WHAT MOVES, AND WHY THE LIST IS SHORT. Almost nothing needs touching, because almost everything is
    * expressed INSIDE a layer's own transform and therefore follows its scale for free — a shape's
-   * width, a font size, a stroke, the legacy vector mask, a repeater's offsets. Only three kinds of
+   * width, a font size, a stroke, the legacy vector mask, a repeater's offsets. Only four kinds of
    * value live in absolute PROJECT pixels and so have to be mapped by hand:
    *   1. A ROOT layer's position and scale. Root only: applyParentChain translates and scales by each
    *      parent before the child's own transform, so a child's numbers are already parent-local, and
@@ -1014,6 +1014,9 @@ window.FM = window.FM || {};
    *   3. Drop-shadow blur and offset. ctx.shadowBlur is device pixels on the target by specification;
    *      the current transform does not touch it, which is the same rule the compositor's "uncapped
    *      companion" note is about. So a shadow does NOT follow its layer's scale and has to be mapped.
+   *   4. A camera's focus distance, DOF width and fog near / far (queue 731). They are the planes every layer's
+   *      z is measured against in the compositor, so they scale with z or the focus and the fog land on the
+   *      wrong layers after a resize. Blur strength and fog colour are not distances and stay.
    * Effect parameters measured in pixels are mapped too, from the registry's own `unit: 'px'` rather
    * than a hand-written list, and clamped back into each parameter's declared range.
    *
@@ -1056,6 +1059,13 @@ window.FM = window.FM || {};
         each(L.transform, 'y', mapY);
         each(L.transform, 'z', v => v * k);
         each(L.transform, 'scale', v => v * k);
+        /* THE CAMERA'S PLANES ARE PROJECT PIXELS TOO (queue 731, hunt MEDIUM #14): focus distance and depth-of-field
+           width, fog near and far. Every layer's z was scaled and the planes it is measured against were not, so after
+           a resize the focus and the fog landed on the wrong layers. Blur strength and colour are not distances. */
+        if (L.type === 'camera') {
+          if (L.focus) { each(L.focus, 'distance', v => v * k); each(L.focus, 'dof', v => v * k); }
+          if (L.fog) { each(L.fog, 'near', v => v * k); each(L.fog, 'far', v => v * k); }
+        }
         stat.layers++;
       }
       // Pen masks are canvas-space for EVERY layer, parented or not.
