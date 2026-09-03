@@ -2130,7 +2130,9 @@ window.FM = window.FM || {};
     const areg = FM.audioFxRegistry.get(fx.type);
     const items = [
       { label: 'Reset', action: () => { const inst = FM.audioFxRegistry.makeInstance(fx.type); if (inst) { fx.params = inst.params; afterAudioFx(); } } },
-      { label: 'Duplicate', action: () => { const inst = FM.audioFxRegistry.makeInstance(fx.type); if (inst) { layer.audioFx.splice(idx + 1, 0, inst); afterAudioFx(); } } },
+      // Duplicate carries the CURRENT settings + keyframes, as the visual stack's does (queue 727, hunt HIGH #10): a
+      // fresh default instance is a Reset wearing Duplicate's label — a tuned reverb came back stock, keyframes gone.
+      { label: 'Duplicate', action: () => { const copy = JSON.parse(JSON.stringify(fx, FM.jsonReplacer)); layer.audioFx.splice(idx + 1, 0, copy); afterAudioFx(); } },
     ];
     // Same favourite affordance as the visual effects' ⋯ menu — audio effects live in their own
     // browser with its own ★ and its own fav list, so this toggles that one. (#62)

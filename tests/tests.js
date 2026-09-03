@@ -53918,6 +53918,39 @@
     }
   });
 
+  /* ═══ 727 (hunt HIGH #10): AUDIO "DUPLICATE" DUPLICATES. It made a fresh default instance — identical to Reset —
+     so a tuned, keyframed reverb duplicated as a stock one. Through the real ⋯ menu on a real audio row: the copy
+     carries the keyframes and is its own object, not a reference to the original. */
+  test('727: Duplicate on an audio effect copies its current settings and keyframes, not the defaults', { item: '727' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const L = FM.makeLayer('video', { name: 'v727', x: 100, y: 100, start: 0, duration: 4 });
+      L.audioFx = [{ type: 'gain', enabled: true, params: { gain: { kf: [{ t: 0, v: 2, e: 'linear' }, { t: 1, v: 0.5, e: 'linear' }] } }, _expanded: true }];   // open: the ⋯ menu lives on the open row
+      FM.scene = scene([L]); FM.selectLayer(L.id); FM.refreshAll();
+      FM.inspector.openCategory('effects'); if (FM.inspector.openFxTab) FM.inspector.openFxTab('audio'); FM.inspector.refresh(); await sleep(200);
+      const more = [...document.querySelectorAll('#inspector-panel .fx-icon-btn, .fx-icon-btn')].find(b => b.textContent === '⋯');
+      if (!more) throw new Error('setup: no ⋯ button on the audio effect row — is the Audio tab up for a video layer?');
+      more.click(); await sleep(120);
+      const item = [...document.querySelectorAll('#ctx-menu .ctx-item, #ctx-menu button, #ctx-menu [role=menuitem]')].find(r => /^Duplicate$/.test(r.textContent.trim()));
+      if (!item) throw new Error('setup: the ⋯ menu has no Duplicate row');
+      item.click(); await sleep(120);
+      if (L.audioFx.length !== 2) throw new Error('Duplicate did not add a second effect (' + L.audioFx.length + ')');
+      const d = L.audioFx[1];
+      if (d === L.audioFx[0] || d.params === L.audioFx[0].params) throw new Error('the duplicate is a reference to the original, not a copy');
+      const g = d.params && d.params.gain;
+      if (!g || !Array.isArray(g.kf) || g.kf.length !== 2 || g.kf[1].v !== 0.5) throw new Error('the duplicate lost the tuned, keyframed gain — it is a fresh default (Reset wearing Duplicate\'s label): ' + JSON.stringify(d.params));
+    } finally {
+      try { if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel
