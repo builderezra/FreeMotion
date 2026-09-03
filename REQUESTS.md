@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.07
+> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.08
 >
-> **State:** v15.07, 1172 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
+> **State:** v15.08, 1174 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
 > **Four pictures are in the chat waiting for one letter each** (nothing visual ships before you pick): **#642** the home background A–D · **#763** the skip-button gap (6/12/18) and the play button A–D · **#765** the split/jump buttons' look 1–3 · and **#760's people shapes** come next, drawn the same way. Everything else waiting on you is a paste or a letter, listed by `tools/next.sh` under its own heading so it cannot hide: #425 A/B · #454 A/B/C · #482 a category · #484 A/B/C · #539 A/B/C · #544 which things · #564 A/B/C · #570 smooth/stepped/leave · #624 a/b/c · #654 A/B/C · #406 which menu · #674 (b)/(c) · #95/#96/#663 the **Your last playback** paste · #215/#604/#677 the **Your last export** paste · #129 the **clip with no picture** paste · the oldest lag item, a **Measure** report · #657 a sample while scrubbing · #676/#706 what "twice" looks like · #712 whether Back from a category stalls · #592 a screenshot.
 > **Next, in order, each already built and proved, shipping one by one:** #508 (a frame-time report of the project-open slide from your phone), #553 (coming back to the app half-drawn), #606, #674 (clip names over filmstrips), #688 (one intro film, dark mode lands on dark), #706 (the add sheet's one motion), #715 (PC sliders glide), #716 (the cursor glow box), #717 (copy/paste button lit), #762 (tap again closes), #764 (dragged add row on top); then #760, #765, #768 and the audit findings.
 
@@ -26736,6 +26736,7 @@ re-opened #480, which I had marked done and had not fixed.
       describing what "twice" looks like.** Recorded rather than silently reordered — he asked for the
       drag work (#678) directly, and that is what was done in the same release.
         ⏸ **2 Sep — BUILT OUT UNTIL HE describes what "twice" looks like** (does the sheet slide up, close, and slide up again — or does it open and a second copy land on top?). The two candidates need different fixes; #706 (2 Sep, "the add layer on mobile still has the glitch that opens up twice now") is the same report and carries the same ask. Re-checked today for strict oldest-first: this line is what is left.
+        ✅ **v15.08 — the one cheap, safe change is shipped, as an experiment (measured under #706, the same report):** the sheet's base rule transitioned `transform` and `.open` animated it with the hinge keyframe — two motions on one property, which Chrome resolves to one (before and after: one open, one render) and iOS Safari is known to replay. The transition is now off while the keyframe owns the property, and back under reduced motion. Cannot be reproduced here. **If the sheet still opens twice on the phone after v15.08, this was not it,** and the line above is still the one that splits the two remaining candidates.
 
 - [ ] **677 — 🔴 STILL NO AUDIO IN AN EXPORT — and this time the whole soundtrack was TWO SOUND
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
@@ -27035,7 +27036,7 @@ re-opened #480, which I had marked done and had not fixed.
       harmless precisely because the blur would have done nothing anyway. Had I shipped on the strength
       of the source reading alone, the fix would have been inert and would have looked done.
 
-- [ ] **688 — Light/dark preference is forgotten on reload, and the old loading animation should go.
+- [x] **688 — Light/dark preference is forgotten on reload, and the old loading animation should go.
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       ✅ **HE ANSWERED, 1 Sep: "It has colour in it."** So inverting the film for dark mode is out — it
       would mangle the logo's colours. **The plan is therefore: keep the film exactly as it is and fade
@@ -27061,8 +27062,8 @@ re-opened #480, which I had marked done and had not fixed.
              default on every launch. One word. The splash reads the same key straight from
              localStorage before settings.js exists, so it honoured the choice and settings.js then
              overrode it — the dark intro then light home was the two halves disagreeing.
-      2. [ ] **Get rid of the OLD loading screen animation.**
-      3. [ ] **Dark mode gets the SAME loading transition light mode has** — not its own separate
+      2. [x] **Get rid of the OLD loading screen animation.** ✅ v15.08
+      3. [x] **Dark mode gets the SAME loading transition light mode has** ✅ v15.08 — not its own separate
              animation — *"it just transitions into dark the dark background… a black transition."*
       ## ⚠️ REPRODUCED AND FOUND — clause 1 is a ONE-WORD bug, and my first diagnosis below was WRONG.
       Measured in the browser: set the preference to dark, and `localStorage['fm.settings']` correctly
@@ -27108,6 +27109,7 @@ re-opened #480, which I had marked done and had not fixed.
       the LIGHT loading screen, which is the opposite. `homeLight` also selects the intro ("the new
       intro" is in the setting's own description), so the intro may read the preference by a different
       route or at a different moment. Check the splash/intro path before assuming one fix covers both.
+        ✅ **v15.08 — ALL THREE CLAUSES DONE.** One film for both looks (`splash-v2.mp4`); `splash.mp4` and its poster path are gone from the boot script. Under the dark look the film dims into the splash's black over 0.4s starting 1.05s from its end — measured, not guessed: the frame is 80 at 1.0s, 131 at 1.1s and solid white from 1.2s of 2.05s, so the dim begins with the bloom's first frame — and the splash then dissolves into the dark page as it always has. Same motion, lands on dark, no white flash. His answer of 1 Sep (the logo has colour) is why it fades rather than inverts. Test `688:` reads index.html as shipped and asks the live stylesheet whether the dark ending actually dims the film and leaves the light look alone.
 
 - [x] **689 — Bug hunt (31 Aug, queue drained): Paste look silently drops three properties it says it
       pastes.**  ✅ v14.66 Found by Claude, not reported — he said *"if ur running out of things to do go find
@@ -27914,6 +27916,7 @@ re-opened #480, which I had marked done and had not fixed.
       carries a `transform` transition is exactly the combination Safari is known to re-run at the
       animation's end. The cheap, low-risk experiment is `#add-sheet.open { transition: none }` while the
       hinge is active — it changes nothing in Chrome and removes the only second motion in the CSS.
+        ✅ **v15.08 — THE ONE CHEAP, SAFE CHANGE IS SHIPPED, said plainly as an experiment.** The sheet's base rule transitions `transform` and `.open` animates it with the hinge keyframe — two motions on one property; Chrome resolves them to one (measured, before and after) and iOS Safari is known to replay exactly that pair, which is a sheet that arrives twice. The transition is now off while the keyframe owns the property (and back under reduced motion, where there is no keyframe). Test pins both halves. **BUILT OUT UNTIL HE says whether the add menu still opens twice on his phone at v15.08** — if it does, the remaining candidate is two gestures being seen, and that needs his description of what "twice" looks like (#676 carries the same ask).
 
 - [x] **707 — PHONE (real touch): a trim from a grip lands SECONDS from where the finger is.** Found 2 Sep
       while finishing #699, with trusted CDP touch (`Input.dispatchTouchEvent`) at 380px — NOT the synthetic

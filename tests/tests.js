@@ -47968,11 +47968,12 @@
     const src = await (await fetch('index.html?t=' + Date.now())).text();
     const m = src.match(/if\s*\(pos\)\s*\{[^}]*\}/);
     if (!m) throw new Error('the poster branch is gone from index.html — cannot tell what the intro does with #splash-poster');
-    if (!/LIGHT[^}]*pos\.remove\(\)/.test(m[0]))
-      throw new Error('the light look no longer REMOVES #splash-poster: ' + m[0].slice(0, 140) +
+    if (!/pos\.remove\(\)/.test(m[0]))
+      throw new Error('the intro no longer REMOVES #splash-poster: ' + m[0].slice(0, 140) +
         ' — an empty <img> the size of the viewport is exactly the "weird white box" he reported');
-    if (!/pos\.src\s*=/.test(m[0]))
-      throw new Error('the dark look no longer gives the poster a src, so it would render as the same placeholder box one theme over');
+    // queue 688 clause 2: the old dark film and its poster are gone — BOTH looks remove the element, none gives it a src
+    if (/pos\.src\s*=/.test(m[0]))
+      throw new Error('the poster is being given a src again — the old dark intro is back (queue 688 clause 2 removed it)');
   });
 
   /* ═══ QUEUE 635 — SLIDERS THAT JUMP TOO FAR, TOO FAST ═════════════════════════════════════════
@@ -53262,6 +53263,64 @@
       if (hadHome && FM.home && FM.home.open) FM.home.open();
       await sleep(60);
     }
+  });
+
+  /* ═══ 688 clauses 2 + 3 (v15.07): ONE INTRO FILM, AND DARK MODE LANDS ON DARK.
+     The boot script runs once per session before any of this exists, so — as #642's guard does — the
+     first half reads index.html AS SHIPPED, and the second half asks the LIVE stylesheet whether the dark
+     ending actually dims the film (a class name in the source proves nothing if the rule is missing). */
+  test('688: the old intro film is gone and the dark look dims the new film into black', { item: '688' }, async function () {
+    const src = await fetch('index.html', { cache: 'no-store' }).then(r => r.text());
+    const boot = src.slice(src.indexOf('splash-vid'), src.indexOf('<div id="app">'));
+    if (/splash\.mp4\?/.test(boot)) throw new Error('index.html still plays splash.mp4 — the OLD loading animation he asked to get rid of');
+    if (/splash-poster\.png/.test(boot)) throw new Error('index.html still sets the old poster on the dark path');
+    if (!/splash-v2\.mp4/.test(boot)) throw new Error('the new film is not referenced at all');
+    if (!/splash-dark/.test(boot) || !/splash-dim/.test(boot)) throw new Error('the dark ending is not wired in the boot script (no splash-dark / splash-dim)');
+    if (!/!LIGHT[^\n]*splash-dim/.test(boot)) throw new Error('the dim is not gated on the DARK look — the light look would dim its film into a white page');
+    // the live stylesheet: a dark splash whose film has reached its last stretch must be dimmed to nothing
+    const sp = document.createElement('div'); sp.id = 'splash'; sp.className = 'splash-light splash-dark';
+    const v = document.createElement('video'); v.id = 'splash-vid'; v.className = 'playing splash-dim';
+    v.style.transition = 'none';   // the reads below are synchronous; the film's own .2s/.4s fades would report the START of each fade, not its end
+    sp.appendChild(v); document.body.appendChild(sp);
+    try {
+      const op = getComputedStyle(v).opacity;
+      if (op !== '0') throw new Error('a dimmed film under the dark look computes opacity ' + op + ', not 0 — the white ending would still flash');
+      v.className = 'playing';
+      if (getComputedStyle(v).opacity !== '1') throw new Error('the film is not fully visible before its ending');
+      sp.className = 'splash-light'; v.className = 'playing splash-dim';
+      if (getComputedStyle(v).opacity !== '1') throw new Error('the dim applies under the LIGHT look too — that look ramps its ground to white and must keep the film');
+    } finally { sp.remove(); }
+  });
+
+  /* ═══ 706 / 676 (v15.08): THE ADD SHEET ARRIVES ONCE. The sheet's base rule transitions `transform`
+     and `.open` animates it with a hinge keyframe — two motions on one property, which Chrome resolves to
+     one and iOS Safari is known to replay. Cannot be reproduced in Chrome (measured: one motion before and
+     after), so this pins the CSS fact that removes the second motion, both ways: open = keyframe and NO
+     transition; closed = the slide transition still there for the way down. Phone width, where the
+     sheet and the hinge exist. */
+  test('706: the add sheet opens with one motion — the hinge owns transform and the slide transition is off while it does', { item: '706' }, async function () {
+    const sheet = document.getElementById('add-sheet');
+    if (!sheet) throw new Error('#add-sheet missing');
+    await atPhoneWidth(async function () {
+      const was = sheet.classList.contains('open');
+      try {
+        sheet.classList.remove('open');
+        const closed = getComputedStyle(sheet);
+        if (!/transform/.test(closed.transitionProperty) || parseFloat(closed.transitionDuration) <= 0) throw new Error('the closed sheet lost its slide transition (' + closed.transitionProperty + ' ' + closed.transitionDuration + ') — the way DOWN would snap');
+        sheet.classList.add('open');
+        const open = getComputedStyle(sheet);
+        if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          if (open.animationName !== 'none') throw new Error('reduced motion still hinges');
+          return;
+        }
+        if (open.animationName !== 'fm-hinge-up') throw new Error('the open sheet is not hinging (animation-name ' + open.animationName + ')');
+        if (parseFloat(open.transitionDuration) !== 0 && /transform|all/.test(open.transitionProperty)) {
+          throw new Error('the open sheet still carries a transform transition (' + open.transitionProperty + ' ' + open.transitionDuration + ') under the hinge keyframe — two motions on one property, the pair Safari replays: the sheet that "opens twice"');
+        }
+      } finally {
+        if (was) sheet.classList.add('open'); else sheet.classList.remove('open');
+      }
+    });
   });
 
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.

@@ -1928,6 +1928,11 @@ html.splash-on, html.splash-on body { background: #000; }
 }
 #splash-vid { opacity: 0; transition: opacity .2s linear; pointer-events: none; }
 #splash-vid.playing { opacity: 1; }
+/* DARK MODE'S ENDING (queue 688 clause 3): the film dims into the splash's black over 0.4s from the
+   first frame of its white bloom (index.html adds the class 1.05s from the end — measured, the frame is
+   solid white from 1.2s of 2.05s), and the splash then dissolves into the dark page as it always has.
+   Scoped to `.splash-dark` so the light look, whose ground ramps to white, is untouched. */
+#splash.splash-dark #splash-vid.playing.splash-dim { opacity: 0; transition: opacity .4s ease-in; }
 #splash-vid.playing + #splash-poster { opacity: 0; }
 #splash-poster { opacity: 1; transition: opacity .2s linear; pointer-events: none; }
 #splash-skip {
@@ -8762,7 +8767,16 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
   /* THE BOTTOM SHEET. It already slid up on a flat `transition: transform .22s ease` — the thing he
      called "missing something". The slide is replaced by the swing rather than layered on top of it,
      because a sheet that translates AND hinges reads as two animations disagreeing. */
-  #add-sheet.open { animation: fm-hinge-up 360ms cubic-bezier(.18, .85, .28, 1.02) both; transform-origin: 50% 100%; }
+  /* ⚠️ ONE MOTION, NOT TWO (queue 676 / 706). Ezra, twice: the add menu "opens twice". The base rule
+     above this block carries `transition: transform .22s ease` for the slide, and `.open` here owns
+     `transform` through the keyframe for 360ms with `fill: both` — so adding the class starts BOTH: a
+     transition from translateY(100%) to 0 underneath a keyframe that also ends at translateY(0). Chrome
+     lets the running animation win for its whole length and the transition is never seen. iOS Safari is
+     known to re-run exactly this pair — perspective()+rotateX() keyframe over a transitioning
+     `transform` on a position:fixed sheet — at the animation's end, which is a sheet that arrives, and
+     then arrives again. Measured here: one motion in Chrome before and after. The transition is switched
+     off while the keyframe owns the property; the close (class removed) still slides on the base rule. */
+  #add-sheet.open { animation: fm-hinge-up 360ms cubic-bezier(.18, .85, .28, 1.02) both; transform-origin: 50% 100%; transition: none; }
   @keyframes fm-hinge-up {
     from { opacity: 0; transform: perspective(1400px) translateY(100%) rotateX(-58deg); }
     55%  { opacity: 1; }
@@ -8782,6 +8796,7 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
    so it is the last thing that should ignore it. */
 @media (prefers-reduced-motion: reduce) {
   #ctx-menu.ctx-hinge, #add-sheet.open, #fx-browser.fxb-sheet { animation: none; }
+  #add-sheet.open { transition: transform .22s ease; }   /* no keyframe here, so the plain slide is the one motion (queue 706) */
 }
 
 /* ===== A PROJECT CARD COMES FORWARD UNDER THE CURSOR (queue 650, v14.32) =========================
