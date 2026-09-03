@@ -1635,7 +1635,14 @@ window.FM = window.FM || {};
      * it — so the honest answer is a fixed light ink to match that ground, not a measurement of a
      * colour the text is not sitting on. #674 already records this ink-choice as the only measured
      * contrast failure in the editor (1.10:1); this stops the gradient making a known problem worse. */
-    const ink = stops ? INK_LIGHT : labelInkFor(col);
+    /* …AND OVER A FILMSTRIP THE INK IS NEVER CHOSEN FROM THE BAR COLOUR (queue 674). A video or image clip's
+       label sits on its FRAMES, not on the bar: the bar colour only shows at the ends. labelInkFor(col) picked
+       a dark ink for a light bar and drew it over dark frames — the QA pass measured that at 1.10:1, the one
+       contrast failure in the editor — while `.clip-label`'s own rule (white with a shadow) was written for
+       exactly this ground and was being overridden by the very line below. Tinted ink stays for solid bars. */
+    let ink = stops ? INK_LIGHT : labelInkFor(col);   // (test 679 pins this exact expression: a gradient never measures one colour)
+    const onPicture = (layer.type === 'video' || layer.type === 'image') && !layer.audioOnly;
+    if (onPicture) ink = INK_LIGHT;   // queue 674: over frames, always the white-on-shadow the CSS rule was written for
     clabel.style.color = ink.color;
     clabel.style.textShadow = ink.shadow;
     clip.appendChild(clabel);

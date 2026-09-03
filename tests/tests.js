@@ -53229,6 +53229,41 @@
     }
   });
 
+  /* ═══ 674 (the ink half): a clip that shows FRAMES keeps the white label, whatever colour its bar is.
+     The QA pass measured 1.10:1 on a clip name — tinted ink chosen for a light bar, drawn over dark frames.
+     Two-way: an IMAGE clip with a light bar must be inked white; a SHAPE clip with the same light bar must
+     still be inked dark (the tint is the point on a solid bar). */
+  test('674: a clip name over a filmstrip is white, a clip name on a solid light bar is dark', { item: '674' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    let I = null;
+    try {
+      if (hadHome) FM.home.close();
+      I = FM.makeLayer('image', { name: 'pic674', x: 100, y: 100, start: 0, duration: 3 });
+      I.clipColorSet = true; I.clipColor = '#f2f2f2';
+      const S = FM.makeLayer('shape', { name: 'bar674', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f2f2f2', start: 0, duration: 3 });
+      S.clipColorSet = true; S.clipColor = '#f2f2f2';
+      const img = document.createElement('img');
+      FM.media.set(I.id, { kind: 'image', el: img, width: 2, height: 2, file: new File([new Uint8Array(8)], 'x.png', { type: 'image/png' }) });
+      FM.scene = scene([I, S]); FM.selectLayer(null); FM.refreshAll(); await sleep(250);
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild(); await sleep(150);
+      const labelOf = (name) => [...document.querySelectorAll('#timeline .clip .clip-label')].find(l => l.textContent === name);
+      const li = labelOf('pic674'), ls = labelOf('bar674');
+      if (!li || !ls) throw new Error('setup: clip labels not found (' + !!li + '/' + !!ls + ')');
+      const lum = (rgb) => { const m = /(\d+),\s*(\d+),\s*(\d+)/.exec(rgb); return m ? (0.2126 * m[1] + 0.7152 * m[2] + 0.0722 * m[3]) / 255 : -1; };
+      const Li = lum(getComputedStyle(li).color), Ls = lum(getComputedStyle(ls).color);
+      if (Li < 0.9) throw new Error('the image clip\'s name is inked ' + getComputedStyle(li).color + ' over its frames — chosen from the bar colour, the 1.10:1 the QA pass measured');
+      if (Ls > 0.5) throw new Error('the shape clip on a light bar is inked ' + getComputedStyle(ls).color + ' — the tinted ink on a solid bar was lost (the control)');
+    } finally {
+      try { if (I && FM.media.delete) FM.media.delete(I.id); } catch (e) {}
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel
