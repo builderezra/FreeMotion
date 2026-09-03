@@ -53650,6 +53650,43 @@
     }
   });
 
+  /* ═══ 718 (hunt HIGH #1): AN ANIMATED DRAW-FROM SURVIVES THE TIMING SANITISER — AND SO SURVIVES UNDO.
+     trimStart is keyframable on an open path; sanitizeTiming coerced the {kf:[…]} to NaN → 0 with no guard, and
+     history.restore() runs it over every layer, so one undo of anything wiped the animation. Two-way through the
+     seam: a keyframed trimStart keeps its list, a broken PLAIN one is still repaired to 0 (the control). Then the
+     real thing: an unrelated edit, one undo, the keyframes are still there. */
+  test('718: an animated Draw-from (trimStart) survives the timing sanitiser and one undo of an unrelated edit', { item: '718' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.storage || !FM.storage._sanitizeTiming) throw new Error('FM.storage._sanitizeTiming seam missing');
+    const kf = () => ({ kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 1.5, e: 'linear' }] });
+    const intact = (v) => !!v && Array.isArray(v.kf) && v.kf.length === 2 && v.kf[1].v === 1.5;
+    const L = FM.makeLayer('shape', { name: 'p718', shape: 'rect', x: 10, y: 10, shapeW: 20, shapeH: 20, fill: '#ffffff', start: 0, duration: 4 });
+    L.trimStart = kf();
+    FM.storage._sanitizeTiming(L);
+    if (!intact(L.trimStart)) throw new Error('the sanitiser wiped an animated trimStart to ' + JSON.stringify(L.trimStart) + ' — the Draw-from animation is gone');
+    const P = FM.makeLayer('shape', { name: 'p718b', shape: 'rect', x: 10, y: 10, shapeW: 20, shapeH: 20, fill: '#ffffff', start: 0, duration: 4 });
+    P.trimStart = NaN;
+    FM.storage._sanitizeTiming(P);
+    if (P.trimStart !== 0) throw new Error('control: a broken PLAIN trimStart was not repaired to 0 (' + P.trimStart + ')');
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    try {
+      const A = FM.makeLayer('shape', { name: 'p718c', shape: 'rect', x: 10, y: 10, shapeW: 20, shapeH: 20, fill: '#ffffff', start: 0, duration: 4 });
+      A.trimStart = kf();
+      FM.scene = scene([A]); FM.selectLayer(A.id); FM.refreshAll();
+      FM.history.commit();
+      A.name = 'p718c-renamed'; FM.history.commit();   // an unrelated edit
+      FM.history.undo(); await sleep(80);
+      const A2 = FM.layerById(FM.scene, A.id);
+      if (!A2) throw new Error('setup: the layer did not survive the undo');
+      if (A2.name !== 'p718c') throw new Error('setup: the undo did not take (name is ' + A2.name + ')');
+      if (!intact(A2.trimStart)) throw new Error('one undo of an unrelated edit wiped the animated trimStart to ' + JSON.stringify(A2.trimStart) + ' — and the next autosave would write that to disk');
+    } finally {
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      await sleep(40);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

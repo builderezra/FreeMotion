@@ -939,8 +939,12 @@ window.FM = window.FM || {};
      * The protection that mattered is kept: still finite, still bounded, just bounded symmetrically. */
     l.start = num(l.start, -3600, 3600, 0);
     l.duration = num(l.duration, 0.05, 3600, 1);       // 0 would be a clip that cannot be selected or seen
-    if (l.trimStart != null) l.trimStart = num(l.trimStart, 0, 3600, 0);
-    // …and the two that may legitimately be animated: repair a broken plain value, never touch a keyframed one.
+    // …and the THREE that may legitimately be animated: repair a broken plain value, never touch a keyframed one.
+    /* trimStart joined them in queue 718 (hunt HIGH #1). It is keyframable on an open path — the Draw-from — and
+       this line had no guard: `+{kf:[…]}` is NaN, so the whole animation became a plain 0. history.restore() runs
+       this over every layer, so ONE UNDO OF ANYTHING left the drawing fully revealed, redo could not bring it back
+       (it sanitises identically) and the next autosave wrote the loss to disk. Queue 680, one line down. */
+    if (l.trimStart != null && !(FM.isAnimated && FM.isAnimated(l.trimStart))) l.trimStart = num(l.trimStart, 0, 3600, 0);
     if (l.speed != null && !(FM.isAnimated && FM.isAnimated(l.speed))) l.speed = num(l.speed, 0.05, 100, 1);
     if (l.volume != null && !(FM.isAnimated && FM.isAnimated(l.volume))) l.volume = num(l.volume, 0, 4, 1);
   }
