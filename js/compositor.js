@@ -1329,6 +1329,7 @@ window.FM = window.FM || {};
   // recompute when the source frame and params are unchanged (static images, paused/scrub
   // redraws, repeated renders of one frame). Stats exposed for verification.
   FM._chromaKey = function (src, w, h, keyHex, tol, filterStr, soft) { return chromaKey(src, w, h, keyHex, tol, filterStr, soft); };   // suite seam (queue 734)
+  FM._lumaKey = function (src, w, h, threshold, filterStr, soft, mode) { return lumaKey(src, w, h, threshold, filterStr, soft, mode); };   // suite seam (queue 735)
   FM._fxStats = { ckCompute: 0, lkCompute: 0, plates: 0 };   // plates: expanded plates rendered (queue 730 — the suite counts them)
   // Bumped whenever a reused offscreen canvas (grade/key/blend) is (re)computed, so srcToken varies for
   // it. Without this, a canvas's object identity is constant while its pixels change every frame, and any
@@ -1388,6 +1389,7 @@ window.FM = window.FM || {};
   function lumaKey(src, w, h, threshold, filterStr, soft, mode) {
     const tok = srcToken(src);
     soft = soft == null ? 28 : soft; mode = mode || 0;
+    if (soft <= 0) soft = 0.0001;   // a zero-wide ramp would divide by zero — normalised BEFORE the memo compare (queue 735: the stored 0.0001 never equalled an incoming 0, so Softness 0 recomputed every redraw)
     if (_lkLast && _lkCanvas && _lkLast.tok === tok && _lkLast.w === w && _lkLast.h === h && _lkLast.thr === threshold && _lkLast.filter === filterStr && _lkLast.soft === soft && _lkLast.mode === mode) return _lkCanvas;
     if (!_lkCanvas) _lkCanvas = document.createElement('canvas');
     const oc = _lkCanvas; oc.width = w; oc.height = h;
@@ -1404,7 +1406,6 @@ window.FM = window.FM || {};
     // a wide ramp to hand over gradually instead of terminating on a line. MODE was the bigger gap:
     // the key could only ever remove the DARK end, so a subject shot against WHITE could not be keyed
     // at all, however the threshold was set. Removing the bright end is the same ramp, mirrored.
-    if (soft <= 0) soft = 0.0001;                          // a zero-wide ramp would divide by zero
     for (let i = 0; i < d.length; i += 4) {
       const luma = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
       if (mode === 1) {

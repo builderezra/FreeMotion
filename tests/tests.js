@@ -54205,6 +54205,22 @@
     if (alphaAt(at5, 1) !== 0) throw new Error('control: at tolerance 0.5 the near-key pixel was not keyed (alpha ' + alphaAt(at5, 1) + ')');
   });
 
+  /* ═══ 735 (hunt MEDIUM #18): THE LUMA-KEY MEMO HITS AT SOFTNESS 0. The compare saw the raw 0, the store held the
+     normalised 0.0001, so a redraw at Softness 0 recomputed the whole pass every time. Same canvas, same args, twice:
+     one compute. Then a different softness: one more (the control that the memo still notices a change). */
+  test('735: a second luma-key pass at Softness 0 is a memo hit, and a changed softness is not', { item: '735' }, async function () {
+    if (!FM._lumaKey || !FM._fxStats) throw new Error('FM._lumaKey seam or FM._fxStats missing');
+    const src = document.createElement('canvas'); src.width = 4; src.height = 4;
+    const sc = src.getContext('2d'); sc.fillStyle = '#808080'; sc.fillRect(0, 0, 4, 4);
+    const n0 = FM._fxStats.lkCompute;
+    FM._lumaKey(src, 4, 4, 0.5, 'none', 0, 0);
+    FM._lumaKey(src, 4, 4, 0.5, 'none', 0, 0);
+    const two = FM._fxStats.lkCompute - n0;
+    if (two !== 1) throw new Error('two identical luma-key passes at Softness 0 computed ' + two + ' times — the memo never hits at 0 (compared raw 0 against a stored 0.0001)');
+    FM._lumaKey(src, 4, 4, 0.5, 'none', 10, 0);
+    if (FM._fxStats.lkCompute - n0 !== 2) throw new Error('control: a changed softness did not recompute (' + (FM._fxStats.lkCompute - n0) + ' computes in all)');
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel
