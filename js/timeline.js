@@ -3104,7 +3104,44 @@ window.FM = window.FM || {};
     scrollMomRAF = requestAnimationFrame(step);
   }
 
+  /* ═══ THE SCRUB FRAME PROBE (queue 768). Ezra: "Scrubbing when you have a layer selected mobile is jumpy
+   * and not smooth". Three probes here at 380px — nothing selected, a shape selected, Position/Scale open
+   * — all measured flat (worst 18ms, none over 33ms), so the stutter is on HIS device and depends on what
+   * the selection brings with it. The same answer as the open-project probe (queue 508): record every frame
+   * of a scrub on the device that runs it, together with what was selected and which panel was open, and
+   * put it behind Settings → Your last scrub → Copy. Nothing about the scrub itself changes. */
+  const scrubProbe = (function () {
+    let t = [], raf = 0, live = false, tailUntil = 0, meta = null;
+    function tick(now) { t.push(now); if (live || now < tailUntil) raf = requestAnimationFrame(tick); else { raf = 0; finish(); } }
+    function begin(info) { if (raf) cancelAnimationFrame(raf); t = []; live = true; tailUntil = 0; meta = info || {}; raf = requestAnimationFrame(tick); }
+    function settle() { if (!live) return; live = false; tailUntil = performance.now() + 250; }   // through the release fling
+    function cancel() { if (raf) cancelAnimationFrame(raf); raf = 0; live = false; t = []; }
+    function finish() {
+      if (t.length < 4) return;
+      const gaps = []; for (let i = 1; i < t.length; i++) gaps.push(t[i] - t[i - 1]);
+      const sorted = gaps.slice().sort((a, b) => a - b), med = sorted[Math.floor(sorted.length / 2)], worst = sorted[sorted.length - 1];
+      const long = []; gaps.forEach((g, i) => { if (g > 33) long.push(Math.round(t[i] - t[0]) + 'ms:' + Math.round(g)); });
+      const ver = (document.querySelector('.brand .ver') || {}).textContent || '';
+      const lines = [
+        'FreeMotion scrub report ' + new Date().toISOString().replace('T', ' ').slice(0, 19) + (ver ? ' ' + ver.trim() : ''),
+        'device      ' + innerWidth + 'x' + innerHeight + ' @' + (devicePixelRatio || 1) + 'x  ' + (navigator.userAgent || '').replace(/Mozilla\/5\.0 /, '').slice(0, 90),
+        'selection   ' + (meta.selected || 'none') + '   panel ' + (meta.panel || '?') + (meta.fx ? ' + effects browser' : ''),
+        'project     ' + (meta.layers == null ? '?' : meta.layers) + ' layers, ' + (meta.effects == null ? '?' : meta.effects) + ' effects on the selected layer',
+        'frames      ' + t.length + ' over ' + Math.round(t[t.length - 1] - t[0]) + 'ms of scrub (+250ms tail)',
+        'frame gap   median ' + med.toFixed(1) + 'ms, worst ' + worst.toFixed(1) + 'ms',
+        'long frames ' + long.length + ' over 33ms' + (long.length ? '  at ' + long.slice(0, 12).join(' ') + (long.length > 12 ? ' …' : '') : ''),
+        'verdict     ' + (worst <= 34 ? 'smooth here' : long.length <= 2 ? 'a couple of hitches' : 'jumpy: ' + long.length + ' long frames'),
+      ];
+      try { localStorage.setItem('fm.lastScrubReport', lines.join('\n')); } catch (e) {}
+    }
+    return { begin: begin, settle: settle, cancel: cancel, last: function () { try { return localStorage.getItem('fm.lastScrubReport') || ''; } catch (e) { return ''; } } };
+  })();
+  FM._scrubProbe = scrubProbe;   // seam: the suite drives a real scrub and reads the report back
   function beginScrub(e) {
+    (function () {
+      const sel = FM.scene && FM.scene.selectedId ? FM.layerById(FM.scene, FM.scene.selectedId) : null;
+      scrubProbe.begin({ selected: sel ? sel.type + (sel.effects && sel.effects.length ? ' with effects' : '') : 'none', panel: (FM.inspector && FM.inspector.currentView) ? FM.inspector.currentView() : '?', fx: !!(FM.fxBrowser && FM.fxBrowser.isOpen && FM.fxBrowser.isOpen()), layers: FM.scene && FM.scene.layers ? FM.scene.layers.length : null, effects: sel && sel.effects ? sel.effects.length : 0 });
+    })();
     stopMomentum();                                     // a fresh grab kills any in-flight glide
     stopScrollMomentum();                               // …the vertical one too (queue 415)
     dragging = true;
@@ -4191,6 +4228,7 @@ window.FM = window.FM || {};
           const fresh = (upT - (scrub.lastT || 0)) < 90;
           startMomentum(fresh ? (scrub.vTime || 0) : 0);
         }
+        if (scrub && scrub.axis === 'x' && scrub.moved) scrubProbe.settle(); else scrubProbe.cancel();   // queue 768: only a real horizontal scrub is a reading
         dragging = false; scrub = null;
         if (clipTap) {
           const ct = clipTap; clipTap = null;

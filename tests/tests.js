@@ -20328,6 +20328,81 @@
     }
   });
 
+  /* Queue 715 (v15.03). Ezra: "Make the sliders on pc glide when you let go like on mobile coz rn its
+   * tedious to aadjust. Also rn it does work but not always its kind finicky."
+   * Drives real PointerEvents at a real .fx-scrub, as the lock test above does, and asserts each half
+   * in BOTH directions so the fix cannot be faked by "always glide" or "never glide":
+   *  A  a mouse flick whose last two samples are a STALL (the hand stops as the click releases) still
+   *     glides — the old last-sample velocity died on exactly this, which is the "not always";
+   *  B  a mouse held still before release does NOT glide — the old code carried stale velocity across
+   *     the pause and could fling a carefully parked value;
+   *  C  a drag ended in FINE mode does not glide (queue 253's rule, dead until the 2 Sep audit found
+   *     cancelDrag never stopped a glide already in flight);
+   *  D  a slow TOUCH drag does not glide — the touch bar is untouched by the mouse one;
+   * and the mouse bar is pinned low enough for a desk-speed flick, the "tedious" half. Timing note: the
+   * samples are ~8ms apart via setTimeout, and every case keeps a margin against 2x jitter — A's window
+   * reads 0.42 px/ms at 16ms samples against a 0.25 bar; B and C do not depend on speed at all. */
+  test('glide (#715): a mouse flick glides — a stall at release does not kill it, a parked pointer does not fling, fine mode never glides', { item: 'glide-mouse-715', budgetMs: 60000 }, async function () {
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    var T = FM.glideTuning;
+    if (!T || typeof T.minFlickMouse !== 'number') throw new Error('FM.glideTuning.minFlickMouse is not exposed — the mouse bar cannot be checked');
+    if (!(T.minFlickMouse <= 0.3)) throw new Error('the mouse flick bar is ' + T.minFlickMouse + ' px/ms — a desk-speed flick (0.3–0.5) will not glide; that is the "tedious"');
+    if (!(T.minFlick >= 0.5)) throw new Error('the TOUCH flick bar dropped to ' + T.minFlick + ' — a thumb\'s positioning drag will fling');
+    if (!(T.rest >= 40 && T.rest <= 200)) throw new Error('the rest cutoff is ' + T.rest + 'ms — a parked pointer must not fling, and a real flick must not be read as parked');
+    var saved = FM.scene, savedSel = FM.scene.selectedId;
+    try {
+      var L = FM.makeLayer('shape', { name: 'G', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 2 });
+      var inst = FM.fxRegistry.makeInstance('blur'), def = FM.fxRegistry.get('blur');
+      if (!inst || !def) throw new Error('could not build a blur instance to scrub');
+      // Mid-range, and re-centred before every case: a glide must be able to travel either way without
+      // meeting a wall, or "did not move after release" would be true for the wrong reason.
+      var centre = function () {
+        var P = FM.scene.layers[0].effects[0].params;
+        def.params.forEach(function (p) { if (typeof p.min === 'number' && typeof p.max === 'number') P[p.key] = (p.min + p.max) / 2; });
+      };
+      L.effects = [inst];
+      FM.scene = scene([L]); centre();
+      FM.selectLayer(L.id); FM.refreshAll(); await sleep(120);
+      var cat = [].slice.call(document.querySelectorAll('#inspector button')).filter(function (b) { return /Effects/.test(b.textContent); })[0];
+      if (cat) { cat.click(); await sleep(160); }
+      var strip = document.querySelector('#inspector .fx-scrub');
+      if (!strip) {
+        var head = document.querySelector('#inspector .fx-head');
+        if (head) { head.click(); await sleep(160); strip = document.querySelector('#inspector .fx-scrub'); }
+      }
+      if (!strip) throw new Error('no .fx-scrub on screen — nothing to test');
+      var read = function () { return JSON.stringify(FM.scene.layers[0].effects[0].params); };
+      var r = strip.getBoundingClientRect(), cx = Math.round(r.left + r.width / 2), cy = Math.round(r.top + r.height / 2);
+      var opts = function (x, y, type, up) { return { bubbles: true, cancelable: true, pointerId: 9, pointerType: type, isPrimary: true, clientX: x, clientY: y, button: 0, buttons: up ? 0 : 1 }; };
+      // moves: dx per ~8ms sample; restMs: still time before the up; yOff: vertical offset of the moves (90 = fine mode)
+      var drive = async function (moves, restMs, type, yOff) {
+        centre();
+        var x = cx, y = cy + (yOff || 0);
+        strip.dispatchEvent(new PointerEvent('pointerdown', opts(x, cy, type)));
+        for (var i = 0; i < moves.length; i++) { await sleep(8); x += moves[i]; strip.dispatchEvent(new PointerEvent('pointermove', opts(x, y, type))); }
+        if (restMs) await sleep(restMs);
+        var atUp = read();
+        strip.dispatchEvent(new PointerEvent('pointerup', opts(x, y, type, true)));
+        await sleep(280);
+        return { moved: read() !== atUp, atUp: atUp, after: read() };
+      };
+      var rep = function (n, dx) { var a = []; for (var i = 0; i < n; i++) a.push(dx); return a; };
+
+      var A = await drive(rep(8, -10).concat([0, 0]), 0, 'mouse', 0);
+      if (!A.moved) throw new Error('A: a mouse flick that stalled for two samples before the click released did NOT glide (' + A.atUp + ' stayed) — the release velocity is still the last sample, not the last ' + T.window + 'ms; this is the "not always"');
+      var B = await drive(rep(8, 10), 160, 'mouse', 0);
+      if (B.moved) throw new Error('B: a mouse held STILL for 160ms before release glided (' + B.atUp + ' → ' + B.after + ') — a parked value was flung by stale velocity');
+      var C = await drive(rep(8, -10).concat([0, 0]), 0, 'mouse', 90);
+      if (C.moved) throw new Error('C: a drag ended in FINE mode glided after release (' + C.atUp + ' → ' + C.after + ') — "no momentum out of fine mode" is dead again; cancelDrag must stop a glide already in flight');
+      var D = await drive(rep(10, -3), 0, 'touch', 0);
+      if (D.moved) throw new Error('D: a slow TOUCH drag (~0.37 px/ms) glided (' + D.atUp + ' → ' + D.after + ') — the touch bar must stay at 0.6; a thumb\'s positioning drag would fling');
+    } finally {
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      await sleep(60);
+    }
+  });
+
   /* Queue 73 (v6.21). Ezra: "currently the names of layers follow and stay on screen, I want them to
    * just stay at the start of the layer and not move along with you." The label used to track the
    * clip's VISIBLE left edge, so it slid along the bar as you scrolled and never left the screen.
@@ -35754,12 +35829,13 @@
 
   /* ---------------- queue 280: the layer-actions button looked live with nothing selected -------- */
 
-  test('the layer-actions button is greyed out when nothing is selected (queue 280)', { item: 'layer-btn-off' }, async function () {
-    /* "make this button greyed out when a layer isnt selected", against a screenshot with this control
-     * circled. It opens the actions for the SELECTED layer, so with no selection there is nothing for
-     * it to open — and it looked exactly as live as everything beside it.
-     * Asserted through the app's own `is-off` convention AND the rendered opacity, because a class that
-     * no stylesheet acts on would satisfy the first half and change nothing on screen. */
+  test('the layer-actions button stays lit with nothing selected (queue 280, overturned by queue 717)', { item: 'layer-btn-off' }, async function () {
+    /* Queue 280 asked for this button to be greyed out with nothing selected, and it was. Queue 717 (2 Sep)
+     * is his later word: "the copy paste button is greyd out when u have nothing selected but it still works
+     * when u have nothing selected so make it always white" — the menu it opens has Select all and Paste,
+     * which need no selection. So the button is lit in EVERY state now, and the rows inside the menu carry
+     * the per-row truth (asserted by the 717 test). This test keeps queue 280's shape — three states — and
+     * asserts the opposite of its original dim, so a return to the dim is caught by name. */
     if (!matchMedia('(min-width: 701px)').matches) return;
     const layers0 = FM.scene.layers.slice();
     try {
@@ -35767,22 +35843,21 @@
       await sleep(220);
       const b = document.getElementById('btn-layermenu');
       if (!b || !b.getBoundingClientRect().width) return;     // not on screen in this layout
-      if (!b.classList.contains('is-off')) throw new Error('with nothing selected the layer-actions button is not marked off');
-      const dim = parseFloat(getComputedStyle(b).opacity);
-      if (!(dim < 0.6)) throw new Error('with nothing selected the layer-actions button renders at opacity ' + dim + ' — it is marked off but nothing shows it');
-      if (b.getAttribute('aria-disabled') !== 'true') throw new Error('the button is dimmed but still reads as enabled to a screen reader');
-
+      const lit = (why) => {
+        if (b.classList.contains('is-off')) throw new Error('the layer-actions button is marked off ' + why + ' — queue 717: it opens a menu that works with nothing selected');
+        if (!(parseFloat(getComputedStyle(b).opacity) > 0.9)) throw new Error('the layer-actions button is dimmed to ' + getComputedStyle(b).opacity + ' ' + why);
+        if (b.getAttribute('aria-disabled') === 'true') throw new Error('the button reads as disabled to a screen reader ' + why + ' while it works');
+      };
+      lit('with nothing selected');
       const P = FM.scene.project;
       const L = FM.makeLayer('shape', { shape: 'rect', x: Math.round(P.width * 0.4), y: Math.round(P.height * 0.4), shapeW: 200, shapeH: 200, fill: '#44aaff' });
       L.start = 0; L.duration = 4;
       FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll();
       await sleep(240);
-      if (b.classList.contains('is-off')) throw new Error('the layer-actions button stayed greyed out with a layer selected — now it is wrong the other way');
-      if (!(parseFloat(getComputedStyle(b).opacity) > 0.9)) throw new Error('the button did not come back to full strength with a layer selected');
-
+      lit('with a layer selected');
       FM.selectLayer(null); FM.refreshAll();
       await sleep(240);
-      if (!b.classList.contains('is-off')) throw new Error('deselecting did not grey it out again — the state only travels one way');
+      lit('after deselecting');
     } finally {
       FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
       FM.selectLayer(null); FM.refreshAll();
@@ -53321,6 +53396,196 @@
         if (was) sheet.classList.add('open'); else sheet.classList.remove('open');
       }
     });
+  });
+
+  /* ═══ 716: THE CURSOR WASH ON HOME IS NOT A BOX. On PC the glow that follows the mouse was a pseudo-element
+     of the centred project column (40px wider than it), so on a wide screen it stopped at a straight edge
+     — his screenshot. It is a viewport-fixed layer on the scroller now. Pseudo-elements have no rects to
+     read, so this asks the stylesheet: the wash gradient must be on the scroller's fixed pseudo and must NOT
+     be on the grid's; and the cards must sit above it. Desktop width, where the column has empty sides. */
+  test('716: the home cursor wash covers the whole screen, not the project column', { item: '716' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      await atWideWidth(async function () {
+        if (!FM.home.isOpen()) { FM.home.open(); await sleep(200); }
+        const sc = document.querySelector('#home-screen .hm-scroll'), grid = document.querySelector('#home-screen .hm-grid');
+        if (!sc || !grid) throw new Error('setup: .hm-scroll / .hm-grid missing');
+        sc.classList.add('glow-on'); sc.style.setProperty('--glow-x', '30px'); sc.style.setProperty('--glow-y', '300px');
+        await sleep(320);   // the wash fades in over .22s by its own rule; read it after the fade, not during it (it read 0.24 at 50ms)
+        const before = getComputedStyle(sc, '::before'), gb = getComputedStyle(grid, '::before');
+        if (!/radial-gradient/.test(before.backgroundImage)) throw new Error('the scroller\'s ::before carries no wash gradient (' + before.backgroundImage.slice(0, 60) + ') — the cursor glow is not on the whole surface');
+        if (before.position !== 'fixed') throw new Error('the wash is ' + before.position + ', not viewport-fixed — inside a scrolling column it would still stop at the column');
+        if (parseFloat(before.opacity) < 0.99) throw new Error('the wash is not shown while glow-on (opacity ' + before.opacity + ')');
+        if (/radial-gradient/.test(gb.backgroundImage)) throw new Error('the project column\'s ::before still carries a wash gradient — that is the box he photographed');
+        const gz = getComputedStyle(grid).zIndex;
+        if (!(parseInt(gz, 10) >= 1)) throw new Error('the project column has z-index ' + gz + ' — the wash could paint over the cards');
+        sc.classList.remove('glow-on'); sc.style.removeProperty('--glow-x'); sc.style.removeProperty('--glow-y');
+      });
+    } finally {
+      try { if (wasOpen && !FM.home.isOpen()) FM.home.open(); else if (!wasOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep(80);
+    }
+  });
+
+  /* ═══ 717: THE CLIPBOARD BUTTON IS LIT WITH NOTHING SELECTED. It opens a menu whose Select all and Paste
+     work without a selection; dimming it said "dead" about a door that works. Two-way: with nothing selected
+     the button has no `is-off` and full opacity, AND the menu it opens still greys "Copy selected" (the
+     per-row truth is kept, only the lie on the button is gone). Desktop width, where the button lives. */
+  test('717: the copy/paste button is not greyed out with nothing selected, and its menu still greys the rows that need one', { item: '717' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      await atWideWidth(async function () {
+        const L = FM.makeLayer('shape', { name: 's717', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#0f0', start: 0, duration: 3 });
+        FM.scene = scene([L]); FM.selectLayer(null); FM.scene.selectedIds = []; FM.refreshAll();
+        if (FM.syncSelectionChrome) FM.syncSelectionChrome();
+        await sleep(200);
+        const b = document.getElementById('btn-layermenu');
+        if (!b) throw new Error('#btn-layermenu missing');
+        if (b.classList.contains('is-off')) throw new Error('the copy/paste button is dimmed (is-off) with nothing selected — "it still works when u have nothing selected so make it always white"');
+        if (parseFloat(getComputedStyle(b).opacity) < 0.99) throw new Error('the copy/paste button is faded to opacity ' + getComputedStyle(b).opacity + ' with nothing selected');
+        if (b.getAttribute('aria-disabled') === 'true') throw new Error('the button still says aria-disabled while it works');
+        b.click(); await sleep(120);
+        const rows = [...document.querySelectorAll('#ctx-menu .ctx-item, #ctx-menu button, #ctx-menu [role=menuitem]')];
+        const copy = rows.find(r => /Copy selected/.test(r.textContent));
+        if (!copy) throw new Error('the menu did not open, or has no "Copy selected" row (' + rows.length + ' rows)');
+        const greyed = copy.disabled || copy.classList.contains('disabled') || copy.getAttribute('aria-disabled') === 'true';
+        if (!greyed) throw new Error('"Copy selected" is offered with nothing selected — the per-row truth was lost along with the dim');
+        try { document.body.click(); } catch (e) {}
+        if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide();
+      });
+    } finally {
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
+  /* ═══ 762: A SECOND TAP ON NOTES OR SETTINGS CLOSES IT. Before: settings.open() on an open panel rebuilt it
+     and notepad.open() closed-and-reopened, so a second tap "opens it again". Three doors, each tapped twice:
+     the Notes button, the settings cog in a project (the canvas dialog), and the home cog (the settings
+     panel). Each must be up after one tap and gone after two. */
+  test('762: tapping Notes or Settings again closes it instead of opening it again', { item: '762' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      await atWideWidth(async function () {
+        if (FM.home.isOpen()) FM.home.close(); await sleep(150);
+        const notes = document.getElementById('btn-notes');
+        if (!notes) throw new Error('#btn-notes missing');
+        notes.click(); await sleep(120);
+        if (!document.querySelector('.np-scrim')) throw new Error('setup: one tap on Notes did not open it');
+        notes.click(); await sleep(120);
+        if (document.querySelector('.np-scrim')) throw new Error('a second tap on Notes left it open — "it should close it not open it again"');
+        const cog = document.getElementById('btn-settings'), dlg = document.getElementById('canvas-dialog');
+        if (!cog || !dlg) throw new Error('#btn-settings / #canvas-dialog missing');
+        cog.click(); await sleep(150);
+        if (dlg.classList.contains('hidden')) throw new Error('setup: one tap on the cog in a project did not open the canvas dialog');
+        cog.click(); await sleep(200);
+        if (!dlg.classList.contains('hidden')) throw new Error('a second tap on the cog left the canvas dialog open');
+        if (!FM.openCanvasDialog) throw new Error('FM.openCanvasDialog is missing — the oversize warning has no open-only path');
+        FM.openCanvasDialog(); await sleep(150);
+        if (dlg.classList.contains('hidden')) throw new Error('the open-only path (the oversize warning\'s tap) did not open the canvas dialog');
+        FM.openCanvasDialog(); await sleep(150);
+        if (dlg.classList.contains('hidden')) throw new Error('the open-only path TOGGLED the dialog shut on a second call — the warning tap must always open');
+        { const c = document.getElementById('cv-cancel'); if (c) c.click(); else dlg.classList.add('hidden'); } await sleep(150);
+        FM.home.open(); await sleep(200);
+        const hcog = document.querySelector('#home-screen .hm-cog, #home-screen [aria-label*="ettings"], #hm-cog');
+        if (!hcog) throw new Error('setup: the home cog was not found');
+        hcog.click(); await sleep(150);
+        if (!FM.settings.isOpen()) throw new Error('setup: one tap on the home cog did not open settings');
+        hcog.click(); await sleep(300);
+        if (FM.settings.isOpen()) throw new Error('a second tap on the home cog left settings open');
+        FM.home.close(); await sleep(100);
+      });
+    } finally {
+      try { if (FM.settings && FM.settings.isOpen && FM.settings.isOpen()) FM.settings.close(); } catch (e) {}
+      try { if (FM.notepad && FM.notepad.close) FM.notepad.close(); } catch (e) {}
+      try { const d = document.getElementById('canvas-dialog'); if (d && !d.classList.contains('hidden')) { const c = document.getElementById('cv-cancel'); if (c) c.click(); } } catch (e) {}
+      try { if (hadHome && !FM.home.isOpen()) FM.home.open(); else if (!hadHome && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep(80);
+    }
+  });
+
+  /* ═══ 764: THE ADD ROW BEING DRAGGED PAINTS ON TOP. A dragged layer row has z-index 30; the add row's
+     dragging class had none, so it slid under the sticky heads (z 8) and the rows. Asks the stylesheet, both
+     ways: with the dragging class the row is positioned and stacks at least as high as a dragged layer row
+     and above a track head; without it, no such stacking (a permanent z-index on the add row would be a
+     different, worse change). Desktop width, his screen. */
+  test('764: the add row shows on top while it is being dragged', { item: '764' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      await atWideWidth(async function () {
+        const L = FM.makeLayer('shape', { name: 'r764', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#0ff', start: 0, duration: 3 });
+        FM.scene = scene([L]); FM.selectLayer(null); FM.refreshAll(); await sleep(200);
+        const row = document.querySelector('#tl-tracks .tl-addrow'), head = document.querySelector('#tl-tracks .track-head');
+        if (!row || !head) throw new Error('setup: add row / track head missing');
+        const headZ = parseInt(getComputedStyle(head).zIndex, 10) || 0;
+        row.classList.add('tl-addrow-dragging'); await sleep(30);
+        const cs = getComputedStyle(row), z = parseInt(cs.zIndex, 10);
+        if (cs.position === 'static') throw new Error('the dragged add row is position: static — z-index cannot apply, it stays under the rows');
+        if (!(z >= 30)) throw new Error('the dragged add row stacks at z-index ' + cs.zIndex + ' — a dragged layer row is 30 and a track head is ' + headZ + ', so it slides behind them: "it looks bad"');
+        if (!(z > headZ)) throw new Error('the dragged add row (' + z + ') is not above the sticky track heads (' + headZ + ')');
+        row.classList.remove('tl-addrow-dragging'); await sleep(30);
+        const z0 = parseInt(getComputedStyle(row).zIndex, 10);
+        if (z0 >= 30) throw new Error('the add row stacks at ' + z0 + ' even when NOT dragged — that would sit it over every sticky head permanently');
+      });
+    } finally {
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
+  /* ═══ 768: A SCRUB WRITES A FRAME-TIME REPORT HE CAN PASTE. His "jumpy with a layer selected" measures
+     flat here in every stageable state, so the app records the scrub on his device instead. Drives the REAL
+     gesture (a relative grab on #timeline, dragged left from t=3 so time actually moves), with a shape
+     selected and the inspector grid up, and asserts the report exists, is about THIS scrub (the key is
+     cleared first), names the selection and the panel, and carries the numbers. */
+  test('768: scrubbing the timeline writes a frame-time report that names what was selected', { item: '768', budgetMs: 30000 }, async function () {
+    if (!FM._scrubProbe) throw new Error('FM._scrubProbe is missing — nothing records the scrub');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      try { localStorage.removeItem('fm.lastScrubReport'); } catch (e) {}
+      await atPhoneWidth(async function () {
+        const L = FM.makeLayer('shape', { name: 's768', shape: 'rect', x: 200, y: 300, shapeW: 120, shapeH: 120, fill: '#f0f', start: 0, duration: 6 });
+        FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+        FM.selectLayer(L.id); FM.refreshAll(); await sleep(300);
+        if (FM.setTime) FM.setTime(3); else FM.time = 3;
+        FM.requestRender && FM.requestRender(); await sleep(150);
+        const tl = document.getElementById('timeline'), tr = tl.getBoundingClientRect();
+        const y = Math.round(tr.top + 12), x0 = Math.round(tr.right - 40), t0 = FM.time;
+        const opts = (x) => ({ bubbles: true, cancelable: true, pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, button: 0, buttons: 1 });
+        tl.dispatchEvent(new PointerEvent('pointerdown', opts(x0)));
+        for (let i = 1; i <= 24; i++) { tl.dispatchEvent(new PointerEvent('pointermove', opts(x0 - i * 5))); await sleep(16); }
+        tl.dispatchEvent(new PointerEvent('pointerup', Object.assign(opts(x0 - 120), { buttons: 0 })));
+        await sleep(500);
+        if (Math.abs(FM.time - t0) < 0.2) throw new Error('setup: the scrub did not move time (' + t0 + ' → ' + FM.time + ') — the gesture did not engage, so no report is expected');
+        const rep = FM._scrubProbe.last();
+        if (!rep) throw new Error('no scrub report was written after a real scrub — the probe never ran, so his phone would have nothing to paste');
+        if (!/selection\s+shape/.test(rep)) throw new Error('the report does not say a shape was selected:\n' + rep);
+        if (!/panel\s+\S/.test(rep)) throw new Error('the report does not say which panel was open:\n' + rep);
+        const frames = /frames\s+(\d+) over/.exec(rep);
+        if (!frames || +frames[1] < 10) throw new Error('too few frames sampled (' + (frames && frames[1]) + ') — a hitch would be missed:\n' + rep);
+        if (!/frame gap\s+median [\d.]+ms, worst [\d.]+ms/.test(rep) || !/long frames\s+\d+ over 33ms/.test(rep) || !/verdict/.test(rep)) throw new Error('the report is missing its numbers or verdict:\n' + rep);
+      });
+    } finally {
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
+    }
   });
 
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.

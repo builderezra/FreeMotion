@@ -684,30 +684,60 @@ window.FM = window.FM || {};
    * it, or the longer tail gets cut off while still visibly moving — which is itself "ends too quick".
    * FM.glideTuning + FM.timeline.momentumTuning are exposed so the suite pins the two together; the
    * defect here was two things meant to feel the same drifting apart in silence. */
-  const GLIDE_MIN_FLICK = 0.6;    // px/ms — below this it was a positioning drag, not a flick
+  const GLIDE_MIN_FLICK = 0.6;    // px/ms, TOUCH — below this it was a positioning drag, not a flick
+  /* A MOUSE FLICK IS SLOWER THAN A THUMB'S, AND ITS LAST SAMPLE LIES (queue 715). Ezra: "Make the sliders
+   * on pc glide when you let go like on mobile coz rn its tedious to aadjust. Also rn it does work but
+   * not always its kind finicky." Two causes, both measured on the strip:
+   * · The release velocity was the LAST pointermove's, smoothed 0.35/0.65 towards it — so the one or two
+   *   slow samples a hand produces as it lets go of a button (the mouse stalls a few ms before the click
+   *   releases) took a 1.2 px/ms drag to 0.15 and the glide died. That is the "not always". A thumb
+   *   leaves the glass mid-motion; a mouse button releases while the hand is stopping.
+   * · A mouse flick that FEELS like a flick runs 0.3–0.5 px/ms on a desk, and the 0.6 touch bar sits
+   *   above most of them. That is the "tedious".
+   * So the velocity is the pointer's travel over the last GLIDE_WINDOW ms — a stall sample dents it
+   * instead of erasing it — and a pointer that has been STILL for GLIDE_REST ms before release was
+   * parked, not flung, and gets zero (the old code carried the stale last-sample velocity across any
+   * pause, so a careful park-then-release could fling the value). The mouse bar is its own number;
+   * touch is unchanged, so a thumb's positioning drag still does not fling. */
+  const GLIDE_MIN_FLICK_MOUSE = 0.25;
+  const GLIDE_WINDOW = 100;       // ms of trail the release velocity is read over
+  const GLIDE_REST = 80;          // ms still before release → parked, no glide
   const GLIDE_MAX_V = 3.2;        // a hard flick travels a long way, not forever
   const GLIDE_FRICTION = 0.947;   // per 16.67ms — MUST match the timeline's (see the note above)
   const GLIDE_STOP = 0.004;       // px/ms below which the tail is imperceptible
-  FM.glideTuning = { friction: GLIDE_FRICTION, maxV: GLIDE_MAX_V, minFlick: GLIDE_MIN_FLICK, stopAt: GLIDE_STOP };
+  FM.glideTuning = { friction: GLIDE_FRICTION, maxV: GLIDE_MAX_V, minFlick: GLIDE_MIN_FLICK, minFlickMouse: GLIDE_MIN_FLICK_MOUSE,
+    window: GLIDE_WINDOW, rest: GLIDE_REST, stopAt: GLIDE_STOP };
   function attachGlide(node, applyDx, onSettle) {
     let drag = null, raf = 0;
     const stop = () => { if (raf) { cancelAnimationFrame(raf); raf = 0; } };
     const settle = () => { if (onSettle) onSettle(); };
     node.addEventListener('pointerdown', e => {
       stop();                                        // a fresh grab kills any in-flight glide
-      drag = { lastX: e.clientX, lastT: e.timeStamp, v: 0 };
+      drag = { mouse: e.pointerType === 'mouse', trail: [{ x: e.clientX, t: e.timeStamp }] };
     });
     node.addEventListener('pointermove', e => {
       if (!drag) return;
-      const dt = e.timeStamp - drag.lastT, dx = e.clientX - drag.lastX;
-      if (dt > 0) drag.v = drag.v * 0.35 + (dx / dt) * 0.65;   // px/ms, smoothed the way the timeline smooths its scrub
-      drag.lastX = e.clientX; drag.lastT = e.timeStamp;
+      const tr = drag.trail; tr.push({ x: e.clientX, t: e.timeStamp });
+      while (tr.length > 2 && tr[1].t <= e.timeStamp - GLIDE_WINDOW) tr.shift();   // keep one sample at or before the window's edge
     });
-    const release = () => {
+    // Travel over the window, not the last sample. A pointer still for GLIDE_REST before the release
+    // was parked. Sparse samples (a slow mouse) fall back to the one sample before the window.
+    const releaseV = (e) => {
+      const tr = drag.trail, last = tr[tr.length - 1];
+      if (e.timeStamp - last.t > GLIDE_REST) return 0;
+      let i = tr.length - 1;
+      while (i > 0 && tr[i - 1].t >= last.t - GLIDE_WINDOW) i--;
+      if (i === tr.length - 1 && i > 0) i--;
+      const dt = last.t - tr[i].t;
+      return dt >= 8 ? (last.x - tr[i].x) / dt : 0;
+    };
+    const release = (e) => {
       if (!drag) return;
-      let v = Math.max(-GLIDE_MAX_V, Math.min(GLIDE_MAX_V, isFinite(drag.v) ? drag.v : 0));
+      const min = drag.mouse ? GLIDE_MIN_FLICK_MOUSE : GLIDE_MIN_FLICK;
+      const v0 = releaseV(e);
+      let v = Math.max(-GLIDE_MAX_V, Math.min(GLIDE_MAX_V, isFinite(v0) ? v0 : 0));
       drag = null;
-      if (Math.abs(v) < GLIDE_MIN_FLICK) { settle(); return; }
+      if (Math.abs(v) < min) { settle(); return; }
       let last = performance.now();
       const step = (now) => {
         // The panel rebuilds constantly (refresh, category change, deselect), which detaches this
@@ -724,7 +754,12 @@ window.FM = window.FM || {};
     };
     node.addEventListener('pointerup', release);
     node.addEventListener('pointercancel', () => { if (!drag) return; drag = null; settle(); });   // OS-cancelled → settle where it is, never glide
-    return { stop: stop, cancelDrag: () => { drag = null; } };
+    /* cancelDrag is called by the strip when a touch turns out to be a scroll (nothing in flight yet)
+       AND — from its own pointerup, which runs AFTER this one — when the drag ended in fine mode. In
+       that second case the glide is ALREADY running: clearing `drag` did nothing to it, so "no momentum
+       out of fine mode" (queue 253) was dead code and a careful fine drag flung anyway (audit 2 Sep,
+       queue 726). Stopping the frame loop is the fix; the settle is owed because the loop would have. */
+    return { stop: stop, cancelDrag: () => { drag = null; if (raf) { stop(); settle(); } } };
   }
 
   /* A scrub gesture, held in its OWN coordinate instead of read back off the value it wrote.
@@ -6226,6 +6261,7 @@ window.FM = window.FM || {};
   FM._presetIcoSrc = function () { return ICO_PRESETS; };
 
   FM.inspector = {
+    currentView() { return view; },   // read by the scrub probe (queue 768): which panel was open while he scrubbed
     _mergedStack: mergedStack,   // seam: the 560 tests drive the merged effects+masks list without a pointer drag
     /* Open the Effects card on a particular side (queue 317). The full-screen browsers own two of the
        three sides and have nowhere to put the third — Filters is a list of ready-made looks, not a grid

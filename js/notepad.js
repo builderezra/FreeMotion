@@ -204,5 +204,7 @@ window.FM = window.FM || {};
     });
   }
 
-  FM.notepad = { open: open, close: close, pending: pending, confirmExport: confirmExport, sync: badge };
+  function isOpen() { return !!document.querySelector('.np-scrim'); }
+  function toggle() { if (isOpen()) close(); else open(); }   // a second tap on the Notes button CLOSES it (queue 762)
+  FM.notepad = { open: open, close: close, isOpen: isOpen, toggle: toggle, pending: pending, confirmExport: confirmExport, sync: badge };
 })(window.FM);

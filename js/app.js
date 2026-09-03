@@ -2351,6 +2351,7 @@ window.FM = window.FM || {};
          open the dialog over the top of it 400ms later, which covered it completely. The explanation
          now lives inside the dialog itself (see cvUpdate), where it is readable for as long as he is
          choosing rather than for four tenths of a second. */
+      if (FM.openCanvasDialog) { FM.openCanvasDialog(); return; }   // queue 762: OPEN, never toggle — the dialog may already be up
       const cv = document.getElementById('btn-canvas');
       if (cv) cv.click();
     });
@@ -5270,7 +5271,7 @@ window.FM = window.FM || {};
     document.getElementById('btn-export').addEventListener('click', showExportDialog);
     ['btn-notes', 'm-notes'].forEach(id => {   // the desktop bar's and the phone's (queue 171) — same panel, same handler
       const b = document.getElementById(id);
-      if (b) b.addEventListener('click', () => { if (FM.notepad) FM.notepad.open(); });
+      if (b) b.addEventListener('click', () => { if (FM.notepad) (FM.notepad.toggle || FM.notepad.open)(); });   // queue 762: tap again to close
     });
     // Home's project ⋯ opens this same dialog, so it can't stay private to this module.
     FM.showExportDialog = showExportDialog;
@@ -5390,6 +5391,16 @@ window.FM = window.FM || {};
         ic.classList.remove('cog-turn');
         void setBtn.offsetWidth;                 // NOT ic.offsetWidth — see above
         ic.classList.add('cog-turn');
+      }
+      /* ⚠️ A SECOND TAP CLOSES WHAT THE FIRST OPENED (queue 762). Ezra: "when u tap on something like the
+         notes button and settings button and tap it again it should close it not open it again". On Home
+         this button opens the settings panel; in a project it opens the canvas dialog. Whichever is up,
+         the tap that finds it up puts it away — through the dialog's own Cancel, which also unpins its
+         anchor and clears the body classes it set. */
+      if (FM.settings && FM.settings.isOpen && FM.settings.isOpen()) { FM.settings.close(); return; }
+      {
+        const dlgUp = document.getElementById('canvas-dialog');
+        if (dlgUp && !dlgUp.classList.contains('hidden')) { const c = document.getElementById('cv-cancel'); if (c) c.click(); else dlgUp.classList.add('hidden'); return; }
       }
       const inProject = !(FM.home && FM.home.isOpen && FM.home.isOpen());
       const cv = document.getElementById('btn-canvas');
@@ -5814,10 +5825,17 @@ window.FM = window.FM || {};
        group that has its own ground, while this one sits in the plain transport row where a hole would
        shuffle the other controls sideways every time you deselected. `is-off` is the app's existing
        word for this — undo and redo already wear it — rather than a second look meaning the same. */
+    /* ⚠️ NOT DIMMED ANY MORE (queue 717). Ezra: "Rn the copy paste button is greyd out when u have nothing
+       selected but it still works when u have nothing selected so make it always white". He is right on
+       both counts: the button opens the clipboard menu, and two of its rows — Select all, Paste on
+       timeline — need no selection at all, so a dimmed button was a lie about a working door. The rows
+       that DO need a selection (Copy selected, Paste look…) are still greyed inside the menu, one by one,
+       which is where that information belongs. The note above this block explains why it was dimmed; it
+       is kept as history, and this overrides it on his word. */
     const lm = document.getElementById('btn-layermenu');
     if (lm) {
-      lm.classList.toggle('is-off', n < 1);
-      lm.setAttribute('aria-disabled', n < 1 ? 'true' : 'false');
+      lm.classList.remove('is-off');
+      lm.setAttribute('aria-disabled', 'false');
     }
   }
   /* THE UNDO for pcTransportLayout (queue 405). Restores every borrowed control to the exact parent and
@@ -6268,7 +6286,9 @@ window.FM = window.FM || {};
         for (let i = 0; i < fpsSel.options.length; i++) if (fpsSel.options[i].value === v) return true;
         return false;
       };
-      canvasBtn.addEventListener('click', () => {
+      /* THE OPEN PATH ON ITS OWN (queue 762). The button below toggles; the oversize warning's tap (FM.warnOversizeProject)
+         calls this directly so it always OPENS — a toggle there closed a dialog that was already up. */
+      const openCanvasDialog = () => {
         cvDetect();
         // seed the custom W/H inputs from the live project so switching to Custom starts sensible
         const cw = document.getElementById('cv-cw'), ch = document.getElementById('cv-ch');
@@ -6328,6 +6348,11 @@ window.FM = window.FM || {};
           (FM._cvPop && (FM._cvPop(), FM._cvPop = null), document.body.classList.remove('cv-anchored', 'cv-up'));
         }
         cvDialog.classList.remove('hidden');
+      };
+      FM.openCanvasDialog = openCanvasDialog;
+      canvasBtn.addEventListener('click', () => {
+        if (!cvDialog.classList.contains('hidden')) { const c = document.getElementById('cv-cancel'); if (c) c.click(); else cvDialog.classList.add('hidden'); return; }   // queue 762: the phone cog forwards here — a second tap closes
+        openCanvasDialog();
       });
       document.querySelectorAll('#canvas-dialog .cv-bg-sw').forEach(b => b.addEventListener('click', () => { cvBg = b.dataset.bg; cvBgSync(); }));
       { const bgInp = document.getElementById('cv-bg'); if (bgInp) bgInp.addEventListener('input', () => { cvBg = bgInp.value; cvBgSync(); }); }

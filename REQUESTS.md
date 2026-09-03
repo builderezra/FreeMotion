@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.08
+> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.09
 >
-> **State:** v15.08, 1174 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
+> **State:** v15.09, 1180 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
 > **Four pictures are in the chat waiting for one letter each** (nothing visual ships before you pick): **#642** the home background A–D · **#763** the skip-button gap (6/12/18) and the play button A–D · **#765** the split/jump buttons' look 1–3 · and **#760's people shapes** come next, drawn the same way. Everything else waiting on you is a paste or a letter, listed by `tools/next.sh` under its own heading so it cannot hide: #425 A/B · #454 A/B/C · #482 a category · #484 A/B/C · #539 A/B/C · #544 which things · #564 A/B/C · #570 smooth/stepped/leave · #624 a/b/c · #654 A/B/C · #406 which menu · #674 (b)/(c) · #95/#96/#663 the **Your last playback** paste · #215/#604/#677 the **Your last export** paste · #129 the **clip with no picture** paste · the oldest lag item, a **Measure** report · #657 a sample while scrubbing · #676/#706 what "twice" looks like · #712 whether Back from a category stalls · #592 a screenshot.
 > **Next, in order, each already built and proved, shipping one by one:** #508 (a frame-time report of the project-open slide from your phone), #553 (coming back to the app half-drawn), #606, #674 (clip names over filmstrips), #688 (one intro film, dark mode lands on dark), #706 (the add sheet's one motion), #715 (PC sliders glide), #716 (the cursor glow box), #717 (copy/paste button lit), #762 (tap again closes), #764 (dragged add row on top); then #760, #765, #768 and the audit findings.
 
@@ -28163,7 +28163,7 @@ re-opened #480, which I had marked done and had not fixed.
       link (centres within 3px) · 3. [x] PC (1280) · 4. [x] phone (380) — both measured and screenshotted before shipping.
       Same head-row the crop toggles use; the test pins row, side, width and thumb height at both suite widths.
 
-- [ ] **715 — PC sliders should GLIDE when you let go, like on mobile — and the existing glide is finicky.** 2 Sep,
+- [x] **715 — PC sliders should GLIDE when you let go, like on mobile — and the existing glide is finicky.** 2 Sep,
       **STATUS: 🟢 READY — nothing is stopping this**
       typed while #714 was being verified. His words, verbatim:
       > Make the sliders on pc glide when you let go like on mobile coz rn its tedious to aadjust. Also rn it does work but not always its kind finicky
@@ -28172,8 +28172,9 @@ re-opened #480, which I had marked done and had not fixed.
       phone, and any PC control that has it) the glide is unreliable; find WHEN it fails to fire (measured, the way
       the timeline flick's dead-at-the-clamp case was measured in queue 415) and make it fire every time.
       Next after #714; the queue is otherwise the standing brief.
+      ✅ **v15.09 — DONE, both halves of his sentence.** *"Make the sliders on pc glide when you let go like on mobile"* — the mouse now has its own flick bar (0.25 px/ms; a desk-speed flick runs 0.3–0.5, the touch bar of 0.6 stays). *"rn it does work but not always its kind finicky"* — the release velocity was the LAST pointermove's, smoothed towards it, so the one or two slow samples a hand makes as it lets go of a button took a 1.2 px/ms drag to 0.15 and the glide died; it is now the pointer's travel over the last 100ms, and a pointer held still for 80ms before release is parked, not flung (the old code kept stale velocity across any pause). Also fixed on the way, the audit's item 9 (#726): a drag ended in FINE mode glided anyway because `cancelDrag` never stopped a glide already in flight — it does now. Test `glide (#715)` drives real pointer events at a real slider strip: a stall-at-release flick glides, a parked mouse does not fling, fine mode never glides, a slow touch does not glide; mutation-checked.
 
-- [ ] **716 — PC home screen: the background colour that follows the cursor cuts off and looks like a box.** 2 Sep,
+- [x] **716 — PC home screen: the background colour that follows the cursor cuts off and looks like a box.** 2 Sep,
       **STATUS: 🟢 READY — nothing is stopping this**
       with a wide PC screenshot of the home screen (Projects list, v15.02): the cursor-following tint sits in a
       rectangular region — a visibly different band down the left of the projects column, a hard-ish edge where
@@ -28182,14 +28183,16 @@ re-opened #480, which I had marked done and had not fixed.
       **Clauses:** 1. [ ] the glow must not cut off — no visible edge · 2. [ ] it must not read as a box (a soft
       radial fade, or clipped only by the viewport). Verified with a picture at PC width before it ships (#545).
       After #715 in order.
+      ✅ **v15.09 — DONE.** The glow that follows the mouse on the home screen was a pseudo-element of the CENTRED project column with a 40px inset, so on a wide screen it was clipped to a rectangle 40px wider than the list — the box in his screenshot, the light stopping at a straight edge left of the projects. It is a viewport-fixed layer on the whole scroller now: same gradient, same variables, same gating, no edge anywhere; the cards' ring is untouched and the column sits above the wash. Test asks the stylesheet at desktop width: the wash on the scroller's fixed pseudo, none on the column's, cards above; mutation-checked.
 
-- [ ] **717 — The copy/paste button is greyed out with nothing selected, but it still works — so make it always white.**
+- [x] **717 — The copy/paste button is greyed out with nothing selected, but it still works — so make it always white.**
       **STATUS: 🟢 READY — nothing is stopping this**
       2 Sep, typed while #715/#716 were being read. His words, verbatim:
       > Rn the copy paste button is greyd out when u have nothing selected but it still works when u have nothing selected so make it always white
       **Clauses:** 1. [ ] the button is never drawn greyed/disabled while nothing is selected · 2. [ ] (check) it really
       does work with nothing selected — if it works, the grey is a lie; if some case does not, that case must be found
       before the grey goes, so the button never LOOKS live and does nothing. After #716 in order.
+      ✅ **v15.09 — DONE, his way.** The ⧉ button opens the clipboard menu, and two of its rows — Select all, Paste on timeline — need no selection, so dimming the button said "dead" about a door that works. It stays lit now; the rows that do need a selection (Copy selected, Paste look…) are still greyed inside the menu, one by one, which is where that truth belongs. Test: nothing selected → no `is-off`, full opacity, and the opened menu still greys Copy selected; mutation-checked.
 
 - [ ] **718 — js/storage.js:942 — undo wipes an animated Draw-from** (hunt HIGH #1)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -28289,6 +28292,7 @@ re-opened #480, which I had marked done and had not fixed.
       - Actual: attachGlide's pointerup (725, registered at 876) fires first, nulls its drag and starts the raf; the strip's handler then calls `cancelDrag()` (727) which only nulls the already-null drag — never `stop()`. The glide runs `applyDx(v*dt)` with `fine` undefined (719 → 868/871 → 604-605 returns the coarse grid).
       - Fix: make `cancelDrag` call `stop()` (cancel the raf and settle); or give attachGlide a `shouldGlide()` predicate checked in release; or register the strip's handler before attachGlide.
       - User sees: a fine-mode drag (finger ≥ 34 px off the strip) ending in a flick overshoots the value at full coarse rate.
+      🔧 **v15.09 — fixed with #715 (the tick comes at its turn in the queue, after #725):** `cancelDrag` stops a glide already in flight, so a drag ended in fine mode lands where it was aimed.
 
 - [ ] **727 — js/inspector.js:2098 — audio "Duplicate" is a Reset** (hunt HIGH #10)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -28607,7 +28611,7 @@ re-opened #480, which I had marked done and had not fixed.
       🎨 **3 Sep — CLAUSES 1 AND 2 DRAWN AND SENT (#545)** (`scratchpad/tiles760.html`, rendered and sent): the PC Shape grid at 40px as shipped (seven across), 48px (six across, recommended) and 56px (five across); and four colour treatments — A as shipped (each shape its own hue on a tinted tile), B one teal for all, C the Shape tab's violet for all, D white glyphs on the coloured tiles (recommended: the colour he liked stays in the tile and every glyph is legible at 24px). One size and one letter make one build. **Clause 3 (the people) is drawn — five figures, A drawn by the app itself, B–E redrawn (AIGA signage, softer/bigger head, classic restroom sign, athletic) at 24/48/220px in `tests/_people760.html` — and goes out as its own picture the moment the tree is free to render the as-shipped row from the app.** Nothing visual ships before his picks.
       🎨 **3 Sep — CLAUSE 3 SENT (#545):** the people at 24 / 48 / 220px — A exactly as shipped, drawn by the app; B airport-sign (AIGA/ISO), C softer with a bigger head, D classic restroom sign, E athletic with arms out — every candidate with open armpits at 24px, one shoulder cap, a real A-line for her. All three clauses are now pictures in the chat. **BUILT OUT UNTIL HE picks — a size and a colour for the tiles, and a letter (or a correction) for the people.** One build follows the picks; nothing visual ships before them.
 
-- [ ] **761 — "make sure all these requests are logged"** (2 Sep, standing)
+- [x] **761 — "make sure all these requests are logged"** (2 Sep, standing) ✅ DONE v15.09.
       **STATUS: ✅ done on arrival, and kept as a standing check like #713**
       His words: *"make sure all these requests are logged"* — sent straight after #760. Every message from this
       session is in this file verbatim: #706, #708, #713, #714, #715, #716, #717, #760, and this one. The structural
@@ -28616,15 +28620,16 @@ re-opened #480, which I had marked done and had not fixed.
       that a message he sent became an entry. That would need his messages to be visible to a script, which they are
       not; the honest answer is that this one stays a rule I obey, and the gate catches the other failure (an entry
       vanishing after it was written).
+        ✅ **v15.09 — every request from that message onward is logged verbatim, each in its own numbered entry: #760, #762–#769 (this one is #761).** Ticked in this release because the queue gate is right that it comes before #762: the logging is a fact, not a build.
 
-
-- [ ] **762 — Tapping the Notes or Settings button again should CLOSE it, not open it twice** (2 Sep)
+- [x] **762 — Tapping the Notes or Settings button again should CLOSE it, not open it twice** (2 Sep)
       **STATUS: 🟢 READY — nothing is stopping this. Queued behind #715–#717 and #760.**
       His words: *"also when u tap on something like the notes button and settings button and tap it again it should
       close it not open it again"*
       "Something like" means the rule is general: every top-bar toggle (Notes, Settings, and whatever else opens a
       panel from a button) should be a toggle — second tap closes. Related to #706 (the Add-layer sheet opening twice
       on mobile), which may be the same missing "already open → close" check.
+      ✅ **v15.09 — DONE, on every door he could mean.** Notes: a second tap closes the notepad (it used to close-and-reopen). The settings cog in a project: a second tap closes the canvas dialog it opened, through the dialog's own Cancel so the anchor and body classes are cleared too; the phone cog forwards to the same button and gets the same toggle. The home cog: a second tap closes the settings panel (it used to rebuild it). Test taps each of the three twice; mutation-checked.
 
 - [ ] **763 — The skip buttons on PC are too close to Play; and draft play-button designs for him to choose from** (2 Sep, PC)
       **STATUS: 🟢 READY — nothing is stopping this. Queued behind the items above.**
@@ -28640,7 +28645,7 @@ re-opened #480, which I had marked done and had not fixed.
          valid outcome.
       🎨 **3 Sep — BOTH CLAUSES DRAWN AND SENT (#545)** (`scratchpad/play763.html`, rendered and sent to the chat). What the sheet found first: on PC the play button IS the timecode pill (`#time-readout`, tap to play, 21px), and the skips sit 4px INSIDE its box on purpose (queue 526, negative margins) — so "too close" is that design. Clause 1: three gaps — 6px as shipped, 12px (the negative margins removed; recommended), 18px. Clause 2: four play designs at ship size and 2×, idle and playing — A as shipped (recommended, it is what he said matches the row), B the pill with a ▶/⏸ glyph, C a round play button with the time beside it, D the pill filling blue while playing. **BUILT OUT UNTIL HE picks a gap and a letter, or says "none"** — nothing visual ships before that.
 
-- [ ] **764 — A layer being dragged in the timeline renders BEHIND the other layers; it must show on top** (2 Sep, PC, with a screenshot mid-drag)
+- [x] **764 — A layer being dragged in the timeline renders BEHIND the other layers; it must show on top** (2 Sep, PC, with a screenshot mid-drag)
       **STATUS: 🟢 READY — nothing is stopping this. Queued behind the items above.**
       His words: *"Dragging the add layer makes it go behind the other layers and it looks bad, make it visually show on
       top"*
@@ -28648,7 +28653,7 @@ re-opened #480, which I had marked done and had not fixed.
       partly hidden by its neighbours instead of floating over them. "the add layer" here is the layer you are
       dragging (the row being moved), not the + button — the fix is the stacking order of the row being dragged
       (z-index / a lifted clone), plus a shadow so it reads as lifted.
-
+      ✅ **v15.09 — DONE.** A dragged LAYER row has had `z-index: 30` all along; the add row's dragging class only set a border and a glow, so while you dragged it it slid under the sticky track heads (z 8) and under the rows it passed — half the bar visible, the rest behind, his screenshot. It stacks like a dragged layer row now, with the same lifted shadow. Structure test both ways (on top while dragging, ordinary when not); mutation-checked.
 
 - [ ] **765 — PC: move the split/jump buttons off the playhead to the right of the add row, give each its shortcut letter (A / S / D), make A and D follow which side of the clip you are on, S extends when not hovering, remove the old playhead buttons, and redesign the set** (2 Sep, PC, two screenshots: the `⊢ ● ⊣` trio beside the playhead at 00:03:02 and the `[ ⟨⟩ ]` trio at 00:03:46)
       **STATUS: 🟢 READY — nothing is stopping this. Queued behind the items above.**
@@ -28718,6 +28723,7 @@ re-opened #480, which I had marked done and had not fixed.
       📐 **2 Sep — NOT MEASURED YET, said plainly.** A first probe dispatched a synthetic touch drag on the ruler and time moved by 0 in every state, so its per-move numbers (0.2ms with nothing selected, ~1ms with a shape selected) describe a gesture that never engaged, not a scrub. The scrub is a RELATIVE grab on `#timeline` itself (`onDown` → `beginScrub`, axis-locked after 5px, timeline.js ~3842 / ~4133); the next probe must drive that path and confirm `FM.time` moved before any frame gap is believed.
       📐 **2 Sep, second probe — THE GESTURE ENGAGED (time moved 2.8s per drag) and on this machine at 380px it is smooth either way:** 39–40 frames per 30-step drag, median 16.7ms, worst 18.4ms, **0 frames over 33ms**, with nothing selected, with a shape selected (inspector grid open), and again with nothing. So the stutter he feels is not in the scrub path itself here. Two things his phone has that this probe did not: a real captured touch pointer, and — more likely — a CATEGORY open under the selection (Position / Scale, Colouring…) whose rows refresh their live values on every scrub frame. Next probe: the same drag with Position / Scale open, then with an animated layer (keyframes) selected, and if still flat here, the open-project frame probe's pattern (#508) — record frames on HIS device behind Settings → Copy.
       📐 **Third probe, same session — Position / Scale open under the selection: still flat** (40 frames, median 16.7ms, worst 18.5ms, 0 over 33). So every state stageable here is smooth, and the entry is honest about what that means: the jank is on HIS device, not reproducible on this Mac — the same wall as #95, #125, #387 and #508. **What is buildable without him:** the #508 frame probe's pattern applied to the scrub — record every frame of a scrub on the device, with what was selected and which panel was open, behind Settings → Copy — so the next paste names the cost instead of the next guess. That is the plan for this entry's turn.
+      ✅ **v15.09 — THE INSTRUMENT IS BUILT, the step this entry named.** Every horizontal scrub records its frames on the device that runs it — with what was selected (type, and whether it carries effects), which inspector panel was open, whether the effects browser was up, the layer count — and writes **Settings → Your last scrub → Copy**: frames, median and worst gap, every frame over 33ms with its time, a one-line verdict. Nothing about the scrub changed. Test drives the real gesture at phone width with a shape selected and reads the report back. **BUILT OUT UNTIL HE scrubs once on his phone with a layer selected and pastes that report** — it will name the cost instead of the next guess.
 
 - [x] **769 — "The lines when editing points … STILLLLLLL … don't line up with the actual object when you zoom in the canvas"** (2 Sep, phone screenshot at v15.02) ✅ **logged and redirected on arrival: this is #561 re-opened, not a new item.**
       His words: *"The lines when editing points for some reason STILLLLLLL even tho I told you to fix still don't line up with the actual object when you zoom in the canvas"*

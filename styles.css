@@ -7811,7 +7811,12 @@ body.fm-pushing #toast { z-index: 213; }
 }
 .tl-addrow-grip span { display: block; height: 1.5px; border-radius: 1px; background: rgba(150, 232, 255, .55); }
 .tl-addrow-grip:hover span { background: rgba(150, 232, 255, .9); }
-.tl-addrow-dragging { cursor: grabbing; border-style: solid; border-color: rgba(150, 232, 255, .9); box-shadow: 0 0 16px rgba(90, 199, 237, .38); }
+/* …AND IT RIDES ON TOP WHILE IT IS BEING DRAGGED (queue 764). Ezra, PC: "Dragging the add layer makes it go behind
+   the other layers and it looks bad, make it visually show on top". A dragged LAYER row gets `z-index: 30`
+   (`.track-row.row-dragging` above); the add row's dragging class only ever set a border and a glow, so it
+   slid UNDER the sticky track heads (z 8) and under the rows it was passing — half a bar visible, the rest
+   behind. Same stacking as the layer rows now, and the same lifted shadow so it reads as picked up. */
+.tl-addrow-dragging { cursor: grabbing; position: relative; z-index: 30; border-style: solid; border-color: rgba(150, 232, 255, .9); box-shadow: 0 8px 22px rgba(0,0,0,.55), 0 0 16px rgba(90, 199, 237, .38); }
 /* THE GLIDE HOME (queue 307, clause 4). While the finger is down the marker's transform must be
    INSTANT — it is following the pointer, and a transition on it would put the marker permanently
    behind the finger, which is its own kind of wrong. `transform` is deliberately absent from
@@ -8868,13 +8873,21 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
     --hm-ring-edge: rgba(38, 118, 175, .38);
     --hm-wash: rgba(52, 132, 184, .10);
   }
-  .hm-grid { position: relative; }
-  .hm-grid::before {
-    content: ''; position: absolute; inset: -40px; z-index: 0; pointer-events: none;
+  .hm-grid { position: relative; z-index: 1; }
+  /* THE WASH IS THE WHOLE SURFACE, NOT THE COLUMN (queue 716). Ezra, PC: "the background changing colour
+     where the courser is on pc looks bad coz it cuts off and it looks like a box". It was a pseudo-element
+     of .hm-grid — a CENTRED column of at most --hm-col — with `inset: -40px`, so on a wide screen the glow
+     was clipped to a rectangle 40px wider than the project list, and moving the mouse into the empty side
+     showed the light stopping at a straight edge. It lives on the scroller now, viewport-fixed, so it
+     follows the cursor across the whole home screen with no edge anywhere. Same gradient, same variables,
+     same gating; the cards' ring is unchanged. */
+  .hm-scroll { position: relative; }
+  .hm-scroll::before {
+    content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
     background: radial-gradient(460px circle at var(--glow-x) var(--glow-y), var(--hm-wash), transparent 62%);
-    background-attachment: fixed;
     opacity: 0; transition: opacity .22s ease-out;
   }
+  .hm-scroll.glow-on::before { opacity: 1; }
   .hm-scroll.glow-on .hm-grid::before { opacity: 1; }
   /* THE RING — one pixel of border, lit from where the cursor is. `padding: 1px` plus the xor mask
      leaves only the border band painted, so it reads as the edge catching light rather than as a glow

@@ -603,6 +603,28 @@ window.FM = window.FM || {};
       opWrap.append(opHead, opBtns, opOut);
       body.appendChild(group(opWrap));
 
+      /* ═══ "YOUR LAST SCRUB" (queue 768) — the scrub probe's report, same shape as the row above. */
+      const scWrap = el('div', 'set-row set-perf');
+      const scOut = el('pre', 'set-perf-out');
+      let scText = '';
+      try { scText = localStorage.getItem('fm.lastScrubReport') || ''; } catch (e) {}
+      scOut.textContent = scText || 'Nothing yet \u2014 this fills in the next time you scrub the timeline.';
+      const scCopy = el('button', 'set-action', 'Copy'); scCopy.type = 'button'; scCopy.disabled = !scText;
+      scCopy.addEventListener('click', async () => {
+        const text = scOut.textContent;
+        try { await navigator.clipboard.writeText(text); if (FM.toast) FM.toast('Copied \u2014 paste it to me', 3000); }
+        catch (e) {
+          try { const r = document.createRange(); r.selectNodeContents(scOut); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r); if (FM.toast) FM.toast('Selected \u2014 use Copy from the menu', 3000); } catch (e2) {}
+        }
+      });
+      const scHead = el('div', 'set-rowtext');
+      scHead.appendChild(el('div', 'set-label', 'Your last scrub'));
+      scHead.appendChild(el('div', 'set-hint', 'How smoothly the last drag of the playhead ran \u2014 every frame, what was selected and which panel was open. If scrubbing feels jumpy on your phone, scrub once, come here, Copy, and paste it to me.'));
+      const scBtns = el('div', 'set-perf-btns');
+      scBtns.append(scCopy);
+      scWrap.append(scHead, scBtns, scOut);
+      body.appendChild(group(scWrap));
+
       /* ═══ "A CLIP WITH NO PICTURE" (queue 129) ═════════════════════════════════════════════════
        * That entry's last question is put to HIM — "what does the FILE say, .mov or .mp4? A .mov
        * points at the container, an .mp4 at the codec, and the two need different fixes." The app
@@ -674,6 +696,7 @@ window.FM = window.FM || {};
       setTimeout(() => s.remove(), 260);   // after the slide-out
     },
     isOpen() { return !!scrim; },
+    toggle() { if (FM.settings.isOpen()) FM.settings.close(); else FM.settings.open(); },   // by name, not `this`: callers pass it detached — `(FM.settings.toggle || FM.settings.open)()` — and a detached method has no `this` in strict mode   // a second tap on the button CLOSES it (queue 762)
   };
 
   load();
