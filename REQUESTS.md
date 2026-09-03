@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.18
+> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.19
 >
-> **State:** v15.18, 1189 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
+> **State:** v15.19, 1189 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
 > **Four pictures are in the chat waiting for one letter each** (nothing visual ships before you pick): **#642** the home background A–D · **#763** the skip-button gap (6/12/18) and the play button A–D · **#765** the split/jump buttons' look 1–3 · and **#760's people shapes** come next, drawn the same way. Everything else waiting on you is a paste or a letter, listed by `tools/next.sh` under its own heading so it cannot hide: #425 A/B · #454 A/B/C · #482 a category · #484 A/B/C · #539 A/B/C · #544 which things · #564 A/B/C · #570 smooth/stepped/leave · #624 a/b/c · #654 A/B/C · #406 which menu · #674 (b)/(c) · #95/#96/#663 the **Your last playback** paste · #215/#604/#677 the **Your last export** paste · #129 the **clip with no picture** paste · the oldest lag item, a **Measure** report · #657 a sample while scrubbing · #676/#706 what "twice" looks like · #712 whether Back from a category stalls · #592 a screenshot.
 > **Next, in order, each already built and proved, shipping one by one:** #508 (a frame-time report of the project-open slide from your phone), #553 (coming back to the app half-drawn), #606, #674 (clip names over filmstrips), #688 (one intro film, dark mode lands on dark), #706 (the add sheet's one motion), #715 (PC sliders glide), #716 (the cursor glow box), #717 (copy/paste button lit), #762 (tap again closes), #764 (dragged add row on top); then #760, #765, #768 and the audit findings.
 
@@ -28290,7 +28290,7 @@ re-opened #480, which I had marked done and had not fixed.
       - User sees: on PC, double-click a benchmark pin → inline rename box; the tooltip invites it.
         ✅ **v15.18 — the last rename route is gone.** #590 removed renaming "outright, including any other route", and the PC double-click still opened an inline box, the tooltip still said so, rebuild() still special-cased it and the stylesheet still dressed it. All four removed. Test double-clicks a real marker and pins both sources. Mutation (a dblclick that makes the box) caught.
 
-- [ ] **726 — js/inspector.js:943-944 vs :725-727 — fine-mode drag still glides at coarse rate** (hunt HIGH #9)
+- [x] **726 — js/inspector.js:943-944 vs :725-727 — fine-mode drag still glides at coarse rate** (hunt HIGH #9) ✅ DONE v15.19.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
@@ -28301,6 +28301,7 @@ re-opened #480, which I had marked done and had not fixed.
       - Fix: make `cancelDrag` call `stop()` (cancel the raf and settle); or give attachGlide a `shouldGlide()` predicate checked in release; or register the strip's handler before attachGlide.
       - User sees: a fine-mode drag (finger ≥ 34 px off the strip) ending in a flick overshoots the value at full coarse rate.
       🔧 **v15.09 — fixed with #715 (the tick comes at its turn in the queue, after #725):** `cancelDrag` stops a glide already in flight, so a drag ended in fine mode lands where it was aimed.
+        ✅ **v15.19 — closed by #715's rewrite of attachGlide (v15.09), whose cancelDrag now stops an in-flight glide and settles** — exactly the fine-zone release this finding describes — and whose proof 715c ("fine mode glides again": cancelDrag back to only nulling the drag) is this case caught by name. Ticked at its turn in the queue; no further code.
 
 - [ ] **727 — js/inspector.js:2098 — audio "Duplicate" is a Reset** (hunt HIGH #10)
       **STATUS: 🟢 READY — nothing is stopping this**
