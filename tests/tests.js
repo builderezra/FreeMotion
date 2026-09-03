@@ -54078,6 +54078,25 @@
     }
   });
 
+  /* ═══ 730 (hunt MEDIUM #13): WIGGLE FAR FROM ANY EDGE RENDERS ONE PLATE, NOT TWO. The three edge-aware canvas
+     effects sat in CFX_NO_BBOX and were handed the full frame as their bbox, so their `near` test was always true and
+     every frame paid for an expanded plate. A small wiggling shape mid-frame → no expanded plate; the same shape on
+     the left edge → one (the control that the plate path still works). */
+  test('730: a wiggling layer nowhere near an edge does not render an expanded plate, one on the edge does', { item: '730' }, async function () {
+    if (!FM._fxStats || typeof FM._fxStats.plates !== 'number') throw new Error('FM._fxStats.plates counter missing');
+    const P = { width: 320, height: 240, fps: 30, duration: 4, background: '#000000' };
+    const mk = (x) => { const L = FM.makeLayer('shape', { shape: 'rect', x: x, y: 120, shapeW: 40, shapeH: 40, fill: '#fff', start: 0, duration: 4 }); L.effects = [{ type: 'wiggle', enabled: true, params: { amount: 10, speed: 3 } }]; return L; };
+    const c = offscreen(320, 240), ctx = c.getContext('2d');
+    const n0 = FM._fxStats.plates;
+    FM.renderScene(ctx, scene([mk(160)], { project: P }), 0.5);
+    const mid = FM._fxStats.plates - n0;
+    if (mid !== 0) throw new Error('a wiggling shape in the middle of the frame rendered ' + mid + ' expanded plate(s) — its `near` test is still always true (the full-frame placeholder bbox)');
+    const n1 = FM._fxStats.plates;
+    FM.renderScene(ctx, scene([mk(4)], { project: P }), 0.5);
+    const edge = FM._fxStats.plates - n1;
+    if (edge < 1) throw new Error('control: a wiggling shape ON the left edge rendered no expanded plate — the plate path is broken, so the first assertion proves nothing');
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

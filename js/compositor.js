@@ -1328,7 +1328,7 @@ window.FM = window.FM || {};
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
   // recompute when the source frame and params are unchanged (static images, paused/scrub
   // redraws, repeated renders of one frame). Stats exposed for verification.
-  FM._fxStats = { ckCompute: 0, lkCompute: 0 };
+  FM._fxStats = { ckCompute: 0, lkCompute: 0, plates: 0 };   // plates: expanded plates rendered (queue 730 — the suite counts them)
   // Bumped whenever a reused offscreen canvas (grade/key/blend) is (re)computed, so srcToken varies for
   // it. Without this, a canvas's object identity is constant while its pixels change every frame, and any
   // memo downstream (e.g. key over a graded video, or grade over a frame-blend) would freeze on frame 1.
@@ -8871,7 +8871,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   }
   // Effects that never read the alpha bbox (no texture wrap, no pivot): skip the full-frame
   // getImageData scan — it was the single most expensive part of running them per frame.
-  const CFX_NO_BBOX = { wiggle: 1, drift: 1, orbit: 1, rasterextrude: 1, motionflow: 1, particles: 1, motionblur: 1, halation: 1, framestutter: 1, speedlines: 1, timewarp: 1, lightwrap: 1, temporaldenoise: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
+  /* wiggle / drift / orbit LEFT the list too (queue 730, hunt MEDIUM #13): each has a `near` test meant to keep the
+     expanded-plate cost off frames where the layer is nowhere near an edge — and the full-frame placeholder this list
+     hands them made `near` always true, so all three rendered a second full plate every frame. They get the fast
+     alpha scan like everything else; pixels unchanged, one drawLayer per frame again. */
+  const CFX_NO_BBOX = { rasterextrude: 1, motionflow: 1, particles: 1, motionblur: 1, halation: 1, framestutter: 1, speedlines: 1, timewarp: 1, lightwrap: 1, temporaldenoise: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
   Object.setPrototypeOf(CFX_NO_BBOX, null);   // own keys only — see POSTFX
   /* A plate is normally the size of the COMP, so anything the layer draws outside the frame is
    * clipped away before an effect ever sees it. Tiles' whole-layer repeat needs that lost content:
@@ -8916,6 +8920,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     let mx = Math.max(_min, Math.max(0, Math.max(reach - cx, cx + reach - PW)));
     let my = Math.max(_min, Math.max(0, Math.max(reach - cy, cy + reach - PH)));
     if (mx < 2 && my < 2) return null;                          // nothing outside the frame — caller uses the normal plate
+    FM._fxStats.plates++;   // queue 730: an expanded plate is being rendered — the suite counts these
     mx = Math.min(mx, PW * 0.6); my = Math.min(my, PH * 0.6);   // cost ceiling: at most ~4.8x the comp's pixels
     const EW = Math.max(1, Math.round((PW + 2 * mx) * ps)), EH = Math.max(1, Math.round((PH + 2 * my) * ps));
     /* Pooled by depth for the same reason A/B below are: the drawLayer at the end of this function
