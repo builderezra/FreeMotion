@@ -23,22 +23,28 @@ function drawFigure(g, px, P, woman) {
   g.beginPath();
   // head
   g.moveTo(X(P.headR), Y(P.headF)); g.arc(X(0), Y(P.headF), R(P.headR), 0, Math.PI * 2);
-  // torso: shoulders → hip (man) or → hem (woman), rounded shoulders
+  // THE SHOULDER CAP: one rounded bar across the whole shoulder line, as wide as the arms' outer edge, so
+  // the outer silhouette runs unbroken from the neck to the wrist (the #435 rule — no notch).
+  const capH = (P.capF || 0.06);
+  rr(g, X(-P.shW), Y(P.shF), R(2 * P.shW), R(capH), R(P.shR));
+  // THE CHEST: a narrow column under the cap, so an open channel exists between it and each arm
   if (!woman) {
-    poly(g, [[X(-P.shW), Y(P.shF)], [X(P.shW), Y(P.shF)], [X(P.hipW), Y(P.splitF)], [X(-P.hipW), Y(P.splitF)]], R(P.shR));
+    // one taper from the chest to the hips — a step at the waist read as a belt (first draft of this sheet)
+    poly(g, [[X(-P.torsoW), Y(P.shF + capH * 0.5)], [X(P.torsoW), Y(P.shF + capH * 0.5)], [X(P.hipW), Y(P.splitF)], [X(-P.hipW), Y(P.splitF)]], R(0.02));
   } else {
-    poly(g, [[X(-P.shW), Y(P.shF)], [X(P.shW), Y(P.shF)], [X(P.torsoW * 1.15), Y(P.flareF)], [X(P.hemW), Y(P.hemF)], [X(-P.hemW), Y(P.hemF)], [X(-P.torsoW * 1.15), Y(P.flareF)]], R(P.shR));
+    // waist, then an A-line: the hem is the widest thing on her by a margin the eye keeps at 24px
+    poly(g, [[X(-P.torsoW), Y(P.shF + capH * 0.5)], [X(P.torsoW), Y(P.shF + capH * 0.5)], [X(P.torsoW * 0.9), Y(P.flareF)], [X(P.hemW), Y(P.hemF)], [X(-P.hemW), Y(P.hemF)], [X(-P.torsoW * 0.9), Y(P.flareF)]], R(0.015));
   }
-  // legs: from a little above the split to the floor, rounded feet
+  // legs: from a little above the split / hem to the floor, rounded feet, the leg's outer line continuing the hip
   const legTop = woman ? P.hemF - 0.015 : P.splitF - 0.012;
   rr(g, X(-P.hipW), Y(legTop), R(P.hipW - P.gapW), Y(1) - Y(legTop), R(P.footR));
   rr(g, X(P.gapW), Y(legTop), R(P.hipW - P.gapW), Y(1) - Y(legTop), R(P.footR));
-  // arms: two bars hung from the shoulder, optionally angled out, with a round or square hand
+  // arms: two SEPARATE bars hung from under the cap, thinner than the legs, optionally angled out, round hands
   const armBot = woman ? P.armBotFW : P.armBotF, aw = P.armOut - P.armIn;
   [-1, 1].forEach(s => {
-    const x0 = X(s * P.armIn), x1 = X(s * P.armOut), yT = Y(P.armTopF), yB = Y(armBot);
-    const dx = R(P.armAngle || 0) * s; // bottom pushed outward for an angled arm
-    poly(g, [[Math.min(x0, x1), yT], [Math.max(x0, x1), yT], [Math.max(x0, x1) + dx, yB], [Math.min(x0, x1) + dx, yB]], R(P.handR != null ? P.handR : aw / 2));
+    const xi = X(s * P.armIn), xo = X(s * P.armOut), yT = Y(P.shF + capH * 0.6), yB = Y(armBot);
+    const dx = R(P.armAngle || 0) * s;
+    poly(g, [[Math.min(xi, xo), yT], [Math.max(xi, xo), yT], [Math.max(xi, xo) + dx, yB], [Math.min(xi, xo) + dx, yB]], R(P.handR != null ? P.handR : aw / 2));
   });
   g.fill('nonzero');
 }
@@ -69,6 +75,11 @@ function row(label, note, drawKind, rec) {
 }
 const stage = document.getElementById('stage');
 const f = document.getElementById('app');
+if (/nocurrent/.test(location.search)) {   // iterate on the candidates without loading the app (a mutation may be on disk)
+  f.remove();
+  CANDIDATES.forEach(([k, note, P]) => stage.appendChild(row(k, note, (g, s, w) => drawFigure(g, s, P, w))));
+  window.__done = true;
+}
 f.addEventListener('load', function () {
   waitFM(f.contentWindow).then(async function (FM) {
     await new Promise(r => setTimeout(r, 400));

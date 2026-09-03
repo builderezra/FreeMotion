@@ -53186,6 +53186,49 @@
     }
   });
 
+  /* ═══ 553 (v15.06): COMING BACK TO THE APP FINISHES A PUSH THAT WAS LEFT MID-FLIGHT.
+     His screenshot is phase 1 of the two-phase push frozen: home slid partly out, #app parked off the right
+     edge, both drawn. A hidden page pauses CSS animations (no animationend) and throttles or freezes timers,
+     so the 9s stranded guard is not enough on a phone. The resume events must finish it. Two-way: the parked
+     state is asserted FIRST (or the event would be proving nothing), then pageshow, then nothing mid-flight. */
+  test('553: returning to the app (pageshow / visible) finishes a push left mid-flight', { item: '553' }, async function () {
+    if (!FM.home || !FM.home.open || !FM.home.close) throw new Error('FM.home is missing');
+    if (typeof FM._finishIfStranded !== 'function') throw new Error('FM._finishIfStranded is missing — nothing listens for the app coming back');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wasOpen = !!(FM.home.isOpen && FM.home.isOpen());
+    const gate = FM.home._pushAllowed;
+    const app = document.getElementById('app'), home = document.getElementById('home-screen');
+    if (!app || !home) throw new Error('#app / #home-screen missing');
+    const mid = () => document.body.classList.contains('fm-pushing') || app.classList.contains('fm-push-wait') || app.classList.contains('fm-push-in');
+    try {
+      await atPhoneWidth(async function () {
+        if (typeof gate === 'function') FM.home._pushAllowed = () => true;
+        if (!FM.home.isOpen()) { FM.home.open(); await sleep(200); }
+        // phase 1 only: park the editor and wait for a load that never comes — his exact picture
+        FM.home.close({ push: true, wait: true });
+        await sleep(60);
+        if (!mid()) throw new Error('setup: the push did not park (#app classes: "' + app.className + '") — nothing is mid-flight to rescue');
+        window.dispatchEvent(new Event('pageshow'));
+        await sleep(40);
+        if (mid()) throw new Error('pageshow arrived with a push parked and it is STILL parked (#app "' + app.className + '", body "' + document.body.className + '") — this is the half-drawn screen he photographed');
+        if (!home.classList.contains('hidden')) throw new Error('after the rescue the home screen is still showing alongside the editor');
+        // …and the visibility path, the other way the app comes back
+        FM.home.open(); await sleep(200);
+        FM.home.close({ push: true, wait: true });
+        await sleep(60);
+        if (!mid()) throw new Error('setup (2): the second push did not park');
+        document.dispatchEvent(new Event('visibilitychange'));     // document.hidden is false in the runner, i.e. "now visible"
+        await sleep(40);
+        if (mid()) throw new Error('a visibilitychange to visible left the push parked');
+      });
+    } finally {
+      if (typeof gate === 'function') FM.home._pushAllowed = gate;
+      try { if (FM.home.abortPush) FM.home.abortPush(); } catch (e) {}
+      try { if (wasOpen && !FM.home.isOpen()) FM.home.open(); else if (!wasOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep(120);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

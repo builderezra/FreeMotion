@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.05
+> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.06
 >
-> **State:** v15.05, 1170 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
+> **State:** v15.06, 1171 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
 > **Four pictures are in the chat waiting for one letter each** (nothing visual ships before you pick): **#642** the home background A–D · **#763** the skip-button gap (6/12/18) and the play button A–D · **#765** the split/jump buttons' look 1–3 · and **#760's people shapes** come next, drawn the same way. Everything else waiting on you is a paste or a letter, listed by `tools/next.sh` under its own heading so it cannot hide: #425 A/B · #454 A/B/C · #482 a category · #484 A/B/C · #539 A/B/C · #544 which things · #564 A/B/C · #570 smooth/stepped/leave · #624 a/b/c · #654 A/B/C · #406 which menu · #674 (b)/(c) · #95/#96/#663 the **Your last playback** paste · #215/#604/#677 the **Your last export** paste · #129 the **clip with no picture** paste · the oldest lag item, a **Measure** report · #657 a sample while scrubbing · #676/#706 what "twice" looks like · #712 whether Back from a category stalls · #592 a screenshot.
 > **Next, in order, each already built and proved, shipping one by one:** #508 (a frame-time report of the project-open slide from your phone), #553 (coming back to the app half-drawn), #606, #674 (clip names over filmstrips), #688 (one intro film, dark mode lands on dark), #706 (the add sheet's one motion), #715 (PC sliders glide), #716 (the cursor glow box), #717 (copy/paste button lit), #762 (tap again closes), #764 (dragged add row on top); then #760, #765, #768 and the audit findings.
 
@@ -20287,7 +20287,7 @@ re-opened #480, which I had marked done and had not fixed.
       resume, which is a lifecycle path (visibilitychange / pageshow / a PWA resume) that a desktop test
       never exercises. Start there rather than in the drawing code. The black-bar half of this entry was
       never investigated and is measurable without him.
-      ❓ASK: the app coming back with the home screen and the editor both drawn at once — seen it since late August? Y or N. (Do not wait on this: the black-bar half of the entry was never investigated and is measurable without you.)
+      ✅ ~~ASK: the app coming back with the home screen and the editor both drawn at once — seen it since late August?~~ HE ANSWERED 1 Sep: yes, still happening, on resume.
       His words, verbatim:
       > Leaving and opening a project glitches the app out like this
       > Notice the black bar at the bottom also
@@ -20324,6 +20324,7 @@ re-opened #480, which I had marked done and had not fixed.
       stranded, that is a much better explanation of "it's always junkie every time" than an easing curve.
       **The black bar is probably the same cause** — `#app` parked off-origin leaves its background
       showing below the two panels — but check it rather than assuming.
+        ✅ **v15.06 — THE RESUME PATH IS HANDLED, which nothing did before.** home.js listened for no `pageshow` and no `visibilitychange`, so a push interrupted by the app going to the background — CSS animations pause on a hidden page, `animationend` never fires, and a backgrounded tab throttles the 9s stranded timer (an iOS PWA freezes it) — could sit half-drawn for as long as he looked at it: his screenshot exactly. Now a push still in flight when the app comes back is FINISHED (`endPush(true)`, the same call the stranded timer makes), on both events. Test `553:` parks a real push, fires `pageshow` and a visibilitychange, and asserts nothing is left mid-flight and home is hidden — two-way, the parked state is asserted first. **The black bar at the bottom REMAINS OPEN** — it was never measured and needs the parked state staged in the pane with its layout read; not folded in unseen.
 
 - [x] **554 — Picking a filter does not preview what it will actually look like.** (25 Aug.) ✅ v12.68
       His words, verbatim:
@@ -28597,6 +28598,7 @@ re-opened #480, which I had marked done and had not fixed.
          (b) render the people shapes BIG and at tile size and at canvas size, as a picture he sees BEFORE anything ships
          (#545 — never ship a visual he has not seen); (c) offer real options, mark one recommended, let him pick.
       **Design request → #545 applies to clauses 2 and 3: pictures first, his pick, then ship.**
+      🎨 **3 Sep — CLAUSES 1 AND 2 DRAWN AND SENT (#545)** (`scratchpad/tiles760.html`, rendered and sent): the PC Shape grid at 40px as shipped (seven across), 48px (six across, recommended) and 56px (five across); and four colour treatments — A as shipped (each shape its own hue on a tinted tile), B one teal for all, C the Shape tab's violet for all, D white glyphs on the coloured tiles (recommended: the colour he liked stays in the tile and every glyph is legible at 24px). One size and one letter make one build. **Clause 3 (the people) is drawn — five figures, A drawn by the app itself, B–E redrawn (AIGA signage, softer/bigger head, classic restroom sign, athletic) at 24/48/220px in `tests/_people760.html` — and goes out as its own picture the moment the tree is free to render the as-shipped row from the app.** Nothing visual ships before his picks.
 
 - [ ] **761 — "make sure all these requests are logged"** (2 Sep, standing)
       **STATUS: ✅ done on arrival, and kept as a standing check like #713**

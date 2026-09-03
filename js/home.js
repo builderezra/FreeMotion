@@ -557,6 +557,29 @@ window.FM = window.FM || {};
     endPush(false);
   }
 
+  /* ═══ A PUSH MUST NOT SURVIVE THE APP BEING PUT AWAY (queue 553). Ezra's screenshot: the home screen
+   * on the left ~78% and the editor squeezed down the right — both drawn at once — and on 1 Sep he
+   * confirmed it still happens "when the app comes back". That is the two-phase push caught mid-flight by
+   * the app going to the background: CSS animations pause on a hidden page, so `animationend` never
+   * fires; the 9s stranded timer (v12.67) is the only rescue, and a backgrounded tab throttles timers,
+   * an iOS PWA freezes them outright — so the picture can sit there for as long as he looks at it.
+   * Nothing here listened for the app coming BACK. Now it does: on `pageshow` and on a visibilitychange
+   * to visible, a push that is still in flight is FINISHED, not aborted — by then the project has all but
+   * certainly loaded, and the editor is recoverable where two half-screens are not (the same call the
+   * stranded timer makes). A pop has its own backstop timer and is left alone. */
+  function finishIfStranded(why) {
+    const app = document.getElementById('app');
+    const mid = document.body.classList.contains('fm-pushing') ||
+      !!(app && (app.classList.contains('fm-push-wait') || app.classList.contains('fm-push-in')));
+    if (!mid) return false;
+    try { console.warn('[home] a push was still in flight on ' + why + ' — finishing it (queue 553)'); } catch (e) {}
+    endPush(true);
+    return true;
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) finishIfStranded('visibilitychange'); });
+  window.addEventListener('pageshow', () => { finishIfStranded('pageshow'); });
+  FM._finishIfStranded = finishIfStranded;   // seam: the suite stages a parked push and fires the resume events
+
   function startPush(lead, wait) {
     const app = document.getElementById('app');
     if (!root || !app) { if (root) root.classList.add('hidden'); return false; }
