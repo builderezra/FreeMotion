@@ -39,9 +39,17 @@ window.FM = window.FM || {};
     const buf = ctx.createBuffer(1, n, ctx.sampleRate);
     const d = buf.getChannelData(0);
     const rnd = seeded(n * 31 + (colour === 'brown' ? 7 : colour === 'pink' ? 11 : 3) + Math.floor(ctx.sampleRate / 100));
-    let last = 0;
+    let last = 0, b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
     for (let i = 0; i < n; i++) {
       const w = rnd() * 2 - 1;
+      /* 'pink' WAS WHITE (queue 743, hunt MEDIUM #26): two recipes asked for it and got static. Paul Kellet's filter — the
+         usual 1/f approximation, −3 dB per octave — so a pass-by and a vinyl crackle sit between air and hiss. */
+      if (colour === 'pink') {
+        b0 = 0.99886 * b0 + w * 0.0555179; b1 = 0.99332 * b1 + w * 0.0750759; b2 = 0.96900 * b2 + w * 0.1538520;
+        b3 = 0.86650 * b3 + w * 0.3104856; b4 = 0.55000 * b4 + w * 0.5329522; b5 = -0.7616 * b5 - w * 0.0168980;
+        d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11; b6 = w * 0.115926;
+        continue;
+      }
       // 'brown' integrates white noise: far more low end, which is what makes a whoosh feel like air
       // rather than like static.
       if (colour === 'brown') { last = (last + 0.02 * w) / 1.02; d[i] = last * 3.5; }
@@ -808,6 +816,7 @@ window.FM = window.FM || {};
   function categoriesOf() { return SFX.reduce((a, s) => (a.indexOf(s.cat) < 0 ? a.concat(s.cat) : a), []); }
 
   FM.sfx = {
+    _noiseBuffer: noiseBuffer,   // suite seam (queue 743)
     open: open,
     close: close,
     list: () => SFX.slice(),

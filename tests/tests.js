@@ -54453,6 +54453,19 @@
     }
   });
 
+  /* ═══ 743 (hunt MEDIUM #26): PINK NOISE IS PINK. It was white under another name. Spectral tilt measured as the
+     first-difference energy ratio E[(x[i]−x[i−1])²] / E[x²]: white ≈ 2, pink well under 1, brown lower still. So
+     pink must sit between brown and white — the two controls. */
+  test('743: the sound-effect noise generator\'s pink is pink — between brown and white in spectral tilt', { item: '743' }, async function () {
+    if (!FM.sfx || !FM.sfx._noiseBuffer || !FM.audioCtx) throw new Error('FM.sfx._noiseBuffer / FM.audioCtx missing');
+    const ctx = FM.audioCtx();
+    const tilt = (colour) => { const d = FM.sfx._noiseBuffer(ctx, 0.5, colour).getChannelData(0); let e = 0, de = 0; for (let i = 1; i < d.length; i++) { e += d[i] * d[i]; de += (d[i] - d[i - 1]) * (d[i] - d[i - 1]); } return de / Math.max(1e-12, e); };
+    const white = tilt('white'), pink = tilt('pink'), brown = tilt('brown');
+    if (!(white > 1.6)) throw new Error('control: white noise measures a tilt of ' + white.toFixed(3) + ' (expected about 2)');
+    if (!(brown < pink)) throw new Error('control: brown (' + brown.toFixed(3) + ') should be darker than pink (' + pink.toFixed(3) + ')');
+    if (!(pink < 1.2)) throw new Error("'pink' measures a tilt of " + pink.toFixed(3) + ' — that is white noise under another name');
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel
