@@ -54969,6 +54969,63 @@
     if (hint && /nine|centre, edges and corners/i.test(hint.textContent)) throw new Error('the anchor pad hint still describes nine points; the grid snaps to 25');
   });
 
+  /* ═══ 770 (hunt MEDIUM #43): THE MOTION PATH AND THE TRACKER SEED DRAW WHERE THE PICTURE IS WHEN THE PREVIEW IS A CROP.
+     Queue 561's bug in two more places: each overlay mapped with its own offset from origin 0. Same probe as the point
+     editor's: phone width, zoom 3x (a crop with an offset origin), ink on the overlay at FM.projectToOverlay of a known
+     point — and none at the old mapping when that lands inside the overlay. */
+  test('770: the motion path\'s keyframe dot and the tracker\'s seed box land on the picture in a zoomed, cropped preview', { item: '770', budgetMs: 30000 }, async function () {
+    if (!FM.motionPath || !FM.tracker || !FM.projectToOverlay) throw new Error('motionPath / tracker / projectToOverlay missing');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const ink = (ov, px) => { const g = ov.getContext('2d'), dpr = window.devicePixelRatio || 1, x = Math.round(px.x * dpr), y = Math.round(px.y * dpr); if (x < 8 || y < 8 || x >= ov.width - 8 || y >= ov.height - 8) return null; const d = g.getImageData(x - 7, y - 7, 15, 15).data; let a = 0; for (let i = 3; i < d.length; i += 4) a += d[i]; return a; };
+    try {
+      if (hadHome) FM.home.close();
+      await atPhoneWidth(async function () {
+        const P = { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' };
+        const L = FM.makeLayer('shape', { name: 'mp770', shape: 'rect', x: 400, y: 900, shapeW: 120, shapeH: 120, fill: '#ff4488', start: 0, duration: 4 });
+        L.transform.x = { kf: [{ t: 0, v: 400, e: 'linear' }, { t: 2, v: 700, e: 'linear' }] };
+        FM.scene = scene([L], { project: P }); FM.selectLayer(L.id); if (FM.pause) FM.pause(); FM.setTime(0); FM.refreshAll(); await sleep(200);
+        FM.motionPath.open(L.id); await sleep(200);
+        FM.viewport.scale = 3; FM.viewport.x = 0; FM.viewport.y = 0; FM.viewport.apply(); await sleep(300);
+        if (FM._motionPathDraw) FM._motionPathDraw(); await sleep(60);
+        const cv = document.getElementById('preview'), ov = document.getElementById('mpath-overlay');
+        if (!cv || !ov) throw new Error('setup: no #preview / #mpath-overlay');
+        const OX = cv.__fmOX || 0, OY = cv.__fmOY || 0;
+        if (!(OX > 0 || OY > 0)) throw new Error('setup: the zoomed preview did not become a crop with an offset origin');
+        const y0 = FM.evalProp(L.transform.y, 0) || 900;
+        const want = FM.projectToOverlay(cv, 400, y0);
+        const a = ink(ov, want);
+        if (a === null) throw new Error('setup: the keyframe dot is outside the cropped preview — move the pan');
+        if (!(a > 0)) throw new Error('no ink on the motion-path overlay where the t=0 keyframe is (' + Math.round(want.x) + ',' + Math.round(want.y) + ') — it maps from origin 0, ignoring the crop origin ' + OX + ',' + OY);
+        FM.motionPath.stop(); await sleep(60);
+        // the tracker seed
+        const V = FM.makeLayer('video', { name: 'tk770', x: 540, y: 960, start: 0, duration: 4 });
+        FM.media.set(V.id, { kind: 'video', el: document.createElement('canvas'), width: 640, height: 360, duration: 4 });
+        FM.scene = scene([V], { project: P }); FM.selectLayer(V.id); FM.refreshAll(); await sleep(150);
+        FM.viewport.scale = 3; FM.viewport.x = 0; FM.viewport.y = 0; FM.viewport.apply(); await sleep(200);
+        FM.tracker.pick(V); await sleep(200);
+        const tov = document.getElementById('trk-overlay');
+        if (!tov) throw new Error('setup: no #trk-overlay after pick()');
+        if (FM.viewport.isDefault()) throw new Error('pick() reset the zoom — the overlay is zoom-aware now and must not');
+        const tr = tov.getBoundingClientRect(), tapX = tr.left + tr.width * 0.5, tapY = tr.top + tr.height * 0.5;
+        tov.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 11, pointerType: 'touch', isPrimary: true, clientX: tapX, clientY: tapY, buttons: 1 }));
+        await sleep(120);
+        if (FM._trackerPaint) FM._trackerPaint();
+        const b = ink(tov, { x: tapX - tr.left, y: tapY - tr.top });
+        if (!(b > 0)) throw new Error('the tracker drew its seed box away from the tap in a cropped preview — it maps from origin 0');
+      });
+    } finally {
+      try { FM.motionPath.stop(); } catch (e) {}
+      try { FM.tracker.cancel(); } catch (e) {}
+      try { FM.viewport.reset(); } catch (e) {}
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

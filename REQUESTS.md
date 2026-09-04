@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 4 Sep at v15.54
+> ## 📌 WHAT I NEED FROM YOU — updated 4 Sep at v15.55
 >
-> **State:** v15.54, 1223 tests green, tree clean.
+> **State:** v15.55, 1224 tests green, tree clean.
 > **Just fixed, ahead of everything:** the intro. You were right and it was mine — v15.08 faded the film to nothing half a second before the splash left, so the last stretch was a blank screen handing over to white. The fade is gone and the film plays through in both looks (#776).
 >
 > **TWO LETTERS ARE ALL I NEED** (nothing visual ships before you pick):
@@ -28792,7 +28792,7 @@ re-opened #480, which I had marked done and had not fixed.
       with this report, so it is worked at #561's place in the queue — fixed, not here. Tracked in #561.
 
 
-- [ ] **770 — The motion-path and tracker overlays ignore the zoomed preview's crop origin, like the point editor did** (hunt MEDIUM #43)
+- [x] **770 — The motion-path and tracker overlays ignore the zoomed preview's crop origin, like the point editor did** (hunt MEDIUM #43) ✅ DONE v15.55.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by the adversarial review of v15.04's diff, two refuters each, neither refuted. `js/motion-path.js:87` maps points with
       its own `ox/oy` and writes screen px into the zoomed wrap; `js/tracker.js:186` draws its seed box from origin 0 and sizes itself in
@@ -28800,6 +28800,7 @@ re-opened #480, which I had marked done and had not fixed.
       (`__fmOX`, `__fmOY`). Fix: place each overlay with `FM.placeOverlayOnCanvas` and map with `FM.projectToOverlay` (v15.04's shared
       pair), and cover each with the same overlay ink probe the point editor has. Not folded into v15.04 because each overlay has its own
       placement code to read first.
+        ✅ **v15.55 — the motion path and the tracker overlays are placed by FM.placeOverlayOnCanvas and mapped through FM.projectToOverlay, v15.04's shared pair, and neither resets the viewport on open any more.** Both drew from origin 0 in a cropped (zoomed-in) preview. Same ink probe as the point editor's, at 3x on a phone: the keyframe dot and the seed box land on the picture. Mutation (the motion path's old mapping) caught.
 
 - [ ] **771 — A template draft card whose template was deleted still promises "close it to save your changes back"** (hunt LOW #44)
       **STATUS: 🟢 READY — nothing is stopping this**

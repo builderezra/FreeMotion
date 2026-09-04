@@ -75,16 +75,18 @@ window.FM = window.FM || {};
     if (!l || l.parent || !cv || !overlay) { FM.motionPath.stop(); return; }
     const times = unionTimes(l);
     if (!times.length) { FM.motionPath.stop(); return; }
-    const r = cv.getBoundingClientRect(), wr = overlay.parentElement.getBoundingClientRect();
-    overlay.style.left = '0px'; overlay.style.top = '0px';
-    overlay.style.width = wr.width + 'px'; overlay.style.height = wr.height + 'px';
-    const dpr = window.devicePixelRatio || 1, W = Math.max(1, Math.round(wr.width * dpr)), H = Math.max(1, Math.round(wr.height * dpr));
+    /* PLACED AND MAPPED BY THE SHARED PAIR (queue 770, hunt MEDIUM #43 — the queue 561 bug in a third place). This overlay
+       covered the wrapper and mapped points with its own offset and scale; above 1.35x the preview is a CROP whose (0,0)
+       is project (__fmOX, __fmOY), so every dot and handle sat off the layer once you zoomed in. FM.placeOverlayOnCanvas
+       puts the overlay over the preview's box and FM.projectToOverlay knows the crop origin — the same two the point
+       editor, the mask editor and the crop tool use since v15.04. */
+    const r = FM.placeOverlayOnCanvas(overlay, cv);   // wrapper-space box, screen-space rect back
+    const dpr = window.devicePixelRatio || 1, W = Math.max(1, Math.round(r.width * dpr)), H = Math.max(1, Math.round(r.height * dpr));
     if (overlay.width !== W || overlay.height !== H) { overlay.width = W; overlay.height = H; }
     const g = overlay.getContext('2d');
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.clearRect(0, 0, wr.width, wr.height);
-    const k = dispScale(), ox = r.left - wr.left, oy = r.top - wr.top;
-    const map = p => [ox + p.x * k, oy + p.y * k];
+    g.clearRect(0, 0, r.width, r.height);
+    const map = p => { const o = FM.projectToOverlay(cv, p.x, p.y); return [o.x, o.y]; };
     // trajectory — sample the REAL evaluated path so Hermite curves (and eases) show live
     const t0 = times[0], t1 = times[times.length - 1], span = t1 - t0;
     if (span > 0) {
@@ -119,6 +121,7 @@ window.FM = window.FM || {};
     });
   }
   function loop() { if (!activeId) return; draw(); raf = requestAnimationFrame(loop); }
+  FM._motionPathDraw = draw;   // suite seam (queue 770)
 
   /* ---------- hit testing (project px; nearest of dots + the selected dot's handles wins) ---------- */
   function pick(pp) {
@@ -221,7 +224,8 @@ window.FM = window.FM || {};
     isActive() { return !!activeId; },
     open(layerId) {
       if (activeId) this.stop();
-      if (FM.viewport && FM.viewport.isDefault && !FM.viewport.isDefault()) FM.viewport.reset();   // overlay lays out in screen px — a zoomed viewport double-scales it
+      // No viewport reset (queue 770): the overlay is placed and mapped zoom-aware now, so the zoom he set to work on a small path stays.
+      // (was: reset when not default — the overlay used to lay out in screen px and a zoomed viewport double-scaled itt double-scales it
       const l = FM.scene.layers.find(x => x.id === layerId);
       if (!l) { if (FM.toast) FM.toast('Layer not found'); return; }
       if (l.parent) { if (FM.toast) FM.toast('Motion path works on unparented layers'); return; }

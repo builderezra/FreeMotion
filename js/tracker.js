@@ -163,7 +163,7 @@ window.FM = window.FM || {};
 
     // Enter pick mode: overlay captures ONE tap → seed point + adjustable box, then Track/Cancel.
     pick(layer) {
-      if (FM.viewport && !FM.viewport.isDefault()) FM.viewport.reset();   // overlay lays out in screen px — a zoomed viewport double-scales it
+      // No viewport reset (queue 770): the overlay is placed and mapped zoom-aware below.
       if (!layer || layer.type !== 'video') { if (FM.toast) FM.toast('Motion tracking works on a video/clip layer'); return; }
       if (layer.parent) { if (FM.toast) FM.toast('Un-parent this layer first — tracking can’t account for a parent’s motion', 3500); return; }
       const m = FM.media.get(layer.id);
@@ -174,21 +174,22 @@ window.FM = window.FM || {};
       overlay = document.createElement('canvas'); overlay.id = 'trk-overlay';
       wrap.appendChild(overlay);
       const paint = () => {
-        const cv = preview(), r = cv.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
-        overlay.style.left = (r.left - wr.left) + 'px'; overlay.style.top = (r.top - wr.top) + 'px';
-        overlay.style.width = r.width + 'px'; overlay.style.height = r.height + 'px';
+        const cv = preview();
+        const r = FM.placeOverlayOnCanvas(overlay, cv);   // queue 770: the shared placement — a zoomed preview is a crop, and this knows it
         const dpr = window.devicePixelRatio || 1;
         overlay.width = Math.round(r.width * dpr); overlay.height = Math.round(r.height * dpr);
         const g = overlay.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, r.width, r.height);
         if (picking && picking.seed) {
-          const k = FM.previewDispScale ? FM.previewDispScale() : (r.width / cv.width);   // CSS px per PROJECT px — contentToProj returns project units
+          const k = FM.previewDispScale ? FM.previewDispScale() : (r.width / cv.width);   // CSS px per PROJECT px — the box's SIZE still scales by this
           const sp = contentToProj(layer, FM.time, picking.seed.x, picking.seed.y);
-          const bx = sp.x * k, by = sp.y * k, hw = (picking.boxPx || 60) * k / 2;
+          const o = FM.projectToOverlay(cv, sp.x, sp.y);   // queue 770: the crop origin, not origin 0
+          const bx = o.x, by = o.y, hw = (picking.boxPx || 60) * k / 2;
           g.strokeStyle = '#29d9bb'; g.lineWidth = 2; g.strokeRect(bx - hw, by - hw, hw * 2, hw * 2);
           g.fillStyle = '#29d9bb'; g.beginPath(); g.arc(bx, by, 3, 0, 6.2832); g.fill();
         }
       };
       picking._paint = paint; paint();
+      FM._trackerPaint = paint;   // suite seam (queue 770)
       overlay.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         const pj = evtToProject(e);
