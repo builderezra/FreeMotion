@@ -54293,6 +54293,41 @@
     if (!r4) throw new Error('control: a source with no border feature at all was allowed through');
   });
 
+  /* ═══ 738 (hunt MEDIUM #21): THE NO-OP HINT LANDS INSIDE THE MEASURED EFFECT'S ROW BODY. It looked for `.fx-body` /
+     `.fx-wrap` (classes that exist nowhere) inside "the open row", which could be an open MASK row. A mask row open
+     before an open effect row, the effect measured as a no-op: the hint sits in the effect row's editor body and the
+     mask row carries none. */
+  test('738: the changes-nothing hint is placed in the measured effect\'s own row body, never on an open mask row', { item: '738' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const real = FM.fxThumbs && FM.fxThumbs.effectDoesNothing;
+    if (!real) throw new Error('FM.fxThumbs.effectDoesNothing missing');
+    try {
+      if (hadHome) FM.home.close();
+      FM.fxThumbs.effectDoesNothing = () => true;
+      const L = FM.makeLayer('shape', { name: 's738', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#8cf', start: 0, duration: 4 });
+      const reg = (FM.fxRegistry.all() || []).find(r => FM.fxRegistry.supportsLayer(r.type || r.id, L) && !FM.isFxContainer(FM.fxRegistry.makeInstance(r.type || r.id) || {}));
+      const fx = FM.fxRegistry.makeInstance(reg.type || reg.id); fx._expanded = true;
+      const mask = FM.masks.make(); mask._expanded = true;
+      L.masks = [mask]; L.effects = [{ type: 'penmask', maskId: mask.id }, fx];   // the mask row renders BEFORE the effect row
+      FM.scene = scene([L]); FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.openCategory('effects'); await sleep(700);
+      const hints = [...document.querySelectorAll('.fx-noop-hint')];
+      if (!hints.length) throw new Error('no no-op hint was painted for an effect measured as doing nothing');
+      const onMask = hints.filter(h => h.closest('.mask-item'));
+      if (onMask.length) throw new Error('the hint about the EFFECT was painted on the open mask row');
+      const h = hints[0], row = h.closest('.fx-row');
+      if (!row || row._fx !== fx) throw new Error('the hint is not inside the measured effect\'s row');
+      if (!h.parentElement.classList.contains('fx-ed-body') && !h.parentElement.classList.contains('fx-swipe-wrap')) throw new Error('the hint was appended to ' + (h.parentElement.className || h.parentElement.tagName) + ', outside the row\'s editor body / swipe wrapper');
+    } finally {
+      FM.fxThumbs.effectDoesNothing = real;
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

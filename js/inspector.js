@@ -1434,6 +1434,7 @@ window.FM = window.FM || {};
     const isBox = FM.isFxContainer(fx);
     const expanded = !!fx._expanded, off = fx.enabled === false;
     const row = el('div', 'fx-row' + (off ? ' fx-off' : '') + (expanded ? ' fx-open' : ''));
+    row._fx = fx;   // queue 738: the no-op hint finds this row by the effect it measured, not by "the open row"
     fxTapHint();
     const head = el('div', 'fx-head');
     const disc = el('button', 'fx-disc'); disc.innerHTML = FX_CHEVRON;
@@ -2417,13 +2418,15 @@ window.FM = window.FM || {};
          "an OPEN effect row can still be dragged to reorder" went red — and it would have broken
          reordering for him in the same breath as adding the hint.
          The accordion guarantees at most one open row, so it can be found rather than tracked. */
-      const openRow = document.querySelector('.fx-row.fx-open');
+      /* BY IDENTITY (queue 738, hunt MEDIUM #21): an open MASK row is also `.fx-row.fx-open` — the accordion only closes
+         other masks when a mask opens — so "the open row" could be a mask, and the hint about an effect landed on it. */
+      const openRow = Array.prototype.find.call(document.querySelectorAll('.fx-row.fx-open'), r => r._fx === lfx) || null;
       if (!openRow) return;
       openRow.classList.toggle('fx-noop', lfx._noop === true);
       const existing = openRow.querySelector('.fx-noop-hint');
       if (lfx._noop === true) {
         if (!existing) {
-          const body = openRow.querySelector('.fx-body') || openRow.querySelector('.fx-wrap') || openRow;
+          const body = openRow.querySelector('.fx-ed-body') || openRow.querySelector('.fx-swipe-wrap') || openRow;   // queue 738: the classes the row actually has (.fx-body / .fx-wrap existed nowhere)
           const why = NOOP_WHY[lfx.type];
           body.appendChild(el('div', 'insp-hint fx-noop-hint',
             'This is on, but it changes nothing on this layer at these settings' + (why ? ' — ' + why : '') + '.'));

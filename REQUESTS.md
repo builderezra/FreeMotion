@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.31
+> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.32
 >
-> **State:** v15.31, 1201 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
+> **State:** v15.32, 1202 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
 > **Four pictures are in the chat waiting for one letter each** (nothing visual ships before you pick): **#642** the home background A–D · **#763** the skip-button gap (6/12/18) and the play button A–D · **#765** the split/jump buttons' look 1–3 · and **#760's people shapes** come next, drawn the same way. Everything else waiting on you is a paste or a letter, listed by `tools/next.sh` under its own heading so it cannot hide: #425 A/B · #454 A/B/C · #482 a category · #484 A/B/C · #539 A/B/C · #544 which things · #564 A/B/C · #570 smooth/stepped/leave · #624 a/b/c · #654 A/B/C · #406 which menu · #674 (b)/(c) · #95/#96/#663 the **Your last playback** paste · #215/#604/#677 the **Your last export** paste · #129 the **clip with no picture** paste · the oldest lag item, a **Measure** report · #657 a sample while scrubbing · #676/#706 what "twice" looks like · #712 whether Back from a category stalls · #592 a screenshot.
 > **Next, in order, each already built and proved, shipping one by one:** #508 (a frame-time report of the project-open slide from your phone), #553 (coming back to the app half-drawn), #606, #674 (clip names over filmstrips), #688 (one intro film, dark mode lands on dark), #706 (the add sheet's one motion), #715 (PC sliders glide), #716 (the cursor glow box), #717 (copy/paste button lit), #762 (tap again closes), #764 (dragged add row on top); then #760, #765, #768 and the audit findings.
 
@@ -28423,13 +28423,14 @@ re-opened #480, which I had marked done and had not fixed.
       - Fix: `!(src.stroke || src.shadow || src.trimPath || src.repeater)`.
         ✅ **v15.31 — the Border gate admits a source with only a trim path or only a repeater, which the paste has carried all along.** Test through a seam on the real gate: trim-path-only and repeater-only pass, stroke-only still passes, an empty source is still refused. Mutation (the two dropped again) caught.
 
-- [ ] **738 — js/inspector.js:2365, 2371 — no-op hint painted into non-existent classes, on possibly the wrong row** (hunt MEDIUM #21)
+- [x] **738 — js/inspector.js:2365, 2371 — no-op hint painted into non-existent classes, on possibly the wrong row** (hunt MEDIUM #21) ✅ DONE v15.32.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
       (v)
       - `.fx-body` / `.fx-wrap` exist nowhere (real: `.fx-ed-body` 1498, `.fx-swipe-wrap` 1495) so the hint lands on `.fx-row` outside the swipe wrapper; `querySelector('.fx-row.fx-open')` can return an open mask row (2690 closes only other masks). Fix: real class names; locate the measured effect's row by identity.
+        ✅ **v15.32 — the hint finds the measured effect's row by identity and appends to the classes the row actually has.** `.fx-body` / `.fx-wrap` existed nowhere and "the open row" could be an open mask row. Test: a mask row open before an open effect row measured as a no-op — the hint sits in the effect row's editor body, the mask row has none. Mutation ("the open row" again) caught.
 
 - [ ] **739 — js/app.js:2973-2974 — ungroup silently drops an animated group transform** (hunt MEDIUM #22)
       **STATUS: 🟢 READY — nothing is stopping this**
