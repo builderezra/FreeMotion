@@ -1,10 +1,17 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.46
+> ## 📌 WHAT I NEED FROM YOU — updated 4 Sep at v15.47
 >
-> **State:** v15.46, 1216 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
-> **Four pictures are in the chat waiting for one letter each** (nothing visual ships before you pick): **#642** the home background A–D · **#763** the skip-button gap (6/12/18) and the play button A–D · **#765** the split/jump buttons' look 1–3 · and **#760's people shapes** come next, drawn the same way. Everything else waiting on you is a paste or a letter, listed by `tools/next.sh` under its own heading so it cannot hide: #425 A/B · #454 A/B/C · #482 a category · #484 A/B/C · #539 A/B/C · #544 which things · #564 A/B/C · #570 smooth/stepped/leave · #624 a/b/c · #654 A/B/C · #406 which menu · #674 (b)/(c) · #95/#96/#663 the **Your last playback** paste · #215/#604/#677 the **Your last export** paste · #129 the **clip with no picture** paste · the oldest lag item, a **Measure** report · #657 a sample while scrubbing · #676/#706 what "twice" looks like · #712 whether Back from a category stalls · #592 a screenshot.
-> **Next, in order, each already built and proved, shipping one by one:** #508 (a frame-time report of the project-open slide from your phone), #553 (coming back to the app half-drawn), #606, #674 (clip names over filmstrips), #688 (one intro film, dark mode lands on dark), #706 (the add sheet's one motion), #715 (PC sliders glide), #716 (the cursor glow box), #717 (copy/paste button lit), #762 (tap again closes), #764 (dragged add row on top); then #760, #765, #768 and the audit findings.
+> **State:** v15.47, 1217 tests green, tree clean.
+> **Just fixed, ahead of everything:** the intro. You were right and it was mine — v15.08 faded the film to nothing half a second before the splash left, so the last stretch was a blank screen handing over to white. The fade is gone and the film plays through in both looks (#776).
+>
+> **TWO LETTERS ARE ALL I NEED** (nothing visual ships before you pick):
+> · **#772** — the split / jump buttons, drawn where you actually meant them: stacked on the seam between the LAYER panel and the timeline. **A / B / C**, A recommended.
+> · **#775** — the PC row when the window is narrow. Below about 1050px the middle controls slide under the pinned ends and your click lands on the wrong one: at 950px, pressing **Layer actions** presses **Back to projects** and throws you out of the project. Something must give below ~1000px. **A / B / C**, A recommended.
+>
+> **One line would settle another:** on PC, drag the layer list up and down by a layer's NAME. Does that layer end up selected? I found the fix but could not make any test fail without it, so I would not ship it on faith (#750).
+>
+> **Shipped since you last looked:** the phone add sheet slides down again when you swipe or tap it away (#773); A / S / D on the keyboard cut, split and move the selected clip (#765); and 24 of the audit findings, from an undo that wiped an animated Draw-from to a preset that landed at a random time.
 
 
 **This file is the record of everything Ezra has asked for.** Every request goes in here the moment
@@ -28576,13 +28583,14 @@ re-opened #480, which I had marked done and had not fixed.
       Fix: round after snap, or paint the HUD from the true edge time.
         ✅ **v15.46 — the notch strip fills the landing notch only when the edge is on a frame, and marks the strip off-grid otherwise.** A snap wins over the frame grid and can land between frames; the strip filled the middle notch regardless — a claim the edge did not meet. Real-trim test: a snap onto a 1.21s edge holds and shows no filled notch; a frame-aligned trim does. Mutation (always filled) caught.
 
-- [ ] **754 — Audio/mask rows drift from effect rows (js/inspector.js)** (hunt MEDIUM #37)
+- [x] **754 — Audio/mask rows drift from effect rows (js/inspector.js)** (hunt MEDIUM #37) ✅ DONE v15.47.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
       - Eye: effect rows use the struck-through glyph (1485-1487); mask rows (2698) and audio rows (2175) only fade (`styles.css:1473 .fx-eye.off`), in the same list since queue 560. Fix: one shared eye renderer.
       - Grip: audio hides it on the open row (2138 `!expanded`) — the v5.52 fix at 1440/1232-1238 removed exactly that. Fix: drop `!expanded`.
+        ✅ **v15.47 — one eyeButton() renders the eye for effect, audio, mask and behaviour rows, struck through when off; the open audio row keeps its grip.** Mask and audio rows only faded, in the same list as effect rows that struck theirs through; the audio row hid its grip when open, which v5.52 had fixed for visual rows. Test on real rows; mutation (the audio row's plain eye back) caught.
 
 - [ ] **755 — js/compositor.js — ~50 dead `if (a == null) a = def` fallbacks after evalProp** (hunt MEDIUM #38)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -28913,5 +28921,32 @@ re-opened #480, which I had marked done and had not fixed.
       defect; clauses 2–5 (the timeline/add-menu separation, the effects browser, the tab switching, the re-test)
       resume the moment he picks, since the fix touches the same row.
 
+- [x] **776 — 🚨 THE INTRO LOADING SCREEN IS BROKEN — it just flashes black-and-white and white and does nothing.** Logged 4 Sep, verbatim, the moment he said it: ✅ DONE v15.47.
+      **STATUS: ✅ FIXED v15.47 — shipped straight away, ahead of everything else**
+      His words: *"You've broken the intro loading screen by the way it does not do anything anymore just like flashing black-and-white and white"*
+      🔎 **Prime suspect, mine: v15.08 (queue 688).** That release made ONE film serve both looks, removed the old
+      `splash.mp4` and its poster, and added a dark ending — the film dims into black over 0.4s from 1.05s before its end,
+      gated on `!LIGHT`. A flash between black and white is exactly the shape of that dim fighting the page ground, or of
+      the film never playing and leaving the bare splash behind.
+      Clauses:
+      1. [x] Find out what it actually does now — measure the splash on a real load, both looks, rather than guess.
+      2. [x] Fix it so the intro plays through as it did.
+      3. [x] A test that fails if the intro stops animating, since the boot path runs once per session and the suite has
+         only ever checked the markup, not that the film moves.
+        ✅ **v15.47 — MEASURED, THEN WITHDRAWN. It was my v15.08 dark ending.** I booted the live build in an iframe with the
+        session flag cleared and watched every frame of the intro in both looks. The dark look: the film fades in to full
+        opacity, and then from currentTime 1.18 of 2.05 its opacity is driven **0.88 → 0.60 → 0.26 → 0 while the splash is
+        still on screen** — so the animation is gone half a second before the splash dissolves, and what is left is a blank
+        ground handing over to the white home screen. That is the black-and-white flash, and "does not do anything anymore"
+        is exactly right: for the last half-second there is nothing to see.
+        v15.08 shipped that dim as "the safe experiment it is", to spare the dark look the white bloom the film ends on. It
+        was not safe. It is removed — the boot script, the stylesheet rule and the `splash-dark` class with it — so one film
+        plays through to its end in both looks, as it did before.
+        📐 **After, measured the same way, both looks:** the film reaches 2.05s at opacity 1 and is never blanked while the
+        splash is up.
+        🧪 **And the gap that let it ship is closed (clause 3).** The suite had only ever read the boot script's MARKUP, so a
+        film dimmed to nothing kept every test green. The new test boots the real page in an iframe with the session flag
+        cleared and asserts the film actually plays and is never faded out while the splash is still there — in both looks.
+        The v15.08 test that REQUIRED the dim is restated to the opposite, so its return is caught by name.
 
 

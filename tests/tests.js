@@ -53344,26 +53344,30 @@
      The boot script runs once per session before any of this exists, so — as #642's guard does — the
      first half reads index.html AS SHIPPED, and the second half asks the LIVE stylesheet whether the dark
      ending actually dims the film (a class name in the source proves nothing if the rule is missing). */
-  test('688: the old intro film is gone and the dark look dims the new film into black', { item: '688' }, async function () {
+  test('688: one intro film serves both looks, the old film and its poster are gone, and neither look hides it', { item: '688' }, async function () {
+    /* ⚠️ THIS TEST USED TO REQUIRE THE OPPOSITE (v15.08): that the dark look dim the film to nothing over its last
+     * 1.05s, to spare it the white bloom the film ends on. Ezra on the shipped result: "You've broken the intro loading
+     * screen ... just like flashing black-and-white and white". Measured: the film's opacity was driven to 0 while the
+     * splash was still up, so the animation vanished half a second early and the screen handed over to white. The dim is
+     * withdrawn (queue 776) and this asserts what is true now — one film, played through, hidden by neither look. */
     const src = await fetch('index.html', { cache: 'no-store' }).then(r => r.text());
     const boot = src.slice(src.indexOf('splash-vid'), src.indexOf('<div id="app">'));
     if (/splash\.mp4\?/.test(boot)) throw new Error('index.html still plays splash.mp4 — the OLD loading animation he asked to get rid of');
-    if (/splash-poster\.png/.test(boot)) throw new Error('index.html still sets the old poster on the dark path');
+    if (/splash-poster\.png/.test(boot)) throw new Error('index.html still sets the old poster');
     if (!/splash-v2\.mp4/.test(boot)) throw new Error('the new film is not referenced at all');
-    if (!/splash-dark/.test(boot) || !/splash-dim/.test(boot)) throw new Error('the dark ending is not wired in the boot script (no splash-dark / splash-dim)');
-    if (!/!LIGHT[^\n]*splash-dim/.test(boot)) throw new Error('the dim is not gated on the DARK look — the light look would dim its film into a white page');
-    // the live stylesheet: a dark splash whose film has reached its last stretch must be dimmed to nothing
+    if (/splash-dim/.test(boot)) throw new Error('the dark dim is back in the boot script — it hides the film before the splash dissolves (queue 776)');
+    // the live stylesheet must carry no rule that can blank a PLAYING film, in either look
     const sp = document.createElement('div'); sp.id = 'splash'; sp.className = 'splash-light splash-dark';
     const v = document.createElement('video'); v.id = 'splash-vid'; v.className = 'playing splash-dim';
     v.style.transition = 'none';   // the reads below are synchronous; the film's own .2s/.4s fades would report the START of each fade, not its end
     sp.appendChild(v); document.body.appendChild(sp);
     try {
       const op = getComputedStyle(v).opacity;
-      if (op !== '0') throw new Error('a dimmed film under the dark look computes opacity ' + op + ', not 0 — the white ending would still flash');
+      if (op !== '1') throw new Error('a playing film computes opacity ' + op + ' under splash-dark/splash-dim — a rule can still blank it mid-intro (queue 776)');
       v.className = 'playing';
-      if (getComputedStyle(v).opacity !== '1') throw new Error('the film is not fully visible before its ending');
+      if (getComputedStyle(v).opacity !== '1') throw new Error('the film is not fully visible while it plays');
       sp.className = 'splash-light'; v.className = 'playing splash-dim';
-      if (getComputedStyle(v).opacity !== '1') throw new Error('the dim applies under the LIGHT look too — that look ramps its ground to white and must keep the film');
+      if (getComputedStyle(v).opacity !== '1') throw new Error('a playing film is blanked in the light look too');
     } finally { sp.remove(); }
   });
 
@@ -54735,6 +54739,57 @@
       try { FM.refreshAll(); } catch (e) {}
       if (hadHome && FM.home && FM.home.open) FM.home.open();
       await sleep(60);
+    }
+  });
+
+  /* ═══ 776: THE INTRO ACTUALLY PLAYS, AND IS NEVER HIDDEN WHILE THE SPLASH IS UP. The suite has only ever read the
+     boot script's MARKUP, which is why v15.08 could dim the film to nothing for the last half-second of the dark look
+     and every test stayed green — "it does not do anything anymore just like flashing black-and-white and white".
+     The boot runs once per session and cannot be replayed here, so this boots the real page in an IFRAME with the
+     session flag cleared, and watches: the film reaches a real currentTime, and its opacity is never driven to zero
+     while the splash is still on screen. Run in both looks, because the dim was dark-only. */
+  test('776: the intro film plays through and is never faded out while the splash is still up', { item: '776', budgetMs: 45000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const settings0 = localStorage.getItem('fm.settings');
+    const watch = async (light) => {
+      try { sessionStorage.removeItem('fm.splashed'); } catch (e) {}
+      const st = JSON.parse(localStorage.getItem('fm.settings') || '{}'); st.homeLight = light;
+      localStorage.setItem('fm.settings', JSON.stringify(st));
+      const f = document.createElement('iframe');
+      f.style.cssText = 'position:fixed;left:-9999px;top:0;width:390px;height:760px;border:0';
+      f.src = '../index.html?intro776=' + Date.now();
+      document.body.appendChild(f);
+      let maxT = 0, blanked = null, played = false;
+      try {
+        for (let i = 0; i < 45; i++) {
+          const d = f.contentDocument;
+          if (d) {
+            const sp = d.getElementById('splash'), v = d.getElementById('splash-vid');
+            if (v) {
+              maxT = Math.max(maxT, v.currentTime || 0);
+              if (v.classList.contains('playing')) played = true;
+              const op = parseFloat(d.defaultView.getComputedStyle(v).opacity);
+              const up = sp && !sp.classList.contains('splash-out') && !sp.classList.contains('hidden');
+              if (up && played && op < 0.05 && (v.currentTime || 0) > 0.4 && blanked === null) blanked = +(v.currentTime).toFixed(2);
+            }
+            if (!sp && played) break;   // the splash finished normally
+          }
+          await sleep(100);
+        }
+      } finally { f.remove(); }
+      return { light, maxT: +maxT.toFixed(2), played, blanked };
+    };
+    try {
+      for (const light of [false, true]) {
+        const r = await watch(light);
+        const look = light ? 'light' : 'dark';
+        if (!r.played) throw new Error('the ' + look + ' intro never started playing (the film reached ' + r.maxT + 's) — this run cannot judge it, but that is also exactly what a broken intro looks like');
+        if (r.maxT < 0.5) throw new Error('the ' + look + ' intro stopped at ' + r.maxT + 's — it is not playing through');
+        if (r.blanked !== null) throw new Error('the ' + look + ' intro was faded to nothing at ' + r.blanked + 's while the splash was still on screen — the animation disappears and the screen just flashes');
+      }
+    } finally {
+      if (settings0 === null) localStorage.removeItem('fm.settings'); else localStorage.setItem('fm.settings', settings0);
+      try { sessionStorage.removeItem('fm.splashed'); } catch (e) {}
     }
   });
 
