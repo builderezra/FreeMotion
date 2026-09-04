@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.43
+> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.44
 >
-> **State:** v15.43, 1213 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
+> **State:** v15.44, 1214 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
 > **Four pictures are in the chat waiting for one letter each** (nothing visual ships before you pick): **#642** the home background A–D · **#763** the skip-button gap (6/12/18) and the play button A–D · **#765** the split/jump buttons' look 1–3 · and **#760's people shapes** come next, drawn the same way. Everything else waiting on you is a paste or a letter, listed by `tools/next.sh` under its own heading so it cannot hide: #425 A/B · #454 A/B/C · #482 a category · #484 A/B/C · #539 A/B/C · #544 which things · #564 A/B/C · #570 smooth/stepped/leave · #624 a/b/c · #654 A/B/C · #406 which menu · #674 (b)/(c) · #95/#96/#663 the **Your last playback** paste · #215/#604/#677 the **Your last export** paste · #129 the **clip with no picture** paste · the oldest lag item, a **Measure** report · #657 a sample while scrubbing · #676/#706 what "twice" looks like · #712 whether Back from a category stalls · #592 a screenshot.
 > **Next, in order, each already built and proved, shipping one by one:** #508 (a frame-time report of the project-open slide from your phone), #553 (coming back to the app half-drawn), #606, #674 (clip names over filmstrips), #688 (one intro film, dark mode lands on dark), #706 (the add sheet's one motion), #715 (PC sliders glide), #716 (the cursor glow box), #717 (copy/paste button lit), #762 (tap again closes), #764 (dragged add row on top); then #760, #765, #768 and the audit findings.
 
@@ -28531,13 +28531,34 @@ re-opened #480, which I had marked done and had not fixed.
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
       - `stopPropagation` from a capture listener on the SAME element does not stop the select handler at 1069. Fix: `stopImmediatePropagation`, or check `panMoved` inside 1069. Desktop mouse: dragging a layer name to scroll also selects it.
+      ⚠️ **4 Sep — INVESTIGATED, FIX WRITTEN, NOT SHIPPED: I could not make any test fail without it, so it is unproven.**
+      The reading is sound on paper — `stopPropagation()` from a capture-phase listener does not stop another listener
+      registered on the SAME element, so the select handler beside it should run after every pan — and the fix (an early
+      `if (panMoved) return;` inside the select handler itself) is one line. What I cannot do is prove it matters:
+      · the test drives a real pan on a track head (pointerdown, three moves, pointerup) and then a click, and asserts the
+        layer is not selected. It passes.
+      · with the guard **removed**, it still passes — `tools/mutate.sh` reported SURVIVED twice, and a third time by hand
+        after I cleared the two pieces of borrowed state that could have masked it (`FM.selectMode` left on by an earlier
+        test routes the click through toggleSelect without moving `selectedId`; a recent long-press leaves `lpFiredAt`
+        fresh so the handler returns early). The assertion now reads the whole selection, not just `selectedId`. Still green.
+      ➡️ **So either the click never reaches the select handler after a real pan (a browser suppresses the click after a
+      drag, which would make the guard dead code), or a synthetic pan cannot reproduce what a finger does.** Both are the
+      same lesson this file already carries: a fixture that cannot distinguish right from wrong is not evidence. Shipping
+      a fix whose absence nothing notices is exactly what `mutate.sh` exists to refuse, so it is not shipped.
+      🔑 **What would settle it:** one line from him — drag the layer list up and down by a header on PC and say whether the
+      layer you grabbed ends up selected. If it does, the bug is real and the fix is right, and the test needs a real
+      pointer rather than a synthetic one; if it does not, this entry closes as "already correct" and the guard is dropped.
+      **JUMPED: unprovable with the tools here, so it must not hold the queue behind it; it waits on one line from him
+      rather than on more of my guessing.**
 
-- [ ] **751 — js/timeline.js:206-210, 4327-4335 vs 3527-3598, 224-231 — a still finger or edge-hold becomes "wreckage" after 1.2 s** (hunt MEDIUM #34)
+
+- [x] **751 — js/timeline.js:206-210, 4327-4335 vs 3527-3598, 224-231 — a still finger or edge-hold becomes "wreckage" after 1.2 s** (hunt MEDIUM #34) ✅ DONE v15.44.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
       - Autoscroll loops never call touchGesture() (3362-3365 says so on purpose); a rebuild in that window calls recoverStuckGesture, which restores nothing (no origStart, no shiftLayerKeyframes, no history.commit, no hideTrimHud/hideSnap, no `_sheetSuppressFor = null` — contradicting 299). Fix: `touchGesture()` inside clipEdgeScroll/trimEdgeScroll; make recovery run the abortGestures path (289-316). Rare, but a clip can be left mid-drag with keyframes detached and no undo step.
+        ✅ **v15.44 — held pointers are counted and a gesture is stale only when its stamp is old AND no pointer is down (or the stamp is very old, so a never-released pointer still heals); the two autoscroll loops stamp the gesture; a recovery hides the HUD and snap line and un-suppresses the sheet.** A still finger or an edge-hold read as dead after 1.2s and the next rebuild recovered a live drag. Test rests 1.45s on a clip, rebuilds, moves — the clip follows. Mutation (held pointers ignored) caught.
 
 - [ ] **752 — js/timeline.js:3584 — trim edge-scroll counter never resets per edge-hold** (hunt MEDIUM #35)
       **STATUS: 🟢 READY — nothing is stopping this**

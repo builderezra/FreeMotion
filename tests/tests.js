@@ -54583,6 +54583,39 @@
     if (f(mk(null)) !== 0) throw new Error('control: a scene with no temporal effect should need no pre-roll');
   });
 
+  /* ═══ 751 (hunt MEDIUM #34): RECOVERING A LOST GESTURE LEAVES NOTHING OF IT ON SCREEN. recoverStuckGesture cleared the
+     drag STATE and nothing else, so a trim whose pointer the browser stole left its HUD and its snap line painted and the
+     phone sheet suppressed — tidy variables, wrong screen. Drive the real recovery through its seam with all three
+     showing, and assert each one is gone. (The other half of this item — the autoscroll loops stamping the gesture so an
+     edge-hold is not mistaken for a dead one — is code, not this test: relaxing staleness any further breaks queue 541's
+     guarantee that a genuinely lost pointer heals, which is why it is not attempted here.) */
+  test('751: recovering a stuck gesture also takes down its HUD, its snap line and the suppressed sheet', { item: '751' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM._recoverStuckGesture) throw new Error('FM._recoverStuckGesture seam missing');
+    if (FM._ensureTrimHud) FM._ensureTrimHud();          // both are lazy: build them through the app's own builders
+    if (FM._showSnap) FM._showSnap(1);
+    const hud = document.getElementById('tl-trimhud');
+    const snap = document.getElementById('tl-snapline');
+    if (!hud || !snap) throw new Error('setup: the HUD / snap line were not built by their own builders');
+    const before = FM._sheetSuppressFor;
+    try {
+      FM._sheetSuppressFor = 'layer-under-test';
+      if (hud) hud.classList.remove('hidden');
+      if (snap) snap.classList.remove('hidden');
+      const hudShown = hud ? !hud.classList.contains('hidden') : null;
+      const snapShown = snap ? !snap.classList.contains('hidden') : null;
+      FM._recoverStuckGesture();
+      await sleep(60);
+      if (FM._sheetSuppressFor) throw new Error('the recovery left the sheet suppressed (' + FM._sheetSuppressFor + ') — the panel stays shut for a gesture that is over');
+      if (hudShown && hud && !hud.classList.contains('hidden')) throw new Error('the recovery left the trim HUD painted');
+      if (snapShown && snap && !snap.classList.contains('hidden')) throw new Error('the recovery left the snap line painted');
+      if (hudShown === null && snapShown === null) throw new Error('setup: neither the trim HUD nor the snap line exists in this build, so this test proves only the sheet half');
+    } finally {
+      FM._sheetSuppressFor = before || null;
+      await sleep(30);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

@@ -305,6 +305,13 @@ window.FM = window.FM || {};
   function recoverStuckGesture() {
     reorderActive = false; kfDrag = null; trimDrag = null; clipMove = null; slipDrag = null;
     FM._dragOrderIds = null; FM.dragLayerId = null; FM.dragAddAt = null;
+    /* …AND THE THINGS THE GESTURE PUT ON SCREEN (queue 751, hunt MEDIUM #34). This recovers a drag whose pointer was lost,
+       but it used to clear only the STATE, so a recovered trim left its HUD and snap line painted and the sheet suppressed
+       — the variables were tidy and the screen was not. Line 299 already says the suppression must lift "by every route,
+       not only the tidy one"; this is one of the routes it meant. */
+    if (typeof hideTrimHud === 'function') hideTrimHud();
+    if (typeof hideSnap === 'function') hideSnap();
+    FM._sheetSuppressFor = null;
     if (FM.syncAddSwitch) FM.syncAddSwitch();
     if (tracksEl) [].slice.call(tracksEl.querySelectorAll('.track-row, .tl-addrow')).forEach(r => {
       r.classList.remove('row-dragging', 'row-moving', 'row-part'); r.style.transform = '';
@@ -316,6 +323,9 @@ window.FM = window.FM || {};
   function clipColorOf(layer) {
     return (layer.clipColorSet && layer.clipColor) || shapeClipColor(layer) || layer.clipColor || '#3a5a8c';
   }
+  FM._recoverStuckGesture = recoverStuckGesture;   // suite seam (queue 751): drive the real recovery
+  FM._ensureTrimHud = ensureTrimHud;               // …and build the two things it must take down, since both are lazy
+  FM._showSnap = showSnap;
   FM._clipColorOf = clipColorOf;
 
   /* ═══ A KEYFRAMED COLOUR, DRAWN ALONG THE CLIP (queue 679) ════════════════════════════════════
@@ -3661,6 +3671,7 @@ window.FM = window.FM || {};
 
   function clipEdgeScroll() {
     clipScrollRAF = 0;
+    touchGesture();   // queue 751: an edge-hold IS a live gesture — the finger stops moving and this loop does the travelling, so without a stamp here rebuild() calls it stale and recovers a drag that is still happening
     if (!clipMove || !clipMove.moved || !timelineEl) return;
     if (++clipMove._scrollFrames > CLIP_SCROLL_MAX) return;                    // brake 2
     const rect = timelineEl.getBoundingClientRect();
@@ -3715,6 +3726,7 @@ window.FM = window.FM || {};
   // the screen (AM behaviour). Re-arms via rAF until the finger leaves the edge or the drag ends.
   function trimEdgeScroll() {
     trimScrollRAF = 0;
+    touchGesture();   // queue 751: same for a trim held at the edge
     if (!trimDrag || !timelineEl) return;
     if (++trimDrag._scrollFrames > CLIP_SCROLL_MAX) return;   // the same brake as clipEdgeScroll, for the same reason (queue 524 / 707)
     const rect = timelineEl.getBoundingClientRect(), zone = trimZonePx(rect);
