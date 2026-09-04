@@ -54505,6 +54505,34 @@
     const s3 = mk(); s3.transform.z = kf; if (f(s3)) throw new Error('a shape with animated depth is badged as never moving');
   });
 
+  /* ═══ 747 (hunt MEDIUM #30): A FEATURED CARD THAT NEEDS A SETTING CARRIES ONE BADGE, NOT TWO. Queue 572 added the
+     hint at the top of the card and queue 529's older line stayed below it — latent while no featured effect needed
+     input, live the moment the derived row (queue 745) featured matchgrade. Open the browser and count. */
+  test('747: a featured effect that needs a setting shows exactly one \'Needs a setting\' badge', { item: '747' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const id = (FM.FX_FEATURED || []).find(k => FM._fxNeedsInput && FM._fxNeedsInput(k));
+      if (!id) throw new Error('setup: no featured effect needs a setting (expected matchgrade from queue 745), so the double badge cannot be observed');
+      const reg = FM.fxRegistry.get(id);
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#48f', start: 0, duration: 6 });
+      FM.scene = scene([L]); FM.selectLayer(L.id); FM.refreshAll();
+      FM.fxBrowser.open(L); await sleep(300);
+      const card = [...document.querySelectorAll('#fx-browser .fxb-card')].find(c => { const n = c.querySelector('.fxb-card-name'); return n && n.textContent === reg.label; });
+      if (!card) throw new Error('setup: no featured card for ' + reg.label);
+      const n = card.querySelectorAll('.fxb-needs').length;
+      if (n !== 1) throw new Error(reg.label + '\'s card carries ' + n + ' "Needs a setting" badges');
+    } finally {
+      try { FM.fxBrowser.close(); } catch (e) {}
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

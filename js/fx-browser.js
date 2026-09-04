@@ -891,7 +891,6 @@ window.FM = window.FM || {};
       { const h = needsInputHint(reg.id) || deadHereHint(reg.id); if (h) { card.appendChild(h); if (h.title) card.title = reg.label + ' — ' + h.title; } }
       card.appendChild(thumb(reg));
       card.appendChild(el('div', 'fxb-card-name', reg.label));
-      { const h = needsInputHint(reg.id); if (h) card.appendChild(h); }   // queue 529 — see NEEDS_INPUT
       card.appendChild(starFor(reg.id, rerenderPaged));   // the featured row had no ★ at all, so the newest effects — which lead FX_FEATURED — were exactly the ones you could not favourite (#62)
       card.addEventListener('click', guardedAdd(card, reg.id));
       attachLongPress(card, reg);
