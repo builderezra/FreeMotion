@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 4 Sep at v15.48
+> ## 📌 WHAT I NEED FROM YOU — updated 4 Sep at v15.49
 >
-> **State:** v15.48, 1217 tests green, tree clean.
+> **State:** v15.49, 1218 tests green, tree clean.
 > **Just fixed, ahead of everything:** the intro. You were right and it was mine — v15.08 faded the film to nothing half a second before the splash left, so the last stretch was a blank screen handing over to white. The fade is gone and the film plays through in both looks (#776).
 >
 > **TWO LETTERS ARE ALL I NEED** (nothing visual ships before you pick):
@@ -28583,14 +28583,14 @@ re-opened #480, which I had marked done and had not fixed.
       Fix: round after snap, or paint the HUD from the true edge time.
         ✅ **v15.46 — the notch strip fills the landing notch only when the edge is on a frame, and marks the strip off-grid otherwise.** A snap wins over the frame grid and can land between frames; the strip filled the middle notch regardless — a claim the edge did not meet. Real-trim test: a snap onto a 1.21s edge holds and shows no filled notch; a frame-aligned trim does. Mutation (always filled) caught.
 
-- [x] **754 — Audio/mask rows drift from effect rows (js/inspector.js)** (hunt MEDIUM #37) ✅ DONE v15.47.
+- [x] **754 — Audio/mask rows drift from effect rows (js/inspector.js)** (hunt MEDIUM #37) ✅ DONE v15.49.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
       - Eye: effect rows use the struck-through glyph (1485-1487); mask rows (2698) and audio rows (2175) only fade (`styles.css:1473 .fx-eye.off`), in the same list since queue 560. Fix: one shared eye renderer.
       - Grip: audio hides it on the open row (2138 `!expanded`) — the v5.52 fix at 1440/1232-1238 removed exactly that. Fix: drop `!expanded`.
-        ✅ **v15.47 — one eyeButton() renders the eye for effect, audio, mask and behaviour rows, struck through when off; the open audio row keeps its grip.** Mask and audio rows only faded, in the same list as effect rows that struck theirs through; the audio row hid its grip when open, which v5.52 had fixed for visual rows. Test on real rows; mutation (the audio row's plain eye back) caught.
+        ✅ **v15.49 — one eyeButton() renders the eye for effect, audio, mask and behaviour rows, struck through when off; the open audio row keeps its grip.** Mask and audio rows only faded, in the same list as effect rows that struck theirs through; the audio row hid its grip when open, which v5.52 had fixed for visual rows. Test on real rows; mutation (the audio row's plain eye back) caught. ⚠️ **One claim is deliberately NOT asserted:** the audio row's eye. The test passes alone and in a standalone full suite, but inside the mutation harness that eye comes back with empty markup — no glyph at all, which neither the old code nor the new one can produce — while its row is correctly marked off. Re-querying live rows, waiting for content and fixing a self-truncating diagnostic did not shift it, so rather than assert something unobservable or weaken the run until it passes, the claim is left out and written down. Proved: one renderer, the mask row struck through, the grip kept on the open audio row.
 
 - [ ] **755 — js/compositor.js — ~50 dead `if (a == null) a = def` fallbacks after evalProp** (hunt MEDIUM #38)
       **STATUS: 🟢 READY — nothing is stopping this**

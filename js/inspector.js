@@ -1515,12 +1515,7 @@ window.FM = window.FM || {};
          only faded the same open eye, which at .4 opacity on a dark row is barely a difference. This
          is the layer's own pair of paths, copied verbatim from js/timeline.js rather than redrawn, so
          the two controls cannot drift apart into two dialects of "off". */
-      const eye = el('button', 'fx-icon-btn fx-eye' + (off ? ' off' : '')); eye.title = off ? 'Effect off — enable' : 'Effect on — disable';
-      // ONE svg with both the eye and the slash inside it — two stacked <svg> elements would sit side
-      // by side in the button rather than on top of each other. Same markup timeline.js uses.
-      eye.innerHTML = off
-        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.24A9.1 9.1 0 0 1 12 4c7 0 11 8 11 8a18 18 0 0 1-2.16 3.19M6.6 6.6A18 18 0 0 0 1 12s4 8 11 8a9 9 0 0 0 5.4-1.6"/><line x1="2" y1="2" x2="22" y2="22"/></svg>'
-        : svgIcon('M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6');
+      const eye = eyeButton(off, 'Effect');
       eye.addEventListener('click', () => { fx.enabled = !(fx.enabled !== false); afterFx(); });
       head.appendChild(eye);
     }
@@ -2173,7 +2168,7 @@ window.FM = window.FM || {};
       FM.inspector.refresh();
     };
     head.addEventListener('click', (e) => { if (e.target.closest('.fx-icon-btn')) return; toggle(); });
-    if (!expanded && (layer.audioFx || []).length > 1) head.appendChild(el('span', 'fx-grip', '⠿'));
+    if ((layer.audioFx || []).length > 1) head.appendChild(el('span', 'fx-grip', '⠿'));   // queue 754: the OPEN row keeps its grip too — v5.52 gave the visual rows exactly that
     head.appendChild(disc); head.appendChild(name); head.appendChild(el('span', 'fx-spacer'));
     if (expanded) {
       /* ═══ HEAR IT (queue 653) ══════════════════════════════════════════════════════════════════
@@ -2209,8 +2204,7 @@ window.FM = window.FM || {};
       del.addEventListener('click', () => { layer.audioFx.splice(idx, 1); afterAudioFx(); });
       head.appendChild(more); head.appendChild(del);
     } else {
-      const eye = el('button', 'fx-icon-btn fx-eye' + (off ? ' off' : '')); eye.title = off ? 'Effect off — enable' : 'Effect on — disable';
-      eye.innerHTML = svgIcon('M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6');
+      const eye = eyeButton(off, 'Effect');   // queue 754: the same struck-through glyph the visual rows wear when off
       eye.addEventListener('click', () => { fx.enabled = !(fx.enabled !== false); afterAudioFx(); });
       head.appendChild(eye);
     }
@@ -2622,6 +2616,17 @@ window.FM = window.FM || {};
   }
   FM._catIco = catIco;   // read by the suite, which compares the Paste Style grid against these
 
+  /* ONE EYE FOR EVERY ROW (queue 754, hunt MEDIUM #37). Effect rows drew a struck-through eye when off; mask, audio and
+     behaviour rows only faded theirs — in the same list, since queue 560 put masks among the effects. The glyph is one
+     <svg> with the eye and the slash inside it (two stacked <svg>s would sit side by side); timeline.js uses the same. */
+  function eyeButton(off, what) {
+    const eye = el('button', 'fx-icon-btn fx-eye' + (off ? ' off' : ''));
+    eye.title = off ? (what + ' off — enable') : (what + ' on — disable');
+    eye.innerHTML = off
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.24A9.1 9.1 0 0 1 12 4c7 0 11 8 11 8a18 18 0 0 1-2.16 3.19M6.6 6.6A18 18 0 0 0 1 12s4 8 11 8a9 9 0 0 0 5.4-1.6"/><line x1="2" y1="2" x2="22" y2="22"/></svg>'
+      : svgIcon('M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6');
+    return eye;
+  }
   function svgIcon(path) {
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="' + path + '"/></svg>';
   }
@@ -2751,9 +2756,7 @@ window.FM = window.FM || {};
       };
       head.addEventListener('click', (e) => { if (e.target.closest('.fx-icon-btn')) return; toggleMask(); });
       if ((rowCount != null ? rowCount : masks.length) > 1) head.appendChild(el('span', 'fx-grip', '\u283f'));   // press-hold to reorder
-      const eye = el('button', 'fx-icon-btn fx-eye' + (mask.enabled === false ? ' off' : ''));
-      eye.title = mask.enabled === false ? 'Mask off — enable' : 'Mask on — disable';
-      eye.innerHTML = svgIcon('M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6');
+      const eye = eyeButton(mask.enabled === false, 'Mask');   // queue 754: one eye renderer for every row in the list
       eye.addEventListener('click', () => { mask.enabled = mask.enabled === false; afterMasks(layer); });
       /* SAME ORDER AS AN EFFECT ROW (queue 560): chevron, then name, then the icons on the right. The
          mask put its eye FIRST, so in one list the two rows disagreed about where their controls live —
@@ -4939,9 +4942,7 @@ window.FM = window.FM || {};
     const off = beh.enabled === false;
     const row = el('div', 'fx-row be-row' + (off ? ' fx-off' : ''));
     const head = el('div', 'fx-head be-head');
-    const eye = el('button', 'fx-icon-btn fx-eye be-eye' + (off ? ' off' : ''));
-    eye.title = off ? 'Behavior off — enable' : 'Behavior on — disable';
-    eye.innerHTML = svgIcon('M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6');
+    const eye = eyeButton(off, 'Behavior'); eye.classList.add('be-eye');   // queue 754
     eye.addEventListener('click', () => { beh.enabled = !(beh.enabled !== false); afterBehavior(); });
     head.appendChild(eye);
     head.appendChild(el('span', 'fx-name', def.label || beh.type));
