@@ -54466,6 +54466,18 @@
     if (!(pink < 1.2)) throw new Error("'pink' measures a tilt of " + pink.toFixed(3) + ' — that is white noise under another name');
   });
 
+  /* ═══ 744 (hunt MEDIUM #27): THE MOTION BLUR (FOOTAGE) BADGE SAYS WHY. Its reason reads "Nothing moves inside this
+     layer…", which the badge shortener did not recognise, so it fell to "does nothing here" — the very label queue
+     603 removed. Through the real shortener: that sentence → "layer never moves"; an unrelated reason still falls
+     through (the control). */
+  test('744: a \'nothing moves inside this layer\' reason is badged \'layer never moves\', not \'does nothing here\'', { item: '744' }, async function () {
+    const f = FM.fxBrowser && FM.fxBrowser._deadShortLabel;
+    if (!f) throw new Error('FM.fxBrowser._deadShortLabel seam missing');
+    const got = f('Nothing moves inside this layer, so there is nothing to blur. It reads the picture frame to frame.');
+    if (got !== 'layer never moves') throw new Error('the footage motion-blur reason was badged "' + got + '"');
+    if (f('some other reason entirely') === 'layer never moves') throw new Error('control: an unrelated reason was badged as never-moves');
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

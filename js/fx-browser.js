@@ -837,7 +837,7 @@ window.FM = window.FM || {};
     if (/no colour to work on/i.test(why)) return 'layer has no colour';
     if (/already pure white/i.test(why)) return 'layer is pure white';
     if (/already pure black/i.test(why)) return 'layer is pure black';
-    if (/never moves|does not move|cannot move/i.test(why)) return 'layer never moves';
+    if (/never moves|does not move|cannot move|nothing moves/i.test(why)) return 'layer never moves';   // queue 744: Motion Blur (Footage) says "Nothing moves inside this layer" and fell to the label queue 603 removed
     if (/at this value/i.test(why)) return 'no change at this value';
     return 'does nothing here';
   }
@@ -1564,6 +1564,7 @@ window.FM = window.FM || {};
        passes every assertion it makes about the tiles it reached. Resolving the key here means the
        wrong call is impossible rather than merely documented. */
     _addEffect: function (id, preset) { return addEffect(id, preset); },   // suite seam (queue 722)
+    _deadShortLabel: deadShortLabel,   // suite seam (queue 744)
     _openCategory: function (cat) {
       const c = (cat && typeof cat === 'object') ? cat : (FM.fxRegistry.categories() || []).filter(x => x.key === cat)[0];
       if (!c) throw new Error('no such effect category: ' + cat);
