@@ -55026,6 +55026,24 @@
     }
   });
 
+  /* ═══ 771 (hunt LOW #44): A DRAFT WHOSE TEMPLATE WAS DELETED DOES NOT PROMISE A SAVE-BACK. Through the real card
+     renderer: an orphan says its template was deleted; a draft of a template that exists still promises the save-back. */
+  test('771: a template draft whose template no longer exists says so instead of promising to save back', { item: '771' }, async function () {
+    if (!FM.home || !FM.home.open) throw new Error('FM.home missing');
+    const cardFn = FM.home._draftCard;
+    if (typeof cardFn !== 'function') throw new Error('FM.home._draftCard seam missing — the card renderer is not exposed');
+    const orphan = cardFn({ id: 'p771a', name: 'Orphan', templateDraft: true, ofTemplate: 'no-such-template-771', modified: Date.now(), layers: 1 });
+    const sub = orphan.querySelector('.hm-sub');
+    if (!sub) throw new Error('setup: the card has no .hm-sub');
+    if (/save your changes back/i.test(sub.textContent)) throw new Error('an orphaned template draft still promises "close it to save your changes back": "' + sub.textContent + '"');
+    if (!/deleted/i.test(sub.textContent)) throw new Error('the orphan card does not say its template was deleted: "' + sub.textContent + '"');
+    const tpl = (FM.templates && FM.templates.list ? FM.templates.list() : [])[0];
+    if (tpl) {
+      const live = cardFn({ id: 'p771b', name: 'Live', templateDraft: true, ofTemplate: tpl.id, modified: Date.now(), layers: 1 });
+      if (!/save your changes back/i.test(live.querySelector('.hm-sub').textContent)) throw new Error('control: a draft of an existing template lost its save-back promise');
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

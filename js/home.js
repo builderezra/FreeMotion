@@ -1882,11 +1882,15 @@ window.FM = window.FM || {};
        share the honest label they already had; what is new is that he can now throw either away. */
     const ofName = p.ofElement && ((FM.elements && FM.elements.list ? FM.elements.list() : []).find(e => e.id === p.ofElement) || {}).name;
     // …or a TEMPLATE (queue 505 clause 4) — same card, same "close it to save" promise, its own noun
-    const ofTpl = p.ofTemplate && ((FM.templates && FM.templates.list ? FM.templates.list() : []).find(t => t.id === p.ofTemplate) || {}).name;
+    const tplEntry = p.ofTemplate ? (FM.templates && FM.templates.list ? FM.templates.list() : []).find(t => t.id === p.ofTemplate) : null;
+    const ofTpl = tplEntry && tplEntry.name;
+    /* THE PROMISE HAS TO BE TRUE (queue 771, hunt LOW #44). A draft whose template (or element) has since been deleted
+       has nothing to save back to; the card used to promise "close it to save your changes back" anyway. */
+    const orphanT = !!(p.ofTemplate && !tplEntry), orphanE = !!(p.ofElement && !ofName);
     body.appendChild(el('div', 'hm-sub', p.ofTemplate
-      ? ('Editing ' + (ofTpl ? '“' + ofTpl + '”' : 'a template') + ' — close it to save your changes back')
+      ? (orphanT ? 'Its template was deleted — open it to keep the work, or delete this draft' : ('Editing ' + (ofTpl ? '“' + ofTpl + '”' : 'a template') + ' — close it to save your changes back'))
       : p.ofElement
-      ? ('Editing ' + (ofName ? '“' + ofName + '”' : 'an element') + ' — close it to save your changes back')
+      ? (orphanE ? 'Its element was deleted — open it to keep the work, or delete this draft' : ('Editing ' + (ofName ? '“' + ofName + '”' : 'an element') + ' — close it to save your changes back'))
       : 'Draft — open it, build it, then ⋯ → Save as element'));
     card.appendChild(body);
     /* A WAY TO THROW ONE AWAY BY HAND (queue 525). Deliberately NOT automatic: an orphan may hold work
@@ -1921,7 +1925,7 @@ window.FM = window.FM || {};
         } },
         { sep: true },
         { label: 'Delete draft…', danger: true, action: async () => {
-          if (!confirm('Delete the draft “' + (p.name || 'Untitled') + '”? Anything in it that you have not saved as an element will be lost.')) return;
+          if (!confirm('Delete the draft “' + (p.name || 'Untitled') + '”? Anything in it that you have not saved back to its ' + (p.ofTemplate ? 'template' : 'element') + ' will be lost.')) return;   // queue 771: the right noun
           /* DO IT FOR HIM (queue 617 clause 4). This used to call `discardDraft`, which refuses on the
              draft you have open, and then TOLD HIM to go and open another one first — so the last
              draft in the list could never be deleted. His words: "as long as there's one left I can't
@@ -2480,6 +2484,7 @@ window.FM = window.FM || {};
   }
 
   FM.home = {
+    _draftCard: elementDraftCard,   // suite seam (queue 771): the card renderer itself, so a test can render one without owning a draft
     init() {
       root = document.getElementById('home-screen');
       if (!root) return;

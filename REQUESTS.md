@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 4 Sep at v15.55
+> ## 📌 WHAT I NEED FROM YOU — updated 4 Sep at v15.56
 >
-> **State:** v15.55, 1224 tests green, tree clean.
+> **State:** v15.56, 1225 tests green, tree clean.
 > **Just fixed, ahead of everything:** the intro. You were right and it was mine — v15.08 faded the film to nothing half a second before the splash left, so the last stretch was a blank screen handing over to white. The fade is gone and the film plays through in both looks (#776).
 >
 > **TWO LETTERS ARE ALL I NEED** (nothing visual ships before you pick):
@@ -28802,12 +28802,13 @@ re-opened #480, which I had marked done and had not fixed.
       placement code to read first.
         ✅ **v15.55 — the motion path and the tracker overlays are placed by FM.placeOverlayOnCanvas and mapped through FM.projectToOverlay, v15.04's shared pair, and neither resets the viewport on open any more.** Both drew from origin 0 in a cropped (zoomed-in) preview. Same ink probe as the point editor's, at 3x on a phone: the keyframe dot and the seed box land on the picture. Mutation (the motion path's old mapping) caught.
 
-- [ ] **771 — A template draft card whose template was deleted still promises "close it to save your changes back"** (hunt LOW #44)
+- [x] **771 — A template draft card whose template was deleted still promises "close it to save your changes back"** (hunt LOW #44) ✅ DONE v15.56.
       **STATUS: 🟢 READY — nothing is stopping this**
       From the same review. `js/home.js` draft card: when `p.ofTemplate` no longer resolves to a template, the subtitle still promises a
       save-back that cannot happen, and the delete-confirm names the wrong noun. Fix: say "its template was deleted — open it to keep the
       work, or delete this draft", pick the noun from `ofTemplate` / `ofElement`, or have `templates.remove` discard that template's
       workspace after the confirm.
+        ✅ **v15.56 — an orphaned draft card says its template (or element) was deleted and offers to keep the work or delete the draft, instead of promising a save-back that cannot happen; the delete prompt names the right noun.** Test through the real card renderer with a live-template draft as the control; mutation (the promise back) caught.
 
 - [ ] **772 — PC: the split / jump (A · S · D) buttons go on the LEFT, stacked vertically on the edge where the editing panel meets the timeline — not on the add-layer row.** Logged 3 Sep, the moment he said it, verbatim:
       **STATUS: ⏸ BUILT OUT UNTIL HE picks a look — the options are drawn and sent; nothing ships before the pick (#545)**
