@@ -54759,7 +54759,7 @@
       f.style.cssText = 'position:fixed;left:-9999px;top:0;width:390px;height:760px;border:0';
       f.src = '../index.html?intro776=' + Date.now();
       document.body.appendChild(f);
-      let maxT = 0, blanked = null, played = false;
+      let maxT = 0, blanked = null, played = false, everVisible = false;
       try {
         for (let i = 0; i < 45; i++) {
           const d = f.contentDocument;
@@ -54770,14 +54770,19 @@
               if (v.classList.contains('playing')) played = true;
               const op = parseFloat(d.defaultView.getComputedStyle(v).opacity);
               const up = sp && !sp.classList.contains('splash-out') && !sp.classList.contains('hidden');
-              if (up && played && op < 0.05 && (v.currentTime || 0) > 0.4 && blanked === null) blanked = +(v.currentTime).toFixed(2);
+              if (op > 0.9) everVisible = true;
+              /* ⚠️ ONLY TRUST A ZERO IF THIS FRAME EVER SHOWED THE FILM AT ALL. An iframe the browser is not rendering
+                 does not advance CSS transitions, so its film can read opacity 0 for the whole intro with nothing wrong —
+                 measured exactly that against the live site while the same build played perfectly on screen. Requiring a
+                 1 first makes a false accusation impossible; if the frame never renders, the run says so below instead. */
+              if (up && played && everVisible && op < 0.05 && (v.currentTime || 0) > 0.4 && blanked === null) blanked = +(v.currentTime).toFixed(2);
             }
             if (!sp && played) break;   // the splash finished normally
           }
           await sleep(100);
         }
       } finally { f.remove(); }
-      return { light, maxT: +maxT.toFixed(2), played, blanked };
+      return { light, maxT: +maxT.toFixed(2), played, blanked, everVisible };
     };
     try {
       for (const light of [false, true]) {
@@ -54785,6 +54790,7 @@
         const look = light ? 'light' : 'dark';
         if (!r.played) throw new Error('the ' + look + ' intro never started playing (the film reached ' + r.maxT + 's) — this run cannot judge it, but that is also exactly what a broken intro looks like');
         if (r.maxT < 0.5) throw new Error('the ' + look + ' intro stopped at ' + r.maxT + 's — it is not playing through');
+        if (!r.everVisible) throw new Error('setup: the ' + look + ' intro never reached full opacity in this frame — the browser is not rendering it, so this run cannot judge whether the film is hidden (it is not evidence against the app)');
         if (r.blanked !== null) throw new Error('the ' + look + ' intro was faded to nothing at ' + r.blanked + 's while the splash was still on screen — the animation disappears and the screen just flashes');
       }
     } finally {

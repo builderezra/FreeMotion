@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 4 Sep at v15.47
+> ## 📌 WHAT I NEED FROM YOU — updated 4 Sep at v15.48
 >
-> **State:** v15.47, 1217 tests green, tree clean.
+> **State:** v15.48, 1217 tests green, tree clean.
 > **Just fixed, ahead of everything:** the intro. You were right and it was mine — v15.08 faded the film to nothing half a second before the splash left, so the last stretch was a blank screen handing over to white. The fade is gone and the film plays through in both looks (#776).
 >
 > **TWO LETTERS ARE ALL I NEED** (nothing visual ships before you pick):
@@ -28948,5 +28948,13 @@ re-opened #480, which I had marked done and had not fixed.
         film dimmed to nothing kept every test green. The new test boots the real page in an iframe with the session flag
         cleared and asserts the film actually plays and is never faded out while the splash is still there — in both looks.
         The v15.08 test that REQUIRED the dim is restated to the opposite, so its return is caught by name.
+        ✅ **v15.48 (tests only) — and the new test can no longer accuse the app of something it cannot see.** Verifying the
+        fix on the live site, my own probe reported the film at opacity 0 for the whole intro in BOTH looks — while a
+        screenshot of the same build showed it playing perfectly. An iframe the browser is not rendering does not advance
+        CSS transitions, so its film reads 0 with nothing wrong. The test now requires the film to reach full opacity
+        once before it will believe a zero, and says plainly when the frame never rendered instead of blaming the app.
+        📸 **Confirmed live at v15.47 by picture, not inference:** two consecutive frames of the intro mid-play, the mark
+        animating on the dark ground.
+
 
 
