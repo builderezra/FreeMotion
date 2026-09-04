@@ -3722,6 +3722,7 @@ window.FM = window.FM || {};
   // The trim auto-scroll zone for THIS viewport: TRIM_EDGE on a desktop, 6% of the width on a phone (queue 707).
   function trimZonePx(rect) { return Math.min(TRIM_EDGE, Math.max(12, Math.round(rect.width * 0.06))); }
   FM._trimZonePx = trimZonePx;   // seam: the test reads the real zone rather than copying 6%
+  FM._trimDrag = function () { return trimDrag; };   // seam (queue 752): the brake counter
   // While a trim finger sits near a viewport edge, scroll the timeline so the clip can keep extending past
   // the screen (AM behaviour). Re-arms via rAF until the finger leaves the edge or the drag ends.
   function trimEdgeScroll() {
@@ -4223,6 +4224,7 @@ window.FM = window.FM || {};
              stays where it is; a grab-and-push extends past the screen, which is the AM behaviour he has). */
           const dragged = Math.abs(e.clientX - trimDrag.startX) >= 6;
           if (inZone && dragged && !trimScrollRAF) {
+            trimDrag._scrollFrames = 0;   // queue 752: a fresh edge-hold gets a fresh brake, as the clip path's does
             trimScrollRAF = requestAnimationFrame(trimEdgeScroll);
           }
           return;

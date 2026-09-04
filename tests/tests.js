@@ -54616,6 +54616,51 @@
     }
   });
 
+  /* ═══ 752 (hunt MEDIUM #35): THE TRIM EDGE-SCROLL BRAKE RESETS WHEN THE FINGER RE-ENTERS THE EDGE. The clip path
+     resets its counter on entry; the trim path never did, so once the brake had tripped the edge was dead for the rest
+     of the drag. Arm a trim, enter the edge (scrolls), trip the brake through the seam, leave, re-enter: it scrolls again. */
+  test('752: after the trim edge-scroll brake trips, leaving and re-entering the edge scrolls again', { item: '752', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM._trimDrag || !FM._trimZonePx) throw new Error('seams missing: _trimDrag / _trimZonePx');
+    /* `FM._trimArmMs` is published INSIDE the grip's pointerdown, so it does not exist until a trim has been started
+       once — requiring it up front made this test unrunnable on its own. Read it if a previous gesture left it, and
+       otherwise use the arm delay the source states, with enough slack that a slower machine still arms. */
+    const ARM = (FM._trimArmMs || 300) + 120;
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const tl = document.getElementById('timeline');
+    try {
+      if (hadHome) FM.home.close();
+      const L = FM.makeLayer('shape', { name: 'c752', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5', start: 0, duration: 3 });
+      FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 40, background: '#000000' } });
+      FM.selectLayer(L.id); if (FM.pause) FM.pause(); FM.setTime(0); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); await sleep(220);
+      const g = attached(document.querySelector('#tl-tracks .clip-grip.right, #tl-tracks .clip-grip[data-edge="right"], #tl-tracks .clip-grip:last-of-type'), 'right trim grip');
+      const gr = g.getBoundingClientRect(), gx = gr.left + gr.width / 2, gy = gr.top + gr.height / 2;
+      const pe = (t, el, cx, buttons) => el.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 8, isPrimary: true, pointerType: 'touch', clientX: cx, clientY: gy, buttons: buttons }));
+      pe('pointerdown', g, gx, 1); await sleep(ARM);
+      const rect = tl.getBoundingClientRect(), zone = FM._trimZonePx(rect), inX = rect.right - Math.max(2, Math.round(zone / 2)), outX = rect.right - zone - 60;
+      pe('pointermove', window, gx + 10, 1); await sleep(20);
+      pe('pointermove', window, inX, 1); await sleep(260);
+      const d = FM._trimDrag();
+      if (!d) throw new Error('setup: no trim drag is live after arming and moving the grip');
+      const s1 = tl.scrollLeft;
+      if (!(d._scrollFrames > 0)) throw new Error('setup: the edge-hold did not run the scroll loop (' + d._scrollFrames + ' frames)');
+      d._scrollFrames = 100000;   // the brake trips
+      pe('pointermove', window, outX, 1); await sleep(120);   // leave the edge — the loop ends
+      pe('pointermove', window, inX, 1);                        // and come back
+      const s2 = tl.scrollLeft; await sleep(300);
+      const s3 = tl.scrollLeft;
+      pe('pointerup', window, inX, 0); await sleep(120);
+      if (!(s3 > s2)) throw new Error('re-entering the edge after the brake had tripped did not scroll (scrollLeft ' + s2 + ' → ' + s3 + ') — the trim counter never resets per edge-hold');
+    } finally {
+      try { window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 8, pointerType: 'touch', buttons: 0 })); } catch (e) {}
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel
