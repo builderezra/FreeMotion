@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.35
+> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.36
 >
-> **State:** v15.35, 1205 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
+> **State:** v15.36, 1206 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
 > **Four pictures are in the chat waiting for one letter each** (nothing visual ships before you pick): **#642** the home background A–D · **#763** the skip-button gap (6/12/18) and the play button A–D · **#765** the split/jump buttons' look 1–3 · and **#760's people shapes** come next, drawn the same way. Everything else waiting on you is a paste or a letter, listed by `tools/next.sh` under its own heading so it cannot hide: #425 A/B · #454 A/B/C · #482 a category · #484 A/B/C · #539 A/B/C · #544 which things · #564 A/B/C · #570 smooth/stepped/leave · #624 a/b/c · #654 A/B/C · #406 which menu · #674 (b)/(c) · #95/#96/#663 the **Your last playback** paste · #215/#604/#677 the **Your last export** paste · #129 the **clip with no picture** paste · the oldest lag item, a **Measure** report · #657 a sample while scrubbing · #676/#706 what "twice" looks like · #712 whether Back from a category stalls · #592 a screenshot.
 > **Next, in order, each already built and proved, shipping one by one:** #508 (a frame-time report of the project-open slide from your phone), #553 (coming back to the app half-drawn), #606, #674 (clip names over filmstrips), #688 (one intro film, dark mode lands on dark), #706 (the add sheet's one motion), #715 (PC sliders glide), #716 (the cursor glow box), #717 (copy/paste button lit), #762 (tap again closes), #764 (dragged add row on top); then #760, #765, #768 and the audit findings.
 
@@ -28458,12 +28458,13 @@ re-opened #480, which I had marked done and had not fixed.
       - Claim (263-269): "same write path a drag does … undoes identically". Drag commits on pointerup (230); pad's set() only flushes; draw-tool.js:770 end() never commits; stop() commits only if `dirty`. Undo after a nudge undoes the PREVIOUS edit and resync throws the nudge away. Fix: commit on pad release.
         ✅ **v15.35 — nudgePad has a release hook and the mask tool's pad commits history in it, as a drag does on pointerup.** Before, an undo after a nudge undid the previous edit and the resync threw the nudge away. Test swipes the real pad, undoes (point back) and redoes (nudge returns — impossible without its own entry). Mutation (the hook not called) caught.
 
-- [ ] **742 — js/mask-tool.js:323-324 — viewport reset on open, reason gone since queue 561** (hunt MEDIUM #25)
+- [x] **742 — js/mask-tool.js:323-324 — viewport reset on open, reason gone since queue 561** (hunt MEDIUM #25) ✅ DONE v15.36.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
       - 108 uses FM.placeOverlayOnCanvas (zoom-aware); draw-tool removed the identical reset (v8.01). 323 is an empty `if`. Fix: delete both; verify hit-test radius (16 / dispScale()) under zoom as draw-tool did.
+        ✅ **v15.36 — the viewport reset on open is gone, with the empty `if` beside it.** Its reason left with queue 561: the overlay is placed and drawn zoom-aware and the hit radius is already 16 / dispScale(); draw-tool dropped the same reset in v8.01. Test zooms to 2x, opens the editor, and the zoom survives. Mutation (the reset back) caught.
 
 - [ ] **743 — js/sfx.js:41-48 — 'pink' noise is white** (hunt MEDIUM #26)
       **STATUS: 🟢 READY — nothing is stopping this**

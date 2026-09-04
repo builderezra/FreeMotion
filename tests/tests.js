@@ -54425,6 +54425,34 @@
     }
   });
 
+  /* ═══ 742 (hunt MEDIUM #25): OPENING THE MASK EDITOR KEEPS A ZOOMED CANVAS ZOOMED. The reset dated from before the
+     overlay was zoom-aware (queue 561); it threw away the zoom he had just set to edit a small mask. Zoom to 2x, open,
+     still 2x and the editor is active (the control that open() ran). */
+  test('742: opening the mask editor no longer resets a zoomed canvas', { item: '742' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.viewport || !FM.viewport.apply || !FM.viewport.isDefault || !FM.maskTool || !FM.maskTool.open) throw new Error('FM.viewport / FM.maskTool missing');
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#c04070', start: 0, duration: 4 });
+      L.masks = [{ id: 'mk742', enabled: true, mode: 'add', feather: 0, opacity: 1, invert: false, closed: true, path: [[100, 100], [300, 100], [300, 300], [100, 300]] }];
+      FM.scene = scene([L]); FM.selectLayer(L.id); FM.refreshAll(); await sleep(120);
+      FM.viewport.scale = 2; FM.viewport.x = 40; FM.viewport.y = 30; FM.viewport.apply(); await sleep(60);
+      if (FM.viewport.isDefault()) throw new Error('setup: the viewport did not zoom');
+      FM.maskTool.open(L.id, 'mk742'); await sleep(260);
+      if (!FM.maskTool.isActive()) throw new Error('setup: the mask editor did not open');
+      if (FM.viewport.isDefault() || Math.abs(FM.viewport.scale - 2) > 1e-6) throw new Error('opening the mask editor reset the zoom he had set (scale now ' + FM.viewport.scale + ')');
+    } finally {
+      try { if (FM.maskTool.isActive() && FM.maskTool.close) FM.maskTool.close(); else if (FM.maskTool.isActive() && FM.maskTool.stop) FM.maskTool.stop(); } catch (e) {}
+      try { FM.viewport.reset(); } catch (e) {}
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

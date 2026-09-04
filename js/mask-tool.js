@@ -323,8 +323,9 @@ window.FM = window.FM || {};
     maskId() { return active ? active.maskId : null; },
     open(layerId, maskId) {
       if (active) this.stop();
-      if (FM.viewport && !FM.viewport.isDefault && FM.viewport.reset) { /* older builds */ }
-      if (FM.viewport && FM.viewport.isDefault && !FM.viewport.isDefault()) FM.viewport.reset();   // overlay lays out in screen px — a zoomed viewport double-scales it
+      // No viewport reset here any more (queue 742, hunt MEDIUM #25): the overlay has been placed by FM.placeOverlayOnCanvas and drawn
+      // through FM.projectToOverlay since queue 561, both zoom-aware, and the hit radius is 16 / dispScale(). draw-tool dropped the
+      // same reset in v8.01. Opening the mask editor on a zoomed-in canvas keeps the zoom he set.
       const l = FM.scene.layers.find(x => x.id === layerId);
       const m = l && l.masks ? l.masks.find(mm => mm && mm.id === maskId) : null;
       if (!l || !m) { if (FM.toast) FM.toast('Mask not found'); return; }
