@@ -28959,5 +28959,12 @@ re-opened #480, which I had marked done and had not fixed.
         📸 **Confirmed live at v15.47 by picture, not inference:** two consecutive frames of the intro mid-play, the mark
         animating on the dark ground.
 
-
-
+- [ ] **777 — Keep the unblock list up to date.** (5 Sep, as the session handed over.)
+      His words, verbatim: *"Make sure they keep this unblock list for me as well"*
+      **The page:** <https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7> — every open item
+      that is built out and waiting only on him, laid out for his phone, with a Copy-my-answers button.
+      **Source is in the repo:** `tools/unblock/unblock.html`. To update: edit it, then publish it with the
+      Artifact tool passing that URL as `url` so the link he has keeps working. The rule is in CLAUDE.md.
+      1. [ ] Whenever an item leaves or joins "built out — waiting on him" (`tools/next.sh` lists them), the page changes to match.
+      2. [ ] When he answers from the page, tick the items it unblocked and remove them from it.
+      **STANDING — stays open on purpose, like #690.** JUMPED: a standing brief, not a task with an end.

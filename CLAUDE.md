@@ -288,6 +288,15 @@ So, for any design request:
 3. **Push the result to the design-system project once one exists** — see #545, which holds the one
    decision needed to make that real.
 
+## ⚠️ THE UNBLOCK LIST — keep it current (his ask, 5 Sep: *"Make sure they keep this unblock list for me as well"*)
+
+**<https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7>** is one page collecting every open item
+that is *built out — waiting on him* (the bucket `tools/next.sh` lists), phrased for his phone, with a button that
+hands back all his answers as one message. It exists because 35 asks scattered through REQUESTS.md were unanswerable
+in practice. **Source: `tools/unblock/unblock.html`.** When that bucket changes — an item unblocked by his answer,
+a new one parked — edit the source and republish with the Artifact tool, passing that URL as `url` (a publish
+without `url` makes a second page and breaks the link he has). Tracked as REQUESTS.md #777.
+
 ## ⚠️ Standing reminder — raise this before ANY public release
 
 **The UI is modelled on Alight Motion and must be made visually our own before publishing.**
