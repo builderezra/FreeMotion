@@ -54360,6 +54360,32 @@
     }
   });
 
+  /* ═══ 740 (hunt MEDIUM #23): A SOUND-EFFECT PREVIEW CONSTRUCTS NO AudioContext OF ITS OWN. With the shared one already
+     alive, count constructions while a preview plays: zero. The counter itself is checked by constructing one directly. */
+  test('740: previewing a sound effect uses the shared AudioContext and builds none of its own', { item: '740' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.sfx || !FM.sfx.preview || !FM.audioCtx) throw new Error('FM.sfx.preview / FM.audioCtx missing');
+    const defs = FM.sfx.list ? FM.sfx.list() : [];
+    const def = defs.find(d => d && typeof d.render === 'function') || (FM.sfx.byId && defs[0] && FM.sfx.byId(defs[0].id));
+    if (!def || typeof def.render !== 'function') throw new Error('setup: no sound-effect definition with a render()');
+    FM.audioCtx();   // the shared one exists before we start counting
+    const RealAC = window.AudioContext, RealWK = window.webkitAudioContext;
+    let made = 0;
+    const Counting = function () { made++; return new RealAC(); };
+    Counting.prototype = RealAC.prototype;
+    try {
+      window.AudioContext = Counting; if (RealWK) window.webkitAudioContext = Counting;
+      const probe = new window.AudioContext(); try { probe.close(); } catch (e) {}
+      if (made !== 1) throw new Error('setup: the counting constructor did not count');
+      made = 0;
+      FM.sfx.preview(def); await sleep(80);
+      if (FM.sfx.stopPreview) FM.sfx.stopPreview();
+      if (made !== 0) throw new Error('the preview constructed ' + made + ' AudioContext(s) of its own instead of using FM.audioCtx() — a second live context, never closed');
+    } finally {
+      window.AudioContext = RealAC; if (RealWK) window.webkitAudioContext = RealWK;
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

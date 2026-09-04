@@ -638,7 +638,9 @@ window.FM = window.FM || {};
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) { if (FM.toast) FM.toast('This browser cannot play sound effects'); return; }
     try {
-      liveCtx = liveCtx && liveCtx.state !== 'closed' ? liveCtx : new AC();
+      // THE one context (queue 740, hunt MEDIUM #23): audio-fx.js owns it and says never to construct another. This built a
+      // second live AudioContext for previews and never closed it; iOS caps a page at about four, after which everything is silent.
+      liveCtx = FM.audioCtx ? FM.audioCtx() : (liveCtx && liveCtx.state !== 'closed' ? liveCtx : new AC());
     } catch (e) {
       if (FM.toast) FM.toast('Could not start audio — ' + (e && e.message ? e.message : 'unknown'));
       return;
