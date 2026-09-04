@@ -1945,13 +1945,13 @@ window.FM = window.FM || {};
   const TEXT_SCRAMBLE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#%&@?!';
   const TEXT_FX = {
     counter: function (st, p, t) {
-      var from = tnum(FM.evalProp(p.from, t), 0), to = tnum(FM.evalProp(p.to, t), 100);
-      var dec = Math.max(0, Math.min(4, Math.round(tnum(FM.evalProp(p.decimals, t), 0))));
-      var pr = clamp01(tnum(FM.evalProp(p.progress, t), 0.5));
+      var from = fparam(p, 'from', 0, t), to = fparam(p, 'to', 100, t);
+      var dec = Math.max(0, Math.min(4, Math.round(fparam(p, 'decimals', 0, t))));
+      var pr = clamp01(fparam(p, 'progress', 0.5, t));
       st.text = (from + (to - from) * pr).toFixed(dec);
     },
     textprogress: function (st, p, t) {
-      var pr = clamp01(tnum(FM.evalProp(p.progress, t), 0.5));
+      var pr = clamp01(fparam(p, 'progress', 0.5, t));
       // A typewriter that could only run left-to-right one code unit at a time, with no caret.
       // UNIT matters most: a caption revealed character by character flickers half-words on screen,
       // and by WORD is the only unit that reads. DIR reveals from the end or outward from the middle.
@@ -1984,8 +1984,8 @@ window.FM = window.FM || {};
       st.text = keep;
     },
     textrandomizer: function (st, p, t) {
-      var pr = clamp01(tnum(FM.evalProp(p.progress, t), 0.5));
-      var spd = tnum(FM.evalProp(p.speed, t), 12);
+      var pr = clamp01(fparam(p, 'progress', 0.5, t));
+      var spd = fparam(p, 'speed', 12, t);
       var s = st.text, n = Math.floor(s.length * pr), frame = Math.floor(t * spd), out = '';
       for (var i = 0; i < s.length; i++) {
         var c = s[i];
@@ -1999,7 +1999,7 @@ window.FM = window.FM || {};
        stacking on top of it — the same Replaces/Adds shape Text Spacing already uses, because two
        controls that do the same kind of thing should not answer to different words. */
     textcurve: function (st, p, t) {
-      var deg = tnum(FM.evalProp(p.curve, t), 60);
+      var deg = fparam(p, 'curve', 60, t);
       var mode = p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0);
       st.curve = mode === 1 ? (st.curve || 0) + deg : deg;
     },
@@ -2014,7 +2014,7 @@ window.FM = window.FM || {};
     /* REPEAT — echo the string, with a separator that can be a newline. Reaches for the same place a
        designer reaches when they want a word to become a texture. */
     textrepeat: function (st, p, t) {
-      var n = Math.max(1, Math.min(20, Math.round(tnum(FM.evalProp(p.count, t), 3))));
+      var n = Math.max(1, Math.min(20, Math.round(fparam(p, 'count', 3, t))));
       var sepI = p.sep == null ? 0 : (Math.round(FM.evalProp(p.sep, t)) | 0);
       var sep = sepI === 1 ? '\n' : sepI === 2 ? ' · ' : sepI === 3 ? '' : ' ';
       if (n <= 1) return;
@@ -2025,7 +2025,7 @@ window.FM = window.FM || {};
     /* PAD — leading zeros and fixed-width labels. The obvious partner to Counter and Timecode, both of
        which already exist and neither of which can do this. */
     textpad: function (st, p, t) {
-      var len = Math.max(0, Math.min(40, Math.round(tnum(FM.evalProp(p.length, t), 3))));
+      var len = Math.max(0, Math.min(40, Math.round(fparam(p, 'length', 3, t))));
       var side = p.side == null ? 0 : (Math.round(FM.evalProp(p.side, t)) | 0);
       var chI = p.ch == null ? 0 : (Math.round(FM.evalProp(p.ch, t)) | 0);
       var ch = chI === 1 ? ' ' : chI === 2 ? '.' : chI === 3 ? '-' : '0';
@@ -2036,7 +2036,7 @@ window.FM = window.FM || {};
       }).join('\n');
     },
     textspacing: function (st, p, t) {
-      var sp = tnum(FM.evalProp(p.spacing, t), 24);
+      var sp = fparam(p, 'spacing', 24, t);
       // It always OVERRODE the layer's own spacing, so an effect meant to nudge tracking silently threw
       // away whatever the layer was already set to — and stacking two of them, or animating one on a
       // layer that already had spacing, could not do the obvious thing. Absolute stays the default so
@@ -2051,14 +2051,14 @@ window.FM = window.FM || {};
          "the user set it to zero". Harmless for word spacing, whose default IS 0; FATAL for line
          height, where it meant every existing Text Spacing collapsed its leading to the clamp floor.
          The `mode` param above has always been written this way for the same reason. */
-      var wsp = p.word == null ? 0 : tnum(FM.evalProp(p.word, t), 0);
+      var wsp = p.word == null ? 0 : fparam(p, 'word', 0, t);
       if (wsp < -40) wsp = -40; if (wsp > 200) wsp = 200;
       st.wordSpacing = mode === 1 ? (st.wordSpacing || 0) + wsp : wsp;
       /* Line height is a MULTIPLIER of the layer's own, not an absolute, and it ignores the mode — a
          multiplier IS relative, so "replaces" and "adds to layer" would be the same question asked
          twice. x1 changes nothing, and two stacked effects compound, which is the only reading of
          "half again, then half again" that is not surprising. */
-      var lm = p.line == null ? 1 : tnum(FM.evalProp(p.line, t), 1);
+      var lm = p.line == null ? 1 : fparam(p, 'line', 1, t);
       if (lm < 0.05) lm = 0.05; if (lm > 8) lm = 8;
       st.lineHeight = (st.lineHeight || 1.15) * lm;
     },
@@ -4197,7 +4197,7 @@ window.FM = window.FM || {};
     },
     // ---- batch 2 ----
     vibrance: function (d, W, H, p, t) {
-      const a = FM.evalProp(p.amount, t), k = (a == null ? 1.6 : a);
+      const k = fparam(p, 'amount', 1.6, t);   // queue 755: evalProp(undefined) is 0, never null — a missing key used to DESATURATE
       // SKIN holds back the boost on orange-red hues, the standard reason a vibrance pass looks
       // wrong: everything else improves while faces go radioactive. HIGHLIGHTS backs off as a pixel
       // approaches clipping, where pushing saturation just shifts hue. Both 0 = the original loop.
@@ -4611,14 +4611,14 @@ window.FM = window.FM || {};
       var dY0=bbBB?Math.max(0,bbBB.y):0, dY1=bbBB?Math.min(H-1,bbBB.y+bbBB.h-1):H-1;
       var dX0=bbBB?Math.max(0,bbBB.x-bbr-1):0, dX1=bbBB?Math.min(W-1,bbBB.x+bbBB.w-1+bbr+1):W-1;
       for(bbY=dY0;bbY<=dY1;bbY++){ bbBase=bbY*bbW4; for(bbCh=0;bbCh<4;bbCh++){ bbSum=bbSrc[bbBase+bbCh]*(bbr+1); for(bbN=1;bbN<=bbr;bbN++){ bbX=bbN<W?bbN:W-1; bbSum+=bbSrc[bbBase+bbX*4+bbCh]; } for(bbX=0;bbX<W;bbX++){ d[bbBase+bbX*4+bbCh]=bbSum*bbInv; bbN=bbX+bbr+1; bbIdx=bbN<W?bbN:W-1; bbSum+=bbSrc[bbBase+bbIdx*4+bbCh]; bbN=bbX-bbr; bbIdx=bbN>0?bbN:0; bbSum-=bbSrc[bbBase+bbIdx*4+bbCh]; } } } bbSrc=d.slice(); for(bbX=dX0;bbX<=dX1;bbX++){ bbBase=bbX*4; for(bbCh=0;bbCh<4;bbCh++){ bbSum=bbSrc[bbBase+bbCh]*(bbr+1); for(bbN=1;bbN<=bbr;bbN++){ bbY=bbN<H?bbN:H-1; bbSum+=bbSrc[bbBase+bbY*bbW4+bbCh]; } for(bbY=0;bbY<H;bbY++){ d[bbBase+bbY*bbW4+bbCh]=bbSum*bbInv; bbN=bbY+bbr+1; bbIdx=bbN<H?bbN:H-1; bbSum+=bbSrc[bbBase+bbIdx*bbW4+bbCh]; bbN=bbY-bbr; bbIdx=bbN>0?bbN:0; bbSum-=bbSrc[bbBase+bbIdx*bbW4+bbCh]; } } } },
-    spinblur: function(d,W,H,p,t){ var sbAmt=FM.evalProp(p.amount,t); if(sbAmt==null)sbAmt=0.5; if(sbAmt<0)sbAmt=0; if(sbAmt>1)sbAmt=1; if(sbAmt<=0)return; var sbS=fxSrc(d);
+    spinblur: function(d,W,H,p,t){ var sbAmt = fparam(p, 'amount', 0.5, t); if(sbAmt<0)sbAmt=0; if(sbAmt>1)sbAmt=1; if(sbAmt<=0)return; var sbS=fxSrc(d);
       // CENTRE was W/2, H/2, so the blur could only ever spin around the middle of the frame — never
       // around the wheel, the face or the logo that is actually turning.
       var sbCx=wCx(p,t,W,W/2), sbCy=wCy(p,t,H,H/2), sbW4=W*4;
       // SAMPLES here is a pure quality knob and needs no span correction: the offsets run -span..+span
       // whatever N is, so more taps close the gaps between the 9 discrete ghosts without widening the arc.
       var sbSpan=sbAmt*0.4, sbN=p.samples==null?9:Math.max(3,Math.min(33,Math.round(FM.evalProp(p.samples,t)))), sbHalf=(sbN-1)/2; var sbCos=new Float64Array(sbN), sbSin=new Float64Array(sbN); for(var sbk=0;sbk<sbN;sbk++){ var sbOff=(sbk-sbHalf)/sbHalf*sbSpan; sbCos[sbk]=Math.cos(sbOff); sbSin[sbk]=Math.sin(sbOff); } for(var sby=0;sby<H;sby++){ var sbDy=sby-sbCy; for(var sbx=0;sbx<W;sbx++){ var sbDx=sbx-sbCx; var sbR=0,sbG=0,sbB=0,sbA=0; for(var sbj=0;sbj<sbN;sbj++){ var sbC=sbCos[sbj], sbN2=sbSin[sbj]; var sbSx=sbCx+sbDx*sbC-sbDy*sbN2; var sbSy=sbCy+sbDx*sbN2+sbDy*sbC; var sbIx=sbSx<0?0:(sbSx>W-1?W-1:(sbSx+0.5)|0); var sbIy=sbSy<0?0:(sbSy>H-1?H-1:(sbSy+0.5)|0); var sbI=sbIy*sbW4+sbIx*4; sbR+=sbS[sbI]; sbG+=sbS[sbI+1]; sbB+=sbS[sbI+2]; sbA+=sbS[sbI+3]; } var sbO=sby*sbW4+sbx*4; d[sbO]=sbR/sbN; d[sbO+1]=sbG/sbN; d[sbO+2]=sbB/sbN; d[sbO+3]=sbA/sbN; } } },
-    gradientmap: function(d,W,H,p,t){ var gmAmt=FM.evalProp(p.amount,t); if(gmAmt==null)gmAmt=1; if(gmAmt<0)gmAmt=0; if(gmAmt>1)gmAmt=1; var gmSh=hexToRGB(p.color)||[36,26,82], gmHi=hexToRGB(p.color2)||[255,184,108]; var gmS0=gmSh[0],gmS1=gmSh[1],gmS2=gmSh[2], gmD0=gmHi[0]-gmS0,gmD1=gmHi[1]-gmS1,gmD2=gmHi[2]-gmS2; var gmMidP=p.midpoint==null?50:FM.evalProp(p.midpoint,t), gmMid=gmMidP/100, gmPlain=gmMidP===50; var gmDith=(p.dither==null?0:FM.evalProp(p.dither,t))/100/255; var gmW=W|0; for(var gmI=0;gmI<d.length;gmI+=4){ var gmL=(0.299*d[gmI]+0.587*d[gmI+1]+0.114*d[gmI+2])/255; if(gmDith>0){ var gmP=gmI>>2, gmX=gmP%gmW, gmY=(gmP/gmW)|0; gmL+=(BAYER8[(gmY&7)*8+(gmX&7)]-0.5)*gmDith*24; if(gmL<0)gmL=0; else if(gmL>1)gmL=1; } if(!gmPlain){ gmL = gmL<=gmMid ? (gmMid<=0?1:0.5*gmL/gmMid) : (gmMid>=1?0:0.5+0.5*(gmL-gmMid)/(1-gmMid)); } var gmO0=gmS0+gmD0*gmL, gmO1=gmS1+gmD1*gmL, gmO2=gmS2+gmD2*gmL; d[gmI]=d[gmI]+(gmO0-d[gmI])*gmAmt; d[gmI+1]=d[gmI+1]+(gmO1-d[gmI+1])*gmAmt; d[gmI+2]=d[gmI+2]+(gmO2-d[gmI+2])*gmAmt; } },
+    gradientmap: function(d,W,H,p,t){ var gmAmt = fparam(p, 'amount', 1, t); if(gmAmt<0)gmAmt=0; if(gmAmt>1)gmAmt=1; var gmSh=hexToRGB(p.color)||[36,26,82], gmHi=hexToRGB(p.color2)||[255,184,108]; var gmS0=gmSh[0],gmS1=gmSh[1],gmS2=gmSh[2], gmD0=gmHi[0]-gmS0,gmD1=gmHi[1]-gmS1,gmD2=gmHi[2]-gmS2; var gmMidP=p.midpoint==null?50:FM.evalProp(p.midpoint,t), gmMid=gmMidP/100, gmPlain=gmMidP===50; var gmDith=(p.dither==null?0:FM.evalProp(p.dither,t))/100/255; var gmW=W|0; for(var gmI=0;gmI<d.length;gmI+=4){ var gmL=(0.299*d[gmI]+0.587*d[gmI+1]+0.114*d[gmI+2])/255; if(gmDith>0){ var gmP=gmI>>2, gmX=gmP%gmW, gmY=(gmP/gmW)|0; gmL+=(BAYER8[(gmY&7)*8+(gmX&7)]-0.5)*gmDith*24; if(gmL<0)gmL=0; else if(gmL>1)gmL=1; } if(!gmPlain){ gmL = gmL<=gmMid ? (gmMid<=0?1:0.5*gmL/gmMid) : (gmMid>=1?0:0.5+0.5*(gmL-gmMid)/(1-gmMid)); } var gmO0=gmS0+gmD0*gmL, gmO1=gmS1+gmD1*gmL, gmO2=gmS2+gmD2*gmL; d[gmI]=d[gmI]+(gmO0-d[gmI])*gmAmt; d[gmI+1]=d[gmI+1]+(gmO1-d[gmI+1])*gmAmt; d[gmI+2]=d[gmI+2]+(gmO2-d[gmI+2])*gmAmt; } },
     colorize: function(d,W,H,p,t){ var czAmt=FM.evalProp(p.amount,t); czAmt=(czAmt==null?1:czAmt); if(czAmt<0)czAmt=0; if(czAmt>1)czAmt=1; var czCol=hexToRGB(p.color)||[58,160,255]; var czR=czCol[0],czG=czCol[1],czB=czCol[2]; var czLiftP=p.lift==null?25:FM.evalProp(p.lift,t); var czLift=czLiftP===25?0.25:czLiftP/100, czRange=czLift===0.25?0.75:(1-czLift); var czMode=p.blend==null?0:(Math.round(FM.evalProp(p.blend,t))|0); for(var czI=0;czI<d.length;czI+=4){ var czL=(0.299*d[czI]+0.587*d[czI+1]+0.114*d[czI+2])/255; var czF=czLift+czRange*czL; var czTR=czR*czF; var czTG=czG*czF; var czTB=czB*czF; if(czMode===1){czTR=d[czI]*czTR/255;czTG=d[czI+1]*czTG/255;czTB=d[czI+2]*czTB/255;} else if(czMode===2){czTR=255-(255-d[czI])*(255-czTR)/255;czTG=255-(255-d[czI+1])*(255-czTG)/255;czTB=255-(255-d[czI+2])*(255-czTB)/255;} else if(czMode===3){czTR=d[czI]<128?(2*d[czI]*czTR/255):(255-2*(255-d[czI])*(255-czTR)/255);czTG=d[czI+1]<128?(2*d[czI+1]*czTG/255):(255-2*(255-d[czI+1])*(255-czTG)/255);czTB=d[czI+2]<128?(2*d[czI+2]*czTB/255):(255-2*(255-d[czI+2])*(255-czTB)/255);} if(czTR<0)czTR=0; else if(czTR>255)czTR=255; if(czTG<0)czTG=0; else if(czTG>255)czTG=255; if(czTB<0)czTB=0; else if(czTB>255)czTB=255; d[czI]=d[czI]+(czTR-d[czI])*czAmt; d[czI+1]=d[czI+1]+(czTG-d[czI+1])*czAmt; d[czI+2]=d[czI+2]+(czTB-d[czI+2])*czAmt; } },
     checker: function(d,W,H,p,t,ps){ var chkSz=FM.evalProp(p.size,t); chkSz=(chkSz==null?24:chkSz); chkSz=Math.max(2,Math.min(120,Math.round(chkSz))); chkSz=Math.max(1,Math.round(chkSz*(ps||1))); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var chkCol=hexToRGB(p.color)||[0,0,0]; var chkR=chkCol[0],chkG=chkCol[1],chkB=chkCol[2];
       // MIX was welded at a 50/50 blend, so neither a solid checker nor a barely-there one existed.
@@ -4729,7 +4729,7 @@ window.FM = window.FM || {};
         // the weighted branch is never entered, so both the taps and the divisor are bit-identical.
         var lb_di=lb_y*lb_w4+lb_x*4, lb_dv=lb_glow?lb_ws:lb_n;
         d[lb_di]=lb_sr/lb_dv;d[lb_di+1]=lb_sg/lb_dv;d[lb_di+2]=lb_sb/lb_dv;d[lb_di+3]=lb_sa/lb_dv;}} },
-    dots: function(d,W,H,p,t,ps){ var dt_sz=FM.evalProp(p.size,t); if(dt_sz==null)dt_sz=16; dt_sz=Math.max(4,Math.min(80,dt_sz)); dt_sz=Math.max(2,dt_sz*(ps||1)); var dt_col=hexToRGB(p.color);
+    dots: function(d,W,H,p,t,ps){ var dt_sz = fparam(p, 'size', 16, t); dt_sz=Math.max(4,Math.min(80,dt_sz)); dt_sz=Math.max(2,dt_sz*(ps||1)); var dt_col=hexToRGB(p.color);
       /* Dot-to-cell ratio and opacity were both hardcoded, so the ONLY pattern available was "medium
          dots at 85%", with hard aliased edges. SOFTNESS feathers the rim over a few pixels, which is
          what stops a dot screen looking like a bitmap. */
@@ -4743,8 +4743,8 @@ window.FM = window.FM || {};
           d[dt_i]=d[dt_i]*dt_ik+dt_col[0]*dt_kk; d[dt_i+1]=d[dt_i+1]*dt_ik+dt_col[1]*dt_kk; d[dt_i+2]=d[dt_i+2]*dt_ik+dt_col[2]*dt_kk; }
       } } },
     // ---- batch 8 (pixel) ----
-    lightglow: function(d,W,H,p,t){ var lgAmt=FM.evalProp(p.amount,t); if(lgAmt==null)lgAmt=0.6; lgAmt=lgAmt<0?0:(lgAmt>1?1:lgAmt); if(lgAmt<=0)return; var lgThr=p.threshold==null?60:FM.evalProp(p.threshold,t); var lgN=W*H, lgBright=new Float32Array(lgN), lgTmp=new Float32Array(lgN), lgi, lgp4; for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0){lgBright[lgi]=0;continue;} var lgL=0.299*d[lgp4]+0.587*d[lgp4+1]+0.114*d[lgp4+2]; lgBright[lgi]=lgL>(lgThr===60?153:lgThr/100*255)?lgL:0; } var lgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))), lgDiv=2*lgR+1, lgx, lgy, lgRow, lgSum, lgIdx; for(lgy=0;lgy<H;lgy++){ lgRow=lgy*W; lgSum=0; for(lgx=-lgR;lgx<=lgR;lgx++){ var lgcx=lgx<0?0:(lgx>=W?W-1:lgx); lgSum+=lgBright[lgRow+lgcx]; } for(lgx=0;lgx<W;lgx++){ lgTmp[lgRow+lgx]=lgSum/lgDiv; var lgAddX=lgx+lgR+1; lgAddX=lgAddX>=W?W-1:lgAddX; var lgSubX=lgx-lgR; lgSubX=lgSubX<0?0:lgSubX; lgSum+=lgBright[lgRow+lgAddX]-lgBright[lgRow+lgSubX]; } } for(lgx=0;lgx<W;lgx++){ lgSum=0; for(lgy=-lgR;lgy<=lgR;lgy++){ var lgcy=lgy<0?0:(lgy>=H?H-1:lgy); lgSum+=lgTmp[lgcy*W+lgx]; } for(lgy=0;lgy<H;lgy++){ lgBright[lgy*W+lgx]=lgSum/lgDiv; var lgAddY=lgy+lgR+1; lgAddY=lgAddY>=H?H-1:lgAddY; var lgSubY=lgy-lgR; lgSubY=lgSubY<0?0:lgSubY; lgSum+=lgTmp[lgAddY*W+lgx]-lgTmp[lgSubY*W+lgx]; } } for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0)continue; var lgGlow=lgBright[lgi]*lgAmt; if(lgGlow<=0)continue; if(lgGlow>255)lgGlow=255; var lgF=(255-lgGlow)/255; d[lgp4]=255-(255-d[lgp4])*lgF; d[lgp4+1]=255-(255-d[lgp4+1])*lgF; d[lgp4+2]=255-(255-d[lgp4+2])*lgF; } },
-    longshadow: function(d,W,H,p,t){ var lsLen=FM.evalProp(p.length,t); if(lsLen==null)lsLen=30; lsLen=Math.max(0,Math.min(80,Math.round(lsLen))); if(lsLen<=0)return; var lsCol=hexToRGB(p.color)||[0,0,0]; var lsR=lsCol[0]&255,lsG=lsCol[1]&255,lsB=lsCol[2]&255; var s=fxSrc(d); var lsND=W+H-1, lsDiag; for(lsDiag=0;lsDiag<lsND;lsDiag++){ var lsX0,lsY0; if(lsDiag<W){lsX0=lsDiag;lsY0=0;}else{lsX0=0;lsY0=lsDiag-W+1;} var lsX=lsX0,lsY=lsY0,lsCount=lsLen; while(lsX<W&&lsY<H){ var lsI=(lsY*W+lsX)*4; if(s[lsI+3]>0){lsCount=0;}else if(lsCount<lsLen){ lsCount++; d[lsI]=lsR; d[lsI+1]=lsG; d[lsI+2]=lsB; d[lsI+3]=255; } lsX++; lsY++; } } },
+    lightglow: function(d,W,H,p,t){ var lgAmt = fparam(p, 'amount', 0.6, t); lgAmt=lgAmt<0?0:(lgAmt>1?1:lgAmt); if(lgAmt<=0)return; var lgThr=p.threshold==null?60:FM.evalProp(p.threshold,t); var lgN=W*H, lgBright=new Float32Array(lgN), lgTmp=new Float32Array(lgN), lgi, lgp4; for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0){lgBright[lgi]=0;continue;} var lgL=0.299*d[lgp4]+0.587*d[lgp4+1]+0.114*d[lgp4+2]; lgBright[lgi]=lgL>(lgThr===60?153:lgThr/100*255)?lgL:0; } var lgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))), lgDiv=2*lgR+1, lgx, lgy, lgRow, lgSum, lgIdx; for(lgy=0;lgy<H;lgy++){ lgRow=lgy*W; lgSum=0; for(lgx=-lgR;lgx<=lgR;lgx++){ var lgcx=lgx<0?0:(lgx>=W?W-1:lgx); lgSum+=lgBright[lgRow+lgcx]; } for(lgx=0;lgx<W;lgx++){ lgTmp[lgRow+lgx]=lgSum/lgDiv; var lgAddX=lgx+lgR+1; lgAddX=lgAddX>=W?W-1:lgAddX; var lgSubX=lgx-lgR; lgSubX=lgSubX<0?0:lgSubX; lgSum+=lgBright[lgRow+lgAddX]-lgBright[lgRow+lgSubX]; } } for(lgx=0;lgx<W;lgx++){ lgSum=0; for(lgy=-lgR;lgy<=lgR;lgy++){ var lgcy=lgy<0?0:(lgy>=H?H-1:lgy); lgSum+=lgTmp[lgcy*W+lgx]; } for(lgy=0;lgy<H;lgy++){ lgBright[lgy*W+lgx]=lgSum/lgDiv; var lgAddY=lgy+lgR+1; lgAddY=lgAddY>=H?H-1:lgAddY; var lgSubY=lgy-lgR; lgSubY=lgSubY<0?0:lgSubY; lgSum+=lgTmp[lgAddY*W+lgx]-lgTmp[lgSubY*W+lgx]; } } for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0)continue; var lgGlow=lgBright[lgi]*lgAmt; if(lgGlow<=0)continue; if(lgGlow>255)lgGlow=255; var lgF=(255-lgGlow)/255; d[lgp4]=255-(255-d[lgp4])*lgF; d[lgp4+1]=255-(255-d[lgp4+1])*lgF; d[lgp4+2]=255-(255-d[lgp4+2])*lgF; } },
+    longshadow: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(80,Math.round(lsLen))); if(lsLen<=0)return; var lsCol=hexToRGB(p.color)||[0,0,0]; var lsR=lsCol[0]&255,lsG=lsCol[1]&255,lsB=lsCol[2]&255; var s=fxSrc(d); var lsND=W+H-1, lsDiag; for(lsDiag=0;lsDiag<lsND;lsDiag++){ var lsX0,lsY0; if(lsDiag<W){lsX0=lsDiag;lsY0=0;}else{lsX0=0;lsY0=lsDiag-W+1;} var lsX=lsX0,lsY=lsY0,lsCount=lsLen; while(lsX<W&&lsY<H){ var lsI=(lsY*W+lsX)*4; if(s[lsI+3]>0){lsCount=0;}else if(lsCount<lsLen){ lsCount++; d[lsI]=lsR; d[lsI+1]=lsG; d[lsI+2]=lsB; d[lsI+3]=255; } lsX++; lsY++; } } },
     halftonelines: function(d,W,H,p,t,ps){ var htlSize=FM.evalProp(p.size,t); if(htlSize==null||isNaN(htlSize))htlSize=8; htlSize=Math.max(3,Math.min(40,Math.round(htlSize))); /* FLOOR THE SCALED PERIOD AT 2, NOT 1 (queue 261). A stripe needs two rows: at a period of 1 every
        row has the same rowMod of 0, the threshold beats it for any luminance below pure white, and the
        whole layer is written BLACK. Measured on a 1080x1920 project at size 3 — full res 64,800 white
@@ -4783,9 +4783,9 @@ window.FM = window.FM || {};
           if(htlSoft>0){ var htlE=(htlM-htlThresh)/htlSoft; htlV=htlE<=0?0:(htlE>=1?255:Math.round(htlE*255)); }
           else htlV=(htlM<htlThresh)?0:255;
           d[htlI]=htlV; d[htlI+1]=htlV; d[htlI+2]=htlV; } } },
-    clouds: function(d,W,H,p,t){ var cl_amt=FM.evalProp(p.amount,t); if(cl_amt==null)cl_amt=0.6; cl_amt=cl_amt<0?0:(cl_amt>1?1:cl_amt); if(cl_amt<=0)return; function cl_hash(cx,cy){ var cl_h=(cx*374761393+cy*668265263)|0; cl_h=(cl_h^(cl_h>>>13))*1274126177|0; cl_h=cl_h^(cl_h>>>16); return ((cl_h>>>0)%1000)/999; } function cl_smooth(cl_f){ return cl_f*cl_f*(3-2*cl_f); } var cl_sc=p.scale==null?100:Math.max(1,FM.evalProp(p.scale,t)); var cl_cells=cl_sc===100?[64,32,16]:[64*cl_sc/100,32*cl_sc/100,16*cl_sc/100]; var cl_wts=[0.5715,0.2857,0.1428]; var cl_dr=p.drift==null?0:FM.evalProp(p.drift,t); var cl_ox=cl_dr*t; var cl_col=p.color?hexToRGB(p.color):null; var cl_cr=cl_col?cl_col[0]/255:1, cl_cg=cl_col?cl_col[1]/255:1, cl_cb=cl_col?cl_col[2]/255:1; var cl_w4=W*4; for(var cl_y=0;cl_y<H;cl_y++){ for(var cl_x=0;cl_x<W;cl_x++){ var cl_i=cl_y*cl_w4+cl_x*4; if(d[cl_i+3]<=0)continue; var cl_sum=0; for(var cl_o=0;cl_o<3;cl_o++){ var cl_C=cl_cells[cl_o]; var cl_xs=cl_x+cl_ox; var cl_gx=Math.floor(cl_xs/cl_C), cl_gy=Math.floor(cl_y/cl_C); var cl_fx=(cl_xs-cl_gx*cl_C)/cl_C, cl_fy=(cl_y-cl_gy*cl_C)/cl_C; var cl_v00=cl_hash(cl_gx,cl_gy), cl_v10=cl_hash(cl_gx+1,cl_gy), cl_v01=cl_hash(cl_gx,cl_gy+1), cl_v11=cl_hash(cl_gx+1,cl_gy+1); var cl_sx=cl_smooth(cl_fx), cl_sy=cl_smooth(cl_fy); var cl_top=cl_v00+(cl_v10-cl_v00)*cl_sx; var cl_bot=cl_v01+(cl_v11-cl_v01)*cl_sx; cl_sum+=(cl_top+(cl_bot-cl_top)*cl_sy)*cl_wts[cl_o]; } var cl_g=cl_sum*255; if(cl_g<0)cl_g=0; if(cl_g>255)cl_g=255; d[cl_i]=d[cl_i]+(cl_g*cl_cr-d[cl_i])*cl_amt; d[cl_i+1]=d[cl_i+1]+(cl_g*cl_cg-d[cl_i+1])*cl_amt; d[cl_i+2]=d[cl_i+2]+(cl_g*cl_cb-d[cl_i+2])*cl_amt; } } },
-    rays: function(d,W,H,p,t){ var raysCount=FM.evalProp(p.count,t); if(raysCount==null)raysCount=16; raysCount=Math.max(3,Math.min(64,Math.round(raysCount))); var raysCol=hexToRGB(p.color); if(!raysCol)raysCol=[255,255,255]; var raysCr=raysCol[0],raysCg=raysCol[1],raysCb=raysCol[2]; var raysPx=p.x==null?50:FM.evalProp(p.x,t); var raysPy=p.y==null?50:FM.evalProp(p.y,t); var raysCx=raysPx===50?W/2:W*(raysPx/100), raysCy=raysPy===50?H/2:H*(raysPy/100); var raysInt2=(p.intensity==null?60:FM.evalProp(p.intensity,t))/100; var raysPh=(p.phase==null?0:FM.evalProp(p.phase,t))*Math.PI/180; for(var raysY=0;raysY<H;raysY++){ var raysDy=raysY-raysCy; var raysRow=raysY*W*4; for(var raysX=0;raysX<W;raysX++){ var raysI=raysRow+raysX*4; if(d[raysI+3]===0)continue; var raysA=Math.atan2(raysDy,raysX-raysCx)+raysPh; var raysInt=Math.cos(raysA*raysCount)*0.5+0.5; var raysAmt=raysInt*raysInt2; var raysInv=1-raysAmt; d[raysI]=d[raysI]*raysInv+raysCr*raysAmt; d[raysI+1]=d[raysI+1]*raysInv+raysCg*raysAmt; d[raysI+2]=d[raysI+2]*raysInv+raysCb*raysAmt; } } },
-    stripes: function(d,W,H,p,t,ps){ var stp_size=FM.evalProp(p.size,t); if(stp_size==null)stp_size=16; stp_size=Math.max(4,Math.min(80,stp_size)); var stp_period=Math.max(2,Math.round(stp_size*(ps||1))); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var stp_c=hexToRGB(p.color); var stp_r=stp_c[0],stp_g=stp_c[1],stp_b=stp_c[2];
+    clouds: function(d,W,H,p,t){ var cl_amt = fparam(p, 'amount', 0.6, t); cl_amt=cl_amt<0?0:(cl_amt>1?1:cl_amt); if(cl_amt<=0)return; function cl_hash(cx,cy){ var cl_h=(cx*374761393+cy*668265263)|0; cl_h=(cl_h^(cl_h>>>13))*1274126177|0; cl_h=cl_h^(cl_h>>>16); return ((cl_h>>>0)%1000)/999; } function cl_smooth(cl_f){ return cl_f*cl_f*(3-2*cl_f); } var cl_sc=p.scale==null?100:Math.max(1,FM.evalProp(p.scale,t)); var cl_cells=cl_sc===100?[64,32,16]:[64*cl_sc/100,32*cl_sc/100,16*cl_sc/100]; var cl_wts=[0.5715,0.2857,0.1428]; var cl_dr=p.drift==null?0:FM.evalProp(p.drift,t); var cl_ox=cl_dr*t; var cl_col=p.color?hexToRGB(p.color):null; var cl_cr=cl_col?cl_col[0]/255:1, cl_cg=cl_col?cl_col[1]/255:1, cl_cb=cl_col?cl_col[2]/255:1; var cl_w4=W*4; for(var cl_y=0;cl_y<H;cl_y++){ for(var cl_x=0;cl_x<W;cl_x++){ var cl_i=cl_y*cl_w4+cl_x*4; if(d[cl_i+3]<=0)continue; var cl_sum=0; for(var cl_o=0;cl_o<3;cl_o++){ var cl_C=cl_cells[cl_o]; var cl_xs=cl_x+cl_ox; var cl_gx=Math.floor(cl_xs/cl_C), cl_gy=Math.floor(cl_y/cl_C); var cl_fx=(cl_xs-cl_gx*cl_C)/cl_C, cl_fy=(cl_y-cl_gy*cl_C)/cl_C; var cl_v00=cl_hash(cl_gx,cl_gy), cl_v10=cl_hash(cl_gx+1,cl_gy), cl_v01=cl_hash(cl_gx,cl_gy+1), cl_v11=cl_hash(cl_gx+1,cl_gy+1); var cl_sx=cl_smooth(cl_fx), cl_sy=cl_smooth(cl_fy); var cl_top=cl_v00+(cl_v10-cl_v00)*cl_sx; var cl_bot=cl_v01+(cl_v11-cl_v01)*cl_sx; cl_sum+=(cl_top+(cl_bot-cl_top)*cl_sy)*cl_wts[cl_o]; } var cl_g=cl_sum*255; if(cl_g<0)cl_g=0; if(cl_g>255)cl_g=255; d[cl_i]=d[cl_i]+(cl_g*cl_cr-d[cl_i])*cl_amt; d[cl_i+1]=d[cl_i+1]+(cl_g*cl_cg-d[cl_i+1])*cl_amt; d[cl_i+2]=d[cl_i+2]+(cl_g*cl_cb-d[cl_i+2])*cl_amt; } } },
+    rays: function(d,W,H,p,t){ var raysCount = fparam(p, 'count', 16, t); raysCount=Math.max(3,Math.min(64,Math.round(raysCount))); var raysCol=hexToRGB(p.color); if(!raysCol)raysCol=[255,255,255]; var raysCr=raysCol[0],raysCg=raysCol[1],raysCb=raysCol[2]; var raysPx=p.x==null?50:FM.evalProp(p.x,t); var raysPy=p.y==null?50:FM.evalProp(p.y,t); var raysCx=raysPx===50?W/2:W*(raysPx/100), raysCy=raysPy===50?H/2:H*(raysPy/100); var raysInt2=(p.intensity==null?60:FM.evalProp(p.intensity,t))/100; var raysPh=(p.phase==null?0:FM.evalProp(p.phase,t))*Math.PI/180; for(var raysY=0;raysY<H;raysY++){ var raysDy=raysY-raysCy; var raysRow=raysY*W*4; for(var raysX=0;raysX<W;raysX++){ var raysI=raysRow+raysX*4; if(d[raysI+3]===0)continue; var raysA=Math.atan2(raysDy,raysX-raysCx)+raysPh; var raysInt=Math.cos(raysA*raysCount)*0.5+0.5; var raysAmt=raysInt*raysInt2; var raysInv=1-raysAmt; d[raysI]=d[raysI]*raysInv+raysCr*raysAmt; d[raysI+1]=d[raysI+1]*raysInv+raysCg*raysAmt; d[raysI+2]=d[raysI+2]*raysInv+raysCb*raysAmt; } } },
+    stripes: function(d,W,H,p,t,ps){ var stp_size = fparam(p, 'size', 16, t); stp_size=Math.max(4,Math.min(80,stp_size)); var stp_period=Math.max(2,Math.round(stp_size*(ps||1))); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var stp_c=hexToRGB(p.color); var stp_r=stp_c[0],stp_g=stp_c[1],stp_b=stp_c[2];
       // Locked to a 45-degree diagonal at a 50% duty cycle mixed at a fixed 0.6 — the only thing you
       // could change was how WIDE they were. DIRECTION picks the axis, DUTY the bar-to-gap ratio,
       // STRENGTH how solid they are. All three defaults are the constants they replace.
@@ -4798,7 +4798,7 @@ window.FM = window.FM || {};
         var stp_v=stp_dir===1?(stp_x-stp_y):(stp_dir===2?stp_y:(stp_dir===3?stp_x:(stp_x+stp_y)));
         var stp_m=stp_v%stp_period; if(stp_m<0)stp_m+=stp_period; if(stp_m<stp_half){ d[stp_i]=d[stp_i]*stp_ik+stp_r*stp_k; d[stp_i+1]=d[stp_i+1]*stp_ik+stp_g*stp_k; d[stp_i+2]=d[stp_i+2]*stp_ik+stp_b*stp_k; } } } },
     // ---- batch 9 (pixel) ----
-    darkglow: function(d,W,H,p,t){ var dgAmt=FM.evalProp(p.amount,t); if(dgAmt==null)dgAmt=0.6; dgAmt=Math.max(0,Math.min(1,dgAmt)); if(dgAmt<=0)return; var dgThr=p.threshold==null?40:FM.evalProp(p.threshold,t); var dgN=W*H; var dgDark=new Float32Array(dgN); var dgI4,dgL; for(var dgi=0;dgi<dgN;dgi++){ dgI4=dgi*4; if(d[dgI4+3]>0){ dgL=0.299*d[dgI4]+0.587*d[dgI4+1]+0.114*d[dgI4+2]; if(dgL<(dgThr===40?102:dgThr/100*255))dgDark[dgi]=255-dgL; } } var dgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))),dgWin=2*dgR+1,dgInv=1/dgWin; var dgTmp=new Float32Array(dgN); var dgx,dgy,dgsum,dgrow,dgxa; for(dgy=0;dgy<H;dgy++){ dgrow=dgy*W; dgsum=0; for(dgx=-dgR;dgx<=dgR;dgx++){ dgxa=dgx<0?0:(dgx>=W?W-1:dgx); dgsum+=dgDark[dgrow+dgxa]; } for(dgx=0;dgx<W;dgx++){ dgTmp[dgrow+dgx]=dgsum*dgInv; var dgAdd=dgx+dgR+1; dgAdd=dgAdd>=W?W-1:dgAdd; var dgSub=dgx-dgR; dgSub=dgSub<0?0:dgSub; dgsum+=dgDark[dgrow+dgAdd]-dgDark[dgrow+dgSub]; } } for(dgx=0;dgx<W;dgx++){ dgsum=0; for(dgy=-dgR;dgy<=dgR;dgy++){ var dgya=dgy<0?0:(dgy>=H?H-1:dgy); dgsum+=dgTmp[dgya*W+dgx]; } for(dgy=0;dgy<H;dgy++){ dgDark[dgy*W+dgx]=dgsum*dgInv; var dgAddY=dgy+dgR+1; dgAddY=dgAddY>=H?H-1:dgAddY; var dgSubY=dgy-dgR; dgSubY=dgSubY<0?0:dgSubY; dgsum+=dgTmp[dgAddY*W+dgx]-dgTmp[dgSubY*W+dgx]; } } for(var dgj=0;dgj<dgN;dgj++){ dgI4=dgj*4; if(d[dgI4+3]>0){ var dgF=1-(dgDark[dgj]/255)*dgAmt; if(dgF<0)dgF=0; d[dgI4]=d[dgI4]*dgF; d[dgI4+1]=d[dgI4+1]*dgF; d[dgI4+2]=d[dgI4+2]*dgF; } } },
+    darkglow: function(d,W,H,p,t){ var dgAmt = fparam(p, 'amount', 0.6, t); dgAmt=Math.max(0,Math.min(1,dgAmt)); if(dgAmt<=0)return; var dgThr=p.threshold==null?40:FM.evalProp(p.threshold,t); var dgN=W*H; var dgDark=new Float32Array(dgN); var dgI4,dgL; for(var dgi=0;dgi<dgN;dgi++){ dgI4=dgi*4; if(d[dgI4+3]>0){ dgL=0.299*d[dgI4]+0.587*d[dgI4+1]+0.114*d[dgI4+2]; if(dgL<(dgThr===40?102:dgThr/100*255))dgDark[dgi]=255-dgL; } } var dgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))),dgWin=2*dgR+1,dgInv=1/dgWin; var dgTmp=new Float32Array(dgN); var dgx,dgy,dgsum,dgrow,dgxa; for(dgy=0;dgy<H;dgy++){ dgrow=dgy*W; dgsum=0; for(dgx=-dgR;dgx<=dgR;dgx++){ dgxa=dgx<0?0:(dgx>=W?W-1:dgx); dgsum+=dgDark[dgrow+dgxa]; } for(dgx=0;dgx<W;dgx++){ dgTmp[dgrow+dgx]=dgsum*dgInv; var dgAdd=dgx+dgR+1; dgAdd=dgAdd>=W?W-1:dgAdd; var dgSub=dgx-dgR; dgSub=dgSub<0?0:dgSub; dgsum+=dgDark[dgrow+dgAdd]-dgDark[dgrow+dgSub]; } } for(dgx=0;dgx<W;dgx++){ dgsum=0; for(dgy=-dgR;dgy<=dgR;dgy++){ var dgya=dgy<0?0:(dgy>=H?H-1:dgy); dgsum+=dgTmp[dgya*W+dgx]; } for(dgy=0;dgy<H;dgy++){ dgDark[dgy*W+dgx]=dgsum*dgInv; var dgAddY=dgy+dgR+1; dgAddY=dgAddY>=H?H-1:dgAddY; var dgSubY=dgy-dgR; dgSubY=dgSubY<0?0:dgSubY; dgsum+=dgTmp[dgAddY*W+dgx]-dgTmp[dgSubY*W+dgx]; } } for(var dgj=0;dgj<dgN;dgj++){ dgI4=dgj*4; if(d[dgI4+3]>0){ var dgF=1-(dgDark[dgj]/255)*dgAmt; if(dgF<0)dgF=0; d[dgI4]=d[dgI4]*dgF; d[dgI4+1]=d[dgI4+1]*dgF; d[dgI4+2]=d[dgI4+2]*dgF; } } },
     stroke: function(d,W,H,p,t,ps){ var st_w=Math.round(FM.evalProp(p.width,t)); if(!(st_w>=1))st_w=4; if(st_w>60)st_w=60; st_w=Math.max(1,Math.round(st_w*(ps||1)));   /* PLATE px: the width the user set is in PROJECT px, and the plate shrinks with the playback quality tier — without this a 16px outline drew 16 plate px on a 0.36 plate, i.e. 44 project px, and the preview disagreed with the export by +154% */ var st_col=hexToRGB(p.color)||[255,255,255]; var st_N=W*H, st_w4=W*4; var st_x,st_y,st_i; var st_src=new Uint8Array(st_N); for(st_i=0;st_i<st_N;st_i++)st_src[st_i]=(d[st_i*4+3]>0)?1:0;
       // POSITION / SHAPE / SOFTNESS. Outside + Square + hard runs the ORIGINAL box dilation below,
       // untouched, so every existing stroke in every project is byte-for-byte what it was. Anything
@@ -4856,7 +4856,7 @@ window.FM = window.FM || {};
       for(sei=0;sei<seN;sei++){ var v=seA[sei];
         if(seK!==0){ v=(v-127.5)*(1+Math.abs(seK)*3)+127.5+seK*127.5; if(v<0)v=0; else if(v>255)v=255; }
         d[sei*4+3]=v; } },
-    blocknoise: function(d,W,H,p,t,ps){ var bnAmt=FM.evalProp(p.amount,t); if(bnAmt==null)bnAmt=0.5; bnAmt=Math.max(0,Math.min(1,bnAmt)); var bnK=bnAmt*0.6, bnInv=1-bnK; if(bnK<=0)return; var bnSpd=p.speed==null?8:FM.evalProp(p.speed,t); var bnFrame=Math.floor(t*bnSpd)|0, bnW4=W*4; var bnSz=p.size==null?6:Math.max(1,FM.evalProp(p.size,t)); bnSz=Math.max(1,bnSz*(ps||1)); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var bnAsp=p.aspect==null?1:Math.max(0.1,FM.evalProp(p.aspect,t)); var bnSzY=bnSz*bnAsp; for(var bnY=0;bnY<H;bnY++){ var bnBy=(bnY/bnSzY)|0, bnRow=bnY*bnW4; for(var bnX=0;bnX<W;bnX++){ var bnI=bnRow+bnX*4; if(d[bnI+3]<=0)continue; var bnBx=(bnX/bnSz)|0; var bnHsh=(bnBx*374761393+bnBy*668265263+bnFrame*2147483647)|0; bnHsh=(bnHsh^(bnHsh>>>13))*1274126177|0; bnHsh=bnHsh^(bnHsh>>>16); var bnG=(bnHsh>>>0)&255; d[bnI]=d[bnI]*bnInv+bnG*bnK; d[bnI+1]=d[bnI+1]*bnInv+bnG*bnK; d[bnI+2]=d[bnI+2]*bnInv+bnG*bnK; } } },
+    blocknoise: function(d,W,H,p,t,ps){ var bnAmt = fparam(p, 'amount', 0.5, t); bnAmt=Math.max(0,Math.min(1,bnAmt)); var bnK=bnAmt*0.6, bnInv=1-bnK; if(bnK<=0)return; var bnSpd=p.speed==null?8:FM.evalProp(p.speed,t); var bnFrame=Math.floor(t*bnSpd)|0, bnW4=W*4; var bnSz=p.size==null?6:Math.max(1,FM.evalProp(p.size,t)); bnSz=Math.max(1,bnSz*(ps||1)); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var bnAsp=p.aspect==null?1:Math.max(0.1,FM.evalProp(p.aspect,t)); var bnSzY=bnSz*bnAsp; for(var bnY=0;bnY<H;bnY++){ var bnBy=(bnY/bnSzY)|0, bnRow=bnY*bnW4; for(var bnX=0;bnX<W;bnX++){ var bnI=bnRow+bnX*4; if(d[bnI+3]<=0)continue; var bnBx=(bnX/bnSz)|0; var bnHsh=(bnBx*374761393+bnBy*668265263+bnFrame*2147483647)|0; bnHsh=(bnHsh^(bnHsh>>>13))*1274126177|0; bnHsh=bnHsh^(bnHsh>>>16); var bnG=(bnHsh>>>0)&255; d[bnI]=d[bnI]*bnInv+bnG*bnK; d[bnI+1]=d[bnI+1]*bnInv+bnG*bnK; d[bnI+2]=d[bnI+2]*bnInv+bnG*bnK; } } },
     starfield: function(sf_d,sf_W,sf_H,sf_p,sf_t){ var sf_amt=FM.evalProp(sf_p.amount,sf_t); if(sf_amt==null)sf_amt=0.5; sf_amt=Math.max(0,Math.min(1,sf_amt)); var sf_thr=sf_amt*0.03; if(sf_thr<=0)return; var sf_col=hexToRGB(sf_p.color)||[255,255,255]; var sf_w4=sf_W*4;
       // Every star was a single pixel of one flat colour. At 1080p that is not a star, it is sensor
       // dirt, and a one-pixel highlight is exactly what an encoder throws away — so it also shimmered
@@ -4888,7 +4888,7 @@ window.FM = window.FM || {};
             sf_d[sf_i]=sf_col[0]*sf_b; sf_d[sf_i+1]=sf_col[1]*sf_b; sf_d[sf_i+2]=sf_col[2]*sf_b; sf_d[sf_i+3]=255; }
         } } } },
     // ---- batch 10 (pixel) ----
-    bumpmap: function(d,W,H,p,t){ var bmAmt=FM.evalProp(p.amount,t); if(bmAmt==null)bmAmt=1.2; bmAmt=Math.max(0,Math.min(3,bmAmt)); var bmS=fxSrc(d); var bmW4=W*4;
+    bumpmap: function(d,W,H,p,t){ var bmAmt = fparam(p, 'amount', 1.2, t); bmAmt=Math.max(0,Math.min(3,bmAmt)); var bmS=fxSrc(d); var bmW4=W*4;
       // Every embossed surface in the app was lit from the same top-left corner at the same depth.
       // ANGLE moves the key light, RELIEF changes how deep the surface reads (it scales the normal's
       // z: a flatter z tilts the normals further, so MORE relief means a SMALLER constant), AMBIENT is
@@ -5171,7 +5171,7 @@ window.FM = window.FM || {};
      * Two box passes, not one: one box leaves square steps in a gradient this smooth. Two ≈ a
      * triangle kernel (sigma ≈ 0.82 x radius). The sliding-window loops are innerblur's. */
     iridescence: function(d,W,H,p,t,ps){
-      var iri_amt=FM.evalProp(p.amount,t); if(iri_amt==null)iri_amt=0.7;
+      var iri_amt = fparam(p, 'amount', 0.7, t);
       var iri_scP=p.scale==null?100:Math.max(1,FM.evalProp(p.scale,t));
       var iri_sc=(iri_scP===100?120:120*(iri_scP/100))*(ps||1);
       var iri_bd=p.bands==null?3:FM.evalProp(p.bands,t);
@@ -5208,8 +5208,8 @@ window.FM = window.FM || {};
     // ---- batch 11 (multi-param pixel) ----
     // (motionblur moved to CANVAS_FX: the per-pixel 9-tap JS loop cost ~28ms/frame at 1080×1920 —
     //  the same directional smear as 9 GPU draws costs ~1ms. See CANVAS_FX.motionblur.)
-    colorbalance: function(d,W,H,p,t){ var cbR=FM.evalProp(p.red,t); if(cbR==null)cbR=25; cbR=cbR<-100?-100:(cbR>100?100:cbR); var cbG=FM.evalProp(p.green,t); if(cbG==null)cbG=0; cbG=cbG<-100?-100:(cbG>100?100:cbG); var cbB=FM.evalProp(p.blue,t); if(cbB==null)cbB=-25; cbB=cbB<-100?-100:(cbB>100?100:cbB); var cbAddR=cbR/100*80, cbAddG=cbG/100*80, cbAddB=cbB/100*80; var cbN=W*H*4; for(var cbI=0;cbI<cbN;cbI+=4){ if(d[cbI+3]>0){ var cbVr=d[cbI]+cbAddR; d[cbI]=cbVr<0?0:(cbVr>255?255:cbVr); var cbVg=d[cbI+1]+cbAddG; d[cbI+1]=cbVg<0?0:(cbVg>255?255:cbVg); var cbVb=d[cbI+2]+cbAddB; d[cbI+2]=cbVb<0?0:(cbVb>255?255:cbVb); } } },
-    highlightsshadows: function(d,W,H,p,t){ var hsHi=FM.evalProp(p.highlights,t); if(hsHi==null)hsHi=-40; hsHi=hsHi<-100?-100:hsHi>100?100:hsHi; var hsSh=FM.evalProp(p.shadows,t); if(hsSh==null)hsSh=50; hsSh=hsSh<-100?-100:hsSh>100?100:hsSh; var hsSA=hsSh/100*120, hsHA=hsHi/100*120; var hsN=W*H*4; for(var hsI=0;hsI<hsN;hsI+=4){ if(d[hsI+3]<=0)continue; var hsR=d[hsI], hsG=d[hsI+1], hsB=d[hsI+2]; var hsL=(0.299*hsR+0.587*hsG+0.114*hsB)/255; if(hsL<0)hsL=0; else if(hsL>1)hsL=1; var hsInv=1-hsL; var hsWS=hsInv*hsInv; var hsWH=hsL*hsL; var hsAdd=hsSA*hsWS+hsHA*hsWH; var hsO; hsO=hsR+hsAdd; d[hsI]=hsO<0?0:hsO>255?255:hsO; hsO=hsG+hsAdd; d[hsI+1]=hsO<0?0:hsO>255?255:hsO; hsO=hsB+hsAdd; d[hsI+2]=hsO<0?0:hsO>255?255:hsO; } },
+    colorbalance: function(d,W,H,p,t){ var cbR = fparam(p, 'red', 25, t); cbR=cbR<-100?-100:(cbR>100?100:cbR); var cbG = fparam(p, 'green', 0, t); cbG=cbG<-100?-100:(cbG>100?100:cbG); var cbB = fparam(p, 'blue', -25, t); cbB=cbB<-100?-100:(cbB>100?100:cbB); var cbAddR=cbR/100*80, cbAddG=cbG/100*80, cbAddB=cbB/100*80; var cbN=W*H*4; for(var cbI=0;cbI<cbN;cbI+=4){ if(d[cbI+3]>0){ var cbVr=d[cbI]+cbAddR; d[cbI]=cbVr<0?0:(cbVr>255?255:cbVr); var cbVg=d[cbI+1]+cbAddG; d[cbI+1]=cbVg<0?0:(cbVg>255?255:cbVg); var cbVb=d[cbI+2]+cbAddB; d[cbI+2]=cbVb<0?0:(cbVb>255?255:cbVb); } } },
+    highlightsshadows: function(d,W,H,p,t){ var hsHi = fparam(p, 'highlights', -40, t); hsHi=hsHi<-100?-100:hsHi>100?100:hsHi; var hsSh = fparam(p, 'shadows', 50, t); hsSh=hsSh<-100?-100:hsSh>100?100:hsSh; var hsSA=hsSh/100*120, hsHA=hsHi/100*120; var hsN=W*H*4; for(var hsI=0;hsI<hsN;hsI+=4){ if(d[hsI+3]<=0)continue; var hsR=d[hsI], hsG=d[hsI+1], hsB=d[hsI+2]; var hsL=(0.299*hsR+0.587*hsG+0.114*hsB)/255; if(hsL<0)hsL=0; else if(hsL>1)hsL=1; var hsInv=1-hsL; var hsWS=hsInv*hsInv; var hsWH=hsL*hsL; var hsAdd=hsSA*hsWS+hsHA*hsWH; var hsO; hsO=hsR+hsAdd; d[hsI]=hsO<0?0:hsO>255?255:hsO; hsO=hsG+hsAdd; d[hsI+1]=hsO<0?0:hsO>255?255:hsO; hsO=hsB+hsAdd; d[hsI+2]=hsO<0?0:hsO>255?255:hsO; } },
     /* TILT SHIFT WAS THE MOST EXPENSIVE EFFECT IN THE APP BY A FACTOR OF FIVE (queue 474, v11.74).
        Measured at 1080x1350 — the exact size of Ezra's own slow reading — against all 179 effects:
        median 14.85ms, and tiltshift **775.75ms**. The next worst was 320ms. He asked for the mobile lag
@@ -5236,8 +5236,8 @@ window.FM = window.FM || {};
          `softness` are not px, but naming a 7th parameter would still push the arity past what
          pxToPlate checks, and this file has been bitten by that once already (#691). */
       var tsBB=arguments[6];
-      var tsCenter=FM.evalProp(p.center,t); if(tsCenter==null)tsCenter=0.5; tsCenter=tsCenter<0?0:(tsCenter>1?1:tsCenter);
-      var tsSoft=FM.evalProp(p.softness,t); if(tsSoft==null)tsSoft=0.5; tsSoft=tsSoft<0?0:(tsSoft>1?1:tsSoft);
+      var tsCenter = fparam(p, 'center', 0.5, t); tsCenter=tsCenter<0?0:(tsCenter>1?1:tsCenter);
+      var tsSoft = fparam(p, 'softness', 0.5, t); tsSoft=tsSoft<0?0:(tsSoft>1?1:tsSoft);
       var tsW4=W*4, tsLen=d.length, tsR=8, tsWin=tsR*2+1;
       var tsPad=tsR+1;
       var tsY0=tsBB?Math.max(0,tsBB.y-tsPad):0, tsY1=tsBB?Math.min(H-1,tsBB.y+tsBB.h-1+tsPad):H-1;
@@ -5292,7 +5292,7 @@ window.FM = window.FM || {};
        `softness` are both `unit: 'px'`, so naming the parameters would push this kernel past the arity
        pxToPlate checks and silently opt it out of the plate scaling (#691). A shadow that stopped
        matching the export is worse than a slow one. */
-    dropshadow: function(d,W,H,p,t){ var dsBB=arguments[6]; var dsDist=FM.evalProp(p.distance,t); if(dsDist==null)dsDist=18; dsDist=Math.max(0,Math.min(60,dsDist)); var dsAng=FM.evalProp(p.angle,t); if(dsAng==null)dsAng=135; var dsSoft=FM.evalProp(p.softness,t); if(dsSoft==null)dsSoft=6; dsSoft=Math.max(0,Math.min(20,Math.round(dsSoft))); var dsCol=hexToRGB(p.color); var dsCr=dsCol?dsCol[0]:0, dsCg=dsCol?dsCol[1]:0, dsCb=dsCol?dsCol[2]:0; var dsN=W*H; var dsRad=dsAng*Math.PI/180; var dsOx=Math.round(Math.cos(dsRad)*dsDist); var dsOy=Math.round(Math.sin(dsRad)*dsDist); var s=fxSrc(d); var dsShift=new Float32Array(dsN); var dsx,dsy,dssx,dssy;
+    dropshadow: function(d,W,H,p,t){ var dsBB=arguments[6]; var dsDist = fparam(p, 'distance', 18, t); dsDist=Math.max(0,Math.min(60,dsDist)); var dsAng = fparam(p, 'angle', 135, t); var dsSoft = fparam(p, 'softness', 6, t); dsSoft=Math.max(0,Math.min(20,Math.round(dsSoft))); var dsCol=hexToRGB(p.color); var dsCr=dsCol?dsCol[0]:0, dsCg=dsCol?dsCol[1]:0, dsCb=dsCol?dsCol[2]:0; var dsN=W*H; var dsRad=dsAng*Math.PI/180; var dsOx=Math.round(Math.cos(dsRad)*dsDist); var dsOy=Math.round(Math.sin(dsRad)*dsDist); var s=fxSrc(d); var dsShift=new Float32Array(dsN); var dsx,dsy,dssx,dssy;
       /* ═══ SKIP WHAT CANNOT HOLD A SHADOW (#692) ══════════════════════════════════════════════════
        * The shadow is the layer's alpha SHIFTED by (dsOx, dsOy) and then blurred by dsSoft, so it can
        * only ever occupy the layer's box moved by that offset and grown by that radius. Everywhere
@@ -5306,14 +5306,14 @@ window.FM = window.FM || {};
       var dsGY0=dsBB?Math.max(0,dsSY0-dsSoft-1):0,          dsGY1=dsBB?Math.min(H-1,dsSY1+dsSoft+1):H-1;
       for(dsy=dsSY0;dsy<=dsSY1;dsy++){ for(dsx=dsSX0;dsx<=dsSX1;dsx++){ dssx=dsx-dsOx; dssy=dsy-dsOy; if(dssx<0||dssx>=W||dssy<0||dssy>=H){ dsShift[dsy*W+dsx]=0; } else { dsShift[dsy*W+dsx]=s[(dssy*W+dssx)*4+3]; } } } if(dsSoft>0){ var dsR=dsSoft; var dsWin=dsR*2+1; var dsTmp=new Float32Array(dsN); var dsAcc,dskx,dski,dsrow; for(dsy=dsSY0;dsy<=dsSY1;dsy++){ dsrow=dsy*W; dsAcc=0; for(dski=-dsR;dski<=dsR;dski++){ dskx=dski<0?0:(dski>=W?W-1:dski); dsAcc+=dsShift[dsrow+dskx]; } for(dsx=0;dsx<W;dsx++){ dsTmp[dsrow+dsx]=dsAcc/dsWin; var dsAdd=dsx+dsR+1; dsAdd=dsAdd>=W?W-1:dsAdd; var dsSub=dsx-dsR; dsSub=dsSub<0?0:dsSub; dsAcc+=dsShift[dsrow+dsAdd]-dsShift[dsrow+dsSub]; } } var dscol2; for(dsx=dsGX0;dsx<=dsGX1;dsx++){ dsAcc=0; for(dski=-dsR;dski<=dsR;dski++){ dscol2=dski<0?0:(dski>=H?H-1:dski); dsAcc+=dsTmp[dscol2*W+dsx]; } for(dsy=0;dsy<H;dsy++){ dsShift[dsy*W+dsx]=dsAcc/dsWin; var dsAddY=dsy+dsR+1; dsAddY=dsAddY>=H?H-1:dsAddY; var dsSubY=dsy-dsR; dsSubY=dsSubY<0?0:dsSubY; dsAcc+=dsTmp[dsAddY*W+dsx]-dsTmp[dsSubY*W+dsx]; } } } var dsi,dsidx,dsa,dssh,dsoa, dsCy, dsCx;
       for(dsCy=dsGY0;dsCy<=dsGY1;dsCy++){ for(dsCx=dsGX0;dsCx<=dsGX1;dsCx++){ dsi=dsCy*W+dsCx; dsidx=dsi*4; dsa=s[dsidx+3]; if(dsa>0) continue; dssh=dsShift[dsi]; if(dssh<=0) continue; dsoa=dssh; if(dsoa>255)dsoa=255; d[dsidx]=dsCr; d[dsidx+1]=dsCg; d[dsidx+2]=dsCb; d[dsidx+3]=dsoa; } } },
-    chromaticaberration: function(d,W,H,p,t){ var caAmt=FM.evalProp(p.amount,t); if(caAmt==null)caAmt=8; caAmt=Math.max(0,Math.min(30,caAmt)); var caAng=FM.evalProp(p.angle,t); if(caAng==null)caAng=0; var caRad=caAng*Math.PI/180; var caDx=Math.cos(caRad)*caAmt, caDy=Math.sin(caRad)*caAmt; if(caAmt===0)return; var caS=fxSrc(d); var caW4=W*4; for(var caY=0;caY<H;caY++){ for(var caX=0;caX<W;caX++){ var caI=(caY*W+caX)*4; if(caS[caI+3]===0)continue; var caRx=Math.round(caX+caDx); var caRy=Math.round(caY+caDy); if(caRx<0)caRx=0; else if(caRx>=W)caRx=W-1; if(caRy<0)caRy=0; else if(caRy>=H)caRy=H-1; var caBx=Math.round(caX-caDx); var caBy=Math.round(caY-caDy); if(caBx<0)caBx=0; else if(caBx>=W)caBx=W-1; if(caBy<0)caBy=0; else if(caBy>=H)caBy=H-1; var caRi=(caRy*W+caRx)*4; var caBi=(caBy*W+caBx)*4; d[caI]=caS[caRi]; d[caI+1]=caS[caI+1]; d[caI+2]=caS[caBi+2]; d[caI+3]=caS[caI+3]; } } },
-    innerglow: function(d,W,H,p,t){ var igRad=FM.evalProp(p.radius,t); if(igRad==null)igRad=10; igRad=Math.max(1,Math.min(30,Math.round(igRad))); var igInt=FM.evalProp(p.intensity,t); if(igInt==null)igInt=1; igInt=Math.max(0,Math.min(2,igInt)); var igCol=hexToRGB(p.color||'#ffe08a'); var igN=W*H; var igMask=new Float32Array(igN); var igI; for(igI=0;igI<igN;igI++){ igMask[igI]=d[igI*4+3]>0?1:0; } var igTmp=new Float32Array(igN); var igDiam=igRad*2+1; var igInv=1/igDiam; var igX,igY,igK,igAcc,igRow,igIdx; for(igY=0;igY<H;igY++){ igRow=igY*W; igAcc=0; for(igK=-igRad;igK<=igRad;igK++){ var igCx=igK<0?0:(igK>=W?W-1:igK); igAcc+=igMask[igRow+igCx]; } for(igX=0;igX<W;igX++){ igTmp[igRow+igX]=igAcc*igInv; var igAdd=igX+igRad+1; igAdd=igAdd>=W?W-1:igAdd; var igSub=igX-igRad; igSub=igSub<0?0:igSub; igAcc+=igMask[igRow+igAdd]-igMask[igRow+igSub]; } } var igSoft=igMask; for(igX=0;igX<W;igX++){ igAcc=0; for(igK=-igRad;igK<=igRad;igK++){ var igCy=igK<0?0:(igK>=H?H-1:igK); igAcc+=igTmp[igCy*W+igX]; } for(igY=0;igY<H;igY++){ igSoft[igY*W+igX]=igAcc*igInv; var igAddY=igY+igRad+1; igAddY=igAddY>=H?H-1:igAddY; var igSubY=igY-igRad; igSubY=igSubY<0?0:igSubY; igAcc+=igTmp[igAddY*W+igX]-igTmp[igSubY*W+igX]; } } var igCr=igCol[0],igCg=igCol[1],igCb=igCol[2]; for(igI=0;igI<igN;igI++){ igIdx=igI*4; if(d[igIdx+3]<=0)continue; var igProx=(1-igSoft[igI])*1.6; if(igProx<0)igProx=0; else if(igProx>1)igProx=1; var igF=igProx*igInt; if(igF<=0)continue; if(igF>1)igF=1; var igGr=igCr*igF, igGg=igCg*igF, igGb=igCb*igF; var igR0=d[igIdx],igG0=d[igIdx+1],igB0=d[igIdx+2]; d[igIdx]=255-(255-igR0)*(255-igGr)/255; d[igIdx+1]=255-(255-igG0)*(255-igGg)/255; d[igIdx+2]=255-(255-igB0)*(255-igGb)/255; } },
-    unsharpmask: function(d,W,H,p,t){ var umAmt=FM.evalProp(p.amount,t); if(umAmt==null)umAmt=1.2; umAmt=Math.max(0,Math.min(3,umAmt)); var umR=FM.evalProp(p.radius,t); if(umR==null)umR=3; umR=Math.round(Math.max(1,Math.min(20,umR))); if(umAmt<=0){return;} var umN=W*H; var umS=d.slice(); var umTmp=new Float32Array(umN*3); var umBlur=new Float32Array(umN*3); var umDiv=2*umR+1; var x,y,c,umP,umI; for(y=0;y<H;y++){ var umRow=y*W; var umAcc0=0,umAcc1=0,umAcc2=0; for(c=0;c<=umR;c++){ umI=(umRow+Math.min(W-1,c))*4; umAcc0+=umS[umI]; umAcc1+=umS[umI+1]; umAcc2+=umS[umI+2]; } var umLeftPx=(umRow)*4; umAcc0+=umS[umLeftPx]*umR; umAcc1+=umS[umLeftPx+1]*umR; umAcc2+=umS[umLeftPx+2]*umR; for(x=0;x<W;x++){ umP=(umRow+x)*3; umTmp[umP]=umAcc0/umDiv; umTmp[umP+1]=umAcc1/umDiv; umTmp[umP+2]=umAcc2/umDiv; var umAddX=Math.min(W-1,x+umR+1); var umSubX=Math.max(0,x-umR); var umAdd=(umRow+umAddX)*4; var umSub=(umRow+umSubX)*4; umAcc0+=umS[umAdd]-umS[umSub]; umAcc1+=umS[umAdd+1]-umS[umSub+1]; umAcc2+=umS[umAdd+2]-umS[umSub+2]; } } for(x=0;x<W;x++){ var umAcc0v=0,umAcc1v=0,umAcc2v=0; for(c=0;c<=umR;c++){ umP=(Math.min(H-1,c)*W+x)*3; umAcc0v+=umTmp[umP]; umAcc1v+=umTmp[umP+1]; umAcc2v+=umTmp[umP+2]; } umP=x*3; umAcc0v+=umTmp[umP]*umR; umAcc1v+=umTmp[umP+1]*umR; umAcc2v+=umTmp[umP+2]*umR; for(y=0;y<H;y++){ umP=(y*W+x)*3; umBlur[umP]=umAcc0v/umDiv; umBlur[umP+1]=umAcc1v/umDiv; umBlur[umP+2]=umAcc2v/umDiv; var umAddY=Math.min(H-1,y+umR+1); var umSubY=Math.max(0,y-umR); var umAddP=(umAddY*W+x)*3; var umSubP=(umSubY*W+x)*3; umAcc0v+=umTmp[umAddP]-umTmp[umSubP]; umAcc1v+=umTmp[umAddP+1]-umTmp[umSubP+1]; umAcc2v+=umTmp[umAddP+2]-umTmp[umSubP+2]; } } for(y=0;y<H;y++){ for(x=0;x<W;x++){ umI=(y*W+x)*4; if(umS[umI+3]<=0)continue; umP=(y*W+x)*3; for(c=0;c<3;c++){ var umOrig=umS[umI+c]; var umVal=umOrig+(umOrig-umBlur[umP+c])*umAmt; if(umVal<0)umVal=0; else if(umVal>255)umVal=255; d[umI+c]=umVal; } } } },
+    chromaticaberration: function(d,W,H,p,t){ var caAmt = fparam(p, 'amount', 8, t); caAmt=Math.max(0,Math.min(30,caAmt)); var caAng = fparam(p, 'angle', 0, t); var caRad=caAng*Math.PI/180; var caDx=Math.cos(caRad)*caAmt, caDy=Math.sin(caRad)*caAmt; if(caAmt===0)return; var caS=fxSrc(d); var caW4=W*4; for(var caY=0;caY<H;caY++){ for(var caX=0;caX<W;caX++){ var caI=(caY*W+caX)*4; if(caS[caI+3]===0)continue; var caRx=Math.round(caX+caDx); var caRy=Math.round(caY+caDy); if(caRx<0)caRx=0; else if(caRx>=W)caRx=W-1; if(caRy<0)caRy=0; else if(caRy>=H)caRy=H-1; var caBx=Math.round(caX-caDx); var caBy=Math.round(caY-caDy); if(caBx<0)caBx=0; else if(caBx>=W)caBx=W-1; if(caBy<0)caBy=0; else if(caBy>=H)caBy=H-1; var caRi=(caRy*W+caRx)*4; var caBi=(caBy*W+caBx)*4; d[caI]=caS[caRi]; d[caI+1]=caS[caI+1]; d[caI+2]=caS[caBi+2]; d[caI+3]=caS[caI+3]; } } },
+    innerglow: function(d,W,H,p,t){ var igRad = fparam(p, 'radius', 10, t); igRad=Math.max(1,Math.min(30,Math.round(igRad))); var igInt = fparam(p, 'intensity', 1, t); igInt=Math.max(0,Math.min(2,igInt)); var igCol=hexToRGB(p.color||'#ffe08a'); var igN=W*H; var igMask=new Float32Array(igN); var igI; for(igI=0;igI<igN;igI++){ igMask[igI]=d[igI*4+3]>0?1:0; } var igTmp=new Float32Array(igN); var igDiam=igRad*2+1; var igInv=1/igDiam; var igX,igY,igK,igAcc,igRow,igIdx; for(igY=0;igY<H;igY++){ igRow=igY*W; igAcc=0; for(igK=-igRad;igK<=igRad;igK++){ var igCx=igK<0?0:(igK>=W?W-1:igK); igAcc+=igMask[igRow+igCx]; } for(igX=0;igX<W;igX++){ igTmp[igRow+igX]=igAcc*igInv; var igAdd=igX+igRad+1; igAdd=igAdd>=W?W-1:igAdd; var igSub=igX-igRad; igSub=igSub<0?0:igSub; igAcc+=igMask[igRow+igAdd]-igMask[igRow+igSub]; } } var igSoft=igMask; for(igX=0;igX<W;igX++){ igAcc=0; for(igK=-igRad;igK<=igRad;igK++){ var igCy=igK<0?0:(igK>=H?H-1:igK); igAcc+=igTmp[igCy*W+igX]; } for(igY=0;igY<H;igY++){ igSoft[igY*W+igX]=igAcc*igInv; var igAddY=igY+igRad+1; igAddY=igAddY>=H?H-1:igAddY; var igSubY=igY-igRad; igSubY=igSubY<0?0:igSubY; igAcc+=igTmp[igAddY*W+igX]-igTmp[igSubY*W+igX]; } } var igCr=igCol[0],igCg=igCol[1],igCb=igCol[2]; for(igI=0;igI<igN;igI++){ igIdx=igI*4; if(d[igIdx+3]<=0)continue; var igProx=(1-igSoft[igI])*1.6; if(igProx<0)igProx=0; else if(igProx>1)igProx=1; var igF=igProx*igInt; if(igF<=0)continue; if(igF>1)igF=1; var igGr=igCr*igF, igGg=igCg*igF, igGb=igCb*igF; var igR0=d[igIdx],igG0=d[igIdx+1],igB0=d[igIdx+2]; d[igIdx]=255-(255-igR0)*(255-igGr)/255; d[igIdx+1]=255-(255-igG0)*(255-igGg)/255; d[igIdx+2]=255-(255-igB0)*(255-igGb)/255; } },
+    unsharpmask: function(d,W,H,p,t){ var umAmt = fparam(p, 'amount', 1.2, t); umAmt=Math.max(0,Math.min(3,umAmt)); var umR = fparam(p, 'radius', 3, t); umR=Math.round(Math.max(1,Math.min(20,umR))); if(umAmt<=0){return;} var umN=W*H; var umS=d.slice(); var umTmp=new Float32Array(umN*3); var umBlur=new Float32Array(umN*3); var umDiv=2*umR+1; var x,y,c,umP,umI; for(y=0;y<H;y++){ var umRow=y*W; var umAcc0=0,umAcc1=0,umAcc2=0; for(c=0;c<=umR;c++){ umI=(umRow+Math.min(W-1,c))*4; umAcc0+=umS[umI]; umAcc1+=umS[umI+1]; umAcc2+=umS[umI+2]; } var umLeftPx=(umRow)*4; umAcc0+=umS[umLeftPx]*umR; umAcc1+=umS[umLeftPx+1]*umR; umAcc2+=umS[umLeftPx+2]*umR; for(x=0;x<W;x++){ umP=(umRow+x)*3; umTmp[umP]=umAcc0/umDiv; umTmp[umP+1]=umAcc1/umDiv; umTmp[umP+2]=umAcc2/umDiv; var umAddX=Math.min(W-1,x+umR+1); var umSubX=Math.max(0,x-umR); var umAdd=(umRow+umAddX)*4; var umSub=(umRow+umSubX)*4; umAcc0+=umS[umAdd]-umS[umSub]; umAcc1+=umS[umAdd+1]-umS[umSub+1]; umAcc2+=umS[umAdd+2]-umS[umSub+2]; } } for(x=0;x<W;x++){ var umAcc0v=0,umAcc1v=0,umAcc2v=0; for(c=0;c<=umR;c++){ umP=(Math.min(H-1,c)*W+x)*3; umAcc0v+=umTmp[umP]; umAcc1v+=umTmp[umP+1]; umAcc2v+=umTmp[umP+2]; } umP=x*3; umAcc0v+=umTmp[umP]*umR; umAcc1v+=umTmp[umP+1]*umR; umAcc2v+=umTmp[umP+2]*umR; for(y=0;y<H;y++){ umP=(y*W+x)*3; umBlur[umP]=umAcc0v/umDiv; umBlur[umP+1]=umAcc1v/umDiv; umBlur[umP+2]=umAcc2v/umDiv; var umAddY=Math.min(H-1,y+umR+1); var umSubY=Math.max(0,y-umR); var umAddP=(umAddY*W+x)*3; var umSubP=(umSubY*W+x)*3; umAcc0v+=umTmp[umAddP]-umTmp[umSubP]; umAcc1v+=umTmp[umAddP+1]-umTmp[umSubP+1]; umAcc2v+=umTmp[umAddP+2]-umTmp[umSubP+2]; } } for(y=0;y<H;y++){ for(x=0;x<W;x++){ umI=(y*W+x)*4; if(umS[umI+3]<=0)continue; umP=(y*W+x)*3; for(c=0;c<3;c++){ var umOrig=umS[umI+c]; var umVal=umOrig+(umOrig-umBlur[umP+c])*umAmt; if(umVal<0)umVal=0; else if(umVal>255)umVal=255; d[umI+c]=umVal; } } } },
     /* NOTE the named 7th parameter here, where the other bounded kernels read `arguments[6]`: this one
        ALREADY declares `ps` and scales its own tile size, so pxToPlate skips it either way and naming
        the bbox costs nothing. The others cannot — their arity has to stay below the slot pxToPlate
        checks, or they lose the plate scaling silently (#691). */
-    hextiles: function(d,W,H,p,t,ps,hxBB){ var hxSize=FM.evalProp(p.size,t); if(hxSize==null)hxSize=20; if(hxSize<4)hxSize=4; if(hxSize>80)hxSize=80; hxSize=Math.max(2,hxSize*(ps||1));   /* tile size is PROJECT px — see plateScale */ var hxRowH=hxSize*0.75; if(hxRowH<1)hxRowH=1; var hxHalf=hxSize*0.5; var hxSrc=fxSrc(d); var hxW4=W*4; /* SKIP WHAT CANNOT BE TILED (#692). This is a gather: each output pixel takes the colour of the hex
+    hextiles: function(d,W,H,p,t,ps,hxBB){ var hxSize = fparam(p, 'size', 20, t); if(hxSize<4)hxSize=4; if(hxSize>80)hxSize=80; hxSize=Math.max(2,hxSize*(ps||1));   /* tile size is PROJECT px — see plateScale */ var hxRowH=hxSize*0.75; if(hxRowH<1)hxRowH=1; var hxHalf=hxSize*0.5; var hxSrc=fxSrc(d); var hxW4=W*4; /* SKIP WHAT CANNOT BE TILED (#692). This is a gather: each output pixel takes the colour of the hex
    cell it falls in, sampled through a 3x3 neighbour search, with no state carried between pixels — so
    BOTH axes bound, as with lensblur. A pixel further than one tile from the layer falls in a cell whose
    centre is also off the layer, so it reads transparent and writes transparent over transparent.
@@ -5322,7 +5322,7 @@ window.FM = window.FM || {};
       var hxY0=hxBB?Math.max(0,hxBB.y-hxM):0, hxY1=hxBB?Math.min(H-1,hxBB.y+hxBB.h-1+hxM):H-1;
       var hxX0=hxBB?Math.max(0,hxBB.x-hxM):0, hxX1=hxBB?Math.min(W-1,hxBB.x+hxBB.w-1+hxM):W-1;
       for(var hxY=hxY0;hxY<=hxY1;hxY++){ var hxRow=Math.floor(hxY/hxRowH); var hxShift=(hxRow&1)?hxHalf:0; for(var hxX=hxX0;hxX<=hxX1;hxX++){ var hxCol=Math.floor((hxX-hxShift)/hxSize); var hxBestDx=1e9,hxBestX=hxX,hxBestY=hxY; for(var hxRO=-1;hxRO<=1;hxRO++){ var hxR2=hxRow+hxRO; var hxCY=hxR2*hxRowH+hxRowH*0.5; var hxSh2=(hxR2&1)?hxHalf:0; for(var hxCO=-1;hxCO<=1;hxCO++){ var hxC2=hxCol+hxCO; var hxCX=hxC2*hxSize+hxSh2+hxHalf; var hxDX=hxX-hxCX, hxDY=hxY-hxCY; var hxDist=hxDX*hxDX+hxDY*hxDY; if(hxDist<hxBestDx){ hxBestDx=hxDist; hxBestX=Math.round(hxCX); hxBestY=Math.round(hxCY); } } } if(hxBestX<0)hxBestX=0; else if(hxBestX>=W)hxBestX=W-1; if(hxBestY<0)hxBestY=0; else if(hxBestY>=H)hxBestY=H-1; var hxSi=(hxBestY*W+hxBestX)*4; var hxDi=hxY*hxW4+hxX*4; d[hxDi]=hxSrc[hxSi]; d[hxDi+1]=hxSrc[hxSi+1]; d[hxDi+2]=hxSrc[hxSi+2]; d[hxDi+3]=hxSrc[hxSi+3]; } } },
-    linstreaks: function(d,W,H,p,t){ var lsLen=FM.evalProp(p.length,t); if(lsLen==null)lsLen=30; lsLen=Math.max(0,Math.min(80,lsLen)); if(lsLen<1)return; var lsAng=FM.evalProp(p.angle,t); if(lsAng==null)lsAng=90; var lsRad=lsAng*Math.PI/180; var lsDx=Math.cos(lsRad), lsDy=Math.sin(lsRad); var lsSamp=8; var lsStep=lsLen/lsSamp; var lsW4=W*4; var lsS=fxSrc(d); for(var lsY=0;lsY<H;lsY++){ var lsRow=lsY*lsW4; for(var lsX=0;lsX<W;lsX++){ var lsI=lsRow+lsX*4; if(lsS[lsI+3]<=0)continue; var lsAr=0,lsAg=0,lsAb=0; for(var lsK=1;lsK<=lsSamp;lsK++){ var lsOff=lsK*lsStep; var lsSx=lsX-lsDx*lsOff, lsSy=lsY-lsDy*lsOff; var lsXi=lsSx<0?0:(lsSx>W-1?W-1:Math.round(lsSx)); var lsYi=lsSy<0?0:(lsSy>H-1?H-1:Math.round(lsSy)); var lsSi=lsYi*lsW4+lsXi*4; if(lsS[lsSi+3]<=0)continue; var lsSr=lsS[lsSi], lsSg=lsS[lsSi+1], lsSb=lsS[lsSi+2]; var lsBright=(lsSr*0.299+lsSg*0.587+lsSb*0.114)/255; lsBright=lsBright*lsBright; var lsDecay=1-(lsK/(lsSamp+1)); var lsWt=lsBright*lsDecay; lsAr+=lsSr*lsWt; lsAg+=lsSg*lsWt; lsAb+=lsSb*lsWt; } var lsNorm=lsSamp*0.5; var lsTr=lsAr/lsNorm, lsTg=lsAg/lsNorm, lsTb=lsAb/lsNorm; if(lsTr>255)lsTr=255; if(lsTg>255)lsTg=255; if(lsTb>255)lsTb=255; var lsR=d[lsI], lsG=d[lsI+1], lsB=d[lsI+2]; d[lsI]=255-(255-lsR)*(255-lsTr)/255; d[lsI+1]=255-(255-lsG)*(255-lsTg)/255; d[lsI+2]=255-(255-lsB)*(255-lsTb)/255; } } },
+    linstreaks: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(80,lsLen)); if(lsLen<1)return; var lsAng = fparam(p, 'angle', 90, t); var lsRad=lsAng*Math.PI/180; var lsDx=Math.cos(lsRad), lsDy=Math.sin(lsRad); var lsSamp=8; var lsStep=lsLen/lsSamp; var lsW4=W*4; var lsS=fxSrc(d); for(var lsY=0;lsY<H;lsY++){ var lsRow=lsY*lsW4; for(var lsX=0;lsX<W;lsX++){ var lsI=lsRow+lsX*4; if(lsS[lsI+3]<=0)continue; var lsAr=0,lsAg=0,lsAb=0; for(var lsK=1;lsK<=lsSamp;lsK++){ var lsOff=lsK*lsStep; var lsSx=lsX-lsDx*lsOff, lsSy=lsY-lsDy*lsOff; var lsXi=lsSx<0?0:(lsSx>W-1?W-1:Math.round(lsSx)); var lsYi=lsSy<0?0:(lsSy>H-1?H-1:Math.round(lsSy)); var lsSi=lsYi*lsW4+lsXi*4; if(lsS[lsSi+3]<=0)continue; var lsSr=lsS[lsSi], lsSg=lsS[lsSi+1], lsSb=lsS[lsSi+2]; var lsBright=(lsSr*0.299+lsSg*0.587+lsSb*0.114)/255; lsBright=lsBright*lsBright; var lsDecay=1-(lsK/(lsSamp+1)); var lsWt=lsBright*lsDecay; lsAr+=lsSr*lsWt; lsAg+=lsSg*lsWt; lsAb+=lsSb*lsWt; } var lsNorm=lsSamp*0.5; var lsTr=lsAr/lsNorm, lsTg=lsAg/lsNorm, lsTb=lsAb/lsNorm; if(lsTr>255)lsTr=255; if(lsTg>255)lsTg=255; if(lsTb>255)lsTb=255; var lsR=d[lsI], lsG=d[lsI+1], lsB=d[lsI+2]; d[lsI]=255-(255-lsR)*(255-lsTr)/255; d[lsI+1]=255-(255-lsG)*(255-lsTg)/255; d[lsI+2]=255-(255-lsB)*(255-lsTb)/255; } } },
     // ---- batch 13 (opacity / visibility) ----
     blink: function(d, W, H, p, t) { var blkRate = FM.evalProp(p.rate, t); if (blkRate == null || !isFinite(blkRate)) blkRate = 2; if (blkRate < 0.5) blkRate = 0.5; if (blkRate > 12) blkRate = 12; var blkTime = (typeof t === 'number' && isFinite(t)) ? t : 0; if (blkTime < 0) blkTime = 0; 
       // Every blink in every project was the same hard 50/50 square wave locked to t=0. DUTY makes a
@@ -5381,7 +5381,7 @@ window.FM = window.FM || {};
       }
     },
     pulseopacity: function(d, W, H, p, t){ var po_speed = FM.evalProp(p.speed, t); if(po_speed==null||isNaN(po_speed)) po_speed = 1; if(po_speed<0.1) po_speed = 0.1; if(po_speed>8) po_speed = 8; var po_depth = FM.evalProp(p.depth, t); if(po_depth==null||isNaN(po_depth)) po_depth = 0.7; if(po_depth<0) po_depth = 0; if(po_depth>1) po_depth = 1; var po_tt = t; if(po_tt==null||isNaN(po_tt)) po_tt = 0; var po_phase = 0.5 - 0.5*Math.cos(2*Math.PI*po_speed*po_tt); var po_k = 1 - po_depth*po_phase; if(po_k<0) po_k = 0; if(po_k>1) po_k = 1; var po_n = W*H; for(var po_i=0; po_i<po_n; po_i++){ var po_ai = po_i*4+3; var po_a = d[po_ai]; if(po_a>0){ d[po_ai] = po_a*po_k; } } },
-    dissolve: function(d,W,H,p,t){ var dsAmt=FM.evalProp(p.amount,t); if(dsAmt==null)dsAmt=0.5; if(dsAmt<0)dsAmt=0; if(dsAmt>1)dsAmt=1; if(dsAmt<=0)return;
+    dissolve: function(d,W,H,p,t){ var dsAmt = fparam(p, 'amount', 0.5, t); if(dsAmt<0)dsAmt=0; if(dsAmt>1)dsAmt=1; if(dsAmt<=0)return;
       /* One static salt-and-pepper pattern, identical in every project and every instance: it ate the
          frame uniformly, the holes had hard binary edges and it never moved. DIRECTION biases the
          threshold across the frame so the dissolve sweeps; SOFT gives the holes a partial edge; SPEED
@@ -5409,11 +5409,11 @@ window.FM = window.FM || {};
         if(dsE<=0)continue; if(dsE>=1){ d[dsI+3]=0; continue; }
         d[dsI+3]=d[dsI+3]*(1-dsE);
       } } },
-    blockdissolve: function(d, W, H, p, t, ps){ var bd_amt = FM.evalProp(p.amount, t); if(bd_amt==null) bd_amt = 0.5; bd_amt = bd_amt<0?0:(bd_amt>1?1:bd_amt); var bd_size = FM.evalProp(p.size, t); if(bd_size==null) bd_size = 16; bd_size = bd_size<4?4:(bd_size>60?60:bd_size); bd_size = Math.floor(bd_size*(ps||1)); if(bd_size<1) bd_size = 1; if(bd_amt<=0) return; var bd_x, bd_y, bd_i, bd_bx, bd_by, bd_h, bd_r; for(bd_y=0; bd_y<H; bd_y++){ bd_by = Math.floor(bd_y/bd_size); for(bd_x=0; bd_x<W; bd_x++){ bd_i = (bd_y*W + bd_x)*4; if(d[bd_i+3]===0) continue; bd_bx = Math.floor(bd_x/bd_size); bd_h = (bd_bx*73856093) ^ (bd_by*19349663); bd_h = bd_h ^ (bd_h>>>13); bd_h = (bd_h*1274126177) >>> 0; bd_r = (bd_h >>> 0) / 4294967295; if(bd_r < bd_amt){ d[bd_i+3] = 0; } } } },
+    blockdissolve: function(d, W, H, p, t, ps){ var bd_amt = fparam(p, 'amount', 0.5, t); bd_amt = bd_amt<0?0:(bd_amt>1?1:bd_amt); var bd_size = fparam(p, 'size', 16, t); bd_size = bd_size<4?4:(bd_size>60?60:bd_size); bd_size = Math.floor(bd_size*(ps||1)); if(bd_size<1) bd_size = 1; if(bd_amt<=0) return; var bd_x, bd_y, bd_i, bd_bx, bd_by, bd_h, bd_r; for(bd_y=0; bd_y<H; bd_y++){ bd_by = Math.floor(bd_y/bd_size); for(bd_x=0; bd_x<W; bd_x++){ bd_i = (bd_y*W + bd_x)*4; if(d[bd_i+3]===0) continue; bd_bx = Math.floor(bd_x/bd_size); bd_h = (bd_bx*73856093) ^ (bd_by*19349663); bd_h = bd_h ^ (bd_h>>>13); bd_h = (bd_h*1274126177) >>> 0; bd_r = (bd_h >>> 0) / 4294967295; if(bd_r < bd_amt){ d[bd_i+3] = 0; } } } },
     // ---- batch 14 (matte / mask / key) ----
     wipe: function(d, W, H, p, t){ var wp_prog = FM.evalProp(p.progress, t); if(wp_prog===null||wp_prog===undefined) wp_prog=0.5; if(wp_prog<0) wp_prog=0; if(wp_prog>1) wp_prog=1; var wp_ang = FM.evalProp(p.angle, t); if(wp_ang===null||wp_ang===undefined) wp_ang=0; var wp_rad = wp_ang*Math.PI/180; var wp_dx = Math.cos(wp_rad); var wp_dy = Math.sin(wp_rad); var wp_cx = W*0.5; var wp_cy = H*0.5; var wp_den = Math.abs(W*wp_dx)+Math.abs(H*wp_dy); if(wp_den<1e-6) wp_den=1e-6; var wp_inv = 1/wp_den; for(var wp_y=0; wp_y<H; wp_y++){ var wp_row = wp_y*W; var wp_py = (wp_y-wp_cy)*wp_dy; for(var wp_x=0; wp_x<W; wp_x++){ var wp_proj = ((wp_x-wp_cx)*wp_dx + wp_py)*wp_inv + 0.5; if(wp_proj > wp_prog){ d[(wp_row+wp_x)*4+3] = 0; } } } },
     radialwipe: function(d, W, H, p, t){ var rw_prog = FM.evalProp(p.progress, t); if(rw_prog===null||rw_prog===undefined) rw_prog=0.5; if(rw_prog<0) rw_prog=0; if(rw_prog>1) rw_prog=1; var rw_start = FM.evalProp(p.start, t); if(rw_start===null||rw_start===undefined) rw_start=0; var rw_TAU = Math.PI*2; var rw_startRad = (rw_start*Math.PI/180) % rw_TAU; if(rw_startRad<0) rw_startRad += rw_TAU; var rw_cx = W/2, rw_cy = H/2; for(var rw_y=0; rw_y<H; rw_y++){ var rw_dy = rw_y - rw_cy; var rw_row = rw_y*W; for(var rw_x=0; rw_x<W; rw_x++){ var rw_dx = rw_x - rw_cx; var rw_ang = Math.atan2(rw_dy, rw_dx); var rw_frac = (rw_ang - rw_startRad) % rw_TAU; if(rw_frac<0) rw_frac += rw_TAU; rw_frac = rw_frac / rw_TAU; if(rw_frac > rw_prog){ d[(rw_row + rw_x)*4 + 3] = 0; } } } },
-    solidmatte: function(d,W,H,p,t){ var sm_amt=FM.evalProp(p.amount,t); if(sm_amt==null) sm_amt=1; if(sm_amt<0) sm_amt=0; if(sm_amt>1) sm_amt=1; var sm_col=hexToRGB(p.color); var sm_cr=sm_col[0], sm_cg=sm_col[1], sm_cb=sm_col[2]; var sm_n=W*H, sm_i=0; for(var sm_k=0; sm_k<sm_n; sm_k++){ if(d[sm_i+3]>0){ d[sm_i]=d[sm_i]+(sm_cr-d[sm_i])*sm_amt; d[sm_i+1]=d[sm_i+1]+(sm_cg-d[sm_i+1])*sm_amt; d[sm_i+2]=d[sm_i+2]+(sm_cb-d[sm_i+2])*sm_amt; } sm_i+=4; } },
+    solidmatte: function(d,W,H,p,t){ var sm_amt = fparam(p, 'amount', 1, t); if(sm_amt<0) sm_amt=0; if(sm_amt>1) sm_amt=1; var sm_col=hexToRGB(p.color); var sm_cr=sm_col[0], sm_cg=sm_col[1], sm_cb=sm_col[2]; var sm_n=W*H, sm_i=0; for(var sm_k=0; sm_k<sm_n; sm_k++){ if(d[sm_i+3]>0){ d[sm_i]=d[sm_i]+(sm_cr-d[sm_i])*sm_amt; d[sm_i+1]=d[sm_i+1]+(sm_cg-d[sm_i+1])*sm_amt; d[sm_i+2]=d[sm_i+2]+(sm_cb-d[sm_i+2])*sm_amt; } sm_i+=4; } },
     mattechoker: function(d,W,H,p,t){ var mcBB=arguments[6];
       /* Erode/dilate ran on whole pixels with a hard square kernel and no post-softening, so a choked
          matte kept stair-stepped edges and the standard choke-THEN-feather workflow needed a second
@@ -5421,7 +5421,7 @@ window.FM = window.FM || {};
          afterwards, which is what stops a feathered matte going milky. */
       var mk_fe=p.feather==null?0:FM.evalProp(p.feather,t); if(mk_fe<0)mk_fe=0; if(mk_fe>20)mk_fe=20;
       var mk_ct=p.contrast==null?0:FM.evalProp(p.contrast,t); if(mk_ct<-1)mk_ct=-1; if(mk_ct>1)mk_ct=1;
-      var mc_choke=FM.evalProp(p.choke,t); if(mc_choke==null) mc_choke=-4; mc_choke=Math.round(mc_choke); if(mc_choke<-20) mc_choke=-20; if(mc_choke>20) mc_choke=20; if(mc_choke===0 && mk_fe===0 && mk_ct===0) return;   // nothing asked for at all
+      var mc_choke = fparam(p, 'choke', -4, t); mc_choke=Math.round(mc_choke); if(mc_choke<-20) mc_choke=-20; if(mc_choke>20) mc_choke=20; if(mc_choke===0 && mk_fe===0 && mk_ct===0) return;   // nothing asked for at all
       /* SKIP WHAT THE LAYER DOES NOT COVER (#692) — 41.4ms at its defaults, and the choke is a
          WINDOW SCAN rather than a running sum, so it costs 2r+1 taps per pixel across the whole plate.
          ⚠️ BOUNDING IS ONLY LEGAL WHEN CONTRAST IS >= 0. The final loop writes alpha to EVERY pixel as
@@ -5462,7 +5462,7 @@ window.FM = window.FM || {};
          own edge; FEATHER softens both boundaries so it falls off the way light does. */
       var mfOp = p.opacity == null ? 1 : FM.evalProp(p.opacity, t); if (mfOp < 0) mfOp = 0; if (mfOp > 1) mfOp = 1;
       var mfFe = p.feather == null ? 0 : FM.evalProp(p.feather, t); if (mfFe < 0) mfFe = 0; if (mfFe > 1) mfFe = 1;
-      var mfw = FM.evalProp(p.width, t); if(mfw==null) mfw=3; mfw = Math.round(mfw); if(mfw<1) mfw=1; if(mfw>12) mfw=12; mfw = Math.max(1, Math.round(mfw * (ps || 1)));   /* PROJECT px — see plateScale */ var mfcol = hexToRGB(p.color); if(!mfcol) mfcol=[0,224,255]; var mfN=W*H; var mfMask=new Uint8Array(mfN); var mfi; for(mfi=0; mfi<mfN; mfi++){ mfMask[mfi] = d[mfi*4+3]>0 ? 1 : 0; } var mfEro=new Uint8Array(mfN); var mfx, mfy, mfk, mfidx; for(mfy=0; mfy<H; mfy++){ var mfrow=mfy*W; for(mfx=0; mfx<W; mfx++){ var mfmin=1; for(mfk=-mfw; mfk<=mfw; mfk++){ var mfsx=mfx+mfk; if(mfsx<0) mfsx=0; else if(mfsx>=W) mfsx=W-1; if(mfMask[mfrow+mfsx]===0){ mfmin=0; break; } } mfEro[mfrow+mfx]=mfmin; } } var mfEro2=new Uint8Array(mfN); for(mfx=0; mfx<W; mfx++){ for(mfy=0; mfy<H; mfy++){ var mfmin2=1; for(mfk=-mfw; mfk<=mfw; mfk++){ var mfsy=mfy+mfk; if(mfsy<0) mfsy=0; else if(mfsy>=H) mfsy=H-1; if(mfEro[mfsy*W+mfx]===0){ mfmin2=0; break; } } mfEro2[mfy*W+mfx]=mfmin2; } } var mfr=mfcol[0], mfg=mfcol[1], mfb=mfcol[2];
+      var mfw = fparam(p, 'width', 3, t); mfw = Math.round(mfw); if(mfw<1) mfw=1; if(mfw>12) mfw=12; mfw = Math.max(1, Math.round(mfw * (ps || 1)));   /* PROJECT px — see plateScale */ var mfcol = hexToRGB(p.color); if(!mfcol) mfcol=[0,224,255]; var mfN=W*H; var mfMask=new Uint8Array(mfN); var mfi; for(mfi=0; mfi<mfN; mfi++){ mfMask[mfi] = d[mfi*4+3]>0 ? 1 : 0; } var mfEro=new Uint8Array(mfN); var mfx, mfy, mfk, mfidx; for(mfy=0; mfy<H; mfy++){ var mfrow=mfy*W; for(mfx=0; mfx<W; mfx++){ var mfmin=1; for(mfk=-mfw; mfk<=mfw; mfk++){ var mfsx=mfx+mfk; if(mfsx<0) mfsx=0; else if(mfsx>=W) mfsx=W-1; if(mfMask[mfrow+mfsx]===0){ mfmin=0; break; } } mfEro[mfrow+mfx]=mfmin; } } var mfEro2=new Uint8Array(mfN); for(mfx=0; mfx<W; mfx++){ for(mfy=0; mfy<H; mfy++){ var mfmin2=1; for(mfk=-mfw; mfk<=mfw; mfk++){ var mfsy=mfy+mfk; if(mfsy<0) mfsy=0; else if(mfsy>=H) mfsy=H-1; if(mfEro[mfsy*W+mfx]===0){ mfmin2=0; break; } } mfEro2[mfy*W+mfx]=mfmin2; } } var mfr=mfcol[0], mfg=mfcol[1], mfb=mfcol[2];
       if(mfOp===1 && mfFe===0){
         for(mfi=0; mfi<mfN; mfi++){ if(mfMask[mfi]===1 && mfEro2[mfi]===0){ mfidx=mfi*4; d[mfidx]=mfr; d[mfidx+1]=mfg; d[mfidx+2]=mfb; } }
         return;
@@ -5561,9 +5561,9 @@ window.FM = window.FM || {};
         }
       }
     },
-    lensflare: function(d,W,H,p,t){ var lfx=FM.evalProp(p.x,t); if(lfx==null)lfx=0.3; if(lfx<0)lfx=0; if(lfx>1)lfx=1; var lfy=FM.evalProp(p.y,t); if(lfy==null)lfy=0.3; if(lfy<0)lfy=0; if(lfy>1)lfy=1; var lfI=FM.evalProp(p.intensity,t); if(lfI==null)lfI=1; if(lfI<0)lfI=0; if(lfI>2)lfI=2; var lfLX=lfx*W, lfLY=lfy*H; var lfSig=W*0.18; if(lfSig<1)lfSig=1; var lfDen=2*lfSig*lfSig; /* QUEUE 558 — "Lens flair should have colour options". The flare was hardcoded warm white (255,240,210 = #fff0d2), and it draws TWO things: the round core and the six streaks. Both get their own colour, so the anamorphic look (warm core, cold streaks) is reachable; both DEFAULT to the old hardcoded value, so an existing flare and a newly added one render exactly as before. */ var lfC1=hexToRGB(p.color||'#fff0d2'), lfFR=lfC1[0], lfFG=lfC1[1], lfFB=lfC1[2]; var lfC2=hexToRGB(p.color2||'#fff0d2'), lfRR=lfC2[0], lfRG=lfC2[1], lfRB=lfC2[2]; var lfSame=(lfRR===lfFR&&lfRG===lfFG&&lfRB===lfFB); var lfRays=[0.0,1.0471975512,2.0943951024,3.1415926536,4.1887902048,5.2359877560]; var lfNR=lfRays.length; var lfMaxR=Math.sqrt(W*W+H*H); var lfw4=W*4; for(var lfYY=0;lfYY<H;lfYY++){ var lfrow=lfYY*lfw4; for(var lfXX=0;lfXX<W;lfXX++){ var lfi=lfrow+lfXX*4; if(d[lfi+3]<=0) continue; var lfDX=lfXX-lfLX, lfDY=lfYY-lfLY; var lfd2=lfDX*lfDX+lfDY*lfDY; var lfDist=Math.sqrt(lfd2); var lfCore=lfI*255*Math.exp(-lfd2/lfDen); var lfRay=0; if(lfDist>0.5){ var lfAng=Math.atan2(lfDY,lfDX); /* SIX COSINES FOR THE NEAREST OF SIX EVENLY-SPACED RAYS (queue 474). The rays sit every 60 deg around the circle, so the best-aligned one is simply the NEAREST — cos is largest where |dA| is smallest — and the nearest is one rounding away. Six cos calls and twelve wrap-tests per pixel become one cos. Equal in exact arithmetic; the float order differs, so the test bounds the difference rather than demanding bit-equality. |dA| <= 30 deg always, so lfBest >= 0.866 and the branch below is always taken, exactly as before. */ var lfStep=1.0471975512; var lfdA=lfAng-Math.round(lfAng/lfStep)*lfStep; var lfBest=Math.cos(lfdA); if(lfBest>0){ /* pow(b,32) is five squarings — checked byte-identical against Math.pow here, and the exponent is a literal so it can never drift out of step with the code. */ var lfB2=lfBest*lfBest, lfB4=lfB2*lfB2, lfB8=lfB4*lfB4, lfB16=lfB8*lfB8; var lfShape=lfB16*lfB16; var lfFall=Math.exp(-lfDist/(lfMaxR*0.35)); lfRay=lfI*150*lfShape*lfFall; } } var lfAmt=lfCore+lfRay; if(lfAmt<=0) continue; /* The equal-colour branch is not an optimisation, it is BYTE-IDENTITY. c*(core+ray) and (c*core + c*ray) are equal in exact arithmetic and can differ in the last float bit, and queue 474's test asserts this kernel byte-for-byte against the original six-ray implementation. Same colour => same expression as before, so that proof survives. */ var lfAddR, lfAddG, lfAddB; if(lfSame){ lfAddR=lfFR*lfAmt/255; lfAddG=lfFG*lfAmt/255; lfAddB=lfFB*lfAmt/255; } else { lfAddR=(lfFR*lfCore+lfRR*lfRay)/255; lfAddG=(lfFG*lfCore+lfRG*lfRay)/255; lfAddB=(lfFB*lfCore+lfRB*lfRay)/255; } var lfR=d[lfi], lfG=d[lfi+1], lfB=d[lfi+2]; var lfNR2=255-(255-lfR)*(255-lfAddR)/255; var lfNG2=255-(255-lfG)*(255-lfAddG)/255; var lfNB2=255-(255-lfB)*(255-lfAddB)/255; d[lfi]=lfNR2; d[lfi+1]=lfNG2; d[lfi+2]=lfNB2; } } },
-    roughenedges: function(d,W,H,p,t){ var re_amt=FM.evalProp(p.amount,t); if(re_amt==null)re_amt=6; re_amt=Math.max(0,Math.min(20,re_amt)); var re_scl=FM.evalProp(p.scale,t); if(re_scl==null)re_scl=10; re_scl=Math.max(2,Math.min(40,re_scl)); if(re_amt<=0)return; var re_s=fxSrc(d); var re_w4=W*4; var re_inv=1/re_scl; function re_hash(ix,iy,sd){ var re_h=(ix*374761393+iy*668265263+sd*2147483647)|0; re_h=(re_h^(re_h>>>13))*1274126177|0; re_h=(re_h^(re_h>>>16))>>>0; return re_h/4294967295; } function re_noise(fx,fy,sd){ var re_x0=Math.floor(fx), re_y0=Math.floor(fy); var re_tx=fx-re_x0, re_ty=fy-re_y0; var re_ux=re_tx*re_tx*(3-2*re_tx), re_uy=re_ty*re_ty*(3-2*re_ty); var re_n00=re_hash(re_x0,re_y0,sd), re_n10=re_hash(re_x0+1,re_y0,sd); var re_n01=re_hash(re_x0,re_y0+1,sd), re_n11=re_hash(re_x0+1,re_y0+1,sd); var re_a=re_n00+(re_n10-re_n00)*re_ux; var re_b=re_n01+(re_n11-re_n01)*re_ux; return re_a+(re_b-re_a)*re_uy; } for(var re_y=0;re_y<H;re_y++){ for(var re_x=0;re_x<W;re_x++){ var re_fx=re_x*re_inv, re_fy=re_y*re_inv; var re_dx=(re_noise(re_fx,re_fy,11)*2-1)*re_amt; var re_dy=(re_noise(re_fx,re_fy,29)*2-1)*re_amt; var re_sx=re_x+(re_dx|0); var re_sy=re_y+(re_dy|0); if(re_sx<0)re_sx=0; else if(re_sx>=W)re_sx=W-1; if(re_sy<0)re_sy=0; else if(re_sy>=H)re_sy=H-1; d[(re_y*W+re_x)*4+3]=re_s[(re_sy*W+re_sx)*4+3]; } } },
-    hexarray: function(d,W,H,p,t){ var hx_s=FM.evalProp(p.size,t); if(hx_s==null) hx_s=24; if(hx_s<8) hx_s=8; if(hx_s>80) hx_s=80; var hx_col=hexToRGB(p.color||'#19d6c0'); var hx_cr=hx_col[0], hx_cg=hx_col[1], hx_cb=hx_col[2]; var hx_rh=hx_s*0.8660254;
+    lensflare: function(d,W,H,p,t){ var lfx = fparam(p, 'x', 0.3, t); if(lfx<0)lfx=0; if(lfx>1)lfx=1; var lfy = fparam(p, 'y', 0.3, t); if(lfy<0)lfy=0; if(lfy>1)lfy=1; var lfI = fparam(p, 'intensity', 1, t); if(lfI<0)lfI=0; if(lfI>2)lfI=2; var lfLX=lfx*W, lfLY=lfy*H; var lfSig=W*0.18; if(lfSig<1)lfSig=1; var lfDen=2*lfSig*lfSig; /* QUEUE 558 — "Lens flair should have colour options". The flare was hardcoded warm white (255,240,210 = #fff0d2), and it draws TWO things: the round core and the six streaks. Both get their own colour, so the anamorphic look (warm core, cold streaks) is reachable; both DEFAULT to the old hardcoded value, so an existing flare and a newly added one render exactly as before. */ var lfC1=hexToRGB(p.color||'#fff0d2'), lfFR=lfC1[0], lfFG=lfC1[1], lfFB=lfC1[2]; var lfC2=hexToRGB(p.color2||'#fff0d2'), lfRR=lfC2[0], lfRG=lfC2[1], lfRB=lfC2[2]; var lfSame=(lfRR===lfFR&&lfRG===lfFG&&lfRB===lfFB); var lfRays=[0.0,1.0471975512,2.0943951024,3.1415926536,4.1887902048,5.2359877560]; var lfNR=lfRays.length; var lfMaxR=Math.sqrt(W*W+H*H); var lfw4=W*4; for(var lfYY=0;lfYY<H;lfYY++){ var lfrow=lfYY*lfw4; for(var lfXX=0;lfXX<W;lfXX++){ var lfi=lfrow+lfXX*4; if(d[lfi+3]<=0) continue; var lfDX=lfXX-lfLX, lfDY=lfYY-lfLY; var lfd2=lfDX*lfDX+lfDY*lfDY; var lfDist=Math.sqrt(lfd2); var lfCore=lfI*255*Math.exp(-lfd2/lfDen); var lfRay=0; if(lfDist>0.5){ var lfAng=Math.atan2(lfDY,lfDX); /* SIX COSINES FOR THE NEAREST OF SIX EVENLY-SPACED RAYS (queue 474). The rays sit every 60 deg around the circle, so the best-aligned one is simply the NEAREST — cos is largest where |dA| is smallest — and the nearest is one rounding away. Six cos calls and twelve wrap-tests per pixel become one cos. Equal in exact arithmetic; the float order differs, so the test bounds the difference rather than demanding bit-equality. |dA| <= 30 deg always, so lfBest >= 0.866 and the branch below is always taken, exactly as before. */ var lfStep=1.0471975512; var lfdA=lfAng-Math.round(lfAng/lfStep)*lfStep; var lfBest=Math.cos(lfdA); if(lfBest>0){ /* pow(b,32) is five squarings — checked byte-identical against Math.pow here, and the exponent is a literal so it can never drift out of step with the code. */ var lfB2=lfBest*lfBest, lfB4=lfB2*lfB2, lfB8=lfB4*lfB4, lfB16=lfB8*lfB8; var lfShape=lfB16*lfB16; var lfFall=Math.exp(-lfDist/(lfMaxR*0.35)); lfRay=lfI*150*lfShape*lfFall; } } var lfAmt=lfCore+lfRay; if(lfAmt<=0) continue; /* The equal-colour branch is not an optimisation, it is BYTE-IDENTITY. c*(core+ray) and (c*core + c*ray) are equal in exact arithmetic and can differ in the last float bit, and queue 474's test asserts this kernel byte-for-byte against the original six-ray implementation. Same colour => same expression as before, so that proof survives. */ var lfAddR, lfAddG, lfAddB; if(lfSame){ lfAddR=lfFR*lfAmt/255; lfAddG=lfFG*lfAmt/255; lfAddB=lfFB*lfAmt/255; } else { lfAddR=(lfFR*lfCore+lfRR*lfRay)/255; lfAddG=(lfFG*lfCore+lfRG*lfRay)/255; lfAddB=(lfFB*lfCore+lfRB*lfRay)/255; } var lfR=d[lfi], lfG=d[lfi+1], lfB=d[lfi+2]; var lfNR2=255-(255-lfR)*(255-lfAddR)/255; var lfNG2=255-(255-lfG)*(255-lfAddG)/255; var lfNB2=255-(255-lfB)*(255-lfAddB)/255; d[lfi]=lfNR2; d[lfi+1]=lfNG2; d[lfi+2]=lfNB2; } } },
+    roughenedges: function(d,W,H,p,t){ var re_amt = fparam(p, 'amount', 6, t); re_amt=Math.max(0,Math.min(20,re_amt)); var re_scl = fparam(p, 'scale', 10, t); re_scl=Math.max(2,Math.min(40,re_scl)); if(re_amt<=0)return; var re_s=fxSrc(d); var re_w4=W*4; var re_inv=1/re_scl; function re_hash(ix,iy,sd){ var re_h=(ix*374761393+iy*668265263+sd*2147483647)|0; re_h=(re_h^(re_h>>>13))*1274126177|0; re_h=(re_h^(re_h>>>16))>>>0; return re_h/4294967295; } function re_noise(fx,fy,sd){ var re_x0=Math.floor(fx), re_y0=Math.floor(fy); var re_tx=fx-re_x0, re_ty=fy-re_y0; var re_ux=re_tx*re_tx*(3-2*re_tx), re_uy=re_ty*re_ty*(3-2*re_ty); var re_n00=re_hash(re_x0,re_y0,sd), re_n10=re_hash(re_x0+1,re_y0,sd); var re_n01=re_hash(re_x0,re_y0+1,sd), re_n11=re_hash(re_x0+1,re_y0+1,sd); var re_a=re_n00+(re_n10-re_n00)*re_ux; var re_b=re_n01+(re_n11-re_n01)*re_ux; return re_a+(re_b-re_a)*re_uy; } for(var re_y=0;re_y<H;re_y++){ for(var re_x=0;re_x<W;re_x++){ var re_fx=re_x*re_inv, re_fy=re_y*re_inv; var re_dx=(re_noise(re_fx,re_fy,11)*2-1)*re_amt; var re_dy=(re_noise(re_fx,re_fy,29)*2-1)*re_amt; var re_sx=re_x+(re_dx|0); var re_sy=re_y+(re_dy|0); if(re_sx<0)re_sx=0; else if(re_sx>=W)re_sx=W-1; if(re_sy<0)re_sy=0; else if(re_sy>=H)re_sy=H-1; d[(re_y*W+re_x)*4+3]=re_s[(re_sy*W+re_sx)*4+3]; } } },
+    hexarray: function(d,W,H,p,t){ var hx_s = fparam(p, 'size', 24, t); if(hx_s<8) hx_s=8; if(hx_s>80) hx_s=80; var hx_col=hexToRGB(p.color||'#19d6c0'); var hx_cr=hx_col[0], hx_cg=hx_col[1], hx_cb=hx_col[2]; var hx_rh=hx_s*0.8660254;
       /* Outline weight was locked to 12% of the cell, so scaling the hexes always dragged the line
          weight with them — you could never have big cells with a fine line. OPACITY lets the lattice
          sit over the picture instead of on top of it. */
@@ -5571,7 +5571,7 @@ window.FM = window.FM || {};
       var hx_op=p.opacity==null?1:FM.evalProp(p.opacity,t); if(hx_op<0)hx_op=0; if(hx_op>1)hx_op=1; if(hx_op<=0)return;
       var hx_band=Math.max(1, hx_tP===0.12?hx_s*0.12:hx_s*hx_tP); for(var hx_y=0; hx_y<H; hx_y++){ var hx_brow=Math.round(hx_y/hx_rh); for(var hx_x=0; hx_x<W; hx_x++){ var hx_idx=(hx_y*W+hx_x)*4; if(d[hx_idx+3]===0) continue; var hx_d1=1e20, hx_d2=1e20; for(var hx_dr=-1; hx_dr<=1; hx_dr++){ var hx_r=hx_brow+hx_dr; var hx_ox=(hx_r&1)?(hx_s*0.5):0; var hx_bc=Math.round((hx_x-hx_ox)/hx_s); for(var hx_dc=-1; hx_dc<=1; hx_dc++){ var hx_c=hx_bc+hx_dc; var hx_px=hx_c*hx_s+hx_ox; var hx_py=hx_r*hx_rh; var hx_ex=hx_x-hx_px, hx_ey=hx_y-hx_py; var hx_dist=Math.sqrt(hx_ex*hx_ex+hx_ey*hx_ey); if(hx_dist<hx_d1){ hx_d2=hx_d1; hx_d1=hx_dist; } else if(hx_dist<hx_d2){ hx_d2=hx_dist; } } } var hx_diff=hx_d2-hx_d1; if(hx_diff<hx_band){ var hx_a=1-hx_diff/hx_band; if(hx_a<0) hx_a=0; if(hx_a>1) hx_a=1; if(hx_op!==1) hx_a*=hx_op; var hx_ia=1-hx_a; d[hx_idx]=d[hx_idx]*hx_ia+hx_cr*hx_a; d[hx_idx+1]=d[hx_idx+1]*hx_ia+hx_cg*hx_a; d[hx_idx+2]=d[hx_idx+2]*hx_ia+hx_cb*hx_a; } } } },
     // ---- batch 17 (drawing / blur / proc) ----
-    electricedges: function(d,W,H,p,t){ var eeAmt=FM.evalProp(p.amount,t); if(eeAmt==null)eeAmt=0.6; if(eeAmt<0)eeAmt=0; if(eeAmt>1)eeAmt=1; var eeSpd=FM.evalProp(p.speed,t); if(eeSpd==null)eeSpd=4; if(eeSpd<0)eeSpd=0; if(eeSpd>10)eeSpd=10; var eeCol=hexToRGB(p.color); var eeR=eeCol[0], eeG=eeCol[1], eeB=eeCol[2]; var ees=fxSrc(d); var eew4=W*4; var eeFrame=Math.floor(t*eeSpd); for(var eey=0;eey<H;eey++){ for(var eex=0;eex<W;eex++){ var eei=(eey*W+eex)*4; if(ees[eei+3]===0)continue; var eexm=eex>0?eex-1:0; var eexp=eex<W-1?eex+1:W-1; var eeym=eey>0?eey-1:0; var eeyp=eey<H-1?eey+1:H-1; var eeRow0=eeym*eew4, eeRow1=eey*eew4, eeRow2=eeyp*eew4; var eeXm4=eexm*4, eeX4=eex*4, eeXp4=eexp*4; var eeTL=ees[eeRow0+eeXm4]*0.299+ees[eeRow0+eeXm4+1]*0.587+ees[eeRow0+eeXm4+2]*0.114; var eeT=ees[eeRow0+eeX4]*0.299+ees[eeRow0+eeX4+1]*0.587+ees[eeRow0+eeX4+2]*0.114; var eeTR=ees[eeRow0+eeXp4]*0.299+ees[eeRow0+eeXp4+1]*0.587+ees[eeRow0+eeXp4+2]*0.114; var eeL=ees[eeRow1+eeXm4]*0.299+ees[eeRow1+eeXm4+1]*0.587+ees[eeRow1+eeXm4+2]*0.114; var eeRr=ees[eeRow1+eeXp4]*0.299+ees[eeRow1+eeXp4+1]*0.587+ees[eeRow1+eeXp4+2]*0.114; var eeBL=ees[eeRow2+eeXm4]*0.299+ees[eeRow2+eeXm4+1]*0.587+ees[eeRow2+eeXm4+2]*0.114; var eeBb=ees[eeRow2+eeX4]*0.299+ees[eeRow2+eeX4+1]*0.587+ees[eeRow2+eeX4+2]*0.114; var eeBR=ees[eeRow2+eeXp4]*0.299+ees[eeRow2+eeXp4+1]*0.587+ees[eeRow2+eeXp4+2]*0.114; var eeGx=(eeTR+2*eeRr+eeBR)-(eeTL+2*eeL+eeBL); var eeGy=(eeBL+2*eeBb+eeBR)-(eeTL+2*eeT+eeTR); var eeMag=Math.sqrt(eeGx*eeGx+eeGy*eeGy)/1442; if(eeMag<=0)continue; if(eeMag>1)eeMag=1; var eeH=(eex*374761393+eey*668265263+eeFrame*2147483647)>>>0; eeH=(eeH^(eeH>>>13))*1274126177>>>0; eeH=(eeH^(eeH>>>16))>>>0; var eeFlick=0.45+(eeH/4294967295)*0.55; /* THIS EFFECT WAS THE FAINTEST IN THE APP BY A WIDE MARGIN (queue 482, round 2). Sweeping all 105
+    electricedges: function(d,W,H,p,t){ var eeAmt = fparam(p, 'amount', 0.6, t); if(eeAmt<0)eeAmt=0; if(eeAmt>1)eeAmt=1; var eeSpd = fparam(p, 'speed', 4, t); if(eeSpd<0)eeSpd=0; if(eeSpd>10)eeSpd=10; var eeCol=hexToRGB(p.color); var eeR=eeCol[0], eeG=eeCol[1], eeB=eeCol[2]; var ees=fxSrc(d); var eew4=W*4; var eeFrame=Math.floor(t*eeSpd); for(var eey=0;eey<H;eey++){ for(var eex=0;eex<W;eex++){ var eei=(eey*W+eex)*4; if(ees[eei+3]===0)continue; var eexm=eex>0?eex-1:0; var eexp=eex<W-1?eex+1:W-1; var eeym=eey>0?eey-1:0; var eeyp=eey<H-1?eey+1:H-1; var eeRow0=eeym*eew4, eeRow1=eey*eew4, eeRow2=eeyp*eew4; var eeXm4=eexm*4, eeX4=eex*4, eeXp4=eexp*4; var eeTL=ees[eeRow0+eeXm4]*0.299+ees[eeRow0+eeXm4+1]*0.587+ees[eeRow0+eeXm4+2]*0.114; var eeT=ees[eeRow0+eeX4]*0.299+ees[eeRow0+eeX4+1]*0.587+ees[eeRow0+eeX4+2]*0.114; var eeTR=ees[eeRow0+eeXp4]*0.299+ees[eeRow0+eeXp4+1]*0.587+ees[eeRow0+eeXp4+2]*0.114; var eeL=ees[eeRow1+eeXm4]*0.299+ees[eeRow1+eeXm4+1]*0.587+ees[eeRow1+eeXm4+2]*0.114; var eeRr=ees[eeRow1+eeXp4]*0.299+ees[eeRow1+eeXp4+1]*0.587+ees[eeRow1+eeXp4+2]*0.114; var eeBL=ees[eeRow2+eeXm4]*0.299+ees[eeRow2+eeXm4+1]*0.587+ees[eeRow2+eeXm4+2]*0.114; var eeBb=ees[eeRow2+eeX4]*0.299+ees[eeRow2+eeX4+1]*0.587+ees[eeRow2+eeX4+2]*0.114; var eeBR=ees[eeRow2+eeXp4]*0.299+ees[eeRow2+eeXp4+1]*0.587+ees[eeRow2+eeXp4+2]*0.114; var eeGx=(eeTR+2*eeRr+eeBR)-(eeTL+2*eeL+eeBL); var eeGy=(eeBL+2*eeBb+eeBR)-(eeTL+2*eeT+eeTR); var eeMag=Math.sqrt(eeGx*eeGx+eeGy*eeGy)/1442; if(eeMag<=0)continue; if(eeMag>1)eeMag=1; var eeH=(eex*374761393+eey*668265263+eeFrame*2147483647)>>>0; eeH=(eeH^(eeH>>>13))*1274126177>>>0; eeH=(eeH^(eeH>>>16))>>>0; var eeFlick=0.45+(eeH/4294967295)*0.55; /* THIS EFFECT WAS THE FAINTEST IN THE APP BY A WIDE MARGIN (queue 482, round 2). Sweeping all 105
    pixel effects at the settings they ship with and taking the 95th-percentile pixel change: the
    median effect scores 131 and the first quartile 60. Electric Edges scored **2** — five times below
    the next weakest and about sixty-five times below the median. Edges you cannot see are not an
@@ -5581,7 +5581,7 @@ window.FM = window.FM || {};
    amount and flicker that left a lift of about 4% of full scale. The gain restores the intended
    look; nothing visible is lost by changing it, because at a p95 of 2 there was nothing to see. */
 var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var eeSr=255-(255-d[eei])*(255-eeR*eeAdd)/255; var eeSg=255-(255-d[eei+1])*(255-eeG*eeAdd)/255; var eeSb=255-(255-d[eei+2])*(255-eeB*eeAdd)/255; d[eei]=eeSr; d[eei+1]=eeSg; d[eei+2]=eeSb; } } },
-    glowscan: function(d,W,H,p,t){ var gsSpeed=FM.evalProp(p.speed,t); if(gsSpeed==null)gsSpeed=1.5; if(gsSpeed<0)gsSpeed=0; if(gsSpeed>8)gsSpeed=8; var gsWidth=FM.evalProp(p.width,t); if(gsWidth==null)gsWidth=60; if(gsWidth<10)gsWidth=10; if(gsWidth>200)gsWidth=200; var gsCol=hexToRGB(p.color); var gsCr=gsCol[0],gsCg=gsCol[1],gsCb=gsCol[2]; var gsSigma=gsWidth*0.5; if(gsSigma<0.5)gsSigma=0.5; var gsDen=2*gsSigma*gsSigma; var gsPhase=(t*gsSpeed)%1; if(gsPhase<0)gsPhase+=1; var gsScanY=gsPhase*H; var gsW4=W*4; for(var gsY=0;gsY<H;gsY++){ var gsDist=Math.abs(gsY-gsScanY); var gsAlt=H-gsDist; if(gsAlt<gsDist)gsDist=gsAlt; var gsBr=Math.exp(-(gsDist*gsDist)/gsDen); if(gsBr<0.002)continue; var gsAddR=gsCr*gsBr,gsAddG=gsCg*gsBr,gsAddB=gsCb*gsBr; var gsRow=gsY*gsW4; for(var gsX=0;gsX<W;gsX++){ var gsI=gsRow+gsX*4; if(d[gsI+3]<=0)continue; var gsR=d[gsI],gsG=d[gsI+1],gsB=d[gsI+2]; d[gsI]=255-(255-gsR)*(255-gsAddR)/255; d[gsI+1]=255-(255-gsG)*(255-gsAddG)/255; d[gsI+2]=255-(255-gsB)*(255-gsAddB)/255; } } },
+    glowscan: function(d,W,H,p,t){ var gsSpeed = fparam(p, 'speed', 1.5, t); if(gsSpeed<0)gsSpeed=0; if(gsSpeed>8)gsSpeed=8; var gsWidth = fparam(p, 'width', 60, t); if(gsWidth<10)gsWidth=10; if(gsWidth>200)gsWidth=200; var gsCol=hexToRGB(p.color); var gsCr=gsCol[0],gsCg=gsCol[1],gsCb=gsCol[2]; var gsSigma=gsWidth*0.5; if(gsSigma<0.5)gsSigma=0.5; var gsDen=2*gsSigma*gsSigma; var gsPhase=(t*gsSpeed)%1; if(gsPhase<0)gsPhase+=1; var gsScanY=gsPhase*H; var gsW4=W*4; for(var gsY=0;gsY<H;gsY++){ var gsDist=Math.abs(gsY-gsScanY); var gsAlt=H-gsDist; if(gsAlt<gsDist)gsDist=gsAlt; var gsBr=Math.exp(-(gsDist*gsDist)/gsDen); if(gsBr<0.002)continue; var gsAddR=gsCr*gsBr,gsAddG=gsCg*gsBr,gsAddB=gsCb*gsBr; var gsRow=gsY*gsW4; for(var gsX=0;gsX<W;gsX++){ var gsI=gsRow+gsX*4; if(d[gsI+3]<=0)continue; var gsR=d[gsI],gsG=d[gsI+1],gsB=d[gsI+2]; d[gsI]=255-(255-gsR)*(255-gsAddR)/255; d[gsI+1]=255-(255-gsG)*(255-gsAddG)/255; d[gsI+2]=255-(255-gsB)*(255-gsAddB)/255; } } },
     spinstreaks: function(d,W,H,p,t){ var ssBB=arguments[6];
       /* SKIP WHAT THE STREAKS CANNOT REACH (#692) — 99.6ms at its defaults on a 180x150 subject in a
          1080x1920 plate, the most expensive kernel in the catalog once the others were bounded.
@@ -5592,7 +5592,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          a superset by construction, not an approximation.
          Nothing outside it is written to anything but zero: the kernel writes a weighted AVERAGE of its
          taps, and where every tap is transparent that average is 0 over an already-0 pixel. */
-      var ssAmt=FM.evalProp(p.amount,t); if(ssAmt==null) ssAmt=0.5; if(ssAmt<0) ssAmt=0; if(ssAmt>1) ssAmt=1; if(ssAmt<=0.001) return; var ssSrc=fxSrc(d);
+      var ssAmt = fparam(p, 'amount', 0.5, t); if(ssAmt<0) ssAmt=0; if(ssAmt>1) ssAmt=1; if(ssAmt<=0.001) return; var ssSrc=fxSrc(d);
       // CENTRE was W/2, H/2. DECAY was the hardcoded 0.6 in 1/(1+k*0.6): at 0 every tap weighs the same
       // and the streak becomes a long even comet tail, at 2 it collapses to a tight ghost right behind
       // the subject. 0.6 read from the param is the same double as the literal, so the default is exact.
@@ -5672,9 +5672,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      *    doing strictly more work. The per-pixel ARITHMETIC is untouched — same lerps, same
      *    operands, same order — which is what keeps it byte-identical. */
     fractalridges: function (d, W, H, p, t, ps) {
-      var fr_amt = FM.evalProp(p.amount, t); if (fr_amt == null) fr_amt = 0.6;
+      var fr_amt = fparam(p, 'amount', 0.6, t);
       fr_amt = fr_amt < 0 ? 0 : (fr_amt > 1 ? 1 : fr_amt);
-      var fr_sc = FM.evalProp(p.scale, t); if (fr_sc == null) fr_sc = 48;
+      var fr_sc = fparam(p, 'scale', 48, t);
       fr_sc = fr_sc < 8 ? 8 : (fr_sc > 120 ? 120 : fr_sc);
       var fr_ps = ps || 1;
       fr_sc = fr_sc * fr_ps;                                     // rule 2
@@ -5828,7 +5828,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         }
       }
     },
-    smoothbevel: function(d,W,H,p,t){ var sb_depth=FM.evalProp(p.depth,t); if(sb_depth==null) sb_depth=6; sb_depth=Math.max(1,Math.min(20,Math.round(sb_depth))); var sb_str=FM.evalProp(p.strength,t); if(sb_str==null) sb_str=1; sb_str=Math.max(0,Math.min(2,sb_str)); var sb_N=W*H, sb_i, sb_x, sb_y, sb_idx; var sb_mask=new Float32Array(sb_N); for(sb_i=0; sb_i<sb_N; sb_i++){ sb_mask[sb_i]=(d[sb_i*4+3]>0)?1:0; } var sb_tmp=new Float32Array(sb_N); var sb_soft=new Float32Array(sb_N); var sb_r=sb_depth, sb_win=sb_r*2+1; var sb_inv=1/sb_win; var sb_acc, sb_k; for(sb_y=0; sb_y<H; sb_y++){ var sb_rowo=sb_y*W; sb_acc=sb_mask[sb_rowo]*(sb_r+1); for(sb_k=1; sb_k<=sb_r; sb_k++){ sb_acc+=sb_mask[sb_rowo+Math.min(sb_k,W-1)]; } for(sb_x=0; sb_x<W; sb_x++){ sb_tmp[sb_rowo+sb_x]=sb_acc*sb_inv; var sb_ox=sb_x-sb_r; if(sb_ox<0) sb_ox=0; var sb_nx=sb_x+sb_r+1; if(sb_nx>W-1) sb_nx=W-1; sb_acc+=sb_mask[sb_rowo+sb_nx]-sb_mask[sb_rowo+sb_ox]; } } for(sb_x=0; sb_x<W; sb_x++){ sb_acc=sb_tmp[sb_x]*(sb_r+1); for(sb_k=1; sb_k<=sb_r; sb_k++){ sb_acc+=sb_tmp[Math.min(sb_k,H-1)*W+sb_x]; } for(sb_y=0; sb_y<H; sb_y++){ sb_soft[sb_y*W+sb_x]=sb_acc*sb_inv; var sb_oy=sb_y-sb_r; if(sb_oy<0) sb_oy=0; var sb_ny=sb_y+sb_r+1; if(sb_ny>H-1) sb_ny=H-1; sb_acc+=sb_tmp[sb_ny*W+sb_x]-sb_tmp[sb_oy*W+sb_x]; } } var sb_lx=-0.7071, sb_ly=-0.7071; for(sb_y=0; sb_y<H; sb_y++){ for(sb_x=0; sb_x<W; sb_x++){ sb_i=sb_y*W+sb_x; sb_idx=sb_i*4; if(d[sb_idx+3]<=0) continue; var sb_s=sb_soft[sb_i]; var sb_band=4*sb_s*(1-sb_s); if(sb_band<=0) continue; if(sb_band>1) sb_band=1; var sb_xm=sb_x>0?sb_x-1:0, sb_xp=sb_x<W-1?sb_x+1:W-1; var sb_ym=sb_y>0?sb_y-1:0, sb_yp=sb_y<H-1?sb_y+1:H-1; var sb_gx=sb_soft[sb_y*W+sb_xp]-sb_soft[sb_y*W+sb_xm]; var sb_gy=sb_soft[sb_yp*W+sb_x]-sb_soft[sb_ym*W+sb_x]; var sb_dot=sb_gx*sb_lx+sb_gy*sb_ly; var sb_term=sb_dot*sb_str*sb_band*255*3; var sb_rr=d[sb_idx]+sb_term; var sb_gg=d[sb_idx+1]+sb_term; var sb_bb=d[sb_idx+2]+sb_term; d[sb_idx]=sb_rr<0?0:(sb_rr>255?255:sb_rr); d[sb_idx+1]=sb_gg<0?0:(sb_gg>255?255:sb_gg); d[sb_idx+2]=sb_bb<0?0:(sb_bb>255?255:sb_bb); } } },
+    smoothbevel: function(d,W,H,p,t){ var sb_depth = fparam(p, 'depth', 6, t); sb_depth=Math.max(1,Math.min(20,Math.round(sb_depth))); var sb_str = fparam(p, 'strength', 1, t); sb_str=Math.max(0,Math.min(2,sb_str)); var sb_N=W*H, sb_i, sb_x, sb_y, sb_idx; var sb_mask=new Float32Array(sb_N); for(sb_i=0; sb_i<sb_N; sb_i++){ sb_mask[sb_i]=(d[sb_i*4+3]>0)?1:0; } var sb_tmp=new Float32Array(sb_N); var sb_soft=new Float32Array(sb_N); var sb_r=sb_depth, sb_win=sb_r*2+1; var sb_inv=1/sb_win; var sb_acc, sb_k; for(sb_y=0; sb_y<H; sb_y++){ var sb_rowo=sb_y*W; sb_acc=sb_mask[sb_rowo]*(sb_r+1); for(sb_k=1; sb_k<=sb_r; sb_k++){ sb_acc+=sb_mask[sb_rowo+Math.min(sb_k,W-1)]; } for(sb_x=0; sb_x<W; sb_x++){ sb_tmp[sb_rowo+sb_x]=sb_acc*sb_inv; var sb_ox=sb_x-sb_r; if(sb_ox<0) sb_ox=0; var sb_nx=sb_x+sb_r+1; if(sb_nx>W-1) sb_nx=W-1; sb_acc+=sb_mask[sb_rowo+sb_nx]-sb_mask[sb_rowo+sb_ox]; } } for(sb_x=0; sb_x<W; sb_x++){ sb_acc=sb_tmp[sb_x]*(sb_r+1); for(sb_k=1; sb_k<=sb_r; sb_k++){ sb_acc+=sb_tmp[Math.min(sb_k,H-1)*W+sb_x]; } for(sb_y=0; sb_y<H; sb_y++){ sb_soft[sb_y*W+sb_x]=sb_acc*sb_inv; var sb_oy=sb_y-sb_r; if(sb_oy<0) sb_oy=0; var sb_ny=sb_y+sb_r+1; if(sb_ny>H-1) sb_ny=H-1; sb_acc+=sb_tmp[sb_ny*W+sb_x]-sb_tmp[sb_oy*W+sb_x]; } } var sb_lx=-0.7071, sb_ly=-0.7071; for(sb_y=0; sb_y<H; sb_y++){ for(sb_x=0; sb_x<W; sb_x++){ sb_i=sb_y*W+sb_x; sb_idx=sb_i*4; if(d[sb_idx+3]<=0) continue; var sb_s=sb_soft[sb_i]; var sb_band=4*sb_s*(1-sb_s); if(sb_band<=0) continue; if(sb_band>1) sb_band=1; var sb_xm=sb_x>0?sb_x-1:0, sb_xp=sb_x<W-1?sb_x+1:W-1; var sb_ym=sb_y>0?sb_y-1:0, sb_yp=sb_y<H-1?sb_y+1:H-1; var sb_gx=sb_soft[sb_y*W+sb_xp]-sb_soft[sb_y*W+sb_xm]; var sb_gy=sb_soft[sb_yp*W+sb_x]-sb_soft[sb_ym*W+sb_x]; var sb_dot=sb_gx*sb_lx+sb_gy*sb_ly; var sb_term=sb_dot*sb_str*sb_band*255*3; var sb_rr=d[sb_idx]+sb_term; var sb_gg=d[sb_idx+1]+sb_term; var sb_bb=d[sb_idx+2]+sb_term; d[sb_idx]=sb_rr<0?0:(sb_rr>255?255:sb_rr); d[sb_idx+1]=sb_gg<0?0:(sb_gg>255?255:sb_gg); d[sb_idx+2]=sb_bb<0?0:(sb_bb>255?255:sb_bb); } } },
     // ---- batch 18 (blur / proc / drawing pixel) ----
     zoomstreaks: function(d,W,H,p,t){ var zsBB=arguments[6];
       /* SKIP WHAT THE STREAKS CANNOT REACH (#692) — 89.8ms at its defaults on a 180x150 subject in a
@@ -5842,7 +5842,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          which on a full-size plate is the whole frame, and the bound simply stops helping rather than
          becoming wrong. Nothing is written where the weight sum is zero, so outside that region it is a
          pure skip. */
-      var zs_amt=FM.evalProp(p.amount,t); if(zs_amt==null) zs_amt=0.5; if(zs_amt<0) zs_amt=0; if(zs_amt>1) zs_amt=1; var zs_s=fxSrc(d);
+      var zs_amt = fparam(p, 'amount', 0.5, t); if(zs_amt<0) zs_amt=0; if(zs_amt>1) zs_amt=1; var zs_s=fxSrc(d);
       // CENTRE was W/2, H/2 — rays always came out of the middle of the frame rather than out of the
       // light in the shot. THRESHOLD gates which pixels are allowed to streak at all: legacy weights
       // every tap by (lum/255)^2, which is small for a mid-tone but not zero, so ten thousand mid-tones
@@ -5894,7 +5894,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          out whatever the bound. The harness now dirties the plate for this reason.
          To bound it, it would first have to stop writing under transparency, and that is a change to
          what the effect DOES rather than to what it costs. */
-      var ib_r=FM.evalProp(p.radius,t); if(ib_r==null) ib_r=8; ib_r=ib_r|0; if(ib_r<0) ib_r=0; if(ib_r>30) ib_r=30; if(ib_r<1) return;
+      var ib_r = fparam(p, 'radius', 8, t); ib_r=ib_r|0; if(ib_r<0) ib_r=0; if(ib_r>30) ib_r=30; if(ib_r<1) return;
       // EDGE is a bug fix wearing a control. The blur below averages RGB and IGNORES alpha, so near
       // the edge of a shape it happily averages in the transparent-black pixels outside it — leaving a
       // dark rim just inside every edge that has nothing to do with the artwork. Turning EDGE on
@@ -5946,8 +5946,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var cs_amt=p.mix==null?1:FM.evalProp(p.mix,t); if(cs_amt<0)cs_amt=0; if(cs_amt>1)cs_amt=1; if(cs_amt<=0)return;
       var cs_alt=p.alternate==null?0.4:FM.evalProp(p.alternate,t); if(cs_alt<0)cs_alt=0; if(cs_alt>1)cs_alt=1;
       var cs_off=p.offset==null?0:FM.evalProp(p.offset,t); if(cs_off<-0.5)cs_off=-0.5; if(cs_off>0.5)cs_off=0.5;
-      var cs_levels=FM.evalProp(p.levels,t); if(cs_levels==null)cs_levels=5; cs_levels=Math.round(cs_levels); if(cs_levels<2)cs_levels=2; if(cs_levels>12)cs_levels=12; var cs_lo=hexToRGB(p.color); var cs_hi=hexToRGB(p.color2); var cs_n=W*H, cs_i, cs_idx, cs_a, cs_r, cs_g, cs_b, cs_l, cs_band, cs_frac, cs_br, cs_bg, cs_bb, cs_mix; for(cs_i=0; cs_i<cs_n; cs_i++){ cs_idx=cs_i*4; cs_a=d[cs_idx+3]; if(cs_a<=0)continue; cs_r=d[cs_idx]; cs_g=d[cs_idx+1]; cs_b=d[cs_idx+2]; cs_l=(0.299*cs_r+0.587*cs_g+0.114*cs_b)/255; if(cs_l<0)cs_l=0; if(cs_l>1)cs_l=1; cs_band=Math.floor((cs_l+cs_off)*cs_levels); if(cs_band<0)cs_band=0; if(cs_band>=cs_levels)cs_band=cs_levels-1; cs_frac=cs_levels>1?cs_band/(cs_levels-1):0; cs_br=cs_lo[0]+(cs_hi[0]-cs_lo[0])*cs_frac; cs_bg=cs_lo[1]+(cs_hi[1]-cs_lo[1])*cs_frac; cs_bb=cs_lo[2]+(cs_hi[2]-cs_lo[2])*cs_frac; cs_mix=((cs_band&1)?1.0:cs_alt)*cs_amt; d[cs_idx]=cs_r+(cs_br-cs_r)*cs_mix; d[cs_idx+1]=cs_g+(cs_bg-cs_g)*cs_mix; d[cs_idx+2]=cs_b+(cs_bb-cs_b)*cs_mix; } },
-    crosshatch: function(d,W,H,p,t,ps){ var sp=FM.evalProp(p.spacing,t); if(sp==null)sp=7; sp=Math.round(sp); if(sp<3)sp=3; if(sp>30)sp=30; sp=Math.max(1,Math.round(sp*(ps||1))); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var col=hexToRGB(p.color); var ir=col[0],ig=col[1],ib=col[2]; var W4=W*4;
+      var cs_levels = fparam(p, 'levels', 5, t); cs_levels=Math.round(cs_levels); if(cs_levels<2)cs_levels=2; if(cs_levels>12)cs_levels=12; var cs_lo=hexToRGB(p.color); var cs_hi=hexToRGB(p.color2); var cs_n=W*H, cs_i, cs_idx, cs_a, cs_r, cs_g, cs_b, cs_l, cs_band, cs_frac, cs_br, cs_bg, cs_bb, cs_mix; for(cs_i=0; cs_i<cs_n; cs_i++){ cs_idx=cs_i*4; cs_a=d[cs_idx+3]; if(cs_a<=0)continue; cs_r=d[cs_idx]; cs_g=d[cs_idx+1]; cs_b=d[cs_idx+2]; cs_l=(0.299*cs_r+0.587*cs_g+0.114*cs_b)/255; if(cs_l<0)cs_l=0; if(cs_l>1)cs_l=1; cs_band=Math.floor((cs_l+cs_off)*cs_levels); if(cs_band<0)cs_band=0; if(cs_band>=cs_levels)cs_band=cs_levels-1; cs_frac=cs_levels>1?cs_band/(cs_levels-1):0; cs_br=cs_lo[0]+(cs_hi[0]-cs_lo[0])*cs_frac; cs_bg=cs_lo[1]+(cs_hi[1]-cs_lo[1])*cs_frac; cs_bb=cs_lo[2]+(cs_hi[2]-cs_lo[2])*cs_frac; cs_mix=((cs_band&1)?1.0:cs_alt)*cs_amt; d[cs_idx]=cs_r+(cs_br-cs_r)*cs_mix; d[cs_idx+1]=cs_g+(cs_bg-cs_g)*cs_mix; d[cs_idx+2]=cs_b+(cs_bb-cs_b)*cs_mix; } },
+    crosshatch: function(d,W,H,p,t,ps){ var sp = fparam(p, 'spacing', 7, t); sp=Math.round(sp); if(sp<3)sp=3; if(sp>30)sp=30; sp=Math.max(1,Math.round(sp*(ps||1))); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var col=hexToRGB(p.color); var ir=col[0],ig=col[1],ib=col[2]; var W4=W*4;
       // The three hatch tiers fired at hardcoded luminances of 0.75/0.5/0.25 with 1px strokes on fixed
       // axes, so how much ink went down was dictated entirely by how the source happened to be exposed
       // — and a 1px stroke is invisible at 1080p, which is the resolution everything here is.
@@ -5969,7 +5969,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           if(!hatch&&l<chT3){ if(hym<chWt)hatch=true; }
           if(hatch){ d[ci]=ir; d[ci+1]=ig; d[ci+2]=ib; } } } },
     // ---- batch 20: cinematic grades + framing ----
-    bleachbypass: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.7; if(a<0)a=0; if(a>1)a=1; function ov(b,o){ return b<128 ? (2*b*o/255) : (255-2*(255-b)*(255-o)/255); }
+    bleachbypass: function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.7, t); if(a<0)a=0; if(a>1)a=1; function ov(b,o){ return b<128 ? (2*b*o/255) : (255-2*(255-b)*(255-o)/255); }
       // The silver-retention desaturation was welded at 0.6, so the one Amount slider tied colour loss
       // and contrast harshness together — and keeping the bleached CONTRAST while keeping the COLOUR
       // is the entire point of the process. They are two controls now.
@@ -5982,7 +5982,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         var tr=ov(dr,l), tg=ov(dg,l), tb=ov(db,l);
         if(bbC!==1){ tr=dr+(tr-dr)*bbC; tg=dg+(tg-dg)*bbC; tb=db+(tb-db)*bbC; }
         d[i]=r+(tr-r)*a; d[i+1]=g+(tg-g)*a; d[i+2]=b+(tb-b)*a; } },
-    tealorange: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1;
+    tealorange: function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.6, t); if(a<0)a=0; if(a>1)a=1;
       // The split between warm and cool sat permanently at mid-grey, so whether FACES land in the
       // orange half was decided by how the shot happened to be exposed rather than by any choice.
       // PIVOT moves that dividing line; SPREAD is how sharply it crosses over (a small spread pushes
@@ -5992,7 +5992,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var toPiv=toPv===50?0.5:toPv/100, toSp=toSpP===100?1:100/toSpP; for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var l=(r*0.299+g*0.587+b*0.114)/255; var w=toPiv===0.5&&toSp===1?(l-0.5)*2:(l-toPiv)*2*toSp;
         if(w<-1)w=-1; else if(w>1)w=1;
         var rr=r+w*42*a, gg=g+w*8*a, bb=b-w*42*a; d[i]=rr<0?0:(rr>255?255:rr); d[i+1]=gg<0?0:(gg>255?255:gg); d[i+2]=bb<0?0:(bb>255?255:bb); } },
-    crossprocess: (function(){ function cv(v,lift,gain){ var x=v/255; x=x+lift*Math.sin(x*Math.PI); if(x<0)x=0; x=Math.pow(x,gain); return x*255; } return function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1;
+    crossprocess: (function(){ function cv(v,lift,gain){ var x=v/255; x=x+lift*Math.sin(x*Math.PI); if(x<0)x=0; x=Math.pow(x,gain); return x*255; } return function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.6, t); if(a<0)a=0; if(a>1)a=1;
       // The whole look lived in six hardcoded constants, so Amount could only crossfade between the
       // footage and that ONE fixed C-41 curve. LIFT scales the per-channel S-bend (0 = none, so the
       // crossed colour cast goes away and only the gamma remains); GAIN scales how far each channel's
@@ -6012,7 +6012,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var LR=new Float64Array(256), LG=new Float64Array(256), LB=new Float64Array(256);
       for(var v=0;v<256;v++){ LR[v]=cv(v,l1,g1); LG[v]=cv(v,l2,g2); LB[v]=cv(v,l3,g3); }
       for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var nr=LR[r], ng=LG[g], nb=LB[b]; d[i]=r+(nr-r)*a; d[i+1]=g+(ng-g)*a; d[i+2]=b+(nb-b)*a; } }; })(),
-    lightleak: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1; var col=hexToRGB(p.color); var cr=col[0],cg=col[1],cb=col[2]; var ph=t*0.15;
+    lightleak: function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.6, t); if(a<0)a=0; if(a>1)a=1; var col=hexToRGB(p.color); var cr=col[0],cg=col[1],cb=col[2]; var ph=t*0.15;
       // The leak always entered from the top-right at a fixed size, so it could not be placed to match
       // where the sun actually is in the shot — which is the only thing that makes a light leak read as
       // light rather than as a sticker. The drift stays; only its ANCHOR moves.
@@ -6033,7 +6033,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * safe now because bb confines it: manufactured alpha inside the layer's own box cannot reach
      * the composite underneath. `bb` absent => the whole plate, so the adjustment-layer path at
      * applyPixelFx (which has no layer box, and whose bounds ARE the frame) is unchanged. */
-    letterbox: function(d,W,H,p,t,ps,bb){ var s=FM.evalProp(p.size,t); if(s==null)s=14; if(s<0)s=0; if(s>48)s=48;
+    letterbox: function(d,W,H,p,t,ps,bb){ var s = fparam(p, 'size', 14, t); if(s<0)s=0; if(s>48)s=48;
       var x0=bb?bb.x:0, y0=bb?bb.y:0, x1=bb?bb.x+bb.w:W, y1=bb?bb.y+bb.h:H, bh=y1-y0;
       // metric 0 = % of the LAYER's height (the per-layer reading every other effect uses), 1 = % of
       // the FRAME's height. Absent key => 1, so an instance saved before v6.35 keeps its bar
@@ -6042,7 +6042,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var bar=Math.round((met===1?H:bh)*s/100); if(bar<=0)return;
       var half=Math.floor(bh/2); if(bar>half)bar=half;   // frame-metric bars on a short layer would otherwise exceed it; never engages full-frame (s caps at 48% vs half at 50%)
       for(var y=y0;y<y1;y++){ if(y>=y0+bar && y<y1-bar) continue; var row=y*W*4; for(var x=x0;x<x1;x++){ var i=row+x*4; d[i]=0; d[i+1]=0; d[i+2]=0; if(d[i+3]<255)d[i+3]=255; } } },
-    border: function(d,W,H,p,t,ps,bb){ var w=FM.evalProp(p.width,t); if(w==null)w=10; w=Math.round(w*(ps||1)); if(w<1)w=1;
+    border: function(d,W,H,p,t,ps,bb){ var w = fparam(p, 'width', 10, t); w=Math.round(w*(ps||1)); if(w<1)w=1;
       // `width` does NOT change meaning: it is absolute project px (schema :396) already multiplied
       // by plateScale, and it stays that. Only the rectangle it hugs moved from the frame to the layer.
       var x0=bb?bb.x:0, y0=bb?bb.y:0, x1=bb?bb.x+bb.w:W, y1=bb?bb.y+bb.h:H;
@@ -6091,11 +6091,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Soft Glow: wide low-threshold bloom — bright-pass, separable box blur, screen-composite.
     // Same skeleton as lightglow but the pass threshold is 90 (not 153) and the radius scales with
     // frame size, so mid-tones haze softly instead of only hot highlights blooming.
-    softglow: function(d,W,H,p,t){ var sgA=FM.evalProp(p.amount,t); if(sgA==null)sgA=0.6; var sgThr=p.threshold==null?35:FM.evalProp(p.threshold,t); var sgThrV=sgThr===35?90:sgThr/100*255; sgA=sgA<0?0:(sgA>1?1:sgA); if(sgA<=0)return; var sgN=W*H, sgB=new Float32Array(sgN), sgT=new Float32Array(sgN), sgi, sg4; for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0){sgB[sgi]=0;continue;} var sgL=0.299*d[sg4]+0.587*d[sg4+1]+0.114*d[sg4+2]; sgB[sgi]=sgL>sgThrV?(sgL-sgThrV)*1.55:0; } var sgRad=p.radius==null?100:FM.evalProp(p.radius,t); var sgR=sgRad===100?Math.max(4,Math.round(Math.min(W,H)/40)):Math.max(1,Math.round(Math.min(W,H)/40*(sgRad/100))), sgWin=2*sgR+1, sgx, sgy, sgS, sgRow; for(sgy=0;sgy<H;sgy++){ sgRow=sgy*W; sgS=0; for(sgx=-sgR;sgx<=sgR;sgx++){ var sgc=sgx<0?0:(sgx>=W?W-1:sgx); sgS+=sgB[sgRow+sgc]; } for(sgx=0;sgx<W;sgx++){ sgT[sgRow+sgx]=sgS/sgWin; var sgAX=sgx+sgR+1; sgAX=sgAX>=W?W-1:sgAX; var sgBX=sgx-sgR; sgBX=sgBX<0?0:sgBX; sgS+=sgB[sgRow+sgAX]-sgB[sgRow+sgBX]; } } for(sgx=0;sgx<W;sgx++){ sgS=0; for(sgy=-sgR;sgy<=sgR;sgy++){ var sgcy=sgy<0?0:(sgy>=H?H-1:sgy); sgS+=sgT[sgcy*W+sgx]; } for(sgy=0;sgy<H;sgy++){ sgB[sgy*W+sgx]=sgS/sgWin; var sgAY=sgy+sgR+1; sgAY=sgAY>=H?H-1:sgAY; var sgBY=sgy-sgR; sgBY=sgBY<0?0:sgBY; sgS+=sgT[sgAY*W+sgx]-sgT[sgBY*W+sgx]; } } for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0)continue; var sgG=sgB[sgi]*sgA; if(sgG<=0)continue; if(sgG>255)sgG=255; var sgF=(255-sgG)/255; d[sg4]=255-(255-d[sg4])*sgF; d[sg4+1]=255-(255-d[sg4+1])*sgF; d[sg4+2]=255-(255-d[sg4+2])*sgF; } },
+    softglow: function(d,W,H,p,t){ var sgA = fparam(p, 'amount', 0.6, t); var sgThr=p.threshold==null?35:FM.evalProp(p.threshold,t); var sgThrV=sgThr===35?90:sgThr/100*255; sgA=sgA<0?0:(sgA>1?1:sgA); if(sgA<=0)return; var sgN=W*H, sgB=new Float32Array(sgN), sgT=new Float32Array(sgN), sgi, sg4; for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0){sgB[sgi]=0;continue;} var sgL=0.299*d[sg4]+0.587*d[sg4+1]+0.114*d[sg4+2]; sgB[sgi]=sgL>sgThrV?(sgL-sgThrV)*1.55:0; } var sgRad=p.radius==null?100:FM.evalProp(p.radius,t); var sgR=sgRad===100?Math.max(4,Math.round(Math.min(W,H)/40)):Math.max(1,Math.round(Math.min(W,H)/40*(sgRad/100))), sgWin=2*sgR+1, sgx, sgy, sgS, sgRow; for(sgy=0;sgy<H;sgy++){ sgRow=sgy*W; sgS=0; for(sgx=-sgR;sgx<=sgR;sgx++){ var sgc=sgx<0?0:(sgx>=W?W-1:sgx); sgS+=sgB[sgRow+sgc]; } for(sgx=0;sgx<W;sgx++){ sgT[sgRow+sgx]=sgS/sgWin; var sgAX=sgx+sgR+1; sgAX=sgAX>=W?W-1:sgAX; var sgBX=sgx-sgR; sgBX=sgBX<0?0:sgBX; sgS+=sgB[sgRow+sgAX]-sgB[sgRow+sgBX]; } } for(sgx=0;sgx<W;sgx++){ sgS=0; for(sgy=-sgR;sgy<=sgR;sgy++){ var sgcy=sgy<0?0:(sgy>=H?H-1:sgy); sgS+=sgT[sgcy*W+sgx]; } for(sgy=0;sgy<H;sgy++){ sgB[sgy*W+sgx]=sgS/sgWin; var sgAY=sgy+sgR+1; sgAY=sgAY>=H?H-1:sgAY; var sgBY=sgy-sgR; sgBY=sgBY<0?0:sgBY; sgS+=sgT[sgAY*W+sgx]-sgT[sgBY*W+sgx]; } } for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0)continue; var sgG=sgB[sgi]*sgA; if(sgG<=0)continue; if(sgG>255)sgG=255; var sgF=(255-sgG)/255; d[sg4]=255-(255-d[sg4])*sgF; d[sg4+1]=255-(255-d[sg4+1])*sgF; d[sg4+2]=255-(255-d[sg4+2])*sgF; } },
     // Replace Color: pixels whose hue sits within the tolerance window of the From colour get their hue
     // shifted to the To colour (sat/val kept), with a soft falloff to the window edge. Near-greys are
     // skipped — they carry no meaningful hue to replace.
-    replacecolor: function(d,W,H,p,t){ var rcTol=FM.evalProp(p.tolerance,t); if(rcTol==null)rcTol=0.25; rcTol=Math.max(0.02,Math.min(1,rcTol)); var rcF=hexToRGB(p.color)||[224,49,49], rcT=hexToRGB(p.color2)||[58,160,255]; function rcHue(r,g,b){ var mx=Math.max(r,g,b), mn=Math.min(r,g,b), df=mx-mn; if(df===0)return 0; var h; if(mx===r)h=((g-b)/df)%6; else if(mx===g)h=(b-r)/df+2; else h=(r-g)/df+4; h*=60; return h<0?h+360:h; } var rcFH=rcHue(rcF[0],rcF[1],rcF[2]), rcTH=rcHue(rcT[0],rcT[1],rcT[2]), rcSh=rcTH-rcFH;
+    replacecolor: function(d,W,H,p,t){ var rcTol = fparam(p, 'tolerance', 0.25, t); rcTol=Math.max(0.02,Math.min(1,rcTol)); var rcF=hexToRGB(p.color)||[224,49,49], rcT=hexToRGB(p.color2)||[58,160,255]; function rcHue(r,g,b){ var mx=Math.max(r,g,b), mn=Math.min(r,g,b), df=mx-mn; if(df===0)return 0; var h; if(mx===r)h=((g-b)/df)%6; else if(mx===g)h=(b-r)/df+2; else h=(r-g)/df+4; h*=60; return h<0?h+360:h; } var rcFH=rcHue(rcF[0],rcF[1],rcF[2]), rcTH=rcHue(rcT[0],rcT[1],rcT[2]), rcSh=rcTH-rcFH;
       // It only ever rotated HUE: saturation and value were rebuilt from the SOURCE pixel, so the To
       // colour's own character was thrown away and picking pale pink to replace a saturated red gave
       // a saturated pink. That is not replacing a colour. MODE 1 takes the target's saturation too;
@@ -6118,7 +6118,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var scDesat=p.desat==null?100:FM.evalProp(p.desat,t); if(scDesat<0)scDesat=0; if(scDesat>100)scDesat=100; scDesat=scDesat===100?1:scDesat/100;
       var scBoost=p.boost==null?100:FM.evalProp(p.boost,t); if(scBoost<0)scBoost=0; if(scBoost>300)scBoost=300; scBoost=scBoost===100?1:scBoost/100;
       var scInv=(p.invert==null?0:(Math.round(FM.evalProp(p.invert,t))|0))===1;
-      var scTol=FM.evalProp(p.tolerance,t); if(scTol==null)scTol=0.2; scTol=Math.max(0.02,Math.min(1,scTol)); var scK=hexToRGB(p.color)||[224,49,49]; var scKmx=Math.max(scK[0],scK[1],scK[2]), scKmn=Math.min(scK[0],scK[1],scK[2]), scKdf=scKmx-scKmn, scKH=0; if(scKdf>0){ if(scKmx===scK[0])scKH=((scK[1]-scK[2])/scKdf)%6; else if(scKmx===scK[1])scKH=(scK[2]-scK[0])/scKdf+2; else scKH=(scK[0]-scK[1])/scKdf+4; scKH*=60; if(scKH<0)scKH+=360; } var scWin=scTol*120; for(var sci=0;sci<d.length;sci+=4){ if(d[sci+3]===0)continue; var scR=d[sci], scG=d[sci+1], scB=d[sci+2]; var scMx=Math.max(scR,scG,scB), scMn=Math.min(scR,scG,scB), scDf=scMx-scMn; var scKeep=0; if(scDf>=8){ var scH; if(scMx===scR)scH=((scG-scB)/scDf)%6; else if(scMx===scG)scH=(scB-scR)/scDf+2; else scH=(scR-scG)/scDf+4; scH*=60; if(scH<0)scH+=360; var scD=Math.abs(scH-scKH); if(scD>180)scD=360-scD; if(scD<=scWin){ var scQ=scD/scWin; scKeep=1-scQ*scQ; } } var scL=0.299*scR+0.587*scG+0.114*scB;
+      var scTol = fparam(p, 'tolerance', 0.2, t); scTol=Math.max(0.02,Math.min(1,scTol)); var scK=hexToRGB(p.color)||[224,49,49]; var scKmx=Math.max(scK[0],scK[1],scK[2]), scKmn=Math.min(scK[0],scK[1],scK[2]), scKdf=scKmx-scKmn, scKH=0; if(scKdf>0){ if(scKmx===scK[0])scKH=((scK[1]-scK[2])/scKdf)%6; else if(scKmx===scK[1])scKH=(scK[2]-scK[0])/scKdf+2; else scKH=(scK[0]-scK[1])/scKdf+4; scKH*=60; if(scKH<0)scKH+=360; } var scWin=scTol*120; for(var sci=0;sci<d.length;sci+=4){ if(d[sci+3]===0)continue; var scR=d[sci], scG=d[sci+1], scB=d[sci+2]; var scMx=Math.max(scR,scG,scB), scMn=Math.min(scR,scG,scB), scDf=scMx-scMn; var scKeep=0; if(scDf>=8){ var scH; if(scMx===scR)scH=((scG-scB)/scDf)%6; else if(scMx===scG)scH=(scB-scR)/scDf+2; else scH=(scR-scG)/scDf+4; scH*=60; if(scH<0)scH+=360; var scD=Math.abs(scH-scKH); if(scD>180)scD=360-scD; if(scD<=scWin){ var scQ=scD/scWin; scKeep=1-scQ*scQ; } } var scL=0.299*scR+0.587*scG+0.114*scB;
         if(scInv) scKeep=1-scKeep;                       // Remove: grey the CHOSEN hue, keep the rest
         var scDs=(1-scKeep)*scDesat;
         var scNr=scR+(scL-scR)*scDs, scNg=scG+(scL-scG)*scDs, scNb=scB+(scL-scB)*scDs;
@@ -6139,7 +6139,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var fcBl=p.blend==null?0:(Math.round(FM.evalProp(p.blend,t))|0);
       var fcSp=p.spread==null?100:FM.evalProp(p.spread,t); if(fcSp<20)fcSp=20; if(fcSp>300)fcSp=300;
       var fcK=fcSp===100?1:fcSp/100;
-      var fcA=FM.evalProp(p.amount,t); if(fcA==null)fcA=0.85; fcA=fcA<0?0:(fcA>1?1:fcA); if(fcA<=0)return; var fc1=hexToRGB(p.color)||[255,61,127], fc2=hexToRGB(p.color2)||[255,184,108], fc3=hexToRGB(p.color3)||[41,217,187], fc4=hexToRGB(p.color4)||[61,123,255]; var fcIW=1/(W-1||1), fcIH=1/(H-1||1); for(var fcy=0;fcy<H;fcy++){ var fcv=fcy*fcIH; if(fcK!==1){ fcv=0.5+(fcv-0.5)*fcK; if(fcv<0)fcv=0; else if(fcv>1)fcv=1; } var fcRow=fcy*W; var fcL0=fc1[0]*(1-fcv)+fc3[0]*fcv, fcL1=fc1[1]*(1-fcv)+fc3[1]*fcv, fcL2=fc1[2]*(1-fcv)+fc3[2]*fcv; var fcR0=fc2[0]*(1-fcv)+fc4[0]*fcv, fcR1=fc2[1]*(1-fcv)+fc4[1]*fcv, fcR2=fc2[2]*(1-fcv)+fc4[2]*fcv; for(var fcx=0;fcx<W;fcx++){ var fci=(fcRow+fcx)*4; if(d[fci+3]===0)continue; var fcu=fcx*fcIW; if(fcK!==1){ fcu=0.5+(fcu-0.5)*fcK; if(fcu<0)fcu=0; else if(fcu>1)fcu=1; } var fcr=fcL0+(fcR0-fcL0)*fcu, fcg=fcL1+(fcR1-fcL1)*fcu, fcb=fcL2+(fcR2-fcL2)*fcu;
+      var fcA = fparam(p, 'amount', 0.85, t); fcA=fcA<0?0:(fcA>1?1:fcA); if(fcA<=0)return; var fc1=hexToRGB(p.color)||[255,61,127], fc2=hexToRGB(p.color2)||[255,184,108], fc3=hexToRGB(p.color3)||[41,217,187], fc4=hexToRGB(p.color4)||[61,123,255]; var fcIW=1/(W-1||1), fcIH=1/(H-1||1); for(var fcy=0;fcy<H;fcy++){ var fcv=fcy*fcIH; if(fcK!==1){ fcv=0.5+(fcv-0.5)*fcK; if(fcv<0)fcv=0; else if(fcv>1)fcv=1; } var fcRow=fcy*W; var fcL0=fc1[0]*(1-fcv)+fc3[0]*fcv, fcL1=fc1[1]*(1-fcv)+fc3[1]*fcv, fcL2=fc1[2]*(1-fcv)+fc3[2]*fcv; var fcR0=fc2[0]*(1-fcv)+fc4[0]*fcv, fcR1=fc2[1]*(1-fcv)+fc4[1]*fcv, fcR2=fc2[2]*(1-fcv)+fc4[2]*fcv; for(var fcx=0;fcx<W;fcx++){ var fci=(fcRow+fcx)*4; if(d[fci+3]===0)continue; var fcu=fcx*fcIW; if(fcK!==1){ fcu=0.5+(fcu-0.5)*fcK; if(fcu<0)fcu=0; else if(fcu>1)fcu=1; } var fcr=fcL0+(fcR0-fcL0)*fcu, fcg=fcL1+(fcR1-fcL1)*fcu, fcb=fcL2+(fcR2-fcL2)*fcu;
         if(fcBl){ var br=d[fci], bg=d[fci+1], bb=d[fci+2];
           if(fcBl===1){ fcr=255-(255-br)*(255-fcr)/255; fcg=255-(255-bg)*(255-fcg)/255; fcb=255-(255-bb)*(255-fcb)/255; }
           else if(fcBl===2){ fcr=br*fcr/255; fcg=bg*fcg/255; fcb=bb*fcb/255; }
@@ -6151,7 +6151,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         d[fci]=d[fci]+(fcr-d[fci])*fcA; d[fci+1]=d[fci+1]+(fcg-d[fci+1])*fcA; d[fci+2]=d[fci+2]+(fcb-d[fci+2])*fcA; } } },
     // Spectral Map: luminance → spectrum sweep (violet 260° for shadows through to red 0° for
     // highlights), full saturation, value lifted so shadows stay readable. False-colour look.
-    spectralmap: function(d,W,H,p,t){ var smA=FM.evalProp(p.amount,t); if(smA==null)smA=1; smA=smA<0?0:(smA>1?1:smA); if(smA<=0)return; var smSpan=p.span==null?260:FM.evalProp(p.span,t); var smOff=p.offset==null?0:FM.evalProp(p.offset,t); var smSatP=p.saturation==null?100:FM.evalProp(p.saturation,t); var smSat=smSatP===100?1:smSatP/100; for(var smi=0;smi<d.length;smi+=4){ if(d[smi+3]===0)continue; var smL=(0.299*d[smi]+0.587*d[smi+1]+0.114*d[smi+2])/255; var smH=(1-smL)*smSpan; if(smOff!==0){smH=(smH+smOff)%360; if(smH<0)smH+=360;} var smV=0.25+0.75*smL, smC=smSat===1?smV:smV*smSat, smX=smC*(1-Math.abs((smH/60)%2-1)), smR, smG, smB; if(smH<60){smR=smC;smG=smX;smB=0;} else if(smH<120){smR=smX;smG=smC;smB=0;} else if(smH<180){smR=0;smG=smC;smB=smX;} else if(smH<240){smR=0;smG=smX;smB=smC;} else if(smH<300){smR=smX;smG=0;smB=smC;} else {smR=smC;smG=0;smB=smX;} if(smSat!==1){var smM=smV-smC; smR+=smM; smG+=smM; smB+=smM;} smR*=255; smG*=255; smB*=255; d[smi]=d[smi]+(smR-d[smi])*smA; d[smi+1]=d[smi+1]+(smG-d[smi+1])*smA; d[smi+2]=d[smi+2]+(smB-d[smi+2])*smA; } },
+    spectralmap: function(d,W,H,p,t){ var smA = fparam(p, 'amount', 1, t); smA=smA<0?0:(smA>1?1:smA); if(smA<=0)return; var smSpan=p.span==null?260:FM.evalProp(p.span,t); var smOff=p.offset==null?0:FM.evalProp(p.offset,t); var smSatP=p.saturation==null?100:FM.evalProp(p.saturation,t); var smSat=smSatP===100?1:smSatP/100; for(var smi=0;smi<d.length;smi+=4){ if(d[smi+3]===0)continue; var smL=(0.299*d[smi]+0.587*d[smi+1]+0.114*d[smi+2])/255; var smH=(1-smL)*smSpan; if(smOff!==0){smH=(smH+smOff)%360; if(smH<0)smH+=360;} var smV=0.25+0.75*smL, smC=smSat===1?smV:smV*smSat, smX=smC*(1-Math.abs((smH/60)%2-1)), smR, smG, smB; if(smH<60){smR=smC;smG=smX;smB=0;} else if(smH<120){smR=smX;smG=smC;smB=0;} else if(smH<180){smR=0;smG=smC;smB=smX;} else if(smH<240){smR=0;smG=smX;smB=smC;} else if(smH<300){smR=smX;smG=0;smB=smC;} else {smR=smC;smG=0;smB=smX;} if(smSat!==1){var smM=smV-smC; smR+=smM; smG+=smM; smB+=smM;} smR*=255; smG*=255; smB*=255; d[smi]=d[smi]+(smR-d[smi])*smA; d[smi+1]=d[smi+1]+(smG-d[smi+1])*smA; d[smi+2]=d[smi+2]+(smB-d[smi+2])*smA; } },
     // Radial Shadow: point-light shadow — each transparent pixel marches a few taps back toward the
     // light; if opaque content sits between it and the light, it's in shadow. Strength fades with tap
     // distance so the shadow softens as it throws further. Paints only transparent px (like longshadow).
@@ -6169,7 +6169,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          transparent (`if(rsS[rsi+3]>0) continue`), so it can never touch the layer itself; and since
          v14.84 the incoming box is exact at `alpha > 0`, so no faint caster is missed. A caster at
          alpha 3 throws a FULL-STRENGTH shadow here — the old `alpha > 8` box would have dropped it. */
-      var rsR=FM.evalProp(p.reach,t); if(rsR==null)rsR=40; rsR=Math.max(0,Math.min(100,rsR)); if(rsR<=0)return; var rsX=FM.evalProp(p.x,t); if(rsX==null)rsX=50; var rsY=FM.evalProp(p.y,t); if(rsY==null)rsY=35; var rsLx=W*rsX/100, rsLy=H*rsY/100, rsC=hexToRGB(p.color)||[0,0,0]; var rsS=fxSrc(d), rsTaps=10, rsK=rsR/100*0.9;
+      var rsR = fparam(p, 'reach', 40, t); rsR=Math.max(0,Math.min(100,rsR)); if(rsR<=0)return; var rsX = fparam(p, 'x', 50, t); var rsY = fparam(p, 'y', 35, t); var rsLx=W*rsX/100, rsLy=H*rsY/100, rsC=hexToRGB(p.color)||[0,0,0]; var rsS=fxSrc(d), rsTaps=10, rsK=rsR/100*0.9;
       var rsY0=0, rsY1=H-1, rsX0=0, rsX1=W-1;
       if(rsBB && isFinite(rsLx) && isFinite(rsLy) && isFinite(rsK)){
         var rsSmax=1+rsK, rsBx0=rsBB.x, rsBy0=rsBB.y, rsBx1=rsBB.x+rsBB.w-1, rsBy1=rsBB.y+rsBB.h-1;
@@ -6192,7 +6192,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Voronoi Cells: stained-glass mosaic — jittered-grid seeds (hash-based, deterministic so preview
     // and export match), each pixel takes its nearest seed's colour; near-equidistant borders darken by
     // Edge. O(9) neighbour checks per pixel, no seed list scan.
-    voronoi: function(d,W,H,p,t){ var vcN=Math.round(FM.evalProp(p.cells,t)||16); if(vcN<4)vcN=4; if(vcN>48)vcN=48; var vcE=FM.evalProp(p.edge,t); if(vcE==null)vcE=0.35; vcE=vcE<0?0:(vcE>1?1:vcE); var vcG=Math.max(6,W/vcN), vcS=fxSrc(d); function vcH(ix,iy,k){ var n=Math.sin(ix*127.1+iy*311.7+k*74.7)*43758.5453; return n-Math.floor(n); }
+    voronoi: function(d,W,H,p,t){ var vcN=Math.round(FM.evalProp(p.cells,t)||16); if(vcN<4)vcN=4; if(vcN>48)vcN=48; var vcE = fparam(p, 'edge', 0.35, t); vcE=vcE<0?0:(vcE>1?1:vcE); var vcG=Math.max(6,W/vcN), vcS=fxSrc(d); function vcH(ix,iy,k){ var n=Math.sin(ix*127.1+iy*311.7+k*74.7)*43758.5453; return n-Math.floor(n); }
       /* MOTION (queue 350). Ezra: "Voronoi cells needs the ability to make them move, and I want it to
          actually move in a cool way and not just a drag it up and down, like they're alive."
          "Not just a drag it up and down" rules out the cheap answer — scrolling the whole field, which
@@ -6285,11 +6285,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Vignette (non-media layers): comp-space radial darkening of the layer's own pixels. Media layers
     // never reach this — they keep their inline clip-bounds vignette in the media draw branch; this fn
     // exists so text/shape/path/group layers stop silently ignoring the effect. (#backlog: vignette no-op)
-    vignette: function(d,W,H,p,t){ var vgA=FM.evalProp(p.amount,t); if(vgA==null)vgA=0.6; vgA=vgA<0?0:(vgA>1?1:vgA); if(vgA<=0)return; var vgCx=W/2, vgCy=H/2, vgMr=Math.hypot(vgCx,vgCy); var vgSz=p.size==null?35:FM.evalProp(p.size,t); var vgIn=vgSz===35?0.35:Math.max(0,Math.min(0.98,vgSz/100)), vgSpan=vgIn===0.35?0.65:(1-vgIn); for(var vgy=0;vgy<H;vgy++){ var vgRow=vgy*W, vgDy=vgy-vgCy; for(var vgx=0;vgx<W;vgx++){ var vgi=(vgRow+vgx)*4; if(d[vgi+3]===0)continue; var vgR=Math.hypot(vgx-vgCx,vgDy)/vgMr, vgQ=(vgR-vgIn)/vgSpan; if(vgQ<=0)continue; var vgF=1-vgA*Math.pow(vgQ,1.6); if(vgF<0)vgF=0; d[vgi]*=vgF; d[vgi+1]*=vgF; d[vgi+2]*=vgF; } } },
+    vignette: function(d,W,H,p,t){ var vgA = fparam(p, 'amount', 0.6, t); vgA=vgA<0?0:(vgA>1?1:vgA); if(vgA<=0)return; var vgCx=W/2, vgCy=H/2, vgMr=Math.hypot(vgCx,vgCy); var vgSz=p.size==null?35:FM.evalProp(p.size,t); var vgIn=vgSz===35?0.35:Math.max(0,Math.min(0.98,vgSz/100)), vgSpan=vgIn===0.35?0.65:(1-vgIn); for(var vgy=0;vgy<H;vgy++){ var vgRow=vgy*W, vgDy=vgy-vgCy; for(var vgx=0;vgx<W;vgx++){ var vgi=(vgRow+vgx)*4; if(d[vgi+3]===0)continue; var vgR=Math.hypot(vgx-vgCx,vgDy)/vgMr, vgQ=(vgR-vgIn)/vgSpan; if(vgQ<=0)continue; var vgF=1-vgA*Math.pow(vgQ,1.6); if(vgF<0)vgF=0; d[vgi]*=vgF; d[vgi+1]*=vgF; d[vgi+2]*=vgF; } } },
     // ---- batch 28 (AM parity fill-ins) ----
     // Palette Map: quantize every pixel to the nearest of a small evenly-spaced palette (posterize in
     // 3D RGB space → banded, screen-print look). Count = palette steps per axis; Amount blends toward it.
-    palettemap: function(d,W,H,p,t){ var pm_c=FM.evalProp(p.count,t); if(pm_c==null)pm_c=4; pm_c=Math.round(pm_c); if(pm_c<2)pm_c=2; if(pm_c>8)pm_c=8; var pm_amt=FM.evalProp(p.amount,t); if(pm_amt==null)pm_amt=1; if(pm_amt<0)pm_amt=0; if(pm_amt>1)pm_amt=1; if(pm_amt<=0)return; var pm_step=255/(pm_c-1); for(var pm_i=0;pm_i<d.length;pm_i+=4){ if(d[pm_i+3]===0)continue; var pm_nr=Math.round(d[pm_i]/pm_step)*pm_step, pm_ng=Math.round(d[pm_i+1]/pm_step)*pm_step, pm_nb=Math.round(d[pm_i+2]/pm_step)*pm_step; d[pm_i]+=(pm_nr-d[pm_i])*pm_amt; d[pm_i+1]+=(pm_ng-d[pm_i+1])*pm_amt; d[pm_i+2]+=(pm_nb-d[pm_i+2])*pm_amt; } },
+    palettemap: function(d,W,H,p,t){ var pm_c = fparam(p, 'count', 4, t); pm_c=Math.round(pm_c); if(pm_c<2)pm_c=2; if(pm_c>8)pm_c=8; var pm_amt = fparam(p, 'amount', 1, t); if(pm_amt<0)pm_amt=0; if(pm_amt>1)pm_amt=1; if(pm_amt<=0)return; var pm_step=255/(pm_c-1); for(var pm_i=0;pm_i<d.length;pm_i+=4){ if(d[pm_i+3]===0)continue; var pm_nr=Math.round(d[pm_i]/pm_step)*pm_step, pm_ng=Math.round(d[pm_i+1]/pm_step)*pm_step, pm_nb=Math.round(d[pm_i+2]/pm_step)*pm_step; d[pm_i]+=(pm_nr-d[pm_i])*pm_amt; d[pm_i+1]+=(pm_ng-d[pm_i+1])*pm_amt; d[pm_i+2]+=(pm_nb-d[pm_i+2])*pm_amt; } },
     // Lightning: procedural bolts — a few jagged vertical paths (deterministic sine-hash jitter, phase
     // driven by t so they flicker), each drawn as an additive glow that fades with distance. Screen-
     // composited over the content in the bolt colour. Count/Intensity params; no random (export-safe).
@@ -6308,9 +6308,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * The params are untouched on purpose: Bolts, Intensity and Colour still mean what they meant, so
      * an existing project keeps its settings and just looks better. */
     lightning: function (d, W, H, p, t) {
-      let n = FM.evalProp(p.count, t); if (n == null) n = 3;
+      let n = fparam(p, 'count', 3, t);
       n = Math.max(1, Math.min(8, Math.round(n)));
-      let intensity = FM.evalProp(p.intensity, t); if (intensity == null) intensity = 0.8;
+      let intensity = fparam(p, 'intensity', 0.8, t);
       intensity = Math.max(0, Math.min(1, intensity));
       if (intensity <= 0) return;
       /* `v == null` FIRST, before evalProp — which is the idiom the rest of this file uses (`p.lift==null
@@ -6422,7 +6422,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       }
     },
     // ---- batch 21 ----
-    faded: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.6; if(a<0)a=0; if(a>1)a=1;
+    faded: function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.6, t); if(a<0)a=0; if(a>1)a=1;
       // ONE slider drove the black lift, the contrast crush, the desaturation AND the warm cast at
       // once, so milky blacks with the colour intact was unreachable and so was a COOL faded look.
       // TONE going negative is what gives the cool one — the cast offsets simply flip sign.
@@ -6435,7 +6435,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var L=r*0.299+g*0.587+b*0.114; var cr=ch(r), cg=ch(g), cb=ch(b);
         var nr=cr+(L-cr)*ds*a+8*a*tk, ng=cg+(L-cg)*ds*a+2*a*tk, nb=cb+(L-cb)*ds*a-6*a*tk;
         d[i]=nr<0?0:(nr>255?255:nr); d[i+1]=ng<0?0:(ng>255?255:ng); d[i+2]=nb<0?0:(nb>255?255:nb); } },
-    nightvision: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.85; if(a<0)a=0; if(a>1)a=1; var fr=(t*30)|0;
+    nightvision: function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.85, t); if(a<0)a=0; if(a>1)a=1; var fr=(t*30)|0;
       /* The tint was hardcoded green and the sensor noise a fixed +-30, so every night-vision shot was
          the same green with the same grain — amber, white-hot and thermal-scope looks were all out of
          reach. GAIN is the intensifier's brightness, which is the other half of the look. */
@@ -6446,7 +6446,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       else if(nvC===3){ nvT0=0.35; nvT1=0.75; nvT2=1; }                 // blue scope
       var nvNoise=p.noise==null?60:FM.evalProp(p.noise,t); if(nvNoise<0)nvNoise=0; if(nvNoise>150)nvNoise=150;
       var nvGain=p.gain==null?1.3:FM.evalProp(p.gain,t); if(nvGain<0.5)nvGain=0.5; if(nvGain>3)nvGain=3; for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var px=i>>2, y=(px/W)|0; var L=d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114; L=L*nvGain+30; var h=(px*374761393+fr*668265263)|0; h=(h^(h>>13))*1274126177; h=(h^(h>>16)); L+=((h&255)/255-0.5)*nvNoise; if(y%3===0)L*=0.7; if(L<0)L=0; if(L>255)L=255; var gr=L*nvT0, gg=L*nvT1, gb=L*nvT2; d[i]=d[i]+(gr-d[i])*a; d[i+1]=d[i+1]+(gg-d[i+1])*a; d[i+2]=d[i+2]+(gb-d[i+2])*a; } },
-    sketch: function(d,W,H,p,t){ var a=FM.evalProp(p.amount,t); if(a==null)a=0.85; if(a<0)a=0; if(a>1)a=1; var s=d.slice();
+    sketch: function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.85, t); if(a<0)a=0; if(a>1)a=1; var s=d.slice();
       // Amount could only fade the whole drawing back toward the photo. DARKNESS was a hardcoded x510
       // gain, so the strokes could not be made bolder or lighter. THRESHOLD clears the grey mud that a
       // Sobel leaves across smooth areas — every gentle gradient produced a faint smear, and there was
@@ -7917,8 +7917,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Mode 0 is Rect→Polar (what this always did). Mode 1 is the INVERSE, which was simply missing —
     // it unwraps a circular image into a straight strip (a clock face into a timeline, a tunnel into
     // a wall). Half the effect had no way to be reached.
-    polarcoords: function(x,y,W,H,cx,cy,maxR,p,t){ var plAmt=FM.evalProp(p.amount,t); if(plAmt==null)plAmt=1; if(plAmt<0)plAmt=0; if(plAmt>1)plAmt=1; var plMode=p.mode==null?0:(Math.round(FM.evalProp(p.mode,t))|0); var plSx, plSy; if(plMode===1){ var plDx=x-cx, plDy=y-cy; var plA=Math.atan2(plDy,plDx); if(plA<0)plA+=Math.PI*2; plSx=(plA/(Math.PI*2))*W; plSy=(Math.sqrt(plDx*plDx+plDy*plDy)/maxR)*H; } else { var plAng=(x/W)*Math.PI*2, plRad=(y/H)*maxR; plSx=cx+Math.cos(plAng)*plRad; plSy=cy+Math.sin(plAng)*plRad; } return [x+(plSx-x)*plAmt, y+(plSy-y)*plAmt]; },
-    bend: function(x,y,W,H,cx,cy,maxR,p,t){ var bdAmt=FM.evalProp(p.amount,t); if(bdAmt==null)bdAmt=0.5; if(bdAmt>1)bdAmt=1; if(bdAmt<-1)bdAmt=-1;
+    polarcoords: function(x,y,W,H,cx,cy,maxR,p,t){ var plAmt = fparam(p, 'amount', 1, t); if(plAmt<0)plAmt=0; if(plAmt>1)plAmt=1; var plMode=p.mode==null?0:(Math.round(FM.evalProp(p.mode,t))|0); var plSx, plSy; if(plMode===1){ var plDx=x-cx, plDy=y-cy; var plA=Math.atan2(plDy,plDx); if(plA<0)plA+=Math.PI*2; plSx=(plA/(Math.PI*2))*W; plSy=(Math.sqrt(plDx*plDx+plDy*plDy)/maxR)*H; } else { var plAng=(x/W)*Math.PI*2, plRad=(y/H)*maxR; plSx=cx+Math.cos(plAng)*plRad; plSy=cy+Math.sin(plAng)*plRad; } return [x+(plSx-x)*plAmt, y+(plSy-y)*plAmt]; },
+    bend: function(x,y,W,H,cx,cy,maxR,p,t){ var bdAmt = fparam(p, 'amount', 0.5, t); if(bdAmt>1)bdAmt=1; if(bdAmt<-1)bdAmt=-1;
       // It only bowed left/right, and the arc always peaked at the vertical midpoint — so bending a
       // banner up or down, or moving where the bow happens, were both impossible. POSITION remaps the
       // sine's input so the peak lands where asked: below the peak the input is stretched to reach 0.5
@@ -7931,7 +7931,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         bdF=bdU<bp?(bdU/bp)*0.5:0.5+((bdU-bp)/(1-bp))*0.5; }
       var bdShift=bdAmt*(bdAx===1?cy:cx)*Math.sin(bdF*Math.PI);
       return bdAx===1?[x,y-bdShift]:[x-bdShift,y]; },
-    glass: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var gam=FM.evalProp(p.amount,t); if(gam==null)gam=12; gam=gam<0?0:(gam>40?40:gam); gam*=(ps||1); /* px displacement — see the note on wave */
+    glass: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var gam = fparam(p, 'amount', 12, t); gam=gam<0?0:(gam>40?40:gam); gam*=(ps||1); /* px displacement — see the note on wave */
       // The jitter was regenerated per INDIVIDUAL PIXEL, which is the one setting at which this reads
       // as TV static rather than as glass: real glass distorts in facets, and a facet is several pixels
       // across. SCALE hashes on a cell so the displacement is shared across one. AXIS gives the
@@ -7983,7 +7983,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if(C.det>1){ fwNx+=Math.sin(x*C.i29-y*C.i53+C.ph17)*0.6; fwNy+=Math.sin(x*C.i35+y*C.i27+C.ph17)*0.6; }
       if(C.det>2){ fwNx+=Math.sin(x*C.i15+y*C.i19+C.ph29)*0.35; fwNy+=Math.cos(x*C.i13-y*C.i21+C.ph29)*0.35; }
       return [x+fwNx*C.amt04, y+fwNy*C.amt04]; },
-    _fractalwarpLegacy: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var fwK=ps||1; var fwAmt=FM.evalProp(p.amount,t); if(fwAmt==null)fwAmt=24; if(fwAmt<0)fwAmt=0; if(fwAmt>60)fwAmt=60; fwAmt*=fwK;
+    _fractalwarpLegacy: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var fwK=ps||1; var fwAmt = fparam(p, 'amount', 24, t); if(fwAmt<0)fwAmt=0; if(fwAmt>60)fwAmt=60; fwAmt*=fwK;
       // The frequency DIVISORS are wavelengths in px too, so they scale with the plate as well —
       // scaling only the amplitude would keep the displacement right and shrink the pattern.
       // The field never MOVED, which is the one thing a fractal warp is for — organic boiling churn.
@@ -8006,7 +8006,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var tnDx=x-C.cx, tnDy=y-C.cy, tnR=Math.hypot(tnDx,tnDy); if(tnR<1e-4)return [x,y];
       var tnRR=tnR*C.ia+(C.rad2/tnR)*C.a;
       return [C.cx+tnDx/tnR*tnRR, C.cy+tnDy/tnR*tnRR]; },
-    _tunnelLegacy: function(x,y,W,H,cx,cy,maxR,p,t){ var tnA=FM.evalProp(p.amount,t); if(tnA==null)tnA=0.5; if(tnA<0)tnA=0; if(tnA>1)tnA=1; if(tnA<=0)return [x,y];
+    _tunnelLegacy: function(x,y,W,H,cx,cy,maxR,p,t){ var tnA = fparam(p, 'amount', 0.5, t); if(tnA<0)tnA=0; if(tnA>1)tnA=1; if(tnA<=0)return [x,y];
       // The inversion radius was hardcoded at 30% of the frame and the mouth locked to frame centre,
       // so the tunnel could be neither resized nor aimed at anything in the shot.
       var tnCx=wCx(p,t,W,cx), tnCy=wCy(p,t,H,cy);
@@ -8091,7 +8091,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if(rr_tw!==0&&maxR>0) rr_a2+=rr_tw*Math.PI/180*(rr_r/maxR);
       if(rr_rr!==0) rr_a2+=rr_rr;
       return [cx+Math.cos(rr_a2)*rr_r, cy+Math.sin(rr_a2)*rr_r]; },
-    mirrortile: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var mt_size=FM.evalProp(p.size,t); if(mt_size==null) mt_size=140; mt_size*=(ps||1); if(mt_size<1) mt_size=1;
+    mirrortile: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var mt_size = fparam(p, 'size', 140, t); mt_size*=(ps||1); if(mt_size<1) mt_size=1;
       // The reflection lines were welded to the frame's top-left corner and it always folded on BOTH
       // axes — but where the mirror line falls IS the composition of a mirror effect, and there was no
       // way to move it. OFFSET slides the seams; AXIS picks which of them fold at all (the other one
@@ -8171,8 +8171,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
               +b3*(DY[r3]*a0+DY[r3+1]*a1+DY[r3+2]*a2+DY[r3+3]*a3);
         return [x+dx, y+dy];
       }
-      var td_a=FM.evalProp(p.amount,t); if(td_a==null)td_a=30; if(td_a<0)td_a=0; if(td_a>80)td_a=80; if(td_a<=0)return [x,y];
-      var td_sc=FM.evalProp(p.scale,t); if(td_sc==null)td_sc=60; if(td_sc<10)td_sc=10;
+      var td_a = fparam(p, 'amount', 30, t); if(td_a<0)td_a=0; if(td_a>80)td_a=80; if(td_a<=0)return [x,y];
+      var td_sc = fparam(p, 'scale', 60, t); if(td_sc<10)td_sc=10;
       td_a*=(ps||1); td_sc=Math.max(1,td_sc*(ps||1));
       var td_ph=t*0.6;
       var td_wx=td_noise(x/td_sc+td_ph, y/td_sc), td_wy=td_noise(x/td_sc, y/td_sc-td_ph*0.8);
@@ -8182,13 +8182,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Stretch Segment: grab a horizontal band and pull it vertically — content inside the band is
     // sampled from a THINNER source band (compress in → stretch out), feathered at the edges so it
     // blends. y/height are % of frame. Outside the band = identity.
-    stretchseg: function(x,y,W,H,cx,cy,maxR,p,t){ var ss_y=FM.evalProp(p.y,t); if(ss_y==null)ss_y=50; var ss_h=FM.evalProp(p.height,t); if(ss_h==null)ss_h=25; var ss_amt=FM.evalProp(p.amount,t); if(ss_amt==null)ss_amt=0.6; if(ss_amt<0)ss_amt=0; if(ss_amt>0.95)ss_amt=0.95; var ss_cy=H*ss_y/100, ss_half=H*ss_h/200; if(ss_half<1)return [x,y]; var ss_d=y-ss_cy; if(ss_d<-ss_half||ss_d>ss_half)return [x,y]; var ss_f=1-ss_amt; var ss_sy=ss_cy+ss_d*ss_f; return [x, ss_sy]; },
+    stretchseg: function(x,y,W,H,cx,cy,maxR,p,t){ var ss_y = fparam(p, 'y', 50, t); var ss_h = fparam(p, 'height', 25, t); var ss_amt = fparam(p, 'amount', 0.6, t); if(ss_amt<0)ss_amt=0; if(ss_amt>0.95)ss_amt=0.95; var ss_cy=H*ss_y/100, ss_half=H*ss_h/200; if(ss_half<1)return [x,y]; var ss_d=y-ss_cy; if(ss_d<-ss_half||ss_d>ss_half)return [x,y]; var ss_f=1-ss_amt; var ss_sy=ss_cy+ss_d*ss_f; return [x, ss_sy]; },
     // Tile Shift: chop into square tiles, offset alternate ROWS sideways (and alt columns down) by a
     // fraction of the tile — the classic sliced/glitch-tile displacement. Samples wrap via the source.
-    tileshift: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var ts_sz=FM.evalProp(p.size,t); if(ts_sz==null)ts_sz=120; if(ts_sz<8)ts_sz=8; ts_sz=Math.max(2,ts_sz*(ps||1)); /* tile size is px; the offset is a FRACTION of it, so it rides along */ var ts_off=FM.evalProp(p.amount,t); if(ts_off==null)ts_off=0.5; var ts_row=Math.floor(y/ts_sz), ts_col=Math.floor(x/ts_sz); var ts_sx=x+((ts_row&1)?ts_off*ts_sz:0); var ts_sy=y+((ts_col&1)?ts_off*ts_sz:0); ts_sx=((ts_sx%W)+W)%W; ts_sy=((ts_sy%H)+H)%H; return [ts_sx,ts_sy]; },
+    tileshift: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var ts_sz = fparam(p, 'size', 120, t); if(ts_sz<8)ts_sz=8; ts_sz=Math.max(2,ts_sz*(ps||1)); /* tile size is px; the offset is a FRACTION of it, so it rides along */ var ts_off = fparam(p, 'amount', 0.5, t); var ts_row=Math.floor(y/ts_sz), ts_col=Math.floor(x/ts_sz); var ts_sx=x+((ts_row&1)?ts_off*ts_sz:0); var ts_sy=y+((ts_col&1)?ts_off*ts_sz:0); ts_sx=((ts_sx%W)+W)%W; ts_sy=((ts_sy%H)+H)%H; return [ts_sx,ts_sy]; },
     // Tile Rotate: chop into tiles, spin each tile's CONTENT about its own centre by Angle (× a subtle
     // per-tile checker sign so neighbours counter-rotate — reads as a woven/pinwheel tile look).
-    tilerotate: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var tr_sz=FM.evalProp(p.size,t); if(tr_sz==null)tr_sz=120; if(tr_sz<8)tr_sz=8; tr_sz=Math.max(2,tr_sz*(ps||1)); var tr_ang=FM.evalProp(p.angle,t); if(tr_ang==null)tr_ang=45; var tr_ix=Math.floor(x/tr_sz), tr_iy=Math.floor(y/tr_sz); var tr_ccx=tr_ix*tr_sz+tr_sz/2, tr_ccy=tr_iy*tr_sz+tr_sz/2; var tr_sign=((tr_ix+tr_iy)&1)?-1:1; var tr_a=tr_ang*Math.PI/180*tr_sign; var tr_dx=x-tr_ccx, tr_dy=y-tr_ccy; var tr_cs=Math.cos(tr_a), tr_sn=Math.sin(tr_a); return [tr_ccx+tr_dx*tr_cs-tr_dy*tr_sn, tr_ccy+tr_dx*tr_sn+tr_dy*tr_cs]; },
+    tilerotate: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var tr_sz = fparam(p, 'size', 120, t); if(tr_sz<8)tr_sz=8; tr_sz=Math.max(2,tr_sz*(ps||1)); var tr_ang = fparam(p, 'angle', 45, t); var tr_ix=Math.floor(x/tr_sz), tr_iy=Math.floor(y/tr_sz); var tr_ccx=tr_ix*tr_sz+tr_sz/2, tr_ccy=tr_iy*tr_sz+tr_sz/2; var tr_sign=((tr_ix+tr_iy)&1)?-1:1; var tr_a=tr_ang*Math.PI/180*tr_sign; var tr_dx=x-tr_ccx, tr_dy=y-tr_ccy; var tr_cs=Math.cos(tr_a), tr_sn=Math.sin(tr_a); return [tr_ccx+tr_dx*tr_cs-tr_dy*tr_sn, tr_ccy+tr_dx*tr_sn+tr_dy*tr_cs]; },
     /* WRAP SHIFT (queue 484 clause 2 — Alight Motion calls it Offset, and he asked for their gaps
        filled "but change the names"). Slide the picture and let whatever leaves one edge come back in
        the other, so a keyframed 0→100% is a seamless loop.
@@ -8261,7 +8261,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * tunnel 21.0, measured at half resolution by `tools/_phoneprobe.py --sweep`). */
   WARP_FX.curl.prep = function (W, H, cx, cy, maxR, p, t, ps) {
     var ccx = wCx(p, t, W, cx), ccy = wCy(p, t, H, cy);
-    var amt = FM.evalProp(p.amount, t); if (amt == null) amt = 0.5; if (amt < -1) amt = -1; if (amt > 1) amt = 1;
+    var amt = fparam(p, 'amount', 0.5, t); if (amt < -1) amt = -1; if (amt > 1) amt = 1;
     var wl = Math.max(1, (p.wavelength == null ? 40 : Math.max(1, FM.evalProp(p.wavelength, t))) * (ps || 1));
     var ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
     return { cx: ccx, cy: ccy, amt: amt, wl: wl, iwl: 1 / wl, ph: ph };
@@ -8437,7 +8437,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      on the tiles an offset creates. */
   WARP_FX.mirrortile.glslPrep = function (W, H, cx, cy, maxR, p, t, ps) {
     var k = ps || 1;
-    var size = FM.evalProp(p.size, t); if (size == null) size = 140; size *= k; if (size < 1) size = 1;
+    var size = fparam(p, 'size', 140, t); size *= k; if (size < 1) size = 1;
     var ox = p.offsetx == null ? 0 : FM.evalProp(p.offsetx, t);
     var oy = p.offsety == null ? 0 : FM.evalProp(p.offsety, t);
     var ax = p.axis == null ? 0 : (Math.round(FM.evalProp(p.axis, t)) | 0);
@@ -8456,7 +8456,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      JavaScript's atan2 and GLSL's atan(y,x) share the same (-PI, PI] range, so the `if (a < 0) a += 2PI`
      transcribes directly rather than needing GLSL's mod. */
   WARP_FX.polarcoords.glslPrep = function (W, H, cx, cy, maxR, p, t, ps) {
-    var amt = FM.evalProp(p.amount, t); if (amt == null) amt = 1; if (amt < 0) amt = 0; if (amt > 1) amt = 1;
+    var amt = fparam(p, 'amount', 1, t); if (amt < 0) amt = 0; if (amt > 1) amt = 1;
     return { amt: amt, mode: p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0) };
   };
   WARP_FX.polarcoords.glsl = [
@@ -8478,7 +8478,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      needed here, but note that a uniform called `half` WOULD have been a GLSL reserved word — which is
      the whole reason gl-warp.js prefixes every one of them. The bow's amplitude is the raw cx or cy. */
   WARP_FX.bend.glslPrep = function (W, H, cx, cy, maxR, p, t, ps) {
-    var amt = FM.evalProp(p.amount, t); if (amt == null) amt = 0.5; if (amt > 1) amt = 1; if (amt < -1) amt = -1;
+    var amt = fparam(p, 'amount', 0.5, t); if (amt > 1) amt = 1; if (amt < -1) amt = -1;
     var pos = p.position == null ? 50 : FM.evalProp(p.position, t); if (pos < 0) pos = 0; if (pos > 100) pos = 100;
     return { amt: amt, ax: p.axis == null ? 0 : (Math.round(FM.evalProp(p.axis, t)) | 0), pos: pos };
   };
@@ -8497,9 +8497,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      ⚠️ `half` is a GLSL RESERVED WORD; it only works here because gl-warp.js turns every prep key into
      `u_<key>`. Without that prefix this kernel would simply refuse to compile. */
   WARP_FX.stretchseg.glslPrep = function (W, H, cx, cy, maxR, p, t, ps) {
-    var yy = FM.evalProp(p.y, t); if (yy == null) yy = 50;
-    var hh = FM.evalProp(p.height, t); if (hh == null) hh = 25;
-    var amt = FM.evalProp(p.amount, t); if (amt == null) amt = 0.6; if (amt < 0) amt = 0; if (amt > 0.95) amt = 0.95;
+    var yy = fparam(p, 'y', 50, t);
+    var hh = fparam(p, 'height', 25, t);
+    var amt = fparam(p, 'amount', 0.6, t); if (amt < 0) amt = 0; if (amt > 0.95) amt = 0.95;
     return { cyy: H * yy / 100, half: H * hh / 200, f: 1 - amt };
   };
   WARP_FX.stretchseg.glsl = [
@@ -8514,9 +8514,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      never negative here (the offset is added), and GLSL's mod is floor-based anyway, so the double mod
      is kept verbatim rather than simplified — it costs nothing and it matches line for line. */
   WARP_FX.tileshift.glslPrep = function (W, H, cx, cy, maxR, p, t, ps) {
-    var sz = FM.evalProp(p.size, t); if (sz == null) sz = 120; if (sz < 8) sz = 8;
+    var sz = fparam(p, 'size', 120, t); if (sz < 8) sz = 8;
     sz = Math.max(2, sz * (ps || 1));
-    var off = FM.evalProp(p.amount, t); if (off == null) off = 0.5;
+    var off = fparam(p, 'amount', 0.5, t);
     return { sz: sz, off: off };
   };
   WARP_FX.tileshift.glsl = [
@@ -8590,9 +8590,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   /* TILE ROTATE — chop into tiles and spin each tile's content about its own centre, with alternate
      tiles counter-rotating so it reads as a weave rather than a uniform turn. */
   WARP_FX.tilerotate.glslPrep = function (W, H, cx, cy, maxR, p, t, ps) {
-    var sz = FM.evalProp(p.size, t); if (sz == null) sz = 120; if (sz < 8) sz = 8;
+    var sz = fparam(p, 'size', 120, t); if (sz < 8) sz = 8;
     sz = Math.max(2, sz * (ps || 1));
-    var ang = FM.evalProp(p.angle, t); if (ang == null) ang = 45;
+    var ang = fparam(p, 'angle', 45, t);
     return { sz: sz, ang: ang };
   };
   WARP_FX.tilerotate.glsl = [
@@ -8622,7 +8622,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
 
   WARP_FX.fractalwarp.prep = function (W, H, cx, cy, maxR, p, t, ps) {
     var fwK = ps || 1;
-    var fwAmt = FM.evalProp(p.amount, t); if (fwAmt == null) fwAmt = 24; if (fwAmt < 0) fwAmt = 0; if (fwAmt > 60) fwAmt = 60; fwAmt *= fwK;
+    var fwAmt = fparam(p, 'amount', 24, t); if (fwAmt < 0) fwAmt = 0; if (fwAmt > 60) fwAmt = 60; fwAmt *= fwK;
     var fwEv = p.evolve == null ? 0 : FM.evalProp(p.evolve, t); if (fwEv < 0) fwEv = 0; if (fwEv > 5) fwEv = 5;
     var fwScP = p.scale == null ? 100 : FM.evalProp(p.scale, t); if (fwScP < 20) fwScP = 20; if (fwScP > 400) fwScP = 400;
     var fwDet = p.detail == null ? 3 : Math.round(FM.evalProp(p.detail, t)); if (fwDet < 1) fwDet = 1; if (fwDet > 3) fwDet = 3;
@@ -8635,7 +8635,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   };
 
   WARP_FX.tunnel.prep = function (W, H, cx, cy, maxR, p, t, ps) {
-    var tnA = FM.evalProp(p.amount, t); if (tnA == null) tnA = 0.5; if (tnA < 0) tnA = 0; if (tnA > 1) tnA = 1;
+    var tnA = fparam(p, 'amount', 0.5, t); if (tnA < 0) tnA = 0; if (tnA > 1) tnA = 1;
     var tnCx = wCx(p, t, W, cx), tnCy = wCy(p, t, H, cy);
     var tnRp = p.radius == null ? 30 : FM.evalProp(p.radius, t); if (tnRp < 5) tnRp = 5; if (tnRp > 100) tnRp = 100;
     var tnRad = tnRp === 30 ? maxR * 0.30 : maxR * (tnRp / 100);
@@ -9104,6 +9104,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     ctx.restore();
     } finally { _t3Depth--; }
   }
+  /* THE ONE WAY TO READ A PARAM WITH A DEFAULT (queue 755, hunt MEDIUM #38). FM.evalProp(undefined) returns 0, never null,
+     so `v = FM.evalProp(p.k, t); if (v == null) v = d` was dead in every one of its 110 copies (the audit guessed ~25; the sweep found 110, plus 13 text-effect reads): a preset or an imported
+     effect that lacks the key rendered at 0 — Fractal Ridges and Lightning returned early on amount/intensity 0, Vibrance
+     DESATURATED, Counter counted to 0. This checks the KEY, which is what "absent" means. Every copy now reads through it. */
   function fparam(p, key, def, t) { return p[key] == null ? def : FM.evalProp(p[key], t); }
   // Crop the layer's alpha bounds out of the frame → the texture the solids wrap.
   function extractTex(src, bb) {
@@ -10300,7 +10304,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       };
     })(),
     roundcorners: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
-      let r = FM.evalProp(p.radius, t); if (r == null) r = 80;
+      let r = fparam(p, 'radius', 80, t);
       const style = Math.round(fparam(p, 'style', 0, t));
       const x = bb.x + 2, y = bb.y + 2, w = bb.w - 4, h = bb.h - 4;   // inset the alphaBBox pad
       r = Math.max(0, Math.min(r, Math.min(w, h) / 2));
@@ -10421,11 +10425,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        * slider's ceiling, a project-space number), THEN scale, so the early-out below still means
        * "he asked for no blur" rather than "the plate made it sub-pixel". */
       const PS = (ps > 0) ? ps : 1;
-      let dist = FM.evalProp(p.distance, t); if (dist == null) dist = 20;
+      let dist = fparam(p, 'distance', 20, t);
       dist = Math.max(0, Math.min(60, dist));
       if (dist < 1) { B.drawImage(A, 0, 0); return; }
       dist *= PS;
-      let ang = FM.evalProp(p.angle, t); if (ang == null) ang = 0;
+      let ang = fparam(p, 'angle', 0, t);
       const rad = Math.max(0, Math.min(360, ang)) * Math.PI / 180;
       const dx = Math.cos(rad), dy = Math.sin(rad), step = dist / 8;
       // additive 'lighter' at 1/9 each = true premultiplied MEAN of the 9 taps — successive-alpha

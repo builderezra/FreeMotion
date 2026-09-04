@@ -54862,6 +54862,37 @@
     }
   });
 
+  /* ═══ 755 (hunt MEDIUM #38): A MISSING PARAM KEY RENDERS AT ITS DEFAULT, NOT AT ZERO. evalProp(undefined) is 0, so every
+     `if (v == null) v = def` after it was dead — an effect without the key rendered at 0. Fractal Ridges with no params
+     must render as it does with its defaults spelled out (and differently from no effect at all); Vibrance with no amount
+     must not desaturate; Counter with no `to` counts toward 100. */
+  test('755: an effect whose params lack a key renders at that key\'s default instead of at zero', { item: '755' }, async function () {
+    const T = FM._FX_TABLES || {};
+    const P = { width: 96, height: 96, fps: 30, duration: 4, background: '#000000' };
+    const render = (fx) => { const L = FM.makeLayer('shape', { shape: 'rect', x: 48, y: 48, shapeW: 60, shapeH: 60, fill: '#4488ff', start: 0, duration: 4 }); L.effects = fx ? [fx] : []; const c = offscreen(96, 96), x = c.getContext('2d'); FM.renderScene(x, scene([L], { project: P }), 0.5); return x.getImageData(0, 0, 96, 96).data; };
+    const same = (a, b) => { for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > 2) return false; return true; };
+    /* ⚠️ NOT "bare === the schema's defaults". The kernel's absent-key fallback and the registry default are allowed to
+       differ — that gap is queue 756's whole subject — so comparing the two proves nothing about this fix and fails on any
+       effect where they legitimately differ (it did: Fractal Ridges falls back to amount 0.6, its schema default is not).
+       The claim here is narrower and exact: with NO params the effect must still DRAW, because a missing key used to read
+       as 0 and this kernel returns early at amount 0. Bare vs no-effect-at-all is the comparison that tests that. */
+    const bare = render({ type: 'fractalridges', enabled: true, params: {} });
+    const none = render(null);
+    if (same(bare, none)) throw new Error('Fractal Ridges with no params drew nothing at all — its amount read as 0 and the kernel returned early, which is exactly what a dead `if (v == null)` fallback does');
+    const amt = render({ type: 'fractalridges', enabled: true, params: { amount: 0.6 } });
+    if (!same(bare, amt)) throw new Error('Fractal Ridges with no params does not match the same effect with amount spelled out at its own fallback (0.6) — the fallback is not being applied');
+    if (T.PIXEL_FX && T.PIXEL_FX.vibrance) {
+      const d = new Uint8ClampedArray([200, 60, 60, 255]);
+      T.PIXEL_FX.vibrance(d, 1, 1, {}, 0);
+      const sat = Math.max(d[0], d[1], d[2]) - Math.min(d[0], d[1], d[2]);
+      if (sat < 120) throw new Error('Vibrance with no amount key desaturated the pixel to a spread of ' + sat + ' — amount read as 0');
+    }
+    if (T.TEXT_FX && T.TEXT_FX.counter) {
+      const st = { text: '' }; T.TEXT_FX.counter(st, { progress: 0.5 }, 0);
+      if (st.text !== '50') throw new Error('Counter with no `to` key shows "' + st.text + '" at half progress — the 100 default never applied');
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

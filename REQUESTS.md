@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 4 Sep at v15.49
+> ## 📌 WHAT I NEED FROM YOU — updated 4 Sep at v15.50
 >
-> **State:** v15.49, 1218 tests green, tree clean.
+> **State:** v15.50, 1219 tests green, tree clean.
 > **Just fixed, ahead of everything:** the intro. You were right and it was mine — v15.08 faded the film to nothing half a second before the splash left, so the last stretch was a blank screen handing over to white. The fade is gone and the film plays through in both looks (#776).
 >
 > **TWO LETTERS ARE ALL I NEED** (nothing visual ships before you pick):
@@ -28592,12 +28592,13 @@ re-opened #480, which I had marked done and had not fixed.
       - Grip: audio hides it on the open row (2138 `!expanded`) — the v5.52 fix at 1440/1232-1238 removed exactly that. Fix: drop `!expanded`.
         ✅ **v15.49 — one eyeButton() renders the eye for effect, audio, mask and behaviour rows, struck through when off; the open audio row keeps its grip.** Mask and audio rows only faded, in the same list as effect rows that struck theirs through; the audio row hid its grip when open, which v5.52 had fixed for visual rows. Test on real rows; mutation (the audio row's plain eye back) caught. ⚠️ **One claim is deliberately NOT asserted:** the audio row's eye. The test passes alone and in a standalone full suite, but inside the mutation harness that eye comes back with empty markup — no glyph at all, which neither the old code nor the new one can produce — while its row is correctly marked off. Re-querying live rows, waiting for content and fixing a self-truncating diagnostic did not shift it, so rather than assert something unobservable or weaken the run until it passes, the claim is left out and written down. Proved: one renderer, the mask row struck through, the grip kept on the open audio row.
 
-- [ ] **755 — js/compositor.js — ~50 dead `if (a == null) a = def` fallbacks after evalProp** (hunt MEDIUM #38)
+- [x] **755 — js/compositor.js — ~50 dead `if (a == null) a = def` fallbacks after evalProp** (hunt MEDIUM #38) ✅ DONE v15.50.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
       - scene.js:73: evalProp(undefined) → 0, never null; four comments state the rule (3994-3995, 4961-4968, 5640-5644, 6307-6311) and two of those kernels break it themselves (fractalridges 5666/5668, lightning 6302/6304 → intensity 0 → return). Vibrance 4191 desaturates on a missing key; TEXT_FX tnum 1939-1941. Reachable via presets, imported JSON, AI ops (makeInstance seeds defaults). Fix: one `pnum(p, key, def, t)` helper = `p[key] == null ? def : FM.evalProp(p[key], t)` and sweep.
+        ✅ **v15.50 — all 110 `v = evalProp(p.k, t); if (v == null) v = d` fallbacks (dead: evalProp(undefined) is 0; the audit guessed ~25) and every text-effect `tnum(evalProp(…), d)` now reads through fparam(), which checks the KEY.** A preset or imported effect lacking a key rendered at 0 — Fractal Ridges and Lightning returned early, Vibrance desaturated, Counter counted to 0. Test renders Fractal Ridges bare vs. defaults spelled out (and vs. no effect), Vibrance on a bare pixel, Counter with no `to`. Mutation caught.
 
 - [ ] **756 — js/compositor.js — schema `def` ≠ kernel absent-key fallback with no `legacy`** (hunt MEDIUM #39)
       **STATUS: 🟢 READY — nothing is stopping this**
