@@ -3315,10 +3315,16 @@ window.FM = window.FM || {};
       var SPAN = 20;                                   // frames either side of the edge
       var edgeT = (trimDrag.edge === 'right') ? endT : startT;
       var edgeF = Math.round(edgeT * fps);
+      /* THE FILLED NOTCH IS A CLAIM (queue 753, hunt MEDIUM #36): "this edge lands on this frame". A snap to another
+         clip's edge wins over the frame grid, and that edge can sit between frames (an imported clip's duration is
+         whatever the file is) — the strip used to fill the middle notch regardless. It fills only when the edge is on
+         a frame; off the grid the strip says so with a class instead of a filled notch that is not true. */
+      var onFrame = Math.abs(edgeT * fps - edgeF) < 0.02;
+      box.classList.toggle('tth-offgrid', !onFrame);
       var html = '';
       for (var k = -SPAN; k <= SPAN; k++) {
         var x = ((k + SPAN) / (SPAN * 2)) * 100;
-        var isLanding = (k === 0);
+        var isLanding = (k === 0) && onFrame;
         // every fifth frame reads a little stronger, so the eye can count without labels
         var cls = 'tth-n' + (isLanding ? ' on' : (((edgeF + k) % 5 === 0) ? ' five' : ''));
         html += '<i class="' + cls + '" style="left:' + x.toFixed(3) + '%"></i>';

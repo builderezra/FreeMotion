@@ -54661,6 +54661,83 @@
     }
   });
 
+  /* ═══ 753 (hunt MEDIUM #36): THE TRIM HUD DOES NOT PAINT A FILLED NOTCH FOR AN OFF-FRAME EDGE. A snap to another
+     clip's edge wins over the frame grid and that edge can sit between frames; the strip filled the middle notch
+     anyway. Trim B's start onto A's end at 1.21s (36.3 frames at 30fps): the snap holds AND no notch is filled; trim
+     to a plain frame-aligned spot: a notch is filled (the control). */
+  test('753: snapping a trim onto an off-frame clip edge shows no filled landing notch, while a frame-aligned edge does', { item: '753', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.timeline.isSnapping) throw new Error('seam missing: FM.timeline.isSnapping');
+    /* `FM._trimArmMs` is published inside the grip's pointerdown, so it does not exist until a trim has been started
+       once and requiring it up front made this test unrunnable alone. Use it when a previous gesture left it. */
+    const ARM = (FM._trimArmMs || 300) + 120;
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const snapBtn = document.getElementById('btn-snap'), snap0 = FM.timeline.isSnapping();
+    try {
+      if (hadHome) FM.home.close();
+      if (!FM.timeline.isSnapping()) { snapBtn.click(); await sleep(50); }
+      const A = FM.makeLayer('shape', { name: 'a753', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#f00', start: 0, duration: 1.21 });
+      const B = FM.makeLayer('shape', { name: 'b753', shape: 'rect', x: 600, y: 600, shapeW: 200, shapeH: 200, fill: '#0f0', start: 2, duration: 3 });
+      FM.scene = scene([A, B], { project: { width: 1080, height: 1920, fps: 30, duration: 12, background: '#000000' } });
+      /* THE PLAYHEAD PARKS AT 0 AND THE SCROLL MUST NOT MOVE. At t=8 of a 12s project the timeline keeps scrolling to
+         centre the playhead, and applyTrimAt adds (scrollLeft - startScroll) to the finger's delta — so the first
+         version of this drag carried a whole scroll's worth of extra time and B's start snapped to 0 instead of to
+         A's end. Parked at 0 the view is still, and the assertion below refuses to judge if it moved anyway. */
+      FM.selectLayer(B.id); if (FM.pause) FM.pause(); FM.setTime(0); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); await sleep(320);
+      const tlEl = document.getElementById('timeline'); tlEl.scrollLeft = 0; await sleep(200);
+      const scroll0 = tlEl.scrollLeft;
+      const clips = [...document.querySelectorAll('#tl-tracks .clip')];
+      const bClip = clips.find(c => /b753/.test(c.textContent)) || clips[1];
+      const g = attached(bClip.querySelector('.clip-grip'), 'B left grip');
+      const gr = g.getBoundingClientRect(), gx = gr.left + gr.width / 2, gy = gr.top + gr.height / 2;
+      /* AIM AT THE PIXEL, NOT AT A COMPUTED RATE. Deriving pixels-per-second and multiplying by a time delta put the
+         first version of this drag nowhere near the target (B\'s start landed on 0, snapped to the timeline origin
+         instead of A\'s end). A\'s right edge is on screen; drag B\'s grip to it and let the app decide. */
+      const aClip = clips.find(c => /a753/.test(c.textContent)) || clips[0];
+      const aRight = aClip.getBoundingClientRect().right;
+      const pe = (t, el, cx, buttons) => el.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 9, isPrimary: true, pointerType: 'touch', clientX: cx, clientY: gy, buttons: buttons }));
+      /* AIM WITH THE APP'S OWN NUMBER, MID-GESTURE. Pixels-per-second is not exposed, and both guesses at it (a computed
+         rate, then A's on-screen right edge) missed the 7px snap radius — the edge landed on 1.3s, frame-aligned, with no
+         snap at all. `FM._lastTrim` records what applyTrimAt actually saw, pps included, so: press, nudge once, read the
+         real rate, then move to exactly where A's end is and let the snap decide. */
+      const drag = async (targetT) => {
+        pe('pointerdown', g, gx, 1); await sleep(ARM);
+        pe('pointermove', window, gx - 12, 1); await sleep(40);
+        const lt = FM._lastTrim;
+        if (!lt || !lt.pps) throw new Error('setup: FM._lastTrim did not record the trim step (no pps to aim with)');
+        const edgeNow = lt.movingEdge;
+        const dx = (targetT - edgeNow) * lt.pps;
+        for (let i = 1; i <= 5; i++) { pe('pointermove', window, gx - 12 + dx * i / 5, 1); await sleep(24); }
+        await sleep(90);
+        const filled = !!document.querySelector('.tth-notches .tth-n.on'), start = FM.layerById(FM.scene, B.id).start, snapped = !!(FM._lastTrim && FM._lastTrim.snapped);
+        pe('pointerup', window, gx - 12 + dx, 0); await sleep(150);
+        return { filled: filled, start: start, snapped: snapped };
+      };
+      const snapCase = await drag(1.215);   // a hair past A's end at 1.21 — inside the snap radius, off the frame grid
+      if (tlEl.scrollLeft !== scroll0) throw new Error('setup: the timeline scrolled by ' + (tlEl.scrollLeft - scroll0) + 'px during the drag, which applyTrimAt adds to the finger delta — this run cannot judge the snap');
+      if (!snapCase.snapped || Math.abs(snapCase.start - 1.21) > 0.02) throw new Error('setup: the trim did not snap onto A\'s end at 1.21s (start ' + snapCase.start + ', snapped ' + snapCase.snapped + ')');
+      if (snapCase.filled) throw new Error('the HUD painted a filled landing notch while the edge sat at 1.21s — between frames — the notch strip claims a frame the edge is not on');
+      FM.layerById(FM.scene, B.id).start = 2; FM.layerById(FM.scene, B.id).duration = 3; FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); await sleep(200);
+      const g2 = attached([...document.querySelectorAll('#tl-tracks .clip')].find(c => /b753/.test(c.textContent)).querySelector('.clip-grip'), 'B left grip again');
+      const gr2 = g2.getBoundingClientRect(); const gx2 = gr2.left + gr2.width / 2;
+      pe('pointerdown', g2, gx2, 1); await sleep(ARM);
+      const dx2 = -Math.round((FM._lastTrim && FM._lastTrim.pps ? FM._lastTrim.pps : 60) * 0.5);   // half a second left, well clear of A's edge: no snap, the frame grid decides
+      for (let i = 1; i <= 6; i++) { pe('pointermove', window, gx2 + dx2 * i / 6, 1); await sleep(16); }
+      await sleep(80);
+      const filled2 = !!document.querySelector('.tth-notches .tth-n.on');
+      pe('pointerup', window, gx2 + dx2, 0); await sleep(150);
+      if (!filled2) throw new Error('control: a frame-aligned edge (1.5s) shows no filled landing notch either — the strip is not painting');
+    } finally {
+      try { window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 9, pointerType: 'touch', buttons: 0 })); } catch (e) {}
+      try { if (FM.timeline.isSnapping() !== snap0) snapBtn.click(); } catch (e) {}
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel
