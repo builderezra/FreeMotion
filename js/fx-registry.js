@@ -180,7 +180,22 @@ window.FM = window.FM || {};
    * The browser ALSO refuses any featured id that names a filter — see fx-browser.js — because this
    * list is the kind that gets appended to, and the collision is invisible until someone reads both
    * files at once. */
-  FM.FX_FEATURED = ['tunnel', 'bend', 'squeeze', 'innerpinch', 'glow', 'chromaticaberration', 'vignette', 'filmgrain', 'sharpen', 'boxblur', 'innerblur', 'stroke'];
+  /* THE FEATURED ROW IS DERIVED (queue 745, hunt MEDIUM #28). The standing rule above — newest first, prepend on every add,
+     trim to ~12 — was a hand-written list that nobody had prepended to since batch 26 while batches 27–39 shipped. Newest
+     first is CATEGORY_OF's insertion order read backwards (every batch is appended there, under its own comment), so the
+     row is read from it: hidden effects, media-only / text-only ones (the v8.98 lesson above), effects that apply to one
+     layer type, and ids that are also ready-made filters (the clash the fx-featured tests pin) are skipped; twelve lead.
+     Lazy, because REG and FM.filters are built after this line. */
+  Object.defineProperty(FM, 'FX_FEATURED', { configurable: true, enumerable: true, get: function () {
+    return Object.keys(CATEGORY_OF).reverse().filter(function (k) {
+      var r = REG[k];
+      if (!r || r.hidden) return false;
+      if (MEDIA_ONLY[k] || TEXT_ONLY[k]) return false;
+      if (r.appliesTo && r.appliesTo !== 'all') return false;
+      if (FM.filters && FM.filters.get && FM.filters.get(k)) return false;
+      return true;
+    }).slice(0, 12);
+  } });
 
   // Segment options are written two ways in FM.EFFECTS: as [value, label] pairs, or as a bare label
   // list where the index IS the value. Normalize to pairs HERE, once — the UI indexes opt[0]/opt[1],

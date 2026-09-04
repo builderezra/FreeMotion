@@ -54478,6 +54478,19 @@
     if (f('some other reason entirely') === 'layer never moves') throw new Error('control: an unrelated reason was badged as never-moves');
   });
 
+  /* ═══ 745 (hunt MEDIUM #28): THE "NEW" ROW LEADS WITH THE NEWEST BATCH. The hand-written list stopped at batch 26; now
+     it is derived from the registry's own batch order. squish (batch 39) leads, batch-38 effects are in, the row is
+     at most twelve, and a batch-26 effect no longer heads it (the control). */
+  test('745: the featured carousel is derived from batch order, so the newest effects lead it', { item: '745' }, async function () {
+    const feat = FM.FX_FEATURED || [];
+    if (!feat.length) throw new Error('FM.FX_FEATURED is empty');
+    if (feat[0] !== 'squish') throw new Error('the row leads with ' + feat[0] + ', not squish (batch 39, the newest) — the list is not derived from batch order');
+    ['lensdistort', 'pixelsort', 'compoundblur', 'matchgrade'].forEach(id => { if (feat.indexOf(id) < 0) throw new Error(id + ' (batch 38) is not in the featured row: ' + feat.join(', ')); });
+    if (feat.length > 12) throw new Error('the row holds ' + feat.length + ' — more than the twelve the rule allows');
+    if (feat[0] === 'tunnel') throw new Error('control: a batch-26 effect still heads the row');
+    feat.forEach(id => { const r = FM.fxRegistry.get(id); if (!r) throw new Error(id + ' is featured but not a real effect'); if (r.hidden) throw new Error(id + ' is featured but hidden'); });
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel
