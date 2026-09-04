@@ -1287,13 +1287,17 @@ window.FM = window.FM || {};
       if (noopCv.width !== w || noopCv.height !== h) { noopCv.width = w; noopCv.height = h; noopCx = null; }
       if (!noopCx) noopCx = noopCv.getContext('2d', { willReadFrequently: true });
       const t0 = performance.now();
-      noopCx.setTransform(1, 0, 0, 1, 0, 0); noopCx.clearRect(0, 0, w, h);
-      FM.renderScene(noopCx, sceneAsIs(layer), FM.time);
-      if (performance.now() - t0 > NOOP_BUDGET_MS) return null;   // too dear to ask — stay quiet
-      const on = noopCx.getImageData(0, 0, w, h).data;
-      noopCx.setTransform(1, 0, 0, 1, 0, 0); noopCx.clearRect(0, 0, w, h);
-      FM.renderScene(noopCx, sceneWithFxOff(layer, idx), FM.time);
-      const off = noopCx.getImageData(0, 0, w, h).data;
+      const g0 = FM._mfGhost; FM._mfGhost = 1;   // queue 759: a probe render is a preview render — the same flag lrender sets, so temporal effects do not advance their history
+      let on, off;
+      try {
+        noopCx.setTransform(1, 0, 0, 1, 0, 0); noopCx.clearRect(0, 0, w, h);
+        FM.renderScene(noopCx, sceneAsIs(layer), FM.time);
+        if (performance.now() - t0 > NOOP_BUDGET_MS) return null;   // too dear to ask — stay quiet
+        on = noopCx.getImageData(0, 0, w, h).data;
+        noopCx.setTransform(1, 0, 0, 1, 0, 0); noopCx.clearRect(0, 0, w, h);
+        FM.renderScene(noopCx, sceneWithFxOff(layer, idx), FM.time);
+        off = noopCx.getImageData(0, 0, w, h).data;
+      } finally { FM._mfGhost = g0; }
       for (let i = 0; i < on.length; i++) if (on[i] !== off[i]) return false;
       return true;
     } catch (e) { return null; }

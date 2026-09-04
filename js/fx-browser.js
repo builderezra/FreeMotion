@@ -434,7 +434,7 @@ window.FM = window.FM || {};
          LAYER (a mask, or the object motion-blur flag). Routed by the same table the tiles are built
          from, so adding a third pseudo entry cannot leave the commit path behind. */
       if (PSEUDO[id]) { if (PSEUDO_ACTION[id] && PSEUDO_ACTION[id](true)) added++; return; }
-      const seed = (keep && shown[i] && (shown[i].type === id || shown[i].id === id)) ? shown[i] : null;
+      const seed = keep ? (shown.find(sh => sh && (sh.type === id || sh.id === id)) || null) : null;   // queue 759: by id — `shown` and `list` are not the same length once pseudo-tiles are filtered out
       if (addEffect(id, null, true, seed)) added++;
     });
     FM.fxBrowser.close();
@@ -1065,12 +1065,12 @@ window.FM = window.FM || {};
       if (!live || e.pointerId !== id) return;
       const dy = e.clientY - sy, dx = e.clientX - sx;
       if (!claimed) {
-        if (dy > 4) { live = false; return; }                    // downward → this is a scroll, let it go
+        if (dy > 4) { live = false; if (_unbindPull) _unbindPull(); return; }   // downward → this is a scroll, let it go (queue 759: and let the window listeners go with it)
         if (dy < -6 && -dy > Math.abs(dx)) { claimed = true; try { body.setPointerCapture(id); } catch (_) {} }
         else return;
       }
       const sc = scroller();
-      if (!sc || !atEnd(sc)) { set(0); live = false; return; }         // scrolled away mid-pull
+      if (!sc || !atEnd(sc)) { set(0); live = false; if (_unbindPull) _unbindPull(); return; }   // scrolled away mid-pull (queue 759: unbind here too)
       if (e.cancelable) e.preventDefault();
       const now = e.timeStamp, dt = now - lastT;
       if (dt > 0) vy = (e.clientY - lastY) / dt;

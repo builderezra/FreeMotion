@@ -54939,6 +54939,36 @@
     Object.keys(R).forEach(k => { if (!W_[k]) throw new Error('reference ' + k + ' names no live kernel'); if (String(R[k]) === String(W_[k])) throw new Error(k + ': the reference is byte-identical to the live kernel — the equality test compares it with itself'); });
   });
 
+  /* ═══ 759 (hunt MEDIUM #42): THE SMALLER FIXES THAT CAN BE OBSERVED. One "open stroke" definition that knows spiral and
+     an open path; the no-op probe renders as a ghost (temporal effects must not advance their history for a probe); and
+     the anchor pad's hint describes the grid it actually snaps to. */
+  test('759: open-stroke is one definition, the no-op probe renders as a ghost, and the anchor hint matches its grid', { item: '759' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const iso = FM.inspector_isOpenStroke;
+    if (!iso) throw new Error('FM.inspector_isOpenStroke seam missing');
+    const sh = (shape, extra) => Object.assign(FM.makeLayer('shape', { shape: shape, x: 10, y: 10, shapeW: 50, shapeH: 50, fill: '#fff' }), extra || {});
+    if (!iso(sh('spiral'))) throw new Error('a spiral is not treated as an open stroke — Stroke controls mislabelled');
+    if (!iso(sh('path', { closed: false }))) throw new Error('an open pen path is not treated as an open stroke');
+    if (iso(sh('path', { closed: true })) || iso(sh('rect'))) throw new Error('control: a closed path or a rect reads as an open stroke');
+    // the probe renders with the ghost flag up
+    if (!FM.fxThumbs || !FM.fxThumbs.effectDoesNothing) throw new Error('FM.fxThumbs.effectDoesNothing missing');
+    const saved = FM.scene, savedSel = FM.scene.selectedId, real = FM.renderScene, seen = [];
+    try {
+      const L = sh('rect'); L.effects = [FM.fxRegistry.makeInstance('blur') || { type: 'blur', enabled: true, params: { amount: 0 } }];
+      FM.scene = scene([L], { project: { width: 64, height: 64, fps: 30, duration: 2, background: '#000000' } });
+      FM.renderScene = function () { seen.push(FM._mfGhost); return real.apply(this, arguments); };
+      FM.fxThumbs.effectDoesNothing(L, 0);
+      if (seen.length < 2) throw new Error('setup: the probe did not render twice (' + seen.length + ')');
+      if (!seen.every(g => g === 1)) throw new Error('the no-op probe rendered with FM._mfGhost ' + JSON.stringify(seen) + ' — a live render, so a temporal effect advances its history for a probe');
+      if (FM._mfGhost === 1) throw new Error('the ghost flag was left up after the probe');
+    } finally {
+      FM.renderScene = real;
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+    }
+    const hint = document.querySelector('.mt-trackpad-hint');
+    if (hint && /nine|centre, edges and corners/i.test(hint.textContent)) throw new Error('the anchor pad hint still describes nine points; the grid snaps to 25');
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

@@ -800,7 +800,7 @@ window.FM = window.FM || {};
            raised the renderer to 12. Nothing caught it because a migration that quietly lowers a value
            still produces a working project. Found 1 Sep alongside queue 695. */
         const sh = typeof mb.shutter === 'number' && isFinite(mb.shutter) ? Math.max(0, Math.min(12, mb.shutter)) : 0.5;
-        const sa = typeof mb.samples === 'number' && isFinite(mb.samples) ? Math.max(2, Math.min(32, Math.round(mb.samples))) : 8;
+        const sa = typeof mb.samples === 'number' && isFinite(mb.samples) ? Math.max(2, Math.min(48, Math.round(mb.samples))) : 8;   // queue 759: the registry allows 48
         l.effects.unshift({ type: 'objectblur', enabled: true, params: { shutter: sh, samples: sa } });
       }
       delete l.motionBlur;   // converted — leaving it would render the blur twice

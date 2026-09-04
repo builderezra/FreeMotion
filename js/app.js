@@ -1006,10 +1006,13 @@ window.FM = window.FM || {};
     }
     const pnsLbl = document.querySelector('#inspector-panel .panel-title-label');
     if (pnsLbl) pnsLbl.textContent = sel ? 'Layer' : 'Inspector';
+    /* queue 759: on PC pcTransportSync owns Delete / Parent (its rule hides Parent with fewer than two layers); this wrote both
+       with a looser rule and was only right because it ran first. It defers where the PC transport exists. */
+    const pcOwns = !!document.getElementById('t-sel');
     const delBtn = document.getElementById('btn-del-layer');
-    if (delBtn) delBtn.style.display = sel ? '' : 'none';
+    if (delBtn && !pcOwns) delBtn.style.display = sel ? '' : 'none';
     const parBtn = document.getElementById('btn-parent');
-    if (parBtn) { parBtn.style.display = sel ? '' : 'none'; parBtn.classList.toggle('active', !!(sel && sel.parent)); }
+    if (parBtn) { if (!pcOwns) parBtn.style.display = sel ? '' : 'none'; parBtn.classList.toggle('active', !!(sel && sel.parent)); }
     // Group appears at 2+, not at 1 — FM.groupSelection needs two members, and an always-visible
     // button that does nothing most of the time is how a control stops being believed. The phone's
     // #m-group holds its slot with `visibility` instead, because there the bin sits beside it and must

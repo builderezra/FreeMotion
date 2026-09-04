@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 4 Sep at v15.53
+> ## 📌 WHAT I NEED FROM YOU — updated 4 Sep at v15.54
 >
-> **State:** v15.53, 1222 tests green, tree clean.
+> **State:** v15.54, 1223 tests green, tree clean.
 > **Just fixed, ahead of everything:** the intro. You were right and it was mine — v15.08 faded the film to nothing half a second before the splash left, so the last stretch was a blank screen handing over to white. The fade is gone and the film plays through in both looks (#776).
 >
 > **TWO LETTERS ARE ALL I NEED** (nothing visual ships before you pick):
@@ -28625,7 +28625,7 @@ re-opened #480, which I had marked done and had not fixed.
       Fix: restore the real per-pixel body from git, or drop curl from the tol-0 equality test and say so.
         ✅ **v15.53 — the `_curlLegacy` copy and its reference entry are gone, and the equality test no longer compares curl with itself.** curl was never prepped (v13.29 introduced the alias as a byte-for-byte copy), so the tol-0 row proved nothing; it stays the control in the render-scale sweep. A test now asserts no reference is source-identical to its live kernel. Mutation (curl referenced again) caught.
 
-- [ ] **759 — Smaller code fixes** (hunt MEDIUM #42)
+- [x] **759 — Smaller code fixes** (hunt MEDIUM #42) ✅ DONE v15.54.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
@@ -28643,20 +28643,7 @@ re-opened #480, which I had marked done and had not fixed.
       - js/fx-browser.js:1063/1068 abandon paths return without `_unbindPull()` — bounded listener leak.
       - js/inspector.js:4720-4723: hint says "centre, edges and corners"/"nine points", `SNAP = [0,.25,.5,.75,1]` gives 25. Either `[0,.5,1]` or fix the hint.
       - js/inspector.js:1290 vs 1310-1312: armed at 34 px, commit at min(56, 18 %); one comment calls 56 "the armed point". Decide which is intended; fix the other.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        ✅ **v15.54 — thirteen small fixes: shadow dx/dy fallback 8 → 0; one isOpenStroke() (line, arc, spiral, open path) for the three sites that kept their own lists; Border offered on open shapes since the renderer draws it; layerHasAudio asks the media; the dead layerHasSource and its stale paragraph removed; pcTransportSync is the one owner of Delete / Parent on PC; the legacy motion-blur samples clamp 32 → 48; the non-existent 'audio' layer type branch gone; the no-op probe renders with the ghost flag; keep-preview seeds paired by id; abandoned pulls unbind their listeners; the anchor hint says quarter points; the swipe comment names 34px as the arm point.** Test covers the observable three; mutation (the probe's ghost flag off) caught.
 
 - [ ] **760 — On PC: bigger shape buttons, better colour choices, and the people shapes fixed — for the last time** (2 Sep, PC, with a screenshot of the Shape grid in the Elements panel)
       **STATUS: 🟢 READY — nothing is stopping this. Queued behind #715–#717 (his, older).**

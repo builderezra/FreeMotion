@@ -1342,7 +1342,7 @@ window.FM = window.FM || {};
     }
     function endSwipe() {
       const wrap = row._wrap || row, w = rowW();
-      // EASY commit: a short pull (~18% of width, capped at 56px — the armed point) deletes, and
+      // EASY commit: a short pull (~18% of width, capped at 56px; the red panel ARMS earlier, at 34px — queue 759) deletes, and
       // any real left flick deletes almost immediately. No need to drag it halfway across anymore.
       const commit = swDx < -Math.min(56, w * 0.18) || (swVx < -0.28 && swDx < -20);
       if (commit) {
@@ -3409,16 +3409,14 @@ window.FM = window.FM || {};
     // …and everything else (group, null, camera) keeps Speed for the same reason, losing only Volume.
     return CATEGORIES.filter(c => c.key !== 'volume' && c.key !== 'editgroup');
   }
-  function layerHasAudio(layer) { return !!layer && layer.type === 'video'; }   // only the video/audio path carries sound — shapes/text/images/groups don't
-  // Speed re-times a layer's SOURCE clock and nothing else: layer.speed feeds FM.layerSourceAdvance →
-  // FM.layerLocalTime, and every consumer of that (playback seek, export seek, frame cache, audio
-  // resample) is gated on layer.type === 'video'. So it moves video frames and audio samples, and
-  // nothing else — a shape/text layer's own keyframes are read at absolute project time, so a speed
-  // ramp on one changes literally nothing on screen. IMAGES count as "no source" too: a still has no
-  // timeline of its own (the compositor draws m.el with no time argument), so 4× an image is still
-  // the same single frame. Rather than leave a control that silently does nothing, the card is shown
-  // but disabled — same treatment Volume already gets on a layer with no audio.
-  function layerHasSource(layer) { return !!layer && layer.type === 'video'; }   // 'video' covers audio-only clips (mp3/wav ride the same path)
+  /* OPEN STROKES — a line, an arc, a spiral, an unclosed pen path: stroked, never filled (queue 759). Three sites each
+     kept their own list and two of them omitted spiral and open paths; the renderer's OPEN_POLY is the source of truth. */
+  function isOpenStroke(layer) { return !!layer && layer.type === 'shape' && (layer.shape === 'line' || layer.shape === 'arc' || layer.shape === 'spiral' || (layer.shape === 'path' && !layer.closed)); }
+  FM.inspector_isOpenStroke = isOpenStroke;   // suite seam (queue 759)
+  // queue 759: the real question, asked of the media — a video without a soundtrack has no audio either (audioSideOk asks the same)
+  function layerHasAudio(layer) { return !!layer && layer.type === 'video' && (FM.hasAudioTrack ? FM.hasAudioTrack(layer) !== false : true); }
+  // (layerHasSource and the paragraph that said Speed is shown-disabled without a source are gone — queue 759: it had no callers,
+  //  and Speed has been live on every layer type since v6.39, gated only by the `type === 'video'` check where the source clock is used.)
 
   /* ---- Visual / Audio switch (queue 45) --------------------------------------------------------
    * Ezra: "move the audio effects to the effects menu but put a toggle at the top that switches from
@@ -3730,7 +3728,7 @@ window.FM = window.FM || {};
     if (!layer.fillMode) layer.fillMode = FM.fillModeOf ? FM.fillModeOf(layer) : 'solid';
     if (layer.fillOpacity == null) layer.fillOpacity = 1;
     const isText = layer.type === 'text';
-    const openStroke = layer.type === 'shape' && (layer.shape === 'line' || layer.shape === 'arc' || layer.shape === 'spiral' || (layer.shape === 'path' && !layer.closed));
+    const openStroke = isOpenStroke(layer);   // queue 759: one definition of "open shape" for the three places that used to each keep their own
     let modes;
     if (openStroke) modes = [['solid', 'Colour']];                                   // a line/arc is just its colour
     else if (isText) modes = [['solid', 'Solid'], ['gradient', 'Gradient']];
@@ -4799,8 +4797,8 @@ window.FM = window.FM || {};
       const bax = mtVBox('Anchor X', () => getA('anchorX') * 100, v => setAnchor(v / 100, getA('anchorY')), { dp: 1, unit: '%', scrub: 0.3, min: -400, max: 500, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
       const bay = mtVBox('Anchor Y', () => getA('anchorY') * 100, v => setAnchor(getA('anchorX'), v / 100), { dp: 1, unit: '%', scrub: 0.3, min: -400, max: 500, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
       refreshables.push(bax, bay); values.append(bax, bay);
-      const apad = el('div', 'mt-trackpad'); apad.appendChild(el('span', 'mt-trackpad-hint', 'Swipe to place the anchor · snaps to centre, edges and corners'));
-      // 260px of swipe crosses the layer, and it snaps to the nine points you actually want
+      const apad = el('div', 'mt-trackpad'); apad.appendChild(el('span', 'mt-trackpad-hint', 'Swipe to place the anchor · snaps to the quarter points'));   // queue 759: the grid is 0 / ¼ / ½ / ¾ / 1 each way — 25 points, not nine
+      // 260px of swipe crosses the layer, and it snaps to the 25 quarter points (queue 759: the hint used to say nine)
       const SNAP = [0, 0.25, 0.5, 0.75, 1];
       const snapA = v => { if (!magnetOn()) return v; for (let i = 0; i < SNAP.length; i++) if (Math.abs(v - SNAP[i]) < 0.045) return SNAP[i]; return v; };
       let ad = null;
@@ -5498,7 +5496,7 @@ window.FM = window.FM || {};
       body.appendChild(spRow);
       // Frame blend + Reverse are about VIDEO frames/audio. Since viewAllowed now gates the whole
       // panel to layers with a source (layerHasSource), this is video/audio only anyway — the guard
-      // stays as the belt-and-braces it always was.
+      // stays as the the only guard (queue 759) it always was.
       if (layer.type === 'video') {
         if (layer.frameBlend == null) layer.frameBlend = false;
         body.appendChild(checkRow('Smooth slow-motion (frame blend)', layer.frameBlend, async v => {
@@ -5942,7 +5940,7 @@ window.FM = window.FM || {};
       // Reuses layer.stroke as the single border. position = inside/center/outside. For line/arc shapes
       // stroke is the LINE colour (not a border), so no border UI there. Group border = silhouette
       // dilation → outside only. size + colour are keyframeable (◆); position is a plain choice.
-      const openKind = layer.type === 'shape' && ['line', 'arc'].indexOf(layer.shape) >= 0;
+      const openKind = isOpenStroke(layer);   // queue 759: spiral and an open path are open strokes too
       /* …and MEDIA (queue 386 clause 1). Ezra: "Outlines should still be a toggle option on videos and
          clips, not just shadow". Video and image were excluded because the media draw path ignores
          `layer.stroke` — but it does not have to read it: `effectiveFx` now turns the toggle into the
@@ -6029,8 +6027,8 @@ window.FM = window.FM || {};
         body.appendChild(kfColorRow(sh, 'color', 'Color', sh.color || '#000000'));
         body.appendChild(kfNumRow(sh, 'blur', 'Size', 0, 100, 1, 16, ''));
         body.appendChild(kfNumRow(sh, 'alpha', 'Alpha', 0, 100, 1, 100, '%'));
-        body.appendChild(kfNumRow(sh, 'dx', 'Position X', -200, 200, 1, 8, ''));
-        body.appendChild(kfNumRow(sh, 'dy', 'Position Y', -200, 200, 1, 8, ''));
+        body.appendChild(kfNumRow(sh, 'dx', 'Position X', -200, 200, 1, 0, ''));   // queue 759: a shadow is made with dx/dy 0 — the row's fallback said 8
+        body.appendChild(kfNumRow(sh, 'dy', 'Position Y', -200, 200, 1, 0, ''));
       }
       // ===== REPEATER (shape only) — draws the shape (fill+stroke, incl. trim/dash) `copies` times, each
       // copy a cumulative step further (offset/rotate/scale) with an optional per-copy opacity falloff.
@@ -6119,7 +6117,7 @@ window.FM = window.FM || {};
         baseKinds.forEach(p => { const o = document.createElement('option'); o.value = p[0]; o.textContent = p[1]; if (p[0] === layer.shape) o.selected = true; ksel.appendChild(o); });
         ksel.addEventListener('change', () => { layer.shape = ksel.value; FM.requestRender(); FM.inspector.refresh(); commitH(); });
         kr.appendChild(ksel); body.appendChild(kr);
-        const openStroke = (layer.shape === 'line' || layer.shape === 'arc');   // stroked, never filled
+        const openStroke = isOpenStroke(layer);   // stroked, never filled — queue 759: this list omitted spiral and open paths, so Spiral got mislabelled Stroke controls
         // Fill/colour now lives in its own "Color & Fill" panel (AM parity) — Edit Shape is geometry + stroke.
         body.appendChild(rangeRow('Width', () => layer.shapeW, v => { layer.shapeW = Math.max(2, v); if (FM.canvasEdit) FM.canvasEdit.update(); }, 4, Math.max(200, P.width), 1));
         body.appendChild(rangeRow('Height', () => layer.shapeH, v => { layer.shapeH = Math.max(2, v); if (FM.canvasEdit) FM.canvasEdit.update(); }, 4, Math.max(200, P.height), 1));

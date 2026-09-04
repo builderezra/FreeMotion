@@ -48,7 +48,7 @@ window.FM = window.FM || {};
     var sc = FM.scene, out = [], now = Date.now(), live = Object.create(null);
     if (!sc || !sc.layers || !FM.media) { since = Object.create(null); return out; }
     sc.layers.forEach(function (l) {
-      if (!l || (l.type !== 'video' && l.type !== 'image' && l.type !== 'audio')) return;
+      if (!l || (l.type !== 'video' && l.type !== 'image')) return;   // queue 759: there is no 'audio' layer type — a song is a video layer
       var m = FM.media.get(l.id);
       var waiting;
       // No record at all means the media is still being decoded into one — that is loading too, and it
