@@ -7969,7 +7969,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * NEIGHBOURING source pixel. A 1-pixel resample across 3% of a warp is a fine price for twirl's
      * 1.89x and a poor one for 1.11x. The `prep` hoist below stays — that part is free and exact. */
     curl: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.curl.prep(W,H,cx,cy,maxR,p,t,ps); var cuDx=x-C.cx, cuDy=y-C.cy, cuR=Math.hypot(cuDx,cuDy); var cuSw=C.amt*0.6*Math.sin(cuR/C.wl-C.ph); var cuA=Math.atan2(cuDy,cuDx)+cuSw; return [C.cx+Math.cos(cuA)*cuR, C.cy+Math.sin(cuA)*cuR]; },
-    _curlLegacy: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.curl.prep(W,H,cx,cy,maxR,p,t,ps); var cuDx=x-C.cx, cuDy=y-C.cy, cuR=Math.hypot(cuDx,cuDy); var cuSw=C.amt*0.6*Math.sin(cuR/C.wl-C.ph); var cuA=Math.atan2(cuDy,cuDx)+cuSw; return [C.cx+Math.cos(cuA)*cuR, C.cy+Math.sin(cuA)*cuR]; },
+    // (no `_curlLegacy`: curl was never rewritten — queue 758 removed a reference that was a byte-for-byte copy of curl itself)
     // ---- batch 10 (warp) ----
     /* PREPPED. Six parameter constants were resolved per pixel, and the octave DIVISORS with them —
      * so this also trades 6-12 divisions per pixel for multiplications by precomputed reciprocals.
@@ -8215,7 +8215,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * on their own object: still reachable for the equality test, invisible to anything enumerating the
    * real ones. */
   const WARP_REF = { fractalwarp: WARP_FX._fractalwarpLegacy, tunnel: WARP_FX._tunnelLegacy,
-                     curl: WARP_FX._curlLegacy, twirl: WARP_FX._twirlLegacy,
+                     twirl: WARP_FX._twirlLegacy,   // curl has no reference: it was never prepped (queue 758)
                      gridrepeat: WARP_FX._gridrepeatLegacy,
                      kaleidoscope: WARP_FX._kaleidoscopeLegacy,
                      radialrepeat: WARP_FX._radialrepeatLegacy,

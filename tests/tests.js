@@ -49605,7 +49605,9 @@
     const pairs = [
       { name: 'tunnel', fn: W_.tunnel, ref: (FM._warpRef || {}).tunnel, tol: 0, moveCap: 0, why: 'a pure hoist must be exact' },
       { name: 'fractalwarp', fn: W_.fractalwarp, ref: (FM._warpRef || {}).fractalwarp, tol: 1e-9, moveCap: 0, why: 'reciprocal multiply rounds differently' },
-      { name: 'curl', fn: W_.curl, ref: (FM._warpRef || {}).curl, tol: 0, moveCap: 0, why: 'curl keeps atan2 on purpose — the rotation identity was reverted here' },
+      /* curl is NOT in this list (queue 758): it was never prepped, so it had no separate reference — `_curlLegacy` was a
+         byte-for-byte copy of curl and the row compared the kernel with itself, which proves nothing. It stays the
+         CONTROL in the render-scale sweep, where a kernel that was already right is exactly what is wanted. */
       /* GRIDREPEAT must be EXACT, and the zero here is load-bearing. Reciprocal substitution was tried
          and measured 1.74x while moving 9,420 of 53,196 sampled points onto a different pixel — 17.7%.
          A tiling warp cannot take reciprocals ANYWHERE, fractions included: with W=540 over 6 columns
@@ -54924,6 +54926,17 @@
     const db = FM._fxBounds(dirty, W, H);
     if (!db) throw new Error('fxBounds returned null for a dirty plate — the kernel is SKIPPED where the design says it must run unbounded');
     if (db.x !== 0 || db.y !== 0 || db.w !== W || db.h !== H) throw new Error('a dirty plate should run unbounded (the whole frame), got ' + JSON.stringify(db));
+  });
+
+  /* ═══ 758 (hunt MEDIUM #41): NO KERNEL IS ITS OWN REFERENCE. `_curlLegacy` was a copy of `curl`, so the equality row
+     compared curl with itself. The copy and the reference entry are gone; a kernel that is in the reference map must
+     differ from the live one in source (it is a separate implementation, or the comparison is void). */
+  test('758: every warp reference is a different function from its live kernel', { item: '758' }, async function () {
+    const W_ = FM._warpFx, R = FM._warpRef;
+    if (!W_ || !R) throw new Error('FM._warpFx / FM._warpRef seams missing');
+    if (W_._curlLegacy) throw new Error('_curlLegacy is back inside WARP_FX');
+    if (R.curl) throw new Error('curl has a reference entry again — it was never prepped, so any reference is either itself or unverified');
+    Object.keys(R).forEach(k => { if (!W_[k]) throw new Error('reference ' + k + ' names no live kernel'); if (String(R[k]) === String(W_[k])) throw new Error(k + ': the reference is byte-identical to the live kernel — the equality test compares it with itself'); });
   });
 
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.

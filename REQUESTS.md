@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 4 Sep at v15.52
+> ## 📌 WHAT I NEED FROM YOU — updated 4 Sep at v15.53
 >
-> **State:** v15.52, 1221 tests green, tree clean.
+> **State:** v15.53, 1222 tests green, tree clean.
 > **Just fixed, ahead of everything:** the intro. You were right and it was mine — v15.08 faded the film to nothing half a second before the splash left, so the last stretch was a blank screen handing over to white. The fade is gone and the film plays through in both looks (#776).
 >
 > **TWO LETTERS ARE ALL I NEED** (nothing visual ships before you pick):
@@ -28617,12 +28617,13 @@ re-opened #480, which I had marked done and had not fixed.
       - Fix: return a distinct sentinel for dirty vs empty and run unbounded on dirty; also correct the comment's premise (each kernel goes through putImageData/getImageData, not one in-place ImageData).
         ✅ **v15.52 — the scan returns a DIRTY_PLATE sentinel for colour under zero alpha and fxBounds hands the kernel the whole frame; null is only "nothing drawn".** Both returned null before and null meant skip, the opposite of what the scan's own comment promised. Seam test on empty, drawn and dirty plates; mutation (dirty back to null) caught. Latent today, since a premultiplying canvas cannot produce the state.
 
-- [ ] **758 — js/compositor.js:7960 — `_curlLegacy` is the hoisted body, so tests.js:49508 compares curl with itself.** (hunt MEDIUM #41)
+- [x] **758 — js/compositor.js:7960 — `_curlLegacy` is the hoisted body, so tests.js:49508 compares curl with itself.** (hunt MEDIUM #41) ✅ DONE v15.53.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
       Fix: restore the real per-pixel body from git, or drop curl from the tol-0 equality test and say so.
+        ✅ **v15.53 — the `_curlLegacy` copy and its reference entry are gone, and the equality test no longer compares curl with itself.** curl was never prepped (v13.29 introduced the alias as a byte-for-byte copy), so the tol-0 row proved nothing; it stays the control in the render-scale sweep. A test now asserts no reference is source-identical to its live kernel. Mutation (curl referenced again) caught.
 
 - [ ] **759 — Smaller code fixes** (hunt MEDIUM #42)
       **STATUS: 🟢 READY — nothing is stopping this**
