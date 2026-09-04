@@ -57,7 +57,7 @@ window.FM = window.FM || {};
     { type: 'sepia', label: 'Sepia', param: 'amount', min: 0, max: 1, step: 0.02, def: 1 },
     { type: 'invert', label: 'Invert', param: 'amount', min: 0, max: 1, step: 0.02, def: 1 },
     { type: 'glow', label: 'Glow', color: true, params: [
-      { key: 'radius', label: 'Radius', min: 0, max: 60, step: 1, def: 16, unit: 'px' },
+      { key: 'radius', label: 'Radius', min: 0, max: 60, step: 1, def: 16, legacy: 12, unit: 'px' },   // queue 756: the kernel draws an absent radius at 12 — the inspector must show what renders
       { key: 'passes', label: 'Bloom', min: 1, max: 4, step: 1, def: 1 },
     ] },
     { type: 'vignette', label: 'Vignette', params: [
@@ -408,13 +408,13 @@ window.FM = window.FM || {};
          tile. Default 1 so a newly added Film Grain is round and the browser tile shows it; the READ
          fallback in the shader is 0, so every project saved before this keeps its exact pixels. Same
          split the `highlights` param below already uses, for the same reason. */
-      { key: 'shape', label: 'Grain shape', def: 1, options: [[0, 'Square'], [1, 'Round']] },
+      { key: 'shape', label: 'Grain shape', def: 1, legacy: 0, options: [[0, 'Square'], [1, 'Round']] },   // queue 756: absent = square, as the kernel reads it
       { key: 'color', label: 'Colour', min: 0, max: 100, step: 1, def: 15, unit: '%' },
       { key: 'shadows', label: 'In shadows', min: 0, max: 100, step: 1, def: 35, unit: '%' },
       // Deliberately def 35, not 0: without it the response curve is zero at pure white, so grain did
       // NOTHING on white text (Ezra: "film grain no work on text"). The FALLBACK is still 0, so every
       // project saved before this keeps its exact pixels; only a newly added Film Grain gets the lift.
-      { key: 'highlights', label: 'In highlights', min: 0, max: 100, step: 1, def: 35, unit: '%' },
+      { key: 'highlights', label: 'In highlights', min: 0, max: 100, step: 1, def: 35, legacy: 0, unit: '%' },   // queue 756: absent = the old curve (0), as the kernel reads it
     ] },
     { type: 'blocknoise', label: 'Chunk Noise', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -990,7 +990,7 @@ window.FM = window.FM || {};
       /* Queue 350. Default 0.4, not 0 — he asked for it to move, so a cell field you have just added
          should already be alive; 0 is still there for anyone who wants the frozen pattern, and an
          effect saved BEFORE this release carries no motion param at all and renders exactly as it did. */
-      { key: 'motion', label: 'Motion', min: 0, max: 1, step: 0.02, def: 0.4 },
+      { key: 'motion', label: 'Motion', min: 0, max: 1, step: 0.02, def: 0.4, legacy: 0 },   // queue 756: an instance saved before motion existed is frozen (0), and the inspector says so
       { key: 'speed', label: 'Speed', min: 0, max: 2, step: 0.02, def: 0.5 },
     ] },
     { type: 'tunnel', label: 'Tunnel', params: [

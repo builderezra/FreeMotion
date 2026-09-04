@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 4 Sep at v15.50
+> ## 📌 WHAT I NEED FROM YOU — updated 4 Sep at v15.51
 >
-> **State:** v15.50, 1219 tests green, tree clean.
+> **State:** v15.51, 1220 tests green, tree clean.
 > **Just fixed, ahead of everything:** the intro. You were right and it was mine — v15.08 faded the film to nothing half a second before the splash left, so the last stretch was a blank screen handing over to white. The fade is gone and the film plays through in both looks (#776).
 >
 > **TWO LETTERS ARE ALL I NEED** (nothing visual ships before you pick):
@@ -28600,12 +28600,13 @@ re-opened #480, which I had marked done and had not fixed.
       - scene.js:73: evalProp(undefined) → 0, never null; four comments state the rule (3994-3995, 4961-4968, 5640-5644, 6307-6311) and two of those kernels break it themselves (fractalridges 5666/5668, lightning 6302/6304 → intensity 0 → return). Vibrance 4191 desaturates on a missing key; TEXT_FX tnum 1939-1941. Reachable via presets, imported JSON, AI ops (makeInstance seeds defaults). Fix: one `pnum(p, key, def, t)` helper = `p[key] == null ? def : FM.evalProp(p[key], t)` and sweep.
         ✅ **v15.50 — all 110 `v = evalProp(p.k, t); if (v == null) v = d` fallbacks (dead: evalProp(undefined) is 0; the audit guessed ~25) and every text-effect `tnum(evalProp(…), d)` now reads through fparam(), which checks the KEY.** A preset or imported effect lacking a key rendered at 0 — Fractal Ridges and Lightning returned early, Vibrance desaturated, Counter counted to 0. Test renders Fractal Ridges bare vs. defaults spelled out (and vs. no effect), Vibrance on a bare pixel, Counter with no `to`. Mutation caught.
 
-- [ ] **756 — js/compositor.js — schema `def` ≠ kernel absent-key fallback with no `legacy`** (hunt MEDIUM #39)
+- [x] **756 — js/compositor.js — schema `def` ≠ kernel absent-key fallback with no `legacy`** (hunt MEDIUM #39) ✅ DONE v15.51.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
       - Voronoi motion 993 (def 0.4) vs 6205 (0); Film Grain shape 411 (1) vs 4132 (0), highlights 417 (35) vs 4122 (0); Glow radius 60 (16) vs 1731/6676 (12). Inspector honours `legacy` (963, 1034). Fix: add `legacy:` per the Edge Glow contract at 453-455 so old instances display what they render.
+        ✅ **v15.51 — the four params whose kernel draws an absent key differently from the schema default now carry `legacy:` (glow radius 12, film-grain shape 0 and highlights 0, voronoi motion 0), the contract Edge Glow already followed, so an old instance's controls show what it renders.** Test reads the schemas with Edge Glow as the control; mutation (glow's legacy dropped) caught.
 
 - [ ] **757 — js/compositor.js:3154-3161 vs 3283-3292 — fxBoundsScan "dirty plate → runs unbounded" is actually "kernel skipped"** (hunt MEDIUM #40)
       **STATUS: 🟢 READY — nothing is stopping this**

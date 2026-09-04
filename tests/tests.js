@@ -54893,6 +54893,20 @@
     }
   });
 
+  /* ═══ 756 (hunt MEDIUM #39): WHERE THE KERNEL'S ABSENT-KEY FALLBACK DIFFERS FROM THE SCHEMA DEFAULT, THE SCHEMA SAYS SO.
+     The inspector honours `legacy` — it shows an old instance at the value that actually renders. Glow radius (12 vs
+     16), Film Grain shape (square vs round) and highlights (0 vs 35), Voronoi motion (0 vs 0.4) carried no `legacy`,
+     so an old instance displayed the default while drawing the fallback. Edge Glow's radius is the control that had
+     the contract all along. */
+  test('756: glow, film grain and voronoi carry legacy values matching their kernels\' absent-key fallbacks', { item: '756' }, async function () {
+    const leg = (fx, key) => { const p = (FM.fxRegistry.paramsOf(fx) || []).find(x => x.key === key); if (!p) throw new Error('setup: no param ' + fx + '.' + key); return p.legacy; };
+    if (leg('glow', 'radius') !== 12) throw new Error('glow.radius has legacy ' + leg('glow', 'radius') + '; the kernel draws an absent radius at 12');
+    if (leg('filmgrain', 'shape') !== 0) throw new Error('filmgrain.shape has legacy ' + leg('filmgrain', 'shape') + '; the kernel reads absent as square (0)');
+    if (leg('filmgrain', 'highlights') !== 0) throw new Error('filmgrain.highlights has legacy ' + leg('filmgrain', 'highlights') + '; the kernel reads absent as 0');
+    if (leg('voronoi', 'motion') !== 0) throw new Error('voronoi.motion has legacy ' + leg('voronoi', 'motion') + '; an instance saved before motion existed is frozen');
+    if (leg('edgeglow', 'radius') !== 3) throw new Error('control: Edge Glow\'s legacy radius is not 3 — the contract this test is modelled on has moved');
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel
