@@ -54533,6 +54533,39 @@
     }
   });
 
+  /* ═══ 748 (hunt MEDIUM #31): "STORAGE FULL" IS SAID ONCE, NOT EVERY OTHER TICK. The project index's write result
+     was discarded, so the once-flag reset on the tick after it was raised and the toast came back the tick after
+     that. Three autosaves with the index write failing on quota → one toast. */
+  test('748: a project index that keeps failing on quota toasts \'Storage full\' once, not every other autosave', { item: '748', budgetMs: 30000 }, async function () {
+    if (!FM.storage || !FM.storage.save || !FM.projects || !FM.projects.currentId) throw new Error('FM.storage.save / FM.projects missing');
+    if (!FM.projects.currentId()) throw new Error('setup: no current project, so the index write cannot be exercised');
+    const toast0 = FM.toast, said = [];
+    /* ⚠️ STUB THE OBJECT, NOT THE PROTOTYPE. This passed alone and failed in a full run with "the quota path was not
+       exercised": the suite's storage tests swap `localStorage` for a mock whose setItem is its OWN property, so a
+       prototype stub is never consulted. An own-property stub works for the real Storage and for a mock alike. */
+    const store = window.localStorage;
+    const hadOwn = Object.prototype.hasOwnProperty.call(store, 'setItem');
+    const realSet = store.setItem.bind(store);
+    try {
+      FM.toast = (m) => { said.push(String(m)); };
+      await FM.storage.save();   // everything writes → the once-flag is clear
+      said.length = 0;
+      store.setItem = function (k, v) { if (k === 'fm.projects') { const e = new Error('quota'); e.name = 'QuotaExceededError'; throw e; } return realSet(k, v); };
+      // prove the stub is the one being called, so a silent miss can never read as the feature failing
+      let stubHit = 0; const armed = store.setItem;
+      store.setItem = function (k, v) { if (k === 'fm.projects') stubHit++; return armed.call(this, k, v); };
+      await FM.storage.save(); await FM.storage.save(); await FM.storage.save();
+      if (!stubHit) throw new Error('setup: nothing wrote the project index during three autosaves, so the quota path was never reached — this run cannot judge the feature');
+      const n = said.filter(m => /Storage full/i.test(m)).length;
+      if (n < 1) throw new Error('setup: a failing index write never toasted at all — the quota path was not exercised');
+      if (n !== 1) throw new Error('"Storage full" was toasted ' + n + ' times over three autosaves with the index failing — the once-flag is being reset every other tick');
+    } finally {
+      if (hadOwn) store.setItem = realSet; else { try { delete store.setItem; } catch (e) { store.setItem = realSet; } }
+      FM.toast = toast0;
+      try { await FM.storage.save(); } catch (e) {}
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

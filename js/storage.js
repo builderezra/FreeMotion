@@ -265,10 +265,13 @@ window.FM = window.FM || {};
     async save() {
       let sceneOk = writeScene();   // rev-guarded; a quota failure shouldn't block the IDB media save below
       const warnedBefore = _quotaWarned;
-      if (FM.projects) FM.projects.touchCurrent();
+      /* queue 748 (hunt MEDIUM #31): `warnedBefore` can only see a flag raised THIS tick, and the index write's result was
+         thrown away — so with the index failing every tick, the flag was raised on tick 1, reset on tick 2 (raised before, not
+         re-raised), and re-toasted on tick 3: "Storage full" every other tick, for ever. The index write reports now. */
+      const indexOk = FM.projects ? (FM.projects.touchCurrent() !== false) : true;
       // reset the once-flag only when EVERYTHING wrote — resetting after the scene write alone made
       // a failing index write re-toast "Storage full" every 600ms forever
-      if (sceneOk && !(_quotaWarned && !warnedBefore)) _quotaWarned = false;
+      if (sceneOk && indexOk && !(_quotaWarned && !warnedBefore)) _quotaWarned = false;
       try {
         const db = await openDB();
         for (const layer of FM.scene.layers) {
@@ -1417,7 +1420,7 @@ window.FM = window.FM || {};
       const n = this.list().length;
       return { count: n, level: n >= 120 ? 'full' : n >= 60 ? 'busy' : 'ok' };
     },
-    saveIndex(arr) { writeJSON(PROJ_INDEX, arr); },
+    saveIndex(arr) { return writeJSON(PROJ_INDEX, arr); },   // queue 748: the autosave tick needs to know
     currentId() { return curId(); },
     // One-time: fold the legacy single fm.scene autosave into the project index.
     migrate() {
@@ -1455,9 +1458,9 @@ window.FM = window.FM || {};
      * in order to be rendered, and it is nearly free. So the two are separable, and home.open() takes
      * the cheap half now and the picture a moment later. */
     touchCurrent(forceThumb, noThumb) {
-      const id = boundId || curId(); if (!id) return;   // THIS tab's project, not the shared fm.currentProject — else a 2nd tab makes us stamp its card/thumbnail with our scene
+      const id = boundId || curId(); if (!id) return true;   // (nothing to write) THIS tab's project, not the shared fm.currentProject — else a 2nd tab makes us stamp its card/thumbnail with our scene
       const idx = this.list();
-      const e = idx.find(p => p.id === id); if (!e) return;
+      const e = idx.find(p => p.id === id); if (!e) return true;   // (nothing to write)
       const P = FM.scene.project;
       e.name = P.name || 'Untitled';
       // Backfill BEFORE the bump below — reading e.modified afterwards would stamp every pre-v3.68
@@ -1471,7 +1474,7 @@ window.FM = window.FM || {};
       const now = Date.now();
       // A pinned thumbnail (user chose a specific frame) is never auto-overwritten by the periodic capture.
       if (!noThumb && !P.thumbPinned && (forceThumb || (now - thumbTimer > 12000 && !FM.playing))) { thumbTimer = now; const t = makeThumb(); if (t) { e.thumb = null; putThumb(id, t); } }   // thumb → IDB, keeps the index small + autosave fast
-      this.saveIndex(idx);
+      return this.saveIndex(idx);   // queue 748: false when the index did not reach disk
     },
     // Capture the current frame NOW as the card thumbnail (the video is correctly seeked at the playhead
     // here — rendering an arbitrary time later would draw the wrong video frame). The pin flag lives on
