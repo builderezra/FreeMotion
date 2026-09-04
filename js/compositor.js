@@ -3166,12 +3166,14 @@ window.FM = window.FM || {};
    *      ImageData in place, kernel after kernel, without going back through a canvas. MEASURED: a clean
    *      plate through Inner Blur comes out with 1024 coloured-but-transparent pixels, and every effect
    *      stacked after it receives them. Box Blur, Lens Blur and Hex Tiles then diverge by ~370,000 bytes
-   *      with max deltas over 100. So when the plate is dirty this returns NULL and the kernel runs
-   *      unbounded — correct, and it only costs the saving on the stacks that actually create the state.
+   *      with max deltas over 100. So when the plate is dirty this returns DIRTY_PLATE and fxBounds hands the
+   *      kernel the whole frame — correct, and it only costs the saving on the stacks that actually create the
+   *      state. (It returned null, which fxBounds read as "nothing drawn" and SKIPPED the kernel — queue 757.)
    *
    * Detecting it is free here because the scan is already touching every pixel it needs. Returning null
    * rather than a wider box is deliberate: the dirty region can be the entire plate, so there is no box
    * that would be both correct and worth having. */
+  const DIRTY_PLATE = { dirty: true };   // queue 757 (hunt MEDIUM #40): a plate with colour under zero alpha — see fxBoundsScan
   function fxBoundsScan(d, W, H) {
     let minX = W, minY = H, maxX = -1, maxY = -1;
     for (let y = 0; y < H; y++) {
@@ -3180,7 +3182,7 @@ window.FM = window.FM || {};
         const i = row + x * 4, a = d[i + 3];
         if (a === 0) {
           // colour under zero alpha: invisible on screen, but the NEXT kernel in the stack reads it
-          if (d[i] !== 0 || d[i + 1] !== 0 || d[i + 2] !== 0) return null;
+          if (d[i] !== 0 || d[i + 1] !== 0 || d[i + 2] !== 0) return DIRTY_PLATE;   // queue 757: DIRTY is not EMPTY — the caller runs the kernel unbounded, it does not skip it
           continue;
         }
         if (x < minX) minX = x;
@@ -3219,7 +3221,8 @@ window.FM = window.FM || {};
      * `alphaBBox` itself stays: other callers use it for framing decisions where a 2px stride is
      * harmless, and it is not this function's business to change them. */
     const ex = fxBoundsScan(d, W, H);
-    if (!ex) return null;                     // nothing drawn, or the plate is dirty — see fxBoundsScan
+    if (!ex) return null;                     // nothing drawn — the kernel can be skipped
+    if (ex.dirty) return { x: 0, y: 0, w: W, h: H };   // queue 757: a DIRTY plate runs the kernel UNBOUNDED. Both cases returned null before, and null means "skip" — the comment above the scan promised the opposite
     x0 = ex.x; y0 = ex.y; x1 = ex.x + ex.w; y1 = ex.y + ex.h;    // exact bounds carry no pad to strip
     /* SNAP to any frame edge the layer's content genuinely reaches. The snap is load-bearing for
      * backward compatibility: on a full-frame layer alphaBBox clamps at 0 and W-1, so stripping the

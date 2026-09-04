@@ -54907,6 +54907,25 @@
     if (leg('edgeglow', 'radius') !== 3) throw new Error('control: Edge Glow\'s legacy radius is not 3 — the contract this test is modelled on has moved');
   });
 
+  /* ═══ 757 (hunt MEDIUM #40): A DIRTY PLATE (COLOUR UNDER ZERO ALPHA) IS NOT AN EMPTY ONE. The scan returned null for
+     both, and fxBounds read null as "nothing drawn" and skipped the kernel — the comment above the scan promised the
+     kernel would run unbounded. Now: empty → null (skip), dirty → the whole frame (run), drawn → the tight box. */
+  test('757: fxBounds hands a dirty plate the whole frame instead of skipping the kernel, and still skips an empty one', { item: '757' }, async function () {
+    if (!FM._fxBoundsScan || !FM._fxBounds) throw new Error('FM._fxBoundsScan / FM._fxBounds seams missing');
+    const W = 8, H = 8, mk = () => new Uint8ClampedArray(W * H * 4);
+    const empty = mk();
+    if (FM._fxBoundsScan(empty, W, H) !== null || FM._fxBounds(empty, W, H) !== null) throw new Error('control: an empty plate should scan and bound to null');
+    const drawn = mk(); const at = (x, y) => (y * W + x) * 4; drawn[at(3, 3) + 3] = 255; drawn[at(4, 4) + 3] = 255;
+    const b = FM._fxBounds(drawn, W, H);
+    if (!b || b.w > 4 || b.h > 4) throw new Error('control: a drawn plate should bound tightly, got ' + JSON.stringify(b));
+    const dirty = mk(); dirty[at(1, 1)] = 200;   // colour under zero alpha
+    const sc = FM._fxBoundsScan(dirty, W, H);
+    if (!sc || !sc.dirty) throw new Error('the scan returned ' + JSON.stringify(sc) + ' for a dirty plate — indistinguishable from empty');
+    const db = FM._fxBounds(dirty, W, H);
+    if (!db) throw new Error('fxBounds returned null for a dirty plate — the kernel is SKIPPED where the design says it must run unbounded');
+    if (db.x !== 0 || db.y !== 0 || db.w !== W || db.h !== H) throw new Error('a dirty plate should run unbounded (the whole frame), got ' + JSON.stringify(db));
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel
@@ -59114,7 +59133,7 @@
     Object.keys(T.BOUNDED_FX).forEach(k => { if (!SEMANTIC[k] && P[k] && !PARAMS[k]) throw new Error(k + ' joined BOUNDED_FX with no entry in this test\'s params table, so it is not being checked at all'); });
 
     const bad = [];
-    let clean = 0, refused = 0;
+    let clean = 0, whole = 0;
     Object.keys(SHAPES).forEach(name => {
       [false, true].forEach(dirty => {
         const mk = () => {
@@ -59126,9 +59145,17 @@
         };
         const box = FB(mk(), W, H);
         if (dirty) {
-          // The RIGHT answer on a dirty plate is no box at all — bounding there is not a skip.
-          if (box) bad.push('"' + name + '" on a DIRTY plate still returned a box ' + JSON.stringify(box) + ' — a kernel that reads colour under zero alpha would then skip pixels that are not invariant');
-          else refused++;
+          /* THE RIGHT ANSWER ON A DIRTY PLATE IS THE WHOLE FRAME (restated for queue 757). This test used to
+             require NO box, because that was what the scan returned — but fxBounds read that same null as
+             "nothing was drawn" and SKIPPED the kernel entirely, which is the opposite of running it unbounded.
+             The intent here never changed: on a plate whose colour under zero alpha cannot be trusted, no pixel
+             may be skipped. A full-frame box says that exactly, and cannot be mistaken for an empty plate. */
+          if (!box) { bad.push('"' + name + '" on a DIRTY plate got NO box — fxBounds reads that as "nothing drawn" and skips the kernel (queue 757)'); return; }
+          if (box.x !== 0 || box.y !== 0 || box.w !== W || box.h !== H) {
+            bad.push('"' + name + '" on a DIRTY plate got a TIGHT box ' + JSON.stringify(box) + ' — a kernel that reads colour under zero alpha would then skip pixels that are not invariant');
+            return;
+          }
+          whole++;
           return;
         }
         if (!box) { bad.push('"' + name + '" on a clean plate got NO box — the bounding is silently off for it'); return; }
@@ -59146,7 +59173,7 @@
       });
     });
     if (!clean) throw new Error('no clean-plate comparison ran at all');
-    if (!refused) throw new Error('no dirty plate was refused a box — the dirty detection is not running, so the third failure mode is uncovered');
+    if (!whole) throw new Error('no dirty plate got the whole frame — the dirty detection is not running, so the third failure mode is uncovered');
     if (bad.length) throw new Error(bad.length + ' problem(s) on the box the renderer really computes: ' + bad.slice(0, 5).join(' · '));
 
     /* AND WHAT BEING EXACT COSTS, so a future "optimisation" back to a strided or thresholded scan has

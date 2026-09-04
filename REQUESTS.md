@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 4 Sep at v15.51
+> ## 📌 WHAT I NEED FROM YOU — updated 4 Sep at v15.52
 >
-> **State:** v15.51, 1220 tests green, tree clean.
+> **State:** v15.52, 1221 tests green, tree clean.
 > **Just fixed, ahead of everything:** the intro. You were right and it was mine — v15.08 faded the film to nothing half a second before the splash left, so the last stretch was a blank screen handing over to white. The fade is gone and the film plays through in both looks (#776).
 >
 > **TWO LETTERS ARE ALL I NEED** (nothing visual ships before you pick):
@@ -28608,13 +28608,14 @@ re-opened #480, which I had marked done and had not fixed.
       - Voronoi motion 993 (def 0.4) vs 6205 (0); Film Grain shape 411 (1) vs 4132 (0), highlights 417 (35) vs 4122 (0); Glow radius 60 (16) vs 1731/6676 (12). Inspector honours `legacy` (963, 1034). Fix: add `legacy:` per the Edge Glow contract at 453-455 so old instances display what they render.
         ✅ **v15.51 — the four params whose kernel draws an absent key differently from the schema default now carry `legacy:` (glow radius 12, film-grain shape 0 and highlights 0, voronoi motion 0), the contract Edge Glow already followed, so an old instance's controls show what it renders.** Test reads the schemas with Edge Glow as the control; mutation (glow's legacy dropped) caught.
 
-- [ ] **757 — js/compositor.js:3154-3161 vs 3283-3292 — fxBoundsScan "dirty plate → runs unbounded" is actually "kernel skipped"** (hunt MEDIUM #40)
+- [x] **757 — js/compositor.js:3154-3161 vs 3283-3292 — fxBoundsScan "dirty plate → runs unbounded" is actually "kernel skipped"** (hunt MEDIUM #40) ✅ DONE v15.52.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
       (latent; cannot fire through a premultiplying canvas today)
       - Fix: return a distinct sentinel for dirty vs empty and run unbounded on dirty; also correct the comment's premise (each kernel goes through putImageData/getImageData, not one in-place ImageData).
+        ✅ **v15.52 — the scan returns a DIRTY_PLATE sentinel for colour under zero alpha and fxBounds hands the kernel the whole frame; null is only "nothing drawn".** Both returned null before and null meant skip, the opposite of what the scan's own comment promised. Seam test on empty, drawn and dirty plates; mutation (dirty back to null) caught. Latent today, since a premultiplying canvas cannot produce the state.
 
 - [ ] **758 — js/compositor.js:7960 — `_curlLegacy` is the hoisted body, so tests.js:49508 compares curl with itself.** (hunt MEDIUM #41)
       **STATUS: 🟢 READY — nothing is stopping this**
