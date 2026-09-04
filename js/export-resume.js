@@ -132,18 +132,27 @@ window.FM = window.FM || {};
   const TEMPORAL_FX = ['motionflow', 'framestutter', 'temporaldenoise', 'timewarp'];
   function prerollFrames(scene) {
     if (!scene || !FM.eachFx) return 0;
-    let found = false;
+    /* THE PRE-ROLL IS THE ACCUMULATOR'S MEMORY, NOT ITS TIME CONSTANT (queue 749, hunt MEDIUM #32). Motion Flow's echo
+       trails keep `persist` of the previous frame each step (compositor: min(0.96, 0.35 + amount × 0.3)); 25 frames at
+       0.96 leaves 0.96^25 ≈ 36% of the trail still missing at a resume seam. The frames it takes for the trail to fall
+       under 5% is log(0.05) / log(persist) — 74 at 0.96 — read from the effect's own amount (its largest keyframe, if
+       animated). Every other temporal effect keeps the 25 it always had; a scene with none needs none. */
+    let frames = 0;
+    const maxOf = (v) => (v && Array.isArray(v.kf)) ? v.kf.reduce((m, k) => Math.max(m, +k.v || 0), 0) : (v == null ? 1 : Math.max(0, +v || 0));
     for (const layer of (scene.layers || [])) {
-      if (found) break;
       FM.eachFx(layer, fx => {
-        if (fx && fx.enabled !== false && TEMPORAL_FX.indexOf(fx.type) >= 0) found = true;
+        if (!fx || fx.enabled === false || TEMPORAL_FX.indexOf(fx.type) < 0) return;
+        let need = 25;
+        if (fx.type === 'motionflow' && Math.round(maxOf(fx.params && fx.params.style) ) === 2) {
+          const persist = Math.min(0.96, 0.35 + maxOf(fx.params && fx.params.amount) * 0.3);
+          need = Math.max(25, Math.ceil(Math.log(0.05) / Math.log(Math.max(0.01, Math.min(0.999, persist)))));
+        }
+        if (need > frames) frames = need;
       });
     }
-    // 25 frames is the echo accumulator's memory at its longest decay (persist 0.96). Nothing here
-    // needs more, and a scene with no temporal effect at all needs none — a pre-roll is real render
-    // work, and paying 25 heavy frames on a phone for a project that cannot see the difference is
-    // exactly the kind of tax that makes a feature not worth having.
-    return found ? 25 : 0;
+    // A pre-roll is real render work, and paying for frames a project cannot see is exactly the kind of tax
+    // that makes a feature not worth having — so it is the smallest number the scene's effects need.
+    return frames;
   }
 
   /* Push the saved chunks back through a fresh muxer, ONE PART AT A TIME.
@@ -357,6 +366,7 @@ window.FM = window.FM || {};
   FM.exportResume = {
     JOB_KEY: JOB_KEY, PART_PREFIX: PART_PREFIX, FORMAT: FORMAT, MAX_BYTES: MAX_BYTES,
     signature: signature,
+    _prerollFrames: prerollFrames,   // suite seam (queue 749)
     chunkRecord: chunkRecord,
     configRecord: configRecord,
     nextFrameForTs: nextFrameForTs,

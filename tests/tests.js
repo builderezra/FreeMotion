@@ -54566,6 +54566,23 @@
     }
   });
 
+  /* ═══ 749 (hunt MEDIUM #32): THE RESUME PRE-ROLL COVERS THE ECHO TRAIL. Echo trails keep `persist` of the last frame
+     each step; 25 frames at persist 0.96 leaves a third of the trail missing at a resume seam. Amount 3 → persist 0.96
+     → 74 frames; amount 2 → 0.95 → 59; a non-echo style keeps 25 (control); no temporal effect → 0 (control). */
+  test('749: the export pre-roll for echo trails is derived from the effect\'s persistence, not a fixed 25', { item: '749' }, async function () {
+    const f = FM.exportResume && FM.exportResume._prerollFrames;
+    if (!f) throw new Error('FM.exportResume._prerollFrames seam missing');
+    const mk = (fx) => { const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 50, shapeH: 50, fill: '#fff', start: 0, duration: 4 }); L.effects = fx ? [fx] : []; return { layers: [L], project: { width: 1080, height: 1920, fps: 30, duration: 4 } }; };
+    const echo = (amount) => ({ type: 'motionflow', enabled: true, params: { style: 2, amount: amount } });
+    const n3 = f(mk(echo(3)));
+    if (n3 !== 74) throw new Error('echo trails at amount 3 (persist 0.96) get a pre-roll of ' + n3 + ' frames; 0.96^25 leaves a third of the trail missing, 74 are needed');
+    const n2 = f(mk(echo(2)));
+    if (n2 !== 59) throw new Error('echo trails at amount 2 (persist 0.95) get ' + n2 + ' frames, not 59');
+    const plain = f(mk({ type: 'motionflow', enabled: true, params: { style: 0, amount: 1 } }));
+    if (plain !== 25) throw new Error('control: a non-echo motion flow should keep the 25-frame pre-roll, got ' + plain);
+    if (f(mk(null)) !== 0) throw new Error('control: a scene with no temporal effect should need no pre-roll');
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel
