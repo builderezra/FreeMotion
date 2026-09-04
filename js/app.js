@@ -2971,8 +2971,10 @@ window.FM = window.FM || {};
     const grot = FM.evalProp(gt.rotation, 0) || 0, gsc = FM.evalProp(gt.scale, 0);
     const sc = (typeof gsc === 'number' && isFinite(gsc) && gsc !== 0) ? gsc : 1;
     const identity = !gx && !gy && !grot && sc === 1;
-    if (identity) return { baked: 0, skipped: 0 };
+    // ANIMATED FIRST (queue 739, hunt MEDIUM #22): identity is judged at t = 0, so a group keyed at rest and then moving
+    // read as identity, returned 0, and its keyframes were dropped without a word.
     if (anim) return { baked: 0, skipped: -1 };            // -1 = "there was something, and it is animated"
+    if (identity) return { baked: 0, skipped: 0 };
     const rad = grot * Math.PI / 180, cos = Math.cos(rad), sin = Math.sin(rad);
     /* ═══ THE BAKE MUST USE THE SAME PIVOT THE RENDERER DOES (queue 630) ═════════════════════════════
      * This function is the algebra of `applyParentChain` written out longhand, so the two are a matched
@@ -3046,8 +3048,10 @@ window.FM = window.FM || {};
     if (FM.groupContext === id) FM.exitGroup(true);
     const bake = bakeGroupTransform(g);                     // BEFORE the members are re-parented
     const lost = bakeGroupLook(g);                          // …and so is everything that is not position
-    if (bake.skipped === -1 && FM.toast) FM.toast('This group’s position is animated — ungrouping cannot carry that onto the layers, so they go back to their own positions', 6000);
-    else if (lost.length && FM.toast) FM.toast('Ungrouped — but ' + lost.join(' and ') + ' belonged to the group itself and cannot be carried onto the layers individually', 6000);
+    // BOTH losses are said (queue 739): the animated-position note used to hide the effects/look note behind an else.
+    const animMsg = 'This group’s position is animated — ungrouping cannot carry that onto the layers, so they go back to their own positions';
+    const lostMsg = lost.length ? 'Ungrouped — but ' + lost.join(' and ') + ' belonged to the group itself and cannot be carried onto the layers individually' : '';
+    if (FM.toast) { if (bake.skipped === -1 && lostMsg) FM.toast(animMsg + '. ' + lostMsg, 7000); else if (bake.skipped === -1) FM.toast(animMsg, 6000); else if (lostMsg) FM.toast(lostMsg, 6000); }
     FM.scene.layers.forEach(l => { if (l.parent === id) l.parent = g.parent || null; });   // members lift into the parent context
     FM.scene.layers = FM.scene.layers.filter(l => l !== g);
     FM.selectLayer(null);

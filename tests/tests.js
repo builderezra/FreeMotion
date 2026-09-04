@@ -54328,6 +54328,38 @@
     }
   });
 
+  /* ═══ 739 (hunt MEDIUM #22): UNGROUPING A GROUP KEYED AT REST SAYS ITS MOTION IS LOST — AND SAYS THE LOOK IS LOST
+     TOO. identity was judged at t=0 before the animated check, so a group with x keyed 0 → +200 read as identity and
+     its keyframes vanished in silence; and the animated toast hid the effects toast behind an else. */
+  test('739: ungrouping a group animated from rest warns about the motion, and about the group\'s own effects in the same breath', { item: '739' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.groupSelection || !FM.ungroup) throw new Error('FM.groupSelection / FM.ungroup missing');
+    const saved = FM.scene, savedSel = FM.scene.selectedId, toast0 = FM.toast;
+    const said = [];
+    try {
+      const a = FM.makeLayer('shape', { name: 'a739', shape: 'rect', x: 300, y: 300, shapeW: 100, shapeH: 100, fill: '#f00', start: 0, duration: 4 });
+      const b = FM.makeLayer('shape', { name: 'b739', shape: 'rect', x: 600, y: 600, shapeW: 100, shapeH: 100, fill: '#0f0', start: 0, duration: 4 });
+      FM.scene = scene([a, b]); FM.selectLayer(a.id); FM.scene.selectedIds = [a.id, b.id]; FM.refreshAll();
+      FM.groupSelection(); await sleep(50);
+      const g = FM.scene.layers.find(l => l.type === 'group');
+      if (!g) throw new Error('setup: grouping made no group');
+      const x0 = FM.evalProp(g.transform.x, 0) || 0;
+      g.transform.x = { kf: [{ t: 0, v: x0, e: 'linear' }, { t: 1, v: x0 + 200, e: 'linear' }] };   // at rest at t=0, then moving
+      const reg = (FM.fxRegistry.all() || []).find(r => !FM.isFxContainer(FM.fxRegistry.makeInstance(r.type || r.id) || {}));
+      g.effects = [FM.fxRegistry.makeInstance(reg.type || reg.id)];
+      FM.toast = (m) => { said.push(String(m)); };
+      FM.ungroup(g.id); await sleep(50);
+      const all = said.join(' | ');
+      if (!/animated/.test(all)) throw new Error('ungrouping a group keyed at rest said nothing about its animated position — identity was judged at t=0 first, and the keyframes were dropped in silence (toasts: ' + JSON.stringify(said) + ')');
+      if (!/belonged to the group itself/.test(all)) throw new Error('the group\'s own effect was lost without a word — the animated note hid it (toasts: ' + JSON.stringify(said) + ')');
+      if (FM.scene.layers.some(l => l.type === 'group')) throw new Error('control: the group was not ungrouped');
+    } finally {
+      FM.toast = toast0;
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel
