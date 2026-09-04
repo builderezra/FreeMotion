@@ -1,0 +1,690 @@
+<title>FreeMotion Unblock List</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  /* ── FreeMotion's own tokens, so this page reads as part of the app it serves.
+     Light lives on bare :root (the un-stamped default is system, so both blocks below matter). */
+  :root {
+    --bg: #f1f5f6; --panel: #ffffff; --sunk: #f6f9fa;
+    --line: #d7e1e5; --line-soft: #e8eef1;
+    --text: #0f1621; --dim: #566475; --faint: #8494a4;
+    --accent: #0c8d79; --accent-ink: #ffffff; --accent-wash: #e2f4f0;
+    --wait: #9a6714; --wait-wash: #fbf1de;
+    --good: #14874a;
+    --shadow: 0 1px 2px rgba(15, 22, 33, .06), 0 4px 14px rgba(15, 22, 33, .05);
+    --radius: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1320; --panel: #161c28; --sunk: #121824;
+      --line: #2b3547; --line-soft: #1f2734;
+      --text: #eef2f8; --dim: #8b96a8; --faint: #59647a;
+      --accent: #29d9bb; --accent-ink: #06231d; --accent-wash: #12302c;
+      --wait: #ffce4a; --wait-wash: #2a2416;
+      --good: #4cd497;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 6px 18px rgba(0, 0, 0, .28);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e1320; --panel: #161c28; --sunk: #121824;
+    --line: #2b3547; --line-soft: #1f2734;
+    --text: #eef2f8; --dim: #8b96a8; --faint: #59647a;
+    --accent: #29d9bb; --accent-ink: #06231d; --accent-wash: #12302c;
+    --wait: #ffce4a; --wait-wash: #2a2416;
+    --good: #4cd497;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 6px 18px rgba(0, 0, 0, .28);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 400 15px/1.5 "IBM Plex Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    padding: 0 0 108px;
+  }
+  .wrap { max-width: 660px; margin: 0 auto; padding: 0 15px; }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
+
+  /* ── masthead ─────────────────────────────────────────────── */
+  header { padding: 30px 0 20px; }
+  h1 { font-size: 25px; line-height: 1.15; font-weight: 700; letter-spacing: -.02em; margin: 0 0 9px; text-wrap: balance; }
+  .stand { color: var(--dim); font-size: 14.5px; margin: 0; max-width: 54ch; }
+  .stand b { color: var(--text); font-weight: 600; }
+
+  .tally { display: flex; flex-wrap: wrap; gap: 7px; margin: 17px 0 0; padding: 0; list-style: none; }
+  .tally li {
+    display: flex; align-items: baseline; gap: 6px;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 999px; padding: 5px 12px 5px 10px; font-size: 12.5px; color: var(--dim);
+  }
+  .tally .n { font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 13.5px; color: var(--text); }
+
+  /* ── sections ─────────────────────────────────────────────── */
+  section { margin: 30px 0 0; }
+  .shead { display: flex; align-items: baseline; gap: 9px; margin: 0 0 3px; }
+  .shead h2 { font-size: 17px; font-weight: 600; letter-spacing: -.01em; margin: 0; }
+  .shead .count {
+    font-family: "IBM Plex Mono", monospace; font-size: 11.5px; font-weight: 600;
+    color: var(--accent); background: var(--accent-wash);
+    border-radius: 5px; padding: 2px 6px; white-space: nowrap;
+  }
+  .sdesc { color: var(--dim); font-size: 13.5px; margin: 0 0 13px; max-width: 56ch; }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 13px 14px; margin-bottom: 9px; box-shadow: var(--shadow);
+  }
+  .card.done { border-color: var(--accent); background: var(--accent-wash); }
+
+  .row { display: flex; align-items: flex-start; gap: 11px; }
+  .ask { flex: 1; min-width: 0; }
+  .ask h3 { font-size: 15px; font-weight: 600; margin: 0 0 3px; line-height: 1.32; }
+  .ask p { margin: 0; color: var(--dim); font-size: 13.5px; line-height: 1.45; }
+  .ask p + p { margin-top: 5px; }
+  .quote { color: var(--dim); font-style: italic; }
+  .path {
+    font-family: "IBM Plex Mono", monospace; font-size: 12.5px; font-weight: 500;
+    background: var(--sunk); border: 1px solid var(--line-soft); border-radius: 6px;
+    padding: 1px 5px; white-space: nowrap; color: var(--text);
+  }
+  .items { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .items span {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; font-weight: 500;
+    color: var(--faint); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px;
+  }
+
+  /* the tick — a real control, sized for a thumb */
+  .tick {
+    flex: none; width: 26px; height: 26px; margin-top: 1px;
+    border: 1.5px solid var(--line); border-radius: 8px; background: var(--sunk);
+    display: grid; place-items: center; cursor: pointer; padding: 0;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  .tick svg { width: 15px; height: 15px; stroke: var(--accent-ink); stroke-width: 2.6; fill: none;
+    stroke-linecap: round; stroke-linejoin: round; opacity: 0; transform: scale(.6); transition: opacity .15s ease, transform .15s ease; }
+  .tick[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
+  .tick[aria-pressed="true"] svg { opacity: 1; transform: scale(1); }
+
+  /* ── option pills ─────────────────────────────────────────── */
+  .opts { display: flex; flex-direction: column; gap: 6px; margin-top: 11px; }
+  .opt {
+    display: flex; align-items: flex-start; gap: 9px; width: 100%; text-align: left;
+    background: var(--sunk); border: 1.5px solid var(--line); border-radius: 9px;
+    padding: 9px 11px; cursor: pointer; color: var(--text);
+    font: inherit; font-size: 13.5px; line-height: 1.4;
+    transition: border-color .14s ease, background .14s ease;
+  }
+  .opt .key {
+    flex: none; font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 12.5px;
+    min-width: 17px; color: var(--faint);
+  }
+  .opt .rec { color: var(--accent); font-weight: 600; }
+  .opt[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-wash); }
+  .opt[aria-pressed="true"] .key { color: var(--accent); }
+  .opt:hover:not([aria-pressed="true"]) { border-color: var(--faint); }
+
+  .note {
+    width: 100%; margin-top: 9px; background: var(--sunk); color: var(--text);
+    border: 1.5px solid var(--line); border-radius: 9px; padding: 9px 11px;
+    font: inherit; font-size: 13.5px; resize: vertical; min-height: 42px;
+  }
+  .note::placeholder { color: var(--faint); }
+  .note:focus, .opt:focus-visible, .tick:focus-visible, button:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+
+  /* ── sticky reply bar ─────────────────────────────────────── */
+  .bar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+    background: var(--panel); border-top: 1px solid var(--line);
+    padding: 11px 15px calc(11px + env(safe-area-inset-bottom, 0px));
+  }
+  .bar .inner { max-width: 660px; margin: 0 auto; display: flex; align-items: center; gap: 11px; }
+  .bar .status { flex: 1; min-width: 0; font-size: 12.5px; color: var(--dim); line-height: 1.35; }
+  .bar .status b { color: var(--text); font-weight: 600; }
+  .send {
+    flex: none; background: var(--accent); color: var(--accent-ink); border: none;
+    border-radius: 9px; padding: 11px 17px; font: inherit; font-weight: 600; font-size: 14px;
+    cursor: pointer;
+  }
+  .send:disabled { opacity: .45; cursor: default; }
+
+  footer { color: var(--faint); font-size: 12.5px; margin: 34px 0 0; line-height: 1.5; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Everything FreeMotion is waiting on you for</h1>
+    <p class="stand">Thirty-five open items are built as far as they can go without you. Nothing here needs
+      more than a tap or a letter. Pick as you go — the page remembers — then hit <b>Copy my answers</b> and
+      paste the lot back in one message.</p>
+    <ul class="tally">
+      <li><span class="n">11</span> need a report pasted</li>
+      <li><span class="n">17</span> need a letter</li>
+      <li><span class="n">5</span> need a quick look</li>
+      <li><span class="n">2</span> need a screenshot</li>
+    </ul>
+  </header>
+
+  <!-- ══ 1. THE REPORTS ══ ordered by how many items each one frees -->
+  <section id="reports">
+    <div class="shead"><h2>Eight copies, eleven items</h2><span class="count">11 items</span></div>
+    <p class="sdesc">The app already records these on your own device. Each one replaces a guess I would
+      otherwise keep making — several bugs here have survived because everything measures fine on this Mac.</p>
+
+    <div class="card" data-id="rep-playback" data-kind="tap" data-label="Your last playback">
+      <div class="row">
+        <button class="tick" aria-pressed="false" aria-label="Mark done"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></svg></button>
+        <div class="ask">
+          <h3>Your last playback</h3>
+          <p>On the phone: play until the sound cuts out, stop, then <span class="path">Settings → Your last playback → Copy</span>.</p>
+          <p>This is the one I most want. Three separate audio complaints all wait on it.</p>
+          <div class="items"><span>#95</span><span>#96</span><span>#663</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" data-id="rep-export" data-kind="tap" data-label="Your last export">
+      <div class="row">
+        <button class="tick" aria-pressed="false" aria-label="Mark done"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></svg></button>
+        <div class="ask">
+          <h3>Your last export</h3>
+          <p>On the phone: export something with sound, then <span class="path">Settings → Your last export → Copy</span>.</p>
+          <p>The report names which of six places the audio was lost. Silent exports are the longest-running
+            complaint in the list.</p>
+          <div class="items"><span>#215</span><span>#677</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" data-id="rep-pcexport" data-kind="tap" data-label="PC export played in Chrome">
+      <div class="row">
+        <button class="tick" aria-pressed="false" aria-label="Mark done"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></svg></button>
+        <div class="ask">
+          <h3>One check on the PC: is the file silent, or is the player?</h3>
+          <p>Export something short with sound on the PC, drag the <span class="path">.mp4</span> into a Chrome
+            tab, press play. Sound or no sound decides which half of the bug this is — and they need opposite fixes.</p>
+          <div class="items"><span>#604</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" data-id="rep-measure-phone" data-kind="tap" data-label="What's slow (phone, effects stacked)">
+      <div class="row">
+        <button class="tick" aria-pressed="false" aria-label="Mark done"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></svg></button>
+        <div class="ask">
+          <h3>What’s slow — on the phone, with effects stacked</h3>
+          <p>Stack a few effects on one layer, then <span class="path">Settings → What’s slow → Measure</span>,
+            use the app for ten seconds, and Copy.</p>
+          <p>This is the oldest thing on the whole list — “editing lags, and gets bad fast”, still open.</p>
+          <div class="items"><span>oldest item</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" data-id="rep-measure-pc" data-kind="tap" data-label="What's slow (PC, while scrubbing)">
+      <div class="row">
+        <button class="tick" aria-pressed="false" aria-label="Mark done"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></svg></button>
+        <div class="ask">
+          <h3>What’s slow — on the PC, <em>while scrubbing</em></h3>
+          <p>Press play <em>and</em> drag the playhead for the ten seconds, then Copy. Your last PC sample came
+            back healthy, which is why the scrubbing part matters — it is the case that never got sampled.</p>
+          <div class="items"><span>#657</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" data-id="rep-scrub" data-kind="tap" data-label="Your last scrub">
+      <div class="row">
+        <button class="tick" aria-pressed="false" aria-label="Mark done"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></svg></button>
+        <div class="ask">
+          <h3>Your last scrub</h3>
+          <p>On the phone: select a layer, scrub the timeline once, then
+            <span class="path">Settings → Your last scrub → Copy</span>.</p>
+          <p>Scrubbing measured perfectly smooth in every state I could stage here, so the jumpiness depends on
+            something your device brings. This records every frame of the real thing.</p>
+          <div class="items"><span>#768</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" data-id="rep-open" data-kind="tap" data-label="Your last project open">
+      <div class="row">
+        <button class="tick" aria-pressed="false" aria-label="Mark done"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></svg></button>
+        <div class="ask">
+          <h3>Your last project open</h3>
+          <p>Open a project on the phone, then <span class="path">Settings → Your last project open → Copy</span>.
+            It says which frames ran long, instead of me guessing again at why opening feels janky.</p>
+          <div class="items"><span>#508</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" data-id="rep-blank" data-kind="tap" data-label="A clip with no picture">
+      <div class="row">
+        <button class="tick" aria-pressed="false" aria-label="Mark done"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></svg></button>
+        <div class="ask">
+          <h3>A clip with no picture <span style="color:var(--faint);font-weight:400">— next time it happens</span></h3>
+          <p>When a screen recording lands blank, go to
+            <span class="path">Settings → A clip with no picture → Copy</span>. It reports what your device can
+            actually decode; a table measured anywhere else is worthless here.</p>
+          <div class="items"><span>#129</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 2. THE PICKS ══ -->
+  <section id="picks">
+    <div class="shead"><h2>Seventeen letters</h2><span class="count">17 items</span></div>
+    <p class="sdesc">Nothing visual ships before you have seen it — your standing rule. Where I drew options and
+      sent them, the letters below are those same options.</p>
+
+    <div class="card" data-id="425" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#425</span> Where does <em>Copy</em> sit on a layer row?</h3>
+        <p>You asked for trash / copy / parent on the right. Copy is the one that fights an earlier instruction.</p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="A"><span class="key">A</span><span>Copy moves right with the rest, switch and all</span></button>
+        <button class="opt" data-v="B"><span class="key">B</span><span>Copy stays left, where you put it a day earlier <span class="rec">— recommended</span></span></button>
+      </div>
+    </div>
+
+    <div class="card" data-id="454" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#454</span> “Save whole look as preset…”</h3>
+        <p>Presets are for effects only now. This row is the last thing still carrying the old meaning.</p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="A"><span class="key">A</span><span>Remove it — your literal words</span></button>
+        <button class="opt" data-v="B"><span class="key">B</span><span>Keep it, rename it “Copy look &amp; motion to…”, move it out of the Presets card <span class="rec">— recommended</span></span></button>
+        <button class="opt" data-v="C"><span class="key">C</span><span>Cut it back to effects only</span></button>
+      </div>
+    </div>
+
+    <div class="card" data-id="484" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#484</span> What is “Silk Ribbon”?</h3>
+        <p>Every other renamed effect is done. This one needs to know what it <em>is</em> before it can be named.</p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="A"><span class="key">A</span><span>A shape under Add → Shape, beside the banner and flag <span class="rec">— recommended</span></span></button>
+        <button class="opt" data-v="B"><span class="key">B</span><span>An effect</span></button>
+        <button class="opt" data-v="C"><span class="key">C</span><span>Skip it</span></button>
+      </div>
+    </div>
+
+    <div class="card" data-id="570" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#570</span> The toggle switch while you drag a layer</h3>
+        <p>It is accurate and it agrees with where the layer lands — only the feel is at issue, so this is taste.</p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="Smooth"><span class="key">A</span><span>Smooth — follows the finger <span class="rec">— recommended</span></span></button>
+        <button class="opt" data-v="Stepped"><span class="key">B</span><span>Stepped, but finer than now</span></button>
+        <button class="opt" data-v="Leave"><span class="key">C</span><span>Leave it alone</span></button>
+      </div>
+    </div>
+
+    <div class="card" data-id="624" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#624</span> Holding a layer on the left of the timeline</h3>
+        <p>(a) and (c) are exact opposites, so I cannot guess this one.</p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="a"><span class="key">a</span><span>Holding to multi-select should <em>not</em> pop the edit menu — you are selecting, not editing</span></button>
+        <button class="opt" data-v="b"><span class="key">b</span><span>It should open, but for the layer you <em>held</em>, not whatever was selected</span></button>
+        <button class="opt" data-v="c"><span class="key">c</span><span>It should open, full stop — today it does not on the left-hand column</span></button>
+      </div>
+    </div>
+
+    <div class="card" data-id="642" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#642</span> The home screen background</h3>
+        <p>Four were drawn and sent. The intro film itself is fixed and shipped; this is only the ground behind it.</p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="A"><span class="key">A</span><span>As shipped — three drifting pools</span></button>
+        <button class="opt" data-v="B"><span class="key">B</span><span>Aurora band — the same three hues as one soft diagonal ribbon</span></button>
+        <button class="opt" data-v="C"><span class="key">C</span><span>One deep glow, quieter, from the top — teal into violet</span></button>
+        <button class="opt" data-v="D"><span class="key">D</span><span>The pools with grain and a vignette</span></button>
+        <button class="opt" data-v="none"><span class="key">—</span><span>None of them</span></button>
+      </div>
+    </div>
+
+    <div class="card" data-id="763" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#763</span> The play button on a draft card</h3>
+        <p>Four looks were drawn. The skip-buttons half of this — the gap next to Play — comes with whichever you pick.</p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="A"><span class="key">A</span><span>As shipped</span></button>
+        <button class="opt" data-v="B"><span class="key">B</span><span>A pill with a ▶ / ⏸ glyph</span></button>
+        <button class="opt" data-v="C"><span class="key">C</span><span>A round play button, the time beside it</span></button>
+        <button class="opt" data-v="D"><span class="key">D</span><span>The pill fills blue while playing</span></button>
+      </div>
+    </div>
+
+    <div class="card" data-id="760a" data-item="760 (size)" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#760</span> Shape buttons on PC — <em>size</em></h3>
+        <p>“Make the shape buttons bigger.” Bigger tiles mean fewer per row and one more page of shapes.</p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="40"><span class="key">40</span><span>As shipped — seven across</span></button>
+        <button class="opt" data-v="48"><span class="key">48</span><span>Six across <span class="rec">— recommended</span></span></button>
+        <button class="opt" data-v="56"><span class="key">56</span><span>Five across — reads like the phone</span></button>
+      </div>
+    </div>
+
+    <div class="card" data-id="760b" data-item="760 (colour)" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#760</span> Shape buttons on PC — <em>colour</em></h3>
+        <p>“The colour choices are bad.”</p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="A"><span class="key">A</span><span>As shipped — every shape its own hue on a tile tinted to match</span></button>
+        <button class="opt" data-v="B"><span class="key">B</span><span>One colour for all of them — calm, reads as one family</span></button>
+        <button class="opt" data-v="C"><span class="key">C</span><span>The Shape tab’s own violet</span></button>
+        <button class="opt" data-v="D"><span class="key">D</span><span>White glyphs on coloured tiles — the shape reads first, colour second <span class="rec">— recommended</span></span></button>
+      </div>
+    </div>
+
+    <div class="card" data-id="772" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#772</span> Split / jump buttons on the left seam</h3>
+        <p class="quote">“I meant the menu on the left side… on the vertical edge where the cut-off between the
+          timeline and the adding menu is… put them all there vertically.”</p>
+        <p>Three looks were drawn and sent for that vertical strip.</p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="A"><span class="key">A</span><span>Keycap Rail <span class="rec">— recommended</span></span></button>
+        <button class="opt" data-v="B"><span class="key">B</span><span>Seam Tabs</span></button>
+        <button class="opt" data-v="C"><span class="key">C</span><span>Docked Key Rail</span></button>
+      </div>
+    </div>
+
+    <div class="card" data-id="765" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#765</span> The look of the three lettered buttons</h3>
+        <p>Three treatments were drawn (1 / 2 / 3 in the chat). This is the styling only — #772 above decides where
+          they live.</p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="1"><span class="key">1</span><span>Option 1</span></button>
+        <button class="opt" data-v="2"><span class="key">2</span><span>Option 2</span></button>
+        <button class="opt" data-v="3"><span class="key">3</span><span>Option 3</span></button>
+      </div>
+    </div>
+
+    <div class="card" data-id="775" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#775</span> The top row on a narrow PC window</h3>
+        <p>Going through the PC menus turned up one real defect: below about 1050px the top row runs out of room
+          and the right-hand controls get squeezed. Three ways out.</p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="A"><span class="key">A</span><span>Drop the version label and the help button</span></button>
+        <button class="opt" data-v="B"><span class="key">B</span><span>Fold the right-hand end into a ⋯ button</span></button>
+        <button class="opt" data-v="C"><span class="key">C</span><span>Switch to the phone’s row below 1050px</span></button>
+      </div>
+    </div>
+
+    <div class="card" data-id="654" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#654</span> How you leave the audio editor</h3>
+        <p>Someone using it for the first time could not work out how to get out. Three exits were drawn at phone
+          width and sent on 29 August.</p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="A"><span class="key">A</span><span>A Done button on the panel’s own back row <span class="rec">— recommended, it is the header you asked for in #297</span></span></button>
+        <button class="opt" data-v="B"><span class="key">B</span><span>Option B as drawn</span></button>
+        <button class="opt" data-v="C"><span class="key">C</span><span>Option C as drawn</span></button>
+      </div>
+    </div>
+
+    <div class="card" data-id="564" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#564</span> The Outline &amp; Shadows rows</h3>
+        <p>“It works but looks bad.” Three looks were drawn above the entry. Whichever you pick, the trim-path
+          glyph gets redrawn properly at 30px with it.</p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="A"><span class="key">A</span><span>Option A as drawn</span></button>
+        <button class="opt" data-v="B"><span class="key">B</span><span>Option B as drawn</span></button>
+        <button class="opt" data-v="C"><span class="key">C</span><span>Option C as drawn</span></button>
+      </div>
+    </div>
+
+    <div class="card" data-id="406" data-kind="say">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#406</span> Which menu did you mean?</h3>
+        <p>“Get rid of saving presets from this menu” — there are three menus that save a preset, and deleting the
+          wrong one removes the only way to do something. Your other question here is already answered in the entry.</p>
+      </div>
+      <textarea class="note" rows="2" placeholder="Where you were when you saw it — the effects panel, the layer ⋯ menu, somewhere else"></textarea>
+    </div>
+
+    <div class="card" data-id="482" data-kind="say">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#482</span> The big one — improving every effect</h3>
+        <p>Name the first category to go through by eye, or say no and I will leave it parked.</p>
+        <p>Colouring 43 · Warping 28 · Blur 19 · Generative 19 · Stylize 19 · 3D 18 · Drawing &amp; Edge 16 · Keying 11</p>
+      </div>
+      <textarea class="note" rows="2" placeholder="A category name, or “no”"></textarea>
+    </div>
+
+    <div class="card" data-id="544" data-kind="say">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#544</span> What gets the Claude Design pass?</h3>
+        <p>Already logged as candidates: the AI Scene and sample-clip icons (#543), the template button (#510, #432),
+          and the identity work in BEFORE-PUBLISHING.md.</p>
+      </div>
+      <textarea class="note" rows="2" placeholder="Which of those — or something else"></textarea>
+    </div>
+
+    <div class="card" data-id="674" data-kind="say">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#674</span> Two answers from the QA pass</h3>
+        <p>Should the transport buttons’ tap area grow to 44px? And the third question from that entry. Everything
+          else in it is done.</p>
+      </div>
+      <textarea class="note" rows="2" placeholder="Yes / no on 44px, and anything on the third"></textarea>
+    </div>
+  </section>
+
+  <!-- ══ 3. QUICK LOOKS ══ -->
+  <section id="looks">
+    <div class="shead"><h2>Five quick looks</h2><span class="count">5 items</span></div>
+    <p class="sdesc">Each of these is a thing only your device can answer. The test harness genuinely cannot see them.</p>
+
+    <div class="card" data-id="676" data-item="676 + 706" data-kind="say">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#676 · #706</span> The add menu opening twice</h3>
+        <p>Does the sheet slide up, close, and slide up again — or does a second copy land on top of the first?
+          The two need opposite fixes, and this is still the blocker on both entries.</p>
+      </div>
+      <textarea class="note" rows="2" placeholder="Which of the two it looks like — and whether it still does it now"></textarea>
+    </div>
+
+    <div class="card" data-id="712" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#712</span> Going Back from a category in the effects browser</h3>
+        <p>Does your phone stall on that Back? It is the one device this cannot speak for.</p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="stalls"><span class="key">Y</span><span>Yes — it still stalls</span></button>
+        <button class="opt" data-v="fine"><span class="key">N</span><span>No — it is fine now</span></button>
+      </div>
+    </div>
+
+    <div class="card" data-id="429" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#429</span> The ruler past the cut-off</h3>
+        <p>In the installed app on your phone, does anything still move or draw past the end of the timeline?
+          The harness cannot tell the two viewport units apart, so it cannot check this one.</p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="moves"><span class="key">Y</span><span>Yes — still moves</span></button>
+        <button class="opt" data-v="fixed"><span class="key">N</span><span>No — looks right now</span></button>
+      </div>
+    </div>
+
+    <div class="card" data-id="619" data-kind="say">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#619</span> Tapping a template</h3>
+        <p>One thing changed since you wrote this: your answer on #505 — “the element opens as its own document” —
+          applies to templates too, so tapping a template card now opens it for <em>editing</em>. The swap-your-media
+          flow this entry asked for would be a second route. Still want it?</p>
+      </div>
+      <textarea class="note" rows="2" placeholder="Yes, still want the fill-in flow — or no, editing is enough"></textarea>
+    </div>
+  </section>
+
+  <!-- ══ 4. SCREENSHOTS ══ -->
+  <section id="shots">
+    <div class="shead"><h2>Two screenshots</h2><span class="count">2 items</span></div>
+    <p class="sdesc">Both were measured as correct here, twice. If they still look wrong to you, the screenshot is
+      the only thing that will settle it — send them in the chat.</p>
+
+    <div class="card" data-id="592" data-kind="tap" data-label="Screenshot: add-row overshoot">
+      <div class="row">
+        <button class="tick" aria-pressed="false" aria-label="Mark done"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></svg></button>
+        <div class="ask">
+          <h3>The add-layer row overshooting the timeline</h3>
+          <p>With the timeline zoomed the way you had it. Two staged versions measured dead level, so the zoom is
+            probably the missing piece.</p>
+          <div class="items"><span>#592</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" data-id="606" data-kind="tap" data-label="Screenshot: drag handle corner">
+      <div class="row">
+        <button class="tick" aria-pressed="false" aria-label="Mark done"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></svg></button>
+        <div class="ask">
+          <h3>The add row’s drag handle, out of line with the layer ones</h3>
+          <p>Just that corner is enough.</p>
+          <div class="items"><span>#606</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Built from REQUESTS.md at v15.56 · every item here is open, built as far as it goes, and waiting only on you.
+    Anything you skip stays exactly where it is — nothing gets dropped.
+  </footer>
+</div>
+
+<div class="bar">
+  <div class="inner">
+    <p class="status" id="status">Nothing picked yet.</p>
+    <button class="send" id="send" disabled>Copy my answers</button>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var KEY = 'fm.unblock.v1';
+    var state = {};
+    try { state = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { state = {}; }
+
+    function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+
+    var cards = [].slice.call(document.querySelectorAll('.card'));
+
+    cards.forEach(function (card) {
+      var id = card.dataset.id, kind = card.dataset.kind;
+
+      var tick = card.querySelector('.tick');
+      if (tick) {
+        if (state[id]) { tick.setAttribute('aria-pressed', 'true'); card.classList.add('done'); }
+        tick.addEventListener('click', function () {
+          var on = tick.getAttribute('aria-pressed') !== 'true';
+          tick.setAttribute('aria-pressed', on ? 'true' : 'false');
+          card.classList.toggle('done', on);
+          if (on) state[id] = card.dataset.label || true; else delete state[id];
+          save(); render();
+        });
+      }
+
+      card.querySelectorAll('.opt').forEach(function (btn) {
+        if (state[id] === btn.dataset.v) { btn.setAttribute('aria-pressed', 'true'); card.classList.add('done'); }
+        btn.addEventListener('click', function () {
+          var already = btn.getAttribute('aria-pressed') === 'true';
+          card.querySelectorAll('.opt').forEach(function (b) { b.setAttribute('aria-pressed', 'false'); });
+          if (already) { delete state[id]; card.classList.remove('done'); }
+          else { btn.setAttribute('aria-pressed', 'true'); state[id] = btn.dataset.v; card.classList.add('done'); }
+          save(); render();
+        });
+      });
+
+      var note = card.querySelector('.note');
+      if (note) {
+        if (typeof state[id] === 'string' && kind === 'say') { note.value = state[id]; card.classList.add('done'); }
+        note.addEventListener('input', function () {
+          var v = note.value.trim();
+          if (v) state[id] = v; else delete state[id];
+          card.classList.toggle('done', !!v);
+          save(); render();
+        });
+      }
+    });
+
+    function build() {
+      var picks = [], notes = [], taps = [];
+      cards.forEach(function (card) {
+        var id = card.dataset.id, v = state[id];
+        if (!v) return;
+        var head = card.querySelector('h3');
+        var title = head ? head.textContent.replace(/\s+/g, ' ').replace(/^#[\d\s·#+]+/, '').trim() : id;
+        var num = card.dataset.item || id;
+        if (card.dataset.kind === 'pick') picks.push('#' + num + ' → ' + v + '   (' + title + ')');
+        else if (card.dataset.kind === 'say') notes.push('#' + num + ': ' + v);
+        else taps.push(card.dataset.label || title);
+      });
+      var out = ['FreeMotion — my answers'];
+      if (picks.length) out.push('', 'PICKS', picks.join('\n'));
+      if (notes.length) out.push('', 'ANSWERS', notes.join('\n'));
+      if (taps.length) out.push('', 'DONE / SENDING', taps.map(function (t) { return '· ' + t; }).join('\n'));
+      return out.join('\n');
+    }
+
+    var status = document.getElementById('status'), send = document.getElementById('send');
+
+    function render() {
+      var n = Object.keys(state).length;
+      send.disabled = n === 0;
+      status.innerHTML = n === 0
+        ? 'Nothing picked yet.'
+        : '<b>' + n + '</b> of <b>' + cards.length + '</b> answered — the page remembers, so you can stop and come back.';
+    }
+
+    send.addEventListener('click', function () {
+      var text = build();
+      function done() {
+        send.textContent = 'Copied — paste it to me';
+        setTimeout(function () { send.textContent = 'Copy my answers'; }, 2600);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, fallback);
+      } else fallback();
+      function fallback() {
+        var ta = document.createElement('textarea');
+        ta.value = text; ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed'; ta.style.top = '-1000px';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); done(); }
+        catch (e) { send.textContent = 'Select and copy'; }
+        setTimeout(function () { ta.remove(); }, 0);
+      }
+    });
+
+    render();
+  })();
+</script>
