@@ -54386,6 +54386,45 @@
     }
   });
 
+  /* ═══ 741 (hunt MEDIUM #24): A PRECISION-PAD NUDGE IS ITS OWN UNDO STEP. The pad only flushed; a drag commits on
+     release. Baseline commit, one swipe on the real pad, then undo → the point is back where it was, and redo → the
+     nudge returns (without the commit, redo has nothing, because the nudge was never an entry). */
+  test('741: nudging a mask point on the precision pad commits history, so undo and redo see the nudge', { item: '741' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.maskTool || !FM.maskTool.open || !FM.maskTool._select) throw new Error('FM.maskTool open/_select missing');
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#c04070', start: 0, duration: 4 });
+      L.masks = [{ id: 'mk741', enabled: true, mode: 'add', feather: 0, opacity: 1, invert: false, closed: true, path: [[100, 100], [300, 100], [300, 300], [100, 300]] }];
+      FM.scene = scene([L]); FM.selectLayer(L.id); FM.refreshAll(); await sleep(120);
+      FM.maskTool.open(L.id, 'mk741'); await sleep(260);
+      FM.maskTool._select(1); await sleep(120);
+      const pad = (document.querySelector('#mask-bar') || document.body).querySelector('.mk-pad');
+      if (!pad) throw new Error('setup: no .mk-pad with a point selected');
+      FM.history.commit();
+      const before = L.masks[0].path[1].slice(0, 2);
+      const send = (t, x, y, b) => pad.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 1, pointerType: 'touch', isPrimary: true, buttons: b }));
+      send('pointerdown', 100, 100, 1); send('pointermove', 140, 130, 1); send('pointerup', 140, 130, 0);
+      await sleep(140);
+      const after = L.masks[0].path[1].slice(0, 2);
+      if (after[0] === before[0] && after[1] === before[1]) throw new Error('setup: the swipe did not move the point');
+      FM.history.undo(); await sleep(120);
+      const L2 = FM.layerById(FM.scene, L.id), u = L2 && L2.masks && L2.masks[0].path[1];
+      if (!u || Math.abs(u[0] - before[0]) > 0.5 || Math.abs(u[1] - before[1]) > 0.5) throw new Error('undo after the nudge did not restore the point (' + JSON.stringify(u) + ' vs ' + JSON.stringify(before) + ')');
+      FM.history.redo(); await sleep(120);
+      const L3 = FM.layerById(FM.scene, L.id), r = L3 && L3.masks && L3.masks[0].path[1];
+      if (!r || Math.abs(r[0] - after[0]) > 0.5 || Math.abs(r[1] - after[1]) > 0.5) throw new Error('redo did not bring the nudge back (' + JSON.stringify(r) + ') — the nudge was never committed as its own step, so undo had undone the edit BEFORE it');
+    } finally {
+      try { if (FM.maskTool.isActive && FM.maskTool.isActive() && FM.maskTool.close) FM.maskTool.close(); } catch (e) {}
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

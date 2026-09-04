@@ -767,7 +767,7 @@ window.FM = window.FM || {};
       opts.set(pd.cx + (e.clientX - pd.x) * sens, pd.cy + (e.clientY - pd.y) * sens);
       e.preventDefault();
     });
-    function end(e) { if (!pd) return; pd = null; try { el.releasePointerCapture(e.pointerId); } catch (_) {} }
+    function end(e) { if (!pd) return; pd = null; try { el.releasePointerCapture(e.pointerId); } catch (_) {} if (opts.end) opts.end(); }   // queue 741: a release hook, so a pad that writes history can commit once per swipe
     el.addEventListener('pointerup', end);
     el.addEventListener('pointercancel', end);
   };

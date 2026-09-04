@@ -286,6 +286,9 @@ window.FM = window.FM || {};
           p2[1] = Math.max(0, Math.min(P.height, y));
           dirty = true; flush(); FM.requestRender(); draw();
         },
+        // COMMIT ON RELEASE (queue 741, hunt MEDIUM #24): a drag commits on pointerup; the pad only flushed, so an undo after a
+        // nudge undid the PREVIOUS edit and the resync threw the nudge away. The same write path now ends the same way.
+        end: () => { if (FM.history) FM.history.commit(); },
       });
     }
 
