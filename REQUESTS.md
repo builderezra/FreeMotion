@@ -1,17 +1,27 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 4 Sep at v15.56
+> ## 📌 WHAT I NEED FROM YOU — updated 5 Sep at v15.56
 >
-> **State:** v15.56, 1225 tests green, tree clean.
-> **Just fixed, ahead of everything:** the intro. You were right and it was mine — v15.08 faded the film to nothing half a second before the splash left, so the last stretch was a blank screen handing over to white. The fade is gone and the film plays through in both looks (#776).
+> **State:** v15.56, 1225 tests green, tree clean. The 42-item audit backlog is finished — the last of it shipped overnight.
 >
-> **TWO LETTERS ARE ALL I NEED** (nothing visual ships before you pick):
-> · **#772** — the split / jump buttons, drawn where you actually meant them: stacked on the seam between the LAYER panel and the timeline. **A / B / C**, A recommended.
-> · **#775** — the PC row when the window is narrow. Below about 1050px the middle controls slide under the pinned ends and your click lands on the wrong one: at 950px, pressing **Layer actions** presses **Back to projects** and throws you out of the project. Something must give below ~1000px. **A / B / C**, A recommended.
+> ### 👉 [**Open the unblock list**](https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7)
+> Everything below is on that page, laid out so you can tap through it on your phone and send me one
+> reply at the end. It remembers what you picked, so you can stop and come back.
 >
-> **One line would settle another:** on PC, drag the layer list up and down by a layer's NAME. Does that layer end up selected? I found the fix but could not make any test fail without it, so I would not ship it on faith (#750).
+> **The queue has run dry of work I can do alone.** 35 of the 55 open items are built as far as they go
+> and are waiting only on you — that is why this is one page instead of thirty-five messages:
+> · **11 want a report pasted** — eight copies in Settings. "Your last playback" alone frees three of them, and the export one covers the silent-export complaints that have been open since August.
+> · **17 want a letter** — every one of them has options already drawn; nothing visual ships before you pick (your standing rule).
+> · **5 want a quick look** on your own phone — things the test harness genuinely cannot see.
+> · **2 want a screenshot** — both measured correct here twice, so a picture is the only way to settle them.
 >
-> **Shipped since you last looked:** the phone add sheet slides down again when you swipe or tap it away (#773); A / S / D on the keyboard cut, split and move the selected clip (#765); and 24 of the audit findings, from an undo that wiped an animated Draw-from to a preset that landed at a random time.
+> **Nothing is dropped by skipping any of it.** Whatever you do not answer stays exactly where it is.
+>
+> **Shipped since you last looked:** the intro fix (#776 — that one was mine, and you were right); the
+> phone add sheet slides down again when you swipe it away (#773); A / S / D cut, split and move the
+> selected clip (#765); and the whole audit run — a missing setting now renders at its default instead
+> of zero, an effect on a part-transparent frame is no longer skipped outright, and a draft whose
+> template was deleted says so instead of promising to save back to it.
 
 
 **This file is the record of everything Ezra has asked for.** Every request goes in here the moment
