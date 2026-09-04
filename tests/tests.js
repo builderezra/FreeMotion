@@ -54491,6 +54491,20 @@
     feat.forEach(id => { const r = FM.fxRegistry.get(id); if (!r) throw new Error(id + ' is featured but not a real effect'); if (r.hidden) throw new Error(id + ' is featured but hidden'); });
   });
 
+  /* ═══ 746 (hunt MEDIUM #29): "LAYER NEVER MOVES" IS NOT SAID OF A LAYER THAT MOVES. A shape parented to an animated
+     layer, or with an animated anchor or depth, was badged as never moving. Through the real predicate: a static
+     shape → cannot move (the control); parented → can; anchorX keyed → can; z keyed → can. */
+  test('746: cannotMove is false for a parented layer and for an animated anchor or depth', { item: '746' }, async function () {
+    const f = FM.fxBrowser && FM.fxBrowser._cannotMove;
+    if (!f) throw new Error('FM.fxBrowser._cannotMove seam missing');
+    const mk = () => FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 50, shapeH: 50, fill: '#fff', start: 0, duration: 4 });
+    const kf = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 1, e: 'linear' }] };
+    const s0 = mk(); if (!f(s0)) throw new Error('control: a static, unparented shape should read as never moving');
+    const s1 = mk(); s1.parent = 'some-animated-parent'; if (f(s1)) throw new Error('a parented shape is badged as never moving — it rides its parent');
+    const s2 = mk(); s2.transform.anchorX = kf; if (f(s2)) throw new Error('a shape with an animated anchor is badged as never moving');
+    const s3 = mk(); s3.transform.z = kf; if (f(s3)) throw new Error('a shape with animated depth is badged as never moving');
+  });
+
   /* ═══ 250: A MOUSE WHEEL MUST BE ABLE TO REACH THE SLAM, NOT JUST A TRACKPAD.
      Ezra, 16 Aug: "the slam easter egg on pc is competely broken now." It was, for anyone with a wheel.
      MEASURED before the fix, one notch at a time: a trackpad flick peaked at 62px and slammed; wheel

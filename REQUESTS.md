@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.39
+> ## 📌 WHAT I NEED FROM YOU — updated 3 Sep at v15.40
 >
-> **State:** v15.39, 1209 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
+> **State:** v15.40, 1210 tests green, tree clean. **Shipped since you last looked:** bookmark lines stop at the divider at any scroll (#429 + #587); templates open for EDITING like elements, with the review's data-loss findings fixed before it went out (#505, #342); the point editor's points sit on the shape when zoomed and panned — the bug you said was STILL there (#561, re-opened and fixed properly). **Your messages from last night are all logged verbatim** (#760–#769) and are being worked in order; #418 closed on your word.
 > **Four pictures are in the chat waiting for one letter each** (nothing visual ships before you pick): **#642** the home background A–D · **#763** the skip-button gap (6/12/18) and the play button A–D · **#765** the split/jump buttons' look 1–3 · and **#760's people shapes** come next, drawn the same way. Everything else waiting on you is a paste or a letter, listed by `tools/next.sh` under its own heading so it cannot hide: #425 A/B · #454 A/B/C · #482 a category · #484 A/B/C · #539 A/B/C · #544 which things · #564 A/B/C · #570 smooth/stepped/leave · #624 a/b/c · #654 A/B/C · #406 which menu · #674 (b)/(c) · #95/#96/#663 the **Your last playback** paste · #215/#604/#677 the **Your last export** paste · #129 the **clip with no picture** paste · the oldest lag item, a **Measure** report · #657 a sample while scrubbing · #676/#706 what "twice" looks like · #712 whether Back from a category stalls · #592 a screenshot.
 > **Next, in order, each already built and proved, shipping one by one:** #508 (a frame-time report of the project-open slide from your phone), #553 (coming back to the app half-drawn), #606, #674 (clip names over filmstrips), #688 (one intro film, dark mode lands on dark), #706 (the add sheet's one motion), #715 (PC sliders glide), #716 (the cursor glow box), #717 (copy/paste button lit), #762 (tap again closes), #764 (dragged add row on top); then #760, #765, #768 and the audit findings.
 
@@ -28492,12 +28492,13 @@ re-opened #480, which I had marked done and had not fixed.
       - Standing rule (165-166) says prepend on every add. Fix: prepend squish, lensdistort, pixelsort, lumamatte, compoundblur, matchgrade… and trim to 12 — or derive the row from CATEGORY_OF batch order so it cannot drift. Note: adding lumamatte/compoundblur/matchgrade also triggers #30.
         ✅ **v15.39 — the featured row is derived from the registry's batch order instead of a hand-written list that stopped at batch 26.** Newest first is CATEGORY_OF read backwards; hidden, media-only / text-only, single-layer-type and filter-clashing ids are skipped; twelve lead. squish (batch 39) leads and batch 38 is in. Test; mutation (oldest first) caught.
 
-- [ ] **746 — js/fx-browser.js:771-781 — cannotMove ignores layer.parent, anchorX/Y, z** (hunt MEDIUM #29)
+- [x] **746 — js/fx-browser.js:771-781 — cannotMove ignores layer.parent, anchorX/Y, z** (hunt MEDIUM #29) ✅ DONE v15.40.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
       - A shape parented to an animated layer is badged "layer never moves". Fix: return false when `layer.parent` is set (or walk parents as fx-thumbs.js:1160-1166 does); add anchor/z keys.
+        ✅ **v15.40 — cannotMove returns false for a parented layer and treats anchorX / anchorY / z as motion channels.** A shape parented to an animated layer was badged "layer never moves". Test through a seam on the real predicate with a static shape as the control; mutation (parent ignored) caught.
 
 - [ ] **747 — js/fx-browser.js:888 — second needsInputHint after 885 (double badge, latent)** (hunt MEDIUM #30)
       **STATUS: 🟢 READY — nothing is stopping this**

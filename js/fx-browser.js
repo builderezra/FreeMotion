@@ -776,8 +776,9 @@ window.FM = window.FM || {};
   function cannotMove(layer) {
     if (!layer || (layer.type !== 'shape' && layer.type !== 'text')) return false;   // video moves by itself
     if ((layer.effects || []).length) return false;                                   // an effect can move it
+    if (layer.parent) return false;                                                     // queue 746: a child rides its parent's motion — fx-thumbs walks the chain the same way
     const tr = layer.transform || {};
-    const anim = ['x', 'y', 'scale', 'scaleX', 'scaleY', 'rotation', 'rotationX', 'rotationY', 'skewX', 'skewY']
+    const anim = ['x', 'y', 'scale', 'scaleX', 'scaleY', 'rotation', 'rotationX', 'rotationY', 'skewX', 'skewY', 'anchorX', 'anchorY', 'z']   // queue 746: an animated anchor or depth moves it too
       .some(k => FM.isAnimated && FM.isAnimated(tr[k]));
     if (anim) return false;
     if (layer.behaviors && layer.behaviors.length) return false;                      // wiggle et al move it
@@ -1565,6 +1566,7 @@ window.FM = window.FM || {};
        wrong call is impossible rather than merely documented. */
     _addEffect: function (id, preset) { return addEffect(id, preset); },   // suite seam (queue 722)
     _deadShortLabel: deadShortLabel,   // suite seam (queue 744)
+    _cannotMove: cannotMove,   // suite seam (queue 746)
     _openCategory: function (cat) {
       const c = (cat && typeof cat === 'object') ? cat : (FM.fxRegistry.categories() || []).filter(x => x.key === cat)[0];
       if (!c) throw new Error('no such effect category: ' + cat);
