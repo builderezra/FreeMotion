@@ -451,7 +451,8 @@ window.FM = window.FM || {};
           if (FM.inspector) FM.inspector.refresh();
         } catch (err) {
           btn.textContent = label; btn.disabled = false;
-          if (FM.toast) FM.toast('Speech detection failed: ' + (err && err.message || err));
+          if (FM.reportError) FM.reportError('detecting speech for captions', err);   // queue 674: the raw message goes to Settings → Last error, not the screen
+          if (FM.toast) FM.toast('Speech detection failed \u2014 the details are in Settings \u2192 Last error \u2192 Copy', 6000);
         }
       });
       wrap.appendChild(btn);

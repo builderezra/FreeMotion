@@ -5960,6 +5960,11 @@ window.FM = window.FM || {};
         if (stk.position == null) stk.position = (layer.type === 'text' || layer.type === 'group') ? 'outside' : 'center';
         bsGrid.appendChild(bsTile('outline', 'Outline', stk.enabled, v => { stk.enabled = v; FM.requestRender(); FM.inspector.refresh(); }));
         if (stk.enabled) {
+          /* SECTIONS (queue 564, the fix he delegated: "you figure out the best fix"). Each enabled feature's rows used to
+             run straight into the next feature's — Outline + Shadow open together gave one unbroken column of Position,
+             Color, Size, Style, Blur, Color, Opacity with nothing saying where one stopped. Every feature now heads its
+             rows with a small label and a divider (the same insp-sub-label the Draw-on rows already use). */
+          body.appendChild(el('div', 'insp-sub-label bs-sub', 'Outline'));
           if (layer.type !== 'group' && !openKind) body.appendChild(segRow('Position', [['inside', 'Inside'], ['center', 'Center'], ['outside', 'Outside']], () => stk.position, v => { stk.position = v; }));
           body.appendChild(kfColorRow(stk, 'color', 'Color', stk.color || '#ffffff'));
           if (openKind) body.appendChild(el('div', 'insp-hint', 'Hugs the line from behind, as thick again as the line — set the line under Line width.'));   // queue 780
@@ -5979,6 +5984,7 @@ window.FM = window.FM || {};
           FM.requestRender(); FM.inspector.refresh();
         }));
         if (layer.trimPath && layer.trimPath.enabled) {
+          body.appendChild(el('div', 'insp-sub-label bs-sub', 'Trim path'));   // queue 564
           const tp = layer.trimPath;
           body.appendChild(kfScaledRow(tp, 'start', 'Start', 0, 100, 1, 0, '%', 100));
           body.appendChild(kfScaledRow(tp, 'end', 'End', 0, 100, 1, 100, '%', 100));
@@ -5994,6 +6000,7 @@ window.FM = window.FM || {};
           FM.requestRender(); FM.inspector.refresh();
         }));
         if (dstroke.dash && dstroke.dash.enabled) {
+          body.appendChild(el('div', 'insp-sub-label bs-sub', 'Dashes'));   // queue 564
           const dh = dstroke.dash;
           body.appendChild(rangeRow('Length', () => dh.length, v => { dh.length = Math.max(0, v); }, 0, 100, 1));
           body.appendChild(rangeRow('Gap', () => dh.gap, v => { dh.gap = Math.max(0, v); }, 0, 100, 1));
@@ -6016,6 +6023,7 @@ window.FM = window.FM || {};
          why he thought the offset one was all there was. */
       bsGrid.appendChild(bsTile('shadow', 'Shadow', sh.enabled, v => { sh.enabled = v; FM.requestRender(); FM.inspector.refresh(); }));
       if (sh.enabled) {
+        body.appendChild(el('div', 'insp-sub-label bs-sub', 'Shadow'));   // queue 564
         /* THE CHOICE, MADE VISIBLE. Position X/Y are still right there below and still keyframeable —
            this row does not replace them, it just means you do not have to know that a shadow becomes
            the normal kind by zeroing two sliders that are already at 8.
@@ -6048,6 +6056,7 @@ window.FM = window.FM || {};
           FM.requestRender(); FM.inspector.refresh();
         }, true));   // wide: Repeater spans both columns so the grid does not end on a lonely half-tile
         if (layer.repeater && layer.repeater.enabled) {
+          body.appendChild(el('div', 'insp-sub-label bs-sub', 'Repeater'));   // queue 564
           const rp = layer.repeater;
           body.appendChild(kfNumRow(rp, 'copies', 'Copies', 1, 50, 1, 3, ''));
           body.appendChild(kfNumRow(rp, 'offsetX', 'Offset X', -500, 500, 1, 40, ''));

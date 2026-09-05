@@ -57824,6 +57824,13 @@
     const src = await (await fetch('../js/app.js?boot=' + Date.now())).text();
     const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
     const bad = code.match(/alert\([^)]*\be\.message\b[^)]*\)/g) || [];
+    /* …AND THE TOASTS IN THE OTHER FILES (queue 674, 5 Sep). This scanned app.js only, and raw err.message still reached him
+       through FM.toast in captions.js, sfx.js (twice) and voice-rec.js. */
+    for (const f of ['captions.js', 'sfx.js', 'voice-rec.js', 'app.js']) {
+      const s2 = await (await fetch('../js/' + f + '?boot=' + Date.now())).text();
+      const c2 = s2.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+      (c2.match(/FM\.toast\([^;]*\b(e|err)\.message\b[^;]*/g) || []).forEach(m => bad.push(f + ': ' + m.slice(0, 90)));
+    }
     if (bad.length)
       throw new Error('a catch-all is putting a raw error message in front of him again — ' + JSON.stringify(bad.slice(0, 2)) + '. Use FM.reportError(where, e, human): the sentence goes on screen, the stack goes to Settings.');
   });
@@ -60246,6 +60253,85 @@
       try { FM.refreshAll(); } catch (e) {}
       if (hadHome && FM.home && FM.home.open) FM.home.open();
       await sleep(60);
+    }
+  });
+
+  test('564: with Outline and Shadow both on, the Outline & Shadows card heads each feature\'s rows with its own label, in order', { item: '564', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.inspector || !FM.inspector.openCategory) throw new Error('seam missing: FM.inspector.openCategory');
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const L = FM.makeLayer('shape', { name: 's564', shape: 'rect', x: 540, y: 960, shapeW: 400, shapeH: 300, fill: '#4080c0', start: 0, duration: 4 });
+      L.stroke = { enabled: true, width: 8, color: '#ffffff', position: 'center' };
+      L.shadow = { enabled: true, blur: 16, dx: 0, dy: 0, color: '#000000', alpha: 100 };
+      FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+      FM.selectLayer(L.id); FM.refreshAll(); await sleep(120);
+      FM.inspector.openCategory('border'); await sleep(250);
+      const labels = [].slice.call(document.querySelectorAll('.insp-sub-label.bs-sub')).map(e => e.textContent.trim());
+      if (labels.indexOf('Outline') < 0 || labels.indexOf('Shadow') < 0) throw new Error('Outline and Shadow are both on and their rows carry no section labels (' + JSON.stringify(labels) + ') — Position, Color, Size, Style, Blur, Opacity run on as one column with nothing saying where one feature stops (queue 564)');
+      if (labels.indexOf('Outline') > labels.indexOf('Shadow')) throw new Error('the section labels are out of order: ' + labels.join(' > '));
+      // the label sits ABOVE its rows: the first prop row after "Outline" is Outline\'s (Position), not Shadow\'s
+      const outlineHead = [].slice.call(document.querySelectorAll('.insp-sub-label.bs-sub')).find(e => e.textContent.trim() === 'Outline');
+      let n = outlineHead.nextElementSibling, seen = [];
+      while (n && !(n.classList && n.classList.contains('bs-sub')) && seen.length < 6) { seen.push((n.textContent || '').trim().slice(0, 12)); n = n.nextElementSibling; }
+      if (!seen.some(t => /Position|Color|Size/.test(t))) throw new Error('the Outline label is not followed by Outline\'s own rows: ' + seen.join(' | '));
+      // off again: no orphan header
+      L.shadow.enabled = false; FM.inspector.refresh(); await sleep(150);
+      const labels2 = [].slice.call(document.querySelectorAll('.insp-sub-label.bs-sub')).map(e => e.textContent.trim());
+      if (labels2.indexOf('Shadow') >= 0) throw new Error('Shadow is off and its section label is still on the card');
+    } finally {
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
+  test('763: on PC the skip buttons sit clear of the play pill — at least as far from it as on the phone, never tucked into it', { item: '763', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (innerWidth <= 700) return;   // the phone row is queue 420's and has its own test ("the skip arrows sit nearer the play pill…"); this one is PC
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close(); await sleep(150);
+      const g = id => { const e = document.getElementById(id); return e && e.getBoundingClientRect(); };
+      const pill = g('time-readout'), ts = g('btn-tostart'), te = g('btn-toend');
+      if (!pill || !ts || !te) throw new Error('setup: the transport row is missing a control at ' + innerWidth + 'px');
+      const boxL = pill.left - ts.right, boxR = te.left - pill.right;
+      const svg = id => { const e = document.querySelector('#' + id + ' svg'); return e && e.getBoundingClientRect(); };
+      const gl = svg('btn-tostart'), gr = svg('btn-toend');
+      const glyphL = gl ? pill.left - gl.right : boxL, glyphR = gr ? gr.left - pill.right : boxR;
+      if (boxL < 0 || boxR < 0) throw new Error('on PC the skip buttons overlap the play pill by ' + Math.min(boxL, boxR).toFixed(1) + 'px — queue 420\'s -4px phone tuck is still applied at ' + innerWidth + 'px (queue 763 clause 1)');
+      if (glyphL < 8 || glyphR < 8) throw new Error('on PC the skip glyphs sit ' + glyphL.toFixed(1) + ' / ' + glyphR.toFixed(1) + 'px from the play pill — the drawn option was 12px; "too close to Play" (queue 763)');
+    } finally {
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
+  test('674: an uncaught error and an unhandled rejection both land in Settings → Last error, silently', { item: '674', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const rep0 = localStorage.getItem('fm.lastError');
+    const realAlert = window.alert; let alerts = 0; window.alert = () => { alerts++; };
+    try {
+      localStorage.removeItem('fm.lastError');
+      window.dispatchEvent(new ErrorEvent('error', { message: 'qa674 script error', error: new Error('qa674 script error'), filename: 'qa.js', lineno: 7 }));
+      await sleep(60);
+      const r1 = localStorage.getItem('fm.lastError') || '';
+      if (r1.indexOf('qa674 script error') < 0) throw new Error('an uncaught script error was not written to Settings → Last error (' + r1.slice(0, 80) + ') — the entry said a global handler "already points at Settings" and there was none (queue 674)');
+      await sleep(2100);   // past the storm throttle
+      localStorage.removeItem('fm.lastError');
+      if (typeof PromiseRejectionEvent === 'function') {
+        window.dispatchEvent(new PromiseRejectionEvent('unhandledrejection', { promise: Promise.resolve(), reason: new Error('qa674 rejection') }));
+        await sleep(60);
+        const r2 = localStorage.getItem('fm.lastError') || '';
+        if (r2.indexOf('qa674 rejection') < 0) throw new Error('an unhandled promise rejection was not written to Settings → Last error (' + r2.slice(0, 80) + ')');
+      }
+      if (alerts) throw new Error('the global handler put ' + alerts + ' alert(s) on screen — it must save silently; the alert is for the three places that hand him a sentence');
+    } finally {
+      window.alert = realAlert;
+      if (rep0 === null) localStorage.removeItem('fm.lastError'); else localStorage.setItem('fm.lastError', rep0);
     }
   });
 

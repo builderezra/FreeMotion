@@ -1244,6 +1244,27 @@ window.FM = window.FM || {};
     if (human) alert(human + '\n\nIf this keeps happening: Settings \u2192 “Last error” \u2192 Copy, and send it to me.');
   };
 
+  /* THE GLOBAL HANDLER THAT THE #674 ENTRY SAID "ALREADY POINTS AT SETTINGS → LAST ERROR" (queue 674, 5 Sep). It did not exist:
+     no window.onerror, no unhandledrejection listener anywhere, and FM.reportError had exactly three callers (import, export,
+     sample clip). An uncaught error anywhere else vanished into the console he cannot see. Both are saved now — silently,
+     no alert — so "Settings → Last error → Copy" is true for every uncaught error, not three. Throttled: one storm of
+     rAF errors must not rewrite the report sixty times a second and hide the first one. */
+  (function () {
+    let last = 0;
+    function save(where, err) {
+      const now = Date.now(); if (now - last < 2000) return; last = now;
+      try { FM.reportError(where, err || new Error('(no error object)')); } catch (_) {}
+    }
+    window.addEventListener('error', function (e) {
+      if (e && e.target && e.target !== window && !(e.error)) return;   // a resource (img/script/video) load error, not a script error — those have their own reports
+      save('an uncaught error at ' + ((e && e.filename) || '?').replace(/^.*\//, '') + ':' + ((e && e.lineno) || '?'), (e && e.error) || new Error((e && e.message) || 'unknown'));
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      const r = e && e.reason;
+      save('an unhandled promise rejection', (r instanceof Error) ? r : new Error(String(r)));
+    });
+  })();
+
   FM.hideToast = function () {
     const t = document.getElementById('toast');
     if (t) { t.classList.add('hidden'); t.onclick = null; t.onkeydown = null; t.classList.remove('toast-tap'); }

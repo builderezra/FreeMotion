@@ -1229,6 +1229,9 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 .addmenu--sheet .addmenu-page { min-height: 100%; }
 .cat-back:hover { color: var(--text); }
 .insp-sub-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--text-faint); font-weight: 700; margin: 14px 0 8px; }
+/* Outline & Shadows sections (queue 564): a hairline above each feature's label so two open features read as two blocks. */
+.insp-sub-label.bs-sub { border-top: 1px solid var(--line-soft); padding-top: 10px; margin-top: 12px; }
+.insp-sub-label.bs-sub:first-of-type { border-top: 0; padding-top: 0; }
 
 /* Color & Fill — AM-style None / Solid / Gradient / Media selector */
 .fill-tabs { display: flex; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 5px; margin-bottom: 13px; }
@@ -2576,6 +2579,14 @@ body.white-chrome #time-readout:active {
 @media (min-width: 400px) {
   #transport #btn-tostart { margin-right: -4px; }
   #transport #btn-toend { margin-left: -4px; margin-right: 6px; }
+}
+/* PC (queue 763 clause 1, his words: "The skip buttons on PC are too close to Play"). Queue 420 pulled the skips 4px INTO the
+   pill for the phone's 440px row, and the PC row inherited it: measured at 1280 the skip glyph sat 2.5px from the pill against
+   ~12.5px on the phone. The 3 Sep sheet drew 6 / 12 / 18px and recommended 12; that is +2px margins here. Scoped to the
+   Studio/PC width the app itself uses (700px), so the phone spacing and its test are untouched. */
+@media (min-width: 701px) {
+  #transport #btn-tostart { margin-right: 2px; }
+  #transport #btn-toend { margin-left: 2px; }
 }
 #btn-addside.sw-dragging .sw-knob { background: var(--sw-colour, var(--accent)); }
 #btn-addside.sw-dragging .sw-track { border-color: var(--sw-colour, var(--accent)); box-shadow: 0 0 8px -1px var(--sw-colour, var(--accent)); }

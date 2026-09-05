@@ -687,7 +687,8 @@ window.FM = window.FM || {};
     }
     close();          // the panel is done; the mic is already down, and close() proves it
     FM.voiceRec.addFile(file, secs).catch(function (err) {
-      if (FM.toast) FM.toast((err && err.message) || 'Could not add the recording');
+      if (FM.reportError) FM.reportError('adding a voice recording', err);   // queue 674
+      if (FM.toast) FM.toast('Could not add the recording \u2014 the details are in Settings \u2192 Last error \u2192 Copy', 6000);
     });
   }
 

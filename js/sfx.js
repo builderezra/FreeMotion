@@ -650,7 +650,8 @@ window.FM = window.FM || {};
       // second live AudioContext for previews and never closed it; iOS caps a page at about four, after which everything is silent.
       liveCtx = FM.audioCtx ? FM.audioCtx() : (liveCtx && liveCtx.state !== 'closed' ? liveCtx : new AC());
     } catch (e) {
-      if (FM.toast) FM.toast('Could not start audio — ' + (e && e.message ? e.message : 'unknown'));
+      if (FM.reportError) FM.reportError('starting audio for a sound effect', e);   // queue 674
+      if (FM.toast) FM.toast('Could not start audio \u2014 the details are in Settings \u2192 Last error \u2192 Copy', 6000);
       return;
     }
     const go = () => {
@@ -663,7 +664,8 @@ window.FM = window.FM || {};
       } catch (e) {
         /* SAID, NOT SWALLOWED. A preview that fails silently is indistinguishable from one that works
            on a muted phone, which is exactly how this lasted. */
-        if (FM.toast) FM.toast('Could not play ' + def.name + ' — ' + (e && e.message ? e.message : 'unknown'));
+        if (FM.reportError) FM.reportError('playing the sound effect ' + def.name, e);   // queue 674
+        if (FM.toast) FM.toast('Could not play ' + def.name + ' \u2014 the details are in Settings \u2192 Last error \u2192 Copy', 6000);
       }
     };
     if (liveCtx.state === 'suspended') liveCtx.resume().then(go, go); else go();
