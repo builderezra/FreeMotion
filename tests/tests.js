@@ -59642,6 +59642,36 @@
     if (m[1].indexOf('boxblur') < 0) throw new Error('boxblur left BOUNDED_FX, so no bbox reaches the kernel and it walks the whole plate again — 67.5ms per frame for one blur (#692)');
   });
 
+  /* ═══ 784 (the rule of queue 755, swept): A MISSING PARAM KEY MUST NOT SWITCH AN EFFECT OFF. v15.50 converted the 110
+     copies of one spelling of the dead `if (v == null)` fallback; the audit found the same bug in other spellings and
+     measured seven effects rendering as NOTHING with params {} (Turbulent Displace's live prep path among them). No regex
+     can promise a sweep is complete, so this asserts the RULE itself for every registered effect: if the effect at its
+     defaults changes the picture, then the same effect with NO params must change it too. (The repo's rule allows the
+     kernel's fallback to differ from the schema default — old projects keep their look and `legacy` tells the inspector —
+     so "differs" is not the failure; "draws nothing at all" is.) */
+  test('784: no effect is switched off by a missing param key — bare renders as something whenever the defaults do', { item: '784', budgetMs: 90000 }, async function () {
+    const P = { width: 120, height: 120, fps: 30, duration: 4, background: '#000000' };
+    const render = (fx) => { const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 60, shapeW: 70, shapeH: 56, fill: '#4488ff', start: 0, duration: 4 }); L.effects = fx ? [fx] : [];
+      const c = offscreen(120, 120); c.__fmRS = 1; c.__fmOX = 0; c.__fmOY = 0;
+      FM.renderScene(c.getContext('2d'), { project: P, layers: [L], selectedId: null, selectedIds: [] }, 0.37);
+      return c.getContext('2d').getImageData(0, 0, 120, 120).data; };
+    const diffN = (a, b) => { let n = 0; for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > 2) n++; return n; };
+    const types = (FM.EFFECTS || []).map(e => e && e.type).filter(Boolean);
+    if (types.length < 150) throw new Error('only ' + types.length + ' effects in the catalog — the sweep collapsed');
+    const none = render(null);
+    const bad = [], dead = []; let checked = 0;
+    for (const type of types) {
+      let inst = null; try { inst = FM.fxRegistry.makeInstance(type); } catch (e) {}
+      if (!inst) continue;
+      let a, b; try { a = render({ type: type, enabled: true, params: {} }); b = render(inst); } catch (e) { bad.push(type + ': threw ' + (e && e.message).slice(0, 60)); continue; }
+      checked++;
+      const defaultsDo = diffN(b, none) > 0, bareDoes = diffN(a, none) > 0;
+      if (defaultsDo && !bareDoes) dead.push(type);
+    }
+    if (checked < 150) throw new Error('only ' + checked + ' effects rendered — the sweep collapsed');
+    if (dead.length) throw new Error(dead.length + ' effect(s) are switched OFF by a missing param key (their defaults change the picture, their bare instance changes nothing): ' + dead.join(', '));
+  });
+
   /* ═══ 692 ROUTE 2: THE READBACK IS CROPPED TO THE LAYER FOR EVERY ADMITTED KERNEL, AND ADMISSION IS RE-PROVED HERE.
      Five rounds bounded 13 kernels one at a time; this covers 44 more in one place in drawPixelEffect. A kernel is in
      CROP_FX only if the cropped path draws the same picture as the full one — five subject positions, defaults and

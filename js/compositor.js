@@ -1654,8 +1654,62 @@ window.FM = window.FM || {};
    * caption cue showing right now (queue 151). Returns the SAME array when there is nothing to add, so
    * the caller can tell "nothing changed" without comparing contents. Pure and exported, because the
    * question "which effects are live on this cue" should be answerable without rasterising a frame. */
+  /* A MISSING PARAM KEY RENDERS AT ITS DEFAULT — FILLED ONCE, HERE, FOR EVERY EFFECT (queue 784, the rule of queue 755 swept).
+     v15.50 converted 110 copies of one dead-fallback spelling; a sweep that asserts the RULE (an effect with no params
+     must not be switched off) found 39 effects still off with `params: {}`, across every dispatcher — CSS colour ops,
+     pixel kernels, warp preps, canvas effects, movers. Fixing 39 sites by hand is the way that stays incomplete, so the
+     fill happens in the one function that answers "which effects does this layer render with": each absent key gets,
+     in order, the schema's `legacy` (what an old instance rendered as before the param existed), else the kernel's own
+     live fallback literal read off its source (`fparam(p, 'k', LIT)` and its two null-check spellings), else the
+     schema default. So a saved project's look cannot change — its keys are present, or its absent key fills with what
+     the kernel already drew — and an instance written by hand or by the AI finally renders at its defaults. Filled once
+     per instance (a WeakSet), so the render loop pays nothing after the first frame. */
+  const _fxFilled = new WeakSet(); const _fxFillCache = Object.create(null);
+  function _kernelOf(type) {
+    const T = FM._FX_TABLES || {};
+    for (const name in T) { const tbl = T[name]; if (tbl && typeof tbl[type] === 'function') return tbl[type]; }
+    return null;
+  }
+  function fxFillValue(type, key) {
+    const c = _fxFillCache[type] || (_fxFillCache[type] = Object.create(null));
+    if (key in c) return c[key];
+    let v; const def = (FM.EFFECTS || []).find(d => d && d.type === type);
+    // the catalog has two shapes: a params[] array, and the one-param shorthand (`param: 'amount', def, legacy`)
+    const pd = def && ((def.params || []).find(q => q && q.key === key) || (def.param === key ? { key: key, def: def.def, legacy: def.legacy } : null));
+    if (pd && pd.legacy !== undefined) v = pd.legacy;
+    else {
+      const fn = _kernelOf(type); const src = fn ? String(fn) : '';
+      const k = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const m = src.match(new RegExp("fparam\\(\\s*\\w+,\\s*'" + k + "',\\s*(-?[0-9.]+)"))
+             || src.match(new RegExp("\\." + k + "\\s*==\\s*null\\s*\\?\\s*(-?[0-9.]+)"))
+             || src.match(new RegExp("evalProp\\(\\w+\\." + k + ",\\s*\\w+\\)[^;]*;\\s*if\\s*\\(\\w+\\s*==\\s*null\\)\\s*\\w+\\s*=\\s*(-?[0-9.]+)"));
+      if (m) v = parseFloat(m[1]);
+      else if (pd && pd.def !== undefined) v = pd.def;
+    }
+    c[key] = v; return v;
+  }
+  FM._fxFillValue = fxFillValue;   // suite seam
+  function fillFxParams(fx) {
+    if (!fx || typeof fx !== 'object' || _fxFilled.has(fx)) return fx;
+    let controls = null; try { controls = FM.fxRegistry && FM.fxRegistry.paramsOf ? FM.fxRegistry.paramsOf(fx.type) : null; } catch (e) { controls = null; }
+    if (Array.isArray(controls) && controls.length) {   // the registry already knows every param whatever shape the catalog wrote it in
+      if (!fx.params || typeof fx.params !== 'object') fx.params = {};
+      // a colour is filled too — Stroke, Electric Edges, Glow Scan and Light Leak draw NOTHING without one (measured 5 Sep);
+      // a source-layer picker is not: an empty source means "self", which is a value, not an absence
+      // …and NOT a key whose schema declares `legacy`: that note exists because the kernel gives an ABSENT key its own
+      // behaviour (Edge Glow keys its original code path on `source == null`); filling it flips a saved project onto
+      // the new path — the suite's "a project saved before the Glow-on control still renders exactly as it did" caught
+      // exactly that on 5 Sep. The panel already shows `legacy` for such a key, so absent stays absent there.
+      controls.forEach(c => { if (!c || !c.key || c.type === 'layer' || c.legacy !== undefined) return; if (fx.params[c.key] === undefined) { let v = fxFillValue(fx.type, c.key); if (v === undefined) v = c.default; if (v !== undefined) fx.params[c.key] = v; } });
+    }
+    if (Array.isArray(fx.effects)) fx.effects.forEach(fillFxParams);   // a filter's children
+    _fxFilled.add(fx);
+    return fx;
+  }
+  FM._fillFxParams = fillFxParams;
   function effectiveFx(layer, t) {
     const own = (layer && layer.effects) || [];
+    for (let i = 0; i < own.length; i++) fillFxParams(own[i]);   // queue 784: absent keys filled once, before anything reads them
     /* …plus the effects being PREVIEWED on it (queue 277). Ezra, on the multi-select browser: "when you
      * tap on an effect it doesn't just add it selects it and it will show the layer selected like what
      * the layer will look like with the effect selected".
@@ -13457,6 +13511,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   }
 
   function drawLayer(ctx, layer, t, scene) {
+    if (layer && Array.isArray(layer.effects)) for (let _i = 0; _i < layer.effects.length; _i++) fillFxParams(layer.effects[_i]);   // queue 784: absent keys filled once, before any dispatcher reads them
     /* PER-CUE EFFECTS (queue 151). Ezra: "when editing a caption layer you should be able to chose
      * somehow between adding effects to each section or adding effects that effect the whole layer."
      *

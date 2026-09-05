@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 5 Sep at v15.63
+> ## 📌 WHAT I NEED FROM YOU — updated 5 Sep at v15.64
 >
-> **State:** v15.63 — the dark look's intro lands on dark again (no white flash); the lag item (#692) has had everything the numbers pointed at: 44 effects crop their readback, the radial blurs are bounded, and eight bounded effects lost their readback floor; and 44 effects now cost a tenth of what they did on a small layer (#692 route 2); yesterday's three oldest items in your own words are closed. The two oldest items in your own words are closed today: #539 (Squish squashes against other layers) and #553 (the half-drawn return and its black bar). You came back and said you suspected "delusion and lack of effort" — you were right to. Every release now has to PROVE its fix (ship.sh reverts the fix and requires the new test to fail), and re-proving the last 27 releases found two that claimed the opposite of what they did (fixed in v15.57, more findings being verified).
+> **State:** v15.64 — 39 effects that a hand-written or AI-written project could switch off by leaving a key out now render at their defaults; the dark look's intro lands on dark again; the lag item (#692) has had everything the numbers pointed at: 44 effects crop their readback, the radial blurs are bounded, and eight bounded effects lost their readback floor; and 44 effects now cost a tenth of what they did on a small layer (#692 route 2); yesterday's three oldest items in your own words are closed. The two oldest items in your own words are closed today: #539 (Squish squashes against other layers) and #553 (the half-drawn return and its black bar). You came back and said you suspected "delusion and lack of effort" — you were right to. Every release now has to PROVE its fix (ship.sh reverts the fix and requires the new test to fail), and re-proving the last 27 releases found two that claimed the opposite of what they did (fixed in v15.57, more findings being verified).
 >
 > ### 👉 [**Open the unblock list**](https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7)
 > Everything below is on that page, laid out so you can tap through it on your phone and send me one
@@ -29205,4 +29205,32 @@ re-opened #480, which I had marked done and had not fixed.
              animation on the dark look's film, none on the light look's).
       4. [x] Pictures of the dark ending for him: the compositor's own screenshots through the bloom read a dim grey card
              fading to the dark home, never white. (Rule 16 — decided, shown.)
+
+- [x] **784 — 39 effects were switched OFF by a missing param key, across every dispatcher — v15.50's rule (a missing key renders at its default) had been applied to one spelling of the bug (hunt HIGH #49)** (5 Sep, from the #778 audit of v15.50, then swept by a test that asserts the rule itself) ✅ DONE v15.64.
+      **JUMPED: a lead from #778 clause 2, verified by measurement before being logged.**
+      The audit said seven effects rendered as nothing with `params: {}` and named Turbulent Displace's prep path. A test
+      that asserts the RULE for every registered effect — if the effect at its defaults changes the picture, the same
+      effect with no params must change it too — measured **39**: brightness, contrast, saturate, hue, rgbsplit, pixelate,
+      gamma, temperature, noise, sharpen, thermal, wave, ripple, twirl, bulge, exposure, fisheye, glitch, zoomblur, crt,
+      boxblur, colorize, lensblur, stroke, smoothedges, starfield, grunge, flicker, flashdark, pulseopacity, channelremap,
+      gradientoverlay, electricedges, glowscan, innerpinch, lightleak, turbulentdisplace, displacemap, hslbands. The
+      property reader was instrumented in the running app to name every line that read an absent key — CSS colour ops,
+      pixel kernels, warp preps, canvas effects — and four (Stroke, Electric Edges, Glow Scan, Light Leak) were off for
+      want of a COLOUR, not a number.
+      1. [x] **Fixed in ONE place instead of 39:** absent keys are filled once per instance at the renderer's entry
+             (`drawLayer`), from the registry's view of the effect. The value is, in order: the schema's `legacy` (what an
+             old instance rendered as before the param existed), else the kernel's own live fallback literal read off its
+             source, else the schema default. So a saved project's look cannot change — its keys are present, or its
+             absent key fills with exactly what the kernel already drew — and an instance written by hand or by the AI
+             renders at its defaults. A source-layer picker is not filled (an empty source means "self") — **and neither is
+             any key whose schema declares `legacy`: the full suite caught the first version flipping an old Edge Glow onto
+             its new code path, because that kernel keys its ORIGINAL path on `source == null`. A legacy note means the
+             kernel gives an absent key its own behaviour, so absent stays absent there and the panel shows the note.**
+      2. [x] The sweep is the test, and it stays: every registered effect, bare vs defaults, "switched off" is the failure.
+             0 of 205 after; 39 before. Proven by prove.sh.
+      ❓ Not done here, logged for its own turn: 14 params whose kernel fallback differs from the schema default carry no
+      `legacy` (scanlines amount, motion blur distance/angle, cube depth, swing speed, pulse amount/speed, tiles gap, …),
+      so the inspector shows an absent-key instance a number it does not render. The fill above uses the kernel's
+      literal, so the RENDER is right; the display is the audit's v15.51 finding and stays open as a lead in
+      `tools/audit-2026-09-05.md`.
 
