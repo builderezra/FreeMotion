@@ -60077,6 +60077,45 @@
     }
   });
 
+  test('429: a finger on the timeline pins the stage height in px for the life of the gesture, and a selected clip no longer puts --stage-h back to vh', { item: '429', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM._stagePinned) throw new Error('seam missing: FM._stagePinned — the pin does not exist');
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const A = FM.makeLayer('shape', { name: 'a429', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#f00', start: 0, duration: 3 });
+      FM.scene = scene([A], { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+      FM.selectLayer(A.id); if (FM.pause) FM.pause(); FM.setTime(0); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); await sleep(300);
+      if (innerWidth <= 700) {
+        // the phone block: one clip selected = body.m-editing, which used to override 40svh with 40vh
+        const v = getComputedStyle(document.body).getPropertyValue('--stage-h').trim();
+        if (!document.body.classList.contains('m-editing')) throw new Error('setup: selecting one clip on the phone did not put body.m-editing on');
+        if (!/svh/.test(v)) throw new Error('with one clip selected on the phone --stage-h is "' + v + '" — the older body.m-editing rule overrides the 40svh fix in the very state he swipes in (queue 429 clause 2)');
+      }
+      const tl = document.getElementById('timeline'), st = document.getElementById('stage');
+      if (!tl || !st) throw new Error('setup: #timeline / #stage missing');
+      const h0 = Math.round(st.getBoundingClientRect().height);
+      const r = tl.getBoundingClientRect();
+      const pe = (t, el, buttons) => el.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 31, isPrimary: true, pointerType: 'touch', clientX: r.left + r.width / 2, clientY: r.top + Math.min(r.height - 4, 30), buttons: buttons }));
+      pe('pointerdown', tl, 1); await sleep(30);
+      const inline = document.documentElement.style.getPropertyValue('--stage-h').trim();
+      if (!FM._stagePinned() || !/px$/.test(inline)) throw new Error('a touch on the timeline did not pin the stage (inline --stage-h "' + inline + '") — whatever the viewport does under the finger, the stage may grow and the + may move (queue 429 clause 2)');
+      if (Math.abs(parseFloat(inline) - h0) > 1.5) throw new Error('the pin is ' + inline + ' but the stage was ' + h0 + 'px — pinned to the wrong height');
+      const h1 = Math.round(st.getBoundingClientRect().height);
+      if (Math.abs(h1 - h0) > 1.5) throw new Error('pinning changed the stage height itself (' + h0 + ' → ' + h1 + ') — a resize jump on every touch');
+      pe('pointerup', tl, 0); await sleep(30);
+      if (FM._stagePinned() || document.documentElement.style.getPropertyValue('--stage-h')) throw new Error('the pin outlived the gesture — the stage would never follow the viewport again');
+    } finally {
+      try { window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 31, pointerType: 'touch', buttons: 0 })); } catch (e) {}
+      document.documentElement.style.removeProperty('--stage-h');
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 692 ROUTE 2: THE READBACK IS CROPPED TO THE LAYER FOR EVERY ADMITTED KERNEL, AND ADMISSION IS RE-PROVED HERE.
      Five rounds bounded 13 kernels one at a time; this covers 44 more in one place in drawPixelEffect. A kernel is in
      CROP_FX only if the cropped path draws the same picture as the full one — five subject positions, defaults and

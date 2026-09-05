@@ -3533,7 +3533,12 @@ body.white-chrome #time-readout:active {
      Canvas shrinks; the timeline shows ONLY the selected clip; the property
      options dock right below the clip (sheet top is anchored by mobile.js so it
      never covers the clip, on any screen size). */
+  /* THE HOLE IN v10.67's FIX (queue 429 clause 2, found by the #778 audit). :root sets --stage-h to 40svh so an iOS toolbar
+     collapse mid-swipe does not grow the stage and shove the add row's + down the screen — and this rule, older than that
+     fix and inside the same phone block, put it back to 40vh whenever exactly ONE clip was selected (body.m-editing), which
+     is the state he swipes in. Same pair as :root: vh first for browsers without svh, svh wins where it exists. */
   body.m-editing { --stage-h: 40vh; }   /* keep the canvas full-size while editing (no resize jump); panel docks below */
+  body.m-editing { --stage-h: 40svh; }
   body.m-editing #inspector-panel { overflow-y: auto; box-shadow: 0 -10px 30px rgba(0,0,0,.5); }
   /* THE "INSPECTOR" HEADING IS GONE ON THE PHONE — every state, not just single-clip editing (queue 377).
      Ezra, with a red line drawn under the word: "Also you can crop off all that space, it doesn't need to

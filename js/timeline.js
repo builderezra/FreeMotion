@@ -346,6 +346,28 @@ window.FM = window.FM || {};
   }
   FM._heldPointers = heldPointers;               // suite seam (queue 781)
   FM._gestureIsStale = gestureIsStale;
+  /* PIN THE STAGE WHILE A FINGER IS ON THE TIMELINE (queue 429 clause 2). `svh` is the right unit and the harness cannot
+     prove it — headless has no browser chrome, so vh and svh are one number there, and the one fact left in this entry was
+     "does the + still shift when you swipe, on your phone". The measurable option the entry itself named: for the life of
+     a touch gesture on the timeline, --stage-h is the stage's CURRENT height in px, set inline on <html>, so whatever the
+     viewport does under the finger the stage cannot grow and the add row's + cannot move. Released on pointerup/cancel.
+     tests/_swipeonrow.html case D (the frame grows 820→880 mid-swipe) reads 0px of + movement with this in place. */
+  (function () {
+    let pinned = false;
+    function pin(e) {
+      if (pinned || e.pointerType !== 'touch') return;
+      const t = e.target && e.target.closest ? e.target.closest('#timeline') : null;
+      if (!t) return;
+      const st = document.getElementById('stage'); if (!st) return;
+      const h = Math.round(st.getBoundingClientRect().height); if (!(h > 0)) return;
+      document.documentElement.style.setProperty('--stage-h', h + 'px'); pinned = true;
+    }
+    function unpin() { if (!pinned) return; pinned = false; document.documentElement.style.removeProperty('--stage-h'); }
+    window.addEventListener('pointerdown', pin, true);
+    window.addEventListener('pointerup', unpin, true);
+    window.addEventListener('pointercancel', unpin, true);
+    FM._stagePinned = function () { return pinned; };   // suite seam
+  })();
   function recoverStuckGesture() {
     restoreGestures();   // queue 796: the clip (and its group), trim, keyframes and slip go BACK where they started — not left where the lost pointer dropped them
     reorderActive = false; kfDrag = null; trimDrag = null; clipMove = null; slipDrag = null;
