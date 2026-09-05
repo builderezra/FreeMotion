@@ -27102,6 +27102,29 @@
     if (dead.length) throw new Error(dead.length + ' raised ceiling(s) are dead space — the top half of the slider does nothing: ' + dead.join(' · '));
   });
 
+  test('800: a negative text curve is a downward arch that still reads left to right, and a positive one is unchanged', { item: '800' }, function () {
+    /* The Text sweep of 6 Sep: at any negative Curve the word rendered mirrored, "noitoM", on the panel's own control with no
+       effect involved (drawArcLine scaled the placement angle by the SIGNED arc, so the first glyph took the right end).
+       Measured on ink: the string "M." has its mass in the wide M, so its ink centroid sits left of centre when the word reads
+       left to right; at a negative curve it must, as it does at a positive one; and the middle of a negative arch must sit LOWER than its ends (a smile), while a positive
+       arch's middle sits higher (a frown). Fails on the old renderer at the first assertion. */
+    /* Two fixtures: "M." for the ORDER (its ink centroid sits left of centre only when the wide M is on the left — on a two-glyph
+       string the M is nearly at the arc's centre, so it says nothing about the bow), and "MOTION" for the BOW (ends at ±30°, a
+       sag of 0.134·R between ends and middle, clear at any size). */
+    const RES = 720, mk = (text, size, curve) => { const L = FM.makeLayer('text', { text: text, fontSize: size, color: '#ffffff', x: RES / 2, y: RES / 2, start: 0, duration: 2 }); L.textCurve = curve; return L; };
+    const shot = (text, size, curve) => { const o = document.createElement('canvas'); o.width = RES; o.height = RES; const g = o.getContext('2d', { willReadFrequently: true }); FM.renderScene(g, { project: { width: RES, height: RES, fps: 30, duration: 2, background: '#000000' }, layers: [mk(text, size, curve)] }, 0.37); return g.getImageData(0, 0, RES, RES).data; };
+    // per-column ink: the middle and the ends are taken over the INK's own extent, not the frame's, so a short word still has ends
+    const stats = d => { const colY = new Float64Array(RES), colN = new Int32Array(RES); let cxSum = 0, n = 0; for (let y = 0; y < RES; y++) for (let x = 0; x < RES; x++) { const v = d[(y * RES + x) * 4]; if (v < 128) continue; n++; cxSum += x; colY[x] += y; colN[x]++; } let x0 = -1, x1 = -1; for (let x = 0; x < RES; x++) if (colN[x]) { if (x0 < 0) x0 = x; x1 = x; } const span = x1 - x0; let midY = 0, midN = 0, sideY = 0, sideN = 0; for (let x = x0; x <= x1; x++) { if (!colN[x]) continue; const f = (x - x0) / span; if (f > 0.4 && f < 0.6) { midY += colY[x]; midN += colN[x]; } else if (f < 0.15 || f > 0.85) { sideY += colY[x]; sideN += colN[x]; } } return { n, cx: n ? cxSum / n : NaN, midY: midN ? midY / midN : NaN, sideY: sideN ? sideY / sideN : NaN }; };
+    const neg = stats(shot('M.', 220, -60)), pos = stats(shot('M.', 220, 60));
+    const negW = stats(shot('MOTION', 120, -60)), posW = stats(shot('MOTION', 120, 60));
+    if (neg.n < 2000 || pos.n < 2000 || negW.n < 2000 || posW.n < 2000) throw new Error('setup: too little ink (' + neg.n + ' / ' + pos.n + ' / ' + negW.n + ' / ' + posW.n + ')');
+    // the wide M carries most of the ink, so the ink centroid sits well left of centre when the word reads left to right
+    if (!(neg.cx < RES / 2 - 15)) throw new Error('at curve -60 the ink centroid is at ' + neg.cx.toFixed(0) + ' of ' + RES + ' — the wide M sits on the right, the word is laid right to left, mirrored (queue 800)');
+    if (!(pos.cx < RES / 2 - 15)) throw new Error('at curve +60 the ink centroid is at ' + pos.cx.toFixed(0) + ' — the wide M is not on the left');
+    if (!(negW.midY > negW.sideY + 20)) throw new Error('at curve -60 the middle of MOTION (' + negW.midY.toFixed(0) + ') is not below its ends (' + negW.sideY.toFixed(0) + ') — a negative curve should bow downward');
+    if (!(posW.midY < posW.sideY - 20)) throw new Error('at curve +60 the middle of MOTION (' + posW.midY.toFixed(0) + ') is not above its ends (' + posW.sideY.toFixed(0) + ')');
+  });
+
   test('799: Electric Edges reads on a photograph at its defaults, and a saved instance without the new control keeps its faint render', { item: '799', budgetMs: 60000 }, async function () {
     /* The whole-catalogue sweep of 6 Sep (tests/_colouring-sheet.html, every category at 1080px with a number per tile): Electric
        Edges read 2.0 at its defaults and 3.4 at its maximum on the city photograph while Edge Glow read 12.8. v12.18 had made it

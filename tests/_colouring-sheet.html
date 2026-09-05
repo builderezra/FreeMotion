@@ -33,16 +33,21 @@ async function run(w) {
   var FM = w.FM, REG = FM.fxRegistry, doc = w.document;
   var q = new URLSearchParams(location.search), cat = q.get('cat') || 'color';
   var SECTION_PHOTO = { color: 'city', distort: 'towers', blur: 'dusk', stylize: 'dog', proc: 'ramp', matte: 'figures', drawing: 'city', threed: 'towers', text: 'pair', repeat: 'shore', opacity: 'bay', move: 'run' };
-  var key = q.get('photo') || SECTION_PHOTO[cat] || 'city';
+  var subject = q.get('subject') || (cat === 'text' ? 'text' : 'photo');   // ?subject=text: a text layer, for the Text category whose effects act on text only
+  var key = subject === 'text' ? 'text' : (q.get('photo') || SECTION_PHOTO[cat] || 'city');
   var R = Math.max(T, Math.min(2160, +q.get('res') || T));   // render size; tiles are scaled down to T for the sheet
-  var im = await loadPhoto(w, key), side = Math.min(im.naturalWidth, im.naturalHeight);
-  var base = doc.createElement('canvas'); base.width = R; base.height = R;
-  base.getContext('2d').drawImage(im, (im.naturalWidth - side) / 2, (im.naturalHeight - side) / 2, side, side, 0, 0, R, R);
-  var mid = '_csheet_' + key + '_' + R; FM.media.set(mid, { kind: 'image', el: base, width: R, height: R, duration: 0 }); FM.media.pin(mid);
+  var mid = null;
+  if (subject !== 'text') {
+    var im = await loadPhoto(w, key), side = Math.min(im.naturalWidth, im.naturalHeight);
+    var base = doc.createElement('canvas'); base.width = R; base.height = R;
+    base.getContext('2d').drawImage(im, (im.naturalWidth - side) / 2, (im.naturalHeight - side) / 2, side, side, 0, 0, R, R);
+    mid = '_csheet_' + key + '_' + R; FM.media.set(mid, { kind: 'image', el: base, width: R, height: R, duration: 0 }); FM.media.pin(mid);
+  }
   var types = REG.all().map(function (d) { return d.type; }).filter(function (t) { var d = REG.get(t); return d && d.category === cat; });
   types.sort();
   function shot(inst) {   // renders at R, returns a T-sized tile; .mad is filled in by diff()
-    var l = FM.makeLayer('image', { x: R / 2, y: R / 2, start: 0, duration: 2 }); l.id = mid; if (inst) l.effects = [inst];
+    var l = subject === 'text' ? FM.makeLayer('text', { text: 'Motion', fontSize: Math.round(R * 0.2), color: '#e8ecf4', x: R / 2, y: R / 2, start: 0, duration: 2 }) : FM.makeLayer('image', { x: R / 2, y: R / 2, start: 0, duration: 2 });
+    if (mid) l.id = mid; if (inst) l.effects = [inst];
     var full = doc.createElement('canvas'); full.width = R; full.height = R;
     FM.renderScene(full.getContext('2d', { willReadFrequently: true }), { project: { width: R, height: R, fps: 30, duration: 2, background: '#000000' }, layers: [l] }, 0.37);
     var o = doc.createElement('canvas'); o.width = T; o.height = T; o.getContext('2d').drawImage(full, 0, 0, T, T);

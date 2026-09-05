@@ -2413,15 +2413,22 @@ window.FM = window.FM || {};
     const tw = widths.reduce((a, b) => a + b, 0) + sp * Math.max(0, chars.length - 1);
     if (tw <= 0) { restore(); return; }
     const ac = curveDeg * Math.PI / 180, R = tw / Math.abs(ac), sign = curveDeg >= 0 ? 1 : -1;
+    /* A NEGATIVE CURVE IS A DOWNWARD ARCH, NOT A MIRROR (queue 800). The glyph angle used to be scaled by the SIGNED arc, so
+       at -60° the first letter took the positive end of the arc (the right) and the last the left: the word came out
+       laid right to left, each glyph rotated the wrong way — "noitoM". Found by the Text sweep of 6 Sep on the panel's
+       own Curve control, no effect involved. The placement angle runs over the arc's MAGNITUDE, always left to right;
+       the sign belongs only to the vertical offset (which side of the chord the arc bows to) and to the rotation
+       (which way the tangent leans). At a positive curve every value below is what it was, byte for byte. */
+    const aa = Math.abs(ac);
     const prevAlign = ctx.textAlign, prevBase = ctx.textBaseline;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     let s = 0;
     chars.forEach((ch, i) => {
       const w = widths[i];
-      const a = ((s + w / 2) / tw - 0.5) * ac;
+      const a = ((s + w / 2) / tw - 0.5) * aa;
       ctx.save();
       ctx.translate(R * Math.sin(a), sign * (R - R * Math.cos(a)));
-      ctx.rotate(a);
+      ctx.rotate(sign * a);
       if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(ch, 0, 0); }
       ctx.fillText(ch, 0, 0);
       ctx.restore();
