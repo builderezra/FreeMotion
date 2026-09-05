@@ -60335,6 +60335,41 @@
     }
   });
 
+  test('654: on the phone the docked clip panel carries a Done button that leaves it, and the button is not there at desktop width', { item: '654', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const A = FM.makeLayer('shape', { name: 'a654', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#f00', start: 0, duration: 3 });
+      FM.scene = scene([A], { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+      FM.selectLayer(null); FM.refreshAll(); await sleep(100);
+      await atPhoneWidth(async function () {
+        FM.selectLayer(A.id); FM.refreshAll(); await sleep(350);
+        if (!document.body.classList.contains('m-editing')) throw new Error('setup: selecting one clip at phone width did not enter m-editing');
+        const row = document.getElementById('insp-done'), btn = row && row.querySelector('button');
+        if (!row || !btn) throw new Error('the docked clip panel has no Done row — nothing on the panel says how to leave it (queue 654, his first-time user)');
+        const cs = getComputedStyle(row);
+        if (cs.display === 'none' || !btn.offsetParent) throw new Error('the Done row exists but is not shown on the docked panel (display ' + cs.display + ')');
+        const insp = document.getElementById('inspector-panel');
+        if (insp && row.parentElement !== insp) throw new Error('the Done row is inside the inspector content, where a rebuild wipes it');
+        btn.click(); await sleep(300);
+        if (document.body.classList.contains('m-editing') || FM.scene.selectedId) throw new Error('Done did not leave the clip panel (m-editing ' + document.body.classList.contains('m-editing') + ', selected ' + FM.scene.selectedId + ')');
+      });
+      if (innerWidth > 700) {
+        FM.selectLayer(A.id); FM.refreshAll(); await sleep(250);
+        const row = document.getElementById('insp-done');
+        if (row && getComputedStyle(row).display !== 'none') throw new Error('the Done row shows at desktop width, where the panel is a side panel with nothing to leave');
+      }
+    } finally {
+      try { FM.selectLayer(null); } catch (e) {}
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 692 ROUTE 2: THE READBACK IS CROPPED TO THE LAYER FOR EVERY ADMITTED KERNEL, AND ADMISSION IS RE-PROVED HERE.
      Five rounds bounded 13 kernels one at a time; this covers 44 more in one place in drawPixelEffect. A kernel is in
      CROP_FX only if the cropped path draws the same picture as the full one — five subject positions, defaults and

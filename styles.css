@@ -1232,6 +1232,7 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 /* Outline & Shadows sections (queue 564): a hairline above each feature's label so two open features read as two blocks. */
 .insp-sub-label.bs-sub { border-top: 1px solid var(--line-soft); padding-top: 10px; margin-top: 12px; }
 .insp-sub-label.bs-sub:first-of-type { border-top: 0; padding-top: 0; }
+#insp-done { display: none; }   /* queue 654: shown only by the phone block's body.m-editing rule */
 
 /* Color & Fill — AM-style None / Solid / Gradient / Media selector */
 .fill-tabs { display: flex; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 5px; margin-bottom: 13px; }
@@ -3549,6 +3550,12 @@ body.white-chrome #time-readout:active {
      fix and inside the same phone block, put it back to 40vh whenever exactly ONE clip was selected (body.m-editing), which
      is the state he swipes in. Same pair as :root: vh first for browsers without svh, svh wins where it exists. */
   body.m-editing { --stage-h: 40vh; }   /* keep the canvas full-size while editing (no resize jump); panel docks below */
+  /* The docked clip panel's own way out (queue 654): a labelled row with a Done button, phone + m-editing only.
+     (The hide rule lives OUTSIDE this phone block, beside .insp-sub-label — inside it, desktop had no rule and showed the row.) */
+  body.m-editing #insp-done { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px 6px; border-bottom: 1px solid var(--line-soft); }
+  #insp-done .insp-done-lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--text-faint); font-weight: 700; }
+  #insp-done .insp-done-btn { min-height: 34px; padding: 0 14px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2, rgba(255,255,255,.06)); color: var(--text); font: inherit; font-weight: 600; }
+  #insp-done .insp-done-btn:active { transform: translateY(1px); }
   body.m-editing { --stage-h: 40svh; }
   body.m-editing #inspector-panel { overflow-y: auto; box-shadow: 0 -10px 30px rgba(0,0,0,.5); }
   /* THE "INSPECTOR" HEADING IS GONE ON THE PHONE — every state, not just single-clip editing (queue 377).
