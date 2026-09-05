@@ -12167,6 +12167,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // the old 14-point blob read as a garlic bulb with a wisp.
     S.flame = [[[0.575,0.03],[0.565,0.30,1,-0.02,0.115],[0.83,0.66,1,0.005,0.135],[0.50,0.965,1,-0.155,0],[0.17,0.66,1,0.005,-0.135],[0.30,0.32,1,0.045,-0.13]]];
     S.banner = [[[0.02,0.24],[0.98,0.24],[0.86,0.5],[0.98,0.76],[0.02,0.76],[0.14,0.5]]];
+    // Silk ribbon (queue 484, decided under rule 16 as a SHAPE beside the banner and flag): a wave with swallowtail
+    // ends — the notches are what reads as "ribbon" at 24px, where a plain wave reads as a banner. Smooth points
+    // along both long edges, hard corners at the four tail tips. Options B (sash) and C (twist) were drawn and shown.
+    S.ribbon = [[[0.02,0.30],[0.25,0.16,1],[0.50,0.34,1],[0.75,0.18,1],[0.98,0.28],[0.88,0.50],[0.98,0.72],[0.75,0.62,1],[0.50,0.78,1],[0.25,0.60,1],[0.02,0.70],[0.12,0.50]]];
     (function(){ const polys=[]; const N=14, a0=PI*1.61, a1=PI*3.39; for(let i=0;i<N;i++){ const a=a0+i*(a1-a0)/(N-1); const cx=0.5+0.38*Math.cos(a), cy=0.52+0.38*Math.sin(a); polys.push(rot(circleS(cx,cy,0.088,0.033,6),cx,cy,a+PI/2)); } S.wreath=polys; })();
     S.diamond = [[[0.5,0.02],[0.92,0.5],[0.5,0.98],[0.08,0.5]]];
     S.plane = [[[0.5,0.04],[0.58,0.12],[0.58,0.34],[0.98,0.58],[0.98,0.68],[0.58,0.56],[0.58,0.78],[0.72,0.9],[0.72,0.97],[0.5,0.9],[0.28,0.97],[0.28,0.9],[0.42,0.78],[0.42,0.56],[0.02,0.68],[0.02,0.58],[0.42,0.34],[0.42,0.12]]];

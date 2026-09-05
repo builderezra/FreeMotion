@@ -333,7 +333,7 @@ window.FM = window.FM || {};
     nightvision: 'Green phosphor, grain and a soft vignette.',
     sketch: 'Redraws the image as pencil lines.',
     copybg: 'Copies the layers underneath into this one, so it can be distorted or masked as a unit.',
-    magnifybg: 'Copy Background through a lens: the layer fills with the scene below it, blown up around its own centre.',
+    magnifybg: 'Backdrop Clone through a lens: the layer fills with the scene below it, blown up around its own centre.',   // queue 484: the v14.09 rename missed this description — the retired name was still on screen
     fillbehind: 'Fills the empty frame around the layer with a blurred, blown-up copy of the layer itself — the way a portrait clip is padded out to landscape. Does nothing if the layer already covers the canvas.',
 
     // ---- the rest, written 2026-08-08. Every line says what the effect DOES, in the words someone

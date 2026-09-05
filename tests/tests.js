@@ -47720,6 +47720,22 @@
     }
     if (hits.length) throw new Error('another company\'s name is in the effect UI: ' + hits.join(' · ') +
                                      ' — this is the class #484 called the worst, and it is a publishing blocker (BEFORE-PUBLISHING.md)');
+    /* AND THE RETIRED NAMES MAY NOT COME BACK THROUGH A SIDE DOOR (queue 484, 5 Sep). v14.09 renamed twenty-two labels; the
+       Backdrop Lens DESCRIPTION still read "Copy Background through a lens" for three weeks, on screen in the browser, because
+       the sweep above checks company names and nothing checked the old effect names. These are the ones the diff of v14.09
+       retired (accc3e9), minus words too generic to sweep (Depth, Speed, Shading, Offset). */
+    const RETIRED = /\b(Radial Rays|Block Noise|Solid Matte|Matte Fringe|Grid Repeat|Linear Repeat|Radial Repeat|Hexagon Array|Text Progress|Text Transform|Flip Layer|Copy Background|Magnify Background|Fill Behind|Scatter Repeat)\b/;
+    const back = [];
+    for (const d of defs) {
+      const key = d.key || d.id || d.type;
+      for (const [what, text] of [['label', d.label || d.name], ['description', d.desc || d.description]]) {
+        if (text && RETIRED.test(text)) back.push(key + ' ' + what + ': "' + text + '"');
+      }
+      for (const p of (d.params || [])) {
+        if (p && p.label && RETIRED.test(p.label)) back.push(key + ' param: "' + p.label + '"');
+      }
+    }
+    if (back.length) throw new Error('a retired Alight Motion effect name is back on screen: ' + back.join(' · ') + ' (queue 484 — v14.09 renamed the label and this text kept the old one)');
   });
 
   /* ═══ QUEUE 657 — "HEALTHY" MUST NOT MEAN "SMOOTH BECAUSE IT GAVE UP SHARPNESS" ═══════════════
@@ -60189,6 +60205,43 @@
     } finally {
       try { if (FM.fxBrowser.close) FM.fxBrowser.close(); } catch (e) {}
       if (rep0 === null) localStorage.removeItem('fm.lastBackReport'); else localStorage.setItem('fm.lastBackReport', rep0);
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
+  test('484: Silk ribbon is a shape beside Banner and Flag — it has an outline, sits in the Add menu, spawns at the banner\'s aspect and renders ink', { item: '484', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.SHAPE_POLYS || !FM.SHAPE_ASPECT || !FM.addShapeLayer || !FM.renderScene) throw new Error('seams missing: SHAPE_POLYS / SHAPE_ASPECT / addShapeLayer / renderScene');
+    const poly = FM.SHAPE_POLYS.ribbon;
+    if (!poly || !poly[0] || poly[0].length < 10) throw new Error('there is no ribbon outline in FM.SHAPE_POLYS — Silk Ribbon is still the one unbuilt item in #484 clause 2');
+    const smooth = poly[0].filter(p => p[2] === 1).length, corners = poly[0].length - smooth;
+    if (smooth < 4 || corners < 4) throw new Error('the ribbon outline has ' + smooth + ' smooth and ' + corners + ' corner points — a ribbon needs flowing edges AND hard tail tips');
+    const asp = FM.SHAPE_ASPECT.ribbon;
+    if (!asp || Math.abs(asp[0] / asp[1] - 1.6 / 0.7) > 0.05) throw new Error('the ribbon has no natural aspect of its own (' + JSON.stringify(asp) + ') — the Add menu icon and the spawned shape would disagree (queue 159)');
+    const src = await fetch('js/addmenu.js', { cache: 'no-store' }).then(r => r.text());
+    if (src.indexOf("['ribbon', 'Silk ribbon']") < 0) throw new Error('the Add menu\'s shape library does not list Silk ribbon');
+    if (src.indexOf("['banner', 'Banner'], ['ribbon', 'Silk ribbon']") < 0) throw new Error('Silk ribbon is in the library but not beside the banner, which is where he was told it would be');
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      FM.scene = scene([], { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+      if (FM.pause) FM.pause(); FM.setTime(0);   // addShapeLayer starts the layer at the playhead — an earlier test can leave that late, and a layer that has not started renders nothing
+      FM.addShapeLayer('ribbon', { name: 'Silk ribbon' }); await sleep(120);
+      const L = FM.scene.layers[FM.scene.layers.length - 1];
+      if (!L || L.type !== 'shape' || L.shape !== 'ribbon') throw new Error('addShapeLayer(\'ribbon\') did not add a ribbon shape layer (' + (L && (L.type + '/' + L.shape)) + ')');
+      const w = L.shapeW || L.w || 0, h = L.shapeH || L.h || 0;
+      if (!(w > 0 && h > 0) || Math.abs(w / h - 1.6 / 0.7) > 0.08) throw new Error('the ribbon spawned at ' + w + 'x' + h + ' — not the banner\'s 1.6:0.7 proportions the aspect table promises');
+      const cv = document.createElement('canvas'); cv.width = 270; cv.height = 480;
+      const g = cv.getContext('2d', { willReadFrequently: true }); g.setTransform(0.25, 0, 0, 0.25, 0, 0);
+      FM.renderScene(g, FM.scene, (L.start || 0) + 0.2);   // inside the layer's own span, whatever the playhead was
+      const d = g.getImageData(0, 0, 270, 480).data; let ink = 0;
+      for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > 60) ink++;
+      if (ink < 400) throw new Error('a spawned Silk ribbon renders ' + ink + ' lit pixels at quarter size — the outline exists but the compositor draws nothing for it');
+    } finally {
       FM.scene = saved; FM.scene.selectedId = savedSel;
       try { FM.refreshAll(); } catch (e) {}
       if (hadHome && FM.home && FM.home.open) FM.home.open();

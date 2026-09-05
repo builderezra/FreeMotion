@@ -124,7 +124,7 @@ window.FM = window.FM || {};
     ['droplet', 'Droplet'], ['cloud', 'Cloud'], ['play', 'Play'], ['spiral', 'Spiral'], ['sparkle', 'Sparkle'],
     ['stamp', 'Stamp'], ['bolt', 'Bolt'], ['puzzle', 'Puzzle'], ['pushpin', 'Pushpin'],
     ['flag', 'Flag'], ['thumbsup', 'Thumbs up'], ['paperplane', 'Paper plane'], ['house', 'House'], ['laurel', 'Laurel'],
-    ['bookmark', 'Bookmark'], ['pointhand', 'Pointing hand'], ['flame', 'Flame'], ['banner', 'Banner'], ['wreath', 'Wreath'],
+    ['bookmark', 'Bookmark'], ['pointhand', 'Pointing hand'], ['flame', 'Flame'], ['banner', 'Banner'], ['ribbon', 'Silk ribbon'], ['wreath', 'Wreath'],
     ['diamond', 'Diamond'], ['plane', 'Plane'], ['umbrella', 'Umbrella'], ['bomb', 'Bomb'],
     ['boat', 'Boat'], ['magnifier', 'Magnifier'], ['key', 'Key'], ['sun', 'Sun'], ['person', 'Person'],
     ['rocket', 'Rocket'], ['envelope', 'Envelope'], ['woman', 'Woman'], ['car', 'Car'],

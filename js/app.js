@@ -2532,7 +2532,7 @@ window.FM = window.FM || {};
   const SHAPE_ASPECT = FM.SHAPE_ASPECT = {
     rect: [1.5, 1], line: [1.6, 0.4], arrow: [1.6, 0.8], semicircle: [1.3, 0.65],
     trapezoid: [1.4, 0.9], parallelogram: [1.5, 0.9],
-    banner: [1.6, 0.7], cloud: [1.4, 0.95], boat: [1.1, 1.1],
+    banner: [1.6, 0.7], ribbon: [1.6, 0.7], cloud: [1.4, 0.95], boat: [1.1, 1.1],   // ribbon: queue 484, the banner's proportions
     // these six come from traced references, so their aspect IS the reference's aspect
     check: [1.11, 0.9], thumbsup: [1.04, 0.96], pointhand: [0.94, 1.07],
     envelope: [1.33, 0.75], key: [0.7, 1.44],
