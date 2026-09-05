@@ -39564,7 +39564,9 @@
     // suite and passed alone). `?only=` keeps its substring meaning. All three stamp the summary FILTERED.
     if (after) { var ia = -1; T.forEach(function (t, i) { if (ia < 0 && String(t.name).indexOf(after) >= 0) ia = i; }); LIST = ia >= 0 ? LIST.slice(ia + 1) : LIST; }
     if (upto) { var iu = -1; LIST.forEach(function (t, i) { if (iu < 0 && String(t.name).indexOf(upto) >= 0) iu = i; }); LIST = iu >= 0 ? LIST.slice(0, iu + 1) : LIST; }
-    if (only) LIST = LIST.filter(function (t) { return String(t.name).indexOf(only) >= 0; });
+    // `?only=` may carry SEVERAL substrings separated by newlines (%0A) — tools/prove.sh runs every test a
+    // release changed in ONE pass rather than one Chrome per test (5 Sep). A single value still works as before.
+    if (only) { var onlyList = String(only).split('\n').filter(Boolean); LIST = LIST.filter(function (t) { return onlyList.some(function (o) { return String(t.name).indexOf(o) >= 0; }); }); }
     if (only || upto || after) window.__fmFiltered = 'FILTERED(' + [only && 'only=' + only, after && 'after=' + after, upto && 'upto=' + upto].filter(Boolean).join(' ') + ', ' + LIST.length + ' of ' + T.length + ')';
     for (var i = 0; i < LIST.length; i++) {
       var t = LIST[i], ok = true, err = null;

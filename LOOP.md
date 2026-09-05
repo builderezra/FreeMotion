@@ -131,6 +131,27 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
     what one bisection would have told me. Identical failure numbers across attempts is the tell that your
     changes are not touching the cause.
 
+18. **🔒 A FIX SHIPS WITH A TEST THAT FAILS WITHOUT IT — and ship.sh now measures that instead of reading it.**
+    His words, 5 Sep, coming back after a fortnight away: *"dont assume fixes will work, do research … i think there
+    could be a lot of delusion and lack of effort."* Every POLISH-LOG line said "mutation caught" and nothing could
+    re-check it. Three tools now, all structural:
+    · **`tools/prove.sh`** — run by `tools/ship.sh` before the suite. It serves HEAD's source with the working tree's
+      tests and requires every test this release added or changed to FAIL there and PASS here — one Chrome run per
+      side, all changed tests in one pass (`?only=` takes several titles separated by newlines). One CAUGHT test per
+      queue item named in the log line, or it refuses. The escape hatch is a declaration he can read:
+      **`UNPROVABLE: <why>`** in the newest POLISH-LOG line. "WEAK" in its output means the test fails on a missing
+      seam rather than on behaviour — accepted, but a behavioural assertion is better.
+    · **`tools/spotcheck.sh <commit>`** — the same proof, after the fact, for any past release, in a throwaway
+      worktree on its own port. It logs to `tools/.spotcheck.log`; **`tools/tick.sh` lists the releases never checked
+      (PROOF DEBT) and the ones whose proof FAILED.** An idle tick pays proof debt instead of inventing work.
+      First run (5 Sep): 3 of the first 5 releases proven, 1 weak, **v15.53 NOT-PROVEN** — one of its two changed
+      tests still passes with the fix reverted.
+    · **`tools/tick.sh`** — the one command a tick runs first. It COMPUTES what a tick needs (mutation lock, live
+      suites, INBOX, HEAD vs ssh/main, queue, stale asks, proof debt, the say-every-reply list) so no rule has to be
+      remembered across a context reset. The cron prompt points at it.
+    ⚠️ Editing a script that agents are RUNNING corrupts their run — bash reads a script as it executes. Write the
+    new version to a temp file and `mv` it into place; the running copies keep their old inode.
+
 ## STATE
 
 📍 **STATE, 29 Aug, v14.16 — 1065 tests green, live on Pages. The loop is running on a one-minute cron.**

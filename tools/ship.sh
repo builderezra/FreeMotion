@@ -315,6 +315,17 @@ fi
 # looking for a fault that does not exist; it cost one this morning. The runner's default is 600s and
 # the suite is over 900 tests now, so the margin only shrinks from here.
 # Two changes, both structural: ask for real headroom, and SAY which of the two things happened.
+# ---- EVERY FIX SHIPS WITH A TEST THAT FAILS WITHOUT IT (5 Sep) --------------------------------------
+# Ezra, coming back to a fortnight of autonomous releases: "dont assume fixes will work". mutate.sh was the
+# proof, and it was voluntary — a log line saying "mutation caught" is a claim, not a measurement. So the
+# proof is now taken here, automatically, with the one mutation that always applies: the fix, reverted.
+# tools/prove.sh serves HEAD's source with the working tree's tests and requires every test this release
+# added or changed to FAIL there and PASS here. About a minute; it runs BEFORE the suite so a dead test
+# costs one minute rather than ten. The escape hatch is a visible declaration — "UNPROVABLE: <why>" in
+# the newest POLISH-LOG line — because he reads that file and a flag he cannot see is not a safeguard.
+echo "→ proving the release (its changed tests must fail without the fix)…"
+tools/prove.sh || { echo "   Not committing, not pushing."; exit 1; }
+
 SUITE_TIMEOUT=1800
 echo "→ running the suite (4-5 minutes)…"
 OUT="$(python3 tests/_cdp.py --port 8777 --timeout $SUITE_TIMEOUT 2>&1)"

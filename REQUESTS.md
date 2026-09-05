@@ -28968,3 +28968,44 @@ re-opened #480, which I had marked done and had not fixed.
       1. [ ] Whenever an item leaves or joins "built out — waiting on him" (`tools/next.sh` lists them), the page changes to match.
       2. [ ] When he answers from the page, tick the items it unblocked and remove them from it.
       **STANDING — stays open on purpose, like #690.** JUMPED: a standing brief, not a task with an end.
+
+- [ ] **778 — New chat, 5 Sep: build a system that never stops, never forgets the rules, never assumes a fix worked; then audit the autonomous work for delusion; then bug-hunt, polish effects, add filters.** Logged the moment he said it, verbatim:
+      **JUMPED: his words are "THE FIRST THING I WANT YOU TO DO" — an explicit now, which is the one thing that jumps the queue.**
+      > *"Okay starting a new freemotion chat, its been a while. THE FIRST THING I WANT YOU TO DO, is figure out how to
+      > achieve a chat where you keep going no matter what, never stopping, never forgetting base rules and instructions,
+      > dont assume fixes will work, do research. I have left claude working on free motion by itself for a long time now
+      > and i think there could be a lot of delusion and lack of effort. I understand there isnt much to do at the moment
+      > so you can do some bug testing once you have worked out a great system. Maybe work on some effects to improve
+      > them, and add filters. make sure when you do something you do it right and work hard to make sure it came out
+      > clean.*
+      >
+      > *What are some instructions? Keep looping every minute so you dont stop work. Log every request i make and do the
+      > oldest stuff first.*
+      >
+      > *heres the send off from the old chat, do with it what you thinnk makes sense"*
+      (The send-off he pasted: v15.56, tree clean, 42-item audit backlog finished, 35 of 55 open items built out and
+      waiting on him, work #690 until he answers from the unblock list.)
+      His clauses:
+      1. [x] **FIRST: a chat that keeps going no matter what** — never stopping, never forgetting base rules and
+             instructions, never assuming a fix worked, doing research. Structural, not remembered.
+             ✅ **Built 5 Sep, all of it a script rather than a note:** the one-minute cron runs `tools/tick.sh`, which
+             COMPUTES the facts a tick needs (INBOX, queue, proof debt, reminders) so nothing is remembered across a
+             context reset; `tools/prove.sh` inside `ship.sh` refuses any release whose tests do not fail with the fix
+             reverted; `tools/spotcheck.sh` re-proves any past release. LOOP.md rule 18, CLAUDE.md.
+             ⚠️ The one thing no script can do: the cron lives in THIS chat session and dies with it (and expires
+             after 7 days). If the chat is closed, the loop stops. Re-open a FreeMotion chat and the first tick re-arms.
+      2. [ ] **Audit the autonomous work for "delusion and lack of effort"** — he left Claude alone a long time and
+             does not trust what it reported. Verify recent claims independently; verify that "waiting on him" is
+             true of the 35 parked items and not a comfortable excuse.
+             🔄 **IN FLIGHT 5 Sep (a background workflow; a tick must NOT start a ship or edit js/ while it runs):**
+             27 releases v15.30–v15.56 each re-proven with spotcheck and re-read; all 35 parked items challenged
+             against the code; every negative finding sent to independent refuters. Early returns: v15.56 PROVEN but
+             weak (fails on a missing seam), **v15.53 NOT PROVEN** (a changed test passes with its fix reverted).
+      3. [ ] **Bug testing** once the system is worked out.
+      4. [ ] **Improve the effects.**
+      5. [ ] **Add filters.**
+      6. [ ] **Do it right, work hard, make sure it came out clean** — every change verified, nothing claimed unseen.
+      7. [x] **Answer "What are some instructions?"** — answered in the chat, 5 Sep (and the useful ones are gates now).
+      8. [x] **Keep looping every minute** so work does not stop. ✅ cron armed 5 Sep, `* * * * *`, prompt = run tick.sh.
+      9. [x] **Log every request; oldest first.** ✅ this entry was written before any work began; next.sh unchanged.
+      10. [ ] **Do what makes sense with the send-off.**

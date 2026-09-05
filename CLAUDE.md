@@ -115,6 +115,17 @@ substitution truncates at the first NUL byte**. Both arguments became the same h
 compares the file with its own backup, so it catches that and every other silent no-op. It runs before
 the suite, so a mistake costs a second rather than four minutes.
 
+```bash
+tools/prove.sh        # run by ship.sh: every changed test must FAIL against HEAD's source and PASS here
+tools/spotcheck.sh <commit>   # the same proof for a past release; tick.sh lists the ones never checked
+tools/tick.sh         # the first command of every loop tick — computes the facts instead of remembering them
+```
+Added 5 Sep, the day he came back and said *"dont assume fixes will work … i think there could be a lot of delusion
+and lack of effort."* `mutate.sh` was voluntary and "mutation caught" in a log line was a claim nobody could re-check.
+`ship.sh` now REFUSES a release whose changed tests do not fail with its source reverted (one CAUGHT test per queue
+item named in the log line); the only way past is a visible **`UNPROVABLE: <why>`** in the POLISH-LOG line, which he
+reads. Details in LOOP.md rule 18.
+
 **Add to this pattern rather than adding notes.** If a mistake could recur, the fix is a script, a test,
 or a gate — not a paragraph.
 
