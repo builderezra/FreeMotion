@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 5 Sep at v15.62
+> ## 📌 WHAT I NEED FROM YOU — updated 5 Sep at v15.63
 >
-> **State:** v15.62 — the lag item (#692) has had everything the numbers pointed at: 44 effects crop their readback, the radial blurs are bounded, and eight bounded effects lost their readback floor; and 44 effects now cost a tenth of what they did on a small layer (#692 route 2); yesterday's three oldest items in your own words are closed. The two oldest items in your own words are closed today: #539 (Squish squashes against other layers) and #553 (the half-drawn return and its black bar). You came back and said you suspected "delusion and lack of effort" — you were right to. Every release now has to PROVE its fix (ship.sh reverts the fix and requires the new test to fail), and re-proving the last 27 releases found two that claimed the opposite of what they did (fixed in v15.57, more findings being verified).
+> **State:** v15.63 — the dark look's intro lands on dark again (no white flash); the lag item (#692) has had everything the numbers pointed at: 44 effects crop their readback, the radial blurs are bounded, and eight bounded effects lost their readback floor; and 44 effects now cost a tenth of what they did on a small layer (#692 route 2); yesterday's three oldest items in your own words are closed. The two oldest items in your own words are closed today: #539 (Squish squashes against other layers) and #553 (the half-drawn return and its black bar). You came back and said you suspected "delusion and lack of effort" — you were right to. Every release now has to PROVE its fix (ship.sh reverts the fix and requires the new test to fail), and re-proving the last 27 releases found two that claimed the opposite of what they did (fixed in v15.57, more findings being verified).
 >
 > ### 👉 [**Open the unblock list**](https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7)
 > Everything below is on that page, laid out so you can tap through it on your phone and send me one
@@ -27539,6 +27539,9 @@ re-opened #480, which I had marked done and had not fixed.
       **What is left in this entry, by design:** the 47 position-dependent unbounded kernels (a grid or a noise field
       genuinely covers the frame) and the seven plate-relative bounded ones keep the full plate. Everything the numbers
       pointed at is done; what remains is his phone's own report, which #95's card asks for.
+        ⏸ **5 Sep — BUILT OUT UNTIL HE pastes "Your last playback"** (Settings → Your last playback → Copy, after playing a
+        project with effects on the phone until it lags). Every kernel the numbers pointed at is cropped or bounded; whether
+        the phone still lags, and on which effect, is a number only his device has. The same paste frees #95, #96 and #663.
       ~~2. **Plate-sized**, the real fix: `nestedPlate` sizes the plate from the whole target canvas.~~ (superseded by the readback crop above — same win, no coordinate-system risk)
          Sizing it to the layer's bounds instead would fix EVERY kernel at once with no per-kernel
          edits — and the machinery is already there, since `OX`/`OY` are threaded through `baseT` for
@@ -29178,3 +29181,28 @@ re-opened #480, which I had marked done and had not fixed.
       moment — 60px of a final 961 — and stayed there as the content grew; the settle-poll then accepted a stable but
       wrong position. It now re-pushes to the end every frame until scrollLeft, scrollWidth and every pin agree across
       two frames. Green 3 of 3 alone at 380px afterwards, then the full phone pass.
+
+- [x] **783 — The dark look's intro ends on a white flash: v15.47 undid #688 clause 3, and v15.08's dim had revealed a white ground under the film (hunt MEDIUM #48)** ✅ DONE v15.63. (5 Sep, from the #778 audit of v15.47, verified by measuring the film)
+      **JUMPED: a lead from #778 clause 2, verified against the film's own frames before being logged.**
+      **Measured on `splash-v2.mp4`, played and sampled every 100ms:** the mark moves on a dark ground until ~0.93s
+      (luminance 31, motion up to 3.7), the bloom rises 0.93→1.34s (luminance 44 → 80 → 131 → 255) and the last 0.7s is
+      a static white card (luminance 255, motion 0). `dismiss()` fires 0.9s before the end, so under the dark look the
+      white card dissolves for 0.9s into the dark home — exactly what #688 clause 3 asked not to happen. And the flash he
+      photographed as #776 under v15.08 was not the dim itself: the dim was on the film's OPACITY, which revealed the
+      splash box's ground ramping #111→#fff beneath it (`#splash.splash-light`'s ramp ran under both looks).
+      1. [x] The ground ramp to white is light-look only; under the dark look the box stays #111. ✅ v15.63
+      2. [x] Under the dark look the film is driven to black by a FILTER over the bloom's own rise, so every frame of the
+             mark's animation is kept and only the white card is not shown; the dissolve then lands black on the dark
+             home. Opacity is never touched, so #776's guard stays meaningful. ✅ v15.63 — **and NOT from JavaScript:**
+             recorded in the pane, the boot blocks the main thread for ~0.65s right across the bloom (the app
+             initialising under the intro), so a class added on `timeupdate` landed at 1.59s instead of 0.93 and the
+             compositor painted the white card meanwhile — the first version of this fix, and a JS-sampled test could
+             not see it for the same reason. It is a CSS animation on the film from the moment it starts (42%→56% of
+             2.05s, film time ~0.96→1.25s), which the compositor runs whatever the main thread is doing.
+      3. [x] A test that boots each look in an iframe and reads what is on screen: dark never brighter than a third after
+             the mark has animated and the ground never white; light still reaches white (the control). ✅ v15.63 — and
+             because the blocked window cannot be sampled, it also asserts the mechanism by name (a compositor-driven
+             animation on the dark look's film, none on the light look's).
+      4. [x] Pictures of the dark ending for him: the compositor's own screenshots through the bloom read a dim grey card
+             fading to the dark home, never white. (Rule 16 — decided, shown.)
+

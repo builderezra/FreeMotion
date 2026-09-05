@@ -54951,6 +54951,66 @@
     }
   });
 
+  /* ═══ 783 (#688 clause 3, restored): THE DARK LOOK'S INTRO LANDS ON DARK, AND THE LIGHT LOOK STILL LANDS ON WHITE.
+     Measured on the film: the mark moves until ~0.93s, then blooms to a static white card by 1.34s. Under the dark look
+     that card used to dissolve into the dark home (v15.47), and before that v15.08's opacity dim revealed the box's white
+     ground under the film (#776's flash). Boot the real page in an iframe per look and read what is actually ON SCREEN:
+     the film's rendered luminance × its brightness filter × the splash's opacity, every 50ms. Dark: after the mark's
+     animation the effective brightness never exceeds a third, the film was fully visible before that, and the box's
+     ground never turns white. Light: the film reaches full white at full brightness — the control that the dark
+     rule does not leak. */
+  test('783: the dark look\'s intro is never bright after the mark has animated, and the light look\'s still ends white', { item: '783', budgetMs: 45000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const settings0 = localStorage.getItem('fm.settings');
+    const cv = document.createElement('canvas'); cv.width = 24; cv.height = 40; const g = cv.getContext('2d', { willReadFrequently: true });
+    const lumOf = (v) => { try { g.drawImage(v, 0, 0, 24, 40); const d = g.getImageData(0, 0, 24, 40).data; let l = 0; for (let i = 0; i < d.length; i += 4) l += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; return l / (d.length / 4) / 255; } catch (e) { return null; } };
+    const watch = async (light) => {
+      try { sessionStorage.removeItem('fm.splashed'); } catch (e) {}
+      const st = JSON.parse(localStorage.getItem('fm.settings') || '{}'); st.homeLight = light; localStorage.setItem('fm.settings', JSON.stringify(st));
+      const f = document.createElement('iframe'); f.style.cssText = 'position:fixed;left:-9999px;top:0;width:390px;height:760px;border:0'; f.src = '../index.html?intro783=' + Date.now();
+      document.body.appendChild(f);
+      let peakEarly = 0, peakLate = 0, groundWhite = false, samples = 0, fullBefore = false, anim = null;
+      try {
+        for (let i = 0; i < 90; i++) {
+          const d = f.contentDocument, w = f.contentWindow;
+          if (d) {
+            const sp = d.getElementById('splash'), v = d.getElementById('splash-vid');
+            if (sp && v && v.classList.contains('playing')) {
+              const cs = w.getComputedStyle(v), t = v.currentTime || 0, lum = lumOf(v);
+              if (anim === null) anim = cs.animationName + ' ' + cs.animationDuration;   // the mechanism must be a compositor-driven animation, not a class from JS
+              const br = /brightness\(([\d.]+)\)/.exec(cs.filter || ''); const bright = br ? parseFloat(br[1]) : 1;
+              const eff = (lum == null ? 0 : lum) * parseFloat(cs.opacity) * bright * parseFloat(w.getComputedStyle(sp).opacity);
+              if (lum != null) { samples++; if (t < 0.85) { peakEarly = Math.max(peakEarly, eff); if (parseFloat(cs.opacity) > 0.9 && bright >= 0.99) fullBefore = true; } else peakLate = Math.max(peakLate, eff); }
+              const bg = w.getComputedStyle(sp).backgroundColor, mm = /rgba?\((\d+), (\d+), (\d+)/.exec(bg);
+              if (mm && (+mm[1] + +mm[2] + +mm[3]) > 500) groundWhite = true;
+            }
+            if (!sp && samples) break;
+          }
+          await sleep(50);
+        }
+      } finally { f.remove(); }
+      return { light, peakEarly, peakLate, groundWhite, samples, fullBefore, anim };
+    };
+    try {
+      const dark = await watch(false);
+      if (dark.samples < 8) throw new Error('setup: only ' + dark.samples + ' frames of the dark intro were read — the frame is not rendering, so this run cannot judge it');
+      if (!dark.fullBefore) throw new Error('setup: the dark intro was never at full brightness before 0.85s — the mark\'s animation would be hidden, or the frame never rendered');
+      if (dark.peakLate > 0.35) throw new Error('the dark look\'s intro reaches ' + Math.round(dark.peakLate * 100) + '% white on screen after the mark has animated — the white card dissolves into the dark home (#688 clause 3)');
+      if (dark.groundWhite) throw new Error('the splash box\'s ground turned white under the dark look — the v15.08 flash');
+      /* The boot blocks the main thread ~0.65s across the bloom (recorded 5 Sep), so this loop cannot sample there and a
+         JS-driven darkening lands too late to matter. The mechanism must therefore be an animation the compositor runs
+         from the moment the film starts — asserted by name, because the samples above cannot see the blocked window. */
+      if (!/splash-film-dark/.test(dark.anim || '')) throw new Error('the dark look\'s film carries no compositor-driven darkening animation (' + dark.anim + ') — a class added from JS lands after the bloom because boot blocks the thread');
+      const lightR = await watch(true);
+      if (lightR.samples < 8) throw new Error('setup: only ' + lightR.samples + ' frames of the light intro were read');
+      if (lightR.peakLate < 0.6) throw new Error('control: the light look\'s intro no longer reaches white (' + Math.round(lightR.peakLate * 100) + '%) — the dark rule leaks into the light look');
+      if (/splash-film-dark/.test(lightR.anim || '')) throw new Error('control: the light look\'s film carries the dark darkening animation');
+    } finally {
+      if (settings0 === null) localStorage.removeItem('fm.settings'); else localStorage.setItem('fm.settings', settings0);
+      try { sessionStorage.removeItem('fm.splashed'); } catch (e) {}
+    }
+  });
+
   /* ═══ 754 (hunt MEDIUM #37): EVERY ROW IN THE EFFECT LIST WEARS THE SAME EYE, AND AN OPEN AUDIO ROW KEEPS ITS GRIP.
      An off effect row showed a struck-through eye; an off mask row and an off audio row only faded. And the audio
      row hid its drag grip when open, which v5.52 had fixed for the visual rows. */

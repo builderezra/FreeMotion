@@ -55,3 +55,7 @@
 2026-09-05 13:58 3687194 pre-filter (re-classified: the runner at that commit predates ?only=, so the control ran the whole suite)
 2026-09-05 14:40 5a67b6e pre-filter (re-classified: the runner at that commit predates ?only=, so the control ran the whole suite)
 2026-09-05 14:41 3687194 pre-filter
+2026-09-05 17:20 f1483f1 PROVEN CAUGHT
+2026-09-05 17:21 da6979a PROVEN CAUGHT CAUGHT
+2026-09-05 17:21 e3e49df PROVEN CAUGHT
+2026-09-05 17:21 b94315e PROVEN CAUGHT

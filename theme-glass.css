@@ -826,7 +826,31 @@ html[data-home="light"] #hm-select-btn {
        rectangle, which is exactly the seam queue 162 was about, inverted.
    The ground is animated rather than switched so the page arrives at white with the film instead of
    snapping at the end. */
-#splash.splash-light { background: #111; animation: splash-ground 2.05s ease-in forwards; }
+#splash.splash-light { background: #111; }
+/* …and the ramp to white is LIGHT-LOOK ONLY (queue 783, 5 Sep). `splash-light` is on the box for both looks now (it
+   carries the film's cover layout, queue 688), so this ramp used to run under the dark look too: v15.08 dimmed the
+   film's OPACITY there, which revealed this ground turning white under it — the black-and-white-and-white flash he
+   reported as #776. Under the dark look the ground stays #111 and the film is darkened by a filter, never made
+   transparent, so there is nothing white for the dissolve to show. */
+html.splash-on-light #splash.splash-light { animation: splash-ground 2.05s ease-in forwards; }
+/* THE DARK LOOK LANDS ON DARK (#688 clause 3, restored at queue 783). Measured on the film itself, 5 Sep: the mark moves
+   on a dark ground until ~0.93s, the bloom rises 0.93→1.34s, and the last 0.7s is a static white card. Under the dark
+   look the film is driven to black over the bloom's own rise — every frame of the mark's animation is kept, only the
+   white card is not shown — and the 0.9s dissolve then lands black on the dark home. A FILTER, not opacity: opacity
+   reveals the box's ground (the v15.08 mistake) and trips the #776 guard.
+   ⚠️ A CSS ANIMATION FROM THE MOMENT THE FILM STARTS, NOT A CLASS ADDED FROM JAVASCRIPT. Recorded 5 Sep: the boot
+   blocks the main thread for ~0.65s right across the bloom (the app initialising under the intro), so a class added on
+   `timeupdate` landed at 1.59s instead of 0.93 and the compositor painted the white card meanwhile — and a JS-sampled
+   test could not see it, for the same reason. The animation's timeline runs on the compositor; `.playing` arrives at
+   ~0.1s of film, so 42%→56% of 2.05s is film time ~0.96→1.25s: the bloom's own rise (luminance 44 → 131), and the
+   compositor's own screenshots during the blocked window read a dim grey card, never white (5 Sep). */
+html:not(.splash-on-light) #splash-vid.playing { animation: splash-film-dark 2.05s linear forwards; }
+@keyframes splash-film-dark {
+  0%   { filter: brightness(1); }
+  42%  { filter: brightness(1); }
+  56%  { filter: brightness(0); }
+  100% { filter: brightness(0); }
+}
 @keyframes splash-ground {
   0%   { background-color: #111; }
   62%  { background-color: #111; }
@@ -850,5 +874,5 @@ html.splash-on-light, html.splash-on-light body { background: #111; animation: s
 }
 /* Someone who asked for less motion still gets the right ground, without the ramp. */
 @media (prefers-reduced-motion: reduce) {
-  #splash.splash-light, html.splash-on-light, html.splash-on-light body { animation: none; background: #fff; }
+  html.splash-on-light #splash.splash-light, html.splash-on-light, html.splash-on-light body { animation: none; background: #fff; }
 }
