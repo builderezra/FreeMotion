@@ -1344,7 +1344,12 @@
       softBtn.click();
       if ((L2.shadow.dx || 0) !== 0 || (L2.shadow.dy || 0) !== 0) throw new Error('tapping Soft did not bring the shadow back under the layer (' + L2.shadow.dx + ',' + L2.shadow.dy + ')');
     } finally {
+      /* PUT THE SELECTION BACK TOO (5 Sep). This restored the layer list and left L2 — a layer no longer in the scene —
+         SELECTED with the Outline & Shadows card open. Thirty tests later, 699 narrowed to phone width and its control
+         swipe on a clip moved nothing one run in two: the stale selection had the phone treating the timeline as a
+         solo view with a docked sheet racing the swipe. Bisected with ?after=&upto= across 65 tests. */
       FM.scene.layers = layers0;
+      try { FM.selectLayer(null); } catch (e) {}
       if (FM.refreshAll) FM.refreshAll();
       if (FM.inspector) FM.inspector.refresh();
     }
@@ -3029,6 +3034,7 @@
     try {
       return await atPhoneWidth(async function () {
         FM.scene.layers.length = 0;
+        try { FM.selectLayer(null); } catch (e) {}   // 5 Sep: a selection left by an earlier test made this a 50/50 at phone width (see test 34's finally)
         for (let i = 0; i < 4; i++) {
           const L = FM.makeLayer('shape', { shape: 'rect', x: 200 + i * 20, y: 300, shapeW: 120, shapeH: 90, fill: '#c05030' });
           L.start = i * 2; L.duration = 2.5; FM.scene.layers.push(L);
@@ -60099,16 +60105,90 @@
       const r = tl.getBoundingClientRect();
       const pe = (t, el, buttons) => el.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 31, isPrimary: true, pointerType: 'touch', clientX: r.left + r.width / 2, clientY: r.top + Math.min(r.height - 4, 30), buttons: buttons }));
       pe('pointerdown', tl, 1); await sleep(30);
-      const inline = document.documentElement.style.getPropertyValue('--stage-h').trim();
+      const inline = (document.getElementById('app') || document.documentElement).style.getPropertyValue('--stage-h').trim();   // on #app, not <html> — see the pin's comment
       if (!FM._stagePinned() || !/px$/.test(inline)) throw new Error('a touch on the timeline did not pin the stage (inline --stage-h "' + inline + '") — whatever the viewport does under the finger, the stage may grow and the + may move (queue 429 clause 2)');
       if (Math.abs(parseFloat(inline) - h0) > 1.5) throw new Error('the pin is ' + inline + ' but the stage was ' + h0 + 'px — pinned to the wrong height');
       const h1 = Math.round(st.getBoundingClientRect().height);
       if (Math.abs(h1 - h0) > 1.5) throw new Error('pinning changed the stage height itself (' + h0 + ' → ' + h1 + ') — a resize jump on every touch');
       pe('pointerup', tl, 0); await sleep(30);
-      if (FM._stagePinned() || document.documentElement.style.getPropertyValue('--stage-h')) throw new Error('the pin outlived the gesture — the stage would never follow the viewport again');
+      if (FM._stagePinned() || (document.getElementById('app') || document.documentElement).style.getPropertyValue('--stage-h')) throw new Error('the pin outlived the gesture — the stage would never follow the viewport again');
     } finally {
       try { window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 31, pointerType: 'touch', buttons: 0 })); } catch (e) {}
-      document.documentElement.style.removeProperty('--stage-h');
+      (document.getElementById('app') || document.documentElement).style.removeProperty('--stage-h');
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
+  test('712: a cold stock effect strip is built across animation frames, not inside one, and its still shows before the strip is done', { item: '712', budgetMs: 30000 }, async function () {
+    const T = FM.fxThumbs;
+    if (!T || !T._sliceMs || !T._uncache || !T.queueState || !T.mount) throw new Error('seams missing: fxThumbs._sliceMs / _uncache / queueState / mount');
+    const raf = () => new Promise(r => requestAnimationFrame(() => r()));
+    const type = 'shake';   // an animated stock effect: still + probe + warm-up + ten frames
+    const slice0 = T._sliceMs(); T._sliceMs(0);
+    const host = document.createElement('div'); host.style.cssText = 'position:fixed;left:-9999px;top:0;width:100px;height:100px'; document.body.appendChild(host);
+    try {
+      T._uncache(type);
+      const cv = document.createElement('canvas'); host.appendChild(cv); T.mount(cv, type);
+      await raf(); await raf(); await raf();   // at a 0ms budget each tick renders exactly one frame — three of thirteen
+      const q = T.queueState();
+      if (q.head !== type || !(q.jobs >= 1)) throw new Error('three animation frames after a cold mount the strip for "' + type + '" is already finished (head ' + q.head + ', jobs ' + q.jobs + ') — the still, the probes and all ten frames were rendered inside one tick, which is the 30-second Back on a slow GPU (queue 712)');
+      let ready = cv.classList.contains('ready');
+      let done = false;
+      for (let i = 0; i < 160 && !done; i++) { await raf(); const s2 = T.queueState(); ready = ready || cv.classList.contains('ready'); done = s2.head !== type && !s2.jobs; }
+      if (!done) throw new Error('the sliced strip never finished within 160 frames (' + JSON.stringify(T.queueState()) + ')');
+      if (!ready) throw new Error('the tile never painted while the strip was being built');
+    } finally { T._sliceMs(slice0); host.remove(); T._uncache(type); }
+  });
+
+  test('712: a queued tile whose canvas has left the page waits behind visible ones, the ticker rests when nothing queued is on the page, and a re-mount wakes it', { item: '712', budgetMs: 30000 }, async function () {
+    const T = FM.fxThumbs;
+    if (!T || !T._sliceMs || !T._uncache || !T.queueState || !T.mount) throw new Error('seams missing');
+    const raf = () => new Promise(r => requestAnimationFrame(() => r()));
+    const slice0 = T._sliceMs(); T._sliceMs(0);
+    const host = document.createElement('div'); host.style.cssText = 'position:fixed;left:-9999px;top:0;width:100px;height:100px'; document.body.appendChild(host);
+    try {
+      T._uncache('shake'); T._uncache('wiggle');
+      const ghost = document.createElement('canvas'); T.mount(ghost, 'shake');    // never on the page: the view it belonged to is gone (Back)
+      const cv = document.createElement('canvas'); host.appendChild(cv); T.mount(cv, 'wiggle');
+      for (let i = 0; i < 20 && !cv.classList.contains('ready'); i++) await raf();
+      if (!cv.classList.contains('ready')) throw new Error('the tile on the page is still blank after 20 frames — the off-page one queued ahead of it is being rendered first, thirteen frames of work nobody can see (queue 712)');
+      let rest = false;
+      for (let i = 0; i < 60 && !rest; i++) { await raf(); const q = T.queueState(); rest = !q.rafArmed && q.queued >= 1; }
+      if (!rest) throw new Error('with only an off-page tile left the ticker keeps running or dropped it (' + JSON.stringify(T.queueState()) + ') — Back still pays for tiles nobody can see, or a tile mounted a moment before insertion would never paint');
+      host.appendChild(ghost); T.mount(ghost, 'shake');
+      for (let i = 0; i < 80 && !ghost.classList.contains('ready'); i++) await raf();
+      if (!ghost.classList.contains('ready')) throw new Error('putting the deferred tile back on the page and re-mounting it did not wake the ticker');
+    } finally { T._sliceMs(slice0); host.remove(); T._uncache('shake'); T._uncache('wiggle'); }
+  });
+
+  test('712: pressing Back in an effects category writes Your last Back — first yield, tiles queued, drained', { item: '712', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.fxBrowser || !FM.fxBrowser.open || !FM.fxBrowser._openCategory || !FM.fxRegistry.categories) throw new Error('seams missing: fxBrowser.open / _openCategory / fxRegistry.categories');
+    const saved = FM.scene, savedSel = FM.scene.selectedId, rep0 = localStorage.getItem('fm.lastBackReport');
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      localStorage.removeItem('fm.lastBackReport');
+      const L = FM.makeLayer('shape', { name: 's712', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#c04070', start: 0, duration: 4 });
+      FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+      FM.selectLayer(L.id); FM.refreshAll(); await sleep(100);
+      FM.fxBrowser.open(L); await sleep(300);
+      const cat = (FM.fxRegistry.categories() || [])[0];
+      if (!cat) throw new Error('setup: no effect categories');
+      FM.fxBrowser._openCategory(cat); await sleep(300);
+      const back = document.querySelector('#fx-browser .fxb-back');
+      if (!back) throw new Error('setup: the category view has no Back button');
+      back.click();
+      let rep = null;
+      for (let i = 0; i < 60 && !rep; i++) { await sleep(100); rep = localStorage.getItem('fm.lastBackReport'); }
+      if (!rep) throw new Error('pressing Back wrote no report in 6s — Settings has nothing to show and the only fact that needs his phone still needs his phone (queue 712)');
+      for (const want of ['first yield', 'queued at Back', 'drained', 'verdict']) if (rep.indexOf(want) < 0) throw new Error('the Back report has no "' + want + '" line: ' + rep.slice(0, 200));
+    } finally {
+      try { if (FM.fxBrowser.close) FM.fxBrowser.close(); } catch (e) {}
+      if (rep0 === null) localStorage.removeItem('fm.lastBackReport'); else localStorage.setItem('fm.lastBackReport', rep0);
       FM.scene = saved; FM.scene.selectedId = savedSel;
       try { FM.refreshAll(); } catch (e) {}
       if (hadHome && FM.home && FM.home.open) FM.home.open();

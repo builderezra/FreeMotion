@@ -45,6 +45,11 @@ if [ "$FROM_FILE" = "0" ]; then
   esac
 fi
 [ -f .mutation-in-progress ] && { echo "❌ a mutation check is still in progress — refusing to ship a mutated tree"; exit 1; }
+# A SPOT-CHECK AND A SHIP DO NOT SHARE THE MACHINE (5 Sep). Two headless suites at once starve the timing-sensitive tests: a
+# two-commit spot-check running under the v15.71 ship's phone pass flaked test 699 ("the CONTROL swipe moved nothing") and cost
+# the whole ship. spotcheck.sh holds .spotcheck-in-progress while it runs and refuses while this lock exists; same here.
+[ -f .spotcheck-in-progress ] && { echo "❌ a spot-check is running (.spotcheck-in-progress) — its suite slices would contend with this ship's; wait for it"; exit 1; }
+touch .ship-in-progress; trap 'rm -f .ship-in-progress' EXIT INT TERM
 # A TEST TITLE WITH A DOUBLE QUOTE IS REFUSED HERE, IN A SECOND, NOT BY THE SUITE TEN MINUTES IN (5 Sep). The suite's own
 # hygiene test catches it — after prove.sh and a full pass — and it caught two in one afternoon (791, then 624), each
 # costing a whole ship. The rule is the suite's; this only moves it to the front of the line.

@@ -642,6 +642,28 @@ window.FM = window.FM || {};
       scWrap.append(scHead, scBtns, scOut);
       body.appendChild(group(scWrap));
 
+      /* ═══ "YOUR LAST BACK FROM AN EFFECTS CATEGORY" (queue 712) ═══ the phone answers the one question only it could. */
+      const bkWrap = el('div', 'set-row set-perf');
+      const bkOut = el('pre', 'set-perf-out');
+      let bkText = '';
+      try { bkText = localStorage.getItem('fm.lastBackReport') || ''; } catch (e) {}
+      bkOut.textContent = bkText || 'Nothing yet \u2014 open the effects browser, go into a category, press Back, then come back here.';
+      const bkCopy = el('button', 'set-action', 'Copy'); bkCopy.type = 'button'; bkCopy.disabled = !bkText;
+      bkCopy.addEventListener('click', async () => {
+        const text = bkOut.textContent;
+        try { await navigator.clipboard.writeText(text); if (FM.toast) FM.toast('Copied \u2014 paste it to me', 3000); }
+        catch (e) {
+          try { const r = document.createRange(); r.selectNodeContents(bkOut); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r); if (FM.toast) FM.toast('Selected \u2014 use Copy', 3000); } catch (e2) {}
+        }
+      });
+      const bkHead = el('div', 'set-rowtext');
+      bkHead.appendChild(el('div', 'set-label', 'Your last Back from an effects category'));
+      bkHead.appendChild(el('div', 'set-hint', 'Whether pressing Back in the effects browser stalls the app while thumbnails build \u2014 how long until it could take a tap again, and how many tiles were queued. If Back ever freezes on your phone, send me this.'));
+      const bkBtns = el('div', 'set-perf-btns');
+      bkBtns.append(bkCopy);
+      bkWrap.append(bkHead, bkBtns, bkOut);
+      body.appendChild(group(bkWrap));
+
       /* ═══ "A CLIP WITH NO PICTURE" (queue 129) ═════════════════════════════════════════════════
        * That entry's last question is put to HIM — "what does the FILE say, .mov or .mp4? A .mov
        * points at the container, an .mp4 at the codec, and the two need different fixes." The app

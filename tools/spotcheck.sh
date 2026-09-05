@@ -42,8 +42,11 @@ if [ -z "$TITLES" ]; then
 fi
 
 WTROOT="$(mktemp -d "${TMPDIR:-/tmp}/fm-spot-XXXXXX")"; WT="$WTROOT/wt"; SRV=""
-cleanup() { [ -n "$SRV" ] && kill "$SRV" 2>/dev/null; git worktree remove --force "$WT" >/dev/null 2>&1; rm -rf "$WTROOT"; }
+cleanup() { rm -f .spotcheck-in-progress; [ -n "$SRV" ] && kill "$SRV" 2>/dev/null; git worktree remove --force "$WT" >/dev/null 2>&1; rm -rf "$WTROOT"; }
 trap cleanup EXIT INT TERM
+# ONE SUITE AT A TIME (5 Sep): refuse while a ship is running, and hold a lock so a ship refuses while this runs — see tools/ship.sh.
+[ -f .ship-in-progress ] && { echo "spotcheck: a ship is in progress (.ship-in-progress) — not starting a second suite beside it"; exit 4; }
+touch .spotcheck-in-progress
 git worktree add -q "$WT" "$H" || { echo "spotcheck: could not create a worktree"; exit 2; }
 # THE RUNNER AT THIS COMMIT MUST KNOW ?only= (added 2 Sep, v15.0x). Before that a filtered URL ran the WHOLE suite, so
 # the "control" was a 1,000-test run against a 300 s budget and six releases (v13.88–v14.40) were logged NOT-PROVEN

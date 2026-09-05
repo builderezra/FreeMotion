@@ -351,7 +351,11 @@ window.FM = window.FM || {};
      "does the + still shift when you swipe, on your phone". The measurable option the entry itself named: for the life of
      a touch gesture on the timeline, --stage-h is the stage's CURRENT height in px, set inline on <html>, so whatever the
      viewport does under the finger the stage cannot grow and the add row's + cannot move. Released on pointerup/cancel.
-     tests/_swipeonrow.html case D (the frame grows 820→880 mid-swipe) reads 0px of + movement with this in place. */
+     tests/_swipeonrow.html case D (the frame grows 820→880 mid-swipe) reads 0px of + movement with this in place.
+     ⚠️ THE VARIABLE LIVES ON #app, NOT <html> (5 Sep, the same day). The first version wrote it inline on the root element
+     and test 699's control swipe then moved nothing one run in two — an inline style on <html> restyles the whole document
+     under the gesture. #app is the element whose grid rule reads --stage-h, and there the write touches nothing else.
+     Measured: 699 alone 2/4 with the var on <html> (rounded or exact), 4/4 with no writes, 4/4 with it on #app. */
   (function () {
     let pinned = false;
     function pin(e) {
@@ -359,10 +363,10 @@ window.FM = window.FM || {};
       const t = e.target && e.target.closest ? e.target.closest('#timeline') : null;
       if (!t) return;
       const st = document.getElementById('stage'); if (!st) return;
-      const h = Math.round(st.getBoundingClientRect().height); if (!(h > 0)) return;
-      document.documentElement.style.setProperty('--stage-h', h + 'px'); pinned = true;
+      const h = st.getBoundingClientRect().height; if (!(h > 0)) return;
+      const app = document.getElementById('app') || document.documentElement; app.style.setProperty('--stage-h', h.toFixed(3) + 'px'); pinned = true;   // the EXACT height: a rounded one shifted the grid by a fraction of a pixel and rebuilt the timeline under a swipe (5 Sep)
     }
-    function unpin() { if (!pinned) return; pinned = false; document.documentElement.style.removeProperty('--stage-h'); }
+    function unpin() { if (!pinned) return; pinned = false; const app = document.getElementById('app') || document.documentElement; app.style.removeProperty('--stage-h'); }
     window.addEventListener('pointerdown', pin, true);
     window.addEventListener('pointerup', unpin, true);
     window.addEventListener('pointercancel', unpin, true);

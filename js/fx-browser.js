@@ -570,7 +570,11 @@ window.FM = window.FM || {};
     if (!FM.effectPresets) return;
     const view = el('div', 'fxb-catview');
     _catDepth++; stopAuto();
-    const closeView = () => { view.remove(); if (--_catDepth <= 0) { _catDepth = 0; if (_featRow && _featRow.isConnected) startAuto(_featRow); } };
+    const closeView = () => {
+      const _t0 = performance.now(), _q0 = (FM.fxThumbs && FM.fxThumbs.queueState) ? FM.fxThumbs.queueState().queued : 0;
+      view.remove(); if (--_catDepth <= 0) { _catDepth = 0; if (_featRow && _featRow.isConnected) startAuto(_featRow); }
+      backReport((typeof cat !== 'undefined' && cat && cat.label) ? cat.label : (typeof reg !== 'undefined' && reg && reg.label) ? reg.label + ' presets' : 'Favourites', _t0, _q0);   // queue 712: category / presets sheet / favourites
+    };
     tapOutToClose(view, closeView);
     view.appendChild(subTop(reg.label, closeView));
     // What it does, then the words it answers to. Holding a tile is the one moment someone is asking
@@ -1204,7 +1208,11 @@ window.FM = window.FM || {};
   function openFavourites(fromPull) {
     const view = el('div', 'fxb-catview fxb-favview' + (reducedMotion() ? ' fxb-favview-fade' : (fromPull ? ' fxb-favview-pull' : ' fxb-favview-in')));
     _catDepth++; stopAuto();
-    const closeView = () => { view.remove(); if (--_catDepth <= 0) { _catDepth = 0; if (_featRow && _featRow.isConnected) startAuto(_featRow); } };
+    const closeView = () => {
+      const _t0 = performance.now(), _q0 = (FM.fxThumbs && FM.fxThumbs.queueState) ? FM.fxThumbs.queueState().queued : 0;
+      view.remove(); if (--_catDepth <= 0) { _catDepth = 0; if (_featRow && _featRow.isConnected) startAuto(_featRow); }
+      backReport((typeof cat !== 'undefined' && cat && cat.label) ? cat.label : (typeof reg !== 'undefined' && reg && reg.label) ? reg.label + ' presets' : 'Favourites', _t0, _q0);   // queue 712: category / presets sheet / favourites
+    };
     tapOutToClose(view, closeView);
 
     /* Faves re-labels its own title as the count changes, so it keeps a handle on it. Asked for from the
@@ -1366,6 +1374,37 @@ window.FM = window.FM || {};
   }
   FM._fxDeviceFilterBanner = deviceFilterBanner;   // suite seam
 
+  /* THE INSTRUMENT INSTEAD OF THE QUESTION (queue 712). The only fact that needed his phone was "does Back from a
+   * category stall?" — so the phone records it, exactly as #768 did for a scrub: how long until the main thread could
+   * breathe after the tap (a setTimeout(0)), how many tiles were queued, and how long until they had all been built.
+   * Settings → Your last Back from an effects category → Copy. */
+  function backReport(label, t0, q0) {
+    try {
+      let yieldMs = null;
+      setTimeout(function () { yieldMs = performance.now() - t0; }, 0);
+      const started = performance.now();
+      (function poll() {
+        const q = (FM.fxThumbs && FM.fxThumbs.queueState) ? FM.fxThumbs.queueState() : { queued: 0, rafArmed: false };
+        const drained = performance.now() - t0;
+        if ((q.queued === 0 || !q.rafArmed) && yieldMs != null || performance.now() - started > 10000) {
+          const ver = (document.querySelector('.brand .ver') || document.querySelector('.ver') || {}).textContent || '';
+          const y = yieldMs == null ? 10000 : yieldMs;
+          const lines = [
+            'FreeMotion back report ' + new Date().toISOString().replace('T', ' ').slice(0, 19) + (ver ? ' ' + ver.trim() : ''),
+            'device      ' + innerWidth + 'x' + innerHeight + ' @' + (devicePixelRatio || 1) + 'x  ' + (navigator.userAgent || '').replace(/Mozilla\/5\.0 /, '').slice(0, 90),
+            'category    ' + label,
+            'tiles       ' + q0 + ' queued at Back' + (q.queued ? ', ' + q.queued + ' still waiting off-screen (deferred)' : ''),
+            'first yield ' + Math.round(y) + 'ms until the app could take a tap again',
+            'drained     ' + Math.round(drained) + 'ms until nothing on screen was still building',
+            'verdict     ' + (y <= 100 ? 'instant here' : y <= 500 ? 'a short stall (' + Math.round(y) + 'ms)' : 'stalled: ' + Math.round(y) + 'ms before the app could breathe'),
+          ];
+          try { localStorage.setItem('fm.lastBackReport', lines.join('\n')); } catch (e) {}
+          return;
+        }
+        requestAnimationFrame(poll);
+      })();
+    } catch (e) {}
+  }
   function subTop(titleText, closeView) {
     const top = el('div', 'fxb-catview-top');
     const back = el('button', 'fxb-back', '‹ Back');
@@ -1402,7 +1441,11 @@ window.FM = window.FM || {};
     // pause the featured auto-scroll + its thumbnail ticker while a full-cover category view is open
     // (they were repainting invisibly underneath)
     _catDepth++; stopAuto();
-    const closeView = () => { view.remove(); if (--_catDepth <= 0) { _catDepth = 0; if (_featRow && _featRow.isConnected) startAuto(_featRow); } };
+    const closeView = () => {
+      const _t0 = performance.now(), _q0 = (FM.fxThumbs && FM.fxThumbs.queueState) ? FM.fxThumbs.queueState().queued : 0;
+      view.remove(); if (--_catDepth <= 0) { _catDepth = 0; if (_featRow && _featRow.isConnected) startAuto(_featRow); }
+      backReport((typeof cat !== 'undefined' && cat && cat.label) ? cat.label : (typeof reg !== 'undefined' && reg && reg.label) ? reg.label + ' presets' : 'Favourites', _t0, _q0);   // queue 712: category / presets sheet / favourites
+    };
     tapOutToClose(view, closeView);
     view.appendChild(subTop(cat.label, closeView));
     const grid = el('div', 'fxb-grid');

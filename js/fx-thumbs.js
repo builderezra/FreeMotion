@@ -1052,6 +1052,39 @@ window.FM = window.FM || {};
       return fallback();
     }
   }
+  /* THE STOCK STRIP, SLICED (queue 712). generate() above renders the still, two probes, a warm-up and a ten-frame strip
+   * in ONE call — fine on a GPU (a cold Back from Distort measured 3ms of main thread in the pane), 30 seconds in headless
+   * software GL, and unmeasured on a weak phone. layerStep 300 lines down already slices a LAYER strip across animation
+   * frames under an 8ms budget and lets pump() paint the first frame early; this is the same shape for the stock tiles
+   * pump() builds. One render per loop turn, so a 0ms budget (the suite's seam) is exactly one frame per tick. generate()
+   * stays for the one synchronous caller (the inspector's own thumbnail at ~1322). */
+  function stockStep(type) {
+    let j = jobs.get(type);
+    try {
+      if (!j) { j = { scene: sceneFor(type), stage: 0, frames: [], i: 0, shown: 0, still: null, d0: null }; jobs.set(type, j); }
+      const t0 = now();
+      do {
+        if (j.stage === 0) {                       // the still, and the reference for the probes
+          renderFrame(j.scene, 0.2); j.d0 = wctx.getImageData(0, 0, PX, PX).data; j.still = snap(); j.stage = 1;
+        } else if (j.stage === 1) {                // probe 1: 0.5s later
+          if (probeDiffers(j.scene, j.d0, 0.7)) j.stage = 3; else j.stage = 2;
+        } else if (j.stage === 2) {                // probe 2: 1s later (1Hz/2Hz effects must not alias to "static")
+          if (!probeDiffers(j.scene, j.d0, 1.2)) { jobs.delete(type); return { kind: 'static', frame: j.still }; }
+          j.stage = 3;
+        } else if (j.stage === 3) {                // warm-up so temporal effects (motionflow) enter the strip with state
+          renderFrame(j.scene, 0); j.stage = 4;
+        } else {                                   // the strip, one frame per turn
+          renderFrame(j.scene, 0.15 + j.i * (1.5 / FRAMES)); j.frames.push(snap()); j.i++;
+          if (j.i >= FRAMES) { jobs.delete(type); return { kind: 'anim', frames: j.frames }; }
+        }
+      } while (now() - t0 < sliceMs());
+      return null;   // not done — pump() keeps it at the head of the queue and shows the still meanwhile
+    } catch (e) {
+      jobs.delete(type);
+      if (!warned[type]) { warned[type] = 1; console.warn('fx-thumbs: preview failed for "' + type + '"', e); }
+      return fallback();
+    }
+  }
   // Preset previews always render an animated strip spanning the preset's own duration (its
   // keyframes replay anchored at 0, exactly like applying it to a clip that starts at 0).
   function generatePreset(preset) {
@@ -1122,7 +1155,9 @@ window.FM = window.FM || {};
   function tileScaleFor(dpr) { return Math.max(2, Math.min(3, Math.round(dpr || 1))); }
   const TSCALE = tileScaleFor(window.devicePixelRatio);
   const TW = 76 * TSCALE, TH = 58 * TSCALE, MAT = '#0a0d13';
-  const SLICE_MS = 8;   // main-thread budget per rAF for a layer strip — see layerStep
+  const SLICE_MS = 8;   // main-thread budget per rAF for a layer strip — see layerStep — and, since queue 712, a stock strip too
+  let sliceOverride = null;   // suite seam: FM.fxThumbs._sliceMs(0) makes every tick render exactly one frame
+  function sliceMs() { return sliceOverride == null ? SLICE_MS : sliceOverride; }
 
   function now() { return (window.performance && performance.now) ? performance.now() : Date.now(); }
   function strHash(s) {
@@ -1378,7 +1413,7 @@ window.FM = window.FM || {};
         return syntheticFor(m);
       }
       j.i++;
-    } while (j.i < j.w.n && now() - t0 < SLICE_MS);
+    } while (j.i < j.w.n && now() - t0 < sliceMs());
     if (j.i < j.w.n) return null;   // not done — pump() keeps it at the head of the queue
     jobs.delete(key);
     return j.frames.length > 1 ? { kind: 'anim', frames: j.frames } : { kind: 'static', frame: j.frames[0] };
@@ -1449,19 +1484,31 @@ window.FM = window.FM || {};
    * before this one: open the first preset sheet within ~1s of the browser opening and every tile
    * mounted in that window is the same grey ball, permanently. The recipe outlives the entry. */
   const meta = new Map();
-  let queue = [], raf = 0;
+  let queue = [], raf = 0, deferred = 0;
   function schedule() { if (!raf && queue.length) raf = requestAnimationFrame(pump); }
   function pump() {
     raf = 0;
     const key = queue[0];
     if (key != null) {
+      /* NOBODY CAN SEE THIS TILE (queue 712). Back only removes the category view; the 41 keys it queued kept rendering
+         one per frame into canvases that had left the page. A key whose waiters are all off the page goes to the back of
+         the queue, and when a full pass finds nothing on the page the ticker RESTS — mountKey's schedule() wakes it the
+         moment a tile is mounted again, and the cache still fills for tiles someone is actually looking at. Deferred, not
+         dropped: a tile mounted a moment before its section is inserted (remountLive's race) must still get painted. */
+      const ws0 = pendingQ.get(key) || [];
+      if (ws0.length && !ws0.some(function (cv) { return cv.isConnected; })) {
+        queue.push(queue.shift()); deferred++;
+        if (deferred >= queue.length) { deferred = 0; return; }
+        schedule(); return;
+      }
+      deferred = 0;
       const m = meta.get(key);
       let entry = cache.get(key);
       artFellBack = false;
       if (!entry) entry = (m && m.layerId) ? layerStep(key, m)
                         : (m && m.filter) ? generateFilter(m.filter)
                         : (m && m.preset) ? generatePreset(m.preset)
-                        : generate(key);
+                        : stockStep(key);   // queue 712: sliced, like layerStep — generate() is the one-call form
       /* A frame rendered while a photograph was still decoding is provisional — see photoArt. It is
          still PAINTED, so a tile is never blank; it is simply not remembered, and the next mount builds
          the real one. */
@@ -1477,9 +1524,10 @@ window.FM = window.FM || {};
         // A strip too dear to finish in one slice: show its first frame now rather than an empty
         // box, and carry on next rAF. The finished strip replaces it.
         const j = jobs.get(key);
-        if (j && j.frames.length && !j.shown) {
+        const first = j && (j.frames[0] || j.still);   // a stock job has its still before its strip (queue 712)
+        if (j && first && !j.shown) {
           j.shown = 1;
-          (pendingQ.get(key) || []).forEach(function (cv) { if (cv._fxType === key) paint(cv, { kind: 'static', frame: j.frames[0] }); });
+          (pendingQ.get(key) || []).forEach(function (cv) { if (cv._fxType === key) paint(cv, { kind: 'static', frame: first }); });
         }
       }
     }
@@ -1675,8 +1723,11 @@ window.FM = window.FM || {};
       return { queued: queue.length, pending: pendingQ.size, cached: cache.size, jobs: jobs.size, rafArmed: !!raf, head: queue[0] || null };
     },
     /* Halt the ticker + pending generation (cache retained) — call when the browser closes. */
+    /* Suite seams (queue 712): a per-tick budget, and a way to make one key cold again. */
+    _sliceMs: function (v) { if (v !== undefined) sliceOverride = v; return sliceMs(); },
+    _uncache: function (key) { cache.delete(key); jobs.delete(key); },
     stopAll: function () {
-      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      if (raf) { cancelAnimationFrame(raf); raf = 0; deferred = 0; }
       queue.length = 0; pendingQ.clear(); jobs.clear();
       if (ticker) { clearInterval(ticker); ticker = 0; }
       live.clear();

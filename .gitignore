@@ -4,3 +4,6 @@ reference/
 .claude/
 tools/.mutate-green
 .edit-failed
+
+.ship-in-progress
+.spotcheck-in-progress
