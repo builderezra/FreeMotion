@@ -1138,10 +1138,10 @@ window.FM = window.FM || {};
     // that hugs the highlight and a wide wash. Glow / Light Glow have one radius and can't do it.
     { type: 'halation', label: 'Halation', desc: 'The warm red bleed film gets around blown highlights — a tight core plus a wide wash, which is what reads as film rather than video.', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 2, step: 0.02, def: 1.1, legacy: 0.8 },
-      { key: 'threshold', label: 'Threshold', min: 0, max: 1, step: 0.02, def: 0.68 },
+      { key: 'threshold', label: 'Threshold', min: 0, max: 1, step: 0.02, def: 0.5, legacy: 0.68 },
       { key: 'tightness', label: 'Core', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'spread', label: 'Spread', min: 0.5, max: 20, step: 0.5, def: 5, unit: '%' },
-      { key: 'knee', label: 'Falloff', min: 1, max: 6, step: 0.1, def: 2.4 },
+      { key: 'knee', label: 'Falloff', min: 1, max: 6, step: 0.1, def: 1.8, legacy: 2.4 },
     ], color: true, defColor: '#ff3a14', colorLabel: 'Halo' },
     // ---- batch 32: two time/impact effects ----
     // Frame Stutter — hold each frame for 1/rate of a second. Stop-motion, anime step, or a strobe
@@ -9804,6 +9804,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * Only the highlight MASK is per-pixel, and it is built at quarter resolution — 130k pixels at
      * 1080p instead of 2M — then both blurs and the upscale ride the compositor's own filter. */
     halation: function (A, B, W, H, bb, p, t) {
+      /* DEFAULTS 0.5 / 1.8 SINCE v15.81 (queue 482, the by-eye pass). At 0.68 with a 2.4 knee the mask took only
+       * near-white pixels, and on a photograph almost none qualify: measured on four fx-art photographs at 150px the
+       * effect moved the picture by 0.2–1.8 at its defaults and under 2.6 at its MAXIMUM — invisible, and the amount
+       * slider could not rescue it because the threshold was the lever. The defaults-visible test never saw this
+       * because its fixture paints a 250-level highlight block that photographs lack. Saved instances without the
+       * keys keep 0.68 / 2.4 through `legacy` (and the `== null` fallbacks below say the same numbers). */
       const amount = Math.max(0, p.amount == null ? 0.8 : FM.evalProp(p.amount, t));
       B.drawImage(A, 0, 0);
       if (amount <= 0.001) return;

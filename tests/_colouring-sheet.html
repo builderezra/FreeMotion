@@ -1,0 +1,78 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111;color:#cfd;font:12px ui-monospace">
+<pre id="o" style="padding:10px;white-space:pre-wrap">running…</pre>
+<img id="sheet" style="display:block;max-width:100%">
+<iframe id="a" src="../index.html" style="width:900px;height:700px;border:0;opacity:.2"></iframe>
+<script>
+/* COLOURING CONTACT SHEET (queue 482, the by-eye half) — every effect the registry files under Colouring, rendered by the app's
+   own renderer on the photograph the Colouring browser already uses ('city', SECTION_PHOTO.color), three ways per row:
+   at its defaults, with its MAIN slider at a quarter of its range, and with it at the top. The middle tile answers "does it
+   look good as shipped"; the outer two answer "is the range useful across the whole slider, not only in the middle" — the
+   two questions the entry says cannot be swept mechanically. The main slider is `amount` when the effect has one, else its
+   first numeric control. Nothing is mocked: FM.renderScene on a real image layer, effects from FM.fxRegistry.makeInstance. */
+var out = []; function say(s) { out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+var T = 150, GAP = 6, LABEL = 15, SUB = 13;
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait() {
+    if (!(w.FM && w.FM.fxRegistry && w.FM.renderScene && w.FM.makeLayer && w.FM.media)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait, 50); }
+    setTimeout(function () { run(w).catch(function (e) { say('sheet threw: ' + (e && e.stack || e)); }); }, 800);
+  })();
+});
+function loadPhoto(w, key) {
+  return new Promise(function (ok, bad) {
+    var im = new w.Image(); im.onload = function () { ok(im); }; im.onerror = function () { bad(new Error('no photo ' + key)); };
+    im.src = '../fx-art/' + key + '.jpg?v=1';
+  });
+}
+async function run(w) {
+  var FM = w.FM, R = FM.fxRegistry, doc = w.document;
+  var key = (new URLSearchParams(location.search).get('photo')) || 'city';
+  var im = await loadPhoto(w, key), side = Math.min(im.naturalWidth, im.naturalHeight);
+  var base = doc.createElement('canvas'); base.width = T; base.height = T;
+  base.getContext('2d').drawImage(im, (im.naturalWidth - side) / 2, (im.naturalHeight - side) / 2, side, side, 0, 0, T, T);
+  var mid = '_csheet_' + key; FM.media.set(mid, { kind: 'image', el: base, width: T, height: T, duration: 0 }); FM.media.pin(mid);
+  var types = R.all().map(function (d) { return d.type; }).filter(function (t) { var d = R.get(t); return d && d.category === 'color'; });
+  types.sort();
+  function shot(inst) {
+    var l = FM.makeLayer('image', { x: T / 2, y: T / 2, start: 0, duration: 2 }); l.id = mid; if (inst) l.effects = [inst];
+    var o = doc.createElement('canvas'); o.width = T; o.height = T;
+    FM.renderScene(o.getContext('2d'), { project: { width: T, height: T, fps: 30, duration: 2, background: '#000000' }, layers: [l] }, 0.37);
+    return o;
+  }
+  var rows = [], plain = shot(null);
+  types.forEach(function (t) {
+    var d = R.get(t), ps = (R.paramsOf(t) || []).filter(function (p) { return typeof p.min === 'number' && typeof p.max === 'number'; });
+    var main = ps.find(function (p) { return p.key === 'amount'; }) || ps[0] || null;
+    var row = { t: t, label: d.label || t, main: main, tiles: [] };
+    try {
+      var d0 = R.makeInstance(t); row.tiles.push({ cv: shot(d0), cap: 'defaults' });
+      if (main) {
+        var lo = main.min + (main.max - main.min) * 0.25, hi = main.max;
+        var i1 = R.makeInstance(t); i1.params[main.key] = lo; row.tiles.push({ cv: shot(i1), cap: main.key + ' ' + (+lo.toFixed(2)) + (main.unit || '') + ' (¼)' });
+        var i2 = R.makeInstance(t); i2.params[main.key] = hi; row.tiles.push({ cv: shot(i2), cap: main.key + ' ' + hi + (main.unit || '') + ' (max)' });
+      }
+    } catch (e) { row.err = String(e && e.message || e); }
+    rows.push(row);
+  });
+  var W = GAP + (T + GAP) * 4, RH = T + LABEL + SUB + GAP, H = GAP + RH * rows.length;
+  var sheet = document.createElement('canvas'); sheet.width = W; sheet.height = H; var g = sheet.getContext('2d');
+  g.fillStyle = '#14181f'; g.fillRect(0, 0, W, H); g.textBaseline = 'top';
+  rows.forEach(function (r, i) {
+    var y = GAP + i * RH, x = GAP;
+    g.font = '600 13px -apple-system, system-ui, sans-serif'; g.fillStyle = '#ffd166'; g.fillText((i + 1) + '. ' + r.label + (r.main ? '' : '  (no numeric control)'), x, y);
+    g.font = '11px -apple-system, system-ui, sans-serif'; g.fillStyle = '#9aa4b2'; g.fillText('as shot · ' + key, x, y + LABEL);
+    g.drawImage(plain, x, y + LABEL + SUB);
+    r.tiles.forEach(function (tl, k) {
+      var tx = x + (k + 1) * (T + GAP);
+      g.fillStyle = '#9aa4b2'; g.fillText(tl.cap, tx, y + LABEL); g.drawImage(tl.cv, tx, y + LABEL + SUB);
+    });
+    if (r.err) { g.fillStyle = '#ff6b6b'; g.fillText('threw: ' + r.err.slice(0, 60), x + T + GAP, y + LABEL + SUB + 4); }
+  });
+  var url = sheet.toDataURL('image/jpeg', 0.84);
+  document.getElementById('sheet').src = url; window.__sheet = url; window.__sheetSize = [W, H]; window.__rows = rows.map(function (r) { return r.t + (r.err ? ' THREW' : ''); });
+  window.__save = function (name) { return fetch('http://localhost:8778/' + (name || 'colouring.jpg'), { method: 'POST', body: url }).then(function (r) { return r.text(); }); };
+  say('SHEET ' + W + 'x' + H + ' ' + Math.round(url.length / 1024) + 'KB · ' + rows.length + ' effects on ' + key + (rows.some(function (r) { return r.err; }) ? ' · THREW: ' + rows.filter(function (r) { return r.err; }).map(function (r) { return r.t; }).join(' ') : ''));
+}
+</script>
+</body></html>

@@ -27102,6 +27102,42 @@
     if (dead.length) throw new Error(dead.length + ' raised ceiling(s) are dead space — the top half of the slider does nothing: ' + dead.join(' · '));
   });
 
+  test('482: Halation reads on a photograph at its defaults, and a saved instance without the new keys renders as it always did', { item: '482', budgetMs: 40000 }, async function () {
+    /* The by-eye Colouring pass (tests/_colouring-sheet.html, v15.81): 43 effects on the section's own photograph, and Halation was
+       the one that read as nothing at every setting. Its mask keyed on luma above 0.68 with a 2.4 falloff, which on a photograph
+       admits almost no pixels; measured at 150px on four fx-art photographs it moved the picture by 0.19–1.84 at its defaults and
+       under 2.6 at its maximum. The defaults-visible test could not see it: its fixture paints a 250-level highlight block. This
+       measures on the real photographs. Floors sit between the old reading and the new one (city 0.66 → 2.10 at defaults,
+       0.97 → 2.95 at max; pair 0.19 → 2.35, 0.30 → 3.40), with margin for a platform's blur. */
+    const T = 150, mad = (A, B) => { let s = 0; for (let i = 0; i < A.length; i++) s += Math.abs(A[i] - B[i]); return s / A.length; };
+    const R = FM.fxRegistry, bad = [];
+    for (const key of ['city', 'pair']) {
+      const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('no photo ' + key)); i.src = 'fx-art/' + key + '.jpg?v=1'; });
+      const side = Math.min(im.naturalWidth, im.naturalHeight), c = document.createElement('canvas'); c.width = T; c.height = T;
+      c.getContext('2d').drawImage(im, (im.naturalWidth - side) / 2, (im.naturalHeight - side) / 2, side, side, 0, 0, T, T);
+      const mid = '_t482hal_' + key; FM.media.set(mid, { kind: 'image', el: c, width: T, height: T, duration: 0 }); FM.media.pin(mid);
+      const shot = inst => {
+        const l = FM.makeLayer('image', { x: T / 2, y: T / 2, start: 0, duration: 2 }); l.id = mid; if (inst) l.effects = [inst];
+        const o = document.createElement('canvas'); o.width = T; o.height = T; const g = o.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(g, { project: { width: T, height: T, fps: 30, duration: 2, background: '#000000' }, layers: [l] }, 0.37);
+        return g.getImageData(0, 0, T, T).data;
+      };
+      const plain = shot(null);
+      if (mad(plain, shot(null)) !== 0) throw new Error('a filterless render differs from itself, so nothing below means anything');
+      const def = R.makeInstance('halation'), top = R.makeInstance('halation'); top.params.amount = 2;
+      const dDef = mad(plain, shot(def)), dTop = mad(plain, shot(top));
+      if (dDef < 1.6) bad.push(key + ': defaults move the picture by only ' + dDef.toFixed(2));
+      if (dTop < 2.4) bad.push(key + ': the maximum moves the picture by only ' + dTop.toFixed(2));
+      // a saved instance from before v15.81 carries no threshold/knee: it must render exactly as 0.68 / 2.4 did
+      const old = R.makeInstance('halation'); delete old.params.threshold; delete old.params.knee;
+      const pinned = R.makeInstance('halation'); pinned.params.threshold = 0.68; pinned.params.knee = 2.4;
+      const drift = mad(shot(old), shot(pinned));
+      if (drift !== 0) bad.push(key + ': an instance without the new keys drifted by ' + drift.toFixed(3) + ' from the 0.68 / 2.4 render it used to be');
+      try { FM.media.unpin && FM.media.unpin(mid); } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · ') + ' (queue 482)');
+  });
+
   test('482: eleven canvas and warp ceilings earned by the round-four probe are in the registry, and each top half still moves the picture', { item: '482', budgetMs: 40000 }, function () {
     /* Round four of the ceilings pass (v15.79). tests/_482ceil.html (v14.81) walked the per-pixel table; the canvas and warp tables take no
        ImageData, so tests/_482ceil2.html walks them through FM.renderScene on a real layer and finds, per slider, the last multiplier of its
