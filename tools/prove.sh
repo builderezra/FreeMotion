@@ -59,7 +59,7 @@ while IFS=$'\t' read -r cv ct cr; do
   rv="$(grep -F "$(printf '\t%s' "$ct")" "$TMP/rev.v" | head -1 | cut -f1)"; rr="$(grep -F "$(printf '\t%s' "$ct")" "$TMP/rev.v" | head -1 | cut -f3)"
   case "$cv/$rv" in
     PASS/FAIL) echo "    ✅ CAUGHT  ${ct:0:100}"; echo "         fails without the fix as: ${rr:0:220}"; CAUGHT=$((CAUGHT+1))
-               printf '%s' "$rr" | grep -qiE 'seam missing|is not a function|not exposed|undefined' && echo "         (WEAK: it fails on a missing seam, not on the behaviour — a behavioural assertion would be stronger)";;
+               printf '%s' "$rr" | grep -qiE 'seams? (are |is )?missing|missing seam|seam.{0,40}missing|is not a function|not exposed|not reachable|undefined' && echo "         (WEAK: it fails on a missing seam, not on the behaviour — a behavioural assertion would be stronger)";;
     PASS/PASS) echo "    ⚠️ DEAD    ${ct:0:100}"; echo "         still PASSES with the fix reverted — fine for a rename or a removed row; a dead assertion otherwise"; DEADN=$((DEADN+1)); RETRY="$RETRY$ct
 ";;
     PASS/*)    echo "    ❌ NORUN   ${ct:0:100}"; echo "         reverted side: ${rr:0:200}"; BAD=1;;

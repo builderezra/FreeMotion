@@ -5937,26 +5937,33 @@ window.FM = window.FM || {};
       const bsGrid = el('div', 'bs-tiles');
       body.appendChild(bsGrid);
       // ===== BORDER (AM parity, keyframeable) =====
-      // Reuses layer.stroke as the single border. position = inside/center/outside. For line/arc shapes
-      // stroke is the LINE colour (not a border), so no border UI there. Group border = silhouette
+      // Reuses layer.stroke as the single border. position = inside/center/outside. Group border = silhouette
       // dilation → outside only. size + colour are keyframeable (◆); position is a plain choice.
+      // OPEN KINDS (line / arc / spiral / open pen path) GET THE TOGGLE TOO (queue 780). The renderer's stroke
+      // branch draws `layer.stroke` as an under-stroke hugging the line from behind whenever stroke.enabled —
+      // twice the line width, in stroke.color — so the border is real on them. v15.54 said "Border offered on
+      // open shapes, since the renderer draws it" and then EXCLUDED them all via the new isOpenStroke(), which
+      // left stroke.enabled unreachable from the UI and a bordered spiral impossible to edit. Position is
+      // hidden on open kinds (the renderer ignores it there), and Size is not offered because stroke.width IS
+      // the line width on an open kind — it lives under Line width in Edit Shape / Colour & Fill.
       const openKind = isOpenStroke(layer);   // queue 759: spiral and an open path are open strokes too
       /* …and MEDIA (queue 386 clause 1). Ezra: "Outlines should still be a toggle option on videos and
          clips, not just shadow". Video and image were excluded because the media draw path ignores
          `layer.stroke` — but it does not have to read it: `effectiveFx` now turns the toggle into the
          same alpha-outline `stroke` effect a group's border already becomes, so the card can offer the
          identical control here and it renders. */
-      const canBorder = (layer.type === 'shape' && !openKind) || layer.type === 'text' || layer.type === 'group'
-                        || layer.type === 'video' || layer.type === 'image';
+      const canBorder = layer.type === 'shape' || layer.type === 'text' || layer.type === 'group'
+                        || layer.type === 'video' || layer.type === 'image';   // every kind the renderer borders (queue 780)
       if (canBorder) {
         if (!layer.stroke) layer.stroke = { enabled: false, width: layer.type === 'text' ? 6 : 8, color: layer.type === 'text' ? '#000000' : '#ffffff' };
         const stk = layer.stroke;
         if (stk.position == null) stk.position = (layer.type === 'text' || layer.type === 'group') ? 'outside' : 'center';
         bsGrid.appendChild(bsTile('outline', 'Outline', stk.enabled, v => { stk.enabled = v; FM.requestRender(); FM.inspector.refresh(); }));
         if (stk.enabled) {
-          if (layer.type !== 'group') body.appendChild(segRow('Position', [['inside', 'Inside'], ['center', 'Center'], ['outside', 'Outside']], () => stk.position, v => { stk.position = v; }));
+          if (layer.type !== 'group' && !openKind) body.appendChild(segRow('Position', [['inside', 'Inside'], ['center', 'Center'], ['outside', 'Outside']], () => stk.position, v => { stk.position = v; }));
           body.appendChild(kfColorRow(stk, 'color', 'Color', stk.color || '#ffffff'));
-          body.appendChild(kfNumRow(stk, 'width', 'Size', 0, 100, 1, 6, ''));
+          if (openKind) body.appendChild(el('div', 'insp-hint', 'Hugs the line from behind, as thick again as the line — set the line under Line width.'));   // queue 780
+          else body.appendChild(kfNumRow(stk, 'width', 'Size', 0, 100, 1, 6, ''));
         }
       }
       // ===== TRIM PATH + DASHES (shape only) — both act on the STROKE, so they sit with the border.

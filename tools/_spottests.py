@@ -17,16 +17,28 @@ def titles_for(h):
         diff = subprocess.run(['git', 'show', '--format=', '-U0', h, '--', 'tests/tests.js'],
                               capture_output=True, text=True).stdout
         post = subprocess.run(['git', 'show', h + ':tests/tests.js'], capture_output=True, text=True).stdout.split('\n')
-    decl = re.compile(r"""^\s*test\(\s*(['"])(.*?)\1\s*,""")
+    head = re.compile(r"""^\s*test\(\s*(['"])""")
+    def decl_title(line):
+        """The JS string literal that opens a test() call, escapes honoured — a regex `(.*?)\1\s*,` stopped at the first
+        quote followed by a comma INSIDE the title (v15.38's title carries one) and reported a truncated name."""
+        m = head.match(line)
+        if not m: return None
+        q = m.group(1); i = m.end(); buf = []
+        while i < len(line):
+            c = line[i]
+            if c == '\\' and i + 1 < len(line):
+                buf.append(line[i + 1]); i += 2; continue
+            if c == q: return ''.join(buf)
+            buf.append(c); i += 1
+        return None
     out, seen = [], set()
     for m in re.finditer(r'^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@', diff, re.M):
         start = int(m.group(1)); n = int(m.group(2) or 1)
         for ln in range(max(start, 1), max(start, 1) + max(n, 1)):
             i = min(ln, len(post)) - 1
             while i >= 0:
-                d = decl.match(post[i])
-                if d:
-                    t = d.group(2).replace("\\'", "'").replace('\\"', '"')   # the source escapes quotes; the runner matches the real title
+                t = decl_title(post[i])
+                if t is not None:
                     if t not in seen:
                         seen.add(t); out.append(t)
                     break

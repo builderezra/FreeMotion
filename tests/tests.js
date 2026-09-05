@@ -20282,6 +20282,14 @@
       var probe = async function (layout) {
       FM.refreshAll(); await sleep(220);
       tl.scrollLeft = 1e6; tl.scrollTop = 1e6; await sleep(260);              // as far right (and down) as it goes
+      /* …and WAIT FOR IT TO LAND (queue 782). Under load (5 Sep: 40 Chromes from an audit) the fixed 260ms was not enough
+         for the scroll and the marker layout to settle, so every pin still read in the lane and this threw "head has 0" —
+         a fixture flake that cost a ship. Poll until two consecutive frames agree on scrollLeft and the pins' positions. */
+      for (var _settle = 0, _last = ''; _settle < 40; _settle++) {
+        await new Promise(function (r) { requestAnimationFrame(function () { setTimeout(r, 30); }); });
+        var _now = tl.scrollLeft + '|' + [].slice.call(document.querySelectorAll('.tl-marker')).map(function (m) { return Math.round(m.getBoundingClientRect().left); }).join(',');
+        if (_now === _last) break; _last = _now;
+      }
       if (!(tl.scrollLeft > 20)) throw new Error('setup: the timeline would not scroll (' + tl.scrollLeft + ') — nothing to clip against');
       var head = document.querySelector('.tl-headspace').getBoundingClientRect(), tlr = tl.getBoundingClientRect();
       var tracks = document.getElementById('tl-tracks').getBoundingClientRect();
@@ -20289,7 +20297,7 @@
       var px = function (m) { return Math.round(m.getBoundingClientRect().left + 5); };
       var inHead = pins.filter(function (m) { var x = px(m); return x >= head.left + 2 && x < head.right - 2; });
       var inLane = pins.filter(function (m) { var x = px(m); return x > head.right + 10 && x < tlr.right - 10; });
-      if (!inHead.length || !inLane.length) throw new Error('setup (' + layout + '): need a pin on each side of the divider; head has ' + inHead.length + ', lane has ' + inLane.length + ' (head right edge ' + Math.round(head.right) + ')');
+      if (!inHead.length || !inLane.length) throw new Error('setup (' + layout + '): need a pin on each side of the divider; head has ' + inHead.length + ', lane has ' + inLane.length + ' (head right edge ' + Math.round(head.right) + ', head left ' + Math.round(head.left) + ', tl ' + Math.round(tlr.left) + '..' + Math.round(tlr.right) + ', scrollLeft ' + Math.round(tl.scrollLeft) + '/' + tl.scrollWidth + ', ' + pins.length + ' pins at x ' + pins.map(px).join(',') + ', markers ' + ((FM.scene.markers || FM.scene.bookmarks || []).length) + ', iframe ' + window.innerWidth + 'px)');
       // where to look: only places with NO opaque head to do the clip's job for it
       var ys = [];
       var add = document.querySelector('.tl-addrow');
@@ -34599,7 +34607,7 @@
       await sleep(40);
 
       const left = [].slice.call(document.querySelectorAll('.track-row')).filter(e => e.style.transform);
-      if (left.length) throw new Error(left.length + ' row(s) are still carrying a drag transform after the pointer was lost — they will sit on top of each other exactly as in his screenshot');
+      if (left.length) throw new Error(left.length + ' row(s) are still carrying a drag transform after the pointer was lost — they will sit on top of each other exactly as in his screenshot (held pointers now: ' + (FM._heldPointers ? JSON.stringify(Array.from(FM._heldPointers.keys ? FM._heldPointers.keys() : FM._heldPointers)) : 'n/a') + ', stale: ' + (FM._gestureIsStale ? FM._gestureIsStale() : 'n/a') + ')');
       const parts = document.querySelectorAll('.track-row.row-part, .track-row.row-dragging, .track-row.row-moving');
       if (parts.length) throw new Error(parts.length + ' row(s) kept a drag class after the pointer was lost');
 
@@ -39609,6 +39617,10 @@
           if (ok) { ok = false; err = 'left a timeline gesture live after finishing (' + drag.live.join(', ') + ') — leaked state that corrupts whatever runs next'; }
           if (FM.timeline._abortGestures) FM.timeline._abortGestures();
         }
+        /* …and a pointer a finished test left DOWN is never a finger (queue 781). Many tests press without releasing;
+         * with held pointers counted, each one would vouch for the next test's stale gesture as "still held". Cleared
+         * silently, because a synthetic press with no release is ordinary fixture shorthand, not a leak. */
+        if (FM._heldPointers && FM._heldPointers.clear) FM._heldPointers.clear();
       } catch (e) {}
       results.push({ name: t.name, item: t.item, pending: t.pending, ok: ok, error: err });
     }
@@ -49607,9 +49619,10 @@
     const pairs = [
       { name: 'tunnel', fn: W_.tunnel, ref: (FM._warpRef || {}).tunnel, tol: 0, moveCap: 0, why: 'a pure hoist must be exact' },
       { name: 'fractalwarp', fn: W_.fractalwarp, ref: (FM._warpRef || {}).fractalwarp, tol: 1e-9, moveCap: 0, why: 'reciprocal multiply rounds differently' },
-      /* curl is NOT in this list (queue 758): it was never prepped, so it had no separate reference — `_curlLegacy` was a
-         byte-for-byte copy of curl and the row compared the kernel with itself, which proves nothing. It stays the
-         CONTROL in the render-scale sweep, where a kernel that was already right is exactly what is wanted. */
+      /* curl is back (queue 779). v15.53 removed this row saying curl "was never prepped" — it has been since v13.28, and
+         from v13.29 its reference was a copy of the prepped kernel, so the row had compared curl with itself. The
+         reference is now the genuine pre-prep kernel; a pure hoist must be exact. */
+      { name: 'curl', fn: W_.curl, ref: (FM._warpRef || {}).curl, tol: 0, moveCap: 0, why: 'a pure hoist must be exact (queue 779)' },
       /* GRIDREPEAT must be EXACT, and the zero here is load-bearing. Reciprocal substitution was tried
          and measured 1.74x while moving 9,420 of 53,196 sampled points onto a different pixel — 17.7%.
          A tiling warp cannot take reciprocals ANYWHERE, fractions included: with W=540 over 6 columns
@@ -54624,6 +54637,54 @@
     }
   });
 
+  /* ═══ 781 (hunt HIGH #47): A STILL FINGER IS NOT A DEAD GESTURE — the half of queue 751 that v15.44 described and never
+     wrote. The stamp moves only on pointermove, so a pointer RESTING on a clip past STALE_MS read as wreckage and the next
+     rebuild request snapped the clip back mid-hold. Real events on the real clip: press (mouse path — clipMove starts on the
+     press), one move, then nothing for longer than the stale window; a rebuild must DEFER, not recover. Then the queue-541
+     shape as the control: a no-button move says the pointer is gone, and the same wait heals it. */
+  test('781: a pointer resting still on a clip past the stale window is not recovered as a dead gesture; a lost one still is', { item: '781', budgetMs: 20000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.timeline._dragState) throw new Error('seam missing: timeline._dragState');
+    // _heldPointers / _gestureIsStale arrive WITH the fix; they are asserted where used so that, without the fix, this
+    // test fails on the behaviour (the drag is recovered under a still finger) rather than on a missing seam.
+    const held = () => FM._heldPointers || new Set();
+    const saved = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const live = () => ((FM.timeline._dragState() || {}).live || []).indexOf('clipMove') >= 0;   // _dragState returns { any, live: [...] }
+    const PID = 781;
+    try {
+      held().clear();
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 40, shapeH: 30, fill: '#4080c0', start: 1, duration: 2 });
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.timeline.rebuild(); await sleep(80);
+      const clip = document.querySelector('.track-row .clip');
+      if (!clip) throw new Error('setup: no .clip in the timeline');
+      const r = clip.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      const send = (el, type, dx, buttons) => el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: PID, pointerType: 'mouse', isPrimary: true, clientX: x + dx, clientY: y, buttons: buttons }));
+      send(clip, 'pointerdown', 0, 1); send(clip, 'pointermove', 6, 1);
+      if (!live()) throw new Error('setup: the press did not start a clip drag (' + JSON.stringify(FM.timeline._dragState()) + ') — nothing below would mean anything');
+      // …and the finger rests. Past STALE_MS with no move at all.
+      await sleep(1450);
+      FM.timeline.rebuild(); await sleep(40);
+      if (!live()) throw new Error('a rebuild during a 1.45s still hold RECOVERED the drag — the clip snapped back under the finger (v15.44 claimed this was fixed)');
+      if (!FM._heldPointers || !FM._gestureIsStale) throw new Error('the drag survived, but not by the mechanism claimed: _heldPointers / _gestureIsStale are missing');
+      if (!FM._heldPointers.has(PID)) throw new Error('the press was not counted as a held pointer — the window-level count is not seeing pointerdown');
+      if (FM._gestureIsStale()) throw new Error('with the pointer still down, the gesture reads as STALE after a 1.45s rest — a still finger is a dead gesture again');
+      // the control — queue 541's shape: the pointer vanished, the mouse moves with no button, the same wait heals it
+      window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: PID, pointerType: 'mouse', clientX: x + 9, clientY: y + 1, buttons: 0 }));
+      if (FM._heldPointers.has(PID)) throw new Error('a move reporting no button did not release the held pointer, so a lost pointer would hold the timeline for 20s instead of healing (queue 541)');
+      await sleep(1350);
+      if (!FM._gestureIsStale()) throw new Error('control: with the pointer released and the stamp old, the gesture still reads as live');
+      FM.timeline.rebuild(); await sleep(40);
+      if (live()) throw new Error('control: a lost pointer was NOT recovered after the stale window — queue 541 is undone');
+    } finally {
+      try { window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: PID, pointerType: 'mouse', buttons: 0 })); } catch (e) {}
+      if (FM._recoverStuckGesture) FM._recoverStuckGesture();
+      held().clear();
+      FM.scene.layers.length = 0; saved.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = sel0;
+      FM.timeline.rebuild(); await sleep(40);
+    }
+  });
+
   /* ═══ 752 (hunt MEDIUM #35): THE TRIM EDGE-SCROLL BRAKE RESETS WHEN THE FINGER RE-ENTERS THE EDGE. The clip path
      resets its counter on entry; the trim path never did, so once the brake had tripped the edge was dead for the rest
      of the drag. Arm a trim, enter the edge (scrolls), trip the brake through the seam, leave, re-enter: it scrolls again. */
@@ -54930,15 +54991,25 @@
     if (db.x !== 0 || db.y !== 0 || db.w !== W || db.h !== H) throw new Error('a dirty plate should run unbounded (the whole frame), got ' + JSON.stringify(db));
   });
 
-  /* ═══ 758 (hunt MEDIUM #41): NO KERNEL IS ITS OWN REFERENCE. `_curlLegacy` was a copy of `curl`, so the equality row
-     compared curl with itself. The copy and the reference entry are gone; a kernel that is in the reference map must
-     differ from the live one in source (it is a separate implementation, or the comparison is void). */
-  test('758: every warp reference is a different function from its live kernel', { item: '758' }, async function () {
+  /* ═══ 758 (hunt MEDIUM #41) — RESTATED AT 779: NO KERNEL IS ITS OWN REFERENCE, AND EVERY PREPPED KERNEL HAS ONE.
+     v13.29 added `_curlLegacy` as a copy of the ALREADY-prepped curl, so the tol-0 row compared curl with itself. v15.53
+     noticed the copy and deleted the reference, writing "curl was never prepped" into this test — false: `curl.prep` has
+     existed since v13.28 (dcfdded). The genuine pre-prep kernel is back as the reference (queue 779); this asserts that
+     every kernel with a `prep` has a reference, and that no reference is byte-identical to its live kernel. */
+  test('758: every warp reference is a different function from its live kernel, and every prepped kernel has one', { item: '779' }, async function () {
     const W_ = FM._warpFx, R = FM._warpRef;
     if (!W_ || !R) throw new Error('FM._warpFx / FM._warpRef seams missing');
-    if (W_._curlLegacy) throw new Error('_curlLegacy is back inside WARP_FX');
-    if (R.curl) throw new Error('curl has a reference entry again — it was never prepped, so any reference is either itself or unverified');
+    if (W_._curlLegacy) throw new Error('_curlLegacy is inside WARP_FX, where it reads as a shipping effect that moves nothing');
+    if (typeof R.curl !== 'function') throw new Error('curl has NO reference — it is prepped (WARP_FX.curl.prep exists), so its hoist is unverified; v15.53 deleted the reference instead of restoring the pre-prep kernel');
+    if (!/cuWl/.test(String(R.curl)) || /prep\(/.test(String(R.curl))) throw new Error('the curl reference is not the pre-prep kernel (it must resolve its own constants per call, never via curl.prep)');
     Object.keys(R).forEach(k => { if (!W_[k]) throw new Error('reference ' + k + ' names no live kernel'); if (String(R[k]) === String(W_[k])) throw new Error(k + ': the reference is byte-identical to the live kernel — the equality test compares it with itself'); });
+    // and the other direction: a kernel that hoists per-frame constants must have a reference to be measured against
+    const prepped = Object.keys(W_).filter(k => typeof W_[k] === 'function' && typeof W_[k].prep === 'function');
+    if (prepped.length < 8) throw new Error('only ' + prepped.length + ' prepped kernels found — the sweep collapsed');
+    // turbulentdisplace and wave carry their own reference tests (queue 474); wrapshift was BORN prepped at v14.16 — a two-line
+    // modulo kernel with no pre-hoist body to compare against, covered by name in the #484 tests. Anything else must answer.
+    const unref = prepped.filter(k => typeof R[k] !== 'function' && k !== 'turbulentdisplace' && k !== 'wave' && k !== 'wrapshift');
+    if (unref.length) throw new Error('prepped kernels with no reference body: ' + unref.join(', ') + ' — their hoists are unverified');
   });
 
   /* ═══ 759 (hunt MEDIUM #42): THE SMALLER FIXES THAT CAN BE OBSERVED. One "open stroke" definition that knows spiral and
@@ -54967,8 +55038,67 @@
       FM.renderScene = real;
       FM.scene = saved; FM.scene.selectedId = savedSel;
     }
-    const hint = document.querySelector('.mt-trackpad-hint');
-    if (hint && /nine|centre, edges and corners/i.test(hint.textContent)) throw new Error('the anchor pad hint still describes nine points; the grid snaps to 25');
+    /* The anchor pad is only in the DOM in the transform card's ANCHOR mode — the assertion used to read a null and pass
+       (queue 780 clause 3, an audit finding). Open the real pad, require the hint to exist and to describe the 25-point grid. */
+    const mode0 = FM._mtMode, sel1 = FM.scene.selectedId;
+    try {
+      const A = sh('rect'); FM.scene.layers.push(A); FM.selectLayer(A.id); FM._mtMode = 'anchor';
+      FM.refreshAll(); FM.inspector.refresh(); FM.inspector.openCategory('transform');
+      const hint = document.querySelector('.mt-trackpad-hint');
+      if (!hint) throw new Error('setup: the anchor pad (.mt-trackpad-hint) is not in the DOM in anchor mode — the assertion would be vacuous');
+      if (/nine|centre, edges and corners/i.test(hint.textContent)) throw new Error('the anchor pad hint still describes nine points; the grid snaps to 25');
+      if (!/quarter/i.test(hint.textContent)) throw new Error('the anchor pad hint does not describe the quarter-point grid it snaps to: "' + hint.textContent + '"');
+      FM.scene.layers.splice(FM.scene.layers.indexOf(A), 1);
+    } finally { FM._mtMode = mode0; FM.scene.selectedId = sel1; try { FM.refreshAll(); FM.inspector.refresh(); } catch (e) {} }
+  });
+
+  /* ═══ 780 (hunt HIGH #46): THE BORDER TOGGLE IS OFFERED ON EVERY SHAPE THE RENDERER BORDERS — open kinds included. v15.54
+     said it added Border to open shapes and REMOVED it from spiral and open pen paths instead, so stroke.enabled became
+     unreachable from the UI on them. Through the real card: the Outline tile exists for a spiral and an open path, tapping
+     it flips stroke.enabled, Position is not offered there (the renderer ignores it on an open kind), a rect still gets
+     Position; and MEASURED: with the toggle on, green under-stroke pixels appear along a red spiral; off, none. */
+  test('780: a spiral and an open pen path get the Outline tile, it renders an under-stroke, and a rect keeps Position', { item: '780' }, async function () {
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const tilesOf = () => [].slice.call(document.querySelectorAll('#inspector .bs-tile, .insp-body .bs-tile'));
+    const outlineTile = () => tilesOf().filter(t => /^Outline$/.test(((t.querySelector('.bs-name') || {}).textContent || '').trim()))[0];
+    const hasPosition = () => [].slice.call(document.querySelectorAll('#inspector label, .insp-body label, #inspector .seg-label, .insp-body .seg-label')).some(l => /^Position$/.test((l.textContent || '').trim()));
+    const mk = (extra) => { const L = FM.makeLayer('shape', Object.assign({ x: 150, y: 150, shapeW: 120, shapeH: 120, fill: '#ff0000' }, extra)); L.start = 0; L.duration = 3; return L; };
+    const openKinds = [['spiral', mk({ shape: 'spiral' })], ['open path', mk({ shape: 'path', closed: false, points: [[0.1, 0.1], [0.9, 0.5], [0.1, 0.9]] })]];
+    try {
+      for (const pair of openKinds) {
+        const what = pair[0], L = pair[1];
+        FM.scene.layers.length = 0; FM.scene.layers.push(L);
+        FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.refresh(); FM.inspector.openCategory('border');
+        const tile = outlineTile();
+        if (!tile) throw new Error('a ' + what + ' has no Outline tile in Outline & Shadows — the renderer borders it, so the toggle must be offered (v15.54 removed it)');
+        if (tile.classList.contains('on')) throw new Error(what + ': Outline reads ON before anything was turned on');
+        tile.click(); FM.inspector.refresh(); FM.inspector.openCategory('border');
+        if (!(L.stroke && L.stroke.enabled)) throw new Error(what + ': tapping Outline did not set stroke.enabled');
+        if (hasPosition()) throw new Error(what + ': the card offers Position, which the renderer ignores on an open kind');
+      }
+      // control: a closed shape still gets Position once its outline is on
+      const R = mk({ shape: 'rect' }); FM.scene.layers.length = 0; FM.scene.layers.push(R);
+      FM.selectLayer(R.id); FM.refreshAll(); FM.inspector.refresh(); FM.inspector.openCategory('border');
+      const rt = outlineTile(); if (!rt) throw new Error('control: a rect lost its Outline tile');
+      rt.click(); FM.inspector.refresh(); FM.inspector.openCategory('border');
+      if (!hasPosition()) throw new Error('control: a rect with its outline on no longer offers Position');
+      // MEASURED: the border on a spiral is ink the renderer actually draws (the #386 probe, on an open kind)
+      const W = 300, H = 300, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const ctx = cv.getContext('2d');
+      const S = mk({ shape: 'spiral' }); S.transform.x = 150; S.transform.y = 150;
+      const sc = { project: { name: 'p', width: W, height: H, fps: 30, duration: 4 }, layers: [S], selectedId: null, selectedIds: [] };
+      const count = () => { ctx.clearRect(0, 0, W, H); FM.renderScene(ctx, sc, 0); const d = ctx.getImageData(0, 0, W, H).data; let g = 0, r = 0; for (let i = 0; i < d.length; i += 4) { if (d[i + 3] > 8) { if (d[i + 1] > 140 && d[i] < 110) g++; if (d[i] > 140 && d[i + 1] < 110) r++; } } return { g: g, r: r }; };
+      S.stroke = { enabled: false, width: 6, color: '#00ff00' };
+      const off = count();
+      if (off.r < 200) throw new Error('setup: the spiral itself did not render (' + off.r + ' red pixels)');
+      if (off.g !== 0) throw new Error('setup: green on screen with the outline OFF (' + off.g + ') — the probe cannot tell a border from the shape');
+      S.stroke.enabled = true;
+      const on = count();
+      if (on.g < 100) throw new Error('the Outline is on but the spiral drew ' + on.g + ' green pixels — the toggle does nothing on an open kind');
+      if (on.r < 150) throw new Error('turning the outline on erased the spiral itself (' + on.r + ' red pixels)');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = sel0;
+      try { FM.refreshAll(); FM.inspector.refresh(); } catch (e) {}
+    }
   });
 
   /* ═══ 770 (hunt MEDIUM #43): THE MOTION PATH AND THE TRACKER SEED DRAW WHERE THE PICTURE IS WHEN THE PREVIEW IS A CROP.

@@ -67,7 +67,7 @@ except Exception: print("(could not read the failure text)")')"
 # A test that fails WITHOUT its fix because a seam the fix ADDED is missing ("seam missing", "is not a
 # function", "undefined") has caught the absence of the code, not the bug. Still a fail, but a weaker proof
 # than a behavioural one — say so, so nobody reads WEAK as PROVEN by mistake.
-weak() { printf '%s' "$1" | grep -qiE "seam missing|is not a function|not exposed|undefined|null" && echo " (WEAK: fails on a missing seam, not on the behaviour)"; }
+weak() { printf '%s' "$1" | grep -qiE "seams? (are |is )?missing|missing seam|seam.{0,40}missing|is not a function|not exposed|not reachable|undefined|null" && echo " (WEAK: fails on a missing seam, not on the behaviour)"; }
 
 VERDICT=0; RESULTS=""; CAUGHT=0
 echo "  tests under check:"; printf '%s\n' "$TITLES" | sed 's/^/    · /'

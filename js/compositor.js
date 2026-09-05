@@ -7969,7 +7969,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * NEIGHBOURING source pixel. A 1-pixel resample across 3% of a warp is a fine price for twirl's
      * 1.89x and a poor one for 1.11x. The `prep` hoist below stays — that part is free and exact. */
     curl: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.curl.prep(W,H,cx,cy,maxR,p,t,ps); var cuDx=x-C.cx, cuDy=y-C.cy, cuR=Math.hypot(cuDx,cuDy); var cuSw=C.amt*0.6*Math.sin(cuR/C.wl-C.ph); var cuA=Math.atan2(cuDy,cuDx)+cuSw; return [C.cx+Math.cos(cuA)*cuR, C.cy+Math.sin(cuA)*cuR]; },
-    // (no `_curlLegacy`: curl was never rewritten — queue 758 removed a reference that was a byte-for-byte copy of curl itself)
+    /* THE GENUINE PRE-PREP CURL (queue 779) — the kernel as it was before v13.28 hoisted its constants, resolving amount /
+     * wavelength / phase per call. It is the reference the tol-0 equality row measures the prepped kernel against.
+     * History, because it was got wrong twice: v13.29 added `_curlLegacy` as a copy of the ALREADY-prepped curl, so the
+     * row compared curl with itself; v15.53 saw the copy and deleted the reference, writing "curl was never prepped"
+     * here — false, `WARP_FX.curl.prep` is a few hundred lines below. Captured into WARP_REF and deleted from WARP_FX.
+     * ONE deliberate difference from the historical body, measured on 5 Sep: it read `FM.evalProp(p.amount, t)` and
+     * evalProp(undefined) is 0, not null — so a bare params object gave NO warp, while prep's `fparam` defaults a missing
+     * key to 0.5. That is the missing-param rule queue 755 (v15.50) fixed app-wide, so the reference follows the rule
+     * and verifies the HOIST, not the old quirk (95 px apart at defaults otherwise; identical everywhere else). */
+    _curlLegacy: function(x,y,W,H,cx,cy,maxR,p,t,ps){ cx=wCx(p,t,W,cx); cy=wCy(p,t,H,cy); var cuAmt=(p.amount==null)?0.5:FM.evalProp(p.amount,t); if(cuAmt==null)cuAmt=0.5; if(cuAmt<-1)cuAmt=-1; if(cuAmt>1)cuAmt=1; var cuWl=Math.max(1,(p.wavelength==null?40:Math.max(1,FM.evalProp(p.wavelength,t)))*(ps||1)); var cuPh=(p.phase==null?0:FM.evalProp(p.phase,t))*Math.PI/180; var cuDx=x-cx, cuDy=y-cy, cuR=Math.hypot(cuDx,cuDy); var cuSw=cuAmt*0.6*Math.sin(cuR/cuWl-cuPh); var cuA=Math.atan2(cuDy,cuDx)+cuSw; return [cx+Math.cos(cuA)*cuR, cy+Math.sin(cuA)*cuR]; },
     // ---- batch 10 (warp) ----
     /* PREPPED. Six parameter constants were resolved per pixel, and the octave DIVISORS with them —
      * so this also trades 6-12 divisions per pixel for multiplications by precomputed reciprocals.
@@ -8215,7 +8224,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * on their own object: still reachable for the equality test, invisible to anything enumerating the
    * real ones. */
   const WARP_REF = { fractalwarp: WARP_FX._fractalwarpLegacy, tunnel: WARP_FX._tunnelLegacy,
-                     twirl: WARP_FX._twirlLegacy,   // curl has no reference: it was never prepped (queue 758)
+                     curl: WARP_FX._curlLegacy,     // the pre-prep kernel (queue 779) — v15.53 wrongly said curl was never prepped
+                     twirl: WARP_FX._twirlLegacy,
                      gridrepeat: WARP_FX._gridrepeatLegacy,
                      kaleidoscope: WARP_FX._kaleidoscopeLegacy,
                      radialrepeat: WARP_FX._radialrepeatLegacy,

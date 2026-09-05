@@ -302,6 +302,50 @@ window.FM = window.FM || {};
       if (ev.buttons !== 0) touchGesture();
     }, true);
   }
+  /* A STILL FINGER IS NOT A DEAD GESTURE (queue 781 — the half of queue 751 that v15.44 described and never wrote).
+     The stamp only moves on pointermove, so a finger RESTING on a clip for longer than STALE_MS — not moving, not at an
+     edge — read as wreckage, and the next rebuild request (a filmstrip arriving, a resize) snapped the clip back mid-hold.
+     So the pointers that are DOWN are counted here, at window level in the capture phase, where no handler can stop the
+     event before it is seen: an old stamp is dead only when nothing is held. A pointer the browser never releases (the
+     queue-541 case this must not undo) still heals, because past HARD_STALE_MS a stamp is dead regardless — twenty
+     seconds without a single move is not a drag anyone is making. `lostpointercapture` is deliberately NOT a release:
+     it fires when capture is handed off with the finger still down. A window blur drops everything — the OS took the
+     pointer and no `pointerup` is coming. */
+  const heldPointers = new Map();                // pointerId -> when it was last seen down (a press, or a move with a button)
+  const HARD_STALE_MS = 20000;
+  const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  /* An entry older than HARD_STALE_MS is not a finger, it is a pointer whose release this page never saw — the same
+     lost pointer queue 541 heals — and it must not vouch for every LATER gesture for the rest of the session. So the
+     count only believes entries younger than the ceiling, and prunes the rest as it goes. */
+  function heldCount() {
+    const t = nowMs(); let n = 0;
+    heldPointers.forEach((seen, id) => { if (t - seen > HARD_STALE_MS) heldPointers.delete(id); else n++; });
+    return n;
+  }
+  if (typeof window !== 'undefined') {
+    window.addEventListener('pointerdown', function (ev) { heldPointers.set(ev.pointerId, nowMs()); }, true);
+    const release = function (ev) { heldPointers.delete(ev.pointerId); };
+    window.addEventListener('pointerup', release, true);
+    window.addEventListener('pointercancel', release, true);
+    window.addEventListener('blur', function () { heldPointers.clear(); });
+    /* A move reporting NO button for a pointer this map still holds is the browser saying it is up — the queue-541
+       shape exactly (the pointer vanished without an up, and he carried on moving the mouse). It only stops the
+       pointer COUNTING as held; the stamp still has to be STALE_MS old before anything is recovered, so a synthetic
+       move without a `buttons` field (the trap the note above records) cannot cancel a live gesture by itself.
+       A move WITH a button re-stamps the entry: a live finger keeps its place; a phantom never does. */
+    window.addEventListener('pointermove', function (ev) {
+      if (!heldPointers.has(ev.pointerId)) return;
+      if (ev.buttons === 0) heldPointers.delete(ev.pointerId); else heldPointers.set(ev.pointerId, nowMs());
+    }, true);
+  }
+  function gestureIsStale() {
+    const age = nowMs() - gestureStamp;
+    if (age > HARD_STALE_MS) return true;          // nobody drags for twenty seconds without moving — heal even if a pointer looks held
+    if (age <= STALE_MS) return false;
+    return heldCount() === 0;                      // old stamp AND nothing down: wreckage. Old stamp with a finger down: a still hold.
+  }
+  FM._heldPointers = heldPointers;               // suite seam (queue 781)
+  FM._gestureIsStale = gestureIsStale;
   function recoverStuckGesture() {
     reorderActive = false; kfDrag = null; trimDrag = null; clipMove = null; slipDrag = null;
     FM._dragOrderIds = null; FM.dragLayerId = null; FM.dragAddAt = null;
@@ -3833,7 +3877,7 @@ window.FM = window.FM || {};
     },
     // …and the way to end one. abortGestures already exists for pinches and rebuilds; the suite needs
     // it so one test's leaked drag cannot be charged to the next test that runs.
-    _abortGestures: function () { abortGestures(); pointers.clear(); pinch = null; },   // the suite's reset: fingers too, or one leak poisons every gesture test after it
+    _abortGestures: function () { abortGestures(); pointers.clear(); pinch = null; heldPointers.clear(); },   // the suite's reset: fingers too (pinch AND held — queue 781), or one leak poisons every gesture test after it
     // The scrub glide's tuning, exposed so the suite can pin the effect sliders to it — see queue 116.
     /* maxV/stopAt are DERIVED per zoom now (queue 614) — reporting the old seconds constants here
        would be a seam that lies. friction is unchanged and is what the glide-parity test compares. */
@@ -4457,7 +4501,7 @@ window.FM = window.FM || {};
            than momentary. A live drag touches the stamp on every pointermove — including the ones
            autoscroll generates — so a stamp this old means nobody is holding anything.
            (The marker rename that used to be excepted here — held by keyboard focus — is gone: queue 725 / #590.) */
-        const stale = (((typeof performance !== 'undefined' ? performance.now() : Date.now()) - gestureStamp) > STALE_MS);
+        const stale = gestureIsStale();   // queue 781: an old stamp with a finger still down is a still hold, not wreckage
         if (!stale) { rebuildPending = true; return; }   // slipDrag too — a mid-slip rebuild tore down the lane holding the ghost
         recoverStuckGesture();
       }
