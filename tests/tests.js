@@ -5621,8 +5621,15 @@
        then reads them half-baked. This test is about the dots, not the pictures. */
     const realMount = FM.fxThumbs && FM.fxThumbs.mountFilter;
     if (realMount) FM.fxThumbs.mountFilter = function () {};
+    let favedForTest = null;   // declared OUTSIDE the try, so `finally` can take the favourite off again
     try {
       if (homeWasOpen) FM.home.close();
+      /* THE ROW THAT FITS IS THE FAVOURITES ROW, MADE REAL FOR THE TEST. Until v15.80 Punchy (4) and Retro (5) fitted at
+         desktop width and this test leaned on that by accident; every section has seven or more now, so a fitting row has
+         to be built on purpose. Favouriting one filter renders a one-tile Favourites row through the same builder and the
+         same rowDots — a real row, not a stub — and it comes off again in `finally`. */
+      favedForTest = (FM.filters && FM.filters.faves && !FM.filters.faves().length) ? FM.filters.all()[0].id : null;
+      if (favedForTest) FM.filters.toggleFave(favedForTest);
       await sleep(150);
       const L = FM.makeLayer('shape', { name: 'f', shape: 'rect', x: 60, y: 60, shapeW: 60, shapeH: 60, fill: '#c05030' });
       L.start = 0; L.duration = 4; L.effects = [];
@@ -5670,6 +5677,7 @@
       g.scrollLeft = 0; await sleep(200);
       if (active() !== 0) throw new Error('scrolled back, the active dot stayed at ' + active());
     } finally {
+      if (favedForTest && FM.filters.isFave(favedForTest)) FM.filters.toggleFave(favedForTest);
       if (realMount) FM.fxThumbs.mountFilter = realMount;
       FM.scene.layers = layers0; FM.selectLayer(sel0 || null);
       if (FM.inspector && FM.inspector.back) { try { FM.inspector.back(); } catch (e) {} }
@@ -39583,6 +39591,55 @@
   /* §6, applied to the authored data rather than to the UI: the nine CSS-filter effects render before
      everything else whatever order they are written in, so a definition that lists one AFTER a
      non-CSS effect reads top-to-bottom as something it does not do. */
+  test('778: ten filters for the thin sections exist, each on a preloaded subject no section-mate shares, and each moves its picture', { item: '778', budgetMs: 40000 }, async function () {
+    /* Clause 5 of #778 ("add filters") and clause 4 of #690. Punchy had 4, Retro 5, Light/Glow 5, Cinematic 7; the batch is data
+       in js/filters.js, judged on the real fx-art photographs in tests/_filters-sheet.html, and the sheet was shown to him. Holds:
+       the ten ids, their sections, a preloaded subject each, no subject repeated inside any section but Tuff (the rule the map has kept
+       since queue 349; Tuff spreads four cars over ten looks and keeps its own no-two-touching rule), no car outside Tuff, and — rendered through the real renderer on a real image layer — each one changes
+       its subject visibly, with the null case (a filterless render against itself) read as exactly 0 first. */
+    const WANT = { tropic: 'vivid', popsicle: 'vivid', hivis: 'vivid', polaroid: 'retro', kodachrome: 'retro', technicolor: 'retro',
+                   halo: 'glow', moonbeam: 'glow', arctic: 'cinematic', desert: 'cinematic' };
+    const CARS = { huracan: 1, mclaren: 1, revuelto: 1, tesla: 1 };
+    const all = FM.filters.all(), keys = FM.fxThumbs._photoKeys(), bad = [];
+    Object.keys(WANT).forEach(id => {
+      const f = all.find(x => x.id === id);
+      if (!f) { bad.push(id + ' is not in the library'); return; }
+      if (f.section !== WANT[id]) bad.push(id + ' is in ' + f.section + ', not ' + WANT[id]);
+      const k = FM.fxThumbs._filterSubject(id);
+      if (!k) bad.push(id + ' has no subject'); else if (keys.indexOf(k) < 0) bad.push(id + ' uses "' + k + '", not preloaded'); else if (CARS[k]) bad.push(id + ' uses a car outside Tuff');
+    });
+    FM.filters.sections().forEach(sc => {
+      if (sc.key === 'tuff') return;   // ten looks over four cars: Tuff's rule is no two cars TOUCHING, kept by its own test
+      const seen = {};
+      FM.filters.bySection(sc.key).forEach(f => { const k = FM.fxThumbs._filterSubject(f.id); if (k && seen[k]) bad.push(sc.key + ': ' + f.id + ' and ' + seen[k] + ' share "' + k + '"'); if (k) seen[k] = f.id; });
+    });
+    if (bad.length) throw new Error(bad.join(' · ') + ' (queue 778)');
+    // liveness on the real subject
+    const S = 96, mad = (A, B) => { let s = 0; for (let i = 0; i < A.length; i++) s += Math.abs(A[i] - B[i]); return s / A.length; };
+    const dead = [];
+    let nullChecked = false;
+    for (const id of Object.keys(WANT)) {
+      const key = FM.fxThumbs._filterSubject(id);
+      const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('no photo ' + key)); i.src = 'fx-art/' + key + '.jpg?v=1'; });
+      const side = Math.min(im.naturalWidth, im.naturalHeight), c = document.createElement('canvas'); c.width = S; c.height = S;
+      c.getContext('2d').drawImage(im, (im.naturalWidth - side) / 2, (im.naturalHeight - side) / 2, side, side, 0, 0, S, S);
+      const mid = '_t778_' + id; FM.media.set(mid, { kind: 'image', el: c, width: S, height: S, duration: 0 }); FM.media.pin(mid);
+      const shot = withFilter => {
+        const l = FM.makeLayer('image', { x: S / 2, y: S / 2, start: 0, duration: 2 }); l.id = mid;
+        if (withFilter) { const box = FM.filters.makeInstance(id); if (!box) throw new Error(id + ' builds nothing'); l.effects = [box]; }
+        const o = document.createElement('canvas'); o.width = S; o.height = S; const g = o.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(g, { project: { width: S, height: S, fps: 30, duration: 2, background: '#000000' }, layers: [l] }, 0.001);
+        return g.getImageData(0, 0, S, S).data;
+      };
+      const plain = shot(false);
+      if (!nullChecked) { nullChecked = true; if (mad(plain, shot(false)) !== 0) throw new Error('a filterless render differs from itself, so nothing below means anything'); }
+      const moved = mad(plain, shot(true));
+      if (moved < 1.5) dead.push(id + ' moved its photograph by only ' + moved.toFixed(2));
+      try { FM.media.unpin && FM.media.unpin(mid); } catch (e) {}
+    }
+    if (dead.length) throw new Error(dead.join(' · ') + ' (queue 778)');
+  });
+
   test('filter library: CSS-filter effects are authored first, so the list matches the render order', { item: 'fx-library' }, function () {
     var bad = [];
     FM.filters.all().forEach(function (f) {
@@ -47920,8 +47977,17 @@
   test('#675: every added filter sits somewhere the existing set does not', { item: '675' }, function () {
     if (!FM.filters || !FM.filters.all) throw new Error('FM.filters is missing');
     const NEW = ['midnight', 'ultraviolet', 'matte', 'ember', 'copperplate'];
+    /* THE ESTABLISHED SET IS THE 33 THESE FIVE WERE ADDED TO — frozen here, because it is history and cannot change.
+       Until v15.80 it was computed as "everything that is not NEW", which silently included every filter added
+       AFTERWARDS (eight between 675 and 778, then the ten of 778): Ultraviolet then read 6.8 from Kodachrome, as if a
+       later addition could make an earlier one a near-duplicate retroactively. It cannot, and this metric is not a
+       property the whole library holds anyway: tests/_675probe.html measures every filter the same way and the original
+       33 already contain more than twenty pairs under 10 (Cross Process and Super 8 at 1.5, Poppy and Sunbaked at 3.3,
+       Poster and Silver at 2.3). A flat orange swatch separates dark from light and colour from mono, not looks. Later
+       batches are judged on the real photographs beside their section-mates (test 778, tests/_filters-sheet.html). */
+    const THEN = ['tealorange', 'bleach', 'crossproc', 'faded', 'vhs', 'crt', 'super8', 'oldfilm', 'dreamy', 'goldenhour', 'leak', 'neonnight', 'comic', 'poster', 'thermal', 'nightvis', 'blackout', 'coldsteel', 'bloodline', 'static', 'nightdrive', 'overdrive', 'whiteout', 'silver', 'noir', 'platinum', 'ink', 'fog', 'newsprint', 'poppy', 'candy', 'sunbaked', 'ash'];
     const all = FM.filters.all();
-    for (const id of NEW) if (!all.some(f => f.id === id)) throw new Error('the filter "' + id + '" is gone from the set');
+    for (const id of NEW.concat(THEN)) if (!all.some(f => f.id === id)) throw new Error('the filter "' + id + '" is gone from the set');
 
     const S = FM.scene, P = S.project;
     const keep = S.layers.slice(), ow = P.width, oh = P.height, od = P.duration;
@@ -47957,7 +48023,7 @@
         const a = rows.filter(r => r.id === id)[0];
         let best = Infinity, who = '';
         for (const b of rows) {
-          if (b.id === id || NEW.indexOf(b.id) >= 0) continue;   // against the ESTABLISHED set only
+          if (THEN.indexOf(b.id) < 0) continue;   // against the set of the time only, never a later addition
           const d = dist(a, b);
           if (d < best) { best = d; who = b.id; }
         }

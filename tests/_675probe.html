@@ -1,0 +1,36 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#111;color:#cfd;font:11px ui-monospace">
+<pre id="o" style="padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:900px;height:600px;border:0;opacity:.15"></iframe>
+<script>
+/* #675's swatch metric (mean brightness and colour spread of the centre box of a flat #c05030 layer), replicated for EVERY
+   filter, with each one's nearest neighbour — the test prints only the offending pair, so the numbers to steer by are here. */
+function say(s) { document.getElementById('o').textContent = s; }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait() { if (!(w.FM && w.FM.filters && w.FM.renderScene)) { if (n++ > 400) return say('no FM'); return setTimeout(wait, 50); } setTimeout(function () { run(w); }, 500); })();
+});
+function run(w) {
+  var FM = w.FM, S = FM.scene, P = S.project, keep = S.layers.slice(), ow = P.width, oh = P.height, od = P.duration;
+  try {
+    P.width = 200; P.height = 200; P.duration = 3; S.layers.length = 0;
+    var hero = FM.makeLayer('shape', { shape: 'rect', shapeW: 400, shapeH: 400, fill: '#c05030' }); hero.start = 0; hero.duration = 3; S.layers.push(hero);
+    var cv = w.document.createElement('canvas'); cv.width = 200; cv.height = 200; var cx = cv.getContext('2d', { willReadFrequently: true });
+    function stats() { cx.clearRect(0, 0, 200, 200); FM.renderScene(cx, S, 1); var d = cx.getImageData(0, 0, 200, 200).data, n = 0, sum = 0, sp = 0;
+      for (var y = 70; y < 130; y++) for (var x = 70; x < 130; x++) { var o = (y * 200 + x) * 4, r = d[o], g = d[o + 1], b = d[o + 2]; sum += r * .299 + g * .587 + b * .114; sp += Math.max(r, g, b) - Math.min(r, g, b); n++; }
+      return { mean: sum / n, colour: sp / n }; }
+    var all = FM.filters.all(), rows = all.map(function (f) { hero.effects = f.effects.map(function (e) { return JSON.parse(JSON.stringify(e)); }); var s = stats(); return { id: f.id, mean: s.mean, colour: s.colour }; });
+    hero.effects = []; var plain = stats();
+    var dist = function (a, b) { return Math.hypot(a.mean - b.mean, (a.colour - b.colour) * 0.6); };
+    var NEW = ['tropic', 'popsicle', 'hivis', 'polaroid', 'kodachrome', 'technicolor', 'halo', 'moonbeam', 'arctic', 'desert'];
+    var FIVE = ['midnight', 'ultraviolet', 'matte', 'ember', 'copperplate'];
+    var out = ['plain mean ' + plain.mean.toFixed(1) + ' colour ' + plain.colour.toFixed(1), ''];
+    rows.forEach(function (a) {
+      var best = Infinity, who = '';
+      rows.forEach(function (b) { if (b.id === a.id) return; var d = dist(a, b); if (d < best) { best = d; who = b.id; } });
+      var tag = NEW.indexOf(a.id) >= 0 ? 'NEW ' : (FIVE.indexOf(a.id) >= 0 ? '675 ' : '    ');
+      out.push(tag + a.id.padEnd(12) + ' mean ' + a.mean.toFixed(1).padStart(6) + ' colour ' + a.colour.toFixed(1).padStart(6) + '  nearest ' + who.padEnd(12) + ' ' + best.toFixed(1) + (best < 10 ? '  <<< under 10' : ''));
+    });
+    say(out.join('\n'));
+  } finally { S.layers.length = 0; keep.forEach(function (l) { S.layers.push(l); }); P.width = ow; P.height = oh; P.duration = od; }
+}
+</script></body></html>

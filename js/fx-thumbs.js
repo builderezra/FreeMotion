@@ -508,6 +508,16 @@ window.FM = window.FM || {};
          (huracan) and beside midnight (tesla), touching neither. */
     blueprint:  'city',    riso:   'pair',     infrared:  'bush',   xerox: 'ramp',
     acidwash:   'dusk',    moonlight: 'sunpath', lowkey:  'bush',   datamosh: 'revuelto',
+    /* THE TEN ADDED FOR queue 778 (clause 5, "add filters") and 690 (clause 4), 6 Sep, under the same two standing
+       rules: no cars outside the tuff group, and no subject repeated inside a section. Each was judged on this exact
+       photograph in tests/_filters-sheet.html beside every filter its section already had, and he was shown the sheet.
+       · tropic pushes greens and blues, so it wants foliage and sky — 'bush'.   · popsicle is a pink-and-cool palette
+       for people — 'pair'.   · hivis needs mid-saturation to push — 'run'.   · polaroid is an instant print, prints are
+       of people — 'figures'.   · kodachrome is famous for reds against blue water — 'bay'.   · technicolor wants real
+       colour to overdrive — 'dusk'.   · halo needs bright lights to bleed — 'city'.   · moonbeam cools an open sky —
+       'clouds'.   · arctic wants pale open tones to chill — 'clouds' (a different section from moonbeam).   · desert
+       wants warmth and skin against shadow — 'figures' (a different section from polaroid). */
+    tropic: 'bush',    popsicle: 'pair',    hivis: 'run',    polaroid: 'figures',    kodachrome: 'bay',    technicolor: 'dusk',    halo: 'city',    moonbeam: 'clouds',    arctic: 'clouds',    desert: 'figures',
   };
   Object.setPrototypeOf(FILTER_SUBJECT, null);   // an id like 'constructor' must miss, not inherit
 

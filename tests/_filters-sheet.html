@@ -1,0 +1,108 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111;color:#cfd;font:12px ui-monospace">
+<pre id="o" style="padding:10px;white-space:pre-wrap">running…</pre>
+<img id="sheet" style="display:block;max-width:100%">
+<iframe id="a" src="../index.html" style="width:900px;height:700px;border:0;opacity:.2"></iframe>
+<script>
+/* FILTER CONTACT SHEET — renders candidate filters through the app's OWN renderer (FM.renderScene, a real image layer,
+   a real filter container from FM.filters.makeInstance) on the same fx-art photographs the Filters tab uses. Each row:
+   the untouched photograph, the candidate, then every existing filter of the same section on the same photograph at
+   half size — so a candidate is judged against its neighbours, not in isolation (the queue-563 trap: a Bell that is
+   the Ding under another name). Candidates come from ?draft=<url of a JSON file> or window.DRAFT below. */
+var out = []; function say(s) { out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+var e = function (type, params) { return { type: type, params: params || {} }; };
+var DRAFT = [
+  { id: 'tropic', name: 'Tropic', section: 'vivid', subject: 'bush',
+    effects: [e('saturate', { amount: 1.22 }), e('contrast', { amount: 1.06 }), e('vibrance', { amount: 2.4, skin: 45 }),
+              e('temperature', { amount: -8, tint: -14 }), e('highlightsshadows', { highlights: -12, shadows: 14 })] },
+  { id: 'popsicle', name: 'Popsicle', section: 'vivid', subject: 'pair',
+    effects: [e('saturate', { amount: 1.3 }), e('brightness', { amount: 1.06 }), e('colorbalance', { red: 12, green: -8, blue: 20 }),
+              e('tint', { amount: 0.22, range: 3, color: '#ff66cc' })] },
+  { id: 'hivis', name: 'Hi-Vis', section: 'vivid', subject: 'run',
+    effects: [e('contrast', { amount: 1.1 }), e('saturate', { amount: 1.15 }), e('vibrance', { amount: 3.2, skin: 20 }),
+              e('levels', { inblack: 10, inwhite: 240 })] },
+  { id: 'polaroid', name: 'Polaroid', section: 'retro', subject: 'figures',
+    effects: [e('brightness', { amount: 1.03 }), e('contrast', { amount: 0.94 }), e('faded', { amount: 0.7, lift: 30, desat: 20, tone: 120 }),
+              e('temperature', { amount: 22, tint: 6 }), e('colorbalance', { red: 0, green: 6, blue: -14 }),
+              e('vignette', { amount: 0.45, size: 30 }), e('filmgrain', { amount: 18, size: 2 })] },
+  { id: 'kodachrome', name: 'Kodachrome', section: 'retro', subject: 'bay',
+    effects: [e('saturate', { amount: 1.28 }), e('contrast', { amount: 1.14 }), e('colorbalance', { red: 20, green: -4, blue: -12 }),
+              e('temperature', { amount: 14 }), e('levels', { inblack: 12, inwhite: 244, gamma: 0.94 }), e('filmgrain', { amount: 12, size: 1.5 })] },
+  { id: 'technicolor', name: 'Technicolor', section: 'retro', subject: 'dusk',
+    effects: [e('saturate', { amount: 1.45 }), e('contrast', { amount: 1.15 }), e('vibrance', { amount: 1.8 }),
+              e('colorbalance', { red: 10, green: -6, blue: 6 }), e('highlightsshadows', { highlights: -8, shadows: 6 })] },
+  { id: 'halo', name: 'Halo', section: 'glow', subject: 'city',
+    effects: [e('halation', { amount: 1.85, threshold: 0.42, tightness: 0.3, spread: 13 }), e('softglow', { amount: 0.42, radius: 160, threshold: 40 })] },
+  { id: 'moonbeam', name: 'Moonbeam', section: 'glow', subject: 'clouds',
+    effects: [e('brightness', { amount: 1.02 }), e('saturate', { amount: 0.85 }), e('temperature', { amount: -28, tint: 4 }),
+              e('lightglow', { amount: 0.5, radius: 22, threshold: 55 }), e('vignette', { amount: 0.3, size: 40 })] },
+  { id: 'arctic', name: 'Arctic', section: 'cinematic', subject: 'clouds',
+    effects: [e('contrast', { amount: 1.04 }), e('saturate', { amount: 0.9 }), e('temperature', { amount: -34, tint: 6 }),
+              e('faded', { amount: 0.35, lift: 14, desat: 0, tone: 100 }), e('levels', { inblack: 0, inwhite: 240 })] },
+  { id: 'desert', name: 'Desert', section: 'cinematic', subject: 'figures',
+    effects: [e('saturate', { amount: 1.05 }), e('contrast', { amount: 1.08 }), e('temperature', { amount: 30, tint: -8 }),
+              e('tealorange', { amount: 0.4, pivot: 55 }), e('highlightsshadows', { highlights: -20, shadows: 10 }), e('filmgrain', { amount: 10, size: 2 })] },
+];
+var BIG = 240, SMALL = 118, GAP = 8, LABEL = 16;
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait() {
+    if (!(w.FM && w.FM.filters && w.FM.FILTERS && w.FM.renderScene && w.FM.makeLayer && w.FM.media && w.FM.fxThumbs && w.FM.fxThumbs._filterSubject)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait, 50); }
+    setTimeout(function () { run(w).catch(function (e) { say('sheet threw: ' + (e && e.stack || e)); }); }, 800);
+  })();
+});
+function loadPhoto(w, key) {
+  return new Promise(function (ok, bad) {
+    var im = new w.Image(); im.onload = function () { ok(im); }; im.onerror = function () { bad(new Error('no photo ' + key)); };
+    im.src = '../fx-art/' + key + '.jpg?v=1';
+  });
+}
+async function run(w) {
+  var FM = w.FM, doc = w.document;
+  var existing = FM.FILTERS.map(function (f) { return f.id; });
+  DRAFT.forEach(function (d) { if (existing.indexOf(d.id) < 0) FM.FILTERS.push({ id: d.id, name: d.name, section: d.section, desc: d.name, effects: d.effects }); });
+  var photos = {};
+  async function tile(key, filterId, S) {          // one square tile: the photo scaled to S, cropped centre-square, filter applied
+    if (!photos[key]) photos[key] = await loadPhoto(w, key);
+    var im = photos[key], side = Math.min(im.naturalWidth, im.naturalHeight);
+    var c = doc.createElement('canvas'); c.width = S; c.height = S;
+    c.getContext('2d').drawImage(im, (im.naturalWidth - side) / 2, (im.naturalHeight - side) / 2, side, side, 0, 0, S, S);
+    var mid = '_sheet_' + key + '_' + S;
+    FM.media.set(mid, { kind: 'image', el: c, width: S, height: S, duration: 0 }); FM.media.pin(mid);
+    var l = FM.makeLayer('image', { x: S / 2, y: S / 2, start: 0, duration: 2 }); l.id = mid;
+    if (filterId) { var box = FM.filters.makeInstance(filterId); if (!box) throw new Error('no instance for ' + filterId); l.effects = [box]; }
+    var o = doc.createElement('canvas'); o.width = S; o.height = S; var g = o.getContext('2d');
+    FM.renderScene(g, { project: { width: S, height: S, fps: 30, duration: 2, background: '#000000' }, layers: [l] }, 0.001);
+    return o;
+  }
+  var rows = [];
+  for (var i = 0; i < DRAFT.length; i++) {
+    var d = DRAFT[i];
+    var peers = FM.FILTERS.filter(function (f) { return f.section === d.section && DRAFT.every(function (x) { return x.id !== f.id; }); });
+    var row = { d: d, plain: await tile(d.subject, null, BIG), cand: await tile(d.subject, d.id, BIG), peers: [] };
+    for (var j = 0; j < peers.length; j++) row.peers.push({ name: peers[j].name, cv: await tile(d.subject, peers[j].id, SMALL) });
+    rows.push(row); say('row ' + (i + 1) + '/' + DRAFT.length + ' ' + d.name + ' on ' + d.subject + ' vs ' + peers.length + ' peers');
+  }
+  var maxPeers = Math.max.apply(null, rows.map(function (r) { return r.peers.length; }));
+  var W = GAP + (BIG + GAP) * 2 + Math.ceil(maxPeers / 2) * (SMALL + GAP) + GAP, RH = BIG + LABEL + GAP * 2, H = RH * rows.length + GAP;
+  var sheet = document.createElement('canvas'); sheet.width = W; sheet.height = H; var g = sheet.getContext('2d');
+  g.fillStyle = '#14181f'; g.fillRect(0, 0, W, H);
+  g.font = '600 13px -apple-system, system-ui, sans-serif'; g.textBaseline = 'top';
+  rows.forEach(function (r, i) {
+    var y = GAP + i * RH, x = GAP;
+    g.drawImage(r.plain, x, y + LABEL); g.fillStyle = '#9aa4b2'; g.fillText('as shot · ' + r.d.subject, x, y);
+    x += BIG + GAP; g.drawImage(r.cand, x, y + LABEL); g.fillStyle = '#ffd166'; g.fillText(r.d.name + '  (' + r.d.section + ', new)', x, y);
+    x += BIG + GAP; g.fillStyle = '#9aa4b2'; g.fillText('the section today:', x, y);
+    r.peers.forEach(function (p, k) {
+      var px = x + Math.floor(k / 2) * (SMALL + GAP), py = y + LABEL + (k % 2) * (SMALL + GAP / 2);
+      g.drawImage(p.cv, px, py); g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(px, py + SMALL - 15, SMALL, 15);
+      g.fillStyle = '#e6ebf2'; g.font = '11px -apple-system, system-ui, sans-serif'; g.fillText(p.name, px + 3, py + SMALL - 14); g.font = '600 13px -apple-system, system-ui, sans-serif';
+    });
+  });
+  var url = sheet.toDataURL('image/jpeg', 0.86);
+  document.getElementById('sheet').src = url; window.__sheet = url; window.__sheetSize = [W, H];
+  window.__save = function () { return fetch('http://localhost:8778/sheet.jpg', { method: 'POST', body: url }).then(function (r) { return r.text(); }); };
+  say('SHEET ' + W + 'x' + H + ' ' + Math.round(url.length / 1024) + 'KB');
+}
+</script>
+</body></html>
