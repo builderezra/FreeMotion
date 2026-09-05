@@ -27102,6 +27102,34 @@
     if (dead.length) throw new Error(dead.length + ' raised ceiling(s) are dead space — the top half of the slider does nothing: ' + dead.join(' · '));
   });
 
+  test('798: Chromatic Aberration fringes toward the edges as its description says, nothing at the centre, and a saved instance without the new control keeps its uniform shift', { item: '798' }, function () {
+    /* The by-eye Warping pass (tests/_colouring-sheet.html?cat=distort&res=1080, v15.83): Chromatic Aberration and RGB Split
+       rendered the same picture at their defaults (Δ9.9 both) — the CA kernel shifted every pixel by one vector while its
+       description has always promised fringing toward the edges. Now: `radial` (default 100) makes the offset grow from zero
+       at the centre to full at the corners; `legacy: 0` keeps every saved instance the uniform shift it was. A high-frequency
+       fixture (2px stripes), because a fringe only shows where there is detail to split. */
+    const W = 240, H = 240, P = FM._pixelFx;
+    if (!P || !P.chromaticaberration) throw new Error('no chromaticaberration kernel');
+    /* Seeded per-pixel noise, not stripes: a periodic pattern lines up with any shift that is a multiple of its period (2px stripes
+       repeat every 4px, so the old 8px shift read as no change at all), and a fringe test that cannot see the shift proves nothing. */
+    const src = () => { const a = new Uint8ClampedArray(W * H * 4); let s = 12345; for (let i = 0; i < a.length; i += 4) { s = (s * 1103515245 + 12345) & 0x7fffffff; const v = (s >>> 8) & 1 ? 235 : 20; a[i] = v; a[i + 1] = v; a[i + 2] = v; a[i + 3] = 255; } return a; };
+    const run = q => { const d = src(); P.chromaticaberration(d, W, H, q, 0.37); return d; };
+    const box = (A, B, x0, y0, x1, y1) => { let s = 0, n = 0; for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { const o = (y * W + x) * 4; s += Math.abs(A[o] - B[o]) + Math.abs(A[o + 2] - B[o + 2]); n += 2; } return s / n; };
+    const pd = (FM.fxRegistry.paramsOf('chromaticaberration') || []).find(x => x.key === 'radial');
+    if (!pd) throw new Error('Chromatic Aberration has no "Toward edges" control — its description promises fringing toward the edges and the kernel shifts the whole picture (queue 798)');
+    if (pd.default !== 100 || pd.legacy !== 0) throw new Error('radial must default to 100 (the description) with legacy 0 (saved projects), got default ' + pd.default + ' legacy ' + pd.legacy);
+    const plain = src();
+    const now = run({ amount: 8, angle: 0, radial: 100 });
+    const centre = box(plain, now, W / 2 - 8, H / 2 - 8, W / 2 + 8, H / 2 + 8), corner = box(plain, now, 0, 0, 40, 40);
+    if (centre > 0.5) throw new Error('at its defaults the centre of the picture still shifts by ' + centre.toFixed(2) + ' — that is a uniform split, not aberration toward the edges');
+    if (corner < 20) throw new Error('at its defaults the corner moves by only ' + corner.toFixed(2) + ' on noise — the fringe is not reaching the edges');
+    // a saved instance carries no `radial`: byte-identical to radial 0, which is byte-identical to the old kernel's uniform shift
+    const legacy = run({ amount: 8, angle: 0 }), zero = run({ amount: 8, angle: 0, radial: 0 });
+    for (let i = 0; i < legacy.length; i++) if (legacy[i] !== zero[i]) throw new Error('an instance without the control drifted from the radial-0 render at byte ' + i);
+    const uniCentre = box(plain, zero, W / 2 - 8, H / 2 - 8, W / 2 + 8, H / 2 + 8);
+    if (uniCentre < 20) throw new Error('radial 0 no longer shifts the centre (' + uniCentre.toFixed(2) + ') — the legacy look is gone');
+  });
+
   test('797: the category number badges hide where there is no keyboard, and on a keyboard the key they advertise still opens the card', { item: '797' }, async function () {
     /* Found on 6 Sep by using the app at 380px with touch emulation on: every clip-option tile carried a faint "1".."9" in its
        corner. The number is a real key on a keyboard (js/app.js routes Digit1-9 to openCategoryByIndex), so the badge is

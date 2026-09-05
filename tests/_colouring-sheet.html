@@ -1,15 +1,19 @@
-<!doctype html><html><head><meta charset="utf-8"></head>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
 <body style="margin:0;background:#111;color:#cfd;font:12px ui-monospace">
 <pre id="o" style="padding:10px;white-space:pre-wrap">running…</pre>
 <img id="sheet" style="display:block;max-width:100%">
 <iframe id="a" src="../index.html" style="width:900px;height:700px;border:0;opacity:.2"></iframe>
 <script>
-/* COLOURING CONTACT SHEET (queue 482, the by-eye half) — every effect the registry files under Colouring, rendered by the app's
-   own renderer on the photograph the Colouring browser already uses ('city', SECTION_PHOTO.color), three ways per row:
+/* CATEGORY CONTACT SHEET (queue 482, the by-eye half) — every effect the registry files under ?cat= (default color, i.e.
+   Colouring; distort is Warping), rendered by the app's own renderer on the photograph that section's browser already uses
+   (SECTION_PHOTO in js/fx-thumbs.js: color city · distort towers · blur dusk · stylize dog · other ramp), three ways per row:
    at its defaults, with its MAIN slider at a quarter of its range, and with it at the top. The middle tile answers "does it
    look good as shipped"; the outer two answer "is the range useful across the whole slider, not only in the middle" — the
    two questions the entry says cannot be swept mechanically. The main slider is `amount` when the effect has one, else its
-   first numeric control. Nothing is mocked: FM.renderScene on a real image layer, effects from FM.fxRegistry.makeInstance. */
+   first numeric control. ?res=1080 renders each tile at the frame size his phone actually uses and scales it down, because a
+   pixel-unit control (a 10px glass displacement) is 7% of a 150px tile and under 1% of a 1080px frame: judged at tile size
+   every px-based effect reads seven times too strong. Each caption carries the mean absolute difference from the untouched
+   photograph, so "looks like nothing" is a number, not an eye. Nothing is mocked: FM.renderScene on a real image layer, effects from FM.fxRegistry.makeInstance. */
 var out = []; function say(s) { out.push(s); document.getElementById('o').textContent = out.join('\n'); }
 var T = 150, GAP = 6, LABEL = 15, SUB = 13;
 document.getElementById('a').addEventListener('load', function () {
@@ -26,31 +30,40 @@ function loadPhoto(w, key) {
   });
 }
 async function run(w) {
-  var FM = w.FM, R = FM.fxRegistry, doc = w.document;
-  var key = (new URLSearchParams(location.search).get('photo')) || 'city';
+  var FM = w.FM, REG = FM.fxRegistry, doc = w.document;
+  var q = new URLSearchParams(location.search), cat = q.get('cat') || 'color';
+  var SECTION_PHOTO = { color: 'city', distort: 'towers', blur: 'dusk', stylize: 'dog', proc: 'ramp', matte: 'figures', drawing: 'city', threed: 'towers', text: 'pair', repeat: 'shore', opacity: 'bay', move: 'run' };
+  var key = q.get('photo') || SECTION_PHOTO[cat] || 'city';
+  var R = Math.max(T, Math.min(2160, +q.get('res') || T));   // render size; tiles are scaled down to T for the sheet
   var im = await loadPhoto(w, key), side = Math.min(im.naturalWidth, im.naturalHeight);
-  var base = doc.createElement('canvas'); base.width = T; base.height = T;
-  base.getContext('2d').drawImage(im, (im.naturalWidth - side) / 2, (im.naturalHeight - side) / 2, side, side, 0, 0, T, T);
-  var mid = '_csheet_' + key; FM.media.set(mid, { kind: 'image', el: base, width: T, height: T, duration: 0 }); FM.media.pin(mid);
-  var types = R.all().map(function (d) { return d.type; }).filter(function (t) { var d = R.get(t); return d && d.category === 'color'; });
+  var base = doc.createElement('canvas'); base.width = R; base.height = R;
+  base.getContext('2d').drawImage(im, (im.naturalWidth - side) / 2, (im.naturalHeight - side) / 2, side, side, 0, 0, R, R);
+  var mid = '_csheet_' + key + '_' + R; FM.media.set(mid, { kind: 'image', el: base, width: R, height: R, duration: 0 }); FM.media.pin(mid);
+  var types = REG.all().map(function (d) { return d.type; }).filter(function (t) { var d = REG.get(t); return d && d.category === cat; });
   types.sort();
-  function shot(inst) {
-    var l = FM.makeLayer('image', { x: T / 2, y: T / 2, start: 0, duration: 2 }); l.id = mid; if (inst) l.effects = [inst];
-    var o = doc.createElement('canvas'); o.width = T; o.height = T;
-    FM.renderScene(o.getContext('2d'), { project: { width: T, height: T, fps: 30, duration: 2, background: '#000000' }, layers: [l] }, 0.37);
-    return o;
+  function shot(inst) {   // renders at R, returns a T-sized tile; .mad is filled in by diff()
+    var l = FM.makeLayer('image', { x: R / 2, y: R / 2, start: 0, duration: 2 }); l.id = mid; if (inst) l.effects = [inst];
+    var full = doc.createElement('canvas'); full.width = R; full.height = R;
+    FM.renderScene(full.getContext('2d', { willReadFrequently: true }), { project: { width: R, height: R, fps: 30, duration: 2, background: '#000000' }, layers: [l] }, 0.37);
+    var o = doc.createElement('canvas'); o.width = T; o.height = T; o.getContext('2d').drawImage(full, 0, 0, T, T);
+    o.full = full; return o;
+  }
+  function diff(a, b) {   // mean absolute difference at the RENDER size, so a fine px-level change counts
+    var A = a.full.getContext('2d').getImageData(0, 0, R, R).data, B = b.full.getContext('2d').getImageData(0, 0, R, R).data, s = 0;
+    for (var i = 0; i < A.length; i += 4) s += Math.abs(A[i] - B[i]) + Math.abs(A[i + 1] - B[i + 1]) + Math.abs(A[i + 2] - B[i + 2]);
+    return (s / (A.length * 0.75)).toFixed(1);
   }
   var rows = [], plain = shot(null);
   types.forEach(function (t) {
-    var d = R.get(t), ps = (R.paramsOf(t) || []).filter(function (p) { return typeof p.min === 'number' && typeof p.max === 'number'; });
+    var d = REG.get(t), ps = (REG.paramsOf(t) || []).filter(function (p) { return typeof p.min === 'number' && typeof p.max === 'number'; });
     var main = ps.find(function (p) { return p.key === 'amount'; }) || ps[0] || null;
     var row = { t: t, label: d.label || t, main: main, tiles: [] };
     try {
-      var d0 = R.makeInstance(t); row.tiles.push({ cv: shot(d0), cap: 'defaults' });
+      var d0 = REG.makeInstance(t); var s0 = shot(d0); row.tiles.push({ cv: s0, cap: 'defaults · Δ' + diff(plain, s0) });
       if (main) {
         var lo = main.min + (main.max - main.min) * 0.25, hi = main.max;
-        var i1 = R.makeInstance(t); i1.params[main.key] = lo; row.tiles.push({ cv: shot(i1), cap: main.key + ' ' + (+lo.toFixed(2)) + (main.unit || '') + ' (¼)' });
-        var i2 = R.makeInstance(t); i2.params[main.key] = hi; row.tiles.push({ cv: shot(i2), cap: main.key + ' ' + hi + (main.unit || '') + ' (max)' });
+        var i1 = REG.makeInstance(t); i1.params[main.key] = lo; var s1 = shot(i1); row.tiles.push({ cv: s1, cap: main.key + ' ' + (+lo.toFixed(2)) + (main.unit || '') + ' (¼) · Δ' + diff(plain, s1) });
+        var i2 = REG.makeInstance(t); i2.params[main.key] = hi; var s2 = shot(i2); row.tiles.push({ cv: s2, cap: main.key + ' ' + hi + (main.unit || '') + ' (max) · Δ' + diff(plain, s2) });
       }
     } catch (e) { row.err = String(e && e.message || e); }
     rows.push(row);
@@ -71,8 +84,9 @@ async function run(w) {
   });
   var url = sheet.toDataURL('image/jpeg', 0.84);
   document.getElementById('sheet').src = url; window.__sheet = url; window.__sheetSize = [W, H]; window.__rows = rows.map(function (r) { return r.t + (r.err ? ' THREW' : ''); });
-  window.__save = function (name) { return fetch('http://localhost:8778/' + (name || 'colouring.jpg'), { method: 'POST', body: url }).then(function (r) { return r.text(); }); };
-  say('SHEET ' + W + 'x' + H + ' ' + Math.round(url.length / 1024) + 'KB · ' + rows.length + ' effects on ' + key + (rows.some(function (r) { return r.err; }) ? ' · THREW: ' + rows.filter(function (r) { return r.err; }).map(function (r) { return r.t; }).join(' ') : ''));
+  window.__data = rows.map(function (r) { return { t: r.t, label: r.label, main: r.main && r.main.key, unit: r.main && r.main.unit, min: r.main && r.main.min, max: r.main && r.main.max, def: r.main && r.main.def, d: r.tiles.map(function (x) { return +(x.cap.split('Δ')[1] || 0); }), err: r.err || null }; });
+  window.__save = function (name) { return fetch('http://localhost:8778/' + (name || cat + '.jpg'), { method: 'POST', body: url }).then(function (r) { return r.text(); }); };
+  say('SHEET ' + W + 'x' + H + ' ' + Math.round(url.length / 1024) + 'KB · ' + rows.length + ' ' + cat + ' effects on ' + key + ' rendered at ' + R + 'px' + (rows.some(function (r) { return r.err; }) ? ' · THREW: ' + rows.filter(function (r) { return r.err; }).map(function (r) { return r.t; }).join(' ') : ''));
 }
 </script>
 </body></html>
