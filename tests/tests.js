@@ -27102,6 +27102,49 @@
     if (dead.length) throw new Error(dead.length + ' raised ceiling(s) are dead space — the top half of the slider does nothing: ' + dead.join(' · '));
   });
 
+  test('797: the category number badges hide where there is no keyboard, and on a keyboard the key they advertise still opens the card', { item: '797' }, async function () {
+    /* Found on 6 Sep by using the app at 380px with touch emulation on: every clip-option tile carried a faint "1".."9" in its
+       corner. The number is a real key on a keyboard (js/app.js routes Digit1-9 to openCategoryByIndex), so the badge is
+       information there and noise on a phone. The runner cannot switch its own media, so the touch half is read off the
+       stylesheet: a rule under a `hover: none` media that hides `.cat-num`. The keyboard half is exercised for real: with a
+       layer selected and the grid up, a Digit3 keydown opens the third card. Both halves, so that a "fix" which deleted the
+       badge outright (and with it the only hint the keys exist) would fail here too. */
+    let hidden = false;
+    for (const sheet of document.styleSheets) {
+      let rules; try { rules = sheet.cssRules; } catch (e) { continue; }
+      for (const r of rules) {
+        if (!(r instanceof CSSMediaRule) || !/hover:\s*none/.test(r.conditionText || r.media.mediaText)) continue;
+        for (const q of r.cssRules) if (q.selectorText && /\.cat-num/.test(q.selectorText) && q.style.display === 'none') hidden = true;
+      }
+    }
+    if (!hidden) throw new Error('no rule under a hover: none media hides .cat-num — the number badges show on a phone, where the key they advertise does not exist (queue 797)');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const L = FM.makeLayer('shape', { name: 'k797', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#c05030', start: 0, duration: 3 });
+      FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 4 } });
+      FM.selectLayer(L.id); FM.refreshAll(); await sleep(250);
+      if (FM.inspector.back) { for (let i = 0; i < 3 && !document.querySelector('#inspector-panel .cat-card'); i++) { FM.inspector.back(); await sleep(120); } }
+      const cards = [...document.querySelectorAll('#inspector-panel .cat-card')];
+      if (cards.length < 3) throw new Error('setup: only ' + cards.length + ' category cards on screen');
+      if (!cards.every(c => c.querySelector('.cat-num'))) throw new Error('setup: a card has lost its number badge — the badge must exist for a keyboard, it is only HIDDEN on touch');
+      const third = cards[2].querySelector('.cat-label').textContent.trim();
+      const active = document.activeElement; if (active && active.blur) active.blur();
+      document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Digit3', key: '3', bubbles: true, cancelable: true }));
+      await sleep(250);
+      if (document.querySelector('#inspector-panel .cat-card')) throw new Error('pressing 3 with the grid up did not open a card — the badge advertises a key that does nothing');
+      const heading = (document.querySelector('#inspector-panel .insp-back, #inspector-panel .insp-crumb, #inspector-panel h3, #inspector-panel .insp-title') || { textContent: '' }).textContent;
+      if (heading && !heading.includes(third) && !/Effects|Mixing|Blend/.test(heading)) throw new Error('pressing 3 opened "' + heading.trim().slice(0, 40) + '", not the third card "' + third + '"');
+    } finally {
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   test('482: Halation reads on a photograph at its defaults, and a saved instance without the new keys renders as it always did', { item: '482', budgetMs: 40000 }, async function () {
     /* The by-eye Colouring pass (tests/_colouring-sheet.html, v15.81): 43 effects on the section's own photograph, and Halation was
        the one that read as nothing at every setting. Its mask keyed on luma above 0.68 with a 2.4 falloff, which on a photograph

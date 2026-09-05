@@ -831,6 +831,12 @@ body.text-editing .sb-wrap { display: none !important; }
 @media (prefers-reduced-motion: reduce) { .cat-card, .cat-card::before { animation: none; } }
 .cat-num { position: absolute; top: 5px; left: 7px; font-size: 10px; font-weight: 700; line-height: 1; color: var(--text-faint); font-variant-numeric: tabular-nums; opacity: .8; }
 .cat-card:hover .cat-num { color: var(--accent); }
+/* THE NUMBER IS A KEY, AND A PHONE HAS NO KEYS (queue 797, found by using the app at 380px with touch on). Keys 1-9
+   open the Nth card (js/app.js, openCategoryByIndex), so the badge is true on a keyboard; on a finger it is a faint "1"
+   in the corner of every tile promising a shortcut that does not exist. `hover: none` is the file's own test for a
+   finger (the 44px-target block says why), so the same media hides the badge. The card's layout does not move: the
+   badge is absolutely positioned. */
+@media (hover: none) { .cat-num { display: none; } }
 .cat-card:hover { background: var(--panel-3); border-color: var(--accent); }
 .cat-card:active { transform: translateY(1px); }
 /* a disabled card (e.g. Volume on a layer with no audio): visible but muted + inert */
