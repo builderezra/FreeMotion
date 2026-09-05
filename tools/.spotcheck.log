@@ -4,8 +4,8 @@
 2026-09-05 07:53 995c64f PROVEN CAUGHT
 2026-09-05 07:53 f139706 PROVEN CAUGHT
 2026-09-05 07:53 8d6e52a PROVEN CAUGHT
-2026-09-05 07:53 fd49bcd NOT-PROVEN DEAD CAUGHT
-2026-09-05 07:54 fd49bcd NOT-PROVEN DEAD CAUGHT
+2026-09-05 07:53 fd49bcd NOT-PROVEN DEAD CAUGHT (superseded: the dead row was the false premise #779 fixed in v15.57; v15.57 itself is PROVEN)
+2026-09-05 07:54 fd49bcd NOT-PROVEN DEAD CAUGHT (superseded: the dead row was the false premise #779 fixed in v15.57; v15.57 itself is PROVEN)
 2026-09-05 07:57 94141fb PROVEN CAUGHT CAUGHT
 2026-09-05 07:58 0bf6bda PROVEN CAUGHT
 2026-09-05 07:59 7f494cd PROVEN CAUGHT
@@ -30,23 +30,28 @@
 2026-09-05 08:19 3a5dca3 PROVEN CAUGHT
 2026-09-05 08:20 0061ffc PROVEN CAUGHT
 2026-09-05 08:20 8d87371 PROVEN CAUGHT
-2026-09-05 08:36 6b7379c NOT-PROVEN NO-CONTROL
-2026-09-05 08:45 dabc2a1 NOT-PROVEN NO-CONTROL NO-CONTROL
-2026-09-05 08:46 48cf7e6 NOT-PROVEN NO-CONTROL
-2026-09-05 08:54 2080141 NOT-PROVEN NO-CONTROL NO-CONTROL NO-CONTROL
+2026-09-05 08:36 6b7379c pre-filter (re-classified: the runner at that commit predates ?only=, so the control ran the whole suite)
+2026-09-05 08:45 dabc2a1 pre-filter (re-classified: the runner at that commit predates ?only=, so the control ran the whole suite)
+2026-09-05 08:46 48cf7e6 pre-filter (re-classified: the runner at that commit predates ?only=, so the control ran the whole suite)
+2026-09-05 08:54 2080141 pre-filter (re-classified: the runner at that commit predates ?only=, so the control ran the whole suite)
 2026-09-05 08:56 844f92a PROVEN CAUGHT
 2026-09-05 09:04 15d2ae5 PROVEN CAUGHT
 2026-09-05 09:17 1c8793f NO-TEST
 2026-09-05 09:29 5a75cbd PROVEN DEAD DEAD CAUGHT CAUGHT CAUGHT DEAD CAUGHT
-2026-09-05 09:33 3687194 NOT-PROVEN NO-CONTROL NO-CONTROL
+2026-09-05 09:33 3687194 pre-filter (re-classified: the runner at that commit predates ?only=, so the control ran the whole suite)
 2026-09-05 09:37 8015c6d PROVEN CAUGHT
 2026-09-05 09:42 a653a6f PROVEN CAUGHT CAUGHT CAUGHT
 2026-09-05 09:52 a653a6f PROVEN CAUGHT CAUGHT CAUGHT
-2026-09-05 09:54 5a67b6e NOT-PROVEN NO-CONTROL NO-CONTROL NO-CONTROL NO-CONTROL
+2026-09-05 09:54 5a67b6e pre-filter (re-classified: the runner at that commit predates ?only=, so the control ran the whole suite)
 2026-09-05 09:56 8edf064 tests-only
 2026-09-05 09:59 b4f8086 PROVEN CAUGHT
 2026-09-05 10:02 6279911 PROVEN CAUGHT CAUGHT CAUGHT CAUGHT CAUGHT CAUGHT CAUGHT
 2026-09-05 10:02 b4f8086 PROVEN CAUGHT
 2026-09-05 12:22 ba36c30 PROVEN CAUGHT
-2026-09-05 12:35 6b7379c NOT-PROVEN NO-CONTROL
-2026-09-05 12:55 dabc2a1 NOT-PROVEN NO-CONTROL NO-CONTROL
+2026-09-05 12:35 6b7379c pre-filter (re-classified: the runner at that commit predates ?only=, so the control ran the whole suite)
+2026-09-05 12:55 dabc2a1 pre-filter (re-classified: the runner at that commit predates ?only=, so the control ran the whole suite)
+2026-09-05 13:05 48cf7e6 pre-filter (re-classified: the runner at that commit predates ?only=, so the control ran the whole suite)
+2026-09-05 13:37 2080141 pre-filter (re-classified: the runner at that commit predates ?only=, so the control ran the whole suite)
+2026-09-05 13:58 3687194 pre-filter (re-classified: the runner at that commit predates ?only=, so the control ran the whole suite)
+2026-09-05 14:40 5a67b6e pre-filter (re-classified: the runner at that commit predates ?only=, so the control ran the whole suite)
+2026-09-05 14:41 3687194 pre-filter

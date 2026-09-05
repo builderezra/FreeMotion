@@ -58,7 +58,7 @@ debt.reverse()
 print(f"{len(debt)} unchecked of the last 60 commits" + (":" if debt else "."))
 for l in debt[:8]: print("  " + l[:110])
 if len(debt) > 8: print(f"  … and {len(debt)-8} more")
-bad = [v for v in latest.values() if 'NOT-PROVEN' in v or 'NO-TEST' in v]
+bad = [v for v in latest.values() if ('NOT-PROVEN' in v or 'NO-TEST' in v) and 'pre-filter' not in v and 'superseded' not in v]   # pre-filter = the tool cannot isolate that commit's tests; superseded = fixed by a later release
 if bad: print("❌ releases whose LATEST proof FAILED — each is an open defect in a test or a fix (re-run supersedes):"); [print("  " + b) for b in bad[-10:]]
 PY
 

@@ -45,6 +45,14 @@ WTROOT="$(mktemp -d "${TMPDIR:-/tmp}/fm-spot-XXXXXX")"; WT="$WTROOT/wt"; SRV=""
 cleanup() { [ -n "$SRV" ] && kill "$SRV" 2>/dev/null; git worktree remove --force "$WT" >/dev/null 2>&1; rm -rf "$WTROOT"; }
 trap cleanup EXIT INT TERM
 git worktree add -q "$WT" "$H" || { echo "spotcheck: could not create a worktree"; exit 2; }
+# THE RUNNER AT THIS COMMIT MUST KNOW ?only= (added 2 Sep, v15.0x). Before that a filtered URL ran the WHOLE suite, so
+# the "control" was a 1,000-test run against a 300 s budget and six releases (v13.88–v14.40) were logged NOT-PROVEN
+# NO-CONTROL on 5 Sep for a limitation of this tool, not a fault of theirs. Say so instead of accusing.
+if ! grep -q "qs.get('only')" "$WT/tests/tests.js" 2>/dev/null; then
+  echo "○ PRE-FILTER — the test runner at $SHORT predates ?only= (2 Sep), so its tests cannot be run in isolation here."
+  echo "   Nothing is proven or disproven about this release by this tool. (Its tests still run in every full suite.)"
+  printf '%s %s pre-filter\n' "$(date '+%Y-%m-%d %H:%M')" "$SHORT" >> tools/.spotcheck.log; exit 0
+fi
 PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')"
 ( cd "$WT" && exec python3 -m http.server "$PORT" --bind 127.0.0.1 ) >/dev/null 2>&1 &
 SRV=$!
