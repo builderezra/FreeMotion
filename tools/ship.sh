@@ -251,7 +251,7 @@ changed = set()
 for line in sh("git status --porcelain").splitlines():
     parts = line[3:].split(" -> ")
     changed.add(parts[-1].strip())
-watched = [f for f in changed if re.match(r'^(js/.*\.js|styles\.css)$', f)]
+watched = [f for f in changed if re.match(r'^(js/.*\.js|styles\.css|theme-glass\.css)$', f)]   # theme-glass.css joined 5 Sep: it ships too (queue 553)
 if not watched: sys.exit(0)
 now = open('index.html', encoding='utf-8').read()
 was = sh("git show HEAD:index.html")

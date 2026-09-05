@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 5 Sep at v15.58
+> ## 📌 WHAT I NEED FROM YOU — updated 5 Sep at v15.59
 >
-> **State:** v15.58 (Squish can now squash against other layers — the oldest item in your own words, #539, is closed). You came back and said you suspected "delusion and lack of effort" — you were right to. Every release now has to PROVE its fix (ship.sh reverts the fix and requires the new test to fail), and re-proving the last 27 releases found two that claimed the opposite of what they did (fixed in v15.57, more findings being verified).
+> **State:** v15.59. The two oldest items in your own words are closed today: #539 (Squish squashes against other layers) and #553 (the half-drawn return and its black bar). You came back and said you suspected "delusion and lack of effort" — you were right to. Every release now has to PROVE its fix (ship.sh reverts the fix and requires the new test to fail), and re-proving the last 27 releases found two that claimed the opposite of what they did (fixed in v15.57, more findings being verified).
 >
 > ### 👉 [**Open the unblock list**](https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7)
 > Everything below is on that page, laid out so you can tap through it on your phone and send me one
@@ -20307,7 +20307,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ Clause 3 is the valuable one and clause 2 is its mechanism: a `trimStart`/`trimEnd` pair on the
       path, keyframed, with the renderer drawing only that span of the stroke.
 
-- [ ] **553 — 🔴 Leaving and re-opening a project leaves the app half-drawn: the home screen and the editor are BOTH on screen at once, side by side. Plus a black bar at the bottom.** (25 Aug, phone screenshot at v12.43.)
+- [x] **553 — 🔴 Leaving and re-opening a project leaves the app half-drawn: the home screen and the editor are BOTH on screen at once, side by side. Plus a black bar at the bottom.** (25 Aug, phone screenshot at v12.43.) ✅ DONE v15.59 (half-drawn return: v15.06; the black bar: v15.59).
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       🔴 **STILL HAPPENING — HE CONFIRMED IT ON HIS DEVICE, 1 Sep.** Asked which phone complaints still
       feel wrong, he ticked "app comes back half-drawn". So the home screen and the editor really are
@@ -20355,6 +20355,16 @@ re-opened #480, which I had marked done and had not fixed.
       showing below the two panels — but check it rather than assuming.
         ✅ **v15.06 — THE RESUME PATH IS HANDLED, which nothing did before.** home.js listened for no `pageshow` and no `visibilitychange`, so a push interrupted by the app going to the background — CSS animations pause on a hidden page, `animationend` never fires, and a backgrounded tab throttles the 9s stranded timer (an iOS PWA freezes it) — could sit half-drawn for as long as he looked at it: his screenshot exactly. Now a push still in flight when the app comes back is FINISHED (`endPush(true)`, the same call the stranded timer makes), on both events. Test `553:` parks a real push, fires `pageshow` and a visibilitychange, and asserts nothing is left mid-flight and home is hidden — two-way, the parked state is asserted first. **The black bar at the bottom REMAINS OPEN** — it was never measured and needs the parked state staged in the pane with its layout read; not folded in unseen.
 
+        ✅ **v15.59 — THE BLACK BAR, MEASURED THEN FIXED.** Staged the parked push at 380×800 in the pane and read the
+        layout: home slid 86px left and dimmed, the editor parked a full width off the right, both panels the full 800px
+        tall — no bar HERE, and the reason a bar can appear on his phone is in the numbers: the PAGE's own background is
+        the editor's near-black `rgb(6,12,15)` while the light home is `rgb(244,246,250)`. Any strip neither panel paints
+        (a paused push, a viewport that resizes on resume, the drift layer #187 already caught once) shows as black under
+        a white screen — his picture. The page now paints the home's colour while the home is up (`theme-glass.css`,
+        light look only) and the editor's the moment it is hidden. Test: parked push, page = home colour; home hidden,
+        page ≠ home colour. I cannot reproduce WHICH quirk leaves the strip on his phone — said plainly — but whatever
+        leaves it, it is now the same colour as the screen around it. **If the app still comes back half-drawn after
+        v15.06, or the bar is still visible after v15.59, say so and this reopens.**
 - [x] **554 — Picking a filter does not preview what it will actually look like.** (25 Aug.) ✅ v12.68
       His words, verbatim:
       > When selecting filters it doesn’t actually preview what it will look like when you add them

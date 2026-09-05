@@ -530,6 +530,14 @@ html[data-home="light"] #home-screen {
   background: #f4f6fa;
   color: #10151f;
 }
+/* THE BLACK BAR UNDER A LIGHT HOME (queue 553, the half that was never measured). The PAGE itself paints the
+   editor's near-black (styles.css: html { background: var(--bg) }), so while the light home is on screen — and
+   above all while a push is parked or paused mid-flight, the home slid left and the editor not yet across —
+   any strip that neither panel paints shows as a black bar. That is the bar in his screenshot, and #187 was
+   the same bar under the home's drift layer. Painting the page the home's own colour for as long as the home
+   is up makes an uncovered strip invisible whatever leaves it; the moment the home is hidden the page is the
+   editor's colour again. Measured in the phone layout with a parked push: page = home colour. */
+html[data-home="light"]:has(#home-screen:not(.hidden)) { background: #f4f6fa; }
 
 /* THE BLEED — "like the top colourful bar is leaning onto the page".
    🚨 IT LIVES ON ITS OWN ELEMENT, AND THE FIRST VERSION DID NOT — that cost the #187 bug back.

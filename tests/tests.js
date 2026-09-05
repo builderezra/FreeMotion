@@ -20282,12 +20282,15 @@
       var probe = async function (layout) {
       FM.refreshAll(); await sleep(220);
       tl.scrollLeft = 1e6; tl.scrollTop = 1e6; await sleep(260);              // as far right (and down) as it goes
-      /* …and WAIT FOR IT TO LAND (queue 782). Under load (5 Sep: 40 Chromes from an audit) the fixed 260ms was not enough
-         for the scroll and the marker layout to settle, so every pin still read in the lane and this threw "head has 0" —
-         a fixture flake that cost a ship. Poll until two consecutive frames agree on scrollLeft and the pins' positions. */
-      for (var _settle = 0, _last = ''; _settle < 40; _settle++) {
+      /* …and KEEP PUSHING UNTIL IT LANDS (queue 782). Under load the lanes are still laying out when the first
+         `scrollLeft = 1e6` is applied, so it clamps to the content's width AT THAT MOMENT (measured 5 Sep: 60 of a final
+         961) and stays there once the content grows — a stable, wrong position that a plain settle-poll accepts. So
+         re-apply the push every frame and stop only when scrollLeft, scrollWidth and the pins' positions all agree
+         across two consecutive frames. */
+      for (var _settle = 0, _last = ''; _settle < 60; _settle++) {
+        tl.scrollLeft = 1e6; tl.scrollTop = 1e6;
         await new Promise(function (r) { requestAnimationFrame(function () { setTimeout(r, 30); }); });
-        var _now = tl.scrollLeft + '|' + [].slice.call(document.querySelectorAll('.tl-marker')).map(function (m) { return Math.round(m.getBoundingClientRect().left); }).join(',');
+        var _now = tl.scrollLeft + '/' + tl.scrollWidth + '|' + [].slice.call(document.querySelectorAll('.tl-marker')).map(function (m) { return Math.round(m.getBoundingClientRect().left); }).join(',');
         if (_now === _last) break; _last = _now;
       }
       if (!(tl.scrollLeft > 20)) throw new Error('setup: the timeline would not scroll (' + tl.scrollLeft + ') — nothing to clip against');
@@ -53317,6 +53320,49 @@
       if (typeof gate === 'function') FM.home._pushAllowed = gate;
       try { if (wasOpen && !FM.home.isOpen()) FM.home.open(); else if (!wasOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
       await sleep(120);
+    }
+  });
+
+  /* ═══ 553, THE BLACK BAR: the page paints the editor's near-black under a LIGHT home, so any strip neither panel covers
+     during a parked or paused push shows as a black bar — his screenshot's bottom edge. The rule paints the page the
+     home's own colour while the home is up. Measured through computed style, in the parked state he photographed, and
+     the control proves the rule leaves with the home. */
+  test('553: while a light home is up (parked push included) the page behind it is the home colour, and the editor gets its own back', { item: '553' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const html = document.documentElement, home = document.getElementById('home-screen'), body = document.body;
+    if (!home || !FM.home || !FM.home.open || !FM.home.close) throw new Error('home missing');
+    if (typeof FM._finishIfStranded !== 'function') throw new Error('FM._finishIfStranded seam missing');
+    const was = html.getAttribute('data-home'), wasOpen = !!(FM.home.isOpen && FM.home.isOpen()), gate = FM.home._pushAllowed;
+    const bg = el => getComputedStyle(el).backgroundColor;
+    /* The intro's ground ramp (`html.splash-on-light`, an animation with fill: forwards) holds the page white and an
+       ANIMATED property beats any static rule. In the app the class leaves with the intro; in the suite the intro is cut
+       short and the class lingers, which painted this probe white and hid the rule under test. Take the leftover off. */
+    const hadSplash = html.classList.contains('splash-on-light');
+    try {
+      html.classList.remove('splash-on-light');
+      html.setAttribute('data-home', 'light');
+      if (!FM.home.isOpen()) { FM.home.open(); await sleep(200); }
+      const homeBg = bg(home);
+      if (homeBg !== 'rgb(244, 246, 250)') throw new Error('setup: the light home is not the paper white (' + homeBg + ') — the look under test is not applied');
+      if (bg(html) !== homeBg) {
+        // say WHICH rule painted the page, so a wrong reading names its cause instead of its symptom
+        const who = []; for (const ss of document.styleSheets) { let cr; try { cr = ss.cssRules; } catch (e) { continue; } for (const r of cr) { if (r.selectorText && /^html|^:root/.test(r.selectorText) && r.style && (r.style.backgroundColor || r.style.background)) who.push((ss.href || 'inline').split('/').pop() + '::' + r.selectorText + '->' + (r.style.backgroundColor || r.style.background).slice(0, 40)); } }
+        throw new Error('with the light home up the page behind it is ' + bg(html) + ', not the home\'s ' + homeBg + ' — a strip the panels leave shows as a black bar (his screenshot). html attrs: ' + [].map.call(html.attributes, a => a.name + '=' + a.value).join(' ') + '; inline: ' + html.style.cssText + '; matches: ' + html.matches('html[data-home="light"]:has(#home-screen:not(.hidden))') + '; rules: ' + who.join(' | '));
+      }
+      // his exact picture: the push parked — home slid out, editor not yet across
+      if (typeof gate === 'function') FM.home._pushAllowed = () => true;
+      FM.home.close({ push: true, wait: true }); await sleep(120);
+      if (!body.classList.contains('fm-pushing')) throw new Error('setup: the push did not park (body "' + body.className + '")');
+      if (bg(html) !== homeBg) throw new Error('mid-push the page is ' + bg(html) + ' — the gap between the home sliding out and the editor sliding in is a black bar');
+      FM._finishIfStranded('553 test'); await sleep(150);
+      if (!home.classList.contains('hidden')) throw new Error('setup: finishing the push did not hide the home');
+      if (bg(html) === homeBg) throw new Error('control: with the home hidden the page still paints the home colour — the rule leaks into the editor');
+    } finally {
+      FM.home._pushAllowed = gate;
+      if (hadSplash) html.classList.add('splash-on-light');
+      if (was == null) html.removeAttribute('data-home'); else html.setAttribute('data-home', was);
+      try { if (wasOpen && !FM.home.isOpen()) FM.home.open(); } catch (e) {}
+      await sleep(100);
     }
   });
 
