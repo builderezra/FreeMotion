@@ -39,7 +39,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=680">
+<link rel="stylesheet" href="styles.css?v=681">
 <link rel="stylesheet" href="theme-glass.css?v=50">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -228,7 +228,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v15.77</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v15.78</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -568,14 +568,14 @@
            So: trim-left · SPLIT · trim-right, one row, the split centred on the line. Three equal
            buttons with equal gaps in a container that is already centred on the playhead means the
            middle one lands on it by construction, not by a magic number. -->
-      <div id="tl-trim" class="hidden">
-        <button id="tl-trim-l" type="button"></button>
-        <button id="tl-trim-s" type="button"></button>
-        <button id="tl-trim-r" type="button"></button>
-      </div>
-      <div id="tl-nudge" class="hidden">
-        <button id="tl-nudge-l" type="button"></button>
-        <button id="tl-nudge-r" type="button"></button>
+      <!-- THE CLIP KEYS (queue 765 + 772): A · S · D stacked on the seam where the editing panel meets the timeline, PC only.
+           What each does follows the playhead (inside the selected clip: trim start · split · trim end; off it: move · extend ·
+           move), the same mapping the keyboard uses — js/timeline.js clipKeyAction, tooltips from syncKeyRail. The trim trio and
+           nudge pair that floated on the playhead are gone: "dont leave the old buttons near the playhead coz they annoying asf". -->
+      <div id="key-rail" class="hidden" aria-label="Clip keys">
+        <button id="key-a" type="button" data-key="a"><kbd>A</kbd></button>
+        <button id="key-s" type="button" data-key="s"><kbd>S</kbd></button>
+        <button id="key-d" type="button" data-key="d"><kbd>D</kbd></button>
       </div>
     </footer>
   </div>
@@ -979,7 +979,7 @@
   <script src="js/filters.js?v=13"></script>
   <script src="js/fx-presets.js?v=11"></script>
   <script src="js/fx-thumbs.js?v=48"></script>
-  <script src="js/timeline.js?v=238"></script>
+  <script src="js/timeline.js?v=239"></script>
   <script src="js/addmenu.js?v=76"></script>
   <script src="js/inspector.js?v=374"></script>
   <script src="js/fx-browser.js?v=82"></script>

@@ -1979,84 +1979,31 @@ html.splash-on, html.splash-on body { background: #000; }
 #rate-chip.armed { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 #rate-chip.hidden { display: none; }
 
-/* ---- clip-nudge pair, straddling the playhead (v5.01) ----------------------------------------
- * Ezra drew an arrow from the inspector's two clip buttons down to a pair of marks either side of
- * the playhead: "i feel its close the where you will be dragging so itll be easy to click, one on
- * each side." So the GAP between them is the playhead — they frame the line rather than sitting
- * near it, which is what makes the pairing read at a glance.
- * Same `calc(50vw - var(--tl-panel-left))` the centre line uses, so they track it exactly in every
- * layout instead of needing their own offset maths. They live in the ruler band, above the clips and
- * below the timecode, which is the strip Ezra marked. Desktop only — the phone keeps them in the
- * inspector (see .qr-nudge below); a floating pair on a 375px timeline would cover the clips. */
-#tl-nudge {
-  position: absolute; z-index: 14;
-  left: calc(50vw - var(--tl-panel-left, 0px)); top: calc(var(--tl-top, 40px) + 1px);
-  /* +1px, and it is not a fudge (queue 235). #tl-centerline is TWO pixels wide drawn from its left
-     edge, so its optical centre is x+1, while translateX(-50%) centres this row on x. Measured before:
-     14px of air on the left of the line and 12px on the right — which is exactly his "one is closer to
-     the playhead than the other, and it just looks weird". Both flanking groups take the same +1. */
-  transform: translateX(calc(-50% + 1px));
-  display: flex; align-items: center; gap: 26px;   /* 26px straddles the 2px line with clearance both sides */
-  pointer-events: none;                            /* only the buttons take clicks — the ruler under them still scrubs */
-}
-#tl-nudge.hidden { display: none; }
-#tl-nudge button {
-  pointer-events: auto;
-  /* 20 not 24, and top 67 not 69, for the same reason as the trim trio above — measured at 686-710
-     against a ruler band ending at 705, these hung 5px onto the first track row. "they need to be
-     moved up slightly as well." */
-  width: 30px; height: 20px; padding: 0;
+/* THE CLIP KEYS (queue 765 + 772 — #772's option A "Keycap Rail", drawn and sent on 3 Sep, decided under rule 16). Three
+   keycaps stacked on the seam where the editing panel meets the timeline. PC only: the phone never had the floating buttons
+   (it has the inspector's own rows). They are the keyboard's A / S / D made visible — the letters never change; what each does
+   follows the playhead (inside the selected clip: trim start · split · trim end; off it: move · extend · move, with the letter on
+   the far side dimmed), and syncKeyRail() rewrites the tooltips on every playhead move. The head column widens by the strip at
+   desktop (end of this file) so the rail covers no eye, no thumbnail and no ＋; HEAD_W is measured from the head's own rect, so
+   the clip geometry follows. The trim trio and nudge pair that floated on the playhead are gone (his words: "dont leave the old
+   buttons that are near the playhead coz they annoying asf"). */
+#key-rail { position: absolute; z-index: 8; left: 5px; top: calc(var(--tl-top, 40px) + 28px); display: flex; flex-direction: column; gap: 6px; }
+#key-rail.hidden { display: none; }
+#key-rail button {
+  width: 30px; height: 28px; padding: 0;
   display: flex; align-items: center; justify-content: center;
-  background: var(--panel-3); border: 1px solid var(--line);
+  background: var(--panel-3); border: 1px solid var(--line); border-bottom-width: 3px;
   border-radius: 7px; color: var(--text); cursor: pointer;
   box-shadow: 0 2px 8px rgba(0, 0, 0, .5);
 }
-#tl-nudge button svg { width: 15px; height: 15px; display: block; }
-#tl-nudge button:hover { border-color: var(--accent); color: var(--accent); }
-#tl-nudge button:active { transform: translateY(1px); }
-/* one home per platform: the floating pair is desktop-only, the inspector copy is phone-only */
-@media (max-width: 700px) { #tl-nudge { display: none !important; } }
+#key-rail button kbd { font: 700 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+#key-rail button:hover { border-color: var(--accent); color: var(--accent); }
+#key-rail button:active { transform: translateY(2px); border-bottom-width: 1px; }
+#key-rail #key-s { border-color: var(--accent); color: var(--accent); }   /* the one acting AT the line wears the accent, as the split did */
+#key-rail button[disabled] { opacity: .35; cursor: default; }
+@media (max-width: 700px) { #key-rail { display: none !important; } }
+/* one home per platform: the rail is desktop-only, the inspector's nudge copy is phone-only */
 @media (min-width: 701px) { .qr-btn.qr-nudge { display: none; } }
-
-/* Trim / split ON the playhead (v5.25, re-ordered v7.83 — queue 234).
-   v5.25 built this from "make sure the delete fully left and delete fully right are both on the left
-   side and then the split is on the right side", which was the instruction at the time. Queue 169 then
-   recorded the OPPOSITE and nobody reconciled them, so this kept v5.25's shape while an open entry
-   described a layout that did not exist — until he noticed: "those buttons aren't how I told you to
-   change them… you just logged it in your memory and didn't actually write it down."
-   It is trim-left · SPLIT · trim-right now, the split centred on the line. The container is already
-   anchored to the playhead and centred with translateX(-50%), so three equal buttons with equal gaps
-   put the middle one exactly on the line BY CONSTRUCTION rather than by a tuned offset.
-   TOP 67, HEIGHT 20 — measured, not guessed: the ruler band runs 683-705 and these were 686-710, so
-   they hung 5px into the first track row, which is his "they might need to be slightly moved up a bit
-   so they're not going onto the top layer". They now sit 684-704, inside the band, under the counter.
-   Shown only while the playhead is INSIDE the selected clip, which is exactly when #tl-nudge is hidden,
-   so only one group is ever on screen. Desktop only, like the nudge pair: three floating buttons over a
-   375px timeline would bury the clips. */
-#tl-trim {
-  position: absolute; z-index: 14;
-  left: calc(50vw - var(--tl-panel-left, 0px)); top: calc(var(--tl-top, 40px) + 1px);
-  transform: translateX(calc(-50% + 1px));   /* see #tl-nudge — the 2px centre line's optical centre is x+1 */
-  display: flex; align-items: center; gap: 7px;
-  pointer-events: none;
-}
-#tl-trim.hidden { display: none; }
-#tl-trim button {
-  pointer-events: auto;
-  width: 30px; height: 20px; padding: 0;
-  display: flex; align-items: center; justify-content: center;
-  background: var(--panel-3); border: 1px solid var(--line);
-  border-radius: 7px; color: var(--text); cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, .5);
-}
-#tl-trim button svg { width: 15px; height: 15px; display: block; }
-/* The split is the one acting AT the line, so it wears the accent — with three near-identical
-   outline buttons in a row the middle one has to say why it is the middle one. */
-#tl-trim #tl-trim-s { border-color: var(--accent); color: var(--accent); }
-#tl-trim #tl-trim-s:hover { background: rgba(90, 199, 237, .16); }
-#tl-trim button:hover { border-color: var(--accent); color: var(--accent); }
-#tl-trim button:active { transform: translateY(1px); }
-@media (max-width: 700px) { #tl-trim { display: none !important; } }
 /* …and on desktop the inspector's copies go away, so these are MOVED rather than duplicated. */
 @media (min-width: 701px) { .qr-btn.qr-trim { display: none; } }
 
@@ -9098,4 +9045,16 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
 @media (min-width: 701px) {
   #inspector-panel .addmenu-page .addmenu-card.addmenu-card--ico { background: linear-gradient(158deg, rgba(var(--am-tint, 41, 217, 187), .60) 0%, rgba(var(--am-tint, 41, 217, 187), .38) 55%, rgba(var(--am-tint, 41, 217, 187), .34) 100%); border-color: rgba(var(--am-tint, 41, 217, 187), .6); }
   #inspector-panel .addmenu-page .addmenu-card.addmenu-card--ico:hover { background: linear-gradient(158deg, rgba(var(--am-tint, 41, 217, 187), .72) 0%, rgba(var(--am-tint, 41, 217, 187), .50) 100%); border-color: rgba(var(--am-tint, 41, 217, 187), .9); }
+}
+
+/* THE RAIL'S STRIP (queue 765 + 772). At desktop the head column is 38px wider and its contents start after the rail, so the
+   keycaps sit on the seam over nothing. `--head-w` is what readHeadW() measures, so PAD and every clip's x follow it. */
+@media (min-width: 701px) {
+  :root { --head-w: 142px; }
+  .track-head, .tl-headspace, .tl-addrow-head { padding-left: 46px; }
+  .tl-addrow--line { padding-left: 38px; }
+  /* …and the in-group rows keep their own two rules on top of the strip: +10 for the indent, and none while editing the
+     group (test 632: inside a group the first control sits at the same x as outside). */
+  .track-head.in-group { padding-left: 56px; }
+  body.group-editing .track-head.in-group { padding-left: 46px; }
 }

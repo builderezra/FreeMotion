@@ -4603,90 +4603,43 @@ window.FM = window.FM || {};
       } else loopRegionEl.classList.add('hidden');
     },
 
-    // Shown only while a clip is selected AND the playhead sits off it — the same condition that used
-    // to decide whether the inspector row offered these. Off the clip, "trim" and "split" can't do
-    // anything; these two can, which is the whole reason the pair swaps in.
-    syncNudge() {
-      const box = document.getElementById('tl-nudge');
-      if (!box) return;
-      const targets = clipToolTargets();
-      const side = clipToolSide(targets);
-      box.classList.toggle('hidden', !side);
-      if (!side) return;
-      const layer = targets[0];
-      const n = targets.length;
-      const right = side > 0;   // playhead is PAST the clip → everything moves/grows rightwards
-      const L = document.getElementById('tl-nudge-l'), R = document.getElementById('tl-nudge-r');
-      const ico = (inner) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + inner + '</svg>';
-      /* TWO ICONS THAT ARE ACTUALLY DIFFERENT (queue 235). Ezra: "those two buttons are very similar…
-       * right now, honestly, at first glance, I cannot tell a fucking difference."
-       * He is right, and the old pair is a good lesson in what does not survive being small: they were
-       * the same drawing except that MOVE's box was closed (`h9v8H4z`) and EXTEND's was open at one end
-       * (`M12 8H4v8h8`). That is about four pixels of difference at 15px, and the two are never on
-       * screen together for you to compare.
-       * So the difference is now carried by the strongest cue available at this size — FILL versus
-       * OUTLINE — with the arrowheads reinforcing it:
-       *   MOVE   a SOLID block and a DOUBLE chevron: the whole clip picks up and travels to the line.
-       *   EXTEND an OUTLINED block whose near edge is open, a DASHED span, one arrow: the edge is being
-       *          pulled out to the line and the dashes are the new material. */
-      L.innerHTML = ico(right
-        ? '<path d="M3.5 8.5h8.5v7H3.5z" fill="currentColor" stroke="none"/><path d="M14 10l2 2-2 2M17 10l2 2-2 2"/><path d="M21 4.5v15"/>'
-        : '<path d="M12 8.5h8.5v7H12z" fill="currentColor" stroke="none"/><path d="M10 10l-2 2 2 2M7 10l-2 2 2 2"/><path d="M3 4.5v15"/>');
-      R.innerHTML = ico(right
-        ? '<path d="M12 8.5H3.5v7H12"/><path d="M12.5 12h6" stroke-dasharray="2 2"/><path d="M17 10l2 2-2 2"/><path d="M21 4.5v15"/>'
-        : '<path d="M12 8.5h8.5v7H12"/><path d="M11.5 12h-6" stroke-dasharray="2 2"/><path d="M7 10l-2 2 2 2"/><path d="M3 4.5v15"/>');
-      // The count is in the words because the buttons look identical either way, and "move 3 clips" is
-      // a very different press from "move clip" to have made by accident.
-      const many = n > 1 ? 'all ' + n + ' clips' : 'clip';
-      L.title = right ? 'Move ' + many + ' right to the playhead' : 'Move ' + many + ' left to the playhead';
-      R.title = n > 1
-        ? 'Extend all ' + n + ' clips to the playhead'
-        : (right ? 'Extend the end of the clip to the playhead' : 'Extend the start of the clip to the playhead');
-      L.setAttribute('aria-label', L.title); R.setAttribute('aria-label', R.title);
-    },
-
-    // The trim/split trio. Mirrors syncNudge, and is its complement: this shows only while the
-    // playhead sits INSIDE the selected clip (side === 0), which is precisely when trimming or
-    // splitting there is meaningful — and precisely when the nudge pair is hidden, so exactly one of
-    // the two groups is ever on screen.
     clipKey(k) { return clipKeyAction(k); },   // queue 765: A / S / D from the keyboard (js/app.js) — see clipKeyAction
-    syncTrim() {
-      const box = document.getElementById('tl-trim');
-      if (!box) return;
+    /* THE CLIP KEYS (queue 765 + 772). One rail on the seam, three keycaps, the keyboard's own mapping: clipKeyAction decides what
+       A / S / D do from where the playhead is, so the letters never change — only the tooltips and which far-side key is dimmed.
+       Replaces syncNudge (the move/extend pair) and syncTrim (the trim/split trio), which floated on the playhead. */
+    syncKeyRail() {
+      const rail = document.getElementById('key-rail');
+      if (!rail) return;
       const targets = clipToolTargets();
-      // "inside" now means inside ANY selected clip, which is the same question the inspector's copy
-      // asked (`layers.some(inside)`) and, for one clip, the same answer as before.
-      const inside = targets.length > 0 && clipToolSide(targets) === 0;
-      box.classList.toggle('hidden', !inside);
-      if (!inside) return;
-      const L = document.getElementById('tl-trim-l'), R = document.getElementById('tl-trim-r'), S = document.getElementById('tl-trim-s');
-      if (!L || !R || !S) return;
-      // The titles carry the count, so they are refreshed every sync even though the icons are static.
       const n = targets.length;
-      if (n > 1) {
-        L.title = 'Trim ' + n + ' clip starts to playhead (drop everything before it)';
-        R.title = 'Trim ' + n + ' clip ends to playhead (drop everything after it)';
-        S.title = 'Split all ' + n + ' at playhead';
+      rail.classList.toggle('hidden', !n);
+      if (!n) return;
+      const side = clipToolSide(targets);
+      const A = document.getElementById('key-a'), S = document.getElementById('key-s'), D = document.getElementById('key-d');
+      if (!A || !S || !D) return;
+      const many = n > 1 ? 'all ' + n + ' clips' : 'the clip';
+      if (side === 0) {
+        A.title = n > 1 ? 'A — trim ' + n + ' clip starts to the playhead' : 'A — trim the start to the playhead (drop everything before it)';
+        S.title = n > 1 ? 'S — split all ' + n + ' at the playhead' : 'S — split at the playhead';
+        D.title = n > 1 ? 'D — trim ' + n + ' clip ends to the playhead' : 'D — trim the end to the playhead (drop everything after it)';
+        A.disabled = false; D.disabled = false;
       } else {
-        L.title = 'Trim start to playhead (drop everything before it)';
-        R.title = 'Trim end to playhead (drop everything after it)';
-        S.title = 'Split at playhead';
+        const right = side > 0;   // playhead is PAST the clip → everything moves/grows rightwards
+        A.title = right ? 'A — nothing to do: the playhead is to the right, so D moves ' + many : 'A — move ' + many + ' left to the playhead';
+        D.title = right ? 'D — move ' + many + ' right to the playhead' : 'D — nothing to do: the playhead is to the left, so A moves ' + many;
+        S.title = n > 1 ? 'S — extend all ' + n + ' clips to the playhead' : (right ? 'S — extend the end of the clip to the playhead' : 'S — extend the start of the clip to the playhead');
+        A.disabled = right; D.disabled = !right;
       }
-      [L, R, S].forEach(b => b.setAttribute('aria-label', b.title));
-      if (L.innerHTML) return;   // icons and handlers are static — build once, not every frame
-      const ico = d => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="' + d + '"/></svg>';
-      L.innerHTML = ico('M6 4v16M6 4h4M6 20h4M14 4v16');    // drop everything BEFORE the playhead
-      R.innerHTML = ico('M18 4v16M18 4h-4M18 20h-4M10 4v16'); // drop everything AFTER the playhead
-      S.innerHTML = ico('M12 3v18M16 8l4 4-4 4M8 8l-4 4 4 4'); // split at the playhead
-      L.addEventListener('click', () => { clipTrimStart(); });   // queue 765: one body, shared with the A key
-      R.addEventListener('click', () => { clipTrimEnd(); });     // …D
-      S.addEventListener('click', () => { clipSplit(); });       // …S
+      const state = side === 0 ? 'inside' : (side > 0 ? 'right' : 'left');
+      [A, S, D].forEach(b => { b.setAttribute('aria-label', b.title); b.dataset.state = state; });
+      if (rail.dataset.wired) return;   // handlers are static — bind once
+      rail.dataset.wired = '1';
+      [A, S, D].forEach(b => b.addEventListener('click', () => { clipKeyAction(b.dataset.key); }));
     },
 
     updatePlayhead() {
       if (!tracksEl) return;
-      FM.timeline.syncNudge();
-      FM.timeline.syncTrim();
+      FM.timeline.syncKeyRail();   // queue 765 + 772: the rail on the seam replaced the two floating groups
       const pps = pxPerSec();
       // UNIVERSAL fixed-centre (phone + desktop): #tl-centerline is a CSS-pinned static line at 50vw
       // that NEVER moves and JS never touches it — we only scroll the CONTENT so the current time sits

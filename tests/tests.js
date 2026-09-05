@@ -13731,15 +13731,10 @@
     }
   });
 
-  test('timeline: the move and extend buttons are told apart, and sit level either side of the playhead', { item: 'nudge-pair' }, async function () {
-    /* Queue 235. Ezra: "those two buttons are very similar… right now, honestly, at first glance, I
-     * cannot tell a fucking difference. And they need to be moved up slightly as well. And also aligned
-     * a bit better, because one is closer to the playhead than the other."
-     * All three measured before the fix: the icons differed only by whether one box was closed or open
-     * at one end (about four pixels at 15px, and the two are never on screen together to compare); the
-     * pair hung 5px into the first track row; and the spacing was 14px on the left against 12px on the
-     * right, because #tl-centerline is 2px wide drawn from its left edge so its optical centre is x+1
-     * while translateX(-50%) centres the row on x. */
+  test('765: off the clip, the rail on the seam reads move and extend with the far-side key dimmed, stacks A S D, and covers no eye and no plus', { item: '765' }, async function () {
+    /* Queue 765 + 772, replacing queue 235's test of the floating move/extend pair — that pair is gone from the desktop
+     * ("dont leave the old buttons that are near the playhead coz they annoying asf"). The rail carries the same two actions
+     * under the keyboard's own letters, and the geometry asserted is the new promise: on the seam, over nothing. */
     if (!matchMedia('(min-width: 701px)').matches) throw new Error('this test must run at a desktop width; the frame is ' + window.innerWidth + 'px');
     const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time;
     try {
@@ -13747,30 +13742,29 @@
       const A = FM.makeLayer('shape', { name: 'Box', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 3 });
       FM.scene.layers.push(A);
       FM.selectLayer(A.id);
-      FM.time = 8;                       // OFF the clip — which is when the nudge pair shows at all
+      FM.time = 8;                       // OFF the clip, to its right
       FM.timeline.rebuild(); FM.timeline.updatePlayhead(); await sleep(60);
-
-      const box = document.getElementById('tl-nudge');
-      if (!box || box.classList.contains('hidden')) throw new Error('the playhead is off the clip and the nudge pair is hidden');
-      const L = document.getElementById('tl-nudge-l'), R = document.getElementById('tl-nudge-r');
-      const line = document.getElementById('tl-centerline');
-      const lb = L.getBoundingClientRect(), rb = R.getBoundingClientRect(), cb = line.getBoundingClientRect();
-      if (lb.width < 10 || rb.width < 10) throw new Error('one of the nudge buttons is not on screen');
-
-      // …level. The two gaps to the line must match; 14 vs 12 is what he could see.
-      const gapL = (cb.x + cb.width / 2) - lb.right, gapR = rb.left - (cb.x + cb.width / 2);
-      if (Math.abs(gapL - gapR) > 1) throw new Error('the pair is not level about the playhead — ' + Math.round(gapL) + 'px on the left against ' + Math.round(gapR) + 'px on the right');
-
-      // …up out of the first track row.
-      const rr = document.getElementById('tl-rulerrow').getBoundingClientRect();
-      const over = lb.bottom - rr.bottom;
-      if (over > 0) throw new Error('the nudge pair hangs ' + Math.round(over) + 'px below the ruler band, onto the first track row');
-
-      // …and actually distinguishable. Compared as the DRAWING, not by eye: move is a solid block,
-      // extend is an outline with a dashed span. If either cue is missing they are twins again.
-      if (!L.querySelector('path[fill="currentColor"]')) throw new Error('the MOVE icon has no solid block — fill is what tells it apart from extend at 15px');
-      if (!R.querySelector('path[stroke-dasharray]')) throw new Error('the EXTEND icon has no dashed span — that is the cue that it stretches rather than travels');
-      if (R.querySelector('path[fill="currentColor"]')) throw new Error('the EXTEND icon is filled too — then both are solid blocks and the pair is indistinguishable again');
+      // the ids are assembled here on purpose: test 497 flags any literal id the suite reaches for that no longer exists, and these must not exist
+      if (['trim', 'nudge'].some(k => document.getElementById('tl-' + k))) throw new Error('the floating nudge pair / trim trio are still in the DOM — clause 5: the old buttons near the playhead had to go');
+      const rail = document.getElementById('key-rail');
+      if (!rail || rail.classList.contains('hidden')) throw new Error('a clip is selected and the key rail is hidden or missing (queue 765 + 772)');
+      const ka = document.getElementById('key-a'), ks = document.getElementById('key-s'), kd = document.getElementById('key-d');
+      const ra = ka.getBoundingClientRect(), rs = ks.getBoundingClientRect(), rd = kd.getBoundingClientRect();
+      if (ra.width < 10 || rs.width < 10 || rd.width < 10) throw new Error('a rail key is not on screen');
+      if (!(ra.bottom <= rs.top + 1 && rs.bottom <= rd.top + 1)) throw new Error('the keys are not stacked A above S above D (tops ' + [ra.top, rs.top, rd.top].map(Math.round).join(', ') + ')');
+      if (Math.abs(ra.left - rd.left) > 1) throw new Error('the keys are not in one column');
+      if (!/move/i.test(kd.title) || !kd.title.startsWith('D')) throw new Error('with the playhead to the right, D should read "move…": "' + kd.title + '"');
+      if (!/extend/i.test(ks.title)) throw new Error('S should read "extend…" off the clip: "' + ks.title + '"');
+      if (!ka.disabled || kd.disabled) throw new Error('the far-side key is not dimmed (A disabled ' + ka.disabled + ', D disabled ' + kd.disabled + ') — "a is always resembling of the left and d for the right"');
+      // …and it covers NOTHING: no eye, no thumbnail, no ＋ — the head column made room for it.
+      const rr = rail.getBoundingClientRect();
+      const hits = el => { const b = el.getBoundingClientRect(); return b.width > 0 && !(b.right <= rr.left || b.left >= rr.right || b.bottom <= rr.top || b.top >= rr.bottom); };
+      // (clips scroll UNDER the sticky head column, whose strip the rail sits in — so they are not what it can cover)
+      const covered = [].slice.call(document.querySelectorAll('.th-eye, .th-thumb, .tl-addrow-plus')).filter(hits);
+      if (covered.length) throw new Error('the rail overlaps ' + covered.map(e => e.className.split(' ')[0]).join(', ') + ' — it must sit on the seam over nothing');
+      const head = document.querySelector('#tl-tracks .track-head');
+      if (head && head.getBoundingClientRect().width < 130) throw new Error('the head column did not widen for the rail (' + Math.round(head.getBoundingClientRect().width) + 'px) — the keys sit on top of the eyes');
+      if (head && rr.right > head.getBoundingClientRect().left + 46 + 0.5) throw new Error('the rail (right edge ' + Math.round(rr.right) + ') reaches past the 46px strip the head column reserves for it (' + Math.round(head.getBoundingClientRect().left + 46) + ')');
     } finally {
       FM.scene.layers.length = 0;
       layers0.forEach(l => FM.scene.layers.push(l));
@@ -13779,17 +13773,9 @@
     }
   });
 
-  test('timeline: split sits ON the playhead with a trim either side, inside the ruler band', { item: 'trim-on-playhead' }, async function () {
-    /* Queue 234, and this has flipped once before, which is why the geometry is asserted rather than
-     * the class names. v5.25 built "both trims on the left, split on the right" from his instruction at
-     * the time; queue 169 then recorded the opposite and nobody reconciled them, so the shipped layout
-     * and the open entry disagreed for weeks until he noticed: "those buttons aren't how I told you to
-     * change them. You probably forgot because I told you to do it, and you just logged it in your
-     * memory and didn't actually write it down."
-     * Two separate claims, both his, both measured:
-     *   · trim-left · SPLIT · trim-right, with the split centred ON the line;
-     *   · "moved up a bit so they're not going onto the top layer" — measured before: the group ran
-     *     686-710 against a ruler band ending at 705, so it hung 5px into the first track row. */
+  test('765: inside the clip the rail reads trim, split, trim with S accented, and pressing S splits the clip', { item: '765' }, async function () {
+    /* Replaces queue 234's test of the floating trim trio: the trio floated on the playhead and is gone; the rail carries the
+     * same three actions under A / S / D, with S — the one acting AT the line — wearing the accent, as the split did. */
     if (!matchMedia('(min-width: 701px)').matches) throw new Error('this test must run at a desktop width; the frame is ' + window.innerWidth + 'px');
     const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time;
     try {
@@ -13797,29 +13783,17 @@
       const A = FM.makeLayer('shape', { name: 'Box', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 6 });
       FM.scene.layers.push(A);
       FM.selectLayer(A.id);
-      FM.time = 2;                       // inside the clip, which is when the trio shows at all
+      FM.time = 2;                       // inside the clip
       FM.timeline.rebuild(); FM.timeline.updatePlayhead(); await sleep(60);
-
-      const box = document.getElementById('tl-trim');
-      if (!box || box.classList.contains('hidden')) throw new Error('the playhead is inside the selected clip and the trim trio is hidden');
-      const mid = el => { const b = el.getBoundingClientRect(); return b.x + b.width / 2; };
-      const L = document.getElementById('tl-trim-l'), S = document.getElementById('tl-trim-s'), R = document.getElementById('tl-trim-r');
-      const line = document.getElementById('tl-centerline');
-      if (!L || !S || !R || !line) throw new Error('missing one of the trim buttons or the centre line');
-      // CONTROL: all three must actually be on screen, or every comparison below is between zeroes.
-      [['trim-left', L], ['split', S], ['trim-right', R]].forEach(function (p) {
-        if (p[1].getBoundingClientRect().width < 10) throw new Error(p[0] + ' is not on screen');
-      });
-
-      if (!(mid(L) < mid(S) && mid(S) < mid(R))) {
-        throw new Error('the order is wrong — left ' + Math.round(mid(L)) + ', split ' + Math.round(mid(S)) + ', right ' + Math.round(mid(R)) + '; it should read trim · split · trim');
-      }
-      const off = Math.abs(mid(S) - mid(line));
-      if (off > 2) throw new Error('the split button is ' + Math.round(off) + 'px off the playhead — it is supposed to sit ON the line');
-
-      const rr = document.getElementById('tl-rulerrow').getBoundingClientRect();
-      const over = S.getBoundingClientRect().bottom - rr.bottom;
-      if (over > 0) throw new Error('the trim group hangs ' + Math.round(over) + 'px below the ruler band, onto the first track row');
+      const rail = document.getElementById('key-rail');
+      if (!rail || rail.classList.contains('hidden')) throw new Error('the playhead is inside the selected clip and the key rail is hidden');
+      const ka = document.getElementById('key-a'), ks = document.getElementById('key-s'), kd = document.getElementById('key-d');
+      if (!/trim the start/i.test(ka.title) || !/split/i.test(ks.title) || !/trim the end/i.test(kd.title)) throw new Error('inside the clip the keys should read trim · split · trim: ' + [ka.title, ks.title, kd.title].join(' | '));
+      if (ka.disabled || ks.disabled || kd.disabled) throw new Error('a key is dimmed inside the clip, where all three act');
+      if (getComputedStyle(ks).borderTopColor === getComputedStyle(ka).borderTopColor) throw new Error('S does not wear the accent — the one acting AT the line has to say why it is the middle one');
+      const before = FM.scene.layers.length;
+      ks.click(); await sleep(60);
+      if (FM.scene.layers.length !== before + 1) throw new Error('pressing S on the rail did not split the clip (' + before + ' → ' + FM.scene.layers.length + ' layers)');
     } finally {
       FM.scene.layers.length = 0;
       layers0.forEach(l => FM.scene.layers.push(l));
@@ -14097,18 +14071,18 @@
       FM.time = 3;
       FM.timeline.rebuild();
       FM.inspector.refresh();
-      FM.timeline.syncTrim();
+      FM.timeline.syncKeyRail();   // queue 765 + 772: the rail replaced the floating trio
 
-      const trim = document.getElementById('tl-trim');
-      if (!trim) throw new Error('#tl-trim is missing');
-      if (desktop && trim.classList.contains('hidden')) throw new Error('the playhead is inside all three selected clips and the trim trio is hidden — it is reading one layer, not the selection');
+      const rail = document.getElementById('key-rail');
+      if (!rail) throw new Error('#key-rail is missing');
+      if (desktop && rail.classList.contains('hidden')) throw new Error('the playhead is inside all three selected clips and the key rail is hidden — it is reading one layer, not the selection');
 
       // CONTROL FIRST: all three are 6s long, so a passing assertion below cannot be one that was
       // already true. Without this a broken trim that changed nothing would look identical to a fixed
       // one that changed everything, if the durations happened to start where they end.
       if (!(A.duration === 6 && B.duration === 6 && C.duration === 6)) throw new Error('setup: the three clips are not all 6s');
 
-      document.getElementById('tl-trim-r').click();     // trim ends to the playhead at t=3
+      document.getElementById('key-d').click();     // D: trim ends to the playhead at t=3
       const got = [A.duration, B.duration, C.duration].map(d => Math.round(d * 100) / 100);
       if (got[0] !== 3) throw new Error('the primary clip was not trimmed at all: durations ' + got.join(', '));
       if (got[1] !== 3 || got[2] !== 3) {
