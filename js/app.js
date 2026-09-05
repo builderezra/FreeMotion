@@ -1779,7 +1779,7 @@ window.FM = window.FM || {};
                told, because the transport pauses elements in four different places and a flag that
                all four must remember to set is a safeguard held shut by remembering. */
             if (FM.audioHealth) FM.audioHealth.noteRestart(m, now, local);
-            m.el.currentTime = local; m._syncAt = now; m.el.play().catch(() => {});   // re-entered the window → resume
+            m.el.currentTime = local; m._syncAt = now; m.el.play().catch(e => { try { if (FM.audioHealth) FM.audioHealth.refused(m, e); } catch (_) {} });   // re-entered the window → resume; a refusal is recorded, not swallowed (queue 786)
           }
           else {
             // speed RAMP: follow the keyframed curve live; the trim rides on top of it.
@@ -2004,7 +2004,11 @@ window.FM = window.FM || {};
         // you hear most often. Start at zero; the sync tick's declickGain lifts it over 45ms. (#148)
         m._resumedAt = performance.now();
         m.el.volume = 0;
-        m.el.play().catch(() => {});
+        /* A REFUSED play() IS THE REPORT (queue 786). On iOS the likeliest shape of "the song will not play at all" is
+           play() rejecting — NotAllowedError without a gesture, NotSupportedError for a codec, AbortError when the
+           element was torn down — and this catch used to swallow every one. "Your last playback" can only say what it
+           was told, so it is told. */
+        m.el.play().catch(e => { try { if (FM.audioHealth) FM.audioHealth.refused(m, e); } catch (_) {} });
       }
     });
     /* WAIT FOR THE SOUND BEFORE THE CLOCK RUNS (queue 95).

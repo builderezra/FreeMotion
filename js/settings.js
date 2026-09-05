@@ -346,6 +346,17 @@ window.FM = window.FM || {};
         actionRow('Save a project file', 'Downloads this project as a .fmotion.json you can keep or re-open later. Nothing here is backed up anywhere else.', 'Save…',
           () => press('btn-save-proj')),
       ));
+      /* THE REPORTS ARE A LONG WAY DOWN IN A PROJECT (queue 785): measured at 380x800 the "Your last playback" row was
+         the 16th of 19 labels, 2,121px into a 3,089px scroll. The project's own settings come first (his ask, queue 52 — its test
+         holds the first row), so the row right under them says the reports exist and takes him there. */
+      const jump = el('div', 'set-row set-jump');
+      const jumpHead = el('div', 'set-row-head');
+      jumpHead.appendChild(el('div', 'set-label', 'Reports from this device'));
+      jumpHead.appendChild(el('div', 'set-hint', 'Your last playback, export, project open, scrub and blank clip — the reports the unblock list asks you to copy.'));
+      const jumpBtn = el('button', 'set-action', 'Show'); jumpBtn.type = 'button';
+      jumpBtn.addEventListener('click', () => { const r = document.getElementById('set-reports'); if (r && r.scrollIntoView) r.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
+      jump.append(jumpHead, jumpBtn);
+      body.appendChild(group(jump));
     }
 
     body.appendChild(group(
@@ -470,7 +481,13 @@ window.FM = window.FM || {};
       perfBtns.append(perfBtn, copyBtn);
       perfWrap.append(perfHead, perfBtns, perfOut);
       body.appendChild(group(perfWrap));
-
+    }
+    /* ---- THE DEVICE REPORTS ARE HERE WHETHER OR NOT A PROJECT IS OPEN (queue 785, 5 Sep). Every readout below is a
+       record the app wrote about HIS DEVICE — the last playback, export, project open, scrub, blank clip — and twelve
+       open items wait on him pasting one of them. They sat inside `if (inProject)` with the Measure button, so from the
+       home screen's cog none of them existed, and the natural moment to look (after leaving a project that cut out or
+       exported silently) found an empty panel. Only Measure needs a project to sample; the readouts need nothing. */
+    {
       /* ---- "Your last export" (queue 604 / 215 / 662) ------------------------------------------
        * He has reported a silent export four times, and every round died the same way: everything
        * measurable on a desktop is healthy, and the device it happens on cannot be inspected. On
@@ -482,7 +499,7 @@ window.FM = window.FM || {};
        * five drop reasons fired, whether the browser even HAS an AudioEncoder, and what the mix peaked
        * at. Same shape as "What's slow" above, for the same reason — that one is the only thing that
        * ever moved the lag reports along. */
-      const expWrap = el('div', 'set-row set-perf');
+      const expWrap = el('div', 'set-row set-perf'); expWrap.id = 'set-reports';   // the jump row's target (queue 785)
       const expOut = el('pre', 'set-perf-out');
       let expText = '';
       try { expText = localStorage.getItem('fm.lastExportReport') || ''; } catch (e) {}

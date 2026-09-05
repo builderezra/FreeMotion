@@ -70,7 +70,7 @@
 
   function reset() {
     S.playMs = 0; S.soundingMs = 0; S.stalls = 0; S.stalledMs = 0; S.worstStallMs = 0; S.restarts = 0;
-    S.events = Object.create(null); S.firstAt = null; S.lastAt = null;
+    S.events = Object.create(null); S.firstAt = null; S.lastAt = null; S.refused = 0;
     S.clips = Object.create(null);
   }
 
@@ -96,7 +96,18 @@
     });
   }
 
+  /* A refused play() (queue 786): the error's NAME is the diagnosis — NotAllowedError is the missing gesture,
+     NotSupportedError the codec, AbortError a torn-down element — so it is counted by name, per clip, and the
+     report is saved even though nothing played, because "nothing played" is exactly the thing to report. */
+  function refused(m, e) {
+    const id = (m && (m.layerId || m.id)) || 'clip';
+    bump('play() refused: ' + ((e && e.name) || 'error'), id);
+    S.refused = (S.refused || 0) + 1;
+    if (!S.firstAt) S.firstAt = Date.now();
+    try { localStorage.setItem('fm.lastAudioReport', FM.audioHealth.report()); } catch (_) {}
+  }
   FM.audioHealth = {
+    refused: refused,
     /* Called from the playback tick for every element that is inside its clip window. `sounding` is
        the app's own view of whether this element ought to be audible right now. */
     note: function (m, now, sounding) {
@@ -197,7 +208,7 @@
        the very main-thread stall this file exists to detect. */
     save: function () {
       try {
-        if (!S.playMs) return;                       // nothing played, nothing to say
+        if (!S.playMs && !S.refused) return;          // nothing played AND nothing refused: nothing to say (a refusal is the story — queue 786)
         localStorage.setItem('fm.lastAudioReport', FM.audioHealth.report());
       } catch (e) {}
     }

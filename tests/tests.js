@@ -59672,6 +59672,83 @@
     if (dead.length) throw new Error(dead.length + ' effect(s) are switched OFF by a missing param key (their defaults change the picture, their bare instance changes nothing): ' + dead.join(', '));
   });
 
+  /* ═══ 785: THE DEVICE REPORTS ARE IN SETTINGS WHETHER OR NOT A PROJECT IS OPEN, AND A PROJECT'S SETTINGS LEADS WITH A WAY
+     TO REACH THEM. Twelve open items wait on him pasting one of these reports; every readout sat inside `if (inProject)`,
+     so the home screen's cog had none of them, and in a project the first of them was 2,121px down. Through the real
+     panel: from the home screen the readouts exist and Measure (which needs a project) does not; in a project the first
+     row is the jump, and pressing it brings the reports into view. */
+  test('785: the device reports are in Settings from the home screen, and a project\'s Settings opens with a row that jumps to them', { item: '785', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.settings || !FM.settings.open || !FM.settings.close || !FM.home) throw new Error('settings / home missing');
+    const wasOpen = !!(FM.home.isOpen && FM.home.isOpen());
+    const labels = () => [].slice.call(document.querySelectorAll('.set-panel .set-row .set-label')).map(l => (l.textContent || '').trim());
+    try {
+      // from the HOME screen
+      if (!FM.home.isOpen()) { FM.home.open(); await sleep(250); }
+      FM.settings.open(); await sleep(360);
+      let L = labels();
+      if (!L.length) throw new Error('setup: Settings opened from the home screen shows no rows');
+      for (const want of ['Your last playback', 'Your last export', 'Your last project open']) if (L.indexOf(want) < 0) throw new Error('from the home screen, Settings has no "' + want + '" — the paste the unblock list asks for is unreachable there. Rows: ' + L.join(' | '));
+      if (L.some(l => /What.s slow/.test(l))) throw new Error('from the home screen, Settings offers Measure ("What’s slow"), which needs a project to sample');
+      FM.settings.close(); await sleep(300);
+      // inside a PROJECT
+      FM.home.close(); await sleep(250);
+      FM.settings.open(); await sleep(360);
+      L = labels();
+      if (L.indexOf('Reports from this device') !== 1) throw new Error('in a project the Settings rows open ' + L.slice(0, 3).join(' | ') + ' — the jump to the device reports must be the SECOND row: the project\'s own row leads (queue 52), and below that the reports are still 2,000px down with nothing pointing at them');
+      const reports = document.getElementById('set-reports'), panel = reports && reports.closest('.set-panel');
+      if (!reports || !panel) throw new Error('setup: the reports anchor (#set-reports) or the panel is missing');
+      const scroller = (() => { let n = reports.parentElement; while (n && n !== document.body) { const cs = getComputedStyle(n); if (/(auto|scroll)/.test(cs.overflowY) && n.scrollHeight > n.clientHeight + 4) return n; n = n.parentElement; } return null; })();
+      if (!scroller) throw new Error('setup: nothing in the panel scrolls, so the jump has nothing to do at this size (' + innerHeight + 'px)');
+      const before = reports.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      const btn = document.querySelector('.set-panel .set-jump button');
+      if (!btn) throw new Error('the jump row has no button');
+      btn.click(); await sleep(700);
+      const after = reports.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      if (!(before > scroller.clientHeight * 0.9)) throw new Error('setup: the reports were already in view before the jump (' + Math.round(before) + 'px) — nothing to prove at this size');
+      if (!(after < scroller.clientHeight * 0.5)) throw new Error('pressing the jump left the reports at ' + Math.round(after) + 'px from the top of a ' + scroller.clientHeight + 'px panel — it did not bring them into view');
+      FM.settings.close(); await sleep(300);
+    } finally {
+      try { FM.settings.close(); } catch (e) {}
+      try { if (wasOpen && !FM.home.isOpen()) FM.home.open(); else if (!wasOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep(200);
+    }
+  });
+
+  /* ═══ 786: A REFUSED play() REACHES "YOUR LAST PLAYBACK". The likeliest shape of "the song will not play at all" on a
+     phone is play() rejecting, and both call sites swallowed it; the report also refused to save when nothing had played,
+     which is exactly the case. A real <video> with no source rejects for real (NotSupportedError); the report must name it
+     and be saved even though 0ms played. */
+  test('786: a refused play() is named in the playback report, and the report is saved even though nothing played', { item: '786', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.audioHealth || !FM.audioHealth.report || !FM.audioHealth.reset) throw new Error('audioHealth seams missing');   // no guard on .refused: without the fix the REPORT must be what fails
+    const saved = FM.scene, savedSel = FM.scene.selectedId, report0 = localStorage.getItem('fm.lastAudioReport');
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      FM.audioHealth.reset();
+      localStorage.removeItem('fm.lastAudioReport');
+      const P = { width: 320, height: 240, fps: 30, duration: 4, background: '#000000' };
+      const V = FM.makeLayer('video', { name: 'v786', x: 160, y: 120, start: 0, duration: 4 });
+      const el = document.createElement('video'); el.muted = true;   // no source: play() rejects with NotSupportedError — a real refusal
+      FM.media.set(V.id, { kind: 'video', el: el, width: 320, height: 240, duration: 4 });
+      FM.scene = scene([V], { project: P }); FM.setTime(0.5); FM.refreshAll(); await sleep(60);
+      FM.play(); await sleep(400); FM.pause(); await sleep(100);
+      const rep = FM.audioHealth.report();
+      if (!/play\(\) refused: \w+/.test(rep)) throw new Error('the playback report does not name the refused play(): ' + rep.slice(0, 300));
+      const stored = localStorage.getItem('fm.lastAudioReport') || '';
+      if (!/play\(\) refused/.test(stored)) throw new Error('the refusal was not SAVED to "Your last playback" (' + (stored ? stored.slice(0, 120) : 'nothing saved') + ') — nothing played, so the old save gate threw it away');
+    } finally {
+      try { FM.pause(); } catch (e) {}
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.audioHealth.reset(); } catch (e) {}
+      if (report0 === null) localStorage.removeItem('fm.lastAudioReport'); else localStorage.setItem('fm.lastAudioReport', report0);
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 692 ROUTE 2: THE READBACK IS CROPPED TO THE LAYER FOR EVERY ADMITTED KERNEL, AND ADMISSION IS RE-PROVED HERE.
      Five rounds bounded 13 kernels one at a time; this covers 44 more in one place in drawPixelEffect. A kernel is in
      CROP_FX only if the cropped path draws the same picture as the full one — five subject positions, defaults and

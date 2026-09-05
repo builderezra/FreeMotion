@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 5 Sep at v15.64
+> ## 📌 WHAT I NEED FROM YOU — updated 5 Sep at v15.65
 >
-> **State:** v15.64 — 39 effects that a hand-written or AI-written project could switch off by leaving a key out now render at their defaults; the dark look's intro lands on dark again; the lag item (#692) has had everything the numbers pointed at: 44 effects crop their readback, the radial blurs are bounded, and eight bounded effects lost their readback floor; and 44 effects now cost a tenth of what they did on a small layer (#692 route 2); yesterday's three oldest items in your own words are closed. The two oldest items in your own words are closed today: #539 (Squish squashes against other layers) and #553 (the half-drawn return and its black bar). You came back and said you suspected "delusion and lack of effort" — you were right to. Every release now has to PROVE its fix (ship.sh reverts the fix and requires the new test to fail), and re-proving the last 27 releases found two that claimed the opposite of what they did (fixed in v15.57, more findings being verified).
+> **State:** v15.65 — the five reports the unblock list asks you to paste (playback, export, project open, scrub, blank clip) now show in Settings from the HOME screen too, not only inside a project, and a project's Settings opens with a "Reports from this device → Show" row that jumps to them (#785); a song that refuses to start is now NAMED in Your last playback instead of being thrown away (#786). Earlier today: 39 effects that a hand-written or AI-written project could switch off by leaving a key out now render at their defaults; the dark look's intro lands on dark again; the lag item (#692) has had everything the numbers pointed at: 44 effects crop their readback, the radial blurs are bounded, and eight bounded effects lost their readback floor; and 44 effects now cost a tenth of what they did on a small layer (#692 route 2); yesterday's three oldest items in your own words are closed. The two oldest items in your own words are closed today: #539 (Squish squashes against other layers) and #553 (the half-drawn return and its black bar). You came back and said you suspected "delusion and lack of effort" — you were right to. Every release now has to PROVE its fix (ship.sh reverts the fix and requires the new test to fail), and re-proving the last 27 releases found two that claimed the opposite of what they did (fixed in v15.57, more findings being verified).
 >
 > ### 👉 [**Open the unblock list**](https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7)
 > Everything below is on that page, laid out so you can tap through it on your phone and send me one
@@ -29233,4 +29233,24 @@ re-opened #480, which I had marked done and had not fixed.
       so the inspector shows an absent-key instance a number it does not render. The fill above uses the kernel's
       literal, so the RENDER is right; the display is the audit's v15.51 finding and stays open as a lead in
       `tools/audit-2026-09-05.md`.
+
+- [x] **785 — The device reports he is asked to paste were only in Settings while a project was open, and 2,121px down when they were (hunt HIGH #50)** (5 Sep, from the #778 audit of #95 and #96, verified by reading js/settings.js) ✅ DONE v15.65.
+      **JUMPED: a lead from #778 clause 2 — it blocks the very pastes twelve items wait on.**
+      `js/settings.js` built every readout — Your last playback, Your last export, Last error, Your last project open, Your
+      last scrub, A clip with no picture — inside `if (inProject) {` together with Measure. From the home screen's cog
+      (the one he would press after leaving a project that cut out or exported silently) none of them existed. In a
+      project the first of them was the 16th of 19 labels, 2,121px into a 3,089px scroll (the audit's measurement).
+      1. [x] The readouts are in Settings whether or not a project is open; only Measure (which samples the app) needs one.
+      2. [x] In a project, right under the project's own row (which keeps the first slot — queue 52's test refused the ship that put the jump first), "Reports from this device" with a Show button that scrolls to them.
+      3. [x] Test through the real panel, both states.
+
+- [x] **786 — A refused play() was swallowed at both call sites, so "Your last playback" could never say why a song did not start (hunt HIGH #51)** (5 Sep, from the #778 audit of #96) ✅ DONE v15.65.
+      **JUMPED: a lead from #778 clause 2 — the report #96 waits on could not carry the likeliest cause.**
+      `m.el.play().catch(() => {})` at both sites in js/app.js; and the report's save gate bailed when nothing had played
+      — which is exactly the state a refusal leaves. On a phone the likeliest shape of "sometimes will not play at all" is
+      play() rejecting: NotAllowedError without a gesture, NotSupportedError for a codec, AbortError for an element torn
+      down mid-start.
+      1. [x] Both catches record the refusal by the error's name, per clip, through `FM.audioHealth.refused`.
+      2. [x] The report saves when a refusal was recorded even though 0ms played.
+      3. [x] Test with a real sourceless video (play() rejects for real).
 
