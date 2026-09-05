@@ -27094,6 +27094,52 @@
     if (dead.length) throw new Error(dead.length + ' raised ceiling(s) are dead space — the top half of the slider does nothing: ' + dead.join(' · '));
   });
 
+  test('482: eleven canvas and warp ceilings earned by the round-four probe are in the registry, and each top half still moves the picture', { item: '482', budgetMs: 40000 }, function () {
+    /* Round four of the ceilings pass (v15.79). tests/_482ceil.html (v14.81) walked the per-pixel table; the canvas and warp tables take no
+       ImageData, so tests/_482ceil2.html walks them through FM.renderScene on a real layer and finds, per slider, the last multiplier of its
+       max that still moves the picture by >= 2 (mean abs diff at 640x480) without collapsing or going flat. Raised to the last step whose
+       gain was still >= 4 — twice the floor — so each new ceiling sits inside the working range, not on the collapse edge. The two seam
+       offsets are not measured (an offset past one period repeats: lie A in the probe) but FOLLOW the tile size: one period of the largest
+       tile, both ways. Holds two things: the number, so a raise cannot quietly revert, and the liveness, so it cannot be dead travel. */
+    const R = FM.fxRegistry;
+    const EARNED = [
+      ['ripple', 'amount', 480], ['wave', 'amount', 720], ['timewarp', 'barwidth', 480], ['starpoly3d', 'spike', 15],
+      ['mirrortile', 'size', 1600], ['tilerotate', 'size', 1600], ['tileshift', 'size', 600], ['bulge', 'amount', 4],
+      ['turbulentdisplace', 'scale', 400], ['mirrortile', 'offsetx', 1600], ['mirrortile', 'offsety', 1600],
+    ];
+    const W = 640, H = 480, P = { width: W, height: H, fps: 30, duration: 4, background: '#000000' };
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    const subject = inst => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 320, y: 240, shapeW: 300, shapeH: 220, fill: '#d0642c', start: 0, duration: 4 });
+      const C = FM.makeLayer('shape', { shape: 'circle', x: 200, y: 200, shapeW: 140, shapeH: 140, fill: '#2c8ad0', start: 0, duration: 4 });
+      const S = FM.makeLayer('shape', { shape: 'star', x: 450, y: 300, shapeW: 120, shapeH: 120, fill: '#e8e050', start: 0, duration: 4 });
+      L.effects = [inst]; return { project: P, layers: [C, S, L] };
+    };
+    const shot = (type, key, v) => {
+      const inst = R.makeInstance(type); if (!inst) throw new Error(type + ': makeInstance gave nothing');
+      inst.params = inst.params || {}; inst.params[key] = v;
+      g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, W, H); FM.renderScene(g, subject(inst), 0.37);
+      return g.getImageData(0, 0, W, H).data;
+    };
+    const mad = (A, B) => { let s = 0; for (let i = 0; i < A.length; i++) s += Math.abs(A[i] - B[i]); return s / A.length; };
+    const wrong = [], dead = [];
+    let nullChecked = false;
+    EARNED.forEach(([type, key, max]) => {
+      const pd = (R.paramsOf(type) || []).find(x => x.key === key);
+      if (!pd) { wrong.push(type + '.' + key + ' is not in the registry'); return; }
+      if (pd.max !== max) { wrong.push(type + '.' + key + ' max is ' + pd.max + ', the probe earned ' + max); return; }
+      if (/^offset/.test(key) && pd.min !== -max) { wrong.push(type + '.' + key + ' min is ' + pd.min + ', a seam reaches both ways'); return; }
+      const mid = shot(type, key, pd.min + (pd.max - pd.min) * 0.5), top = shot(type, key, pd.max);
+      // the metric must be able to read zero before a non-zero reading means anything
+      if (!nullChecked) { nullChecked = true; if (mad(top, shot(type, key, pd.max)) !== 0) throw new Error(type + '.' + key + ' renders differently from itself, so nothing measured below means anything'); }
+      const moved = mad(mid, top);
+      if (moved < 0.5) dead.push(type + '.' + key + ' (' + pd.min + '..' + pd.max + ') moved ' + moved.toFixed(2));
+    });
+    if (wrong.length) throw new Error('the round-four ceilings are not what the probe earned: ' + wrong.join(' · ') + ' (queue 482)');
+    if (dead.length) throw new Error(dead.length + ' raised ceiling(s) are dead travel, the top half moves nothing: ' + dead.join(' · ') + ' (queue 482)');
+  });
+
   /* ---------------- queue 265: the keyframe rails had almost no coverage ----------------
    * Found by a mutation aimed at the new Edit Points ◆ landing on the CROP panel's instead, because
    * `left.appendChild(kfBtn)` appears four times in inspector.js and I had not anchored uniquely. It
@@ -60405,6 +60451,50 @@
       const d = g.getImageData(0, 0, 270, 480).data; let ink = 0;
       for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > 60) ink++;
       if (ink < 600) throw new Error('the two people render ' + ink + ' lit pixels at quarter size — the outlines exist and the compositor draws nothing for them');
+    } finally {
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
+  test('606: the add-layer row grip is centred on the same x as the layer rows handles, bare and unboxed, at 380 and at his 440', { item: '606', budgetMs: 40000 }, async function () {
+    /* v13.47 lined the add row's ≡ up with the layer rows' boxed ≡ and shipped without a test (tools/spotcheck.sh: NO TEST). This is
+       that test, plus his DO-NOT (clause 1b: "Don't change the design" — the add-row grip stays bare, three bars, no box), plus the
+       measurement clause 2 waited on: at 380 AND at his 440, the boxed handle's glyph sits on its box's centre to the half pixel. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const mid = r => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+    try {
+      if (hadHome) FM.home.close();
+      const A = FM.makeLayer('shape', { name: 'a606', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#f00', start: 0, duration: 3 });
+      const B = FM.makeLayer('shape', { name: 'b606', shape: 'rect', x: 600, y: 600, shapeW: 200, shapeH: 200, fill: '#0f0', start: 0, duration: 3 });
+      FM.scene = scene([A, B], { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+      FM.selectLayer(null); if (FM.pause) FM.pause(); FM.setTime(0); FM.refreshAll(); await sleep(100);
+      for (const w of [380, 440]) {
+        await atPhoneWidth(async function () {
+          FM.timeline.rebuild(); await sleep(250);
+          document.getElementById('timeline').scrollLeft = 0; await sleep(120);
+          const grip = document.querySelector('.tl-addrow .tl-addrow-grip'), hand = document.querySelector('#tl-tracks .row-drag');
+          if (!grip || !hand) throw new Error('setup at ' + w + ': no add-row grip or layer handle on the phone timeline');
+          const g = grip.getBoundingClientRect(), h = hand.getBoundingClientRect();
+          if (g.width < 10 || h.width < 10) throw new Error('setup at ' + w + ': a handle is not on screen');
+          // clause 1: same x, to the half pixel
+          const dx = Math.abs(mid(g).x - mid(h).x);
+          if (dx > 0.5) throw new Error('at ' + w + 'px the add-row grip is ' + dx.toFixed(2) + 'px off the layer handles (grip ' + mid(g).x.toFixed(1) + ', handle ' + mid(h).x.toFixed(1) + ') — "out of line with the layer ones" (queue 606 clause 1)');
+          // clause 1b: bare — no box, no border, three bars
+          const gs = getComputedStyle(grip);
+          if (parseFloat(gs.borderTopWidth) > 0 || (gs.backgroundColor !== 'rgba(0, 0, 0, 0)' && gs.backgroundColor !== 'transparent')) throw new Error('the add-row grip grew a box (' + gs.borderTopWidth + ' border, ' + gs.backgroundColor + ') — "Don\'t change the design" (clause 1b)');
+          if (grip.querySelectorAll('span').length !== 3) throw new Error('the add-row grip is not three bars any more (' + grip.querySelectorAll('span').length + ' spans)');
+          // clause 2: the boxed handle's glyph sits on its box's centre
+          const path = hand.querySelector('svg'), pr = path && path.getBoundingClientRect();
+          if (!pr) throw new Error('setup at ' + w + ': the layer handle has no glyph');
+          const ox = Math.abs(mid(pr).x - mid(h).x), oy = Math.abs(mid(pr).y - mid(h).y);
+          if (ox > 0.75 || oy > 0.75) throw new Error('at ' + w + 'px the ≡ glyph sits ' + ox.toFixed(2) + ' / ' + oy.toFixed(2) + 'px off its box\'s centre (queue 606 clause 2)');
+        }, w);
+      }
     } finally {
       FM.scene = saved; FM.scene.selectedId = savedSel;
       try { FM.refreshAll(); } catch (e) {}

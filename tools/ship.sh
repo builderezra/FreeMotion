@@ -128,6 +128,12 @@ VER="$(grep -o 'class="ver"[^>]*>v[0-9]\+\.[0-9]\+' index.html | grep -o 'v[0-9]
 LOG="$(grep -o '^- v[0-9]\+\.[0-9]\+' POLISH-LOG.md | tail -1 | sed 's/^- //')"
 [ -n "$VER" ] || { echo "❌ could not read the version label out of index.html — fix this gate before shipping"; exit 1; }
 [ "$VER" = "$LOG" ] || { echo "❌ index.html says $VER but the newest POLISH-LOG entry is $LOG — write the log entry first"; exit 1; }
+# No log line may appear TWICE. On 6 Sep the log was found carrying v2.31..v15.00 twice: at v15.00 a bad append glued
+# a second copy of the whole file onto its own last line, and for 79 releases nothing noticed, because every check here
+# reads only the newest line. Whole lines, not version numbers: thirteen versions legitimately have two differently
+# worded lines. A doubled log is a doubled record he reads; refuse it.
+DUPL="$(grep '^- v' POLISH-LOG.md | sort | uniq -d | cut -c1-12 | head -3 | tr '\n' ' ')"
+[ -z "$DUPL" ] || { echo "❌ POLISH-LOG.md carries the same line more than once ($DUPL…) — the log has been doubled; remove the stale copy"; exit 1; }
 
 # ---- THE COMMIT MESSAGE MUST NAME THE VERSION IT IS ACTUALLY SHIPPING (27 Aug) ----------------
 # This gate exists because the history lied once. A release was started, and while its suite was

@@ -1,0 +1,93 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111">
+<pre id="o" style="color:#cfd;font:11px ui-monospace;padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="a" src="../index.html" style="width:900px;height:700px;border:0"></iframe>
+<script>
+/* #482 ROUND 4 — the ceilings the pixel scan (tests/_482ceil.html, v14.81) never reached: the CANVAS_FX and WARP_FX tables.
+   Those kernels do not take an ImageData, so the walk goes through FM.renderScene on a real layer carrying the effect, and
+   the three lies the first scan met are guarded the same way:
+     A. DIFFERENCE IS NOT REACH — seeds, speeds, rates, phases and the like are excluded by name (a bigger number is a
+        different picture, not a stronger one).
+     B. COLLAPSE — an effect at a ceiling that no longer depends on the picture is past its useful range: rendered on two
+        unlike scenes it must still give two answers.
+     C. UNIFORMITY — an output that has gone flat is past it too.
+   Reach is measured as the mean absolute difference between successive multipliers of the slider's max; the last multiplier
+   that still moves the picture by ≥ 2 (on a 640x480 frame) without collapsing is the ceiling that earns its place. */
+var out = [];
+function say(s){ out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.fxRegistry && w.FM._FX_TABLES && w.FM.renderScene && w.FM.makeLayer)) { if (n++ > 400) return say('FM never came up'); return setTimeout(wait, 50); }
+    setTimeout(function(){ try { run(w); } catch (e) { say('probe threw: ' + (e && e.stack || e)); } }, 800);
+  })();
+});
+function run(w) {
+  var FM = w.FM, R = FM.fxRegistry, T = FM._FX_TABLES;
+  var W = 640, H = 480;
+  var TABLES = { canvas: T.CANVAS_FX, warp: T.WARP_FX };
+  var cvA = w.document.createElement('canvas'), cvB = w.document.createElement('canvas');
+  cvA.width = cvB.width = W; cvA.height = cvB.height = H;
+  var gA = cvA.getContext('2d', { willReadFrequently: true }), gB = cvB.getContext('2d', { willReadFrequently: true });
+  var P = { width: W, height: H, fps: 30, duration: 4, background: '#000000' };
+  function subjectA(inst) {   // a scene with variety: three shapes, one text — the effect rides on the first shape
+    var L = FM.makeLayer('shape', { shape: 'rect', x: 320, y: 240, shapeW: 300, shapeH: 220, fill: '#d0642c', start: 0, duration: 4 });
+    var C = FM.makeLayer('shape', { shape: 'circle', x: 200, y: 200, shapeW: 140, shapeH: 140, fill: '#2c8ad0', start: 0, duration: 4 });
+    var S = FM.makeLayer('shape', { shape: 'star', x: 450, y: 300, shapeW: 120, shapeH: 120, fill: '#e8e050', start: 0, duration: 4 });
+    L.effects = [inst];
+    return { project: P, layers: [C, S, L] };
+  }
+  function subjectB(inst) {   // a deliberately UNLIKE scene: one tall thin bar and a small square, other colours, other places
+    var L = FM.makeLayer('shape', { shape: 'rect', x: 180, y: 240, shapeW: 90, shapeH: 400, fill: '#40c090', start: 0, duration: 4 });
+    var Q = FM.makeLayer('shape', { shape: 'rect', x: 500, y: 120, shapeW: 80, shapeH: 80, fill: '#c04080', start: 0, duration: 4 });
+    L.effects = [inst];
+    return { project: P, layers: [Q, L] };
+  }
+  function shot(g, scene, t) { g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, W, H); try { FM.renderScene(g, scene, t); } catch (e) { return null; } return g.getImageData(0, 0, W, H).data; }
+  function mad(A, B) { var s = 0; for (var i = 0; i < A.length; i++) s += Math.abs(A[i] - B[i]); return s / A.length; }
+  function spread(A) { var n = 0, sr = 0; for (var i = 0; i < A.length; i += 4) { if (A[i + 3] < 8) continue; n++; sr += (A[i] + A[i + 1] + A[i + 2]) / 3; } if (!n) return 0; var m = sr / n, s = 0; for (var i = 0; i < A.length; i += 4) { if (A[i + 3] < 8) continue; s += Math.abs((A[i] + A[i + 1] + A[i + 2]) / 3 - m); } return s / n; }
+  var CYCLIC = { '°': 1, '%': 1, 's': 1, 'fps': 1, 'Hz': 1, 'px/s': 1, '°/s': 1 };
+  var NATURAL = { 1: 1, 100: 1, 180: 1, 255: 1, 360: 1 };
+  var NOT_MAGNITUDE = /seed|speed|rate|phase|drift|roll|freq|jitter$|wander|count|copies|steps|segments|sides|layers|frames|fps|delay|offset$/i;
+  var MULT = [1, 1.5, 2, 3, 4, 6, 8];
+  var rows = [], skipped = 0, notMag = 0, threw = 0, tables = {};
+  Object.keys(TABLES).forEach(function (tn) { Object.keys(TABLES[tn] || {}).forEach(function (type) { tables[type] = tn; }); });
+  var types = Object.keys(tables);
+  say('walking ' + types.length + ' canvas/warp effects at ' + W + 'x' + H + '…');
+  types.forEach(function (type) {
+    var ps = R.paramsOf(type) || [];
+    ps.forEach(function (p) {
+      if (typeof p.min !== 'number' || typeof p.max !== 'number' || p.max <= 0 || p.max <= p.min) return;
+      if (CYCLIC[p.unit]) { skipped++; return; }
+      if (NATURAL[p.max]) { skipped++; return; }
+      if (NOT_MAGNITUDE.test(p.key)) { notMag++; return; }
+      var prev = null, gains = [], best = 1, why = '';
+      for (var k = 0; k < MULT.length; k++) {
+        var v = p.max * MULT[k];
+        var inst = R.makeInstance(type); if (!inst) { why = 'no instance'; break; }
+        inst.params = inst.params || {}; inst.params[p.key] = v;
+        if (p.overriddenBy && p.liveWhen !== undefined) inst.params[p.overriddenBy] = p.liveWhen;
+        var s = shot(gA, subjectA(inst), 0.37);
+        if (!s) { why = 'threw'; threw++; break; }
+        if (prev) {
+          var gain = mad(prev, s); gains.push(+gain.toFixed(2));
+          if (gain < 2) { why = 'gain fell to ' + gain.toFixed(2); break; }
+          var inst2 = R.makeInstance(type); inst2.params = Object.assign({}, inst.params);
+          var sB = shot(gB, subjectB(inst2), 0.37);
+          var dep = sB ? mad(s, sB) : 0;
+          if (dep < 4) { why = 'stopped depending on the picture (' + dep.toFixed(1) + ')'; break; }
+          if (spread(s) < 3) { why = 'went uniform'; break; }
+          best = MULT[k];
+        }
+        prev = s;
+      }
+      if (best > 1) rows.push({ table: tables[type], type: type, key: p.key, unit: p.unit || '', max: p.max, mult: best, to: +(p.max * best).toFixed(3), gains: gains, why: why || 'ran out of multipliers' });
+    });
+  });
+  rows.sort(function (a, b) { return b.mult - a.mult || a.type.localeCompare(b.type); });
+  say('RESULT ' + JSON.stringify({ effects: types.length, raise: rows.length, skipped: skipped, notMagnitude: notMag, threw: threw }));
+  rows.forEach(function (r) { say(r.table + ' ' + r.type + '.' + r.key + ' ' + r.max + r.unit + ' → ' + r.to + ' (×' + r.mult + ')  gains ' + r.gains.join('/') + '  stop: ' + r.why); });
+  w.__482r4 = rows;
+}
+</script>
+</body></html>

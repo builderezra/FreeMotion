@@ -177,13 +177,13 @@ window.FM = window.FM || {};
     ] },
     // ---- batch 3: geometric warps (routed through drawWarpEffect) ----
     { type: 'wave', label: 'Wave', params: [
-      { key: 'amount', label: 'Amplitude', min: 0, max: 120, step: 1, def: 30, unit: 'px' },
+      { key: 'amount', label: 'Amplitude', min: 0, max: 720, step: 1, def: 30, unit: 'px' },
       { key: 'wavelength', label: 'Wavelength', min: 8, max: 300, step: 1, def: 38, unit: 'px' },
       { key: 'phase', label: 'Phase', min: -360, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'vertical', label: 'Cross wave', min: 0, max: 100, step: 1, def: 40, unit: '%' },
     ] },
     { type: 'ripple', label: 'Circular Ripple', params: [
-      { key: 'amount', label: 'Height', min: 0, max: 60, step: 1, def: 22, unit: 'px' },
+      { key: 'amount', label: 'Height', min: 0, max: 480, step: 1, def: 22, unit: 'px' },
       { key: 'wavelength', label: 'Spacing', min: 4, max: 200, step: 1, def: 20, unit: 'px' },
       { key: 'phase', label: 'Phase', min: -360, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
@@ -196,7 +196,7 @@ window.FM = window.FM || {};
       { key: 'radius', label: 'Radius', min: 5, max: 200, step: 1, def: 100, unit: '%' },
     ] },
     { type: 'bulge', label: 'Pinch / Bulge', params: [
-      { key: 'amount', label: 'Amount', min: -1, max: 2, step: 0.02, def: -0.5 },
+      { key: 'amount', label: 'Amount', min: -1, max: 4, step: 0.02, def: -0.5 },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'radius', label: 'Radius', min: 5, max: 200, step: 1, def: 100, unit: '%' },
@@ -604,9 +604,9 @@ window.FM = window.FM || {};
       { key: 'twist', label: 'Twist', min: -360, max: 360, step: 1, def: 0, unit: '°' },
     ] },
     { type: 'mirrortile', label: 'Mirror Tile', params: [
-      { key: 'size', label: 'Tile size', min: 20, max: 400, step: 1, def: 140, unit: 'px' },
-      { key: 'offsetx', label: 'Seam X', min: -400, max: 400, step: 1, def: 0, unit: 'px' },
-      { key: 'offsety', label: 'Seam Y', min: -400, max: 400, step: 1, def: 0, unit: 'px' },
+      { key: 'size', label: 'Tile size', min: 20, max: 1600, step: 1, def: 140, unit: 'px' },
+      { key: 'offsetx', label: 'Seam X', min: -1600, max: 1600, step: 1, def: 0, unit: 'px' },
+      { key: 'offsety', label: 'Seam Y', min: -1600, max: 1600, step: 1, def: 0, unit: 'px' },
       { key: 'axis', label: 'Folds on', def: 0, options: [[0, 'Both'], [1, 'Across'], [2, 'Down']] },
     ] },
     // ---- batch 16: Other / Color / Procedural / Drawing ----
@@ -841,7 +841,7 @@ window.FM = window.FM || {};
     { type: 'octahedron3d', label: 'Octahedron', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 20, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 30, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.65 }] },
     { type: 'hexprism3d', label: 'Hexagonal Prism', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 35, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'depth', label: 'Depth', min: 10, max: 200, step: 1, def: 55, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 80, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
     { type: 'starprism3d', label: 'Star Prism', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 30, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'points', label: 'Points', min: 4, max: 10, step: 1, def: 5 }, { key: 'depth', label: 'Depth', min: 10, max: 150, step: 1, def: 40, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
-    { type: 'starpoly3d', label: 'Spiked Star', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 20, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 30, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'spike', label: 'Spike Length', min: 0.2, max: 2.5, step: 0.05, def: 1.1 }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 70, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.65 }] },
+    { type: 'starpoly3d', label: 'Spiked Star', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 20, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 30, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'spike', label: 'Spike Length', min: 0.2, max: 15, step: 0.05, def: 1.1 }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 70, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.65 }] },
     { type: 'heart3d', label: 'Heart', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 15, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 30, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'depth', label: 'Depth', min: 10, max: 150, step: 1, def: 45, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
     { type: 'hollowbox3d', label: 'Open Box', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 35, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'wall', label: 'Wall', min: 8, max: 45, step: 1, def: 22, unit: '%' }, { key: 'depth', label: 'Depth', min: 10, max: 200, step: 1, def: 70, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 80, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
     { type: 'axiscross3d', label: 'Cross Beam', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 35, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'arm', label: 'Arm Width', min: 15, max: 60, step: 1, def: 34, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 80, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }] },
@@ -1008,7 +1008,7 @@ window.FM = window.FM || {};
     // ---- batch 28 (more AM Distortion/Warp + Procedural + Color parity) ----
     { type: 'turbulentdisplace', label: 'Turbulent Displace', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 80, step: 1, def: 30, unit: 'px' },
-      { key: 'scale', label: 'Detail', min: 10, max: 200, step: 1, def: 60 },
+      { key: 'scale', label: 'Detail', min: 10, max: 400, step: 1, def: 60 },
     ] },
     { type: 'stretchseg', label: 'Stretch Segment', params: [
       { key: 'y', label: 'Position', min: 0, max: 100, step: 1, def: 50, unit: '%' },
@@ -1016,11 +1016,11 @@ window.FM = window.FM || {};
       { key: 'amount', label: 'Stretch', min: 0, max: 0.95, step: 0.02, def: 0.6 },
     ] },
     { type: 'tileshift', label: 'Tile Shift', params: [
-      { key: 'size', label: 'Tile', min: 8, max: 400, step: 1, def: 120, unit: 'px' },
+      { key: 'size', label: 'Tile', min: 8, max: 600, step: 1, def: 120, unit: 'px' },
       { key: 'amount', label: 'Offset', min: -1, max: 1, step: 0.02, def: 0.5 },
     ] },
     { type: 'tilerotate', label: 'Tile Rotate', params: [
-      { key: 'size', label: 'Tile', min: 8, max: 400, step: 1, def: 120, unit: 'px' },
+      { key: 'size', label: 'Tile', min: 8, max: 1600, step: 1, def: 120, unit: 'px' },
       { key: 'angle', label: 'Angle', min: -180, max: 180, step: 1, def: 45, unit: '°' },
     ] },
     // ---- Wrap Shift (queue 484: AM's Offset, our name) — slide the frame, wrap the overflow ----
@@ -1198,7 +1198,7 @@ window.FM = window.FM || {};
       { key: 'duration', label: 'Sweep time', min: 0.2, max: 20, step: 0.1, def: 2.5, unit: 's' },
       { key: 'direction', label: 'Direction', options: [[0, 'Down'], [1, 'Up'], [2, 'Right'], [3, 'Left']], def: 0 },
       { key: 'mode', label: 'Mode', options: [[0, 'Freeze'], [1, 'Reveal']], def: 0 },
-      { key: 'barwidth', label: 'Bar width', min: 0, max: 60, step: 1, def: 5, unit: 'px' },
+      { key: 'barwidth', label: 'Bar width', min: 0, max: 480, step: 1, def: 5, unit: 'px' },
       { key: 'glow', label: 'Bar glow', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'loop', label: 'Repeat', options: [[0, 'Once'], [1, 'Loop']], def: 0 },
     ], color: true, defColor: '#eaf4ff', colorLabel: 'Bar' },
