@@ -21897,6 +21897,47 @@
     return x1 < 0 ? { w: 0, h: 0 } : { w: x1 - x0 + 1, h: y1 - y0 + 1, x1: x1 };
   }
 
+  /* ═══ 539 clauses 2 + 3: SQUISH SQUASHES AGAINST OTHER LAYERS, not only the frame. Ezra: "give it an option to select layers
+     that will effect it, so if you have another shape it…" plus a tick for every layer. Bounding boxes — the honest first
+     pass the entry itself allowed. A teal ball in the middle of a 400x240 comp (touching no wall) and a red block to its
+     right overlapping it by 30px: with Collide = chosen layer the ball's teal pixels come out narrower and end at the
+     block's edge; with Collide = every layer, the same; with Collide off, or the block moved clear, the ball is exactly
+     its plain self. MEASURED, not read off a flag: the teal bounding box of the rendered pixels. */
+  test('539: Squish squashes a ball against another layer (chosen, or every layer), and not when nothing overlaps', { item: '539' }, function () {
+    var P = { width: 400, height: 240, fps: 30, duration: 5, background: null };
+    function shot(collide, blockX, source) {
+      var c = offscreen(400, 240); c.__fmRS = 1; c.__fmOX = 0; c.__fmOY = 0;
+      var ball = FM.makeLayer('shape', { shape: 'ellipse', x: 170, y: 120, shapeW: 150, shapeH: 150, fill: '#2fd0b5', start: 0, duration: 5 });
+      var block = FM.makeLayer('shape', { shape: 'rect', x: blockX, y: 120, shapeW: 100, shapeH: 200, fill: '#ff0000', start: 0, duration: 5 });
+      ball.effects = [{ type: 'squish', enabled: true, params: { collide: collide, source: source === undefined ? block.id : source } }];
+      FM.renderScene(c.getContext('2d'), { project: P, layers: [ball, block], selectedId: null, selectedIds: [] }, 0);   // first = topmost: the ball must be in front, or the block hides its edge
+      return c.getContext('2d').getImageData(0, 0, 400, 240);
+    }
+    function teal(img) {   // bbox of the ball's own colour, so the block cannot be mistaken for it
+      var W = img.width, H = img.height, d = img.data, x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1, n = 0;
+      for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+        var i = (y * W + x) * 4; if (d[i + 3] <= 8 || !(d[i + 1] > 150 && d[i] < 120)) continue;
+        n++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+      return { w: x1 < 0 ? 0 : x1 - x0 + 1, h: y1 < 0 ? 0 : y1 - y0 + 1, x1: x1, n: n };
+    }
+    // the block at x=265 spans 215..315; the ball spans 95..245 → 30px of overlap on x, full overlap on y
+    var plain = teal(shot(0, 265));
+    if (!(plain.w >= 140 && plain.w <= 160)) throw new Error('setup: the plain ball is ' + plain.w + 'px wide, expected ~150 — the probe is not seeing the ball');
+    if (!(plain.x1 >= 240)) throw new Error('setup: the plain ball ends at x=' + plain.x1 + ', so it does not reach into the block (215..315) — nothing to squash');
+    var chosen = teal(shot(1, 265));
+    if (!(chosen.w < plain.w - 12)) throw new Error('Collide = chosen layer: the ball is ' + chosen.w + 'px wide against ' + plain.w + ' plain — it did not squash against the block (queue 539 clause 2)');
+    if (!(chosen.x1 <= 218)) throw new Error('Collide = chosen layer: the ball still reaches x=' + chosen.x1 + ' past the block\'s edge at 215 — the block is not acting as a wall');
+    if (!(chosen.h > plain.h)) throw new Error('Collide = chosen layer: the ball got narrower but not taller (' + chosen.h + ' vs ' + plain.h + ') — that is clipping, not squashing');
+    var every = teal(shot(2, 265, ''));
+    if (!(every.w < plain.w - 12 && every.x1 <= 218)) throw new Error('Collide = every layer: ' + every.w + 'px wide ending at ' + every.x1 + ' — the tick for every layer does not collide (queue 539 clause 3)');
+    // controls: no overlap, and collide off, must both be the plain ball
+    var clear = teal(shot(1, 400));
+    if (!(Math.abs(clear.w - plain.w) <= 1 && Math.abs(clear.h - plain.h) <= 1)) throw new Error('control: with the block moved clear the ball still changed (' + clear.w + 'x' + clear.h + ' vs ' + plain.w + 'x' + plain.h + ') — a phantom wall');
+    var off = teal(shot(0, 265));
+    if (!(Math.abs(off.w - plain.w) <= 1)) throw new Error('control: Collide = frame only changed the ball (' + off.w + ' vs ' + plain.w + ')');
+  });
+
   test('effects: Squish at strength 0 is byte-identical to the effect not being there', { item: 'fx-squish' }, function () {
     // Strength 0 must be the effect ABSENT, not "a warp that happens to be the identity": with the
     // short-circuit removed, this exact probe comes back 210 bytes different, because the plate

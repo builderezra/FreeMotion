@@ -1598,7 +1598,7 @@ window.FM = window.FM || {};
         else if (p.type === 'layer') {   // Displacement Map: pick which OTHER layer drives the warp
           const cr = el('div', 'prop-row'); cr.appendChild(el('label', null, p.label || 'Source'));
           const sel = document.createElement('select');
-          const o0 = document.createElement('option'); o0.value = ''; o0.textContent = 'This layer (self)'; sel.appendChild(o0);
+          const o0 = document.createElement('option'); o0.value = ''; o0.textContent = p.selfLabel || 'This layer (self)'; sel.appendChild(o0);   // Squish says 'None' (queue 539)
           (FM.scene.layers || []).forEach(l => {
             if (l.id === layer.id || l.type === 'camera' || l.type === 'null') return;   // self / non-visual can't be a map
             const op = document.createElement('option'); op.value = l.id; op.textContent = l.name || l.type; sel.appendChild(op);

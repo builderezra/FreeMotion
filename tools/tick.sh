@@ -38,11 +38,13 @@ hr "PROOF DEBT — releases that changed source and have never been spot-checked
 python3 - <<'PY'
 import subprocess, re
 log = subprocess.run(['git','log','--format=%h %s','-60'], capture_output=True, text=True).stdout.splitlines()
-checked = set()
+checked = set(); latest = {}
 try:
     for l in open('tools/.spotcheck.log'):
         p = l.split()
-        if len(p) >= 2: checked.add(p[1])
+        # a log line is "date time hash verdict…": the hash is the THIRD column (keyed on the time until 5 Sep 12:40,
+        # which matched nothing, so every release read as unchecked); a re-run supersedes an earlier verdict
+        if len(p) >= 4: checked.add(p[2]); latest[p[2]] = l.strip()
 except FileNotFoundError: pass
 debt = []
 for l in log:
@@ -56,10 +58,8 @@ debt.reverse()
 print(f"{len(debt)} unchecked of the last 60 commits" + (":" if debt else "."))
 for l in debt[:8]: print("  " + l[:110])
 if len(debt) > 8: print(f"  … and {len(debt)-8} more")
-try:
-    bad = [l.strip() for l in open('tools/.spotcheck.log') if 'NOT-PROVEN' in l or 'NO-TEST' in l]
-    if bad: print("❌ releases whose proof FAILED — each is an open defect in a test or a fix:"); [print("  " + b) for b in bad[-10:]]
-except FileNotFoundError: pass
+bad = [v for v in latest.values() if 'NOT-PROVEN' in v or 'NO-TEST' in v]
+if bad: print("❌ releases whose LATEST proof FAILED — each is an open defect in a test or a fix (re-run supersedes):"); [print("  " + b) for b in bad[-10:]]
 PY
 
 hr "SAY IN EVERY REPLY UNTIL HE ANSWERS (from LOOP.md)"

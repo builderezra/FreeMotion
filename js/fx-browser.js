@@ -722,6 +722,10 @@ window.FM = window.FM || {};
     if (!Array.isArray(ps)) return false;
     const src = ps.filter(function (p) { return p && p.type === 'layer'; });
     if (!src.length) return false;
+    // An effect whose layer picker is OPTIONAL works without one — Squish squashes against the frame by default and
+    // only uses "Collide with" when Collide says so (queue 539) — so it is not "Needs a setting". The def says which.
+    const _def = (FM.EFFECTS || []).find(function (d) { return d && d.type === id; });
+    if (_def && _def.layerOptional) return false;
     let inst = null;
     try { inst = FM.fxRegistry.makeInstance(id); } catch (e) { return false; }
     if (!inst || !inst.params) return false;

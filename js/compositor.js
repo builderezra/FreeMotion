@@ -238,7 +238,10 @@ window.FM = window.FM || {};
       { key: 'firmness', label: 'Firmness', min: 15, max: 45, step: 1, def: 30, unit: '%' },
       { key: 'inset', label: 'Wall inset', min: -200, max: 200, step: 1, def: 0, unit: 'px' },
       { key: 'walls', label: 'Walls', options: [[0, 'All'], [1, 'Floor'], [2, 'Sides'], [3, 'Floor + ceiling']], def: 0 },
-    ] },
+      // queue 539 clauses 2 + 3: other layers as walls. `layer: true` adds the "Collide with" picker (stored in
+      // params.source); Every layer ignores the picker and tests all of them. Bounding boxes — see drawSquish.
+      { key: 'collide', label: 'Collide', options: [[0, 'Frame only'], [1, 'Chosen layer'], [2, 'Every layer']], def: 0 },
+    ], layer: true, layerLabel: 'Collide with', layerSelf: 'None', layerOptional: true },   // optional: the frame is the default wall, so no "Needs a setting" badge
     // ---- batch 5 ----
     { type: 'kaleidoscope', label: 'Kaleidoscope', params: [
       { key: 'segments', label: 'Segments', min: 2, max: 12, step: 1, def: 6 },
@@ -7137,8 +7140,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const insP = p.inset == null ? 0 : FM.evalProp(p.inset, t);            // PROJECT px — x ps below
     const mode = Math.round(p.walls == null ? 0 : FM.evalProp(p.walls, t)) | 0;
     const liveX = (mode === 0 || mode === 2);          // 0 All · 1 Floor · 2 Sides · 3 Floor+ceiling
-    const liveT = (mode === 0 || mode === 3);
-    const liveB = (mode === 0 || mode === 1 || mode === 3);
+    let liveT = (mode === 0 || mode === 3);
+    let liveB = (mode === 0 || mode === 1 || mode === 3);
+    let liveL = liveX, liveR = liveX;                   // per side, because a LAYER can be a wall on one side only (queue 539)
 
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const PW = proj.width, PH = proj.height, ps = plateScale(ctx);   // see plateScale — 1 for export/1:1
@@ -7147,7 +7151,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // ps or the walls would move as preview quality changed. Clamped per axis so opposing walls can
     // meet but never cross (an inset of 300 on a 480 comp would otherwise put left right of right).
     const insX = Math.min(insP * ps, W / 2 - 1), insY = Math.min(insP * ps, H / 2 - 1);
-    const xL = insX, xR = W - insX, yT = insY, yB = H - insY;
+    let xL = insX, xR = W - insX, yT = insY, yB = H - insY;   // plate px; a colliding layer may move them inward (queue 539)
 
     /* WHERE COULD THIS LAYER POSSIBLY BE? A conservative box in PROJECT space, used twice: to skip
      * the whole pass when no live wall is even reachable, and to size the padded plate.
@@ -7211,8 +7215,36 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const qx = FM.evalProp(tr.x, t) || 0, qy = FM.evalProp(tr.y, t) || 0;
       gx0 = qx - reach; gx1 = qx + reach; gy0 = qy - reach; gy1 = qy + reach;
     }
-    const iPX = Math.min(insP, PW / 2 - 1), iPY = Math.min(insP, PH / 2 - 1);
-    if (!(liveX && (gx1 > PW - iPX || gx0 < iPX)) && !(liveB && gy1 > PH - iPY) && !(liveT && gy0 < iPY)) {
+    /* ---- OTHER LAYERS AS WALLS (queue 539 clauses 2 + 3) — axis-aligned bounds, the honest first pass -----------
+     * Ezra: "give it an option to select layers that will effect it, so if you have another shape it…", plus a tick
+     * for every layer. Each candidate's transform box is tested against this layer's; where they overlap, the
+     * shallower axis is the contact and the other layer's near edge becomes a wall on that side — the same interior
+     * wall `inset` already supports, so everything downstream (effective walls, penetration, far-edge pin, the
+     * contact chord) is unchanged. A wall found this way is live whatever the Walls option says; a frame wall keeps
+     * its own. Rotated or round shapes collide on their bounding box for now — the entry allows a first pass that
+     * only handles axis-aligned bounds provided it is said plainly, so: said. */
+    const collide = p.collide == null ? 0 : (Math.round(FM.evalProp(p.collide, t)) | 0);
+    if (collide && scene && scene.layers) {
+      const me = layerAABB(layer, t, scene);
+      const pool = collide === 2 ? scene.layers : [FM.layerById ? FM.layerById(scene, p.source) : null];
+      if (me) for (const o of pool) {
+        if (!o || o.id === layer.id || o.visible === false || o.type === 'camera' || o.type === 'null') continue;
+        const s0 = o.start || 0, s1 = s0 + (o.duration == null ? Infinity : o.duration);
+        if (t < s0 || t >= s1) continue;
+        const ob = layerAABB(o, t, scene); if (!ob) continue;
+        const ovx = Math.min(me.x1, ob.x1) - Math.max(me.x0, ob.x0), ovy = Math.min(me.y1, ob.y1) - Math.max(me.y0, ob.y0);
+        if (!(ovx > 0 && ovy > 0)) continue;
+        if (ovx <= ovy) {
+          if (me.x0 + me.x1 <= ob.x0 + ob.x1) { const w = ob.x0 * ps; xR = liveR ? Math.min(xR, w) : w; liveR = true; }
+          else { const w = ob.x1 * ps; xL = liveL ? Math.max(xL, w) : w; liveL = true; }
+        } else {
+          if (me.y0 + me.y1 <= ob.y0 + ob.y1) { const w = ob.y0 * ps; yB = liveB ? Math.min(yB, w) : w; liveB = true; }
+          else { const w = ob.y1 * ps; yT = liveT ? Math.max(yT, w) : w; liveT = true; }
+        }
+      }
+    }
+    // the walls that actually apply, back in PROJECT px for the reach test
+    if (!(liveR && gx1 > xR / ps) && !(liveL && gx0 < xL / ps) && !(liveB && gy1 > yB / ps) && !(liveT && gy0 < yT / ps)) {
       return drawSquishOff(ctx, layer, t, scene, fx);
     }
 
@@ -7300,8 +7332,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // EFFECTIVE walls. Equal to the real wall until the cap binds, then they ride with the layer.
       const wR = Math.max(xR, bx0 + tMinX), wL = Math.min(xL, bx1 - tMinX);
       const wB = Math.max(yB, by0 + tMinY), wT = Math.min(yT, by1 - tMinY);
-      const pR = liveX ? Math.max(0, bx1 - wR) * amt : 0;
-      const pL = liveX ? Math.max(0, wL - bx0) * amt : 0;
+      const pR = liveR ? Math.max(0, bx1 - wR) * amt : 0;
+      const pL = liveL ? Math.max(0, wL - bx0) * amt : 0;
       const pB = liveB ? Math.max(0, by1 - wB) * amt : 0;
       const pT = liveT ? Math.max(0, wT - by0) * amt : 0;
       const EPS = 0.01 * ps;
@@ -7318,7 +7350,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         FM._squishInfo = { bbox: [bx0, by0, bx1, by1], ex: [exX, exY],
                            walls: { xL: xL, xR: xR, yT: yT, yB: yB },
                            effective: { wL: wL, wR: wR, wT: wT, wB: wB },
-                           live: { x: !!liveX, b: !!liveB, t: !!liveT },
+                           live: { x: !!liveX, l: !!liveL, r: !!liveR, b: !!liveB, t: !!liveT }, collide: collide,
                            pen: { L: pL, R: pR, T: pT, B: pB }, firm: firm, amt: amt, EPS: EPS };
       }
       if (pR < EPS && pL < EPS && pB < EPS && pT < EPS) {
@@ -11653,6 +11685,26 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return c.getTransform();
   }
   FM._layerCTM = layerCTM;   // exposed for the motion-blur tests
+  /* A layer's axis-aligned box in PROJECT px at time t: its transform box under its full CTM (parents included) —
+     the same four corners drawSquish walks for its plate estimate. Layer-vs-layer collision reads it (queue 539). */
+  function layerAABB(l, t, scene) {
+    const sz = FM.layerSize ? FM.layerSize(l) : null; if (!sz) return null;
+    const tr = l.transform || {}, kx = anchorX(tr), ky = anchorY(tr), bw = sz.w || 0, bh = sz.h || 0;
+    const M = layerCTM(l, t, scene);
+    if (!M) {
+      const sc = Math.abs(FM.evalProp(tr.scale, t) || 1), r = 0.5 * Math.hypot(bw, bh) * sc;
+      const qx = FM.evalProp(tr.x, t) || 0, qy = FM.evalProp(tr.y, t) || 0;
+      return { x0: qx - r, y0: qy - r, x1: qx + r, y1: qy + r };
+    }
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (let i = 0; i < 4; i++) {
+      const lx = ((i & 1) ? 1 - kx : -kx) * bw, ly = ((i & 2) ? 1 - ky : -ky) * bh;
+      const qx = M.a * lx + M.c * ly + M.e, qy = M.b * lx + M.d * ly + M.f;
+      if (qx < x0) x0 = qx; if (qx > x1) x1 = qx; if (qy < y0) y0 = qy; if (qy > y1) y1 = qy;
+    }
+    return { x0: x0, y0: y0, x1: x1, y1: y1 };
+  }
+  FM._layerAABB = layerAABB;   // suite seam (queue 539)
 
   /* ONE placement map for every on-canvas editing overlay (BUG-HUNT: "Both files should share one
    * helper so they cannot drift from the compositor again").

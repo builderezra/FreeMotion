@@ -242,7 +242,7 @@ window.FM = window.FM || {};
     }
     // a source-layer picker (Displacement Map): stores another layer's id. First in the list so it
     // reads top-down "pick a map, then how much". Value is a plain string id — persists (no leading _).
-    if (def.layer) out.unshift({ key: 'source', label: def.layerLabel || 'Source', type: 'layer', default: '', keyframable: false });
+    if (def.layer) out.unshift({ key: 'source', label: def.layerLabel || 'Source', type: 'layer', default: '', keyframable: false, selfLabel: def.layerSelf });   // layerSelf: what the empty choice means for THIS effect (Squish: 'None', queue 539)
     /* ⚠️ COLOURS KEYFRAME (queue 555). Ezra: "Colours for every effect like gradient overly should be
        key frame able" — a screenshot of Gradient Overlay where Amount carries a ◆ and the two colour
        stops carry nothing. These were `keyframable: false` while BOTH halves of the machinery already
