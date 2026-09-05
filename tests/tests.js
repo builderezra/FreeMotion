@@ -27102,6 +27102,45 @@
     if (dead.length) throw new Error(dead.length + ' raised ceiling(s) are dead space — the top half of the slider does nothing: ' + dead.join(' · '));
   });
 
+  test('799: Electric Edges reads on a photograph at its defaults, and a saved instance without the new control keeps its faint render', { item: '799', budgetMs: 60000 }, async function () {
+    /* The whole-catalogue sweep of 6 Sep (tests/_colouring-sheet.html, every category at 1080px with a number per tile): Electric
+       Edges read 2.0 at its defaults and 3.4 at its maximum on the city photograph while Edge Glow read 12.8. v12.18 had made it
+       visible on a fixture with HARD edges; a photograph's edges are soft and a linear Sobel magnitude on them is 0.05–0.15.
+       The `soft` control (default 70, legacy 0) bends the response with a square root. Measured after the change at 1080px:
+       city 1.99 → 12.42 at defaults, 3.35 → 20.7 at max; towers 4.96 → 18.72. Floors sit between the two readings. */
+    const RES = 1080, R = FM.fxRegistry;
+    const pd = (R.paramsOf('electricedges') || []).find(x => x.key === 'soft');
+    if (!pd) throw new Error('Electric Edges has no "Soft edges" control — on a photograph its lines are invisible (queue 799)');
+    if (pd.default !== 70 || pd.legacy !== 0) throw new Error('soft must default to 70 with legacy 0, got default ' + pd.default + ' legacy ' + pd.legacy);
+    const mad = (A, B) => { let s = 0; for (let i = 0; i < A.length; i += 4) s += Math.abs(A[i] - B[i]) + Math.abs(A[i + 1] - B[i + 1]) + Math.abs(A[i + 2] - B[i + 2]); return s / (A.length * 0.75); };
+    const bad = [];
+    for (const [key, fDef, fMax] of [['city', 7, 12], ['towers', 11, 18]]) {
+      const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('no photo ' + key)); i.src = 'fx-art/' + key + '.jpg?v=1'; });
+      const side = Math.min(im.naturalWidth, im.naturalHeight), c = document.createElement('canvas'); c.width = RES; c.height = RES;
+      c.getContext('2d').drawImage(im, (im.naturalWidth - side) / 2, (im.naturalHeight - side) / 2, side, side, 0, 0, RES, RES);
+      const mid = '_t799_' + key; FM.media.set(mid, { kind: 'image', el: c, width: RES, height: RES, duration: 0 }); FM.media.pin(mid);
+      const shot = inst => {
+        const l = FM.makeLayer('image', { x: RES / 2, y: RES / 2, start: 0, duration: 2 }); l.id = mid; if (inst) l.effects = [inst];
+        const o = document.createElement('canvas'); o.width = RES; o.height = RES; const g = o.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(g, { project: { width: RES, height: RES, fps: 30, duration: 2, background: '#000000' }, layers: [l] }, 0.37);
+        return g.getImageData(0, 0, RES, RES).data;
+      };
+      const plain = shot(null);
+      const def = R.makeInstance('electricedges'), top = R.makeInstance('electricedges'); top.params.amount = 1;
+      const dDef = mad(plain, shot(def)), dTop = mad(plain, shot(top));
+      if (dDef < fDef) bad.push(key + ': defaults move the picture by only ' + dDef.toFixed(2));
+      if (dTop < fMax) bad.push(key + ': the maximum moves the picture by only ' + dTop.toFixed(2));
+      const old = R.makeInstance('electricedges'); delete old.params.soft;
+      const zero = R.makeInstance('electricedges'); zero.params.soft = 0;
+      const a = shot(old), b = shot(zero); let drift = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) { drift++; }
+      if (drift) bad.push(key + ': an instance without the control differs from soft 0 in ' + drift + ' bytes — the legacy render is not pinned');
+      const dOld = mad(plain, b);
+      if (dOld >= fDef) bad.push(key + ': soft 0 reads ' + dOld.toFixed(2) + ', so the legacy render is not the faint one and this floor proves nothing');
+      try { FM.media.unpin && FM.media.unpin(mid); } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · ') + ' (queue 799)');
+  });
+
   test('798: Chromatic Aberration fringes toward the edges as its description says, nothing at the centre, and a saved instance without the new control keeps its uniform shift', { item: '798' }, function () {
     /* The by-eye Warping pass (tests/_colouring-sheet.html?cat=distort&res=1080, v15.83): Chromatic Aberration and RGB Split
        rendered the same picture at their defaults (Δ9.9 both) — the CA kernel shifted every pixel by one vector while its
