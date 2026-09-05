@@ -155,3 +155,5 @@ Older probes (`_boltshot`, `_fxbshot`, `_setshot`, `_sheetshot`, `_swdrag`, `_ro
 `_insphdr`, `_presetup`, `_blendshot`, `_dragfar`, `_fxnoop`, `_leavecost`, `_grouphdr`, `_sheeth`)
 predate this index; each is named for the screen it measures and is quoted from the REQUESTS.md entry
 that produced it — search the entry number if you need one.
+
+- `_fixtures/hevc-2s.mov` — a real 2-second HEVC (hvc1) QuickTime movie, 360x640 @30fps, moov after the mdat like an iPhone recording. Written by `tools/mkhevc.swift` (AVFoundation; `swiftc -O tools/mkhevc.swift -o /tmp/mkhevc && /tmp/mkhevc out.mov 2 30`). Test 129 loads it end to end: a browser that refuses HEVC must write the blank-clip report; one that decodes it must see a 2s clip. (queue 129, 5 Sep)

@@ -152,7 +152,7 @@ window.FM = window.FM || {};
           finish();
         }
       }, { once: true });
-      el.addEventListener('error', () => { if (settled) return; settled = true; clearTimeout(metaTimer); try { URL.revokeObjectURL(url); } catch (e2) {} reject(new Error('Could not load video: ' + file.name)); }, { once: true });   // failed imports must not pin the whole file blob for the page lifetime
+      el.addEventListener('error', () => { if (settled) return; settled = true; clearTimeout(metaTimer); try { FM.saveBlankClipReport({ file: file, el: el }, FM.blankClipFacts({ file: file, el: el }), 'refused at load: the browser raised an error before metadata (queue 129)'); } catch (e3) {} try { URL.revokeObjectURL(url); } catch (e2) {} reject(new Error('Could not load video: ' + file.name)); }, { once: true });   // failed imports must not pin the whole file blob for the page lifetime
     });
   };
 
@@ -372,20 +372,28 @@ window.FM = window.FM || {};
    * PWA, where the two are roughly reversed. Codec support is per-browser, so a table taken here
    * cannot speak for there. Asked on HIS device it is the whole answer. */
   FM.codecSupport = function () {
+    /* THE BARE TAGS LIE (queue 129, found by the #778 audit — the #486 bug one function down). Chromium answers "" to
+       codecs="hvc1" and "probably" to "hvc1.1.6.L93.B0" on the same machine that just decoded the file; FM._hevcFromProbe
+       above already knows that and asks with the full profile strings. This table asked the bare ones and reported a
+       confident NO — the "whole answer" this entry sent him to fetch was wrong before it left the phone. A bare "" for
+       video/quicktime is not proof of a container refusal either; the row says so. */
     const rows = [
-      ['H.265 hvc1', 'video/mp4; codecs="hvc1"'],
-      ['H.265 hev1', 'video/mp4; codecs="hev1"'],
+      ['H.265 hvc1 Main', 'video/mp4; codecs="hvc1.1.6.L93.B0"'],
+      ['H.265 hev1 Main', 'video/mp4; codecs="hev1.1.6.L93.B0"'],
+      ['H.265 hvc1 Main10', 'video/mp4; codecs="hvc1.2.4.L120.B0"'],
       ['H.264 avc1', 'video/mp4; codecs="avc1.42E01E"'],
       ['mp4 generic', 'video/mp4'],
-      ['quicktime (.mov)', 'video/quicktime'],
+      ['quicktime (.mov, bare — "" here is not a refusal)', 'video/quicktime'],
     ];
     const v = document.createElement('video');
-    return rows.map(function (r) {
+    let any = '?';
+    try { any = FM._hevcFromProbe ? (FM._hevcFromProbe(function (c) { return v.canPlayType(c); }) ? 'yes' : 'NO') : '?'; } catch (e) {}
+    return ['H.265 (any profile): ' + any].concat(rows.map(function (r) {
       let can = '?', mse = '?';
       try { can = v.canPlayType(r[1]) || 'NO'; } catch (e) {}
       try { mse = (window.MediaSource && MediaSource.isTypeSupported) ? String(MediaSource.isTypeSupported(r[1])) : 'n/a'; } catch (e) { mse = 'n/a'; }
       return r[0] + ': "' + can + '" (MSE ' + mse + ')';
-    }).join('  ·  ');
+    })).join('  ·  ');
   };
 
   /* ═══ AND IT IS WRITTEN DOWN, NOT ONLY FLASHED (queue 129) ═══════════════════════════════════════

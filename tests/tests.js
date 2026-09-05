@@ -60016,6 +60016,67 @@
     }
   });
 
+  test('129: the codec table asks with the profile strings Chromium answers, names H.265 by the working probe, and a real HEVC .mov refused at load still writes the blank-clip report', { item: '129', budgetMs: 40000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.codecSupport || !FM.loadVideoFile || !FM.saveBlankClipReport || !FM._hevcFromProbe) throw new Error('seams missing: codecSupport / loadVideoFile / saveBlankClipReport / _hevcFromProbe');
+    const table = FM.codecSupport();
+    if (table.indexOf('H.265 (any profile)') < 0) throw new Error('the codec table has no "H.265 (any profile)" line — it still reports the bare hvc1/hev1 tags Chromium answers "" to, the confident NO that was wrong before it left the phone (queue 129): ' + table.slice(0, 160));
+    if (table.indexOf('hvc1.1.6.L93.B0') < 0 && table.indexOf('Main') < 0) throw new Error('the codec table does not ask with a full profile string: ' + table.slice(0, 160));
+    const v = document.createElement('video');
+    const probe = !!FM._hevcFromProbe(c => v.canPlayType(c));
+    const anyLine = (table.match(/H\.265 \(any profile\): (\w+)/) || [])[1];
+    if ((anyLine === 'yes') !== probe) throw new Error('the table says H.265 (any profile): ' + anyLine + ' while FM._hevcFromProbe says ' + probe + ' — two answers to one question');
+    // a REAL 2-second HEVC .mov (tools/mkhevc.swift, AVFoundation, hvc1) — the entry said one could not be made here
+    const rep0 = localStorage.getItem('fm.lastBlankClip');
+    try {
+      localStorage.removeItem('fm.lastBlankClip');
+      const res = await fetch('tests/_fixtures/hevc-2s.mov'); if (!res.ok) throw new Error('setup: tests/_fixtures/hevc-2s.mov is missing (' + res.status + ')');
+      const blob = await res.blob();
+      const file = new File([blob], 'screen-recording-2s.mov', { type: 'video/quicktime' });
+      let outcome = null, err = null;
+      try { outcome = await FM.loadVideoFile(file); } catch (e) { err = e; }
+      if (err) {
+        const rep = localStorage.getItem('fm.lastBlankClip') || '';
+        if (!rep) throw new Error('this browser refused the HEVC .mov at load (' + err.message + ') and nothing was written to "A clip with no picture" — Settings stays "Nothing yet" on exactly the file the entry is about (queue 129)');
+        if (rep.indexOf('refused at load') < 0) throw new Error('the report written for a refused load does not say so: ' + rep.slice(0, 200));
+        if (rep.indexOf('H.265 (any profile)') < 0) throw new Error('the refused-load report carries the old codec table: ' + rep.slice(0, 200));
+      } else {
+        // this browser decodes HEVC: the load path is not the case here, but the file must be a real 2s clip
+        if (!(outcome && outcome.width > 0 && outcome.duration > 1.5 && outcome.duration < 2.6)) throw new Error('the fixture decoded but not as a 2s clip: ' + JSON.stringify({ w: outcome && outcome.width, d: outcome && outcome.duration }));
+        try { if (outcome.url) URL.revokeObjectURL(outcome.url); } catch (e) {}
+      }
+    } finally {
+      if (rep0 === null) localStorage.removeItem('fm.lastBlankClip'); else localStorage.setItem('fm.lastBlankClip', rep0);
+    }
+  });
+
+  test('129: a decoder error after metadata writes A clip with no picture exactly once, and the row is in Settings from the home screen', { item: '129', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.wireVideoRepaint || !FM.blankClipFacts) throw new Error('seams missing: wireVideoRepaint / blankClipFacts');
+    const rep0 = localStorage.getItem('fm.lastBlankClip');
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      localStorage.removeItem('fm.lastBlankClip');
+      const el = document.createElement('video'); el.muted = true;
+      const rec = { kind: 'video', el: el, file: new File([new Uint8Array([0, 0, 0, 0])], 'broken.mov', { type: 'video/quicktime' }), width: 0, height: 0, duration: 2 };
+      FM.wireVideoRepaint(rec);
+      el.dispatchEvent(new Event('error')); await sleep(50);
+      const rep1 = localStorage.getItem('fm.lastBlankClip') || '';
+      if (!rep1 || rep1.indexOf('decoder raised an error') < 0) throw new Error('an error event after wiring wrote no blank-clip report (' + rep1.slice(0, 120) + ')');
+      localStorage.setItem('fm.lastBlankClip', 'MARK'); el.dispatchEvent(new Event('error')); await sleep(50);
+      if (localStorage.getItem('fm.lastBlankClip') !== 'MARK') throw new Error('a second error event wrote a second report — _blankSaid does not hold');
+      if (!hadHome) FM.home.open(); await sleep(250);
+      FM.settings.open(); await sleep(300);
+      const labels = [].slice.call(document.querySelectorAll('.set-panel .set-row .set-label')).map(l => l.textContent.trim());
+      if (labels.indexOf('A clip with no picture') < 0) throw new Error('Settings from the home screen has no "A clip with no picture" row: ' + labels.join(' | '));
+    } finally {
+      try { FM.settings.close(); } catch (e) {}
+      if (!hadHome) { try { FM.home.close(); } catch (e) {} }
+      if (rep0 === null) localStorage.removeItem('fm.lastBlankClip'); else localStorage.setItem('fm.lastBlankClip', rep0);
+      await sleep(60);
+    }
+  });
+
   /* ═══ 692 ROUTE 2: THE READBACK IS CROPPED TO THE LAYER FOR EVERY ADMITTED KERNEL, AND ADMISSION IS RE-PROVED HERE.
      Five rounds bounded 13 kernels one at a time; this covers 44 more in one place in drawPixelEffect. A kernel is in
      CROP_FX only if the cropped path draws the same picture as the full one — five subject positions, defaults and
