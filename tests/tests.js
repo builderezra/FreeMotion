@@ -60406,6 +60406,39 @@
     }
   });
 
+  test('760: the people are the round-two construction — rounded shoulders, an open armpit channel, a hem that clears his widest point — and both render', { item: '760', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const P = FM.SHAPE_POLYS && FM.SHAPE_POLYS.person, W = FM.SHAPE_POLYS && FM.SHAPE_POLYS.woman;
+    if (!P || !W) throw new Error('no person/woman outlines');
+    if (P.length !== 6 || W.length !== 6) throw new Error('person has ' + P.length + ' and woman ' + W.length + ' subpaths — head, torso/dress, two legs, two arms is six each (queue 760 clause 3)');
+    const xs = poly => poly.map(q => q[0]);
+    const torsoMaxX = Math.max(...xs(P[1]).filter((x, i) => P[1][i][1] > 0.35));   // the chest below the shoulder slab
+    const armMinX = Math.min(...xs(P[5]));
+    if (!(armMinX - torsoMaxX >= 0.06)) throw new Error('the armpit channel is ' + (armMinX - torsoMaxX).toFixed(3) + ' of the box — under 0.06 it closes at 24px, the "it has no arms" read');
+    const hemMax = Math.max(...xs(W[1])), hipMax = Math.max(...xs(P[1]));
+    if (!(hemMax - hipMax >= 0.06)) throw new Error('her hem (' + hemMax + ') does not clear his widest (' + hipMax + ') — the two converge at 24px');
+    if (!(P[1][0][1] > 0.2 && P[0].length >= 10)) throw new Error('the head is not a smooth circle above a neck gap');
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      FM.scene = scene([], { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+      if (FM.pause) FM.pause(); FM.setTime(0);
+      FM.addShapeLayer('person', { name: 'Person' }); FM.addShapeLayer('woman', { name: 'Woman' }); await sleep(120);
+      const cv = document.createElement('canvas'); cv.width = 270; cv.height = 480;
+      const g = cv.getContext('2d', { willReadFrequently: true }); g.setTransform(0.25, 0, 0, 0.25, 0, 0);
+      FM.renderScene(g, FM.scene, 0.2);
+      const d = g.getImageData(0, 0, 270, 480).data; let ink = 0;
+      for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > 60) ink++;
+      if (ink < 600) throw new Error('the two people render ' + ink + ' lit pixels at quarter size — the outlines exist and the compositor draws nothing for them');
+    } finally {
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 692 ROUTE 2: THE READBACK IS CROPPED TO THE LAYER FOR EVERY ADMITTED KERNEL, AND ADMISSION IS RE-PROVED HERE.
      Five rounds bounded 13 kernels one at a time; this covers 44 more in one place in drawPixelEffect. A kernel is in
      CROP_FX only if the cropped path draws the same picture as the full one — five subject positions, defaults and

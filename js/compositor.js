@@ -12322,16 +12322,24 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // two people shapes are good but need arms"). His chest holds 0.090 down to 0.520, BELOW the wrist,
     // and only widens to the hip after the arms have ended: a man whose silhouette flares outward at
     // the hip is the woman's silhouette, and these two sit side by side in one menu.
-    S.person = (function () {
-      const P = PICTO;
-      return [
-        P.head(),
-        P.torso([[P.torsoW, P.holdF], [P.hipW, P.splitF]]),
-        P.leg(-P.hipW, -P.gapW, P.splitF),
-        P.leg(P.gapW, P.hipW, P.splitF),
-        P.arm(-1, P.armBotF), P.arm(1, P.armBotF),
-      ];
-    })();
+    /* PEOPLE, ROUND TWO (queue 760 clause 3 — his words: "Ive asked u to make the people shapes look good over 10 times by now so
+       this has to be the last time"). Every previous round — v3.49 (rebuilt), v3.81 (restroom pictogram), v6.03 (redraw), v8.66
+       (#160, arms added), v10.75 (#435, shoulders flush with the arms), and the 3 Sep candidates — was a NUDGE of one construction:
+       a slab of shoulders, two bar arms hanging straight down the sides, the chest held to the hip. Whatever the numbers, that
+       construction reads as a coat hanger with a head. This is a different construction, the airport sign's: rounded shoulders over
+       a chest that does not taper, arms hanging beside it with an open 0.07 channel, a smaller head. The suite's own rules from the
+       earlier rounds (1:6–1:7 head, shoulders the widest point, equal legs with a gap, no holes at 24px, an open armpit at 76px)
+       forbid flared arms and V legs, so the first draft of this figure was reshaped inside them — six parts whose union is one
+       silhouette, because the arms test counts head, torso, two legs, two arms.
+       Drawn through FM.pointCtrl beside three alternatives (A as shipped, C rounded, D athletic) on tools/design/people760.html and
+       decided under rule 16: say "people A / C / D" to change it. The PICTO builder above is no longer used by these two and is kept
+       for the record of what was tried. */
+    S.person = [
+      [[0.5,0.02,1],[0.5375,0.03,1],[0.565,0.0575,1],[0.575,0.095,1],[0.565,0.1325,1],[0.5375,0.16,1],[0.5,0.17,1],[0.4625,0.16,1],[0.435,0.1325,1],[0.425,0.095,1],[0.435,0.0575,1],[0.4625,0.03,1]],   // head: Ø 0.15 of the box (1:6.4 of the figure)
+      [[0.3,0.23],[0.7,0.23],[0.735,0.255,1],[0.735,0.3],[0.6,0.3],[0.6,0.6],[0.4,0.6],[0.4,0.3],[0.265,0.3],[0.265,0.255,1]],   // torso: rounded shoulders over a 0.20 chest that does not taper (the arms hang beside it with a 0.07 channel)
+      [[0.4,0.58],[0.465,0.58],[0.465,0.985],[0.4,0.985]], [[0.535,0.58],[0.6,0.58],[0.6,0.985],[0.535,0.985]],   // legs: 0.065 each, a 0.07 gap, from 0.58 — 42% of the height
+      [[0.33,0.28],[0.33,0.55],[0.275,0.55],[0.265,0.525],[0.265,0.28]], [[0.67,0.28],[0.735,0.28],[0.735,0.525],[0.725,0.55],[0.67,0.55]],   // arms: straight down from under the shoulder to 0.55, above the hip line so the hips measure narrower than the shoulders, overlapping the slab so the union is one silhouette
+    ];
     S.rocket = [[[0.5,0.02,1],[0.635,0.22,1],[0.645,0.45,1],[0.62,0.70],[0.38,0.70],[0.355,0.45,1],[0.365,0.22,1]],[[0.38,0.60],[0.38,0.82],[0.2,0.94],[0.3,0.66]],[[0.62,0.60],[0.7,0.66],[0.8,0.94],[0.62,0.82]],[[0.46,0.74],[0.54,0.74],[0.5,0.94]]];
     // woman: the SAME head, the SAME shoulders, the SAME arms and the SAME legs as `person` — see
     // PICTO. The only difference is the middle: her sides hold the chest width past the wrist and then
@@ -12342,16 +12350,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // that carried the gender read" — the two shapes converged into the same blob. Putting the skirt
     // back outside the arms restores it: the widest thing on her is her dress, the widest thing on him
     // is his arms above a narrow hip.
-    S.woman = (function () {
-      const P = PICTO;
-      return [
-        P.head(),
-        P.torso([[P.torsoW, P.flareF], [P.hemW, P.hemF]]),
-        P.leg(-P.hipW, -P.gapW, P.hemF),
-        P.leg(P.gapW, P.hipW, P.hemF),
-        P.arm(-1, P.armBotFW), P.arm(1, P.armBotFW),
-      ];
-    })();
+    // woman: the SAME head and arms as `person`; the body is the dress — shoulders to a straight hem below the wrist — with two legs
+    // under it. Her hem (0.26–0.74) is wider than his hips (0.34–0.66) by 0.16 of the box, so the two stay apart at 24px.
+    S.woman = [
+      S.person[0],
+      [[0.3,0.23],[0.7,0.23],[0.735,0.255,1],[0.735,0.3],[0.6,0.3],[0.6,0.45],[0.81,0.62],[0.19,0.62],[0.4,0.45],[0.4,0.3],[0.265,0.3],[0.265,0.255,1]],   // the same shoulders and chest; the dress flares ONCE, from below her wrist (0.45) to a hem 0.62 wide at 0.62 — the widest thing on her, and her legs stay 38% of the height
+      [[0.4,0.62],[0.465,0.62],[0.465,0.985],[0.4,0.985]], [[0.535,0.62],[0.6,0.62],[0.6,0.985],[0.535,0.985]],   // her legs are his legs
+      [[0.33,0.28],[0.33,0.45],[0.275,0.45],[0.265,0.425],[0.265,0.28]], [[0.67,0.28],[0.735,0.28],[0.735,0.425],[0.725,0.45],[0.67,0.45]],   // her arms stop at 0.45, above the flare, so the channel under them stays open
+    ];
     // stamp: perforated edge = semicircular notches cut INTO the square (one smooth point per notch),
     // with explicit corner points so the outline never overshoots the square
     S.stamp = [(function(){ const pts=[]; const bumps=4, r=0.05, c0=0.20, span=(0.80-0.20)/(bumps-1);
