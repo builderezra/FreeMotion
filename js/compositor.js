@@ -3220,11 +3220,16 @@ window.FM = window.FM || {};
    *      with a max channel delta over 100, boxblur 6201, dropshadow 1631. This scans at `alpha > 0`.
    *   3. THE DIRTY PLATE. Several kernels read and write RGB UNDER ZERO ALPHA, so outside the layer is
    *      not "zeros in, zeros out" and no bound is a skip. A canvas cannot produce that state — it stores
-   *      premultiplied, so alpha 0 always reads back as 0,0,0 — but the effect chain mutates one
-   *      ImageData in place, kernel after kernel, without going back through a canvas. MEASURED: a clean
-   *      plate through Inner Blur comes out with 1024 coloured-but-transparent pixels, and every effect
-   *      stacked after it receives them. Box Blur, Lens Blur and Hex Tiles then diverge by ~370,000 bytes
-   *      with max deltas over 100. So when the plate is dirty this returns DIRTY_PLATE and fxBounds hands the
+   *      premultiplied, so alpha 0 always reads back as 0,0,0 — and EVERY kernel goes
+   *      through putImageData/getImageData (drawPixelEffect runs ONE effect per call, on its own plate), so
+   *      from the app a dirty plate never reaches this scan: a kernel that writes colour under alpha 0
+   *      (Inner Blur leaves 1024 such pixels) hands the next effect a clean plate again. The premise this
+   *      block used to state — one ImageData mutated in place, kernel after kernel — was measured false
+   *      (queue 789; #692 round 7: colour under alpha 0 does not survive put/get). The ~370,000-byte
+   *      divergence in Box Blur, Lens Blur and Hex Tiles is what a DIRECT caller of this seam (the suite)
+   *      sees, and the guard stays for it. Letterbox and Border read the box as GEOMETRY, not a skip, so a
+   *      whole-frame box would bar the comp instead of the layer — unreachable from the app for the same
+   *      reason, and left as is rather than threading a kernel type into a scan that has none. So when the plate is dirty this returns DIRTY_PLATE and fxBounds hands the
    *      kernel the whole frame — correct, and it only costs the saving on the stacks that actually create the
    *      state. (It returned null, which fxBounds read as "nothing drawn" and SKIPPED the kernel — queue 757.)
    *

@@ -11,8 +11,9 @@
  * that pulls tangents out for adjusting.
  * Unparented layers only: their x/y are project px, the same space the preview canvas draws in, so
  * screen<->project mapping is just the display scale (a parented layer's x/y live in parent space).
- * The overlay covers #canvas-wrap, which the preview canvas fills exactly — so a keyframe positioned
- * outside the composition frame is off-overlay and not grabbable; move it via Move & Transform instead.
+ * The overlay is placed over the PREVIEW CANVAS (FM.placeOverlayOnCanvas, queue 770) — above 1.35x that canvas is a
+ * crop of the comp, and positions go through FM.projectToOverlay, which knows the crop origin. A keyframe positioned
+ * outside what is on screen is off-overlay and not grabbable; move it via Move & Transform instead.
  */
 window.FM = window.FM || {};
 (function (FM) {
@@ -27,8 +28,8 @@ window.FM = window.FM || {};
   const preview = () => document.getElementById('preview');
   function layer() { return activeId ? FM.scene.layers.find(l => l.id === activeId) : null; }
 
-  // screen px ↔ project(canvas) px — the preview canvas is sized to project px (app.js resizeCanvas),
-  // so the only mapping is the on-screen display scale (same trick as mask-tool.js).
+  // CSS px per PROJECT px — the SIZE of things drawn on the overlay scales by this; POSITIONS go through
+  // FM.projectToOverlay, which also subtracts the crop origin once the preview is zoomed past 1.35x (queue 770).
   function dispScale() { return FM.previewDispScale ? FM.previewDispScale() : 1; }   // CSS px per PROJECT px
   function evtToProj(e) {
     return FM.eventToProject(e);   // shared conversion: honours the preview's render scale and crop origin
@@ -225,7 +226,7 @@ window.FM = window.FM || {};
     open(layerId) {
       if (activeId) this.stop();
       // No viewport reset (queue 770): the overlay is placed and mapped zoom-aware now, so the zoom he set to work on a small path stays.
-      // (was: reset when not default — the overlay used to lay out in screen px and a zoomed viewport double-scaled itt double-scales it
+      // (was: reset when not default — the overlay used to lay out in screen px, and a zoomed viewport double-scaled it.)
       const l = FM.scene.layers.find(x => x.id === layerId);
       if (!l) { if (FM.toast) FM.toast('Layer not found'); return; }
       if (l.parent) { if (FM.toast) FM.toast('Motion path works on unparented layers'); return; }

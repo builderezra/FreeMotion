@@ -614,6 +614,12 @@ window.FM = window.FM || {};
       if (key === _lastKey) return;
       _lastKey = key;
       resizeCanvas();
+      /* ONE HOOK FOR EVERY OVERLAY (queue 790). Above 1.35x the preview canvas is a CROP of the comp, so an overlay placed
+         over it by FM.placeOverlayOnCanvas must be re-placed after every zoom or pan that changed the box — not only on a
+         window resize. The tracker's pick overlay listened to resize alone, so Fit or − while picking left its box drawn
+         for the old crop. Fired HERE, after resizeCanvas, because viewport.apply() runs 120ms before the canvas moves. */
+      const w = document.getElementById('canvas-wrap');
+      if (w) { try { w.dispatchEvent(new CustomEvent('fm-viewport', { detail: { crop: c } })); } catch (e) {} }
     }, 120);
   };
 

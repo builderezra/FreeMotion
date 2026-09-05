@@ -1925,7 +1925,7 @@ window.FM = window.FM || {};
         } },
         { sep: true },
         { label: 'Delete draft…', danger: true, action: async () => {
-          if (!confirm('Delete the draft “' + (p.name || 'Untitled') + '”? Anything in it that you have not saved back to its ' + (p.ofTemplate ? 'template' : 'element') + ' will be lost.')) return;   // queue 771: the right noun
+          if (!confirm('Delete the draft “' + (p.name || 'Untitled') + '”? ' + (p.ofTemplate ? 'Anything in it that you have not saved back to its template will be lost.' : p.ofElement ? 'Anything in it that you have not saved back to its element will be lost.' : 'It was never saved as an element, so everything in it will be lost.'))) return;   // queue 771: the right noun
           /* DO IT FOR HIM (queue 617 clause 4). This used to call `discardDraft`, which refuses on the
              draft you have open, and then TOLD HIM to go and open another one first — so the last
              draft in the list could never be deleted. His words: "as long as there's one left I can't

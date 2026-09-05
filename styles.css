@@ -8449,6 +8449,13 @@ body:has(#el-browser:not(.hidden)) #view-bar { display: none; }
 .tth-mark.in { background: #ff5d9e; }
 .tth-mark.out { background: #3ddc84; }
 .tth-n.on { z-index: 2; }
+/* OFF THE FRAME GRID (queue 788). updateTrimHud sets tth-offgrid when the dragged edge sits between frames (a snap onto
+   another clip's edge wins over the grid) and paints no filled notch — and until now nothing read the class, so the
+   "strip says so" half of v15.46 was invisible. The dragged edge IS the in- or out-mark, and that mark sits at the
+   strip's centre, so the mark itself goes DASHED: a broken line in the edge's own colour reads "between frames"
+   without a second cue fighting it on the same pixel column (an amber dotted overlay was tried first and vanished into it). */
+.tth-notches.tth-offgrid .tth-mark.in { background: repeating-linear-gradient(to bottom, #ff5d9e 0 2px, transparent 2px 4px); }
+.tth-notches.tth-offgrid .tth-mark.out { background: repeating-linear-gradient(to bottom, #3ddc84 0 2px, transparent 2px 4px); }
 
 /* The measured "this effect changes nothing here" line (queue 477). Deliberately quiet: an explanation,
    not a warning. Amber rather than red — nothing is broken, the effect simply has nothing to act on, and

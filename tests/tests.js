@@ -42387,7 +42387,8 @@
       await sleep(160);
       const aFilter = FM.filters.all()[0];
       if (!aFilter) throw new Error('there are no ready-made filters to test the guard with');
-      FM.FX_FEATURED.push(aFilter.id);
+      FM._fxFeaturedPlant = [aFilter.id];   // queue 787: the seam — a push landed on a throwaway array since v15.39's getter, so this guard was never driven
+      if (FM.FX_FEATURED.indexOf(aFilter.id) < 0) throw new Error('the plant seam did not put the filter id into FM.FX_FEATURED, so the guard below is not being driven (v15.39 made FX_FEATURED a getter; a push landed on a throwaway array and this test passed for nothing)');
       FM.fxBrowser.open(L);
       await sleep(300);
       const row = document.querySelector('#fx-browser .fxb-featured');
@@ -42397,7 +42398,7 @@
       if (!ids.length) throw new Error('the featured row rendered no tiles at all, so the check above proves nothing');
     } finally {
       if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
-      FM.FX_FEATURED.length = 0; feat0.forEach(id => FM.FX_FEATURED.push(id));
+      delete FM._fxFeaturedPlant;
       FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
       FM.selectLayer(null); FM.refreshAll(); await sleep(100);
     }
@@ -54867,13 +54868,19 @@
         for (let i = 1; i <= 5; i++) { pe('pointermove', window, gx - 12 + dx * i / 5, 1); await sleep(24); }
         await sleep(90);
         const filled = !!document.querySelector('.tth-notches .tth-n.on'), start = FM.layerById(FM.scene, B.id).start, snapped = !!(FM._lastTrim && FM._lastTrim.snapped);
+        /* queue 788: read the off-grid mark WHILE the HUD is up — the class alone was the whole signal, and no stylesheet rule read it */
+        const nb = document.querySelector('.tth-notches'), nm = nb ? nb.querySelector('.tth-mark') : null;
+        const offgrid = nb ? { cls: nb.classList.contains('tth-offgrid'), mark: nm ? nm.className : null, bg: nm ? getComputedStyle(nm).backgroundImage : null } : null;
         pe('pointerup', window, gx - 12 + dx, 0); await sleep(150);
-        return { filled: filled, start: start, snapped: snapped };
+        return { filled: filled, start: start, snapped: snapped, offgrid: offgrid };
       };
       const snapCase = await drag(1.215);   // a hair past A's end at 1.21 — inside the snap radius, off the frame grid
       if (tlEl.scrollLeft !== scroll0) throw new Error('setup: the timeline scrolled by ' + (tlEl.scrollLeft - scroll0) + 'px during the drag, which applyTrimAt adds to the finger delta — this run cannot judge the snap');
       if (!snapCase.snapped || Math.abs(snapCase.start - 1.21) > 0.02) throw new Error('setup: the trim did not snap onto A\'s end at 1.21s (start ' + snapCase.start + ', snapped ' + snapCase.snapped + ')');
       if (snapCase.filled) throw new Error('the HUD painted a filled landing notch while the edge sat at 1.21s — between frames — the notch strip claims a frame the edge is not on');
+      if (!snapCase.offgrid || !snapCase.offgrid.cls) throw new Error('the notch strip does not carry tth-offgrid while the edge sits between frames (' + JSON.stringify(snapCase.offgrid) + ')');
+      if (!snapCase.offgrid.mark) throw new Error('no in/out mark is on the strip while the dragged edge sits at its centre (' + JSON.stringify(snapCase.offgrid) + ')');
+      if (!/repeating-linear-gradient/.test(snapCase.offgrid.bg || '')) throw new Error('tth-offgrid changes nothing on screen — the centre mark (' + snapCase.offgrid.mark + ') is still a solid bar (background-image ' + snapCase.offgrid.bg + '); the class is set and nothing reads it, so an off-frame landing looks exactly like an on-frame one (queue 788)');
       FM.layerById(FM.scene, B.id).start = 2; FM.layerById(FM.scene, B.id).duration = 3; FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); await sleep(200);
       const g2 = attached([...document.querySelectorAll('#tl-tracks .clip')].find(c => /b753/.test(c.textContent)).querySelector('.clip-grip'), 'B left grip again');
       const gr2 = g2.getBoundingClientRect(); const gx2 = gr2.left + gr2.width / 2;
@@ -59746,6 +59753,89 @@
       try { FM.refreshAll(); } catch (e) {}
       if (hadHome && FM.home && FM.home.open) FM.home.open();
       await sleep(60);
+    }
+  });
+
+  test('790: the tracker pick overlay follows a zoom change (Fit, +, − while picking), not only a window resize', { item: '790', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.tracker || !FM.tracker.pick || !FM.viewport || !FM.placeOverlayOnCanvas) throw new Error('seams missing: tracker.pick / viewport / placeOverlayOnCanvas');
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const vp0 = { x: FM.viewport.x, y: FM.viewport.y, scale: FM.viewport.scale };
+    const rect = r => Math.round(r.left) + ',' + Math.round(r.top) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height);
+    try {
+      if (hadHome) FM.home.close();
+      const V = FM.makeLayer('video', { name: 'v790', x: 540, y: 960, start: 0, duration: 4 });
+      const el = document.createElement('video'); el.muted = true;
+      FM.media.set(V.id, { kind: 'video', el: el, width: 640, height: 360, duration: 4 });
+      FM.scene = scene([V], { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+      FM.selectLayer(V.id); FM.setTime(0.5); FM.refreshAll(); await sleep(120);
+      FM.viewport.reset(); await sleep(80);
+      FM.tracker.pick(V); await sleep(150);
+      const ov = document.getElementById('trk-overlay');
+      if (!ov) throw new Error('pick mode did not create #trk-overlay');
+      const cv = document.getElementById('preview');
+      const same = () => { const a = ov.getBoundingClientRect(), b = cv.getBoundingClientRect(); return Math.abs(a.left - b.left) < 1.5 && Math.abs(a.top - b.top) < 1.5 && Math.abs(a.width - b.width) < 1.5 && Math.abs(a.height - b.height) < 1.5; };
+      if (!same()) throw new Error('setup: right after pick the overlay (' + rect(ov.getBoundingClientRect()) + ') does not cover the preview canvas (' + rect(cv.getBoundingClientRect()) + ')');
+      const r0 = ov.getBoundingClientRect();
+      FM.viewport.scale = 2; FM.viewport.apply(); await sleep(450);   // what + does, past the 1.35x crop threshold; the re-crop is debounced 120ms
+      const r1 = ov.getBoundingClientRect(), c1 = cv.getBoundingClientRect();
+      if (Math.abs(c1.width - r0.width) < 1 && Math.abs(c1.height - r0.height) < 1 && Math.abs(c1.left - r0.left) < 1) throw new Error('setup: zooming to 2x left the preview canvas box where it was (' + rect(c1) + '), so a stale overlay could not be told from a fresh one here');
+      if (!same()) throw new Error('after a zoom to 2x the overlay is ' + rect(r1) + ' while the canvas is ' + rect(c1) + ' — the overlay only repaints on resize or a tap, so the tracker box is drawn for the old crop (queue 790)');
+      const fit = document.getElementById('vb-fit');
+      if (fit) { fit.click(); await sleep(450); if (!same()) throw new Error('after the real Fit button the overlay (' + rect(ov.getBoundingClientRect()) + ') still sits where the zoomed crop was; canvas ' + rect(cv.getBoundingClientRect())); }
+    } finally {
+      try { FM.tracker.cancel(); } catch (e) {}
+      FM.viewport.x = vp0.x; FM.viewport.y = vp0.y; FM.viewport.scale = vp0.scale; try { FM.viewport.apply(); } catch (e) {}
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
+  test('791: Delete draft… names the right noun for all three draft kinds — a plain draft has no element to save back to', { item: '791', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.projects || !FM.projects.create || !FM.home) throw new Error('projects/home are not reachable');
+    const realConfirm = window.confirm;
+    const openBefore = FM.projects.currentId ? FM.projects.currentId() : null;
+    const wasHome = !!(FM.home.isOpen && FM.home.isOpen());
+    const mine = () => FM.projects.list().filter(p => /__qa791/.test(p.name || ''));
+    const made = [];
+    try {
+      made.push((await FM.projects.create({ name: '__qa791 plain', width: 640, height: 640, elementDraft: true })).id);
+      made.push((await FM.projects.create({ name: '__qa791 editing', width: 640, height: 640, elementDraft: true, ofElement: '__qa791elem' })).id);
+      const other = FM.projects.list().filter(p => !p.elementDraft && !/__qa791/.test(p.name || ''))[0];
+      if (other) await FM.projects.open(other.id);
+      FM.home.open(); await sleep(350);
+      const tabBtn = [].slice.call(document.querySelectorAll('#hm-tabs button, .hm-tab')).filter(b => /element/i.test(b.textContent))[0];
+      if (!tabBtn) throw new Error('could not find the Elements tab, so no draft card can be read');
+      tabBtn.click(); await sleep(350);
+      const ask = async (name) => {
+        const card = [].slice.call(document.querySelectorAll('.hm-card-draft')).filter(c => c.textContent.indexOf(name) >= 0)[0];
+        if (!card) throw new Error('the seeded draft "' + name + '" is not on screen');
+        let msg = null; window.confirm = (m) => { msg = String(m); return false; };   // read the prompt, never delete
+        card.querySelector('.hm-card-more').click(); await sleep(250);
+        const del = [].slice.call(document.querySelectorAll('.ctx-item, .cm-item, [role="menuitem"]')).filter(i => /Delete draft/i.test(i.textContent))[0];
+        if (!del) throw new Error('the ⋯ menu of "' + name + '" has no Delete entry');
+        del.click(); await sleep(300);
+        if (msg === null) throw new Error('Delete draft… on "' + name + '" asked nothing — confirm() was never called');
+        return msg;
+      };
+      const mPlain = await ask('__qa791 plain');
+      if (/its element|its template/.test(mPlain)) throw new Error('a plain draft — no template, no element — is told: "' + mPlain + '" — there is no element to save back to, and the card itself says to Save as element first (queue 791)');
+      if (!/never saved as an element/.test(mPlain)) throw new Error('a plain draft\'s prompt does not say it was never saved: "' + mPlain + '"');
+      const mEdit = await ask('__qa791 editing');
+      if (!/its element/.test(mEdit)) throw new Error('control: a draft that IS editing an element no longer says "its element": "' + mEdit + '"');
+      if (mine().length !== 2) throw new Error('confirm() returned false and yet a seeded draft is gone (' + mine().length + ' of 2 left)');
+    } finally {
+      window.confirm = realConfirm;
+      if (FM.contextMenu && FM.contextMenu.hide) { try { FM.contextMenu.hide(); } catch (e) {} }
+      for (const id of made) { try { await FM.projects.remove(id); } catch (e) {} }
+      if (openBefore && FM.projects.currentId && FM.projects.currentId() !== openBefore) { try { await FM.projects.open(openBefore); } catch (e) {} }
+      if (!wasHome && FM.home.isOpen && FM.home.isOpen()) { try { FM.home.close(); } catch (e) {} }
+      if (wasHome && !(FM.home.isOpen && FM.home.isOpen())) { try { FM.home.open(); } catch (e) {} }
+      await sleep(80);
     }
   });
 

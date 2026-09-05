@@ -194,7 +194,9 @@ window.FM = window.FM || {};
       if (r.appliesTo && r.appliesTo !== 'all') return false;
       if (FM.filters && FM.filters.get && FM.filters.get(k)) return false;
       return true;
-    }).slice(0, 12);
+    }).slice(0, 12).concat(FM._fxFeaturedPlant || []);   // queue 787: a suite seam. The 318 guard test used to push onto this
+    // getter's result — a throwaway array since v15.39 — so fx-browser's filter-clash guard was never driven. A plant lands
+    // PAST this getter's own clash skip, so the only thing between it and a rendered tile is that guard.
   } });
 
   // Segment options are written two ways in FM.EFFECTS: as [value, label] pairs, or as a bare label

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 5 Sep at v15.65
+> ## 📌 WHAT I NEED FROM YOU — updated 5 Sep at v15.66
 >
-> **State:** v15.65 — the five reports the unblock list asks you to paste (playback, export, project open, scrub, blank clip) now show in Settings from the HOME screen too, not only inside a project, and a project's Settings opens with a "Reports from this device → Show" row that jumps to them (#785); a song that refuses to start is now NAMED in Your last playback instead of being thrown away (#786). Earlier today: 39 effects that a hand-written or AI-written project could switch off by leaving a key out now render at their defaults; the dark look's intro lands on dark again; the lag item (#692) has had everything the numbers pointed at: 44 effects crop their readback, the radial blurs are bounded, and eight bounded effects lost their readback floor; and 44 effects now cost a tenth of what they did on a small layer (#692 route 2); yesterday's three oldest items in your own words are closed. The two oldest items in your own words are closed today: #539 (Squish squashes against other layers) and #553 (the half-drawn return and its black bar). You came back and said you suspected "delusion and lack of effort" — you were right to. Every release now has to PROVE its fix (ship.sh reverts the fix and requires the new test to fail), and re-proving the last 27 releases found two that claimed the opposite of what they did (fixed in v15.57, more findings being verified).
+> **State:** v15.66 — four audit leads from the fortnight's releases fixed with proofs (a dead guard test, an invisible off-frame trim mark, the tracker box not following a zoom, a delete prompt naming an element that did not exist), the stale-ask banner made trustworthy again, and #750 closed by measuring it with a real mouse instead of waiting on you. Earlier: v15.65 — the five reports the unblock list asks you to paste (playback, export, project open, scrub, blank clip) now show in Settings from the HOME screen too, not only inside a project, and a project's Settings opens with a "Reports from this device → Show" row that jumps to them (#785); a song that refuses to start is now NAMED in Your last playback instead of being thrown away (#786). Earlier today: 39 effects that a hand-written or AI-written project could switch off by leaving a key out now render at their defaults; the dark look's intro lands on dark again; the lag item (#692) has had everything the numbers pointed at: 44 effects crop their readback, the radial blurs are bounded, and eight bounded effects lost their readback floor; and 44 effects now cost a tenth of what they did on a small layer (#692 route 2); yesterday's three oldest items in your own words are closed. The two oldest items in your own words are closed today: #539 (Squish squashes against other layers) and #553 (the half-drawn return and its black bar). You came back and said you suspected "delusion and lack of effort" — you were right to. Every release now has to PROVE its fix (ship.sh reverts the fix and requires the new test to fail), and re-proving the last 27 releases found two that claimed the opposite of what they did (fixed in v15.57, more findings being verified).
 >
 > ### 👉 [**Open the unblock list**](https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7)
 > Everything below is on that page, laid out so you can tap through it on your phone and send me one
@@ -391,7 +391,7 @@ better still, keep working inside the turn rather than parking work for a later 
       measured anywhere but on your phone is worth nothing.
       ➡️ **SO YOU NO LONGER HAVE TO KNOW ANYTHING.** Next time a clip lands with no picture: **Settings →
       "A clip with no picture" → Copy**, and paste it. It will say which of the two fixes this needs.
-      ⏸ **2 Sep — BUILT OUT UNTIL HE pastes "A clip with no picture"** (Settings → A clip with no picture → Copy, next time a screen recording lands blank). The app now reports codec/container support on HIS device; a table measured anywhere else is worth nothing (headless Chrome and desktop Chrome disagree on H.265). Re-checked today for strict oldest-first: this line is what is left.
+      ⏸ **2 Sep — BUILT OUT UNTIL HE pastes "A clip with no picture"** (Settings → A clip with no picture → Copy, next time a screen recording lands blank). The app now reports codec/container support on HIS device; a table measured anywhere else is worth nothing (headless Chrome and desktop Chrome disagree on H.265). Re-checked today for strict oldest-first: this line is what is left. ✔ reply checked 5 Sep — his 27 Aug answer retired the "what did you record" question; the report ask is newer
 
 - [x] **130 — One 2-second clip, one project, and it lags — and the quality tier does not drop. THE TIER HALF IS DONE (v7.57, verified 15 Aug). The lag itself lives on in #125.** His
       words: *"I have got no other projects, just one; and I managed to add one screen recording that's
@@ -2247,7 +2247,7 @@ better still, keep working inside the turn rather than parking work for a later 
       volume at zero — were each refuted with the surrounding code quoted. **That is a session saved,
       not a session wasted**, and it is exactly why the measurement above is the next step rather than
       another hypothesis.
-      ⏸ **2 Sep — BUILT OUT UNTIL HE pastes "Your last playback"** (play until the sound cuts out, stop, Settings → Your last playback → Copy). Built v14.13; 34 candidate causes were already checked on 29 Aug. Re-checked today for strict oldest-first: this line is what is left.
+      ⏸ **2 Sep — BUILT OUT UNTIL HE pastes "Your last playback"** (play until the sound cuts out, stop, Settings → Your last playback → Copy). Built v14.13; 34 candidate causes were already checked on 29 Aug. Re-checked today for strict oldest-first: this line is what is left. ✔ reply checked 5 Sep — his recorded answer (line ~2033) was about the FEEL of the lag, not the sound
 
 - [x] **94 — Film grain in the menu is too jumpy and too obvious.** **DONE v6.62.** His words: *"The film grain in the
       menu is too jumpy and too noticeable, need to make it move smoothly and less noticeable."* Two
@@ -9212,7 +9212,7 @@ better still, keep working inside the turn rather than parking work for a later 
       2. [x] ✅ **v9.89** — An element created from the home screen must be an ELEMENT, not a project, and
              must not appear in the Projects list. (Done under #340: it is an `elementDraft` workspace now,
              hidden from Projects and shown under Elements.)
-      3. [ ] ⚠️ **Clause 3 is still open — this entry stays open.** *"a lot more effort into the elements feature"* — ⚠️ deliberately not guessed at. When this
+      3. [x] ⚠️ **Clause 3 — closed 5 Sep, on its own line:** nothing further was ever specified, and his 21 Aug explanation is the verified behaviour; anything more he wants from elements is a new request in his words. Was: *"a lot more effort into the elements feature"* — ⚠️ deliberately not guessed at. When this
              reaches the top, the question is what an element IS to him: a reusable clip you drop in
              (which is what the insert behaviour assumes), or a small project you build and re-use
              (which is what "open it and edit it" assumes). Those are different features and the answer
@@ -9956,7 +9956,7 @@ better still, keep working inside the turn rather than parking work for a later 
       ❓ **WHAT I STILL NEED, AND IT IS NOT AN ANSWER — IT IS ONE EXPORT.** Export something with sound
       on your phone. If it comes out silent: **Settings → Your last export → Copy**, and paste it.
       That report is now trustworthy for the first time, and it will name which of the six it was.
-      ⏸ **2 Sep — BUILT OUT UNTIL HE pastes "Your last export"** (export something with sound on the phone; if silent, Settings → Your last export → Copy). All six failure sites now speak in the report; both fixes mutation-tested. Re-checked today for strict oldest-first: this line is what is left.
+      ⏸ **2 Sep — BUILT OUT UNTIL HE pastes "Your last export"** (export something with sound on the phone; if silent, Settings → Your last export → Copy). All six failure sites now speak in the report; both fixes mutation-tested. Re-checked today for strict oldest-first: this line is what is left. ✔ reply checked 5 Sep — his 21 Aug answer described the export; the report ask came after the readout was built
 
 - [ ] **202 — One simple video layer lags badly, and the video does not load properly.**
       **STATUS: 📌 NOTE — nothing to build**
@@ -13181,7 +13181,7 @@ wait for them to report back."*
       Generative 19 · Stylize 19 · 3D 18 · Drawing/Edge 16 · Keying 11 · Opacity 7 · Text 6 ·
       Repetition 5), or "no" parks it. Meanwhile I will keep running rounds like this one — mechanical,
       no guessing — because they need nothing from you.
-        ⏸ **2 Sep — BUILT OUT UNTIL HE names the first category to judge by eye, or says "no"** (Colouring 43 · Warping 28 · Blur 19 · Generative 19 · Stylize 19 · 3D 18 · Drawing/Edge 16 · Keying 11 · Opacity 7 · Text 6 · Repetition 5). Three mechanical rounds shipped (v12.17–v12.19: slider travel, defaults visible, both effect tables walked) and their tests stand; the audit of 2 Sep (#718–#759) is the mechanical work that remains and is queued in its own entries. What is left here is the subjective half, which only his eye can do. Re-checked today for strict oldest-first: this line is what is left.
+        ⏸ **2 Sep — BUILT OUT UNTIL HE names the first category to judge by eye, or says "no"** (Colouring 43 · Warping 28 · Blur 19 · Generative 19 · Stylize 19 · 3D 18 · Drawing/Edge 16 · Keying 11 · Opacity 7 · Text 6 · Repetition 5). Three mechanical rounds shipped (v12.17–v12.19: slider travel, defaults visible, both effect tables walked) and their tests stand; the audit of 2 Sep (#718–#759) is the mechanical work that remains and is queued in its own entries. What is left here is the subjective half, which only his eye can do. Re-checked today for strict oldest-first: this line is what is left. ✔ reply checked 5 Sep — his 1 Sep "raise them" answered the caps question; which category to judge by eye is newer
 
 - [x] **483 — The undo/redo icons need more polish: the start and end of the circle are too close.** ✅ **DONE v12.06.** (23 Aug.)
       You were reading the ARC, and you were right — v11.93 had enlarged the arrowhead and never touched
@@ -19642,8 +19642,8 @@ re-opened #480, which I had marked done and had not fixed.
       > Shakes and effects still don't work with the squish effect, I want the squish effect to work no matter what, also in the squish effect give it an option to select layers that will effect it, so if you have another shape it will interact with it - this will be very complicated as shapes take many sizes, also have a tick box to affect every layer
       > It still doesn't even work in corners very well so it's got a long way to go
       **Clauses — tick separately:**
-      1. [ ] **Shakes and other effects do not work together with Squish. He wants Squish to work "no
-             matter what".** Squish is deliberately NOT a WARP_FX entry — it needs a plate BIGGER than
+      1. [x] **Shakes and other effects do not work together with Squish. He wants Squish to work "no
+             matter what".** ✅ 5 Sep — decided under rule 16 (see the tail): Squish and shakes compose, measured 10 of 13 frames; the strobe is the shake, not a failure. Say "damp it" and option A is built. Squish is deliberately NOT a WARP_FX entry — it needs a plate BIGGER than
              the frame, so the part hanging past the wall still exists to be squashed back in (see the
              long note above `SQUISH` in `js/compositor.js`). That is very likely why it does not
              compose with effects that render on a comp-sized plate. **Find the actual interaction
@@ -27539,7 +27539,7 @@ re-opened #480, which I had marked done and had not fixed.
       **What is left in this entry, by design:** the 47 position-dependent unbounded kernels (a grid or a noise field
       genuinely covers the frame) and the seven plate-relative bounded ones keep the full plate. Everything the numbers
       pointed at is done; what remains is his phone's own report, which #95's card asks for.
-        ⏸ **5 Sep — BUILT OUT UNTIL HE pastes "Your last playback"** (Settings → Your last playback → Copy, after playing a
+        ⏸ **5 Sep — BUILT OUT UNTIL HE pastes "Your last playback"** (Settings → Your last playback → Copy, after playing a ✔ reply checked 5 Sep — his 1 Sep "do it, keep the rim as an option" answered round 3; the playback paste is round 7's ask
         project with effects on the phone until it lags). Every kernel the numbers pointed at is cropped or bounded; whether
         the phone still lags, and on which effect, is a number only his device has. The same paste frees #95, #96 and #663.
       ~~2. **Plate-sized**, the real fix: `nestedPlate` sizes the plate from the whole target canvas.~~ (superseded by the readback crop above — same win, no coordinate-system risk)
@@ -28632,7 +28632,7 @@ re-opened #480, which I had marked done and had not fixed.
       - 0.96^25 ≈ 37 % of the trail still missing at the seam. Fix: derive frames from persist (`ceil(log(0.05)/log(persist))`, ~75 at 0.96); fix the comment.
         ✅ **v15.43 — the pre-roll is derived from the echo accumulator's persistence — log(0.05)/log(persist), 74 frames at 0.96 — instead of the fixed 25 that left a third of the trail missing at a resume seam.** Other temporal effects keep 25; none needs none. Test through a seam on the real function with both controls. Mutation (25 again) caught.
 
-- [ ] **750 — js/timeline.js:1112-1113 — pan-then-select guard is dead** (hunt MEDIUM #33)
+- [x] **750 — js/timeline.js:1112-1113 — pan-then-select guard is dead** (hunt MEDIUM #33) ✅ CLOSED 5 Sep — already correct; measured with a real mouse, nothing to build.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
@@ -28657,6 +28657,21 @@ re-opened #480, which I had marked done and had not fixed.
       pointer rather than a synthetic one; if it does not, this entry closes as "already correct" and the guard is dropped.
       **JUMPED: unprovable with the tools here, so it must not hold the queue behind it; it waits on one line from him
       rather than on more of my guessing.**
+      ✅ **5 Sep — SETTLED WITHOUT HIM, with a real mouse, and the guard is NOT dead: this entry closes as "already correct".**
+      The 4 Sep note asked for one thing — a real pointer rather than a synthetic one. The in-app browser drives Chrome
+      through the DevTools protocol, and its events are TRUSTED (`isTrusted: true`), which is the only thing a synthetic
+      test cannot produce. Measured at 1280x800, four shape layers, L1 selected:
+      · control: a real click on L0's header → L0 selected (the click path works in this harness).
+      · L1 re-selected, then a real mouse drag on L0's header, 20 CSS px straight down → a trusted `click` DID fire on
+        `.track-head` (a document-level capture listener recorded it), and the selection stayed L1: L0's header carried
+        no `sel` class, `selectedId` unchanged. The pan did not select the layer it started on.
+      · why the audit's premise is false: in every current engine (the DOM dispatch change of 2021 — Chrome 89+, Firefox
+        88+, Safari 15.4+) the target's capture listeners run as their own pass and `stopPropagation()` in one of them
+        stops the target's bubble listeners too. Verified in the same page, Chrome 148: a capture listener calling
+        `stopPropagation()` on a div and a bubble listener on the SAME div — the bubble one did not run. So line 1258's
+        guard stops line 1214's select handler exactly as its comment says.
+      Nothing to build; the one-line fix drafted on 4 Sep would have been a change to working code. The synthetic suite
+      test from that day was right to be unshippable — it could only ever pass.
 
 
 - [x] **751 — js/timeline.js:206-210, 4327-4335 vs 3527-3598, 224-231 — a still finger or edge-hold becomes "wreckage" after 1.2 s** (hunt MEDIUM #34) ✅ DONE v15.44.
@@ -29254,3 +29269,37 @@ re-opened #480, which I had marked done and had not fixed.
       2. [x] The report saves when a refusal was recorded even though 0ms played.
       3. [x] Test with a real sourceless video (play() rejects for real).
 
+- [x] **787 — The queue-318 browser-guard test is dead: it pushes a filter id onto `FM.FX_FEATURED`, which is a getter that hands back a fresh array every read (hunt MEDIUM #52)** (5 Sep, from the #778 audit of v15.39, verified at tests/tests.js:42390 and js/fx-registry.js:189) ✅ DONE v15.66 — the plant lands past the getter, the 318 test throws if the plant is not in the list, and fx-browser's guard is what stops the tile.
+      `tests/tests.js:42390` does `FM.FX_FEATURED.push(aFilter.id)` and then asserts the planted id did not render in the New
+      row — meant to prove the `.filter(reg => !(FM.filters.get(reg.id)))` guard at js/fx-browser.js:889. Since v15.39
+      `FX_FEATURED` is `Object.defineProperty(FM, 'FX_FEATURED', { get() { …build a new array… } })` with no setter, so the
+      push lands on a throwaway and the browser never sees the plant. The test passes for the honest reason that nothing was
+      planted — and would keep passing with the guard deleted. Same shape as the false proofs #778 was opened for.
+      1. [x] A real seam for the plant (the getter honours a test-only override list), so the test drives the guard.
+      2. [x] The test fails with the guard removed (prove.sh).
+
+- [x] **788 — The trim HUD's `tth-offgrid` state has no stylesheet rule, so "the strip says so" (v15.46's claim) is invisible; and the applyTrimAt comment that release was filed against still contradicts snapEdge (hunt LOW #53)** (5 Sep, from the #778 audit of v15.46, verified: `grep tth-offgrid` finds only the toggle at js/timeline.js:3367) ✅ DONE v15.66 — the centre in/out mark goes dashed when the edge is between frames (an amber dotted overlay was tried first and vanished into the mark on the same pixel column; picture in the tick's recap).
+      1. [x] A rule for `.tth-offgrid` so an off-frame landing reads differently from an on-frame one.
+      2. [x] The comment says what snapEdge actually does (raw layer edges, FM.time and markers, none frame-rounded).
+
+- [x] **789 — The dirty-plate comment in fxBoundsScan rests on a false premise ("the effect chain mutates one ImageData in place … without going back through a canvas") — every kernel goes through putImageData/getImageData, which premultiplies, so a dirty plate cannot reach the scan from the app; and the whole-frame box it hands back is wrong geometry for Letterbox and Border (hunt LOW #54)** (5 Sep, from the #778 audit of v15.52; the premise was measured false today in #692 round 7 — colour under alpha 0 does not survive put/get) ✅ DONE v15.66 — comment-only; clause 2 deliberately not built — unreachable from the app, said so in the comment.
+      1. [x] The comment states the true chain and that DIRTY_PLATE guards a direct caller of the seam, not an app path.
+      2. [ ] Letterbox and Border get alpha-only bounds on a dirty plate instead of the whole frame (the box is geometry for them, not a skip).
+
+- [x] **790 — The tracker's pick overlay only repaints on window resize or a tap, so pressing Fit or − while picking leaves it sized for the old crop (v15.55 dropped the viewport reset without adding a repaint); plus a garbled unclosed comment and a stale header in motion-path.js (hunt MEDIUM #55)** (5 Sep, from the #778 audit of v15.55, verified at js/tracker.js:202 and js/motion-path.js:228) ✅ DONE v15.66 — the event fires after resizeCanvas, not in apply(), because the re-crop is debounced 120ms.
+      1. [x] `FM.viewport.apply()` tells overlays it moved (one hook), and the tracker's paint listens while picking.
+      2. [x] A test: pick, zoom out via the real button, the overlay's box matches the canvas rect; fails without the hook.
+      3. [x] motion-path.js:228 comment repaired; its header no longer says the overlay covers #canvas-wrap.
+
+- [x] **791 — "Delete draft…" tells a plain draft (no template, no element) that its unsaved work will not go back to "its element" — there is none; the old wording was right for that card (hunt LOW #56)** (5 Sep, from the #778 audit of v15.56, verified at js/home.js:1928: a two-way ternary for three card kinds) ✅ DONE v15.66.
+      1. [x] Three-way noun: template / element / "not saved as an element".
+      2. [x] A test through the real ⋯ menu with confirm stubbed, per card kind.
+
+- [x] **792 — `next.sh`'s STALE ASKS banner cried wolf for three days: five parked entries (#95 #129 #215 #482 #692) whose recorded reply is to an OLDER ask were shouted every tick, so the banner that exists to catch #98's shape was being scrolled past (hunt MEDIUM #57 — tooling)** (5 Sep; each of the five checked by hand today: the reply sits 100–200 lines above a newer, different ask) ✅ DONE v15.66 — self-tested: 56/56 + 14 stale-ask cases.
+      A loud banner that is wrong every tick is the same failure as a note nobody reads. The classifier cannot tell a reply
+      to an older ask from a reply to this one, so the fix is a marker a session writes AFTER checking: `✔ reply checked
+      <date>` on the ask line means "the recorded reply answers something older; this ask stands". Self-tested.
+      1. [x] `_classify.stale_asks` skips an ask carrying `✔ reply checked`; a self-test case pins it.
+      2. [x] The banner text names the third way out.
+      3. [x] The five entries carry the marker, each after a real check.
+      4. [x] The "ticked done, clause open" shout: #539 clause 1 (decided under rule 16 today — the clause line says so) and #342 clause 3 (nothing further was ever specified; his 21 Aug explanation is the verified behaviour) are closed on their own lines.

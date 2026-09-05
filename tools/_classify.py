@@ -392,7 +392,9 @@ def stale_asks(md):
     for chunk in re.split(r'(?m)^(?=- \[[ x]\] \*\*)', md):
         m = re.match(r'- \[( |x)\] \*\*(\d+[a-z]?)?', chunk)
         if not m or m.group(1) == 'x': continue
-        asks = [l for l in chunk.split('\n') if _ASK.match(l) and '~~' not in l and not l.lstrip().startswith('✅')]
+        # `✔ reply checked <date>` on an ask line (queue 792): a session READ the recorded reply and it answers an
+        # OLDER ask, so this one stands. Five parked entries were shouted every tick for three days without it.
+        asks = [l for l in chunk.split('\n') if _ASK.match(l) and '~~' not in l and not l.lstrip().startswith('✅') and '✔ reply checked' not in l]
         if asks and _reply_re(chunk).search(chunk):
             out.append((m.group(2) or '(unnumbered)', asks[0].strip()[:110]))
     return out
@@ -686,6 +688,10 @@ _STALE_CASES = [
      "an open ask with no answer recorded is simply open"),
     ("- [ ] **98 — x**\n      ✅ ~~ASK: how big should text start?~~ ANSWERED 1 Sep: 160pt.", False,
      "a struck ask is not stale — striking it is the fix"),
+    ("- [ ] **95 — x**\n      ✅ HE ANSWERED, 27 Aug: the feel, not the sound.\n        ⏸ **2 Sep — BUILT OUT UNTIL HE pastes the report.** ✔ reply checked 5 Sep — his answer was to the older ask", False,
+     "an ask marked '✔ reply checked' stands beside a recorded answer — a session read the reply and it answers something older (queue 792: five parked entries shouted for three days)"),
+    ("- [ ] **95 — x**\n      ✅ HE ANSWERED, 27 Aug: the feel, not the sound.\n        ⏸ **2 Sep — BUILT OUT UNTIL HE pastes the report.**", True,
+     "…and without the marker the same entry still shouts — the marker is a record of a check, not a mute"),
     ("- [x] **98 — x**\n      HE ANSWERED it.\n      ❓ASK: how big?", False,
      "a closed entry is nobody's queue; do not shout about it"),
     ("- [ ] **7 — x**\n      He answered a different question about it.\n      ✅ ASK (struck): resolved", False,

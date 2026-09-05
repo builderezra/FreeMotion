@@ -128,8 +128,9 @@ PYS
 if [ -n "$STALE" ]; then
   echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
   echo "!! STALE ASKS — these entries RECORD HIS ANSWER and still carry an open ❓ASK line, so they read as"
-  echo "!! blocked when they may be done. Strike the ask (~~…~~ or a ✅ prefix) or say the answer was to"
-  echo "!! something else. #98 sat unreachable for a day this way."
+  echo "!! blocked when they may be done. Strike the ask (~~…~~ or a ✅ prefix), or READ the reply and, if it"
+  echo "!! answers an OLDER ask, write '✔ reply checked <date>' on the ask line. #98 sat unreachable for a day"
+  echo "!! this way; five parked entries were shouted for three days the other way (queue 792)."
   printf '%s\n' "$STALE"
   echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
   echo

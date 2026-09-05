@@ -201,12 +201,15 @@ window.FM = window.FM || {};
       showBar();
       window.addEventListener('resize', paint);
       picking._onResize = paint;
+      wrap.addEventListener('fm-viewport', paint);   // queue 790: Fit / + / − / a pinch while picking re-place the box for the new crop
+      picking._onViewport = paint;
     },
 
     cancel() {
       if (overlay) { overlay.remove(); overlay = null; }
       if (bar) { bar.remove(); bar = null; }
       if (picking && picking._onResize) window.removeEventListener('resize', picking._onResize);
+      if (picking && picking._onViewport) { const w = document.getElementById('canvas-wrap'); if (w) w.removeEventListener('fm-viewport', picking._onViewport); }
       picking = null;
     },
 

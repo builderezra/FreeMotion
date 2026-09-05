@@ -64,6 +64,8 @@ window.FM = window.FM || {};
       const pct = Math.round(this.scale * 100);
       const lbl = document.getElementById('vb-zlabel'); if (lbl) lbl.textContent = pct === 100 ? 'Full' : pct + '%';
       update();
+      /* The `fm-viewport` event overlays listen for (queue 790) is NOT fired here: refreshPreviewScale re-crops the canvas
+         120ms later, and an overlay placed now would cover the OLD box. It fires in app.js after resizeCanvas(). */
     },
     reset() { this.x = 0; this.y = 0; this.scale = 1; this.apply(); },
     isDefault() { return !this.x && !this.y && Math.abs(this.scale - 1) < 1e-3; },
