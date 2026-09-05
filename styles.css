@@ -7510,6 +7510,7 @@ body.fm-pushing #toast { z-index: 213; }
      (the head divider) and --ar-x1 (the project's end), both published by buildAddRow from the LIVE head
      width — `--head-w` reads 82px while the phone's real head is 66. */
   border: 1px dashed transparent;
+  --ar-bl: 1px;   /* queue 592: the border the ::before must step back over — the PC variant below sets it to 0 with its border */
   /* ⚠️ THE SEPARATOR IS THE ROW'S, THE DASHED BOX IS THE PSEUDO-ELEMENT'S (queue 633). Ezra: *"On the
      layer with the add layer it doesn't show the line separating layers for some reason"*, circled on
      the span between the dashed box and the grip on the right.
@@ -7528,7 +7529,13 @@ body.fm-pushing #toast { z-index: 213; }
 }
 .tl-addrow::before {
   content: ""; position: absolute; top: -1px; bottom: -1px;
-  left: var(--ar-x0, 0px); width: calc(var(--ar-x1, 100%) - var(--ar-x0, 0px));
+  /* MINUS THE BORDER (queue 592 — his "slightly", measured at exactly 1px). --ar-x0/--ar-x1 are published from the row's
+     OUTER left (x1 = headW + PAD + duration·pxPerSec, the same origin the clips use), but this pseudo-element is positioned
+     inside the row's 1px border, so its right edge landed at row.left + 1 + x1: one pixel past the last clip. Two earlier
+     measurements read the decoration's own rect against the clip and saw 0 because both were taken from the padding box.
+     Shifting the box left by the border keeps the width and lands both ends where the variables say. `--ar-bl` is set
+     beside each border rule (1px on the phone row, 0 on the PC line variant), so this cannot drift from the border. */
+  left: calc(var(--ar-x0, 0px) - var(--ar-bl, 0px)); width: calc(var(--ar-x1, 100%) - var(--ar-x0, 0px));
   border-radius: 10px;
   /* QUIETER AT REST (queue 616 clause 1). Ezra: *"These blue bars around look tacky and don't go
      away"* — two complaints, and this is the second one. It was `.45` dashed with a `0 0 9px` cyan
@@ -7833,7 +7840,7 @@ body.fm-pushing #toast { z-index: 213; }
    "this is a control", which is exactly the signal he described wanting. */
 .tl-addrow--line {
   min-height: 0; height: 7px; margin: 1px 0;
-  border-radius: 4px; border: none;
+  border-radius: 4px; border: none; --ar-bl: 0px;
   background: linear-gradient(90deg, rgba(150, 232, 255, .5), rgba(90, 199, 237, .22) 45%, transparent);
   box-shadow: 0 0 7px rgba(90, 199, 237, .22);
   cursor: pointer; overflow: hidden;

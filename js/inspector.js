@@ -6470,7 +6470,13 @@ window.FM = window.FM || {};
       // the timeline, duplicate is on the transport row, delete moved to the top bar, and rename is
       // now the top-bar name field. So the inspector goes straight to the actions.
       if (view === 'home') {
-        const multi = FM.selectionIds && FM.selectionIds().length >= 2;
+        /* SELECT MODE WITH ONE LAYER IS MULTI, NOT "EDIT THIS LAYER" (queue 624). Holding a layer head enters select mode
+           and makes the held layer the primary — and this used to render the 1-9 single-layer grid for it, which is the
+           screenshot he sent: "1 selected" in the top bar and the 8-tile edit menu open under it. His words: "it should open
+           up the edit menu for that layer because you're trying to multi select" — decided under rule 16 as reading (a):
+           you are selecting, not editing; the other two readings describe what already happened. To overrule: say "open it"
+           and this becomes `length >= 2` again. */
+        const multi = (FM.selectionIds && FM.selectionIds().length >= 2) || !!FM.selectMode;
         // multi-select: the multi bar's trim/split/delete act on the WHOLE selection — showing the
         // single-layer quick row above it too was a confusing near-duplicate (it hit only the primary)
         // The numbered 1-9 grid is a set of SINGLE-layer editors: each card builds its panel from the

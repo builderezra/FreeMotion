@@ -59839,6 +59839,90 @@
     }
   });
 
+  test('592: the add-layer row decoration ends on the last clip edge, not one pixel past it', { item: '592', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const A = FM.makeLayer('shape', { name: 'a592', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#f00', start: 0, duration: 4 });
+      FM.scene = scene([A], { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+      FM.selectLayer(null); if (FM.pause) FM.pause(); FM.setTime(0); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); await sleep(300);
+      document.getElementById('timeline').scrollLeft = 0; await sleep(150);
+      const row = document.querySelector('.tl-addrow'), clip = document.querySelector('#tl-tracks .clip');
+      if (!row) throw new Error('setup: no .tl-addrow is drawn with nothing selected — the decoration cannot be measured');
+      if (!clip) throw new Error('setup: the 4s clip is not on the timeline');
+      const cr = clip.getBoundingClientRect();
+      // the pseudo-element lives inside the border: its screen edges are row.left + border + left (+ width)
+      const measure = () => {
+        const rr = row.getBoundingClientRect(), cs = getComputedStyle(row), ps = getComputedStyle(row, '::before');
+        const bl = parseFloat(cs.borderLeftWidth) || 0, pl = parseFloat(ps.left), pw = parseFloat(ps.width);
+        return { bl: bl, pw: pw, rowLeft: rr.left, x1: parseFloat(cs.getPropertyValue('--ar-x1')), x0: parseFloat(cs.getPropertyValue('--ar-x0')) || 0, decoLeft: rr.left + bl + pl, decoRight: rr.left + bl + pl + pw };
+      };
+      const check = (m, what) => {
+        if (!(m.pw > 0)) throw new Error('setup (' + what + '): ::before has no width — the decoration is not drawn');
+        if (Math.abs((m.rowLeft + m.x1) - cr.right) > 0.6) throw new Error('setup (' + what + '): --ar-x1 (' + m.x1 + ') does not land on the clip\'s right edge (' + (cr.right - m.rowLeft).toFixed(2) + ' from the row) — the variable is wrong before the CSS is');
+        if (Math.abs(m.decoRight - cr.right) > 0.5) throw new Error(what + ': the add-row decoration ends at ' + m.decoRight.toFixed(2) + ' while the last clip ends at ' + cr.right.toFixed(2) + ' — ' + (m.decoRight - cr.right).toFixed(2) + 'px past it: the pseudo-element sits inside the row\'s ' + m.bl + 'px border and its left was never offset by it (queue 592)');
+        if (Math.abs(m.decoLeft - (m.rowLeft + m.x0)) > 0.5) throw new Error(what + ': the decoration starts at ' + m.decoLeft.toFixed(2) + ' while --ar-x0 says ' + (m.rowLeft + m.x0).toFixed(2) + ' — both ends must move together');
+      };
+      const asIs = measure(); check(asIs, 'as rendered (' + (asIs.bl ? 'phone row, ' + asIs.bl + 'px border' : 'PC line variant, no border') + ')');
+      /* THE PHONE ROW IS THE CASE (queue 592). The runner may build the PC line variant (no border) even at 380px — a
+         fine pointer decides it, not the width — and there the overshoot cannot exist. So the phone row's stylesheet is
+         measured too, by lifting the variant class: the base rule wears the 1px dashed border he sees on his phone. */
+      const wasLine = row.classList.contains('tl-addrow--line');
+      if (wasLine) row.classList.remove('tl-addrow--line');
+      try {
+        await sleep(30);
+        const phone = measure();
+        if (!(phone.bl >= 1)) throw new Error('setup: the base .tl-addrow rule has no 1px border any more (' + phone.bl + ') — the case this test measures has moved');
+        check(phone, 'phone row (' + phone.bl + 'px border)');
+      } finally { if (wasLine) row.classList.add('tl-addrow--line'); }
+    } finally {
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
+  test('624: holding a layer head to multi-select shows 1 selected and no single-layer edit menu (rule 16 reading a); two selected still get the multi panel', { item: '624', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedSel = FM.scene.selectedId, mode0 = !!FM.selectMode;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const phone = innerWidth <= 480;
+    try {
+      if (hadHome) FM.home.close();
+      const A = FM.makeLayer('shape', { name: 'a624', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#f00', start: 0, duration: 3 });
+      const B = FM.makeLayer('shape', { name: 'b624', shape: 'rect', x: 600, y: 600, shapeW: 200, shapeH: 200, fill: '#0f0', start: 0, duration: 3 });
+      FM.scene = scene([A, B], { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+      FM.selectMode = false; FM.selectLayer(null); if (FM.pause) FM.pause(); FM.setTime(0); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); await sleep(300);
+      const head = attached([...document.querySelectorAll('.track-head')].find(h => !h.querySelector('.th-eye.off')) || document.querySelector('.track-head'), 'a track head');
+      const r = head.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const pe = (t, el, buttons) => el.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 21, isPrimary: true, pointerType: 'touch', clientX: cx, clientY: cy, buttons: buttons }));
+      pe('pointerdown', head, 1); await sleep(520);   // past the 380ms hold
+      pe('pointerup', head, 0); await sleep(250);
+      if (!FM.selectMode) throw new Error('setup: a 520ms hold on a layer head did not enter select mode — nothing below is about the hold');
+      const ids = FM.selectionIds ? FM.selectionIds() : [];
+      if (ids.length !== 1) throw new Error('setup: the hold selected ' + ids.length + ' layer(s), not one');
+      const cnt = document.getElementById('m-selcount');
+      if (cnt && !/1 (layer )?selected/.test(cnt.textContent)) throw new Error('the top bar says "' + cnt.textContent.trim() + '" after the hold, not "1 (layer) selected"');
+      if (document.querySelector('.cat-grid')) throw new Error('holding a layer head to multi-select opened the single-layer 1-9 edit grid for it — the screenshot he sent, "1 selected" with the 8-tile menu under it (queue 624, reading a)');
+      if (phone) { const insp = document.getElementById('inspector') || document.querySelector('.inspector'); if (insp && insp.classList.contains('open')) throw new Error('the phone sheet came up over the timeline on the first frame of a paint-select (queue 624)'); }
+      // control: with two selected the multi panel is the panel — nothing here removed it
+      FM.toggleSelect(FM.scene.layers.find(l => ids.indexOf(l.id) < 0).id, true); if (FM.syncSelectionChrome) FM.syncSelectionChrome(); FM.refreshAll(); await sleep(250);
+      if ((FM.selectionIds ? FM.selectionIds() : []).length !== 2) throw new Error('setup: could not grow the selection to two');
+      if (document.querySelector('.cat-grid')) throw new Error('control: two selected layers show the single-layer grid');
+      if (phone) { const insp = document.getElementById('inspector') || document.querySelector('.inspector'); if (insp && !insp.classList.contains('open')) throw new Error('control: with two selected the multi sheet no longer comes up — the gate is wider than one layer'); }
+    } finally {
+      try { window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 21, pointerType: 'touch', buttons: 0 })); } catch (e) {}
+      FM.selectMode = mode0; if (FM.syncSelectionChrome) { try { FM.syncSelectionChrome(); } catch (e) {} }
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 692 ROUTE 2: THE READBACK IS CROPPED TO THE LAYER FOR EVERY ADMITTED KERNEL, AND ADMISSION IS RE-PROVED HERE.
      Five rounds bounded 13 kernels one at a time; this covers 44 more in one place in drawPixelEffect. A kernel is in
      CROP_FX only if the cropped path draws the same picture as the full one — five subject positions, defaults and

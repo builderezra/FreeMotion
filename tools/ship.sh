@@ -45,6 +45,11 @@ if [ "$FROM_FILE" = "0" ]; then
   esac
 fi
 [ -f .mutation-in-progress ] && { echo "❌ a mutation check is still in progress — refusing to ship a mutated tree"; exit 1; }
+# A TEST TITLE WITH A DOUBLE QUOTE IS REFUSED HERE, IN A SECOND, NOT BY THE SUITE TEN MINUTES IN (5 Sep). The suite's own
+# hygiene test catches it — after prove.sh and a full pass — and it caught two in one afternoon (791, then 624), each
+# costing a whole ship. The rule is the suite's; this only moves it to the front of the line.
+_DQ="$(grep -nE "test\('[^'\n]*\"[^'\n]*'" tests/tests.js | head -3)"
+[ -z "$_DQ" ] || { echo "❌ a test title contains a double quote — the FAIL line would be cut short in ship.sh and mutate.sh; use single quotes:"; echo "$_DQ" | cut -c1-160; exit 1; }
 
 # ─── NO NUL BYTES IN SOURCE (28 Aug) ────────────────────────────────────────────────────────────────
 # A NUL byte in a text file makes grep treat the WHOLE FILE as binary and print NOTHING for it — not an

@@ -55,6 +55,10 @@ window.FM = window.FM || {};
       var key = multi ? 'multi:' + ids.length : id;
       if (key !== lastSyncKey) { userClosed = false; lastSyncKey = key; }   // a NEW selection always gets the sheet back
       if (!has) { insp.style.top = ''; insp.style.maxHeight = ''; close(); userClosed = false; return; }
+      /* HOLDING TO MULTI-SELECT DOES NOT RAISE THE SHEET (queue 624, rule 16 reading (a)). One layer in select mode is the
+         first frame of a paint-select: the finger is still on the timeline, about to drag down for more rows, and a sheet
+         thrown over that is the thing he photographed. With two or more the multi sheet comes up as before. */
+      if (FM.selectMode && ids.length === 1) { insp.style.top = ''; insp.style.maxHeight = ''; close(); return; }
       /* A timeline clip drag owns the screen. Dragging a clip SELECTS it first, on purpose, so you can
          see what you grabbed — but the sheet is derived from the selection, so that selection used to
          throw the panel up over the very timeline being dragged on (Ezra, twice: "I still need it so I
