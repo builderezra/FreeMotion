@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 5 Sep at v15.61
+> ## 📌 WHAT I NEED FROM YOU — updated 5 Sep at v15.62
 >
-> **State:** v15.61 — Zoom Blur and Spin Blur cost 2ms instead of 80 on a small layer, and 44 effects now cost a tenth of what they did on a small layer (#692 route 2); yesterday's three oldest items in your own words are closed. The two oldest items in your own words are closed today: #539 (Squish squashes against other layers) and #553 (the half-drawn return and its black bar). You came back and said you suspected "delusion and lack of effort" — you were right to. Every release now has to PROVE its fix (ship.sh reverts the fix and requires the new test to fail), and re-proving the last 27 releases found two that claimed the opposite of what they did (fixed in v15.57, more findings being verified).
+> **State:** v15.62 — the lag item (#692) has had everything the numbers pointed at: 44 effects crop their readback, the radial blurs are bounded, and eight bounded effects lost their readback floor; and 44 effects now cost a tenth of what they did on a small layer (#692 route 2); yesterday's three oldest items in your own words are closed. The two oldest items in your own words are closed today: #539 (Squish squashes against other layers) and #553 (the half-drawn return and its black bar). You came back and said you suspected "delusion and lack of effort" — you were right to. Every release now has to PROVE its fix (ship.sh reverts the fix and requires the new test to fail), and re-proving the last 27 releases found two that claimed the opposite of what they did (fixed in v15.57, more findings being verified).
 >
 > ### 👉 [**Open the unblock list**](https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7)
 > Everything below is on that page, laid out so you can tap through it on your phone and send me one
@@ -27516,10 +27516,29 @@ re-opened #480, which I had marked done and had not fixed.
       |---|---|---|
       | Zoom Blur | 65–90ms | **2.0ms** |
       | Spin Blur | 71–83ms | **2.0ms** |
-      **What is left in this entry:** the 47 position-dependent kernels stay on the full plate by design (a grid or a
-      noise field genuinely covers the frame); the remaining floor is the full-plate readback the bounded path still
-      pays (~8–12ms), which the crop path avoids and a bounded kernel could too if the alpha box came from the 1/8
-      scan instead of a full scan — a later round if the phone still lags with these in place.
+      ✅ **ROUND 7 — v15.62: the readback floor is gone for eight bounded kernels.** Measured first (renderScene, this
+      Mac, 1080x1920, small layer): a crop-path effect 4.5ms, a bounded one 7–14 — the floor was the full-plate
+      getImageData, the alpha scan and the putImageData. Bounded kernels whose geometry is relative to the LAYER now take
+      the same cropped readback and measure their box on the small buffer. Admission through the real dispatcher (crop
+      forced on vs off, byte-identical, with the fixture big enough that the crop is real): Box Blur, Drop Shadow, Lens
+      Blur, Matte Choker, Edge Glow, Inner Blur. **Letterbox and Border passed that probe and were then caught by the
+      full suite** — a Letterbox saved before v6.35 sizes its bars as a fraction of the FRAME height, a legacy path a
+      fresh instance never takes — so they stay on the full readback; a probe on fresh instances is not the suite.
+      Box Blur had to declare its true reach (radius ×
+      passes × vertical amount, up to 320px) — the generic margin clipped its tails at the maximums, caught by the
+      probe. Tilt Shift, Hex Tiles, Radial Shadow, the two streaks and the two blurs from round 6 are plate-relative and
+      keep the full readback; Tilt Shift is the suite's control.
+      | 180x150 subject in a 1080x1920 plate | full readback | cropped |
+      |---|---|---|
+      | Box Blur | 17.3ms | **5.0ms** |
+      | Edge Glow | 18.5 | **4.9** |
+      | Matte Choker | 15.7 | **4.0** |
+      | Inner Blur | 15.0 | **4.0** |
+      | Drop Shadow | 9.7 | **3.9** |
+      | Lens Blur | 9.0 | **5.7** |
+      **What is left in this entry, by design:** the 47 position-dependent unbounded kernels (a grid or a noise field
+      genuinely covers the frame) and the seven plate-relative bounded ones keep the full plate. Everything the numbers
+      pointed at is done; what remains is his phone's own report, which #95's card asks for.
       ~~2. **Plate-sized**, the real fix: `nestedPlate` sizes the plate from the whole target canvas.~~ (superseded by the readback crop above — same win, no coordinate-system risk)
          Sizing it to the layer's bounds instead would fix EVERY kernel at once with no per-kernel
          edits — and the machinery is already there, since `OX`/`OY` are threaded through `baseT` for

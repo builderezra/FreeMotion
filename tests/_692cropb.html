@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>#692 round 7 — which BOUNDED kernels can take the cropped readback</title></head>
+<body style="margin:0;background:#081116;color:#d8e6ee;font:12px/1.45 ui-monospace,monospace">
+<iframe id="app" src="../index.html" style="width:420px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="o" style="padding:10px;white-space:pre-wrap">measuring…</pre>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.fxRegistry&&w.FM.renderScene&&w.FM._boundedFx&&w.FM._cropStats)return r(w.FM);if(n++>400)return j(new Error('FM never appeared'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('o');
+f.addEventListener('load',function(){var w=f.contentWindow,d=f.contentDocument;
+ waitFM(w).then(async function(FM){
+  await sleep(500);
+  function shot(type,P,pos,mode,params){
+    var c=d.createElement('canvas');c.width=P.width;c.height=P.height;c.__fmRS=1;c.__fmOX=0;c.__fmOY=0;
+    var L=FM.makeLayer('shape',{shape:'rect',x:pos[0],y:pos[1],shapeW:pos[2],shapeH:pos[3],fill:'#4fa0ff',start:0,duration:4});
+    var e=FM.fxRegistry.makeInstance(type); if(params)Object.assign(e.params,params); L.effects=[e];
+    var m0=FM._cropMode; FM._cropMode=mode; var t0=performance.now();
+    try{FM.renderScene(c.getContext('2d'),{project:P,layers:[L],selectedId:null,selectedIds:[]},0);}finally{FM._cropMode=m0;}
+    var ms=performance.now()-t0;
+    return {px:c.getContext('2d').getImageData(0,0,P.width,P.height).data, ms:ms};
+  }
+  function diff(a,b){var n=0;for(var i=0;i<a.length;i++)if(a[i]!==b[i])n++;return n;}
+  var P={width:640,height:520,fps:30,duration:4,background:null};   // big enough that the crop is REAL at every position
+  var POS=[[320,260,90,70,'centred'],[30,25,60,50,'corner'],[620,500,60,50,'clipped'],[320,260,640,520,'fills'],[320,260,2,1,'hairline']];
+  var types=Object.keys(FM._boundedFx), admitted=[], rejected=[], lines=[];
+  function maxParams(type){var ps=FM.fxRegistry.paramsOf(type)||[];var p={};ps.forEach(function(c){if(c.type==='range'&&typeof c.max==='number')p[c.key]=c.max;});return p;}
+  for(var k=0;k<types.length;k++){var type=types[k]; var ok=true, why='', real=0, vac=0;
+    for(var s=0;s<2&&ok;s++)for(var q=0;q<POS.length&&ok;q++){var params=s?maxParams(type):null;
+      var a,b; try{a=shot(type,P,POS[q],-1,params); b=shot(type,P,POS[q],2,params);}catch(e){ok=false;why='threw '+(e&&e.message);break;}
+      var lr=FM._cropStats.lastRect; var vacuous=(!lr || lr.w*lr.h>=P.width*P.height*0.9);
+      if(vacuous)vac++; else real++;   // a crop that covers the plate proves nothing but risks nothing either — the dispatcher would do the same
+      var n=diff(a.px,b.px); if(n){ok=false;why=(s?'max':'defaults')+'/'+POS[q][4]+': '+n+' bytes differ (crop '+(lr?lr.w+'x'+lr.h:'none')+')';}
+    }
+    if(ok && !real){ok=false;why='the crop covered the plate at every position — never actually cropped, so nothing is proven';}
+    (ok?admitted:rejected).push(type); lines.push((ok?'✅ ':'❌ ')+type.padEnd(14)+(ok?'  ('+real+' real crops, '+vac+' vacuous)':'  '+why));
+    await sleep(0);
+  }
+  var BIG={width:1080,height:1920,fps:30,duration:4,background:null}, timing=[];
+  for(var a2=0;a2<admitted.length;a2++){var type=admitted[a2]; var full=[],crop=[];
+    for(var r=0;r<4;r++){full.push(shot(type,BIG,[540,960,180,150],-1).ms); crop.push(shot(type,BIG,[540,960,180,150],2).ms);}
+    full.sort(function(x,y){return x-y});crop.sort(function(x,y){return x-y});
+    timing.push({type:type,full:full[1],crop:crop[1]});
+    await sleep(0);
+  }
+  var o=['#692 round 7 — '+types.length+' bounded kernels, through the real dispatcher, crop forced on vs off, '+POS.length+' positions × defaults/max',''];
+  o.push('ADMITTED ('+admitted.length+'): '+admitted.join(' '));
+  o.push('REJECTED ('+rejected.length+'): '+rejected.join(' '));
+  o.push(''); o.push('renderScene, 180x150 subject in 1080x1920 (ms, median of 4): full readback → cropped');
+  timing.forEach(function(t){o.push('  '+t.type.padEnd(14)+String(t.full.toFixed(1)).padStart(7)+' → '+String(t.crop.toFixed(1)).padStart(6));});
+  o.push(''); o.push(lines.join('\n'));
+  out.textContent=o.join('\n'); w.__done=true; window.__done=true;
+ }).catch(function(e){out.textContent='probe failed: '+(e&&e.stack||e);window.__done=true;});
+});
+</script></body></html>

@@ -59635,6 +59635,51 @@
     if (lit < 500) throw new Error('setup: the Edge render is empty (' + lit + ' lit pixels) — identical nothings prove nothing');
   });
 
+  /* ═══ 692 ROUND 7: BOUNDED KERNELS THAT CAN ALSO TAKE THE CROPPED READBACK. The bounded path still paid the full-plate
+     getImageData / scan / putImageData (measured 7–14ms per effect against 4.5 on the crop path). Eight bounded kernels
+     whose geometry is relative to the layer now read back only the layer's box plus their reach and measure their box on
+     that buffer. Admission is by identity THROUGH THE REAL DISPATCHER (renderScene, crop forced on vs off), and this
+     re-proves it for every member with the fixture large enough that the crop is real; the control is Tilt Shift, whose
+     centre is a fraction of the plate — it must differ under a forced crop, or the comparison sees nothing. */
+  test('692: every crop-admitted bounded kernel renders identically with the cropped readback, a plate-relative control does not, and the dispatcher takes it', { item: '692', budgetMs: 90000 }, async function () {
+    const CB = FM._cropBoundedFx, B = FM._boundedFx;
+    if (!CB || !B || !FM._cropStats) throw new Error('seams missing: _cropBoundedFx / _boundedFx / _cropStats');
+    const members = Object.keys(CB);
+    if (members.length < 5) throw new Error('only ' + members.length + ' bounded kernels are crop-admitted — the list collapsed');
+    const P = { width: 640, height: 520, fps: 30, duration: 4, background: null };
+    const POS = [[320, 260, 90, 70, 'centred'], [30, 25, 60, 50, 'corner'], [620, 500, 60, 50, 'clipped'], [320, 260, 640, 520, 'fills'], [320, 260, 2, 1, 'hairline']];
+    const maxParams = type => { const ps = FM.fxRegistry.paramsOf(type) || []; const p = {}; ps.forEach(c => { if (c.type === 'range' && typeof c.max === 'number') p[c.key] = c.max; }); return p; };
+    const shot = (type, pos, mode, params) => { const c = offscreen(P.width, P.height); c.__fmRS = 1; c.__fmOX = 0; c.__fmOY = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: pos[0], y: pos[1], shapeW: pos[2], shapeH: pos[3], fill: '#4fa0ff', start: 0, duration: 4 });
+      const e = FM.fxRegistry.makeInstance(type); if (params) Object.assign(e.params, params); L.effects = [e];
+      const m0 = FM._cropMode; FM._cropMode = mode; const cb0 = FM._cropStats.cropBounded, f0 = FM._cropStats.full;
+      try { FM.renderScene(c.getContext('2d'), { project: P, layers: [L], selectedId: null, selectedIds: [] }, 0); } finally { FM._cropMode = m0; }
+      return { px: c.getContext('2d').getImageData(0, 0, P.width, P.height).data, rect: FM._cropStats.lastRect, cb: FM._cropStats.cropBounded - cb0, full: FM._cropStats.full - f0 }; };
+    const diff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n; };
+    const bad = [];
+    for (const type of members) {
+      if (!B[type]) { bad.push(type + ': crop-admitted but not bounded'); continue; }
+      let real = 0;
+      for (const params of [null, maxParams(type)]) for (const pos of POS) {
+        const a = shot(type, pos, -1, params), b = shot(type, pos, 2, params);
+        const vacuous = !b.rect || b.rect.w * b.rect.h >= P.width * P.height * 0.9; if (!vacuous) real++;
+        const n = diff(a.px, b.px);
+        if (n) { bad.push(type + ' (' + (params ? 'max' : 'defaults') + ', ' + pos[4] + '): ' + n + ' bytes differ'); break; }
+      }
+      if (!real) bad.push(type + ': the crop covered the plate at every position — nothing proven');
+    }
+    if (bad.length) throw new Error('crop-admitted bounded kernels that do NOT render the same picture (drop them from CROP_BOUNDED_FX): ' + bad.slice(0, 6).join(' ;; '));
+    // the control: Tilt Shift's centre is a fraction of the PLATE, so a forced crop must change its picture
+    if (CB.tiltshift) throw new Error('tiltshift is crop-admitted — its centre is a fraction of the plate');
+    const ca = shot('tiltshift', POS[0], -1, null), cb = shot('tiltshift', POS[0], 2, null);
+    if (diff(ca.px, cb.px) === 0) throw new Error('CONTROL FAILED: Tilt Shift renders the same picture under a forced crop — the comparison is blind');
+    // …and the dispatcher takes the crop path for an admitted bounded kernel without being forced
+    const d0 = shot('boxblur', POS[0], 0, null);
+    if (!(d0.cb >= 1)) throw new Error('at the default mode Box Blur did not take the cropped readback (cropBounded ' + d0.cb + ', full ' + d0.full + ') — CROP_BOUNDED_FX is not consulted');
+    let lit = 0; for (let i = 3; i < d0.px.length; i += 4) if (d0.px[i] > 8) lit++;
+    if (lit < 500) throw new Error('setup: the Box Blur render is empty (' + lit + ' lit pixels)');
+  });
+
   /* ═══ 692: ZOOM BLUR AND SPIN BLUR, BOUNDED TO WHAT THEIR TAPS CAN REACH. Both were "never" — on the premise that a
      later effect could read colour they write under zero alpha; measured 5 Sep, a canvas cannot hold such colour, so
      the standard is the ordinary one: byte-identical to the unbounded kernel. Fixtures: the subject centred, in a corner,

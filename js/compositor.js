@@ -3292,8 +3292,20 @@ window.FM = window.FM || {};
    * the small plates, different on the big one). They keep the full plate. */
   const CROP_FX = Object.assign(Object.create(null), { levels: 1, chromakeypro: 1, hslbands: 1, solarize: 1, gamma: 1, temperature: 1, vibrance: 1, sharpen: 1, thermal: 1, edge: 1, emboss: 1, exposure: 1, gradientmap: 1, colorize: 1, lightglow: 1, longshadow: 1, darkglow: 1, stroke: 1, smoothedges: 1, bumpmap: 1, contourlines: 1, colorbalance: 1, highlightsshadows: 1, chromaticaberration: 1, innerglow: 1, unsharpmask: 1, linstreaks: 1, blink: 1, flicker: 1, flashdark: 1, pulseopacity: 1, solidmatte: 1, mattefringe: 1, channelremap: 1, smoothbevel: 1, contourstrips: 1, bleachbypass: 1, tealorange: 1, crossprocess: 1, replacecolor: 1, spotcolor: 1, spectralmap: 1, palettemap: 1, faded: 1 });
   FM._cropFx = CROP_FX;
-  FM._cropMode = 0;              // 0 = CROP_FX decides · 1 = force the crop path for any kernel (the admission probe) · -1 = never crop
-  FM._cropStats = { crops: 0, full: 0, lastRect: null };
+  /* BOUNDED kernels that can ALSO take the cropped readback (#692 round 7). A bounded kernel needs its box, so on the
+   * crop path it gets the box measured on the cropped buffer (fxBounds on a buffer 1/50th the size). Only kernels whose
+   * geometry is relative to the layer, not the plate, can take it — a blur radius, a shadow offset — and admission is
+   * again by data: tests/_692cropb.html renders each through the real dispatcher with the crop forced on and off and
+   * compares the canvas byte for byte. Frame-relative kernels (Letterbox, Border, Tilt Shift's centre, the radial ones
+   * whose centre is a % of the plate, Hex Tiles' grid) fail that and keep the full readback. */
+  const CROP_BOUNDED_FX = Object.assign(Object.create(null), { boxblur: 1, dropshadow: 1, lensblur: 1, mattechoker: 1, edgeglow: 1, innerblur: 1 });
+  /* Admitted 5 Sep by tests/_692cropb.html. Letterbox and Border passed that probe on fresh instances and are NOT here:
+     the full suite caught a Letterbox saved before v6.35 sizing its bars as a fraction of the FRAME height (48px of a
+     240px frame became 32px of a crop) — a legacy path the probe's fixtures never took. A frame is a frame; they keep
+     the full readback with the seven plate-relative kernels. */
+  FM._cropBoundedFx = CROP_BOUNDED_FX;
+  FM._cropMode = 0;              // 0 = the lists decide · 1 = force the crop path for any unbounded kernel · 2 = force it for bounded ones too · -1 = never crop
+  FM._cropStats = { crops: 0, cropBounded: 0, full: 0, lastRect: null };
   let _cropA = null, _cropB = null;
   function cropRectOf(src, W, H, pad) {
     if (!_cropA) { _cropA = document.createElement('canvas'); _cropB = document.createElement('canvas'); }
@@ -3313,12 +3325,22 @@ window.FM = window.FM || {};
     const X1 = Math.min(W, (x1 + 2) * S + pad), Y1 = Math.min(H, (y1 + 2) * S + pad);
     return { x: X0, y: Y0, w: Math.max(1, X1 - X0), h: Math.max(1, Y1 - Y0) };
   }
+  /* A kernel whose reach is not the sum of its pixel-unit params says so here, in its own terms. Box Blur spreads
+     radius × passes sideways and radius × (vertical amount) × passes downward — up to 320px at its maximums, which no
+     multiple of "radius" could honestly promise (measured 5 Sep: 83,232 bytes differed at the maximums under 3×). */
+  const CROP_REACH = Object.assign(Object.create(null), {
+    boxblur: function (p, t) { const r = Math.min(40, Math.round(FM.evalProp(p.radius, t) || 0)), n = Math.max(1, Math.min(4, Math.round(p.passes == null ? 1 : FM.evalProp(p.passes, t)))), a = Math.max(0, Math.min(200, p.aspect == null ? 100 : FM.evalProp(p.aspect, t))); return r * n * Math.max(1, a / 100); },
+  });
   function cropMarginFor(type, params, t, ps) {
+    if (CROP_REACH[type]) return Math.ceil(CROP_REACH[type](params || {}, t) * (ps || 1) * 1.1) + 8;
     const keys = pxParamKeys(type); let reach = 0;
     for (let i = 0; i < keys.length; i++) { const v = params ? FM.evalProp(params[keys[i]], t) : 0; if (typeof v === 'number' && isFinite(v)) reach += Math.abs(v); }
-    return Math.ceil(reach * (ps || 1) * 1.5) + 8;   // the sum of every pixel-unit param, half again for luck, and a floor for antialiasing
+    // Three times the summed pixel-unit params: a box blur runs up to three passes, a shadow's softness is a blur on
+    // top of its offset, a glow spreads past its radius — measured 5 Sep, 1.5x clipped their tails on a hairline.
+    return Math.ceil(reach * (ps || 1) * 3) + 8;
   }
-  function cropWanted(type) { return FM._cropMode === 1 || (FM._cropMode === 0 && !!CROP_FX[type]); }
+  function cropWanted(type) { return FM._cropMode === 1 || FM._cropMode === 2 || (FM._cropMode === 0 && !!CROP_FX[type]); }
+  function cropBoundedWanted(type) { return FM._cropMode === 2 || (FM._cropMode === 0 && !!CROP_BOUNDED_FX[type]); }
   /* The whole crop path on a bare buffer, for the admission probe and the suite: run `fn` on a copy of `data` in full,
      and again through the crop (the real cropRectOf + margin), and say whether the two pictures are byte-identical. */
   FM._cropIdentity = function (type, data, W, H, params, t, ps) {
@@ -3372,17 +3394,20 @@ window.FM = window.FM || {};
       // #692 route 2: an admitted kernel reads back only the layer's box plus its reach, runs on that, and is put back
       // at its offset over an untouched copy of the plate. Bounded kernels keep their own path (they need the full plate
       // and a box). An empty plate skips the kernel exactly as the bounded path does.
-      if (!bounded && cropWanted(fx.type)) {
+      if ((!bounded && cropWanted(fx.type)) || (bounded && cropBoundedWanted(fx.type))) {
         const pars = pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn);
         const rect = cropRectOf(pA, W, H, cropMarginFor(fx.type, fx.params || {}, t, ps));
-        FM._cropStats.crops++; FM._cropStats.lastRect = rect;
+        if (bounded) FM._cropStats.cropBounded++; else FM._cropStats.crops++;
+        FM._cropStats.lastRect = rect;
         const bctx = pB.getContext('2d');
         bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.globalAlpha = 1; bctx.globalCompositeOperation = 'copy'; bctx.filter = 'none';
         bctx.drawImage(pA, 0, 0);                    // 'copy': the plate lands exactly, transparent pixels included
         bctx.globalCompositeOperation = 'source-over';
         if (rect) {
           const sub = actx.getImageData(rect.x, rect.y, rect.w, rect.h);
-          fn(sub.data, rect.w, rect.h, pars, t, ps);
+          // a bounded kernel gets its box measured on the cropped buffer — the same scan, 1/50th of the pixels
+          const bb2 = bounded ? fxBounds(sub.data, rect.w, rect.h) : null;
+          if (!bounded || bb2) fn(sub.data, rect.w, rect.h, pars, t, ps, bb2);
           bctx.putImageData(sub, rect.x, rect.y);
         }
         ctx.save();
