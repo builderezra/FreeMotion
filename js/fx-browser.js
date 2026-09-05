@@ -781,6 +781,7 @@ window.FM = window.FM || {};
     if (!layer || (layer.type !== 'shape' && layer.type !== 'text')) return false;   // video moves by itself
     if ((layer.effects || []).length) return false;                                   // an effect can move it
     if (layer.parent) return false;                                                     // queue 746: a child rides its parent's motion — fx-thumbs walks the chain the same way
+    if (layer.type === 'text' && FM.textHasAnim && FM.textHasAnim(layer)) return false;   // queue 795: a text animator moves every glyph — the badge said "never moves" over it
     const tr = layer.transform || {};
     const anim = ['x', 'y', 'scale', 'scaleX', 'scaleY', 'rotation', 'rotationX', 'rotationY', 'skewX', 'skewY', 'anchorX', 'anchorY', 'z']   // queue 746: an animated anchor or depth moves it too
       .some(k => FM.isAnimated && FM.isAnimated(tr[k]));

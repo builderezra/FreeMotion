@@ -347,6 +347,7 @@ window.FM = window.FM || {};
   FM._heldPointers = heldPointers;               // suite seam (queue 781)
   FM._gestureIsStale = gestureIsStale;
   function recoverStuckGesture() {
+    restoreGestures();   // queue 796: the clip (and its group), trim, keyframes and slip go BACK where they started — not left where the lost pointer dropped them
     reorderActive = false; kfDrag = null; trimDrag = null; clipMove = null; slipDrag = null;
     FM._dragOrderIds = null; FM.dragLayerId = null; FM.dragAddAt = null;
     /* …AND THE THINGS THE GESTURE PUT ON SCREEN (queue 751, hunt MEDIUM #34). This recovers a drag whose pointer was lost,
@@ -424,7 +425,12 @@ window.FM = window.FM || {};
   // and pointercancel must never leave a half-applied edit in the scene (a moved clip whose keyframes
   // never followed, a half-trim, a mid-drag keyframe time) — that state would ride silently into the
   // next history.commit and autosave.
-  function abortGestures() {
+  /* RESTORE, THEN (SEPARATELY) REBUILD. `restoreGestures` puts every in-flight gesture's subject back where it started
+     and clears the gesture; `abortGestures` is that plus the rebuild and render. Split (queue 796) because
+     recoverStuckGesture runs INSIDE rebuild() and used to null `clipMove` without restoring anything — a clip whose
+     pointer was lost stayed wherever the last pointermove had dragged it, and its group with it. It now restores here
+     and lets the rebuild it is already inside carry on. */
+  function restoreGestures() {
     const had = clipMove || trimDrag || kfDrag || slipDrag || cueDrag;
     if (cueDrag) { cueDrag.cue.start = cueDrag.s0; cueDrag.cue.end = cueDrag.e0; cueDrag = null; }
     if (slipDrag) { slipDrag.layer.trimStart = slipDrag.trim0; endSlipGhost(slipDrag); slipDrag = null; }
@@ -450,6 +456,10 @@ window.FM = window.FM || {};
       kfDrag = null;
     }
     if (clipTap) { if (clipTap.holdTimer) clearTimeout(clipTap.holdTimer); clipTap = null; }   // orphaned hold timer could grab the WRONG clip later
+    return had;
+  }
+  function abortGestures() {
+    const had = restoreGestures();
     if (had) { hideSnap(); FM.timeline.rebuild(); FM.requestRender(); }
   }
 

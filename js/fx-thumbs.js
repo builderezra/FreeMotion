@@ -1276,10 +1276,16 @@ window.FM = window.FM || {};
   }
   /* null = could not tell (too slow, or it threw). true/false = measured. The caller must treat null as
      "say nothing", never as "it works" — an absent answer is not a negative one. */
+  /* THE PROBE RENDERS UNDER FM._mfGhost (queue 759) SO A TEMPORAL EFFECT DOES NOT ADVANCE ITS HISTORY — and these four
+     kernels answer that flag by passing the picture straight through. "Effect on" then equals "effect off" byte for byte
+     and the probe would call them dead on every layer (queue 794, found by the #778 audit of v15.54). A probe that cannot
+     see an effect says nothing about it. */
+  const GHOST_GATED = { temporaldenoise: 1, timewarp: 1, framestutter: 1, motionflow: 1 };
   function effectDoesNothing(layer, idx) {
     if (!layer || !FM.scene || !FM.renderScene) return null;
     const fx = layer.effects && layer.effects[idx];
     if (!fx || fx.enabled === false) return null;   // switched off is doing nothing ON PURPOSE
+    if (GHOST_GATED[fx.type]) return null;          // queue 794: the ghost render is a passthrough for these — no verdict possible
     const P = FM.scene.project;
     const w = Math.max(2, P.width | 0), h = Math.max(2, P.height | 0);
     try {

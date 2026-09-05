@@ -394,7 +394,7 @@ window.FM = window.FM || {};
     ] },
     { type: 'roundcorners', label: 'Squircle Corners', params: [
       // The tick box is listed FIRST because it decides whether the two sliders under it do anything.
-      { key: 'style', label: 'Continuous curve', toggle: true, def: 1,
+      { key: 'style', label: 'Continuous curve', toggle: true, def: 1, legacy: 0,
         note: 'One continuous squircle across the whole layer — the app-icon shape. Radius does nothing while this is on.' },
       { key: 'radius', label: 'Radius', min: 0, max: 400, step: 1, def: 80, unit: 'px', overriddenBy: 'style' },
       // NO smoothing slider. It only ever applied to the old Apple-flavoured-rounded-rect path, and now
@@ -860,13 +860,16 @@ window.FM = window.FM || {};
     // big displacements read as motion instead of teleporting. NOTE the render fn's fparam fallbacks stay
     // at the OLD values (20/12/4 + zeros) — an existing project's instance renders byte-identical; only
     // these schema defaults (what a fresh add gets) are spicy.
+    /* queue 793: `legacy` on ten params below (shake ×6, roundcorners.style, tiles.gap, motionflow.amount, halation.amount) —
+       the kernel draws an absent key at that value, and since v15.64 the renderer fills it at that value; the inspector
+       must show the same number. A sweep test now holds every param to it. */
     { type: 'shake', label: 'Shake', params: [
-      { key: 'amount', label: 'Amount', min: 0, max: 2400, step: 1, def: 120, unit: 'px' },
-      { key: 'speed', label: 'Speed', min: 1, max: 40, step: 0.5, def: 14, unit: 'Hz' },
-      { key: 'twist', label: 'Twist', min: 0, max: 180, step: 0.5, def: 10, unit: '°' },
-      { key: 'zoom', label: 'Zoom punch', min: 0, max: 60, step: 0.5, def: 12, unit: '%' },
-      { key: 'jitter', label: 'Hardness', min: 0, max: 1, step: 0.02, def: 0.65 },
-      { key: 'smear', label: 'Smear', min: 0, max: 1, step: 0.02, def: 0.3 },
+      { key: 'amount', label: 'Amount', min: 0, max: 2400, step: 1, def: 120, legacy: 20, unit: 'px' },
+      { key: 'speed', label: 'Speed', min: 1, max: 40, step: 0.5, def: 14, legacy: 12, unit: 'Hz' },
+      { key: 'twist', label: 'Twist', min: 0, max: 180, step: 0.5, def: 10, legacy: 4, unit: '°' },
+      { key: 'zoom', label: 'Zoom punch', min: 0, max: 60, step: 0.5, def: 12, legacy: 0, unit: '%' },
+      { key: 'jitter', label: 'Hardness', min: 0, max: 1, step: 0.02, def: 0.65, legacy: 0 },
+      { key: 'smear', label: 'Smear', min: 0, max: 1, step: 0.02, def: 0.3, legacy: 0 },
       { key: 'direction', label: 'Direction', options: ['Omni', 'Horizontal', 'Vertical'], def: 0 },
     ] },
     { type: 'swing', label: 'Swing', params: [{ key: 'angle', label: 'Angle', min: 0, max: 180, step: 1, def: 15, unit: '°' }, { key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1, unit: 'Hz' }] },
@@ -890,7 +893,7 @@ window.FM = window.FM || {};
       // highlights the button that is actually drawing rather than the new default.
       { key: 'mode', label: 'Layout', options: ['Extend', 'Grid'], def: 0, legacy: 1 },   // Extend = clip stays put, copies fill outward; Grid = classic n×n shrink
       { key: 'count', label: 'Tiles', min: 1, max: 8, step: 1, def: 3 },
-      { key: 'gap', label: 'Gap', min: 0, max: 40, step: 1, def: 0, unit: '%' },
+      { key: 'gap', label: 'Gap', min: 0, max: 40, step: 1, def: 0, legacy: 8, unit: '%' },
       { key: 'mirror', label: 'Mirror', options: ['Off', 'On'], def: 1, legacy: 0 },      // mirrored copies join seamlessly — "the clip keeps going"
       // What gets repeated. "On screen" is the original behaviour: it tiles whatever alpha survives
       // inside the frame, so a clip dragged half off the edge repeats a sliver. "Whole clip" renders
@@ -928,7 +931,7 @@ window.FM = window.FM || {};
          ⚠️ A DEFAULT CHANGE CANNOT DISTURB HIS EXISTING CLIPS: makeInstance seeds every parameter, so a
          placed effect carries its own saved `amount` and keeps reading it. Only newly added ones start
          at 1.5 — which measures +140%, i.e. it reads without touching a slider, which is the ask. */
-      { key: 'amount', label: 'Shutter', min: 0, max: 6, step: 0.05, def: 1.5 },
+      { key: 'amount', label: 'Shutter', min: 0, max: 6, step: 0.05, def: 1.5, legacy: 1 },
       { key: 'samples', label: 'Quality', min: 4, max: 24, step: 1, def: 10 },
       { key: 'threshold', label: 'Threshold', min: 0, max: 0.4, step: 0.01, def: 0.05 },
       { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.05, def: 0.5 },
@@ -1134,7 +1137,7 @@ window.FM = window.FM || {};
     // the back of the base and re-exposes the emulsion. Two radii is the whole trick: a tight core
     // that hugs the highlight and a wide wash. Glow / Light Glow have one radius and can't do it.
     { type: 'halation', label: 'Halation', desc: 'The warm red bleed film gets around blown highlights — a tight core plus a wide wash, which is what reads as film rather than video.', params: [
-      { key: 'amount', label: 'Amount', min: 0, max: 2, step: 0.02, def: 1.1 },
+      { key: 'amount', label: 'Amount', min: 0, max: 2, step: 0.02, def: 1.1, legacy: 0.8 },
       { key: 'threshold', label: 'Threshold', min: 0, max: 1, step: 0.02, def: 0.68 },
       { key: 'tightness', label: 'Core', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'spread', label: 'Spread', min: 0.5, max: 20, step: 0.5, def: 5, unit: '%' },

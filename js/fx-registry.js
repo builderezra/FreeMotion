@@ -216,7 +216,7 @@ window.FM = window.FM || {};
       def.params.forEach(function (pp) {
         // `toggle` is a tick box, not a two-button segment: it reads as ON/OFF rather than as a choice
         // between two equal options, which matters when the thing it switches on overrides other controls.
-        if (pp.toggle) out.push({ key: pp.key, label: pp.label, type: 'toggle', default: pp.def, note: pp.note || '', keyframable: false });
+        if (pp.toggle) out.push({ key: pp.key, label: pp.label, type: 'toggle', default: pp.def, legacy: pp.legacy, note: pp.note || '', keyframable: false });
         // `legacy` is the value the RENDERER falls back to when the key is absent, which is not always
         // the schema default (byte-identity: an old instance must keep rendering as it always did).
         // The UI needs it so the highlighted button matches what actually draws.

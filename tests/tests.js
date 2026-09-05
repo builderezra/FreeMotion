@@ -59923,6 +59923,99 @@
     }
   });
 
+  test('793: every param shows in the inspector what an absent key renders — legacy where the kernel disagrees with the schema default', { item: '793' }, function () {
+    if (!FM._fxFillValue || !FM.fxRegistry || !FM.fxRegistry.paramsOf) throw new Error('seams missing: FM._fxFillValue / fxRegistry.paramsOf');
+    const types = (FM.EFFECTS || []).map(d => d && d.type).filter(Boolean);
+    if (types.length < 100) throw new Error('only ' + types.length + ' effect types in FM.EFFECTS — the sweep would cover nothing');
+    const bad = []; let n = 0;
+    for (const t of types) {
+      let ps; try { ps = FM.fxRegistry.paramsOf(t) || []; } catch (e) { continue; }
+      for (const c of ps) {
+        if (!c || !c.key || c.type === 'layer') continue;
+        const fill = FM._fxFillValue(t, c.key);
+        if (fill === undefined || typeof fill !== 'number') continue;   // no numeric fallback to compare (colours, keys without a def)
+        n++;
+        const shown = (c.legacy != null) ? c.legacy : c.default;   // inspector.js: fallback = legacy where declared, else default
+        if (typeof shown !== 'number' || Math.abs(shown - fill) > 1e-9) bad.push(t + '.' + c.key + ' shows ' + JSON.stringify(shown) + (c.legacy != null ? ' (legacy)' : ' (def)') + ' but an absent key renders ' + JSON.stringify(fill));
+      }
+    }
+    if (n < 400) throw new Error('only ' + n + ' params compared — the sweep is not reaching the catalogue');
+    if (bad.length) throw new Error(bad.length + ' param(s) show one value and render another when the key is absent — the inspector lies about them (queue 793): ' + bad.slice(0, 12).join('; '));
+  });
+
+  test('794: the does-nothing-here probe stays quiet for Time Warp Scan and its ghost-gated siblings, and still calls a real no-op dead', { item: '794', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.fxThumbs || typeof FM.fxThumbs.effectDoesNothing !== 'function') throw new Error('FM.fxThumbs.effectDoesNothing is not reachable');
+    const saved = { layers: FM.scene.layers.slice(), w: FM.scene.project.width, h: FM.scene.project.height };
+    try {
+      FM.scene.project.width = 1080; FM.scene.project.height = 1920;
+      const put = (fill, type) => {
+        const inst = FM.fxRegistry.makeInstance(type);
+        if (!inst) throw new Error(type + ' has no registry instance');
+        FM.scene.layers.length = 0;
+        const L = FM.makeLayer('shape', { shape: 'rect', name: 'probe794', x: 540, y: 960, shapeW: 700, shapeH: 700, fill: fill });
+        L.start = 0; L.duration = 5; L.effects = [inst];
+        FM.scene.layers.push(L); FM.refreshAll();
+        return L;
+      };
+      for (const type of ['timewarp', 'motionflow', 'framestutter', 'temporaldenoise']) {
+        const v = FM.fxThumbs.effectDoesNothing(put('#ff8a3d', type), 0);
+        if (v === true) throw new Error(type + ' is reported as doing nothing on a plain shape — the probe renders under the ghost flag and this kernel passes the picture through under that flag, so on == off is the probe\'s own blindness, not the effect\'s (queue 794)');
+      }
+      const dead = FM.fxThumbs.effectDoesNothing(put('#cc22cc', 'channelremap'), 0);
+      if (dead !== true) throw new Error('control: Channel Remap on a flat #cc22cc fill must still be called dead (got ' + dead + ') — the probe has gone quiet on everything');
+    } finally {
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l));
+      FM.scene.project.width = saved.w; FM.scene.project.height = saved.h;
+      FM.refreshAll(); await sleep(60);
+    }
+  });
+
+  test('795: a text layer with a text animator is not told it never moves; a static one still is', { item: '795' }, function () {
+    if (!FM.fxBrowser || !FM.fxBrowser._cannotMove || !FM.textHasAnim) throw new Error('seams missing: fxBrowser._cannotMove / FM.textHasAnim');
+    const still = FM.makeLayer('text', { name: 't795', text: 'hi', x: 540, y: 960 });
+    const anim = FM.makeLayer('text', { name: 't795b', text: 'hi', x: 540, y: 960 });
+    anim.textAnim = Object.assign({}, anim.textAnim || {}, { preset: 'typewriter' });
+    if (!FM.textHasAnim(anim)) throw new Error('setup: FM.textHasAnim does not recognise the animated fixture');
+    if (FM.textHasAnim(still)) throw new Error('setup: the static fixture reads as animated');
+    if (!FM.fxBrowser._cannotMove(still)) throw new Error('control: a static text layer with nothing animating it is no longer "cannot move" — the hint would never show');
+    if (FM.fxBrowser._cannotMove(anim)) throw new Error('a text layer whose animator moves every glyph is still "cannot move" — Object Blur\'s tile would say "This layer never moves" over a moving one (queue 795)');
+  });
+
+  test('796: recovering a stuck clip drag puts the clip (and its group) back on its original start', { item: '796', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM._recoverStuckGesture) throw new Error('seam missing: FM._recoverStuckGesture');
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const A = FM.makeLayer('shape', { name: 'a796', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#f00', start: 1, duration: 2 });
+      const B = FM.makeLayer('shape', { name: 'b796', shape: 'rect', x: 600, y: 600, shapeW: 200, shapeH: 200, fill: '#0f0', start: 4, duration: 2 });
+      FM.scene = scene([A, B], { project: { width: 1080, height: 1920, fps: 30, duration: 12, background: '#000000' } });
+      if (FM.pause) FM.pause(); FM.setTime(0); FM.selectLayer(A.id); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); await sleep(300);
+      const tlEl = document.getElementById('timeline'); tlEl.scrollLeft = 0; await sleep(150);
+      const clip = attached([...document.querySelectorAll('#tl-tracks .clip')].find(c => /a796/.test(c.textContent)), 'A clip');
+      const r = clip.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const pe = (t, el, x, buttons) => el.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 11, isPrimary: true, pointerType: 'mouse', button: 0, clientX: x, clientY: cy, buttons: buttons }));
+      pe('pointerdown', clip, cx, 1); await sleep(40);
+      for (let i = 1; i <= 6; i++) { pe('pointermove', window, cx + 15 * i, 1); await sleep(20); }
+      await sleep(60);
+      const movedTo = FM.layerById(FM.scene, A.id).start;
+      if (!(movedTo > 1.05)) throw new Error('setup: a 90px mouse drag did not move the clip (start ' + movedTo + ') — there is no in-flight gesture to lose');
+      // the pointer is lost here (no pointerup ever comes); the app's own recovery runs
+      FM._recoverStuckGesture(); await sleep(60);
+      const after = FM.layerById(FM.scene, A.id).start;
+      if (Math.abs(after - 1) > 1e-6) throw new Error('after recovering the stuck drag the clip sits at ' + after + 's, not its original 1s — recovery cleared the gesture and left the clip where the lost pointer dropped it (queue 796)');
+    } finally {
+      try { window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 11, pointerType: 'mouse', buttons: 0 })); } catch (e) {}
+      try { FM._recoverStuckGesture(); } catch (e) {}
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 692 ROUTE 2: THE READBACK IS CROPPED TO THE LAYER FOR EVERY ADMITTED KERNEL, AND ADMISSION IS RE-PROVED HERE.
      Five rounds bounded 13 kernels one at a time; this covers 44 more in one place in drawPixelEffect. A kernel is in
      CROP_FX only if the cropped path draws the same picture as the full one — five subject positions, defaults and
