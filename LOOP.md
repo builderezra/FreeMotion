@@ -154,6 +154,17 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## STATE
 
+📍 **STATE, 5 Sep, v15.57 — 1227 tests green, live on Pages. Ezra is back; the loop runs `tools/tick.sh` every minute.**
+He came back after a fortnight and said he suspected *"delusion and lack of effort"*. He was right. Re-proving the last
+27 releases found three that claimed what they did not do (#779 v15.53, #780 v15.54, #781 v15.44 — fixed in v15.57)
+and 55 more unrefuted leads, all in **`tools/audit-2026-09-05.md`**. Of 33 "waiting on him" items audited, the reader
+judged none as genuinely blocked; #570 had his answer in the entry for ten days under a re-ask. **What changed
+structurally (rule 18):** `ship.sh` now refuses a release whose tests pass with the fix reverted (`prove.sh`);
+`spotcheck.sh` re-proves any past release; `tick.sh` computes the tick; the classifier credits his reply formats and
+shouts when a re-ask sits under an answer. **The refutation stage of the audit never ran (session limit) — verify
+every digest lead against the code before acting, exactly as #779–#781 were.** Work the digest oldest-first.
+
+
 📍 **STATE, 29 Aug, v14.16 — 1065 tests green, live on Pages. The loop is running on a one-minute cron.**
 
 🟢 **THE OLDEST ITEM'S LAST ARCHITECTURAL PIECE IS DONE (v14.12).** *"Editing lags, and gets bad fast"*

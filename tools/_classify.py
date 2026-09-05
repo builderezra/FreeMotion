@@ -85,7 +85,7 @@ def classify(body):
     # 'HE ANSWERED' in capitals counts too (2 Sep): two entries (#98, #560) recorded his answer that way,
     # got no credit, and sat as blocked for a day each. Lowercase prose ("he answered a different question")
     # deliberately does NOT count — see the #250 case below.
-    answered = ('ANSWERED BY EZRA' in body) or ('HE ANSWERED' in body)
+    answered = bool(_reply_re(body, strict=True).search(body))   # ANSWERED BY EZRA / HE ANSWERED, or his own reply formats (5 Sep)
     # A HOLD CAN BE LIFTED, and the words that placed it stay in the entry forever (this file keeps its
     # history on purpose). #419 carried "⚠️ HELD AT HIS REQUEST — Log don't do yet" from 18 Aug and was
     # still reading as held after he said "just make it what I want" on the 21st. Held rightly outranks
@@ -125,7 +125,7 @@ def classify(body):
     # Blocking prose written AFTER his last answer has not been superseded by it — nothing came later.
     # So the answer only silences what precedes it. When there is no answer, `tail` is the whole body and
     # this is exactly the old rule.
-    tail = re.split(r'ANSWERED BY EZRA|HE ANSWERED', body)[-1] if answered else body   # after his LAST answer, whichever wording
+    tail = _reply_re(body, strict=True).split(body)[-1] if answered else body   # after his LAST answer, whichever wording or format
     return ('only long-term ideas left' if hedged_only else
             'standing note (no build)' if _standing(body) else
             'held by Ezra' if (HELD.search(body) and not lifted) else
@@ -369,15 +369,31 @@ def next_up(md):
 # This does NOT reclassify (the #250 case shows an unrelated answer must not promote an entry). It NAMES
 # the contradiction — an unstruck ❓ASK beside any record of an answer — so next.sh can shout it, and the
 # fix is one edit: strike the ask, or say plainly that the answer was to something else.
-_ASK = re.compile(r'^\s*❓\s*ASK', re.M)
+# An ask is any of the three shapes a session writes one in: the literal ❓ASK line, the older "❓ **QUESTION FOR HIM"
+# heading, and a "BUILT OUT UNTIL HE …" parking line — that last one IS a question by construction (it names what he
+# owes), and it is the shape that sat under #570's answer for three days (5 Sep).
+_ASK = re.compile(r'^\s*(❓\s*ASK|❓\s*\*{0,2}\s*QUESTION FOR HIM|.{0,12}BUILT OUT UNTIL HE)', re.M)
 _ANSWERED = re.compile(r'ANSWERED BY EZRA|HE ANSWERED|EZRA ANSWERED|He answered|he answered', re.M)
+# HIS OWN REPLY FORMATS COUNT AS AN ANSWER (5 Sep). #570 carried his reply "> 570 stepped" (the INBOX shape: the item
+# number, then the answer, quoted into the entry) from 26 Aug, and a session on 2 Sep wrote "BUILT OUT UNTIL HE picks:
+# Smooth · Stepped · Leave it" under it — the answer was two lines above the re-ask and nothing shouted, because only
+# the words ANSWERED BY EZRA / HE ANSWERED were credited. The unblock page's Copy-my-answers button emits the other
+# shape, "#454 → A". Both are recognised ONLY for the entry's own number: a quoted "> 571 stepped" inside #570 is a
+# different item's answer. Plain "#570: …" is deliberately not a reply — that is how prose refers to an item.
+_ANSWERED_STRICT = r'ANSWERED BY EZRA|HE ANSWERED'   # what classify() credits — lowercase prose must NOT promote (the #250 case)
+def _reply_re(body, strict=False):
+    base = _ANSWERED_STRICT if strict else _ANSWERED.pattern
+    m = re.match(r'- \[[ x]\] \*\*(\d+[a-z]?)', body or '')
+    if not m: return re.compile(base, re.M)
+    n = re.escape(m.group(1))
+    return re.compile(base + r'|^\s*>\s*' + n + r'(?![\dа-я])\s*[:—–-]?\s*\S|#' + n + r'\s*→\s*\S', re.M)
 def stale_asks(md):
     out = []
     for chunk in re.split(r'(?m)^(?=- \[[ x]\] \*\*)', md):
         m = re.match(r'- \[( |x)\] \*\*(\d+[a-z]?)?', chunk)
         if not m or m.group(1) == 'x': continue
         asks = [l for l in chunk.split('\n') if _ASK.match(l) and '~~' not in l and not l.lstrip().startswith('✅')]
-        if asks and _ANSWERED.search(chunk):
+        if asks and _reply_re(chunk).search(chunk):
             out.append((m.group(2) or '(unnumbered)', asks[0].strip()[:110]))
     return out
 
@@ -386,6 +402,27 @@ def stale_asks(md):
 # push when it fails, because every rule in this file was written to cure a specific bug and nothing
 # else would notice if one stopped working. Each case below IS one of those bugs, in its own words.
 _CASES = [
+    # HIS REPLY FORMATS ARE ANSWERS (5 Sep). "> 570 stepped" sat under a block for weeks and above a re-ask for days.
+    ("""- [ ] **570 — the switch does not update live**
+      it is your call: smooth or stepped.
+      > 570 stepped""",
+     'ACTIONABLE',
+     "an inbox-shaped reply ('> 570 stepped') after the question lifts it, like HE ANSWERED does"),
+    ("""- [ ] **454 — presets**
+      it is your call: A, B or C.
+      #454 → A   (remove it)""",
+     'ACTIONABLE',
+     "an unblock-page pick ('#454 → A') after the question lifts it"),
+    ("""- [ ] **570 — the switch does not update live**
+      > 571 stepped
+      it is your call: smooth or stepped.""",
+     'blocked on Ezra',
+     "a reply quoted for ANOTHER number does not lift this entry's question"),
+    ("""- [ ] **570 — the switch does not update live**
+      > 570 stepped
+      ⏸ **2 Sep — BUILT OUT UNTIL HE picks: Smooth (recommended) · Stepped · Leave it.**""",
+     'built out — waiting on him',
+     "a re-ask written AFTER his reply still parks the entry (the tail rule) — next.sh's STALE ASKS banner is what shouts, not a promotion"),
     # AN EXPLICIT UNBLOCK BEATS BOTH THE PROSE AND THE "needs his eye" MARKER (24 Aug). Real cases:
     # #456 carried an old "WAITING ON EZRA — a letter, or a mix" clause and #507 quotes my own past
     # "waiting on your answer" as history. Both were decided; both stayed invisible.
@@ -631,6 +668,20 @@ _DIFF = [
 _STALE_CASES = [
     ("- [ ] **98 — x**\n      ✅ HE ANSWERED THE SIZE QUESTION, 1 Sep: 160pt.\n      ❓ASK: how big should text start?", True,
      "an unstruck ❓ASK beside a recorded answer is stale — #98 sat blocked for a day this way"),
+    ("- [ ] **570 — the switch**\n      His reply, 26 Aug:\n      > 570 stepped\n      ❓ASK: Smooth (recommended) · Stepped but finer · Leave it?", True,
+     "his INBOX-shaped reply ('> 570 stepped') is an answer; the 2 Sep re-ask under it went unshouted for three days (5 Sep)"),
+    ("- [ ] **570 — the switch**\n      > 570 stepped\n        ⏸ **2 Sep — BUILT OUT UNTIL HE picks: Smooth (recommended) · Stepped · Leave it.**", True,
+     "a BUILT OUT UNTIL HE line is an ask; under his reply it is a stale one — #570's exact shape"),
+    ("- [ ] **571 — x**\n      HE ANSWERED: yes\n      ❓ **QUESTION FOR HIM, WITH A RECOMMENDATION:** which colour?", True,
+     "the older '❓ **QUESTION FOR HIM' heading is an ask too"),
+    ("- [ ] **572 — x**\n        ⏸ **2 Sep — BUILT OUT UNTIL HE pastes the report.**", False,
+     "a parking line with no reply recorded is simply parked"),
+    ("- [ ] **454 — presets**\n      From the unblock page:\n      #454 → A   (Save whole look)\n      ❓ASK: A, B or C?", True,
+     "the unblock page's '#454 → A' is an answer"),
+    ("- [ ] **570 — the switch**\n      > 571 stepped\n      ❓ASK: Smooth or stepped?", False,
+     "a quoted reply to a DIFFERENT number is not this entry's answer"),
+    ("- [ ] **570 — the switch**\n      see #570: the switch is accurate\n      ❓ASK: Smooth or stepped?", False,
+     "plain '#570:' is how prose refers to an item, not a reply"),
     ("- [ ] **99 — x**\n      ❓ASK: which file failed?", False,
      "an open ask with no answer recorded is simply open"),
     ("- [ ] **98 — x**\n      ✅ ~~ASK: how big should text start?~~ ANSWERED 1 Sep: 160pt.", False,
