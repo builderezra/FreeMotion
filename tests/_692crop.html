@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>#692 route 2 — which pixel kernels crop byte-identically</title></head>
+<body style="margin:0;background:#081116;color:#d8e6ee;font:12px/1.45 ui-monospace,monospace">
+<iframe id="app" src="../index.html" style="width:420px;height:820px;border:0;position:absolute;left:-9999px"></iframe>
+<pre id="o" style="padding:10px;white-space:pre-wrap">measuring…</pre>
+<script>
+function waitFM(w){return new Promise(function(r,j){var n=0;(function p(){if(w.FM&&w.FM.fxRegistry&&w.FM._cropIdentity&&w.FM._pixelFx)return r(w.FM);if(n++>400)return j(new Error('FM never appeared'));setTimeout(p,50);})();});}
+function sleep(m){return new Promise(function(r){setTimeout(r,m);});}
+var f=document.getElementById('app'), out=document.getElementById('o');
+f.addEventListener('load',function(){var w=f.contentWindow;
+ waitFM(w).then(async function(FM){
+  await sleep(500);
+  var W=240,H=200;
+  function mk(rx,ry,rw,rh,dirty,PW,PH){ PW=PW||W; PH=PH||H; var a=new Uint8ClampedArray(PW*PH*4);
+    for(var y=0;y<PH;y++)for(var x=0;x<PW;x++){var i=(y*PW+x)*4;
+      if(x>=rx&&x<rx+rw&&y>=ry&&y<ry+rh){var edge=(x<rx+2||x>=rx+rw-2||y<ry+2||y>=ry+rh-2);a[i]=200+((x*7)%55);a[i+1]=80+((y*11)%60);a[i+2]=60+((x+y)%40);a[i+3]=edge?140:255;}
+      else if(dirty){a[i]=(x*3)&255;a[i+1]=(y*5)&255;a[i+2]=77;a[i+3]=0;} }
+    return a; }
+  var FIX=[{rx:90,ry:70,rw:60,rh:50,l:'centred'},{rx:0,ry:0,rw:60,rh:50,l:'corner'},{rx:200,ry:160,rw:60,rh:50,l:'clipped'},{rx:0,ry:0,rw:W,rh:H,l:'full plate'},{rx:119,ry:99,rw:2,rh:1,l:'hairline'}];
+  var bounded=FM._boundedFx||{};
+  var types=Object.keys(FM._pixelFx).filter(function(t){return !bounded[t];});
+  function maxParams(type){var ps=FM.fxRegistry.paramsOf(type)||[];var inst=FM.fxRegistry.makeInstance(type);var p=Object.assign({},inst?inst.params:{});ps.forEach(function(c){if(c.type==='range'&&typeof c.max==='number')p[c.key]=c.max;});return p;}
+  var lines=[],admitted=[],rejected=[],timing=[];
+  for(var k=0;k<types.length;k++){var type=types[k];
+    var inst=null; try{inst=FM.fxRegistry.makeInstance(type);}catch(e){}
+    if(!inst){lines.push('·  '+type+': no instance (not in the registry) — skipped');continue;}
+    var sets=[['defaults',inst.params],['max',maxParams(type)]]; var ok=true, why='', anyCrop=false;
+    // clean plates only: a canvas stores premultiplied pixels, so a plate read back from one never carries colour
+    // under zero alpha — the dirty case belongs to kernel-to-kernel buffer reuse, which the dispatcher never does
+    for(var s=0;s<sets.length&&ok;s++)for(var q=0;q<FIX.length&&ok;q++)for(var dd=0;dd<1&&ok;dd++){var fx=FIX[q],dirty=!!dd,r;
+      try{r=FM._cropIdentity(type,mk(fx.rx,fx.ry,fx.rw,fx.rh,dirty),W,H,sets[s][1],0.3,1);}catch(e){r={same:false,diff:'threw '+(e&&e.message)};}
+      if(r&&r.rect&&r.area<r.plate)anyCrop=true;
+      if(!r||r.same!==true){ok=false;why=sets[s][0]+'/'+fx.l+(dirty?'/dirty':'')+': '+(r?r.diff:'no result')+' px differ';}
+    }
+    if(ok){admitted.push(type);}else{rejected.push(type);}
+    lines.push((ok?'✅ ':'❌ ')+type.padEnd(18)+(ok?(anyCrop?'':' (never cropped — the box always covered the plate)'):'  '+why));
+    await sleep(0);
+  }
+  // timing on the shape of the lag: a 180x150 subject in a 1080x1920 plate, defaults, admitted kernels only
+  var BW=1080,BH=1920,big=mk(450,900,180,150,false,BW,BH);
+  for(var a=0;a<admitted.length;a++){var type=admitted[a];var inst=FM.fxRegistry.makeInstance(type);var r;
+    try{r=FM._cropIdentity(type,big,BW,BH,inst.params,0.3,1);}catch(e){r=null;}
+    if(r)timing.push({type:type,full:r.tFull,crop:r.tCrop,area:r.area,plate:r.plate,same:r.same});
+    await sleep(0);
+  }
+  timing.sort(function(a,b){return b.full-a.full;});
+  var o=[];
+  o.push('#692 route 2 — '+types.length+' unbounded pixel kernels, '+FIX.length+' positions × clean/dirty × defaults/max, byte-identity through FM._cropIdentity');
+  o.push('');
+  o.push('ADMITTED ('+admitted.length+'): '+admitted.join(' '));
+  o.push('REJECTED ('+rejected.length+'): '+rejected.join(' '));
+  o.push('');
+  o.push('COST on a 180x150 subject in a 1080x1920 plate (ms): full → crop   [crop area %]   (admitted only, defaults)');
+  timing.forEach(function(t){o.push('  '+t.type.padEnd(18)+String(t.full.toFixed(1)).padStart(7)+' → '+String(t.crop.toFixed(1)).padStart(6)+'   ['+(t.area*100/t.plate).toFixed(1)+'%]'+(t.same?'':'  ⚠️ NOT identical on the big plate'));});
+  o.push('');
+  o.push(lines.join('\n'));
+  out.textContent=o.join('\n'); w.__done=true; window.__done=true;
+ }).catch(function(e){out.textContent='probe failed: '+(e&&e.stack||e);window.__done=true;});
+});
+</script></body></html>

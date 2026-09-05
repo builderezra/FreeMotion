@@ -59580,6 +59580,59 @@
     if (m[1].indexOf('boxblur') < 0) throw new Error('boxblur left BOUNDED_FX, so no bbox reaches the kernel and it walks the whole plate again — 67.5ms per frame for one blur (#692)');
   });
 
+  /* ═══ 692 ROUTE 2: THE READBACK IS CROPPED TO THE LAYER FOR EVERY ADMITTED KERNEL, AND ADMISSION IS RE-PROVED HERE.
+     Five rounds bounded 13 kernels one at a time; this covers 44 more in one place in drawPixelEffect. A kernel is in
+     CROP_FX only if the cropped path draws the same picture as the full one — five subject positions, defaults and
+     every range param at its maximum, and the real lag shape (a 180x150 subject in a 1080x1920 plate). The control is
+     a kernel that computes from the plate's size: it must DIFFER under the crop, or this comparison sees nothing.
+     Then the dispatcher itself: a real render through renderScene with the crop on and off is byte-identical, and the
+     crop path is the one that ran (FM._cropStats), so the saving is real rather than assumed. */
+  test('692: every crop-admitted kernel draws the same picture cropped, a centre-based control does not, and the dispatcher takes the crop path', { item: '692', budgetMs: 60000 }, async function () {
+    const C = FM._cropFx, I = FM._cropIdentity;
+    if (!C || !I || !FM._pixelFx) throw new Error('seams missing: _cropFx / _cropIdentity / _pixelFx');
+    const admitted = Object.keys(C);
+    if (admitted.length < 30) throw new Error('only ' + admitted.length + ' kernels are crop-admitted — the list collapsed');
+    const W = 240, H = 200;
+    const mk = (rx, ry, rw, rh, PW, PH) => { PW = PW || W; PH = PH || H; const a = new Uint8ClampedArray(PW * PH * 4);
+      for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) { const i = (y * PW + x) * 4; if (x >= rx && x < rx + rw && y >= ry && y < ry + rh) { const edge = (x < rx + 2 || x >= rx + rw - 2 || y < ry + 2 || y >= ry + rh - 2); a[i] = 200 + ((x * 7) % 55); a[i + 1] = 80 + ((y * 11) % 60); a[i + 2] = 60 + ((x + y) % 40); a[i + 3] = edge ? 140 : 255; } }
+      return a; };
+    const FIX = [[90, 70, 60, 50, 'centred'], [0, 0, 60, 50, 'corner'], [200, 160, 60, 50, 'clipped'], [0, 0, W, H, 'full plate'], [119, 99, 2, 1, 'hairline']];
+    const maxParams = type => { const ps = FM.fxRegistry.paramsOf(type) || []; const inst = FM.fxRegistry.makeInstance(type); const p = Object.assign({}, inst ? inst.params : {}); ps.forEach(c => { if (c.type === 'range' && typeof c.max === 'number') p[c.key] = c.max; }); return p; };
+    const bad = [];
+    for (const type of admitted) {
+      if (FM._boundedFx && FM._boundedFx[type]) { bad.push(type + ': is BOTH bounded and crop-admitted'); continue; }
+      const inst = FM.fxRegistry.makeInstance(type); if (!inst) { bad.push(type + ': not in the registry'); continue; }
+      for (const [pl, params] of [['defaults', inst.params], ['max', maxParams(type)]]) for (const f of FIX) {
+        const r = I(type, mk(f[0], f[1], f[2], f[3]), W, H, params, 0.3, 1);
+        if (!r || r.same !== true) { bad.push(type + ' (' + pl + ', ' + f[4] + '): ' + (r ? r.diff + ' bytes differ' : 'no result')); break; }
+      }
+      const big = I(type, mk(450, 900, 180, 150, 1080, 1920), 1080, 1920, inst.params, 0.3, 1);
+      if (!big || big.same !== true) bad.push(type + ' (1080x1920): ' + (big ? big.diff + ' bytes differ' : 'no result'));
+      else if (!(big.area < big.plate * 0.25)) bad.push(type + ': the crop covered ' + Math.round(big.area * 100 / big.plate) + '% of the big plate — nothing saved');
+    }
+    if (bad.length) throw new Error('crop-admitted kernels that do NOT draw the same picture cropped (drop them from CROP_FX): ' + bad.slice(0, 6).join(' ;; '));
+    // the control: a kernel whose picture depends on the plate's centre must differ, or this test cannot see anything
+    const ctrl = I('zoomblur', mk(90, 70, 60, 50), W, H, FM.fxRegistry.makeInstance('zoomblur').params, 0.3, 1);
+    if (!ctrl || ctrl.same !== false) throw new Error('CONTROL FAILED: zoom blur (centre = W/2,H/2) reads as identical under the crop — the comparison is blind');
+    if (C.zoomblur) throw new Error('zoom blur is crop-admitted — its centre moves with the crop');
+    // …and the dispatcher: a real render, crop on vs off, byte-identical, and the crop path is what ran
+    const P = { width: 300, height: 240, fps: 30, duration: 4, background: null };
+    const render = (mode) => { const c = offscreen(300, 240); c.__fmRS = 1; c.__fmOX = 0; c.__fmOY = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 150, y: 120, shapeW: 90, shapeH: 70, fill: '#4fa0ff', start: 0, duration: 4 });
+      const e = FM.fxRegistry.makeInstance('edge'); L.effects = [e];
+      const m0 = FM._cropMode; FM._cropMode = mode; const c0 = FM._cropStats.crops, f0 = FM._cropStats.full;
+      try { FM.renderScene(c.getContext('2d'), { project: P, layers: [L], selectedId: null, selectedIds: [] }, 0); }
+      finally { FM._cropMode = m0; }
+      return { px: c.getContext('2d').getImageData(0, 0, 300, 240).data, crops: FM._cropStats.crops - c0, full: FM._cropStats.full - f0 }; };
+    const on = render(0), off = render(-1);
+    let d = 0; for (let i = 0; i < on.px.length; i++) if (on.px[i] !== off.px[i]) d++;
+    if (d) throw new Error('through the dispatcher, Edge with the crop on differs from the crop off by ' + d + ' bytes');
+    if (!(on.crops >= 1)) throw new Error('the crop path did not run for Edge (crops ' + on.crops + ', full ' + on.full + ') — CROP_FX is not consulted by the dispatcher');
+    if (!(off.full >= 1 && off.crops === 0)) throw new Error('control: with the crop forced off the full path did not run (crops ' + off.crops + ', full ' + off.full + ')');
+    let lit = 0; for (let i = 3; i < on.px.length; i += 4) if (on.px[i] > 8) lit++;
+    if (lit < 500) throw new Error('setup: the Edge render is empty (' + lit + ' lit pixels) — identical nothings prove nothing');
+  });
+
   test('effects: bounding the drop shadow to the layer changes NOTHING about the picture', { item: '692' }, async function () {
     /* #692, the second kernel. Drop Shadow has FOUR full-frame loops — build the shifted alpha, blur it
      * horizontally, blur it vertically, composite it under the layer — and each ran over the whole

@@ -3117,6 +3117,7 @@ window.FM = window.FM || {};
      layer) checksummed before and after and required to match exactly. */
   const BOUNDED_FX = { letterbox: 1, border: 1, boxblur: 1, dropshadow: 1, lensblur: 1, hextiles: 1, tiltshift: 1, mattechoker: 1, radialshadow: 1, edgeglow: 1, zoomstreaks: 1, spinstreaks: 1, innerblur: 1 };
   Object.setPrototypeOf(BOUNDED_FX, null);   // own keys only — see POSTFX
+  FM._boundedFx = BOUNDED_FX;                // seam: the #692 crop probe skips what is already bounded
   /* Does the layer's own alpha ACTUALLY occupy the plate's edge row or column? Four direct scans of
    * the four edge lines, at alphaBBox's own `> 8` threshold so the two agree on what counts as
    * content. No stride, no pad, nothing inferred — this reads the very pixels the question is about.
@@ -3266,6 +3267,82 @@ window.FM = window.FM || {};
 
   const _pfPool = [];
   let _pfDepth = 0;
+  /* ---- CROP THE READBACK TO THE LAYER (#692, route 2) ------------------------------------------------------------
+   * The lag's measured cause: every pixel kernel walked the WHOLE plate — 1080x1920 of arithmetic for a layer covering
+   * 1.3% of it — and the full-frame getImageData/putImageData round trip alone was an 8–12ms floor. Five rounds bounded
+   * 13 kernels one at a time (BOUNDED_FX); this does the rest in ONE place: read back only the layer's alpha box plus
+   * an effect-specific margin, run the kernel on that smaller buffer, and put it back at its offset. The canvas
+   * coordinate system is untouched (the viewport crop's __fmOX/__fmOY still hold), so it is invisible to everything
+   * else. Two things make it unsafe blind, and both are handled by DATA rather than by hoping:
+   *   · a kernel that computes anything from the plate's size or centre (zoom blur's centre is W/2,H/2; a tile grid is
+   *     anchored at 0,0) draws a DIFFERENT picture on a cropped buffer — so a kernel is only cropped if its type is in
+   *     CROP_FX, and a type only gets there by passing tests/_692crop.html's byte-identity fixtures, which the suite
+   *     re-runs for every member (and proves it can see a position-dependent kernel with a control);
+   *   · the margin must cover the kernel's reach, so it is the sum of the effect's own pixel-unit parameters (the same
+   *     catalog data pxToPlate uses) times the plate scale, plus a floor — and the fixtures include every param at its
+   *     maximum and a plate carrying colour under zero alpha, so a reach the margin misses is caught, not assumed.
+   * The alpha box comes from a 1/8-scale copy made by three halvings (a box filter each time, so a 1px hairline keeps
+   * a non-zero alpha and cannot fall between samples), read back at 1/64 of the pixels. */
+  /* Admitted 5 Sep by tests/_692crop.html: byte-identical (after the canvas round trip) at five positions, at defaults
+   * and at every range param's maximum, and on a 1080x1920 plate. The suite re-proves every member and keeps a
+   * position-dependent control out. NOT here, and why: anything seeded or gridded from (x,y) or the plate's size —
+   * noise, film grain, scanlines, dither, halftone, tiles, mosaic, dots, checker, grid, clouds, rays, stripes, voronoi,
+   * hex array, cross-hatch, sketch, glitch, crt, vhs, lens distort, dispersion, shockwave, zoom/spin blur (centre =
+   * W/2,H/2), vignette, light leak, lens flare, gradient overlay, the wipes and dissolves, and pixel sort (identical on
+   * the small plates, different on the big one). They keep the full plate. */
+  const CROP_FX = Object.assign(Object.create(null), { levels: 1, chromakeypro: 1, hslbands: 1, solarize: 1, gamma: 1, temperature: 1, vibrance: 1, sharpen: 1, thermal: 1, edge: 1, emboss: 1, exposure: 1, gradientmap: 1, colorize: 1, lightglow: 1, longshadow: 1, darkglow: 1, stroke: 1, smoothedges: 1, bumpmap: 1, contourlines: 1, colorbalance: 1, highlightsshadows: 1, chromaticaberration: 1, innerglow: 1, unsharpmask: 1, linstreaks: 1, blink: 1, flicker: 1, flashdark: 1, pulseopacity: 1, solidmatte: 1, mattefringe: 1, channelremap: 1, smoothbevel: 1, contourstrips: 1, bleachbypass: 1, tealorange: 1, crossprocess: 1, replacecolor: 1, spotcolor: 1, spectralmap: 1, palettemap: 1, faded: 1 });
+  FM._cropFx = CROP_FX;
+  FM._cropMode = 0;              // 0 = CROP_FX decides · 1 = force the crop path for any kernel (the admission probe) · -1 = never crop
+  FM._cropStats = { crops: 0, full: 0, lastRect: null };
+  let _cropA = null, _cropB = null;
+  function cropRectOf(src, W, H, pad) {
+    if (!_cropA) { _cropA = document.createElement('canvas'); _cropB = document.createElement('canvas'); }
+    let cur = src, cw = W, ch = H, dst = _cropA;
+    for (let i = 0; i < 3; i++) {
+      const nw = Math.max(1, Math.ceil(cw / 2)), nh = Math.max(1, Math.ceil(ch / 2));
+      if (dst.width !== nw || dst.height !== nh) { dst.width = nw; dst.height = nh; }
+      const g = dst.getContext('2d', { willReadFrequently: true });
+      g.clearRect(0, 0, nw, nh); g.imageSmoothingEnabled = true; g.drawImage(cur, 0, 0, cw, ch, 0, 0, nw, nh);
+      cur = dst; cw = nw; ch = nh; dst = (dst === _cropA) ? _cropB : _cropA;
+    }
+    const d = cur.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, cw, ch).data;
+    let x0 = cw, y0 = ch, x1 = -1, y1 = -1;
+    for (let y = 0; y < ch; y++) { const row = y * cw * 4; for (let x = 0; x < cw; x++) { if (d[row + x * 4 + 3] === 0) continue; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; } }
+    if (x1 < 0) return null;                       // an empty plate: nothing to run the kernel on
+    const S = 8, X0 = Math.max(0, x0 * S - S - pad), Y0 = Math.max(0, y0 * S - S - pad);
+    const X1 = Math.min(W, (x1 + 2) * S + pad), Y1 = Math.min(H, (y1 + 2) * S + pad);
+    return { x: X0, y: Y0, w: Math.max(1, X1 - X0), h: Math.max(1, Y1 - Y0) };
+  }
+  function cropMarginFor(type, params, t, ps) {
+    const keys = pxParamKeys(type); let reach = 0;
+    for (let i = 0; i < keys.length; i++) { const v = params ? FM.evalProp(params[keys[i]], t) : 0; if (typeof v === 'number' && isFinite(v)) reach += Math.abs(v); }
+    return Math.ceil(reach * (ps || 1) * 1.5) + 8;   // the sum of every pixel-unit param, half again for luck, and a floor for antialiasing
+  }
+  function cropWanted(type) { return FM._cropMode === 1 || (FM._cropMode === 0 && !!CROP_FX[type]); }
+  /* The whole crop path on a bare buffer, for the admission probe and the suite: run `fn` on a copy of `data` in full,
+     and again through the crop (the real cropRectOf + margin), and say whether the two pictures are byte-identical. */
+  FM._cropIdentity = function (type, data, W, H, params, t, ps) {
+    const fn = PIXEL_FX[type]; if (!fn) return { same: null, why: 'no kernel' };
+    const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const g = cv.getContext('2d', { willReadFrequently: true }); g.putImageData(new ImageData(new Uint8ClampedArray(data), W, H), 0, 0);
+    const t0 = now(); const full = g.getImageData(0, 0, W, H).data; fn(full, W, H, params, t, ps); const tFull = now() - t0;
+    const t1 = now(); const rect = cropRectOf(cv, W, H, cropMarginFor(type, params, t, ps));
+    const out = new Uint8ClampedArray(data);
+    if (rect) {
+      const sub = g.getImageData(rect.x, rect.y, rect.w, rect.h); fn(sub.data, rect.w, rect.h, params, t, ps);
+      for (let y = 0; y < rect.h; y++) out.set(sub.data.subarray(y * rect.w * 4, (y + 1) * rect.w * 4), ((rect.y + y) * W + rect.x) * 4);
+    }
+    const tCrop = now() - t1;
+    /* Compare AFTER the canvas round trip the dispatcher performs (putImageData → drawImage): a canvas stores
+       premultiplied pixels, so colour a kernel writes under zero alpha never survives it — it is neither on screen
+       nor readable by the next effect. A raw byte compare would reject every grade for "dirt" that cannot exist. */
+    const norm = (buf) => { const c = document.createElement('canvas'); c.width = W; c.height = H; const q = c.getContext('2d', { willReadFrequently: true }); q.putImageData(new ImageData(buf, W, H), 0, 0); return q.getImageData(0, 0, W, H).data; };
+    const a = norm(new Uint8ClampedArray(full)), b = norm(out);
+    let diff = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) diff++;
+    return { same: diff === 0, diff: diff, rect: rect, area: rect ? rect.w * rect.h : 0, plate: W * H, tFull: tFull, tCrop: tCrop };
+  };
+
   function drawPixelEffect(ctx, layer, t, scene, fx, fn) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -3291,11 +3368,37 @@ window.FM = window.FM || {};
       actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
       const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
       drawLayer(actx, tmp, t, scene);
+      const bounded = !!BOUNDED_FX[fx.type];
+      // #692 route 2: an admitted kernel reads back only the layer's box plus its reach, runs on that, and is put back
+      // at its offset over an untouched copy of the plate. Bounded kernels keep their own path (they need the full plate
+      // and a box). An empty plate skips the kernel exactly as the bounded path does.
+      if (!bounded && cropWanted(fx.type)) {
+        const pars = pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn);
+        const rect = cropRectOf(pA, W, H, cropMarginFor(fx.type, fx.params || {}, t, ps));
+        FM._cropStats.crops++; FM._cropStats.lastRect = rect;
+        const bctx = pB.getContext('2d');
+        bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.globalAlpha = 1; bctx.globalCompositeOperation = 'copy'; bctx.filter = 'none';
+        bctx.drawImage(pA, 0, 0);                    // 'copy': the plate lands exactly, transparent pixels included
+        bctx.globalCompositeOperation = 'source-over';
+        if (rect) {
+          const sub = actx.getImageData(rect.x, rect.y, rect.w, rect.h);
+          fn(sub.data, rect.w, rect.h, pars, t, ps);
+          bctx.putImageData(sub, rect.x, rect.y);
+        }
+        ctx.save();
+        baseT(ctx);
+        ctx.globalAlpha = opacity;
+        ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+        ctx.filter = 'none';
+        ctx.drawImage(pB, OX, OY, PWp, PHp);
+        ctx.restore();
+        return;
+      }
+      FM._cropStats.full++;
       const img = actx.getImageData(0, 0, W, H);
       // Effects that DRAW a frame get the layer's own box (plate pixels) as a 7th argument — see
       // BOUNDED_FX above. Everything else is a grade and keeps the whole plate, unchanged.
       let bb = null;
-      const bounded = !!BOUNDED_FX[fx.type];
       if (bounded) bb = fxBounds(img.data, W, H);
       /* No box means the layer really is empty, so there is nothing to frame and the KERNEL is
        * skipped — but the layer is still blitted below, unchanged. Skipping the blit as well

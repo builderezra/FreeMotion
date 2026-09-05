@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 5 Sep at v15.59
+> ## 📌 WHAT I NEED FROM YOU — updated 5 Sep at v15.60
 >
-> **State:** v15.59. The two oldest items in your own words are closed today: #539 (Squish squashes against other layers) and #553 (the half-drawn return and its black bar). You came back and said you suspected "delusion and lack of effort" — you were right to. Every release now has to PROVE its fix (ship.sh reverts the fix and requires the new test to fail), and re-proving the last 27 releases found two that claimed the opposite of what they did (fixed in v15.57, more findings being verified).
+> **State:** v15.60 — 44 effects now cost a tenth of what they did on a small layer (#692 route 2); yesterday's three oldest items in your own words are closed. The two oldest items in your own words are closed today: #539 (Squish squashes against other layers) and #553 (the half-drawn return and its black bar). You came back and said you suspected "delusion and lack of effort" — you were right to. Every release now has to PROVE its fix (ship.sh reverts the fix and requires the new test to fail), and re-proving the last 27 releases found two that claimed the opposite of what they did (fixed in v15.57, more findings being verified).
 >
 > ### 👉 [**Open the unblock list**](https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7)
 > Everything below is on that page, laid out so you can tap through it on your phone and send me one
@@ -27475,7 +27475,37 @@ re-opened #480, which I had marked done and had not fixed.
       ➡️ **Two routes, and the second is the whole prize:**
       1. **Per-kernel**, contained and safe: pass the padded bbox and restrict the loops. No coordinate
          system changes. Box Blur and Drop Shadow alone are ~100ms of the 106.
-      2. **Plate-sized**, the real fix: `nestedPlate` sizes the plate from the whole target canvas.
+      ✅ **ROUTE 2 BUILT — v15.60. 44 kernels crop their readback to the layer, in ONE place, admitted by identity.**
+      `drawPixelEffect` reads back only the layer's alpha box (from a 1/8-scale copy made by three halvings, so a
+      hairline cannot fall between samples) plus the effect's reach (the sum of its own pixel-unit params × plate scale,
+      half again, +8), runs the kernel on that buffer and puts it back at its offset over an untouched copy of the plate.
+      No coordinate change — the viewport crop's `__fmOX/__fmOY` are untouched. **Admission is data, not judgement:**
+      `tests/_692crop.html` runs every unbounded kernel at five positions, at defaults and every range param at maximum,
+      and on the 1080x1920 lag shape; a kernel joins `CROP_FX` only if the two pictures are byte-identical after the
+      canvas round trip. **44 in, 47 out** — the 47 compute from (x,y) or the plate's size (noise, grain, scanlines,
+      dither, halftone, tiles, mosaic, dots, grids, clouds, rays, stripes, voronoi, hex, cross-hatch, sketch, glitch,
+      crt, vhs, lens distort, dispersion, shockwave, zoom/spin blur, vignette, light leak, lens flare, gradient overlay,
+      wipes, dissolves; pixel sort passed the small plates and failed the big one) and stay on the full plate. The suite
+      re-proves every member on every run, with Zoom Blur as the control that must differ.
+      | on a 180x150 subject in a 1080x1920 plate | full | cropped |
+      |---|---|---|
+      | Edge | 42.0ms | **4.1ms** |
+      | Stroke | 35.2 | **4.5** |
+      | Unsharp Mask | 29.6 | **4.3** |
+      | Emboss | 25.6 | **4.7** |
+      | Sharpen | 24.3 | **4.2** |
+      | Thermal / Matte Fringe / Inner Glow / Chroma Key Pro | 20–24 | **3.4–5.0** |
+      | every other admitted kernel | 4–19 | **2.6–4.5** |
+      🔑 **AND THE PREMISE THAT KEPT THREE BIG ONES UNBOUNDED IS FALSE, MEASURED.** This entry says a kernel's colour under
+      zero alpha "can be read by the next effect in your stack". It cannot: every effect's plate is read back from a
+      CANVAS, and a canvas stores premultiplied pixels — `putImageData` of (255,128,64,α=0) reads back (0,0,0,0), through
+      `drawImage` too, on a software and a GPU canvas alike (measured 5 Sep). Colour survives only where α ≥ 1, quantised
+      hard ((255,128,64,1) → (255,255,0,1)). So the "dark rim" a following blur pulls in comes from LOW alpha, not zero,
+      and **Inner Blur, Zoom Blur and Spin Blur (~220ms together) CAN be bounded** by the ordinary standard — identical
+      wherever the canvas can hold it. That is the next round of this entry, with a test that stages the low-alpha rim
+      so the bound is proved against the thing that was actually seen. The ten-agent review's "never" rested on the
+      false premise, which is why its verdicts are re-opened here rather than trusted.
+      ~~2. **Plate-sized**, the real fix: `nestedPlate` sizes the plate from the whole target canvas.~~ (superseded by the readback crop above — same win, no coordinate-system risk)
          Sizing it to the layer's bounds instead would fix EVERY kernel at once with no per-kernel
          edits — and the machinery is already there, since `OX`/`OY` are threaded through `baseT` for
          the viewport crop. Bigger, riskier, touches the most critical path in the app.
@@ -29109,3 +29139,8 @@ re-opened #480, which I had marked done and had not fixed.
       The test scrolls the timeline to its end and sleeps 260 ms before reading where the bookmark pins are. Under load
       the pins had not moved yet, so it threw "setup (phone): need a pin on each side of the divider; head has 0".
       It now polls until two consecutive frames agree on scrollLeft and every pin's position, then reads.
+      ✅ **v15.59 — THE REAL CAUSE, read off the instrumented failure when it fired again at the phone pass:** the fixture
+      set `scrollLeft = 1e6` ONCE, while the lanes were still laying out, so it clamped to the content width at that
+      moment — 60px of a final 961 — and stayed there as the content grew; the settle-poll then accepted a stable but
+      wrong position. It now re-pushes to the end every frame until scrollLeft, scrollWidth and every pin agree across
+      two frames. Green 3 of 3 alone at 380px afterwards, then the full phone pass.
