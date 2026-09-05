@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 5 Sep at v15.60
+> ## 📌 WHAT I NEED FROM YOU — updated 5 Sep at v15.61
 >
-> **State:** v15.60 — 44 effects now cost a tenth of what they did on a small layer (#692 route 2); yesterday's three oldest items in your own words are closed. The two oldest items in your own words are closed today: #539 (Squish squashes against other layers) and #553 (the half-drawn return and its black bar). You came back and said you suspected "delusion and lack of effort" — you were right to. Every release now has to PROVE its fix (ship.sh reverts the fix and requires the new test to fail), and re-proving the last 27 releases found two that claimed the opposite of what they did (fixed in v15.57, more findings being verified).
+> **State:** v15.61 — Zoom Blur and Spin Blur cost 2ms instead of 80 on a small layer, and 44 effects now cost a tenth of what they did on a small layer (#692 route 2); yesterday's three oldest items in your own words are closed. The two oldest items in your own words are closed today: #539 (Squish squashes against other layers) and #553 (the half-drawn return and its black bar). You came back and said you suspected "delusion and lack of effort" — you were right to. Every release now has to PROVE its fix (ship.sh reverts the fix and requires the new test to fail), and re-proving the last 27 releases found two that claimed the opposite of what they did (fixed in v15.57, more findings being verified).
 >
 > ### 👉 [**Open the unblock list**](https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7)
 > Everything below is on that page, laid out so you can tap through it on your phone and send me one
@@ -27505,6 +27505,21 @@ re-opened #480, which I had marked done and had not fixed.
       wherever the canvas can hold it. That is the next round of this entry, with a test that stages the low-alpha rim
       so the bound is proved against the thing that was actually seen. The ten-agent review's "never" rested on the
       false premise, which is why its verdicts are re-opened here rather than trusted.
+      ✅ **ROUND 6 — v15.61: ZOOM BLUR AND SPIN BLUR BOUNDED, the two "never"s.** Geometry, like the streaks: a rush tap
+      walks the segment from p toward the centre, so p is lit only if the layer's box scaled away from the centre by
+      1/(1−s) contains it; a spin tap walks an arc of ±span about the centre, so the reachable set is the box swept
+      through that arc — its corners' arc ends plus the axis crossings, exactly. Spin Blur's taps CLAMP at the plate
+      edge, so a far pixel can read a layer that sits on an edge; the bound is refused whenever the box touches one.
+      Byte-identical over 216 combinations per kernel (six positions, three centres, three amounts, two qualities); the
+      control is a one-pixel box, which must and does draw a different picture.
+      | 180x150 subject in a 1080x1920 plate | full | bounded |
+      |---|---|---|
+      | Zoom Blur | 65–90ms | **2.0ms** |
+      | Spin Blur | 71–83ms | **2.0ms** |
+      **What is left in this entry:** the 47 position-dependent kernels stay on the full plate by design (a grid or a
+      noise field genuinely covers the frame); the remaining floor is the full-plate readback the bounded path still
+      pays (~8–12ms), which the crop path avoids and a bounded kernel could too if the alpha box came from the 1/8
+      scan instead of a full scan — a later round if the phone still lags with these in place.
       ~~2. **Plate-sized**, the real fix: `nestedPlate` sizes the plate from the whole target canvas.~~ (superseded by the readback crop above — same win, no coordinate-system risk)
          Sizing it to the layer's bounds instead would fix EVERY kernel at once with no per-kernel
          edits — and the machinery is already there, since `OX`/`OY` are threaded through `baseT` for

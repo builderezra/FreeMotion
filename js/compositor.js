@@ -3115,7 +3115,7 @@ window.FM = window.FM || {};
      content can be stepped over and the output is IDENTICAL rather than merely similar. Verified that
      way — seven renders (edge-clipped, full-frame, anisotropic, multi-pass, radius larger than the
      layer) checksummed before and after and required to match exactly. */
-  const BOUNDED_FX = { letterbox: 1, border: 1, boxblur: 1, dropshadow: 1, lensblur: 1, hextiles: 1, tiltshift: 1, mattechoker: 1, radialshadow: 1, edgeglow: 1, zoomstreaks: 1, spinstreaks: 1, innerblur: 1 };
+  const BOUNDED_FX = { letterbox: 1, border: 1, boxblur: 1, dropshadow: 1, lensblur: 1, hextiles: 1, tiltshift: 1, mattechoker: 1, radialshadow: 1, edgeglow: 1, zoomstreaks: 1, spinstreaks: 1, innerblur: 1, zoomblur: 1, spinblur: 1 };   // zoomblur + spinblur: #692, 5 Sep
   Object.setPrototypeOf(BOUNDED_FX, null);   // own keys only — see POSTFX
   FM._boundedFx = BOUNDED_FX;                // seam: the #692 crop probe skips what is already bounded
   /* Does the layer's own alpha ACTUALLY occupy the plate's edge row or column? Four direct scans of
@@ -4642,8 +4642,29 @@ window.FM = window.FM || {};
       // used rather than an algebraically equal one, because (k/8)*(8/9) is not bit-identical to k/9.
       const kf = new Float64Array(N);
       for (let k = 0; k < N; k++) kf[k] = N === 9 ? k / 9 : (k / (N - 1)) * (8 / 9);
-      for (let y = 0; y < H; y++) {
-        for (let x = 0; x < W; x++) {
+      /* SKIP WHAT THE RUSH CANNOT REACH (#692, 5 Sep — 87ms at defaults on a 180x150 subject in a 1080x1920 plate). A tap
+         at f ∈ [1 − amt·0.35·8/9, 1] samples c + (p − c)·f, so the output at p is non-zero only if that segment meets the
+         layer: p lies in the layer's box scaled AWAY from the centre by up to K = 1/(1 − s). Same geometry as Zoom
+         Streaks and the same SCALED slack — the tap truncates to a pixel, and a one-pixel error at the sample is K pixels
+         at the output. Outside the box the plate is clean (fxBounds refuses a dirty one — and a canvas cannot even hold
+         colour under zero alpha, measured 5 Sep), so every skipped pixel would have averaged zeros to zero. The old
+         reason this kernel was "never" boundable — that the next effect could read what it writes under alpha 0 —
+         was measured false: a canvas stores premultiplied pixels and hands back 0,0,0,0. */
+      const zbBB = arguments[6]; let zx0 = 0, zx1 = W - 1, zy0 = 0, zy1 = H - 1;
+      if (zbBB) {
+        const zs = amt * 0.35 * (8 / 9), zK = zs < 0.999 ? 1 / (1 - zs) : 1000;
+        const cxs = [zbBB.x, zbBB.x + zbBB.w - 1], cys = [zbBB.y, zbBB.y + zbBB.h - 1], ks = [1, zK];
+        let mnx = Infinity, mxx = -Infinity, mny = Infinity, mxy = -Infinity;
+        for (let ia = 0; ia < 2; ia++) for (let ib = 0; ib < 2; ib++) for (let ic = 0; ic < 2; ic++) {
+          const px = cx + (cxs[ia] - cx) * ks[ic], py = cy + (cys[ib] - cy) * ks[ic];
+          if (px < mnx) mnx = px; if (px > mxx) mxx = px; if (py < mny) mny = py; if (py > mxy) mxy = py;
+        }
+        const sl = Math.ceil(zK) + 2;
+        zx0 = Math.max(0, Math.floor(mnx) - sl); zx1 = Math.min(W - 1, Math.ceil(mxx) + sl);
+        zy0 = Math.max(0, Math.floor(mny) - sl); zy1 = Math.min(H - 1, Math.ceil(mxy) + sl);
+      }
+      for (let y = zy0; y <= zy1; y++) {
+        for (let x = zx0; x <= zx1; x++) {
           const i = (y * W + x) * 4, dx = x - cx, dy = y - cy; let r = 0, g = 0, b = 0, a = 0, n = 0;
           for (let k = 0; k < N; k++) {
             const f = 1 - kf[k] * amt * 0.35, sx = (cx + dx * f) | 0, sy = (cy + dy * f) | 0;
@@ -4726,7 +4747,28 @@ window.FM = window.FM || {};
       var sbCx=wCx(p,t,W,W/2), sbCy=wCy(p,t,H,H/2), sbW4=W*4;
       // SAMPLES here is a pure quality knob and needs no span correction: the offsets run -span..+span
       // whatever N is, so more taps close the gaps between the 9 discrete ghosts without widening the arc.
-      var sbSpan=sbAmt*0.4, sbN=p.samples==null?9:Math.max(3,Math.min(33,Math.round(FM.evalProp(p.samples,t)))), sbHalf=(sbN-1)/2; var sbCos=new Float64Array(sbN), sbSin=new Float64Array(sbN); for(var sbk=0;sbk<sbN;sbk++){ var sbOff=(sbk-sbHalf)/sbHalf*sbSpan; sbCos[sbk]=Math.cos(sbOff); sbSin[sbk]=Math.sin(sbOff); } for(var sby=0;sby<H;sby++){ var sbDy=sby-sbCy; for(var sbx=0;sbx<W;sbx++){ var sbDx=sbx-sbCx; var sbR=0,sbG=0,sbB=0,sbA=0; for(var sbj=0;sbj<sbN;sbj++){ var sbC=sbCos[sbj], sbN2=sbSin[sbj]; var sbSx=sbCx+sbDx*sbC-sbDy*sbN2; var sbSy=sbCy+sbDx*sbN2+sbDy*sbC; var sbIx=sbSx<0?0:(sbSx>W-1?W-1:(sbSx+0.5)|0); var sbIy=sbSy<0?0:(sbSy>H-1?H-1:(sbSy+0.5)|0); var sbI=sbIy*sbW4+sbIx*4; sbR+=sbS[sbI]; sbG+=sbS[sbI+1]; sbB+=sbS[sbI+2]; sbA+=sbS[sbI+3]; } var sbO=sby*sbW4+sbx*4; d[sbO]=sbR/sbN; d[sbO+1]=sbG/sbN; d[sbO+2]=sbB/sbN; d[sbO+3]=sbA/sbN; } } },
+      var sbSpan=sbAmt*0.4, sbN=p.samples==null?9:Math.max(3,Math.min(33,Math.round(FM.evalProp(p.samples,t)))), sbHalf=(sbN-1)/2; var sbCos=new Float64Array(sbN), sbSin=new Float64Array(sbN); for(var sbk=0;sbk<sbN;sbk++){ var sbOff=(sbk-sbHalf)/sbHalf*sbSpan; sbCos[sbk]=Math.cos(sbOff); sbSin[sbk]=Math.sin(sbOff); }
+      /* SKIP WHAT THE SPIN CANNOT REACH (#692, 5 Sep — 86ms at defaults on the same subject). A tap rotates p about the
+         centre by α ∈ [−span, span], so p is lit only if some rotation of it meets the layer: p lies in the layer's box
+         SWEPT through that arc. For a fixed angle a rotated rectangle's extreme is a corner, so the sweep's box is the
+         union over the four corners of each corner's arc — its two ends, plus the axis crossings (0°, 90°, 180°, 270°)
+         where the arc passes them. Slack 2px: the tap ROUNDS to the nearest pixel, and rotation keeps distances.
+         ⚠️ NOT when the layer touches a plate edge: a tap that lands off the plate CLAMPS to the edge pixel, so a far
+         pixel can read a layer that sits on that edge — the bound is not a skip there, so it is not taken. */
+      var sbBB=arguments[6], sbX0=0, sbX1=W-1, sbY0=0, sbY1=H-1;
+      if(sbBB && sbBB.x>0 && sbBB.y>0 && sbBB.x+sbBB.w<W && sbBB.y+sbBB.h<H){
+        var sbMnx=Infinity, sbMxx=-Infinity, sbMny=Infinity, sbMxy=-Infinity;
+        var sbCxs=[sbBB.x, sbBB.x+sbBB.w-1], sbCys=[sbBB.y, sbBB.y+sbBB.h-1];
+        for(var sbA=0;sbA<2;sbA++) for(var sbB2=0;sbB2<2;sbB2++){
+          var sbQx=sbCxs[sbA]-sbCx, sbQy=sbCys[sbB2]-sbCy, sbRad=Math.hypot(sbQx,sbQy), sbPhi=Math.atan2(sbQy,sbQx);
+          var sbAngs=[sbPhi-sbSpan, sbPhi+sbSpan];
+          for(var sbQ=-4;sbQ<=4;sbQ++){ var sbAx=sbQ*Math.PI/2; if(sbAx>sbPhi-sbSpan && sbAx<sbPhi+sbSpan) sbAngs.push(sbAx); }
+          for(var sbG=0;sbG<sbAngs.length;sbG++){ var sbPx=sbCx+sbRad*Math.cos(sbAngs[sbG]), sbPy=sbCy+sbRad*Math.sin(sbAngs[sbG]);
+            if(sbPx<sbMnx)sbMnx=sbPx; if(sbPx>sbMxx)sbMxx=sbPx; if(sbPy<sbMny)sbMny=sbPy; if(sbPy>sbMxy)sbMxy=sbPy; }
+        }
+        sbX0=Math.max(0,Math.floor(sbMnx)-2); sbX1=Math.min(W-1,Math.ceil(sbMxx)+2); sbY0=Math.max(0,Math.floor(sbMny)-2); sbY1=Math.min(H-1,Math.ceil(sbMxy)+2);
+      }
+      for(var sby=sbY0;sby<=sbY1;sby++){ var sbDy=sby-sbCy; for(var sbx=sbX0;sbx<=sbX1;sbx++){ var sbDx=sbx-sbCx; var sbR=0,sbG=0,sbB=0,sbA=0; for(var sbj=0;sbj<sbN;sbj++){ var sbC=sbCos[sbj], sbN2=sbSin[sbj]; var sbSx=sbCx+sbDx*sbC-sbDy*sbN2; var sbSy=sbCy+sbDx*sbN2+sbDy*sbC; var sbIx=sbSx<0?0:(sbSx>W-1?W-1:(sbSx+0.5)|0); var sbIy=sbSy<0?0:(sbSy>H-1?H-1:(sbSy+0.5)|0); var sbI=sbIy*sbW4+sbIx*4; sbR+=sbS[sbI]; sbG+=sbS[sbI+1]; sbB+=sbS[sbI+2]; sbA+=sbS[sbI+3]; } var sbO=sby*sbW4+sbx*4; d[sbO]=sbR/sbN; d[sbO+1]=sbG/sbN; d[sbO+2]=sbB/sbN; d[sbO+3]=sbA/sbN; } } },
     gradientmap: function(d,W,H,p,t){ var gmAmt = fparam(p, 'amount', 1, t); if(gmAmt<0)gmAmt=0; if(gmAmt>1)gmAmt=1; var gmSh=hexToRGB(p.color)||[36,26,82], gmHi=hexToRGB(p.color2)||[255,184,108]; var gmS0=gmSh[0],gmS1=gmSh[1],gmS2=gmSh[2], gmD0=gmHi[0]-gmS0,gmD1=gmHi[1]-gmS1,gmD2=gmHi[2]-gmS2; var gmMidP=p.midpoint==null?50:FM.evalProp(p.midpoint,t), gmMid=gmMidP/100, gmPlain=gmMidP===50; var gmDith=(p.dither==null?0:FM.evalProp(p.dither,t))/100/255; var gmW=W|0; for(var gmI=0;gmI<d.length;gmI+=4){ var gmL=(0.299*d[gmI]+0.587*d[gmI+1]+0.114*d[gmI+2])/255; if(gmDith>0){ var gmP=gmI>>2, gmX=gmP%gmW, gmY=(gmP/gmW)|0; gmL+=(BAYER8[(gmY&7)*8+(gmX&7)]-0.5)*gmDith*24; if(gmL<0)gmL=0; else if(gmL>1)gmL=1; } if(!gmPlain){ gmL = gmL<=gmMid ? (gmMid<=0?1:0.5*gmL/gmMid) : (gmMid>=1?0:0.5+0.5*(gmL-gmMid)/(1-gmMid)); } var gmO0=gmS0+gmD0*gmL, gmO1=gmS1+gmD1*gmL, gmO2=gmS2+gmD2*gmL; d[gmI]=d[gmI]+(gmO0-d[gmI])*gmAmt; d[gmI+1]=d[gmI+1]+(gmO1-d[gmI+1])*gmAmt; d[gmI+2]=d[gmI+2]+(gmO2-d[gmI+2])*gmAmt; } },
     colorize: function(d,W,H,p,t){ var czAmt=FM.evalProp(p.amount,t); czAmt=(czAmt==null?1:czAmt); if(czAmt<0)czAmt=0; if(czAmt>1)czAmt=1; var czCol=hexToRGB(p.color)||[58,160,255]; var czR=czCol[0],czG=czCol[1],czB=czCol[2]; var czLiftP=p.lift==null?25:FM.evalProp(p.lift,t); var czLift=czLiftP===25?0.25:czLiftP/100, czRange=czLift===0.25?0.75:(1-czLift); var czMode=p.blend==null?0:(Math.round(FM.evalProp(p.blend,t))|0); for(var czI=0;czI<d.length;czI+=4){ var czL=(0.299*d[czI]+0.587*d[czI+1]+0.114*d[czI+2])/255; var czF=czLift+czRange*czL; var czTR=czR*czF; var czTG=czG*czF; var czTB=czB*czF; if(czMode===1){czTR=d[czI]*czTR/255;czTG=d[czI+1]*czTG/255;czTB=d[czI+2]*czTB/255;} else if(czMode===2){czTR=255-(255-d[czI])*(255-czTR)/255;czTG=255-(255-d[czI+1])*(255-czTG)/255;czTB=255-(255-d[czI+2])*(255-czTB)/255;} else if(czMode===3){czTR=d[czI]<128?(2*d[czI]*czTR/255):(255-2*(255-d[czI])*(255-czTR)/255);czTG=d[czI+1]<128?(2*d[czI+1]*czTG/255):(255-2*(255-d[czI+1])*(255-czTG)/255);czTB=d[czI+2]<128?(2*d[czI+2]*czTB/255):(255-2*(255-d[czI+2])*(255-czTB)/255);} if(czTR<0)czTR=0; else if(czTR>255)czTR=255; if(czTG<0)czTG=0; else if(czTG>255)czTG=255; if(czTB<0)czTB=0; else if(czTB>255)czTB=255; d[czI]=d[czI]+(czTR-d[czI])*czAmt; d[czI+1]=d[czI+1]+(czTG-d[czI+1])*czAmt; d[czI+2]=d[czI+2]+(czTB-d[czI+2])*czAmt; } },
     checker: function(d,W,H,p,t,ps){ var chkSz=FM.evalProp(p.size,t); chkSz=(chkSz==null?24:chkSz); chkSz=Math.max(2,Math.min(120,Math.round(chkSz))); chkSz=Math.max(1,Math.round(chkSz*(ps||1))); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var chkCol=hexToRGB(p.color)||[0,0,0]; var chkR=chkCol[0],chkG=chkCol[1],chkB=chkCol[2];

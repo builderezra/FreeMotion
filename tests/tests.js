@@ -59434,6 +59434,8 @@
       innerblur: { radius: 8 },
       zoomstreaks: { amount: 0.5, centerx: 50, centery: 50, threshold: 0 },
       spinstreaks: { amount: 0.5, centerx: 50, centery: 50, decay: 0.6 },
+      zoomblur: { amount: 0.5, centerx: 50, centery: 50, samples: 9 },     // #692 round 6 (5 Sep)
+      spinblur: { amount: 0.5, centerx: 50, centery: 50, samples: 9 },
     };
     /* ⚠️ TWO OF THESE ARE NOT ROW/COLUMN SKIPS AND THEIR DEFAULTS PROVE ALMOST NOTHING ABOUT THEM.
        Radial Shadow's bound is GEOMETRY — the layer's box scaled about the light — so it has to be
@@ -59631,6 +59633,44 @@
     if (!(off.full >= 1 && off.crops === 0)) throw new Error('control: with the crop forced off the full path did not run (crops ' + off.crops + ', full ' + off.full + ')');
     let lit = 0; for (let i = 3; i < on.px.length; i += 4) if (on.px[i] > 8) lit++;
     if (lit < 500) throw new Error('setup: the Edge render is empty (' + lit + ' lit pixels) — identical nothings prove nothing');
+  });
+
+  /* ═══ 692: ZOOM BLUR AND SPIN BLUR, BOUNDED TO WHAT THEIR TAPS CAN REACH. Both were "never" — on the premise that a
+     later effect could read colour they write under zero alpha; measured 5 Sep, a canvas cannot hold such colour, so
+     the standard is the ordinary one: byte-identical to the unbounded kernel. Fixtures: the subject centred, in a corner,
+     clipped by the far edge, filling the plate, a hairline; the centre at the middle, a corner and off to one side;
+     Amount at the default, the maximum and small; Quality at 9 and 32. The CONTROL is a box deliberately far too tight
+     (one pixel in the middle of the layer): the bounded kernel must then draw a DIFFERENT picture, or this comparison
+     cannot see a wrong bound at all — the mutation that survived the Tilt Shift fixture until it dirtied the plate. */
+  ['zoomblur', 'spinblur'].forEach(function (type) {
+    test('692: bounding ' + type + ' to what it can reach changes NOTHING about the picture, and a wrong bound is seen', { item: '692', budgetMs: 40000 }, async function () {
+      const K = FM._pixelFx && FM._pixelFx[type];
+      if (!K) throw new Error('the ' + type + ' kernel is missing — the harness, not the feature');
+      if (!(FM._boundedFx && FM._boundedFx[type])) throw new Error(type + ' is not in BOUNDED_FX, so no box reaches it and it walks the whole plate');
+      const sum = (d) => { let a = 0, b = 0; for (let i = 0; i < d.length; i += 4) { a = (a + d[i] * 7 + d[i + 1] * 13 + d[i + 2] * 17 + d[i + 3] * 19) >>> 0; b = (b + a) >>> 0; } return a + ':' + b; };
+      const W = 220, H = 180;
+      const mk = (rx, ry, rw, rh) => { const a = new Uint8ClampedArray(W * H * 4);
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if (x >= rx && x < rx + rw && y >= ry && y < ry + rh) { const edge = (x < rx + 2 || x >= rx + rw - 2 || y < ry + 2 || y >= ry + rh - 2); a[i] = 200 + ((x * 7) % 55); a[i + 1] = 80 + ((y * 11) % 60); a[i + 2] = 60 + ((x + y) % 40); a[i + 3] = edge ? 140 : 255; } }
+        return a; };
+      const BOXES = [[70, 60, 80, 60, 'centred'], [0, 0, 60, 50, 'corner'], [160, 130, 60, 50, 'clipped'], [0, 0, W, H, 'fills the plate'], [110, 90, 2, 1, 'hairline'], [30, 100, 40, 30, 'off to one side']];
+      const CENTRES = [[50, 50], [5, 5], [90, 40]];
+      const AMTS = [0.5, 1, 0.12];
+      const bad = []; let n = 0;
+      for (const bx of BOXES) for (const c of CENTRES) for (const amt of AMTS) for (const q of [9, 32]) {
+        const params = { amount: amt, centerx: c[0], centery: c[1], samples: q };
+        const a = mk(bx[0], bx[1], bx[2], bx[3]); K(a, W, H, params, 0.3, 1);
+        const b = mk(bx[0], bx[1], bx[2], bx[3]); K(b, W, H, params, 0.3, 1, { x: bx[0], y: bx[1], w: bx[2], h: bx[3] });
+        n++;
+        if (sum(a) !== sum(b)) bad.push(bx[4] + ' / centre ' + c.join(',') + ' / amount ' + amt + ' / ' + q + ' taps');
+        if (bad.length > 5) break;
+      }
+      if (n < 100) throw new Error('only ' + n + ' combinations swept — the sweep collapsed');
+      if (bad.length) throw new Error('bounded ' + type + ' draws a DIFFERENT picture from the unbounded one on: ' + bad.join(' ;; ') + ' — the skip is only safe while it is provably a skip');
+      // the control: a box far too tight must change the picture, or the comparison above is blind
+      const ca = mk(70, 60, 80, 60); K(ca, W, H, { amount: 1, centerx: 50, centery: 50, samples: 9 }, 0.3, 1);
+      const cb = mk(70, 60, 80, 60); K(cb, W, H, { amount: 1, centerx: 50, centery: 50, samples: 9 }, 0.3, 1, { x: 110, y: 90, w: 1, h: 1 });
+      if (sum(ca) === sum(cb)) throw new Error('CONTROL FAILED: a one-pixel box drew the same picture as the full plate — the fixture cannot see a wrong bound');
+    });
   });
 
   test('effects: bounding the drop shadow to the layer changes NOTHING about the picture', { item: '692' }, async function () {
