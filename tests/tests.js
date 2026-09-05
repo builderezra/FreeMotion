@@ -60370,6 +60370,42 @@
     }
   });
 
+  test('760: on PC the shape tiles are 46px or wider with 40px art, and every glyph is white on its own tinted plate', { item: '760', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (innerWidth <= 700) return;   // the phone sheet is deliberately untouched (fixed 5 columns); this is the PC panel's fit
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      FM.selectLayer(null); FM.refreshAll(); await sleep(300);
+      const panel = document.querySelector('#inspector-panel .addmenu--panel');
+      if (!panel) throw new Error('setup: with nothing selected the PC inspector does not show the Add panel');
+      const tab = [].slice.call(panel.querySelectorAll('button')).filter(b => /^Shape$/i.test(b.textContent.trim()))[0];
+      if (!tab) throw new Error('setup: the Add panel has no Shape tab');
+      tab.click(); await sleep(400);
+      const cards = [].slice.call(panel.querySelectorAll('.addmenu-card--ico')).filter(c => c.getBoundingClientRect().width > 0);
+      if (cards.length < 6) throw new Error('setup: only ' + cards.length + ' shape tiles are laid out');
+      const c0 = cards[0], r = c0.getBoundingClientRect(), svg = c0.querySelector('svg'), sr = svg && svg.getBoundingClientRect();
+      if (!(r.width >= 46 && r.height >= 42)) throw new Error('on PC the shape tiles are ' + r.width.toFixed(1) + 'x' + r.height.toFixed(1) + 'px — "make the shape buttons bigger" (queue 760 clause 1; the drawn option was 48)');
+      if (!(sr && sr.width >= 38)) throw new Error('the shape art inside the tile is ' + (sr && sr.width.toFixed(1)) + 'px — the tile grew and the glyph did not');
+      const ic = c0.querySelector('.addmenu-ic'), col = ic && getComputedStyle(ic).color;
+      if (col !== 'rgb(255, 255, 255)') throw new Error('the shape glyph is ' + col + ', not white — option D was "white glyphs on the coloured tiles" (queue 760 clause 2)');
+      // the plate may be a flat colour (the sheet) or the PC panel's gradient — read the first coloured stop either way
+      const csc = getComputedStyle(c0), bg = csc.backgroundColor + ' ' + csc.backgroundImage;
+      const m = [].concat(bg.match(/rgba?\(\s*\d+,\s*\d+,\s*\d+(?:,\s*[\d.]+)?\)/g) || []).map(t => t.match(/rgba?\(\s*(\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/)).find(x => x && (x[4] === undefined || parseFloat(x[4]) > 0));
+      const a = m ? (m[4] === undefined ? 1 : parseFloat(m[4])) : 0;
+      if (!(a >= 0.3)) throw new Error('the tile plate is ' + bg + ' — the glyph is white but the plate is not coloured under it, so the tile reads as white on nothing');
+      const tint = (c0.style.getPropertyValue('--am-tint') || '').trim();
+      if (!tint) throw new Error('the tile carries no --am-tint of its own — the spectrum is gone');
+      if (m && (m[1] + ', ' + m[2] + ', ' + m[3]) !== tint) throw new Error('the plate colour ' + bg + ' is not the tile\'s own tint ' + tint);
+    } finally {
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   /* ═══ 692 ROUTE 2: THE READBACK IS CROPPED TO THE LAYER FOR EVERY ADMITTED KERNEL, AND ADMISSION IS RE-PROVED HERE.
      Five rounds bounded 13 kernels one at a time; this covers 44 more in one place in drawPixelEffect. A kernel is in
      CROP_FX only if the cropped path draws the same picture as the full one — five subject positions, defaults and

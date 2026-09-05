@@ -714,7 +714,10 @@ window.FM = window.FM || {};
     // labelled cards (Elements / Media / Audio / Template)
     lbl: { minW: 44, maxW: 118, minH: 40, maxH: 118, padV: 7, padH: 4, padVMin: 2, padHMin: 2, aspect: 1.45, icoGap: 5, icoMin: 19, icoMax: 46, lines: 2 },
     // icon-only cards (Shape) — the name lives in the tooltip, so all the height goes to the art
-    ico: { minW: 34, maxW: 110, minH: 34, maxH: 110, padV: 8, padH: 6, padVMin: 0, padHMin: 0, aspect: 1.25, icoGap: 0, icoMin: 34, icoMax: 58, lines: 0 },
+    /* BIGGER ON PC (queue 760 clause 1, his words: "on pc make the shape buttons bigger"). The 3 Sep sheet drew the grid at 40px as
+       shipped (seven across), 48px (six across, recommended) and 56px; decided under rule 16 as 48. minW/minH lift the floor the
+       solver may not go under, icoMin the art inside it; measured at 1280 before: 39.7x35 tiles, 34px art. Say 40 or 56 to change. */
+    ico: { minW: 46, maxW: 110, minH: 44, maxH: 110, padV: 8, padH: 6, padVMin: 0, padHMin: 0, aspect: 1.25, icoGap: 0, icoMin: 40, icoMax: 58, lines: 0 },
   };
   /* The label's RESERVED band, in px, and the one number that makes the fit monotonic.
    * It is a CONSTANT per card kind — the gap plus two lines at the smallest font — not a function

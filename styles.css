@@ -9085,3 +9085,17 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
   pointer-events: none; border-radius: inherit;
   background: linear-gradient(90deg, rgba(6, 12, 20, .72), rgba(6, 12, 20, 0));
 }
+
+/* SHAPE TILES: WHITE GLYPH ON THE COLOURED PLATE (queue 760 clause 2, his words: "the colour choices are bad"). Four treatments were
+   drawn and sent on 3 Sep — A each shape its own hue on a tinted plate (as shipped), B one teal, C the Shape tab's violet, D white glyphs on
+   the coloured tiles (recommended) — and D is decided under rule 16. The tile keeps its own --am-tint (the golden-angle sequence from
+   js/addmenu.js), so the grid stays a spectrum; the glyph stops competing with it. Say A, B or C to change. */
+.addmenu-page .addmenu-card.addmenu-card--ico { background: rgba(var(--am-tint, 41, 217, 187), .42); border-color: rgba(var(--am-tint, 41, 217, 187), .55); }
+.addmenu-page .addmenu-card.addmenu-card--ico > .addmenu-ic { color: #fff; }
+.addmenu-page .addmenu-card.addmenu-card--ico:hover { background: rgba(var(--am-tint, 41, 217, 187), .56); border-color: rgba(var(--am-tint, 41, 217, 187), .85); }
+/* The PC panel paints every card with `#inspector-panel .addmenu-card { background: linear-gradient(…) }` at ≥701px — an id selector, so the
+   class rule above loses there and the plate stayed a faint .26 wash. Same shape of rule, same id, saturated for the shape tiles. */
+@media (min-width: 701px) {
+  #inspector-panel .addmenu-page .addmenu-card.addmenu-card--ico { background: linear-gradient(158deg, rgba(var(--am-tint, 41, 217, 187), .60) 0%, rgba(var(--am-tint, 41, 217, 187), .38) 55%, rgba(var(--am-tint, 41, 217, 187), .34) 100%); border-color: rgba(var(--am-tint, 41, 217, 187), .6); }
+  #inspector-panel .addmenu-page .addmenu-card.addmenu-card--ico:hover { background: linear-gradient(158deg, rgba(var(--am-tint, 41, 217, 187), .72) 0%, rgba(var(--am-tint, 41, 217, 187), .50) 100%); border-color: rgba(var(--am-tint, 41, 217, 187), .9); }
+}
