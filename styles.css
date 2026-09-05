@@ -7098,6 +7098,31 @@ body.fm-pushing #toast { z-index: 213; }
   body { --rail-w: 0px; }
   body #topbar { display: none; }
 
+  /* ---- THE ROW IS TOO NARROW FOR BOTH END CLUSTERS BELOW 1160px (queue 801) -------------------------
+   Found 6 Sep by using the PC layout at 900px with a layer selected: #t-far (version chip · help · notes ·
+   cog · export · view options, 266px) is absolute so the play button stays centred, and #t-sel (parent ·
+   delete · more, 126px) is a normal child of the right column — so once the row is narrower than the two
+   clusters plus the transport, the far run simply sits ON TOP of the layer toolbar. Measured: 123px of
+   overlap at 900, 73 at 1000, 23 at 1100, none from 1150 — and at 760 the layer toolbar was entirely
+   under the version chip, invisible and unclickable, with undo and redo half covered. That band is an
+   iPad in landscape and a half-screen browser window.
+   Below 1160 the far run hangs in a BAND UNDER THE ROW instead: still absolute (so the row's centre
+   arithmetic is untouched), pinned to the row's bottom edge, and the panel's first grid row grows from
+   40 to 80 so the ruler starts under the band. Nothing can be covered, because nothing shares the row
+   with it any more. One control height taller at those widths is the honest cost; a hidden control is
+   not. A two-row grid was tried first and collapsed the row's fr tracks — measured, not guessed.
+     Nested inside the 701 block on purpose: this is a refinement of the PC layout, not a layout of its own. */
+  @media (max-width: 1160px) {
+    /* The band's 40px come from the STAGE, not the tracks: the panel grows by the band's height (the base
+       --tl-h is the 701px clamp two screens up), so the ruler and every track row sit exactly where they
+       did — measured, because the first cut took the height from the tracks and four desktop tests that
+       count visible rows went red at the runner's 900px. */
+    :root { --tl-h: calc(clamp(232px, 30vh, 300px) + 40px); }
+    #timeline-panel { grid-template-rows: 80px 1fr; }
+    #transport { align-self: start; height: 40px; }
+    #t-far { top: 100%; bottom: auto; height: 40px; }
+  }
+
   /* ---- the LAST control comes down off the header (v7.75, queue 229) -------------------------
      Ezra: "no dont reclaim the top bar, i just want you to move the nescesary buttons to the bottoms
      one so its all there." So the header stays exactly where it is; what leaves it is the one working

@@ -1680,10 +1680,15 @@
     const p = panel.getBoundingClientRect(), t = tl.getBoundingClientRect(), tr = transport.getBoundingClientRect();
     // Control: a collapsed panel would make the comparison meaningless.
     if (p.height < 120) throw new Error('#timeline-panel is only ' + Math.round(p.height) + 'px tall — nothing below can mean anything');
-    const expected = p.height - tr.height;
+    /* Below 1160px the far run hangs in a BAND under the row (queue 801), so "below the transport row" means below the band
+       too: the scroller must fill everything under the last strip of controls, whichever that is. */
+    const far = document.getElementById('t-far');
+    const fr = far ? far.getBoundingClientRect() : null;
+    const band = (fr && fr.height > 2 && fr.top >= tr.bottom - 1) ? fr.height : 0;
+    const expected = p.height - tr.height - band;
     if (t.height < expected - 4) {
       throw new Error('the timeline scroller is ' + Math.round(t.height) + 'px inside a ' + Math.round(p.height) +
-        'px panel whose transport row is ' + Math.round(tr.height) + 'px — it should be about ' + Math.round(expected) +
+        'px panel whose transport row is ' + Math.round(tr.height) + 'px' + (band ? ' plus a ' + Math.round(band) + 'px band under it' : '') + ' — it should be about ' + Math.round(expected) +
         '. Everything below that height is clipped and unhittable, which reads as "the tap does not land" rather than as a layout bug');
     }
   });
@@ -13720,11 +13725,18 @@
         const tr = t.getBoundingClientRect();
         if (tr.height < 20) throw new Error('the transport row measures ' + Math.round(tr.height) + 'px tall — this test would be comparing against nothing');
         let checked = 0;
+        /* Below 1160px the far run (version chip · help · notes · cog · export · view options) hangs in a BAND under the
+           row (queue 801), so those controls are measured against the band they sit on, not the row above it. The
+           intent is unchanged: nothing is taller than the strip it lives on. */
+        const far = document.getElementById('t-far');
+        const fr = far ? far.getBoundingClientRect() : null;
+        const farInBand = !!(fr && fr.top >= tr.bottom - 1);
         [].slice.call(t.querySelectorAll('button, .btn, .ver')).forEach(function (el) {
           const b = el.getBoundingClientRect();
           if (b.width < 2 || b.height < 2) return;   // hidden controls are not this test's business
           checked++;
-          const over = Math.max(Math.round(tr.top - b.top), Math.round(b.bottom - tr.bottom));
+          const strip = (farInBand && far.contains(el)) ? fr : tr;
+          const over = Math.max(Math.round(strip.top - b.top), Math.round(b.bottom - strip.bottom));
           if (over > 0) {
             throw new Error((studio ? 'studio' : 'classic') + ': ' + (el.id || el.className) + ' is ' + Math.round(b.height) +
               'px tall in a ' + Math.round(tr.height) + 'px row and stands ' + over + 'px proud of it — it laps over the divider');
@@ -27102,6 +27114,47 @@
     if (dead.length) throw new Error(dead.length + ' raised ceiling(s) are dead space — the top half of the slider does nothing: ' + dead.join(' · '));
   });
 
+  test('801: in the PC layout the far-right run never covers the selected layer toolbar, at 900 and at 760, and stays one row at 1280', { item: '801', budgetMs: 40000 }, async function () {
+    /* Found 6 Sep by using the PC layout at 900px with a layer selected: #t-far is absolute (so play stays centred) and #t-sel is
+       a flex child of the right column, so below ~1150px the far run sat on top of parent / delete / more — 123px of overlap at
+       900, all of it at 760, with undo and redo half covered. Below 1160 the far run now hangs in a band under the row. This selects a
+       layer, narrows the runner to 900 and 760, and asks elementFromPoint what is on top of the delete button; then confirms
+       the row is still ONE row at 1280 (the far run's top on the transport's first row), so the wrap does not leak wide. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const inter = (a, b) => { const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(); return Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left) > 2 && Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top) > 2; };
+    try {
+      if (hadHome) FM.home.close();
+      const L = FM.makeLayer('shape', { name: 'k801', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#c05030', start: 0, duration: 3 });
+      FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 4 } });
+      FM.selectLayer(L.id); FM.refreshAll(); await sleep(250);
+      for (const w of [900, 760]) {
+        await atWideWidth(async function () {
+          FM.refreshAll(); await sleep(300);
+          const sel = document.getElementById('t-sel'), far = document.getElementById('t-far'), del = document.getElementById('btn-del-layer');
+          if (!sel || !far || !del) throw new Error('setup at ' + w + ': the PC transport groups are not built (t-sel ' + !!sel + ', t-far ' + !!far + ', delete ' + !!del + ')');
+          if (inter(sel, far)) throw new Error('at ' + w + 'px the far-right run (version · cog · export) sits on top of the layer toolbar (parent · delete · more) — controls covered (queue 801)');
+          const r = del.getBoundingClientRect(), top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          if (!top || !(top === del || del.contains(top))) throw new Error('at ' + w + 'px the delete button is under "' + (top && (top.id || top.className)) + '" — a user cannot press it (queue 801)');
+          const tr = document.getElementById('transport').getBoundingClientRect();
+          if (far.getBoundingClientRect().right > tr.right + 1) throw new Error('at ' + w + 'px the far run runs past the row (' + Math.round(far.getBoundingClientRect().right) + ' > ' + Math.round(tr.right) + ')');
+        }, w);
+      }
+      // wide: still one row — the far run's top sits on the transport's first row, beside the undo button (1280 explicitly: the runner's own frame may be narrower)
+      await atWideWidth(async function () {
+        FM.refreshAll(); await sleep(250);
+        const far = document.getElementById('t-far'), undo = document.getElementById('btn-undo');
+        if (far && undo && Math.abs(far.getBoundingClientRect().top - undo.getBoundingClientRect().top) > 6) throw new Error('at ' + innerWidth + 'px the far run has dropped under the row (' + Math.round(far.getBoundingClientRect().top) + ' vs undo at ' + Math.round(undo.getBoundingClientRect().top) + ') — the band leaked into the wide layout');
+      }, 1280);
+    } finally {
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   test('800: a negative text curve is a downward arch that still reads left to right, and a positive one is unchanged', { item: '800' }, function () {
     /* The Text sweep of 6 Sep: at any negative Curve the word rendered mirrored, "noitoM", on the panel's own control with no
        effect involved (drawArcLine scaled the placement angle by the SIGNED arc, so the first glyph took the right end).
@@ -34001,6 +34054,11 @@
        rebuild back inside the loop, because the eyes it is dragging over would be replaced mid-gesture. */
     const saved = FM.scene.layers.slice();
     const savedVis = saved.map(l => l.visible);
+    /* The Home screen covers the timeline when the runner starts from an empty profile (queue 801 found it: every eye
+       read as under `.hm-scroll`). This test sweeps the TIMELINE, so Home is closed first and put back after, as its
+       neighbours do. */
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) { FM.home.close(); await sleep(150); }
     try {
       while (FM.scene.layers.length < 5)
         FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 40, shapeH: 30, fill: '#4080c0', start: 0, duration: 4 }));
@@ -34071,6 +34129,7 @@
         if (vis() !== start) throw new Error('one Undo left the layers at ' + vis() + ' instead of ' + start + ' — the sweep committed more than one history entry, so Undo walks back a row at a time');
       }
     } finally {
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
       FM.scene.layers.length = 0;
       saved.forEach((l, i) => { l.visible = savedVis[i]; FM.scene.layers.push(l); });
       if (FM.refreshAll) FM.refreshAll();
