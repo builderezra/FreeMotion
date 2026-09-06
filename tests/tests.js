@@ -36081,6 +36081,61 @@
     }
   });
 
+  test('deleting the project you have open never drops you into a hidden workspace (queue 834 u7)', { item: '834' }, function () {
+    /* An element or a template is edited in a hidden workspace project. Deleting the project you had open
+       picked the next entry from the RAW list, so it could quietly drop you inside one of those — nothing
+       on Home shows as open, and anything added there is saved back over that element when you leave. The
+       three sibling paths that pick a landing project have always filtered them out; this one did not. */
+    if (!FM.projects || !FM.projects.list) return;
+    const src = FM.projects.remove.toString().replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const i = src.indexOf('curId()');
+    if (i < 0) throw new Error('remove() no longer decides where to land, so this test is measuring the wrong function');
+    const tail = src.slice(i);
+    if (!/elementDraft/.test(tail) || !/templateDraft/.test(tail))
+      throw new Error('deleting the open project still lands on the raw project list, so it can drop him inside a hidden element or template workspace');
+  });
+
+  test('opening a second project while the first is still loading loads the RIGHT clips (queue 834 u8)', { item: '834' }, async function () {
+    /* Callers deliberately share an in-flight hydration rather than racing it, but the guard did not record
+       WHICH scene the run was for — so opening a different project while one was still loading handed back
+       that other run's promise and the new project's clips were never fetched. It opened with every clip
+       blank until he left and came back. Driven through the seam the app itself uses. */
+    if (!FM.storage || !FM.storage._hydrateSceneMedia) return;
+    const savedLayers = FM.scene.layers.slice();
+    try {
+      FM.scene.layers = [];
+      const first = FM.storage._hydrateSceneMedia({ onlyMissing: true });
+      /* …and now the scene changes underneath it, exactly as opening another project does. */
+      FM.scene.layers = [];
+      const second = FM.storage._hydrateSceneMedia({ onlyMissing: true });
+      if (second === first) throw new Error('the second project shared the first project’s hydration run — its own clips are never fetched, so it opens with every clip blank');
+      await Promise.all([first.catch(() => {}), second.catch(() => {})]);
+    } finally {
+      FM.scene.layers = savedLayers;
+      await sleep(40);
+    }
+  });
+
+  test('pulling the sound out of a huge video refuses instead of killing the tab (queue 834 u9)', { item: '834' }, async function () {
+    /* Add ▸ Audio accepts video on purpose, so he can pick one from the camera roll. It then decodes the
+       WHOLE track into memory at the device rate and builds a WAV of it — about 10MB a minute, doubled
+       while the WAV is made. A long video therefore asked a phone for a gigabyte or more: a minute-long
+       freeze with no progress at best, a dead tab at worst. The waveform and vocal paths have had a
+       ceiling for exactly this reason; this one had none. */
+    if (!FM._audioFromVideo || !FM.media || !FM.media.WAVE_MAX_BYTES) throw new Error('there is no shared ceiling to measure against — the audio import can still be handed a file of any size');
+    const huge = { name: 'q834.mp4', type: 'video/mp4', size: FM.media.WAVE_MAX_BYTES + 1 };
+    const realDecode = FM.decodeAudio;
+    let decoded = false;
+    try {
+      FM.decodeAudio = async function () { decoded = true; return null; };
+      const out = await FM._audioFromVideo(huge);
+      if (decoded) throw new Error('it tried to decode a file past the ceiling anyway — that is the freeze, and on a phone the tab can die with the import in it');
+      if (out) throw new Error('it returned a file for something it should have refused');
+    } finally {
+      FM.decodeAudio = realDecode;
+    }
+  });
+
   test('a raised inspector grows its option cards into the height it was given (queue 807)', { item: '807' }, async function () {
     /* Measured in the pane at 1280x800 on v15.88: raised by 250px the cards stayed 48px and the last one
        ended 266px above the panel's bottom, because --cat-h asks the band floor (--tl-h) how much room

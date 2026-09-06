@@ -4147,7 +4147,19 @@ window.FM = window.FM || {};
    * he asked for and better than an import that does nothing.
    * ⚠️ WAV is uncompressed — roughly 10MB a minute in IndexedDB. Named in queue 448 against #430's
    * storage work; if that turns out to matter, FM.exporter.encodeM4A (v10.72) is now a real alternative. */
+  /* ⚠️ queue 834 (u9): A CEILING, because this decodes the WHOLE track into memory at the device rate and
+     then makes a WAV of it — roughly 10MB a minute of PCM, doubled while the WAV is built. Picking a long
+     video from the camera roll under Add ▸ Audio (which accepts video on purpose, queue 448 — "choose from
+     camera roll") therefore asked a phone for a gigabyte or more: best case a minute-long freeze with no
+     progress, worst case the tab dies and the import is lost. The same ceiling the waveform and the vocal
+     paths already use (WAVE_MAX_BYTES in js/media.js), read from there rather than copied, so there is one
+     number. Over it, refuse honestly and say why instead of trying and dying. */
+  const AUDIO_IMPORT_MAX = (FM.media && FM.media.WAVE_MAX_BYTES) || 300 * 1024 * 1024;
   async function audioFromVideo(file) {
+    if (file && file.size > AUDIO_IMPORT_MAX) {
+      if (FM.toast) FM.toast('That video is too big to pull the sound out of on this device — add it as a clip and mute the picture instead', 3200);
+      return null;
+    }
     let buf = null;
     try { buf = await FM.decodeAudio(file); }
     catch (e) { console.warn('[import] could not decode the audio of ' + file.name, e); buf = null; }

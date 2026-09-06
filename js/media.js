@@ -73,6 +73,7 @@ window.FM = window.FM || {};
     all() { return store; },
   };
 
+
   /* Load a video file -> { kind:'video', el, width, height, duration, url } */
   FM.loadVideoFile = function (file) {
     return new Promise((resolve, reject) => {
@@ -605,6 +606,7 @@ window.FM = window.FM || {};
    * file.arrayBuffer() alone has to hold the whole file in RAM before decoding even starts. A clip with
    * no waveform is a small cosmetic loss; a browser that kills the tab loses the project. */
   const WAVE_MAX_BYTES = 300 * 1024 * 1024;
+  FM.media.WAVE_MAX_BYTES = WAVE_MAX_BYTES;   // queue 834 (u9): one ceiling, shared with the audio import in js/app.js
   const WAVE_RATE = 8000;   // 600 peaks are drawn from this — 8kHz is ample, and 6x smaller than 48k
 
   /* ---- "Does this layer actually carry SOUND?" -------------------------------------------------

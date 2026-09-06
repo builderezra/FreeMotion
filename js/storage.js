@@ -194,11 +194,22 @@ window.FM = window.FM || {};
    * may already be drawing from, and that clip goes blank with nothing in the log. The routes really can
    * overlap: close() fires this without awaiting, and openProject awaits its own call on the
    * same-project path. Callers share the run rather than racing it. */
-  let _hydrating = null;
+  let _hydrating = null, _hydratingFor = null;
+  /* ⚠️ queue 834 (u8): SHARE A RUN ONLY WITH THE SCENE IT IS FOR. Callers deliberately share an in-flight
+     hydration rather than racing it — but the guard did not record WHICH scene the run belonged to, so
+     opening a DIFFERENT project while one was still loading returned that other run's promise and the new
+     project's clips were never fetched: it opened with every clip blank until he left and came back.
+     The layer ARRAY identity is exactly what the loop is bound to (it reads FM.scene.layers after its
+     first await), so that is what the run is tagged with. A run for a different scene is queued behind
+     this one instead of being mistaken for it. */
   function hydrateSceneMedia(opts) {
-    if (_hydrating) return _hydrating;
-    _hydrating = _hydrateSceneMedia(opts).then(function (n) { _hydrating = null; return n; },
-                                              function (e) { _hydrating = null; throw e; });
+    const forLayers = FM.scene.layers;
+    if (_hydrating && _hydratingFor === forLayers) return _hydrating;
+    const start = _hydrating ? _hydrating.catch(function () {}) : Promise.resolve();
+    _hydratingFor = forLayers;
+    _hydrating = start.then(function () { return _hydrateSceneMedia(opts); })
+      .then(function (n) { if (_hydratingFor === forLayers) { _hydrating = null; _hydratingFor = null; } return n; },
+            function (e) { if (_hydratingFor === forLayers) { _hydrating = null; _hydratingFor = null; } throw e; });
     return _hydrating;
   }
   async function _hydrateSceneMedia(opts) {
@@ -274,6 +285,7 @@ window.FM = window.FM || {};
   }
   FM.storage = {
     _writeJobs: planBlobWrites,   // queue 830 suite seam
+    _hydrateSceneMedia: hydrateSceneMedia,   // queue 834 (u8) suite seam: the shared-run guard itself
     /* ⚠️ queue 829: THE FILE HE IS REPLACING MUST SURVIVE THE REPLACE. A layer's blob is keyed by the
        LAYER id, so the next save writes the new file over the same key — the comment on replaceMedia says
        "the outgoing blob is NOT deleted any more", and it is right that nothing deletes it, but the save
@@ -1705,7 +1717,14 @@ window.FM = window.FM || {};
       try { localStorage.removeItem('fm.proj.' + id); } catch (e) {}
       this.saveIndex(this.list().filter(p => p.id !== id));
       if (id === curId()) {
-        const rest = this.list();
+        /* ⚠️ queue 834 (u7): A DRAFT WORKSPACE IS NOT SOMEWHERE TO LAND. `list()` includes the hidden
+           workspaces that an element or a template is edited in, so deleting the project you had open
+           could quietly drop you INSIDE one — nothing on Home shows as open, and anything you then add
+           is saved back over that element or template when you leave. The three sibling paths that pick
+           a landing project (js/storage.js:1687, :2036, :2220) all filter these out; this one did not.
+           No `|| any draft` fallback on purpose: with no real project left, a NEW one is the honest
+           answer, and that branch already exists below. */
+        const rest = this.list().filter(p => !p.elementDraft && !p.templateDraft);
         if (rest.length) await this.open(rest[0].id);
         else { try { localStorage.removeItem(CUR_KEY); } catch (e) {} await this.create({}); }
         // open()/create() flushSync'd BEFORE switching CUR_KEY, resurrecting the deleted doc as an
