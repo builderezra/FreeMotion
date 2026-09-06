@@ -35664,6 +35664,69 @@
     }
   });
 
+  test('on a finger, a swipe across a selected clip scrubs — only a hold slips its media (queue 822)', { item: '822' }, async function () {
+    /* The ⇄ pill is centred on the clip, which on a phone lane is where a thumb lands to scrub, and it used
+       to take EVERY pointer at once. The clip's own handler never ran and the timeline sets
+       `touch-action: none`, so an ordinary swipe silently re-timed the media and committed it.
+       ⚠️ THE FIRST FOUR VERSIONS OF THIS TEST PASSED AGAINST THE BUG, so it now says what it observed at
+       each step: a claim about a gesture is worthless unless the gesture demonstrably started. */
+    if (!FM._trimArmMs || !FM.timeline._dragState) return;
+    const savedSel = FM.scene.selectedId;
+    const savedLayers = FM.scene.layers.slice();
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const media = [];
+    try {
+      const vid = FM.makeLayer('video', { name: 'q822 clip', start: 0, duration: 4 });
+      FM.scene.layers.push(vid); media.push(vid.id);
+      // ten seconds of source under a four-second clip: real slack, the only state the pill renders in
+      FM.media.set(vid.id, { kind: 'video', el: document.createElement('video'), width: 640, height: 360, duration: 10, layerId: vid.id });
+      vid.trimStart = 1;
+      FM.timeline.rebuild(); FM.selectLayer(vid.id); FM.refreshAll(); await sleep(260);
+      const pillNow = () => {
+        const c = [].slice.call(document.querySelectorAll('.clip')).filter(el => el.dataset && el.dataset.id === vid.id)[0];
+        return attached(c && c.querySelector('.clip-slip'), 'slip pill on this clip');
+      };
+      let pill = pillNow();
+      const r = pill.getBoundingClientRect(), x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
+      const win = (t, x, b, pid) => window.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: pid, pointerType: 'touch', clientX: x, clientY: y0, buttons: b }));
+
+      // ── an ordinary swipe: down, then travel straight away ──
+      const trim0 = vid.trimStart;
+      pill.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 31, pointerType: 'touch', clientX: x0, clientY: y0, buttons: 1 }));
+      await sleep(30);
+      const afterDown = FM.timeline._dragState().live.slice();
+      for (let i = 1; i <= 5; i++) win('pointermove', x0 + 14 * i, 1, 31);
+      await sleep(60);
+      const trimMid = vid.trimStart;
+      win('pointerup', x0 + 70, 0, 31);
+      await sleep(100);
+      if (trimMid !== trim0) throw new Error('an ordinary swipe re-timed the clip’s media (trimStart ' + trim0 + ' → ' + trimMid + ') — a silent, destructive edit inside the commonest gesture on a phone');
+
+      // ── the same press, HELD past the arm, then the same travel: that IS a slip ──
+      pill = pillNow();
+      pill.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 32, pointerType: 'touch', clientX: x0, clientY: y0, buttons: 1 }));
+      await sleep(FM._trimArmMs + 200);
+      const afterHold = FM.timeline._dragState().live.slice();
+      for (let i = 1; i <= 5; i++) win('pointermove', x0 + 14 * i, 1, 32);
+      await sleep(80);
+      const slipped = vid.trimStart !== trim0;
+      win('pointerup', x0 + 70, 0, 32);
+      await sleep(80);
+      /* ⚠️ THE CONTROL THAT THE EARLIER VERSIONS LACKED. If the hold does not start a slip either, this
+         test cannot tell "the swipe was correctly refused" from "the gesture never reached the pill", and
+         it would pass against the bug — which it did, four times. The observed gesture state is reported
+         so the next reader does not have to guess. */
+      if (!slipped) throw new Error('a deliberate hold-then-drag did not slip the media either, so the refusal above proves nothing — gestures live after the press were [' + afterDown.join(',') + '] and after the hold [' + afterHold.join(',') + ']');
+    } finally {
+      try { FM.timeline._abortGestures(); } catch (e) {}
+      media.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.timeline.rebuild(); FM.selectLayer(savedSel || null); FM.refreshAll(); await sleep(40);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
   test('a raised inspector grows its option cards into the height it was given (queue 807)', { item: '807' }, async function () {
     /* Measured in the pane at 1280x800 on v15.88: raised by 250px the cards stayed 48px and the last one
        ended 266px above the panel's bottom, because --cat-h asks the band floor (--tl-h) how much room
