@@ -5285,6 +5285,15 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
    into a scrolling container — which would have broken the commit bar, the pager and the preview loop
    at once. The phone rule above is untouched: there is no inspector column to sit in there, and the
    full-bleed sheet is his own design from the queue-277 spec. */
+/* ⚠️ queue 810 MEASURED AND LEFT FOR HIM (6 Sep): this rule names only the VISUAL browser, while
+   FM.fxSheet has added `fxb-in-inspector` to BOTH since queue 300 — so the audio menu is told it is
+   docked in the 307px column and then draws itself the full window width from that column's top.
+   Measured at 1280x800: audio [0, 560, 1280, 240] against visual [0, 560, 307, 240], covering 973px of
+   the timeline. Adding `#afx-browser` to this selector was TRIED and reverted the same hour: the box
+   then lands correctly, but the audio pager sizes its pages for a full-width sheet, so its 150px cards
+   spill out of a 307px column (measured: cards at x=328 and x=490 inside a 307px box). Docking it
+   properly means re-paging that browser for the column, which is a visible change to a menu he uses —
+   so it is his call, not a silent one. */
 #fx-browser.fxb-sheet.fxb-in-inspector {
   top: var(--fxb-top, 0); left: var(--fxb-left, 0);
   right: var(--fxb-right, 0); bottom: var(--fxb-bottom, 0);

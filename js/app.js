@@ -4856,6 +4856,26 @@ window.FM = window.FM || {};
       return Math.max(150, Math.min(ceil, h));
     };
     FM.clampTimelineH = clampH;   // exposed so the suite tests the clamp that actually runs, not a copy of it
+    /* ⚠️ queue 808: `--tl-h` CANNOT BE READ BACK WITH getComputedStyle. A custom property is not resolved
+       unless it has been registered, so getPropertyValue hands back the token stream the stylesheet wrote
+       — measured on a fresh profile at 1280x800: "clamp(232px, 30vh, 300px)" — and parseInt of that is
+       NaN. All four readers below then fell to their fallback of 232 while the real band was 240 (300 on
+       a 1080p window; 40 more below 1160px, where the transport hangs under the row). Measured
+       consequences, all three from this one line-pattern: a 10px drag DOWN on the add menu's handle
+       detached the panel at 232px inside a 240px row and opened an 8px strip of bare background above it;
+       a CLICK on the timeline divider persisted 232, so the next load opened with a shorter band than the
+       one he left; and the window-resize re-clamp never ran at all, because `if (cur)` is false for NaN.
+       The band's grid ROW is the honest source and #timeline-panel fills it in every PC layout — including
+       while the inspector floats out of it, which is exactly when the floor is needed. The inline value is
+       trusted first because it is the record that a drag set this height on purpose. */
+    const bandH = () => {
+      const inline = parseInt(root.style.getPropertyValue('--tl-h'), 10);
+      if (inline) return inline;
+      const tp = document.getElementById('timeline-panel');
+      const h = tp ? Math.round(tp.getBoundingClientRect().height) : 0;
+      return h || 232;
+    };
+    FM._bandH = bandH;            // suite seam: the tests read the height the app reads
     let saved = 0;
     try { saved = parseInt(localStorage.getItem('fm_tl_h') || '', 10) || 0; } catch (_) {}
     if (saved && !isPhone()) root.style.setProperty('--tl-h', clampH(saved) + 'px');
@@ -4919,8 +4939,11 @@ window.FM = window.FM || {};
     const end = () => {
       if (!dragging) return;
       dragging = false; document.body.classList.remove('tl-resizing');
-      const cur = getComputedStyle(root).getPropertyValue('--tl-h').trim();
-      try { if (cur) localStorage.setItem('fm_tl_h', parseInt(cur, 10) || 232); } catch (_) {}
+      /* queue 808: the INLINE value, not the computed one — it is set only when a drag (or the startup
+         restore) actually chose a height, so a press-and-release that moved nothing now persists nothing
+         instead of writing the 232 that parseInt produced from the stylesheet's clamp(). */
+      const cur = parseInt(root.style.getPropertyValue('--tl-h'), 10);
+      try { if (cur) localStorage.setItem('fm_tl_h', cur); } catch (_) {}
     };
     rez.addEventListener('pointerup', end);
     rez.addEventListener('pointercancel', end);
@@ -4947,7 +4970,7 @@ window.FM = window.FM || {};
     const amRez = document.getElementById('am-resizer');
     if (amRez) {
       const STICK = STICK244;             // px of travel past the floor before the two couple (draw-tool's snapCursor uses the same idea)
-      const amFloor = () => parseInt(getComputedStyle(root).getPropertyValue('--tl-h'), 10) || 232;
+      const amFloor = () => bandH();          // queue 808: measured, never parsed out of the custom property
       const amClamp = (h) => {
         const vh = window.innerHeight;
         /* How far up it may go. This was 0.82 of the window, which leaves about 140px of stage on a
@@ -5084,7 +5107,7 @@ window.FM = window.FM || {};
            The TIMELINE's height is persisted and always has been — that one is read back at startup. If
            he wants the panel to remember its height too, that is a real feature and a decision for him,
            not something to resurrect by leaving a write nobody reads. */
-        try { const tl = parseInt(getComputedStyle(root).getPropertyValue('--tl-h'), 10); if (tl) localStorage.setItem('fm_tl_h', tl); } catch (_) {}
+        try { const tl = parseInt(root.style.getPropertyValue('--tl-h'), 10); if (tl) localStorage.setItem('fm_tl_h', tl); } catch (_) {}   // queue 808: inline only — see bandH
       };
       amRez.addEventListener('pointerup', amEnd);
       amRez.addEventListener('pointercancel', amEnd);
@@ -5134,7 +5157,7 @@ window.FM = window.FM || {};
     // window shrank below a stored height → re-clamp so the timeline can't exceed the viewport
     window.addEventListener('resize', () => {
       if (isPhone()) return;
-      const cur = parseInt(getComputedStyle(root).getPropertyValue('--tl-h'), 10);
+      const cur = bandH();        // queue 808: was NaN for a stylesheet band, so this never ran at all
       if (cur) { const c = clampH(cur); if (c !== cur) root.style.setProperty('--tl-h', c + 'px'); }
     });
   }
@@ -6540,6 +6563,19 @@ window.FM = window.FM || {};
       // Both key and code are checked — a synthesised event may carry only one of them.
       const isEscape = e.code === 'Escape' || e.key === 'Escape';
       if (!isEscape && FM.overlayOwnsScreen()) return;
+      /* ⚠️ queue 809: AN OPEN BROWSER OWNS THE KEYBOARD, and unlike the rule above that is not a
+         geometry question. On PC the effects browser is docked over the INSPECTOR COLUMN, so
+         overlayOwnsScreen() correctly answers no — and every bare-key shortcut then drove the project
+         underneath it. Measured on v15.89: Escape stepped the inspector back BEHIND the browser and a
+         second Escape DESELECTED the layer while it was still open, so Done added the picks to a layer
+         nothing was showing ("Added 1 effect", and the panel shows none); Tab selected the next layer;
+         Space started playback; Delete deleted the layer. Escape leaves through the browser's own exit
+         so picks are applied rather than binned, exactly as a tap-away does (queue 389/401). `inEdit`
+         first, because typing in its search box must reach the input. */
+      if (!inEdit && FM.fxSheetOpen && FM.fxSheetOpen() && !FM.overlayOwnsScreen()) {   // a full-screen overlay ON TOP of it owns Escape first
+        if (isEscape) { e.preventDefault(); if (FM.fxSheetExit) FM.fxSheetExit(); }
+        return;
+      }
       // The focused text editor is a MODE, and the rule above cannot see it. overlayOwnsScreen() asks
       // a GEOMETRY question — "is a fixed element covering the middle of the screen?" — and since
       // v6.17 the desktop editor is a 560x145 card docked at the bottom of the stage, which covers
@@ -6732,10 +6768,11 @@ window.FM = window.FM || {};
            "outside #fx-browser" — so the menu closed and the drag never started: the band could not be
            raised WITH the Effects menu open, which is the one flow #804 was about. */
         if (e.target && e.target.closest && e.target.closest('#am-resizer, #tl-resizer')) { armed = false; keepAtDown = true; return; }
-        const fxbOpen = document.getElementById('fx-browser');
-        if (fxbOpen && !fxbOpen.classList.contains('hidden') &&
-            !(e.target && e.target.closest && e.target.closest('#fx-browser'))) {
-          if (FM._fxExitBrowser) FM._fxExitBrowser();
+        // queue 810: ASK which browser is open instead of naming one — the audio browser was left out
+        // of this exit, so a tap away kept it up over a layer it was no longer editing.
+        const fxbOpen = FM.fxSheetOpen ? FM.fxSheetOpen() : null;
+        if (fxbOpen && !(e.target && fxbOpen.contains(e.target))) {
+          if (FM.fxSheetExit) FM.fxSheetExit();
           else if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
           armed = false; keepAtDown = true;
           e.stopPropagation();

@@ -105,6 +105,28 @@ window.FM = window.FM || {};
   /* queue 805: the band's float moves the panel without resizing the canvas or the window, which are the
      only two things watchSheet listens for — so the drag calls this after every height write. */
   FM.fxSheetReplace = function () { sheetRoots.forEach(r => { if (r.classList.contains('fxb-sheet')) placeSheet(r); }); };
+  /* ⚠️ queue 809/810: WHICH BROWSER IS OPEN — ASKED, NOT LISTED. Three places needed to know (the
+     tap-away exit, the keyboard, Escape) and all three named `#fx-browser` literally, so the AUDIO
+     browser got none of them: tapping away left it open over a layer it was no longer editing and the
+     effect landed on the old one. Every browser goes through FM.fxSheet, so the set it already keeps is
+     the honest register — a new one is covered the day it is written, which is the same reasoning as
+     FM.overlayOwnsScreen's geometry test rather than a list of ids. */
+  FM.fxSheetOpen = function () {
+    let found = null;
+    sheetRoots.forEach(r => { if (!r.classList.contains('hidden')) found = r; });
+    return found;
+  };
+  /* And HOW to leave it: each browser hangs its own exit on its root when it builds, so the picks are
+     applied exactly as its commit bar would (queue 389 — "a tap-away is an exit like any other")
+     instead of a generic hide that skips its teardown. The fallback is the safety net for a browser
+     that forgot to register one. */
+  FM.fxSheetExit = function () {
+    const r = FM.fxSheetOpen();
+    if (!r) return false;
+    if (typeof r._fxExit === 'function') r._fxExit();
+    else { r.classList.add('hidden'); FM.fxSheet(r, false); }
+    return true;
+  };
   FM.fxSheet = function (root, on) {
     if (!root) return false;
     const sheet = on !== false;
@@ -1640,6 +1662,7 @@ window.FM = window.FM || {};
          **Clear** — an explicit control that says what it does, rather than three exits that quietly do it. */
       const exitBrowser = () => { if (_picked.length) commitPicks(); else FM.fxBrowser.close(); };
       FM._fxExitBrowser = exitBrowser;   // suite seam
+      root._fxExit = exitBrowser;        // queue 809/810: how FM.fxSheetExit leaves THIS browser
       root.querySelector('.fxb-close').addEventListener('click', exitBrowser);
       // Click the backdrop (outside the centred panel, on PC) → close. The panel's own clicks have
       // target inside .fxb-top / .fxb-scroll etc., so only a hit on the root backdrop itself closes.
@@ -1668,6 +1691,17 @@ window.FM = window.FM || {};
       }
       const searchBtn = root.querySelector('.fxb-search-btn');
       searchBtn.addEventListener('click', () => { searchInput.classList.toggle('hidden'); if (!searchInput.classList.contains('hidden')) searchInput.focus(); else { searchInput.value = ''; rebuild(); } });
+      /* queue 809: Escape inside the search box was swallowed — the window handler returns early for
+         an editable target, and the input itself only listened for 'input'. So it neither cleared the
+         search nor closed the browser: the one key everyone presses to back out did nothing at all.
+         Clears a search first, leaves the browser when there is nothing left to clear. */
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape' && e.code !== 'Escape') return;
+        e.preventDefault(); e.stopPropagation();
+        if ((searchInput.value || '').trim()) { searchInput.value = ''; rebuild(); return; }
+        searchInput.classList.add('hidden');
+        if (FM._fxExitBrowser) FM._fxExitBrowser();
+      });
       searchInput.addEventListener('input', () => { clearTimeout(_searchDebounce); _searchDebounce = setTimeout(rebuild, 120); });   // debounce: every keystroke tore down + rebuilt the whole result grid, re-mounting a canvas per match
     },
     open: function (layer, opts) {

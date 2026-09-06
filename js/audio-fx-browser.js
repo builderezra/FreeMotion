@@ -361,6 +361,7 @@ window.FM = window.FM || {};
          same markup, was not converted with it. FM.fxSheet is that geometry, so both are now the same
          thing rather than two things that happen to match. */
       FM.fxSheet(root);
+      root._fxExit = () => FM.audioFxBrowser.close();   // queue 810: this browser's own way out, for FM.fxSheetExit
       root.classList.remove('hidden');
       rebuild();
     },

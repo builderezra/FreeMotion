@@ -34653,6 +34653,191 @@
     }
   });
 
+  test('the band’s floor is its real height, so a small drag DOWN leaves it docked with no gap (queue 808)', { item: '808' }, async function () {
+    /* MEASURED at 1280x800 before the fix: getComputedStyle(root).getPropertyValue('--tl-h') returns the
+       token stream the stylesheet wrote — "clamp(232px, 30vh, 300px)" — because a custom property is not
+       resolved unless it is registered. parseInt of that is NaN, so the floor fell back to 232 while the
+       band was 240, and a 10px drag DOWN detached the panel at 232px inside a 240px row: an 8px strip of
+       bare background opened between the timeline's top and the panel. The runner's own band is taller
+       still (272 at 900x760), so the gap here is 10px. Nothing is stored in this state, which is the
+       state a NEW user is in — the bug needed no setup at all. */
+    if (window.innerWidth < 701) return;
+    const panel = document.getElementById('inspector-panel');
+    const tlp = document.getElementById('timeline-panel');
+    const rez = document.getElementById('am-resizer');
+    if (!panel || !tlp || !rez) return;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const rootEl = document.documentElement;
+    const savedTlH = rootEl.style.getPropertyValue('--tl-h');
+    let savedStore = null; try { savedStore = localStorage.getItem('fm_tl_h'); } catch (e) {}
+    const savedSel = FM.scene.selectedId;
+    try {
+      rootEl.style.removeProperty('--tl-h');            // the state a new profile is in: the band comes from the stylesheet
+      FM.selectLayer(null); FM.inspector.refresh(); await sleep(120);
+      const band = Math.round(tlp.getBoundingClientRect().height);
+      /* CONTROL: if the band happened to BE 232 the old fallback would be right by accident and this
+         test would pass on the broken code. */
+      if (band <= 233) throw new Error('the band is ' + band + 'px here, so the old 232px fallback cannot be told apart from the real height — this test would prove nothing');
+      const r = rez.getBoundingClientRect(), x = r.left + r.width / 2, y0 = r.top + r.height / 2;
+      const ev = (t, cy, b) => rez.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', clientX: x, clientY: cy, buttons: b }));
+      ev('pointerdown', y0, 1);
+      for (let i = 1; i <= 5; i++) ev('pointermove', y0 + (10 * i / 5), 1);
+      ev('pointerup', y0 + 10, 0);
+      await sleep(80);
+      if (document.body.classList.contains('am-floating'))
+        throw new Error('a 10px drag DOWN detached the panel: it is floating at ' + Math.round(panel.getBoundingClientRect().height) + 'px inside a ' + band + 'px band — the floor was read as 232 from a CSS variable that does not resolve');
+      const gap = Math.round(panel.getBoundingClientRect().top - tlp.getBoundingClientRect().top);
+      if (Math.abs(gap) > 1) throw new Error('a ' + gap + 'px strip of bare background opened between the timeline’s top and the panel');
+    } finally {
+      if (FM.dropAddMenuFloat) FM.dropAddMenuFloat();
+      if (savedTlH) rootEl.style.setProperty('--tl-h', savedTlH); else rootEl.style.removeProperty('--tl-h');
+      try { if (savedStore === null) localStorage.removeItem('fm_tl_h'); else localStorage.setItem('fm_tl_h', savedStore); } catch (e) {}
+      FM.selectLayer(savedSel || null); FM.inspector.refresh(); await sleep(40);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  test('clicking the timeline divider without moving it does not resize the band on the next load (queue 808)', { item: '808' }, async function () {
+    /* The same unresolvable read wrote the STORED height: `parseInt(getComputedStyle…) || 232`. So a tap
+       on the divider — to see the pill, or a stray click — saved 232, and the next load opened with a
+       band shorter than the one he left, with nothing on screen to explain it. */
+    if (window.innerWidth < 701) return;
+    const rez = document.getElementById('tl-resizer');
+    if (!rez) return;
+    const rootEl = document.documentElement;
+    const savedTlH = rootEl.style.getPropertyValue('--tl-h');
+    let savedStore = null; try { savedStore = localStorage.getItem('fm_tl_h'); } catch (e) {}
+    try {
+      rootEl.style.removeProperty('--tl-h');
+      try { localStorage.removeItem('fm_tl_h'); } catch (e) {}
+      await sleep(40);
+      const r = rez.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      const ev = (t, b) => rez.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 3, pointerType: 'mouse', clientX: x, clientY: y, buttons: b }));
+      ev('pointerdown', 1); ev('pointerup', 0);
+      await sleep(60);
+      let now = null; try { now = localStorage.getItem('fm_tl_h'); } catch (e) {}
+      if (now !== null) throw new Error('a click that moved nothing stored a band height of ' + now + 'px — the next load would open at that height instead of the one on screen');
+    } finally {
+      if (savedTlH) rootEl.style.setProperty('--tl-h', savedTlH); else rootEl.style.removeProperty('--tl-h');
+      try { if (savedStore === null) localStorage.removeItem('fm_tl_h'); else localStorage.setItem('fm_tl_h', savedStore); } catch (e) {}
+    }
+  });
+
+  test('while the Effects menu is open the keyboard belongs to it: Tab, Space and Delete do not drive the project, and Escape leaves (queue 809)', { item: '809' }, async function () {
+    /* Found by the five-lens hunt over the browser, two verifiers each. On PC the browser is docked over
+       the INSPECTOR COLUMN, so FM.overlayOwnsScreen() correctly answers "no full-screen overlay" — and
+       every bare-key shortcut then drove the project underneath it. Measured on v15.89 at 1280x800:
+       Tab selected the next layer, Space started playback, and TWO Escapes left the browser open over a
+       DESELECTED layer, so Done added the picks to a layer nothing was showing. */
+    if (window.innerWidth < 701) return;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedSel = FM.scene.selectedId;
+    const savedLayers = FM.scene.layers.slice();
+    while (FM.scene.layers.length < 2) FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: 0, duration: 4 }));
+    const A = FM.scene.layers[0].id;
+    const key = (code, k) => window.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: k, code }));
+    try {
+      FM.timeline.rebuild(); FM.selectLayer(A); FM.inspector.refresh(); await sleep(120);
+      FM.fxBrowser.open(FM.layerById(FM.scene, A)); await sleep(220);
+      if (!FM.fxBrowser.isOpen()) throw new Error('the Effects browser did not open, so none of this is being measured');
+      /* CONTROL: the thing that made this reachable is that the docked browser does NOT own the screen.
+         If it ever does, these keys are already blocked by the older rule and this test proves nothing. */
+      if (FM.overlayOwnsScreen && FM.overlayOwnsScreen()) throw new Error('the docked browser now covers the screen, so the older overlay rule already blocks these keys — this test would pass without its fix');
+
+      key('Tab', 'Tab'); await sleep(70);
+      if (FM.scene.selectedId !== A) throw new Error('Tab moved the selection to another layer while the Effects menu was open — Done would then add the picks to the layer that is no longer shown');
+      key('Space', ' '); await sleep(70);
+      if (FM.playing) throw new Error('Space started playback under the open Effects menu');
+      const n = FM.scene.layers.length;
+      key('Backspace', 'Backspace'); await sleep(70);
+      if (FM.scene.layers.length !== n) throw new Error('Backspace DELETED the selected layer while the Effects menu was open');
+
+      key('Escape', 'Escape'); await sleep(220);
+      if (FM.fxBrowser.isOpen()) throw new Error('Escape did not close the Effects menu — it stepped the panel back behind it instead');
+      if (FM.scene.selectedId !== A) throw new Error('Escape closed the menu but also dropped the selection (' + (FM.scene.selectedId || 'none') + ')');
+    } finally {
+      try { if (FM.fxBrowser.isOpen()) FM.fxBrowser.close(); } catch (e) {}
+      if (FM.playing && FM.togglePlay) FM.togglePlay();
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.timeline.rebuild(); FM.selectLayer(savedSel || null); FM.inspector.refresh(); await sleep(40);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  test('Escape in the Effects search box clears the search, then leaves the menu (queue 809)', { item: '809' }, async function () {
+    /* It was swallowed: the window handler returns early for an editable target, and the input listened
+       only for 'input'. So the one key everyone presses to back out of a search did nothing at all. */
+    if (window.innerWidth < 701) return;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedSel = FM.scene.selectedId;
+    const savedLayers = FM.scene.layers.slice();
+    if (!FM.scene.layers.length) FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: 0, duration: 4 }));
+    try {
+      FM.timeline.rebuild(); FM.selectLayer(FM.scene.layers[0].id); FM.inspector.refresh(); await sleep(120);
+      FM.fxBrowser.open(FM.scene.layers[0]); await sleep(220);
+      const input = document.querySelector('#fx-browser .fxb-search-input');
+      if (!input) throw new Error('the Effects browser has no search input, so this cannot be measured');
+      input.classList.remove('hidden');
+      input.value = 'blur';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(200);
+      input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape', code: 'Escape' }));
+      await sleep(200);
+      if ((input.value || '').trim()) throw new Error('Escape in the search box left the search as "' + input.value + '" — it was swallowed');
+      if (!FM.fxBrowser.isOpen()) throw new Error('Escape cleared the search AND closed the menu in one press — the first press should only clear');
+      input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape', code: 'Escape' }));
+      await sleep(220);
+      if (FM.fxBrowser.isOpen()) throw new Error('a second Escape, with the search already empty, did not leave the menu');
+    } finally {
+      try { if (FM.fxBrowser.isOpen()) FM.fxBrowser.close(); } catch (e) {}
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.timeline.rebuild(); FM.selectLayer(savedSel || null); FM.inspector.refresh(); await sleep(40);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  test('the AUDIO effects menu is a menu too: tapping away leaves it instead of stranding it over another layer (queue 810)', { item: '810' }, async function () {
+    /* Everything written for the visual browser named `#fx-browser` literally — the queue-401 tap-away
+       exit, the Escape path, the key guard — so the audio browser got none of it. Measured on v15.89:
+       open it on a clip, tap the canvas, and it stayed up while the selection changed underneath; the
+       next effect tapped went onto the layer it was opened with, and read as lost. The fix asks which
+       browser is open rather than naming one, so a browser written tomorrow is covered too. */
+    if (window.innerWidth < 701) return;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedSel = FM.scene.selectedId;
+    const savedLayers = FM.scene.layers.slice();
+    const media = [];
+    try {
+      const vid = FM.makeLayer('video', { name: 'q810 clip', duration: 5 });
+      FM.scene.layers.push(vid); media.push(vid.id);
+      // `el` is not decoration: the sheet's preview loop re-seeks every media record (see queue 300).
+      FM.media.set(vid.id, { kind: 'video', el: document.createElement('video'), width: 640, height: 360, duration: 5 });
+      FM.timeline.rebuild(); FM.selectLayer(vid.id); FM.refreshAll(); await sleep(200);
+      const aRoot = document.getElementById('afx-browser');
+      if (!aRoot) throw new Error('there is no #afx-browser in the page');
+      FM.audioFxBrowser.open(vid); await sleep(280);
+      if (aRoot.classList.contains('hidden')) throw new Error('the audio browser did not open, so the exit cannot be measured');
+      /* The register is the point: whatever is open must be findable without naming it. */
+      if (!FM.fxSheetOpen || FM.fxSheetOpen() !== aRoot) throw new Error('the open audio browser is not what FM.fxSheetOpen() reports — the exits will keep missing it');
+
+      const cv = document.getElementById('preview');
+      const r = cv.getBoundingClientRect();
+      cv.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 7, pointerType: 'mouse', clientX: Math.round(r.left + r.width / 2), clientY: Math.round(r.top + r.height / 2), buttons: 1 }));
+      await sleep(220);
+      if (!aRoot.classList.contains('hidden')) throw new Error('a tap outside the audio menu left it open — it is still sitting over whatever the selection becomes next');
+    } finally {
+      try { if (FM.audioFxBrowser && FM.audioFxBrowser.close) FM.audioFxBrowser.close(); } catch (e) {}
+      media.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.timeline.rebuild(); FM.selectLayer(savedSel || null); FM.refreshAll(); await sleep(40);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
   test('a raised inspector grows its option cards into the height it was given (queue 807)', { item: '807' }, async function () {
     /* Measured in the pane at 1280x800 on v15.88: raised by 250px the cards stayed 48px and the last one
        ended 266px above the panel's bottom, because --cat-h asks the band floor (--tl-h) how much room
