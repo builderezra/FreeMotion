@@ -5023,6 +5023,12 @@ window.FM = window.FM || {};
         const p = document.getElementById('inspector-panel');
         if (!p) return;
         const r = p.getBoundingClientRect();
+        /* queue 814: A HIDDEN PANEL MEASURES ZERO. While the text editor or the drawing tool is up the PC
+           rules set `#inspector-panel { display: none !important }`, so every edge of this rect is 0 — and
+           a window resize during either one re-pinned a raised band to left:0, width:0, i.e. nowhere.
+           Keeping the last good pin is right: the panel is not on screen to need a new one, and it comes
+           back to the column it left. */
+        if (!r.width || !r.height) return;
         root.style.setProperty('--am-left', Math.round(r.left) + 'px');
         root.style.setProperty('--am-width', Math.round(r.width) + 'px');
         root.style.setProperty('--am-bottom', Math.round(window.innerHeight - r.bottom) + 'px');

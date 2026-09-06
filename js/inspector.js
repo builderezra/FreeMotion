@@ -2294,7 +2294,12 @@ window.FM = window.FM || {};
      Those helpers are indented at module level but are NESTED inside the filters view builder, so a function declared
      among them is invisible to openCategory / back / refresh — "clearFilterPreview is not defined", thrown from the
      refresh that runs on every selection change. Indentation is not scope; `_fltPicks` is the anchor that is. */
-  const clearFilterPreview = () => { _fltPicks = []; FM._fxPreview = null; };
+  /* queue 814: …AND IT HAS TO ASK FOR A FRAME. Clearing FM._fxPreview only changes what the NEXT paint
+     would draw, and with the playhead stopped — the ordinary state while editing — there is no next
+     paint: the canvas kept showing a filter that was no longer picked, until something else happened to
+     trigger a frame. Its sibling restartFilterPreview() has always ended with this line; this one did
+     not, which is the whole difference. */
+  const clearFilterPreview = () => { _fltPicks = []; FM._fxPreview = null; if (FM.requestRender) FM.requestRender(); };
 
   // Order mirrors Alight Motion's property menu (Color & Fill leads, Move & Transform 4th, Effects last).
   const CATEGORIES = [

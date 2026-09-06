@@ -35001,6 +35001,77 @@
     }
   });
 
+  test('leaving the Filters tab asks the canvas to repaint, the way picking one does (queue 814)', { item: '814' }, async function () {
+    /* The two halves of one contract, and only one of them held it. Picking a filter tile sets
+       FM._fxPreview and calls FM.requestRender, so the canvas shows the preview. Leaving the tab cleared
+       FM._fxPreview and asked for nothing — and with the playhead stopped, which is the ordinary editing
+       state, there is no next frame: the canvas went on showing a filter that was no longer picked until
+       something unrelated happened to trigger a paint. This pins the asymmetry itself. */
+    const savedSel = FM.scene.selectedId;
+    const savedLayers = FM.scene.layers.slice();
+    const realRender = FM.requestRender;
+    const savedPreview = FM._fxPreview;
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#c04020', start: 0, duration: 4 });
+    let calls = 0;
+    try {
+      FM.scene.layers.push(L);
+      FM.timeline.rebuild(); FM.selectLayer(L.id); FM.refreshAll(); await sleep(140);
+      if (!FM.inspector.openCategory) throw new Error('the inspector has no openCategory, so the leave path cannot be driven');
+      FM.inspector.openCategory('effects'); await sleep(160);
+      FM._fxPreview = { id: L.id, list: [] };          // the state a picked filter tile leaves behind
+      FM.requestRender = function () { calls++; return realRender && realRender.apply(this, arguments); };
+
+      FM.inspector.openCategory('home'); await sleep(180);   // one of the ways out of the tab
+      if (FM._fxPreview) throw new Error('leaving the tab did not drop the filter preview at all');
+      if (calls < 1) throw new Error('leaving the Filters tab dropped the preview without asking the canvas to repaint — with the playhead stopped the filter stays on screen until some unrelated thing triggers a frame');
+
+      /* THE CONTROL: the sibling path has always repainted, so "it repaints" must not be true of nothing. */
+      calls = 0;
+      if (FM.requestRender) FM.requestRender();
+      if (calls !== 1) throw new Error('the counter is not seeing calls at all (' + calls + '), so the assertion above proves nothing');
+    } finally {
+      FM.requestRender = realRender;
+      FM._fxPreview = savedPreview || null;
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.timeline.rebuild(); FM.selectLayer(savedSel || null); FM.refreshAll(); await sleep(40);
+    }
+  });
+
+  test('a raised band is not re-pinned to nowhere while the panel is hidden (queue 814)', { item: '814' }, async function () {
+    /* While the text editor or the drawing tool is up, the PC rules hide #inspector-panel outright, so its
+       rect is all zeros. A window resize during either one re-pinned a raised band to left:0 / width:0 —
+       measured as a 0-wide panel — and it came back from the editor as a sliver. */
+    if (window.innerWidth < 701) return;
+    const panel = document.getElementById('inspector-panel');
+    if (!panel || !FM._amRepin) return;
+    const rootEl = document.documentElement;
+    const hadFloat = document.body.classList.contains('am-floating');
+    const savedLeft = rootEl.style.getPropertyValue('--am-left');
+    const savedWidth = rootEl.style.getPropertyValue('--am-width');
+    const hadEditing = document.body.classList.contains('text-editing');
+    try {
+      document.body.classList.add('am-floating');
+      FM._amRepin();                                   // a good pin, taken while the panel is on screen
+      await sleep(40);
+      const goodW = parseInt(getComputedStyle(rootEl).getPropertyValue('--am-width'), 10) || 0;
+      if (goodW < 100) throw new Error('the control pin is only ' + goodW + 'px wide, so a bad one cannot be told from a good one here');
+
+      document.body.classList.add('text-editing');     // the state that hides the panel on PC
+      await sleep(60);
+      const hidden = getComputedStyle(panel).display === 'none';
+      if (!hidden) throw new Error('the panel is not hidden while text-editing at this width, so this test cannot reach the case');
+      FM._amRepin();                                   // …what a window resize does during an edit
+      await sleep(40);
+      const nowW = parseInt(getComputedStyle(rootEl).getPropertyValue('--am-width'), 10) || 0;
+      if (nowW < 100) throw new Error('re-pinning while the panel was hidden set the raised band to ' + nowW + 'px wide — it measured a display:none box and pinned the band to nowhere');
+    } finally {
+      if (!hadEditing) document.body.classList.remove('text-editing');
+      if (!hadFloat) document.body.classList.remove('am-floating');
+      if (savedLeft) rootEl.style.setProperty('--am-left', savedLeft); else rootEl.style.removeProperty('--am-left');
+      if (savedWidth) rootEl.style.setProperty('--am-width', savedWidth); else rootEl.style.removeProperty('--am-width');
+    }
+  });
+
   test('a raised inspector grows its option cards into the height it was given (queue 807)', { item: '807' }, async function () {
     /* Measured in the pane at 1280x800 on v15.88: raised by 250px the cards stayed 48px and the last one
        ended 266px above the panel's bottom, because --cat-h asks the band floor (--tl-h) how much room
