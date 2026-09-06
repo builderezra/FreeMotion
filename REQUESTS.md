@@ -29655,7 +29655,17 @@ re-opened #480, which I had marked done and had not fixed.
       runs, the browser cannot scroll because the timeline sets `touch-action: none`, so the swipe slips the source
       and commits it. **A silent, undoable-only-if-you-notice edit in the middle of the most ordinary phone gesture.**
       1. [x] Slip arms on touch like a trim — v15.93: a 300ms hold (the grips' own number, read from their seam), a moving finger hands the gesture back, and the pill goes accent-coloured and buzzes when it arms. A mouse still slips at once.
-      2. [ ] A test that FAILS without it, at 380px. — still open, tracked in #823: the pill only renders on a video clip whose source has real slack, which needs a media fixture the suite does not have.
+      2. [ ] A test that FAILS without it. ⏸ **ATTEMPTED AND WITHDRAWN, 6 Sep — the honest state.**
+         The FIX is verified by hand in the browser on the shipped build: with the pre-fix file checked out, a synthetic touch
+         swipe across the pill moved `trimStart` from 1.000 to 0.597; with the fix in, the same swipe leaves it at 1.000 and a
+         hold-then-drag still slips. But the same gesture in the SUITE does not reach the drag at all, so the test passed
+         against the bug — a false proof, which is worse than no test, so it was removed rather than shipped.
+         Five causes ruled out, each of which HAD been the answer somewhere else that day: the `atPhoneWidth` wrapper (the app
+         frame is a fixed 900px, so a width guard makes a test skip); the pill being found by `.clip.sel .clip-slip`, which
+         hands back another test's clip (pinned to this clip's own element by `data-id`); a `Math.abs()` tolerance, which is
+         false for the NaN a degenerate scale writes (now `!==`); asserting after the pointerup rather than mid-gesture; and a
+         media fixture without real source slack. Whatever remains is specific to the runner's frame, and the next session
+         should find it by instrumenting the runner rather than by guessing — the fixture and the gesture are both correct.
 
 - [ ] **823 — The rest of the timeline hunt: seventeen smaller findings, verified only by their finder (hunt MEDIUM #85)** (6 Sep)
       Kept as one entry so they are not lost; each needs its own check before it is believed.
