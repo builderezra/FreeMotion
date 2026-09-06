@@ -6818,6 +6818,14 @@ window.FM = window.FM || {};
         // steps out of it (the refresh guard tears the overlay down with the view)
         if (FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive() && !FM.pointEdit.isEmbedded()) { FM.pointEdit.stop(); return; }
         if (FM.tracker && FM.tracker.isPicking && FM.tracker.isPicking()) { FM.tracker.cancel(); return; }
+        /* ⚠️ queue 834 (u13): THE MASK EDITOR TOO. It is already in FM.toolOwnsCanvas below — so a TAP is
+           handled — but it was never added here, so Escape fell straight through to inspector.back(),
+           which deselected the layer and left the mask overlay drawn over nothing. Same order as the
+           owner list, so the two read as one rule rather than two lists that drift. */
+        if (FM.maskTool && FM.maskTool.isActive && FM.maskTool.isActive()) { FM.maskTool.stop(); return; }
+        /* …and the motion path, for the same reason: its overlay is a canvas edit mode, and Escape used to
+           deselect the layer underneath it. */
+        if (FM.motionPath && FM.motionPath.isActive && FM.motionPath.isActive() && FM.motionPath.stop) { FM.motionPath.stop(); return; }
         if (FM.inspector && FM.inspector.back) FM.inspector.back();
       }
       else if (e.code === 'KeyA' || e.code === 'KeyS' || e.code === 'KeyD') {
@@ -6853,7 +6861,12 @@ window.FM = window.FM || {};
       return on(FM.eyedropper, 'isActive') || on(FM.cropTool, 'isActive') ||
              on(FM.touchupTool, 'isOpen') || on(FM.textEdit, 'isActive') ||
              on(FM.pointEdit, 'isActive') || on(FM.tracker, 'isPicking') ||
-             on(FM.fillDrag, 'isActive') || on(FM.maskTool, 'isActive');
+             on(FM.fillDrag, 'isActive') || on(FM.maskTool, 'isActive') ||
+             /* queue 834 (u12): the MOTION PATH is a canvas edit mode as well — its dots are drawn on an
+                overlay over the comp, and tapping one read as an empty-background tap, so the layer was
+                deselected and the path was left drawn over nothing. The sixth tool to arrive without
+                being added to this list, which is why the list is a set of live questions and not ids. */
+             on(FM.motionPath, 'isActive');
     };
 
     (function deselectOnEmptyTap() {

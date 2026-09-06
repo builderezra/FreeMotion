@@ -36100,7 +36100,10 @@
        WHICH scene the run was for — so opening a different project while one was still loading handed back
        that other run's promise and the new project's clips were never fetched. It opened with every clip
        blank until he left and came back. Driven through the seam the app itself uses. */
-    if (!FM.storage || !FM.storage._hydrateSceneMedia) return;
+    /* ⚠️ THROW, DO NOT RETURN. The seam is part of the fix, so `return` here made the test SKIP against the
+       old code and report green — the third time in one day I wrote that shape. If the guard cannot be
+       observed, the test has not been run, and saying so is the honest outcome. */
+    if (!FM.storage || !FM.storage._hydrateSceneMedia) throw new Error('there is no way to observe the hydration guard, so a second project can still be handed the first one’s run and open with every clip blank');
     const savedLayers = FM.scene.layers.slice();
     try {
       FM.scene.layers = [];
@@ -36136,6 +36139,50 @@
     }
   });
 
+  test('Escape leaves the mask editor and the motion path, instead of deselecting underneath them (queue 834 u12, u13)', { item: '834' }, async function () {
+    /* Both are canvas edit modes with an overlay drawn over the comp. The mask editor was already in
+       FM.toolOwnsCanvas — so a TAP was handled — but neither was in the Escape chain, so Escape fell past
+       them to inspector.back(), which deselected the layer and left the overlay drawn over nothing. The
+       motion path was in neither list, so tapping one of its dots deselected the layer too. */
+    if (!FM.maskTool || !FM.maskTool.open || !FM.motionPath || !FM.motionPath.open) return;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedLayers = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const esc = () => window.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape', code: 'Escape' }));
+    try {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#fff', start: 0, duration: 5 });
+      L.masks = [{ id: 'q834mask', type: 'pen', path: [[0, 0], [40, 0], [40, 40]] }];
+      L.transform.x = { kf: [{ t: 0, v: 100, e: 'linear' }, { t: 2, v: 300, e: 'linear' }] };
+      FM.scene.layers.push(L);
+      FM.timeline.rebuild(); FM.selectLayer(L.id); FM.refreshAll(); await sleep(160);
+
+      // ── the mask editor ──
+      FM.maskTool.open(L.id, 'q834mask');
+      await sleep(160);
+      if (!FM.maskTool.isActive()) throw new Error('the mask editor did not open, so its Escape cannot be measured');
+      esc(); await sleep(160);
+      if (FM.maskTool.isActive()) throw new Error('Escape did not leave the mask editor');
+      if (FM.scene.selectedId !== L.id) throw new Error('Escape closed the mask editor by deselecting the layer underneath it (' + (FM.scene.selectedId || 'nothing') + ' is selected now), which is what stranded the overlay');
+
+      // ── the motion path ──
+      FM.selectLayer(L.id); await sleep(80);
+      FM.motionPath.open(L.id);
+      await sleep(160);
+      if (!FM.motionPath.isActive()) throw new Error('the motion path did not open, so its Escape cannot be measured');
+      esc(); await sleep(160);
+      if (FM.motionPath.isActive()) throw new Error('Escape did not leave the motion path');
+      if (FM.scene.selectedId !== L.id) throw new Error('Escape left the motion path by deselecting the layer underneath it, so the path was drawn over nothing');
+      /* And the tap rule, which is the half that made a dot-tap deselect: both are canvas owners now. */
+      FM.motionPath.open(L.id); await sleep(140);
+      if (FM.toolOwnsCanvas && !FM.toolOwnsCanvas()) throw new Error('with the motion path open the app does not think a canvas tool is driving, so a tap on one of its dots still reads as empty background and deselects the layer');
+    } finally {
+      try { if (FM.maskTool.isActive()) FM.maskTool.stop(); } catch (e) {}
+      try { if (FM.motionPath.isActive()) FM.motionPath.stop(); } catch (e) {}
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0 || null); FM.timeline.rebuild(); FM.refreshAll(); await sleep(60);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
   test('a raised inspector grows its option cards into the height it was given (queue 807)', { item: '807' }, async function () {
     /* Measured in the pane at 1280x800 on v15.88: raised by 250px the cards stayed 48px and the last one
        ended 266px above the panel's bottom, because --cat-h asks the band floor (--tl-h) how much room
