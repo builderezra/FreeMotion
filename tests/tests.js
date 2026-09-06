@@ -36218,6 +36218,45 @@
     }
   });
 
+  test('dragging one motion-path dot moves that dot, not the whole path (queue 834 u10)', { item: '834' }, async function () {
+    /* With one axis keyframed and the other still a plain number, seeding that axis with a SINGLE keyframe
+       leaves it constant — so every dot shared the same x and dragging one slid the whole path sideways as
+       one piece. Each dot needs its own keyframe on that axis before it can move independently, which is
+       the point of a path editor. */
+    if (!FM.motionPath || !FM.motionPath.open) return;
+    /* ⚠️ THROW, NOT RETURN — the fourth time today. The seeding rule is only reachable through this seam,
+       and the seam ships WITH the fix, so `return` here made the test skip against the old code and report
+       green. "Cannot be observed" is a failure, not a pass. */
+    if (!FM.motionPath._ensureKf) throw new Error('the path editor’s seeding rule cannot be observed, so dragging one dot can still slide the whole path when the other axis is a plain number');
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedLayers = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    try {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 200, shapeW: 40, shapeH: 40, fill: '#fff', start: 0, duration: 6 });
+      /* y is animated across three times; x is still a plain number — the case that failed. */
+      L.transform.y = { kf: [{ t: 0, v: 200, e: 'linear' }, { t: 2, v: 400, e: 'linear' }, { t: 4, v: 300, e: 'linear' }] };
+      L.transform.x = 100;
+      FM.scene.layers.push(L);
+      FM.timeline.rebuild(); FM.selectLayer(L.id); FM.refreshAll(); await sleep(140);
+
+      FM.motionPath._ensureKf(L, 'x', 2);
+      const kf = L.transform.x && L.transform.x.kf;
+      if (!kf) throw new Error('seeding the static axis did not make it animated at all');
+      if (kf.length < 3) throw new Error('the static axis was seeded with ' + kf.length + ' keyframe(s) for a 3-dot path — a single one evaluates to a constant, so every dot still shares the same x and dragging one moves the whole path');
+      /* Moving the middle dot must leave the others where they were. */
+      const before = [FM.evalProp(L.transform.x, 0), FM.evalProp(L.transform.x, 4)];
+      FM.setProp(L.transform, 'x', 500, 2);
+      const after = [FM.evalProp(L.transform.x, 0), FM.evalProp(L.transform.x, 4)];
+      if (Math.abs(after[0] - before[0]) > 1 || Math.abs(after[1] - before[1]) > 1)
+        throw new Error('moving the middle dot moved the others too (' + before + ' → ' + after + ') — the whole path slides as one piece');
+    } finally {
+      try { if (FM.motionPath.isActive()) FM.motionPath.stop(); } catch (e) {}
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0 || null); FM.timeline.rebuild(); FM.refreshAll(); await sleep(60);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
   test('a raised inspector grows its option cards into the height it was given (queue 807)', { item: '807' }, async function () {
     /* Measured in the pane at 1280x800 on v15.88: raised by 250px the cards stayed 48px and the last one
        ended 266px above the panel's bottom, because --cat-h asks the band floor (--tl-h) how much room

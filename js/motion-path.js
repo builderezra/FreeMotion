@@ -65,9 +65,19 @@ window.FM = window.FM || {};
       if (!k) { FM.setProp(tr, key, clampN(FM.evalProp(p, t)), t); k = kfAt(l, key, t); }
       return k;
     }
-    tr[key] = { kf: [{ t: t, v: (typeof p === 'number' && isFinite(p)) ? p : 0, e: 'linear' }] };
+    /* ⚠️ queue 834 (u10): SEED A KEYFRAME AT EVERY DOT, not one at this time. A lone keyframe evaluates to
+       a constant, so with x still static and y keyframed, every dot shared the SAME x — dragging one dot
+       sideways slid the whole path as one, and the axis quietly became a single constant keyframe. Each
+       dot needs its own keyframe on that axis before it can be moved independently, which is the point of
+       a path editor. The value is the static one at every time, so the render is identical until he
+       actually drags something. */
+    const v0 = (typeof p === 'number' && isFinite(p)) ? p : 0;
+    const at = unionTimes(l);
+    const times = (at && at.length) ? at.slice() : [t];
+    if (times.indexOf(t) < 0) { times.push(t); times.sort((a, b) => a - b); }
+    tr[key] = { kf: times.map(tt => ({ t: tt, v: v0, e: 'linear' })) };
     if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
-    return tr[key].kf[0];
+    return kfAt(l, key, t) || tr[key].kf[0];
   }
 
   /* ---------- drawing ---------- */
@@ -222,6 +232,7 @@ window.FM = window.FM || {};
   }
 
   FM.motionPath = {
+    _ensureKf: ensureKf,   // queue 834 (u10) suite seam: the seeding rule itself, which is where the bug was
     isActive() { return !!activeId; },
     open(layerId) {
       if (activeId) this.stop();
