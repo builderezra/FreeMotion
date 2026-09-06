@@ -6228,7 +6228,19 @@ window.FM = window.FM || {};
     // keyframes. Only while the EFFECTS panel is actually open — an effect left expanded from an
     // earlier visit would otherwise keep stealing focus while you work in Move & Transform.
     if (view === 'effects') {
-      const openFx = (layer.effects || []).find(e => e && e._expanded);
+      /* ⚠️ queue 819: AN EFFECT INSIDE A FILTER IS AN OPEN EFFECT TOO. This looked one level deep, so with
+         a filter's child open it found the CONTAINER (whose only param is `strength`) and handed that
+         back. Every diamond for the child's parameters then failed `inFocus`, rendered idle, and its
+         pointerdown bailed on `!entry.live` — the keyframes were drawn and could never be dragged, while
+         the tooltip told him to open an editor that was already open. The diamonds themselves have always
+         walked children (FM.animatedProps → FM.eachFx); this is the same walk, so the two agree.
+         A child wins over its container: opening a child necessarily leaves the container expanded. */
+      let openTop = null, openChild = null;
+      if (FM.eachFx) FM.eachFx(layer, (fx, path, parent) => {
+        if (!fx || !fx._expanded) return;
+        if (parent) { if (!openChild) openChild = fx; } else if (!openTop) openTop = fx;
+      });
+      const openFx = openChild || openTop || (layer.effects || []).find(e => e && e._expanded) || null;
       if (openFx && openFx.params) Object.keys(openFx.params).forEach(k => out.push({ key: 'fx:' + k, prop: openFx.params[k] }));
       return out;
     }

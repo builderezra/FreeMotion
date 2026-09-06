@@ -35072,6 +35072,363 @@
     }
   });
 
+  test('dragging a layer NAME keeps scrolling when a rebuild lands mid-gesture (queue 815)', { item: '815' }, async function () {
+    /* The track-head pan kept its state in that head's closure and listened on the element, and rebuild()
+       defers for a clip move, a trim, a keyframe drag, a slip and a reorder — but nobody added this one.
+       So a waveform or filmstrip arriving, or the 150ms resize rebuild when the Android address bar
+       slides, emptied the track list and destroyed the element under his finger: the rest of the drag
+       scrolled nothing. It reads exactly like the timeline being laggy. */
+    const savedSel = FM.scene.selectedId;
+    const savedLayers = FM.scene.layers.slice();
+    try {
+      for (let i = 0; i < 8; i++) FM.scene.layers.push(FM.makeLayer('shape', { name: 'L' + i, shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: 0, duration: 4 }));
+      FM.selectLayer(null); FM.timeline.rebuild(); await sleep(160);
+      const head = document.querySelector('#tl-tracks .track-head');
+      const scroller = document.getElementById('timeline');
+      if (!head || !scroller) throw new Error('no track head or timeline scroller to drag');
+      const max = scroller.scrollHeight - scroller.clientHeight;
+      if (max < 30) throw new Error('the layer list does not overflow here (' + max + 'px of range), so a pan cannot be measured');
+      scroller.scrollTop = 0;
+      const r = head.getBoundingClientRect(), x = r.left + r.width / 2, y0 = r.top + r.height / 2;
+      const ev = (t, cy, b) => head.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 9, pointerType: 'touch', clientX: x, clientY: cy, buttons: b }));
+      ev('pointerdown', y0, 1);
+      ev('pointermove', y0 - 20, 1);          // past the 8px commit, so the pan owns the gesture
+      const afterFirst = scroller.scrollTop;
+      if (afterFirst <= 0) throw new Error('the pan did not scroll at all on its first move, so nothing below is being tested');
+
+      FM.timeline.rebuild();                   // …the waveform arrives
+      await sleep(60);
+      if (!head.isConnected) throw new Error('the rebuild destroyed the layer name under the finger — the rest of the drag scrolls nothing');
+      ev('pointermove', y0 - 60, 1);
+      const afterSecond = scroller.scrollTop;
+      if (afterSecond <= afterFirst) throw new Error('the drag stopped scrolling after the rebuild (' + afterFirst + ' → ' + afterSecond + ')');
+      ev('pointerup', y0 - 60, 0);
+      await sleep(60);
+    } finally {
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(savedSel || null); FM.timeline.rebuild(); await sleep(40);
+    }
+  });
+
+  test('A, S and D refuse a LOCKED clip, and say why (queue 816)', { item: '816' }, async function () {
+    /* A locked layer stays selectable on purpose, and every other way of retiming one refuses — the clip
+       body drag, the reorder handle, the keyboard nudge. The four clip-key helpers did not, so A trimmed
+       the head, D the tail and S split a clip he had locked precisely so that could not happen. */
+    const savedSel = FM.scene.selectedId;
+    const savedLayers = FM.scene.layers.slice();
+    const t0 = FM.time;
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: 0, duration: 4 });
+    try {
+      FM.scene.layers.push(L);
+      FM.timeline.rebuild(); FM.selectLayer(L.id); FM.time = 2; await sleep(140);
+      /* CONTROL: unlocked, the key really does edit — or "it did nothing" is true of everything. */
+      if (!FM.timeline.clipKey('a')) throw new Error('control: A did nothing on an UNLOCKED clip with the playhead inside it, so a refusal proves nothing');
+      L.start = 0; L.duration = 4; FM.time = 2;
+
+      L.locked = true; FM.timeline.rebuild(); await sleep(120);
+      const n0 = FM.scene.layers.length;
+      const a = FM.timeline.clipKey('a'), d = FM.timeline.clipKey('d'), sp = FM.timeline.clipKey('s');
+      await sleep(120);
+      if (a || d) throw new Error('a locked clip was trimmed by the keys (A=' + a + ', D=' + d + ')');
+      if (L.start !== 0 || Math.abs(L.duration - 4) > 1e-6) throw new Error('the locked clip moved: start ' + L.start + ', duration ' + L.duration);
+      if (FM.scene.layers.length !== n0) throw new Error('S split a locked clip — there are now ' + FM.scene.layers.length + ' layers against ' + n0);
+      if (sp) throw new Error('S reported that it did something to a locked clip');
+    } finally {
+      L.locked = false;
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.time = t0; FM.selectLayer(savedSel || null); FM.timeline.rebuild(); await sleep(40);
+    }
+  });
+
+  test('trimming a captioned clip with the A key leaves every caption where it was (queue 817)', { item: '817' }, async function () {
+    /* Cue times are stored LOCAL to the clip, so anything that moves `start` has to take the same amount
+       back out of them. The comment on FM.shiftLayerCues says "a THIRD caller turned up and had lost it";
+       the A key was the fourth. Without it, trimming a second off the head showed every caption a second
+       late and pushed the last ones off the end — while dragging the same clip's grip did it correctly. */
+    const savedSel = FM.scene.selectedId;
+    const savedLayers = FM.scene.layers.slice();
+    const t0 = FM.time;
+    const C = FM.makeLayer('text', { text: 'hi', x: 50, y: 50, start: 0, duration: 6 });
+    C.captions = [{ start: 0.5, end: 1.5, text: 'one' }, { start: 3, end: 4, text: 'two' }];
+    try {
+      FM.scene.layers.push(C);
+      FM.timeline.rebuild(); FM.selectLayer(C.id); FM.time = 1; await sleep(150);
+      /* The cue's ABSOLUTE time is what he sees: layer.start + cue.start. That is the invariant. */
+      const absBefore = C.captions.map(c => C.start + c.start);
+      if (!FM.timeline.clipKey('a')) throw new Error('A did nothing, so the trim under test never happened');
+      await sleep(120);
+      if (Math.abs(C.start - 1) > 1e-6) throw new Error('the head did not move to the playhead (start is ' + C.start + ')');
+      const absAfter = C.captions.map(c => C.start + c.start);
+      absBefore.forEach((was, i) => {
+        if (Math.abs(absAfter[i] - was) > 1e-6) throw new Error('caption ' + (i + 1) + ' moved from ' + was + 's to ' + absAfter[i] + 's — a head trim by the key does not re-base the cues, so every caption shows late');
+      });
+    } finally {
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.time = t0; FM.selectLayer(savedSel || null); FM.timeline.rebuild(); await sleep(40);
+    }
+  });
+
+  test('a split keeps a Bounce-eased segment’s curve at the seam (queue 818)', { item: '818' }, async function () {
+    /* `ez` is resolved BEFORE `bez` and `e`, so a seam keyframe that copies only the latter two silently
+       drops the curve while both copied fields say it was kept. Measured through FM.evalProp, not by
+       reading which fields exist. */
+    const savedSel = FM.scene.selectedId;
+    const savedLayers = FM.scene.layers.slice();
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: 0, duration: 4 });
+    try {
+      FM.scene.layers.push(L);
+      /* ⚠️ BUILT FROM THE REAL TABLE, NOT INVENTED. The first version of this fixture hand-wrote
+         `{fam:'bounce', preset:'bounceOut'}` — no such preset — so FM.easeApply returned null, both
+         sides fell back to the named ease, and the test measured nothing. The control below is the
+         guard: if the block does not actually bend the curve, say so instead of passing. */
+      const fam = FM.EASE_FAMILIES.filter(f => !f.bez)[0];
+      const preset = fam && fam.presets && fam.presets[0];
+      if (!preset) throw new Error('there is no parameterised easing family to test with');
+      const mkEz = () => ({ fam: fam.key, preset: preset.key, p: Object.assign({}, preset.defaults) });
+      if (!(FM.easeApply && Math.abs((FM.easeApply(mkEz(), 0.25) || 0.25) - 0.25) > 0.02))
+        throw new Error('the ' + fam.key + '/' + preset.key + ' block does not bend the curve at all, so this fixture cannot tell a kept curve from a dropped one');
+      L.transform.x = { kf: [ { t: 0, v: 0, e: 'easeInOut', ez: mkEz() },
+                              { t: 4, v: 100, e: 'easeInOut', ez: mkEz() } ] };
+      FM.timeline.rebuild(); FM.selectLayer(L.id); await sleep(120);
+      /* The split happens AT the playhead, and the playhead is shared state the suite runs through: a
+         short project duration left by an earlier test clamps it, and the split then lands outside the
+         clip. Give the project room, then SAY the precondition rather than assume it — this test passed
+         alone and failed in the full suite for exactly this reason. */
+      FM.scene.project.duration = Math.max(FM.scene.project.duration || 0, 10);
+      FM.time = 2;
+      if (!(FM.time > L.start + 1e-4 && FM.time < L.start + L.duration - 1e-4))
+        throw new Error('control: the playhead sits at ' + FM.time + 's, not inside the clip (' + L.start + '–' + (L.start + L.duration) + 's), so the split cannot land where this test needs it');
+      /* ⚠️ IDENTIFY THE HALVES, DO NOT GO FISHING. The first version took "the earliest layer that has
+         keyframes", which is this clip when the test runs alone and somebody else's leftover animated
+         layer when it runs in the suite — so it measured the wrong layer and reported that the split had
+         not happened. The halves are exactly: this layer, plus whatever is new. */
+      const idsBefore = new Set(FM.scene.layers.map(l => l.id));
+      await FM.splitLayer(L.id);
+      await sleep(160);
+      const halves = FM.scene.layers.filter(l => l && (l.id === L.id || !idsBefore.has(l.id)))
+        .filter(l => l.transform && l.transform.x && Array.isArray(l.transform.x.kf))
+        .sort((a, b) => a.start - b.start);
+      if (halves.length < 2) throw new Error('the split produced ' + halves.length + ' keyframed half/halves, not two');
+      const head = halves[0];
+      const seam = head.transform.x.kf[head.transform.x.kf.length - 1];
+      if (!seam || !seam.split) throw new Error('the head half has no seam keyframe, so the split did not happen where this test expects');
+      /* ⚠️ NOT "the same value as before the split" — that is false by construction: the head half
+         re-interpolates a two-second segment where the whole clip had four, so 1s is a different
+         fraction of it. What has to survive is the CURVE, and the segment's easing comes from its END
+         keyframe — the seam. So: strip `ez` from a copy and the render must change. On the old code the
+         seam had no `ez` to strip, so the two were identical and this fails by the same measurement. */
+      const at = 1.0;
+      const withCurve = FM.evalProp(head.transform.x, at);
+      const stripped = JSON.parse(JSON.stringify(head.transform.x));
+      stripped.kf.forEach(k => { delete k.ez; });
+      const withoutCurve = FM.evalProp(stripped, at);
+      if (Math.abs(withCurve - withoutCurve) < 0.5) throw new Error('the head half renders ' + withCurve.toFixed(2) + ' at ' + at + 's with or without its Bounce data — the seam keyframe dropped the curve, so the eased segment plays as a plain ease');
+    } finally {
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(savedSel || null); FM.timeline.rebuild(); await sleep(40);
+    }
+  });
+
+  test('a refused play() is recorded once, not sixty times a second (queue 820)', { item: '820' }, async function () {
+    /* On the phone a decode can push el.play() outside the user gesture, so it is rejected; the element
+       stays paused, so the transport's resume branch re-ran on the very next frame and was rejected
+       again — and every rejection built the whole audio report (sorting a 600-entry array) and wrote it
+       to localStorage synchronously. Roughly sixty storage writes a second, from the diagnostics rather
+       than from the editor, for as long as the transport ran. It belongs to the lag he has reported. */
+    if (!FM.audioHealth || !FM.audioHealth.refused) return;
+    const real = localStorage.setItem.bind(localStorage);
+    let writes = 0;
+    try {
+      localStorage.setItem = function (k, v) { if (k === 'fm.lastAudioReport') writes++; return real(k, v); };
+      const fake = { id: 'q820', layerId: 'q820', el: { paused: true } };
+      for (let i = 0; i < 40; i++) FM.audioHealth.refused(fake, { name: 'NotAllowedError' });
+      if (writes === 0) throw new Error('the report was never written at all — the first refusal has to land, or he has nothing to copy');
+      if (writes > 3) throw new Error('40 refusals in one burst wrote the whole report ' + writes + ' times — on a phone that is the storm this fix is about');
+    } finally {
+      localStorage.setItem = real;
+    }
+  });
+
+  test('a clip inside a HIDDEN group is silent in preview, as it is in the export (queue 821)', { item: '821' }, async function () {
+    /* Hiding a group took the picture away and left the sound playing at full volume, while the export
+       silences it — so what he heard while editing was not what came out of the file. The reversed-clip
+       preview path has checked the group since it was written, which is what makes this an oversight. */
+    if (!FM._syncMediaToClock) return;
+    const savedSel = FM.scene.selectedId;
+    const savedLayers = FM.scene.layers.slice();
+    const t0 = FM.time;
+    const media = [];
+    /* ⚠️ AN ELEMENT WITH NO SOURCE IS ALREADY SILENT FOR AN UNRELATED REASON. A synthetic <video> has
+       readyState 0, so FM.seekBusy is true and the tick's FIRST gate mutes and returns before it ever
+       reaches the visibility question — measured in the browser: muted in both the hidden and the
+       visible case, which would make the control below true of nothing. Stubbed for the length of this
+       test so what is measured is the gate under test, and restored in finally. */
+    const realSeekBusy = FM.seekBusy;
+    try {
+      FM.seekBusy = () => false;
+      const g = FM.makeLayer('group', { name: 'q821 group', start: 0, duration: 8 });
+      FM.scene.layers.push(g);
+      const vid = FM.makeLayer('video', { name: 'q821 clip', start: 0, duration: 5 });
+      vid.parent = g.id;
+      FM.scene.layers.push(vid); media.push(vid.id);
+      const el = document.createElement('video');
+      el.muted = false;
+      FM.media.set(vid.id, { kind: 'video', el: el, width: 640, height: 360, duration: 5, layerId: vid.id });
+      FM.time = 1; FM.timeline.rebuild(); await sleep(140);
+
+      g.visible = false;
+      FM._syncMediaToClock();
+      await sleep(60);
+      if (!el.muted || !el.paused) throw new Error('a clip inside a hidden group is still sounding: muted=' + el.muted + ', paused=' + el.paused + ' — the export silences it, so this is not what he would get in the file');
+      /* CONTROL: with the group visible the same tick must NOT mute it, or the assertion above is true
+         of a clip that was never going to sound anyway. */
+      g.visible = true;
+      el.muted = false;
+      FM._syncMediaToClock();
+      await sleep(60);
+      if (el.muted) throw new Error('the tick mutes the clip even with the group visible, so the check above proves nothing');
+    } finally {
+      FM.seekBusy = realSeekBusy;
+      media.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.time = t0; FM.selectLayer(savedSel || null); FM.timeline.rebuild(); await sleep(40);
+    }
+  });
+
+  test('on the phone the effects sheet lifts above the on-screen keyboard (queue 814)', { item: '814' }, async function () {
+    /* The re-placement was already wired to the visual viewport — and did nothing, because the phone
+       branch only recomputed the sheet's TOP from the canvas, which the keyboard does not move. So the
+       moment he typed in the search box the lower half of the sheet, Add bar included, sat behind the
+       keyboard. A real keyboard cannot be raised in a headless browser, so the measurement it depends on
+       is exported (FM.kbInset) and driven here; the rest of the path is the app's own. */
+    /* ⚠️ AT A REAL PHONE WIDTH. The runner's app frame is a fixed 900px whatever the driver window is, so
+       an `innerWidth > 700` early return meant this test never ran at either pass — it passed against the
+       bug and against the fix alike. atPhoneWidth narrows the frame itself and asserts that it worked. */
+    if (!FM._fxSheetPlace) return;
+    return await atPhoneWidth(async () => {
+    const savedSel = FM.scene.selectedId;
+    const savedLayers = FM.scene.layers.slice();
+    let restoreVV = null;
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: 0, duration: 4 });
+    try {
+      FM.scene.layers.push(L);
+      FM.timeline.rebuild(); FM.selectLayer(L.id); FM.refreshAll(); await sleep(140);
+      FM.fxBrowser.open(L); await sleep(240);
+      const root = document.getElementById('fx-browser');
+      if (!root || root.classList.contains('hidden')) throw new Error('the effects sheet did not open');
+      if (!root.classList.contains('fxb-sheet')) throw new Error('at ' + window.innerWidth + 'px it is not the sheet, so this is not the case under test');
+
+      const noKb = root.getBoundingClientRect();
+      const vh = document.documentElement.clientHeight;
+      if (Math.abs(noKb.bottom - vh) > 2) throw new Error('with no keyboard the sheet should reach the bottom of the window: it ends at ' + Math.round(noKb.bottom) + ' in a ' + vh + 'px viewport');
+
+      /* ⚠️ THE VIEWPORT IS FAKED, NOT THE APP'S OWN HELPER. Stubbing FM.kbInset would make this test
+         SKIP against code that has no such helper — which is what a reverted fix looks like — instead of
+         failing. Shadowing window.visualViewport drives the real measurement the app makes, so the old
+         code is measured doing the wrong thing rather than not being measured at all. */
+      const realVV = Object.getOwnPropertyDescriptor(window, 'visualViewport');
+      restoreVV = () => { if (realVV) Object.defineProperty(window, 'visualViewport', realVV); else delete window.visualViewport; };
+      Object.defineProperty(window, 'visualViewport', { configurable: true, value: { height: vh - 300, offsetTop: 0, addEventListener() {}, removeEventListener() {} } });
+      FM._fxSheetPlace(root);
+      await sleep(80);
+      const withKb = root.getBoundingClientRect();
+      if (Math.abs((vh - withKb.bottom) - 300) > 2) throw new Error('with 300px of keyboard the sheet still ends ' + Math.round(vh - withKb.bottom) + 'px above the bottom — its lower half, the Add bar included, is behind the keyboard');
+      if (withKb.height < 60) throw new Error('the sheet collapsed to ' + Math.round(withKb.height) + 'px once the keyboard was accounted for');
+
+      restoreVV(); restoreVV = null;                     // …and it closes again
+      FM._fxSheetPlace(root);
+      await sleep(80);
+      const back = root.getBoundingClientRect();
+      if (Math.abs(back.bottom - vh) > 2) throw new Error('the sheet did not come back down when the keyboard closed: it ends at ' + Math.round(back.bottom) + ' of ' + vh);
+    } finally {
+      if (restoreVV) { try { restoreVV(); } catch (e) {} }
+      try { if (FM.fxBrowser.isOpen()) FM.fxBrowser.close(); } catch (e) {}
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.timeline.rebuild(); FM.selectLayer(savedSel || null); FM.refreshAll(); await sleep(40);
+    }
+    }, 390);
+  });
+
+  test('a trim abandoned mid-drag puts the captions back with the clip (queue 817)', { item: '817' }, async function () {
+    /* The drag re-bases cues on every move — correctly — and took a copy of them at pointerdown for the
+       restore. The restore then put back start, duration and trimStart and never used that copy, so a
+       trim abandoned by a lost pointer (the phone's commonest way to end a gesture) left the clip where
+       it started with its captions shifted by however far the finger had travelled. */
+    if (!FM.timeline._abortGestures) return;
+    const savedSel = FM.scene.selectedId;
+    const savedLayers = FM.scene.layers.slice();
+    const C = FM.makeLayer('text', { text: 'hi', x: 50, y: 50, start: 1, duration: 6 });
+    C.captions = [{ start: 0.5, end: 1.5, text: 'one' }, { start: 3, end: 4, text: 'two' }];
+    try {
+      FM.scene.layers.push(C);
+      FM.timeline.rebuild(); FM.selectLayer(C.id); await sleep(160);
+      const before = { start: C.start, dur: C.duration, caps: C.captions.map(c => [c.start, c.end]) };
+      const grip = document.querySelector('.clip.sel .clip-grip');
+      if (!grip) throw new Error('no trim grip on the selected clip, so a trim cannot be started');
+      const r = grip.getBoundingClientRect(), y = r.top + r.height / 2;
+      const ev = (t, x, b) => grip.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 11, pointerType: 'mouse', clientX: x, clientY: y, buttons: b }));
+      ev('pointerdown', r.left + r.width / 2, 1);
+      for (let i = 1; i <= 4; i++) window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, pointerId: 11, pointerType: 'mouse', clientX: r.left + r.width / 2 + 12 * i, clientY: y, buttons: 1 }));
+      await sleep(80);
+      /* CONTROL: the drag has to have actually moved the cues, or "they were restored" is true of
+         captions nothing ever touched. */
+      const moved = C.captions.some((c, i) => Math.abs(c.start - before.caps[i][0]) > 1e-6);
+      const clipMoved = Math.abs(C.start - before.start) > 1e-6 || Math.abs(C.duration - before.dur) > 1e-6;
+      if (!moved && !clipMoved) throw new Error('the drag changed nothing at all, so the abort below is being measured against a gesture that never happened');
+
+      FM.timeline._abortGestures();          // …the pointer is lost
+      await sleep(80);
+      if (Math.abs(C.start - before.start) > 1e-6 || Math.abs(C.duration - before.dur) > 1e-6)
+        throw new Error('the abort did not put the clip back (start ' + C.start + ', duration ' + C.duration + ')');
+      C.captions.forEach((c, i) => {
+        if (Math.abs(c.start - before.caps[i][0]) > 1e-6 || Math.abs(c.end - before.caps[i][1]) > 1e-6)
+          throw new Error('caption ' + (i + 1) + ' came back as ' + c.start.toFixed(3) + '–' + c.end.toFixed(3) + ' instead of ' + before.caps[i][0] + '–' + before.caps[i][1] + ' — the clip was restored and its captions were not');
+      });
+    } finally {
+      try { FM.timeline._abortGestures(); } catch (e) {}
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(savedSel || null); FM.timeline.rebuild(); await sleep(40);
+    }
+  });
+
+  test('a keyframe on an effect INSIDE a filter goes live, so it can be dragged (queue 819)', { item: '819' }, async function () {
+    /* The diamonds were drawn — the walker that finds animated properties goes into filter children —
+       but the scope that decides which are LIVE looked one level deep, found the filter CONTAINER, and
+       handed back its `strength`. So every diamond for the child's parameters rendered idle, the drag
+       bailed on `!entry.live`, and the tooltip told him to open an editor that was already open.
+       Measured here as the class the diamond actually carries, which is what makes it draggable. */
+    const savedSel = FM.scene.selectedId;
+    const savedLayers = FM.scene.layers.slice();
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: 0, duration: 4 });
+    try {
+      FM.scene.layers.push(L);
+      const all = FM.filters.all();
+      const box = FM.filters.makeInstance((all[0] || {}).id);
+      if (!box || !Array.isArray(box.effects) || !box.effects.length) throw new Error('could not build a filter with a child effect to animate');
+      const child = box.effects[0];
+      const key = Object.keys(child.params || {})[0];
+      if (!key) throw new Error('the filter’s child effect has no parameter to keyframe');
+      const v = child.params[key];
+      const base = (typeof v === 'number' && isFinite(v)) ? v : 1;
+      child.params[key] = { kf: [ { t: 0, v: base, e: 'linear' }, { t: 2, v: base + 1, e: 'linear' } ] };
+      child._expanded = true;                 // he has the child's controls open — the state the scope reads
+      L.effects = [box];
+      FM.timeline.rebuild(); FM.selectLayer(L.id); FM.refreshAll(); await sleep(160);
+      if (FM.inspector.openCategory) FM.inspector.openCategory('effects');
+      await sleep(220);
+      FM.timeline.rebuild(); await sleep(160);
+
+      /* CONTROL: the diamonds have to be on screen at all, or "none of them is idle" is true of nothing. */
+      const dots = [].slice.call(document.querySelectorAll('#tl-tracks .kf-dot'));
+      if (!dots.length) throw new Error('no keyframe diamonds rendered for a filter child’s animated parameter, so nothing below is being measured');
+      const live = dots.filter(d => d.classList.contains('kf-live'));
+      if (!live.length) throw new Error(dots.length + ' diamond(s) for the open filter child are all idle — they are drawn and cannot be dragged, and the tooltip asks him to open an editor that is already open');
+    } finally {
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(savedSel || null); FM.refreshAll(); FM.timeline.rebuild(); await sleep(40);
+    }
+  });
+
   test('a raised inspector grows its option cards into the height it was given (queue 807)', { item: '807' }, async function () {
     /* Measured in the pane at 1280x800 on v15.88: raised by 250px the cards stayed 48px and the last one
        ended 266px above the panel's bottom, because --cat-h asks the band floor (--tl-h) how much room

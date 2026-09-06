@@ -70,7 +70,14 @@ window.FM = window.FM || {};
         root.classList.add('fxb-in-inspector');
       } else {
         root.classList.remove('fxb-in-inspector');
-        ['--fxb-left', '--fxb-right', '--fxb-bottom'].forEach(k => root.style.removeProperty(k));
+        ['--fxb-left', '--fxb-right'].forEach(k => root.style.removeProperty(k));
+        /* ⚠️ queue 814: THE ON-SCREEN KEYBOARD SHRINKS THE VISUAL VIEWPORT, NOT window.innerHeight. This
+           branch was re-run on every visualViewport resize — the wiring was there — and then recomputed
+           only the sheet's TOP from the canvas, which the keyboard does not move. So the whole lower half
+           of the sheet, the Add bar included, sat behind the keyboard the moment he typed in the search
+           box, and nothing on screen said why. The bottom is now lifted by however much of the window the
+           keyboard is covering, and it goes back to 0 when it closes. */
+        root.style.setProperty('--fxb-bottom', (FM.kbInset ? FM.kbInset() : 0) + 'px');
         const cv = document.getElementById('preview');
         /* FLOOR, not round (queue 528). Rounding lands within half a pixel EITHER side of the canvas
            bottom, so half the time it leaves a hairline of background showing — which is the very thing
@@ -101,6 +108,15 @@ window.FM = window.FM || {};
     if (root._fxbUnwatch) { try { root._fxbUnwatch(); } catch (e) {} root._fxbUnwatch = null; }
   }
 
+  /* queue 814: how much of the window something is covering from the bottom — the on-screen keyboard in
+     practice. `window.innerHeight` does not change when it opens; the VISUAL viewport does. Exported so
+     the suite can drive it: a real keyboard cannot be raised in a headless browser, and a test that can
+     only run on his phone is a test nobody runs. */
+  FM.kbInset = function () {
+    const vv = window.visualViewport;
+    if (!vv || !isFinite(vv.height)) return 0;
+    return Math.max(0, Math.round(window.innerHeight - (vv.height + (vv.offsetTop || 0))));
+  };
   const sheetRoots = new Set();   // every root currently in sheet mode (#fx-browser, #afx-browser)
   /* queue 805: the band's float moves the panel without resizing the canvas or the window, which are the
      only two things watchSheet listens for — so the drag calls this after every height write. */

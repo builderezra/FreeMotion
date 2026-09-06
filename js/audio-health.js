@@ -99,13 +99,32 @@
   /* A refused play() (queue 786): the error's NAME is the diagnosis — NotAllowedError is the missing gesture,
      NotSupportedError the codec, AbortError a torn-down element — so it is counted by name, per clip, and the
      report is saved even though nothing played, because "nothing played" is exactly the thing to report. */
+  /* ⚠️ queue 820: THE REPORT IS BUILT ONCE A SECOND, NOT ONCE A FRAME. A refusal is not a one-off: the
+     element stays paused, so the transport's resume branch re-runs on the very next frame, calls play()
+     again, is refused again — and this function used to build the whole report (which sorts a 600-entry
+     array and stamps a date) and write it to localStorage synchronously EVERY TIME. On a phone whose
+     first play() lands outside the user gesture that is roughly sixty synchronous storage writes a
+     second, for as long as the transport is running. It is a real cause of the lag he has reported since
+     August, and it comes from the diagnostics rather than from the editor.
+     The COUNT is still exact — only the persisting is throttled, and the first one always lands so the
+     report exists the moment he goes to copy it. */
+  let lastSaveAt = 0;
+  const SAVE_EVERY_MS = 1000;
+  function saveReport(force) {
+    const t = Date.now();
+    if (!force && t - lastSaveAt < SAVE_EVERY_MS) return false;
+    lastSaveAt = t;
+    try { localStorage.setItem('fm.lastAudioReport', FM.audioHealth.report()); } catch (_) {}
+    return true;
+  }
   function refused(m, e) {
     const id = (m && (m.layerId || m.id)) || 'clip';
     bump('play() refused: ' + ((e && e.name) || 'error'), id);
     S.refused = (S.refused || 0) + 1;
     if (!S.firstAt) S.firstAt = Date.now();
-    try { localStorage.setItem('fm.lastAudioReport', FM.audioHealth.report()); } catch (_) {}
+    saveReport(S.refused === 1);
   }
+  FM._audioHealthSaveCount = () => lastSaveAt;   // suite seam: the test watches the WRITES, not the counter
   FM.audioHealth = {
     refused: refused,
     /* Called from the playback tick for every element that is inside its clip window. `sounding` is

@@ -1761,9 +1761,21 @@ window.FM = window.FM || {};
         // playhead leaves the clip window OR the layer is hidden, so a clip trimmed shorter than its
         // source (or hidden mid-play) stops dead instead of bleeding its source audio on. (#1,#8)
         const local = FM.layerLocalTime(layer, FM.time);
-        if (local == null || layer.visible === false) { try { if (!m.el.paused) m.el.pause(); m.el.muted = true; } catch (e) {} return; }
+        /* ⚠️ queue 821: A HIDDEN GROUP SILENCES WHAT IS INSIDE IT. This gate asked only about the layer's
+           own eye, so hiding a GROUP took the picture away and left the sound playing at full volume —
+           and the export silences it, so what he heard while editing was not what came out of the file.
+           The reversed-clip preview has checked both since it was written (js/audio-play.js `audible`),
+           which is what makes this an oversight rather than a decision. Same two helpers, same order. */
+        const hiddenHere = layer.visible === false
+          || (FM.groupHidden && FM.groupHidden(layer))
+          || (FM.soloSilenced && FM.soloSilenced(layer));
+        if (local == null || hiddenHere) { try { if (!m.el.paused) m.el.pause(); m.el.muted = true; } catch (e) {} return; }
         try {
           if (m.el.paused) {
+            /* queue 820: a play() the browser just refused is not retried on the very next frame. Without
+               this the branch re-fired ~60x a second — re-seeking and re-rejecting — which is what made
+               one refusal into a storm of diagnostic writes. Half a second of quiet, then try again. */
+            if (m._playRefusedAt && now - m._playRefusedAt < 500) return;
             /* PAST THE END OF THE ACTUAL MEDIA = HOLD SILENT, NEVER RESUME.
              * DEFENSIVE, NOT A VERIFIED FIX FOR A SEEN BUG — stated plainly so nobody inherits a false
              * claim. The reasoning that stands on its own: if the transport is asking for a time at or
@@ -1806,7 +1818,12 @@ window.FM = window.FM || {};
                told, because the transport pauses elements in four different places and a flag that
                all four must remember to set is a safeguard held shut by remembering. */
             if (FM.audioHealth) FM.audioHealth.noteRestart(m, now, local);
-            m.el.currentTime = local; m._syncAt = now; m.el.play().catch(e => { try { if (FM.audioHealth) FM.audioHealth.refused(m, e); } catch (_) {} });   // re-entered the window → resume; a refusal is recorded, not swallowed (queue 786)
+            /* queue 820: AND DO NOT ASK AGAIN NEXT FRAME. A refused play() leaves the element paused, so
+               without this the branch re-fires every frame — re-seeking the element and re-rejecting —
+               which is what turned one refusal into sixty diagnostic writes a second. Half a second of
+               quiet between attempts; a play that succeeds clears the mark by leaving this branch. */
+            m.el.currentTime = local; m._syncAt = now;
+            m.el.play().then(() => { m._playRefusedAt = 0; }, e => { m._playRefusedAt = now; try { if (FM.audioHealth) FM.audioHealth.refused(m, e); } catch (_) {} });   // re-entered the window → resume; a refusal is recorded, not swallowed (queue 786)
           }
           else {
             // speed RAMP: follow the keyframed curve live; the trim rides on top of it.
@@ -3709,6 +3726,10 @@ window.FM = window.FM || {};
           // transition that triggered the ring — see bounceDelta in js/behaviors.js (bug hunt, 21 Aug).
           const nk = { t: t, v: v, e: (b && b.e) || 'linear', split: 1 };   // inherit the cut segment's easing, not hardcoded linear
           if (b && b.bez) nk.bez = b.bez.slice();
+          /* queue 818: …and `ez` with it. It is resolved BEFORE `bez` and `e`, so a segment eased from the
+             Bounce / Elastic / Steps rail lost its curve at the seam while the two fields copied above
+             said it had been kept. Cloned rather than shared, so retuning one half cannot reach the other. */
+          if (b && b.ez) nk.ez = JSON.parse(JSON.stringify(b.ez));
           p.kf.push(nk);
         }
         p.kf.sort((k1, k2) => k1.t - k2.t);

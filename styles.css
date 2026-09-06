@@ -2668,6 +2668,8 @@ body.white-chrome #time-readout:active {
    as the clip flickering. */
 .clip.sel .clip-grip { transition: background .16s ease; }
 .clip.sel .clip-grip.armed { background: var(--accent); box-shadow: 0 0 0 2px rgba(41,217,187,.35); }
+/* queue 822: the slip pill arms on a hold like the grips do, and says so the same way. */
+.clip-slip.armed { background: var(--accent); color: #06212a; box-shadow: 0 0 0 2px rgba(41,217,187,.35); }
 .clip.sel .clip-grip.armed::after { border-top-color: #06212a; border-right-color: #06212a; }
 /* AM: the layer name printed ON the clip bar, left-aligned, readable over fills/waveforms.
    Phone-only: on desktop the track-head column still shows the name (no redundancy). */
@@ -5274,7 +5276,9 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
    one of those two roots, so a bare class would invite it onto something that has no inset to
    override. */
 #fx-browser.fxb-sheet, #afx-browser.fxb-sheet {
-  top: var(--fxb-top, 0); bottom: 0; left: 0; right: 0;
+  /* queue 814: `bottom` is the keyboard's inset, 0 with no keyboard — see FM.kbInset. It used to be a
+     hard 0, so an open keyboard buried the sheet's lower half including the Add bar. */
+  top: var(--fxb-top, 0); bottom: var(--fxb-bottom, 0); left: 0; right: 0;
   border-top: 1px solid var(--line);
   border-radius: 14px 14px 0 0;
   box-shadow: 0 -18px 44px rgba(0, 0, 0, .5);

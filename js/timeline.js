@@ -57,10 +57,17 @@ window.FM = window.FM || {};
    * of the buttons that are near the play head". Deleting the inspector copies is only safe once these
    * mean the same thing, so they read the selection now. With one clip selected the set is [that clip]
    * and every path below is the one that already shipped. */
-  function clipToolTargets() {
+  function clipToolAll() {
     const ids = FM.selectionIds ? FM.selectionIds() : (FM.scene.selectedId ? [FM.scene.selectedId] : []);
     return ids.map(id => FM.layerById(FM.scene, id)).filter(Boolean);
   }
+  /* ⚠️ queue 816: A LOCKED CLIP IS NOT A TARGET. A locked layer stays SELECTABLE on purpose (see the
+     clip-body handler: "locked: selectable, never movable"), and every other way of retiming one refuses
+     — the body drag, the reorder handle, the keyboard nudge. These four helpers did not, so A trimmed the
+     head, D the tail and S split a clip he had locked precisely so that could not happen. Filtered here,
+     at the one place all of them read, rather than in four bodies that would drift apart again. The rail
+     hides itself as a consequence, which is the honest signal; the keys say why (see clipKeyAction). */
+  function clipToolTargets() { return clipToolAll().filter(l => !l.locked); }
   /* 0 = the playhead is inside at least one selected clip, so trim and split can do something.
    * ±1 = it is off every one of them, and the sign says which way the block has to travel.
    * null/0-length = nothing selected. For a single clip this is exactly FM.clipPlayheadSide. */
@@ -82,6 +89,12 @@ window.FM = window.FM || {};
       const cut = FM.time - l.start;
       l.start = FM.time; l.duration -= cut;
       if (l.type === 'video' && !l.reversed) l.trimStart = (l.trimStart || 0) + (FM.layerSourceAdvance ? FM.layerSourceAdvance(l, cut) : cut * (l.speed || 1));
+      /* ⚠️ queue 817: AND THE CUES COME WITH IT. Caption times are stored LOCAL to the clip, so anything
+         that moves `start` has to take the same amount back out of them — the comment on FM.shiftLayerCues
+         says "a THIRD caller turned up and had lost it", and this key was the fourth. Without it, trimming
+         a second off the head showed every caption a second late and pushed the last ones off the end,
+         while dragging the same clip's grip by the same amount left them exactly where they were. */
+      if (FM.shiftLayerCues) FM.shiftLayerCues(l, cut);
     });
     clipAfterCut(); return true;
   }
@@ -139,7 +152,13 @@ window.FM = window.FM || {};
    * REQUESTS.md #765 as a question he can correct. Returns true when something changed. */
   function clipKeyAction(k) {
     const targets = clipToolTargets();
-    if (!targets.length) return false;
+    if (!targets.length) {
+      /* queue 816: a key pressed on a locked clip has to SAY so. Silence would read as the key being
+         broken — and on the phone the rail is hidden in this state, so the keyboard is the only way in. */
+      const all = clipToolAll();
+      if (all.length && all.every(l => l.locked) && FM.toast) FM.toast(all.length > 1 ? 'Those clips are locked' : 'That clip is locked', 1600);
+      return false;
+    }
     const side = clipToolSide(targets);
     if (side === 0) {
       if (k === 'a') return clipTrimStart();
@@ -262,6 +281,13 @@ window.FM = window.FM || {};
   let clipTap = null;    // touch: pending gesture on a clip (tap=select, drag=scrub, long-press=move)
   let snapping = true;   // magnet toggle: snap clip/trim edges to playhead / clip edges / 0
   let rebuildPending = false;      // a rebuild requested mid-gesture — deferred to the gesture's end
+  /* ⚠️ queue 815: A LAYER-NAME PAN IS A GESTURE TOO. It scrolls the layer list, its state lives in the
+     head's own closure, and its listeners are on the head element — so a rebuild that empties the track
+     list (a waveform or a filmstrip arriving, or the 150ms resize rebuild when the Android address bar
+     slides) destroyed the element under his finger and the rest of the drag scrolled nothing. Every
+     other timeline gesture is named in the defer gate below; this one never was, and the symptom is
+     indistinguishable from the timeline being laggy. Module-level because the gate cannot see a closure. */
+  let headPan = false;
   let reorderActive = false;       // a ≡ reorder drag is in flight (its listeners live on the captured handle — a rebuild would kill it)
   /* ⚠️ A GESTURE FLAG THAT OUTLIVES ITS GESTURE BREAKS THE TIMELINE PERMANENTLY, AND IT DID (queue 541).
      Ezra: "i broke the timeline somehow, fix this issue" — his PC screenshot shows layer rows drawn on
@@ -472,6 +498,11 @@ window.FM = window.FM || {};
       const L = trimDrag.layer;
       L.start = trimDrag.start; L.duration = trimDrag.dur;
       if (L.type === 'video') L.trimStart = trimDrag.trim;
+      /* queue 817: …AND THE CUES, which the drag has been re-basing on every move. The copy taken at
+         pointerdown was already sitting on the gesture (`caps`) for exactly this, and the restore did not
+         use it — so a trim abandoned by a lost pointer put the clip back and left its captions shifted by
+         however far the finger had travelled. */
+      if (trimDrag.caps) L.captions = trimDrag.caps.map(c => ({ ...c }));
       trimDrag = null; hideTrimHud();
     }
     if (kfDrag) {
@@ -1281,10 +1312,12 @@ window.FM = window.FM || {};
       // header can't hijack it, and a tap never turns into a 1px scroll.
       if (!panning && Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)) {
         panning = true;
+        headPan = true;                          // queue 815: hold the rebuild while this drag runs
         try { head.setPointerCapture(e.pointerId); } catch (_) {}
       }
       if (panning && timelineEl) {
         e.preventDefault();
+        touchGesture();                          // queue 815: a live pan, so the stale-gesture healer leaves it alone
         panMoved = true;
         const max = Math.max(0, timelineEl.scrollHeight - timelineEl.clientHeight);
         timelineEl.scrollTop = Math.max(0, Math.min(max, panFrom - dy));
@@ -1292,8 +1325,11 @@ window.FM = window.FM || {};
     });
     // A pan must not also select the layer it started on — the click fires after pointerup.
     head.addEventListener('click', (e) => { if (panMoved) { e.stopPropagation(); panMoved = false; } }, true);
-    head.addEventListener('pointerup', () => { clearTimeout(lpTimer); lpTimer = null; lpStart = null; panning = false; lpFired = false; });
-    head.addEventListener('pointercancel', () => { clearTimeout(lpTimer); lpTimer = null; lpStart = null; panning = false; panMoved = false; });
+    /* queue 815: the flag is cleared on the way out and the deferred rebuild is flushed, exactly like
+       every other gesture's release path — otherwise one pan would freeze the timeline for good. */
+    const endHeadPan = () => { headPan = false; if (rebuildPending) { rebuildPending = false; FM.timeline.rebuild(); } };
+    head.addEventListener('pointerup', () => { clearTimeout(lpTimer); lpTimer = null; lpStart = null; panning = false; lpFired = false; endHeadPan(); });
+    head.addEventListener('pointercancel', () => { clearTimeout(lpTimer); lpTimer = null; lpStart = null; panning = false; panMoved = false; endHeadPan(); });
     head.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); if (Date.now() - lpFiredAt < 800) return; FM.selectLayer(layer.id); if (FM.contextMenu && FM.layerMenuItems) FM.contextMenu.show(e.clientX, e.clientY, FM.layerMenuItems(layer)); });
     return head;
   }
@@ -2153,9 +2189,16 @@ window.FM = window.FM || {};
         slip.className = 'clip-slip';
         slip.title = 'Slip — slide the media inside the clip (position & length stay put)';
         slip.textContent = '⇄';
-        slip.addEventListener('pointerdown', (e) => {
-          e.stopPropagation(); e.preventDefault();
-          if (e.pointerType === 'mouse' && e.button !== 0) return;
+        /* ⚠️ queue 822: ON A FINGER, SLIP HAS TO BE ARMED — IT CANNOT JUST TAKE THE TOUCH. This pill is
+           absolutely centred on the clip, which on a 314px phone lane is exactly where a thumb lands to
+           scrub. It used to stopPropagation + preventDefault and create the drag for EVERY pointer type,
+           so the clip's own handler never ran and #timeline sets `touch-action: none` — meaning an
+           ordinary sideways swipe across a selected video clip silently re-timed its media and committed
+           it. A destructive edit hiding inside the most ordinary gesture on the phone.
+           So touch now uses the SAME 300ms arm the trim grips use, including tearing down the clip's own
+           pending gesture on arm and the vibrate that tells him it went live. A mouse is unchanged: it
+           slips at once, as it always has. */
+        const armSlip = (e, immediate) => {
           if (pinch) return;
           try { slip.setPointerCapture(e.pointerId); } catch (_) {}
           touchGesture();   // queue 541: a gesture that never gets stamped looks stale to rebuild() the instant it starts
@@ -2163,6 +2206,36 @@ window.FM = window.FM || {};
           FM.selectLayer(layer.id);
           if (FM.playing) FM.pause();
           beginSlipGhost(slipDrag, clip);
+          if (!immediate) { slip.classList.add('armed'); if (navigator.vibrate) { try { navigator.vibrate(10); } catch (err) {} } }
+        };
+        slip.addEventListener('pointerdown', (e) => {
+          if (e.pointerType === 'mouse' && e.button !== 0) return;
+          if (pinch) return;
+          if (e.pointerType === 'mouse') { e.stopPropagation(); e.preventDefault(); armSlip(e, true); return; }
+
+          const pid = e.pointerId, x0 = e.clientX, y0 = e.clientY;
+          let armTimer = setTimeout(() => {
+            armTimer = null;
+            if (!slip.isConnected) return;
+            // the clip's own pending tap must be torn down, or its hold fires mid-slip and grabs the clip too
+            if (clipTap && clipTap.pointerId === pid && clipTap.layer === layer) { if (clipTap.holdTimer) clearTimeout(clipTap.holdTimer); clipTap = null; }
+            armSlip({ pointerId: pid, clientX: x0 }, false);
+          }, FM._trimArmMs || 300);   // queue 822: the trim grips' own number, read from their seam — this block is not in their scope
+          const cancel = () => {
+            if (armTimer) { clearTimeout(armTimer); armTimer = null; }
+            slip.classList.remove('armed');
+            window.removeEventListener('pointermove', moved, true);
+            window.removeEventListener('pointerup', cancel, true);
+            window.removeEventListener('pointercancel', cancel, true);
+          };
+          // Travel before the hold fires means he is scrubbing, not slipping: hand the gesture back.
+          const moved = (ev) => {
+            if (ev.pointerId !== pid || !armTimer) return;
+            if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > 8) cancel();
+          };
+          window.addEventListener('pointermove', moved, true);
+          window.addEventListener('pointerup', cancel, true);
+          window.addEventListener('pointercancel', cancel, true);
         });
         clip.appendChild(slip);
       }
@@ -2377,7 +2450,14 @@ window.FM = window.FM || {};
           const items = Object.keys(FM.EASE_PRESETS).map(key => ({
             label: EASE_LABELS[key] || key,
             action: () => {
-              entry.kf.bez = FM.EASE_PRESETS[key].slice(); entry.kf.e = key;
+              /* ⚠️ queue 818: `ez` GOES TOO. A keyframe eased from the Bounce / Elastic / Steps rail carries
+                 an `ez` block, and FM.evalProp resolves `ez` BEFORE `bez` and `e` — so writing a plain ease
+                 here changed nothing at all: the render kept bouncing while the diamond recoloured to the
+                 ease it had just written and the graph editor still reported Bounce. Three parts of the UI
+                 disagreeing, and on a phone this menu is the ONLY way in, because a double-click never fires
+                 on a finger. The graph editor's own writer has deleted it since it was written, with a
+                 comment saying why; this copy never did. */
+              entry.kf.bez = FM.EASE_PRESETS[key].slice(); entry.kf.e = key; delete entry.kf.ez;
               FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); FM.requestRender(); if (FM.history) FM.history.commit();
             },
           }));
@@ -2385,7 +2465,7 @@ window.FM = window.FM || {};
           items.push({
             label: 'Hold (step)',
             action: () => {
-              entry.kf.e = 'hold'; delete entry.kf.bez;
+              entry.kf.e = 'hold'; delete entry.kf.bez; delete entry.kf.ez;   // queue 818: Hold has to beat a live Bounce too
               FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); FM.requestRender(); if (FM.history) FM.history.commit();
             },
           });
@@ -4531,7 +4611,7 @@ window.FM = window.FM || {};
       // A rebuild mid-gesture rips the DOM out from under an active drag (frozen kf-dot, wiped
       // marker-rename input) — an async filmstrip/waveform arrival or resize can fire one at any
       // moment. Defer it; the gesture's own release path (or the marker's commit) flushes it.
-      if (clipMove || trimDrag || kfDrag || slipDrag || reorderActive) {
+      if (clipMove || trimDrag || kfDrag || slipDrag || reorderActive || headPan) {
         /* …UNLESS THE GESTURE IS DEAD (queue 541 — see the note on `gestureStamp`). A drag whose pointer
            was lost leaves its flag set forever, and this refusal is what makes that permanent rather
            than momentary. A live drag touches the stamp on every pointermove — including the ones
