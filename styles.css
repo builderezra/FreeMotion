@@ -8149,6 +8149,7 @@ body.fm-pushing #toast { z-index: 213; }
   body #inspector-panel:has(.addmenu--panel) > .panel-title { flex: none; }
   body #inspector-panel:has(.addmenu--panel) > #inspector {
     flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+    overflow: visible;   /* queue 804: the band's #inspector scrolls in every OTHER state; here .addmenu-body is the scroller (queue 269/276/542) */
   }
   body #inspector-panel:has(.addmenu--panel) .addmenu--panel,
   body #inspector-panel:has(.addmenu--panel) .addmenu-main { min-height: 0; flex: 1 1 auto; }
@@ -8163,20 +8164,35 @@ body.fm-pushing #toast { z-index: 213; }
      raises the add menu, which is what the handle is for and the only reading of "sit outside on the
      top" that leaves it grabbable; the timeline's own column (the far larger half of the band) still
      resizes the band exactly as before. */
-  body #inspector-panel:has(.addmenu--panel) > #am-resizer {
+  /* queue 804, part one: THE PANEL MUST NOT CLIP ITS OWN HANDLE. `#am-resizer` hangs 9px above the
+     panel's top edge, and outside the add menu the panel was the scroller (overflow auto), which clips
+     everything outside its box — the handle was displayed, measured, and hit-tested to the stage
+     beneath it. Same cure as the two precedents in this file (`:has(.addmenu--panel)` above and
+     `.insp-ease` near the top): the panel becomes a flex column and #inspector is the scroller, so the
+     title stays put and the handle is reachable in every state. Inside the PC block only: the phone
+     sheet keeps its own overflow. */
+  #inspector-panel { overflow: visible; display: flex; flex-direction: column; }
+  #inspector-panel > #insp-grab, #inspector-panel > .panel-title { flex: none; }
+  #inspector-panel > #inspector { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  /* queue 804, part two: the handle is on the band's inspector column in EVERY state, not only beside
+     the add menu. It was gated on `:has(.addmenu--panel)` because a raised inspector had no way down; that was
+     queue 511's reason for snapping the band back on every selection change, which Ezra then called
+     "it forces the timeline and the inspector menu to be connected". With the handle always present the
+     float can persist and still always be pulled back down. */
+  body #inspector-panel > #am-resizer {
     display: block; position: absolute; left: 0; right: 0; top: -9px; height: 9px;
     cursor: ns-resize; z-index: 31; touch-action: none;
   }
   /* The grab affordance: a short bar, centred, the same language as the timeline's own resizer —
      including the part he asked for here, which #tl-resizer has always done: nothing at rest, the pill
      fades in under the cursor. */
-  body #inspector-panel:has(.addmenu--panel) > #am-resizer::after {
+  body #inspector-panel > #am-resizer::after {
     content: ''; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
     width: 46px; height: 4px; border-radius: 2px; background: var(--line);
     opacity: 0; transition: opacity .15s ease, background .15s ease;
   }
-  body #inspector-panel:has(.addmenu--panel) > #am-resizer:hover::after,
-  body.am-resizing #inspector-panel:has(.addmenu--panel) > #am-resizer::after { opacity: 1; background: var(--accent); }
+  body #inspector-panel > #am-resizer:hover::after,
+  body.am-resizing #inspector-panel > #am-resizer::after { opacity: 1; background: var(--accent); }
 
   /* FLOATING. The panel leaves the grid and sits above the stage, so raising it cannot shrink the
      canvas — which is not a nicety here but the only way the gesture can work at all: the band and

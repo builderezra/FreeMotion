@@ -4969,7 +4969,15 @@ window.FM = window.FM || {};
       FM.clampAddMenuH = amClamp;         // exposed so the suite tests the clamp that runs, not a copy
       /* No layout test any more (queue 293): there is one desktop layout, so "not a phone and the band
          is showing the add menu" is the whole condition. */
-      const studioAdd = () => !isPhone() && !!document.querySelector('#inspector-panel .addmenu--panel');
+      /* ⚠️ queue 804 REVERSED queue 511 clause 1. `studioAdd()` used to gate the handle, the resize drop
+         and the selection drop on "the panel is showing the ADD MENU", so tapping a layer or opening the
+         Effects browser snapped a raised band straight back into the grid. Ezra, 6 Sep: "whenever I open
+         it, it forces the timeline and the ad menu or, like, inspector menu to be connected. It doesn't
+         let them stay detached, so fix that." 511's reason for dropping it was real — the handle was
+         `display: none` outside the add menu, so a raised inspector was stuck tall with no way down — and
+         that is what changed: `#am-resizer` is now shown on the band's inspector column in EVERY state
+         (styles.css, "queue 804"), so the float can persist and always be pulled back down. The only
+         thing that still drops it is the phone layout, where the float does not exist. */
       let amDrag = false, amStartY = 0, amStartH = 0, amStuck = 0;
       /* PIN THE SLOT BEFORE LEAVING IT. The panel floats while it is raised, and a floating box needs
          to be told where its other three edges are or it resolves against the page — which is what it
@@ -5010,7 +5018,7 @@ window.FM = window.FM || {};
       window.addEventListener('resize', amRepin);
 
       amRez.addEventListener('pointerdown', (e) => {
-        if (!studioAdd()) return;
+        if (isPhone()) return;
         if (e.pointerType === 'mouse' && e.button !== 0) return;
         amDrag = true; amStartY = e.clientY; amStuck = 0; snapFlashed = false;
         const p = document.getElementById('inspector-panel');
@@ -5081,7 +5089,7 @@ window.FM = window.FM || {};
         root.style.removeProperty('--am-h');
         ['--am-left', '--am-width', '--am-bottom'].forEach(v => root.style.removeProperty(v));
       };
-      window.addEventListener('resize', () => { if (!studioAdd()) FM.dropAddMenuFloat(); });
+      window.addEventListener('resize', () => { if (isPhone()) FM.dropAddMenuFloat(); });
       /* ⚠️ …AND A SELECTION CHANGE IS THE CASE THAT WAS MISSING (queue 511 clause 1).
          The comment above `dropAddMenuFloat` states the rule plainly — "the menu must never be left
          floating over a canvas it is no longer showing" — and it was enforced for a window resize and a
@@ -5098,7 +5106,7 @@ window.FM = window.FM || {};
          dozen call sites that can change what is selected. */
       FM.syncAddMenuFloat = function () {
         if (!document.body.classList.contains('am-floating')) return;
-        if (studioAdd()) return;            // the add menu is still what the panel is showing — leave it raised
+        if (!isPhone()) return;             // queue 804: a raised band stays raised whatever it shows — the handle is always there now
         FM.dropAddMenuFloat();
         stageResized();
       };

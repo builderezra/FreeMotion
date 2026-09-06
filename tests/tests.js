@@ -34503,64 +34503,86 @@
     }
   });
 
-  test('a raised Add menu comes back down when the panel stops showing it (queue 511)', { item: '511' }, async function () {
-    /* Ezra: "with all the moving parts that come with the inspector and being [dragged] up and down I
-       find it's very inconsistent and bugs a lot depending on … what order you do stuff."
-       This is one concrete cause, found by driving the drag state machine through orderings rather than
-       by reading it. The rule was already written down — the comment on `dropAddMenuFloat` says "the
-       menu must never be left floating over a canvas it is no longer showing" — and it was enforced for
-       a window resize and a layout switch but NOT for selecting a layer, which is the thing that happens
-       constantly and is the ONLY way the panel's contents change.
-       Measured before the fix: raise the add menu to 582px, tap a layer. The panel stayed floating at
-       582px over the canvas while showing that layer's category list, and `#am-resizer` is
-       `display: none` in that state — **so it was stuck tall with no handle to pull it back down**, and
-       deselecting did not clear it either. The same two taps in the other order behaved completely
-       differently, which is exactly what he was describing. */
+  test('a raised band stays raised when a layer is selected or the Effects browser opens, and keeps its handle (queue 804)', { item: '804' }, async function () {
+    /* Ezra, 6 Sep: "The effects and filters menu are both... like, whenever I open it, it forces the
+       timeline and the ad menu or, like, inspector menu to be connected. It doesn't let them stay
+       detached, so fix that."
+       This REVERSES queue 511 clause 1, whose test stood here: it proved that selecting a layer dropped
+       a raised add menu back into the grid, because in that state `#am-resizer` was `display: none` and
+       the panel was "stuck tall with no handle to pull it back down". The handle is what changed (it is
+       now on the band's inspector column in every state), so this test proves BOTH halves of the new
+       rule on the path he described: the float persists through a selection and through the Effects
+       browser, and at each step the handle is displayed, is what a hit-test at its centre finds, and
+       dragging it down still docks the band. Measured before the fix: raised to 582px, one tap on a
+       layer, and the panel was back at the band's 232px with `am-floating` gone. */
     if (window.innerWidth < 701) return;                       // the floating panel only exists in the PC layout
     const panel = document.getElementById('inspector-panel');
     const rez = document.getElementById('am-resizer');
     if (!panel || !rez) return;
+    /* A fresh headless profile starts on the Home screen, whose thumbnails sit over the stage: run alone,
+       the hit-test below found one of its images instead of the handle. Close it, and put it back. */
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    /* The drag down at the end re-couples the band and, past the snap, RESIZES it — so it must stop just
+       past the floor, and the band's height goes back exactly as found (inline var and the stored one):
+       the first version dragged the full raised height, left the band 150px tall, and the queue 542
+       test after it measured the Audio tab spilling 53px out of a band that was never that short. */
+    const rootEl = document.documentElement;
+    const savedTlH = rootEl.style.getPropertyValue('--tl-h');
+    let savedTlStore = null; try { savedTlStore = localStorage.getItem('fm_tl_h'); } catch (e) {}
+    const floorH = () => parseInt(getComputedStyle(rootEl).getPropertyValue('--tl-h'), 10) || 232;
     const savedSel = FM.scene.selectedId;
     const madeLayer = !FM.scene.layers.length;
     if (madeLayer) FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: 0, duration: 4 }));
-    try {
-      FM.selectLayer(null); FM.inspector.refresh(); await sleep(90);
-      if (!panel.querySelector('.addmenu--panel')) throw new Error('deselecting did not put the Add menu in the panel, so this test cannot raise it');
-      if (getComputedStyle(rez).display === 'none') throw new Error('the add-menu resize handle is not shown even with the add menu up');
-
-      // raise it
+    const floating = () => document.body.classList.contains('am-floating');
+    const drag = (dy) => {
       const r = rez.getBoundingClientRect(), x = r.left + r.width / 2, y0 = r.top + r.height / 2;
       const ev = (t, cy, b) => rez.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', clientX: x, clientY: cy, buttons: b }));
       ev('pointerdown', y0, 1);
-      for (let i = 1; i <= 6; i++) ev('pointermove', y0 - (350 * i / 6), 1);
-      ev('pointerup', y0 - 350, 0);
-      await sleep(60);
+      for (let i = 1; i <= 8; i++) ev('pointermove', y0 + (dy * i / 8), 1);
+      ev('pointerup', y0 + dy, 0);
+    };
+    const handleUsable = (when) => {
+      if (getComputedStyle(rez).display === 'none') throw new Error('the drag handle is hidden ' + when + ' — the band is stuck tall with no way down, which is the exact reason queue 511 used to drop it');
+      const rr = rez.getBoundingClientRect();
+      const hit = document.elementFromPoint(rr.left + rr.width / 2, rr.top + rr.height / 2);
+      if (hit !== rez) throw new Error('a hit-test at the handle’s centre finds ' + (hit ? (hit.id || hit.className || hit.tagName) : 'nothing') + ' rather than the handle ' + when + ' — it is drawn but not grabbable');
+    };
+    try {
+      FM.selectLayer(null); FM.inspector.refresh(); await sleep(90);
+      if (!panel.querySelector('.addmenu--panel')) throw new Error('deselecting did not put the Add menu in the panel, so this test cannot raise it');
+      drag(-350); await sleep(60);
 
-      /* THE CONTROL: it has to have actually gone up, or "it came back down" is true of a panel that
-         never moved. */
+      /* THE CONTROL: it has to have actually gone up, or "it stayed up" is true of a panel that never moved. */
       const raisedH = panel.getBoundingClientRect().height;
-      if (!document.body.classList.contains('am-floating')) throw new Error('the drag did not raise the panel at all — nothing below is being tested');
+      if (!floating()) throw new Error('the drag did not raise the panel at all — nothing below is being tested');
       if (raisedH < 300) throw new Error('the panel only reached ' + Math.round(raisedH) + 'px, which is not raised enough to tell the states apart');
 
-      // …now select a layer, which swaps what the panel is showing
-      FM.selectLayer(FM.scene.layers[0].id); FM.inspector.refresh(); await sleep(90);
-      const nowH = panel.getBoundingClientRect().height;
-      if (panel.querySelector('.addmenu--panel')) throw new Error('selecting a layer did not change what the panel shows, so the ordering this test is about did not happen');
-      if (document.body.classList.contains('am-floating'))
-        throw new Error('the panel is STILL floating at ' + Math.round(nowH) + 'px while showing the layer\u2019s options — and its drag handle is hidden in this state, so there is no way to lower it again');
-      if (nowH > raisedH - 100) throw new Error('the panel is still ' + Math.round(nowH) + 'px tall after the add menu left it (was ' + Math.round(raisedH) + ')');
+      FM.selectLayer(FM.scene.layers[0].id); FM.inspector.refresh(); await sleep(120);
+      if (panel.querySelector('.addmenu--panel')) throw new Error('selecting a layer did not change what the panel shows, so the path this test is about did not happen');
+      if (!floating()) throw new Error('selecting a layer snapped the raised band back into the grid — "it forces the timeline and the inspector menu to be connected"');
+      const selH = panel.getBoundingClientRect().height;
+      if (Math.abs(selH - raisedH) > 4) throw new Error('the raised band changed height from ' + Math.round(raisedH) + ' to ' + Math.round(selH) + 'px when its contents changed');
+      handleUsable('with a layer selected');
 
-      // …and it must still be raisable afterwards, or the fix has simply broken the feature
-      FM.selectLayer(null); FM.inspector.refresh(); await sleep(90);
-      ev('pointerdown', y0, 1);
-      for (let i = 1; i <= 6; i++) ev('pointermove', y0 - (350 * i / 6), 1);
-      ev('pointerup', y0 - 350, 0);
-      await sleep(60);
-      if (!document.body.classList.contains('am-floating')) throw new Error('the panel can no longer be raised after a selection dropped it — the fix broke the feature it was protecting');
+      FM.fxBrowser.open(FM.scene.layers[0]); await sleep(160);
+      if (!FM.fxBrowser.isOpen()) throw new Error('the Effects browser did not open, so his exact case could not be reached');
+      if (!floating()) throw new Error('opening the Effects browser snapped the raised band back into the grid — his exact words: "whenever I open it, it forces … [them] to be connected"');
+      handleUsable('with the Effects browser open');
+      FM.fxBrowser.close(); await sleep(90);
+      if (!floating()) throw new Error('closing the Effects browser dropped the raised band');
+
+      /* THE WAY DOWN: the whole reason 511 dropped it was that this gesture did not exist here. */
+      drag(raisedH - floorH() + 30); await sleep(60);
+      if (floating()) throw new Error('dragging the handle down past the band did not dock it again — the panel is still floating at ' + Math.round(panel.getBoundingClientRect().height) + 'px');
     } finally {
+      try { if (FM.fxBrowser.isOpen()) FM.fxBrowser.close(); } catch (e) {}
       if (FM.dropAddMenuFloat) FM.dropAddMenuFloat();
       if (madeLayer) FM.scene.layers.length = 0;
       FM.selectLayer(savedSel || null); FM.inspector.refresh(); await sleep(40);
+      if (savedTlH) rootEl.style.setProperty('--tl-h', savedTlH); else rootEl.style.removeProperty('--tl-h');
+      try { if (savedTlStore === null) localStorage.removeItem('fm_tl_h'); else localStorage.setItem('fm_tl_h', savedTlStore); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
   });
 
