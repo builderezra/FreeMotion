@@ -3351,15 +3351,18 @@ window.FM = window.FM || {};
     // duplicateLayer commits history itself, so the loop would leave one undo entry PER layer and
     // reversing a single button press would take three presses of undo. Muted for the run, then one
     // commit at the end — the whole duplication is one action, so it is one step back.
-    const hist = FM.history, realCommit = hist && hist.commit;
-    if (hist) hist.commit = function () {};
+    /* queue 826: FM.history.mute(), not a swapped-out commit. Two of these can overlap — each awaits real
+       work — and the old form had the second capture the first's no-op as "the real commit" and restore
+       THAT, leaving history and autosave dead for the rest of the session. A depth counter cannot be lost. */
+    const hist = FM.history;
+    if (hist && hist.mute) hist.mute();
     try {
       for (const id of todo) {
         await FM.duplicateLayer(id, inPlace);
         Object.assign(batch, FM._lastDupMap || {});
         if (FM.scene.selectedId && made.indexOf(FM.scene.selectedId) < 0) made.push(FM.scene.selectedId);
       }
-    } finally { if (hist) hist.commit = realCommit; }
+    } finally { if (hist && hist.unmute) hist.unmute(); }
     /* THE WHOLE BATCH AT ONCE, once every copy exists. A per-layer pass cannot do this: when layer A is
      * duplicated, layer B's copy does not exist yet, so a link from A to B has nothing to point at.
      * Idempotent over the per-subtree remap duplicateLayer already did — those refs are copy ids now,

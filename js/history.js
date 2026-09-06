@@ -10,6 +10,17 @@ window.FM = window.FM || {};
   const stack = [];
   let index = -1;
   let suppress = false;
+  /* ⚠️ queue 826: MUTING IS A DEPTH, NOT A SWAPPED-OUT FUNCTION. Two callers used to batch a multi-layer
+     action by saving `FM.history.commit`, replacing it with a no-op and restoring it in a finally —
+     duplicateSelection (js/app.js) and clipSplit (js/timeline.js). Both await real work, so two of them can
+     overlap: the second captures the FIRST one's no-op as "the real commit" and restores THAT, and from
+     then on commit is a no-op FOREVER. Nothing looks wrong — the undo and redo buttons still light up,
+     because syncButtons only runs from inside commit — but no snapshot is taken and `FM.storage.autosave()`
+     is called ONLY from commit, so nothing he does reaches disk either. Then undo, which is NOT muted,
+     restores the snapshot from before the mute and throws away every edit since.
+     A counter cannot be lost that way: unbalanced calls can only ever end with a mute still ON, which the
+     next commit's own guard reports, rather than silently ending with the app's history disconnected. */
+  let muteDepth = 0;
 
   function snap() {
     // jsonReplacer strips runtime '_' props — without it, transient flags (e.g. _cropEditing) rode
@@ -88,6 +99,10 @@ window.FM = window.FM || {};
 
   FM.history = {
     canUndo() { return index > 0; },
+    /* queue 826 suite seam: how many steps are actually ON the stack. A test that counts CALLS to commit()
+       measures the wrong thing now — a muted batch still calls it, and it returns early — so the honest
+       question is how many places undo can go back to. */
+    _steps() { return { len: stack.length, index: index }; },
     canRedo() { return index < stack.length - 1; },
     syncButtons: syncButtons,
     // reset() runs on open/load/boot — its commit must not count as a user edit, or merely VIEWING
@@ -109,8 +124,14 @@ window.FM = window.FM || {};
       if (FM.storage && FM.storage.clearDirty) FM.storage.clearDirty();
       syncButtons();
     },
+    /* queue 826: batch a multi-step action with these instead of swapping `commit` out. Re-entrant by
+       design — nested and overlapping batches each add one, and history resumes when the last one ends. */
+    mute() { muteDepth++; },
+    unmute() { if (muteDepth > 0) muteDepth--; },
+    isMuted() { return muteDepth > 0; },
     commit() {
       if (suppress) return;
+      if (muteDepth > 0) return;
       const s = snap();
       if (index >= 0 && stack[index] === s) return;   // identical to the current state → a no-op action can never add a stray undo step
       // Discarding the redo tail can strand a clip just as an eviction can — a layer that only ever

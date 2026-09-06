@@ -111,11 +111,11 @@ window.FM = window.FM || {};
        working. FM.duplicateSelection has muted the inner commits and written one at the end since it was
        written (js/app.js), for exactly this; same pattern, restored in a finally so a throw mid-way cannot
        leave history muted for the rest of the session. */
-    const hist = FM.history, realCommit = hist && hist.commit;
-    if (hist && ls.length > 1) hist.commit = function () {};
+    const hist = FM.history, batch = !!(hist && hist.mute && ls.length > 1);
+    if (batch) hist.mute();
     try { for (const l of ls) await FM.splitLayer(l.id); }
-    finally { if (hist) hist.commit = realCommit; }
-    if (hist && ls.length > 1) hist.commit();
+    finally { if (batch) hist.unmute(); }
+    if (batch) hist.commit();
     return true;
   }
   function clipNudge(one, many) {

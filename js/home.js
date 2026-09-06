@@ -2120,6 +2120,11 @@ window.FM = window.FM || {};
     const live = new Set(shownIds);
     [...selected].forEach(id => { if (!live.has(id)) selected.delete(id); });
   }
+  /* queue 828 suite seam: what is ticked, and what is actually on screen. The bug was the gap between the
+     two on the Templates and Elements tabs, and a test that cannot see both cannot measure it. Attached to
+     FM.home BELOW, after the object literal that would otherwise replace them. */
+  function selectionState() { return { selectMode: selectMode, selected: [...selected], shown: shownIds.slice() }; }
+  function setSelectionForTest(ids) { selectMode = true; selected.clear(); (ids || []).forEach(id => selected.add(id)); }
   function render() {
     if (!grid) return;
     ensureStaticTile();   // one-time; the CSS vars it sets are what #hm-grain draws
@@ -2204,11 +2209,19 @@ window.FM = window.FM || {};
         const shown = strong.length ? strong : scored.slice(0, 5);
         grid.appendChild(el('div', 'hm-note', strong.length ? (strong.length + (strong.length === 1 ? ' match' : ' matches') + ' — best first') : 'Nothing matched “' + query + '” exactly. Closest templates:'));
         shown.forEach(x => { shownIds.push(x.t.id); grid.appendChild(templateCard(x.t)); });
+        pruneSelection();   // queue 828: a search hides ticked items, and Delete would still take them
         renderSelBar();
         return;
       }
       if (!list.length) grid.appendChild(emptyState('◱', 'No templates yet', 'Tap + to save a project as one, or use a project’s ⋯ menu.'));
       list.forEach(t => { shownIds.push(t.id); grid.appendChild(templateCard(t)); });
+      /* ⚠️ queue 828: THE TICK LIST MUST ONLY EVER HOLD WHAT IS ON SCREEN. pruneSelection exists for this
+         and its own comment describes the surprise — the PROJECTS tab called it on both its paths, and the
+         Templates and Elements tabs called it on none. So: tick three elements, tap search, type a query
+         that matches one, and Delete removed all three. Templates and elements are IndexedDB packs with
+         their media inside them, there is no undo and no backup, and the confirm only shows a COUNT — so
+         the two he could not see were gone with nothing on screen having named them. */
+      pruneSelection();
       // A template being edited has a workspace (queue 505 clause 4); it is hidden from Projects, so it
       // has to be visible HERE or a failed commit would leave it nowhere he can see or delete it.
       (FM.projects.list() || []).filter(p => p.templateDraft).forEach(p => { shownIds.push(p.id); grid.appendChild(elementDraftCard(p)); });
@@ -2221,6 +2234,7 @@ window.FM = window.FM || {};
         const shown = strong.length ? strong : scored.slice(0, 5);
         grid.appendChild(el('div', 'hm-note', strong.length ? (strong.length + (strong.length === 1 ? ' match' : ' matches') + ' — best first') : 'Nothing matched “' + query + '” exactly. Closest elements:'));
         shown.forEach(x => { shownIds.push(x.e.id); grid.appendChild(elementCard(x.e)); });
+        pruneSelection();   // queue 828: same as above — Templates and Elements never called this, Projects always did
         renderSelBar();
         return;
       }
@@ -2235,6 +2249,7 @@ window.FM = window.FM || {};
       if (!list.length && !drafts.length) grid.appendChild(emptyState('◇', 'No elements yet', 'An element is a saved piece — a watermark, a logo, a lower-third — that you drop into any edit.'));
       drafts.forEach(p => { shownIds.push(p.id); grid.appendChild(elementDraftCard(p)); });
       list.forEach(e => { shownIds.push(e.id); grid.appendChild(elementCard(e)); });
+      pruneSelection();   // queue 828: the elements list too — see the note on the templates branch
     }
     renderSelBar();
     if (introPending) { introPending = false; stampIntro(); }
@@ -2713,4 +2728,8 @@ window.FM = window.FM || {};
     // The grain field's shape, for the suite — see STATIC_PX (queue 157).
     _grain: { tile: STATIC_PX, tiles: STATIC_TILES },
   };
+  FM.home._render = function (which) { if (which) tab = which; render(); };   // queue 828 suite seam: the render is where the pruning lives
+  FM.home._selectionState = selectionState;   // queue 828
+  FM.home._setSelection = setSelectionForTest;   // queue 828
+
 })(window.FM);

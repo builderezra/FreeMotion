@@ -509,8 +509,14 @@ window.FM = window.FM || {};
     p.kf.slice(0, AFX_MAX_KF).forEach(k => {
       if (!k || typeof k !== 'object') return;
       const t = +k.t, v = +k.v;
-      if (!isFinite(t) || t < 0 || !isFinite(v)) return;
-      const o = { t: Math.min(3600, t), v: Math.max(min, Math.min(max, v)), e: easeOk(k.e) ? k.e : 'linear' };
+      /* ⚠️ queue 827: A NEGATIVE KEYFRAME TIME IS LEGAL. A clip can be dragged PAST 0 into a negative start
+         — deliberate, supported, and the timeline floors it at -(duration - 0.1) — and shiftLayerKeyframes
+         retimes its keyframes with it, so they go negative too. This sanitiser runs on EVERY project open
+         and every undo, and it was deleting them: the animation reverted to whatever the first surviving
+         keyframe held, and the next autosave wrote that loss to disk. Bounded on BOTH sides now, which is
+         what the upper clamp was already doing for the other end. */
+      if (!isFinite(t) || !isFinite(v)) return;
+      const o = { t: Math.max(-3600, Math.min(3600, t)), v: Math.max(min, Math.min(max, v)), e: easeOk(k.e) ? k.e : 'linear' };
       if (Array.isArray(k.bez) && k.bez.length === 4 && k.bez.every(n => isFinite(+n))) o.bez = k.bez.map(Number);
       /* ez / ti / to used to be dropped here, silently. That was survivable while this function only
        * saw audio params, and stops being survivable the moment effect params come through it (below):
@@ -664,10 +670,10 @@ window.FM = window.FM || {};
       path.kf.slice(0, MASK_MAX_KF).forEach(k => {
         if (!k || typeof k !== 'object') return;
         const t = +k.t;
-        if (!isFinite(t) || t < 0) return;
+        if (!isFinite(t)) return;          // queue 827: negative is legal — a clip dragged before zero takes its roto with it
         const pts = safeMaskPts(k.v);
         if (!pts || !pts.length) return;   // a keyframe with no valid vertices contributes nothing → drop it
-        kf.push({ t: Math.min(3600, t), v: pts, e: easeOk(k.e) ? k.e : 'linear' });
+        kf.push({ t: Math.max(-3600, Math.min(3600, t)), v: pts, e: easeOk(k.e) ? k.e : 'linear' });
       });
       if (!kf.length) return null;
       kf.sort((a, b) => a.t - b.t);
@@ -2154,8 +2160,18 @@ window.FM = window.FM || {};
       if (!eid) return false;
       const pid = curId();
       if (!pid) return false;
-      if (FM.storage) FM.storage.flushSync();
+      /* ⚠️ queue 825: THE FLUSH MUST LAND — the same rule the TEMPLATE twin above got on 2 Sep, and this
+         copy never did. writeScene returns false on quota, on a stale rev and on a read-back mismatch; the
+         old code threw that away and went on to pack the doc ON DISK, which after a failed write is an
+         OLDER version, wrote it over the element, and then discarded the draft holding his real edits.
+         Keep the draft instead: it is the only copy left. */
+      if (FM.storage && FM.storage.flushSync && !FM.storage.flushSync()) return false;
       if (!this.list().some(e => e.id === eid)) return false;     // deleted mid-edit — keep the draft
+      /* …AND AN EMPTY WORKSPACE NEVER REPLACES AN ELEMENT THAT HAS LAYERS (also from the twin). A blank
+         element is legitimate, so updateFrom allows an empty pack; a workspace that is empty while the
+         element is not is a stub — a crash before hydration finished — not an edit. */
+      const liveLayers = (FM.scene.layers || []).length;
+      if (!liveLayers) { const cur = await this.getPack(eid); if (cur && cur.layers && cur.layers.length) return false; }
       const ok = await this.updateFrom(eid, pid);
       if (!ok) return false;                                       // failed write — keep the draft
       const list = FM.projects.list().filter(p => !p.elementDraft && !p.templateDraft && p.id !== pid);   // a template workspace is not somewhere to land either

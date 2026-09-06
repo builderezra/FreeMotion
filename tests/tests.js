@@ -35636,8 +35636,6 @@
     const savedSel = FM.scene.selectedId;
     const savedLayers = FM.scene.layers.slice();
     const t0 = FM.time;
-    const real = FM.history.commit;
-    let commits = 0;
     try {
       const made = [];
       for (let i = 0; i < 3; i++) {
@@ -35652,13 +35650,17 @@
       if (ids.length < 3) throw new Error('could not select three clips at once (' + ids.length + '), so the multi-split cannot be measured');
       FM.time = 2;
       const n0 = FM.scene.layers.length;
-      FM.history.commit = function () { commits++; return real.apply(this, arguments); };
+      /* ⚠️ COUNT THE STEPS ON THE STACK, NOT THE CALLS. A batched action still CALLS commit() — the mute
+         makes it return early — so counting calls measures the implementation, not what undo does. What
+         matters to him is how many times he has to press undo. */
+      const steps0 = FM.history._steps ? FM.history._steps().len : null;
+      if (steps0 == null) return;
       await FM.timeline.clipKey('s');
       await sleep(400);
+      const added = FM.history._steps().len - steps0;
       if (FM.scene.layers.length <= n0) throw new Error('nothing was split (' + n0 + ' → ' + FM.scene.layers.length + ' layers), so the undo count below means nothing');
-      if (commits > 1) throw new Error('one press of S wrote ' + commits + ' undo entries for ' + ids.length + ' clips — undo takes them apart one at a time instead of putting the timeline back');
+      if (added > 1) throw new Error('one press of S added ' + added + ' undo steps for ' + ids.length + ' clips — undo takes them apart one at a time instead of putting the timeline back');
     } finally {
-      FM.history.commit = real;
       FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
       FM.time = t0; FM.selectLayer(savedSel || null); FM.timeline.rebuild(); await sleep(40);
     }
@@ -35724,6 +35726,123 @@
       FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
       FM.timeline.rebuild(); FM.selectLayer(savedSel || null); FM.refreshAll(); await sleep(40);
       if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  test('two overlapping batched actions cannot leave history muted for good (queue 826)', { item: '826' }, async function () {
+    /* THE WORST BUG FOUND ALL DAY. Two callers batched a multi-layer action by saving FM.history.commit,
+       replacing it with a no-op and restoring it in a finally. Both await real work, so two can overlap:
+       the second captures the FIRST one's no-op as "the real commit" and restores THAT — and from then on
+       commit is a no-op for the rest of the session. Nothing looks wrong, because the undo and redo buttons
+       are only ever refreshed from inside commit, and FM.storage.autosave() is called ONLY from commit —
+       so no edit reaches the disk either. Then undo, which is not muted, restores the snapshot from before
+       the mute and throws away everything since. A depth counter cannot be lost that way. */
+    if (!FM.history || !FM.history.mute || !FM.history._steps) throw new Error('history has no re-entrant mute — a batched action still has to swap the commit function out, which is the bug');
+    const before = FM.history._steps().len;
+    /* Interleaved on purpose, the way two awaited runs overlap: A starts, B starts, A ends, B ends. */
+    FM.history.mute();
+    FM.history.mute();
+    FM.history.unmute();
+    if (!FM.history.isMuted()) throw new Error('the first batch to finish un-muted history while the second was still running — the second batch’s edits would be recorded when they should not be');
+    FM.history.unmute();
+    if (FM.history.isMuted()) throw new Error('history is STILL muted after both batches finished — every edit from here on would go unrecorded and unsaved, and undo would then throw away everything since');
+    FM.scene.project.name = (FM.scene.project.name || 'p') + ' ';   // a real, trivial edit
+    FM.history.commit();
+    await sleep(60);
+    const after = FM.history._steps().len;
+    if (after <= before) throw new Error('history recorded nothing after the batches ended (' + before + ' → ' + after + ' steps) — commit is still muted, so nothing he does is being saved');
+  });
+
+  test('a keyframe before zero survives a save and a reload (queue 827)', { item: '827' }, function () {
+    /* A clip can be dragged PAST 0 into a negative start — deliberate, supported, floored at
+       -(duration - 0.1) — and shiftLayerKeyframes retimes its keyframes with it, so they go negative too.
+       The sanitiser that runs on EVERY project open and every undo was DELETING those: a roto mask lost
+       its animation (or the whole mask, when every keyframe was negative), and keyframed effect params
+       reverted to whatever the first surviving keyframe held. The next autosave then wrote that loss down. */
+    if (!FM.storage || !FM.storage._sanitizeLayers) return;
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: -1, duration: 4 });
+    /* Points are [x, y] PAIRS, not {x, y} — the first version of this fixture used objects, every vertex was
+       rejected as invalid, and the mask was dropped for a reason that had nothing to do with the bug. */
+    L.masks = [{ type: 'pen', path: { kf: [
+      { t: -0.8, v: [[0, 0], [10, 0], [10, 10]] },
+      { t: 0.5, v: [[2, 2], [12, 2], [12, 12]] },
+    ] } }];
+    /* Built from the REGISTRY, not from a guessed parameter name: an unknown key is dropped outright, so a
+       hand-written one would fail for a reason that has nothing to do with negative time. */
+    const fxDef = (FM.fxRegistry.all() || []).filter(d => d && !d.hidden && (d.params || []).some(pd => pd && isFinite(pd.min) && isFinite(pd.max) && pd.keyframable !== false))[0];
+    if (!fxDef) throw new Error('no keyframable effect parameter in the registry to build this fixture from');
+    const pdef = fxDef.params.filter(pd => pd && isFinite(pd.min) && isFinite(pd.max) && pd.keyframable !== false)[0];
+    const lo = pdef.min + (pdef.max - pdef.min) * 0.25, hi = pdef.min + (pdef.max - pdef.min) * 0.75;
+    const fxInst = FM.fxRegistry.makeInstance(fxDef.type);
+    fxInst.params[pdef.key] = { kf: [{ t: -0.8, v: lo, e: 'linear' }, { t: 0.5, v: hi, e: 'linear' }] };
+    L.effects = [fxInst];
+    const layers = JSON.parse(JSON.stringify([L]));
+    FM.storage._sanitizeLayers(layers);
+    const out = layers[0];
+    if (!out.masks || !out.masks.length) throw new Error('the whole mask was dropped by the sanitiser — a roto mask on a clip that starts before zero disappears the next time the project opens');
+    const mkf = out.masks[0].path && out.masks[0].path.kf;
+    if (!mkf || mkf.length !== 2) throw new Error('the mask kept ' + (mkf ? mkf.length : 0) + ' of its 2 keyframes — the one before zero was deleted, so the roto animation is gone');
+    if (!(mkf[0].t < 0)) throw new Error('the surviving mask keyframes are all at t >= 0 (' + mkf.map(k => k.t).join(', ') + ') — the negative one did not survive');
+    const p = out.effects && out.effects[0] && out.effects[0].params && out.effects[0].params[pdef.key];
+    if (!p || !Array.isArray(p.kf) || p.kf.length !== 2) throw new Error('the keyframed ' + fxDef.type + '.' + pdef.key + ' kept ' + (p && p.kf ? p.kf.length : 0) + ' of its 2 keyframes — the animation before zero was deleted');
+  });
+
+  test('a search on the Elements tab cannot leave invisible items ticked for Delete (queue 828)', { item: '828' }, async function () {
+    /* Tick three elements, tap search, type something that matches one: the bar still said "3 selected"
+       and Delete took all three. Elements and templates are IndexedDB packs with their media inside them,
+       there is no undo and no backup, and the confirm only shows a COUNT — so the two he could not see
+       were gone with nothing on screen having named them. pruneSelection exists for exactly this and its
+       own comment describes the surprise; the PROJECTS tab called it on both paths and these two on none. */
+    if (!FM.home || !FM.home._selectionState || !FM.home._setSelection) throw new Error('Home exposes no way to see what is ticked against what is on screen, so this cannot be measured');
+    const st0 = FM.home._selectionState();
+    try {
+      const shown = st0.shown || [];
+      /* Tick what is on screen PLUS something that is not — which is exactly what a search leaves behind. */
+      FM.home._setSelection(shown.concat(['q828-not-on-screen']));
+      const mid = FM.home._selectionState();
+      if (mid.selected.indexOf('q828-not-on-screen') < 0) throw new Error('could not tick a hidden item, so the pruning below proves nothing');
+      if (!FM.home._render) throw new Error('Home exposes no render seam, so the pruning cannot be driven');
+      FM.home._render('elements');               // the elements tab — the one that never pruned
+      await sleep(220);
+      const after = FM.home._selectionState();
+      if (after.selected.indexOf('q828-not-on-screen') >= 0) throw new Error('an item that is not on screen is still ticked after a render — Delete would take it, and for an element or a template that is permanent');
+    } finally {
+      try { FM.home._setSelection(st0.selected); } catch (e) {}
+    }
+  });
+
+  test('a failed save keeps the element draft instead of writing the old version over it (queue 825)', { item: '825' }, async function () {
+    /* The TEMPLATE path learned this on 2 Sep, with a comment saying why; the ELEMENT twin never did.
+       writeScene returns false on quota, on a stale tab and on a read-back mismatch. commitDraft threw
+       that away, packed the doc ON DISK — which after a failed write is an older version — wrote it over
+       the element, and then discarded the draft holding the real edits. The draft is the only copy left,
+       so the whole point is to keep it. */
+    if (!FM.elements || !FM.elements.commitDraft || !FM.storage) return;
+    const realFlush = FM.storage.flushSync;
+    const realUpdate = FM.elements.updateFrom;
+    const realList = FM.elements.list;
+    const realGetPack = FM.elements.getPack;
+    const P = FM.scene.project;
+    const hadOf = P.ofElement;
+    let updates = 0;
+    try {
+      FM.storage.flushSync = () => false;                       // the save is failing, as it does at quota
+      FM.elements.updateFrom = async function () { updates++; return true; };
+      /* ⚠️ THE ELEMENT HAS TO EXIST. commitDraft returns early when the element is not in the list — which
+         is a DIFFERENT refusal, and the first version of this test passed against the bug because of it:
+         green for "deleted mid-edit", not for "the save failed". */
+      FM.elements.list = () => [{ id: 'q825-element', name: 'q825' }];
+      FM.elements.getPack = async () => ({ layers: [{ id: 'x' }] });
+      P.ofElement = 'q825-element';
+      const ok = await FM.elements.commitDraft();
+      if (ok) throw new Error('commitDraft reported success while the save was failing — it would then discard the draft, which is the only copy of his edits');
+      if (updates > 0) throw new Error('it went on to write the element from the doc on disk (' + updates + ' write(s)) even though the flush had failed — that is the older version overwriting the newer one');
+    } finally {
+      FM.storage.flushSync = realFlush;
+      FM.elements.updateFrom = realUpdate;
+      FM.elements.list = realList;
+      FM.elements.getPack = realGetPack;
+      if (hadOf === undefined) delete P.ofElement; else P.ofElement = hadOf;
     }
   });
 
