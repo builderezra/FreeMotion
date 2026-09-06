@@ -28,7 +28,28 @@ window.FM = window.FM || {};
   // Build a reversed buffer for the trimmed clip region, honoring clip speed
   // (same resample as the exporter so preview matches output). lenSamples spans the
   // clip's timeline duration; source is read at speed× rate from the end backward.
+  /* ⚠️ queue 823: MEMOISED, because this walks every sample by hand on the main thread. It is called from
+     start(), and start() re-runs on a loop wrap, a volume change, a delete and a preview-rate change — so a
+     looping project with a reversed clip rebuilt the WHOLE clip's backwards audio every lap (measured: about
+     40–50ms of stall and roughly 11MB thrown away each time, even when the loop region is one second).
+     The key is everything the output depends on, so nothing has to remember to invalidate it: a trim, a
+     length change, a speed edit or a different source all change the key by themselves. Stored on the media
+     record, which is where the frame cache already lives. */
+  function reversedKey(ab, layer) {
+    const sp = layer.speed;
+    const spSig = (FM.isAnimated && FM.isAnimated(sp)) ? JSON.stringify(sp.kf || sp) : String(sp == null ? 1 : sp);
+    return [ab.sampleRate, ab.length, layer.trimStart || 0, layer.duration || 0, spSig, !!layer.reversed].join('|');
+  }
   function reversedBuffer(audioCtx, ab, layer) {
+    const m = FM.media.get(layer.id);
+    const key = reversedKey(ab, layer);
+    if (m && m._revBuf && m._revKey === key) return m._revBuf;
+    const out = buildReversedBuffer(audioCtx, ab, layer);
+    if (m) { m._revKey = key; m._revBuf = out; }
+    return out;
+  }
+  FM._reversedKey = reversedKey;   // suite seam: the key is what makes the cache honest
+  function buildReversedBuffer(audioCtx, ab, layer) {
     const sr = ab.sampleRate;
     const startSample = Math.floor(layer.trimStart * sr);
     const availSec = Math.max(0, ab.duration - layer.trimStart);

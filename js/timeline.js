@@ -106,7 +106,16 @@ window.FM = window.FM || {};
   }
   async function clipSplit() {
     const ls = clipCutTargets(); if (!ls.length) return false;
-    for (const l of ls) await FM.splitLayer(l.id);
+    /* queue 823: ONE UNDO FOR ONE PRESS. FM.splitLayer commits history itself, so splitting a selection of
+       four clips left four entries and undo took them apart one at a time — it read as undo only half
+       working. FM.duplicateSelection has muted the inner commits and written one at the end since it was
+       written (js/app.js), for exactly this; same pattern, restored in a finally so a throw mid-way cannot
+       leave history muted for the rest of the session. */
+    const hist = FM.history, realCommit = hist && hist.commit;
+    if (hist && ls.length > 1) hist.commit = function () {};
+    try { for (const l of ls) await FM.splitLayer(l.id); }
+    finally { if (hist) hist.commit = realCommit; }
+    if (hist && ls.length > 1) hist.commit();
     return true;
   }
   function clipNudge(one, many) {
@@ -2360,7 +2369,15 @@ window.FM = window.FM || {};
           e.stopPropagation(); e.preventDefault();
           beginCue(mode, e.clientX, e.pointerId, captureEl);
         };
-        chip.addEventListener('pointerdown', (e) => startCue(e, 'move'));
+        /* queue 823: a press that lands on a cue's own GRIP belongs to the grip. On a mouse the grip stops
+           propagation, so this never fired for it; on TOUCH the grip deliberately does not (queue 136 —
+           the clip keeps the un-armed gesture), so this handler ran too and started a MOVE, which is what
+           the window handlers then drove. The arrows were painted on the cue, the phone buzzed as though a
+           trim had armed, and the cue moved instead of being trimmed — a finger could never trim a cue. */
+        chip.addEventListener('pointerdown', (e) => {
+          if (e.target && e.target.closest && e.target.closest('.cap-cue-grip')) return;
+          startCue(e, 'move');
+        });
         chip.addEventListener('dblclick', (e) => {
           e.stopPropagation(); e.preventDefault();
           FM.selectLayer(layer.id);
@@ -4130,7 +4147,11 @@ window.FM = window.FM || {};
       // mouse down + wheel), not the scroll event — during playback the playhead's own auto-scroll
       // rewrites scrollLeft every frame, so user scrolls get swallowed by the feedback guard above.
       if (timelineEl) {
-        timelineEl.addEventListener('pointerdown', () => { stopMomentum(); if (FM.playing) FM.pause(); }, true);   // any grab kills a glide + pauses
+        // queue 823: `stopScrollMomentum` too — this line killed the horizontal glide only, so putting a
+        // finger on a clip or a layer name did not stop the LAYER LIST sliding, and the stab that was meant
+        // to stop it landed as a tap on whatever slid under it. Capture phase, so a clip's own
+        // stopPropagation cannot hide the grab.
+        timelineEl.addEventListener('pointerdown', () => { stopMomentum(); stopScrollMomentum(); if (FM.playing) FM.pause(); }, true);   // any grab kills a glide + pauses
         timelineEl.addEventListener('wheel', (e) => { stopMomentum(); if (!e.ctrlKey && !e.metaKey && FM.playing) FM.pause(); }, { passive: true });
       }
       // two-finger PINCH zoom — tracked on window in CAPTURE phase so clip/ruler stopPropagation can't hide it
@@ -4586,8 +4607,19 @@ window.FM = window.FM || {};
         if (trimDrag) {
           if (e.pointerType !== 'mouse') shieldClicks(300);   // the edit sheet opened under this finger when the trim armed (queue 707)
           if (FM.autoFitDuration) FM.autoFitDuration();   // fit comp to clips after a trim
+          /* queue 823: A GRIP TOUCHED AND RELEASED IS NOT AN EDIT. This committed unconditionally, so a
+             tap on a trim handle — or a press that armed and never travelled — wrote an undo entry that
+             changes nothing: the next undo appeared to do nothing at all, and you had to press it twice to
+             take back the edit before it. The slip release two blocks up has compared against its own
+             pre-grab value since it was written; trimDrag has carried the same three values all along. */
+          const TL = trimDrag.layer;
+          const changed = Math.abs(TL.start - trimDrag.start) > 1e-4
+            || Math.abs(TL.duration - trimDrag.dur) > 1e-4
+            || (TL.trimStart != null && Math.abs((TL.trimStart || 0) - (trimDrag.trim || 0)) > 1e-4);
           trimDrag = null; hideSnap(); hideTrimHud();
-          FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit();
+          // the rebuild and the refresh stay unconditional: the grip's own colour and geometry must settle
+          FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh();
+          if (changed && FM.history) FM.history.commit();
           return;
         }
         if (kfDrag) {

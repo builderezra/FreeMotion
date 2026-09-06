@@ -1707,6 +1707,11 @@ window.FM = window.FM || {};
            * `_resumedAt`, so without these two lines the envelope is flat 1.0 straight through the cut.
            * Same three lines as play(), for the same reason, in the third place that needed them. */
           m._resumedAt = now;
+          /* queue 823: …AND THE DRIFT CONTROLLER RE-WARMS, exactly as it does on play(). A wrap is the same
+             discontinuity the line below calls it: the element has just been re-seeked, so the bias learned
+             at the old position describes a position that no longer exists. Left alone, `_warmCt` stayed set
+             from the first lap and the controller sat frozen for every lap after it. */
+          m._warmCt = null; m._errBias = null; m._rateAt = 0; m._baseRate = null;
           m.el.volume = 0;
         } catch (e) {}
       }
@@ -2075,6 +2080,13 @@ window.FM = window.FM || {};
       FM.scene.layers.forEach(l => {
         const m = FM.media.get(l.id);
         if (!m || !m.el || m.el.muted) return;
+        /* ⚠️ queue 823: ONLY SOMETHING THAT CAN REPORT PROGRESS MAY HOLD UP THE START. This wait watches
+           each element's currentTime advance before letting the transport go, so sound and picture start
+           together. An IMAGE's record has an element that never advances, so it could never satisfy the
+           wait — and every press of play on a project made of photos, text and shapes sat still for the
+           full timeout before anything moved. Measured as 0.4s, on every press. */
+        if (typeof m.el.currentTime !== 'number' || !('play' in m.el)) return;
+        if (m.kind && m.kind !== 'video' && m.kind !== 'audio') return;
         if (!FM.isLayerVisibleAt(l, FM.time)) return;
         if (!(FM.layerVolume(l, FM.time) > 0)) return;
         waiters.push({ el: m.el, from: m.el.currentTime || 0 });

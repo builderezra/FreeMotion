@@ -35548,6 +35548,122 @@
     }
   });
 
+  test('pressing play in a project made of pictures starts at once (queue 823 c7)', { item: '823' }, async function () {
+    /* The start-of-play wait watches each media element's currentTime advance so sound and picture start
+       together. An IMAGE's record has an element that never advances, so it could never satisfy the wait —
+       and every press of play on a project of photos, text and shapes sat still for the full timeout first.
+       Measured at 0.4s, on every press. */
+    if (!FM.play || !FM.pause) return;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedLayers = FM.scene.layers.slice();
+    const t0 = FM.time;
+    const media = [];
+    try {
+      const img = FM.makeLayer('image', { start: 0, duration: 6 });
+      FM.scene.layers.push(img); media.push(img.id);
+      const cv = document.createElement('canvas'); cv.width = 32; cv.height = 32;
+      FM.media.set(img.id, { kind: 'image', el: cv, width: 32, height: 32, duration: 0, layerId: img.id });
+      FM.timeline.rebuild(); await sleep(120);
+      FM.setTime ? FM.setTime(0) : (FM.time = 0);
+      await sleep(60);
+      FM.play();
+      await sleep(220);                      // comfortably inside the old 400ms wait
+      const moved = FM.time;
+      FM.pause();
+      if (!(moved > 0.02)) throw new Error('220ms after pressing play the playhead is still at ' + moved.toFixed(3) + 's — a picture cannot report progress, so it was holding up the start of a project it should never have delayed');
+    } finally {
+      try { if (FM.playing) FM.pause(); } catch (e) {}
+      media.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.time = t0; FM.timeline.rebuild(); await sleep(40);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  test('a trim grip touched and released writes no undo entry (queue 823 c10a)', { item: '823' }, async function () {
+    /* It committed unconditionally, so a tap on a trim handle counted as an edit: the next undo appeared to
+       do nothing, and you had to press it twice to take back the change before it. The slip release two
+       blocks above has compared against its own pre-grab value since it was written. */
+    if (!FM.history || !FM.history.commit) return;
+    const savedSel = FM.scene.selectedId;
+    const savedLayers = FM.scene.layers.slice();
+    const real = FM.history.commit;
+    let commits = 0;
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: 1, duration: 3 });
+    try {
+      FM.scene.layers.push(L);
+      FM.timeline.rebuild(); FM.selectLayer(L.id); await sleep(160);
+      /* Re-acquired immediately before each gesture: an async rebuild (a filmstrip or waveform arriving)
+         swaps the grip out, and the suite refuses a dispatch on a detached node — rightly, since it would
+         exercise an orphan. */
+      const gripNow = () => {
+        const c = [].slice.call(document.querySelectorAll('.clip')).filter(el => el.dataset && el.dataset.id === L.id)[0];
+        return attached(c && c.querySelector('.clip-grip'), 'trim grip on this clip');
+      };
+      FM.history.commit = function () { commits++; return real.apply(this, arguments); };
+      let grip = gripNow();
+      const r = grip.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      grip.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 51, pointerType: 'mouse', clientX: x, clientY: y, buttons: 1 }));
+      await sleep(40);
+      window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: 51, pointerType: 'mouse', clientX: x, clientY: y, buttons: 0 }));
+      await sleep(120);
+      if (commits > 0) throw new Error('a grip touched and released with no movement wrote ' + commits + ' undo entr(y/ies) — the next undo would appear to do nothing');
+
+      /* CONTROL: a grip that DOES move must still commit, or this test would pass against a release path
+         that stopped recording trims altogether. */
+      commits = 0;
+      grip = gripNow();
+      grip.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 52, pointerType: 'mouse', clientX: x, clientY: y, buttons: 1 }));
+      for (let i = 1; i <= 4; i++) window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, pointerId: 52, pointerType: 'mouse', clientX: x + 18 * i, clientY: y, buttons: 1 }));
+      await sleep(60);
+      window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: 52, pointerType: 'mouse', clientX: x + 72, clientY: y, buttons: 0 }));
+      await sleep(120);
+      if (commits === 0) throw new Error('a trim that really moved the edge wrote no undo entry either — the fix stopped recording trims');
+    } finally {
+      FM.history.commit = real;
+      try { FM.timeline._abortGestures(); } catch (e) {}
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(savedSel || null); FM.timeline.rebuild(); await sleep(40);
+    }
+  });
+
+  test('splitting several clips at once costs one undo, not one each (queue 823 c10b)', { item: '823' }, async function () {
+    /* FM.splitLayer commits history itself, so splitting a selection of four left four entries and undo
+       took them apart one at a time — it reads as undo only half working. FM.duplicateSelection has muted
+       the inner commits and written one at the end since it was written, for exactly this. */
+    if (!FM.history || !FM.history.commit || !FM.timeline.clipKey) return;
+    const savedSel = FM.scene.selectedId;
+    const savedLayers = FM.scene.layers.slice();
+    const t0 = FM.time;
+    const real = FM.history.commit;
+    let commits = 0;
+    try {
+      const made = [];
+      for (let i = 0; i < 3; i++) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: 0, duration: 4 });
+        FM.scene.layers.push(L); made.push(L);
+      }
+      FM.timeline.rebuild();
+      FM.selectLayer(made[0].id);
+      if (FM.toggleSelect) { FM.toggleSelect(made[1].id); FM.toggleSelect(made[2].id); }
+      await sleep(140);
+      const ids = FM.selectionIds ? FM.selectionIds() : [];
+      if (ids.length < 3) throw new Error('could not select three clips at once (' + ids.length + '), so the multi-split cannot be measured');
+      FM.time = 2;
+      const n0 = FM.scene.layers.length;
+      FM.history.commit = function () { commits++; return real.apply(this, arguments); };
+      await FM.timeline.clipKey('s');
+      await sleep(400);
+      if (FM.scene.layers.length <= n0) throw new Error('nothing was split (' + n0 + ' → ' + FM.scene.layers.length + ' layers), so the undo count below means nothing');
+      if (commits > 1) throw new Error('one press of S wrote ' + commits + ' undo entries for ' + ids.length + ' clips — undo takes them apart one at a time instead of putting the timeline back');
+    } finally {
+      FM.history.commit = real;
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.time = t0; FM.selectLayer(savedSel || null); FM.timeline.rebuild(); await sleep(40);
+    }
+  });
+
   test('a raised inspector grows its option cards into the height it was given (queue 807)', { item: '807' }, async function () {
     /* Measured in the pane at 1280x800 on v15.88: raised by 250px the cards stayed 48px and the last one
        ended 266px above the panel's bottom, because --cat-h asks the band floor (--tl-h) how much room
