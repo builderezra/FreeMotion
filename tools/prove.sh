@@ -81,7 +81,13 @@ if [ -n "$RETRY" ] && [ "$WIDTH" != "380" ]; then
   done < "$TMP/ctrl2.v"
 fi
 # One catching test per queue item the log line names — a batch of three fixes needs three proofs, not one.
-NEED="$(printf '%s' "$LOGLINE" | grep -o 'queue [0-9]\+' | grep -o '[0-9]\+' | sort -u | wc -l | tr -d ' ')"; [ "$NEED" -ge 1 ] || NEED=1
+# ⚠️ "queue NNN (partial)" MEANS THE ITEM IS NOT CLOSED, so it does not owe a proof — ship.sh's
+# closes-gate has honoured that marker since 26 Aug (see PARTIALS there) and this counter did not, so a
+# release that declared one partial item was refused for a proof it was never claiming to have. The two
+# gates now read the same marker; declaring a partial is a line HE reads either way.
+_PARTIAL="$(printf '%s' "$LOGLINE" | grep -o 'queue [0-9]\+ (partial)' | grep -o '[0-9]\+' | sort -u)"
+NEED="$(printf '%s' "$LOGLINE" | grep -o 'queue [0-9]\+' | grep -o '[0-9]\+' | sort -u \
+        | { [ -n "$_PARTIAL" ] && grep -vxF "$_PARTIAL" || cat; } | wc -l | tr -d ' ')"; [ "$NEED" -ge 1 ] || NEED=1
 if [ "$BAD" = 0 ] && [ "$CAUGHT" -ge "$NEED" ]; then
   echo "✅ prove: $CAUGHT test(s) fail without their fix and pass with it ($NEED queue item(s) named in the log line)$( [ "$DEADN" -gt 0 ] && echo "; $DEADN changed test(s) do not see the fix — see above")."; exit 0
 fi

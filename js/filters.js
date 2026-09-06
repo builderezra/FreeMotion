@@ -129,8 +129,12 @@ window.FM = window.FM || {};
     // ---- Stylised -----------------------------------------------------------------------------
     { id: 'comic', name: 'Comic Ink', section: 'stylised',
       desc: 'Flat blocks of colour with the edges drawn back in, like inked line art.',
+      /* queue 813: it used to end on e('edge', { amount: 1 }), and `mix` defaults to 100 — which the
+         kernel reads as "replace the picture with the edge map". So the one filter whose description
+         promises colour rendered as white-on-black line art. Now it inks: the posterised colour stays
+         and the lines are multiplied over it. */
       effects: [e('contrast', { amount: 1.15 }), e('posterize', { levels: 5, mix: 0.85 }),
-                e('edge', { amount: 1 })] },
+                e('edge', { amount: 1.2, polarity: 1, blend: 1, mix: 70, threshold: 16 })] },
     { id: 'poster', name: 'Poster Print', section: 'stylised',
       desc: 'Few colours, printed as dots — a screen-printed poster.',
       effects: [e('contrast', { amount: 1.2 }), e('posterize', { levels: 4 }),
@@ -590,7 +594,22 @@ window.FM = window.FM || {};
       box.effects = (def.effects || []).map(saneChild).filter(Boolean);
       if (!box.effects.length) return null;
       box.name = def.name;      // so the row reads "Teal & Orange", not "Filter"
+      /* queue 812: WHICH filter this is, not just what it is called. Without it the container carried no
+         identity at all, so the ⋯ menu's Favourite had nothing to star and starred the hidden container
+         TYPE instead — the toast said "★ Filter added to favourites" and the Filters tab showed none.
+         Metadata only: drawFilterContainer reads `effects`, so a saved project renders byte-identical. */
+      box.fid = def.id;
       return box;
+    },
+    /* Instances saved before v15.91 have no `fid`, and a custom filter the user renamed has no matching
+       name either — both resolve to null, and the caller then offers nothing rather than starring a lie. */
+    idOfInstance: function (box) {
+      if (!box) return null;
+      if (box.fid && this.get(box.fid)) return box.fid;
+      const nm = String(box.name || '').trim().toLowerCase();
+      if (!nm) return null;
+      const hit = this.all().filter(f => f && String(f.name || '').trim().toLowerCase() === nm)[0];
+      return hit ? hit.id : null;
     },
   };
 })(window.FM);

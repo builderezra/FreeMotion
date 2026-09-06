@@ -4935,6 +4935,12 @@ window.FM = window.FM || {};
       }
       root.style.setProperty('--tl-h', want + 'px');       // pure CSS-grid resize — no timeline reflow needed (height doesn't touch clip-x / pps math)
       stageResized();
+      /* queue 811: …AND THE OPEN EFFECTS MENU COMES WITH IT. v15.89 stopped a press here from closing
+         the browser and taught the ADD MENU's drag to re-place the sheet, but not this one. The sheet
+         is a fixed overlay pinned to the panel's rect at open, and its only other trigger is a canvas
+         resize — which a band-height change does NOT cause when the canvas is width-bound, so it stayed
+         where it was while the band moved out from under it. */
+      amSheetFollow();
     });
     const end = () => {
       if (!dragging) return;
@@ -4944,6 +4950,7 @@ window.FM = window.FM || {};
          instead of writing the 232 that parseInt produced from the stylesheet's clamp(). */
       const cur = parseInt(root.style.getPropertyValue('--tl-h'), 10);
       try { if (cur) localStorage.setItem('fm_tl_h', cur); } catch (_) {}
+      amSheetFollow();                                   // queue 811: and once more where the drag lands
     };
     rez.addEventListener('pointerup', end);
     rez.addEventListener('pointercancel', end);

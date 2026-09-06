@@ -1211,12 +1211,24 @@ window.FM = window.FM || {};
     // Favourite from here too: you usually decide an effect is a keeper while you are USING it, not
     // while browsing for it — and until now the ★ existed only in the browser. (#62)
     if (FM.fxBrowser && FM.fxBrowser.toggleFav) {
-      const faved = FM.fxBrowser.isFav(fx.type);
-      const nm = (reg && reg.label) || fx.type;
-      items.push({ label: faved ? 'Remove from favourites' : 'Favourite', action: () => {
-        const on = FM.fxBrowser.toggleFav(fx.type);
-        if (FM.toast) FM.toast(on ? '★ ' + nm + ' added to favourites' : nm + ' removed from favourites', 1600);
-      } });
+      /* ⚠️ queue 812: A FILTER ROW STARS THE FILTER, not the box it lives in. Every filter — a preset, an
+         Empty filter, a Noir you retuned — is one container whose `type` is the hidden `'filter'`, so
+         this wrote that container type into the effects favourites: the toast said "★ Filter added to
+         favourites", the Filters tab grew no Favourites row, and the browser's Faves view listed a bare
+         "Filter" tile. #581 shipped the lookup that puts a CUSTOM filter in that row (v13.14) and nothing
+         in the app could ever reach it — the only other caller is the ★ on a Filters TILE, which a saved
+         custom filter does not get until it is already a favourite. */
+      const fid = (FM.isFxContainer && FM.isFxContainer(fx) && FM.filters && FM.filters.idOfInstance)
+        ? FM.filters.idOfInstance(fx) : null;
+      const isBox = !!(FM.isFxContainer && FM.isFxContainer(fx));
+      if (!isBox || fid) {
+        const faved = fid ? FM.filters.isFave(fid) : FM.fxBrowser.isFav(fx.type);
+        const nm = fid ? (fx.name || 'Filter') : ((reg && reg.label) || fx.type);
+        items.push({ label: faved ? 'Remove from favourites' : 'Favourite', action: () => {
+          const on = fid ? FM.filters.toggleFave(fid) : FM.fxBrowser.toggleFav(fx.type);
+          if (FM.toast) FM.toast(on ? '★ ' + nm + ' added to favourites' : nm + ' removed from favourites', 1600);
+        } });
+      }
     }
     // Naming what is on the clipboard matters more here than in most menus: an effect stack is a list
     // of near-identical rows, and a bare "Paste effect" gives you no way to tell what you are about to

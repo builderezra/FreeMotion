@@ -34838,6 +34838,169 @@
     }
   });
 
+  test('dragging the TIMELINE’s divider carries the open Effects menu with it (queue 811)', { item: '811' }, async function () {
+    /* The other half of v15.89. That release stopped a press on #tl-resizer from closing the browser and
+       taught the ADD MENU's drag to re-place the sheet — but the timeline divider's own drag only wrote
+       --tl-h and called stageResized(). The sheet's only other trigger is a ResizeObserver on the canvas,
+       so this hid whenever the canvas happened to change size with the band. The project here is
+       DELIBERATELY ultrawide: the canvas is then width-bound, its box does not move when the band height
+       does, and the observer never fires — which is the case where the sheet stayed put for good. */
+    if (window.innerWidth < 701) return;
+    const rez = document.getElementById('tl-resizer');
+    const panel = document.getElementById('inspector-panel');
+    if (!rez || !panel) return;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const rootEl = document.documentElement;
+    const savedTlH = rootEl.style.getPropertyValue('--tl-h');
+    let savedStore = null; try { savedStore = localStorage.getItem('fm_tl_h'); } catch (e) {}
+    const savedSel = FM.scene.selectedId;
+    const savedLayers = FM.scene.layers.slice();
+    const pw = FM.scene.project.width, ph = FM.scene.project.height;
+    if (!FM.scene.layers.length) FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: 0, duration: 4 }));
+    try {
+      FM.scene.project.width = 3000; FM.scene.project.height = 1000;   // width-bound: the canvas cannot change with the band
+      FM.timeline.rebuild(); FM.selectLayer(FM.scene.layers[0].id); FM.refreshAll(); await sleep(250);
+      FM.fxBrowser.open(FM.scene.layers[0]); await sleep(260);
+      const fxb = document.getElementById('fx-browser');
+      if (!FM.fxBrowser.isOpen() || !fxb) throw new Error('the Effects browser did not open');
+      const cv = document.getElementById('preview');
+      const c0 = cv.getBoundingClientRect();
+      const p0 = panel.getBoundingClientRect(), f0 = fxb.getBoundingClientRect();
+      if (Math.abs(f0.top - p0.top) > 2) throw new Error('control: at open the menu is not pinned to the panel (' + Math.round(f0.top) + ' vs ' + Math.round(p0.top) + ')');
+
+      const r = rez.getBoundingClientRect(), x = r.left + r.width / 2, y0 = r.top + r.height / 2;
+      const ev = (t, cy, b) => rez.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 5, pointerType: 'mouse', clientX: x, clientY: cy, buttons: b }));
+      ev('pointerdown', y0, 1);
+      for (let i = 1; i <= 6; i++) ev('pointermove', y0 - (80 * i / 6), 1);
+      ev('pointerup', y0 - 80, 0);
+      await sleep(300);            // long enough for a ResizeObserver to have fired twice, if one were going to
+
+      const p1 = panel.getBoundingClientRect(), f1 = fxb.getBoundingClientRect(), c1 = cv.getBoundingClientRect();
+      if (Math.abs(p1.top - p0.top) < 20) throw new Error('control: the band did not actually move (' + Math.round(p0.top) + ' → ' + Math.round(p1.top) + '), so nothing below is being tested');
+      if (Math.abs(c1.height - c0.height) > 1) throw new Error('control: the canvas resized with the band (' + Math.round(c0.height) + ' → ' + Math.round(c1.height) + '), so its observer would re-place the sheet and this test could not see the bug');
+      if (Math.abs(f1.top - p1.top) > 2) throw new Error('the band moved to y=' + Math.round(p1.top) + ' and the Effects menu stayed at y=' + Math.round(f1.top) + ' — it is hanging where the band used to be');
+    } finally {
+      try { if (FM.fxBrowser.isOpen()) FM.fxBrowser.close(); } catch (e) {}
+      FM.scene.project.width = pw; FM.scene.project.height = ph;
+      if (savedTlH) rootEl.style.setProperty('--tl-h', savedTlH); else rootEl.style.removeProperty('--tl-h');
+      try { if (savedStore === null) localStorage.removeItem('fm_tl_h'); else localStorage.setItem('fm_tl_h', savedStore); } catch (e) {}
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.timeline.rebuild(); FM.selectLayer(savedSel || null); FM.refreshAll(); await sleep(60);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  test('favouriting a FILTER row stars that filter, so it reaches the Filters tab (queue 812)', { item: '812' }, async function () {
+    /* Driven through the REAL ⋯ menu, because the bug was invisible from any seam: every filter is one
+       container whose `type` is the hidden 'filter', and the menu starred that TYPE. The toast said
+       "★ Filter added to favourites", the Filters tab grew no Favourites row, and the effects browser's
+       Faves view listed a bare "Filter" tile. #581 shipped the lookup that puts a custom filter in that
+       row (v13.14) and nothing a person could click ever reached it. */
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedSel = FM.scene.selectedId;
+    const savedLayers = FM.scene.layers.slice();
+    let faves0 = null, fxFav0 = null;
+    try { faves0 = localStorage.getItem('fm.filterFaves'); } catch (e) {}
+    try { fxFav0 = localStorage.getItem('fm.fx.fav'); } catch (e) {}
+    const all = FM.filters.all();
+    if (!all.length) throw new Error('there are no filters at all, so this cannot be measured');
+    const target = all.filter(f => !FM.filters.isFave(f.id))[0] || all[0];
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: 0, duration: 4 });
+    try {
+      FM.scene.layers.push(L);
+      const box = FM.filters.makeInstance(target.id);
+      if (!box) throw new Error('could not build the filter "' + target.name + '"');
+      box._expanded = true;                       // the ⋯ only exists on an open row
+      L.effects = [box];
+      FM.timeline.rebuild(); FM.selectLayer(L.id); FM.refreshAll(); await sleep(150);
+      if (FM.inspector.openCategory) FM.inspector.openCategory('effects');
+      await sleep(200);
+
+      const rows = [].slice.call(document.querySelectorAll('#inspector .fx-row, #inspector .fx-item, #inspector .fx-card'));
+      let more = null;
+      const btns = [].slice.call(document.querySelectorAll('#inspector .fx-icon-btn'));
+      more = btns.filter(b => (b.textContent || '').trim() === '⋯')[0] || null;
+      if (!more) throw new Error('the filter row has no ⋯ button on screen (' + rows.length + ' row(s), ' + btns.length + ' icon button(s)) — this test cannot reach the menu it is about');
+      more.click(); await sleep(180);
+
+      const items = [].slice.call(document.querySelectorAll('#ctx-menu button, #ctx-menu .ctx-item, #ctx-menu [role="menuitem"]'));
+      const fav = items.filter(i => /favourite/i.test((i.textContent || '')) && !/remove/i.test(i.textContent || ''))[0];
+      if (!fav) throw new Error('the ⋯ menu has no Favourite entry (' + items.map(i => (i.textContent || '').trim()).join(' | ') + ')');
+      fav.click(); await sleep(200);
+
+      /* THE OUTCOME HE WOULD SEE: the filter is in the Filters tab's favourites… */
+      if (!FM.filters.isFave(target.id) || FM.filters.faves().filter(f => f && f.id === target.id).length !== 1)
+        throw new Error('after using Favourite on the "' + target.name + '" row, the Filters tab still has no favourite for it — the row starred something else');
+      /* …and the hidden container type is NOT in the effects favourites, where it used to land and then
+         draw a bare "Filter" tile in the browser's Faves view. */
+      if (FM.fxBrowser.isFav(FM.FX_CONTAINER))
+        throw new Error('the hidden "' + FM.FX_CONTAINER + '" container type was starred instead — that is the bug, and it puts a nameless tile in the effects Faves view');
+      /* And the identity has to survive the round trip a saved project makes. */
+      const roundTripped = JSON.parse(JSON.stringify(box, FM.jsonReplacer));
+      if (FM.filters.idOfInstance && FM.filters.idOfInstance(roundTripped) !== target.id)
+        throw new Error('a saved filter no longer says which filter it is, so Favourite would break again after a reload');
+    } finally {
+      try { if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
+      try { if (FM.filters.isFave(target.id)) FM.filters.toggleFave(target.id); } catch (e) {}
+      try { if (faves0 === null) localStorage.removeItem('fm.filterFaves'); else localStorage.setItem('fm.filterFaves', faves0); } catch (e) {}
+      try { if (fxFav0 === null) localStorage.removeItem('fm.fx.fav'); else localStorage.setItem('fm.fx.fav', fxFav0); } catch (e) {}
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.timeline.rebuild(); FM.selectLayer(savedSel || null); FM.refreshAll(); await sleep(40);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  test('Comic Ink keeps the colour and draws the lines over it, and an edge with no Draw-as still replaces (queue 813)', { item: '813' }, async function () {
+    /* Its description promises "flat blocks of colour with the edges drawn back in" and it rendered as a
+       white-on-black edge map, because the last step is `edge` and that effect's `mix` defaults to 100,
+       which the kernel reads as "replace the picture". Rendered through the app's own renderer on the
+       Stylised photograph before this was written: no colour anywhere. The second half of this test is
+       the compatibility half — the new Draw-as control defaults to the OLD behaviour, so every project
+       that already carries a Find Edges renders exactly as it did. */
+    const S = 120, id = '_q813_img';
+    const cvs = document.createElement('canvas'); cvs.width = S; cvs.height = S;
+    const g2 = cvs.getContext('2d');
+    /* ⚠️ THE TWO HALVES MUST DIFFER IN BRIGHTNESS, not only in hue. The first version of this fixture used
+       #c8402a over #2a6fc8 — a red and a blue whose lumas are 102 and 101 — and the Sobel reads luma
+       only, so there was no edge at the seam AT ALL and the test could not tell "the ink line is drawn"
+       from "the filter did nothing". Measured: darkest 87 against a flat 87. These two are 166 and 83. */
+    g2.fillStyle = '#e0a030'; g2.fillRect(0, 0, S, S / 2);          // bright warm above (luma ~166)
+    g2.fillStyle = '#3050c0'; g2.fillRect(0, S / 2, S, S / 2);      // dark cool below (luma ~83) — a real seam
+    const proj = { project: { width: S, height: S, fps: 30, duration: 2, background: '#000000' }, layers: [] };
+    const mk = () => { const l = FM.makeLayer('image', { x: S / 2, y: S / 2, start: 0, duration: 2 }); l.id = id; return l; };
+    try {
+      FM.media.set(id, { kind: 'image', el: cvs, width: S, height: S, duration: 0 }); FM.media.pin(id);
+
+      const box = FM.filters.makeInstance('comic');
+      if (!box) throw new Error('there is no Comic Ink filter to measure');
+      const inked = mk(); inked.effects = [box];
+      const a = offscreen(S, S); FM.renderScene(a.getContext('2d'), Object.assign({}, proj, { layers: [inked] }), 0.001);
+      const ax = a.getContext('2d');
+      const top = px(ax, S / 2, Math.round(S * 0.22)), bot = px(ax, S / 2, Math.round(S * 0.78));
+      if (!(top[0] - top[2] > 40)) throw new Error('the flat area above the seam came out as ' + [top[0], top[1], top[2]] + ' — Comic Ink is still replacing the picture with its line map instead of inking over it');
+      if (!(bot[2] - bot[0] > 40)) throw new Error('the flat area below the seam came out as ' + [bot[0], bot[1], bot[2]] + ' — the colour did not survive the ink');
+      /* And the line is actually drawn: the seam has to be darker than the flat colour on both sides. */
+      let darkest = 255;
+      for (let y = Math.round(S / 2) - 3; y <= Math.round(S / 2) + 3; y++) { const p = px(ax, S / 2, y); darkest = Math.min(darkest, (p[0] + p[1] + p[2]) / 3); }
+      const flat = Math.min((top[0] + top[1] + top[2]) / 3, (bot[0] + bot[1] + bot[2]) / 3);
+      if (!(darkest < flat - 25)) throw new Error('there is no ink line at the seam: darkest ' + Math.round(darkest) + ' against a flat ' + Math.round(flat));
+
+      /* THE LEGACY HALF. An edge instance with no Draw-as — every one saved before this — still paints
+         the line map over the whole frame, so an existing project is untouched. */
+      const legacy = FM.fxRegistry.makeInstance('edge');
+      if (!legacy) throw new Error('there is no Find Edges effect in the registry');
+      delete legacy.params.blend;
+      const old = mk(); old.effects = [legacy];
+      const b = offscreen(S, S); FM.renderScene(b.getContext('2d'), Object.assign({}, proj, { layers: [old] }), 0.001);
+      const q = px(b.getContext('2d'), S / 2, Math.round(S * 0.22));
+      if (!(Math.abs(q[0] - q[1]) < 3 && Math.abs(q[1] - q[2]) < 3)) throw new Error('a Find Edges with no Draw-as setting no longer replaces the picture: it rendered ' + [q[0], q[1], q[2]] + ' — every saved project carrying this effect just changed');
+    } finally {
+      try { FM.media.remove(id); } catch (e) {}
+    }
+  });
+
   test('a raised inspector grows its option cards into the height it was given (queue 807)', { item: '807' }, async function () {
     /* Measured in the pane at 1280x800 on v15.88: raised by 250px the cards stayed 48px and the last one
        ended 266px above the panel's bottom, because --cat-h asks the band floor (--tl-h) how much room

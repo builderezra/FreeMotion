@@ -50,6 +50,26 @@ fi
 # the whole ship. spotcheck.sh holds .spotcheck-in-progress while it runs and refuses while this lock exists; same here.
 [ -f .spotcheck-in-progress ] && { echo "❌ a spot-check is running (.spotcheck-in-progress) — its suite slices would contend with this ship's; wait for it"; exit 1; }
 touch .ship-in-progress; trap 'rm -f .ship-in-progress' EXIT INT TERM
+
+# ⚠️ A RELEASE CANNOT RUN WITHOUT A LOCAL SERVER, AND THE OLD FAILURE WAS DISCOVERED TOO LATE (queue 814,
+# 6 Sep). `tests/_cdp.py` does not start one — it expects port 8777 to be serving — and when nothing was,
+# a ship spent its whole proof step and then died at the suite with "Connection refused", having proved
+# five tests and shipped nothing. The proof step is the expensive half, so the check belongs BEFORE it,
+# and a missing server is not a decision anybody needs to make: start one. Started detached, from the
+# repo root, and left running — the suite, the probes and the browser pane all want the same thing.
+if ! curl -sf -o /dev/null "http://localhost:8777/tests/run.html"; then
+  echo "→ nothing is serving port 8777 — starting one (the suite does not start its own)…"
+  nohup python3 -m http.server 8777 --bind 127.0.0.1 >/dev/null 2>&1 </dev/null &
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    sleep 0.5
+    curl -sf -o /dev/null "http://localhost:8777/tests/run.html" && break
+  done
+  if ! curl -sf -o /dev/null "http://localhost:8777/tests/run.html"; then
+    echo "❌ could not start a server on port 8777, and the suite cannot run without one. Nothing is committed or pushed."
+    exit 1
+  fi
+  echo "   server up ✅"
+fi
 # A TEST TITLE WITH A DOUBLE QUOTE IS REFUSED HERE, IN A SECOND, NOT BY THE SUITE TEN MINUTES IN (5 Sep). The suite's own
 # hygiene test catches it — after prove.sh and a full pass — and it caught two in one afternoon (791, then 624), each
 # costing a whole ship. The rule is the suite's; this only moves it to the front of the line.

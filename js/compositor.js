@@ -207,6 +207,16 @@ window.FM = window.FM || {};
       { key: 'polarity', label: 'Lines', def: 0, options: [[0, 'White on black'], [1, 'Black on white']] },
       { key: 'threshold', label: 'Ignore below', min: 0, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      /* queue 813: INK, not a fade toward the line map. `mix` blends TOWARDS the edge map, so laying
+         black-on-white lines over a picture drags every flat area toward white — rendered on the
+         Stylised photograph the whole frame went pastel and the dog went grey, which is not "flat
+         blocks of colour with the edges drawn back in", it is a washed-out photograph. Multiplying is
+         how ink actually sits on paper: a flat area (line map white) keeps its colour EXACTLY, and only
+         the lines darken. Default 0 is the old behaviour, so every saved instance renders byte for byte
+         as before — no `legacy` needed, the default IS the legacy. Ink always reads the lines as
+         black-on-white whatever `polarity` says, because the other reading multiplies a picture by its
+         own edge map and returns a mostly black frame. */
+      { key: 'blend', label: 'Draw as', def: 0, options: [[0, 'Replace the picture'], [1, 'Ink over the picture']] },
     ] },
     { type: 'emboss', label: 'Emboss', params: [
       { key: 'amount', label: 'Depth', min: 0, max: 18, step: 0.05, def: 1 },
@@ -4621,6 +4631,7 @@ window.FM = window.FM || {};
       const inv = (p.polarity == null ? 0 : (Math.round(FM.evalProp(p.polarity, t)) | 0)) === 1;
       const mixP = p.mix == null ? 100 : Math.max(0, Math.min(100, FM.evalProp(p.mix, t)));
       const mix = mixP / 100, full = mixP === 100;
+      const ink = (p.blend == null ? 0 : (Math.round(FM.evalProp(p.blend, t)) | 0)) === 1;   // queue 813
       for (let y = 1; y < H - 1; y++) {
         for (let x = 1; x < W - 1; x++) {
           const i = (y * W + x) * 4;
@@ -4640,7 +4651,12 @@ window.FM = window.FM || {};
           // POLARITY: the effect could only ever draw glowing white lines on black. Ink on paper — the
           // way line art is actually drawn — was simply unreachable.
           if (inv) mag = 255 - mag;
-          if (full) { d[i] = mag; d[i + 1] = mag; d[i + 2] = mag; }
+          if (ink) {
+            // queue 813: multiply. `ml` is 1 on paper and 0 on a line; `mix` sets how black the line gets.
+            const ml = 1 - mix * (1 - (inv ? mag : 255 - mag) / 255);
+            d[i] = s[i] * ml; d[i + 1] = s[i + 1] * ml; d[i + 2] = s[i + 2] * ml;
+          }
+          else if (full) { d[i] = mag; d[i + 1] = mag; d[i + 2] = mag; }
           // MIX lays the edges back over the picture instead of replacing it.
           else { d[i] = s[i] + (mag - s[i]) * mix; d[i + 1] = s[i + 1] + (mag - s[i + 1]) * mix; d[i + 2] = s[i + 2] + (mag - s[i + 2]) * mix; }
         }

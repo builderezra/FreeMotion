@@ -1,0 +1,85 @@
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;background:#111;color:#cfd;font:12px ui-monospace">
+<pre id="o" style="padding:10px;white-space:pre-wrap">running…</pre>
+<img id="sheet" style="display:block;max-width:100%">
+<iframe id="a" src="../index.html" style="width:900px;height:700px;border:0;opacity:.2"></iframe>
+<script>
+/* queue 813 — COMIC INK. Its last step is edge{amount:1} and `mix` defaults to 100, which the kernel reads as
+   "replace the picture with the edge map": the filter renders as white-on-black line art, while its own
+   description says "Flat blocks of colour with the edges drawn back in". Rendered here through the app's own
+   renderer on the Stylised section's photograph, beside its section-mates, so the call is made on a picture. */
+var out = []; function say(s) { out.push(s); document.getElementById('o').textContent = out.join('\n'); }
+var e = function (t, p) { return { type: t, params: p || {} }; };
+var BASE = [e('contrast', { amount: 1.15 }), e('posterize', { levels: 5, mix: 0.85 })];
+var OPTS = [
+  { id: '_c_now', name: 'Comic Ink — today', effects: BASE.concat([e('edge', { amount: 1 })]) },
+  { id: '_c_a', name: 'A · lighter ink', effects: BASE.concat([e('edge', { amount: 1.2, polarity: 1, blend: 1, mix: 55, threshold: 10 })]) },
+  { id: '_c_b', name: 'B · SHIPPED in v15.91', effects: BASE.concat([e('edge', { amount: 1.2, polarity: 1, blend: 1, mix: 70, threshold: 16 })]) },
+  { id: '_c_c', name: 'C · heavier ink', effects: BASE.concat([e('edge', { amount: 1.4, polarity: 1, blend: 1, mix: 80, threshold: 24 })]) },
+];
+var BIG = 250, SMALL = 118, GAP = 8, LABEL = 17;
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait() {
+    if (!(w.FM && w.FM.filters && w.FM.FILTERS && w.FM.renderScene && w.FM.makeLayer && w.FM.media)) { if (n++ > 400) return say('FM never appeared'); return setTimeout(wait, 50); }
+    setTimeout(function () { run(w).catch(function (err) { say('threw: ' + (err && err.stack || err)); }); }, 800);
+  })();
+});
+function loadPhoto(w, key) {
+  return new Promise(function (ok, bad) {
+    var im = new w.Image(); im.onload = function () { ok(im); }; im.onerror = function () { bad(new Error('no photo ' + key)); };
+    im.src = '../fx-art/' + key + '.jpg?v=1';
+  });
+}
+async function run(w) {
+  var FM = w.FM, doc = w.document, photos = {};
+  OPTS.forEach(function (o) { if (!FM.filters.get(o.id)) FM.FILTERS.push({ id: o.id, name: o.name, section: 'stylised', desc: o.name, effects: o.effects }); });
+  async function tile(key, filterId, S) {
+    if (!photos[key]) photos[key] = await loadPhoto(w, key);
+    var im = photos[key], side = Math.min(im.naturalWidth, im.naturalHeight);
+    var c = doc.createElement('canvas'); c.width = S; c.height = S;
+    c.getContext('2d').drawImage(im, (im.naturalWidth - side) / 2, (im.naturalHeight - side) / 2, side, side, 0, 0, S, S);
+    var mid = '_c813_' + key + '_' + S;
+    FM.media.set(mid, { kind: 'image', el: c, width: S, height: S, duration: 0 }); FM.media.pin(mid);
+    var l = FM.makeLayer('image', { x: S / 2, y: S / 2, start: 0, duration: 2 }); l.id = mid;
+    if (filterId) { var box = FM.filters.makeInstance(filterId); if (!box) throw new Error('no instance for ' + filterId); l.effects = [box]; }
+    var o = doc.createElement('canvas'); o.width = S; o.height = S;
+    FM.renderScene(o.getContext('2d'), { project: { width: S, height: S, fps: 30, duration: 2, background: '#000000' }, layers: [l] }, 0.001);
+    return o;
+  }
+  var SUBJ = 'dog';
+  var tiles = [{ name: 'as shot', cv: await tile(SUBJ, null, BIG) }];
+  for (var i = 0; i < OPTS.length; i++) { tiles.push({ name: OPTS[i].name, cv: await tile(SUBJ, OPTS[i].id, BIG) }); say('rendered ' + OPTS[i].name); }
+  var peers = FM.FILTERS.filter(function (f) { return f.section === 'stylised' && f.id.indexOf('_c_') !== 0 && f.id !== 'comic'; });
+  var peerTiles = [];
+  for (var j = 0; j < peers.length; j++) peerTiles.push({ name: peers[j].name, cv: await tile(SUBJ, peers[j].id, SMALL) });
+  var cols = tiles.length, W = GAP + cols * (BIG + GAP);
+  var peerRows = Math.ceil(peerTiles.length / Math.max(1, Math.floor((W - GAP) / (SMALL + GAP))));
+  var H = LABEL + BIG + GAP * 2 + LABEL + peerRows * (SMALL + GAP) + GAP;
+  var sheet = document.createElement('canvas'); sheet.width = W; sheet.height = H;
+  var g = sheet.getContext('2d');
+  g.fillStyle = '#14181f'; g.fillRect(0, 0, W, H);
+  g.textBaseline = 'top'; g.font = '600 13px -apple-system, system-ui, sans-serif';
+  tiles.forEach(function (t, k) {
+    var x = GAP + k * (BIG + GAP);
+    g.fillStyle = k === 0 ? '#9aa4b2' : (k === 1 ? '#ff6b6b' : '#ffd166');
+    g.fillText(t.name, x, GAP);
+    g.drawImage(t.cv, x, GAP + LABEL);
+  });
+  var py0 = GAP + LABEL + BIG + GAP + LABEL;
+  g.fillStyle = '#9aa4b2'; g.fillText('the Stylised section today:', GAP, GAP + LABEL + BIG + GAP);
+  var perRow = Math.max(1, Math.floor((W - GAP) / (SMALL + GAP)));
+  peerTiles.forEach(function (p, k) {
+    var px = GAP + (k % perRow) * (SMALL + GAP), py = py0 + Math.floor(k / perRow) * (SMALL + GAP);
+    g.drawImage(p.cv, px, py);
+    g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(px, py + SMALL - 15, SMALL, 15);
+    g.fillStyle = '#e6ebf2'; g.font = '11px -apple-system, system-ui, sans-serif';
+    g.fillText(p.name, px + 3, py + SMALL - 14); g.font = '600 13px -apple-system, system-ui, sans-serif';
+  });
+  var url = sheet.toDataURL('image/jpeg', 0.88);
+  document.getElementById('sheet').src = url; window.__sheet = url;
+  window.__save = function (n) { return fetch('http://localhost:8778/' + (n || 'comic813') + '.jpg', { method: 'POST', body: url }).then(function (r) { return r.text(); }); };
+  say('SHEET ' + W + 'x' + H + ' ' + Math.round(url.length / 1024) + 'KB');
+}
+</script>
+</body></html>
