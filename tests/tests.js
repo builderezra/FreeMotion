@@ -97,6 +97,44 @@
      NAME ends the line. A test called `templates: "Insert your Media" …` reported itself as
      `FAILtemplates: \` and the mutation check could not tell which assertion had fired.
      Cheaper to forbid the character than to teach two shell scripts to parse JSON. */
+  /* ⚠️ A TEST THAT SKIPS WHEN ITS SEAM IS MISSING PROVES NOTHING, AND READS AS GREEN. Written after making
+     the same mistake FOUR times in one day (queue 834, and three before it): a test that opens with
+     `if (!FM.something._seam) return;` passes against the very bug it was written for, because ship.sh's
+     proof step REVERTS the fix — and the seam ships with the fix, so the guard fires and the test returns.
+     Every one was caught only by prove.sh's "⚠️ still DEAD" line, i.e. by a human reading output.
+     His rule is the one this whole repo is built on: "every safe guard needs to be structural… anything
+     that could be forgotten needs to be structural." So this is a gate rather than a note.
+     Underscore-prefixed members are this codebase's convention for a SUITE SEAM, which is exactly the kind
+     of thing that appears with a fix — so a `return` guarded on one is the shape to forbid. `throw` is the
+     honest form: "the behaviour cannot be observed" is a failure, not a pass.
+     An explicit `// SKIP-OK: <why>` on the same line opts out, for the handful of cases where a seam really
+     does mark a deliberately-reverted feature rather than a fix under test. */
+  test('suite: no test skips itself when a seam is missing', { item: 'suite-seam-skips' }, async function () {
+    /* ../tests/tests.js, not ./tests.js: the suite runs INSIDE the app frame (its document is /index.html),
+       so a bare relative path resolves against the app root and quietly fetched a 404 whose body matched
+       nothing — the gate reported zero violations while thirteen were sitting in this file. */
+    const res = await fetch('../tests/tests.js?boot=' + Date.now());
+    if (!res.ok) throw new Error('could not read the suite source to check it (' + res.status + ')');
+    const src = await res.text();
+    if (!/function attached\(/.test(src)) throw new Error('what was fetched is not the suite source, so this gate is scanning the wrong file');
+    const bad = [];
+    let sinceTest = 999;
+    src.split('\n').forEach((line, i) => {
+      if (/^\s*test\(/.test(line)) sinceTest = 0; else sinceTest++;
+      const t = line.trim();
+      /* Only a guard near the TOP of a test body is a skip. Further in, a `return` inside a callback is
+         ordinary control flow — and a line of prose in a comment is not code at all. */
+      if (sinceTest > 15) return;
+      if (t.startsWith('*') || t.startsWith('//') || t.indexOf('`') >= 0) return;
+      if (/SKIP-OK/.test(line)) return;
+      if (!/\breturn\s*;/.test(line)) return;
+      if (!/if\s*\(\s*!/.test(line)) return;
+      if (!/\bFM\.(?:[A-Za-z$]+\.)*_[A-Za-z$]/.test(line)) return;
+      bad.push((i + 1) + ': ' + t.slice(0, 110));
+    });
+    if (bad.length) throw new Error(bad.length + ' test(s) RETURN when a suite seam is missing, so they pass against the bug they were written for — the seam ships with the fix, so reverting it makes them skip. Throw instead, or mark the line // SKIP-OK: <why>.\n' + bad.join('\n'));
+  });
+
   test('suite: no test name can truncate its own failure report', { item: 'suite-name-quotes' }, function () {
     var bad = T.filter(function (t) { return String(t.name).indexOf('"') >= 0; });
     if (bad.length) throw new Error(bad.length + ' test name(s) contain a double quote, which cuts the FAIL line short in ship.sh and mutate.sh — use single quotes: ' + bad.map(function (t) { return t.name.slice(0, 60); }).join(' | '));
@@ -35043,7 +35081,8 @@
        measured as a 0-wide panel — and it came back from the editor as a sliver. */
     if (window.innerWidth < 701) return;
     const panel = document.getElementById('inspector-panel');
-    if (!panel || !FM._amRepin) return;
+    if (!panel) return;   // SKIP-OK: no inspector panel at this width — a layout precondition, not a seam
+    if (!FM._amRepin) throw new Error('the band’s re-pin cannot be driven, so a hidden panel could still pin it to nowhere');
     const rootEl = document.documentElement;
     const hadFloat = document.body.classList.contains('am-floating');
     const savedLeft = rootEl.style.getPropertyValue('--am-left');
@@ -35253,7 +35292,7 @@
     /* Hiding a group took the picture away and left the sound playing at full volume, while the export
        silences it — so what he heard while editing was not what came out of the file. The reversed-clip
        preview path has checked the group since it was written, which is what makes this an oversight. */
-    if (!FM._syncMediaToClock) return;
+    if (!FM._syncMediaToClock) throw new Error('the playback tick cannot be driven, so a hidden group could still be sounding in preview');
     const savedSel = FM.scene.selectedId;
     const savedLayers = FM.scene.layers.slice();
     const t0 = FM.time;
@@ -35304,7 +35343,7 @@
     /* ⚠️ AT A REAL PHONE WIDTH. The runner's app frame is a fixed 900px whatever the driver window is, so
        an `innerWidth > 700` early return meant this test never ran at either pass — it passed against the
        bug and against the fix alike. atPhoneWidth narrows the frame itself and asserts that it worked. */
-    if (!FM._fxSheetPlace) return;
+    if (!FM._fxSheetPlace) throw new Error('the sheet cannot be re-placed from here, so the keyboard could still be covering it');
     return await atPhoneWidth(async () => {
     const savedSel = FM.scene.selectedId;
     const savedLayers = FM.scene.layers.slice();
@@ -35354,7 +35393,7 @@
        restore. The restore then put back start, duration and trimStart and never used that copy, so a
        trim abandoned by a lost pointer (the phone's commonest way to end a gesture) left the clip where
        it started with its captions shifted by however far the finger had travelled. */
-    if (!FM.timeline._abortGestures) return;
+    if (!FM.timeline._abortGestures) throw new Error('a gesture cannot be aborted from here, so an abandoned trim could still leave its captions shifted');
     const savedSel = FM.scene.selectedId;
     const savedLayers = FM.scene.layers.slice();
     const C = FM.makeLayer('text', { text: 'hi', x: 50, y: 50, start: 1, duration: 6 });
@@ -35434,7 +35473,7 @@
        timeline, and wired the shared helper into the trim path only. The clip-MOVE path kept the raw 46px,
        so on a 380px screen 29% of the lane armed a scroll nobody asked for — against 15% for a trim on the
        same screen — and the speed ramp divided by the same number, so it also ran twice as fast. */
-    if (!FM._trimZonePx || !FM._clipEdgeScrollSrc) return;
+    if (!FM._trimZonePx || !FM._clipEdgeScrollSrc) throw new Error('the edge band cannot be read, so a clip drag could still arm the auto-scroll from a quarter of a phone screen');
     const src = FM._clipEdgeScrollSrc();
     if (!/trimZonePx/.test(src)) throw new Error('the clip edge-scroll still measures its own band instead of the shared one — a clip drag and a trim disagree about where the edge is');
     /* CONTROL: the shared helper has to actually be narrower than the raw constant at a phone width, or
@@ -35672,7 +35711,7 @@
        `touch-action: none`, so an ordinary swipe silently re-timed the media and committed it.
        ⚠️ THE FIRST FOUR VERSIONS OF THIS TEST PASSED AGAINST THE BUG, so it now says what it observed at
        each step: a claim about a gesture is worthless unless the gesture demonstrably started. */
-    if (!FM._trimArmMs || !FM.timeline._dragState) return;
+    if (!FM._trimArmMs || !FM.timeline._dragState) throw new Error('the arm time or the live-gesture list cannot be read, so a swipe could still slip a clip’s media');
     const savedSel = FM.scene.selectedId;
     const savedLayers = FM.scene.layers.slice();
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
@@ -35759,7 +35798,7 @@
        The sanitiser that runs on EVERY project open and every undo was DELETING those: a roto mask lost
        its animation (or the whole mask, when every keyframe was negative), and keyframed effect params
        reverted to whatever the first surviving keyframe held. The next autosave then wrote that loss down. */
-    if (!FM.storage || !FM.storage._sanitizeLayers) return;
+    if (!FM.storage || !FM.storage._sanitizeLayers) throw new Error('the sanitiser cannot be driven, so keyframes before zero could still be deleted on every open');
     const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: -1, duration: 4 });
     /* Points are [x, y] PAIRS, not {x, y} — the first version of this fixture used objects, every vertex was
        rejected as invalid, and the mask was dropped for a reason that had nothing to do with the bug. */
@@ -36000,7 +36039,7 @@
     /* The eraser runs from every pointermove, and each call used to deselect, refresh the WHOLE app and
        write a scene-level undo step — so one rub across a sketch stuttered on a phone and left dozens of
        undo steps behind it, enough that Undo could no longer reach back past the drawing. */
-    if (!FM.drawTool || !FM.drawTool._eraseAt || !FM.history || !FM.history._steps) return;
+    if (!FM.drawTool || !FM.drawTool._eraseAt || !FM.history || !FM.history._steps) throw new Error('the eraser or the history depth cannot be read, so one rub could still cost dozens of undo steps');
     const savedLayers = FM.scene.layers.slice();
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
@@ -36037,7 +36076,7 @@
        brand-new one from defaults: new id, name back to "Sketch", and its effects, opacity, blend and
        rotation gone. He would have had to notice at the moment it happened — and on a phone the transport
        is hidden while drawing, so there is not even an undo button on screen. */
-    if (!FM.drawTool || !FM.drawTool._eraseAt || !FM._drawCommitStroke || !FM.startDraw || !FM.drawTool._stop) return;
+    if (!FM.drawTool || !FM.drawTool._eraseAt || !FM._drawCommitStroke || !FM.startDraw || !FM.drawTool._stop) throw new Error('the draw tool cannot be driven, so erasing a drawing to nothing could still lose its name and effects');
     const savedLayers = FM.scene.layers.slice();
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
