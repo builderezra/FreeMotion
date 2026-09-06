@@ -35996,6 +35996,91 @@
     }
   });
 
+  test('one rub of the eraser is one undo step, not one per frame (queue 834 u0)', { item: '834' }, async function () {
+    /* The eraser runs from every pointermove, and each call used to deselect, refresh the WHOLE app and
+       write a scene-level undo step — so one rub across a sketch stuttered on a phone and left dozens of
+       undo steps behind it, enough that Undo could no longer reach back past the drawing. */
+    if (!FM.drawTool || !FM.drawTool._eraseAt || !FM.history || !FM.history._steps) return;
+    const savedLayers = FM.scene.layers.slice();
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    try {
+      if (FM.startDraw) FM.startDraw('freehand'); else return;
+      await sleep(120);
+      /* A stroke to rub out: straight across, plenty of vertices so the eraser has work to do. */
+      const pts = [];
+      for (let i = 0; i <= 40; i++) pts.push([100 + i * 10, 300]);
+      FM.drawTool.points = pts.slice();
+      if (!FM._drawCommitStroke) throw new Error('no way to commit a stroke from the suite');
+      FM._drawCommitStroke();
+      await sleep(160);
+      const before = FM.history._steps().len;
+      FM.drawTool.erasing = true;
+      /* The drag: several erase points, exactly as a finger produces. */
+      let erased = 0;
+      for (let i = 8; i < 32; i += 3) { if (FM.drawTool._eraseAt([100 + i * 10, 300])) erased++; }
+      await sleep(120);
+      if (!erased) throw new Error('the eraser did not remove anything, so the undo count below means nothing');
+      const during = FM.history._steps().len - before;
+      if (during > 1) throw new Error('one rub of the eraser wrote ' + during + ' undo steps while the finger was still down — on a phone that both stutters and buries the step that would undo the drawing itself');
+    } finally {
+      FM.drawTool.erasing = false;
+      if (FM.drawTool && FM.drawTool._stop) FM.drawTool._stop();
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.timeline.rebuild(); await sleep(60);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  test('rubbing a named drawing out to nothing and drawing again brings the SAME layer back (queue 834 u1)', { item: '834' }, async function () {
+    /* Rubbing out the last stroke used to splice the layer away for good, and the next stroke built a
+       brand-new one from defaults: new id, name back to "Sketch", and its effects, opacity, blend and
+       rotation gone. He would have had to notice at the moment it happened — and on a phone the transport
+       is hidden while drawing, so there is not even an undo button on screen. */
+    if (!FM.drawTool || !FM.drawTool._eraseAt || !FM._drawCommitStroke || !FM.startDraw || !FM.drawTool._stop) return;
+    const savedLayers = FM.scene.layers.slice();
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    try {
+      FM.startDraw('freehand');
+      await sleep(120);
+      const pts = []; for (let i = 0; i <= 30; i++) pts.push([100 + i * 10, 300]);
+      FM.drawTool.points = pts.slice();
+      FM._drawCommitStroke();
+      await sleep(160);
+      /* A ONE-stroke drawing keeps its path in `points`; `subs` only appears once there are several, so
+         filtering on `subs` found nothing and the test reported that the stroke had not become a layer. */
+      const made = FM.scene.layers.filter(l => l && l.type === 'shape' && (l.subs || l.points));
+      const L = made[made.length - 1];
+      if (!L) throw new Error('the stroke did not become a layer, so this measures nothing');
+      /* What he would have put on it. */
+      L.name = 'My signature';
+      L.effects = [{ type: 'blur', params: {} }];
+      const id0 = L.id;
+
+      FM.drawTool.erasing = true;
+      for (let i = 0; i <= 30; i++) FM.drawTool._eraseAt([100 + i * 10, 300]);
+      FM.drawTool.erasing = false;
+      await sleep(140);
+      if (FM.scene.layers.some(l => l && l.id === id0)) throw new Error('the drawing was not actually erased to nothing, so the rebuild below is not being tested');
+
+      // …and one more stroke, which is where the layer used to come back as a stranger
+      FM.drawTool.points = pts.slice();
+      FM._drawCommitStroke();
+      await sleep(160);
+      const back = FM.scene.layers.filter(l => l && l.id === id0)[0];
+      if (!back) throw new Error('drawing again created a BRAND-NEW layer instead of bringing the drawing back — its name, its effects and everything else he had set are gone');
+      if (back.name !== 'My signature') throw new Error('the drawing came back named "' + back.name + '" instead of "My signature"');
+      if (!back.effects || !back.effects.length) throw new Error('the drawing came back with its effects stripped');
+    } finally {
+      FM.drawTool.erasing = false;
+      if (FM.drawTool && FM.drawTool._stop) FM.drawTool._stop();
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.timeline.rebuild(); await sleep(60);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
   test('a raised inspector grows its option cards into the height it was given (queue 807)', { item: '807' }, async function () {
     /* Measured in the pane at 1280x800 on v15.88: raised by 250px the cards stayed 48px and the last one
        ended 266px above the panel's bottom, because --cat-h asks the band floor (--tl-h) how much room
@@ -59832,7 +59917,12 @@
     const i = src.indexOf('function commitStroke');
     if (i < 0) throw new Error('commitStroke is gone');
     const body = src.slice(i, i + 4000);
-    const refit = body.indexOf('refitPathLayer');
+    /* ⚠️ ANCHORED ON THE MULTI-STROKE BRANCH ITSELF, not on the first mention of refitPathLayer. queue 834
+       added an earlier branch to commitStroke (restoring a drawing that was rubbed out to nothing), which
+       also calls refitPathLayer — so `indexOf` landed there and the window stopped short of the commit
+       this test is about, reporting a regression in code that was not touched. */
+    let refit = body.indexOf('} else if (FM.refitPathLayer)');
+    if (refit < 0) refit = body.indexOf('refitPathLayer');
     if (refit < 0) throw new Error('the multi-stroke branch is gone from commitStroke');
     /* Comments stripped FIRST, then the window taken — the other way round, the 514 explanation
        (about a thousand characters of it) ate the budget before the line being looked for. */

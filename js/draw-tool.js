@@ -8,6 +8,8 @@ window.FM = window.FM || {};
   'use strict';
 
   var overlay = null, octx = null, bar = null, drawing = false, erasing = false;
+  var erasedLayer = null, erasedAt = null;   // queue 834 (u1): the drawing rubbed out to nothing, kept so it can come back as ITSELF
+  var eraseDirty = false;   // queue 834 (u0): has this erase DRAG changed anything yet — one snapshot and one refresh per drag
   var userPickedColor = false;   // set once he moves the swatch himself — see the listener and startDraw
   // cursor: where the NEXT vector point will land (project coords). The trackpad moves it, "Add point"
   // commits it. snapX/snapY hold the co-ordinate it locked onto, so the guides can be drawn.
@@ -236,7 +238,7 @@ window.FM = window.FM || {};
       // you want gone. It is a MODE, not a second meaning for one finger, which is the same reason the
       // pan/zoom point in that entry has to be one too.
       if (FM.drawTool.erasing) {
-        erasing = true; eraseAt(p);
+        erasing = true; eraseDirty = false; eraseAt(p);
         try { overlay.setPointerCapture(e.pointerId); } catch (_) {}
         return;
       }
@@ -279,7 +281,12 @@ window.FM = window.FM || {};
          lifting one of two fingers should not start a stroke from wherever the other one happens to be. */
       if (dPinch && dPtrs.size < 2) { dPinch = null; drawing = false; FM.drawTool.points = []; redraw(); return; }
     }
-    if (erasing) { erasing = false; return; }
+    if (erasing) {
+      erasing = false;
+      /* queue 834 (u0): the finger is up, so now do the once-per-action work the drag skipped. */
+      if (eraseDirty) { eraseDirty = false; applySubs(false); }
+      return;
+    }
     if (!FM.drawTool.active || FM.drawTool.mode !== 'freehand' || !drawing) return;
     drawing = false;
     commitStroke();
@@ -301,8 +308,24 @@ window.FM = window.FM || {};
     sessionSubs = sessionSubs.concat([sub]);
     var layer = sessionLayerId ? FM.layerById(FM.scene, sessionLayerId) : null;
     if (!layer) {
-      layer = FM.addPathLayer(sub, { closed: false, name: 'Sketch', color: t.color, stroke: t.stroke });
-      if (layer) { sessionLayerId = layer.id; strokes.push(layer.id); }
+      /* queue 834 (u1): if this session rubbed a drawing out to nothing a moment ago, the SAME layer comes
+         back — with the name, the effects and everything else he had put on it. Only a session that never
+         had one builds a fresh Sketch. The undo path (applySubs) carries the identical rule; this is the
+         copy that runs when he simply draws again. */
+      if (erasedLayer) {
+        layer = erasedLayer; erasedLayer = null;
+        var backAt = (erasedAt != null && erasedAt <= FM.scene.layers.length) ? erasedAt : FM.scene.layers.length;
+        FM.scene.layers.splice(backAt, 0, layer);
+        erasedAt = null;
+        sessionLayerId = layer.id; strokes.push(layer.id);
+        if (FM.refitPathLayer) FM.refitPathLayer(layer, sessionSubs);
+        if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+        if (FM.refreshAll) FM.refreshAll();
+        if (FM.requestRender) FM.requestRender();
+      } else {
+        layer = FM.addPathLayer(sub, { closed: false, name: 'Sketch', color: t.color, stroke: t.stroke });
+        if (layer) { sessionLayerId = layer.id; strokes.push(layer.id); }
+      }
     } else if (FM.refitPathLayer) {
       FM.refitPathLayer(layer, sessionSubs);
       if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();   // the thumbnail has to follow the drawing
@@ -451,29 +474,51 @@ window.FM = window.FM || {};
    * The unit of work is the stroke, so both directions move one subpath between sessionSubs and
    * a snapshot of the list and re-fit. The layer itself is only removed when the last stroke leaves it, and
    * recreated when the first one comes back. */
-  function applySubs() {
+  /* ⚠️ queue 834 (u0): `live` MEANS "A FINGER IS STILL DOWN". The eraser calls this from every
+     pointermove, and it used to deselect, refresh the WHOLE app and write a scene-level undo step each
+     time — so one rub across a sketch stuttered badly on a phone and left dozens of undo steps, enough
+     that Undo could no longer reach back past the drawing. The picture still updates on every move (that
+     is the point of an eraser); the expensive, once-per-action work waits for the finger to lift. */
+  function applySubs(live) {
     var layer = sessionLayerId ? FM.layerById(FM.scene, sessionLayerId) : null;
     if (!sessionSubs.length) {
       if (layer) {
         var i = FM.scene.layers.indexOf(layer);
-        if (i >= 0) FM.scene.layers.splice(i, 1);
+        /* ⚠️ queue 834 (u1): KEEP THE LAYER, do not just drop the reference. Rubbing out the last stroke of
+           a drawing he had NAMED and put effects on used to splice the layer away for good, and the next
+           stroke built a brand-new one from defaults — new id, name back to "Sketch", effects, opacity,
+           blend and rotation all gone, and it landed at the playhead rather than where it was. Stashed
+           with its index so the rebuild below puts the SAME layer back where it was. */
+        if (i >= 0) { erasedLayer = layer; erasedAt = i; FM.scene.layers.splice(i, 1); }
       }
       sessionLayerId = null;
       strokes.length = 0;
     } else if (!layer) {
-      // Every stroke was undone and now one is coming back: the layer has to be built again, with the
-      // FIRST surviving stroke, and the rest re-fitted on top of it.
-      layer = FM.addPathLayer(sessionSubs[0], { closed: false, name: 'Sketch', color: FM.drawTool.color, stroke: FM.drawTool.stroke });
-      if (layer) {
+      // Every stroke was undone and now one is coming back. If this session emptied the layer a moment
+      // ago, the SAME layer comes back — with everything he had put on it. Only a session that never had
+      // one builds a fresh Sketch.
+      if (erasedLayer) {
+        layer = erasedLayer; erasedLayer = null;
+        var at = (erasedAt != null && erasedAt <= FM.scene.layers.length) ? erasedAt : FM.scene.layers.length;
+        FM.scene.layers.splice(at, 0, layer);
+        erasedAt = null;
         sessionLayerId = layer.id; strokes.length = 0; strokes.push(layer.id);
-        if (sessionSubs.length > 1 && FM.refitPathLayer) FM.refitPathLayer(layer, sessionSubs);
+        if (FM.refitPathLayer) FM.refitPathLayer(layer, sessionSubs);
+      } else {
+        layer = FM.addPathLayer(sessionSubs[0], { closed: false, name: 'Sketch', color: FM.drawTool.color, stroke: FM.drawTool.stroke });
+        if (layer) {
+          sessionLayerId = layer.id; strokes.length = 0; strokes.push(layer.id);
+          if (sessionSubs.length > 1 && FM.refitPathLayer) FM.refitPathLayer(layer, sessionSubs);
+        }
       }
     } else if (FM.refitPathLayer) {
       FM.refitPathLayer(layer, sessionSubs);
     }
-    if (FM.selectLayer) FM.selectLayer(null);   // same rule as commitStroke: no inspector sheet mid-drawing
-    if (FM.refreshAll) FM.refreshAll();
-    if (FM.history) FM.history.commit();
+    if (!live) {
+      if (FM.selectLayer) FM.selectLayer(null);   // same rule as commitStroke: no inspector sheet mid-drawing
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.history) FM.history.commit();
+    }
     if (octx) octx.clearRect(0, 0, overlay.width, overlay.height);
     redraw(); updateBar(); FM.requestRender && FM.requestRender();
   }
@@ -574,9 +619,16 @@ window.FM = window.FM || {};
       if (bestJ >= 2) runs.push(sub.slice(0, bestJ));
       if (sub.length - bestJ >= 2) runs.push(sub.slice(bestJ));
     }
-    pushHistory();
+    /* queue 834 (u0): one snapshot per erase DRAG. This used to run per pointermove, so a single rub
+       filled the draw tool's own undo stack as well as the app's.
+       ⚠️ BOTH FLAGS. `erasing` is this module's own, and `FM.drawTool.erasing` is the one the bar and the
+       suite can see; they are set together everywhere, and reading both means the seam can drive a real
+       drag instead of only the private half. */
+    var live = erasing || !!FM.drawTool.erasing;
+    if (!live || !eraseDirty) pushHistory();
+    eraseDirty = true;
     sessionSubs = sessionSubs.slice(0, i).concat(runs, sessionSubs.slice(i + 1));
-    applySubs();
+    applySubs(live);
     return true;
   }
   FM.drawTool._eraseAt = eraseAt;   // the suite erases at a real project coordinate, not through a synthetic drag
@@ -620,6 +672,7 @@ window.FM = window.FM || {};
   function stop() {
     strokes = [];
     sessionLayerId = null; sessionSubs = []; histPast = []; histFuture = [];   // a new drawing starts a new layer (queue 167) and a fresh history
+    erasedLayer = null; erasedAt = null; eraseDirty = false;   // queue 834: a stash belongs to ONE drawing session
     FM.drawTool.active = false; FM.drawTool.mode = null; FM.drawTool.points = []; drawing = false; erasing = false; FM.drawTool.erasing = false;
     FM.drawTool.cursor = null; FM.drawTool.snapX = FM.drawTool.snapY = null;
     if (octx) octx.clearRect(0, 0, overlay.width, overlay.height);
