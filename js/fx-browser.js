@@ -101,12 +101,17 @@ window.FM = window.FM || {};
     if (root._fxbUnwatch) { try { root._fxbUnwatch(); } catch (e) {} root._fxbUnwatch = null; }
   }
 
+  const sheetRoots = new Set();   // every root currently in sheet mode (#fx-browser, #afx-browser)
+  /* queue 805: the band's float moves the panel without resizing the canvas or the window, which are the
+     only two things watchSheet listens for — so the drag calls this after every height write. */
+  FM.fxSheetReplace = function () { sheetRoots.forEach(r => { if (r.classList.contains('fxb-sheet')) placeSheet(r); }); };
   FM.fxSheet = function (root, on) {
     if (!root) return false;
     const sheet = on !== false;
     root.classList.toggle('fxb-sheet', sheet);
-    if (sheet) { placeSheet(root); watchSheet(root); }
+    if (sheet) { sheetRoots.add(root); placeSheet(root); watchSheet(root); }
     else {
+      sheetRoots.delete(root);
       unwatchSheet(root);
       root.classList.remove('fxb-in-inspector');
       ['--fxb-top', '--fxb-left', '--fxb-right', '--fxb-bottom'].forEach(k => root.style.removeProperty(k));

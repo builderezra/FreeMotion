@@ -4876,6 +4876,10 @@ window.FM = window.FM || {};
       setTimeout(() => p.classList.remove('am-snap'), 420);
     };
     const amHeightNow = () => parseInt(getComputedStyle(root).getPropertyValue('--am-h'), 10) || 0;
+    /* queue 805: the Effects/Filters/Audio browser is a fixed overlay pinned to the panel's rect ONCE at
+       open and re-placed only on a canvas or window resize — a float causes neither, so every write that
+       moves the panel tells the sheet to follow. */
+    const amSheetFollow = () => { try { if (FM.fxSheetReplace) FM.fxSheetReplace(); } catch (_) {} };
 
     let dragging = false, startY = 0, startH = 0;
     rez.addEventListener('pointerdown', (e) => {
@@ -5052,6 +5056,7 @@ window.FM = window.FM || {};
           root.style.setProperty('--am-h', amClamp(want) + 'px');
           document.body.classList.add('am-floating');
           stageResized();
+          amSheetFollow();
         } else {
           // At or below the floor. Hold here until the pointer has travelled STICK past it.
           amStuck = floor - want;
@@ -5062,6 +5067,7 @@ window.FM = window.FM || {};
             root.style.setProperty('--tl-h', clampH(floor - (amStuck - STICK)) + 'px');
             stageResized();
           }
+          amSheetFollow();
         }
       });
       const amEnd = () => {
@@ -5088,8 +5094,18 @@ window.FM = window.FM || {};
         document.body.classList.remove('am-floating');
         root.style.removeProperty('--am-h');
         ['--am-left', '--am-width', '--am-bottom'].forEach(v => root.style.removeProperty(v));
+        amSheetFollow();
       };
-      window.addEventListener('resize', () => { if (isPhone()) FM.dropAddMenuFloat(); });
+      /* queue 807: a window that shrinks under a raised panel used to leave --am-h where the drag put it,
+         so the handle could end up above the screen with no way to reach it; re-clamped to the same
+         0.62·vh rule the drag obeys, and the sheet told to follow. */
+      window.addEventListener('resize', () => {
+        if (isPhone()) { FM.dropAddMenuFloat(); return; }
+        if (!document.body.classList.contains('am-floating')) return;
+        const h = amHeightNow(), c = amClamp(h);
+        if (c !== h) root.style.setProperty('--am-h', c + 'px');
+        amSheetFollow();
+      });
       /* ⚠️ …AND A SELECTION CHANGE IS THE CASE THAT WAS MISSING (queue 511 clause 1).
          The comment above `dropAddMenuFloat` states the rule plainly — "the menu must never be left
          floating over a canvas it is no longer showing" — and it was enforced for a window resize and a
@@ -6711,6 +6727,11 @@ window.FM = window.FM || {};
            The exit goes through the browser's own path so picks are applied rather than binned (queue
            389 — a tap-away is an exit like any other), and `armed = false` stops the pointerup branch
            below from treating the same gesture as a second tap. */
+        /* queue 805: A PRESS ON A RESIZE HANDLE IS A DRAG, NEVER A TAP-AWAY. With the band's handle shown
+           in every state (queue 804) a press on it while the Effects menu was open landed here first —
+           "outside #fx-browser" — so the menu closed and the drag never started: the band could not be
+           raised WITH the Effects menu open, which is the one flow #804 was about. */
+        if (e.target && e.target.closest && e.target.closest('#am-resizer, #tl-resizer')) { armed = false; keepAtDown = true; return; }
         const fxbOpen = document.getElementById('fx-browser');
         if (fxbOpen && !fxbOpen.classList.contains('hidden') &&
             !(e.target && e.target.closest && e.target.closest('#fx-browser'))) {

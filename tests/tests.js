@@ -17400,7 +17400,8 @@
       const EPS = 0.5;
       function assertFits(where) {
         const pb = box(panel);
-        const over = panel.scrollHeight - panel.clientHeight;
+        const inspEl = document.getElementById('inspector');   // queue 806: #inspector is the PC scroller; the panel alone can no longer overflow
+        const over = Math.max(panel.scrollHeight - panel.clientHeight, inspEl ? inspEl.scrollHeight - inspEl.clientHeight : 0);
         if (over > 0) throw new Error(where + ': the inspector overflows by ' + over + 'px (' + panel.scrollHeight + ' of content in ' + panel.clientHeight + 'px) — the editor does not fit the panel');
         // Guard against the cheapest way to pass this: an empty rail. Every family carries at least
         // two presets, and the family rail is always the full three.
@@ -29265,7 +29266,8 @@
       root.style.setProperty('--tl-h', '240px');
       await sleep(300);
       const small = Math.round(cards()[0].getBoundingClientRect().height);
-      const scroll = panel.scrollHeight - panel.clientHeight;
+      const inspEl = document.getElementById('inspector');   // queue 806: #inspector is the PC scroller
+      const scroll = Math.max(panel.scrollHeight - panel.clientHeight, inspEl ? inspEl.scrollHeight - inspEl.clientHeight : 0);
       if (scroll > 2) throw new Error('at a 240px band the layer panel still needs ' + scroll + 'px of scrolling — the buttons are not fitting on screen');
       const bottom = panel.getBoundingClientRect().bottom;
       const spilled = cards().filter(function (c) { return c.getBoundingClientRect().bottom > bottom + 1; });
@@ -33964,7 +33966,8 @@
         const cards = panel.querySelectorAll('.cat-card');
         if (!cards.length) continue;                            // this type does not show the card grid
         checked++;
-        const over = panel.scrollHeight - panel.clientHeight;
+        const inspEl = document.getElementById('inspector');   // queue 806: on PC the panel is a flex column and #inspector is the scroller, so the panel itself never overflows
+        const over = Math.max(panel.scrollHeight - panel.clientHeight, inspEl ? inspEl.scrollHeight - inspEl.clientHeight : 0);
         if (over > 2) bad.push(kind + ': the panel holds ' + panel.scrollHeight + 'px of content in ' + panel.clientHeight + 'px (' + over + 'px past it) — something in this layout is not counted by the row-height arithmetic');
       }
       /* CONTROL: if no type rendered a card grid, "none of them overflow" is true of nothing. */
@@ -34583,6 +34586,130 @@
       if (savedTlH) rootEl.style.setProperty('--tl-h', savedTlH); else rootEl.style.removeProperty('--tl-h');
       try { if (savedTlStore === null) localStorage.removeItem('fm_tl_h'); else localStorage.setItem('fm_tl_h', savedTlStore); } catch (e) {}
       if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  test('with the Effects menu open, the band’s handle raises the band and the menu comes with it (queue 805)', { item: '805' }, async function () {
+    /* Found by the five-lens review of v15.88. Ezra's #804 words: "whenever I open it [Effects], it forces the
+       timeline and the … inspector menu to be connected. It doesn't let them stay detached." v15.88 let the
+       float persist, but with the Effects menu OPEN a press on the handle reached the queue 401 tap-away
+       listener first (document, capture phase), which closed the menu and stopped the event — so the drag
+       never started, and the one flow he described still could not be done. And the browser is a fixed
+       overlay pinned to the panel's rect once at open, re-placed only on a canvas or window resize, neither
+       of which a float causes. Both halves are proven here: the menu survives the press, and its top
+       tracks the panel's top up AND back down. Measured on v15.88: the press closed the menu. */
+    if (window.innerWidth < 701) return;
+    const panel = document.getElementById('inspector-panel');
+    const rez = document.getElementById('am-resizer');
+    if (!panel || !rez) return;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const rootEl = document.documentElement;
+    const savedTlH = rootEl.style.getPropertyValue('--tl-h');
+    let savedTlStore = null; try { savedTlStore = localStorage.getItem('fm_tl_h'); } catch (e) {}
+    const floorH = () => parseInt(getComputedStyle(rootEl).getPropertyValue('--tl-h'), 10) || 232;
+    const savedSel = FM.scene.selectedId;
+    const madeLayer = !FM.scene.layers.length;
+    if (madeLayer) FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: 0, duration: 4 }));
+    const floating = () => document.body.classList.contains('am-floating');
+    const fxb = () => document.getElementById('fx-browser');
+    const R = (el) => el.getBoundingClientRect();
+    try {
+      FM.selectLayer(FM.scene.layers[0].id); FM.inspector.refresh(); await sleep(120);
+      FM.fxBrowser.open(FM.scene.layers[0]); await sleep(160);
+      if (!FM.fxBrowser.isOpen() || !fxb()) throw new Error('the Effects browser did not open, so the flow cannot be reached');
+      const p0 = R(panel), f0 = R(fxb());
+      if (Math.abs(f0.top - p0.top) > 2) throw new Error('control: at open the Effects menu is not pinned to the panel (menu top ' + Math.round(f0.top) + ', panel top ' + Math.round(p0.top) + ')');
+      const r = R(rez), x = r.left + r.width / 2, y0 = r.top + r.height / 2;
+      const ev = (t, cy, b) => rez.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', clientX: x, clientY: cy, buttons: b }));
+      ev('pointerdown', y0, 1); await sleep(30);
+      if (!FM.fxBrowser.isOpen()) throw new Error('pressing the band’s handle CLOSED the Effects menu — the tap-away listener read the press as a tap outside the menu, so the band cannot be raised with the menu open');
+      for (let i = 1; i <= 8; i++) ev('pointermove', y0 - (300 * i / 8), 1);
+      await sleep(40);
+      if (!floating()) throw new Error('the drag did not raise the panel at all');
+      const p1 = R(panel), f1 = R(fxb());
+      if (p1.height < p0.height + 200) throw new Error('control: the panel only grew from ' + Math.round(p0.height) + ' to ' + Math.round(p1.height) + 'px');
+      if (Math.abs(f1.top - p1.top) > 2) throw new Error('the panel rose to y=' + Math.round(p1.top) + ' but the Effects menu stayed at y=' + Math.round(f1.top) + ' — the menu did not follow the band');
+      if (!FM.fxBrowser.isOpen()) throw new Error('the Effects menu closed during the drag');
+      ev('pointerup', y0 - 300, 0); await sleep(40);
+
+      // and back down: the dock must carry the menu with it
+      const r2 = R(rez), y2 = r2.top + r2.height / 2, down = p1.height - floorH() + 30;
+      ev('pointerdown', y2, 1);
+      for (let i = 1; i <= 8; i++) ev('pointermove', y2 + (down * i / 8), 1);
+      ev('pointerup', y2 + down, 0); await sleep(60);
+      if (floating()) throw new Error('dragging the handle down did not dock the band');
+      const p2 = R(panel), f2 = R(fxb());
+      if (!FM.fxBrowser.isOpen()) throw new Error('docking the band closed the Effects menu');
+      if (Math.abs(f2.top - p2.top) > 2) throw new Error('the band docked at y=' + Math.round(p2.top) + ' but the Effects menu stayed at y=' + Math.round(f2.top) + ' — it is hanging over the canvas with the handle underneath it');
+    } finally {
+      try { if (FM.fxBrowser.isOpen()) FM.fxBrowser.close(); } catch (e) {}
+      if (FM.dropAddMenuFloat) FM.dropAddMenuFloat();
+      if (madeLayer) FM.scene.layers.length = 0;
+      FM.selectLayer(savedSel || null); FM.inspector.refresh(); await sleep(40);
+      if (savedTlH) rootEl.style.setProperty('--tl-h', savedTlH); else rootEl.style.removeProperty('--tl-h');
+      try { if (savedTlStore === null) localStorage.removeItem('fm_tl_h'); else localStorage.setItem('fm_tl_h', savedTlStore); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  test('a raised inspector grows its option cards into the height it was given (queue 807)', { item: '807' }, async function () {
+    /* Measured in the pane at 1280x800 on v15.88: raised by 250px the cards stayed 48px and the last one
+       ended 266px above the panel's bottom, because --cat-h asks the band floor (--tl-h) how much room
+       there is. While floating the panel is --am-h tall, and the cards should say so. */
+    if (window.innerWidth < 701) return;
+    const panel = document.getElementById('inspector-panel');
+    if (!panel) return;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const rootEl = document.documentElement;
+    const floorH = () => parseInt(getComputedStyle(rootEl).getPropertyValue('--tl-h'), 10) || 232;
+    const savedSel = FM.scene.selectedId;
+    const madeLayer = !FM.scene.layers.length;
+    if (madeLayer) FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: 0, duration: 4 }));
+    const cards = () => [].slice.call(panel.querySelectorAll('.cat-card'));
+    try {
+      FM.selectLayer(FM.scene.layers[0].id); FM.inspector.refresh(); await sleep(120);
+      if (cards().length < 6) throw new Error('control: a shape layer did not show its card grid (' + cards().length + ' cards)');
+      const h0 = cards()[0].getBoundingClientRect().height;
+      rootEl.style.setProperty('--am-h', Math.round(floorH() + 250) + 'px');
+      document.body.classList.add('am-floating');
+      if (FM._amRepin) FM._amRepin();
+      await sleep(120);
+      const h1 = cards()[0].getBoundingClientRect().height;
+      if (h1 < h0 + 20) throw new Error('raised by 250px the option cards are still ' + Math.round(h1) + 'px tall (were ' + Math.round(h0) + ') — the grid is sized from the band floor, not from the panel it is in');
+      const last = cards()[cards().length - 1].getBoundingClientRect().bottom, pb = panel.getBoundingClientRect().bottom;
+      if (last > pb + 1) throw new Error('the grown cards spill ' + Math.round(last - pb) + 'px out of the raised panel');
+    } finally {
+      if (FM.dropAddMenuFloat) FM.dropAddMenuFloat();
+      if (madeLayer) FM.scene.layers.length = 0;
+      FM.selectLayer(savedSel || null); FM.inspector.refresh(); await sleep(40);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  test('a window that shrinks under a raised inspector pulls it down to the clamp (queue 807)', { item: '807' }, async function () {
+    /* The drag clamps --am-h to a share of the window; a later window resize did not, so a raised panel
+       could stand taller than the window with its handle above the screen and no way to reach it. */
+    if (window.innerWidth < 701) return;
+    const panel = document.getElementById('inspector-panel');
+    if (!panel) return;
+    const rootEl = document.documentElement;
+    const hadFloat = document.body.classList.contains('am-floating');
+    try {
+      const tall = Math.round(window.innerHeight * 0.95);
+      rootEl.style.setProperty('--am-h', tall + 'px');
+      document.body.classList.add('am-floating');
+      if (FM._amRepin) FM._amRepin();
+      await sleep(40);
+      window.dispatchEvent(new Event('resize')); await sleep(80);
+      const h = parseInt(getComputedStyle(rootEl).getPropertyValue('--am-h'), 10);
+      if (!(h < tall)) throw new Error('after a window resize the raised panel is still ' + h + 'px tall in a ' + window.innerHeight + 'px window — the clamp the drag obeys was not applied, so the handle can sit off-screen');
+      if (h + 9 > window.innerHeight) throw new Error('re-clamped to ' + h + 'px, which still puts the handle above a ' + window.innerHeight + 'px window');
+      if (document.body.classList.contains('am-floating') !== true) throw new Error('the resize dropped the float instead of re-clamping it');
+    } finally {
+      if (FM.dropAddMenuFloat) FM.dropAddMenuFloat();
+      if (hadFloat) document.body.classList.add('am-floating');
     }
   });
 

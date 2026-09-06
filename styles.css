@@ -8047,6 +8047,13 @@ body.fm-pushing #toast { z-index: 213; }
        costing more height than the padding inside a tile. */
     --cat-gap: clamp(4px, calc((var(--tl-h, 264px) - 120px) / 16), 9px);
   }
+  /* queue 807: WHILE FLOATING THE PANEL IS --am-h TALL, NOT --tl-h. The formula above asks the band
+     floor how much room there is, so a panel raised by 250px kept 48px cards and 266px of nothing under
+     them (measured 1280x800). Same formula, the panel's own height in. */
+  body.am-floating #inspector-panel {
+    --cat-h: clamp(40px, calc((var(--am-h, 264px) - 88px - var(--insp-extra, 0px)) / 3), 101px);
+    --cat-pad: clamp(4px, calc((var(--am-h, 264px) - 120px - var(--insp-extra, 0px)) / 12), 17px);
+  }
   /* ⚠️ THE CLIP MOVED OFF THE CARD AND ONTO THE LABEL (queue 517). Ezra: "all of the outlines look
      really bad. Like, I think they're kinda glitching underneath the buttons."
      `overflow: hidden` was here to stop a long label pushing the tile taller — a real job, kept below —
