@@ -95,6 +95,7 @@ window.FM = window.FM || {};
          a second off the head showed every caption a second late and pushed the last ones off the end,
          while dragging the same clip's grip by the same amount left them exactly where they were. */
       if (FM.shiftLayerCues) FM.shiftLayerCues(l, cut);
+      if (FM.shiftLayerFxClock) FM.shiftLayerFxClock(l, cut);   // queue 823: and the effect clock, or Drift/Spin jump
     });
     clipAfterCut(); return true;
   }
@@ -279,6 +280,20 @@ window.FM = window.FM || {};
   let cueDrag = null;    // moving / trimming one CAPTION CUE inside its track's clip
   let lpFiredAt = 0;     // when a header long-press fired — suppresses the trailing click/contextmenu
   let clipTap = null;    // touch: pending gesture on a clip (tap=select, drag=scrub, long-press=move)
+  /* ⚠️ queue 823: A GESTURE BELONGS TO THE FINGER THAT STARTED IT. The window-level handlers below acted on
+     whatever pointerId arrived, and the gestures carried no owner to compare against — so a SECOND touch
+     anywhere OUTSIDE #timeline drove the drag and committed it: tap and lift and the clip dropped where it
+     stood; move and the clip flew to that finger's x. A second touch INSIDE the timeline was already safe
+     (it becomes a pinch, which aborts and restores), which is exactly why this was scoped to outside. The ≡
+     reorder drag never had the hole because its listeners live on the captured handle rather than on the
+     window; this gives the others the same ownership by hand.
+     A gesture with no `pid` — one driven synthetically, or created by a path that does not know its pointer
+     — owns every pointer, exactly as before. */
+  function foreignPointer(e) {
+    const g = clipMove || trimDrag || kfDrag || slipDrag || cueDrag;
+    return !!(g && g.pid != null && e && e.pointerId != null && e.pointerId !== g.pid);
+  }
+  FM._foreignPointer = foreignPointer;   // suite seam
   let snapping = true;   // magnet toggle: snap clip/trim edges to playhead / clip edges / 0
   let rebuildPending = false;      // a rebuild requested mid-gesture — deferred to the gesture's end
   /* ⚠️ queue 815: A LAYER-NAME PAN IS A GESTURE TOO. It scrolls the layer list, its state lives in the
@@ -2004,10 +2019,14 @@ window.FM = window.FM || {};
                 let group = [];
                 const selIds = FM.selectionIds ? FM.selectionIds() : [];
                 if (selIds.length > 1 && selIds.indexOf(layer.id) >= 0) {
-                  group = selIds.filter(id => id !== layer.id).map(id => { const l = FM.layerById(FM.scene, id); return l ? { layer: l, origStart: l.start } : null; }).filter(Boolean);
+                  /* queue 823: LOCKED CLIPS DO NOT COME ALONG. The mouse path a few lines down refuses a
+                     locked layer outright ("locked: selectable, never movable"), but this touch path built
+                     the co-drag list straight from the selection — so on the phone a locked clip inside a
+                     multi-selection moved with the rest and stayed moved. */
+                  group = selIds.filter(id => id !== layer.id).map(id => { const l = FM.layerById(FM.scene, id); return l && !l.locked ? { layer: l, origStart: l.start } : null; }).filter(Boolean);
                 }
                 touchGesture();   // queue 541: a gesture that never gets stamped looks stale to rebuild() the instant it starts
-                clipMove = { layer: layer, startX: clipTap.startX, origStart: layer.start, origProjDur: (FM.scene.project.duration || 0), moved: false, downTime: clipTap.downTime, group: group, sup: snappedTargetsOf(layer) };
+                clipMove = { pid: clipTap.pointerId, layer: layer, startX: clipTap.startX, origStart: layer.start, origProjDur: (FM.scene.project.duration || 0), moved: false, downTime: clipTap.downTime, group: group, sup: snappedTargetsOf(layer) };
                 /* Ezra, twice: "I still need it so I can drag clips on the timeline without it opening
                    up the editing panel." The selectLayer above is deliberate — you must be able to SEE
                    which clip you grabbed — but on a phone the inspector sheet is DERIVED from the
@@ -2033,13 +2052,13 @@ window.FM = window.FM || {};
       if (selIds.length > 1 && selIds.indexOf(layer.id) >= 0) {
         // dragging part of a multi-selection → keep the set, make this clip primary, move them together
         if (FM.scene.selectedId !== layer.id) { FM.scene.selectedId = layer.id; if (FM.inspector) FM.inspector.refresh(); FM.timeline.rebuild(); }
-        group = selIds.filter(id => id !== layer.id).map(id => { const l = FM.layerById(FM.scene, id); return l ? { layer: l, origStart: l.start } : null; }).filter(Boolean);
+        group = selIds.filter(id => id !== layer.id).map(id => { const l = FM.layerById(FM.scene, id); return l && !l.locked ? { layer: l, origStart: l.start } : null; }).filter(Boolean);   // queue 823: …and the mouse path skips them in the co-drag too
       }
       // else: NOT selected here any more. A mouse press that turns into a drag must not change the
       // selection; a press that turns out to be a plain click selects on release, below.
       if (layer.locked) { FM.selectLayer(layer.id); return; }   // locked: selectable, never movable — so there is no drag to wait for
       touchGesture();   // queue 541: a gesture that never gets stamped looks stale to rebuild() the instant it starts
-      clipMove = { layer: layer, startX: e.clientX, origStart: layer.start, origProjDur: (FM.scene.project.duration || 0), moved: false, downTime: timeFromX(e.clientX), group: group.filter(g => !g.layer.locked), sup: snappedTargetsOf(layer) };
+      clipMove = { pid: e.pointerId, layer: layer, startX: e.clientX, origStart: layer.start, origProjDur: (FM.scene.project.duration || 0), moved: false, downTime: timeFromX(e.clientX), group: group.filter(g => !g.layer.locked), sup: snappedTargetsOf(layer) };
       try { innerEl.setPointerCapture(e.pointerId); } catch (_) {}   // a released/synthetic pointerId throws NotFoundError; every other call site in this app already guards
       if (FM.playing) FM.pause();
     });
@@ -2088,7 +2107,7 @@ window.FM = window.FM || {};
         // `caps` is the cue list AS IT WAS AT THE GRAB — every move recomputes from the original, the
         // same way `start`/`dur`/`trim` above do. Shifting the live list per move would compound.
         touchGesture();   // queue 541: a gesture that never gets stamped looks stale to rebuild() the instant it starts
-        trimDrag = { layer: layer, edge: edge, startX: e.clientX, lastX: e.clientX, _scrollFrames: 0, startScroll: timelineEl ? timelineEl.scrollLeft : 0, start: layer.start, dur: layer.duration, trim: layer.trimStart, srcDur: (m && m.duration) ? m.duration : Infinity, type: layer.type, sup: snappedTargetsOf(layer), caps: Array.isArray(layer.captions) ? layer.captions.map(c => ({ ...c })) : null };
+        trimDrag = { pid: e.pointerId, fx0: (parseFloat(layer.fxTimeOffset) || 0), layer: layer, edge: edge, startX: e.clientX, lastX: e.clientX, _scrollFrames: 0, startScroll: timelineEl ? timelineEl.scrollLeft : 0, start: layer.start, dur: layer.duration, trim: layer.trimStart, srcDur: (m && m.duration) ? m.duration : Infinity, type: layer.type, sup: snappedTargetsOf(layer), caps: Array.isArray(layer.captions) ? layer.captions.map(c => ({ ...c })) : null };
         FM.selectLayer(layer.id);
         if (FM.playing) FM.pause();
       };
@@ -2202,7 +2221,7 @@ window.FM = window.FM || {};
           if (pinch) return;
           try { slip.setPointerCapture(e.pointerId); } catch (_) {}
           touchGesture();   // queue 541: a gesture that never gets stamped looks stale to rebuild() the instant it starts
-          slipDrag = { layer: layer, startX: e.clientX, trim0: layer.trimStart || 0, rate: advTotal / Math.max(1e-6, layer.duration), max: m.duration - advTotal, m: m, pps: pxPerSec() };
+          slipDrag = { pid: e.pointerId, layer: layer, startX: e.clientX, trim0: layer.trimStart || 0, rate: advTotal / Math.max(1e-6, layer.duration), max: m.duration - advTotal, m: m, pps: pxPerSec() };
           FM.selectLayer(layer.id);
           if (FM.playing) FM.pause();
           beginSlipGhost(slipDrag, clip);
@@ -2282,7 +2301,7 @@ window.FM = window.FM || {};
           // 50ms behind and would otherwise fire mid-cue-drag and grab the clip as well.
           if (clipTap) { if (clipTap.holdTimer) clearTimeout(clipTap.holdTimer); clipTap = null; }
           try { if (captureEl && pointerId != null) captureEl.setPointerCapture(pointerId); } catch (_) {}
-          cueDrag = { layer: layer, cue: cue, ci: ci, mode: mode, startX: clientX, s0: cue.start, e0: cue.end, moved: false, chip: chip };
+          cueDrag = { pid: (pointerId != null ? pointerId : null), layer: layer, cue: cue, ci: ci, mode: mode, startX: clientX, s0: cue.start, e0: cue.end, moved: false, chip: chip };
           /* #149 — Ezra: "when dragging the cue length for captions it should show it changing live not
            * just wait for you to let go then jump."
            * This line was the cause, and it is not obvious from reading it. selectLayer() rebuilds the
@@ -2420,7 +2439,7 @@ window.FM = window.FM || {};
           // now share one hold — arm at KF_HOLD_MS, and if you let go without moving, that same hold
           // opens the menu instead. One gesture, both outcomes, and touch keeps its route in.
           touchGesture();   // queue 541: a gesture that never gets stamped looks stale to rebuild() the instant it starts
-          kfDrag = { layer: layer, kfs: kfs, dot: dot, orig: kfs.map(k => k.t), armed: false,
+          kfDrag = { pid: e.pointerId, layer: layer, kfs: kfs, dot: dot, orig: kfs.map(k => k.t), armed: false,
                      downX: e.clientX, downY: e.clientY,   // where the press landed — the arm test measures travel FROM here
                      // Carry the menu opener WITH the gesture. Release is handled by a window-level
                      // pointerup (it has to be, or letting go off the diamond strands the drag), and
@@ -3603,6 +3622,9 @@ window.FM = window.FM || {};
            brings its frames back. `indexAt` only ever matches `lt >= c.start && lt < c.end`, so a
            negative cue simply never shows. */
         if (Array.isArray(L.captions) && Math.abs(delta) > 1e-9) L.captions = shiftCues(trimDrag.caps, delta);
+        /* queue 823: re-based from the value at pointerdown for the same reason the cues are — a drag
+           reports its position every frame, so adding to the live value would compound it. */
+        if (Math.abs(delta) > 1e-9) L.fxTimeOffset = (trimDrag.fx0 || 0) + delta;
       }
     }
     // belt-and-braces: a non-finite number must NEVER reach the scene (it cascades into every layout)
@@ -3646,6 +3668,20 @@ window.FM = window.FM || {};
     layer.captions = shiftCues(layer.captions, delta);
   };
 
+  /* ⚠️ queue 823: THE EFFECT CLOCK MOVES WITH THE HEAD TOO, and for the same reason the cues do. Every
+     time-driven effect — Drift, Spin, Orbit, Wiggle, Shake — is driven by "seconds since this clip began"
+     (FM.fxLocalTime = t - layer.start + fxTimeOffset), so moving `start` forward by a second rewinds all of
+     them by a second and the picture SNAPS. A split has carried the phase across the cut since the day it
+     was written (js/app.js, `B.fxTimeOffset = … + into`) precisely because the jump was measured there —
+     211px of centroid shift on a 320px canvas for Drift. A head TRIM is the same discontinuity and had
+     none of it. Exported and written once, like the cue rule above, because this is now the third caller
+     and the reason that rule has a comment about a third caller. */
+  FM.shiftLayerFxClock = function (layer, delta) {
+    if (!layer || !isFinite(delta) || !delta) return;
+    const n = parseFloat(layer.fxTimeOffset);
+    layer.fxTimeOffset = (isFinite(n) ? n : 0) + delta;
+  };
+
   /* Head-trim as a function, so the suite can drive the thing the grip drives (bug hunt, 21 Aug).
    * Driving the GRIP from a test is not equivalent: a touch trim requires a deliberate 550ms hold before
    * it arms (queue 336), so a synthetic press-and-drag arms nothing and measures nothing — which is what
@@ -3664,6 +3700,7 @@ window.FM = window.FM || {};
     layer.duration = Math.max(0.1, (layer.duration || 0) - delta);
     if (layer.type === 'video') layer.trimStart = (layer.trimStart || 0) + srcDelta;
     if (caps) layer.captions = shiftCues(caps, delta);
+    FM.shiftLayerFxClock(layer, delta);   // queue 823
   };
 
   /* The placement half of a clip-body drag, lifted out of the pointermove handler so the edge-scroll
@@ -3841,10 +3878,17 @@ window.FM = window.FM || {};
     if (!clipMove || !clipMove.moved || !timelineEl) return;
     if (++clipMove._scrollFrames > CLIP_SCROLL_MAX) return;                    // brake 2
     const rect = timelineEl.getBoundingClientRect();
+    /* ⚠️ queue 823: THE SAME EDGE BAND AS A TRIM, not the raw 46px. queue 707 shrank the trim's band to 6%
+       of the lane because 46px is a quarter of a phone's timeline — and wired `trimZonePx` into the trim
+       path only. On a 380px screen the head takes 66px, so the lane is 314px and a raw 46px band on each
+       side made 29% of it a trigger, against 15% for a trim on the same screen. Nudging a clip that
+       happened to sit near an edge started a scroll nobody asked for, and the ramp below divides by the
+       same number, so it also ran twice as fast for the same finger position. */
+    const zone = trimZonePx(rect);
     const x = clipMove.lastX, headRight = rect.left + HEAD_W, MAX = 22;
     let v = 0;
-    if (x > rect.right - TRIM_EDGE) v = Math.min(MAX, ((x - (rect.right - TRIM_EDGE)) / TRIM_EDGE) * MAX);
-    else if (x < headRight + TRIM_EDGE) v = -Math.min(MAX, (((headRight + TRIM_EDGE) - x) / TRIM_EDGE) * MAX);
+    if (x > rect.right - zone) v = Math.min(MAX, ((x - (rect.right - zone)) / zone) * MAX);
+    else if (x < headRight + zone) v = -Math.min(MAX, (((headRight + zone) - x) / zone) * MAX);
     if (v === 0) return;
     /* BRAKE 4 — MEASURED, and it is the whole of what "breaks" means in queue 524.
      * Once `start` is pinned at the ceiling the clip cannot move right any further, but this loop kept
@@ -4248,6 +4292,7 @@ window.FM = window.FM || {};
       });
       window.addEventListener('pointermove', (e) => {
         if (pinch) return;   // a 2-finger pinch is in progress → ignore any in-flight 1-finger drag math
+        if (foreignPointer(e)) return;   // queue 823: this move belongs to a different finger
         if (cueDrag) {
           const pps = pxPerSec(), f = FM.scene.project.fps || 30;
           let dt = Math.round(((e.clientX - cueDrag.startX) / pps) * f) / f;
@@ -4352,8 +4397,9 @@ window.FM = window.FM || {};
           // Near a viewport edge? Bring the timeline to meet the finger so the drag can keep going
           // past the screen, the same way a trim already does. (queue 115)
           const trect = timelineEl ? timelineEl.getBoundingClientRect() : null;
+          const tzone = trect ? trimZonePx(trect) : 0;   // queue 823: the trim path's band, not the raw 46px
           if (trect && !clipScrollRAF &&
-              (e.clientX > trect.right - TRIM_EDGE || e.clientX < trect.left + HEAD_W + TRIM_EDGE)) {
+              (e.clientX > trect.right - tzone || e.clientX < trect.left + HEAD_W + tzone)) {
             // Reset per edge-hold, not per drag: leaving the edge and coming back is a fresh gesture,
             // and a cap that only ever counted down would stop working part-way through a long edit.
             clipMove._scrollFrames = 0;
@@ -4451,6 +4497,7 @@ window.FM = window.FM || {};
         }
       });
       window.addEventListener('pointerup', (e) => {
+        if (foreignPointer(e)) return;   // queue 823: a second finger's release must not commit somebody else's drag
         if (trimScrollRAF) { cancelAnimationFrame(trimScrollRAF); trimScrollRAF = 0; }
         endClipEdgeScroll();
         if (cueDrag) {

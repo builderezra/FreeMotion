@@ -35429,6 +35429,125 @@
     }
   });
 
+  test('a clip drag uses the same edge band as a trim, not a quarter of a phone screen (queue 823 c1)', { item: '823' }, function () {
+    /* queue 707 shrank the TRIM's auto-scroll band to 6% of the lane because 46px is a quarter of a phone's
+       timeline, and wired the shared helper into the trim path only. The clip-MOVE path kept the raw 46px,
+       so on a 380px screen 29% of the lane armed a scroll nobody asked for — against 15% for a trim on the
+       same screen — and the speed ramp divided by the same number, so it also ran twice as fast. */
+    if (!FM._trimZonePx || !FM._clipEdgeScrollSrc) return;
+    const src = FM._clipEdgeScrollSrc();
+    if (!/trimZonePx/.test(src)) throw new Error('the clip edge-scroll still measures its own band instead of the shared one — a clip drag and a trim disagree about where the edge is');
+    /* CONTROL: the shared helper has to actually be narrower than the raw constant at a phone width, or
+       "it uses the shared one" would be a distinction without a difference. */
+    const phone = FM._trimZonePx({ width: 314 });
+    if (!(phone < 46)) throw new Error('the shared band is ' + phone + 'px on a 314px lane, which is not narrower than the raw 46px — this test would pass either way');
+  });
+
+  test('a second finger cannot drive or commit a drag it did not start (queue 823 c2)', { item: '823' }, async function () {
+    /* The window-level handlers acted on whatever pointerId arrived and the gestures carried no owner, so
+       a second touch anywhere OUTSIDE the timeline drove the drag: tap and lift and the clip dropped where
+       it stood; move and the clip flew to that finger's x. A second touch INSIDE the timeline was already
+       safe, because it becomes a pinch, which aborts and restores — which is why this was scoped to
+       outside, and why it needs a real ownership check rather than another pinch guard. */
+    if (!FM._foreignPointer) throw new Error('there is no pointer-ownership check at all — any finger can drive any drag');
+    const savedSel = FM.scene.selectedId;
+    const savedLayers = FM.scene.layers.slice();
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: 1, duration: 3 });
+    try {
+      FM.scene.layers.push(L);
+      FM.timeline.rebuild(); FM.selectLayer(L.id); await sleep(160);
+      const clip = [].slice.call(document.querySelectorAll('.clip')).filter(c => c.dataset && c.dataset.id === L.id)[0];
+      if (!clip) throw new Error('this clip has no element on the timeline');
+      const r = clip.getBoundingClientRect(), y = r.top + r.height / 2, x0 = r.left + r.width / 2;
+      const start0 = L.start;
+      clip.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 41, pointerType: 'mouse', clientX: x0, clientY: y, buttons: 1 }));
+      await sleep(40);
+      /* CONTROL: the gesture must really be in flight, or "a stranger cannot move it" is true of nothing. */
+      window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, pointerId: 41, pointerType: 'mouse', clientX: x0 + 60, clientY: y, buttons: 1 }));
+      await sleep(40);
+      const mine = L.start;
+      if (Math.abs(mine - start0) < 1e-6) throw new Error('the owning pointer’s own move did not drag the clip, so this test is not measuring a live gesture');
+
+      // …now a stranger, the way a bracing thumb on the stage arrives
+      window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, pointerId: 99, pointerType: 'touch', clientX: x0 - 200, clientY: y, buttons: 1 }));
+      await sleep(40);
+      if (Math.abs(L.start - mine) > 1e-6) throw new Error('a second finger moved the clip from ' + mine.toFixed(3) + 's to ' + L.start.toFixed(3) + 's — it is driving a drag it never started');
+      window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: 99, pointerType: 'touch', clientX: x0 - 200, clientY: y, buttons: 0 }));
+      await sleep(60);
+      window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, pointerId: 41, pointerType: 'mouse', clientX: x0 + 120, clientY: y, buttons: 1 }));
+      await sleep(40);
+      if (Math.abs(L.start - mine) < 1e-6) throw new Error('the stranger’s release ended the drag: the owning finger can no longer move the clip');
+      window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: 41, pointerType: 'mouse', clientX: x0 + 120, clientY: y, buttons: 0 }));
+      await sleep(60);
+    } finally {
+      try { FM.timeline._abortGestures(); } catch (e) {}
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(savedSel || null); FM.timeline.rebuild(); await sleep(40);
+    }
+  });
+
+  test('arrow-nudging a group and its own members moves them once, not twice (queue 823 c4)', { item: '823' }, async function () {
+    /* Select All and nudge: anything inside a group travelled twice — once because the group carries it,
+       once because it is in the selection too — so the layout tore apart one arrow-press at a time.
+       FM.duplicateSelection has dropped members-of-selected-groups since it was written; this is the same
+       map, applied to the nudge. */
+    /* A fresh headless profile opens on the Home screen, and a full-screen overlay swallows every bare
+       key — so without this the arrow never reaches the nudge and the control below reads "nothing moved". */
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedSel = FM.scene.selectedId;
+    const savedLayers = FM.scene.layers.slice();
+    try {
+      const g = FM.makeLayer('group', { name: 'c4 group', start: 0, duration: 5 });
+      FM.scene.layers.push(g);
+      const child = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 20, shapeH: 20, fill: '#fff', start: 0, duration: 5 });
+      child.parent = g.id;
+      FM.scene.layers.push(child);
+      FM.timeline.rebuild();
+      FM.selectLayer(g.id);
+      if (FM.toggleSelect) FM.toggleSelect(child.id);      // the app's own multi-select, as a shift-click makes it
+      await sleep(120);
+      const ids = FM.selectionIds ? FM.selectionIds() : [];
+      if (ids.indexOf(g.id) < 0 || ids.indexOf(child.id) < 0) throw new Error('could not select the group AND its member together, so the double-move cannot be reached');
+      /* ⚠️ MEASURED WHERE IT LANDS ON SCREEN, not on the child's own property. A group carries its members
+         by moving ITSELF, so after the fix the child's own x is deliberately unchanged — reading that
+         alone said "the nudge did nothing" about a nudge that worked. What the user sees is the sum. */
+      const seen = () => FM.evalProp(g.transform.x, FM.time) + FM.evalProp(child.transform.x, FM.time);
+      const x0 = seen();
+      window.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowRight', code: 'ArrowRight' }));
+      await sleep(120);
+      const moved = seen() - x0;
+      if (Math.abs(moved) < 1e-6) throw new Error('the nudge did not move the member at all, so nothing below is being measured');
+      if (Math.abs(moved) > 1.5) throw new Error('one arrow-press moved the group’s member by ' + moved + 'px on screen instead of 1 — it is being carried by the group AND nudged on its own');
+    } finally {
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(savedSel || null); FM.timeline.rebuild(); await sleep(40);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  test('a head trim carries the effect clock, so Drift and Spin do not jump (queue 823 c5)', { item: '823' }, async function () {
+    /* Every time-driven effect is driven by "seconds since this clip began" (FM.fxLocalTime), so moving
+       `start` forward by a second rewinds all of them by a second and the picture snaps. A SPLIT has
+       carried the phase across the cut since the day it was written, because the jump was measured there
+       — 211px of centroid shift for Drift. A head TRIM is the same discontinuity and carried nothing. */
+    if (!FM.fxLocalTime || !FM.trimLayerHead) return;
+    const savedLayers = FM.scene.layers.slice();
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: 1, duration: 4 });
+    try {
+      FM.scene.layers.push(L);
+      const at = 2.5;
+      const before = FM.fxLocalTime(L, at);
+      FM.trimLayerHead(L, 0.75);                 // the grip's own writer, so this is the shipped path
+      const after = FM.fxLocalTime(L, at);
+      if (Math.abs(L.start - 1.75) > 1e-6) throw new Error('the head did not move (start ' + L.start + '), so nothing below is being measured');
+      if (Math.abs(after - before) > 1e-6) throw new Error('the effect clock jumped by ' + (after - before).toFixed(3) + 's when the head moved — every time-driven effect on the clip snaps at that moment');
+    } finally {
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.timeline.rebuild(); await sleep(40);
+    }
+  });
+
   test('a raised inspector grows its option cards into the height it was given (queue 807)', { item: '807' }, async function () {
     /* Measured in the pane at 1280x800 on v15.88: raised by 250px the cards stayed 48px and the last one
        ended 266px above the panel's bottom, because --cat-h asks the band floor (--tl-h) how much room

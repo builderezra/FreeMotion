@@ -3645,6 +3645,7 @@ window.FM = window.FM || {};
      * belt-and-braces reset just above this — leaves the cues alone by construction. */
     const applied = layer.start - s0;
     if (applied && FM.shiftLayerCues) FM.shiftLayerCues(layer, applied);
+    if (applied && FM.shiftLayerFxClock) FM.shiftLayerFxClock(layer, applied);   // queue 823: the effect clock rides with the head
     return layer.start !== s0 || layer.duration !== d0;
   };
 
@@ -6663,7 +6664,18 @@ window.FM = window.FM || {};
       if (e.code === 'Space') { e.preventDefault(); FM.togglePlay(); }
       else if (e.key === '?') { e.preventDefault(); if (FM.shortcuts) FM.shortcuts.toggle(); }
       else if (e.code.indexOf('Arrow') === 0) {
-        const nudgeable = (FM.selectionIds ? FM.selectionIds() : (FM.scene.selectedId ? [FM.scene.selectedId] : []))
+        /* ⚠️ queue 823: A MEMBER OF A SELECTED GROUP IS ALREADY BEING MOVED BY THAT GROUP. Select All and
+           nudge, and anything inside a group travelled TWICE — once because the group carries it and once
+           because it is in the selection too — so the layout tore apart one arrow-press at a time.
+           FM.duplicateSelection has solved this since it was written (`inside`, js/app.js:3332): drop any
+           selected layer that lives under another selected layer. Same map, same reason. */
+        const selForNudge = (FM.selectionIds ? FM.selectionIds() : (FM.scene.selectedId ? [FM.scene.selectedId] : []));
+        const insideSel = {};
+        selForNudge.forEach(id => {
+          const l = FM.layerById(FM.scene, id);
+          if (l && l.type === 'group' && FM.groupDescendants) FM.groupDescendants(id).forEach(d => { insideSel[d.id] = 1; });
+        });
+        const nudgeable = selForNudge.filter(id => !insideSel[id])
           .map(id => FM.layerById(FM.scene, id)).filter(l => l && !l.locked);
         if (nudgeable.length) {                                  // nudge all selected layers
           e.preventDefault();

@@ -304,11 +304,56 @@ for f in sorted(watched):
 PYEOF
 )"
 if [ -n "$BUSTER_MISS" ]; then
-  echo "❌ A FILE CHANGED BUT ITS CACHE-BUSTER DID NOT — not committing, not pushing."
-  echo "$BUSTER_MISS" | sed 's/^/   /'
-  echo "   Bump the ?v= for each of those in index.html. Without it the phone keeps serving the OLD file,"
-  echo "   the app looks unchanged, and the fix reads as broken when it is fine."
-  exit 1
+  # ⚠️ IT BUMPS THEM RATHER THAN REFUSING (6 Sep). This gate refused twice in one day, on two different
+  # releases, for the same reason both times — and a gate that only says "you forgot" leaves the forgetting
+  # possible. His rule is the one this whole file is built on: "every safe guard needs to be structural…
+  # anything that could be forgotten needs to be structural." A number that must be incremented whenever a
+  # file changes is exactly the kind of thing a person forgets and a script never does, so the script does
+  # it. It still SAYS which ones it bumped, loudly, because a silent edit to index.html would be its own
+  # kind of surprise — and it still refuses below if the bump did not take.
+  echo "→ cache-busters were stale — bumping them (a changed file MUST be re-fetched by the phone):"
+  echo "$BUSTER_MISS" | sed 's/^/   · /'
+  python3 - <<'PYEOF'
+import re
+names = []
+import subprocess
+out = subprocess.run("git status --porcelain", shell=True, capture_output=True, text=True).stdout
+for line in out.splitlines():
+    f = line[3:].split(" -> ")[-1].strip()
+    if re.match(r'^(js/.*\.js|styles\.css|theme-glass\.css)$', f): names.append(f)
+src = open('index.html', encoding='utf-8').read()
+was = subprocess.run("git show HEAD:index.html", shell=True, capture_output=True, text=True).stdout
+for f in sorted(set(names)):
+    m_now = re.search(re.escape(f) + r'\?v=([0-9]+)', src)
+    m_was = re.search(re.escape(f) + r'\?v=([0-9]+)', was)
+    if not m_now or not m_was: continue
+    if m_now.group(1) != m_was.group(1): continue          # already bumped by hand
+    src = src.replace(m_now.group(0), f + '?v=' + str(int(m_now.group(1)) + 1))
+    print("   ✅ %s ?v=%s → ?v=%d" % (f, m_now.group(1), int(m_now.group(1)) + 1))
+open('index.html', 'w', encoding='utf-8').write(src)
+PYEOF
+  STILL="$(python3 - <<'PYEOF'
+import subprocess, re, sys
+def sh(c): return subprocess.run(c, shell=True, capture_output=True, text=True).stdout
+changed = set()
+for line in sh("git status --porcelain").splitlines():
+    changed.add(line[3:].split(" -> ")[-1].strip())
+watched = [f for f in changed if re.match(r'^(js/.*\.js|styles\.css|theme-glass\.css)$', f)]
+now = open('index.html', encoding='utf-8').read(); was = sh("git show HEAD:index.html")
+def b(t, f):
+    m = re.search(re.escape(f) + r'\?v=([0-9.]+)', t); return m.group(1) if m else None
+for f in sorted(watched):
+    n, o = b(now, f), b(was, f)
+    if n is None or o is None: continue
+    if n == o: print("%s (still ?v=%s)" % (f, n))
+PYEOF
+)"
+  if [ -n "$STILL" ]; then
+    echo "❌ A FILE CHANGED AND ITS CACHE-BUSTER COULD NOT BE BUMPED — not committing, not pushing."
+    echo "$STILL" | sed 's/^/   /'
+    echo "   Without it the phone keeps serving the OLD file, the app looks unchanged, and the fix reads as broken."
+    exit 1
+  fi
 fi
 
 # ---- THE SUMMARY EZRA READS MUST NOT BE STALE (22 Aug) -------------------------------------------
