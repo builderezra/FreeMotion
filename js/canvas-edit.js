@@ -165,7 +165,23 @@ window.FM = window.FM || {};
       const c = Math.cos(out.rot), si = Math.sin(out.rot);
       out.x += out.s * (c * px - si * py);
       out.y += out.s * (si * px + c * py);
+      /* ⚠️ queue 832: THE GROUP PIVOT, exactly as the renderer applies it. A group is created at (0,0) on
+         purpose, so scaling or rotating one about the origin would fling every member — queue 630 fixed
+         that in the compositor with a pivot sandwich (translate to the members' bbox centre, transform,
+         translate back) and this walk was never taught it. So a member of a scaled or rotated group had
+         its selection box, its five handles and its tap region drawn where the layer ISN'T: measured
+         ~460px away at 1.5x. Tapping the layer then missed and DESELECTED it, and the rotate knob
+         measured its angle from a centre that was not the layer's, so it spun non-linearly under the
+         finger. Same condition as the renderer's, so an untransformed group still costs nothing. */
+      const needsPivot = (pr !== 0 || ps !== 1) && chain[i].type === 'group';
+      const piv = needsPivot && FM.groupPivot ? FM.groupPivot(chain[i], FM.scene, t) : null;
+      if (piv) { out.x += out.s * (c * piv.x - si * piv.y); out.y += out.s * (si * piv.x + c * piv.y); }
       out.rot += pr; out.s *= ps;
+      if (piv) {
+        const c2 = Math.cos(out.rot), s2 = Math.sin(out.rot);
+        out.x += out.s * (c2 * -piv.x - s2 * -piv.y);
+        out.y += out.s * (s2 * -piv.x + c2 * -piv.y);
+      }
     }
     return out;
   }
@@ -287,6 +303,7 @@ window.FM = window.FM || {};
         // (adding w/2 would land on the right edge) — same convention startHandle already relies on.
         const b = FM.groupBounds(sel, FM.scene, FM.time);
         if (b) vpPinch.pivot = { cx: b.x, cy: b.y,
+                                 sandwich: !!(FM.groupPivot && FM.groupPivot(sel, FM.scene, FM.time)),   // queue 831: the renderer pivots for us now
                                  g0x: FM.evalProp(sel.transform.x, FM.time), g0y: FM.evalProp(sel.transform.y, FM.time) };
       }
     }
@@ -371,7 +388,18 @@ window.FM = window.FM || {};
         // members clear off-frame. Each move compensates x/y so the box turns/scales in place.
         const gb = FM.groupBounds(layer, FM.scene, FM.time);
         if (gb) {
+          /* ⚠️ queue 831: THE RENDERER ALREADY PIVOTS, SO DO NOT COMPENSATE ON TOP OF IT. This block was
+             written when a group scaled about the project ORIGIN, and it moved x/y each frame to keep the
+             box in place. queue 630 then taught the compositor the pivot sandwich — members render at
+             G + P + s·(m − P) — so the visible centre is G + P whatever the scale or rotation is, and it
+             does not move on its own any more. The old compensation therefore DISPLACED the group by
+             (1−k)·P: measured, a 1x→2x drag on members centred at (575,725) wrote x/y = (−575,−725) and
+             put the content in the top-left corner, which is the very symptom 630 fixed. With keyframed
+             x/y it was worse: shiftTransform moved EVERY position keyframe by that bogus delta, so one
+             handle drag rewrote the group's whole animation. `sandwich` records whether the renderer will
+             pivot for this group, so if that ever stops being true the old maths comes back with it. */
           pivot = { cx: gb.x, cy: gb.y,
+                    sandwich: !!(FM.groupPivot && FM.groupPivot(layer, FM.scene, FM.time)),
                     g0x: FM.evalProp(layer.transform.x, FM.time) || 0,
                     g0y: FM.evalProp(layer.transform.y, FM.time) || 0 };
           cx = gb.x; cy = gb.y;   // finger distance/angle are measured from what the user SEES
@@ -438,7 +466,7 @@ window.FM = window.FM || {};
           const L = vpPinch.layer;
           const ratio = d / vpPinch.dist;
           const sc = Math.max(0.02, Math.round(vpPinch.startScale * ratio * 1000) / 1000);
-          if (vpPinch.pivot) {   // keep a group's visible centre put while its members scale
+          if (vpPinch.pivot && !vpPinch.pivot.sandwich) {   // queue 831: only when the renderer is NOT pivoting — see startHandle
             const k = sc / vpPinch.startScale, P = vpPinch.pivot;
             FM.shiftTransform(L, 'x', Math.round(P.cx + (P.g0x - P.cx) * k), FM.time);
             FM.shiftTransform(L, 'y', Math.round(P.cy + (P.g0y - P.cy) * k), FM.time);
@@ -543,8 +571,9 @@ window.FM = window.FM || {};
       L.wrapWidth = Math.max(20, Math.round(local / Math.abs(drag.k || 0.5)));
     } else if (drag.mode === 'scale') {
       const s = Math.max(0.02, Math.round(drag.startScale * (Math.hypot(p.x - drag.cx, p.y - drag.cy) / drag.startDist) * 1000) / 1000);
-      if (drag.pivot) {
+      if (drag.pivot && !drag.pivot.sandwich) {
         // scale about the bounds centre C: members sit at G + s·m, so G' = C + (s/s0)·(G0 − C)
+        // (queue 831: only when the RENDERER is not pivoting — see the note where `pivot` is built)
         const k = s / drag.startScale, pv = drag.pivot;
         FM.shiftTransform(L, 'x', Math.round(pv.cx + k * (pv.g0x - pv.cx)), FM.time);
         FM.shiftTransform(L, 'y', Math.round(pv.cy + k * (pv.g0y - pv.cy)), FM.time);
@@ -552,8 +581,9 @@ window.FM = window.FM || {};
       FM.shiftTransform(L, 'scale', s, FM.time);
     } else if (drag.mode === 'rotate') {
       const deg = drag.startRot + (Math.atan2(p.y - drag.cy, p.x - drag.cx) - drag.startAngle) * 180 / Math.PI;
-      if (drag.pivot) {
+      if (drag.pivot && !drag.pivot.sandwich) {
         // rotate about the bounds centre C: G' = C + R(Δ)·(G0 − C), so the visible box turns in place
+        // (queue 831: only when the RENDERER is not pivoting — see the note where `pivot` is built)
         const d = (deg - drag.startRot) * Math.PI / 180, pv = drag.pivot;
         const c = Math.cos(d), si = Math.sin(d), vx = pv.g0x - pv.cx, vy = pv.g0y - pv.cy;
         FM.shiftTransform(L, 'x', Math.round(pv.cx + c * vx - si * vy), FM.time);
@@ -756,6 +786,7 @@ window.FM = window.FM || {};
   };
 
   FM.canvasEdit = {
+    _parentXform: parentXform,   // queue 832 suite seam: the walk the outline, the handles and the hit test all use
     init() {
       canvas = document.getElementById('preview');
       wrap = document.getElementById('canvas-wrap');

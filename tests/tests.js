@@ -35846,6 +35846,156 @@
     }
   });
 
+  test('a save writes the clips of the scene it was started for, even if the project changes mid-write (queue 830)', { item: '830' }, async function () {
+    /* The blob loop re-read FM.media for each layer AFTER the previous layer's awaits, and opening
+       another project calls FM.releaseProjectMedia synchronously, which removes every record of the
+       outgoing scene. So importing a few clips on a phone and going Home while the first big file was
+       still being written left the rest never written at all — and the scene doc, already flushed, lists
+       them, so that project reopens with permanently blank clips and no error anywhere. */
+    if (!FM.storage || !FM.storage.save) return;
+    const savedLayers = FM.scene.layers.slice();
+    const media = [];
+    const realPut = FM.storage._idbPut;
+    try {
+      const ids = [];
+      for (let i = 0; i < 3; i++) {
+        const L = FM.makeLayer('image', { start: 0, duration: 3 });
+        FM.scene.layers.push(L); ids.push(L.id); media.push(L.id);
+        const cv = document.createElement('canvas'); cv.width = 8; cv.height = 8;
+        FM.media.set(L.id, { kind: 'image', el: cv, width: 8, height: 8, duration: 0, file: new Blob(['q830-' + i]), layerId: L.id });
+      }
+      if (!FM.storage._writeJobs) throw new Error('the save exposes no way to see which clips it decided to write, so this cannot be measured');
+      /* The jobs are decided BEFORE the first await; that is the whole fix. Emptying the store after
+         that point — which is exactly what opening another project does — must not change them. */
+      const jobs = FM.storage._writeJobs();
+      if (jobs.length < 3) throw new Error('the save planned ' + jobs.length + ' blob writes for 3 clips with files, so the fixture is wrong, not the code');
+      media.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      const after = jobs.filter(j => j && j.file).length;
+      if (after < 3) throw new Error('after the media store was emptied mid-save only ' + after + ' of 3 clips still had a file to write — the rest would be left blank in a project whose doc already lists them');
+    } finally {
+      FM.storage._idbPut = realPut;
+      media.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      await sleep(40);
+    }
+  });
+
+  test('a member of a scaled group is drawn where it actually is (queue 832)', { item: '832' }, function () {
+    /* A group is created at (0,0) on purpose, so scaling one about the origin would fling its members —
+       queue 630 fixed that in the RENDERER with a pivot sandwich (translate to the members' bbox centre,
+       transform, translate back). The canvas editor's own parent walk never learned it, so a member of a
+       scaled group had its selection box, its five handles and its tap region drawn where the layer is
+       NOT: measured ~460px away at 1.5x, and tapping the layer then missed and DESELECTED it.
+       ⚠️ MEASURED ON THE SELECTION BOX ON SCREEN, not through the editor's own helper: the helper is only
+       exported BY this fix, so a test that asked for it would skip against the old code instead of
+       failing — which is exactly what the first version of this test did. */
+    const cv = document.getElementById('preview'), box = document.getElementById('select-box');
+    if (!cv || !box || !FM.groupPivot) return;
+    const savedLayers = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time;
+    const P0 = FM.scene.project, w0 = P0.width, h0 = P0.height;
+    const hadEditing = document.body.classList.contains('text-editing');
+    try {
+      document.body.classList.remove('text-editing');
+      P0.width = 1080; P0.height = 1080; FM.time = 0;
+      FM.scene.layers.length = 0;
+      const G = FM.makeLayer('group', { name: 'g832', x: 0, y: 0, start: 0, duration: 10 });
+      G.transform.scale = 1.5;
+      const A = FM.makeLayer('shape', { shape: 'rect', x: 400, y: 500, shapeW: 40, shapeH: 40, fill: '#fff', start: 0, duration: 10 });
+      const B = FM.makeLayer('shape', { shape: 'rect', x: 750, y: 950, shapeW: 40, shapeH: 40, fill: '#fff', start: 0, duration: 10 });
+      A.parent = G.id; B.parent = G.id;
+      FM.scene.layers.push(G, A, B);
+      FM.selectLayer(A.id); FM.refreshAll();
+      if (FM.canvasEdit) FM.canvasEdit.update();
+
+      const piv = FM.groupPivot(G, FM.scene, 0);
+      if (!piv) throw new Error('the renderer reports no pivot for this group, so there is nothing to compare against');
+      /* The renderer's own rule, written out rather than borrowed: world = G + P + s*(L - P). */
+      const s = 1.5;
+      const wantX = piv.x + s * (400 - piv.x), wantY = piv.y + s * (500 - piv.y);
+      const toClient = (px, py) => {
+        const r = cv.getBoundingClientRect(), sc = cv.__fmRS || 1;
+        return { x: r.left + ((px - (cv.__fmOX || 0)) / (cv.width / sc)) * r.width,
+                 y: r.top + ((py - (cv.__fmOY || 0)) / (cv.height / sc)) * r.height };
+      };
+      const want = toClient(wantX, wantY);
+      const br = box.getBoundingClientRect();
+      if (!(br.width > 0 && br.height > 0)) throw new Error('the selection box has no size, so this measures nothing — the harness, not the feature');
+      const gotCx = br.left + br.width / 2, gotCy = br.top + br.height / 2;
+      const off = Math.hypot(gotCx - want.x, gotCy - want.y);
+      /* A few px of tolerance for the box's own border and rounding; the fault is hundreds. */
+      if (off > 12) throw new Error('the selection box is centred ' + Math.round(off) + 'px from where the renderer draws this member — its outline, its five handles and its tap area are all in the wrong place, so tapping the layer misses and deselects it');
+    } finally {
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0); FM.time = t0; P0.width = w0; P0.height = h0;
+      if (hadEditing) document.body.classList.add('text-editing');
+      FM.refreshAll();
+    }
+  });
+  test('“Draw more” on an animated sketch keeps its keyframes (queue 833)', { item: '833' }, function () {
+    /* Adding one stroke to a sketch he had already animated used to plain-assign over transform.x/y and
+       over a keyframed shape path, deleting every keyframe — and commitStroke then committed and
+       autosaved the flattened layer. On a phone the transport is hidden while drawing, so there was not
+       even an undo button on screen at the moment it happened. */
+    if (!FM.refitPathLayer) return;
+    const savedLayers = FM.scene.layers.slice();
+    const t0 = FM.time;
+    try {
+      FM.time = 0;
+      const L = FM.makeLayer('shape', { shape: 'path', x: 100, y: 100, shapeW: 50, shapeH: 50, start: 0, duration: 5 });
+      L.subs = { kf: [{ t: 0, v: [[[0, 0], [1, 0], [1, 1]]], e: 'linear' }, { t: 2, v: [[[0, 0], [0.5, 0.5], [1, 1]]], e: 'linear' }] };
+      L.transform.x = { kf: [{ t: 0, v: 100, e: 'linear' }, { t: 3, v: 400, e: 'linear' }] };
+      L.transform.y = { kf: [{ t: 0, v: 100, e: 'linear' }, { t: 3, v: 300, e: 'linear' }] };
+      FM.scene.layers.push(L);
+      FM.refitPathLayer(L, [[[10, 10], [200, 10], [200, 260]]]);
+      if (!L.transform.x || !Array.isArray(L.transform.x.kf) || L.transform.x.kf.length !== 2)
+        throw new Error('the position animation was flattened to a plain number — every keyframe he set is gone, and the draw tool commits and autosaves straight after');
+      if (!L.subs || Array.isArray(L.subs) || !Array.isArray(L.subs.kf) || L.subs.kf.length < 2)
+        throw new Error('the keyframed shape path was replaced by a single static path — the Edit Points animation is gone');
+      /* And the new stroke really landed: the keyframe at the playhead now holds it. */
+      const here = L.subs.kf.filter(k => Math.abs((+k.t || 0) - FM.time) < 1e-3)[0];
+      if (!here || !Array.isArray(here.v) || !here.v.length) throw new Error('the new stroke did not reach the keyframe at the playhead, so the drawing would not have changed at all');
+    } finally {
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.time = t0;
+    }
+  });
+
+  test('replacing a clip’s file keeps the original, and undo brings it back (queue 829)', { item: '829' }, async function () {
+    /* Pick the wrong file in "Replace media…" and the original was gone from all three places at once:
+       the registry released it, the next save wrote the new blob over the SAME IndexedDB key (blobs are
+       keyed by layer id), and the media-library entry that pointed there was removed. Undo could not help
+       — history only ever swaps layer JSON, deliberately, so it never touches loaded media. The outgoing
+       file is now stashed before the replace, and an undo that takes the layer's mediaRev backwards asks
+       for it back. */
+    if (!FM.storage || !FM.storage.stashPrevMedia || !FM.storage.takePrevMedia) throw new Error('there is no way to keep the outgoing file at all — a replace still destroys the only copy');
+    const savedLayers = FM.scene.layers.slice();
+    const L = FM.makeLayer('image', { start: 0, duration: 3 });
+    try {
+      FM.scene.layers.push(L);
+      const original = new Blob(['q829-ORIGINAL']);
+      const cv = document.createElement('canvas'); cv.width = 8; cv.height = 8;
+      FM.media.set(L.id, { kind: 'image', el: cv, width: 8, height: 8, duration: 0, file: original, rev: 0, layerId: L.id });
+      L.mediaRev = 0;
+
+      const okStash = await FM.storage.stashPrevMedia(L.id, FM.media.get(L.id), 0);
+      if (!okStash) throw new Error('the outgoing file could not be kept, so a wrong pick is still unrecoverable');
+      // …the replace itself: a new file under the same layer id, and the rev moves on
+      const cv2 = document.createElement('canvas'); cv2.width = 8; cv2.height = 8;
+      FM.media.set(L.id, { kind: 'image', el: cv2, width: 8, height: 8, duration: 0, file: new Blob(['q829-NEW']), rev: 1, layerId: L.id });
+      L.mediaRev = 1;
+
+      const kept = await FM.storage.takePrevMedia(L.id);
+      if (!kept || !kept.file) throw new Error('the original file is not in the store after the replace — it is gone for good');
+      const text = await kept.file.text();
+      if (text.indexOf('ORIGINAL') < 0) throw new Error('what was kept is not the original file (' + text + ')');
+      if ((kept.rev || 0) !== 0) throw new Error('the kept file is not tagged with the revision undo would ask for, so an undo could not match it');
+    } finally {
+      try { FM.media.remove(L.id); } catch (e) {}
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      await sleep(40);
+    }
+  });
+
   test('a raised inspector grows its option cards into the height it was given (queue 807)', { item: '807' }, async function () {
     /* Measured in the pane at 1280x800 on v15.88: raised by 250px the cards stayed 48px and the last one
        ended 266px above the panel's bottom, because --cat-h asks the band floor (--tl-h) how much room
@@ -59913,8 +60063,15 @@
           y: r.top + ((py - (cv.__fmOY || 0)) / (cv.height / sc)) * r.height,
         };
       };
-      // The layer's anchor in world coords: the group sits at 0,0 and doubles, so 100,200 -> 200,400.
-      const WX = 200, WY = 400;
+      /* ⚠️ THE LAYER'S ANCHOR IN WORLD COORDS, under the model the RENDERER actually uses (queue 630 /
+         queue 831). This used to say "the group sits at 0,0 and doubles, so 100,200 -> 200,400" — the
+         pre-630 model, where a group scaled its children about the project origin. Since 630 the
+         compositor pivots about the members' own bounding-box centre: world = G + P + s·(L − P). This
+         group has ONE member, so P is that member's own centre (100,200) and the member therefore scales
+         about itself and does not move at all. The old number agreed with the old parentXform, so the two
+         were wrong together and the test passed; it is derived here from the renderer's rule, still
+         without asking parentXform. */
+      const WX = 100, WY = 200;
       const target = toClient(WX + 300, WY);
       const o = (cx, cy) => ({ bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 0, buttons: 1, pointerId: 7, pointerType: 'mouse', isPrimary: true });
 

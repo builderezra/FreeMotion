@@ -63,6 +63,11 @@ window.FM = window.FM || {};
       FM.scene.selectedIds = [];
     }
     suppress = false;
+    /* queue 829: the layers are back — now bring the MEDIA back into agreement with them. An undo past a
+       "Replace media…" restores a layer whose mediaRev is older than the file currently loaded for it, and
+       the original was stashed at replace time for exactly this. Async and silent: the layer is already
+       correct, this only makes the picture match it. */
+    if (FM.restoreReplacedMedia) { try { FM.restoreReplacedMedia(); } catch (e) {} }
     // Undo can remove the group the user is INSIDE (Edit Group) — a dangling groupContext filters
     // every layer out of the timeline (blank list + stale crumb). Validate and exit if it's gone.
     if (FM.groupContext && !FM.scene.layers.some(l => l.id === FM.groupContext)) {

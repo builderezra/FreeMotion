@@ -2644,12 +2644,31 @@ window.FM = window.FM || {};
     }));
     if (!isFinite(minX)) return layer;
     const w = Math.max(4, maxX - minX), h = Math.max(4, maxY - minY);
-    layer.subs = projSubs.map(sub => sub.map(p => (p.length > 2
+    const flat = projSubs.map(sub => sub.map(p => (p.length > 2
       ? [(p[0] - minX) / w, (p[1] - minY) / h, p[2]]
       : [(p[0] - minX) / w, (p[1] - minY) / h])));
+    /* ⚠️ queue 833: "DRAW MORE" MUST NOT FLATTEN AN ANIMATION. This used to plain-assign over
+       `layer.subs` and over `transform.x`/`y`, so adding one stroke to a sketch he had already animated
+       silently deleted every position keyframe AND a keyframed shape path from Edit Points — and
+       commitStroke then committed and autosaved the flattened layer. On a phone the transport is hidden
+       while drawing, so there was not even an undo button on screen at the moment it happened.
+       A keyframed path takes the new shape at the PLAYHEAD, where he is drawing, and the other keyframes
+       are left alone; a keyframed position is SHIFTED by the same delta the flat assignment would have
+       applied, which is what FM.shiftTransform exists for and what every other mover on the canvas does. */
+    if (layer.subs && !Array.isArray(layer.subs) && Array.isArray(layer.subs.kf) && layer.subs.kf.length) {
+      const t = FM.time || 0;
+      let hit = null, best = Infinity;
+      layer.subs.kf.forEach(k => { const d = Math.abs((+k.t || 0) - t); if (d < best) { best = d; hit = k; } });
+      if (best <= 1e-3 && hit) hit.v = flat;
+      else { layer.subs.kf.push({ t: t, v: flat, e: 'linear' }); layer.subs.kf.sort((a, b) => (+a.t) - (+b.t)); }
+    } else {
+      layer.subs = flat;
+    }
     layer.points = null;                       // subs win in traceShapePath; don't leave a stale single path
     layer.shapeW = Math.round(w); layer.shapeH = Math.round(h);
-    layer.transform.x = minX + w / 2; layer.transform.y = minY + h / 2;
+    const nx = minX + w / 2, ny = minY + h / 2;
+    if (FM.shiftTransform) { FM.shiftTransform(layer, 'x', nx, FM.time); FM.shiftTransform(layer, 'y', ny, FM.time); }
+    else { layer.transform.x = nx; layer.transform.y = ny; }
     return layer;
   };
 
@@ -3479,6 +3498,32 @@ window.FM = window.FM || {};
   };
 
   // ---- replace a layer's media, keeping its transform / keyframes / timing / effects ----
+  /* queue 829: put a stashed file back when undo takes the layer's mediaRev backwards. History only ever
+     swaps layer JSON — deliberately, so an undo does not re-decode every video — so the media had to be
+     asked separately. Called from history.restore; silent and async, because the layer is already correct
+     and this only brings the picture back into agreement with it. */
+  FM.restoreReplacedMedia = async function () {
+    if (!FM.storage || !FM.storage.takePrevMedia) return 0;
+    let back = 0;
+    for (const layer of (FM.scene.layers || [])) {
+      if (!layer || layer.type === 'text' || layer.type === 'shape' || layer.type === 'null') continue;
+      const want = layer.mediaRev || 0;
+      const live = FM.media.get(layer.id);
+      if (!live || (live.rev || 0) <= want) continue;      // the picture is not ahead of the layer
+      const prev = await FM.storage.takePrevMedia(layer.id);
+      if (!prev || !prev.file || (prev.rev || 0) !== want) continue;
+      let rec = null;
+      try { rec = /^video/.test(prev.kind || '') ? await FM.loadVideoFile(prev.file) : await FM.loadImageFile(prev.file); } catch (e) { rec = null; }
+      if (!rec) continue;
+      rec.rev = want;
+      FM.replaceMediaWith(layer.id, rec);
+      layer.mediaRev = want;
+      back++;
+    }
+    if (back) { FM.refreshAll(); FM.requestRender(); if (FM.storage) FM.storage.markDirty(); }
+    return back;
+  };
+
   FM.replaceMediaWith = function (id, nrec) {
     const layer = FM.layerById(FM.scene, id);
     if (!layer || !nrec) return false;
@@ -3512,6 +3557,13 @@ window.FM = window.FM || {};
       let nrec = null;
       try { nrec = isVideo ? await FM.loadVideoFile(file) : await FM.loadImageFile(file); } catch (e) { nrec = null; }
       if (!nrec) { if (FM.toast) FM.toast('Could not load that file'); return; }
+      /* queue 829: keep the outgoing file BEFORE anything replaces it. The next save writes the new blob
+         over the same key, so without this the original is gone from the registry, from IndexedDB and
+         from the media library at once — and undo cannot reach it, because history only swaps layer JSON. */
+      const outgoing = FM.media.get(id);
+      if (outgoing && outgoing.file && FM.storage && FM.storage.stashPrevMedia) {
+        try { await FM.storage.stashPrevMedia(id, outgoing, layer.mediaRev || 0); } catch (e) {}
+      }
       FM.replaceMediaWith(id, nrec);
       if (layer.reversed && FM.ensureReverseCache) { try { await FM.ensureReverseCache(layer); } catch (e) {} }
       /* The outgoing blob is NOT deleted any more, and the layer gets a serialisable marker.
@@ -3529,6 +3581,7 @@ window.FM = window.FM || {};
        * come back to has been erased. Orphans are reaped by the boot sweep, which is the same rule
        * deleteLayer already follows for exactly this reason. */
       layer.mediaRev = (layer.mediaRev || 0) + 1;
+      { const r = FM.media.get(id); if (r) r.rev = layer.mediaRev; }   // queue 829: the record knows which rev it is, so undo can tell it is ahead
       refreshAll(); FM.seekVideosToTime();
       if (FM.history) FM.history.commit();
       if (FM.storage && FM.storage.save) FM.storage.save();

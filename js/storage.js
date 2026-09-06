@@ -261,7 +261,44 @@ window.FM = window.FM || {};
     return ids.length;
   }
 
+  /* queue 830: which blobs this save is FOR, decided before any await. Exported so the suite can ask the
+     same question the save asks, at the same moment, without racing a real IndexedDB write. */
+  function planBlobWrites() {
+    const jobs = [];
+    (FM.scene.layers || []).forEach(layer => {
+      if (!layer || layer.type === 'text') return;
+      const m = FM.media.get(layer.id);
+      if (m && m.file) jobs.push({ id: layer.id, file: m.file, kind: m.kind, rev: layer.mediaRev || 0 });
+    });
+    return jobs;
+  }
   FM.storage = {
+    _writeJobs: planBlobWrites,   // queue 830 suite seam
+    /* ⚠️ queue 829: THE FILE HE IS REPLACING MUST SURVIVE THE REPLACE. A layer's blob is keyed by the
+       LAYER id, so the next save writes the new file over the same key — the comment on replaceMedia says
+       "the outgoing blob is NOT deleted any more", and it is right that nothing deletes it, but the save
+       overwrites it a moment later. Together with the registry release and the library entry going, that
+       was every copy: pick the wrong file and the original is gone, with undo unable to bring it back
+       because history only ever swaps layer JSON. One slot per layer, so a chain of replaces cannot grow
+       without bound, and it is written before the new file is, not after. */
+    async stashPrevMedia(id, rec, rev) {
+      if (!id || !rec || !rec.file) return false;
+      try {
+        const db = await openDB();
+        await idbPut(db, 'prev:' + id, { file: rec.file, kind: rec.kind, rev: rev || 0 });
+        db.close();
+        return true;
+      } catch (e) { return false; }
+    },
+    async takePrevMedia(id) {
+      if (!id) return null;
+      try {
+        const db = await openDB();
+        const got = await idbGet(db, 'prev:' + id);
+        db.close();
+        return got || null;
+      } catch (e) { return null; }
+    },
     async save() {
       let sceneOk = writeScene();   // rev-guarded; a quota failure shouldn't block the IDB media save below
       const warnedBefore = _quotaWarned;
@@ -273,11 +310,18 @@ window.FM = window.FM || {};
       // a failing index write re-toast "Storage full" every 600ms forever
       if (sceneOk && indexOk && !(_quotaWarned && !warnedBefore)) _quotaWarned = false;
       try {
+        /* ⚠️ queue 830: TAKE THE RECORDS BEFORE THE FIRST AWAIT. This loop re-read FM.media for each layer
+           AFTER the previous layer's awaits, so anything that cleared the store mid-save silently blanked
+           the rest — and one thing does exactly that: opening another project calls FM.releaseProjectMedia
+           synchronously, which removes every record of the outgoing scene. Import three clips on a phone
+           and go Home while the first big file is still being written, and the remaining clips were never
+           written at all. The scene doc was already flushed and lists them, so that project reopens with
+           permanently blank clips — and no toast, because idbPut was never reached, so nothing failed.
+           A snapshot taken before any await belongs to the scene this save is FOR. */
+        const jobs = planBlobWrites();
         const db = await openDB();
-        for (const layer of FM.scene.layers) {
-          if (layer.type === 'text') continue;
-          const m = FM.media.get(layer.id);
-          if (m && m.file) {
+        for (const job of jobs) {
+          {
             /* ═══ A REPLACED FILE MUST OVERWRITE THE OLD BLOB (queue 668) ═══════════════════════
              * This line used to read `if (!existing) await idbPut(...)`, and it is the ONLY writer of
              * a layer's media blob. `FM.replaceMedia` swaps the file under the SAME layer id, so after
@@ -297,9 +341,8 @@ window.FM = window.FM || {};
              * `mediaRev`, so both read 0 and nothing is rewritten: existing projects do not get a mass
              * re-write on first launch. `kind` rides along, which also fixes a video→image replace
              * saving the layer as one type against a stored record marked the other. */
-            const existing = await idbGet(db, layer.id);
-            const rev = layer.mediaRev || 0;
-            if (!existing || (existing.rev || 0) !== rev) await idbPut(db, layer.id, { file: m.file, kind: m.kind, rev: rev });
+            const existing = await idbGet(db, job.id);
+            if (!existing || (existing.rev || 0) !== job.rev) await idbPut(db, job.id, { file: job.file, kind: job.kind, rev: job.rev });
           }
         }
         // NOTE: no blanket prune here any more — media blobs are shared across ALL projects (plus
