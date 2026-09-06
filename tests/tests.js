@@ -36183,6 +36183,41 @@
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
   });
+  test('a right-click on a scale or rotate handle starts no drag (queue 834 u11)', { item: '834' }, async function () {
+    /* A right-click on a corner or the rotate knob started a transform drag, and the release that would
+       end it never arrives for that button — so the layer went on following the cursor afterwards,
+       scaling or spinning with every movement until something else cleared the drag. The body's own
+       handler has checked the button since it was written; the handles never did. */
+    const box = document.getElementById('select-box');
+    if (!box || !FM.canvasEdit) return;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedLayers = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    try {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 200, y: 200, shapeW: 80, shapeH: 80, fill: '#fff', start: 0, duration: 5 });
+      FM.scene.layers.push(L);
+      FM.timeline.rebuild(); FM.selectLayer(L.id); FM.refreshAll();
+      if (FM.canvasEdit.update) FM.canvasEdit.update();
+      await sleep(180);
+      const h = box.querySelector('.sb-h, .sb-handle, [class*="sb-"]');
+      if (!h) throw new Error('the selection box has no handle to press, so this cannot be measured');
+      const r = h.getBoundingClientRect();
+      const x0 = FM.evalProp(L.transform.x, FM.time), s0 = FM.evalProp(L.transform.scale, FM.time);
+      h.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 61, pointerType: 'mouse', button: 2, buttons: 2, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
+      window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, pointerId: 61, pointerType: 'mouse', button: 2, buttons: 2, clientX: r.left + 220, clientY: r.top + 160 }));
+      await sleep(120);
+      const x1 = FM.evalProp(L.transform.x, FM.time), s1 = FM.evalProp(L.transform.scale, FM.time);
+      if (Math.abs(x1 - x0) > 0.5 || Math.abs(s1 - s0) > 0.005)
+        throw new Error('a right-click on a handle moved the layer (x ' + x0 + '→' + x1 + ', scale ' + s0 + '→' + s1 + ') — and the release for that button never comes, so it keeps following the cursor');
+    } finally {
+      try { FM.canvasEdit._finishDrag && FM.canvasEdit._finishDrag(); } catch (e) {}
+      window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: 61, pointerType: 'mouse', button: 2, buttons: 0, clientX: 0, clientY: 0 }));
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0 || null); FM.timeline.rebuild(); FM.refreshAll(); await sleep(60);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
   test('a raised inspector grows its option cards into the height it was given (queue 807)', { item: '807' }, async function () {
     /* Measured in the pane at 1280x800 on v15.88: raised by 250px the cards stayed 48px and the last one
        ended 266px above the panel's bottom, because --cat-h asks the band floor (--tl-h) how much room

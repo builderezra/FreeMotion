@@ -367,6 +367,12 @@ window.FM = window.FM || {};
   function startHandle(role) {
     return function (e) {
       e.preventDefault(); e.stopPropagation();
+      /* ⚠️ queue 834 (u11): ONLY THE PRIMARY BUTTON STARTS A DRAG. A right-click on a corner or the rotate
+         knob started one, and the release that would end it never arrives for button 2 — so the layer went
+         on following the cursor afterwards, scaling or spinning with every movement until something else
+         cleared the drag. The body's own move handler has checked `e.button !== 0` since it was written;
+         the handles never did. */
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
       const layer = FM.selectedLayer(FM.scene);
       if (!layer || layer.locked) return;   // lock means LOCKED — scale/rotate too, not just move
       if (drag) return;                     // another pointer's drag is live — don't overwrite it
