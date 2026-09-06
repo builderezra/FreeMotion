@@ -13751,7 +13751,7 @@
     }
   });
 
-  test('765: off the clip, the rail on the seam reads move and extend with the far-side key dimmed, stacks A S D, and covers no eye and no plus', { item: '765' }, async function () {
+  test('765: off the clip, the rail in the band reads move and extend with the far-side key dimmed, sits A S D in a row left of the timeline, and covers no eye and no plus', { item: '765' }, async function () {
     /* Queue 765 + 772, replacing queue 235's test of the floating move/extend pair — that pair is gone from the desktop
      * ("dont leave the old buttons that are near the playhead coz they annoying asf"). The rail carries the same two actions
      * under the keyboard's own letters, and the geometry asserted is the new promise: on the seam, over nothing. */
@@ -13771,8 +13771,9 @@
       const ka = document.getElementById('key-a'), ks = document.getElementById('key-s'), kd = document.getElementById('key-d');
       const ra = ka.getBoundingClientRect(), rs = ks.getBoundingClientRect(), rd = kd.getBoundingClientRect();
       if (ra.width < 10 || rs.width < 10 || rd.width < 10) throw new Error('a rail key is not on screen');
-      if (!(ra.bottom <= rs.top + 1 && rs.bottom <= rd.top + 1)) throw new Error('the keys are not stacked A above S above D (tops ' + [ra.top, rs.top, rd.top].map(Math.round).join(', ') + ')');
-      if (Math.abs(ra.left - rd.left) > 1) throw new Error('the keys are not in one column');
+      // queue 803 moved the keys into the band: one ROW, A · S · D left to right, under the layer's name
+      if (!(ra.right <= rs.left + 1 && rs.right <= rd.left + 1)) throw new Error('the keys are not in a row A · S · D (lefts ' + [ra.left, rs.left, rd.left].map(Math.round).join(', ') + ')');
+      if (Math.abs(ra.top - rd.top) > 1) throw new Error('the keys are not on one row');
       if (!/move/i.test(kd.title) || !kd.title.startsWith('D')) throw new Error('with the playhead to the right, D should read "move…": "' + kd.title + '"');
       if (!/extend/i.test(ks.title)) throw new Error('S should read "extend…" off the clip: "' + ks.title + '"');
       if (!ka.disabled || kd.disabled) throw new Error('the far-side key is not dimmed (A disabled ' + ka.disabled + ', D disabled ' + kd.disabled + ') — "a is always resembling of the left and d for the right"');
@@ -13782,9 +13783,9 @@
       // (clips scroll UNDER the sticky head column, whose strip the rail sits in — so they are not what it can cover)
       const covered = [].slice.call(document.querySelectorAll('.th-eye, .th-thumb, .tl-addrow-plus')).filter(hits);
       if (covered.length) throw new Error('the rail overlaps ' + covered.map(e => e.className.split(' ')[0]).join(', ') + ' — it must sit on the seam over nothing');
-      const head = document.querySelector('#tl-tracks .track-head');
-      if (head && head.getBoundingClientRect().width < 130) throw new Error('the head column did not widen for the rail (' + Math.round(head.getBoundingClientRect().width) + 'px) — the keys sit on top of the eyes');
-      if (head && rr.right > head.getBoundingClientRect().left + 46 + 0.5) throw new Error('the rail (right edge ' + Math.round(rr.right) + ') reaches past the 46px strip the head column reserves for it (' + Math.round(head.getBoundingClientRect().left + 46) + ')');
+      // (queue 803: the head column no longer reserves a strip — the keys live in the band, left of the timeline altogether)
+      const tlp = document.getElementById('timeline-panel').getBoundingClientRect();
+      if (rr.right > tlp.left + 1) throw new Error('the rail (right edge ' + Math.round(rr.right) + ') reaches into the timeline panel (left ' + Math.round(tlp.left) + ') — he wants it on the add-menu side, left of the line (queue 803)');
     } finally {
       FM.scene.layers.length = 0;
       layers0.forEach(l => FM.scene.layers.push(l));
@@ -14135,7 +14136,10 @@
            and the old floor called that a failure. The claim was never "80px"; it was "fill the
            section", and the GAP check below is what actually measures that — this line only has to
            rule out the phone's little strip. */
-        if (h <= 40) throw new Error('the align buttons are only ' + h + 'px tall — that is the phone strip, not a filled panel');
+        /* 36, the phone strip's own height, not 40: since queue 803 the clip keys row (51px) shares the band above these, so in the
+           runner's 272px band four filled buttons measure exactly 40 — the gap rule below is what says "filled", this line only
+           rules out the strip. */
+        if (h <= 36) throw new Error('the align buttons are only ' + h + 'px tall — that is the phone strip, not a filled panel');
         if (gap > 60) throw new Error('the align buttons stop ' + gap + 'px short of the bottom of the panel — that empty band IS the "left massive area" this change was supposed to use');
         if (!big[0].querySelector('.qr-cap') || !big[0].querySelector('.qr-cap').textContent) throw new Error('the big align buttons have no name on them — three unlabelled slabs is worse than the strip was');
       }
@@ -27112,6 +27116,72 @@
     if (missing.length) throw new Error('the raise list no longer matches the catalog: ' + missing.join(' · '));
     if (checked !== RAISED.length) throw new Error('only ' + checked + ' of ' + RAISED.length + ' raised sliders were measured');
     if (dead.length) throw new Error(dead.length + ' raised ceiling(s) are dead space — the top half of the slider does nothing: ' + dead.join(' · '));
+  });
+
+  test('803: the clip keys sit in the band on the layer title line, bigger, with icons that change with the playhead, hide in the Effects view while the keys still work, and are gone on a phone', { item: '803', budgetMs: 40000 }, async function () {
+    /* His words, 6 Sep: "I didn't want it to be on the timeline. I wanted it to be on the ad menu on the left side of the line… the
+       buttons are also really small. They don't have icons to resemble what they are." Then, seeing the row in the preview: "it
+       would be better if they just didn't show up at all when you're in the effects menu… But if you still press ASND, it works."
+       One clause per assertion, on the PC layout, then the phone. */
+    if (!matchMedia('(min-width: 701px)').matches) throw new Error('this test must run at a desktop width; the frame is ' + window.innerWidth + 'px');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      FM.scene.layers.length = 0;
+      const A = FM.makeLayer('shape', { name: 'Box', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 3 });
+      FM.scene.layers.push(A); FM.selectLayer(A.id);
+      FM.time = 1.5; FM.timeline.rebuild(); FM.timeline.updatePlayhead(); FM.refreshAll(); await sleep(120);
+      if (FM.inspector.back) { for (let i = 0; i < 3 && FM.inspector.currentView() !== 'home'; i++) { FM.inspector.back(); await sleep(60); } }
+      FM.timeline.syncKeyRail(); await sleep(40);
+      const rail = document.getElementById('key-rail'), panel = document.getElementById('inspector-panel'), title = panel.querySelector('.panel-title'), tlp = document.getElementById('timeline-panel');
+      if (!rail || rail.classList.contains('hidden')) throw new Error('a clip is selected on the category grid and the keys are hidden');
+      if (!panel.contains(rail)) throw new Error('the keys are not inside the left band (queue 803 clause 1: "on the ad menu on the left side of the line")');
+      const rr = rail.getBoundingClientRect();
+      if (rr.right > tlp.getBoundingClientRect().left + 1) throw new Error('the keys reach into the timeline (right ' + Math.round(rr.right) + ' vs the timeline at ' + Math.round(tlp.getBoundingClientRect().left) + ')');
+      /* ONE mode for every band height: the keys ride the title line, right-aligned, 42x34, and the band is told the 7px
+         the title grows by. (A 46x41 row under the name cost 51px, which a 240px band cannot pay — test 285.) */
+      const tr = title.getBoundingClientRect();
+      if (rr.top < tr.top - 1 || rr.bottom > tr.bottom + 1) throw new Error('the keys are not on the title line (rail ' + Math.round(rr.top) + '-' + Math.round(rr.bottom) + ', title ' + Math.round(tr.top) + '-' + Math.round(tr.bottom) + ')');
+      const keys = ['key-a', 'key-s', 'key-d'].map(id => document.getElementById(id));
+      keys.forEach(k => { const b = k.getBoundingClientRect(); if (b.width < 40 || b.height < 32) throw new Error(k.id + ' is ' + Math.round(b.width) + 'x' + Math.round(b.height) + ' — "the buttons are also really small" (clause 2 wants at least 40x32, up from 30x28)'); });
+      const extra = parseFloat(getComputedStyle(panel).getPropertyValue('--insp-extra'));
+      if (!(extra >= 6)) throw new Error('the keys are showing but the band arithmetic is told only ' + extra + 'px for the taller title line');
+      const vis = el => { const r = el.getBoundingClientRect(); return r.width > 4 && r.height > 4; };
+      keys.forEach(k => {
+        if (!k.querySelector('svg')) throw new Error(k.id + ' has no icon — "they don\'t have icons to resemble what they are" (clause 3)');
+        if (!k.querySelector('kbd')) throw new Error(k.id + ' lost its key caption — the letter still names the keyboard key');
+        if (!vis(k.querySelector('.ico-trim')) || vis(k.querySelector('.ico-alt'))) throw new Error(k.id + ' inside the clip should show the trim/split icon, not the move one');
+      });
+      // outside the clip the icons change to move / extend
+      FM.time = 8; FM.timeline.updatePlayhead(); FM.timeline.syncKeyRail(); await sleep(40);
+      keys.forEach(k => { if (vis(k.querySelector('.ico-trim')) || !vis(k.querySelector('.ico-alt'))) throw new Error(k.id + ' off the clip should show the move/extend icon (state ' + k.dataset.state + ')'); });
+      // clause 4: in the Effects view the row is gone, and S on the keyboard still splits
+      FM.time = 1.5; FM.timeline.updatePlayhead(); FM.timeline.syncKeyRail(); await sleep(40);
+      if (FM.inspector.openCategory) FM.inspector.openCategory('effects'); await sleep(150);
+      if (FM.inspector.currentView() !== 'effects') throw new Error('setup: could not open the Effects view (' + FM.inspector.currentView() + ')');
+      if (!rail.classList.contains('hidden')) throw new Error('the keys are still showing in the Effects view — "it would be better if they just didn\'t show up at all when you\'re in the effects menu"');
+      // …and the band's card arithmetic counts the row only while it shows (--insp-extra), so the grid never runs past the band
+      if (getComputedStyle(document.getElementById('inspector-panel')).getPropertyValue('--insp-extra').trim() !== '0px') throw new Error('with the row hidden the band still reserves ' + getComputedStyle(document.getElementById('inspector-panel')).getPropertyValue('--insp-extra') + ' for it');
+      const before = FM.scene.layers.length;
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyS', key: 's', bubbles: true, cancelable: true }));
+      await sleep(120);
+      if (FM.scene.layers.length !== before + 1) throw new Error('pressing S with the row hidden did not split the clip (' + before + ' → ' + FM.scene.layers.length + ') — "if you still press ASND, it works"');
+      if (FM.inspector.back) { for (let i = 0; i < 3 && FM.inspector.currentView() !== 'home'; i++) { FM.inspector.back(); await sleep(60); } }
+      // and on a phone the row does not exist at all
+      await atPhoneWidth(async function () {
+        FM.refreshAll(); await sleep(150); FM.timeline.syncKeyRail();
+        const r = document.getElementById('key-rail');
+        if (r && getComputedStyle(r).display !== 'none') throw new Error('the keys show at ' + window.innerWidth + 'px — a phone has no A, S or D');
+      }, 380);
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.scene.selectedId = sel0; FM.time = t0;
+      try { FM.timeline.rebuild(); FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
   });
 
   test('801: in the PC layout the far-right run never covers the selected layer toolbar, at 900 and at 760, and stays one row at 1280', { item: '801', budgetMs: 40000 }, async function () {

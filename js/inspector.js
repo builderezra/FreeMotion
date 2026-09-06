@@ -6392,6 +6392,8 @@ window.FM = window.FM || {};
       FM.selectLayer(null); kfClearSel(); return true;   // at the grid → deselect (closes the editor)
     },
     refresh() {
+      // the clip keys hide in the Effects view (queue 803): re-sync after this render settles
+      setTimeout(() => { try { if (FM.timeline && FM.timeline.syncKeyRail) FM.timeline.syncKeyRail(); } catch (e) {} }, 0);
       // A selectedId that no longer resolves is the worst state this panel can be in: the app believes
       // something is selected (top bar, delete button, keyboard shortcuts, the mobile sheet) while the
       // inspector falls through to the Add menu — "a layer is selected but the edit options are gone".

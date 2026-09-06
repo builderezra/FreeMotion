@@ -1,0 +1,160 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clip Keys, Redrawn</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  /* Same family as the other review sheets. The buttons below are drawn at the size they ship at (42 x 34, icons at 20px)
+     and again at 1:1 inside a replica of the left band's header, so the choice is made on real pixels. */
+  :root {
+    --bg: #f3f5f7; --panel: #ffffff; --sunk: #e9edf1; --rule: #d9e0e7;
+    --text: #111821; --dim: #5b6675; --faint: #8d98a6;
+    --accent: #b7791f; --accent-ink: #ffffff; --accent-wash: #fbf1dc;
+    --good: #1f8a5b; --good-wash: #e3f4ea;
+    --shadow: 0 1px 2px rgba(17, 24, 33, .06), 0 6px 18px rgba(17, 24, 33, .06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1318; --panel: #171c24; --sunk: #12171e; --rule: #263040;
+      --text: #e7ecf3; --dim: #97a3b3; --faint: #5f6b7a;
+      --accent: #ffd166; --accent-ink: #1a1400; --accent-wash: #2a2410;
+      --good: #4cd497; --good-wash: #12302c;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 22px rgba(0, 0, 0, .35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1318; --panel: #171c24; --sunk: #12171e; --rule: #263040;
+    --text: #e7ecf3; --dim: #97a3b3; --faint: #5f6b7a;
+    --accent: #ffd166; --accent-ink: #1a1400; --accent-wash: #2a2410;
+    --good: #4cd497; --good-wash: #12302c;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 22px rgba(0, 0, 0, .35);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 400 15px/1.5 "IBM Plex Sans", -apple-system, system-ui, sans-serif; -webkit-font-smoothing: antialiased; padding-bottom: 48px; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 0 16px; }
+  header { padding: 28px 0 14px; }
+  h1 { font-family: "Bricolage Grotesque", "IBM Plex Sans", system-ui, sans-serif; font-weight: 700; font-size: 34px; line-height: 1.05; letter-spacing: -.02em; margin: 0 0 10px; text-wrap: balance; }
+  .stand { color: var(--dim); margin: 0; max-width: 58ch; }
+  .stand b { color: var(--text); font-weight: 600; }
+  .quote { color: var(--dim); font-style: italic; border-left: 3px solid var(--rule); padding-left: 12px; margin: 14px 0 0; font-size: 14px; }
+  h2 { font-family: "Bricolage Grotesque", "IBM Plex Sans", system-ui, sans-serif; font-weight: 700; font-size: 20px; letter-spacing: -.01em; margin: 26px 0 4px; }
+  .sdesc { color: var(--dim); font-size: 13.5px; margin: 0 0 12px; max-width: 58ch; }
+  .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; box-shadow: var(--shadow); }
+  .card h3 { font-family: "Bricolage Grotesque", "IBM Plex Sans", system-ui, sans-serif; font-weight: 700; font-size: 17px; margin: 0 0 2px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .tag { font-family: "IBM Plex Mono", ui-monospace, monospace; font-weight: 500; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; border-radius: 5px; padding: 2px 6px; }
+  .tag.rec { color: var(--good); background: var(--good-wash); }
+  .tag.alt { color: var(--accent); background: var(--accent-wash); }
+  .card p { margin: 0; color: var(--dim); font-size: 13.5px; }
+  .card p + p { margin-top: 5px; }
+  .card p b { color: var(--text); font-weight: 600; }
+
+  /* ── the app's own dark band, replicated at 1:1 so the buttons are judged on the ground they ship on ── */
+  .band { background: #0e141b; border: 1px solid #1f2a35; border-radius: 10px; padding: 0; margin-top: 10px; overflow: hidden; width: 300px; max-width: 100%; }
+  .band .title { display: flex; align-items: center; gap: 9px; padding: 10px 14px 8px; }
+  .band .kick { font: 600 11px/1 "IBM Plex Mono", ui-monospace, monospace; letter-spacing: .14em; color: #6f8496; }
+  .band .name { font: 600 13px/1 "IBM Plex Sans", system-ui, sans-serif; color: #e6edf5; }
+  .band .row { display: flex; gap: 6px; padding: 4px 14px 10px; }
+  .band .below { padding: 8px 14px 12px; border-top: 1px solid #1f2a35; color: #4d8bf0; font: 600 13px/1 "IBM Plex Sans", system-ui, sans-serif; }
+  .key { width: 42px; height: 34px; border-radius: 8px; border: 1px solid rgba(150, 232, 255, .35); background: rgba(20, 32, 44, .92); color: #dfe7ef; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 0; }
+  .key.on { color: #5ac7ed; border-color: #5ac7ed; }
+  .key.dim { opacity: .35; }
+  .key svg { width: 20px; height: 20px; }
+  .key kbd { font: 600 8px/1 "IBM Plex Mono", ui-monospace, monospace; letter-spacing: .08em; opacity: .65; }
+  .stack { position: relative; width: 300px; max-width: 100%; height: 150px; background: #0e141b; border: 1px solid #1f2a35; border-radius: 10px; margin-top: 10px; overflow: hidden; }
+  .stack .seam { position: absolute; left: 142px; top: 0; bottom: 0; width: 1px; background: #2a3947; }
+  .stack .rowline { position: absolute; left: 0; right: 0; height: 1px; background: #1f2a35; }
+  .stack .col { position: absolute; left: 6px; top: 6px; display: flex; flex-direction: column; gap: 6px; }
+  .stack .col .key { width: 40px; height: 36px; }
+  .stack .clip { position: absolute; left: 160px; right: 20px; height: 30px; border-radius: 7px; background: linear-gradient(#e2673a, #b8481f); }
+  .stack .eye { position: absolute; left: 56px; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #7d8b98; }
+  .legend { color: var(--faint); font-size: 12.5px; margin: 6px 0 0; }
+  .big { display: flex; gap: 10px; align-items: flex-end; margin-top: 10px; flex-wrap: wrap; }
+  .big .key { width: 92px; height: 82px; border-radius: 16px; }
+  .big .key svg { width: 44px; height: 44px; }
+  .big .key kbd { font-size: 14px; }
+  .reply { background: var(--accent-wash); border: 1px solid var(--rule); border-radius: 12px; padding: 14px 16px; margin: 26px 0 0; }
+  .reply h2 { margin: 0 0 6px; font-size: 18px; }
+  .reply p { margin: 0; color: var(--dim); font-size: 14px; }
+  .reply p + p { margin-top: 6px; }
+  .reply b { color: var(--text); }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>The clip keys, off the timeline and drawn as what they do</h1>
+    <p class="stand">Your words, in full, so the fix is measured against them:</p>
+    <p class="quote">"The ASD splitting is completely shit. Like, it's not where I wanted it to be. I wanted... I didn't want it to be on the timeline. I wanted it to be on the ad menu on the left side of the line pretty much. Like, you've got it on the right side of the line and on the left. And the buttons are also really small. They don't have icons to resemble what they are. They're just big one two... not... sorry. They're, like, big ASD. They're not actually marked with any icons. So definitely fix that."</p>
+    <p class="quote" style="margin-top:10px">Then, seeing the row in the preview: "you've got it on the top row. With the effects menu open… I think it would be better if they just didn't show up at all when you're in the effects menu, the buttons. But if you still press ASND, it works."</p>
+    <p class="stand" style="margin-top:14px">Four things, then: <b>off the timeline, on the add-menu side left of the line</b>; <b>bigger</b>; <b>icons</b>; <b>gone while the effects menu is open, keys still working</b>. Below, the placement and the icons are shown on the band they ship on, at the size they ship at. The recommended pair ships now; say the word to swap either.</p>
+  </header>
+
+  <h2>Where</h2>
+  <div class="card">
+    <h3>In the left band, on the layer's title line <span class="tag rec">Shipping</span></h3>
+    <p>Three keys at the right of the line that says LAYER and the layer's name, on the add-menu side, left of every line: 42 &#215; 34 per key (the old caps were 30 &#215; 28), icons, the key letter as a small caption. They appear when a clip is selected and go away with it, and they stay out of the way in the Effects view, the effects browser and every other sub-panel, where A, S and D on the keyboard still do their jobs. <b>Why the title line and not a row under it:</b> a row costs the band 51px, and the band can be dragged down to 232px, where the category cards are already at their smallest; the title line grows 7px and everything under it keeps its room.</p>
+    <div class="band" aria-hidden="true">
+      <div class="title" style="position:relative;min-height:40px"><span class="kick">LAYER</span><span class="name">Text</span>
+      <div class="row" style="position:absolute;right:12px;top:3px;padding:0;gap:5px">
+        <div class="key"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="7" height="8" rx="1.5" stroke-dasharray="2 2" opacity=".6"/><path d="M11 4v16" stroke-width="2.5"/><rect x="13" y="8" width="8" height="8" rx="1.5" fill="currentColor" fill-opacity=".25"/></svg><kbd>A</kbd></div>
+        <div class="key on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="6" r="2.5"/><circle cx="7" cy="18" r="2.5"/><path d="M9 7.5L20 16M9 16.5L20 8"/></svg><kbd>S</kbd></div>
+        <div class="key"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="8" height="8" rx="1.5" fill="currentColor" fill-opacity=".25"/><path d="M13 4v16" stroke-width="2.5"/><rect x="14" y="8" width="7" height="8" rx="1.5" stroke-dasharray="2 2" opacity=".6"/></svg><kbd>D</kbd></div>
+      </div></div>
+      <div class="below">‹ Effects</div>
+    </div>
+    <p class="legend">A replica of the band at 1:1, 300 px wide as it is at 900 px; wider bands get the same line.</p>
+  </div>
+  <div class="card">
+    <h3>On the timeline's left edge, stacked <span class="tag alt">The old place, bigger</span></h3>
+    <p>What you have now, only larger and with icons. Still on the timeline, still beside the eyes, which is what you said you did not want. Shown so the comparison is fair.</p>
+    <div class="stack" aria-hidden="true">
+      <div class="seam"></div>
+      <div class="rowline" style="top:22px"></div><div class="rowline" style="top:64px"></div><div class="rowline" style="top:106px"></div>
+      <div class="eye" style="top:36px"></div><div class="eye" style="top:78px"></div><div class="eye" style="top:120px"></div>
+      <div class="clip" style="top:30px"></div><div class="clip" style="top:72px"></div>
+      <div class="col">
+        <div class="key"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="7" height="8" rx="1.5" stroke-dasharray="2 2" opacity=".6"/><path d="M11 4v16" stroke-width="2.5"/><rect x="13" y="8" width="8" height="8" rx="1.5" fill="currentColor" fill-opacity=".25"/></svg><kbd>A</kbd></div>
+        <div class="key on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="6" r="2.5"/><circle cx="7" cy="18" r="2.5"/><path d="M9 7.5L20 16M9 16.5L20 8"/></svg><kbd>S</kbd></div>
+        <div class="key"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="8" height="8" rx="1.5" fill="currentColor" fill-opacity=".25"/><path d="M13 4v16" stroke-width="2.5"/><rect x="14" y="8" width="7" height="8" rx="1.5" stroke-dasharray="2 2" opacity=".6"/></svg><kbd>D</kbd></div>
+      </div>
+    </div>
+  </div>
+
+  <h2>Which icons</h2>
+  <p class="sdesc">Each set at the size it ships (20 px in a 42 px key) and blown up beside it. The middle key is the one that acts at the line, so it wears the accent.</p>
+  <div class="card">
+    <h3>The clip bar, cut at the line <span class="tag rec">Recommended · shipping</span></h3>
+    <p><b>A</b>: the part before the line goes dashed, the part after stays solid. <b>S</b>: scissors at the line. <b>D</b>: the mirror of A. When the playhead is outside the clip the same keys move or stretch it instead, and the icons change with them: an arrow into the bar for move, a bar reaching out for extend.</p>
+    <div class="big">
+      <div class="key"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="7" height="8" rx="1.5" stroke-dasharray="2 2" opacity=".6"/><path d="M11 4v16" stroke-width="2.5"/><rect x="13" y="8" width="8" height="8" rx="1.5" fill="currentColor" fill-opacity=".25"/></svg><kbd>A · trim start</kbd></div>
+      <div class="key on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="6" r="2.5"/><circle cx="7" cy="18" r="2.5"/><path d="M9 7.5L20 16M9 16.5L20 8"/></svg><kbd>S · split</kbd></div>
+      <div class="key"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="8" height="8" rx="1.5" fill="currentColor" fill-opacity=".25"/><path d="M13 4v16" stroke-width="2.5"/><rect x="14" y="8" width="7" height="8" rx="1.5" stroke-dasharray="2 2" opacity=".6"/></svg><kbd>D · trim end</kbd></div>
+      <div class="key"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16" stroke-width="2.5"/><path d="M20 12H8"/><path d="M12 8l-4 4 4 4"/><rect x="14" y="8" width="7" height="8" rx="1.5" fill="currentColor" fill-opacity=".25"/></svg><kbd>A · move left</kbd></div>
+      <div class="key on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16" stroke-width="2.5"/><rect x="10" y="8" width="10" height="8" rx="1.5" fill="currentColor" fill-opacity=".25"/><path d="M10 12H5" stroke-dasharray="2 2"/></svg><kbd>S · extend</kbd></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Brackets and scissors <span class="tag alt">Alternative</span></h3>
+    <p>A bracket at the line with a small block for the clip. Tidier, less literal: the bracket says "edge", not "the part you lose".</p>
+    <div class="big">
+      <div class="key"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4v16"/><path d="M5 12h6"/><rect x="11" y="8" width="10" height="8" rx="2"/><path d="M9 8l-4 4 4 4" opacity=".55"/></svg><kbd>A</kbd></div>
+      <div class="key on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="6" r="2.5"/><circle cx="7" cy="18" r="2.5"/><path d="M9 7.5L20 16M9 16.5L20 8"/></svg><kbd>S</kbd></div>
+      <div class="key"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 4v16"/><path d="M13 12h6"/><rect x="3" y="8" width="10" height="8" rx="2"/><path d="M15 8l4 4-4 4" opacity=".55"/></svg><kbd>D</kbd></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Arrows into the bar, split as two halves <span class="tag alt">Alternative</span></h3>
+    <p>An arrow pushing at the line and a clip beside it; the split is two halves with a gap. Reads as movement more than cutting.</p>
+    <div class="big">
+      <div class="key"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v16"/><path d="M4 9l4 3-4 3"/><rect x="12" y="8" width="9" height="8" rx="2"/></svg><kbd>A</kbd></div>
+      <div class="key on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="7" height="8" rx="2"/><rect x="14" y="8" width="7" height="8" rx="2"/><path d="M12 4v3M12 10.5v3M12 17v3"/></svg><kbd>S</kbd></div>
+      <div class="key"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4v16"/><path d="M20 9l-4 3 4 3"/><rect x="3" y="8" width="9" height="8" rx="2"/></svg><kbd>D</kbd></div>
+    </div>
+  </div>
+
+  <div class="reply">
+    <h2>What to reply</h2>
+    <p><b>Nothing, if this is right.</b> It ships now: the keys on the band's title line, the cut-bar icons.</p>
+    <p>Otherwise: <b>"brackets"</b> or <b>"arrows"</b> for the other icon sets, <b>"bigger"</b> or a size, or <b>"row"</b> if you would rather have a full 46 &#215; 41 row under the name and let the cards below shrink for it.</p>
+  </div>
+</div>

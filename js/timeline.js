@@ -4612,8 +4612,27 @@ window.FM = window.FM || {};
       if (!rail) return;
       const targets = clipToolTargets();
       const n = targets.length;
-      rail.classList.toggle('hidden', !n);
-      if (!n) return;
+      /* Hidden while the Effects view or the effects browser is up — queue 803, his second message: "it would be better if they
+         just didn't show up at all when you're in the effects menu… But if you still press ASND, it works." The keyboard path
+         (app.js KeyA/S/D → clipKey) never looks at this element, so the keys keep working with the row gone. */
+      const view = (FM.inspector && FM.inspector.currentView) ? FM.inspector.currentView() : 'home';
+      const inBrowser = !!(FM.fxBrowser && FM.fxBrowser.isOpen && FM.fxBrowser.isOpen());
+      /* Shown on the clip's main grid (and the multi-select panel, which is that grid's other face); hidden inside every
+         sub-panel — the Effects view he named, and the slider lists and the easing editor, whose graph the row would
+         otherwise take 51px from (the suite measured it collapsing to 22px). */
+      const shown = !!n && view === 'home' && !inBrowser;
+      rail.classList.toggle('hidden', !shown);
+      /* ON THE TITLE LINE, one mode for every band height. A row under the name (46x41 with letters) costs the band
+         51px, and the band can be dragged down to 232px where the grid's cards are already at their 40px floor — test 285
+         measured 17px of scrolling at 240. So the three keys sit on the title line, right-aligned, 42x34 with a small
+         caption: bigger than the 30x28 caps he rejected, out of the grid's way, and the band is told only the 7px the
+         title line grows by (`--insp-extra`, which the card arithmetic subtracts). */
+      const panel = document.getElementById('inspector-panel');
+      if (panel) {
+        panel.classList.toggle('keys-on', shown);
+        panel.style.setProperty('--insp-extra', shown ? '7px' : '0px');
+      }
+      if (!shown) return;
       const side = clipToolSide(targets);
       const A = document.getElementById('key-a'), S = document.getElementById('key-s'), D = document.getElementById('key-d');
       if (!A || !S || !D) return;
