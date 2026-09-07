@@ -242,27 +242,18 @@ window.FM = window.FM || {};
 
     // Anchor the docked sheet's top just below the single selected-clip row so the property
     // options never cover the clip — clamped so the panel always keeps a usable height.
-    /* A WAY OUT THAT SAYS SO (queue 654, decided under rule 16 as option A). A first-time user could not work out how to
-       LEAVE the docked clip panel: the top-bar arrow deselects (its aria-label says "Close clip options"), but nothing on the
-       panel itself says "you are done here". This row sits at the top of the sheet, above the inspector's own content — it
-       is a child of #inspector-panel, not of #inspector, so the inspector's rebuilds cannot wipe it — and does exactly what
-       the arrow does. Phone width and m-editing only (styles.css). Options B (the arrow becomes an ✕) and C (the back row
-       names where it goes) were drawn and shown on 2 Sep; one word changes it. */
-    function ensureDoneRow() {
-      let row = document.getElementById('insp-done');
-      if (row) return row;
-      row = document.createElement('div'); row.id = 'insp-done';
-      const lbl = document.createElement('span'); lbl.className = 'insp-done-lbl'; lbl.textContent = 'Clip options';
-      const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'insp-done-btn'; btn.textContent = 'Done';
-      btn.setAttribute('aria-label', 'Done editing this clip');
-      btn.addEventListener('click', function () { FM.selectLayer(null); });   // the same thing the top-bar arrow does in m-editing
-      row.append(lbl, btn);
-      insp.insertBefore(row, insp.firstChild);
-      return row;
-    }
+    /* ⚠️ queue 835: THE "CLIP OPTIONS / Done" ROW IS GONE, on his instruction. It was queue 654, decided
+       under rule 16 when he was silent — a first-time user could not tell how to leave the docked clip
+       panel, so a row was added saying so. He has now seen it and it is not what he wants: "Get rid of the
+       row that says clip options and done… Idk why this was even added i never asked for it and it's
+       pointless". The way out he already knew about is the top-bar arrow, whose aria-label is still
+       "Close clip options". The 49px the row occupied goes back to the options grid, which is what he
+       asked for: the sheet still docks in the same place and covers the same area, with more of the
+       cards visible inside it. A stale row from a previous session is removed on sight. */
     function dockSheet() {
       if (!isPhone() || !document.body.classList.contains('m-editing')) { insp.style.top = ''; insp.style.maxHeight = ''; return; }
-      ensureDoneRow();
+      const stale = document.getElementById('insp-done');   // queue 835: a row built before this change
+      if (stale) stale.remove();
       var tracks = document.getElementById('tl-tracks');
       /* DOCK TO THE ROWS, NOT TO THE CONTAINER (queue 433 clause 1). Ezra, with the band circled:
          "Wasted space here". Measured at 380px: the clip's row ended at y=485 and the sheet started at
