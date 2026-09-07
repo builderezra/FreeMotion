@@ -130,7 +130,9 @@ window.FM = window.FM || {};
    * which is why `resetMotionFlowCache()` runs before every export. That reset is right; what a resume
    * additionally needs is to warm the state back up before it starts recording again. */
   const TEMPORAL_FX = ['motionflow', 'framestutter', 'temporaldenoise', 'timewarp'];
-  function prerollFrames(scene) {
+  /* `fps` and `seamTime` are optional and only Time Warp Scan reads them — every other caller and every
+     other effect answers exactly as before when they are absent (queue 839). */
+  function prerollFrames(scene, fps, seamTime) {
     if (!scene || !FM.eachFx) return 0;
     /* THE PRE-ROLL IS THE ACCUMULATOR'S MEMORY, NOT ITS TIME CONSTANT (queue 749, hunt MEDIUM #32). Motion Flow's echo
        trails keep `persist` of the previous frame each step (compositor: min(0.96, 0.35 + amount × 0.3)); 25 frames at
@@ -146,6 +148,27 @@ window.FM = window.FM || {};
         if (fx.type === 'motionflow' && Math.round(maxOf(fx.params && fx.params.style) ) === 2) {
           const persist = Math.min(0.96, 0.35 + maxOf(fx.params && fx.params.amount) * 0.3);
           need = Math.max(25, Math.ceil(Math.log(0.05) / Math.log(Math.max(0.01, Math.min(0.999, persist)))));
+        }
+        /* ⚠️ TIME WARP SCAN'S MEMORY IS NOT A FADE, IT IS THE WHOLE SWEEP (queue 839, and the reason 25
+           was never right for it). The other temporal effects keep a decaying picture of the last few
+           frames, so 25 frames rebuilds them to within a few percent. This one assembles a band STRIP BY
+           STRIP: each strip holds the picture from the moment the bar crossed it, and the compositor's
+           record (js/compositor.js `timewarp`) treats a fresh record as a JUMP — it clears the band and
+           refills everything already swept from the CURRENT frame. So resuming a killed export 25 frames
+           early does not warm it up: it repaints the whole frozen band with the picture at the seam, and
+           the finished file visibly changes at the join.
+           The only pre-roll that rebuilds it is back to where the sweep began — local time 0 for Repeat =
+           Once, or the start of the current cycle for Loop. That is the layer's own elapsed time, which
+           can be long; it is render work with nothing encoded, and it is the price of the join matching.
+           Without fps and the seam time (an older caller) this falls back to the old 25 rather than
+           guessing, so nothing gets worse. */
+        if (fx.type === 'timewarp' && fps > 0 && seamTime != null) {
+          const dur = Math.max(0.05, maxOf(fx.params && fx.params.duration) || 2.5);
+          const loop = Math.round(maxOf(fx.params && fx.params.loop) || 0) === 1;
+          const tl = Math.max(0, seamTime - (layer.start || 0));
+          const back = loop ? (tl - Math.floor(tl / dur) * dur)   // Loop: to the start of the cycle it is in
+                            : tl;                                 // Once: all the way to local time 0
+          need = Math.max(need, Math.ceil(back * fps) + 1);
         }
         if (need > frames) frames = need;
       });

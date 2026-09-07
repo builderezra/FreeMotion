@@ -41606,6 +41606,88 @@
     if (XR.prerollFrames(off) !== 0) throw new Error('a DISABLED temporal effect still asked for a pre-roll');
   });
 
+  /* ═══ THE RECORD IS PART OF THE PRODUCT (queue 840, 841, 842) ══════════════════════════════════════
+   * Three findings from re-checking the 5 Sep audit, and none of them changes a pixel: a comment that
+   * describes an intro two releases out of date, a test message that rules out the cause it should name,
+   * and a test whose NAME claims an assertion it deliberately does not make. Each one has already sent a
+   * reader the wrong way once. Prose has no test, which is exactly why these three are tests. */
+  test('the splash script does not claim the dark ending is withdrawn — it was put back in queue 783 (queue 840)', { item: '840' }, async function () {
+    const r = await fetch('../index.html');
+    if (!r.ok) throw new Error('could not read index.html to check its own comment (' + r.status + ')');
+    const src = await r.text();
+    if (!/timeupdate/.test(src)) throw new Error('control: what was fetched is not index.html — it has no timeupdate handler, so the checks below would pass on anything');
+    if (/THE DARK ENDING IS WITHDRAWN/.test(src))
+      throw new Error('index.html still says "THE DARK ENDING IS WITHDRAWN" in the present tense — queue 783 put it back, and the stale block sent a later reader hunting the wrong cause of the intro flash');
+    if (/played through to its end in\s+both looks/.test(src.replace(/\s+/g, ' ')))
+      throw new Error('index.html still concludes "one film, played through to its end in both looks" — false since v15.63, when the dark look got its own ending again');
+  });
+
+  test('the intro test does not rule out the app as the cause of a film nobody can see (queue 841)', { item: '841' }, async function () {
+    const r = await fetch('../tests/tests.js');
+    if (!r.ok) throw new Error('could not read the suite source (' + r.status + ')');
+    const src = await r.text();
+    if (!/function attached\(/.test(src)) throw new Error('control: what was fetched is not the suite — the checks below would pass on anything');
+    /* ⚠️ BUILT AT RUNTIME, NOT WRITTEN OUT. The suite scans its own source, so a literal here would be
+       found by its own search and the test would accuse itself for ever. Same reason the message below
+       describes the sentence instead of quoting it. */
+    const banned = new RegExp(['it is not', 'evidence against', 'the app'].join(' '));
+    if (banned.test(src))
+      throw new Error('test 776 still tells the reader that a transparent intro says nothing about the app — if the APP is what holds the film transparent that is false, and it invites the next session to wave a real failure away as a harness artefact');
+  });
+
+  test('the 754 test’s name claims only what it asserts (queue 842)', { item: '842' }, async function () {
+    const r = await fetch('../tests/tests.js');
+    if (!r.ok) throw new Error('could not read the suite source (' + r.status + ')');
+    const src = await r.text();
+    if (!/function attached\(/.test(src)) throw new Error('control: what was fetched is not the suite');
+    // built at runtime for the same reason as the check above: a literal would match this very line
+    const stale = new RegExp('754: an off mask row and an off ' + 'audio row show the struck-through eye');
+    if (stale.test(src))
+      throw new Error('the 754 test is still NAMED for an assertion it deliberately does not make (the audio row’s own eye) — a name is what prints in the run output and what a reader trusts when deciding whether something is covered');
+    if (!/754: an off mask row shows the struck-through eye/.test(src))
+      throw new Error('the 754 test is gone or renamed to something this check does not recognise — if it was deliberately renamed again, update this test with it');
+  });
+
+  test('export resume: Time Warp Scan is warmed back to where its sweep began, not by a flat 25 frames (queue 839)', { item: '839' }, function () {
+    /* Every other temporal effect keeps a DECAYING picture of the last few frames, so 25 rebuilds it. Time
+       Warp Scan assembles its band strip by strip — each strip holds the picture from the moment the bar
+       crossed it — and the compositor treats a fresh record as a jump: it clears the band and refills
+       everything already swept from the CURRENT frame. Resuming 25 frames early therefore repaints the
+       whole frozen band with the picture at the seam, and the join is visible in the finished file. */
+    const XR = FM.exportResume;
+    if (!XR || !XR.prerollFrames) throw new Error('the export-resume pre-roll cannot be observed');
+    const mk = (params, start) => {
+      const l = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 10, shapeH: 10, start: start || 0, duration: 30 });
+      const fx = FM.fxRegistry.makeInstance('timewarp');
+      if (!fx) throw new Error('could not make a Time Warp Scan instance');
+      Object.keys(params).forEach(k => { fx.params[k] = params[k]; });
+      l.effects = [fx];
+      return { layers: [l], project: { width: 64, height: 48, fps: 30, duration: 30 } };
+    };
+    const fps = 30;
+
+    // Repeat = Once, sweep 2.5s, the export died at 4s: the warm-up has to go back to the layer's own
+    // start, because every strip of the band was painted from a frame before then.
+    const once = XR.prerollFrames(mk({ duration: 2.5, loop: 0 }, 0), fps, 4);
+    if (once < 4 * fps)
+      throw new Error('Time Warp Scan asked for ' + once + ' frames of warm-up at a 4s seam — fewer than the ' + (4 * fps) + ' its band was built from, so the resume repaints the frozen part with the picture at the join');
+
+    // Repeat = Loop only needs the cycle it is in: at 4s with a 2.5s sweep that is 1.5s.
+    const loop = XR.prerollFrames(mk({ duration: 2.5, loop: 1 }, 0), fps, 4);
+    if (!(loop >= 1.5 * fps && loop <= 1.6 * fps + 2))
+      throw new Error('a looping sweep asked for ' + loop + ' frames, not the ~' + Math.round(1.5 * fps) + ' of the cycle it is in — either it is warming from nothing or paying for cycles that have already been overwritten');
+    if (!(loop < once)) throw new Error('Loop asked for as much warm-up as Once (' + loop + ' vs ' + once + '); the cycle boundary is being ignored');
+
+    // A layer that starts late measures from ITS own clock, not the project's.
+    const late = XR.prerollFrames(mk({ duration: 2.5, loop: 0 }, 3), fps, 4);
+    if (!(late >= 25 && late < once))
+      throw new Error('a layer starting at 3s asked for ' + late + ' frames at a 4s seam — it has only been on screen for one second, so it is measuring from the project clock instead of its own');
+
+    // BACK-COMPAT CONTROL — an older caller with no fps must still get the old constant, not a guess.
+    const bare = XR.prerollFrames(mk({ duration: 2.5, loop: 0 }, 0));
+    if (bare !== 25) throw new Error('without fps and a seam time the pre-roll changed to ' + bare + ' — a caller that cannot say when the seam is must not be handed a number derived from one');
+  });
+
   test('export resume: a half-written part truncates the resume instead of corrupting it', { item: 'export-resume-torn' }, async function () {
     var XR = FM.exportResume;
     var sig = XR.signature(xrBaseSig()) + '|torn';
@@ -57464,7 +57546,12 @@
         const look = light ? 'light' : 'dark';
         if (!r.played) throw new Error('the ' + look + ' intro never started playing (the film reached ' + r.maxT + 's) — this run cannot judge it, but that is also exactly what a broken intro looks like');
         if (r.maxT < 0.5) throw new Error('the ' + look + ' intro stopped at ' + r.maxT + 's — it is not playing through');
-        if (!r.everVisible) throw new Error('setup: the ' + look + ' intro never reached full opacity in this frame — the browser is not rendering it, so this run cannot judge whether the film is hidden (it is not evidence against the app)');
+        /* ⚠️ NAME BOTH CAUSES (queue 841). This used to blame the browser outright and tell the reader the red was
+           nothing to do with the app, which rules out the case where the APP holds the film transparent — and that
+           is the case a reader most needs to consider, because the sentence invites them to wave the red away as
+           a harness artefact. `everVisible` is set only by the film's own computed opacity, so it cannot tell the
+           two apart; test 688 can, and it is named here so the next reader goes there instead of guessing. */
+        if (!r.everVisible) throw new Error('the ' + look + ' intro never reached full opacity in this frame — either this frame is not being rendered (a known harness artefact) OR the app is holding the film transparent. Test 688 tells the two apart: if it is green, this is the harness');
         if (r.blanked !== null) throw new Error('the ' + look + ' intro was faded to nothing at ' + r.blanked + 's while the splash was still on screen — the animation disappears and the screen just flashes');
       }
     } finally {
@@ -57536,7 +57623,11 @@
   /* ═══ 754 (hunt MEDIUM #37): EVERY ROW IN THE EFFECT LIST WEARS THE SAME EYE, AND AN OPEN AUDIO ROW KEEPS ITS GRIP.
      An off effect row showed a struck-through eye; an off mask row and an off audio row only faded. And the audio
      row hid its drag grip when open, which v5.52 had fixed for the visual rows. */
-  test('754: an off mask row and an off audio row show the struck-through eye like an effect row, and an open audio row keeps its grip', { item: '754' }, async function () {
+  /* ⚠️ THE NAME IS THE CLAIM (queue 842). It used to name the audio row's eye alongside the mask row's, and
+     that eye is the one assertion this test deliberately leaves out —
+     the note further down says so in full. A test's name is what prints in the run output and what a reader
+     trusts when they are deciding whether something is covered, so it now says what is actually asserted. */
+  test('754: an off mask row shows the struck-through eye like an effect row, through the one shared renderer, and an open audio row keeps its grip', { item: '754' }, async function () {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const saved = FM.scene, savedSel = FM.scene.selectedId;
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());

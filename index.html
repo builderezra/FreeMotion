@@ -148,14 +148,17 @@
       }
       // Begin the hand-off BEFORE the last frame, not on it. `ended` stays as the backstop for a
       // video whose duration never resolves (streaming, or a metadata-less file).
-      /* ⚠️ THE DARK ENDING IS WITHDRAWN (queue 776). v15.08 dimmed the film into black over the last 1.05s under the
-         dark look, to spare it the white bloom the film ends on. Ezra, on the shipped result: "You've broken the intro
-         loading screen by the way it does not do anything anymore just like flashing black-and-white and white."
-         Measured on the live build, dark look: the film reaches full opacity, then from currentTime 1.18 its opacity is
-         driven 0.88 → 0.60 → 0.26 → 0 while the splash is still up — so the animation VANISHES half a second before the
-         splash dissolves, and what is left is a blank ground handing over to the white home screen. That is the flash.
-         It shipped as "the safe experiment it is"; it was not safe, so it goes. One film, played through to its end in
-         both looks, which is what it did before. */
+      /* ⚠️ HISTORY OF THE DARK ENDING — READ THIS BEFORE DIMMING THE FILM AGAIN (queue 776, then 783; corrected
+         under queue 840). v15.08 faded the film's OPACITY to 0 over its last 1.05s under the dark look, to spare it
+         the white bloom the film ends on. Ezra, on the shipped result: "You've broken the intro loading screen by the
+         way it does not do anything anymore just like flashing black-and-white and white." Fading the film's opacity
+         does not reveal black — it reveals whatever the splash box itself is painting, and that box's own ground ramps
+         to white (theme-glass.css). So the fade uncovered the white it was meant to hide: that is the flash he saw,
+         and it is why v15.08 was withdrawn.
+         ⚠️ **THE DARK ENDING IS NOT WITHDRAWN ANY MORE.** Queue 783 put it back the right way round — as a CSS
+         animation on the film itself (see theme-glass.css and the note below), which lands on dark without ever
+         handing the ground back. This block used to end by claiming one film plays to its end under both looks, which
+         has been false since v15.63; it sent a later reader hunting the wrong cause. */
       vid.addEventListener('timeupdate', function () {
         var d = vid.duration;
         /* THE DARK LOOK LANDS ON DARK (#688 clause 3, queue 783) is a CSS animation on the film itself — see
@@ -228,7 +231,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v16.08</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v16.09</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1007,14 +1010,14 @@
   <script src="js/audio-fx-browser.js?v=11"></script>
   <script src="js/history.js?v=32"></script>
   <script src="js/storage.js?v=42"></script>
-  <script src="js/export-resume.js?v=5"></script>
+  <script src="js/export-resume.js?v=6"></script>
   <script src="js/medialib.js?v=6"></script>
   <script src="js/template-fill.js?v=3"></script>
   <script src="js/home.js?v=174"></script>
   <script src="js/graph-editor.js?v=17"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
-  <script src="js/exporter.js?v=117"></script>
+  <script src="js/exporter.js?v=118"></script>
   <script src="js/sample.js?v=10"></script>
   <script src="js/contextmenu.js?v=43"></script>
   <script src="js/shortcuts.js?v=81"></script>

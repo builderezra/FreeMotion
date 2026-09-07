@@ -1083,7 +1083,8 @@ window.FM = window.FM || {};
        * So re-render the frames leading up to the seam WITHOUT encoding them, purely to rebuild the
        * history. Nothing is emitted, so the output is unaffected; it just costs a few frames of render
        * time, and only for a project that actually carries one of those effects. */
-      const preroll = XR ? XR.prerollFrames(scene) : 0;
+      // fps + the seam's project time: Time Warp Scan's pre-roll is its own elapsed sweep, not a constant (queue 839)
+      const preroll = XR ? XR.prerollFrames(scene, fps, start + resumeFrom / fps) : 0;
       if (resumeFrom > 0 && preroll > 0) {
         const warmFrom = Math.max(0, resumeFrom - preroll);
         if (opts.onProgress) opts.onProgress(resumeFrom / totalFrames, 'Warming the effects back up at the join…', true);
