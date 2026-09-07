@@ -1718,7 +1718,15 @@ window.FM = window.FM || {};
         });
       }
       function autoScroll(now) {
-        autoRAF = 0; if (!moved) return;
+        /* ⚠️ `!reorderActive` IS THE LOOP'S WAY TO DIE WHEN THE GESTURE IS RECOVERED RATHER THAN RELEASED
+         * (queue 838). `moved` never goes back to false, so a recovery — a lost pointer, an app switch, a
+         * notification, the Android address bar — cleared the drag at recoverStuckGesture (which sets
+         * reorderActive = false) and left THIS loop asking for frames for ever: it went on pinning the
+         * scroll, re-publishing FM._dragOrderIds and FM.dragAddAt through layout(), calling for a render,
+         * and buzzing the phone on every gap change, against a drag nobody is holding. The two sibling
+         * loops already die this way (`if (!clipMove)`), and cleanup() clears the same flag on a normal
+         * drop, so the ordinary path is unchanged. */
+        autoRAF = 0; if (!moved || !reorderActive) return;
         const vr = timelineEl.getBoundingClientRect(), y = lastEv.clientY;
         let dir = 0, depth = 0;
         if (y < vr.top + EDGE) { dir = -1; depth = (vr.top + EDGE - y) / EDGE; }

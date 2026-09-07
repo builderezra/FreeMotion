@@ -49629,6 +49629,182 @@
     }
   });
 
+  test('a reorder drag that is recovered rather than released stops its auto-scroll loop (queue 838)', { item: '838' }, async function () {
+    /* Drag a layer by its ≡ handle to the bottom edge so the list starts scrolling, then LOSE the pointer
+       without a pointerup — an app switch, a notification, the Android address bar. recoverStuckGesture
+       clears the drag, but `moved` never goes back to false, so the loop went on asking for frames: it
+       kept pinning the scroll, re-publishing the drop position through layout(), calling for a render and
+       buzzing the phone on every gap change, against a drag nobody was holding. */
+    if (!FM._recoverStuckGesture) throw new Error('the gesture recovery cannot be driven, so a zombie auto-scroll loop cannot be observed');
+    const tl = document.getElementById('timeline');
+    if (!tl) throw new Error('there is no timeline element');
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedLayers = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const scroll0 = tl.scrollTop;
+    const pid = 838;
+    try {
+      for (let i = 0; i < 16; i++) FM.scene.layers.push(FM.makeLayer('shape', { name: 'q838-' + i, shape: 'rect', x: 100, y: 100, shapeW: 40, shapeH: 40, fill: '#456', start: 0, duration: 3 }));
+      FM.selectLayer(null); FM.timeline.rebuild(); FM.refreshAll(); await sleep(200);
+      if (!(tl.scrollHeight > tl.clientHeight + 20)) throw new Error('setup: the layer list is not scrollable (' + tl.scrollHeight + ' in ' + tl.clientHeight + '), so an auto-scroll cannot be started');
+      const h = tl.querySelector('.row-drag');
+      if (!h) throw new Error('setup: no ≡ reorder handle on any row');
+      const r = h.getBoundingClientRect(), tr = tl.getBoundingClientRect();
+      h.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: pid, pointerType: 'touch', clientX: r.left + 6, clientY: r.top + 6 }));
+      // …down to the bottom edge, which is what arms the auto-scroll
+      h.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, pointerId: pid, pointerType: 'touch', clientX: r.left + 6, clientY: tr.bottom - 4 }));
+      await sleep(260);
+      const scrolled = tl.scrollTop;
+      if (!(scrolled > scroll0)) throw new Error('setup: holding at the bottom edge did not start the auto-scroll (scrollTop ' + scroll0 + ' → ' + scrolled + ')');
+
+      // the finger is GONE — no pointerup ever arrives, and the recovery runs instead
+      FM._recoverStuckGesture();
+      await sleep(60);
+      const atRecovery = tl.scrollTop;
+      await sleep(400);
+      const later = tl.scrollTop;
+      if (later !== atRecovery)
+        throw new Error('the auto-scroll kept running after the gesture was recovered (scrollTop ' + atRecovery + ' → ' + later + ' with nothing held) — the loop also re-publishes the drop position and vibrates on every gap it crosses');
+    } finally {
+      try { window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: pid, pointerType: 'touch', clientX: 0, clientY: 0 })); } catch (e) {}
+      try { FM._recoverStuckGesture(); } catch (e) {}
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0 || null); FM.timeline.rebuild(); FM.refreshAll();
+      tl.scrollTop = scroll0;
+      await sleep(80);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  test('opening Edit Points or Crop keeps the zoom and pan he set up (queue 837)', { item: '837' }, async function () {
+    /* Both tools carried the byte-identical viewport reset queue 742 deleted from the mask tool, and the
+       reason it gave stopped being true when the overlays became zoom-aware: both place through
+       FM.placeOverlayOnCanvas, draw through FM.projectToOverlay and read the pointer through
+       FM.eventToProject. So zooming to 300%, panning to the corner you want, and opening either tool
+       threw the setup away and re-centred on the whole comp. The mask tool and the draw tool keep it. */
+    if (!FM.viewport || !FM.pointEdit || !FM.pointEdit.start) throw new Error('the point editor or the viewport is missing, so this cannot be observed');
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedLayers = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const v0 = { x: FM.viewport.x, y: FM.viewport.y, scale: FM.viewport.scale };
+    const realGet = FM.media && FM.media.get;
+    try {
+      const L = FM.makeLayer('shape', { name: 'q837', shape: 'poly', x: 200, y: 200, shapeW: 120, shapeH: 120, fill: '#8ad', start: 0, duration: 4 });
+      L.points = [[0, 0], [100, 0], [100, 100], [0, 100]];
+      FM.scene.layers.push(L);
+      FM.timeline.rebuild(); FM.selectLayer(L.id); FM.refreshAll(); await sleep(120);
+
+      const zoom = () => { FM.viewport.x = -40; FM.viewport.y = 25; FM.viewport.scale = 3; FM.viewport.apply(); };
+      const reads = () => [FM.viewport.x, FM.viewport.y, Math.round(FM.viewport.scale * 100) / 100].join(',');
+
+      zoom();
+      if (FM.viewport.isDefault()) throw new Error('setup: the viewport did not take the zoom');
+      FM.pointEdit.start(L.id, { embedded: true });
+      const afterPE = reads();
+      try { if (FM.pointEdit.stop) FM.pointEdit.stop(); } catch (e) {}
+      if (afterPE !== '-40,25,3')
+        throw new Error('opening Edit Points threw the zoom away (' + afterPE + ' instead of -40,25,3) — the canvas snaps back to Full and re-centres, on the tool you open by selecting a path layer');
+
+      // …and the crop tool, which needs a media record to open at all
+      if (FM.cropTool && FM.cropTool.start && FM.media) {
+        FM.media.get = (id) => (id === L.id ? { width: 640, height: 480 } : (realGet ? realGet.call(FM.media, id) : null));
+        zoom();
+        FM.cropTool.start(L.id);
+        const afterCrop = reads();
+        try { if (FM.cropTool.stop) FM.cropTool.stop(); } catch (e) {}
+        if (afterCrop !== '-40,25,3')
+          throw new Error('opening Crop threw the zoom away (' + afterCrop + ' instead of -40,25,3)');
+      }
+
+      // CONTROL — the touch-up tool KEEPS its reset on purpose: its overlay is not zoom-aware, so a
+      // sweep that "finished the job" there would be a different bug. If this ever stops being true the
+      // comment beside it is wrong and someone should know.
+      if (FM.touchupTool && FM.touchupTool.start) {
+        zoom();
+        try { FM.touchupTool.start(L.id); } catch (e) {}
+        const afterTU = reads();
+        try { if (FM.touchupTool.stop) FM.touchupTool.stop(); } catch (e) {}
+        if (afterTU === '-40,25,3' && !FM.touchupTool._zoomAware)
+          throw new Error('control: the touch-up tool no longer resets the viewport either — its overlay is not zoom-aware, so either it was changed by mistake or the note beside it is now wrong');
+      }
+    } finally {
+      if (realGet && FM.media) FM.media.get = realGet;
+      FM.viewport.x = v0.x; FM.viewport.y = v0.y; FM.viewport.scale = v0.scale; FM.viewport.apply();
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0 || null); FM.timeline.rebuild(); FM.refreshAll(); await sleep(60);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  /* ═══ QUEUE 836 — ONE OLD GLOW USED TO TAKE THE WHOLE LAYER'S COLOUR WITH IT ═══════════════════
+   * Two faults, one test. (1) The GPU path read the glow radius with FM.evalProp, which returns 0 for a
+   * key that is not there, so a Glow saved without a radius drew at 0 while the PC path used the
+   * registry's legacy 12. (2) A radius that small makes FM.glColor.blur refuse, and the refusal used to
+   * abandon the ENTIRE pass — so every Grayscale, Saturation and Brightness on the same layer went with
+   * it, on the one kind of device that has no ctx.filter to fall back to. That is queue 661's complaint
+   * arriving through a single saved effect.
+   * ⚠️ `FM._forceNoCtxFilter` ALONE CANNOT SEE THIS. It only makes the GPU path be CHOSEN; when that
+   * path bails out, drawLayer falls through to the ctx.filter path, which on this healthy browser works
+   * perfectly and paints the right answer — so the bug reads green. The filter property itself has to be
+   * dead for the duration, which is what the descriptor swap below does (restored in the finally). */
+  test('a Glow with no saved radius still glows on a device without ctx.filter, and does not take the layer’s other colour effects with it (queue 836)', { item: '836' }, function () {
+    if (!FM.glColor) throw new Error('FM.glColor is missing');
+    if (!FM.glColor.available()) throw new Error('WebGL is not available, so his phone’s path cannot be exercised: ' + FM.glColor.stats().reason);
+    const P = { name: 'p836', width: 120, height: 120, fps: 30, duration: 2, background: '#000000' };
+    const mkScene = (glowParams) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 60, shapeW: 60, shapeH: 60, fill: '#e8443f' });
+      L.start = 0; L.duration = 2;
+      const grey = FM.fxRegistry.makeInstance('grayscale');
+      if (!grey) throw new Error('could not make a grayscale instance');
+      // built by hand, NOT through makeInstance — the point is a params object with no radius in it,
+      // which is what the load sanitiser leaves behind ("absent stays absent", js/storage.js).
+      L.effects = [{ type: 'glow', enabled: true, params: glowParams }, grey];
+      return { project: P, layers: [L], selectedId: null, selectedIds: [] };
+    };
+    const shoot = (glowParams) => {
+      const cv = document.createElement('canvas'); cv.width = 120; cv.height = 120;
+      const cx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(cx, mkScene(glowParams), 0.5);
+      const centre = cx.getImageData(60, 60, 1, 1).data;
+      // the square covers 30..90; count anything lit in a band well outside it
+      const band = cx.getImageData(6, 6, 108, 18).data;
+      let halo = 0;
+      for (let i = 0; i < band.length; i += 4) if (band[i] + band[i + 1] + band[i + 2] > 24) halo++;
+      return { centre: centre, halo: halo, grey: Math.abs(centre[0] - centre[1]) < 14 && Math.abs(centre[1] - centre[2]) < 14 };
+    };
+    const wasForce = FM._forceNoCtxFilter;
+    const desc = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'filter');
+    try {
+      // CONTROL — his PC. ctx.filter alive, radius absent: the halo and the grey both have to be there,
+      // or the fixture is not describing the bug and nothing below means anything.
+      FM._forceNoCtxFilter = false; FM.glColor._reset();
+      const pc = shoot({});
+      if (!(pc.halo > 0)) throw new Error('control: with ctx.filter working, a Glow with no radius drew no halo (' + pc.halo + ') — the legacy 12 is not being applied on the PC path either, so this test is not about the phone');
+      if (!pc.grey) throw new Error('control: with ctx.filter working the square is ' + [pc.centre[0], pc.centre[1], pc.centre[2]] + ', not grey — the grayscale in the fixture is not running');
+
+      // HIS PHONE — the GPU path chosen AND ctx.filter genuinely dead, so nothing can quietly cover for it.
+      if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', { configurable: true, get: function () { return 'none'; }, set: function () {} });
+      FM._forceNoCtxFilter = true; FM.glColor._reset();
+      const absent = shoot({});
+      if (!(absent.halo > 0))
+        throw new Error('on a device without ctx.filter a Glow with no saved radius draws no halo at all (' + absent.halo + ' lit px against the PC’s ' + pc.halo + ') — the radius is read as 0 there while the panel shows 12');
+      if (!absent.grey)
+        throw new Error('the square is ' + [absent.centre[0], absent.centre[1], absent.centre[2]] + ' on the phone path — the Grayscale on the same layer did nothing, because the glow abandoned the whole pass (queue 661 all over again)');
+
+      // …and a radius the USER typed as 0 is the same trap: no halo is correct, losing the grayscale is not.
+      FM.glColor._reset();
+      const zero = shoot({ radius: 0 });
+      if (!zero.grey)
+        throw new Error('a Glow the user set to radius 0 killed the Grayscale on the same layer (' + [zero.centre[0], zero.centre[1], zero.centre[2]] + ') — a glow that cannot draw a halo must be skipped, not fatal to the stack');
+      if (zero.centre[3] < 200)
+        throw new Error('with a 0-radius glow the layer did not draw at all (alpha ' + zero.centre[3] + ')');
+    } finally {
+      if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', desc);
+      FM._forceNoCtxFilter = wasForce;
+      FM.glColor._reset();
+    }
+  });
+
   /* BLUR TOO — the eighth of the nine, and the one he actually reaches for. It is NOT a colour matrix
    * (it reads neighbouring pixels), so it is a separate separable two-pass Gaussian.
    * 📐 THE SIGMA CONSTANT WAS MEASURED, NOT LOOKED UP: the specs disagree about whether `blur(Npx)`

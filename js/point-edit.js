@@ -401,7 +401,11 @@ window.FM = window.FM || {};
     commit() { if (FM.history) FM.history.commit(); },
 
     start(layerId, opts) {
-      if (FM.viewport && !FM.viewport.isDefault()) FM.viewport.reset();   // overlay lays out in screen px — a zoomed viewport double-scales it
+      // No viewport reset here any more (queue 837): this overlay has been placed by FM.placeOverlayOnCanvas and drawn through
+      // FM.projectToOverlay for a long time, both zoom-aware, and the pointer comes in through FM.eventToProject — so the reason
+      // the old line gave ("a zoomed viewport double-scales it") stopped being true. queue 742 removed the byte-identical line
+      // from the mask tool for the same reason; this is the sibling it missed. Zoom in, open this, and the zoom he set stays.
+      // ⚠️ js/touchup-tool.js keeps ITS reset on purpose — that overlay is not zoom-aware yet.
       if (active && active.layerId === layerId) return;   // already editing this layer
       if (active) this.stop();
       const l = FM.scene.layers.find(x => x.id === layerId);

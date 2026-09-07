@@ -166,7 +166,11 @@ window.FM = window.FM || {};
     layerId() { return active ? active.layerId : null; },
     start(layerId) {
       if (active) this.stop();   // re-entry guard (like text-edit/point-edit/touch-up) — reopening crop used to orphan the old overlay + leave the old layer's _cropEditing stuck true
-      if (FM.viewport && !FM.viewport.isDefault()) FM.viewport.reset();   // overlay lays out in screen px — a zoomed viewport double-scales it
+      // No viewport reset here any more (queue 837): this overlay has been placed by FM.placeOverlayOnCanvas and drawn through
+      // FM.projectToOverlay for a long time, both zoom-aware, and the pointer comes in through FM.eventToProject — so the reason
+      // the old line gave ("a zoomed viewport double-scales it") stopped being true. queue 742 removed the byte-identical line
+      // from the mask tool for the same reason; this is the sibling it missed. Zoom in, open this, and the zoom he set stays.
+      // ⚠️ js/touchup-tool.js keeps ITS reset on purpose — that overlay is not zoom-aware yet.
       const l = FM.scene.layers.find(x => x.id === layerId);
       const m = l && FM.media ? FM.media.get(l.id) : null;
       if (!l || !m || !m.width || !m.height) { if (FM.toast) FM.toast('Nothing to crop'); return; }

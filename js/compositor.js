@@ -6955,7 +6955,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          * composited BEHIND it — repeated `passes` times, each pass shadowing the previous RESULT, which
          * is what turns a halo into something that reads as light. It is not a filter over the pixels,
          * so it is neither a colour matrix nor a plain blur; it is both plus a composite. */
-        const gr = FM.evalProp(p.radius, t);
+        /* ⚠️ ASK WHETHER THE KEY IS THERE, do not ask whether the VALUE is finite (queue 836).
+         * `FM.evalProp` returns 0 for an absent property, `Number.isFinite(0)` is true, so the `: 12`
+         * below was dead code and a Glow saved without a radius rendered at 0 HERE while the PC path
+         * (effectFilter's `nn('radius', 12)`, line ~1821) drew the registry's legacy 12. An absent
+         * radius is not exotic: the load sanitiser drops one it cannot validate — "absent stays
+         * absent" — so every older, shared, AI- or hand-authored project reaches this, and the
+         * queue-784 fill deliberately skips any param that declares a `legacy`, so it cannot be
+         * repaired there. Same question, same answer, both paths. */
+        const gr = p.radius == null ? 12 : FM.evalProp(p.radius, t);
         const gp = Math.max(1, Math.min(4, Math.round(p.passes == null ? 1 : FM.evalProp(p.passes, t))));
         glows.push({ radius: Number.isFinite(gr) ? Math.max(0, gr) : 12,
                      color: (FM.evalProp(p.color, t) || '#ffffff'), passes: gp });
@@ -7043,7 +7051,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const g = ops.glows[gi];
         for (let pass = 0; pass < g.passes; pass++) {
           const halo = FM.glColor.blur(cur, W, H, Math.max(0.05, g.radius * ps * GLOW_SIGMA));
-          if (!halo) return false;
+          /* ⚠️ A GLOW THAT CANNOT DRAW A HALO IS NOT A REASON TO ABANDON THE WHOLE STACK (queue 836).
+           * `FM.glColor.blur` refuses a radius that is not > 0.05 and hands back null, and `return
+           * false` here throws away the ENTIRE pass — every Grayscale, Saturation and Brightness on the
+           * same layer with it. On a device without ctx.filter there is no second path to catch them,
+           * so the layer draws bare: queue 661's complaint, caused by one glow. It is reachable with a
+           * radius the user typed (0) as well as one that was never saved, which is why the fix above
+           * is not enough on its own. A glow with no halo contributes nothing; skip that glow. */
+          if (!halo) continue;
           const c = needC();
           // the blurred ALPHA, filled with the glow colour…
           c.cx.drawImage(halo, 0, 0);
