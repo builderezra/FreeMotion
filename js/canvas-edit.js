@@ -447,7 +447,27 @@ window.FM = window.FM || {};
         // drag starts from the border you can already see instead of jumping to some default.
         void cur;
       } else if (role === 'scale') {
-        drag = { mode: 'scale', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, pivot: pivot, startScale: FM.evalProp(layer.transform.scale, FM.time) || 0.0001, startDist: Math.hypot(p.x - cx, p.y - cy) || 1 };
+        /* ⚠️ A LAYER THAT IS SCALED TO NOTHING HERE CANNOT BE RESIZED BY ITS CORNERS (queue 834 u18).
+           The drag is PROPORTIONAL — it multiplies the scale you started from — so from 0 there is
+           nothing to multiply. What happened instead was worse than nothing: `|| 0.0001` made the base
+           a millionth, every product rounded to zero, and the 0.02 floor below caught it — so the box
+           never moved however far you dragged, and the 0.02 was still WRITTEN. On a keyframed pop-in
+           that is not a local edit: shiftTransform moves EVERY scale keyframe by the difference, so a
+           drag that visibly did nothing silently lifted the layer's whole animation off zero and it
+           never fully disappeared again.
+           So the gesture is refused at the source and says why. The layer is still resizable — at a
+           time where it has a size, or through Move & Transform, which sets the value outright rather
+           than multiplying it. */
+        /* The threshold is 0.005, not the 0.02 floor: at 0.01 a 2x drag already clears the floor and
+           the gesture works, so refusing there would take away something that functions. Below 0.005
+           the ratio needed is one nobody can reach on a screen — and the box is a pixel wide, so there
+           is no handle to aim at either. */
+        const s0 = FM.evalProp(layer.transform.scale, FM.time);
+        if (!(s0 > 0.005)) {
+          if (FM.toast) FM.toast('This layer is scaled to nothing at the playhead — move to a frame where you can see it, or set Scale in Move & Transform');
+          return;
+        }
+        drag = { mode: 'scale', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, pivot: pivot, startScale: s0, startDist: Math.hypot(p.x - cx, p.y - cy) || 1 };
       } else {
         drag = { mode: 'rotate', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, pivot: pivot, startRot: FM.evalProp(layer.transform.rotation, FM.time), startAngle: Math.atan2(p.y - cy, p.x - cx) };
       }

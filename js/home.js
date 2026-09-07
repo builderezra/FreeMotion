@@ -1464,6 +1464,17 @@ window.FM = window.FM || {};
     renderSelBar();
   }
   function enterSelect(preId) { selectMode = true; selected.clear(); if (preId) selected.add(preId); render(); }
+  /* WHICH SELECTED IDS A STORE CAN ACTUALLY DUPLICATE (queue 834 u14). A DRAFT is a project wearing an
+     Elements/Templates card, so its id means nothing to FM.elements / FM.templates — the same routing the
+     bulk DELETE handler already does. Its own function so the rule is assertable without owning a draft,
+     a store and a select bar. */
+  function dupPlan(ids) {
+    const draftIds = new Set((FM.projects.list() || []).filter(x => x.elementDraft || x.templateDraft).map(x => x.id));
+    const doable = ids.filter(id => !draftIds.has(id));
+    return { doable: doable, drafts: ids.length - doable.length };
+  }
+  FM._dupPlan = dupPlan;   // suite seam
+
   function exitSelect() { selectMode = false; selected.clear(); const b = document.getElementById('hm-selbar'); if (b) b.remove(); render(); }
 
   // Bottom action bar shown while selecting: Delete (n) · Duplicate (n) · Select all · Cancel.
@@ -1516,7 +1527,35 @@ window.FM = window.FM || {};
     all.addEventListener('click', () => { shownIds.forEach(id => selected.add(id)); renderSelBar(); render(); });
     const dup = el('button', 'hm-selbtn', 'Duplicate');
     dup.disabled = !n;
-    dup.addEventListener('click', async () => { if (!n) return; const ids = [...selected]; if (FM.toast) FM.toast('Duplicating ' + ids.length + '…'); for (const id of ids) await K.store.duplicate(id); exitSelect(); });
+    /* ⚠️ IT SAID "Duplicating 1…" AND NOTHING HAPPENED (queue 834 u14).
+       Two silences, both here. First, a DRAFT is a project wearing an Elements/Templates card — the
+       same thing the Delete handler below routes around — so `FM.elements.duplicate(draftId)` is asked
+       for a pack that store has never held, returns false, and the loop moves on. The draft card's own
+       ⋯ menu offers no Duplicate at all, so this is not a capability being taken away: it is the bulk
+       bar finally agreeing with the card. Second, `duplicate()` returns FALSE for every other failure
+       too (no pack, a full localStorage index) and the return value was thrown away — so a real
+       element that could not be copied looked exactly like one that was. Count what actually worked
+       and say it. */
+    dup.addEventListener('click', async () => {
+      if (!n) return;
+      const ids = [...selected];
+      const plan = dupPlan(ids), doable = plan.doable, drafts = plan.drafts;
+      const noun = K.noun === 'template' ? 'a template' : 'an element';
+      if (!doable.length) {
+        if (FM.toast) FM.toast(drafts === 1 ? 'That is a draft, not ' + noun + ' — open it and save it first, then it can be duplicated'
+                                            : 'Those are drafts, not ' + noun.replace(/^an? /, '') + 's — open one and save it first, then it can be duplicated');
+        return;
+      }
+      if (FM.toast) FM.toast('Duplicating ' + doable.length + '…');
+      let done = 0;
+      for (const id of doable) { try { if (await K.store.duplicate(id) !== false) done++; } catch (e) {} }
+      if (FM.toast) {
+        const skipped = drafts ? ' · ' + drafts + ' draft' + (drafts === 1 ? '' : 's') + ' skipped' : '';
+        FM.toast(done === doable.length ? 'Duplicated ' + done + skipped
+                                        : done + ' of ' + doable.length + ' duplicated — the rest could not be copied' + skipped);
+      }
+      exitSelect();
+    });
     const del = el('button', 'hm-selbtn danger', 'Delete');
     del.disabled = !n;
     del.addEventListener('click', async () => {
@@ -1965,12 +2004,31 @@ window.FM = window.FM || {};
     return card;
   }
 
+  /* THE PROJECTS GRID'S OWN LIST AND ORDER, in one place (queue 834 u15).
+     The + button's "which project?" menu built its own list from `FM.projects.list()` raw, and that is
+     two different lists from the one on screen: it included element and template DRAFTS — hidden
+     workspaces, offered as if they were projects, which is the whole of the complaint queue 340 fixed
+     for the grid — and it was in the store's own order (most recently created) rather than the order
+     Settings → Project sorting asks for, with pins ignored. So the first 14 the menu showed were not
+     the first 14 anywhere. One function now answers "which projects, in what order", and both callers
+     use it. */
+  function projectsInGridOrder() {
+    const byName = FM.settings && FM.settings.get('sort') === 'name';
+    return pinSort('projects', (FM.projects.list() || []).filter(p => !p.elementDraft && !p.templateDraft).slice().sort(byName
+      ? (a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { numeric: true, sensitivity: 'base' })
+      : (a, b) => (b.modified || 0) - (a.modified || 0)), p => p.id);
+  }
+  FM._projectsInGridOrder = projectsInGridOrder;   // suite seam
+
   function pickProject(title, then) {
-    const list = FM.projects.list();
+    const list = projectsInGridOrder();
     if (!list.length) { if (FM.toast) FM.toast('Make a project first — templates and elements are saved from one'); return; }
-    const items = list.slice(0, 14).map(p => ({ label: p.name || 'Untitled', action: () => then(p) }));
+    const MAX = 14;   // a context menu that runs off the top of the screen is worse than a short one
+    const items = list.slice(0, MAX).map(p => ({ label: p.name || 'Untitled', action: () => then(p) }));
+    // …and it SAYS when it is short, instead of quietly ending. Before, project 15 simply did not exist.
+    if (list.length > MAX) items.push({ label: '…and ' + (list.length - MAX) + ' more — open that one and use its ⋯ menu', disabled: true });
     const btn = document.getElementById('hm-new'), r = btn.getBoundingClientRect();
-    FM.contextMenu.show(Math.max(8, Math.min(r.left - 150, window.innerWidth - 230)), Math.max(8, r.top - 12 - Math.min(14, items.length) * 34),
+    FM.contextMenu.show(Math.max(8, Math.min(r.left - 150, window.innerWidth - 230)), Math.max(8, r.top - 12 - Math.min(MAX + 1, items.length) * 34),
       [{ label: title, disabled: true }, { sep: true }].concat(items));
   }
   function newFromTab() {
@@ -2155,19 +2213,16 @@ window.FM = window.FM || {};
     // screen that has no projects on it.
     if (newBtn) { newBtn.style.display = (tab === 'tutorials') ? 'none' : ''; newBtn.setAttribute('aria-label', tab === 'templates' ? 'New template' : tab === 'elements' ? 'New element' : 'New project'); }
     if (tab === 'projects') {
-      // Order follows Settings → Project sorting: most recently EDITED first (so the project you
-      // just worked on is the front card), or plain A–Z by name.
-      const byName = FM.settings && FM.settings.get('sort') === 'name';
-      // …then pinned cards are lifted to the front, keeping that order inside each block (queue 138).
-      // Deliberately NOT applied to the search results below: when you have typed a query you want the
-      // best MATCH first, and a pinned project outranking a closer one would read as the search being
-      // broken. Pins are about the resting order of the list, not about relevance.
-      /* Element DRAFTS are not projects and do not belong in this list (queue 340) — they are the
-         workspace a new element is built in, and showing them here is the whole of his complaint that
-         "it just creates a new project". They appear under Elements instead. */
-      const list = pinSort('projects', FM.projects.list().filter(p => !p.elementDraft && !p.templateDraft).slice().sort(byName
-        ? (a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { numeric: true, sensitivity: 'base' })
-        : (a, b) => (b.modified || 0) - (a.modified || 0)), p => p.id);
+      /* Order follows Settings → Project sorting: most recently EDITED first (so the project you just
+         worked on is the front card), or plain A–Z by name; then pinned cards are lifted to the front,
+         keeping that order inside each block (queue 138). Element DRAFTS are not projects and do not
+         belong in this list (queue 340) — they are the workspace a new element is built in, and showing
+         them here is the whole of his complaint that "it just creates a new project".
+         All three rules live in projectsInGridOrder(), because the + button's "which project?" menu got
+         every one of them wrong by building its own list (queue 834 u15).
+         Pins are deliberately NOT applied to the search results below: with a query typed you want the
+         best MATCH first, and a pinned project outranking a closer one reads as broken search. */
+      const list = projectsInGridOrder();
       if (query) {
         if (!list.length) { grid.appendChild(emptyState('▶', 'No projects yet', 'Tap + to start one.')); renderSelBar(); return; }
         const range = parseDateQuery(query);

@@ -417,6 +417,40 @@ window.FM = window.FM || {};
       }
     }
   };
+  /* EVERY EFFECT STACK ON A LAYER THAT CAN HOLD A CROSS-LAYER REFERENCE (queue 834 u3, 7 Sep).
+   *
+   * eachFx above walks `layer.effects`, and that is the stack the three ADDRESS grammars index, so it
+   * cannot grow a path shape they are unable to parse. It is also not the only effect stack a layer
+   * has: a caption CUE carries its own (js/inspector.js cueFxList; drawn at js/compositor.js
+   * drawLayer, which concatenates them over the track's), and any effect declaring `layer: true` in
+   * the registry stores a layer id in `params.source` — Luma Matte, Compound Blur, Match Grade,
+   * Displacement Map, Polar Displacement.
+   *
+   * Every id-remapping site walked eachFx alone, so a cue effect's source was never rewritten. In a
+   * duplicate or a paste it kept pointing at the ORIGINAL layer (the copy mattes off the wrong thing);
+   * in an import, or a project inserted as a template or element, it pointed at an id that is not in
+   * the new scene at all — and the compositor's lookup returns undefined and falls through to drawing
+   * the layer PLAIN. No error, no toast, and the dead ref is autosaved into the copy.
+   *
+   * The remap sites walk THIS. The ADDRESS builders (the timeline's keyframe clipboard, audio-react's
+   * links) deliberately stay on eachFx: a cue effect has no address grammar to be written into, and
+   * inventing one here would hand them a string they cannot read back. */
+  FM.eachRefFx = function (layer, fn) {
+    FM.eachFx(layer, fn);
+    const cues = (layer && Array.isArray(layer.captions)) ? layer.captions : [];
+    for (let ci = 0; ci < cues.length; ci++) {
+      const cue = cues[ci], list = cue && cue.effects;
+      if (!Array.isArray(list)) continue;
+      for (let k = 0; k < list.length; k++) {
+        const fx = list[k];
+        if (!fx) continue;
+        fn(fx, ['cue', ci, k], cue);
+        if (FM.isFxContainer(fx)) {
+          for (let j = 0; j < fx.effects.length; j++) { const ch = fx.effects[j]; if (ch) fn(ch, ['cue', ci, k, j], fx); }
+        }
+      }
+    }
+  };
   FM.fxAt = function (layer, path) {
     if (!path || !path.length) return null;
     let fx = ((layer && layer.effects) || [])[path[0]];

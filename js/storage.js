@@ -1221,7 +1221,10 @@ window.FM = window.FM || {};
     // autosaved into the copy, so the duplicated / imported / templated project silently renders
     // differently from the original and stays that way. karaokeOf is the same unremapped class.
     out.forEach(l => {
-      FM.eachFx(l, fx => {
+      // eachRefFx: a caption CUE's own effects carry params.source too, and were never remapped —
+      // an imported or templated copy kept mattes pointing at a layer that is not in the new scene
+      // and the compositor drew the layer plain (queue 834 u3).
+      FM.eachRefFx(l, fx => {
         if (fx && fx.params && fx.params.source) fx.params.source = map[fx.params.source] || '';
       });
       if (l.karaokeOf) l.karaokeOf = map[l.karaokeOf] || null;

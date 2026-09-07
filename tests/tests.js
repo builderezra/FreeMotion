@@ -36257,6 +36257,59 @@
     }
   });
 
+  test('a corner drag on a layer scaled to nothing is refused, instead of lifting every scale keyframe off zero (queue 834 u18)', { item: '834' }, async function () {
+    /* The scale drag MULTIPLIES the scale it started from, so from 0 there is nothing to multiply: the
+       old base of 0.0001 made every product round to zero, the 0.02 floor caught it, and the box never
+       moved however far you dragged — while 0.02 was still written. On a keyframed pop-in shiftTransform
+       moves EVERY scale keyframe by that difference, so a drag that did nothing visible lifted the whole
+       animation off zero for good. */
+    const box = document.getElementById('select-box');
+    if (!box || !FM.canvasEdit) throw new Error('there is no selection box to press a handle on, so this cannot be measured');
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedLayers = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time;
+    try {
+      const L = FM.makeLayer('shape', { name: 'u18-popin', shape: 'rect', x: 200, y: 200, shapeW: 120, shapeH: 120, fill: '#fff', start: 0, duration: 5 });
+      // a pop-in: nothing at t=0, full size at t=1 — his own most likely case
+      L.transform.scale = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 1, e: 'linear' }] };
+      FM.scene.layers.push(L);
+      FM.seek ? FM.seek(0) : (FM.time = 0);
+      FM.timeline.rebuild(); FM.selectLayer(L.id); FM.refreshAll();
+      if (FM.canvasEdit.update) FM.canvasEdit.update();
+      await sleep(180);
+      if (Math.abs(FM.evalProp(L.transform.scale, FM.time)) > 1e-6) throw new Error('setup: the layer is not at scale 0 at the playhead (' + FM.evalProp(L.transform.scale, FM.time) + ')');
+      const h = box.querySelector('.sb-se') || box.querySelector('.sb-nw');
+      if (!h) throw new Error('the selection box has no corner handle');
+      const r = h.getBoundingClientRect();
+      const kfBefore = L.transform.scale.kf.map(k => k.v).join(',');
+      h.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 63, pointerType: 'mouse', button: 0, buttons: 1, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
+      window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, pointerId: 63, pointerType: 'mouse', button: 0, buttons: 1, clientX: r.left + 240, clientY: r.top + 180 }));
+      await sleep(120);
+      const kfAfter = L.transform.scale.kf.map(k => k.v).join(',');
+      if (kfAfter !== kfBefore)
+        throw new Error('a corner drag on a layer scaled to nothing rewrote its scale keyframes (' + kfBefore + ' → ' + kfAfter + ') — the drag does nothing on screen and the pop-in never reaches zero again');
+
+      // CONTROL — at a frame where the layer HAS a size, the same drag must still scale it. A guard that
+      // refused everywhere would pass the assertion above and take the gesture away.
+      FM.seek ? FM.seek(1) : (FM.time = 1);
+      FM.refreshAll(); if (FM.canvasEdit.update) FM.canvasEdit.update(); await sleep(140);
+      const h2 = box.querySelector('.sb-se') || box.querySelector('.sb-nw');
+      const r2 = h2.getBoundingClientRect(), was = L.transform.scale.kf.map(k => k.v).join(',');
+      h2.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 64, pointerType: 'mouse', button: 0, buttons: 1, clientX: r2.left + r2.width / 2, clientY: r2.top + r2.height / 2 }));
+      window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, pointerId: 64, pointerType: 'mouse', button: 0, buttons: 1, clientX: r2.left + 260, clientY: r2.top + 200 }));
+      await sleep(120);
+      if (L.transform.scale.kf.map(k => k.v).join(',') === was)
+        throw new Error('control: at a frame where the layer is visible the corner drag no longer scales it either — the guard is refusing everywhere');
+    } finally {
+      try { FM.canvasEdit._finishDrag && FM.canvasEdit._finishDrag(); } catch (e) {}
+      [63, 64].forEach(id => window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: id, pointerType: 'mouse', button: 0, buttons: 0, clientX: 0, clientY: 0 })));
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      if (FM.seek) FM.seek(t0); else FM.time = t0;
+      FM.selectLayer(sel0 || null); FM.timeline.rebuild(); FM.refreshAll(); await sleep(60);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
   test('dragging one motion-path dot moves that dot, not the whole path (queue 834 u10)', { item: '834' }, async function () {
     /* With one axis keyframed and the other still a plain number, seeding that axis with a SINGLE keyframe
        leaves it constant — so every dot shared the same x and dragging one slid the whole path sideways as
@@ -36293,6 +36346,94 @@
       FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
       FM.selectLayer(sel0 || null); FM.timeline.rebuild(); FM.refreshAll(); await sleep(60);
       if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  test('bulk Duplicate skips drafts and says so, instead of reporting “Duplicating 1…” and doing nothing (queue 834 u14)', { item: '834' }, async function () {
+    /* A draft is a project wearing an Elements/Templates card, so FM.elements.duplicate(draftId) is asked
+       for a pack that store has never held: it returns false and the loop moves on with no word said. The
+       bulk DELETE handler has routed around this since queue 617; Duplicate never did. */
+    if (!FM.home || !FM._dupPlan) throw new Error('the bulk-duplicate rule cannot be observed, so a ticked draft can still report "Duplicating 1…" and do nothing');
+    const realList = FM.projects.list;
+    try {
+      FM.projects.list = () => ([
+        { id: 'u14-real', name: 'A real element source' },
+        { id: 'u14-draft', name: 'A draft', elementDraft: true },
+        { id: 'u14-tdraft', name: 'A template draft', templateDraft: true },
+      ]);
+      const all = FM._dupPlan(['u14-real', 'u14-draft', 'u14-tdraft']);
+      if (all.drafts !== 2) throw new Error('a Select-all batch counted ' + all.drafts + ' drafts, not 2 — they would be handed to a store that has never heard of them');
+      if (all.doable.join(',') !== 'u14-real') throw new Error('the batch would still try to duplicate ' + all.doable.join(',') + ' — a draft id means nothing to the elements store');
+      const only = FM._dupPlan(['u14-draft']);
+      if (only.doable.length !== 0) throw new Error('ticking one draft alone still reports something to duplicate, which is the "Duplicating 1…" that never arrives');
+      // CONTROL — a batch of real ids must be left completely alone by the rule
+      const clean = FM._dupPlan(['u14-real']);
+      if (clean.doable.length !== 1 || clean.drafts !== 0) throw new Error('control: the rule is now dropping ordinary elements too (' + JSON.stringify(clean) + ')');
+    } finally { FM.projects.list = realList; }
+  });
+
+  test('the + button’s “which project?” list is the projects grid’s own list and order, with no hidden drafts (queue 834 u15)', { item: '834' }, async function () {
+    /* The menu built its own list from FM.projects.list() raw: element and template DRAFTS appeared in it
+       as if they were projects (the very thing queue 340 took out of the grid), and the order was the
+       store's — most recently created — not the Settings → Project sorting order the grid uses, with pins
+       ignored. So "the first 14" were the first 14 of a list that is on no screen. */
+    if (!FM.home || !FM._projectsInGridOrder) throw new Error('the + button’s project list cannot be observed, so it can still offer hidden draft workspaces as projects');
+    const realList = FM.projects.list;
+    try {
+      // deliberately in the WRONG order for both sort settings, so returning the store's order fails
+      FM.projects.list = () => ([
+        { id: 'u15-draft', name: 'AAA draft', elementDraft: true, modified: 9000 },
+        { id: 'u15-tdraft', name: 'AAB template draft', templateDraft: true, modified: 8000 },
+        { id: 'u15-old', name: 'Zulu', modified: 100 },
+        { id: 'u15-new', name: 'Alpha', modified: 7000 },
+      ]);
+      const got = FM._projectsInGridOrder().map(p => p.id);
+      if (got.indexOf('u15-draft') >= 0 || got.indexOf('u15-tdraft') >= 0)
+        throw new Error('the list still offers a hidden draft workspace as a project (' + got.join(',') + ')');
+      if (got.length !== 2) throw new Error('the list dropped a real project — got ' + got.join(',') + ', expected the two non-drafts');
+      /* The fixture is built so BOTH sort settings want the same answer — "Alpha" before "Zulu" by name,
+         and 7000 before 100 by date — so the test does not depend on which one he has chosen, while the
+         store's own order (the bug) still fails it. */
+      if (got.join(',') !== 'u15-new,u15-old')
+        throw new Error('the list is in the store’s own order (' + got.join(',') + '), not the grid’s — so its first entries are not the ones on screen');
+    } finally { FM.projects.list = realList; }
+  });
+
+  test('a caption cue’s own effects are re-pointed with the layer, so a copy does not matte off the original (queue 834 u3)', { item: '834' }, async function () {
+    /* A caption CUE carries its own effects array, and an effect declaring `layer: true` stores a layer id
+       in params.source. Every id-remapping site walked FM.eachFx, which only visits layer.effects — so a
+       duplicate kept the ORIGINAL's id (the copy mattes off the wrong layer) and an import or template
+       insert kept an id that is not in the new scene at all, where the compositor draws the layer plain. */
+    if (!FM.eachRefFx) throw new Error('there is no walker that visits a caption cue’s effects, so a cue’s Luma Matte / Displacement Map source is still never remapped in a copy');
+    if (!FM.storage || !FM.storage._reIdLayers) throw new Error('the import/template re-id cannot be observed');
+    const mk = () => {
+      const src = FM.makeLayer('shape', { name: 'u3-matte', shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#fff', start: 0, duration: 4 });
+      const cap = FM.makeLayer('text', { name: 'u3-caps', text: 'hello', x: 100, y: 300, start: 0, duration: 4 });
+      cap.captions = [{ start: 0, end: 2, text: 'hello', effects: [{ type: 'lumamatte', enabled: true, params: { source: src.id } }] }];
+      // the TRACK's own stack carries one too — it already worked, and is the control: if the walk broke
+      // entirely, this would fail alongside the cue and the test would not be telling us which.
+      cap.effects = [{ type: 'lumamatte', enabled: true, params: { source: src.id } }];
+      return { src: src, cap: cap };
+    };
+
+    // 1. the import / template / element / project-duplicate path
+    const a = mk();
+    const r = FM.storage._reIdLayers([a.src, a.cap]);
+    const cap2 = r.layers[1], srcId2 = r.map[a.src.id];
+    if (!srcId2) throw new Error('control: the re-id did not mint a new id for the matte layer');
+    const cue2 = cap2.captions && cap2.captions[0], cueFx2 = cue2 && cue2.effects && cue2.effects[0];
+    if (!cueFx2) throw new Error('control: the cue’s effect did not survive the import sanitiser at all');
+    if (cap2.effects[0].params.source !== srcId2) throw new Error('control: even the TRACK’s own effect was not remapped (' + cap2.effects[0].params.source + ') — the failure is not about cues');
+    if (cueFx2.params.source !== srcId2)
+      throw new Error('the cue’s matte still points at ' + (cueFx2.params.source === a.src.id ? 'the ORIGINAL layer' : '"' + cueFx2.params.source + '"') + ' instead of the copy — in an imported project that id does not exist and the layer draws plain');
+
+    // 2. the duplicate / paste path (FM.remapLayerRefs is pure, so no scene is touched)
+    if (FM.remapLayerRefs) {
+      const b = mk(), idMap = Object.create(null); idMap[b.src.id] = 'l-u3-new';
+      FM.remapLayerRefs(b.cap, idMap);
+      if (b.cap.effects[0].params.source !== 'l-u3-new') throw new Error('control: remapLayerRefs did not rewrite the track’s own effect');
+      if (b.cap.captions[0].effects[0].params.source !== 'l-u3-new')
+        throw new Error('duplicating the pair left the cue’s matte pointing at the original layer (' + b.cap.captions[0].effects[0].params.source + ')');
     }
   });
 
