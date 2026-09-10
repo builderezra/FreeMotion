@@ -16,7 +16,12 @@ HELD    = re.compile(r'⚠️ *HELD|Held because|Log don.t do yet|held at (his|y
 BLOCKED = re.compile(r'one word from (him|you)|need one photo|worth one line from (him|you)|your call|your word|'
                      r'needs? (his|your) (decision|word|call)|decision for you|say the word|Ask him|'
                      r'would settle it|from you would close it|LEFT OPEN for your eye|still worth your ears|'
-                     r'waiting on (his|your)|ASKED HIM|STAYS OPEN|is his call|his call alone|'
+                     r'waiting on (his|your)|ASKED HIM|(?-i:STAYS OPEN)|is his call|his call alone|'
+                     # ⚠️ (?-i:STAYS OPEN) — CASE-SENSITIVE ON PURPOSE (10 Sep). It is a shouted marker, and
+                     # matched case-insensitively it also catches ordinary prose: #857 is a bug report whose
+                     # clause read "the edit stays open while you do it", and the whole entry was filed as
+                     # blocked on Ezra and taken out of the queue. That is the exact failure this file's own
+                     # header warns about — a phrase in a note about an item making the item unreachable.
                      # …and the plain ways a PARTIAL SHIP says it, which the list above all missed:
                      # "waiting on him" (not "his"), and a decision named as still outstanding.
                      r'waiting on (him|ezra)|decisions? only ezra can|decision (he|you) still owes?|'
@@ -404,6 +409,19 @@ def stale_asks(md):
 # push when it fails, because every rule in this file was written to cure a specific bug and nothing
 # else would notice if one stopped working. Each case below IS one of those bugs, in its own words.
 _CASES = [
+    # ORDINARY PROSE MUST NOT LOOK LIKE A SHOUTED MARKER (10 Sep). #857 is a bug report — "tapping the
+    # canvas while editing text should move it" — and one of its clauses said "the edit stays open while
+    # you do it". Matched case-insensitively, `STAYS OPEN` filed the whole entry as blocked on Ezra and
+    # took a real bug out of the queue. The marker is shouted where it is meant; the prose is not.
+    ("""- [ ] **857 — editing text closes when you tap the canvas**
+      1. [ ] Dragging on the canvas during a text edit moves the text.
+      2. [ ] The edit stays open while you do it.""",
+     'ACTIONABLE',
+     "ordinary prose containing 'stays open' is not the shouted STAYS OPEN marker"),
+    ("""- [ ] **900 — something he must look at**
+      STAYS OPEN until he checks it on his own phone.""",
+     'blocked on Ezra',
+     "the shouted marker still blocks, which is what it was written for"),
     # HIS REPLY FORMATS ARE ANSWERS (5 Sep). "> 570 stepped" sat under a block for weeks and above a re-ask for days.
     ("""- [ ] **570 — the switch does not update live**
       it is your call: smooth or stepped.

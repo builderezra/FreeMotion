@@ -576,6 +576,23 @@ window.FM = window.FM || {};
       setTimeout(() => { if (active && FM.scene.selectedId !== active.layerId) commit(); }, 0);
       return;
     }
+    /* ⚠️ THE CANVAS IS NOT "OFF THE EDITOR" (queue 857). His words: *"as soon as you tap on the actual
+     * canvas to try and move the text and stuff. It just closes it. You should be able to tap on the
+     * canvas and move the text around while editing text."*
+     * This handler swallowed EVERY tap outside the editor UI — preventDefault, stopPropagation, commit —
+     * so on a phone the canvas never even saw the touch. Two things were wrong with that: the edit ended
+     * when he was only trying to place the text, and the drag he was making went nowhere.
+     * The canvas now gets the tap and the session stays open, which is what the DESKTOP branch above has
+     * always done for the same reason ("a click on the canvas means 'look at my text' / 'nudge it', not
+     * 'I'm finished'"). Everything else — the timeline, the panels, the sheets — still commits and
+     * returns to the grid, because tapping those really does mean he is finished here.
+     * `#canvas-wrap` and not `#stage` on purpose: the view rail lives in the stage too, and a rail button
+     * is a view control rather than a place to put text. */
+    const wrap = document.getElementById('canvas-wrap');
+    if (wrap && t && wrap.contains(t)) {
+      if (pop) closePop();               // a sub-popover still closes first
+      return;                            // …and the tap reaches the canvas: drag the text, keep editing
+    }
     e.preventDefault(); e.stopPropagation();
     if (pop) { closePop(); return; }   // an open sub-popover closes first…
     commit();                          // …otherwise tapping off the editor commits + returns to the grid

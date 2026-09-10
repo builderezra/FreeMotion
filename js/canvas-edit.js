@@ -251,6 +251,10 @@ window.FM = window.FM || {};
   // ---- drag start ----
   // Two-finger pinch state (phones): pointer cache on #preview, same pattern as the timeline's pinch.
   const vpPtrs = new Map();
+  /* Suite seam (queue 857): how many touch pointers the canvas currently thinks are down. A test whose
+     drag silently became "the second finger" reads as the bug it was written for, and this is what tells
+     the two apart in the failure message. */
+  FM._vpPointerCount = () => vpPtrs.size;
   let vpPinch = null;
   function finishDrag() {   // commit an in-flight drag (second finger landed / pointer lost)
     if (!drag) return;

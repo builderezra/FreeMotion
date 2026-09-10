@@ -54729,6 +54729,94 @@
      Second half: on the tick that LEARNS the bias, the bias is set to the raw error itself, so the
      de-biased value is exactly 0 by construction — a fact about the arithmetic, not about the audio.
      Storing it dropped a guaranteed zero into the list after every seek and at the start of every clip. */
+  test('tapping the canvas while editing text MOVES the text and keeps the edit open (queue 857)', { item: '857', budgetMs: 30000 }, async function () {
+    /* His words: "as soon as you tap on the actual canvas to try and move the text and stuff. It just
+       closes it. You should be able to tap on the canvas and move the text around while editing text."
+       The phone branch of text-edit's document handler swallowed EVERY tap outside the editor UI —
+       preventDefault, stopPropagation, commit — so the canvas never even saw the touch: the edit ended,
+       and the drag he was making went nowhere. The desktop branch has always kept the session open on a
+       canvas click, for the reason written beside it: a click on the canvas means "nudge it", not "I am
+       finished". */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.textEdit || !FM.textEdit.start) throw new Error('there is no text editor to drive');
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedLayers = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const pid = 857;
+    try {
+      /* ⚠️ THE CANVAS HAS TO BE THE CANVAS. Run alone this passed; inside the full suite it read "moved
+         0px", because something earlier had left a tool owning canvas taps or the viewport zoomed, and a
+         drag then goes somewhere else entirely. Clear it, and SAY what had to be cleared — a test that
+         silently tidies up hides the leak from whoever looks next. */
+      const dirty = [];
+      if (FM.playing) { dirty.push('playing'); FM.pause(); }
+      for (const [name, tool, stop] of [['mask', FM.maskTool, 'stop'], ['motion path', FM.motionPath, 'stop'],
+                                        ['crop', FM.cropTool, 'stop'], ['point edit', FM.pointEdit, 'stop'],
+                                        ['draw', FM.drawTool, '_stop'], ['tracker', FM.tracker, 'cancel']]) {
+        try { if (tool && tool.isActive && tool.isActive() && tool[stop]) { dirty.push(name); tool[stop](); } } catch (e) {}
+      }
+      try { if (FM.eyedropper && FM.eyedropper.isActive && FM.eyedropper.isActive()) { dirty.push('eyedropper'); FM.eyedropper.stop(); } } catch (e) {}
+      if (FM.viewport && !FM.viewport.isDefault()) { dirty.push('viewport zoom'); FM.viewport.reset(); }
+      if (dirty.length) window.__fmStep = 'q857 cleared: ' + dirty.join(', ');
+      const L = FM.makeLayer('text', { name: 'q857', text: 'Hello', x: 540, y: 900, start: 0, duration: 4 });
+      FM.scene.layers.push(L);
+      FM.timeline.rebuild(); FM.selectLayer(L.id); FM.refreshAll(); await sleep(140);
+      FM.textEdit.start(L.id); await sleep(260);
+      if (!FM.textEdit.isActive()) throw new Error('setup: the text editor did not open');
+
+      /* ⚠️ IT HAS TO RUN AT PHONE WIDTH, and `--width 380` does not do that (see runner-frame-is-900):
+         the app's own frame stays 900px whatever the driver window is, so without atPhoneWidth this test
+         takes the DESKTOP branch — which already kept the editor open — and passes against the very bug
+         it was written for. It did, on the first run. */
+      await atPhoneWidth(async function () {
+      const wrap = document.getElementById('canvas-wrap');
+      if (!wrap) throw new Error('setup: no canvas to tap');
+      const r = wrap.getBoundingClientRect();
+      const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2);
+      const target = document.elementFromPoint(x, y) || wrap;
+      if (!wrap.contains(target)) throw new Error('setup: the middle of the canvas is covered by ' + (target.id || target.className) + ', so this cannot be measured');
+      const x0 = FM.evalProp(L.transform.x, FM.time);
+      /* ⚠️ A MOUSE POINTER, NOT A TOUCH ONE, and the reason is a suite-ordering trap rather than a
+         preference. The canvas keeps a cache of live TOUCH pointers so a second finger becomes a pinch;
+         a test that ran earlier and left one behind makes this drag the SECOND finger, and it pinches
+         instead of dragging — the text then moves 0px and this test reads as the bug being back. Run
+         alone it passed, inside the suite it did not, which is the signature of exactly that. The branch
+         under test is chosen by the WIDTH (matchMedia), not by the pointer type, so a mouse drag
+         exercises the same phone path with none of that. */
+      target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: pid, pointerType: 'mouse', button: 0, buttons: 1, clientX: x, clientY: y }));
+      window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, pointerId: pid, pointerType: 'mouse', button: 0, buttons: 1, clientX: x + 60, clientY: y + 40 }));
+      window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: pid, pointerType: 'mouse', button: 0, buttons: 0, clientX: x + 60, clientY: y + 40 }));
+      await sleep(120);
+
+      if (!FM.textEdit.isActive()) throw new Error('tapping the canvas closed the text editor — "as soon as you tap on the actual canvas to try and move the text and stuff. It just closes it"');
+      const moved = Math.abs(FM.evalProp(L.transform.x, FM.time) - x0);
+      if (!(moved > 5)) throw new Error('dragging on the canvas moved the text by ' + Math.round(moved) + 'px — the tap is still being swallowed before the canvas can see it' +
+        (FM._vpPointerCount ? ' (…and ' + FM._vpPointerCount() + ' pointer(s) were already live on the canvas, so this drag was read as a second finger)' : '') +
+        (dirty.length ? ' [this test had to clear: ' + dirty.join(', ') + ']' : ''));
+
+      /* CONTROL — a tap that really does mean "I am finished" must still end it. On the phone that is
+         anything outside the canvas; on the desktop the card is modeless by design and follows the
+         SELECTION instead, which is documented in text-edit.js and is not what this change touched. */
+      const tl = document.getElementById('timeline');
+      if (tl) {
+        const tr = tl.getBoundingClientRect();
+        const tx = Math.round(tr.left + 20), ty = Math.round(tr.top + 10);
+        tl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: pid + 1, pointerType: 'touch', clientX: tx, clientY: ty }));
+        // …and LET IT GO. A pointerdown with no pointerup leaves a live gesture behind, which the suite
+        // rightly refuses: it corrupts whatever runs next.
+        window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: pid + 1, pointerType: 'touch', clientX: tx, clientY: ty }));
+        await sleep(160);
+        if (FM.textEdit.isActive()) throw new Error('control: on the phone a tap on the timeline no longer ends the edit either — the fix has gone too far and there is no way out but the bar');
+      }
+      });
+    } finally {
+      try { if (FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {}
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0 || null); FM.timeline.rebuild(); FM.refreshAll(); await sleep(80);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
   test('the two side panels sit in the same band, and the pop-up stays clear of the row it rises from (queue 854)', { item: '854', budgetMs: 30000 }, async function () {
     /* From his own iPhone 16 Pro Max on v16.13, with a screenshot: "the left side pop-up menu doesn't go in
        the same area that the right side pop-up menu does and it kind of is over on top of other buttons and
