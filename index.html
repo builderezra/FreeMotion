@@ -39,7 +39,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=692">
+<link rel="stylesheet" href="styles.css?v=693">
 <link rel="stylesheet" href="theme-glass.css?v=50">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -231,7 +231,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v16.10</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v16.11</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -411,13 +411,6 @@
           <!-- Second group (v5.03): the transport extras Ezra wants out of the ⋯ menu — playback speed,
                loop, the export marks, and timeline zoom. They belong together here because every one
                of them is about HOW you're watching rather than what the project contains. -->
-          <div class="vb-sep" aria-hidden="true"></div>
-          <div id="vb-rate">
-            <button id="vb-slower" class="vb-z" title="Slower playback" aria-label="Slower playback">−</button>
-            <span id="vb-ratelabel">1×</span>
-            <button id="vb-faster" class="vb-z" title="Faster playback" aria-label="Faster playback">+</button>
-          </div>
-          <button id="vb-loop" class="vb-btn" title="Loop playback"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></button>
           <!-- Onion skin · Snapping · Guides (v6.24). These three are the answer to Ezra asking where
                they went: they DID move into the settings panel as agreed, and then two later changes
                buried them — v6.13 pointed the cog at Canvas settings to match the phone, and v6.14
@@ -430,16 +423,10 @@
                you go to READ the state of things, this bar is where you flick it. -->
           <!-- Onion skin's button was here. Removed in queue 122: it ghosts the SELECTED layer and does
                nothing without one, so it was a per-layer tool in a global bar. It lives in the layer ⋯ menu. -->
-                    <button id="vb-snap" class="vb-btn" title="Snapping (magnet) — clips and keyframes stick to edges"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v8a6 6 0 0 0 12 0V4"/><path d="M6 9h4M14 9h4"/></svg></button>
           <button id="vb-guides" class="vb-btn" title="Guides — safe margins and rule-of-thirds (never exported)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1.5"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18" opacity=".55"/></svg></button>
           <!-- The three export-mark buttons share a backing so they read as ONE control rather than
                three unrelated icons in a column. Ezra: "add a dark layer behind these three buttons to
                signify theyre grouped." -->
-          <div id="vb-marks">
-            <button id="vb-markin" class="vb-btn" title="Mark export start"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16M7 4h6M7 20h6M17 4v16"/></svg></button>
-            <button id="vb-markout" class="vb-btn" title="Mark export end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4v16M17 4h-6M17 20h-6M7 4v16"/></svg></button>
-            <button id="vb-markclear" class="vb-btn" title="Clear export marks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l14 14M19 5L5 19"/></svg></button>
-          </div>
 <!-- Arrows, per Ezra, and HOLDING one runs to the end of the range instead of stepping. -->
           <div id="vb-tlzoom">
             <button id="vb-tlin" class="vb-z" title="Zoom timeline in · hold for maximum" aria-label="Zoom timeline in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
@@ -480,8 +467,37 @@
       <div id="tl-resizer" title="Drag to resize the timeline" aria-label="Resize timeline"></div>
       <!-- Alight Motion transport: PLAY dead-centre, 3 controls each side revolving around it.
            Left: undo · redo · jump-to-start.  Right: jump-to-end · layer-menu · fit. -->
+      <!-- ⚙ THE OPTIONS THAT ARE NOT VIEW OPTIONS (queue 851). His words, with a screenshot he had
+           circled in red: "Put the red circles buttons in a new pop up menu on the left side. On pc it
+           will be on the right side next to where the view options button is… it will be good coz a lot
+           of buttons in there aren't view options. And it will make that layer in the centre of the
+           screen have an even amount of buttons."
+           What he circled: the playback-speed stepper, loop, the magnet, and the three export marks.
+           What he did NOT circle, and so stays in the rail: fit, layers, camera, canvas zoom, the grid
+           and the timeline zoom — every one of those really is about how you are LOOKING at the project.
+           SAME NODES, MOVED. Every button keeps its id, so all of app.js's handlers and FM.syncViewBar
+           bind exactly as they did; there is no second copy of any control to drift out of step. -->
+      <div id="opt-bar" class="hidden" role="group" aria-label="Timeline options">
+        <div id="vb-rate">
+        <button id="vb-slower" class="vb-z" title="Slower playback" aria-label="Slower playback">−</button>
+        <span id="vb-ratelabel">1×</span>
+        <button id="vb-faster" class="vb-z" title="Faster playback" aria-label="Faster playback">+</button>
+        </div>
+        <button id="vb-loop" class="vb-btn" title="Loop playback"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></button>
+        <button id="vb-snap" class="vb-btn" title="Snapping (magnet) — clips and keyframes stick to edges"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v8a6 6 0 0 0 12 0V4"/><path d="M6 9h4M14 9h4"/></svg></button>
+        <div id="vb-marks">
+        <button id="vb-markin" class="vb-btn" title="Mark export start"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16M7 4h6M7 20h6M17 4v16"/></svg></button>
+        <button id="vb-markout" class="vb-btn" title="Mark export end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4v16M17 4h-6M17 20h-6M7 4v16"/></svg></button>
+        <button id="vb-markclear" class="vb-btn" title="Clear export marks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l14 14M19 5L5 19"/></svg></button>
+        </div>
+      </div>
       <div id="transport">
         <div class="t-side t-left">
+        <!-- Its twin is #btn-amfit at the other end of this row (queue 851): one pop-up opener at each
+        end. It is also what makes the row 4 + 4 — the "even amount of buttons" he asked for — and
+        it deliberately does NOT take over ⧉ (#btn-layermenu): his arrows point at this END of the
+        row, and ⧉ already opens the layer menu, so replacing it would cost him a control. -->
+          <button id="btn-opts" class="tbtn" title="Timeline options (speed · loop · snapping · export marks)" aria-label="Timeline options"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h9M19 7h1M4 17h3M13 17h7"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg></button>
           <button id="btn-layermenu" class="tbtn" title="Layer actions"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><g transform="translate(0 0.5)"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></g></svg></button>
           <!-- THE ADD-ROW SWITCH (queue 373). Ezra: "on its right put a little switch toggle that moves the
                add menu button to the top of to the bottom of the timeline, if the switch is facing up it's at
@@ -1024,7 +1040,7 @@
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=53"></script>
   <script src="js/audio-health.js?v=6"></script>
-  <script src="js/app.js?v=426"></script>
+  <script src="js/app.js?v=427"></script>
   <script src="js/audio-tools.js?v=5"></script>
   <script src="js/loading.js?v=3"></script>
   <script src="js/sfx.js?v=14"></script>

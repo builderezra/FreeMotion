@@ -5797,7 +5797,28 @@ window.FM = window.FM || {};
         if (FM._reviewing) { FM.pause(); return; }       // reviewing → a plain TAP stops it (no popup); FM.pause reverts the icon
         const open = viewBar.classList.toggle('hidden') === false;
         amFitBtn.classList.toggle('active', open);
+        if (open && FM.closeOptBar) FM.closeOptBar();   // one bar at a time (queue 851)
         if (open && FM.syncViewBar) FM.syncViewBar();   // rate / loop / mark state can all change while it's shut
+      });
+    }
+    /* ⚙ THE TIMELINE-OPTIONS POP-UP (queue 851) — the twin of the ⛶ button above, and deliberately the
+       same three lines: tap toggles, the button lights while it is open, and FM.syncViewBar() runs on
+       open because the speed, the loop and the export marks can all change while it is shut.
+       Opening one CLOSES the other. Two glass bars over a phone timeline at once is the "crammed" look
+       v5.29 was about, and they are two halves of one idea — you are picking a control, not stacking
+       panels. */
+    const optBtn = document.getElementById('btn-opts');
+    const optBar = document.getElementById('opt-bar');
+    const closeOptBar = () => { if (optBar && !optBar.classList.contains('hidden')) { optBar.classList.add('hidden'); if (optBtn) optBtn.classList.remove('active'); } };
+    FM.closeOptBar = closeOptBar;   // …so anything that owns the screen can put it away
+    if (optBtn && optBar) {
+      optBtn.addEventListener('click', () => {
+        const open = optBar.classList.toggle('hidden') === false;
+        optBtn.classList.toggle('active', open);
+        if (open) {
+          if (viewBar && !viewBar.classList.contains('hidden')) { viewBar.classList.add('hidden'); if (amFitBtn) amFitBtn.classList.remove('active'); }
+          if (FM.syncViewBar) FM.syncViewBar();
+        }
       });
     }
     const vbFit = document.getElementById('vb-fit');
@@ -6030,7 +6051,16 @@ window.FM = window.FM || {};
        Adding it to this list is the whole PC half: #171's order becomes ver · ? · notes · cog ·
        Export · ⛶. The suite's Studio test carries the list, so dropping one in a future migration is
        red rather than shipped — which is exactly how btn-notes went missing in v7.52. */
-      ['btn-help', 'btn-notes', 'btn-settings', 'btn-export', 'btn-amfit'].forEach(id => { const b = grab(id); if (b) far.appendChild(b); });
+      /* …and #btn-opts LAST, so on PC it lands beside the view-options button exactly as he asked —
+         "on pc it will be on the right side next to where the view options button is" (queue 851). It
+         rides this list rather than a resize listener of its own because `grab` records where each
+         button came from and the teardown puts it back; on the phone it stays where index.html has it,
+         at the left end of the transport row. */
+      /* …with #btn-opts BESIDE the view-options button but not OUTSIDE it (queue 851). He asked for it
+         "next to where the view options button is", and the Studio layout test has asserted since queue
+         171 that ⛶ is the outermost control on the right — so it goes immediately before it. Both things
+         are true this way; putting it last made the suite red, correctly. */
+      ['btn-help', 'btn-notes', 'btn-settings', 'btn-export', 'btn-opts', 'btn-amfit'].forEach(id => { const b = grab(id); if (b) far.appendChild(b); });
     if (far.childNodes.length) t.appendChild(far);
 
     t._pcBuilt = true;
@@ -6208,12 +6238,18 @@ window.FM = window.FM || {};
      * follows, so learning what a control is never also toggles it — the whole point is to ask without
      * committing. */
     (function viewRailHints() {
+      /* ⚠️ BOTH BARS (queue 851). This was bound to #view-bar alone, and the four controls he asked to
+         move — speed, loop, the magnet, the marks — went with their labels: on a phone, where `title`
+         does nothing, holding them taught nothing any more. The suite caught it. The chip is placed to
+         the LEFT of a button in the vertical rail; above it in the horizontal pop-up, where "to the
+         left" runs off the screen for the first control. */
       const rail = document.getElementById('view-bar');
-      if (!rail) return;
+      const optb = document.getElementById('opt-bar');
+      if (!rail && !optb) return;
       const OWNS_HOLD = { 'vb-tlin': 1, 'vb-tlout': 1 };
       let chip = null, timer = 0, shown = false;
       const hide = () => { if (chip) { chip.remove(); chip = null; } if (timer) { clearTimeout(timer); timer = 0; } };
-      rail.addEventListener('pointerdown', (e) => {
+      const onDown = (e) => {
         const b = e.target.closest ? e.target.closest('.vb-btn, .vb-z') : null;
         if (!b || OWNS_HOLD[b.id]) return;
         const label = b.getAttribute('title') || b.getAttribute('aria-label');
@@ -6227,19 +6263,31 @@ window.FM = window.FM || {};
           chip.textContent = label.split(' — ')[0].split(' · ')[0];   // the name, not the whole explanation
           document.body.appendChild(chip);
           const r = b.getBoundingClientRect(), c = chip.getBoundingClientRect();
-          chip.style.top = Math.round(r.top + r.height / 2 - c.height / 2) + 'px';
-          chip.style.left = Math.round(r.left - c.width - 10) + 'px';
+          const inBar = !!(optb && optb.contains(b));
+          if (inBar) {   // the pop-up is horizontal: sit the label above the control, clamped on screen
+            chip.style.top = Math.round(r.top - c.height - 8) + 'px';
+            chip.style.left = Math.round(Math.max(6, Math.min(window.innerWidth - c.width - 6, r.left + r.width / 2 - c.width / 2))) + 'px';
+          } else {
+            chip.style.top = Math.round(r.top + r.height / 2 - c.height / 2) + 'px';
+            chip.style.left = Math.round(r.left - c.width - 10) + 'px';
+          }
           if (navigator.vibrate) { try { navigator.vibrate(6); } catch (_) {} }
         }, 380);
-      });
+      };
+      if (rail) rail.addEventListener('pointerdown', onDown);
+      if (optb) optb.addEventListener('pointerdown', onDown);
       function hideChipOnly() { if (chip) { chip.remove(); chip = null; } }
-      ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev =>
-        rail.addEventListener(ev, () => { if (timer) { clearTimeout(timer); timer = 0; } setTimeout(hideChipOnly, 900); }));
-      rail.addEventListener('click', (e) => {
+      const swallow = (e) => {
         if (!shown) return;
         shown = false;
         e.stopPropagation(); e.preventDefault();   // asked what it is; did not ask to press it
-      }, true);
+      };
+      [rail, optb].forEach((host) => {
+        if (!host) return;
+        ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev =>
+          host.addEventListener(ev, () => { if (timer) { clearTimeout(timer); timer = 0; } setTimeout(hideChipOnly, 900); }));
+        host.addEventListener('click', swallow, true);
+      });
     })();
 
     [['vb-tlin', 1], ['vb-tlout', -1]].forEach(([id, dir]) => {

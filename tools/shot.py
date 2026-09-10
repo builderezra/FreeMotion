@@ -43,7 +43,8 @@ def shoot(out, port, width, height, setup, wait_ms, path):
                                                        {"name": "any-pointer", "value": "coarse"}])
         if not c.eval("matchMedia('(hover: none)').matches"):
             raise RuntimeError("the shot is not a phone: (hover: none) does not match, so touch-only rules are off")
-        c.eval("(function(){ if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close(); })()")
+        # tolerant on purpose: this also shoots plain pages (a drawn-options sheet), where FM does not exist
+        c.eval("(function(){ try { if (window.FM && FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {} })()")
         time.sleep(0.6)
         if setup:
             c.eval(f"(function(){{ {setup} }})()")

@@ -18733,6 +18733,16 @@
       const vb = document.getElementById('view-bar');
       if (vb.classList.contains('hidden')) { amfit.click(); await sleep(80); }
       if (vb.classList.contains('hidden')) throw new Error('⛶ did not open the view bar');
+      /* …AND THE SECOND BAR (queue 851). He asked for speed, loop, the magnet and the export marks to
+         leave this rail for a pop-up of their own, so half the actions this test follows now live there.
+         The test is about the ACTIONS surviving the loss of the ⋯ menu, not about which bar holds them —
+         the same reasoning the vb-guides note below already carries. `vhit` opens whichever one owns the
+         control, so a later move cannot make a correct change look like a regression. */
+      const ob = document.getElementById('opt-bar'), obtn = document.getElementById('btn-opts');
+      const openHost = (e) => {
+        const host = e.closest('#opt-bar') ? ob : vb;
+        if (host && host.classList.contains('hidden')) { (host === ob ? obtn : amfit).click(); }
+      };
       // The rail is a SCROLLER (v5.29: "needs to not be crammed in and be slide-able up and down"),
       // so on a short window its last controls sit below its own viewport — measured 566px of content
       // in a 464px rail at 900x760. Scroll each one in the way a finger would before hit-testing it;
@@ -18740,7 +18750,8 @@
       // fix would be to break a deliberate design.
       const vhit = (id) => {
         const e = document.getElementById(id);
-        if (!e) throw new Error('#' + id + ' is missing from the view bar');
+        if (!e) throw new Error('#' + id + ' is missing from both bars');
+        openHost(e);
         e.scrollIntoView({ block: 'center' });
         const q = e.getBoundingClientRect();
         if (!(q.width > 0 && q.height > 0)) throw new Error('#' + id + ' is 0x0 — not a control anyone can press');
@@ -25374,8 +25385,14 @@
     if (!rail) throw new Error('no view rail');
     const hadHidden = rail.classList.contains('hidden');
     rail.classList.remove('hidden');
+    /* #vb-loop moved into the timeline-options pop-up at his request (queue 851). Holding it must still
+       name it — a control you cannot learn is the whole point of queue 108, and on a phone `title` shows
+       nothing. Un-hide whichever bar owns it rather than pinning the test to one bar. */
     const btn = document.getElementById('vb-loop');
     if (!btn) throw new Error('no loop button to hold');
+    const optHost = btn.closest('#opt-bar');
+    const optWasHidden = !!(optHost && optHost.classList.contains('hidden'));
+    if (optHost) optHost.classList.remove('hidden');
     const wasLoop = !!FM.loop;
     try {
       const send = (type) => {
@@ -25407,6 +25424,7 @@
     } finally {
       document.querySelectorAll('.vb-hint').forEach(n => n.remove());
       if (hadHidden) rail.classList.add('hidden');
+      if (optHost && optWasHidden) optHost.classList.add('hidden');
       if (!!FM.loop !== wasLoop && FM.toggleLoop) FM.toggleLoop();
       await sleep(60);
     }
@@ -54706,6 +54724,85 @@
      Second half: on the tick that LEARNS the bias, the bias is set to the raw error itself, so the
      de-biased value is exactly 0 by construction — a fact about the arithmetic, not about the audio.
      Storing it dropped a guaranteed zero into the list after every seek and at the start of every clip. */
+  test('the controls that are not view options live in their own pop-up, opened from the transport row (queue 851)', { item: '851', budgetMs: 30000 }, async function () {
+    /* His words, over a screenshot circled in red: "Put the red circles buttons in a new pop up menu on
+       the left side. On pc it will be on the right side next to where the view options button is… it
+       will be good coz a lot of buttons in there aren't view options. And it will make that layer in the
+       centre of the screen have an even amount of buttons."
+       He circled the playback-speed stepper, loop, the magnet and the three export marks. He did NOT
+       circle the grid or the timeline zoom, and those stay in the rail. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const bar = document.getElementById('opt-bar'), btn = document.getElementById('btn-opts');
+    const rail = document.getElementById('view-bar'), railBtn = document.getElementById('btn-amfit');
+    if (!bar || !btn) throw new Error('there is no timeline-options pop-up or no button to open it, so the four controls he circled are still in the view-options rail');
+
+    // …the four groups he circled MOVED, rather than being copied
+    for (const id of ['vb-rate', 'vb-loop', 'vb-snap', 'vb-marks']) {
+      const el = document.getElementById(id);
+      if (!el) throw new Error(id + ' is gone from the app entirely');
+      if (!bar.contains(el)) throw new Error(id + ' is not in the new pop-up — he circled it, so it is not a view option');
+      if (rail && rail.contains(el)) throw new Error(id + ' is in BOTH bars — a second copy is a second set of handlers to keep in step');
+    }
+    // …and the ones he did NOT circle stayed put. Without this the test passes on "move everything".
+    for (const id of ['vb-fit', 'vb-layers', 'vb-camera', 'vb-zoom', 'vb-guides', 'vb-tlzoom']) {
+      const el = document.getElementById(id);
+      if (el && rail && !rail.contains(el)) throw new Error(id + ' left the view rail, and he did not circle it — the grid and the zooms really are about how you are looking at the project');
+    }
+
+    /* ⚠️ THE TRANSPORT ROW IS A THREE-COLUMN GRID AND ITS CENTRING IS LOAD-BEARING. Putting the new
+       button in as a fourth grid child is exactly what I did first, and it dropped out of the row into
+       an implicit second row, half behind the timeline. */
+    const tr = document.getElementById('transport');
+    if (tr && getComputedStyle(tr).display === 'grid') {
+      /* Absolutely-positioned children (#t-home, #t-far on PC) are out of the grid by design, and
+         #btn-play is in the DOM but display:none — app.js swaps its icon and four things read it, so it
+         stays hidden rather than removed. Neither takes a grid track. */
+      const kids = [].slice.call(tr.children).filter(c => { const cs = getComputedStyle(c); return cs.position !== 'absolute' && cs.display !== 'none'; });
+      if (kids.length !== 3) throw new Error('the transport row has ' + kids.length + ' children taking grid tracks (' + kids.map(k => k.id || k.className).join(', ') + '), not 3 — its grid is `1fr auto 1fr`, so a fourth lands in a second row and the pill stops being centred');
+    }
+
+    // it opens and closes, and the button says which state it is in
+    const wasOpen = !bar.classList.contains('hidden');
+    if (wasOpen) { btn.click(); await sleep(60); }
+    btn.click(); await sleep(80);
+    if (bar.classList.contains('hidden')) throw new Error('tapping the button did not open the pop-up');
+    if (!btn.classList.contains('active')) throw new Error('the button does not light while its pop-up is open, so there is nothing on screen saying which one you opened');
+    const r = bar.getBoundingClientRect();
+    if (!(r.width > 40 && r.height > 20)) throw new Error('the pop-up is open but has no size (' + Math.round(r.width) + 'x' + Math.round(r.height) + ')');
+
+    // "it will pop up ABOVE the button" — on both layouts
+    const br = btn.getBoundingClientRect();
+    if (!(r.bottom <= br.top + 6)) throw new Error('the pop-up is not above its button (bar bottom ' + Math.round(r.bottom) + ', button top ' + Math.round(br.top) + ')');
+
+    // …and one bar at a time: opening the view rail puts this one away
+    if (railBtn && rail) {
+      railBtn.click(); await sleep(80);
+      if (!bar.classList.contains('hidden')) throw new Error('opening the view-options rail left the timeline-options bar open too — two glass bars over a phone timeline is the crammed look v5.29 was about');
+      railBtn.click(); await sleep(60);   // put the rail back
+    }
+
+    // where the button sits, per layout — his one explicit placement instruction
+    if (window.innerWidth > 700) {
+      const far = document.getElementById('t-far');
+      if (far && far.contains(document.getElementById('btn-amfit'))) {
+        if (!far.contains(btn)) throw new Error('on PC the button is not in the far-right cluster beside the view-options button, which is where he asked for it');
+        /* ADJACENT, and specifically just INSIDE it. He asked for the new button "next to where the view
+           options button is"; the Studio layout test has required ⛶ to be the outermost control on the
+           right since queue 171. Both hold only if the new one sits immediately before it — which is
+           also what the suite told me when I put it last. */
+        const amfit = document.getElementById('btn-amfit');
+        if (amfit) {
+          if (btn.nextElementSibling !== amfit) throw new Error('on PC the button is not immediately beside the view-options button (its neighbour is ' + (btn.nextElementSibling ? (btn.nextElementSibling.id || btn.nextElementSibling.className) : 'nothing') + ')');
+          if (far.lastElementChild !== amfit) throw new Error('the view-options button is no longer the outermost control on the right — queue 171 put it there and the Studio test still asserts it');
+        }
+      }
+    } else {
+      const left = document.querySelector('#transport .t-left');
+      if (left && !left.contains(btn)) throw new Error('on the phone the button is not at the left end of the transport row');
+    }
+    if (!bar.classList.contains('hidden')) { btn.click(); await sleep(40); }
+  });
+
   test('a drift seek re-warms the sync controller, so it cannot learn its offset from the spin-up (queue 848)', { item: '848' }, async function () {
     /* Straight off HIS phone (#844): 94 trims, 4 seeks, a median |err| of 158ms that never closes and a
        worst of 357ms sitting just past SYNC_HARD. SYNC_WARMUP exists because the first quarter-second of

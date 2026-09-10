@@ -690,6 +690,57 @@ body.text-editing .sb-wrap { display: none !important; }
   scrollbar-width: none;
 }
 #view-bar::-webkit-scrollbar { display: none; }
+/* ═══ THE TIMELINE-OPTIONS POP-UP (queue 851) ══════════════════════════════════════════════════════
+   His words: "This will essentially work the same as the view options button that pops up on the right
+   side… While on mobile the bar will pop up above the button on the left, on pc it will also appear
+   above it but on the right side as it should."
+   So: the same glass, the same radius, the same 38px targets as #view-bar — but a BAR, laid out along
+   the row it belongs to and floating directly above the button that opens it. It lives inside
+   #timeline-panel so it is anchored to the transport row rather than to the canvas, which is what
+   "above the button" means on both layouts.
+   The four groups inside it were built for a 46px vertical rail, so they are turned on their side here
+   rather than duplicated: same nodes, same ids, one extra rule each. */
+#opt-bar {
+  position: absolute; z-index: 21;
+  bottom: calc(100% - 4px);          /* …directly above the transport row that holds the button */
+  left: 6px;                          /* PHONE: the button is at the far LEFT of the row */
+  display: flex; flex-direction: row; align-items: center; gap: 6px;
+  padding: 5px 8px;
+  background: rgba(18, 24, 36, .94); border: 1px solid var(--line); border-radius: 13px;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, .38);
+  max-width: calc(100% - 12px);
+  overflow-x: auto; overflow-y: hidden; overscroll-behavior: contain; scrollbar-width: none;
+}
+#opt-bar::-webkit-scrollbar { display: none; }
+#opt-bar > * { flex: 0 0 auto; }
+#opt-bar.hidden { display: none; }
+/* turned on their side — a column of three marks would make this bar three buttons tall */
+#opt-bar #vb-rate, #opt-bar #vb-marks { flex-direction: row; }
+#opt-bar #vb-marks { padding: 2px 3px; gap: 1px; }
+#opt-bar #vb-rate { gap: 1px; }
+/* The transport row is the positioning context for it. */
+#transport { position: relative; }
+/* ⚠️ #btn-opts IS MOVED BY JS, NOT BY CSS, AND THE REASON IS WORTH KEEPING (queue 851). He wants it on
+   the LEFT on the phone and on the RIGHT on PC, "next to where the view options button is". The obvious
+   answer — make it a direct child of #transport and flex-`order` it to either end — BREAKS the row:
+   #transport is a three-column GRID (minmax(0,1fr) auto minmax(0,1fr)) holding .t-left, the pill and
+   .t-right, and a fourth child lands in an implicit second row. Measured: the button rendered under the
+   transport bar, half behind the timeline. The centring maths in that grid is documented across three
+   separate queue entries and is not something to re-derive for a button.
+   A second copy of the node would be a second set of handlers to keep in step, which this repo has been
+   bitten by before. So there is ONE node and js/app.js re-parents it at the 700px line: first child of
+   .t-left below, last child of .t-right above — and .t-right is `justify-content: space-between` across
+   a 1fr track, so "last child" is exactly beside #btn-amfit at the far right. */
+#timeline-panel { position: relative; }
+/* PC: the same bar, but hung from the RIGHT end of the row, beside the view-options button it is the
+   twin of — "on pc it will also appear above it but on the right side as it should". */
+@media (min-width: 701px) {
+  #opt-bar { left: auto; right: 6px; }
+}
+/* …and it stands down with the rail whenever a full-width browser owns the screen, for the same reason
+   #view-bar does: those sheets cover the timeline and a pop-up floating over them is orphaned. */
+
 /* The groups inside must not be squashed by the flex container when the content overflows — without
    this the browser shrinks them to fit and you get the crammed look back instead of a scroll. */
 #view-bar > * { flex: 0 0 auto; }
@@ -8458,7 +8509,10 @@ html[data-theme="glass"] .addmenu-card--rainbow > .addmenu-ic { color: #ffffff; 
    rail behaves as it does today — a no-op, never a broken layout. */
 body:has(#fx-browser:not(.hidden)) #view-bar,
 body:has(#afx-browser:not(.hidden)) #view-bar,
-body:has(#el-browser:not(.hidden)) #view-bar { display: none; }
+body:has(#el-browser:not(.hidden)) #view-bar,
+body:has(#fx-browser:not(.hidden)) #opt-bar,
+body:has(#afx-browser:not(.hidden)) #opt-bar,
+body:has(#el-browser:not(.hidden)) #opt-bar { display: none; }
 
 /* ---- TEXT TO VOICE (queue 392) ----------------------------------------------------------------
    The button sits in the strip directly under the clip, ABOVE the trim/split trio, which is where
