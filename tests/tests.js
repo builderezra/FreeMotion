@@ -18739,6 +18739,11 @@
          the same reasoning the vb-guides note below already carries. `vhit` opens whichever one owns the
          control, so a later move cannot make a correct change look like a regression. */
       const ob = document.getElementById('opt-bar'), obtn = document.getElementById('btn-opts');
+      /* ⚠️ OPEN IT AND LET IT ARRIVE (queue 853). The panels animate in with a clip-path, and a clip-path
+         clips HIT-TESTING as well as paint — so a control measured 0ms after the click is legitimately
+         not there yet and `elementFromPoint` answers with the stage behind it. Open both up front and
+         wait out the entrance; `openHost` below stays as a backstop for a bar that got closed midway. */
+      if (ob && ob.classList.contains('hidden')) { obtn.click(); await sleep(300); }
       const openHost = (e) => {
         const host = e.closest('#opt-bar') ? ob : vb;
         if (host && host.classList.contains('hidden')) { (host === ob ? obtn : amfit).click(); }
@@ -54724,6 +54729,142 @@
      Second half: on the tick that LEARNS the bias, the bias is set to the raw error itself, so the
      de-biased value is exactly 0 by construction — a fact about the arithmetic, not about the audio.
      Storing it dropped a guaranteed zero into the list after every seek and at the start of every clip. */
+  test('the side panels are glued to the edge, thinner, evenly spaced, and they animate in and out (queue 853)', { item: '853', budgetMs: 40000 }, async function () {
+    /* His words: "both of the menus that pop up on the sides… take up too much space… the buttons could be
+       laid out differently so it doesn't awkwardly have like gaps or ended a weird height… instead of them
+       being like bars that pop up and have like a little gap from the side of the screen they could be
+       fully attached to the sides of the screen… just like glued to the side of the screen sort of thing
+       seamlessly… give them a little animation when they pop up… and make sure as a satisfying animation
+       as well when you turn it off."
+       MEASURED BEFORE THE CHANGE, with both open: a 6px strip of background outside each panel; the rail's
+       controls 4px apart EXCEPT one hole of 57px on his phone and 235px on PC (`margin-top: auto` on the
+       zoom stepper); a 370px box around 352px of content; 46px of panel for a 38px button. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const rail = document.getElementById('view-bar'), railBtn = document.getElementById('btn-amfit');
+    const bar = document.getElementById('opt-bar'), btn = document.getElementById('btn-opts');
+    if (!rail || !bar || !railBtn || !btn) throw new Error('a side panel or its button is missing');
+    const open = (el) => (FM.sideBarOpen ? FM.sideBarOpen(el) : !el.classList.contains('hidden'));
+    /* The Home screen covers the whole app, so a hit test taken with it open reports every control as
+       covered by it — which is true and useless. Close it, and put it back at the end. */
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const gapsIn = (el) => {
+      const k = [].slice.call(el.children).filter(c => c.getBoundingClientRect().height > 0);
+      const g = [];
+      for (let i = 1; i < k.length; i++) g.push(Math.round(k[i].getBoundingClientRect().top - k[i - 1].getBoundingClientRect().bottom));
+      return { gaps: g, first: k[0], last: k[k.length - 1], n: k.length };
+    };
+    try {
+      if (!open(rail)) { railBtn.click(); await sleep(300); }
+      if (!open(bar)) { btn.click(); await sleep(300); }
+      if (FM.fitBarsTogether) FM.fitBarsTogether();
+      await sleep(120);
+
+      // ── GLUED. No strip of background between the panel and the edge of the screen.
+      const r = rail.getBoundingClientRect();
+      const edge = Math.round(window.innerWidth - r.right);
+      if (edge !== 0) throw new Error('the view rail sits ' + edge + 'px in from the right edge — that is the gap he asked to be rid of ("the side panel is just like glued to the side of the screen")');
+      if (window.innerWidth <= 700) {
+        const b = bar.getBoundingClientRect();
+        if (Math.round(b.left) !== 0) throw new Error('on the phone the pop-up sits ' + Math.round(b.left) + 'px in from the left edge instead of being glued to it');
+      }
+
+      // ── THINNER, without taking it out of his thumb. 46 → 40, and the control stays 38.
+      if (!(r.width <= 42)) throw new Error('the rail is ' + Math.round(r.width) + 'px wide — it was 46 plus a 6px gap, and the point of this was to give that space back');
+      const anyBtn = rail.querySelector('.vb-btn');
+      if (anyBtn) {
+        const q = anyBtn.getBoundingClientRect();
+        if (!(q.width >= 36 && q.height >= 36)) throw new Error('a rail control is now ' + Math.round(q.width) + 'x' + Math.round(q.height) + ' — the width was supposed to come out of the chrome, not out of the tap target (38px is already under Apple’s 44pt guidance)');
+      }
+
+      // ── NO AWKWARD GAPS, and no odd trailing height.
+      for (const el of [rail, bar]) {
+        const g = gapsIn(el);
+        if (g.n < 2) continue;
+        const worst = Math.max.apply(null, g.gaps), best = Math.min.apply(null, g.gaps);
+        if (worst > best + 6) throw new Error('#' + el.id + ' spaces its controls unevenly (' + g.gaps.join(', ') + ') — the 57px hole on his phone and 235px on PC came from `margin-top: auto` shoving one group to the floor');
+        const box = el.getBoundingClientRect();
+        const content = g.last.getBoundingClientRect().bottom - g.first.getBoundingClientRect().top;
+        if (box.height - content > 20) throw new Error('#' + el.id + ' is ' + Math.round(box.height) + 'px tall around ' + Math.round(content) + 'px of controls — it is being stretched rather than fitting what is in it');
+      }
+
+      // ── IT ARRIVES WITH AN ANIMATION, and each control on its own.
+      btn.click(); await sleep(240);                     // shut it…
+      btn.click(); await sleep(30);                      // …and catch the entrance in flight
+      if (!bar.classList.contains('sb-in')) throw new Error('opening the pop-up plays no entrance animation');
+      const kids = [].slice.call(bar.children);
+      const delays = kids.map(k => parseFloat(getComputedStyle(k).animationDelay) || 0);
+      if (!(delays.length > 1)) throw new Error('setup: the pop-up has fewer than two controls to stagger');
+      if (!(delays[1] > delays[0])) throw new Error('the controls all arrive together (delays ' + delays.join(', ') + 's) — he asked for "each icon like rapidly pops up… by themselves"');
+      const step = delays[1] - delays[0];
+      if (!(step > 0.005 && step < 0.12)) throw new Error('the stagger between controls is ' + Math.round(step * 1000) + 'ms — too small reads as one lump, too big reads as slow');
+      await sleep(320);
+      if (bar.classList.contains('sb-in')) { /* the class is left on until the next toggle, which is fine */ }
+
+      // ── AND IT LEAVES WITH ONE. The panel must still be on screen while the exit plays, then go.
+      btn.click(); await sleep(40);
+      if (!bar.classList.contains('sb-out')) throw new Error('closing the pop-up plays no exit animation — he asked for the leaving to be as satisfying as the arriving');
+      if (bar.classList.contains('hidden')) throw new Error('the pop-up was hidden immediately, so nothing of its exit can be seen');
+      await sleep(320);
+      if (!bar.classList.contains('hidden')) throw new Error('the pop-up never finished closing — it is left on screen after its exit animation');
+      if (btn.classList.contains('active')) throw new Error('the button is still lit after the pop-up closed');
+
+      // ── …and a phone that asks for less motion gets none of it.
+      const css = await (await fetch('../styles.css')).text();
+      if (!/prefers-reduced-motion[\s\S]{0,400}sb-in/.test(css)) throw new Error('there is no reduced-motion rule covering the panel animations');
+
+      /* ═══ AND THE FIVE THINGS THE REVIEW CAUGHT, so none of them can come back ══════════════════
+         Five independent readers went over this with screenshots and measurements; these are their
+         findings turned into assertions. */
+      btn.click(); await sleep(340);                     // settled, both open
+      if (!open(bar)) { btn.click(); await sleep(340); }
+      if (FM.fitBarsTogether) FM.fitBarsTogether();
+      await sleep(80);
+
+      // (a) NOTHING IS COVERED. On a 360x640 phone the pop-up used to grow up under the header, and
+      //     tapping "slower" hit the back-to-projects arrow — it left the project.
+      for (const el of [rail, bar]) {
+        const host = el.getBoundingClientRect();
+        for (const b of [].slice.call(el.querySelectorAll('button'))) {
+          const q = b.getBoundingClientRect();
+          if (!(q.width > 2 && q.height > 2)) continue;
+          if (q.top < host.top - 1 || q.bottom > host.bottom + 1) continue;   // scrolled out is not covered
+          const hit = document.elementFromPoint(Math.round(q.left + q.width / 2), Math.round(q.top + q.height / 2));
+          if (!(hit === b || b.contains(hit))) throw new Error('#' + (b.id || '?') + ' in #' + el.id + ' is covered by ' + (hit ? (hit.id || hit.className) : 'nothing') + ' — a control you cannot press, and the one this caught tapped the back-to-projects arrow instead');
+        }
+      }
+      // (b) NEITHER PANEL SITS UNDER THE HEADER.
+      const head = document.getElementById(window.innerWidth > 700 ? 'topbar' : 'topbar-m');
+      if (head && head.getBoundingClientRect().height > 0) {
+        const hb = head.getBoundingClientRect().bottom;
+        if (bar.getBoundingClientRect().top < hb - 1) throw new Error('the pop-up runs up under the header (top ' + Math.round(bar.getBoundingClientRect().top) + ' against the header bottom ' + Math.round(hb) + ')');
+      }
+      // (c) THE ENTRANCE DOES NOT PIN ITS LAST FRAME. `both` left clip-path on the panel for as long as
+      //     it was open, which clipped away the drop shadow, and pinned opacity:1 on every control,
+      //     which silently killed the camera button's own "hidden" dimming.
+      for (const el of [rail, bar]) {
+        if (getComputedStyle(el).clipPath !== 'none') throw new Error('#' + el.id + ' still has a clip-path after its entrance (' + getComputedStyle(el).clipPath + ') — it clips the panel’s own drop shadow away');
+        const kid = el.children[0];
+        if (kid && getComputedStyle(kid).animationFillMode === 'both') throw new Error('#' + el.id + '’s controls keep their animation’s final frame, which pins opacity and overrides states like the camera button’s dimming');
+      }
+      // (d) A PANEL THAT SCROLLS SAYS SO, so a cut-off control reads as "more below" and not as sliced.
+      for (const el of [rail, bar]) {
+        const scrolls = el.scrollHeight > el.clientHeight + 1;
+        if (scrolls !== el.classList.contains('sb-scrolls')) throw new Error('#' + el.id + ' ' + (scrolls ? 'overflows but is not marked as scrolling' : 'is marked as scrolling but does not overflow'));
+      }
+      // (e) NO CONTROL OVERFLOWS THE PANEL SIDEWAYS. The export-marks group was 42px inside a 40px panel,
+      //     so its own grouping ring was sliced off on both sides.
+      for (const el of [rail, bar]) {
+        if (el.scrollWidth > el.clientWidth + 1) throw new Error('#' + el.id + ' is ' + (el.scrollWidth - el.clientWidth) + 'px wider inside than out — something in it is being clipped sideways');
+      }
+    } finally {
+      if (open(bar)) { btn.click(); await sleep(60); }
+      if (open(rail)) { railBtn.click(); }
+      await sleep(260);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
   test('both bars can be open at once without covering each other, and the phone one opens upwards (queue 852)', { item: '852', budgetMs: 30000 }, async function () {
     /* His words: "Make it so both the buttons can be on at the same time and they actually dont cover over
        each other, design it in a smart way that fits on pc and mobile respectively" and, minutes later,
@@ -54737,16 +54878,17 @@
     const bar = document.getElementById('opt-bar'), btn = document.getElementById('btn-opts');
     const rail = document.getElementById('view-bar'), railBtn = document.getElementById('btn-amfit');
     if (!bar || !btn || !rail || !railBtn) throw new Error('one of the two bars or its button is missing');
-    const shut = (el, b) => { if (el && !el.classList.contains('hidden')) { b.click(); } };
+    const open = (el) => (FM.sideBarOpen ? FM.sideBarOpen(el) : !el.classList.contains('hidden'));
+    const shut = (el, b) => { if (open(el)) b.click(); };
     const openBoth = async () => {
-      if (bar.classList.contains('hidden')) { btn.click(); await sleep(70); }
-      if (rail.classList.contains('hidden')) { railBtn.click(); await sleep(70); }
+      if (!open(bar)) { btn.click(); await sleep(90); }
+      if (!open(rail)) { railBtn.click(); await sleep(90); }
       if (FM.fitBarsTogether) FM.fitBarsTogether();
-      await sleep(90);
+      await sleep(300);            // …and let both entrances finish before measuring anything
     };
     try {
       await openBoth();
-      if (bar.classList.contains('hidden') || rail.classList.contains('hidden'))
+      if (!open(bar) || !open(rail))
         throw new Error('the two bars will not stay open together — one of them closed the other');
 
       const a = bar.getBoundingClientRect(), b = rail.getBoundingClientRect();
@@ -54782,9 +54924,9 @@
       if (window.innerWidth > 700 && !(c.right > wasRight - 1))
         throw new Error('control: with the rail shut the pop-up still holds its place (' + Math.round(c.right) + ') — the offset is hard-coded rather than measured from the rail');
     } finally {
-      shut(bar, btn); await sleep(40);
-      if (!rail.classList.contains('hidden')) { railBtn.click(); }
-      await sleep(40);
+      shut(bar, btn); await sleep(60);
+      if (open(rail)) railBtn.click();
+      await sleep(240);            // leave nothing mid-animation for the next test to trip over
     }
   });
 
@@ -54826,13 +54968,17 @@
     }
 
     // it opens and closes, and the button says which state it is in
-    const wasOpen = !bar.classList.contains('hidden');
-    if (wasOpen) { btn.click(); await sleep(60); }
-    btn.click(); await sleep(80);
-    if (bar.classList.contains('hidden')) throw new Error('tapping the button did not open the pop-up');
+    /* `.hidden` is no longer the whole truth (queue 853): a panel on its way out has dropped `.hidden`
+       for the length of its exit animation. FM.sideBarOpen is what the app itself asks. */
+    const isOpen = () => (FM.sideBarOpen ? FM.sideBarOpen(bar) : !bar.classList.contains('hidden'));
+    if (isOpen()) { btn.click(); await sleep(220); }
+    btn.click(); await sleep(300);
+    if (!isOpen()) throw new Error('tapping the button did not open the pop-up');
     if (!btn.classList.contains('active')) throw new Error('the button does not light while its pop-up is open, so there is nothing on screen saying which one you opened');
     const r = bar.getBoundingClientRect();
-    if (!(r.width > 40 && r.height > 20)) throw new Error('the pop-up is open but has no size (' + Math.round(r.width) + 'x' + Math.round(r.height) + ')');
+    // …a real box. The threshold is deliberately low: queue 853 made the panel THINNER (46 → 40), and a
+    // test that pins the old width would turn a requested change into a red run.
+    if (!(r.width >= 24 && r.height > 20)) throw new Error('the pop-up is open but has no size (' + Math.round(r.width) + 'x' + Math.round(r.height) + ')');
 
     // "it will pop up ABOVE the button" — on both layouts
     const br = btn.getBoundingClientRect();
@@ -54843,9 +54989,9 @@
        same time and they actually dont cover over each other." The overlap itself is asserted in the 852
        test; this one just refuses to let the old behaviour come back. */
     if (railBtn && rail) {
-      railBtn.click(); await sleep(90);
-      if (bar.classList.contains('hidden')) throw new Error('opening the view-options rail closed the timeline-options pop-up — he asked for both at once');
-      railBtn.click(); await sleep(60);   // put the rail back
+      railBtn.click(); await sleep(260);
+      if (!isOpen()) throw new Error('opening the view-options rail closed the timeline-options pop-up — he asked for both at once');
+      railBtn.click(); await sleep(220);   // put the rail back
     }
 
     // where the button sits, per layout — his one explicit placement instruction
@@ -54867,7 +55013,7 @@
       const left = document.querySelector('#transport .t-left');
       if (left && !left.contains(btn)) throw new Error('on the phone the button is not at the left end of the transport row');
     }
-    if (!bar.classList.contains('hidden')) { btn.click(); await sleep(40); }
+    if (isOpen()) { btn.click(); await sleep(220); }
   });
 
   test('a drift seek re-warms the sync controller, so it cannot learn its offset from the spin-up (queue 848)', { item: '848' }, async function () {

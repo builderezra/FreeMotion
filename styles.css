@@ -667,90 +667,191 @@ body.text-editing .sb-wrap { display: none !important; }
 .dh-icon { font-size: 44px; opacity: .85; }
 #stage.dragover { box-shadow: inset 0 0 0 2px var(--accent); }
 
-/* AM right-side view toolbar (fit · grid · layers · camera · zoom). Docked over the canvas right edge. */
-#view-bar {
-  position: absolute; top: 6px; right: 6px; bottom: 6px; width: 46px; z-index: 20;
-  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0;
-  background: rgba(18,24,36,.9); border: 1px solid var(--line); border-radius: 13px;
-  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-  /* SCROLLS (v5.29). Ezra, of the phone: "the view row is kinda ruined, needs to not be crammed in
-     and be slide-able up and down." The rail is pinned top-to-bottom of the CANVAS, and since v5.03
-     it carries a lot more than it used to — fit, grid, layers, camera, canvas zoom, playback rate,
-     loop, the three export marks, timeline zoom. On a phone that is taller than the canvas, so the
-     last controls were simply unreachable: his screenshot has the mark-out button sliced in half by
-     the canvas edge and everything below it gone.
-     Scrolling is the right answer rather than shrinking the buttons — "not crammed in" was the other
-     half of what he asked for, so the controls keep their 38px touch targets and you slide to them.
-     overscroll-behavior: contain stops a flick that reaches the end of the rail from turning into a
-     page scroll or a scrub on the timeline underneath. The scrollbar is hidden because a 46px rail
-     with a visible bar in it is exactly the crammed look being fixed. */
-  overflow-y: auto; overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  scrollbar-width: none;
-}
-#view-bar::-webkit-scrollbar { display: none; }
-/* ═══ THE TIMELINE-OPTIONS POP-UP (queue 851) ══════════════════════════════════════════════════════
-   His words: "This will essentially work the same as the view options button that pops up on the right
-   side… While on mobile the bar will pop up above the button on the left, on pc it will also appear
-   above it but on the right side as it should."
-   So: the same glass, the same radius, the same 38px targets as #view-bar — but a BAR, laid out along
-   the row it belongs to and floating directly above the button that opens it. It lives inside
-   #timeline-panel so it is anchored to the transport row rather than to the canvas, which is what
-   "above the button" means on both layouts.
-   The four groups inside it were built for a 46px vertical rail, so they are turned on their side here
-   rather than duplicated: same nodes, same ids, one extra rule each. */
-#opt-bar {
-  position: absolute; z-index: 21;
-  bottom: calc(100% - 4px);          /* …rising from the button, which sits in the transport row below */
-  left: 6px;                          /* PHONE: its button is at the far LEFT of that row */
-  /* ⚠️ A COLUMN, NOT A BAR (queue 852). v16.11 laid it out sideways and he came straight back: "on mobile
-     make it open upwards not sideways, coz rn it covers too much space" — measured, it was 668 of the
-     phone's 380px-wide screen. Upwards costs 46px of width instead, the same 46 the view rail costs, and
-     it is why the two can be open together without meeting: his button is at the LEFT end of the
-     transport row and the rail is pinned to the RIGHT of the canvas. */
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
-  width: 46px; padding: 8px 0;
-  max-height: calc(100vh - 210px);
-  background: rgba(18, 24, 36, .94); border: 1px solid var(--line); border-radius: 13px;
-  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-  box-shadow: 0 6px 22px rgba(0, 0, 0, .38);
-  /* the rail scrolls for the same reason and with the same rules (v5.29) — a short phone must not put a
-     control out of reach, and a flick that runs out must not turn into a scrub on the timeline */
+/* ═══ THE TWO SIDE PANELS (queue 853) ══════════════════════════════════════════════════════════════
+   His words: *"both of the menus that pop up on the sides on mobile and potentially PC take up too much
+   space… the buttons could be laid out differently so it doesn't awkwardly have like gaps or ended a
+   weird height… instead of them being like bars that pop up and have like a little gap from the side of
+   the screen they could be fully attached to the sides of the screen… just like glued to the side of the
+   screen sort of thing seamlessly."*
+
+   MEASURED BEFORE TOUCHING ANYTHING, with both open, on his own phone size (440×956) and two others:
+     · a 6px strip of background between the panel and the screen edge — the gap he describes, exactly
+     · the rail's children sat 4px apart EXCEPT one hole of 57px on his phone and 235px on PC, because
+       #vb-zoom carried `margin-top: auto` and shoved everything after it to the floor
+     · the rail box was 370px tall around 352px of content on his phone, 548 around 530 on PC — pinned
+       top-to-bottom rather than fitting what is in it, which is the "ended a weird height"
+     · 46px of panel for a 38px button: 4px of padding either side, plus the 6px gap = 52px of screen
+
+   SO: glued (right: 0, radius and border on the INNER edge only), content-height, even gaps, and 40px
+   wide instead of 52. THE BUTTON ITSELF IS NOT SHRUNK — 38px is already under Apple's 44pt guidance and
+   this is a phone-first app, so the width comes out of chrome, not out of his thumb.
+   Safe areas are honoured on the glued edge, which is what makes it right on HIS iPhone 16 Pro Max and
+   on a phone with no notch at all: `env(safe-area-inset-*)` is 0 where there is nothing to avoid. */
+#view-bar, #opt-bar {
+  --sb-w: 40px;            /* the panel; the control inside stays 38 */
+  --sb-gap: 3px;
+  --sb-pad: 5px;
+  z-index: 20;
+  display: flex; flex-direction: column; align-items: center;
+  gap: var(--sb-gap);
+  width: calc(var(--sb-w) + env(safe-area-inset-right, 0px));
+  padding: var(--sb-pad) 0;
+  background: rgba(16, 22, 33, .93);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px);
+  /* SCROLLS (v5.29). Ezra, of the phone: "the view row is kinda ruined, needs to not be crammed in and
+     be slide-able up and down." It carries a lot, and a short phone must not put a control out of reach.
+     overscroll-behavior stops a flick that runs out from turning into a scrub on the timeline. */
   overflow-y: auto; overflow-x: hidden;
   -webkit-overflow-scrolling: touch; overscroll-behavior: contain; scrollbar-width: none;
 }
-#opt-bar::-webkit-scrollbar { display: none; }
-#opt-bar > * { flex: 0 0 auto; }
-#opt-bar.hidden { display: none; }
-/* The groups keep the vertical shape they were built with for the rail — no override needed now. */
-#opt-bar #vb-marks { padding: 3px 2px; }
+#view-bar::-webkit-scrollbar, #opt-bar::-webkit-scrollbar { display: none; }
+/* ⚠️ A PANEL THAT SCROLLS HAS TO LOOK LIKE IT SCROLLS (queue 853, found in review). On a 568–667px phone
+   the controls genuinely do not all fit — the rail alone is 279px of buttons — so it scrolls, which is
+   the v5.29 answer and still the right one. What was wrong is that a hard-cut edge reads as a panel
+   sliced off rather than as a list with more in it: the reviewer's screenshot showed the timeline-zoom
+   arrow cut in half with nothing to say why. `sb-scrolls` is set by FM.fitBarsTogether when the content
+   is actually taller than the box, and fades the cut edge instead. */
+#view-bar.sb-scrolls, #opt-bar.sb-scrolls {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+          mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+}
+/* …and on a short screen they give back what they can before resorting to that: 1px off each gap and
+   2px off the padding is 12px of the rail, which is a whole control's worth of the shortfall. */
+@media (max-height: 720px) {
+  #view-bar, #opt-bar { --sb-gap: 2px; --sb-pad: 3px; }
+  #vb-zoom { padding: 2px 0; }
+  #vb-marks { padding: 2px 0; }
+}
+/* The groups inside must keep their size when the panel scrolls, or the browser squashes them and the
+   crammed look comes back instead of a scroll. */
+#view-bar > *, #opt-bar > * { flex: 0 0 auto; }
+#view-bar.hidden, #opt-bar.hidden { display: none; }
+
+/* ═══ HOW THEY ARRIVE AND LEAVE (queue 853) ════════════════════════════════════════════════════════
+   His words: *"give them a little animation when they pop up like it could be like the bar does like a
+   separate animation to each icon each icon like rapidly pops up like all spawns in or fades in by
+   themselves… and make sure as a satisfying animation as well when you turn it off… just make it a
+   premium feel."*
+
+   TWO ANIMATIONS, NOT ONE, which is exactly what he described. The PANEL wipes out from the edge it is
+   glued to — a clip-path inset, so the glass appears to grow out of the side of the screen rather than
+   slide in from off it, which is the whole point of gluing it there. Then each CONTROL arrives on its
+   own, 26ms apart, with a small overshoot so it lands rather than fades.
+   The stagger is `nth-child` rather than a JS loop: there are never more than eight, and a rule that
+   needs no JavaScript cannot get out of step with the DOM.
+   ⚠️ THE EXIT IS NOT THE ENTRANCE REVERSED AT THE SAME SPEED. Leaving should feel decisive: the icons
+   go together (a 90ms fade-and-shrink, no stagger) and the panel closes back into its edge in 140ms.
+   A slow, staggered exit reads as the app being reluctant, which is the opposite of premium.
+   Reduced motion gets none of it — the panel and its controls simply appear. */
+@keyframes sb-panel-in  { from { clip-path: inset(0 0 0 100%); opacity: .4; } to { clip-path: inset(0 0 0 0); opacity: 1; } }
+@keyframes sb-panel-inL { from { clip-path: inset(0 100% 0 0); opacity: .4; } to { clip-path: inset(0 0 0 0); opacity: 1; } }
+@keyframes sb-panel-out  { from { clip-path: inset(0 0 0 0); opacity: 1; } to { clip-path: inset(0 0 0 100%); opacity: 0; } }
+@keyframes sb-panel-outL { from { clip-path: inset(0 0 0 0); opacity: 1; } to { clip-path: inset(0 100% 0 0); opacity: 0; } }
+@keyframes sb-item-in  { from { opacity: 0; transform: translateX(10px) scale(.82); } to { opacity: 1; transform: none; } }
+@keyframes sb-item-inL { from { opacity: 0; transform: translateX(-10px) scale(.82); } to { opacity: 1; transform: none; } }
+@keyframes sb-item-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(.9); } }
+
+/* the panel: 190ms, an ease that decelerates hard so it settles rather than stops */
+#view-bar.sb-in  { animation: sb-panel-in  190ms cubic-bezier(.16, 1, .3, 1) backwards; }
+#opt-bar.sb-in   { animation: sb-panel-inL 190ms cubic-bezier(.16, 1, .3, 1) backwards; }
+@media (min-width: 701px) { #opt-bar.sb-in { animation-name: sb-panel-in; } }
+#view-bar.sb-out { animation: sb-panel-out  140ms cubic-bezier(.4, 0, 1, 1) both; }
+#opt-bar.sb-out  { animation: sb-panel-outL 140ms cubic-bezier(.4, 0, 1, 1) both; }
+@media (min-width: 701px) { #opt-bar.sb-out { animation-name: sb-panel-out; } }
+
+/* each control: 200ms with a touch of overshoot, 26ms apart, in the direction the panel opened from */
+/* ⚠️ `backwards`, NOT `both` (queue 853, found in review). `both` keeps the LAST keyframe applied for
+   as long as the class is on the element, and the class stays until the next toggle — so `opacity: 1`
+   was pinned on every control and the camera button's own `.cam-off { opacity: .45 }` stopped showing,
+   while `clip-path: inset(0)` stayed on the panel and clipped away the drop shadow written for the
+   glued look. `backwards` holds only the FROM state during the stagger delay, which is all it needs. */
+#view-bar.sb-in > *, #opt-bar.sb-in > * { animation: sb-item-in 200ms cubic-bezier(.34, 1.4, .64, 1) backwards; }
+#opt-bar.sb-in > * { animation-name: sb-item-inL; }
+@media (min-width: 701px) { #opt-bar.sb-in > * { animation-name: sb-item-in; } }
+#view-bar.sb-in > *:nth-child(1), #opt-bar.sb-in > *:nth-child(1) { animation-delay:  40ms; }
+#view-bar.sb-in > *:nth-child(2), #opt-bar.sb-in > *:nth-child(2) { animation-delay:  66ms; }
+#view-bar.sb-in > *:nth-child(3), #opt-bar.sb-in > *:nth-child(3) { animation-delay:  92ms; }
+#view-bar.sb-in > *:nth-child(4), #opt-bar.sb-in > *:nth-child(4) { animation-delay: 118ms; }
+#view-bar.sb-in > *:nth-child(5), #opt-bar.sb-in > *:nth-child(5) { animation-delay: 144ms; }
+#view-bar.sb-in > *:nth-child(6), #opt-bar.sb-in > *:nth-child(6) { animation-delay: 170ms; }
+#view-bar.sb-in > *:nth-child(7), #opt-bar.sb-in > *:nth-child(7) { animation-delay: 196ms; }
+#view-bar.sb-in > *:nth-child(n+8), #opt-bar.sb-in > *:nth-child(n+8) { animation-delay: 222ms; }
+/* leaving: together, quickly */
+/* the controls leave TOGETHER and quickly — a staggered exit reads as the app being reluctant. When a
+   close interrupts an entrance the JS continues each control from where it actually is (see setSideBar),
+   because restarting this keyframe from opacity:1 made every un-arrived icon flash to full first. */
+#view-bar.sb-out > *, #opt-bar.sb-out > * { animation: sb-item-out 90ms ease-in both; }
+
+@media (prefers-reduced-motion: reduce) {
+  #view-bar.sb-in, #opt-bar.sb-in, #view-bar.sb-out, #opt-bar.sb-out,
+  #view-bar.sb-in > *, #opt-bar.sb-in > *, #view-bar.sb-out > *, #opt-bar.sb-out > * { animation: none !important; }
+}
+
+/* ── the RIGHT-hand panel: the view rail ──────────────────────────────────────────────────────────
+   Glued to the right edge and CENTRED on the canvas rather than stretched between its top and bottom,
+   so the panel is exactly as tall as what is in it. */
+#view-bar {
+  position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+  max-height: calc(100% - 10px);
+  padding-right: env(safe-area-inset-right, 0px);
+  border-right: none;
+  border-radius: 15px 0 0 15px;
+  box-shadow: -6px 0 20px rgba(0, 0, 0, .30);
+}
+/* #vb-zoom NO LONGER PUSHES ITSELF TO THE FLOOR. `margin-top: auto` is what opened the 57px hole on his
+   phone and the 235px one on PC — it was written when the rail was pinned top-to-bottom and had spare
+   height to spend. The panel fits its content now, so there is nothing to push against. */
+#vb-zoom { margin-top: 0; }
+
+/* ── the pop-up: the same panel, glued to the edge its own button sits at ─────────────────────────
+   PHONE: his button is at the LEFT end of the transport row, so this is glued LEFT — which is also why
+   the two can be open together and never meet (queue 852). It rises FROM the button rather than being
+   centred, because that is what he asked for and it keeps the canvas above it clear. */
+#opt-bar {
+  position: absolute; z-index: 21;
+  bottom: calc(100% - 4px);
+  left: 0;
+  width: calc(var(--sb-w) + env(safe-area-inset-left, 0px));
+  padding-left: env(safe-area-inset-left, 0px);
+  max-height: calc(100dvh - 190px);
+  border-left: none;
+  border-radius: 0 15px 15px 0;
+  box-shadow: 6px 0 20px rgba(0, 0, 0, .30);
+}
 /* The transport row is the positioning context for it. */
 #transport { position: relative; }
 #timeline-panel { position: relative; }
-/* ⚠️ #btn-opts IS MOVED BY JS, NOT BY CSS, AND THE REASON IS WORTH KEEPING (queue 851). He wants it on
-   the LEFT on the phone and on the RIGHT on PC, "next to where the view options button is". The obvious
-   answer — make it a direct child of #transport and flex-`order` it to either end — BREAKS the row:
-   #transport is a three-column GRID (minmax(0,1fr) auto minmax(0,1fr)) holding .t-left, the pill and
-   .t-right, and a fourth child lands in an implicit second row. Measured: the button rendered under the
-   transport bar, half behind the timeline. The centring maths in that grid is documented across three
-   separate queue entries and is not something to re-derive for a button.
-   A second copy of the node would be a second set of handlers to keep in step, which this repo has been
-   bitten by before. So there is ONE node and js/app.js re-parents it at the 700px line: first child of
-   .t-left below, and on PC into the far-right cluster just inside the view-options button. */
-/* PC: the same column, hung at the right — but INSIDE the view rail's own column, not on top of it.
-   `--fm-rail-w` is written by FM.fitBarsTogether from the rail's measured box, so the two never meet
-   whether the rail is open, shut, or scrolled. */
+/* ⚠️ #btn-opts IS MOVED BY JS, NOT BY CSS (queue 851). He wants it on the LEFT on the phone and on the
+   RIGHT on PC, "next to where the view options button is". The obvious answer — make it a direct child
+   of #transport and flex-`order` it to either end — BREAKS the row: #transport is a three-column GRID
+   holding .t-left, the pill and .t-right, and a fourth child lands in an implicit second row (measured:
+   the button rendered under the bar, half behind the timeline). A second copy of the node would be a
+   second set of handlers to keep in step. So there is ONE node, re-parented at the 700px line. */
 @media (min-width: 701px) {
-  #opt-bar { left: auto; right: calc(6px + var(--fm-rail-w, 0px)); }
+  /* PC: both panels are on the right, so this one hangs immediately inside the rail. `--fm-rail-w` is
+     written by FM.fitBarsTogether from the rail's MEASURED box and is 0 when the rail is shut, so the
+     pop-up glues itself to the edge on its own and steps aside when the rail joins it. */
+  #opt-bar {
+    left: auto; right: var(--fm-rail-w, 0px);
+    width: calc(var(--sb-w) + env(safe-area-inset-right, 0px));
+    padding-left: 0; padding-right: env(safe-area-inset-right, 0px);
+    border-left: 1px solid var(--line); border-right: none;
+    border-radius: 15px 0 0 15px;
+    box-shadow: -6px 0 20px rgba(0, 0, 0, .30);
+    /* it SLIDES the 40px when the rail comes or goes, rather than teleporting mid-animation (queue 853,
+       found in review: the pop-up jumped the instant ⛶ was tapped and sat on top of the rail for the
+       remaining ~120ms of the rail's own exit). */
+    transition: right 160ms cubic-bezier(.16, 1, .3, 1);
+  }
+  /* …and when the rail is NOT beside it, the pop-up is the outermost panel: it keeps a border on its
+     canvas-facing side so its edge cannot read as torn where the rail is not there to close it.
+     `fm-rail-open` is written by FM.fitBarsTogether from the rail's real state — and now something
+     actually reads it, which the review pointed out nothing did. */
+  body:not(.fm-rail-open) #opt-bar { border-right: 1px solid var(--line); }
 }
-/* …and it stands down with the rail whenever a full-width browser owns the screen, for the same reason
-   #view-bar does: those sheets cover the timeline and a pop-up floating over them is orphaned. */
+@media (prefers-reduced-motion: reduce) { #opt-bar { transition: none; } }
 
-/* The groups inside must not be squashed by the flex container when the content overflows — without
-   this the browser shrinks them to fit and you get the crammed look back instead of a scroll. */
-#view-bar > * { flex: 0 0 auto; }
-#view-bar.hidden { display: none; }
 .vb-btn {
   width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
   background: transparent; border: none; color: var(--text); border-radius: 9px; cursor: pointer;
@@ -766,7 +867,7 @@ body.text-editing .sb-wrap { display: none !important; }
 #vb-camera.on { color: var(--accent); }
 #vb-camera.cam-off { opacity: .45; }
 #vb-zoom {
-  margin-top: auto; display: flex; flex-direction: column; align-items: center;
+  display: flex; flex-direction: column; align-items: center;
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 3px 0; width: 38px;
 }
 /* The stepper buttons hold a drawn arrow now (queue 362), so they need to CENTRE it rather than rely
@@ -2017,8 +2118,11 @@ html.splash-on, html.splash-on body { background: #000; }
    "armed" (.vb-btn.on, the accent-soft wash), so a lighter panel would have said the marks were set
    when they were not. Inset instead of raised, for the same reason. */
 #vb-marks {
+  /* 3px 0, NOT 3px 2px (queue 853, found in review): 38px button + 2px either side is 42px inside a 40px
+     panel, so `overflow-x: hidden` sliced ~1.5px off each side — and what it sliced was this group's own
+     ring, which is the thing that says the three marks are one control. */
   display: flex; flex-direction: column; align-items: center; gap: 1px;
-  padding: 3px 2px; border-radius: 10px;
+  padding: 3px 0; border-radius: 10px;
   background: rgba(0, 0, 0, .42);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06);
 }

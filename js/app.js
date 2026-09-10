@@ -5795,10 +5795,9 @@ window.FM = window.FM || {};
       amFitBtn.addEventListener('click', () => {
         if (vbLpFired) { vbLpFired = false; return; }   // the hold already handled it (started/stopped review)
         if (FM._reviewing) { FM.pause(); return; }       // reviewing → a plain TAP stops it (no popup); FM.pause reverts the icon
-        const open = viewBar.classList.toggle('hidden') === false;
-        amFitBtn.classList.toggle('active', open);
-        if (open && FM.syncViewBar) FM.syncViewBar();   // rate / loop / mark state can all change while it's shut
-        if (FM.fitBarsTogether) FM.fitBarsTogether();   // queue 852: both may be open, so they make room for each other
+        const open = !FM.sideBarOpen(viewBar);
+        FM.setSideBar(viewBar, amFitBtn, open);          // queue 853: it arrives and leaves with an animation
+        if (open && FM.syncViewBar) FM.syncViewBar();    // rate / loop / mark state can all change while it's shut
       });
     }
     /* ⚙ THE TIMELINE-OPTIONS POP-UP (queue 851) — the twin of the ⛶ button above, and deliberately the
@@ -5822,32 +5821,135 @@ window.FM = window.FM || {};
      * offset is zero and the pop-up sits at the edge on its own.
      * Anything left over is caught by the last block: if the two boxes still overlap, the pop-up loses
      * height from the top rather than being drawn over. A guard, not the mechanism. */
+    /* ⚙ ONE DOOR FOR BOTH PANELS (queue 853). `.hidden` is `display:none`, so a panel that is closed the
+     * blunt way vanishes with no exit at all — and he asked for the leaving to be as satisfying as the
+     * arriving. So closing means: play `.sb-out`, then hide when it finishes. Opening means: un-hide,
+     * then play `.sb-in`, which the CSS staggers across the controls.
+     * The timeout is a BACKSTOP, not the mechanism: `animationend` fires per element and the panel's own
+     * is the one that matters, but a browser that skips the animation (reduced motion, a background tab)
+     * would otherwise leave the panel on screen for ever. Whichever lands first wins, and re-opening
+     * mid-exit cancels the pending hide rather than fighting it. */
+    const SB_OUT_MS = 150;
+    FM.setSideBar = function (el, btn, open) {
+      if (!el) return;
+      if (el._sbT) { clearTimeout(el._sbT); el._sbT = 0; }
+      el.classList.remove('sb-in', 'sb-out');
+      if (open) {
+        el.classList.remove('hidden');
+        void el.offsetWidth;                     // restart the animation even if it was mid-exit
+        el.classList.add('sb-in');
+        if (btn) btn.classList.add('active');
+        if (el.id === 'view-bar') document.body.classList.add('fm-rail-open');   // …only the RAIL owns this flag
+      } else {
+        if (el.classList.contains('hidden')) { if (btn) btn.classList.remove('active'); return; }
+        /* ⚠️ A CLOSE DURING THE ENTRANCE USED TO FLASH (queue 853, measured in review): tap open, tap shut
+           100ms later, and the controls that had not arrived yet jumped to full opacity for one frame
+           before fading, because the exit keyframe starts from `opacity: 1` whatever the element was
+           doing. So each control that is still animating is CONTINUED from its current computed state
+           with the Web Animations API, and only the settled ones use the CSS keyframe. */
+        const mid = [].slice.call(el.children).filter(k => k.getAnimations && k.getAnimations().some(a => a.playState === 'running'));
+        mid.forEach(k => {
+          const cs = getComputedStyle(k), from = { opacity: cs.opacity, transform: cs.transform === 'none' ? 'scale(1)' : cs.transform };
+          k.getAnimations().forEach(a => a.cancel());
+          try { k.animate([from, { opacity: 0, transform: 'scale(.9)' }], { duration: 90, easing: 'ease-in', fill: 'forwards' }); } catch (e) {}
+        });
+        el.classList.add('sb-out');
+        if (btn) btn.classList.remove('active');
+        const done = () => {
+          if (el._sbEnd) { el.removeEventListener('animationend', el._sbEnd); el._sbEnd = null; }
+          if (!el.classList.contains('sb-out')) return;   // re-opened while leaving
+          el.classList.add('hidden'); el.classList.remove('sb-out');
+          if (el.id === 'view-bar') document.body.classList.remove('fm-rail-open');
+          if (FM.fitBarsTogether) FM.fitBarsTogether();
+        };
+        /* Nothing actually animating — reduced motion, or a background tab — so there is no animationend
+           coming and the 150ms backstop would leave the panel sitting there for no reason (queue 853,
+           found in review). It also stops a listener being added that can never fire and never unbind. */
+        if (!el.getAnimations || !el.getAnimations().length) { done(); return; }
+        el._sbT = setTimeout(done, SB_OUT_MS);
+        el._sbEnd = function (ev) {
+          if (ev.target !== el) return;                    // the CONTROLS finish first; wait for the panel
+          if (el._sbT) { clearTimeout(el._sbT); el._sbT = 0; }
+          done();
+        };
+        el.addEventListener('animationend', el._sbEnd);
+      }
+      if (FM.fitBarsTogether) FM.fitBarsTogether();
+    };
+    FM.sideBarOpen = (el) => !!(el && !el.classList.contains('hidden') && !el.classList.contains('sb-out'));
+
+    /* Says whether a panel is actually taller than its box, so the CSS can fade the cut edge rather than
+       leaving a control sliced in half with nothing to explain it (queue 853, found in review). */
+    const markScroll = (el) => {
+      if (!el) return;
+      requestAnimationFrame(() => { try { el.classList.toggle('sb-scrolls', el.scrollHeight > el.clientHeight + 1); } catch (e) {} });
+    };
     FM.fitBarsTogether = function () {
       const rail = document.getElementById('view-bar'), bar = document.getElementById('opt-bar');
-      if (!bar) return;
-      const railOpen = !!(rail && !rail.classList.contains('hidden'));
+      if (!bar && !rail) return;
+      markScroll(rail);
       const wide = window.innerWidth > 700;
-      const rw = (wide && railOpen && rail) ? Math.round(rail.getBoundingClientRect().width) : 0;
-      document.documentElement.style.setProperty('--fm-rail-w', (rw ? rw + 6 : 0) + 'px');
-      bar.style.maxHeight = '';
-      if (bar.classList.contains('hidden') || !railOpen || !rail) return;
-      const a = bar.getBoundingClientRect(), b = rail.getBoundingClientRect();
-      const overlaps = a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
-      if (!overlaps) return;
-      // they still meet: give the pop-up the room that is left ABOVE the rail's bottom edge, and let it
-      // scroll inside that, which is what the rail itself does on a short phone (v5.29).
-      const room = Math.max(120, Math.round(a.bottom - b.bottom - 8));
+      /* ⚠️ "OPEN" HERE MEANS "STILL TAKING UP ROOM", NOT "not on its way out" (queue 853, found in review).
+         Using FM.sideBarOpen made --fm-rail-w drop to 0 the instant the rail was tapped shut, so on PC the
+         pop-up TELEPORTED 40px sideways and sat on top of the rail for the remaining ~120ms of its exit
+         animation. A panel that is still painting still occupies its width. */
+      const railThere = !!(rail && !rail.classList.contains('hidden'));
+      if (rail) document.body.classList.toggle('fm-rail-open', railThere);
+      const rw = (wide && railThere && rail) ? Math.round(rail.getBoundingClientRect().width) : 0;
+      /* EXACTLY the rail's width, with nothing between them: a gap here would put back the strip of
+         background he asked to be rid of, only in the middle instead of at the edge. The rail's own left
+         border is the divider, so the pair reads as one piece of glass. */
+      document.documentElement.style.setProperty('--fm-rail-w', rw + 'px');
+      if (!bar) return;
+      /* ⚠️ AND THE SAFE-AREA INSET IS NOT PAID TWICE (queue 853, found in review). The rail's measured
+         width already contains its own `env(safe-area-inset-right)` padding, so on a notched phone in
+         landscape the pop-up added a second one and opened a 59px band of empty glass between them. It
+         only touches the screen edge when the rail is not there. */
+      bar.style.paddingRight = (wide && rw) ? '0px' : '';
+
+      bar.style.maxHeight = ''; bar.style.bottom = '';
+      if (bar.classList.contains('hidden')) return;
+      const b = bar.getBoundingClientRect();
+
+      /* ⚠️ ITS HEIGHT IS THE ROOM IT ACTUALLY HAS, MEASURED — not a constant taken off the viewport
+         (queue 853, and this is the one the review caught hardest). `max-height: calc(100dvh - 190px)`
+         is a guess about how tall the furniture is, and on a 360x640 phone it was wrong by enough that
+         the pop-up grew up UNDER the top bar: elementFromPoint on the speed-down button returned
+         `m-back`, so tapping "slower" left the project. On a 320x568 its top was off the screen entirely.
+         The room is the distance from the panel's own bottom up to whatever is above it, which is the
+         header on a phone and the top of the stage on PC. It scrolls inside that, as the rail does. */
+      const head = document.getElementById(wide ? 'topbar' : 'topbar-m');
+      const stage = document.getElementById('stage');
+      let ceiling = 8;
+      if (head) { const hr = head.getBoundingClientRect(); if (hr.height > 0) ceiling = Math.max(ceiling, hr.bottom + 8); }
+      if (wide && stage) { const sr = stage.getBoundingClientRect(); if (sr.height > 0) ceiling = Math.max(ceiling, sr.top + 8); }
+      const room = Math.max(96, Math.round(b.bottom - ceiling));
       bar.style.maxHeight = room + 'px';
+      markScroll(bar);
+
+      /* ON PC THE TWO SIT AS ONE BLOCK. The review's words: they "read as two offset slabs rather than one
+         piece" — the rail is centred on the stage, the pop-up rises from its button, so at 1280x800 they
+         shared only 51% of their edge and the pop-up's tail hung 132px below the rail with no border on
+         its outer side. Lining the bottoms up costs one measurement and fixes both. */
+      if (wide && railThere && rail) {
+        const r = rail.getBoundingClientRect(), host = bar.offsetParent;
+        if (host) {
+          const hr = host.getBoundingClientRect();
+          bar.style.bottom = Math.round(hr.bottom - r.bottom) + 'px';
+          const b2 = bar.getBoundingClientRect();
+          bar.style.maxHeight = Math.max(96, Math.round(Math.min(room, b2.bottom - Math.max(ceiling, r.top)))) + 'px';
+          markScroll(bar);
+        }
+      }
     };
-    const closeOptBar = () => { if (optBar && !optBar.classList.contains('hidden')) { optBar.classList.add('hidden'); if (optBtn) optBtn.classList.remove('active'); } };
+    const closeOptBar = () => { if (FM.sideBarOpen(optBar)) FM.setSideBar(optBar, optBtn, false); };
     FM.closeOptBar = closeOptBar;   // …so anything that owns the screen can put it away
     if (optBtn && optBar) {
       window.addEventListener('resize', () => { try { FM.fitBarsTogether(); } catch (e) {} });
       optBtn.addEventListener('click', () => {
-        const open = optBar.classList.toggle('hidden') === false;
-        optBtn.classList.toggle('active', open);
+        const open = !FM.sideBarOpen(optBar);
+        FM.setSideBar(optBar, optBtn, open);             // queue 853
         if (open && FM.syncViewBar) FM.syncViewBar();
-        if (FM.fitBarsTogether) FM.fitBarsTogether();
       });
     }
     const vbFit = document.getElementById('vb-fit');
@@ -6292,14 +6394,14 @@ window.FM = window.FM || {};
           chip.textContent = label.split(' — ')[0].split(' · ')[0];   // the name, not the whole explanation
           document.body.appendChild(chip);
           const r = b.getBoundingClientRect(), c = chip.getBoundingClientRect();
-          const inBar = !!(optb && optb.contains(b));
-          if (inBar) {   // the pop-up is horizontal: sit the label above the control, clamped on screen
-            chip.style.top = Math.round(r.top - c.height - 8) + 'px';
-            chip.style.left = Math.round(Math.max(6, Math.min(window.innerWidth - c.width - 6, r.left + r.width / 2 - c.width / 2))) + 'px';
-          } else {
-            chip.style.top = Math.round(r.top + r.height / 2 - c.height / 2) + 'px';
-            chip.style.left = Math.round(r.left - c.width - 10) + 'px';
-          }
+          /* ⚠️ THE LABEL GOES ON THE CONTROL'S OPEN SIDE (queue 853, found in review). Both panels are
+             columns glued to an edge now, so a label placed to the LEFT of a LEFT-glued panel lands on
+             the panel itself — measured, it covered the control below the one being held. Put it on
+             whichever side has the screen, and clamp it so it can never leave. */
+          const onLeftEdge = r.left < window.innerWidth / 2;
+          chip.style.top = Math.round(Math.max(6, Math.min(window.innerHeight - c.height - 6, r.top + r.height / 2 - c.height / 2))) + 'px';
+          chip.style.left = Math.round(onLeftEdge ? Math.min(window.innerWidth - c.width - 6, r.right + 10)
+                                                  : Math.max(6, r.left - c.width - 10)) + 'px';
           if (navigator.vibrate) { try { navigator.vibrate(6); } catch (_) {} }
         }, 380);
       };
