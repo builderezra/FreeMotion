@@ -54724,6 +54724,70 @@
      Second half: on the tick that LEARNS the bias, the bias is set to the raw error itself, so the
      de-biased value is exactly 0 by construction — a fact about the arithmetic, not about the audio.
      Storing it dropped a guaranteed zero into the list after every seek and at the start of every clip. */
+  test('both bars can be open at once without covering each other, and the phone one opens upwards (queue 852)', { item: '852', budgetMs: 30000 }, async function () {
+    /* His words: "Make it so both the buttons can be on at the same time and they actually dont cover over
+       each other, design it in a smart way that fits on pc and mobile respectively" and, minutes later,
+       "on mobile make it open upwards not sideways, coz rn it covers too much space".
+       The SHAPE is most of the answer: two 46px columns. On the phone they hang off opposite edges — his
+       button at the left end of the transport row, the rail pinned to the right of the canvas — so they
+       cannot meet. On PC they are on the same side, so the pop-up stands off by the rail's measured
+       width. Measured before this test was written: phone rail [328,58,46,316] against pop-up
+       [6,89,46,296]; PC rail [1228,6,46,548] against pop-up [1176,269,46,296]. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const bar = document.getElementById('opt-bar'), btn = document.getElementById('btn-opts');
+    const rail = document.getElementById('view-bar'), railBtn = document.getElementById('btn-amfit');
+    if (!bar || !btn || !rail || !railBtn) throw new Error('one of the two bars or its button is missing');
+    const shut = (el, b) => { if (el && !el.classList.contains('hidden')) { b.click(); } };
+    const openBoth = async () => {
+      if (bar.classList.contains('hidden')) { btn.click(); await sleep(70); }
+      if (rail.classList.contains('hidden')) { railBtn.click(); await sleep(70); }
+      if (FM.fitBarsTogether) FM.fitBarsTogether();
+      await sleep(90);
+    };
+    try {
+      await openBoth();
+      if (bar.classList.contains('hidden') || rail.classList.contains('hidden'))
+        throw new Error('the two bars will not stay open together — one of them closed the other');
+
+      const a = bar.getBoundingClientRect(), b = rail.getBoundingClientRect();
+      if (!(a.width > 10 && a.height > 10 && b.width > 10 && b.height > 10))
+        throw new Error('one of the bars is open but has no size (pop-up ' + Math.round(a.width) + 'x' + Math.round(a.height) + ', rail ' + Math.round(b.width) + 'x' + Math.round(b.height) + ')');
+      const overlap = a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+      if (overlap)
+        throw new Error('the two bars overlap: pop-up [' + [a.left, a.top, a.width, a.height].map(Math.round) + '] against rail [' + [b.left, b.top, b.width, b.height].map(Math.round) + ']');
+
+      // "open upwards not sideways, coz rn it covers too much space"
+      if (!(a.height > a.width)) throw new Error('the pop-up is still wider than it is tall (' + Math.round(a.width) + 'x' + Math.round(a.height) + ') — he asked for it to open upwards, not sideways');
+      if (!(a.width <= 70)) throw new Error('the pop-up is ' + Math.round(a.width) + 'px wide — as a column it should cost about the same 46px the rail does; before this it spanned most of the screen');
+      if (window.innerWidth <= 700 && a.width > window.innerWidth * 0.25)
+        throw new Error('on the phone the pop-up takes ' + Math.round(a.width / window.innerWidth * 100) + '% of the width, which is the "covers too much space" he reported');
+      // it rises FROM its button
+      const br = btn.getBoundingClientRect();
+      if (!(a.bottom <= br.top + 8)) throw new Error('the pop-up does not sit above its own button (bar bottom ' + Math.round(a.bottom) + ', button top ' + Math.round(br.top) + ')');
+
+      // per-layout arrangement, which is his clause 3
+      if (window.innerWidth > 700) {
+        if (!(a.right <= b.left + 1)) throw new Error('on PC the pop-up is not standing clear to the LEFT of the rail (pop-up right ' + Math.round(a.right) + ', rail left ' + Math.round(b.left) + ')');
+        if (!(b.left - a.right < 40)) throw new Error('on PC the two columns are ' + Math.round(b.left - a.right) + 'px apart — they should read as a pair, not as two unrelated panels');
+      } else {
+        if (!(a.right < b.left)) throw new Error('on the phone the two columns are not on opposite sides (pop-up right ' + Math.round(a.right) + ', rail left ' + Math.round(b.left) + ')');
+      }
+
+      // CONTROL — with the rail SHUT the pop-up must not keep standing off from an empty edge.
+      const wasRight = a.right;
+      railBtn.click(); await sleep(120);
+      if (FM.fitBarsTogether) FM.fitBarsTogether();
+      await sleep(60);
+      const c = bar.getBoundingClientRect();
+      if (window.innerWidth > 700 && !(c.right > wasRight - 1))
+        throw new Error('control: with the rail shut the pop-up still holds its place (' + Math.round(c.right) + ') — the offset is hard-coded rather than measured from the rail');
+    } finally {
+      shut(bar, btn); await sleep(40);
+      if (!rail.classList.contains('hidden')) { railBtn.click(); }
+      await sleep(40);
+    }
+  });
+
   test('the controls that are not view options live in their own pop-up, opened from the transport row (queue 851)', { item: '851', budgetMs: 30000 }, async function () {
     /* His words, over a screenshot circled in red: "Put the red circles buttons in a new pop up menu on
        the left side. On pc it will be on the right side next to where the view options button is… it
@@ -54774,10 +54838,13 @@
     const br = btn.getBoundingClientRect();
     if (!(r.bottom <= br.top + 6)) throw new Error('the pop-up is not above its button (bar bottom ' + Math.round(r.bottom) + ', button top ' + Math.round(br.top) + ')');
 
-    // …and one bar at a time: opening the view rail puts this one away
+    /* ⚠️ BOTH MAY BE OPEN (queue 852). v16.11 closed one when the other opened — my own addition, and the
+       #851 entry said one word would undo it. His word: "Make it so both the buttons can be on at the
+       same time and they actually dont cover over each other." The overlap itself is asserted in the 852
+       test; this one just refuses to let the old behaviour come back. */
     if (railBtn && rail) {
-      railBtn.click(); await sleep(80);
-      if (!bar.classList.contains('hidden')) throw new Error('opening the view-options rail left the timeline-options bar open too — two glass bars over a phone timeline is the crammed look v5.29 was about');
+      railBtn.click(); await sleep(90);
+      if (bar.classList.contains('hidden')) throw new Error('opening the view-options rail closed the timeline-options pop-up — he asked for both at once');
       railBtn.click(); await sleep(60);   // put the rail back
     }
 

@@ -702,25 +702,32 @@ body.text-editing .sb-wrap { display: none !important; }
    rather than duplicated: same nodes, same ids, one extra rule each. */
 #opt-bar {
   position: absolute; z-index: 21;
-  bottom: calc(100% - 4px);          /* …directly above the transport row that holds the button */
-  left: 6px;                          /* PHONE: the button is at the far LEFT of the row */
-  display: flex; flex-direction: row; align-items: center; gap: 6px;
-  padding: 5px 8px;
+  bottom: calc(100% - 4px);          /* …rising from the button, which sits in the transport row below */
+  left: 6px;                          /* PHONE: its button is at the far LEFT of that row */
+  /* ⚠️ A COLUMN, NOT A BAR (queue 852). v16.11 laid it out sideways and he came straight back: "on mobile
+     make it open upwards not sideways, coz rn it covers too much space" — measured, it was 668 of the
+     phone's 380px-wide screen. Upwards costs 46px of width instead, the same 46 the view rail costs, and
+     it is why the two can be open together without meeting: his button is at the LEFT end of the
+     transport row and the rail is pinned to the RIGHT of the canvas. */
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  width: 46px; padding: 8px 0;
+  max-height: calc(100vh - 210px);
   background: rgba(18, 24, 36, .94); border: 1px solid var(--line); border-radius: 13px;
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
   box-shadow: 0 6px 22px rgba(0, 0, 0, .38);
-  max-width: calc(100% - 12px);
-  overflow-x: auto; overflow-y: hidden; overscroll-behavior: contain; scrollbar-width: none;
+  /* the rail scrolls for the same reason and with the same rules (v5.29) — a short phone must not put a
+     control out of reach, and a flick that runs out must not turn into a scrub on the timeline */
+  overflow-y: auto; overflow-x: hidden;
+  -webkit-overflow-scrolling: touch; overscroll-behavior: contain; scrollbar-width: none;
 }
 #opt-bar::-webkit-scrollbar { display: none; }
 #opt-bar > * { flex: 0 0 auto; }
 #opt-bar.hidden { display: none; }
-/* turned on their side — a column of three marks would make this bar three buttons tall */
-#opt-bar #vb-rate, #opt-bar #vb-marks { flex-direction: row; }
-#opt-bar #vb-marks { padding: 2px 3px; gap: 1px; }
-#opt-bar #vb-rate { gap: 1px; }
+/* The groups keep the vertical shape they were built with for the rail — no override needed now. */
+#opt-bar #vb-marks { padding: 3px 2px; }
 /* The transport row is the positioning context for it. */
 #transport { position: relative; }
+#timeline-panel { position: relative; }
 /* ⚠️ #btn-opts IS MOVED BY JS, NOT BY CSS, AND THE REASON IS WORTH KEEPING (queue 851). He wants it on
    the LEFT on the phone and on the RIGHT on PC, "next to where the view options button is". The obvious
    answer — make it a direct child of #transport and flex-`order` it to either end — BREAKS the row:
@@ -730,13 +737,12 @@ body.text-editing .sb-wrap { display: none !important; }
    separate queue entries and is not something to re-derive for a button.
    A second copy of the node would be a second set of handlers to keep in step, which this repo has been
    bitten by before. So there is ONE node and js/app.js re-parents it at the 700px line: first child of
-   .t-left below, last child of .t-right above — and .t-right is `justify-content: space-between` across
-   a 1fr track, so "last child" is exactly beside #btn-amfit at the far right. */
-#timeline-panel { position: relative; }
-/* PC: the same bar, but hung from the RIGHT end of the row, beside the view-options button it is the
-   twin of — "on pc it will also appear above it but on the right side as it should". */
+   .t-left below, and on PC into the far-right cluster just inside the view-options button. */
+/* PC: the same column, hung at the right — but INSIDE the view rail's own column, not on top of it.
+   `--fm-rail-w` is written by FM.fitBarsTogether from the rail's measured box, so the two never meet
+   whether the rail is open, shut, or scrolled. */
 @media (min-width: 701px) {
-  #opt-bar { left: auto; right: 6px; }
+  #opt-bar { left: auto; right: calc(6px + var(--fm-rail-w, 0px)); }
 }
 /* …and it stands down with the rail whenever a full-width browser owns the screen, for the same reason
    #view-bar does: those sheets cover the timeline and a pop-up floating over them is orphaned. */

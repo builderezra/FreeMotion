@@ -5797,28 +5797,57 @@ window.FM = window.FM || {};
         if (FM._reviewing) { FM.pause(); return; }       // reviewing → a plain TAP stops it (no popup); FM.pause reverts the icon
         const open = viewBar.classList.toggle('hidden') === false;
         amFitBtn.classList.toggle('active', open);
-        if (open && FM.closeOptBar) FM.closeOptBar();   // one bar at a time (queue 851)
         if (open && FM.syncViewBar) FM.syncViewBar();   // rate / loop / mark state can all change while it's shut
+        if (FM.fitBarsTogether) FM.fitBarsTogether();   // queue 852: both may be open, so they make room for each other
       });
     }
     /* ⚙ THE TIMELINE-OPTIONS POP-UP (queue 851) — the twin of the ⛶ button above, and deliberately the
        same three lines: tap toggles, the button lights while it is open, and FM.syncViewBar() runs on
        open because the speed, the loop and the export marks can all change while it is shut.
-       Opening one CLOSES the other. Two glass bars over a phone timeline at once is the "crammed" look
-       v5.29 was about, and they are two halves of one idea — you are picking a control, not stacking
-       panels. */
+       ⚠️ THEY CAN BOTH BE OPEN (queue 852). v16.11 closed one when the other opened, on my own reasoning
+       that two glass bars at once is the "crammed" look v5.29 was about. His answer: *"Make it so both the
+       buttons can be on at the same time and they actually dont cover over each other."* So instead of
+       one bar at a time, they make ROOM for each other — see FM.fitBarsTogether. */
     const optBtn = document.getElementById('btn-opts');
     const optBar = document.getElementById('opt-bar');
+    /* ⚙ BOTH BARS OPEN, NEITHER COVERING THE OTHER (queue 852). His words: "Make it so both the buttons
+     * can be on at the same time and they actually dont cover over each other, design it in a smart way
+     * that fits on pc and mobile respectively."
+     * The SHAPE does most of it, which is why this function is small. Both are 46px columns now, and on
+     * the phone they hang off opposite sides — his button at the left end of the transport row, the view
+     * rail pinned to the right of the canvas — so they cannot meet however tall either gets.
+     * On PC they are on the SAME side, because that is where he asked for the button, so the pop-up has
+     * to stand off by however wide the rail actually is. Measured rather than assumed: the rail scrolls,
+     * its width can change with a scrollbar, and it is `display: none` when shut — in which case the
+     * offset is zero and the pop-up sits at the edge on its own.
+     * Anything left over is caught by the last block: if the two boxes still overlap, the pop-up loses
+     * height from the top rather than being drawn over. A guard, not the mechanism. */
+    FM.fitBarsTogether = function () {
+      const rail = document.getElementById('view-bar'), bar = document.getElementById('opt-bar');
+      if (!bar) return;
+      const railOpen = !!(rail && !rail.classList.contains('hidden'));
+      const wide = window.innerWidth > 700;
+      const rw = (wide && railOpen && rail) ? Math.round(rail.getBoundingClientRect().width) : 0;
+      document.documentElement.style.setProperty('--fm-rail-w', (rw ? rw + 6 : 0) + 'px');
+      bar.style.maxHeight = '';
+      if (bar.classList.contains('hidden') || !railOpen || !rail) return;
+      const a = bar.getBoundingClientRect(), b = rail.getBoundingClientRect();
+      const overlaps = a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+      if (!overlaps) return;
+      // they still meet: give the pop-up the room that is left ABOVE the rail's bottom edge, and let it
+      // scroll inside that, which is what the rail itself does on a short phone (v5.29).
+      const room = Math.max(120, Math.round(a.bottom - b.bottom - 8));
+      bar.style.maxHeight = room + 'px';
+    };
     const closeOptBar = () => { if (optBar && !optBar.classList.contains('hidden')) { optBar.classList.add('hidden'); if (optBtn) optBtn.classList.remove('active'); } };
     FM.closeOptBar = closeOptBar;   // …so anything that owns the screen can put it away
     if (optBtn && optBar) {
+      window.addEventListener('resize', () => { try { FM.fitBarsTogether(); } catch (e) {} });
       optBtn.addEventListener('click', () => {
         const open = optBar.classList.toggle('hidden') === false;
         optBtn.classList.toggle('active', open);
-        if (open) {
-          if (viewBar && !viewBar.classList.contains('hidden')) { viewBar.classList.add('hidden'); if (amFitBtn) amFitBtn.classList.remove('active'); }
-          if (FM.syncViewBar) FM.syncViewBar();
-        }
+        if (open && FM.syncViewBar) FM.syncViewBar();
+        if (FM.fitBarsTogether) FM.fitBarsTogether();
       });
     }
     const vbFit = document.getElementById('vb-fit');
