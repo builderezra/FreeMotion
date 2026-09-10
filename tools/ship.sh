@@ -404,6 +404,32 @@ fi
 # added or changed to FAIL there and PASS here. About a minute; it runs BEFORE the suite so a dead test
 # costs one minute rather than ten. The escape hatch is a visible declaration — "UNPROVABLE: <why>" in
 # the newest POLISH-LOG line — because he reads that file and a flag he cannot see is not a safeguard.
+# ⚠️ "queue NNN" IN PROSE IS READ AS A CLAIM, AND THAT HAS COST A SHIP CYCLE THREE TIMES (7 Sep).
+# prove.sh counts every `queue NNN` in the newest POLISH-LOG line and demands one catching test for each,
+# which is right — but a line that mentions an OLD item while explaining the new one ("the reset #742
+# removed", "queue 754's claim") was counted too, and the release was refused for a proof it never
+# claimed to owe. The repo's convention is already "#NNN" for a historical reference and "queue NNN" for
+# what this release closes; nothing enforced it, so it was remembered, and remembering failed.
+# This names the offender in one second instead of after the proof step, and it says which form to use.
+# An item that IS being closed or partially closed here is fine, by definition.
+LOGLINE_Q="$(tail -n 1 POLISH-LOG.md)"
+SHIP_VER="$(grep -o '>v[0-9][0-9.]*<' index.html | head -1 | tr -d '><')"
+for q in $(printf '%s' "$LOGLINE_Q" | grep -o 'queue [0-9]\+' | grep -o '[0-9]\+' | sort -u); do
+  printf '%s' "$LOGLINE_Q" | grep -q "queue $q (partial)" && continue              # declared partial: prove.sh exempts it
+  grep -q "^- \[ \] \*\*$q[ —]" REQUESTS.md && continue                          # still open here: it owes a proof, prove.sh's own gate
+  # …otherwise it must be an item THIS release touches, which its entry says by carrying this version.
+  awk -v q="$q" -v v="$SHIP_VER" '
+    $0 ~ "^- \\[[ x]\\] \\*\\*" q "[ —]" { inq = 1 }
+    inq && index($0, v) { found = 1 }
+    inq && /^- \[[ x]\] \*\*[0-9]/ && $0 !~ "^- \\[[ x]\\] \\*\\*" q "[ —]" { inq = 0 }
+    END { exit(found ? 0 : 1) }' REQUESTS.md && continue
+  echo "❌ the newest POLISH-LOG line says \"queue $q\", but #$q's entry does not mention $SHIP_VER —"
+  echo "   so this release is not what closes it. prove.sh reads \"queue $q\" as a CLAIM and will demand a"
+  echo "   catching test for it. If you are only REFERRING to that item, write it as #$q, which is the"
+  echo "   convention this file has used for months. Not committing."
+  exit 1
+done
+
 echo "→ proving the release (its changed tests must fail without the fix)…"
 tools/prove.sh || { echo "   Not committing, not pushing."; exit 1; }
 

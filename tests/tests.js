@@ -48832,6 +48832,88 @@
     FM.audioHealth.reset();
   });
 
+  test('the audio report says what it measures: real played time, a denominator, the clock it ran on, and which clip (queue 849)', { item: '849' }, async function () {
+    /* His 10 Sep paste (#844) read "played 1.2s with sound: 1.2s / CUT OUT 1 time(s), 1.2s total, worst
+       1205ms", which anyone would read as a clip that was silent for its whole length. It was not: the
+       150ms anti-jitter floor guarded the played/sounding totals as well as the stall judgement, so on a
+       healthy phone those two fields counted NOTHING and only moved during a freeze. All four numbers
+       were one 1205ms sample. Three more fields were unreadable beside it. */
+    const fakeEl = over => Object.assign({
+      currentTime: 0, paused: false, muted: false, volume: 1, playbackRate: 1,
+      play() { this.paused = false; return Promise.resolve(); }, pause() { this.paused = true; },
+      addEventListener() {}, removeEventListener() {}
+    }, over || {});
+    const realClock = FM.clockSource;
+    try {
+      // ── 1. ORDINARY FRAMES ARE PLAYED TIME. 16ms ticks, advancing normally: nothing is wrong here,
+      //       and the report has to be able to say how long he played for.
+      FM.audioHealth.reset();
+      const good = { layerId: 'q849-good', el: fakeEl() };
+      let t = 1000;
+      for (let i = 0; i < 30; i++) { FM.audioHealth.note(good, t, true, 'q849-good'); t += 16; good.el.currentTime += 0.016; }
+      const st = FM._audioHealth;
+      if (!(st.playMs >= 400)) throw new Error('half a second of ordinary 16ms frames counted ' + Math.round(st.playMs) + 'ms as played — the anti-jitter floor is still guarding the totals, so "played" only ever counts freezes and his report read as a clip that was silent throughout');
+      if (!(st.soundingMs >= 400)) throw new Error('the same frames counted ' + Math.round(st.soundingMs) + 'ms as sounding');
+      if (st.stalls !== 0) throw new Error('counting ordinary frames as played also started counting them as cut-outs (' + st.stalls + ') — the floor must still guard the JUDGEMENT');
+
+      // ── 2. WHICH CLIP. A media record carries no id of its own, so this only works if the id is passed in.
+      FM.audioHealth.reset();
+      const a = { el: fakeEl() }, b = { el: fakeEl() };
+      FM.audioHealth.note(a, 1000, true, 'layer-aaa111'); FM.audioHealth.note(a, 1300, true, 'layer-aaa111');
+      FM.audioHealth.note(b, 1000, true, 'layer-bbb222'); FM.audioHealth.note(b, 1300, true, 'layer-bbb222');
+      const ids = Object.keys(FM._audioHealth.clips);
+      if (ids.length !== 2) throw new Error('two different clips that both cut out landed in ' + ids.length + ' bucket(s) (' + ids.join(',') + ') — every clip used to hash to the literal string "clip", so the report could never say which one, which is the line he most needed when he said "pretty much all of the audio files" glitch');
+      let rep = FM.audioHealth.report();
+      if (!/per clip/.test(rep)) throw new Error('the report has no "per clip" line even with two clips cutting out');
+      if (!/aaa111/.test(rep) || !/bbb222/.test(rep)) throw new Error('the per-clip line does not name the clips: ' + rep.split('\n').filter(l => /per clip/.test(l))[0]);
+
+      // ── 3. A DENOMINATOR. "trims 94" is meaningless without the number of ticks it is out of.
+      if (!/sync\s+\d+ ticks:/.test(rep)) throw new Error('the sync line still has no tick count, so "trims 94" cannot be read as either a pinned controller or as housekeeping: ' + rep.split('\n').filter(l => /^sync/.test(l))[0]);
+
+      // ── 4. THE CLOCK IT RAN ON, not the clock at report time. The report is written when playback
+      //       has stopped, so asking then always answered "stopped" — in every report ever pasted.
+      FM.audioHealth.reset();
+      FM.clockSource = () => 'audio';
+      const c = { el: fakeEl() };
+      FM.audioHealth.note(c, 1000, true, 'layer-ccc333');
+      FM.clockSource = () => 'stopped';                 // …playback ends, and only now is the report built
+      rep = FM.audioHealth.report();
+      const clockLine = rep.split('\n').filter(l => /^clock/.test(l))[0] || '';
+      if (!/audio/.test(clockLine)) throw new Error('the report says "' + clockLine.trim() + '" — it asked what the clock is NOW instead of what it was while playing, which is why every report he has ever sent says "stopped"');
+    } finally {
+      FM.clockSource = realClock;
+      FM.audioHealth.reset();
+    }
+  });
+
+  test('pressing play starts the audio report fresh, so it describes one play and not the session (queue 849)', { item: '849' }, async function () {
+    /* The sync and frame numbers are reset by FM.play(); the health counters never were — reset() had no
+       caller outside the suite. So played / with sound / CUT OUT / RESTARTED / events accumulated for the
+       whole session while the numbers printed beside them described only the last play. One report, two
+       different windows, and nothing in it saying so. */
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const wasPlaying = FM.playing;
+    try {
+      FM.audioHealth.reset();
+      const fake = { el: { currentTime: 0, paused: false, muted: false, volume: 1, playbackRate: 1,
+                           play() { return Promise.resolve(); }, pause() {}, addEventListener() {}, removeEventListener() {} } };
+      FM.audioHealth.note(fake, 1000, true, 'layer-stale');
+      FM.audioHealth.note(fake, 1400, true, 'layer-stale');       // a cut-out from an EARLIER play
+      if (FM._audioHealth.stalls !== 1) throw new Error('setup: the stale cut-out was not recorded');
+      if (FM.playing) FM.pause();
+      FM.play();
+      const after = FM._audioHealth;
+      const carried = after.stalls || after.restarts || Object.keys(after.clips).length;
+      if (carried) throw new Error('pressing play carried ' + after.stalls + ' cut-out(s) and ' + Object.keys(after.clips).length + ' clip(s) over from before — his report then mixes a session-long count with sync numbers that describe only the last play, which is exactly the report he pasted on 10 Sep');
+    } finally {
+      try { if (FM.playing) FM.pause(); } catch (e) {}
+      if (!wasPlaying) { try { FM.playing = false; } catch (e) {} }
+      FM.audioHealth.reset();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
   /* ⚠️ AND IT MUST SURVIVE HIM LEAVING WITHOUT PRESSING STOP — which on a phone is the likely path.
    * The report is written by FM.pause. What he actually does is play it, hear the sound break, and
    * switch away to tell me: home button, app switcher, another tab. Playback is torn down with the
@@ -54624,6 +54706,48 @@
      Second half: on the tick that LEARNS the bias, the bias is set to the raw error itself, so the
      de-biased value is exactly 0 by construction — a fact about the arithmetic, not about the audio.
      Storing it dropped a guaranteed zero into the list after every seek and at the start of every clip. */
+  test('a drift seek re-warms the sync controller, so it cannot learn its offset from the spin-up (queue 848)', { item: '848' }, async function () {
+    /* Straight off HIS phone (#844): 94 trims, 4 seeks, a median |err| of 158ms that never closes and a
+       worst of 357ms sitting just past SYNC_HARD. SYNC_WARMUP exists because the first quarter-second of
+       an element's playback reads as the sound being late, and its own comment says seeding the
+       controller there "teaches a latency that is too small, and everything after it reads as the sound
+       being late". A hard seek re-creates that condition mid-clip and throws the learned bias away — but
+       the warm-up was armed once per element, so by then it had long expired and the very next tick
+       learned a fresh bias from the post-seek spin-up. The controller then chases an offset that is not
+       there, trims every tick, drifts past SYNC_HARD, seeks again, and re-poisons the bias.
+       FM.play() and the loop wrap have always cleared BOTH; the drift seek cleared only the bias. */
+    if (!FM._noteSyncSeek || !FM._syncShouldLearn || FM._SYNC_WARMUP == null)
+      throw new Error('the drift seek’s re-warm cannot be observed, so the controller can still learn its offset from a post-seek spin-up sample');
+    const W = FM._SYNC_WARMUP;
+
+    // an element that has been playing a while, with a bias it learned honestly
+    const m = { _warmCt: 3.0, _errBias: 0.16 };
+    if (!FM._syncShouldLearn(m, 5.0)) throw new Error('setup: a settled element is not being corrected at all');
+
+    FM._noteSyncSeek(m);                       // …the drift seek fires
+    if (m._errBias != null) throw new Error('the seek kept the bias it learned at the old position');
+    // the tick seeds _warmCt from the post-seek element time, then asks whether to learn
+    const ct = 5.0;
+    if (m._warmCt == null) m._warmCt = ct;
+    if (FM._syncShouldLearn(m, ct))
+      throw new Error('the controller learns its bias from the very first sample after a hard seek — that is the spin-up sample SYNC_WARMUP exists to reject, and it is what makes the seek/trim/seek loop sustain itself');
+    // …and it must start correcting again once the element has genuinely settled
+    if (!FM._syncShouldLearn(m, ct + W + 0.01))
+      throw new Error('after ' + W + 's of element time the controller still refuses to correct — the fix has switched drift correction off instead of delaying it');
+
+    // CONTROL — an element that has NOT just seeked must be unaffected by any of this.
+    const n = { _warmCt: 3.0, _errBias: 0.16 };
+    if (!FM._syncShouldLearn(n, 3.0 + W + 0.01)) throw new Error('control: an ordinary settled element stopped being corrected');
+    if (FM._syncShouldLearn(n, 3.0 + W / 2)) throw new Error('control: an element inside its warm-up is being corrected, which is the original queue 148 fault');
+
+    // …and the three seek sites must agree, because the whole defect was one of them disagreeing.
+    const r = await fetch('../js/app.js');
+    if (!r.ok) throw new Error('could not read js/app.js (' + r.status + ')');
+    const src = await r.text();
+    if (!/plan\.action === 'seek'\)\s*\{[\s\S]{0,220}FM\._noteSyncSeek\(m\)/.test(src))
+      throw new Error('the drift seek in the sync tick no longer goes through FM._noteSyncSeek — it is the third of three seek sites, and the other two clear the warm-up as well as the bias');
+  });
+
   test('493: the recorded sync error has the latency bias removed, including right after a seek', { item: '493' }, async function () {
     if (typeof FM._syncBiasStep !== 'function') throw new Error('FM._syncBiasStep is missing — the bias step is not reachable, so a test would have to reimplement it and would only be testing itself');
     const LATENCY = 0.25;                       // 250ms of constant output latency, the thing v11.70 removed

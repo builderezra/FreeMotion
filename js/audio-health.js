@@ -65,13 +65,14 @@
     events: Object.create(null),
     firstAt: null, lastAt: null,
     clips: Object.create(null),
+    clockSrc: null,        // what the transport was running on WHILE it played — see the report
   };
   FM._audioHealth = S;                      // suite hook — see tests
 
   function reset() {
     S.playMs = 0; S.soundingMs = 0; S.stalls = 0; S.stalledMs = 0; S.worstStallMs = 0; S.restarts = 0;
     S.events = Object.create(null); S.firstAt = null; S.lastAt = null; S.refused = 0;
-    S.clips = Object.create(null);
+    S.clips = Object.create(null); S.clockSrc = null;
   }
 
   function bump(name, id) {
@@ -85,10 +86,16 @@
   /* Attached ONCE per element, lazily, the first time the tick reports on it. Doing it here rather
      than at element-creation time means nothing else in the app has to know this file exists — and a
      media element that never plays never pays for a listener it does not need. */
+  /* ⚠️ THE CLIP ID HAS TO BE PASSED IN (queue 849). This read `m.layerId || m.id || 'clip'`, and a
+     media record has NEITHER field — js/media.js keys its store by id and the record itself carries
+     none. So every clip in the project hashed to the literal string 'clip': one bucket, all stalls
+     merged, and the "per clip" line gated on `ids.length > 1` could never print. That is the line his
+     report most needed on 10 Sep, when he said "pretty much all of the audio files … glitch out". */
+  function idOf(m) { return (m && (m._ahId || m.layerId || m.id)) || 'clip'; }
   function wire(m) {
     if (!m || !m.el || m._ahWired) return;
     m._ahWired = true;
-    const id = m.layerId || m.id || 'clip';
+    const id = idOf(m);
     TROUBLE.forEach(function (name) {
       try {
         m.el.addEventListener(name, function () { if (FM.playing) bump(name, id); }, false);
@@ -118,7 +125,7 @@
     return true;
   }
   function refused(m, e) {
-    const id = (m && (m.layerId || m.id)) || 'clip';
+    const id = idOf(m);
     bump('play() refused: ' + ((e && e.name) || 'error'), id);
     S.refused = (S.refused || 0) + 1;
     if (!S.firstAt) S.firstAt = Date.now();
@@ -129,10 +136,12 @@
     refused: refused,
     /* Called from the playback tick for every element that is inside its clip window. `sounding` is
        the app's own view of whether this element ought to be audible right now. */
-    note: function (m, now, sounding) {
+    note: function (m, now, sounding, layerId) {
       try {
         if (!m || !m.el) return;
+        if (layerId && !m._ahId) m._ahId = layerId;
         wire(m);
+        if (S.clockSrc == null && FM.clockSource) { try { S.clockSrc = FM.clockSource(); } catch (_) {} }
         const el = m.el;
         if (S.firstAt == null) S.firstAt = now;
         S.lastAt = now;
@@ -143,10 +152,19 @@
         if (sounding && !el.muted && el.volume > 0 && !el.paused) m._ahSoundAt = now;
         if (was == null || at == null) return;
         const dt = now - at;
-        if (dt < STALL_WINDOW_MS || dt > 2000) return;   // too soon to judge, or the tab was away
+        if (dt > 2000) return;                           // the tab was away; that gap is not playback
+        /* ⚠️ "played" USED TO MEAN "TIME SPENT IN SLOW FRAMES" (queue 849). The 150ms floor below is
+           the anti-jitter rule for judging a STALL, and it used to sit above these two lines as well —
+           so on a healthy phone, where frames are 16ms apart, playMs and soundingMs never counted
+           anything at all, and the only time they moved was during a freeze. His report then read
+           "played 1.2s with sound: 1.2s / CUT OUT 1 time(s), 1.2s total" and looked like a clip that
+           was silent for its whole length, when what it actually recorded was ONE 1205ms gap between
+           two ticks. Every sample counts toward played/sounding now; only the stall judgement keeps
+           the floor, so "cut out 1.2s of the 40s you played" finally means what it says. */
         S.playMs += dt;
         if (!sounding || el.muted || !(el.volume > 0) || el.paused) return;
         S.soundingMs += dt;
+        if (dt < STALL_WINDOW_MS) return;                // too soon to judge a stall (frame jitter)
         const rate = (el.playbackRate > 0 ? el.playbackRate : 1);
         const expected = (dt / 1000) * rate;
         const moved = ct - was;
@@ -154,7 +172,7 @@
           S.stalls++;
           S.stalledMs += dt;
           if (dt > S.worstStallMs) S.worstStallMs = dt;
-          const id = m.layerId || m.id || 'clip';
+          const id = idOf(m);
           const c = S.clips[id] || (S.clips[id] = { stalls: 0, stalledMs: 0, ev: Object.create(null) });
           c.stalls++; c.stalledMs += dt;
         }
@@ -180,7 +198,7 @@
         if (seen == null || now - seen > 400) return;                       // was not audible just now
         if (!(Math.abs((m.el.currentTime || 0) - local) < 0.25)) return;     // moved — a seek, not a stop
         S.restarts++;
-        const id = m.layerId || m.id || 'clip';
+        const id = idOf(m);
         const c = S.clips[id] || (S.clips[id] = { stalls: 0, stalledMs: 0, ev: Object.create(null) });
         c.ev['restart'] = (c.ev['restart'] || 0) + 1;
       } catch (e) {}
@@ -206,17 +224,25 @@
       const ev = Object.keys(S.events);
       lines.push('events     ' + (ev.length ? ev.map(function (k) { return k + ' x' + S.events[k]; }).join(', ') : 'none'));
       const ids = Object.keys(S.clips);
-      if (ids.length > 1) {
+      if (ids.length) {
         lines.push('per clip   ' + ids.map(function (id) {
           const c = S.clips[id];
           return String(id).slice(-6) + ': ' + c.stalls + ' cut(s)';
         }).join(', '));
       }
-      lines.push('sync       seeks ' + (p.seeks | 0) + ', trims ' + (p.trims | 0) + ', rate writes ' + (p.rateWrites | 0));
+      /* `syncs` is the DENOMINATOR and was counted but never printed (queue 849): "trims 94" says
+         nothing without it — 94 of 96 ticks is a controller pinned against the stops, 94 of 3000 is
+         housekeeping. It was the first number I wanted when he pasted his report. */
+      lines.push('sync       ' + (p.syncs | 0) + ' ticks: seeks ' + (p.seeks | 0) + ', trims ' + (p.trims | 0) + ', rate writes ' + (p.rateWrites | 0));
       lines.push('timing     median |err| ' + (med == null ? '-' : Math.round(med * 1000) + 'ms') +
                  ', worst ' + (worstErr == null ? '-' : Math.round(worstErr * 1000) + 'ms'));
       lines.push('frames     drawn ' + (p.renders | 0) + ', dropped ' + (p.drops | 0));
-      lines.push('clock      ' + (FM.clockSource ? FM.clockSource() : '?'));
+      /* ⚠️ THE CLOCK WHILE IT PLAYED, not the clock now (queue 849). This asked FM.clockSource() at
+         REPORT time, and the report is written when playback stops — where the answer is always the
+         literal string "stopped". Every report ever pasted said "clock stopped", which is why his
+         said it too, and it destroyed the one field that would say whether the transport was running
+         on the audio clock or on wall time. */
+      lines.push('clock      ' + (S.clockSrc || (FM.clockSource ? FM.clockSource() : '?')));
       lines.push('drawing    ' + (FM.glWarp && FM.glWarp.available && FM.glWarp.available() ? 'GPU' : 'CPU (no WebGL)') +
                  ', ' + (FM.fxHealth ? FM.fxHealth().line : 'canvas fx ?'));   // v14.33 — one writer, see FM.fxHealth
       lines.push('device     ' + (navigator.userAgent || '').slice(0, 120));

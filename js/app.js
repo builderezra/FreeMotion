@@ -1670,6 +1670,40 @@ window.FM = window.FM || {};
   /* One step of the sync loop's bias tracking, as a function so the suite can drive the real thing
      across a seek (queue 493). `fresh` says the bias was just learned from this very sample, which
      makes the de-biased error exactly zero — a fact about the arithmetic, not about the audio. */
+  /* ⚠️ A HARD SEEK IS A SPIN-UP, AND A SPIN-UP SAMPLE MUST NOT BECOME THE BIAS (queue 848).
+   * SYNC_WARMUP exists because the first quarter-second of an element's playback reads as the sound
+   * being LATE — the element has not settled, so an error sampled there is not drift. Its own comment
+   * says seeding the controller from that sample "teaches a latency that is too small, and everything
+   * after it reads as the sound being late".
+   * A hard seek re-creates exactly that condition mid-clip, and it also throws the learned bias away
+   * (it belonged to the old position). But the warm-up guard was armed ONCE per element, off
+   * `_warmCt`, so by then it was long expired: the very next tick learned a fresh bias from the
+   * post-seek spin-up sample. The controller then chased an offset that was never there, trimmed
+   * every tick to close it, drifted past SYNC_HARD, seeked again, and re-poisoned the bias — a loop
+   * that sustains itself.
+   * That is the shape of the numbers on HIS phone (#844): 94 trims, 4 seeks, a median |err| of 158ms
+   * that never closes, and a worst of 357ms sitting just past SYNC_HARD (0.35s).
+   * ⚠️ AND TWO OF THE THREE SEEK SITES ALREADY GOT THIS RIGHT, which is what makes it a defect rather
+   * than a design choice: `FM.play()` and the loop-wrap both clear `_warmCt` AND `_errBias` together,
+   * the wrap one under a queue-823 comment saying the bias "describes a position that no longer
+   * exists". The drift seek is the third site, it cleared only the bias — and it is the only one of
+   * the three that fires over and over while he is listening.
+   * So a seek re-arms the warm-up, exactly as entering a clip does. The cost is that no correction is
+   * made for a quarter-second of element time after a seek, which is the same trade already accepted
+   * at every clip start, and cheaper than a correction aimed at a number that is not real. */
+  FM._noteSyncSeek = function (m) {
+    if (!m) return;
+    m._errBias = null;   // the offset we learned belonged to the old position
+    m._warmCt = null;    // …and the next sample is a spin-up, so do not learn from it either
+  };
+  /* The warm-up decision as one function, so the suite drives what ships rather than a copy of it. */
+  FM._syncShouldLearn = function (m, ct) {
+    if (!m) return false;
+    if (m._warmCt == null) return false;   // the tick seeds it on this same tick, so a null only reaches here from a direct caller: not yet warm is the safe answer
+    return (ct - m._warmCt) >= SYNC_WARMUP;
+  };
+  FM._SYNC_WARMUP = SYNC_WARMUP;   // suite seam: the test states the number it is asserting about
+
   FM._syncBiasStep = function (m, rawErr) {
     const fresh = (m._errBias == null || !isFinite(m._errBias));
     if (fresh) m._errBias = rawErr;
@@ -1872,7 +1906,7 @@ window.FM = window.FM || {};
                longer than that to become audible — and removes a pitch ramp on every single play. */
             const ct = m.el.currentTime || 0;
             if (m._warmCt == null) m._warmCt = ct;
-            if (ct - m._warmCt < SYNC_WARMUP) {
+            if (!FM._syncShouldLearn(m, ct)) {
               /* Note the base but correct NOTHING. Deliberately not a `return`: the volume/fade
                  reconcile below runs every tick, and skipping it here would freeze a fade for the
                  first quarter-second of every clip — trading an audible pitch ramp for an audible
@@ -1890,7 +1924,7 @@ window.FM = window.FM || {};
             const plan = FM.mediaSyncPlan(step.deBiased, base, m._syncAt == null ? Infinity : now - m._syncAt);
             if (plan.action === 'seek') {
               m.el.currentTime = local; m._syncAt = now; FM.playbackStats.seeks++;
-              m._errBias = null;   // the offset we learned belonged to the old position
+              FM._noteSyncSeek(m);
             } else if (plan.action === 'trim') FM.playbackStats.trims++;
             const baseMoved = Math.abs((m._baseRate == null ? base : m._baseRate) - base) > 1e-4;
             m._baseRate = base;
@@ -1932,7 +1966,7 @@ window.FM = window.FM || {};
              here — no seek, no trim, no dropped frame — and "it cuts in and out" is what that sounds
              like. js/audio-health.js does the judging; this line only reports the app's own view of
              whether this element ought to be audible right now. */
-          if (FM.audioHealth) FM.audioHealth.note(m, now, !m.el.muted && vol > 0);
+          if (FM.audioHealth) FM.audioHealth.note(m, now, !m.el.muted && vol > 0, layer.id);   // the id, so the report can say WHICH clip (queue 849)
         } catch (e) {}
       }
     });
@@ -2027,6 +2061,11 @@ window.FM = window.FM || {};
    * all. Both are read by js/perf-probe.js, so his own device can answer the question this entry
    * has been asking his ears. */
   FM.playbackStats = { syncs: 0, renders: 0, drops: 0, seeks: 0, trims: 0, rateWrites: 0, errs: [], errT: [] };
+    /* The health watcher resets HERE with the sync counters (queue 849). It never did: reset() had no
+       caller outside the suite, so played / with sound / CUT OUT / RESTARTED / events accumulated for the
+       whole session while the sync and frame numbers beside them described only the last play. One report,
+       two different windows, nothing saying so — and his 10 Sep paste is exactly that report. */
+    if (FM.audioHealth && FM.audioHealth.reset) FM.audioHealth.reset();
     _renderAvg = 0; _tierCooldown = 8; _dropFrom = 0;   // let the first few frames settle before judging the machine, with no verdict pending from before
     resizeCanvas();                                     // …and re-size the canvas into playback quality
     // Play is the user gesture that unlocks the AudioContext; route the effected clips before they start.

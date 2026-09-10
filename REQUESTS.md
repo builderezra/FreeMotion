@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 7 Sep at v16.09
+> ## 📌 WHAT I NEED FROM YOU — updated 10 Sep at v16.10
 >
-> **State:** v16.09 — the last four of the seven confirmed audit findings (#839–#842): resuming a killed export no longer changes the look of a Time Warp Scan at the join, and three places where the RECORD said something the code does not do are corrected, each with a test so they cannot rot back. Before that, v16.08 — **a phone-only bug worth knowing about: one old Glow could switch off every colour effect on its layer.** If a Glow was saved without a Radius (any older, shared or imported project — the loader drops a value it cannot read), your phone drew no halo AND no Grayscale, no Saturation, no Brightness on that layer, while your PC looked right. That is the "these effects don't work on mobile" complaint coming back through one saved effect. Fixed, and a glow that cannot draw a halo no longer takes the rest of the stack down with it. Also: opening Edit Points or Crop no longer throws away the zoom and pan you set up, and losing your finger mid-reorder no longer leaves the list scrolling and buzzing on its own. All three came out of re-checking the 5 Sep audit's own leads against today's code — 9 were already fixed, 3 were wrong, 7 were real (#836–#842). Before that, v16.07 — four more of the twenty findings fixed (#834): a caption cue's own effects now travel with a copied project instead of matting off the original, bulk Duplicate on the Templates/Elements tabs says what it skipped instead of doing nothing quietly, the + button's "which project?" menu is the projects grid's own list (no hidden drafts, the grid's order, and it says when it is short), and a corner drag on a layer scaled to nothing is refused instead of silently lifting a pop-in's whole animation off zero. Before that, v16.06 — the **CLIP OPTIONS / Done row is gone** from the phone's clip panel, on your word (#835). The panel still docks in the same place and covers the same area; the 49px the row was taking goes back to the option cards, so the grid starts at the top of the sheet and the bottom row is on screen where it used to run off. The way out is the arrow at the top left, which already says "Close clip options". That row was mine — it came out of #654, a stranger who could not find the way out of a menu, and I added it while you were away rather than asking. Before that, v16.05 — a second hunt, this time over the TIMELINE, found eight real bugs and all eight are fixed. Three matter to you directly: dragging a layer name to scroll died whenever a waveform finished loading (that is one of the things that reads as "laggy"); a refused sound-start was writing a diagnostic report to storage sixty times a second, which is a measured cause of the phone lag; and on the phone an ordinary swipe across a selected video clip was silently re-timing its media. Also: A/S/D no longer edit locked clips, trimming a captioned clip no longer slides every caption, and a clip in a hidden group is now silent in preview as it already was in the export. Before that, the effects-menu hunt: seven bugs found and fixed, plus two smaller ones today (a filter preview that stayed on a paused canvas after you left the tab, and a raised band that got pinned to nowhere if you resized the window while editing text). **Two questions are waiting for you on the unblock page:** where the Audio effects menu should sit on PC, and how heavy Comic Ink should be. Newest: the timeline divider now carries the open Effects menu with it, favouriting a filter row actually stars that filter (it starred a hidden internal type, so the Filters tab never showed a favourite), and **Comic Ink** was rendering as white-on-black line art though it promises flat colour with inked edges — Find Edges can now ink over a picture instead of replacing it, and I sent you the before/after with a lighter and a heavier option. Before that: the band's floor was read from a CSS variable that never resolves (a small drag DOWN detached the panel and opened a gap; a click on the timeline divider shrank the band on the next load), the keyboard drove the project underneath the open Effects menu (Escape deselected your layer, Tab changed layers, Delete deleted one), and the AUDIO menu was left out of every one of those rules. One thing needs YOUR call: the audio menu draws full-width over the timeline while the visual one sits in the inspector column — see #810. Before that, #804 done and reviewed by 21 agents: a detached band (Studio) stays detached when you tap a layer or open Effects/Filters, its handle is always there, and (v15.89) you can raise the band WITH the Effects menu open and the menu comes with it; a raised inspector now uses its height for the option cards. Also the PC half of the no-audio-export check (#604 / #215) done here: an audible clip exports with a real AAC track on this Mac; the two audio fixtures turn out to be silent for their first three seconds. Earlier: v15.87 — the clip keys moved off the timeline onto the left band's title line, 42×34 with icons that change with the playhead, hidden while the Effects view is open with A/S/D still working (#803, your words; picture at https://claude.ai/code/artifact/a60e6ecf-7801-4290-8dac-465b2359f77a). Earlier: v15.86 — PC layout, second pass of #778 clause 3: between 701 and 1160px wide (an iPad in landscape, a half-screen window) the version chip and cog sat on top of the selected layer's parent / delete / more buttons (#801); the far run now hangs in a band under the row there. Earlier: v15.85 — the Text category swept too (#482, all ten alive) and one fault found on the way: a negative Text Curve mirrored the word (#800), fixed. Earlier: v15.84 — the numeric sweep of the ten remaining effect categories at the phone's frame size (#482): 155 effects, every zero explained, one fix (#799, Electric Edges was invisible on photographs). Earlier: v15.83 — the by-eye Warping pass (#482): 29 effects at the phone's true frame size, one fix (#798, Chromatic Aberration was RGB Split under another name and now fringes toward the edges as its description says). Earlier: v15.82 — first pass of #778 clause 3 (bug testing as a user, at 380 with touch): nine screens through the add, text, clip-options, effects, settings and export flows, one finding (#797, the 1–9 badges on the clip-option tiles showed on a phone), fixed. Earlier: v15.81 — the by-eye pass over all 43 Colouring effects (#482, rule 16 pick): Halation was invisible on photographs and is fixed; two taste calls and the next category wait for your word at https://claude.ai/code/artifact/1865b863-9713-4230-a19e-fb132604d722. Earlier: v15.80 — ten new filters (Tropic, Popsicle, Hi-Vis, Polaroid, Kodachrome, Technicolor, Halo, Moonbeam, Arctic, Desert), judged on your own photographs; the sheet is at https://claude.ai/code/artifact/1b858b3a-3afe-47af-b7c7-6c2e7038e1a1 — say the name of any to drop. Earlier: v15.79 — eleven more effect ceilings raised by measurement (#482 round four: Ripple, Wave, Time Warp, Spiked Star, Mirror Tile, Tile Rotate, Tile Shift, Bulge, Turbulent Displace), and #606 closed by measurement at 380 and at your 440 (the handles line up to the half pixel and the ≡ is centred in its box); say LEFT / RIGHT / UP / DOWN if your eye still disagrees. Earlier: v15.78 — #765 and #772 closed: the A · S · D keycap rail sits on the seam on PC (the recommended look), the old buttons on the playhead are gone; say B or C for the other looks. Earlier: v15.77 — #760 closed: the people shapes are the airport-pictogram construction (B on the picture), a different construction rather than another nudge; say "people A / C / D" to change it. Earlier: v15.76 — #760: the PC shape tiles are bigger (the drawn 48) and their glyphs white on the coloured plate (the drawn D) — both the recommended options, one word changes either; the people shapes get a real second round next, with a picture. Earlier: v15.75 — #654: the phone's clip panel has a Done button now (option A under rule 16; say B or C to change it). Earlier: v15.74 — three of YOUR parked items closed in one go: #564 (the Outline & Shadows card heads each feature's rows), #763 (the PC skip buttons sit 12px clear of Play; the pill stays A), #674 (every uncaught error lands in Settings → Last error; four raw toasts speak plainly; two taste questions decided). Each is one word from being changed. Earlier: v15.73 — #484 closed: Silk Ribbon is a shape (Add → Shape → Silk ribbon), three outlines drawn and pictured, one word changes it. Earlier: v15.71 — the effects browser's Back effect name still on screen (in a description) is gone, and a test now refuses all the retired ones; the Silk Ribbon shape is next, with a picture. Earlier: v15.71 — the effects browser's Back no longer pays for thumbnails nobody can see, stock thumbnails build across frames instead of in one go, and your phone now measures Back itself (Settings → Your last Back from an effects category). Earlier: v15.70 — another of YOUR parked items closed without you: #429's add-row + can no longer move under a swipe (the svh fix was being overridden with one clip selected, and the stage is now pinned for the life of a touch). Earlier: v15.69 — #129's blank-clip report no longer lies about H.265 (it asked the wrong question), a file refused at load now writes it too, and a real HEVC .mov is checked in for the suite — the paste from your phone is still wanted, but it will now say something true. Earlier: v15.68 — the audit's last four live leads fixed with proofs: ten inspector values that lied about an absent key, a probe that called four temporal effects dead on every layer, a "never moves" badge over animated text, and a stuck clip drag that stayed where the lost pointer dropped it. Earlier: v15.67 — two of YOUR items that had been parked as waiting on you were not waiting on anything: #592 (the add-layer row overshooting by 1px — measured, cause found, fixed) and #624 (holding a layer to multi-select no longer pops the edit menu — decided under rule 16; say "open it" to overrule). Both left the unblock list. Earlier: v15.66 — four audit leads from the fortnight's releases fixed with proofs (a dead guard test, an invisible off-frame trim mark, the tracker box not following a zoom, a delete prompt naming an element that did not exist), the stale-ask banner made trustworthy again, and #750 closed by measuring it with a real mouse instead of waiting on you. Earlier: v15.65 — the five reports the unblock list asks you to paste (playback, export, project open, scrub, blank clip) now show in Settings from the HOME screen too, not only inside a project, and a project's Settings opens with a "Reports from this device → Show" row that jumps to them (#785); a song that refuses to start is now NAMED in Your last playback instead of being thrown away (#786). Earlier today: 39 effects that a hand-written or AI-written project could switch off by leaving a key out now render at their defaults; the dark look's intro lands on dark again; the lag item (#692) has had everything the numbers pointed at: 44 effects crop their readback, the radial blurs are bounded, and eight bounded effects lost their readback floor; and 44 effects now cost a tenth of what they did on a small layer (#692 route 2); yesterday's three oldest items in your own words are closed. The two oldest items in your own words are closed today: #539 (Squish squashes against other layers) and #553 (the half-drawn return and its black bar). You came back and said you suspected "delusion and lack of effort" — you were right to. Every release now has to PROVE its fix (ship.sh reverts the fix and requires the new test to fail), and re-proving the last 27 releases found two that claimed the opposite of what they did (fixed in v15.57, more findings being verified).
+> **State:** v16.10 — **you pasted your two phone reports and they were worth it.** The export one settles the silent-export complaints: your phone wrote a real sound track, peak 0.931, nothing dropped, so that fault does not reproduce on this build. The playback one found two things. First, a real bug in the thing that keeps the sound level with the picture: every time it gives up and jumps the audio into place, it immediately re-learns its offset from the jump itself, which is the one moment that reading is wrong, so it chases a number that is not there, jumps again, and repeats. That is what your 94 trims and 4 jumps in one second are. Fixed. Second, and this one is on me: the report itself could not be read. Five separate fields were wrong, including one that made a single 1.2-second freeze look like a clip that was silent for its whole length. All five fixed, so the NEXT report you send says what it means. Before that, v16.09 — the last four of the seven confirmed audit findings (#839–#842): resuming a killed export no longer changes the look of a Time Warp Scan at the join, and three places where the RECORD said something the code does not do are corrected, each with a test so they cannot rot back. Before that, v16.08 — **a phone-only bug worth knowing about: one old Glow could switch off every colour effect on its layer.** If a Glow was saved without a Radius (any older, shared or imported project — the loader drops a value it cannot read), your phone drew no halo AND no Grayscale, no Saturation, no Brightness on that layer, while your PC looked right. That is the "these effects don't work on mobile" complaint coming back through one saved effect. Fixed, and a glow that cannot draw a halo no longer takes the rest of the stack down with it. Also: opening Edit Points or Crop no longer throws away the zoom and pan you set up, and losing your finger mid-reorder no longer leaves the list scrolling and buzzing on its own. All three came out of re-checking the 5 Sep audit's own leads against today's code — 9 were already fixed, 3 were wrong, 7 were real (#836–#842). Before that, v16.07 — four more of the twenty findings fixed (#834): a caption cue's own effects now travel with a copied project instead of matting off the original, bulk Duplicate on the Templates/Elements tabs says what it skipped instead of doing nothing quietly, the + button's "which project?" menu is the projects grid's own list (no hidden drafts, the grid's order, and it says when it is short), and a corner drag on a layer scaled to nothing is refused instead of silently lifting a pop-in's whole animation off zero. Before that, v16.06 — the **CLIP OPTIONS / Done row is gone** from the phone's clip panel, on your word (#835). The panel still docks in the same place and covers the same area; the 49px the row was taking goes back to the option cards, so the grid starts at the top of the sheet and the bottom row is on screen where it used to run off. The way out is the arrow at the top left, which already says "Close clip options". That row was mine — it came out of #654, a stranger who could not find the way out of a menu, and I added it while you were away rather than asking. Before that, v16.05 — a second hunt, this time over the TIMELINE, found eight real bugs and all eight are fixed. Three matter to you directly: dragging a layer name to scroll died whenever a waveform finished loading (that is one of the things that reads as "laggy"); a refused sound-start was writing a diagnostic report to storage sixty times a second, which is a measured cause of the phone lag; and on the phone an ordinary swipe across a selected video clip was silently re-timing its media. Also: A/S/D no longer edit locked clips, trimming a captioned clip no longer slides every caption, and a clip in a hidden group is now silent in preview as it already was in the export. Before that, the effects-menu hunt: seven bugs found and fixed, plus two smaller ones today (a filter preview that stayed on a paused canvas after you left the tab, and a raised band that got pinned to nowhere if you resized the window while editing text). **Two questions are waiting for you on the unblock page:** where the Audio effects menu should sit on PC, and how heavy Comic Ink should be. Newest: the timeline divider now carries the open Effects menu with it, favouriting a filter row actually stars that filter (it starred a hidden internal type, so the Filters tab never showed a favourite), and **Comic Ink** was rendering as white-on-black line art though it promises flat colour with inked edges — Find Edges can now ink over a picture instead of replacing it, and I sent you the before/after with a lighter and a heavier option. Before that: the band's floor was read from a CSS variable that never resolves (a small drag DOWN detached the panel and opened a gap; a click on the timeline divider shrank the band on the next load), the keyboard drove the project underneath the open Effects menu (Escape deselected your layer, Tab changed layers, Delete deleted one), and the AUDIO menu was left out of every one of those rules. One thing needs YOUR call: the audio menu draws full-width over the timeline while the visual one sits in the inspector column — see #810. Before that, #804 done and reviewed by 21 agents: a detached band (Studio) stays detached when you tap a layer or open Effects/Filters, its handle is always there, and (v15.89) you can raise the band WITH the Effects menu open and the menu comes with it; a raised inspector now uses its height for the option cards. Also the PC half of the no-audio-export check (#604 / #215) done here: an audible clip exports with a real AAC track on this Mac; the two audio fixtures turn out to be silent for their first three seconds. Earlier: v15.87 — the clip keys moved off the timeline onto the left band's title line, 42×34 with icons that change with the playhead, hidden while the Effects view is open with A/S/D still working (#803, your words; picture at https://claude.ai/code/artifact/a60e6ecf-7801-4290-8dac-465b2359f77a). Earlier: v15.86 — PC layout, second pass of #778 clause 3: between 701 and 1160px wide (an iPad in landscape, a half-screen window) the version chip and cog sat on top of the selected layer's parent / delete / more buttons (#801); the far run now hangs in a band under the row there. Earlier: v15.85 — the Text category swept too (#482, all ten alive) and one fault found on the way: a negative Text Curve mirrored the word (#800), fixed. Earlier: v15.84 — the numeric sweep of the ten remaining effect categories at the phone's frame size (#482): 155 effects, every zero explained, one fix (#799, Electric Edges was invisible on photographs). Earlier: v15.83 — the by-eye Warping pass (#482): 29 effects at the phone's true frame size, one fix (#798, Chromatic Aberration was RGB Split under another name and now fringes toward the edges as its description says). Earlier: v15.82 — first pass of #778 clause 3 (bug testing as a user, at 380 with touch): nine screens through the add, text, clip-options, effects, settings and export flows, one finding (#797, the 1–9 badges on the clip-option tiles showed on a phone), fixed. Earlier: v15.81 — the by-eye pass over all 43 Colouring effects (#482, rule 16 pick): Halation was invisible on photographs and is fixed; two taste calls and the next category wait for your word at https://claude.ai/code/artifact/1865b863-9713-4230-a19e-fb132604d722. Earlier: v15.80 — ten new filters (Tropic, Popsicle, Hi-Vis, Polaroid, Kodachrome, Technicolor, Halo, Moonbeam, Arctic, Desert), judged on your own photographs; the sheet is at https://claude.ai/code/artifact/1b858b3a-3afe-47af-b7c7-6c2e7038e1a1 — say the name of any to drop. Earlier: v15.79 — eleven more effect ceilings raised by measurement (#482 round four: Ripple, Wave, Time Warp, Spiked Star, Mirror Tile, Tile Rotate, Tile Shift, Bulge, Turbulent Displace), and #606 closed by measurement at 380 and at your 440 (the handles line up to the half pixel and the ≡ is centred in its box); say LEFT / RIGHT / UP / DOWN if your eye still disagrees. Earlier: v15.78 — #765 and #772 closed: the A · S · D keycap rail sits on the seam on PC (the recommended look), the old buttons on the playhead are gone; say B or C for the other looks. Earlier: v15.77 — #760 closed: the people shapes are the airport-pictogram construction (B on the picture), a different construction rather than another nudge; say "people A / C / D" to change it. Earlier: v15.76 — #760: the PC shape tiles are bigger (the drawn 48) and their glyphs white on the coloured plate (the drawn D) — both the recommended options, one word changes either; the people shapes get a real second round next, with a picture. Earlier: v15.75 — #654: the phone's clip panel has a Done button now (option A under rule 16; say B or C to change it). Earlier: v15.74 — three of YOUR parked items closed in one go: #564 (the Outline & Shadows card heads each feature's rows), #763 (the PC skip buttons sit 12px clear of Play; the pill stays A), #674 (every uncaught error lands in Settings → Last error; four raw toasts speak plainly; two taste questions decided). Each is one word from being changed. Earlier: v15.73 — #484 closed: Silk Ribbon is a shape (Add → Shape → Silk ribbon), three outlines drawn and pictured, one word changes it. Earlier: v15.71 — the effects browser's Back effect name still on screen (in a description) is gone, and a test now refuses all the retired ones; the Silk Ribbon shape is next, with a picture. Earlier: v15.71 — the effects browser's Back no longer pays for thumbnails nobody can see, stock thumbnails build across frames instead of in one go, and your phone now measures Back itself (Settings → Your last Back from an effects category). Earlier: v15.70 — another of YOUR parked items closed without you: #429's add-row + can no longer move under a swipe (the svh fix was being overridden with one clip selected, and the stage is now pinned for the life of a touch). Earlier: v15.69 — #129's blank-clip report no longer lies about H.265 (it asked the wrong question), a file refused at load now writes it too, and a real HEVC .mov is checked in for the suite — the paste from your phone is still wanted, but it will now say something true. Earlier: v15.68 — the audit's last four live leads fixed with proofs: ten inspector values that lied about an absent key, a probe that called four temporal effects dead on every layer, a "never moves" badge over animated text, and a stuck clip drag that stayed where the lost pointer dropped it. Earlier: v15.67 — two of YOUR items that had been parked as waiting on you were not waiting on anything: #592 (the add-layer row overshooting by 1px — measured, cause found, fixed) and #624 (holding a layer to multi-select no longer pops the edit menu — decided under rule 16; say "open it" to overrule). Both left the unblock list. Earlier: v15.66 — four audit leads from the fortnight's releases fixed with proofs (a dead guard test, an invisible off-frame trim mark, the tracker box not following a zoom, a delete prompt naming an element that did not exist), the stale-ask banner made trustworthy again, and #750 closed by measuring it with a real mouse instead of waiting on you. Earlier: v15.65 — the five reports the unblock list asks you to paste (playback, export, project open, scrub, blank clip) now show in Settings from the HOME screen too, not only inside a project, and a project's Settings opens with a "Reports from this device → Show" row that jumps to them (#785); a song that refuses to start is now NAMED in Your last playback instead of being thrown away (#786). Earlier today: 39 effects that a hand-written or AI-written project could switch off by leaving a key out now render at their defaults; the dark look's intro lands on dark again; the lag item (#692) has had everything the numbers pointed at: 44 effects crop their readback, the radial blurs are bounded, and eight bounded effects lost their readback floor; and 44 effects now cost a tenth of what they did on a small layer (#692 route 2); yesterday's three oldest items in your own words are closed. The two oldest items in your own words are closed today: #539 (Squish squashes against other layers) and #553 (the half-drawn return and its black bar). You came back and said you suspected "delusion and lack of effort" — you were right to. Every release now has to PROVE its fix (ship.sh reverts the fix and requires the new test to fail), and re-proving the last 27 releases found two that claimed the opposite of what they did (fixed in v15.57, more findings being verified).
 >
 > ### 👉 [**Open the unblock list**](https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7)
 > Everything below is on that page, laid out so you can tap through it on your phone and send me one
@@ -1880,7 +1880,8 @@ better still, keep working inside the turn rather than parking work for a later 
       **The taste call in (c) is still yours and still unanswered** — see the question block.
 - [ ] **96 — Adding a SONG is really buggy and sometimes will not play at all, as the only clip.** His
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
-      ❓ASK: has a song failed to play since v13.88? If so, WHICH file — the format and rough length is enough. A fourth cause was found and fixed today; this is only open because I cannot prove it was yours.
+      **ANSWERED BY EZRA 10 Sep — he pasted the report this was waiting on; see #844.** No song is named, so the "which file" half is still unanswered — but he says the files are fine until effects are added, which points the same way as #845.
+      ❓ASK (still open, and narrowed 10 Sep: he says the files are fine until EFFECTS are added — #844 — so the question is now whether a song still fails with NO effects on it): has a song failed to play since v13.88? If so, WHICH file — the format and rough length is enough. A fourth cause was found and fixed today; this is only open because I cannot prove it was yours.
 
       ✅ **v12.36 — A THIRD CAUSE, AND IT PRODUCES YOUR SYMPTOM EXACTLY: the clip could be born with NO
       LENGTH.** Found by taking this entry's own lead seriously — that the suspect is an mp3 whose length
@@ -2032,6 +2033,7 @@ better still, keep working inside the turn rather than parking work for a later 
 
 - [ ] **95 — Phone: timeline still laggy AND audio does not play smoothly (tested with a voice memo).**
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **ANSWERED BY EZRA 10 Sep — he pasted the report this was waiting on; see #844.** The audio half now has numbers: one cut-out of 1205ms in 1.2s, 32 of 133 frames dropped, the clock 158ms out, and 94 sync trims in 1.2s. Chased in #845.
       ✅ **THE LAG HALF IS CLOSED 1 Sep — HE CONFIRMED IT.** Asked which phone complaints still feel
       bad, he did not tick the timeline lag or playback stutter. **The AUDIO half of this entry is NOT
       closed by that** — "audio does not play smoothly" is a different symptom from lag, and the question
@@ -9557,6 +9559,7 @@ better still, keep working inside the turn rather than parking work for a later 
       his standing words remain *"I know if you just go and do that urself ur gonna ruin every shape."*
 - [ ] **215 — ⚠️ EXPORTED VIDEO CAME OUT WITH NO AUDIO, though the clip had audio.** His words: *"I just
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **ANSWERED BY EZRA 10 Sep — he pasted the report this was waiting on; see #844.** His phone's export wrote a real AAC track (peak 0.931, no drops, no suppressions), so this no longer reproduces on his device on this build. What is left is whether that FILE plays with sound for him.
       ═══ 🚨 **28 AUG (v13.92) — THE WARNINGS WERE NEVER INVISIBLE BECAUSE THEY DID NOT FIRE. THEY WERE
       PAINTED BEHIND THE EXPORT.** ═══
       **This entry built FIVE audio-loss reports over five rounds** — `all-suppressed`, `mix-silent`,
@@ -26387,6 +26390,7 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **663 — Audio still cuts in and out on mobile (the popping itself seems fixed).** (28 Aug.)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **ANSWERED BY EZRA 10 Sep — he pasted the report this was waiting on; see #844.** "Cuts in and out" is confirmed by his own device: one 1205ms cut-out and one self-restart inside 1.2s of playing. His trigger, verbatim: the files sound fine until he adds EFFECTS. Chased in #845.
       His words, verbatim:
       > Seems fixed for the scratchy popping but audio still doesn’t play consistently on mobile, it cuts in and out
 
@@ -26441,7 +26445,7 @@ re-opened #480, which I had marked done and had not fixed.
       worse than none — it would send us chasing your phone for a fault that was not there.
       ❓ **So the ask stands and it is real:** play it on your phone until it cuts out, press stop, then
       **Settings → Your last playback → Copy**.
-        ⏸ **2 Sep — BUILT OUT UNTIL HE pastes "Your last playback"** (play on the phone until the sound cuts out, stop, Settings → Your last playback → Copy) — the same paste #95 and #96 wait on; the watcher that records it is tested both ways. Re-checked today for strict oldest-first: this line is what is left.
+        ✅ ~~2 Sep — BUILT OUT UNTIL HE pastes "Your last playback"~~ **PASTED 10 Sep, see #844 — this line is closed.** Was: (play on the phone until the sound cuts out, stop, Settings → Your last playback → Copy) — the same paste #95 and #96 wait on; the watcher that records it is tested both ways. Re-checked today for strict oldest-first: this line is what is left.
 
 - [x] **664 — Line height and Curve should BE effects, and add more text effects.** (28 Aug — answering
       #602's standing offer, and the answer is the opposite of what was offered.)
@@ -26882,6 +26886,7 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **677 — 🔴 STILL NO AUDIO IN AN EXPORT — and this time the whole soundtrack was TWO SOUND
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **ANSWERED BY EZRA 10 Sep — he pasted the report this was waiting on; see #844.** Same paste: TRACK WRITTEN, peak 0.931, none of the six loss paths fired. The two-sound-effects case he reported is not losing audio on this build.
       EFFECTS.** (30 Aug.)
       His words, verbatim:
       > also i just exported a video with the same normal settings as usual and got no audio again, not
@@ -26901,13 +26906,13 @@ re-opened #480, which I had marked done and had not fixed.
       **So "sound effects only" does not break the path by itself.** Whatever this is, it is his device.
       ⏳ **Waiting on your phone: a REAL-DEVICE report is the only thing that can name the cause, and
       nothing further can be built here until it arrives.**
-      ❓ASK: export something with sound on your phone, then Settings → "Your last export" → Copy, and paste it — I reproduced your exact setup (two sound effects, nothing else) on desktop and it produced a working audio track, so only your device's report can say which of the six loss paths it was.
+      ✅ ~~ASK: export something with sound on your phone, then Settings → "Your last export" → Copy, and paste it~~ **ANSWERED 10 Sep (#844).** Was: — I reproduced your exact setup (two sound effects, nothing else) on desktop and it produced a working audio track, so only your device's report can say which of the six loss paths it was.
       ❓ **THE ONE THING THAT SETTLES IT, and it is a paste rather than an answer:** export something
       with sound on your phone, then **Settings → "Your last export" → Copy**, and send it. That report
       was **fixed in v14.35** — before that it could hand back a PREVIOUS export's verdict, which is a
       large part of why three months of asking never resolved this. It is trustworthy now, and it names
       which of the six loss paths it was.
-        ⏸ **2 Sep — BUILT OUT UNTIL HE pastes "Your last export"** (export something with sound on the phone, Settings → Your last export → Copy) — trustworthy since v14.35, names which of the six loss paths it was; #215 and #604 wait on the same paste. Re-checked today for strict oldest-first: this line is what is left.
+        ✅ ~~2 Sep — BUILT OUT UNTIL HE pastes "Your last export"~~ **PASTED 10 Sep, see #844 — TRACK WRITTEN, peak 0.931, no drops, none of the six loss paths. This line is closed.** Was: (export something with sound on the phone, Settings → Your last export → Copy) — trustworthy since v14.35, names which of the six loss paths it was; #215 and #604 wait on the same paste. Re-checked today for strict oldest-first: this line is what is left.
 
 - [x] **678 — Stress-test the draggable ADD-LAYER row and the draggable TIMELINE — he says both are
       His words, verbatim:
@@ -27348,6 +27353,7 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **692 — 🔴 THE LAG HAS A MEASURED CAUSE: every pixel effect walks the WHOLE FRAME no matter how
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **ANSWERED BY EZRA 10 Sep — he pasted the report this was waiting on; see #844.** The playback paste gives the phone number this was missing: 32 of 133 frames dropped with the colour effects on the graphics chip. Feeds #845.
       ✅ **ROUND 3 — v14.82, three more kernels, and the list re-ranked first rather than trusted.**
       Re-measured every one of the 105 pixel kernels at its OWN defaults on a 180x150 subject in a
       1080x1920 plate — the actual shape of the lag, where the layer covers 1.3% of the frame — instead
@@ -29936,3 +29942,220 @@ re-opened #480, which I had marked done and had not fixed.
              #841 — the change is in the test file.
       2. [x] Nothing is added to the test on a guess — its own note explains why the assertion was left out. — v16.09,
              untouched.
+
+- [x] **843 — Two chats: this one runs non-stop, another one logs his requests, and he answers questions HERE.** ✅ DONE 10 Sep (v16.10) — the rule is in CLAUDE.md so the other chat reads it itself. (10 Sep, his words in full:)
+      > *"Okay so im going to use this chat for you to keep running non stop, then ill start another chat that logs
+      > requests and youll see them. but ill ansswer the questions in this chat"*
+      **STATUS: 🟢 SET UP — one change was needed, see below.**
+      His clauses:
+      1. [x] This chat keeps running non-stop. — the cron loop lives here; unchanged.
+      2. [x] A second chat logs his requests and this chat sees them. — ⚠️ **the second chat must append to
+             [INBOX.md](INBOX.md), NOT to REQUESTS.md.** Both chats have the SAME working tree open, so two sessions
+             editing a 30,000-line REQUESTS.md is how a request gets clobbered by a stale write — and losing a request
+             is the exact failure that file exists to prevent. INBOX.md is append-only by design, with one writer each
+             way, and this chat is the only thing that empties it. Written into CLAUDE.md so the other chat reads the
+             rule itself rather than needing to be told.
+      3. [x] He answers questions in this chat. — the unblock page still works and still remembers what he picks, but
+             it is no longer the only way in; an answer typed here is worth the same.
+      ⤷ **What this changes for the loop:** every tick starts with `git pull` + INBOX drain (it already did), and the
+        drain is now the main way his words arrive, not the exception.
+
+- [x] **844 — HE PASTED BOTH DEVICE REPORTS, and said what triggers the audio glitch.** (10 Sep) ✅ LOGGED; the work it unblocks is #845.
+      **This is the paste eleven parked items were waiting on.** Both reports are from his iPhone (iOS 18.7,
+      Safari 26.6.1), a minute apart on 9 Sep. Kept verbatim, in full, because every number in them is evidence.
+      His words with them, verbatim:
+      > *"Pretty much all of the files audio files are added sounded fine deciding effects to them. They start to
+      > glitch out on my phone."*
+      Read as: the audio files sound fine until he adds EFFECTS to them, and then they glitch on the phone.
+
+      ```
+      FreeMotion export report
+      when       2026-09-09T23:29:35.136Z
+      file       Project 27.mp4  27 KB
+      video      1080x1080 @60fps, 2.05s
+      audio      TRACK WRITTEN
+      dropped    no
+      mix peak   0.931
+      drops      []
+      suppressed []
+      AAC encode AudioEncoder present
+      canvas fx  canvas filter MISSING — the 9 colour effects run on the graphics chip instead, and DO work
+      resumed    no (rendered start to finish)
+      protected  yes, the whole way
+      device     Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6.1 Mobile/15
+      ```
+
+      ```
+      FreeMotion audio report
+      when       2026-09-09T23:28:03.658Z
+      played     1.2s   with sound: 1.2s
+      CUT OUT    1 time(s), 1.2s total, worst 1205ms
+      RESTARTED  1 time(s)   (the sound stopped on its own and the app started it again)
+      events     none
+      sync       seeks 4, trims 94, rate writes 9
+      timing     median |err| 158ms, worst 357ms
+      frames     drawn 101, dropped 32
+      clock      stopped
+      drawing    GPU, canvas filter MISSING — the 9 colour effects run on the graphics chip instead, and DO work
+      device     Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6.1 Mobile/15
+      ```
+
+      **What they say before anyone interprets them** (each line traced to the code that writes it, under #845):
+      · **The export had sound.** `audio TRACK WRITTEN`, `mix peak 0.931`, no drops, no suppressions, AudioEncoder
+        present, not resumed. So the six loss paths #677 was written to distinguish did not fire on his device.
+      · **Playback is genuinely bad, and measured.** In 1.2s of playing: the sound cut out ONCE for the WHOLE
+        1.2s and the app restarted it by itself; 32 of 133 frames dropped; the audio clock was a median 158ms
+        out and 357ms at worst; and the sync loop wrote **94 trims and 9 rate changes in 1.2 seconds**.
+      · **His device is the no-`ctx.filter` device.** Both reports say so. That is the exact path #836 was fixed
+        in on 7 Sep, so that fix lands on his phone and not just in theory.
+      · ⚠️ **One number to check, not to conclude from:** 27 KB for 2.05s at 1080x1080@60fps is very small. It
+        may be honest for a near-static scene; it may also mean the VIDEO track is nearly empty. #845 checks it.
+
+- [ ] **845 — PHONE: audio glitches once EFFECTS are added to a sound (hunt HIGH #103, from HIS report)** (10 Sep)
+      **This is his own trigger, in his words** (full paste in #844): *"Pretty much all of the files audio files are
+      added sounded fine deciding effects to them. They start to glitch out on my phone."*
+      **And his device measured it:** in 1.2s of playing, the sound cut out once for 1205ms and the app restarted it
+      by itself; the sync controller wrote 94 trims, 9 rate writes and 4 seeks; the clock ran a median 158ms out and
+      357ms at worst; 32 of 133 frames dropped. `events: none`, so nothing was backgrounded or interrupted.
+      **Why his sentence narrows it so hard:** a layer with NO audio effects is never routed through Web Audio and
+      keeps the native path. Add an effect and the element is pulled into `el → MediaElementSource → chain →
+      speakers` (js/audio-fx-live.js), which the file's own header calls irreversible. So "fine until effects" points
+      at exactly one subsystem, on the one device none of us can debug on.
+      1. [x] Explain every number in his report from the code, refuted rather than assumed. — 10 Sep. Five readers,
+             then a refuter each; 13 of 17 agents stalled on a loaded machine, so the refutation stage did NOT run and
+             every reading was verified BY HAND against the code instead. That is the same failure that produced the
+             5 Sep audit's unrefuted list, and the same answer: verify before acting.
+      2. [x] Fix what the reading proves. — v16.10, two faults, both proven: **#848** (the drift seek poisons its own
+             controller) and **#849** (five unreadable fields in the report itself).
+      3. [ ] ⏸ **BUILT OUT UNTIL HE plays a clip WITH effects on it and pastes "Your last playback" again.** Not a
+             stall for its own sake: the report he sent was measured by the broken instrument, so its top half cannot
+             separate "the sound cut out" from "the main thread froze for 1205ms" — and those need opposite fixes. The
+             instrument is fixed as of v16.10, so one more paste answers it. Everything the code alone could settle is
+             already done and shipped.
+             ❓ASK: play something with audio EFFECTS on it until it glitches, then Settings → Your last playback → Copy.
+
+- [ ] **846 — Standing instruction, 10 Sep (verbatim):**
+      > *"When ur done or able to just do some bug hunting and you can also work on effects to improve them and add
+      > more filters also"*
+      Same three things as #690 and #778 clauses 3–5, said again while the audio work was running, and explicitly
+      NOT an interruption: *"when ur done or able"*. So it is what the loop does whenever his own queue is clear.
+      ⚠️ **This entry is a receipt, not a queue item — it never closes, and it must not hold the list.** It is the
+      same instruction as #690 and #778 clauses 3–5. What it produces gets its own number, and those are what the
+      queue actually carries.
+      1. [ ] Bug hunting — the pattern that works here is lenses plus a refuter per finding, and every confirmed one
+             gets its own numbered item before it gets a fix.
+             ▸ **10 Sep: #848 and #849**, both from reading his own pasted reports against the code. And the honest
+               note: 13 of 17 agents stalled on a loaded machine, so the refuter stage did not run and every reading
+               was verified by hand instead.
+      2. [ ] Improve effects — #482 is the big one and waits on him naming the next category to judge by eye; the
+             numeric sweeps do NOT wait on him and can carry on.
+      3. [ ] Add more filters — ten went in at v15.80, judged on his own photographs. Same method: build them, render
+             them on real pictures, show him the sheet, let him drop any by name.
+
+- [ ] **847 — Keep the loop running non-stop, ticking every minute.** (10 Sep, his words in full, two messages:)
+      > *"I dont want uu to stop working, keep a loop going non stop"*
+      > *"ticking every mminute"*
+      ⚠️ **AND IT WAS NOT RUNNING WHEN HE ASKED.** `CronList` returned "No scheduled jobs" — the one-minute cron
+      built for #778 clause 1 on 5 Sep was gone. It is session-only and in-memory by construction: it dies with the
+      chat, and it auto-expires after 7 days. So the loop had been stopped for some part of the last five days and
+      nothing in the repo could have noticed, because a dead scheduler produces silence, not an error.
+      1. [x] Re-armed 10 Sep, every minute, job 1f8cef41. The tick prompt carries no knowledge of its own: it pulls,
+             drains INBOX.md, runs `tools/tick.sh`, and reads `tools/next.sh` for what is next.
+      2. [ ] ⏸ **BUILT OUT UNTIL HE says whether he wants a cloud routine as the backstop.** The honest limit, which
+             he should know: I cannot make this survive the chat closing. Cron jobs are
+             held in the session, not on disk. If this chat is closed or the app restarts, the loop stops until a new
+             FreeMotion chat re-arms it. The only real fix is a scheduler outside the session; the nearest thing that
+             exists today is the cloud `/schedule` routine, which would run as its own agent rather than in this chat.
+             ❓ASK: want me to set up a cloud routine as the backstop, so the loop survives this chat being closed?
+      3. [x] **First thing every tick checks is INBOX.md**, because #843 makes that the way his words arrive now.
+             ✅ Proven on its first real use, 10 Sep: the logging chat wrote two requests into INBOX.md, `tools/next.sh`
+             REFUSED to hand out any work until they were drained, and both reached this file as #850 and #851 inside
+             one tick. Nothing was interrupted, which is exactly what he asked for.
+
+- [x] **848 — The drift seek poisons the sync controller, and it is the one seek that fires while he listens (hunt HIGH #104)** (10 Sep) ✅ DONE v16.10.
+      **Found by reading HIS numbers against the code** (#844): 94 trims, 4 seeks, a median sync error of
+      158ms that never closes, and a worst of 357ms sitting just past the 350ms hard-seek threshold.
+      **The mechanism, and two of three sites already had it right.** `SYNC_WARMUP` exists because the first
+      quarter-second of an element's playback reads as the sound being late; its own comment says learning
+      the controller's offset there "teaches a latency that is too small, and everything after it reads as
+      the sound being late". A hard seek re-creates that condition mid-clip and throws the learned offset
+      away — but the warm-up was armed once per element, so by then it had long expired, and the very next
+      tick learned a fresh offset from the post-seek spin-up. The controller then chases a number that is
+      not there, trims every tick, drifts past the hard threshold, seeks again, and re-poisons itself.
+      `FM.play()` and the loop wrap both clear the warm-up AND the offset together; the drift seek cleared
+      only the offset, and it is the only one of the three that fires over and over during playback.
+      1. [x] A drift seek re-arms the warm-up, exactly as entering a clip and wrapping a loop already do. — v16.10
+      2. [x] A test that FAILS without it, with two controls: a settled element must still be corrected, and
+             an element inside its warm-up must still be left alone. — v16.10
+
+- [x] **849 — His audio report could not be read, and I nearly acted on it anyway (hunt HIGH #105)** (10 Sep) ✅ DONE v16.10.
+      **This is the instrument, not the app, and that makes it worse rather than better:** the report is the
+      only window onto his phone, eleven items wait on it, and five separate things in it were wrong.
+      1. [x] **"played 1.2s with sound: 1.2s" did not mean he played for 1.2s.** The 150ms anti-jitter floor
+             guarded the played/sounding totals as well as the stall judgement, so on a healthy phone, where
+             frames are 16ms apart, those two fields counted NOTHING and only moved during a freeze. All four
+             numbers in his top line were one 1205ms sample. Every sample counts now; the floor still guards
+             the judgement. — v16.10
+      2. [x] **The counters never reset**, because `reset()` had no caller outside the suite. So played, cut
+             out, restarted and events accumulated for the whole session while the sync and frame numbers
+             printed beside them described only the last play: one report, two windows, nothing saying so.
+             `FM.play()` resets it now, exactly as it already resets the sync counters. — v16.10
+      3. [x] **It could never say WHICH clip.** It read `m.layerId || m.id`, and a media record carries
+             neither — the store is keyed by id and the record holds none — so every clip hashed to the
+             literal string 'clip', one bucket, and the per-clip line was gated on there being more than one.
+             That is the line his 10 Sep message most needed: *"pretty much all of the audio files"*. — v16.10
+      4. [x] **"trims 94" had no denominator.** `syncs` was counted and never printed. 94 of 96 ticks is a
+             controller pinned against the stops; 94 of 3000 is housekeeping. — v16.10
+      5. [x] **"clock stopped" was printed by every report ever pasted**, because it asked what the clock was
+             at REPORT time and the report is written when playback has stopped. It records what the transport
+             was actually running on while it played. — v16.10
+      ⤷ **What this costs:** the numbers in #844 stay true — one 1205ms freeze, 94 trims, 158ms median — but
+        "cut out for the whole 1.2s" was my reading of a broken field, not his phone's finding. The next
+        report he sends will be readable, and #845 waits for it rather than guessing from this one.
+
+- [x] **850 — The other chat's job is ONLY to log; this chat does the work and is never interrupted.** (10 Sep, via INBOX from the logging chat, his words in full:) ✅ SET UP.
+      > *"Okay so your job in this chat ONLY is to log requests, all the actual work is being done in another chat, this way the other chat never gets interupted"*
+      Same arrangement as #843, said to the other chat this time. Already structural: CLAUDE.md carries the rule
+      (the logging chat writes ONLY to INBOX.md, never REQUESTS.md, never code), `tools/next.sh` REFUSES to hand out
+      any work while INBOX.md is undrained, and the one-minute loop drains it first. It worked on its first use —
+      the two requests below arrived that way and reached this file within one tick.
+
+- [ ] **851 — Move the buttons in the right-hand rail that are NOT view options into their own pop-up menu.** (10 Sep, via INBOX, with a screenshot he marked up in red. His words, verbatim and in full:)
+      > *"Put the red circles buttons in a new pop up menu on the left side. On pc it will be on the right side next
+      > to where the view options button is.*
+      > *This will essentially work the same as the view options button that pops up on the right side, but it will be
+      > good coz a lot of buttons in there aren't view options. And it will make that layer in the centre of the screen
+      > have an even amount of buttons. While on mobile the bar will pop up above the button on the left, on pc it will
+      > also appear above it but on the right side as it should"*
+      **STATUS: 🟢 READY to build the mechanism; the ICON is a design call and he sees options first (his standing rule).**
+      **JUMPED: v16.10 (#848 and #849) shipped ahead of this, and here is the reason in full so he can disagree with
+      it.** Both were already built and tested when this request arrived, and both came out of HIS OWN pasted reports
+      (#844), so they are his words too. #849 is the one that decides it: it repairs the audio report itself, and #845
+      is currently asking him to paste that report again. Holding the repair behind this feature would mean his next
+      paste is measured by the same broken instrument — five wrong fields, including one that makes a 1.2-second
+      freeze look like a clip silent for its whole length. That is a day lost for nothing. This entry is next, and
+      nothing else goes in front of it.
+      ⚠️ **The screenshot itself cannot be read from this chat — the logging chat's description IS the record**, and it
+      is detailed enough to build from. Phone, portrait, v16.09, "Project 27", a blue heart on the canvas, playhead at
+      00:05:00, two layer rows.
+      **Circled in the vertical rail down the RIGHT of the canvas, top to bottom:**
+      1. [ ] the zoom stepper — **−**, **1×**, **+** (all three, one circle)
+      2. [ ] the **loop / repeat arrows** icon (circled, with an arrow drawn at it)
+      3. [ ] the **magnet** icon (lit teal/active in the shot)
+      4. [ ] the bottom group of three together: **[|**, **|]**, **✕**
+      **NOT circled, so they stay:** the **grid** (3×3) icon and the **⌃** chevron at the foot of the rail. The grid
+      genuinely is a view option.
+      **Where it goes:** several red arrows converge on the **⧉ button at the far left of the transport row** (the row
+      with ⏮ 00:05:00 ⏭ ↺ ↻ ⛶). Phone → button on the LEFT, bar pops up ABOVE it. PC → button on the RIGHT beside the
+      view-options button, bar also above it.
+      **His reasoning, his terms:** the rail is called view options and a lot of what is in it is not one; and moving
+      them evens up the button count on that centre row.
+      His clauses:
+      5. [ ] The four circled groups leave the rail and live in the new pop-up.
+      6. [ ] It behaves exactly like the existing view-options pop-up.
+      7. [ ] Phone: button left, bar above it. PC: button right beside view options, bar above it.
+      8. [ ] The grid and the chevron stay where they are.
+      ❓ASK (both are guesses I refuse to make silently):
+      · **(a)** is the new button the EXISTING **⧉** button, or a NEW button beside it? His arrows land on ⧉ but he
+        never says to replace it, and ⧉ is a control that already does something.
+      · **(b)** the icon and label. Drawn options come to him before anything ships — his standing rule, #545.

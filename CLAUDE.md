@@ -62,6 +62,13 @@ by remembering:
   typed yesterday feels more urgent than something from three weeks ago. The escape hatch is a
   declaration, not a flag — write **`JUMPED: <reason>`** in the skipped entry and it stops holding the
   queue, which turns a silent reordering into a line he can read.
+- **A `queue NNN` in the newest POLISH-LOG line must be an item THIS release closes, or ship.sh refuses.**
+  Added 7 Sep, after it cost three ship cycles in one day. `prove.sh` counts every `queue NNN` in that line and
+  demands one catching test for each — which is right — but a line that mentions an OLDER item while EXPLAINING
+  the new one ("the reset queue 742 removed", "queue 754's claim") was counted too, and the release was refused
+  for a proof it never claimed to owe. The convention was already there — `#NNN` refers, `queue NNN` claims — and
+  nothing enforced it, so it was remembered, and remembering failed. The gate reads the item's own entry for the
+  version being shipped, fires in one second instead of after the proof step, and says which form to use.
 - **`python3 tools/_classify.py` self-tests the queue classifier, and ship.sh refuses if any rule fails.**
   Every rule in it cures a real bug — an answered item gone unreachable, a hold that would not lift, five
   real items hidden by a phrase in a note about them — and nothing else in the repo would notice if one
@@ -244,6 +251,20 @@ So, structurally:
    because I verified in a layout where the cog is a different element. This is the v7.79 lesson
    repeating verbatim: *measure the layout you ship to, not the one you have open.* For a PC report
    that means a desktop width AND the Studio layout, not Classic.
+
+## ⚠️ IF YOU ARE NOT THE LOOP SESSION, LOG TO INBOX.md — NEVER TO REQUESTS.md
+
+His arrangement from 10 Sep (#843), in his words: *"im going to use this chat for you to keep running non stop, then
+ill start another chat that logs requests and youll see them. but ill ansswer the questions in this chat"*.
+
+So there are two sessions with the SAME working tree open: a long-running one that does the work, and a short one whose
+whole job is to write down what he says. **The logging session appends his words to `INBOX.md` and stops there.** It
+does not edit REQUESTS.md, does not renumber, does not tick anything — two sessions editing a 30,000-line file is how a
+request gets clobbered by a stale write, and losing a request is the precise failure REQUESTS.md exists to prevent.
+INBOX.md is append-only and has one writer each way, which makes a conflict impossible rather than unlikely.
+
+**Verbatim still applies to the inbox entry** — paste what he said, in full, before paraphrasing. The loop session moves
+it into REQUESTS.md with a number on its next tick, which is every minute.
 
 ## ⚠️ DRAIN [INBOX.md](INBOX.md) BEFORE EVERY LOOP ITEM
 
