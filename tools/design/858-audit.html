@@ -1,0 +1,47 @@
+<!doctype html><meta charset="utf-8"><title>858 ingredient audit</title>
+<body style="background:#0f1420;color:#cde;font:11px monospace"><pre id="out">…</pre>
+<iframe id="a" src="../../index.html" style="position:fixed;left:-3000px;width:900px;height:700px;border:0"></iframe>
+<script>
+/* queue 858 clause 4 — "fix the CLASS, not just the instances". A filter is a recipe of effects, so an
+   effect change can silently kill a filter. This renders EVERY filter's photo with each ingredient on
+   its own and reports the ones that change nothing: a dead ingredient in a recipe. */
+document.getElementById('a').addEventListener('load', function () {
+  var w=document.getElementById('a').contentWindow, n=0;
+  (function wait(){ if(!(w.FM&&w.FM.FILTERS&&w.FM.renderScene&&w.FM.fxRegistry)){ if(n++>500) return; return setTimeout(wait,50);} setTimeout(function(){run(w).catch(function(e){document.getElementById('out').textContent='threw '+(e&&e.stack||e);});},900); })();
+});
+function loadPhoto(w,key){ return new Promise(function(ok,bad){ var im=new w.Image(); im.onload=function(){ok(im);}; im.onerror=function(){bad(new Error(key));}; im.src='../../fx-art/'+key+'.jpg?v=1'; }); }
+async function run(w){
+  var FM=w.FM, doc=w.document, S=160, photos={}, lines=[], dead=[];
+  var subjectOf=(FM.fxThumbs&&FM.fxThumbs._filterSubject)?FM.fxThumbs._filterSubject:function(){return 'pair';};
+  async function px(key, effects){
+    if(!photos[key]) photos[key]=await loadPhoto(w,key);
+    var im=photos[key], side=Math.min(im.naturalWidth,im.naturalHeight);
+    var c=doc.createElement('canvas'); c.width=S; c.height=S;
+    c.getContext('2d').drawImage(im,(im.naturalWidth-side)/2,(im.naturalHeight-side)/2,side,side,0,0,S,S);
+    var mid='_au_'+key; FM.media.set(mid,{kind:'image',el:c,width:S,height:S,duration:0}); FM.media.pin(mid);
+    var l=FM.makeLayer('image',{x:S/2,y:S/2,start:0,duration:2}); l.id=mid; l.effects=effects||[];
+    var o=doc.createElement('canvas'); o.width=S; o.height=S;
+    FM.renderScene(o.getContext('2d'),{project:{width:S,height:S,fps:30,duration:2,background:'#000'},layers:[l]},0.001);
+    return o.getContext('2d').getImageData(0,0,S,S).data;
+  }
+  function diff(a,b){ var d=0,n=0; for(var i=0;i<a.length;i+=4){ d+=Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2]); n++; } return d/n/3; }
+  for (var i=0;i<FM.FILTERS.length;i++){
+    var f=FM.FILTERS[i], subj;
+    try{ subj=subjectOf(f.id)||'pair'; }catch(e){ subj='pair'; }
+    var base=await px(subj,[]);
+    var box=FM.filters.makeInstance(f.id);
+    var whole=diff(base, await px(subj,[box]));
+    var kids=(box&&box.effects)||[], per=[];
+    for (var j=0;j<kids.length;j++){
+      var solo=JSON.parse(JSON.stringify(kids[j]));
+      var d=diff(base, await px(subj,[solo]));
+      per.push(kids[j].type+'='+d.toFixed(2));
+      if (d < 0.05) dead.push(f.name+' ('+f.id+'): '+kids[j].type+' does NOTHING on '+subj);
+    }
+    lines.push((whole<0.5?'⚠️ ':'   ')+f.name.padEnd(16)+' whole='+whole.toFixed(2)+'  ['+per.join(' ')+']');
+    document.getElementById('out').textContent = lines.join('\n');
+  }
+  var txt = lines.join('\n') + '\n\n=== DEAD INGREDIENTS (' + dead.length + ') ===\n' + dead.join('\n');
+  document.getElementById('out').textContent = txt; window.__done = txt;
+}
+</script>

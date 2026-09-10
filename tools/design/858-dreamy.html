@@ -1,0 +1,38 @@
+<!doctype html><meta charset="utf-8"><title>dreamy probe</title>
+<body style="background:#0f1420;color:#cde;font:12px monospace"><pre id="out">…</pre>
+<iframe id="a" src="../../index.html" style="position:fixed;left:-3000px;width:900px;height:700px;border:0"></iframe>
+<script>
+document.getElementById('a').addEventListener('load', function () {
+  var w=document.getElementById('a').contentWindow, n=0;
+  (function wait(){ if(!(w.FM&&w.FM.filters&&w.FM.renderScene&&w.FM.fxRegistry)){ if(n++>500) return; return setTimeout(wait,50);} setTimeout(function(){run(w);},900); })();
+});
+function run(w){
+  var FM=w.FM, doc=w.document, S=200, out=[];
+  var im=new w.Image();
+  im.onload=function(){
+    var side=Math.min(im.naturalWidth,im.naturalHeight);
+    var c=doc.createElement('canvas'); c.width=S; c.height=S;
+    c.getContext('2d').drawImage(im,(im.naturalWidth-side)/2,(im.naturalHeight-side)/2,side,side,0,0,S,S);
+    FM.media.set('_dz',{kind:'image',el:c,width:S,height:S,duration:0}); FM.media.pin('_dz');
+    function shoot(effects){
+      var l=FM.makeLayer('image',{x:S/2,y:S/2,start:0,duration:2}); l.id='_dz'; l.effects=effects||[];
+      var o=doc.createElement('canvas'); o.width=S; o.height=S;
+      FM.renderScene(o.getContext('2d'),{project:{width:S,height:S,fps:30,duration:2,background:'#000'},layers:[l]},0.001);
+      return o.getContext('2d').getImageData(0,0,S,S).data;
+    }
+    function diff(a,b){ var d=0,n=0; for(var i=0;i<a.length;i+=4){ d+=Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2]); n++; } return (d/n/3).toFixed(2); }
+    var base=shoot([]);
+    var mk=function(t,p){ var e=FM.fxRegistry.makeInstance(t); if(!e) return null; if(p) Object.keys(p).forEach(function(k){e.params[k]=p[k];}); return e; };
+    var recipe=[['glow',{radius:22,passes:2}],['saturate',{amount:1.1}],['lightglow',{amount:0.55,radius:14,threshold:55}]];
+    recipe.forEach(function(r){ var e=mk(r[0],r[1]); out.push(r[0]+' alone → mean channel diff ' + (e?diff(base,shoot([e])):'NO INSTANCE')); });
+    var all=recipe.map(function(r){return mk(r[0],r[1]);}).filter(Boolean);
+    out.push('all three (loose) → ' + diff(base,shoot(all)));
+    var box=FM.filters.makeInstance('dreamy');
+    out.push('the FILTER container → ' + diff(base,shoot([box])));
+    out.push('container shape: ' + JSON.stringify({type:box.type, enabled:box.enabled, n:(box.effects||[]).length, kids:(box.effects||[]).map(function(k){return k.type+'('+JSON.stringify(k.params)+')';})}).slice(0,600));
+    document.getElementById('out').textContent = out.join('\n');
+    window.__done = out.join('\n');
+  };
+  im.src='../../fx-art/dusk.jpg?v=1';
+}
+</script>

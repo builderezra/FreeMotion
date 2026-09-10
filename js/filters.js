@@ -92,9 +92,23 @@ window.FM = window.FM || {};
       desc: 'Worn tape: colour bleeding sideways, the picture wobbling, tracking drifting through it.',
       effects: [e('vhstape', { amount: 0.7, chromableed: 30, wobble: 4 }),
                 e('scanlines', { amount: 0.32, spacing: 3 })] },
+    /* ⚠️ `glow` IS DEAD IN A FILTER, AND HE FOUND IT (queue 858). His words: "I noticed that the dreamy
+       below effect is completely fucked and there might be a couple of others like that."
+       He was right, and it is a CLASS rather than three accidents. `glow` is a stacked drop-shadow: it
+       blurs the layer's ALPHA, fills it with the glow colour and composites it BEHIND the layer. On a
+       shape or a line of text that is the halo you want. On a photograph — which is what a FILTER is
+       applied to — the alpha is a solid rectangle, so the halo is entirely behind an opaque image and
+       can never be seen. Measured across all 56 filters, one ingredient at a time: `glow` contributed a
+       mean channel difference of 0.00 in every recipe that used it (Dreamy Bloom, CRT Monitor, Thermal
+       Camera) while every other ingredient in the app moved the picture.
+       The bloom a photograph wants is `lightglow` (bright areas spreading) or `softglow`. So the three
+       recipes ask for that instead, and tests/tests.js now renders every filter's ingredients one by one
+       and fails if any of them changes nothing — which is what stops the next effect change from quietly
+       killing a filter. */
     { id: 'crt', name: 'CRT Monitor', section: 'retro',
       desc: 'An old television: scanlines, a shadow mask, and the soft bloom a phosphor screen gives everything.',
-      effects: [e('glow', { radius: 10 }), e('crt', { amount: 0.7, scanline: 0.5, mask: 0.22 })] },
+      // the phosphor bloom is a LIGHT bloom, not a halo behind the picture (queue 858)
+      effects: [e('lightglow', { amount: 0.4, radius: 10, threshold: 55 }), e('crt', { amount: 0.7, scanline: 0.5, mask: 0.22 })] },
     { id: 'super8', name: 'Super 8', section: 'retro',
       desc: 'Home-movie film — warm, grainy, light spilling in at the edges.',
       effects: [e('saturate', { amount: 1.15 }), e('contrast', { amount: 1.08 }),
@@ -109,8 +123,11 @@ window.FM = window.FM || {};
     // ---- Light & Glow -------------------------------------------------------------------------
     { id: 'dreamy', name: 'Dreamy Bloom', section: 'glow',
       desc: 'Highlights blooming into a soft haze — the everything-is-lovely look.',
-      effects: [e('glow', { radius: 22, passes: 2 }), e('saturate', { amount: 1.1 }),
-                e('lightglow', { amount: 0.55, radius: 14, threshold: 55 })] },
+      // "Highlights blooming into a soft haze" is exactly what lightglow does and what glow could not:
+      // the dead ingredient is gone and the bloom it was supposed to add is now in the one that works,
+      // with softglow spreading the haze wider behind it (queue 858).
+      effects: [e('saturate', { amount: 1.1 }), e('lightglow', { amount: 0.8, radius: 26, threshold: 45 }),
+                e('softglow', { amount: 0.45, radius: 130, threshold: 40 })] },
     { id: 'goldenhour', name: 'Golden Hour', section: 'glow',
       desc: 'Warm late light, with the highlights just starting to bloom.',
       effects: [e('saturate', { amount: 1.14 }), e('temperature', { amount: 45, tint: 8 }),
@@ -141,7 +158,11 @@ window.FM = window.FM || {};
                 e('halftone', { size: 6 })] },
     { id: 'thermal', name: 'Thermal Camera', section: 'stylised',
       desc: 'Brightness read as heat — cold darks, white-hot highlights, glowing.',
-      effects: [e('glow', { radius: 12 }), e('thermal', { amount: 1 })] },
+      // "white-hot highlights, glowing" — after the thermal ramp, so the hot areas are what bloom (queue 858)
+      // …and the bloom has to be able to FIND the hot areas: after the thermal ramp the brightest parts of
+      // an ordinary photograph sit well below a 50% threshold, and at 0.5/50 it measured 0.28 — technically
+      // alive, which is not what "proper potential" means. 0.6 at a 28% threshold reads as heat glowing.
+      effects: [e('thermal', { amount: 1 }), e('lightglow', { amount: 0.6, radius: 16, threshold: 28 })] },
     { id: 'nightvis', name: 'Night Vision', section: 'stylised',
       desc: 'Green phosphor, sensor noise and a hard vignette — looking through a scope.',
       effects: [e('nightvision', { amount: 0.85 }), e('noise', { amount: 25, speed: 20 }),

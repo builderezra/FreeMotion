@@ -1,0 +1,61 @@
+<!doctype html><meta charset="utf-8"><title>858 filter sweep</title>
+<style>body{margin:0;background:#0f1420}img{display:block;max-width:100%}iframe{position:fixed;left:-3000px;width:900px;height:700px;border:0}
+#say{position:fixed;left:8px;top:8px;color:#8fa;font:12px monospace;z-index:9}</style>
+<div id="say">booting…</div>
+<img id="sheet"><iframe id="a" src="../../index.html"></iframe>
+<script>
+/* queue 858 — HIS REQUEST: "just do a large sweep through all the filters and make sure you know one by
+   one carefully that they're all up there proper potential… no cheap cutting corners."
+   So: every filter in FM.FILTERS, rendered through the REAL pipeline (FM.filters.makeInstance +
+   FM.renderScene) on the same photograph the Filters tab uses for it, beside the untouched picture. */
+var S = 150, GAP = 6, LAB = 15, COLS = 7;
+function say(m){ document.getElementById('say').textContent = m; }
+document.getElementById('a').addEventListener('load', function () {
+  var w = document.getElementById('a').contentWindow, n = 0;
+  (function wait(){
+    if (!(w.FM && w.FM.filters && w.FM.FILTERS && w.FM.renderScene && w.FM.makeLayer && w.FM.media)) { if (n++>500) return say('FM never came up'); return setTimeout(wait,50); }
+    setTimeout(function(){ run(w).catch(function(e){ say('threw: ' + (e && e.stack || e)); }); }, 900);
+  })();
+});
+function loadPhoto(w, key){ return new Promise(function(ok,bad){ var im=new w.Image(); im.onload=function(){ok(im);}; im.onerror=function(){bad(new Error('no photo '+key));}; im.src='../../fx-art/'+key+'.jpg?v=1'; }); }
+async function run(w){
+  var FM=w.FM, doc=w.document, photos={};
+  var subjectOf = (FM.fxThumbs && FM.fxThumbs._filterSubject) ? FM.fxThumbs._filterSubject : function(){ return 'pair'; };
+  async function tile(key, filterId){
+    if(!photos[key]) photos[key]=await loadPhoto(w,key);
+    var im=photos[key], side=Math.min(im.naturalWidth, im.naturalHeight);
+    var c=doc.createElement('canvas'); c.width=S; c.height=S;
+    c.getContext('2d').drawImage(im,(im.naturalWidth-side)/2,(im.naturalHeight-side)/2,side,side,0,0,S,S);
+    var mid='_sw_'+key+'_'+(filterId||'raw');
+    FM.media.set(mid,{kind:'image',el:c,width:S,height:S,duration:0}); FM.media.pin(mid);
+    var l=FM.makeLayer('image',{x:S/2,y:S/2,start:0,duration:2}); l.id=mid;
+    if(filterId){ var box=FM.filters.makeInstance(filterId); if(!box) throw new Error('no instance for '+filterId); l.effects=[box]; }
+    var o=doc.createElement('canvas'); o.width=S; o.height=S;
+    FM.renderScene(o.getContext('2d'),{project:{width:S,height:S,fps:30,duration:2,background:'#000000'},layers:[l]},0.001);
+    return o;
+  }
+  var list=FM.FILTERS.slice(), cells=[];
+  for(var i=0;i<list.length;i++){
+    var f=list[i], subj;
+    try { subj = subjectOf(f.id) || 'pair'; } catch(e){ subj='pair'; }
+    var plain=await tile(subj,null), done=await tile(subj,f.id);
+    cells.push({name:f.name, id:f.id, section:f.section, plain:plain, done:done});
+    say('rendered '+(i+1)+'/'+list.length+'  '+f.name);
+  }
+  var PAIR = S*2+2;
+  var W=GAP+COLS*(PAIR+GAP), rows=Math.ceil(cells.length/COLS), H=GAP+rows*(S+LAB+GAP);
+  var sheet=document.createElement('canvas'); sheet.width=W; sheet.height=H; var g=sheet.getContext('2d');
+  g.fillStyle='#0f1420'; g.fillRect(0,0,W,H); g.textBaseline='top';
+  cells.forEach(function(c,i){
+    var col=i%COLS, row=Math.floor(i/COLS), x=GAP+col*(PAIR+GAP), y=GAP+row*(S+LAB+GAP);
+    g.drawImage(c.plain,x,y+LAB); g.drawImage(c.done,x+S+2,y+LAB);
+    g.fillStyle='#e6ebf2'; g.font='600 12px -apple-system, system-ui, sans-serif';
+    g.fillText(c.name,x,y);
+    g.fillStyle='#6b7788'; g.font='10px -apple-system, system-ui, sans-serif';
+    g.fillText(c.section, x+PAIR-g.measureText(c.section).width, y+1);
+  });
+  var url=sheet.toDataURL('image/jpeg',0.9);
+  document.getElementById('sheet').src=url; window.__sheet=url; window.__done=true; window.__size=[W,H];
+  say('done: '+cells.length+' filters, sheet '+W+'x'+H);
+}
+</script>

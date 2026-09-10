@@ -54729,6 +54729,69 @@
      Second half: on the tick that LEARNS the bias, the bias is set to the raw error itself, so the
      de-biased value is exactly 0 by construction — a fact about the arithmetic, not about the audio.
      Storing it dropped a guaranteed zero into the list after every seek and at the start of every clip. */
+  test('every ingredient in every filter recipe actually changes the picture (queue 858)', { item: '858', budgetMs: 120000 }, async function () {
+    /* His words: "Check all of the filters because you might've changed the effects a bunch and when you
+       change an effect that would have a change on the filter filters because the filters are built with
+       effects. I noticed that the dreamy below effect is completely fucked and there might be a couple of
+       others like that… no cheap cutting corners."
+       He was right, and it was a CLASS rather than three accidents. `glow` is a stacked drop-shadow — it
+       blurs the layer's ALPHA and composites it BEHIND the layer — so on a photograph, which is what a
+       filter is applied to, the halo sits behind an opaque rectangle and can never be seen. Measured one
+       ingredient at a time across all 56 filters, `glow` contributed a mean channel difference of 0.00 in
+       every recipe that used it: Dreamy Bloom, CRT Monitor and Thermal Camera.
+       THIS TEST IS THE CLASS FIX. A filter is a recipe of effects, so an effect change can silently kill a
+       filter and nothing noticed. Now something does. */
+    if (!FM.FILTERS || !FM.filters || !FM.filters.makeInstance || !FM.renderScene) throw new Error('the filter list or the renderer is missing');
+    const S = 96;
+    // a picture with real highlights, midtones and shadows — a flat fill would make a bloom look dead
+    const src = document.createElement('canvas'); src.width = S; src.height = S;
+    const sc = src.getContext('2d');
+    const g = sc.createLinearGradient(0, 0, S, S);
+    g.addColorStop(0, '#fdf6d8'); g.addColorStop(0.45, '#e07a3a'); g.addColorStop(0.8, '#2a3550'); g.addColorStop(1, '#05070c');
+    sc.fillStyle = g; sc.fillRect(0, 0, S, S);
+    sc.fillStyle = '#ffffff'; sc.beginPath(); sc.arc(S * 0.3, S * 0.28, S * 0.11, 0, 7); sc.fill();      // a hot highlight to bloom
+    sc.fillStyle = '#1b6f4a'; sc.fillRect(0, S * 0.72, S, S * 0.1);                                       // a saturated band
+    const mid = '_q858';
+    FM.media.set(mid, { kind: 'image', el: src, width: S, height: S, duration: 0 });
+    if (FM.media.pin) FM.media.pin(mid);
+    const shoot = (effects) => {
+      const l = FM.makeLayer('image', { x: S / 2, y: S / 2, start: 0, duration: 2 });
+      l.id = mid; l.effects = effects || [];
+      const o = document.createElement('canvas'); o.width = S; o.height = S;
+      FM.renderScene(o.getContext('2d'), { project: { width: S, height: S, fps: 30, duration: 2, background: '#000000' }, layers: [l] }, 0.001);
+      return o.getContext('2d').getImageData(0, 0, S, S).data;
+    };
+    const diff = (a, b) => { let d = 0; for (let i = 0; i < a.length; i += 4) d += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); return d / (a.length / 4) / 3; };
+    try {
+      const base = shoot([]);
+      /* CONTROL FIRST. If the harness cannot see a change at all, every "dead" verdict below is the tool
+         and not the filter — 12 of 15 accusations were the tool the last time this was skipped. */
+      const ctl = FM.fxRegistry && FM.fxRegistry.makeInstance('grayscale');
+      if (!ctl) throw new Error('control: could not build a grayscale instance');
+      if (!(diff(base, shoot([ctl])) > 1)) throw new Error('control: grayscale changed nothing on the fixture, so this test cannot see anything and every verdict below would be false');
+
+      const dead = [], weak = [];
+      for (const f of FM.FILTERS) {
+        const box = FM.filters.makeInstance(f.id);
+        if (!box) throw new Error('no instance for the ' + f.name + ' filter');
+        const whole = diff(base, shoot([box]));
+        if (whole < 0.5) dead.push(f.name + ' as a whole (' + whole.toFixed(2) + ')');
+        for (const kid of (box.effects || [])) {
+          const d = diff(base, shoot([JSON.parse(JSON.stringify(kid))]));
+          if (d < 0.05) dead.push(f.name + ' → ' + kid.type + ' (' + d.toFixed(2) + ')');
+          else if (d < 0.3) weak.push(f.name + ' → ' + kid.type + ' (' + d.toFixed(2) + ')');
+        }
+      }
+      if (dead.length)
+        throw new Error(dead.length + ' filter ingredient(s) change NOTHING, so the filter is not what it says it is: ' + dead.slice(0, 8).join('; ') +
+          '. `glow` was the whole of the last batch — it composites its halo BEHIND the layer, which is invisible on an opaque photograph; a filter wants `lightglow` or `softglow` instead.');
+      // …and a nearly-dead one is worth naming without failing: it is a taste call, not a fault.
+      if (weak.length > 6) throw new Error(weak.length + ' ingredients barely register (' + weak.slice(0, 6).join('; ') + ') — that many is a pattern, not a preference');
+    } finally {
+      try { if (FM.media.remove) FM.media.remove(mid); } catch (e) {}
+    }
+  });
+
   test('tapping the canvas while editing text MOVES the text and keeps the edit open (queue 857)', { item: '857', budgetMs: 30000 }, async function () {
     /* His words: "as soon as you tap on the actual canvas to try and move the text and stuff. It just
        closes it. You should be able to tap on the canvas and move the text around while editing text."
