@@ -54729,6 +54729,52 @@
      Second half: on the tick that LEARNS the bias, the bias is set to the raw error itself, so the
      de-biased value is exactly 0 by construction — a fact about the arithmetic, not about the audio.
      Storing it dropped a guaranteed zero into the list after every seek and at the start of every clip. */
+  test('the two side panels sit in the same band, and the pop-up stays clear of the row it rises from (queue 854)', { item: '854', budgetMs: 30000 }, async function () {
+    /* From his own iPhone 16 Pro Max on v16.13, with a screenshot: "the left side pop-up menu doesn't go in
+       the same area that the right side pop-up menu does and it kind of is over on top of other buttons and
+       stuff. It's like kinda awkward." Measured from that shot: the rail ran y290–920 and the pop-up
+       y400–985 — 110px lower at the top, 65px lower at the bottom, finishing about 4px above the transport
+       row. The rail was centred on the stage; the pop-up was anchored to its own button. A reviewer had
+       found the same fault on PC under queue 853 and I fixed it only there. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const rail = document.getElementById('view-bar'), railBtn = document.getElementById('btn-amfit');
+    const bar = document.getElementById('opt-bar'), btn = document.getElementById('btn-opts');
+    const row = document.getElementById('transport');
+    if (!rail || !bar || !railBtn || !btn || !row) throw new Error('a panel, its button or the transport row is missing');
+    const isOpen = (el) => (FM.sideBarOpen ? FM.sideBarOpen(el) : !el.classList.contains('hidden'));
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    try {
+      if (!isOpen(rail)) { railBtn.click(); await sleep(300); }
+      if (!isOpen(bar)) { btn.click(); await sleep(300); }
+      if (FM.fitBarsTogether) FM.fitBarsTogether();
+      await sleep(120);
+
+      const r = rail.getBoundingClientRect(), b = bar.getBoundingClientRect();
+      const rc = r.top + r.height / 2, bc = b.top + b.height / 2;
+      /* 6px, not 14. MEASURED after the fix: 1px apart at his 440x956, 0px at 390x844, 380x820, 1280x800
+         and 1024x700, 3px at 360x640 and 2px at 320x568 — so 6 is comfortable headroom over the real
+         numbers. It matters that it is tight: at 14 the test still PASSED against the release he was
+         complaining about, because that release had bottom-aligned the two on PC and their centres sat
+         9.5px apart there. A tolerance wider than the fault proves nothing (see tolerance-from-measurement). */
+      if (Math.abs(rc - bc) > 6)
+        throw new Error('the two panels are ' + Math.round(Math.abs(rc - bc)) + 'px apart on the screen (rail ' + Math.round(r.top) + '–' + Math.round(r.bottom) + ', pop-up ' + Math.round(b.top) + '–' + Math.round(b.bottom) + ') — he asked for them to be in the same area, and offset by this much is what he called awkward');
+
+      // …and it must not crowd the controls it rises out of
+      const clear = row.getBoundingClientRect().top - b.bottom;
+      if (clear < 0)
+        throw new Error('the pop-up overlaps the transport row by ' + Math.round(-clear) + 'px — "it kind of is over on top of other buttons and stuff"');
+
+      // CONTROL — this must not have been achieved by shrinking it to nothing.
+      if (!(b.height > 100)) throw new Error('control: the pop-up is only ' + Math.round(b.height) + 'px tall — lining it up must not mean collapsing it');
+    } finally {
+      if (isOpen(bar)) { btn.click(); await sleep(60); }
+      if (isOpen(rail)) { railBtn.click(); }
+      await sleep(260);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
   test('the side panels are glued to the edge, thinner, evenly spaced, and they animate in and out (queue 853)', { item: '853', budgetMs: 40000 }, async function () {
     /* His words: "both of the menus that pop up on the sides… take up too much space… the buttons could be
        laid out differently so it doesn't awkwardly have like gaps or ended a weird height… instead of them

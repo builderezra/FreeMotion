@@ -5927,19 +5927,34 @@ window.FM = window.FM || {};
       bar.style.maxHeight = room + 'px';
       markScroll(bar);
 
-      /* ON PC THE TWO SIT AS ONE BLOCK. The review's words: they "read as two offset slabs rather than one
-         piece" — the rail is centred on the stage, the pop-up rises from its button, so at 1280x800 they
-         shared only 51% of their edge and the pop-up's tail hung 132px below the rail with no border on
-         its outer side. Lining the bottoms up costs one measurement and fixes both. */
-      if (wide && railThere && rail) {
-        const r = rail.getBoundingClientRect(), host = bar.offsetParent;
-        if (host) {
-          const hr = host.getBoundingClientRect();
-          bar.style.bottom = Math.round(hr.bottom - r.bottom) + 'px';
-          const b2 = bar.getBoundingClientRect();
-          bar.style.maxHeight = Math.max(96, Math.round(Math.min(room, b2.bottom - Math.max(ceiling, r.top)))) + 'px';
-          markScroll(bar);
-        }
+      /* ⚠️ THE TWO PANELS SHARE ONE BAND, ON EVERY LAYOUT (queue 854 — and a reviewer found the same thing
+         on PC under #853, where I fixed it and left the phone alone). His words, with a screenshot from
+         his own iPhone: *"the left side pop-up menu doesn't go in the same area that the right side pop-up
+         menu does and it kind of is over on top of other buttons and stuff. It's like kinda awkward."*
+         The rail is centred on the stage. The pop-up was anchored to its own button, so it started ~110px
+         lower and finished ~65px lower, 4px above the transport row it was crowding.
+         So the pop-up is centred on the STAGE too — the same rule, measured rather than declared, because
+         it lives in a different containing block (#timeline-panel) and cannot use the rail's percentage.
+         It still opens upward out of its button; it just lands where its twin lands. */
+      const host = bar.offsetParent;
+      const sr = stage ? stage.getBoundingClientRect() : null;
+      if (host && sr && sr.height > 40) {
+        const hr = host.getBoundingClientRect();
+        /* The band it is allowed to live in: from whatever is above it down to the row it rises out of.
+           ⚠️ THE HEIGHT GIVES WAY, NOT THE POSITION. The first version clamped the panel's bottom to the
+           row and then re-clamped its top under the header, and on a 360x640 the second clamp won and put
+           it 4px INTO the transport row again — the crowding he reported. Fit the height to the band
+           first and the two clamps can no longer disagree. */
+        const tr = document.getElementById('transport');
+        const floor = tr ? tr.getBoundingClientRect().top - 4 : hr.bottom - 4;
+        const band = Math.max(96, floor - ceiling);
+        const h = Math.min(bar.getBoundingClientRect().height, band, room);
+        let wantBottom = sr.top + sr.height / 2 + h / 2;   // centred on the canvas, exactly like the rail
+        wantBottom = Math.min(wantBottom, floor);
+        wantBottom = Math.max(wantBottom, ceiling + h);
+        bar.style.bottom = Math.round(hr.bottom - wantBottom) + 'px';
+        bar.style.maxHeight = Math.round(h) + 'px';
+        markScroll(bar);
       }
     };
     const closeOptBar = () => { if (FM.sideBarOpen(optBar)) FM.setSideBar(optBar, optBtn, false); };
