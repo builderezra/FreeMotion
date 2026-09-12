@@ -385,6 +385,23 @@ if ! python3 tools/_classify.py; then
   echo "   Each failing case above is a bug that already happened once. Fix tools/_classify.py first."
   exit 1
 fi
+# THE FAILSAFE MUST PROVE ITSELF TOO (12 Sep). tools/rollback.sh is the answer to his question "whats the
+# fail safe if an ai fucks up all the code?" — and on the day it was written it broke TWICE, in opposite
+# directions: untracked (so `git clean -fd` and its own `git stash -u` would eat it), then, once that was
+# fixed, deleting itself from inside, because every release predates the commit that added it and the
+# restore removes files added since. Both were found by ad-hoc probing; nothing in the repo would have
+# noticed either. A disaster-recovery tool that is broken is worse than none, because it is the thing you
+# reach for when you have no attention to spare — so it runs its own test whenever it changes. ~15s, in a
+# throwaway clone wired to a local bare repo, so it cannot reach the live site.
+if ! git diff --cached --quiet -- tools/rollback.sh 2>/dev/null || ! git diff --quiet -- tools/rollback.sh 2>/dev/null; then
+  echo "→ tools/rollback.sh changed — proving the failsafe still works before shipping"
+  if ! ./tools/test-rollback.sh; then
+    echo "❌ THE FAILSAFE IS BROKEN — not committing, not pushing."
+    echo "   Every ❌ above is a way his undo button fails at the moment he needs it."
+    exit 1
+  fi
+fi
+
 # Refresh REQUESTS.md's STATUS labels first, so they can never be stale in a commit (queue 352).
 # A label written by hand is true the day it is written and misleading a week later.
 ./tools/status.sh >/dev/null 2>&1 || true

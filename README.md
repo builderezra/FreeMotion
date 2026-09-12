@@ -10,14 +10,14 @@ framework, no npm. Everything is stored on the device (localStorage + IndexedDB)
 ## 🚨 If something is broken and you want it put back
 
 ```bash
-tools/rollback.sh
+cd ~/Claude/FreeMotion && tools/rollback.sh
 ```
 
 Lists the recent releases, newest first, plus the version the app is on right now. **It changes nothing** —
 safe to run any time. Then:
 
 ```bash
-tools/rollback.sh v16.12
+cd ~/Claude/FreeMotion && tools/rollback.sh v16.12
 ```
 
 Puts the whole app back to that release and publishes it. It asks before it publishes; the live site
