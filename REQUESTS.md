@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 11 Sep at v16.16
+> ## 📌 WHAT I NEED FROM YOU — updated 11 Sep at v16.17
 >
-> **State:** v16.16 — **you were right about Dreamy Bloom, and it was three filters, not one.** All 56 swept, and the cause is a class rather than an accident: `glow` puts its halo BEHIND the layer, which is invisible on a photograph, so any filter built on it was dead. Dreamy Bloom, CRT Monitor and Thermal Camera all used it. Fixed with the bloom that actually works on a picture, before-and-after sent. And the real fix is that the suite now renders every filter's ingredients one at a time and fails if any of them does nothing, so the next effect change cannot quietly break a filter. Four others are heavy-handed but working, so they are a taste call for you rather than something I should change on my own. Before that, v16.15 — **you can move text while you are editing it now.** Tapping the canvas mid-edit used to close the editor and the drag went nowhere, because the phone was swallowing every tap outside the editor's own controls. The canvas is the thing you are typing into, so it gets the tap: the text moves and the edit stays running. Tapping anything else still finishes, as before. Your three other messages are logged as well — the tutorial one is HELD for before launch exactly as you asked, the talk-to-it AI is on the list, and the filter sweep is next. Before that, v16.14 — **the left pop-up now sits in the same band as the right rail on your phone**, which is what you spotted in your screenshot. Both are centred on the canvas: 1px apart on your 16 Pro Max, 0px on most sizes, and the pop-up is 48px clear of the row of buttons under it instead of finishing on top of them. A reviewer had found the same fault on PC in the release before and I fixed it only there, which is exactly why you saw it. Before that, v16.13 — **both side panels rebuilt: glued to the edge of the screen, thinner, evenly spaced, and they now animate in and out.** 52px of screen down to 40, with the buttons themselves unchanged. The gap between the panel and the edge is gone. The hole that used to sit in the middle of the rail is gone. Each icon pops in on its own, 26ms apart, and they leave together quickly. **Five agents reviewed it before it shipped, as you asked, and all five said needs-work** — they found that on a 360px-wide phone the pop-up grew up under the top bar so tapping "slower" left the project, that the panel's own drop shadow never painted, and that the camera button's dimming had been silently switched off. All eleven findings fixed and turned into tests. Before that, v16.12 — **both bars open together now, and on the phone the new one opens upwards as a narrow column instead of sideways across the screen.** It costs 46px, the same as the view rail, and the two sit on opposite edges of the phone so they cannot cover each other. On PC they are a pair of columns side by side, the new one standing off by however wide the rail actually is, and it slides back to the edge when the rail is shut. Before that, v16.11 — **the four buttons you circled are out of the view-options rail and in their own pop-up**, opened from a new button at the left end of the transport row on the phone and beside the view-options button on PC, popping up above it either way. Speed, loop, the magnet and the export marks. The grid and the zooms stayed, because those really are view options. Pictures sent, including four icons for the new button — say a letter to change it. One thing I decided rather than asked: it is a NEW button, not your ⧉ one, because ⧉ already opens the layer menu and a new button is what makes that row an even 4 and 4, which was your reason. Before that, v16.10 — **you pasted your two phone reports and they were worth it.** The export one settles the silent-export complaints: your phone wrote a real sound track, peak 0.931, nothing dropped, so that fault does not reproduce on this build. The playback one found two things. First, a real bug in the thing that keeps the sound level with the picture: every time it gives up and jumps the audio into place, it immediately re-learns its offset from the jump itself, which is the one moment that reading is wrong, so it chases a number that is not there, jumps again, and repeats. That is what your 94 trims and 4 jumps in one second are. Fixed. Second, and this one is on me: the report itself could not be read. Five separate fields were wrong, including one that made a single 1.2-second freeze look like a clip that was silent for its whole length. All five fixed, so the NEXT report you send says what it means. Before that, v16.09 — the last four of the seven confirmed audit findings (#839–#842): resuming a killed export no longer changes the look of a Time Warp Scan at the join, and three places where the RECORD said something the code does not do are corrected, each with a test so they cannot rot back. Before that, v16.08 — **a phone-only bug worth knowing about: one old Glow could switch off every colour effect on its layer.** If a Glow was saved without a Radius (any older, shared or imported project — the loader drops a value it cannot read), your phone drew no halo AND no Grayscale, no Saturation, no Brightness on that layer, while your PC looked right. That is the "these effects don't work on mobile" complaint coming back through one saved effect. Fixed, and a glow that cannot draw a halo no longer takes the rest of the stack down with it. Also: opening Edit Points or Crop no longer throws away the zoom and pan you set up, and losing your finger mid-reorder no longer leaves the list scrolling and buzzing on its own. All three came out of re-checking the 5 Sep audit's own leads against today's code — 9 were already fixed, 3 were wrong, 7 were real (#836–#842). Before that, v16.07 — four more of the twenty findings fixed (#834): a caption cue's own effects now travel with a copied project instead of matting off the original, bulk Duplicate on the Templates/Elements tabs says what it skipped instead of doing nothing quietly, the + button's "which project?" menu is the projects grid's own list (no hidden drafts, the grid's order, and it says when it is short), and a corner drag on a layer scaled to nothing is refused instead of silently lifting a pop-in's whole animation off zero. Before that, v16.06 — the **CLIP OPTIONS / Done row is gone** from the phone's clip panel, on your word (#835). The panel still docks in the same place and covers the same area; the 49px the row was taking goes back to the option cards, so the grid starts at the top of the sheet and the bottom row is on screen where it used to run off. The way out is the arrow at the top left, which already says "Close clip options". That row was mine — it came out of #654, a stranger who could not find the way out of a menu, and I added it while you were away rather than asking. Before that, v16.05 — a second hunt, this time over the TIMELINE, found eight real bugs and all eight are fixed. Three matter to you directly: dragging a layer name to scroll died whenever a waveform finished loading (that is one of the things that reads as "laggy"); a refused sound-start was writing a diagnostic report to storage sixty times a second, which is a measured cause of the phone lag; and on the phone an ordinary swipe across a selected video clip was silently re-timing its media. Also: A/S/D no longer edit locked clips, trimming a captioned clip no longer slides every caption, and a clip in a hidden group is now silent in preview as it already was in the export. Before that, the effects-menu hunt: seven bugs found and fixed, plus two smaller ones today (a filter preview that stayed on a paused canvas after you left the tab, and a raised band that got pinned to nowhere if you resized the window while editing text). **Two questions are waiting for you on the unblock page:** where the Audio effects menu should sit on PC, and how heavy Comic Ink should be. Newest: the timeline divider now carries the open Effects menu with it, favouriting a filter row actually stars that filter (it starred a hidden internal type, so the Filters tab never showed a favourite), and **Comic Ink** was rendering as white-on-black line art though it promises flat colour with inked edges — Find Edges can now ink over a picture instead of replacing it, and I sent you the before/after with a lighter and a heavier option. Before that: the band's floor was read from a CSS variable that never resolves (a small drag DOWN detached the panel and opened a gap; a click on the timeline divider shrank the band on the next load), the keyboard drove the project underneath the open Effects menu (Escape deselected your layer, Tab changed layers, Delete deleted one), and the AUDIO menu was left out of every one of those rules. One thing needs YOUR call: the audio menu draws full-width over the timeline while the visual one sits in the inspector column — see #810. Before that, #804 done and reviewed by 21 agents: a detached band (Studio) stays detached when you tap a layer or open Effects/Filters, its handle is always there, and (v15.89) you can raise the band WITH the Effects menu open and the menu comes with it; a raised inspector now uses its height for the option cards. Also the PC half of the no-audio-export check (#604 / #215) done here: an audible clip exports with a real AAC track on this Mac; the two audio fixtures turn out to be silent for their first three seconds. Earlier: v15.87 — the clip keys moved off the timeline onto the left band's title line, 42×34 with icons that change with the playhead, hidden while the Effects view is open with A/S/D still working (#803, your words; picture at https://claude.ai/code/artifact/a60e6ecf-7801-4290-8dac-465b2359f77a). Earlier: v15.86 — PC layout, second pass of #778 clause 3: between 701 and 1160px wide (an iPad in landscape, a half-screen window) the version chip and cog sat on top of the selected layer's parent / delete / more buttons (#801); the far run now hangs in a band under the row there. Earlier: v15.85 — the Text category swept too (#482, all ten alive) and one fault found on the way: a negative Text Curve mirrored the word (#800), fixed. Earlier: v15.84 — the numeric sweep of the ten remaining effect categories at the phone's frame size (#482): 155 effects, every zero explained, one fix (#799, Electric Edges was invisible on photographs). Earlier: v15.83 — the by-eye Warping pass (#482): 29 effects at the phone's true frame size, one fix (#798, Chromatic Aberration was RGB Split under another name and now fringes toward the edges as its description says). Earlier: v15.82 — first pass of #778 clause 3 (bug testing as a user, at 380 with touch): nine screens through the add, text, clip-options, effects, settings and export flows, one finding (#797, the 1–9 badges on the clip-option tiles showed on a phone), fixed. Earlier: v15.81 — the by-eye pass over all 43 Colouring effects (#482, rule 16 pick): Halation was invisible on photographs and is fixed; two taste calls and the next category wait for your word at https://claude.ai/code/artifact/1865b863-9713-4230-a19e-fb132604d722. Earlier: v15.80 — ten new filters (Tropic, Popsicle, Hi-Vis, Polaroid, Kodachrome, Technicolor, Halo, Moonbeam, Arctic, Desert), judged on your own photographs; the sheet is at https://claude.ai/code/artifact/1b858b3a-3afe-47af-b7c7-6c2e7038e1a1 — say the name of any to drop. Earlier: v15.79 — eleven more effect ceilings raised by measurement (#482 round four: Ripple, Wave, Time Warp, Spiked Star, Mirror Tile, Tile Rotate, Tile Shift, Bulge, Turbulent Displace), and #606 closed by measurement at 380 and at your 440 (the handles line up to the half pixel and the ≡ is centred in its box); say LEFT / RIGHT / UP / DOWN if your eye still disagrees. Earlier: v15.78 — #765 and #772 closed: the A · S · D keycap rail sits on the seam on PC (the recommended look), the old buttons on the playhead are gone; say B or C for the other looks. Earlier: v15.77 — #760 closed: the people shapes are the airport-pictogram construction (B on the picture), a different construction rather than another nudge; say "people A / C / D" to change it. Earlier: v15.76 — #760: the PC shape tiles are bigger (the drawn 48) and their glyphs white on the coloured plate (the drawn D) — both the recommended options, one word changes either; the people shapes get a real second round next, with a picture. Earlier: v15.75 — #654: the phone's clip panel has a Done button now (option A under rule 16; say B or C to change it). Earlier: v15.74 — three of YOUR parked items closed in one go: #564 (the Outline & Shadows card heads each feature's rows), #763 (the PC skip buttons sit 12px clear of Play; the pill stays A), #674 (every uncaught error lands in Settings → Last error; four raw toasts speak plainly; two taste questions decided). Each is one word from being changed. Earlier: v15.73 — #484 closed: Silk Ribbon is a shape (Add → Shape → Silk ribbon), three outlines drawn and pictured, one word changes it. Earlier: v15.71 — the effects browser's Back effect name still on screen (in a description) is gone, and a test now refuses all the retired ones; the Silk Ribbon shape is next, with a picture. Earlier: v15.71 — the effects browser's Back no longer pays for thumbnails nobody can see, stock thumbnails build across frames instead of in one go, and your phone now measures Back itself (Settings → Your last Back from an effects category). Earlier: v15.70 — another of YOUR parked items closed without you: #429's add-row + can no longer move under a swipe (the svh fix was being overridden with one clip selected, and the stage is now pinned for the life of a touch). Earlier: v15.69 — #129's blank-clip report no longer lies about H.265 (it asked the wrong question), a file refused at load now writes it too, and a real HEVC .mov is checked in for the suite — the paste from your phone is still wanted, but it will now say something true. Earlier: v15.68 — the audit's last four live leads fixed with proofs: ten inspector values that lied about an absent key, a probe that called four temporal effects dead on every layer, a "never moves" badge over animated text, and a stuck clip drag that stayed where the lost pointer dropped it. Earlier: v15.67 — two of YOUR items that had been parked as waiting on you were not waiting on anything: #592 (the add-layer row overshooting by 1px — measured, cause found, fixed) and #624 (holding a layer to multi-select no longer pops the edit menu — decided under rule 16; say "open it" to overrule). Both left the unblock list. Earlier: v15.66 — four audit leads from the fortnight's releases fixed with proofs (a dead guard test, an invisible off-frame trim mark, the tracker box not following a zoom, a delete prompt naming an element that did not exist), the stale-ask banner made trustworthy again, and #750 closed by measuring it with a real mouse instead of waiting on you. Earlier: v15.65 — the five reports the unblock list asks you to paste (playback, export, project open, scrub, blank clip) now show in Settings from the HOME screen too, not only inside a project, and a project's Settings opens with a "Reports from this device → Show" row that jumps to them (#785); a song that refuses to start is now NAMED in Your last playback instead of being thrown away (#786). Earlier today: 39 effects that a hand-written or AI-written project could switch off by leaving a key out now render at their defaults; the dark look's intro lands on dark again; the lag item (#692) has had everything the numbers pointed at: 44 effects crop their readback, the radial blurs are bounded, and eight bounded effects lost their readback floor; and 44 effects now cost a tenth of what they did on a small layer (#692 route 2); yesterday's three oldest items in your own words are closed. The two oldest items in your own words are closed today: #539 (Squish squashes against other layers) and #553 (the half-drawn return and its black bar). You came back and said you suspected "delusion and lack of effort" — you were right to. Every release now has to PROVE its fix (ship.sh reverts the fix and requires the new test to fail), and re-proving the last 27 releases found two that claimed the opposite of what they did (fixed in v15.57, more findings being verified).
+> **State:** v16.17 — **you asked how confident I am that the effects are actually good, and the honest answer is not very: 72 of 205 have ever been looked at.** So I started the real sweep, and the first thing it found is that adding Motion Blur to a PHOTO told you nothing when it could not work, while the same effect on a shape has always said so. Fixed. The full answer with the numbers is in #859. Before that, v16.16 — **you were right about Dreamy Bloom, and it was three filters, not one.** All 56 swept, and the cause is a class rather than an accident: `glow` puts its halo BEHIND the layer, which is invisible on a photograph, so any filter built on it was dead. Dreamy Bloom, CRT Monitor and Thermal Camera all used it. Fixed with the bloom that actually works on a picture, before-and-after sent. And the real fix is that the suite now renders every filter's ingredients one at a time and fails if any of them does nothing, so the next effect change cannot quietly break a filter. Four others are heavy-handed but working, so they are a taste call for you rather than something I should change on my own. Before that, v16.15 — **you can move text while you are editing it now.** Tapping the canvas mid-edit used to close the editor and the drag went nowhere, because the phone was swallowing every tap outside the editor's own controls. The canvas is the thing you are typing into, so it gets the tap: the text moves and the edit stays running. Tapping anything else still finishes, as before. Your three other messages are logged as well — the tutorial one is HELD for before launch exactly as you asked, the talk-to-it AI is on the list, and the filter sweep is next. Before that, v16.14 — **the left pop-up now sits in the same band as the right rail on your phone**, which is what you spotted in your screenshot. Both are centred on the canvas: 1px apart on your 16 Pro Max, 0px on most sizes, and the pop-up is 48px clear of the row of buttons under it instead of finishing on top of them. A reviewer had found the same fault on PC in the release before and I fixed it only there, which is exactly why you saw it. Before that, v16.13 — **both side panels rebuilt: glued to the edge of the screen, thinner, evenly spaced, and they now animate in and out.** 52px of screen down to 40, with the buttons themselves unchanged. The gap between the panel and the edge is gone. The hole that used to sit in the middle of the rail is gone. Each icon pops in on its own, 26ms apart, and they leave together quickly. **Five agents reviewed it before it shipped, as you asked, and all five said needs-work** — they found that on a 360px-wide phone the pop-up grew up under the top bar so tapping "slower" left the project, that the panel's own drop shadow never painted, and that the camera button's dimming had been silently switched off. All eleven findings fixed and turned into tests. Before that, v16.12 — **both bars open together now, and on the phone the new one opens upwards as a narrow column instead of sideways across the screen.** It costs 46px, the same as the view rail, and the two sit on opposite edges of the phone so they cannot cover each other. On PC they are a pair of columns side by side, the new one standing off by however wide the rail actually is, and it slides back to the edge when the rail is shut. Before that, v16.11 — **the four buttons you circled are out of the view-options rail and in their own pop-up**, opened from a new button at the left end of the transport row on the phone and beside the view-options button on PC, popping up above it either way. Speed, loop, the magnet and the export marks. The grid and the zooms stayed, because those really are view options. Pictures sent, including four icons for the new button — say a letter to change it. One thing I decided rather than asked: it is a NEW button, not your ⧉ one, because ⧉ already opens the layer menu and a new button is what makes that row an even 4 and 4, which was your reason. Before that, v16.10 — **you pasted your two phone reports and they were worth it.** The export one settles the silent-export complaints: your phone wrote a real sound track, peak 0.931, nothing dropped, so that fault does not reproduce on this build. The playback one found two things. First, a real bug in the thing that keeps the sound level with the picture: every time it gives up and jumps the audio into place, it immediately re-learns its offset from the jump itself, which is the one moment that reading is wrong, so it chases a number that is not there, jumps again, and repeats. That is what your 94 trims and 4 jumps in one second are. Fixed. Second, and this one is on me: the report itself could not be read. Five separate fields were wrong, including one that made a single 1.2-second freeze look like a clip that was silent for its whole length. All five fixed, so the NEXT report you send says what it means. Before that, v16.09 — the last four of the seven confirmed audit findings (#839–#842): resuming a killed export no longer changes the look of a Time Warp Scan at the join, and three places where the RECORD said something the code does not do are corrected, each with a test so they cannot rot back. Before that, v16.08 — **a phone-only bug worth knowing about: one old Glow could switch off every colour effect on its layer.** If a Glow was saved without a Radius (any older, shared or imported project — the loader drops a value it cannot read), your phone drew no halo AND no Grayscale, no Saturation, no Brightness on that layer, while your PC looked right. That is the "these effects don't work on mobile" complaint coming back through one saved effect. Fixed, and a glow that cannot draw a halo no longer takes the rest of the stack down with it. Also: opening Edit Points or Crop no longer throws away the zoom and pan you set up, and losing your finger mid-reorder no longer leaves the list scrolling and buzzing on its own. All three came out of re-checking the 5 Sep audit's own leads against today's code — 9 were already fixed, 3 were wrong, 7 were real (#836–#842). Before that, v16.07 — four more of the twenty findings fixed (#834): a caption cue's own effects now travel with a copied project instead of matting off the original, bulk Duplicate on the Templates/Elements tabs says what it skipped instead of doing nothing quietly, the + button's "which project?" menu is the projects grid's own list (no hidden drafts, the grid's order, and it says when it is short), and a corner drag on a layer scaled to nothing is refused instead of silently lifting a pop-in's whole animation off zero. Before that, v16.06 — the **CLIP OPTIONS / Done row is gone** from the phone's clip panel, on your word (#835). The panel still docks in the same place and covers the same area; the 49px the row was taking goes back to the option cards, so the grid starts at the top of the sheet and the bottom row is on screen where it used to run off. The way out is the arrow at the top left, which already says "Close clip options". That row was mine — it came out of #654, a stranger who could not find the way out of a menu, and I added it while you were away rather than asking. Before that, v16.05 — a second hunt, this time over the TIMELINE, found eight real bugs and all eight are fixed. Three matter to you directly: dragging a layer name to scroll died whenever a waveform finished loading (that is one of the things that reads as "laggy"); a refused sound-start was writing a diagnostic report to storage sixty times a second, which is a measured cause of the phone lag; and on the phone an ordinary swipe across a selected video clip was silently re-timing its media. Also: A/S/D no longer edit locked clips, trimming a captioned clip no longer slides every caption, and a clip in a hidden group is now silent in preview as it already was in the export. Before that, the effects-menu hunt: seven bugs found and fixed, plus two smaller ones today (a filter preview that stayed on a paused canvas after you left the tab, and a raised band that got pinned to nowhere if you resized the window while editing text). **Two questions are waiting for you on the unblock page:** where the Audio effects menu should sit on PC, and how heavy Comic Ink should be. Newest: the timeline divider now carries the open Effects menu with it, favouriting a filter row actually stars that filter (it starred a hidden internal type, so the Filters tab never showed a favourite), and **Comic Ink** was rendering as white-on-black line art though it promises flat colour with inked edges — Find Edges can now ink over a picture instead of replacing it, and I sent you the before/after with a lighter and a heavier option. Before that: the band's floor was read from a CSS variable that never resolves (a small drag DOWN detached the panel and opened a gap; a click on the timeline divider shrank the band on the next load), the keyboard drove the project underneath the open Effects menu (Escape deselected your layer, Tab changed layers, Delete deleted one), and the AUDIO menu was left out of every one of those rules. One thing needs YOUR call: the audio menu draws full-width over the timeline while the visual one sits in the inspector column — see #810. Before that, #804 done and reviewed by 21 agents: a detached band (Studio) stays detached when you tap a layer or open Effects/Filters, its handle is always there, and (v15.89) you can raise the band WITH the Effects menu open and the menu comes with it; a raised inspector now uses its height for the option cards. Also the PC half of the no-audio-export check (#604 / #215) done here: an audible clip exports with a real AAC track on this Mac; the two audio fixtures turn out to be silent for their first three seconds. Earlier: v15.87 — the clip keys moved off the timeline onto the left band's title line, 42×34 with icons that change with the playhead, hidden while the Effects view is open with A/S/D still working (#803, your words; picture at https://claude.ai/code/artifact/a60e6ecf-7801-4290-8dac-465b2359f77a). Earlier: v15.86 — PC layout, second pass of #778 clause 3: between 701 and 1160px wide (an iPad in landscape, a half-screen window) the version chip and cog sat on top of the selected layer's parent / delete / more buttons (#801); the far run now hangs in a band under the row there. Earlier: v15.85 — the Text category swept too (#482, all ten alive) and one fault found on the way: a negative Text Curve mirrored the word (#800), fixed. Earlier: v15.84 — the numeric sweep of the ten remaining effect categories at the phone's frame size (#482): 155 effects, every zero explained, one fix (#799, Electric Edges was invisible on photographs). Earlier: v15.83 — the by-eye Warping pass (#482): 29 effects at the phone's true frame size, one fix (#798, Chromatic Aberration was RGB Split under another name and now fringes toward the edges as its description says). Earlier: v15.82 — first pass of #778 clause 3 (bug testing as a user, at 380 with touch): nine screens through the add, text, clip-options, effects, settings and export flows, one finding (#797, the 1–9 badges on the clip-option tiles showed on a phone), fixed. Earlier: v15.81 — the by-eye pass over all 43 Colouring effects (#482, rule 16 pick): Halation was invisible on photographs and is fixed; two taste calls and the next category wait for your word at https://claude.ai/code/artifact/1865b863-9713-4230-a19e-fb132604d722. Earlier: v15.80 — ten new filters (Tropic, Popsicle, Hi-Vis, Polaroid, Kodachrome, Technicolor, Halo, Moonbeam, Arctic, Desert), judged on your own photographs; the sheet is at https://claude.ai/code/artifact/1b858b3a-3afe-47af-b7c7-6c2e7038e1a1 — say the name of any to drop. Earlier: v15.79 — eleven more effect ceilings raised by measurement (#482 round four: Ripple, Wave, Time Warp, Spiked Star, Mirror Tile, Tile Rotate, Tile Shift, Bulge, Turbulent Displace), and #606 closed by measurement at 380 and at your 440 (the handles line up to the half pixel and the ≡ is centred in its box); say LEFT / RIGHT / UP / DOWN if your eye still disagrees. Earlier: v15.78 — #765 and #772 closed: the A · S · D keycap rail sits on the seam on PC (the recommended look), the old buttons on the playhead are gone; say B or C for the other looks. Earlier: v15.77 — #760 closed: the people shapes are the airport-pictogram construction (B on the picture), a different construction rather than another nudge; say "people A / C / D" to change it. Earlier: v15.76 — #760: the PC shape tiles are bigger (the drawn 48) and their glyphs white on the coloured plate (the drawn D) — both the recommended options, one word changes either; the people shapes get a real second round next, with a picture. Earlier: v15.75 — #654: the phone's clip panel has a Done button now (option A under rule 16; say B or C to change it). Earlier: v15.74 — three of YOUR parked items closed in one go: #564 (the Outline & Shadows card heads each feature's rows), #763 (the PC skip buttons sit 12px clear of Play; the pill stays A), #674 (every uncaught error lands in Settings → Last error; four raw toasts speak plainly; two taste questions decided). Each is one word from being changed. Earlier: v15.73 — #484 closed: Silk Ribbon is a shape (Add → Shape → Silk ribbon), three outlines drawn and pictured, one word changes it. Earlier: v15.71 — the effects browser's Back effect name still on screen (in a description) is gone, and a test now refuses all the retired ones; the Silk Ribbon shape is next, with a picture. Earlier: v15.71 — the effects browser's Back no longer pays for thumbnails nobody can see, stock thumbnails build across frames instead of in one go, and your phone now measures Back itself (Settings → Your last Back from an effects category). Earlier: v15.70 — another of YOUR parked items closed without you: #429's add-row + can no longer move under a swipe (the svh fix was being overridden with one clip selected, and the stage is now pinned for the life of a touch). Earlier: v15.69 — #129's blank-clip report no longer lies about H.265 (it asked the wrong question), a file refused at load now writes it too, and a real HEVC .mov is checked in for the suite — the paste from your phone is still wanted, but it will now say something true. Earlier: v15.68 — the audit's last four live leads fixed with proofs: ten inspector values that lied about an absent key, a probe that called four temporal effects dead on every layer, a "never moves" badge over animated text, and a stuck clip drag that stayed where the lost pointer dropped it. Earlier: v15.67 — two of YOUR items that had been parked as waiting on you were not waiting on anything: #592 (the add-layer row overshooting by 1px — measured, cause found, fixed) and #624 (holding a layer to multi-select no longer pops the edit menu — decided under rule 16; say "open it" to overrule). Both left the unblock list. Earlier: v15.66 — four audit leads from the fortnight's releases fixed with proofs (a dead guard test, an invisible off-frame trim mark, the tracker box not following a zoom, a delete prompt naming an element that did not exist), the stale-ask banner made trustworthy again, and #750 closed by measuring it with a real mouse instead of waiting on you. Earlier: v15.65 — the five reports the unblock list asks you to paste (playback, export, project open, scrub, blank clip) now show in Settings from the HOME screen too, not only inside a project, and a project's Settings opens with a "Reports from this device → Show" row that jumps to them (#785); a song that refuses to start is now NAMED in Your last playback instead of being thrown away (#786). Earlier today: 39 effects that a hand-written or AI-written project could switch off by leaving a key out now render at their defaults; the dark look's intro lands on dark again; the lag item (#692) has had everything the numbers pointed at: 44 effects crop their readback, the radial blurs are bounded, and eight bounded effects lost their readback floor; and 44 effects now cost a tenth of what they did on a small layer (#692 route 2); yesterday's three oldest items in your own words are closed. The two oldest items in your own words are closed today: #539 (Squish squashes against other layers) and #553 (the half-drawn return and its black bar). You came back and said you suspected "delusion and lack of effort" — you were right to. Every release now has to PROVE its fix (ship.sh reverts the fix and requires the new test to fail), and re-proving the last 27 releases found two that claimed the opposite of what they did (fixed in v15.57, more findings being verified).
 >
 > ### 👉 [**Open the unblock list**](https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7)
 > Everything below is on that page, laid out so you can tap through it on your phone and send me one
@@ -23,6 +23,64 @@
 > of zero, an effect on a part-transparent frame is no longer skipped outright, and a draft whose
 > template was deleted says so instead of promising to save back to it.
 
+
+---
+
+## 🚦 START HERE — you are a new session with no memory of any of this
+
+**Run this first. It computes every fact you need from the repo, so nothing here has to be remembered
+or trusted:**
+
+```bash
+tools/tick.sh
+```
+
+It prints, in this order: anything in flight you must not disturb · whether Ezra has written to
+`INBOX.md` · whether the tree is pushed · **the queue, oldest first** · questions of his that have
+gone stale · releases that still owe a proof · the standing reminders.
+
+**The five things that will otherwise bite you:**
+
+| | |
+|---|---|
+| **Who this is for** | Ezra, a solo builder in Perth. Not a career programmer. Do the work, don't hand him steps. Short, calm replies. |
+| **The app** | FreeMotion, a video/motion editor. Vanilla HTML/CSS/JS, **no build step, no framework, no npm**. Local-only (localStorage + IndexedDB). Live at <https://builderezra.github.io/FreeMotion/> off `main`. |
+| **The order of work** | **The lowest-numbered OPEN item in this file, always** — never what he said most recently. `tools/next.sh` computes it; `tools/ship.sh` refuses a release that jumps the queue. The only escape is writing **`JUMPED: <reason>`** into the skipped entry. |
+| **Before you touch the queue** | If `INBOX.md` has anything under its `---`, **log it into this file VERBATIM with the next number and clear the inbox — before any other work.** He writes there from his phone so he never has to interrupt you. |
+| **Before you claim anything** | A fix ships with a test that **FAILS when the fix is reverted**. `tools/ship.sh` reverts it and checks. "It works" without that is the exact thing he caught and distrusts. |
+
+**Shipping is one command** (never `git commit` / `git push` by hand):
+
+```bash
+nohup tools/ship.sh "v16.xx — queue NNN: what changed" > /tmp/ship.log 2>&1 < /dev/null & disown
+```
+
+It runs the suite twice (desktop, then 380px), checks the version label == the newest POLISH-LOG line
+== this file's stamp, bumps the `?v=` cache-busters, proves every `queue NNN` you claimed, and pushes.
+**It refuses rather than shipping something wrong.** It takes ~8 minutes; poll `[ -f .ship-in-progress ]`,
+never re-run it. Then confirm `git rev-parse HEAD` == `git rev-parse ssh/main`.
+
+**Three writing rules he has enforced personally, each after catching a miss:**
+1. **Quote him verbatim and in full** in the entry, before paraphrasing anything. A summary is where
+   clauses go to die.
+2. **Split a multi-part request into a checklist of HIS clauses** and tick them one at a time. An entry
+   cannot be marked DONE while a clause is unticked.
+3. **Never ship a visual he has not seen.** Any design request: draw real options, render them at the
+   size they ship at (and at 380px), send him the picture, let him pick.
+
+**If something goes wrong and the code needs undoing:**
+
+```bash
+tools/rollback.sh
+```
+
+Lists every release newest-first; `tools/rollback.sh v16.12` puts the app back to that one and pushes
+it live. It never rewrites history and never force-pushes, so nothing is lost either way.
+
+**The rest of the standing rules are in [CLAUDE.md](CLAUDE.md)** (loaded automatically) and the loop's
+rules are in [LOOP.md](LOOP.md). Everything in both is there because it already went wrong once.
+
+---
 
 **This file is the record of everything Ezra has asked for.** Every request goes in here the moment
 he makes it, however small, in the order he said it. Nothing is judged too minor to write down —
@@ -30408,3 +30466,256 @@ re-opened #480, which I had marked done and had not fixed.
              The suite now renders EVERY filter's ingredients one at a time and fails if any of them changes nothing,
              with a control that fails first if the harness itself cannot see a change. An effect change can no
              longer quietly kill a filter.
+
+- [ ] **859 — "How confident are you that every effect is actually good?" — and if the answer is not confident, do the sweep now.** (11 Sep, his words in full:)
+      > *"How confident would you say you are that everything? Every single effect is high-quality and has had a lot of
+      > effort put into it and they're as good as they can get like every setting that you could possibly want on them?
+      > Like how comfortable are you in that because I've asked you a lot of times to go through every single effect and
+      > just improve them all but I haven't really checked and seen what you've done and I was about to ask you to do it
+      > again when I was like I'd probably see if it's actually even worth doing at this point but if you do think it's
+      > worth doing it all would just go ahead and do it right now"*
+      **THE HONEST ANSWER, WITH THE NUMBERS, because he is asking whether to trust the record:**
+      · **205 effect types** in the registry.
+      · **Judged BY EYE: 72 of them** — Colouring (43) and Warping (29). That is **35%**.
+      · The other **~133 were "swept by number"**, which asks "does this change the picture at its defaults" — a floor,
+        not a judgement. It cannot see an effect that works but looks wrong, and it cannot see a missing setting.
+      · **"Every setting you could possibly want" has never been audited at all.** 29 sliders had their ceilings raised
+        by measurement (#482), and defaults/slider travel were checked mechanically — but nobody has asked, effect by
+        effect, whether the parameter set is the right one.
+      · **And there is direct evidence the numeric approach misses real faults:** yesterday's #858 found that `glow`
+        contributes literally nothing inside a filter, in three shipped filters, and no numeric sweep had caught it
+        because it tested effects alone rather than in use.
+      **So: yes, it is worth doing, and he told me to go ahead if so.**
+      **JUMPED: this entry is IN PROGRESS, and what it finds ships under its own numbers — which is clause 4
+      of this very entry ("findings logged as their own numbered items").** #863 is the first of them: the
+      "this layer never moves" warning never fired on a photograph. The queue gate reads numbers rather than
+      intent, and would otherwise hold every finding of this audit behind the audit itself, which would mean
+      shipping nothing until all 205 effects are done. Each finding is proven and tested in its own right.
+      ═══ **FIRST PASS, 11 Sep — what is measured so far** (tools/design/859-effects.html, 859-audit.html) ═══
+      · **All 205 effects rendered at their defaults on a photograph, beside the untouched picture**, on one sheet.
+        That sheet is the instrument the by-eye pass needs and it did not exist before today.
+      · **27 of the effects OFFERED for a photo layer produce no visible change at their defaults** (a mean channel
+        difference under 0.05 across three photographs). Most have an honest reason — Drop Shadow, Stroke, Inner Glow,
+        Smooth Edges and the rest need an ALPHA EDGE, and a full-frame photo has none — but that is the point: the
+        user picks one and nothing happens.
+      · **`glow` is dead on any full-frame photo**, proven twice now: here, and in #858 where it contributed exactly
+        0.00 inside three shipped filters.
+      ⚠️ **AND ONE THING I CANNOT YET CLAIM, because my own probe failed its control.** I tried to measure whether the
+      app WARNS about those 27 ("does nothing here" badges exist — `FM._fxDeadHereWhy`). It reported 0 warned out of
+      27, which would be damning — but the control case, an effect the badge is known to cover, also returned nothing.
+      So the harness cannot see badges and every number in that run is worthless. **Badge coverage is unmeasured, not
+      bad.** The right way is a suite test driving the real browser, not an iframe probe; that is the next step.
+      1. [ ] Every remaining category judged BY EYE on real photographs, the way Colouring and Warping were.
+             ▸ the sheet exists now; ~133 effects still need the actual looking.
+      2. [ ] Each one that looks wrong is fixed and shown to him.
+      3. [ ] A pass on the SETTINGS themselves: does each effect expose the controls you would expect, with useful
+             ranges — the half that has never been looked at.
+      4. [ ] Findings logged as their own numbered items, and the class-level ones turned into tests.
+
+- [ ] **860 — Durability / stress testing, especially on PC: try to break it, and the icons that do not display.** (11 Sep, same message, his words in full:)
+      > *"and also you can do some handsome stuff and just durability test the oven and see where you can break things
+      > I guess. just going through like mess around with the PCs like how you can drag up and down the two like the
+      > timeline ends the ad layer separately and just like Claire and see how you can get it to improved because I
+      > don't know how good it is right now cause I've tested it in awhile but I just know that last time I've tested
+      > it it's been a bit broken and foggy sometimes like you can do certain things to mess it up and like the icons
+      > don't display properly so just that's a bunch of things for you to do."*
+      (Dictation: "handsome stuff" = hammering/stress; "the oven" = the app; "the ad layer" = the ADD-LAYER row;
+      "just like Claire" = unclear, most likely "just click around".)
+      **What he is pointing at:** dragging the timeline divider and the add-layer row up and down, separately, on PC —
+      and generally hammering the app to see what breaks. His memory of the last time he tried: "a bit broken and
+      foggy", things you can do to mess it up, and **icons that do not display properly**.
+      ═══ **FIRST PASS, 11 Sep — and the honest result is that these two hold up** ═══
+      1. [x] Stress the PC layout: both handles dragged to the top of the screen, the bottom, the middle, and to
+             absurd targets (-400 and 600px past the bottom), separately AND both grabbed at once without releasing —
+             at **1280×800, 1024×700, 1440×900 and 800×620**. Nothing collapsed, nothing went off-screen, neither
+             handle escaped the window, and the clamps held at every size. **#tl-resizer and #am-resizer are healthy.**
+             ⚠️ **My first run said the divider did not move AT ALL, and that was the harness, not the app.** The
+             handle uses `setPointerCapture`, and a synthetic pointer cannot be captured — so moves dispatched on
+             `window` never reached it. Dispatched on the handle itself, it works perfectly. Worth writing down: it is
+             the second time in two days that a synthetic-event limitation nearly became a bug report.
+      2. [x] **First hunt: nothing found on PC.** All 37 icons on screen at 1280×800 measured — every one has drawable
+             children, and at least one of those children is filled or stroked and visible. — 11 Sep
+             ⚠️ **And the first version of THAT check accused seven of them**, because it read `fill`/`stroke` on the
+             `<svg>` root while the ink lives on the paths inside. The tool, again. Both of today's false alarms were
+             caught by asking "would this accusation survive a control?" before writing any of it down as a fault.
+             ⤷ **This does not mean he never saw it.** He has reported it more than once, and it is likely to be a
+             STATE rather than a place: an icon that fails to draw after something specific happens (a rebuild, a
+             tab switch, a project load). The next pass drives the app through those states rather than photographing
+             it at rest.
+      3. [ ] Everything found gets its own numbered item, a fix, and a test that fails without it.
+      **JUMPED: v16.17 closes #863 while this is still open, deliberately.** #863 is a finding OF the sweep this
+      and #859 asked for — a one-line fix with two controls, proven by reversion — and the first durability pass on
+      THIS item (both drag handles at four window sizes, all 37 icons on PC) found nothing broken, so it produced no
+      code to ship. Holding a proven fix back to wait for a pass that has nothing to hand over would leave the bug in
+      his app for no gain. This item stays open and keeps going; clause 2's state-driven pass is the next work on it.
+
+- [x] **861 — "Give me the list to answer."** (10 Sep, his words in full — logged LATE, on 11 Sep, and that is the point of the entry:)
+      > *"Give me the list to answer."*
+      ✅ **DONE the same turn it was asked** — the 22 parked items were handed to him grouped by what each needs (7
+      letters, 3 quick looks on his phone, 8 copies from Settings covering 12 items), and the unblock page was
+      corrected to match: it had been claiming 19 letters, 6 looks and 2 screenshots while holding 10 letter cards, 3
+      look cards and an EMPTY screenshots section, because items that left the page were never subtracted.
+      ⚠️ **BUT IT WAS NEVER WRITTEN DOWN UNTIL HE ASKED ME TO CHECK.** He said on 11 Sep: *"make sure you don't miss
+      anything I said, log if you have to"* — I went back over every message of his in this session against this file,
+      and this is the one that was missing. Doing the work is not the same as logging it: the record is what survives
+      a context reset, and an unlogged request is one nobody can audit. Every other message of his from 7–11 Sep is
+      accounted for (#824, #835, #843–#847, #850–#860).
+
+- [ ] **862 — STANDING INSTRUCTION: keep the loop running, take the time to get it right, and miss nothing.** (11 Sep, his words in full:)
+      > *"Turn on a loop and keep going don't stop. Take your time to perfect everything, make sure you don't miss
+      > anything I said, log if you have to"*
+      1. [x] The loop is on and ticking every minute (job 1f8cef41, re-armed 10 Sep under #847 — checked again today
+             and still alive). ⚠️ Still session-only: it dies if this chat closes. #847 clause 2 holds the open
+             question of whether he wants a cloud routine as the backstop.
+      2. [x] **"Miss nothing I said" — audited today.** Every message of his in this session checked against this
+             file, one by one. One was missing and is now #861.
+      3. [ ] **"Take your time to perfect everything"** — read as: no more shipping a thing that is only mostly right.
+             It is the same instruction as *"no cheap cutting corners"* (#858) and *"put a lot of effort into it"*
+             (#853), and the way it has actually paid off both times is the same: an independent review pass before it
+             ships, not after he finds it. #853 shipped with eleven defects found that way; #858 found a whole class.
+             So that is the standing method now, not a one-off: **anything visual or user-facing gets a review pass
+             before he sees it.**
+      ⤷ **Why this is filed as a STANDING INSTRUCTION rather than a task (12 Sep).** It has no finish line — clause 3
+        says so itself, "the standing method now, not a one-off" — so as an ordinary open item it would sit at the
+        bottom of the queue blocking every release after it, forever, and the only way past would be to write
+        `JUMPED:` into it on every single ship. That is a lie repeated daily instead of a fact stated once. It is
+        still listed on every tick under its own heading, so it cannot be lost; it just stops pretending to be work
+        that can be finished. **Nothing about it is dropped** — the loop runs, the review pass before anything
+        visual ships is the method, and "miss nothing" is enforced by the INBOX drain and the verbatim rule.
+
+- [x] **863 — The "this layer never moves" warning never fired on a PHOTO, only on a shape (hunt HIGH #106)** (11 Sep) ✅ DONE v16.17.
+      **Found while answering his question in #859** — "how confident are you that every effect is actually good?" — by
+      asking the RUNNING app, effect by effect, whether it warns when one cannot work.
+      **The measurement, with a control that made it readable:** on a never-animated SHAPE, `objectblur` is badged
+      *"This layer never moves, so there is no movement to smear"* and `motionflow` *"Nothing moves inside this layer"*.
+      On a never-animated PHOTOGRAPH, in the identical situation, both said **nothing**.
+      **The cause is one line and its comment was half right.** `cannotMove()` read "shape or text, otherwise it moves
+      by itself", commented *"video moves by itself"* — true of VIDEO, whose picture changes frame to frame, and false
+      of an IMAGE, which is as still as a rectangle. A photograph is the commonest layer in the app.
+      1. [x] A still photo is treated as still, so both motion effects warn on it. — v16.17
+      2. [x] A test with two controls, because a badge that always fires tells him nothing: animate the photo and the
+             badge must GO, and a VIDEO layer must never get it. — v16.17
+      ⤷ **This is one instance of the class #859 is really about.** 27 effects offered for a photo layer do nothing at
+        their defaults, and the honest number for how many of those the app warns about is now measurable — this is
+        the first one fixed. The rest of that audit continues under #859.
+
+- [ ] **864 — The ⋯ menu on a project card is a DARK slab sitting on the LIGHT Home screen, so it does not match the theme.** (11 Sep, via INBOX, with a screenshot. His words, verbatim and in full:)
+      > Log out the pop-up menu for when you press on the three dots on the project in the home menu isn’t matching the theme of this menu and it needs to be changed up so it’s actually fitting
+
+      **The screenshot he sent** is outside the repo on purpose (no binary in the tree):
+      `/Users/ezrasmith/.claude/uploads/776d13bf-2ef3-46e2-9faf-76c2ce5f8539/51a95536-image.png`
+      · **The Home screen around it is LIGHT** — white-to-pale-mint background, black wordmark, a circular search
+        button, a "Select" pill and a gear all white with dark text; the tab row is pale pills with "Projects" a
+        white pill; project cards are white, softly rounded, with a drop shadow, a thumbnail, a duration chip, a
+        green "OPEN" badge on the open one and a meta line; the + at the bottom is a pastel rainbow circle.
+      · **The ⋯ menu on top of it is DARK** — a near-black rounded slab with white text. Its rows, in order:
+        Open · Pin to top · Rename… · Duplicate · Save as template… · Save as element… · Select… · Export video… ·
+        Save project file…, then a divider and **Delete…** in red.
+      **What he wants:** the menu restyled so it belongs to the Home screen's theme — same light glass surface, same
+      corner radius and shadow language, dark text, with Delete still reading as the destructive one.
+      ⚠️ **DESIGN REQUEST — his standing rule applies:** draw real options, render them at the size they ship at,
+      and show him the picture before it ships. He has NOT waived it here.
+      ⚠️ **Check the OTHER menus on that screen in the same pass** — the draft card's ⋯, the + menu, any confirm
+      dialogs. If they share one renderer this is one fix; if not, he will see the next one and report it again.
+
+- [ ] **865 — The add-row switch STILL does not update live while layers are being moved. THIRD time he has raised it.** (11 Sep, via INBOX. His words, verbatim and in full:)
+      > Log that the switch still doesn’t update live when you are moving around layers
+
+      ⚠️ **"Still" is the whole point — two closed entries sit behind this and he is saying it is not fixed:**
+      · **#416** (ticked) — *"while dragging a layer, the add-row switch takes that layer's colour, and pressing it
+        jumps that layer to the top or bottom"*, his own "genius idea".
+      · **#570** (ticked, 26 Aug, with a phone screenshot) — *"Dragging a layer still does not update the toggle
+        switch LIVE."* The same complaint, already once before.
+      So a third report means whatever shipped does not hold in the case he is actually doing. **Do not re-read the
+      old entries and conclude it works** — that is exactly what produced #570 after #416. Reproduce it first, at
+      380px with touch, moving layers the way he does.
+      **Where the code is:** `FM.syncAddSwitch` in `js/app.js` (defined ~2339, exported ~2364) repaints the switch;
+      `js/timeline.js` publishes `FM.dragLayerId` and calls it when a ≡ reorder drag starts. **"Live" means DURING
+      the drag, every time the row would land somewhere new** — not once at the start and once on drop.
+      ⚠️ He says "moving around layers", which may be wider than the ≡ reorder drag #416 covered — it could include
+      dragging a clip between rows, or the multi-select move. Ask the code, not the assumption, and cover every path
+      that changes a layer's position.
+
+- [ ] **866 — PC: the TIMELINE options menu does not travel with the timeline when the band is moved, unlike the view options menu.** (11 Sep, via INBOX. His words, verbatim and in full:)
+      > The timeline options menu on PC is kind of glitchy because if you move the timeline up and down while it’s active it doesn’t move with it. The view options menu moves with it and it’s great but the timeline view options doesn’t get altered and it just kinda end up going on top of other stuff and really buggy.
+
+      **Read it as:** on PC, open the timeline options menu, then drag the timeline up or down while it is still
+      open. The menu stays where it was and ends up floating over whatever is now underneath.
+      **He names the working case himself:** the VIEW options menu DOES follow the band and he likes it ("moves with
+      it and it's great"). So this is one menu missing a behaviour its neighbour already has — the fix should make
+      it use the same mechanism, not invent a second one.
+      ⚠️ **Precedent, and it is the same bug in a different menu:** **#811** (ticked, v15.91) — *"Dragging the
+      TIMELINE's divider with the Effects menu open moves the band but not the menu"*. Fixed by re-placing the sheet
+      on **every write** during the divider's drag and on its end, because `#tl-resizer`'s drag writes `--tl-h` and
+      calls `stageResized()` without telling the sheet. This looks like the same gap, never closed for this menu.
+      Start at `js/app.js`, around the `#tl-resizer` drag and whatever re-pins the view-options pop-up.
+      ⚠️ **PC only, as he says** — verify at a desktop width AND in the layout he actually uses, not just the 900px
+      suite frame. A menu that follows correctly at one width can still be wrong at his.
+
+- [ ] **867 — PC: the Controller and New group tiles look too alike, both look bad, and New group is the same colour as the custom-elements background.** (11 Sep, via INBOX. His words, verbatim and in full:)
+      > The controller and New group options are both very similar looking while also both looking kind of shit so if you could just work those a bit so they look different and also the problem with the new group button is that like the exact same colour as the custom elements background so change colour as well. It’s just on PC. I noticed it more because on PC the buttons are bigger and that Connor makes them look a lot more shit when they’re bigger.
+
+      ("that Connor makes them" is dictation — read as "that kinda makes them".)
+      **Three separable things:**
+      1. [ ] Controller and New group must stop looking like each other.
+      2. [ ] Both need to look better in their own right — "both looking kind of shit".
+      3. [ ] New group's colour clashes with the custom-elements background — it is "the exact same colour", so it
+             disappears into what it sits on. Change the colour.
+      **PC only**, and he says why: the tiles are bigger there, which makes it obvious. Probably present on the
+      phone too, just smaller.
+      **Where they are:** both are cards in `js/addmenu.js` — `Controller` (~252) and `New group` (~261). **They are
+      BOTH DRAWN WITH A DASHED OUTLINE, which is almost certainly why they read as the same thing**, and the file
+      already knows it: a note at ~520 says outright that *"`Controller` and `New group` are both dashed, and there
+      the dashes mean 'an EMPTY container'"*. Tints are set at ~906: Controller `255, 118, 140` (red — **pinned** by
+      his own earlier words *"Null being red is good"*, so do not change it without saying so), New group
+      `150, 165, 190` (steel, "deliberately the quiet one") — and steel is the colour he says vanishes.
+      ⚠️ **DESIGN REQUEST — his standing rule applies:** draw real options, render them at the size they ship at on
+      PC as well as at 380px, and show him the picture before anything ships. He has not waived it here.
+
+- [x] **868 — "whats the fail safe if an ai fucks up all the code? how do i undo what they did"** (12 Sep) ✅ DONE.
+      His words, verbatim and in full:
+      > *"also real quick, whats the fail safe if an ai fucks up all the code? how do i undo what they did"*
+      > …and, when asked whether a fresh AI would find it: *"Would a new ai like chatgpt know how to use the rollback feautre?"*
+
+      **The answer: `tools/rollback.sh`.** No arguments lists the releases newest-first and changes nothing;
+      `tools/rollback.sh v16.12` puts the whole app back to that release and publishes it. It asks first.
+      1. [x] The script itself — stashes a dirty tree rather than discarding it, never rewrites history, never
+             force-pushes (the restore is a NEW commit, so the rollback is itself reversible), pushes to `ssh`
+             and verifies HEAD == ssh/main rather than trusting the push output.
+      2. [x] **His second question answered by measurement, not opinion.** Nine agents were dropped into this
+             repo with no context and asked his question in four different framings. The first run of five was
+             WORTHLESS and is recorded as such — my own safety preamble named `tools/rollback.sh`, so the probes
+             were told the answer before being asked the question. The clean re-run of four never mentioned any
+             script: **4 of 4 found it, and 4 of 4 said it was luck** — `ls tools/`, not documentation. Every one
+             of them independently named the same cause: `grep -c rollback` was 0 in CLAUDE.md, 0 in LOOP.md, 0 in
+             tick.sh, and the only pointer in the repo was one line inside a 2.9 MB REQUESTS.md.
+      3. [x] **Three real faults in the failsafe, all found by those probes, all fixed:**
+             · **It was UNTRACKED.** Never committed, never on GitHub — it existed on one Mac. `git clean -fd`,
+               the usual reflex while clearing up an AI's mess, deletes untracked files; and the script's own
+               `git stash push -u` would have swept the script into a stash on first real use. **The disaster
+               tool did not survive the disaster.** Committed now.
+             · **A rollback rewound his record.** `git checkout <hash> -- .` restores every tracked file, so
+               REQUESTS.md and POLISH-LOG.md went back too — silently dropping every request logged since that
+               release, which is the exact failure this file exists to prevent. Those three files are now held at
+               their current state: the code goes back, the notes keep going forward.
+             · **It was not an exact restore.** Files added AFTER the target survived, leaving a mixture of the
+               old index.html and newer orphans. Those are removed now.
+      4. [x] It is written where it will actually be found: a new `README.md` at the repo root (there was none —
+             17 markdown files and no front door), a block in CLAUDE.md's SAFEGUARDS section beside the other six
+             tools, a line in every `tools/tick.sh` run, and the START HERE block at the top of this file.
+      ⤷ **One gap this does NOT close, and it is worth its own item:** rollback.sh covers the CODE. His actual
+        projects live in localStorage / IndexedDB on the device and have no one-command backup at all — the only
+        route is exporting a `.fmotion.json` by hand, beforehand. Raised by two of the probes independently, and
+        it is the half he would actually grieve. Logged as #869.
+
+- [ ] **869 — There is no backup for his PROJECTS, only for the code.** (12 Sep — found while answering #868, not his words.)
+      `tools/rollback.sh` can put the app back to any release, and every release is on GitHub. **His projects are
+      not in the repo** — they are in localStorage / IndexedDB on whichever device made them. If that storage is
+      cleared, the device is lost, or a project is deleted by mistake, there is no undo: `js/home.js` says so in
+      its own words at the delete prompt — *"there is no undo and no backup, and the confirm only shows a COUNT"*.
+      The only existing route is exporting a `.fmotion.json` by hand before anything goes wrong.
+      1. [ ] A one-command / one-tap "back up everything" that writes every project to a single file.
+      2. [ ] Somewhere obvious to put it back from.
+      3. [ ] ⚠️ ASK HIM FIRST — this is his data and the sensible answers differ a lot (a file he saves himself
+             vs. anything that leaves the device). The app is local-only by design and that should not change
+             without him saying so.

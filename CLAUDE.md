@@ -123,6 +123,25 @@ compares the file with its own backup, so it catches that and every other silent
 the suite, so a mistake costs a second rather than four minutes.
 
 ```bash
+tools/rollback.sh                 # list the releases, newest first — changes NOTHING, safe to run
+tools/rollback.sh v16.12          # put the whole app back to that release and push it live
+```
+**This is the answer to "an AI wrecked the code, how do I undo it" — his own words, 12 Sep.** It is listed
+here because four independent agents were dropped into this repo and asked exactly that question, and all
+four found the script **by luck** (`ls tools/`) rather than from anything written down: `grep -c rollback`
+was 0 in this file, 0 in LOOP.md and 0 in tick.sh, and the only pointer was one line inside a 2.9 MB
+REQUESTS.md. A safeguard nobody is told about is a hope, which is what the section above is about.
+It stashes a dirty tree before touching anything, keeps REQUESTS.md / POLISH-LOG.md / INBOX.md at their
+CURRENT state so his record never travels backwards, removes files added after the target so the tree is
+really that release, asks before it publishes, and **never rewrites history or force-pushes** — the restore
+is a NEW commit, so the rollback is itself reversible. His projects are untouched either way: they live in
+localStorage / IndexedDB on the device, not in this repo.
+⚠️ **It was untracked for its first day and that was a real hole**, found by the same probes: `git clean -fd`
+— the usual reflex while cleaning up an AI's mess — deletes untracked files, and the script's own
+`git stash push -u` would have swept the script into a stash on first use. The disaster tool did not survive
+the disaster. It is committed now; keep it that way.
+
+```bash
 tools/prove.sh        # run by ship.sh: every changed test must FAIL against HEAD's source and PASS here
 tools/spotcheck.sh <commit>   # the same proof for a past release; tick.sh lists the ones never checked
 tools/tick.sh         # the first command of every loop tick — computes the facts instead of remembering them

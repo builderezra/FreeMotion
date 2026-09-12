@@ -65,6 +65,8 @@ PY
 hr "SAY IN EVERY REPLY UNTIL HE ANSWERS (from LOOP.md)"
 awk '/SAY THESE IN EVERY REPLY/{f=1; next} f && /^\*\*▶️|^\*\*📌|^## /{exit} f && /^- \*\*#/{print}' LOOP.md | cut -c1-200
 echo
+echo "If the app is broken and needs undoing:  tools/rollback.sh  (no args = list releases; tools/rollback.sh v16.12 = put it back and push)"
+echo
 echo "Rules in one breath: log him verbatim before working · oldest first · read the code before building · never stop the cron ·"
 echo "prove before claiming (a fix ships with a test that FAILS without it — ship.sh checks) · mobile at 380px · batch 3-5 items per ship ·"
 echo "ship.sh in the background with timeout 600000, then HEAD == ssh/main · when he is silent, DECIDE and show him the picture (rule 16)."
