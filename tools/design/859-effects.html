@@ -1,0 +1,64 @@
+<!doctype html><meta charset="utf-8"><title>859 effect sweep</title>
+<style>body{margin:0;background:#0f1420}img{display:block;max-width:100%}
+iframe{position:fixed;left:-3000px;width:900px;height:700px;border:0}
+#say{position:fixed;left:8px;top:8px;color:#8fa;font:12px monospace;z-index:9}</style>
+<div id="say">booting…</div><img id="sheet"><iframe id="a" src="../../index.html"></iframe>
+<script>
+/* queue 859 — HIS QUESTION: are all the effects actually good? 35% of them have ever been LOOKED at.
+   This renders every effect in a category through the real pipeline, at its DEFAULTS, beside the
+   untouched photograph — the same instrument that found the dead glow in three filters yesterday. */
+var S=180, GAP=6, LAB=15, COLS=5;   // bigger tiles: this sheet is for JUDGING, not for counting
+function say(m){ document.getElementById('say').textContent=m; }
+var CAT = (location.hash||'#color').slice(1);
+document.getElementById('a').addEventListener('load', function(){
+  var w=document.getElementById('a').contentWindow, n=0;
+  (function wait(){ if(!(w.FM&&w.FM.fxRegistry&&w.FM.renderScene&&w.FM.EFFECTS)){ if(n++>500) return say('FM never came up'); return setTimeout(wait,50);} setTimeout(function(){ run(w).catch(function(e){say('threw '+(e&&e.stack||e));}); },900); })();
+});
+function loadPhoto(w,key){ return new Promise(function(ok,bad){ var im=new w.Image(); im.onload=function(){ok(im);}; im.onerror=function(){bad(new Error(key));}; im.src='../../fx-art/'+key+'.jpg?v=1'; }); }
+async function run(w){
+  var FM=w.FM, doc=w.document, photos={};
+  var cats = FM.fxRegistry.categories ? FM.fxRegistry.categories() : null;
+  var all = FM.EFFECTS.map(function(e){ return e.type; });
+  /* #types=a,b,c picks exactly which effects to render, because the registry does not expose its own
+     category map and a sheet of 205 thumbnails is not something anyone can actually judge. */
+  var mine = all;
+  var m = /types=([a-z0-9,]+)/.exec(location.hash || '');
+  if (m) { var want = m[1].split(','); mine = all.filter(function(t){ return want.indexOf(t) >= 0; }); }
+  var KEY = 'dusk';
+  async function tile(effect){
+    if(!photos[KEY]) photos[KEY]=await loadPhoto(w,KEY);
+    var im=photos[KEY], side=Math.min(im.naturalWidth,im.naturalHeight);
+    var c=doc.createElement('canvas'); c.width=S; c.height=S;
+    c.getContext('2d').drawImage(im,(im.naturalWidth-side)/2,(im.naturalHeight-side)/2,side,side,0,0,S,S);
+    var mid='_ef_'+(effect?effect.type:'raw'); FM.media.set(mid,{kind:'image',el:c,width:S,height:S,duration:0}); FM.media.pin(mid);
+    var l=FM.makeLayer('image',{x:S/2,y:S/2,start:0,duration:2}); l.id=mid; l.effects=effect?[effect]:[];
+    var o=doc.createElement('canvas'); o.width=S; o.height=S;
+    FM.renderScene(o.getContext('2d'),{project:{width:S,height:S,fps:30,duration:2,background:'#000'},layers:[l]},0.4);
+    return o;
+  }
+  var plain=await tile(null), cells=[];
+  for(var i=0;i<mine.length;i++){
+    var t=mine[i], inst=null;
+    try { inst=FM.fxRegistry.makeInstance(t); } catch(e){}
+    var reg=FM.fxRegistry.get(t)||{};
+    var cv = inst ? await tile(inst) : null;
+    cells.push({type:t, label:reg.label||t, cv:cv, params:(FM.fxRegistry.paramsOf(t)||[]).map(function(p){return p.key;})});
+    say('rendered '+(i+1)+'/'+mine.length+'  '+t);
+  }
+  var W=GAP+COLS*(S+GAP), rows=Math.ceil((cells.length+1)/COLS), H=GAP+rows*(S+LAB+GAP);
+  var sheet=document.createElement('canvas'); sheet.width=W; sheet.height=H; var g=sheet.getContext('2d');
+  g.fillStyle='#0f1420'; g.fillRect(0,0,W,H); g.textBaseline='top';
+  function put(i,cv,label,sub){
+    var col=i%COLS, row=Math.floor(i/COLS), x=GAP+col*(S+GAP), y=GAP+row*(S+LAB+GAP);
+    if(cv) g.drawImage(cv,x,y+LAB); else { g.fillStyle='#401'; g.fillRect(x,y+LAB,S,S); }
+    g.fillStyle=sub?'#8fb3d9':'#e6ebf2'; g.font='600 11px -apple-system, system-ui, sans-serif';
+    g.fillText(label.slice(0,20),x,y);
+  }
+  put(0,plain,'— as shot —',true);
+  cells.forEach(function(c,i){ put(i+1,c.cv,c.label); });
+  var url=sheet.toDataURL('image/jpeg',0.9);
+  document.getElementById('sheet').src=url; window.__sheet=url; window.__done=true; window.__n=cells.length;
+  window.__missing=cells.filter(function(c){return !c.cv;}).map(function(c){return c.type;});
+  say('done '+CAT+': '+cells.length+' effects');
+}
+</script>

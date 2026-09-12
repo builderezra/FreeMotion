@@ -25865,6 +25865,11 @@ re-opened #480, which I had marked done and had not fixed.
       the tiles, Resolution, Frame rate, Background, Canvas, Cancel and Create all read fine in light
       ink on the dark panel — and the sheet's own heading "New project" is nearly black on that same
       dark panel**, circled. Only the heading is wrong.
+      ⤷ **12 Sep, #864:** the dialog stopped being a dark panel at all on the light Home screen — it now
+        matches the light glass surface, on purpose. The fix above (declaring the card's own ink so no
+        child could inherit the wrong one) is unaffected; the test's PRECONDITION that the panel must be
+        dark no longer holds by design, so it now checks contrast in whichever direction the panel
+        actually is, plus the new fact that it is genuinely light there. Nothing about this item regressed.
       ⚠️ **SAME SHAPE OF BUG AS #647, OPPOSITE DIRECTION, AND THAT IS THE LEAD.** #647 was a LIGHT-theme
       rule that covered `.hm-empty` / `.hm-empty-sub` and missed `.hm-empty-title`. This is a dark panel
       wearing a heading colour meant for a LIGHT background — so the first place to look is whether a
@@ -30583,7 +30588,7 @@ re-opened #480, which I had marked done and had not fixed.
         that can be finished. **Nothing about it is dropped** — the loop runs, the review pass before anything
         visual ships is the method, and "miss nothing" is enforced by the INBOX drain and the verbatim rule.
 
-- [x] **863 — The "this layer never moves" warning never fired on a PHOTO, only on a shape (hunt HIGH #106)** (11 Sep) ✅ DONE v16.17.
+- [ ] **863 — The "this layer never moves" warning never fired on a PHOTO, only on a shape (hunt HIGH #106)** (11 Sep)
       **Found while answering his question in #859** — "how confident are you that every effect is actually good?" — by
       asking the RUNNING app, effect by effect, whether it warns when one cannot work.
       **The measurement, with a control that made it readable:** on a never-animated SHAPE, `objectblur` is badged
@@ -30592,14 +30597,17 @@ re-opened #480, which I had marked done and had not fixed.
       **The cause is one line and its comment was half right.** `cannotMove()` read "shape or text, otherwise it moves
       by itself", commented *"video moves by itself"* — true of VIDEO, whose picture changes frame to frame, and false
       of an IMAGE, which is as still as a rectangle. A photograph is the commonest layer in the app.
-      1. [x] A still photo is treated as still, so both motion effects warn on it. — v16.17
-      2. [x] A test with two controls, because a badge that always fires tells him nothing: animate the photo and the
-             badge must GO, and a VIDEO layer must never get it. — v16.17
+      1. [ ] A still photo is treated as still, so both motion effects warn on it. **Built and tested, held in
+             `tools/held-863/` rather than shipped** — #863 is a finding of mine, and the classifier correctly ranks
+             it behind #865 (his own words) whatever the numbers say. Re-apply `tools/held-863/fx-browser.patch` and
+             paste in `tools/held-863/863-test.js` once #865 is worked, then ship them together and delete that folder.
+      2. [ ] A test with two controls, because a badge that always fires tells him nothing: animate the photo and the
+             badge must GO, and a VIDEO layer must never get it. Written and passing against the fix; parked with it.
       ⤷ **This is one instance of the class #859 is really about.** 27 effects offered for a photo layer do nothing at
         their defaults, and the honest number for how many of those the app warns about is now measurable — this is
         the first one fixed. The rest of that audit continues under #859.
 
-- [ ] **864 — The ⋯ menu on a project card is a DARK slab sitting on the LIGHT Home screen, so it does not match the theme.** (11 Sep, via INBOX, with a screenshot. His words, verbatim and in full:)
+- [x] **864 — The ⋯ menu on a project card is a DARK slab sitting on the LIGHT Home screen, so it does not match the theme.** ✅ DONE v16.17. (11 Sep, via INBOX, with a screenshot. His words, verbatim and in full:)
       > Log out the pop-up menu for when you press on the three dots on the project in the home menu isn’t matching the theme of this menu and it needs to be changed up so it’s actually fitting
 
       **The screenshot he sent** is outside the repo on purpose (no binary in the tree):
@@ -30613,10 +30621,27 @@ re-opened #480, which I had marked done and had not fixed.
         Save project file…, then a divider and **Delete…** in red.
       **What he wants:** the menu restyled so it belongs to the Home screen's theme — same light glass surface, same
       corner radius and shadow language, dark text, with Delete still reading as the destructive one.
-      ⚠️ **DESIGN REQUEST — his standing rule applies:** draw real options, render them at the size they ship at,
-      and show him the picture before it ships. He has NOT waived it here.
-      ⚠️ **Check the OTHER menus on that screen in the same pass** — the draft card's ⋯, the + menu, any confirm
-      dialogs. If they share one renderer this is one fix; if not, he will see the next one and report it again.
+      1. [x] **DESIGN REQUEST — his standing rule applied.** `FM.contextMenu` picks up the light glass surface
+             (paper white, the cards' own radius/shadow language, dark ink) only while the light Home screen is
+             actually on screen — a class set at open time, not a CSS attribute selector, because `data-home`
+             stays "light" while a project is open too and the editor's menus must stay dark regardless. Delete
+             stays red, retuned from the dark theme's salmon (2.6:1 on white) to a red that reads on paper (5.9:1).
+             Three options (A/B/C — glass, tinted glass, flat card) rendered through the real app at 380px and at
+             PC width and sent to him before anything shipped; option A shipped.
+      2. [x] **Check the OTHER menus on that screen in the same pass** — done, and they did NOT share one renderer:
+             the four ⋯ menus and the + button's list are all `FM.contextMenu` and got the fix for free, but the
+             New-project DIALOG (`#hm-dialog`) is a separate element and was still a full dark card on the light
+             Home — found by photographing it, not by assuming. Fixed the same way, including the Create button
+             (its fill is a background-IMAGE gradient layered over the background-colour, a second instance of the
+             glass theme's shorthand trap) and the "1080 × 1920 · 30 fps" line, both measured white-on-white before
+             the fix.
+      3. [x] The contrast sweep (#644) that guards the light Home never opened the dialog, so it was blind to
+             exactly the bug above — the same shape queue 665 already fixed once for the tabs. It opens the dialog
+             now and reads gradient fills, with a control proving it doesn't accuse the (correct) OPEN badge.
+      4. [x] A test with a real control: it opens the menu on the light Home AND, in the same run, inside the
+             editor with `data-home` still "light" — the obvious selector-based fix passes the first half and
+             would have turned every timeline right-click menu white, which only the second half catches. Proven
+             by reverting the fix and watching it fail with the exact wording of his screenshot.
 
 - [ ] **865 — The add-row switch STILL does not update live while layers are being moved. THIRD time he has raised it.** (11 Sep, via INBOX. His words, verbatim and in full:)
       > Log that the switch still doesn’t update live when you are moving around layers

@@ -1,0 +1,50 @@
+<!doctype html><meta charset="utf-8"><title>859 defaults audit</title>
+<body style="background:#0f1420;color:#cde;font:11px monospace"><pre id="out">…</pre>
+<iframe id="a" src="../../index.html" style="position:fixed;left:-3000px;width:900px;height:700px;border:0"></iframe>
+<script>
+document.getElementById('a').addEventListener('load', function(){
+  var w=document.getElementById('a').contentWindow,n=0;
+  (function wait(){ if(!(w.FM&&w.FM.fxRegistry&&w.FM.renderScene&&w.FM.EFFECTS)){ if(n++>500) return; return setTimeout(wait,50);} setTimeout(function(){run(w).catch(function(e){document.getElementById('out').textContent='threw '+(e&&e.stack||e);});},900); })();
+});
+function loadPhoto(w,key){ return new Promise(function(ok,bad){ var im=new w.Image(); im.onload=function(){ok(im);}; im.onerror=function(){bad(new Error(key));}; im.src='../../fx-art/'+key+'.jpg?v=1'; }); }
+async function run(w){
+  var FM=w.FM, doc=w.document, S=128, photos={}, rows=[], dead=[], faint=[];
+  async function px(key, effects, t){
+    if(!photos[key]) photos[key]=await loadPhoto(w,key);
+    var im=photos[key], side=Math.min(im.naturalWidth,im.naturalHeight);
+    var c=doc.createElement('canvas'); c.width=S; c.height=S;
+    c.getContext('2d').drawImage(im,(im.naturalWidth-side)/2,(im.naturalHeight-side)/2,side,side,0,0,S,S);
+    var mid='_dz_'+key; FM.media.set(mid,{kind:'image',el:c,width:S,height:S,duration:0}); FM.media.pin(mid);
+    var l=FM.makeLayer('image',{x:S/2,y:S/2,start:0,duration:4}); l.id=mid; l.effects=effects||[];
+    var o=doc.createElement('canvas'); o.width=S; o.height=S;
+    FM.renderScene(o.getContext('2d'),{project:{width:S,height:S,fps:30,duration:4,background:'#000'},layers:[l]},t||0.4);
+    return o.getContext('2d').getImageData(0,0,S,S).data;
+  }
+  function diff(a,b){ var d=0; for(var i=0;i<a.length;i+=4) d+=Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2]); return d/(a.length/4)/3; }
+  var KEYS=['dusk','city','cat'];
+  var bases={}; for (var k=0;k<KEYS.length;k++) bases[KEYS[k]]=await px(KEYS[k],[]);
+  var list=FM.EFFECTS.map(function(e){return e.type;});
+  for(var i=0;i<list.length;i++){
+    var t=list[i], inst=null;
+    try{ inst=FM.fxRegistry.makeInstance(t); }catch(e){}
+    if(!inst){ dead.push(t+' — NO INSTANCE'); continue; }
+    var best=0, on='';
+    for (var k2=0;k2<KEYS.length;k2++){
+      var d=diff(bases[KEYS[k2]], await px(KEYS[k2],[JSON.parse(JSON.stringify(inst))]));
+      if (d>best){ best=d; on=KEYS[k2]; }
+    }
+    var reg=FM.fxRegistry.get(t)||{}; var nparams=(FM.fxRegistry.paramsOf(t)||[]).length;
+    rows.push({t:t,label:reg.label||t,d:best,on:on,n:nparams});
+    if (best<0.05) dead.push(t+' ('+(reg.label||t)+') — 0.00 on all three photographs');
+    else if (best<0.5) faint.push(t+' ('+(reg.label||t)+') — '+best.toFixed(2));
+    document.getElementById('out').textContent = 'checked '+(i+1)+'/'+list.length;
+  }
+  rows.sort(function(a,b){return a.d-b.d;});
+  var txt = 'WEAKEST 30 AT THEIR DEFAULTS (mean channel diff, best of three photographs):\n' +
+    rows.slice(0,30).map(function(r){return ('  '+r.d.toFixed(2)).padStart(8)+'  '+r.label+' ('+r.t+', '+r.n+' params, best on '+r.on+')';}).join('\n') +
+    '\n\n=== DEAD AT DEFAULTS ('+dead.length+') ===\n'+dead.join('\n') +
+    '\n\n=== BARELY VISIBLE ('+faint.length+') ===\n'+faint.join('\n') +
+    '\n\nEFFECTS WITH NO PARAMETERS AT ALL: ' + rows.filter(function(r){return r.n===0;}).map(function(r){return r.label;}).join(', ');
+  document.getElementById('out').textContent=txt; window.__done=txt;
+}
+</script>

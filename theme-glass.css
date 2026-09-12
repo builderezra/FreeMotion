@@ -876,3 +876,141 @@ html.splash-on-light, html.splash-on-light body { background: #111; animation: s
 @media (prefers-reduced-motion: reduce) {
   html.splash-on-light #splash.splash-light, html.splash-on-light, html.splash-on-light body { animation: none; background: #fff; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   #864 — THE ⋯ MENU ON A PROJECT CARD, ON THE LIGHT HOME SCREEN
+   Ezra, 11 Sep, with a photograph of his own phone: *"the pop-up menu for when you press on the
+   three dots on the project in the home menu isn’t matching the theme of this menu and it needs to
+   be changed up so it’s actually fitting"*. His screenshot is a near-black slab with white rows
+   dropped on a white-to-mint page of white cards — it does not belong to the screen at all.
+
+   WHY IT WAS DARK, AND WHY NONE OF THE 44 RULES ABOVE CAUGHT IT. `#ctx-menu` is appended to
+   `document.body` (contextmenu.js `ensure()`), not into `#home-screen`, because it has to escape the
+   home's stacking context and its scroller. Every light rule in this file is written as
+   `html[data-home="light"] <something inside the home>`, so the menu is outside all of them and kept
+   the editor's `--panel-2` / `--line` / `--text`. Nothing was broken; the menu simply was never a
+   member of the family. **This is the #647 shape for the fifth time — a family rule that misses one
+   member — and the reason it keeps happening is that membership is by SELECTOR, so a member that
+   moves out of the subtree leaves silently.**
+
+   WHY THE SELECTOR IS A CLASS AND NOT `html[data-home="light"] #ctx-menu`. That would be true inside
+   a PROJECT as well: the home-light setting persists while the editor is open, and the editor is dark
+   whatever it is set to, so every right-click menu on the timeline would turn white. The condition
+   that matters is "is the light home ON SCREEN", which is a question about state, not about ancestry,
+   and contextmenu.js answers it at open time.
+
+   ONE FIX COVERS ALL FOUR MENUS ON THAT SCREEN — the project card's ⋯, the draft card's ⋯, the
+   template/element card's ⋯ and the + button's "which project?" list are all `FM.contextMenu.show()`
+   (home.js lines 1286, 1716, 1813, 1944, 2031, 2050). He asked for the one he photographed; they were
+   all the same slab, and they all change together because they are all the same element.
+
+   THE SURFACE IS THE CARDS' OWN, deliberately, so the menu reads as belonging to the thing it opened
+   from: the same white glass, the same 1px rim of the same hue, the same two-part shadow. Only three
+   things differ from `.hm-card`, each for a reason — it is more opaque (.92 vs .82) because it lands
+   on top of busy content and the rows have to stay legible; the radius is 14 not 16 because the menu
+   is a smaller box and 16 on a 152px-wide slab reads as a pill; and the drop shadow is longer, because
+   this one is floating above the page and the cards are sitting on it.
+   ⚠️ background-COLOR, never the `background` shorthand — the shorthand resets background-image, and
+   the glass theme paints its sheen there. That has already cost two silent regressions in this file.
+   ══════════════════════════════════════════════════════════════════════════════════════════════ */
+#ctx-menu.ctx-light {
+  background-color: rgba(255, 255, 255, .92);
+  border-color: rgba(16, 30, 52, .12);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(16, 30, 52, .06), 0 18px 40px -20px rgba(16, 30, 52, .55);
+  backdrop-filter: blur(14px) saturate(1.15); -webkit-backdrop-filter: blur(14px) saturate(1.15);
+}
+/* The ink is the cards' title colour, so a row and a project name read at the same weight. */
+#ctx-menu.ctx-light .ctx-item { color: #10151f; }
+#ctx-menu.ctx-light .ctx-item:hover { background: rgba(16, 30, 52, .055); }
+/* DELETE STAYS THE DESTRUCTIVE ONE — his note asks for that by name. The dark theme's #ff6b6b is a
+   salmon chosen to glow on near-black; on white it measures 2.6:1 and reads as disabled rather than
+   dangerous. Same hue family, carried down until it is unmistakably red ON PAPER (5.9:1). */
+#ctx-menu.ctx-light .ctx-item.danger { color: #c62740; }
+#ctx-menu.ctx-light .ctx-item.danger:hover { background: rgba(198, 39, 64, .10); }
+#ctx-menu.ctx-light .ctx-sep { background: rgba(16, 30, 52, .10); }
+/* The rest of the menu's parts, so nothing is left as a dark-theme colour on paper — the split row's
+   divider and chevron, the layer-thumbnail rows, and the colour-swatch strip. Each of these opens on
+   the home screen today or is one call site away from doing so, and the failure mode when one is
+   missed is invisible-on-white, which is what the four notes above this block are all about. */
+#ctx-menu.ctx-light .ctx-split-label:hover { background: rgba(16, 30, 52, .055); }
+#ctx-menu.ctx-light .ctx-split-arrow { border-left-color: rgba(16, 30, 52, .12); color: #5a6478; }
+#ctx-menu.ctx-light .ctx-split-arrow:hover { background: rgba(16, 30, 52, .055); color: #1d6fa5; }
+#ctx-menu.ctx-light .ctx-thumb { border-color: rgba(16, 30, 52, .12); background: #e9edf3; }
+#ctx-menu.ctx-light .ctx-thumb-glyph { color: #5f6b7d; }
+#ctx-menu.ctx-light .ctx-swatch-label { color: #5f6b7d; }
+#ctx-menu.ctx-light .ctx-swatch { border-color: rgba(16, 30, 52, .16); }
+#ctx-menu.ctx-light .ctx-swatch-none { background: #eef1f6; color: #5f6b7d; }
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   #864, THE SECOND HALF — THE HOME DIALOGS. His note asked for this check by name: *"Worth checking
+   in the same pass whether the OTHER menus on that screen are the same dark slab … If they share one
+   renderer, this is one fix; if they do not, he will see the next one and report it again."*
+   They do not all share one. The four ⋯ menus and the + button's list are all `#ctx-menu`, so the
+   block above fixes every one of them at once. **`#hm-dialog` is a different renderer, and it was
+   still a full dark card** — photographed here on a light home before this block existed: New project
+   came up as a near-black sheet with cyan accents over a white-to-mint page, which is the same
+   complaint he made, one element along. Fixed now rather than logged, because "he will see the next
+   one and report it again" is a prediction it costs nothing to make false.
+
+   ⚠️ THE INK IS ALREADY SPOKEN FOR, AND GETTING THIS WRONG UNDOES queue 649. `.hm-dlg-card` declares
+   `color: var(--text)` ON THE CARD on purpose: `#hm-dialog` lives INSIDE `#home-screen`, whose light
+   look sets `color: #10151f`, so before that declaration existed the dialog's heading inherited the
+   light page's near-black onto a dark panel and was unreadable — his *"text un readable"*. That
+   declaration must stay; what changes here is the SURFACE it sits on, so the two agree again. Every
+   rule below therefore sets both a background and an ink, never one alone.
+   ⚠️ THE SCRIM STAYS DARK-ISH BUT MUCH LIGHTER. `rgba(4,6,10,.7)` over paper reads as the lights
+   going out; a dialog on a light page wants a veil, not a blackout. Kept tinted rather than grey so
+   the home's own hue carries through it.
+   ══════════════════════════════════════════════════════════════════════════════════════════════ */
+html[data-home="light"] #hm-dialog { background: rgba(20, 38, 56, .34); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+html[data-home="light"] .hm-dlg-card {
+  background-color: rgba(255, 255, 255, .94);
+  border-color: rgba(16, 30, 52, .12);
+  box-shadow: 0 1px 2px rgba(16, 30, 52, .06), 0 26px 60px -26px rgba(16, 30, 52, .6);
+  backdrop-filter: blur(14px) saturate(1.15); -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  color: #10151f;   /* the queue-649 declaration, carried over to the light surface rather than dropped */
+}
+html[data-home="light"] .hm-dlg-title { color: #0d1420; }
+html[data-home="light"] .hm-fld-label { color: #5f6b7d; }
+html[data-home="light"] .hm-fld > span:first-child { color: #48546b; }
+html[data-home="light"] .hm-num-pair { color: #5f6b7d; }
+/* Fields and tiles: the card's own paper, one step down, so the card still reads as the surface. */
+html[data-home="light"] #hm-new-name,
+html[data-home="light"] .hm-fld select,
+html[data-home="light"] #hm-new-bg,
+html[data-home="light"] .hm-aspect {
+  background-color: rgba(16, 30, 52, .045); border-color: rgba(16, 30, 52, .14); color: #10151f;
+}
+html[data-home="light"] .hm-aspect span,
+html[data-home="light"] .hm-aspect .ac-frame { color: #5f6b7d; }
+/* THE SELECTED STATE. The dark theme's `--accent` is a pale cyan chosen to glow on near-black; the
+   pinned-title note above this file records that same colour measuring 1.02:1 on paper. Same hue,
+   carried down to a blue that reads ON WHITE (4.9:1) — the tile is still unmistakably the chosen one,
+   and it is still the app's blue rather than a new colour introduced here. */
+html[data-home="light"] .hm-aspect.active { border-color: rgba(23, 128, 180, .75); color: #0f6f9e; background-color: rgba(90, 199, 237, .13); }
+html[data-home="light"] .hm-aspect.active .ac-frame,
+html[data-home="light"] .hm-aspect.active span { color: #0f6f9e; }
+html[data-home="light"] #hm-new-name:focus,
+html[data-home="light"] .hm-bg-sw.active { border-color: rgba(23, 128, 180, .8); }
+html[data-home="light"] .hm-bg-sw.active { box-shadow: 0 0 0 2px rgba(23, 128, 180, .8) inset; }
+html[data-home="light"] .hm-bg-sw { border-color: rgba(16, 30, 52, .18); }
+/* Cancel is quiet paper; Create keeps the app's blue as a FILL, with white ink — on white the pale
+   cyan fill with near-black ink is the third instance of the same white-on-white class. */
+html[data-home="light"] .hm-dlg-actions button { background-color: rgba(16, 30, 52, .05); border-color: rgba(16, 30, 52, .14); color: #10151f; }
+html[data-home="light"] .hm-dlg-actions button.accent { background-color: #1780b4; border-color: #1780b4; color: #ffffff; }
+/* TWO SURVIVORS THE FIRST PASS OF THIS BLOCK LEFT BEHIND, both found by photographing the dialog and
+   then measuring it rather than by looking — worth recording because they are two DIFFERENT failures.
+   · `.cv-size` ("1080 × 1920 · 30 fps") is `var(--text)`, the dark theme's near-white, and it is
+     declared in styles.css outside the home's subtree, so it was never a candidate for the 44 rules.
+     Measured rgb(233,244,247) on the new white card — the FIFTH white-on-dark ink to reach paper.
+   · **Create was the opposite mistake, and it is mine.** `background-color: #1780b4` above applied
+     perfectly and changed nothing you could see, because `html[data-theme="glass"] … button.accent`
+     paints a `linear-gradient(#7ad6f2, var(--accent))` — a background-IMAGE — straight over it, so
+     the white ink ended up on pale cyan. This file warns four times that the shorthand wipes the
+     glass sheen; this is the same seam from the other side, and the lesson is the same one: on this
+     theme a fill is TWO properties, and setting one of them is a no-op you cannot see. */
+html[data-home="light"] .cv-size { color: #10151f; }
+html[data-home="light"] .hm-dlg-actions button.accent {
+  background-image: linear-gradient(180deg, #2a97cb, #1780b4);
+}

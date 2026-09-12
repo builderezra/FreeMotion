@@ -1,0 +1,56 @@
+<!doctype html><meta charset="utf-8"><title>859 badge coverage</title>
+<body style="background:#0f1420;color:#cde;font:11px monospace"><pre id="out">…</pre>
+<iframe id="a" src="../../index.html" style="position:fixed;left:-3000px;width:900px;height:700px;border:0"></iframe>
+<script>
+/* queue 859 — the question that matters more than "does it change pixels": if an effect can do NOTHING
+   on the layer you are pointing it at, does the app SAY so? An effect offered with no warning that
+   cannot work is the shape of every "I added it and nothing happened" report. */
+document.getElementById('a').addEventListener('load', function(){
+  var w=document.getElementById('a').contentWindow,n=0;
+  (function wait(){ if(!(w.FM&&w.FM.fxRegistry&&w.FM.renderScene&&w.FM.EFFECTS&&w.FM._fxDeadHereWhy)){ if(n++>500) return document.getElementById('out').textContent='FM/seam never came up'; return setTimeout(wait,50);} setTimeout(function(){run(w).catch(function(e){document.getElementById('out').textContent='threw '+(e&&e.stack||e);});},900); })();
+});
+function loadPhoto(w,key){ return new Promise(function(ok,bad){ var im=new w.Image(); im.onload=function(){ok(im);}; im.onerror=function(){bad(new Error(key));}; im.src='../../fx-art/'+key+'.jpg?v=1'; }); }
+async function run(w){
+  var FM=w.FM, doc=w.document, S=128;
+  var im=await loadPhoto(w,'dusk'), side=Math.min(im.naturalWidth,im.naturalHeight);
+  var c=doc.createElement('canvas'); c.width=S; c.height=S;
+  c.getContext('2d').drawImage(im,(im.naturalWidth-side)/2,(im.naturalHeight-side)/2,side,side,0,0,S,S);
+  FM.media.set('_bz',{kind:'image',el:c,width:S,height:S,duration:0}); FM.media.pin('_bz');
+  var layer=FM.makeLayer('image',{x:S/2,y:S/2,start:0,duration:4}); layer.id='_bz';
+  FM.scene.layers.length=0; FM.scene.layers.push(layer); FM.scene.selectedId=layer.id;
+  function shoot(effects,t){
+    var l=JSON.parse(JSON.stringify(layer)); l.id='_bz'; l.effects=effects||[];
+    var o=doc.createElement('canvas'); o.width=S; o.height=S;
+    FM.renderScene(o.getContext('2d'),{project:{width:S,height:S,fps:30,duration:4,background:'#000'},layers:[l]},t||0.4);
+    return o.getContext('2d').getImageData(0,0,S,S).data;
+  }
+  function diff(a,b){ var d=0; for(var i=0;i<a.length;i+=4) d+=Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2]); return d/(a.length/4)/3; }
+  var base=shoot([]), silent=[], warned=[], notOffered=[];
+  /* ⚠️ ONLY WHAT THE BROWSER ACTUALLY OFFERS FOR THIS LAYER. The first version of this probe counted every
+     effect in the app and reported 37 silently dead — but the text effects and the rest are FILTERED OUT
+     for an image layer, so they are never offered and cannot disappoint anyone. Counting them made the
+     tool look like the app was broken. supportsLayer is the same question the browser asks. */
+  FM.EFFECTS.forEach(function(e){
+    var inst=null; try{ inst=FM.fxRegistry.makeInstance(e.type); }catch(x){}
+    if(!inst) return;
+    var ok = true;
+    try { ok = FM.fxRegistry.supportsLayer ? FM.fxRegistry.supportsLayer(e.type, layer) : true; } catch(x){}
+    if (!ok) { notOffered.push(e.type); return; }
+    var d=0; try{ d=diff(base, shoot([inst])); }catch(x){ d=-1; }
+    if (d >= 0.05) return;                       // it does something: nothing to warn about
+    var why=null; try{ why=FM._fxDeadHereWhy(e.type); }catch(x){ why='(threw: '+x.message+')'; }
+    (why ? warned : silent).push((FM.fxRegistry.get(e.type)||{}).label || e.type);
+  });
+  /* CONTROL — the badge must fire for a case it is KNOWN to cover, or a run of zeroes above is the
+     harness and not the app (12 of 15 accusations were the tool, the last time this was skipped). */
+  var ctlWhy=null; try{ ctlWhy=FM._fxDeadHereWhy('motionflow'); }catch(x){}
+  var txt = 'CONTROL — the badge on a known-dead case (Motion Flow on a still photo): ' + (ctlWhy || 'NOTHING — this harness cannot see badges, so ignore every number below') + '\n\n' +
+    'not offered for this layer at all (filtered out, so nobody can pick them): ' + notOffered.length + '\n' +
+    'ON AN ORDINARY PHOTO LAYER:\n' +
+    '  effects that do nothing AND the app says so: ' + warned.length + '\n' +
+    '  effects that do nothing AND THE APP SAYS NOTHING: ' + silent.length + '\n\n' +
+    '=== SILENT (you add it, nothing happens, no warning) ===\n' + silent.join('\n') +
+    '\n\n=== WARNED (badged "does nothing here") ===\n' + warned.join(', ');
+  document.getElementById('out').textContent=txt; window.__done=txt;
+}
+</script>

@@ -1,0 +1,21 @@
+diff --git a/js/fx-browser.js b/js/fx-browser.js
+index ca5da97..cb8e28e 100644
+--- a/js/fx-browser.js
++++ b/js/fx-browser.js
+@@ -825,7 +825,15 @@ window.FM = window.FM || {};
+     motionflow: 'Nothing moves inside this layer, so there is nothing to blur. It reads the picture frame to frame.',
+   };
+   function cannotMove(layer) {
+-    if (!layer || (layer.type !== 'shape' && layer.type !== 'text')) return false;   // video moves by itself
++    /* ⚠️ A STILL PHOTO DOES NOT MOVE BY ITSELF EITHER (queue 863). This read "shape or text, otherwise it
++     * moves" with the comment "video moves by itself" — true of VIDEO, whose picture changes frame to
++     * frame, and false of an IMAGE, which is as still as a rectangle. So the two motion effects were
++     * badged "this layer never moves" on a shape and said NOTHING on a photograph in the identical
++     * situation: measured in the running app, `objectblur` on a never-animated shape returns "This layer
++     * never moves, so there is no movement to smear", and on a never-animated image returns nothing.
++     * That is the exact shape of every "I added it and nothing happened" report — and a photograph is the
++     * commonest layer in the app. A VIDEO still returns false here, which is the reason the line exists. */
++    if (!layer || (layer.type !== 'shape' && layer.type !== 'text' && layer.type !== 'image')) return false;
+     if ((layer.effects || []).length) return false;                                   // an effect can move it
+     if (layer.parent) return false;                                                     // queue 746: a child rides its parent's motion — fx-thumbs walks the chain the same way
+     if (layer.type === 'text' && FM.textHasAnim && FM.textHasAnim(layer)) return false;   // queue 795: a text animator moves every glyph — the badge said "never moves" over it

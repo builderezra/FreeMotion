@@ -50137,7 +50137,16 @@
    * suffered. Second occurrence of the shape — #647 was a rule covering `.hm-empty` and
    * `.hm-empty-sub` while missing `.hm-empty-title` — so the assertion is the GENERAL one: nothing
    * inside the dark dialog may be darker than the panel it sits on. */
-  test('#649: the New project dialog is readable on the light home', { item: '649' }, function () {
+  /* ⚠️ RETUNED 12 Sep (#864), not renamed, not removed — DROPS TEST in spirit, so the change is written
+     out in full. This test used to REQUIRE the dialog card to be dark on the light home ('the dialog
+     card is not dark... this test cannot judge contrast on it') — that was true of the #649 bug it was
+     built for: the card stayed the editor's dark panel and only its INK leaked in from the light page,
+     so 'dark panel, light ink' was the only shape the bug could take. #864 made the card itself light
+     on purpose, which makes that precondition permanently false rather than a mistake — the fix this
+     test predates is the fix that breaks it. So the direction is no longer assumed: contrast is
+     measured either way, AND the new deliberate fact (#864: the card really is light on the light home
+     now) is checked explicitly, rather than silently dropped along with the old assumption. */
+  test('#649: the New project dialog is readable, whichever theme it is drawn in', { item: '649' }, function () {
     const dlg = document.getElementById('hm-dialog');
     if (!dlg) throw new Error('#hm-dialog is not in the document');
     const card = dlg.querySelector('.hm-dlg-card');
@@ -50157,18 +50166,20 @@
       const bg = lum(getComputedStyle(card).backgroundColor);
       const ink = lum(getComputedStyle(title).color);
       if (bg == null || ink == null) throw new Error('could not read the colours');
-      if (!(bg < 128)) throw new Error('the dialog card is not dark (luminance ' + bg.toFixed(0) + ') — this test cannot judge contrast on it');
-      if (!(ink > bg + 60))
+      // #864: on the light home the card is now genuinely light, by design — checked as a fact, not
+      // assumed, so a future regression that quietly turns it dark again is caught from this angle too.
+      if (!(bg > 128)) throw new Error('on the light home the dialog card is dark (luminance ' + bg.toFixed(0) + ') — #864 made it light on purpose');
+      if (Math.abs(ink - bg) < 60)
         throw new Error('the dialog heading is luminance ' + ink.toFixed(0) + ' on a panel of ' + bg.toFixed(0) +
-                        ' — dark ink on a dark panel, which is what he circled (#649)');
+                        ' — not enough contrast to read, which is what he circled (#649)');
       const bad = [];
       dlg.querySelectorAll('.hm-dlg-title, .hm-fld-label, .hm-dlg-scroll div, label, span').forEach(n => {
         if (!n.textContent || !n.textContent.trim()) return;
         const l = lum(getComputedStyle(n).color);
-        if (l != null && l < bg + 40) bad.push((n.className || n.tagName) + ' @ ' + l.toFixed(0));
+        if (l != null && Math.abs(l - bg) < 40) bad.push((n.className || n.tagName) + ' @ ' + l.toFixed(0));
       });
       if (bad.length > 0 && bad.length <= 8)
-        throw new Error(bad.length + ' element(s) in the dialog are as dark as the panel behind them: ' + bad.join(' · '));
+        throw new Error(bad.length + ' element(s) in the dialog are too close in luminance to the panel behind them: ' + bad.join(' · '));
     } finally {
       if (was == null) root.removeAttribute('data-home'); else root.setAttribute('data-home', was);
       if (wasHidden) dlg.classList.add('hidden');
@@ -64016,5 +64027,79 @@
     const src = await (await fetch('../js/compositor.js?boot=' + Date.now())).text();
     const m = /const BOUNDED_FX = \{([^}]*)\}/.exec(src);
     if (!m || m[1].indexOf('hextiles') < 0) throw new Error('hextiles left BOUNDED_FX — back to 98ms a frame on a small layer (#692)');
+  });
+
+  /* ═══ 864: THE ⋯ MENU ON A LIGHT HOME SCREEN IS LIGHT — AND THE EDITOR'S IS STILL DARK ════════
+   * Ezra sent a photograph of his phone: a near-black slab of white rows dropped on his white-to-mint
+   * Home screen. *"the pop-up menu for when you press on the three dots on the project in the home
+   * menu isn’t matching the theme of this menu and it needs to be changed up so it’s actually fitting"*
+   *
+   * ⚠️ THE CONTROL IS THE WHOLE TEST, and it is not decoration. The obvious fix — a CSS rule reading
+   * `html[data-home="light"] #ctx-menu` — passes the first half of this test and breaks the app,
+   * because `data-home` stays "light" while you are INSIDE a project and the editor is dark whatever
+   * the home is set to. That fix would turn every right-click menu on the timeline white and nothing
+   * in the suite would have noticed. So this asserts BOTH ends: light over the light home, dark in the
+   * editor with the attribute unchanged. A rule that cannot tell them apart fails the second half.
+   * The second control is the ink: a menu can be the right colour and still be white-on-white, which is
+   * the exact shape of the four regressions recorded in theme-glass.css, so the rows are measured for
+   * real contrast against the surface they actually land on rather than merely for "not the dark one".
+   * ═══════════════════════════════════════════════════════════════════════════════════════════ */
+  test('864: the project ⋯ menu is light on the light home screen, and the editor’s menus stay dark', { item: '864' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const html = document.documentElement, home = document.getElementById('home-screen');
+    if (!home || !FM.home || !FM.home.open || !FM.home.close) throw new Error('home missing');
+    if (!FM.contextMenu || !FM.contextMenu.show) throw new Error('FM.contextMenu missing');
+    const menu = () => document.getElementById('ctx-menu');
+    // relative luminance, so "is this surface light" is a number and not a colour name
+    const lum = (c) => { const m = String(c).match(/[\d.]+/g).map(Number);
+      const f = m.slice(0, 3).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+      return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2]; };
+    const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    // the menu surface is translucent, so composite it over the page it lands on for an honest reading
+    const over = (fg, back) => { const a = String(fg).match(/[\d.]+/g).map(Number), b = String(back).match(/[\d.]+/g).map(Number);
+      const al = a.length > 3 ? a[3] : 1;
+      return 'rgb(' + [0, 1, 2].map(i => Math.round(a[i] * al + b[i] * (1 - al))).join(',') + ')'; };
+    const was = html.getAttribute('data-home'), wasOpen = !!(FM.home.isOpen && FM.home.isOpen());
+    const items = [{ label: 'Open', action() {} }, { sep: true }, { label: 'Delete…', danger: true, action() {} }];
+    try {
+      html.setAttribute('data-home', 'light');
+      if (!FM.home.isOpen()) { FM.home.open(); await sleep(220); }
+      const paper = getComputedStyle(home).backgroundColor;
+      if (lum(paper) < 0.6) throw new Error('setup: the home is not the light look (' + paper + ') — the bug under test cannot occur');
+
+      FM.contextMenu.show(20, 20, items); await sleep(30);
+      const m = menu();
+      if (!m || m.classList.contains('hidden')) throw new Error('setup: the menu did not open on the home screen');
+      const surface = over(getComputedStyle(m).backgroundColor, paper);
+      if (lum(surface) < 0.6) throw new Error('on the LIGHT home the ⋯ menu is ' + getComputedStyle(m).backgroundColor
+        + ' (over ' + paper + ' that is ' + surface + ') — that is his screenshot: a dark slab on a light screen');
+
+      const rows = [].slice.call(m.querySelectorAll('.ctx-item'));
+      const plain = rows.filter(r => !r.classList.contains('danger'))[0];
+      const danger = m.querySelector('.ctx-item.danger');
+      if (!plain || !danger) throw new Error('setup: the probe menu did not build a plain row and a danger row');
+      const rPlain = ratio(getComputedStyle(plain).color, surface);
+      if (rPlain < 7) throw new Error('the menu rows read ' + rPlain.toFixed(2) + ':1 on the light surface — light ink survived onto paper (the fifth time; see theme-glass.css)');
+      const rDanger = ratio(getComputedStyle(danger).color, surface);
+      // his note asks for Delete to still read as the destructive one. The dark theme's #ff6b6b is 2.6:1 here.
+      if (rDanger < 4.5) throw new Error('Delete reads ' + rDanger.toFixed(2) + ':1 on the light menu — it looks disabled, not dangerous');
+      const dCol = String(getComputedStyle(danger).color).match(/[\d.]+/g).map(Number);
+      if (!(dCol[0] > dCol[1] + 60 && dCol[0] > dCol[2] + 60)) throw new Error('Delete is ' + getComputedStyle(danger).color + ' — it has stopped being red, so nothing marks the destructive row');
+
+      /* ═══ THE CONTROL: the same menu, the same data-home, inside the editor ═══════════════════ */
+      FM.contextMenu.hide();
+      FM.home.close(); await sleep(260);
+      if (!home.classList.contains('hidden')) throw new Error('setup: the home did not close, so the control cannot run');
+      if (html.getAttribute('data-home') !== 'light') throw new Error('setup: data-home stopped being "light" on the way into the editor — the control no longer tests the leak it exists for');
+      FM.contextMenu.show(20, 20, items); await sleep(30);
+      const m2 = menu();
+      if (m2.classList.contains('ctx-light')) throw new Error('control: the EDITOR menu carries ctx-light while data-home is still "light" — every right-click menu on the timeline just turned white');
+      if (lum(getComputedStyle(m2).backgroundColor) > 0.4) throw new Error('control: the editor menu is ' + getComputedStyle(m2).backgroundColor + ' — the light look leaked out of the home screen');
+    } finally {
+      try { FM.contextMenu.hide(); } catch (e) {}
+      if (was == null) html.removeAttribute('data-home'); else html.setAttribute('data-home', was);
+      try { if (wasOpen && !FM.home.isOpen()) FM.home.open(); else if (!wasOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep(120);
+    }
   });
 })();

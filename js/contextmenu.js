@@ -97,6 +97,20 @@ window.FM = window.FM || {};
         }
         menu.appendChild(b);
       });
+      /* ⚠️ #864 — THE MENU IS A CHILD OF document.body, SO EVERY ONE OF THE LIGHT HOME'S 44 RULES
+         MISSES IT. That is the whole bug Ezra photographed: a near-black slab with white text dropped
+         on a white-to-mint Home screen. `html[data-home="light"]` is on the root and would match here
+         too — but it must NOT, because the same #ctx-menu opens inside the editor, which is dark
+         whatever the home is set to, and the home-light setting persists across the boundary.
+         So the question the CSS has to be asked is not "is the light home switched on" but "is the
+         light home ON SCREEN RIGHT NOW", and that is decided here, at open time, where the answer is
+         knowable. A class rather than a `:has()` selector on purpose: a class is readable from a test
+         in one line, and this is exactly the shape of thing that gets silently undone by a later
+         refactor of the home screen's markup. */
+      const home = document.getElementById('home-screen');
+      const onLightHome = !!home && !home.classList.contains('hidden')
+                       && document.documentElement.getAttribute('data-home') === 'light';
+      menu.classList.toggle('ctx-light', onLightHome);
       menu.style.left = x + 'px'; menu.style.top = y + 'px'; menu.classList.remove('hidden');
       /* ⚠️ THE HINGE CLASS COMES OFF BEFORE ANYTHING IS MEASURED, and this cost a real bug on the
          SECOND open. `fm-hinge-corner` is `animation-fill-mode: both`, so the moment the class is on,

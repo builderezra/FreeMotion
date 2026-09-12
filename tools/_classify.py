@@ -315,14 +315,26 @@ def closed_in_diff(diff):
     """Numbers whose entry checkbox goes `- [ ]` -> `- [x]` in a `git diff` of REQUESTS.md.
 
     Returns a sorted list of (num, suffix). Unnumbered entries come back as (None, '') — they are the
-    oldest in the file, so a release closing one still has to satisfy the ordering gate."""
-    opened, closed = set(), set()
+    oldest in the file, so a release closing one still has to satisfy the ordering gate.
+
+    ⚠️ REWRITTEN 12 Sep, after it accused a release of closing an item the release was UN-closing.
+    The old version bucketed every '-' line's checkbox state into one set and every '+' line's into
+    another, with no memory of which line replaced which — so "old ' ', new 'x'" (a genuine close) and
+    "old 'x', new ' '" (reverting a premature tick, exactly what happened correcting #863 tonight)
+    produced IDENTICAL membership in both sets, because both directions put 'x' in one bucket and ' '
+    in the other. The gate cannot ask "did this go the right way" of a bucket that has already thrown
+    the direction away. Fixed by keeping the OLD state and the NEW state as separate per-item facts —
+    a close is now, explicitly, `old-state was open AND new-state is closed`, which a bucket cannot
+    accidentally satisfy backwards. See the two_directions case below: a genuine close and the exact
+    reverse must not produce the same answer, and this is the test that would have caught it."""
+    old_state, new_state = {}, {}   # key -> ' ' or 'x', from '-' lines and '+' lines respectively
     for line in (diff or '').split('\n'):
         if not line or line[0] not in '+-':
             continue
         # `---`/`+++` are the file headers, not content
         if line.startswith('---') or line.startswith('+++'):
             continue
+        side = old_state if line[0] == '-' else new_state
         body = line[1:]
         m = re.match(r'- \[( |x)\] \*\*(\d+)([a-z]?)[ —]', body)
         if not m:
@@ -330,20 +342,22 @@ def closed_in_diff(diff):
             m2 = re.match(r'- \[( |x)\] \*\*(?!\d)', body)
             if not m2:
                 continue
-            key = (None, body[:60])
-            (closed if m2.group(1) == 'x' else opened).add(key)
+            # ⚠️ THE KEY MUST START **AFTER** THE CHECKBOX, OR OLD AND NEW NEVER MATCH. body[:60] here
+            # would include `- [ ] ` / `- [x] ` itself — the very thing that DIFFERS between the old and
+            # new line — so a genuine unnumbered close produced two keys that never compared equal and
+            # silently vanished. Caught by the regression test above it, not by inspection: this half of
+            # the function had no test before tonight and the bug had been here since the function was
+            # first written.
+            side[(None, body[m2.end():m2.end() + 60])] = m2.group(1)
             continue
-        key = (int(m.group(2)), m.group(3))
-        (closed if m.group(1) == 'x' else opened).add(key)
-    # A number that only appears as `+- [x]` is a NEW entry added already-ticked, not a close of
-    # something that was open — those are logged all the time and must not trip the ordering gate.
-    out = []
-    for k in closed:
-        if k[0] is None:
-            if any(o[0] is None and o[1] == k[1] for o in opened):
-                out.append((None, ''))
-        elif k in opened:
-            out.append(k)
+        side[(int(m.group(2)), m.group(3))] = m.group(1)
+    # Closed = the NEW line says 'x' AND the OLD line (if this key had one at all) said ' '. A key with
+    # no OLD line — a brand-new entry logged already-ticked — has old_state.get(key) return None, not
+    # ' ', so it is excluded by the same comparison rather than needing a separate case for it.
+    # unnumbered keys carry their body prefix only to MATCH old against new; the caller gets (None, '')
+    # for all of them, same as a numbered close returns its real (num, suffix).
+    out = [(None, '') if k[0] is None else k
+           for k, new in new_state.items() if new == 'x' and old_state.get(k) == ' ']
     return sorted(set(out), key=lambda t: sort_key(t[0], t[1]))
 
 
@@ -683,6 +697,20 @@ _DIFF = [
      [], 'an entry edited but left OPEN is not a close'),
     ('-- [ ] **648 — a tap.**\n+- [x] **648 — a tap.**\n-- [ ] **650 — hover.**\n+- [x] **650 — hover.**',
      [(648, ''), (650, '')], 'two closes in one release, in order'),
+    # 12 Sep: reverting a premature tick on #863 read as "this release closes #863" and blocked a
+    # ship the OTHER way — the release was un-closing it, not closing it. The bucket-based version put
+    # 'x' and ' ' in the same two sets whichever direction the change ran, so a genuine close and its
+    # exact reverse were indistinguishable. This pair is the regression test: run the SAME diff text
+    # forwards and backwards and demand opposite, not identical, answers.
+    ('-- [ ] **863 — a photo badge.**\n+- [x] **863 — a photo badge.**',
+     [(863, '')], 'the forward direction: open to closed IS a close'),
+    ('-- [x] **863 — a photo badge.**\n+- [ ] **863 — a photo badge.**',
+     [], 'the exact reverse of the line above: closed to open must NOT read as a close — this is the bug'),
+    # the same pair again for an unnumbered entry, since it is keyed differently (by body prefix, not number)
+    ('-- [ ] **Standing reminder about the thing**\n+- [x] **Standing reminder about the thing**',
+     [(None, '')], 'an unnumbered close, forward direction'),
+    ('-- [x] **Standing reminder about the thing**\n+- [ ] **Standing reminder about the thing**',
+     [], 'an unnumbered entry reverted must not read as a close either'),
 ]
 
 _STALE_CASES = [
