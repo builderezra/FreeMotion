@@ -77,13 +77,24 @@ git checkout "$HASH" -- . || { echo "❌ could not restore those files. Nothing 
 for keep in REQUESTS.md POLISH-LOG.md INBOX.md; do
   [ -f "$keep" ] && git checkout HEAD -- "$keep" 2>/dev/null
 done
+# ── AND THE WORKSHOP STAYS AT TODAY, WHICH IS NOT A PREFERENCE — IT IS THE FAILSAFE SURVIVING ────
+# 🚨 CAUGHT BY RUNNING THIS SCRIPT FOR REAL, IN A THROWAWAY CLONE, ON 12 SEP. Rolling back to v16.12
+# DELETED tools/rollback.sh. Every release in the history predates the commit that added this script,
+# so "restore the files that existed then, remove the ones added since" removes the very tool you are
+# standing in — the next `./tools/rollback.sh` after a rollback said "no such file or directory".
+# That is the SAME fault the discoverability probes found hours earlier (the script was untracked, so
+# `git clean -fd` and its own `git stash -u` would eat it) arriving from the opposite direction, which
+# is worth stating plainly: the failsafe must be the one thing a rollback cannot take away.
+# tools/ is the workshop, not the product. What he is putting back is the app his phone loads; the
+# scripts that do the putting-back have no business travelling with it.
+git checkout HEAD -- tools 2>/dev/null || true
 
 # ── AND FILES ADDED SINCE THAT RELEASE ARE REMOVED ───────────────────────────────────────────────
 # `checkout <hash> -- .` restores what existed THEN; it does not delete what was added SINCE. Without
 # this the tree is a mixture — the old index.html plus newer orphaned modules — which is not "exactly
 # how it was", and a leftover file is exactly the sort of thing that reads as "the rollback did not work".
 git ls-tree -r --name-only HEAD | while IFS= read -r f; do
-  case "$f" in REQUESTS.md|POLISH-LOG.md|INBOX.md) continue;; esac
+  case "$f" in REQUESTS.md|POLISH-LOG.md|INBOX.md|tools/*|README.md|CLAUDE.md) continue;; esac
   git cat-file -e "$HASH:$f" 2>/dev/null || rm -f "$f"
 done
 
