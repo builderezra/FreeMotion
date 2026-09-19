@@ -4,7 +4,7 @@
  * object. Keep it plain-JSON-serializable: no DOM nodes, no live media here — those
  * live in the media registry (media.js), keyed by layer id.
  */
-window.FM = window.FM || {};
+globalThis.FM = globalThis.FM || {};
 (function (FM) {
   'use strict';
 
@@ -972,10 +972,11 @@ window.FM = window.FM || {};
 
   // TRUE if any group ancestor is hidden (no time-window check) — audio/export gate a clip on this
   // so a clip inside a hidden group is silent, not just invisible. Cycle-safe; only groups gate.
-  FM.groupHidden = function (layer) {
+  FM.groupHidden = function (layer, scene) {
+    scene = scene || FM.scene;
     let pid = layer.parent, hops = 0;
     while (pid && hops++ < 64) {
-      const p = FM.scene && FM.scene.layers.find(l => l.id === pid);
+      const p = scene && scene.layers.find(l => l.id === pid);
       if (!p) break;
       if (p.type === 'group' && !p.visible) return true;
       pid = p.parent;
@@ -1136,4 +1137,4 @@ window.FM = window.FM || {};
     });
     return stat;
   };
-})(window.FM);
+})(globalThis.FM);

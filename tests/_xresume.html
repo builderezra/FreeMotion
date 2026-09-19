@@ -99,7 +99,10 @@ async function main(w) {
     var o = Object.assign({
       scale: 1, fps: FPS, bitrate: 400000, name: 'xresume-probe', from: 0, to: 5, outW: 160, outH: 120,
       onProgress: function (p, what) {
-        if (what === 'video' || what === 'audio + video') { loops++; if (first < 0) first = Math.round(p * FRAMES) - 1; }
+        if (what === 'video' || what === 'audio + video') {
+          loops++; if (first < 0) first = Math.round(p * FRAMES) - 1;
+          if (extra && extra.failAt && loops >= extra.failAt) throw new Error('SIMULATED CRASH');
+        }
         else notices.push(what);
       },
     }, extra || {});
@@ -138,14 +141,11 @@ async function main(w) {
     /* ---- 2. the crash. A THROW, not Cancel — Cancel is meant to discard the render. ---- */
     useScene();
     caught = null;
-    var n = 0;
-    FM.renderScene = function () { if (++n > KILL_AT) throw new Error('SIMULATED CRASH'); return realRender.apply(this, arguments); };
-    var k = await runExport();
-    FM.renderScene = realRender;
+    var k = await runExport({ failAt: KILL_AT });
     say('a render that dies mid-export throws instead of quietly delivering a truncated file',
         !k.ok && k.loops < FRAMES, 'the simulated crash did not take the export down (ok=' + k.ok + ', ' + k.loops + ' frames)');
 
-    await sleep(400);   // the crash skipped settle(), so let the last queued IndexedDB write land
+    await sleep(400);   // also works against older exporters that left the final write in flight
     var saved = await savedRun();
     var resumeAt = saved ? XR.nextFrameForTs(saved.lastTs, 1e6 / FPS) : -1;
     say('the frames rendered before the crash are still on the device afterwards',
@@ -180,10 +180,8 @@ async function main(w) {
 
     /* ---- 4. the dangerous case: saved frames must NOT be spliced into a project that has changed ---- */
     var L = useScene();
-    caught = null; n = 0;
-    FM.renderScene = function () { if (++n > KILL_AT) throw new Error('SIMULATED CRASH'); return realRender.apply(this, arguments); };
-    await runExport();
-    FM.renderScene = realRender;
+    caught = null;
+    await runExport({ failAt: KILL_AT });
     await sleep(400);
     var stashed = await savedRun();
     L.transform.y = { kf: [{ t: 0, v: 20, e: 'linear' }, { t: 5, v: 100, e: 'linear' }] };   // the project changes

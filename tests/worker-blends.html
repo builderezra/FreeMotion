@@ -1,0 +1,142 @@
+<!doctype html>
+<meta charset="utf-8"><title>FreeMotion #47: native blends through nested groups</title>
+<style>body{background:#111;color:#eee;font:15px system-ui;margin:24px}pre{white-space:pre-wrap}iframe{position:fixed;left:-10000px;width:900px;height:760px}</style>
+<h1>Native blends through nested and plain groups</h1><pre id="result">Loading…</pre><iframe id="app"></iframe>
+<script>
+(async function(){
+  const checks=[],frame=document.getElementById('app'),output=document.getElementById('result');
+  const assert=(ok,message)=>{if(!ok)throw new Error(message);};
+  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  async function waitFor(fn,message){const end=performance.now()+15000;while(performance.now()<end){if(fn())return;await sleep(20);}throw new Error(message);}
+  function error(a,b){let total=0,max=0;for(let i=0;i<a.length;i++){const d=Math.abs(a[i]-b[i]);total+=d;max=Math.max(max,d);}return {mean:total/a.length,max};}
+  function redCenter(data){let sum=0,count=0;for(let i=0;i<data.length;i+=4){if(data[i]>140&&data[i+1]<120&&data[i+2]<130){sum+=(i/4)%160;count++;}}return {count,x:count?sum/count:NaN};}
+  function pixels(source,doc){const c=doc.createElement('canvas');c.width=160;c.height=120;const ctx=c.getContext('2d');ctx.drawImage(source,0,0);return ctx.getImageData(0,0,160,120).data;}
+  async function decodedFrames(blob){
+    const video=document.createElement('video'),url=URL.createObjectURL(blob);
+    const c=document.createElement('canvas');c.width=160;c.height=120;const ctx=c.getContext('2d');
+    try{
+      video.muted=true;video.preload='auto';video.src=url;video.load();
+      await waitFor(()=>video.readyState>=2||video.error,'Group MP4 never decoded');
+      assert(!video.error&&video.videoWidth===160&&video.videoHeight===120,'Group MP4 decoder/dimensions differ');
+      const frames=[];
+      for(const time of [.05,.85]){
+        video.currentTime=time;
+        await waitFor(()=>video.error||(!video.seeking&&video.readyState>=2&&Math.abs(video.currentTime-time)<1e-4),'Group MP4 seek never completed');
+        assert(!video.error,'Group MP4 decoder failed during seek');
+        ctx.clearRect(0,0,160,120);ctx.drawImage(video,0,0);frames.push(ctx.getImageData(0,0,160,120).data);
+      }
+      return frames;
+    }finally{video.pause();video.removeAttribute('src');video.load();URL.revokeObjectURL(url);}
+  }
+  function toneFile(w,hz){
+    const length=48000,bytes=new ArrayBuffer(44+length*2),v=new DataView(bytes);
+    const str=(at,s)=>{for(let i=0;i<s.length;i++)v.setUint8(at+i,s.charCodeAt(i));};
+    str(0,'RIFF');v.setUint32(4,bytes.byteLength-8,true);str(8,'WAVE');str(12,'fmt ');
+    v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
+    v.setUint32(24,48000,true);v.setUint32(28,96000,true);v.setUint16(32,2,true);v.setUint16(34,16,true);
+    str(36,'data');v.setUint32(40,length*2,true);
+    for(let i=0;i<length;i++)v.setInt16(44+i*2,Math.round(Math.sin(2*Math.PI*hz*i/48000)*.25*32767),true);
+    return new w.File([bytes],hz+'-group-tone.wav',{type:'audio/wav'});
+  }
+  function strength(buffer,hz){
+    const data=buffer.getChannelData(0),sr=buffer.sampleRate,from=Math.floor(sr*.2),to=Math.min(data.length,Math.floor(sr*.8));let re=0,im=0;
+    for(let i=from;i<to;i++){const phase=2*Math.PI*hz*i/sr;re+=data[i]*Math.cos(phase);im+=data[i]*Math.sin(phase);}
+    return 2*Math.hypot(re,im)/(to-from);
+  }
+  try{
+    const loaded=new Promise(resolve=>frame.addEventListener('load',resolve,{once:true}));frame.style.width=Math.min(900,innerWidth)+'px';frame.src='../index.html';await loaded;
+    const w=frame.contentWindow,FM=w.FM,NativeWorker=w.Worker,realDecode=FM.decodeAudio,realRender=FM.renderScene,realCapture=FM.exportWorker.capture,originalMedia=FM.media;
+    const leadFile=toneFile(w,220),soundFile=toneFile(w,440),replacementFile=toneFile(w,880);
+    let mode='worker',jobs=[],activeCapture=null,raw=[],rawCount=0;
+    const remember=data=>{const index=rawCount++;if(index===0||index===8)raw[index]=data;};
+    FM.exportWorker.capture=function(...args){activeCapture=realCapture.apply(this,args);return activeCapture;};
+    w.Worker=class extends NativeWorker{
+      constructor(...args){if(mode==='main')throw new Error('GROUP_STARTUP_FALLBACK');super(...args);this.job={terminated:0};jobs.push(this.job);
+        // Installed before the client's onmessage handler, which closes the transferred output.
+        this.addEventListener('message',e=>{if(e.data.bitmap)remember(pixels(e.data.bitmap,w.document));});}
+      postMessage(msg,transfer){if(msg.type==='init')this.job.scene=msg.scene;return super.postMessage(msg,transfer);}
+      terminate(){this.job.terminated++;return super.terminate();}
+    };
+    FM.renderScene=function(ctx,scene,time){const result=realRender.call(this,ctx,scene,time);if(mode==='main'&&FM._exporting&&activeCapture&&scene===activeCapture.document)remember(ctx.getImageData(0,0,160,120).data);return result;};
+    try{
+      for(const backend of ['worker','main']){
+        mode=backend;activeCapture=null;raw=[];rawCount=0;await FM.exportResume.clear();
+        const lead=await FM.loadVideoFile(leadFile),sound=await FM.loadVideoFile(soundFile),replacement=await FM.loadVideoFile(replacementFile);
+        const scene=FM.newScene();Object.assign(scene.project,{width:160,height:120,fps:10,duration:1,background:'#102030',markers:[]});
+        const controller=FM.makeLayer('null',{name:'Controller',x:0,y:0,duration:1});
+        controller.transform.x={kf:[{t:0,v:0},{t:1,v:80}]};
+        const outer=FM.makeLayer('group',{name:'Screen group',x:0,y:0,duration:1});outer.parent=controller.id;
+        outer.transform.opacity={kf:[{t:0,v:.8},{t:1,v:.65}]};outer.effects=[{type:'brightness',params:{amount:1.1}}];outer.blendMode='screen';
+        const group=FM.makeLayer('group',{name:'Moving group',x:0,y:0,duration:1});group.parent=outer.id;group.collapsed=true;
+        group.transform.rotation={kf:[{t:0,v:-8},{t:1,v:18}]};group.transform.scale={kf:[{t:0,v:.9},{t:1,v:1.1}]};group.transform.opacity={kf:[{t:0,v:.7},{t:1,v:.9}]};group.effects=[{type:'blur',params:{radius:.6}},{type:'gamma',params:{gamma:1.2}}];
+        const red=FM.makeLayer('shape',{name:'Red member',shape:'rect',x:45,y:55,shapeW:36,shapeH:32,fill:'#ff4050',duration:1});
+        const blue=FM.makeLayer('shape',{name:'Blue member',shape:'ellipse',x:55,y:60,shapeW:40,shapeH:40,fill:'#307fe8',duration:1});
+        red.blendMode='multiply';blue.blendMode='hue';
+        // A normal group does not flatten. Its child blends with the external scene backdrop,
+        // unlike the two children above, which blend inside their inner group's transparent plate.
+        const plain=FM.makeLayer('group',{name:'Plain group',x:0,y:0,duration:1});
+        const overlay=FM.makeLayer('shape',{name:'Plain-group overlay',shape:'rect',x:107,y:80,shapeW:64,shapeH:40,fill:'#2e96cc',duration:1});
+        overlay.parent=plain.id;overlay.blendMode='overlay';overlay.transform.opacity=.75;
+        const backdrop=FM.makeLayer('shape',{name:'External colored backdrop',shape:'rect',x:80,y:60,shapeW:160,shapeH:120,fill:'#a45b3c',duration:1});
+        const a=FM.makeLayer('video',{name:'Group lead',duration:1}),b=FM.makeLayer('video',{name:'Group soundtrack',duration:1});
+        for(const member of [red,blue,a,b])member.parent=group.id;
+        a.volume=.4;b.volume=.6;b.fadeIn=.1;b.fadeOut=.1;
+        scene.layers=[controller,outer,group,red,blue,a,b,plain,overlay,backdrop];FM.scene=scene;FM.time=0;FM.isolate=null;FM._dragOrderIds=null;FM._exportTransparent=false;
+        FM.media.set(a.id,lead);FM.media.set(b.id,sound);
+        let entered=false,release,ready,running=null,completed=false;const gate=new Promise(resolve=>{release=resolve;}),before=jobs.length;
+        try{
+          assert(FM.exportWorker.eligible(scene),'Screen/multiply/hue/overlay native blends and group effects were not admitted');
+          const reference=w.document.createElement('canvas');reference.width=160;reference.height=120;const ctx=reference.getContext('2d');
+          function expectedAt(time){FM.time=time;FM._exporting=true;try{realRender(ctx,scene,time);return ctx.getImageData(0,0,160,120).data;}finally{FM._exporting=false;}}
+          const expectedEarly=expectedAt(0),expectedLate=expectedAt(.8);FM.time=0;
+          const referenceEarly=redCenter(expectedEarly),referenceLate=redCenter(expectedLate);
+          assert(error(expectedEarly,expectedLate).mean>.5,'Native-blend group reference did not visibly animate');
+          const blendedLayers=[outer,red,blue,overlay],blendModes=blendedLayers.map(layer=>layer.blendMode);
+          let withoutBlends;
+          try{blendedLayers.forEach(layer=>{layer.blendMode='normal';});withoutBlends=expectedAt(0);}
+          finally{blendedLayers.forEach((layer,i)=>{layer.blendMode=blendModes[i];});FM.time=0;}
+          assert(error(expectedEarly,withoutBlends).mean>.5,'Native blend settings had no visible effect on the reference');
+          FM.decodeAudio=async function(file){if(file===leadFile&&!entered){entered=true;await gate;}return realDecode.call(FM,file);};
+          running=FM.exporter.run({bitrate:600000,onReady:async result=>{ready=result;}});
+          await waitFor(()=>entered,'Group mix did not reach its first audio decode');
+          assert(activeCapture&&activeCapture.document!==scene,'Export did not capture the original hierarchy');
+          // The first group visibility lookup has happened, but the second has not. A mixer using
+          // live FM.scene suppresses 440 Hz here even when its document/media are captured.
+          group.visible=false;controller.transform.x=999;FM.time=.7;blendedLayers.forEach(layer=>{layer.blendMode='normal';});
+          sound.file=replacementFile;b.volume=0;b.muted=true;FM.media.set(b.id,replacement);
+          release();await running;completed=true;
+          assert(ready&&ready.hasAudio&&!ready.audioDropped,'Grouped export lost its original soundtrack');
+          assert(raw[0]&&raw[8]&&rawCount===10,'Did not capture the first and ninth of ten export frames: '+rawCount);
+          const earlyParity=error(raw[0],expectedEarly),lateParity=error(raw[8],expectedLate);
+          if(earlyParity.max||lateParity.max){
+            const save=data=>{const c=w.document.createElement('canvas');c.width=160;c.height=120;c.getContext('2d').putImageData(new w.ImageData(new w.Uint8ClampedArray(data),160,120),0,0);return c.toDataURL();};
+            window.__workerProbeImages={page:save(lateParity.max?expectedLate:expectedEarly),worker:save(lateParity.max?raw[8]:raw[0])};
+          }
+          assert(earlyParity.max===0&&lateParity.max===0,'Captured hierarchy differs from original app rendering: '+JSON.stringify({earlyParity,lateParity}));
+          const decoded=await decodedFrames(ready.blob),early=redCenter(decoded[0]),late=redCenter(decoded[1]);
+          const earlyError=error(decoded[0],expectedEarly),lateError=error(decoded[1],expectedLate);
+          assert(error(decoded[0],decoded[1]).mean>.5,'Actual MP4 lost native-blend group animation');
+          assert(earlyError.mean<8&&lateError.mean<8,'Actual MP4 no longer matches captured group content: '+JSON.stringify({earlyError,lateError}));
+          const audio=await realDecode.call(FM,ready.blob);assert(audio&&audio.duration>.9,'Actual grouped MP4 audio did not decode');
+          const leadStrength=strength(audio,220),originalStrength=strength(audio,440),replacementStrength=strength(audio,880);
+          assert(leadStrength>.035&&originalStrength>.055&&originalStrength>replacementStrength*4,'Group audio followed live visibility/mute/replacement: '+JSON.stringify({leadStrength,originalStrength,replacementStrength}));
+          assert(FM.scene===scene&&FM.media===originalMedia&&FM.media.get(b.id)===replacement&&group.visible===false&&controller.transform.x===999&&b.muted===true&&b.volume===0&&FM.time===.7,'Export undid live hierarchy or audio edits');
+          assert(activeCapture.document.layers.find(l=>l.id===group.id).visible===true,'Captured group itself followed live visibility');
+          assert(blendedLayers.every(layer=>layer.blendMode==='normal'),'Export undid live blend-mode edits');
+          assert(blendedLayers.every((layer,i)=>activeCapture.document.layers.find(l=>l.id===layer.id).blendMode===blendModes[i]),'Captured blend modes followed the live edit');
+          assert(jobs.length===before+(backend==='worker'?1:0),'Incorrect group renderer selected');
+          if(backend==='worker')assert(jobs[before].terminated===1,'Group Worker was not terminated exactly once');
+          checks.push(backend+': screen outer group, multiply/hue inner children and plain-group overlay preserve exact frames, motion and original audio through live edits and fallback; '+JSON.stringify({earlyParity,lateParity,frameDifference:error(decoded[0],decoded[1]).mean,leadStrength,originalStrength,replacementStrength}));
+        }finally{
+          release();if(running&&!completed){FM._exportCancel=true;try{await running;}catch(e){}}
+          FM.decodeAudio=realDecode;FM.media=originalMedia;FM.media.remove(a.id);FM.media.remove(b.id);
+          for(const rec of [lead,sound,replacement]){try{rec.el.pause();rec.el.removeAttribute('src');rec.el.load();URL.revokeObjectURL(rec.url);}catch(e){}}
+          await FM.exportResume.clear();FM._exportCancel=false;
+        }
+      }
+      assert(jobs.every(job=>job.terminated===1),'Group export leaked or repeatedly terminated a Worker');window.__workerCanvasResult={ok:true,checks};
+    }finally{w.Worker=NativeWorker;FM.decodeAudio=realDecode;FM.renderScene=realRender;FM.exportWorker.capture=realCapture;FM.media=originalMedia;FM._exporting=false;FM._exportCancel=false;}
+  }catch(e){window.__workerCanvasResult={ok:false,error:e.stack||String(e),checks};}
+  output.textContent=JSON.stringify(window.__workerCanvasResult,null,2);
+})();
+</script>

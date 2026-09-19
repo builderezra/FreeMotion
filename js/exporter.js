@@ -320,7 +320,9 @@ window.FM = window.FM || {};
   }
   FM._exportSay = exportSay;   // suite seam
 
-  async function buildAudioMix(scene, from, to) {
+  async function buildAudioMix(scene, from, to, mediaMap) {
+    // Captured jobs can pin their file/buffer references without replacing the live media registry.
+    mediaMap = mediaMap || FM.media;
     const P = scene.project;
     const sampleRate = 48000, channels = 2;
     from = from || 0; to = (to == null) ? P.duration : to;
@@ -349,7 +351,7 @@ window.FM = window.FM || {};
     // outside the range is a surprise worth reporting or the user's own instruction. See below.
     const wholeProject = (from <= 0.001) && (to >= (P.duration || 0) - 0.001);
     for (const layer of scene.layers) {
-      const hiddenOrSolo = layer.visible === false || (FM.groupHidden && FM.groupHidden(layer)) || (soloActive && !layer.solo);
+      const hiddenOrSolo = layer.visible === false || (FM.groupHidden && FM.groupHidden(layer, scene)) || (soloActive && !layer.solo);
       if (hiddenOrSolo) {
         /* SUPPRESSED IS NOT THE SAME AS SILENT, and this `continue` was the last one in the mixer with
          * no witness (queue 215, 25 Aug). Hiding a layer should silence it — that part is correct and
@@ -361,7 +363,7 @@ window.FM = window.FM || {};
          * So the audio-bearing ones are remembered, and reported ONLY if they turn out to be the reason
          * the whole export is silent — see the report block below. A warning that fires while the file
          * still has sound would be exactly the noise this was avoiding. */
-        const sm = FM.media.get(layer.id);
+        const sm = mediaMap.get(layer.id);
         if (sm && (sm.file || sm.audioBuffer)) {
           suppressed.push(nameOf(layer) + (layer.visible === false ? ' (hidden)'
                           : (soloActive && !layer.solo) ? ' (another layer is soloed)' : ' (inside a hidden group)'));
@@ -373,11 +375,11 @@ window.FM = window.FM || {};
         // NON-video layer here either genuinely has no sound, or is an audio layer built by some other
         // route that this mixer has never handled. Only the second is worth saying out loud, and the
         // honest test for it is whether it has decodable media attached.
-        const mm = FM.media.get(layer.id);
+        const mm = mediaMap.get(layer.id);
         if (mm && (mm.file || mm.audioBuffer)) dropped.push(nameOf(layer) + ' (type "' + layer.type + '" — the mixer only takes "video" layers)');
         continue;
       }
-      const m = FM.media.get(layer.id);
+      const m = mediaMap.get(layer.id);
       if (!m || !m.file) {
         if (m) dropped.push(nameOf(layer) + ' (no file on its media record — a bundled or URL-backed clip?)');
         else dropped.push(nameOf(layer) + ' (no media record at all)');
@@ -815,7 +817,23 @@ window.FM = window.FM || {};
       if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') {
         throw new Error('NO_WEBCODECS');
       }
-      const scene = FM.scene, P = scene.project;
+      // Capture supported documents before cache/audio/codec setup yields. A failed Worker startup
+      // changes the renderer only; it must not change which project this export describes.
+      let captured = FM.exportWorker && FM.exportWorker.capture
+        ? FM.exportWorker.capture(FM.scene, {time:Math.max(0, opts.from || 0)}) : null;
+      FM._exportCancel = false;
+      try {
+      if (captured && ((captured.images && captured.images.length) || (captured.fonts && captured.fonts.length) || (captured.videos && captured.videos.length))) {
+        try {
+          if (!await FM.exportWorker.prepare(captured, {shouldCancel:() => FM._exportCancel})) {
+            FM.exportWorker.release(captured); captured = null;
+          }
+        } catch (e) {
+          if (FM._exportCancel && FM.exportResume) { try { await FM.exportResume.clear(); } catch (ignored) {} }
+          throw e;
+        }
+      }
+      const scene = captured ? captured.document : FM.scene, P = scene.project;
       const scale = opts.scale || 1, fps = opts.fps || P.fps || 30;
       /* CUSTOM OUTPUT SIZE (queue 141). Ezra: "there's no way to do custom export ratios, or fps."
        * Everything here used to derive the output from ONE uniform scale, so the export could only ever
@@ -835,12 +853,11 @@ window.FM = window.FM || {};
          autosaved and lose your background for good. With that gone, a setup-time read would give
          transparent GIFs COLOURED letterbox bars. `blit` is shared by the MP4, GIF and frame paths and
          all three set the flag after this line, so the fill has to be asked for per frame. */
-      const barFillNow = () => (FM._exportTransparent || P.background == null) ? null : P.background;
+      const barFillNow = () => ((captured ? captured.transparent : FM._exportTransparent) || P.background == null) ? null : P.background;
       const bitrate = Math.min(80e6, opts.bitrate || Math.round(outW * outH * fps * 0.12));   // cap so 4K60 doesn't choke the encoder
       const start = (opts.from != null) ? Math.max(0, opts.from) : 0;
       const end = (opts.to != null) ? Math.min(P.duration, opts.to) : P.duration;
       const totalFrames = Math.max(1, Math.round((end - start) * fps));
-      FM._exportCancel = false;
       resetSeekWatch();
       /* ⚠️ v14.35 — AND THE REPORT COULD LIE, WHICH MATTERS MORE THAN ANY OF THE MESSAGES, BECAUSE THE
        * REPORT IS THE ARTIFACT THIS ENTRY SAYS DECIDES THE CASE. `FM._audioTrackDropped` had no
@@ -878,7 +895,7 @@ window.FM = window.FM || {};
          lazily at call time, so its position above the declaration was harmless. A factory takes the
          canvas as a VALUE, so constructing it early threw "Cannot access 'projCanvas' before
          initialization" — caught by the suite on the first run after the change, in eight tests. */
-      const blit = makeBlit(projCanvas, outW, outH, fit, barFillNow);
+      let blit = makeBlit(projCanvas, outW, outH, fit, barFillNow);
       const outCanvas = document.createElement('canvas');
       outCanvas.width = outW; outCanvas.height = outH;
       const outCtx = outCanvas.getContext('2d');
@@ -889,7 +906,7 @@ window.FM = window.FM || {};
 
       FM._exporting = true;   // tells the compositor to skip the preview-only hold-frame capture/substitution (#13,#22)
       // Hoisted out of the try so the finally can shut the recorder down before deciding what to keep.
-      let delivered = false, recorder = null, poster = null;
+      let delivered = false, recorder = null, poster = null, frameRenderer = null, encoder = null;
       try {
       // audio (best-effort: never let it sink the whole export)
       let mix = null;
@@ -900,7 +917,7 @@ window.FM = window.FM || {};
        * exactly this line, and a long project is precisely the export Ezra has not tried yet.
        * It cannot prevent the loss — it makes the loss say something, which is the difference between
        * an unreproducible report and a one-line answer. */
-      try { mix = await buildAudioMix(scene, start, end); }
+      try { mix = await buildAudioMix(scene, start, end, captured ? captured.media : undefined); }
       catch (e) {
         console.warn('[export] the soundtrack could not be built — exporting video only', e);
         FM._audioTrackDropped = 'mix-failed';
@@ -950,13 +967,58 @@ window.FM = window.FM || {};
        * else about the move matters — pickVideoCodec only probes the encoder. */
       const codec = await pickVideoCodec(outW, outH, fps, bitrate);
       const frameDurUs = 1e6 / fps;
+      frameRenderer = FM.exportWorker ? await FM.exportWorker.create(scene, {
+        time: start, shouldCancel: () => FM._exportCancel, capture:captured
+      }) : null;
+      if (FM._exportCancel) throw new Error('CANCELLED');
+      if (frameRenderer) {
+        // Keep the adapter tied to the actual renderer document, including direct/custom renderer
+        // implementations. Normal jobs captured this document before asynchronous setup began.
+        const renderedProject = frameRenderer.document.project;
+        projCanvas.width = renderedProject.width; projCanvas.height = renderedProject.height;
+        blit = makeBlit(projCanvas, outW, outH,
+          FM.exportFitRect(renderedProject.width, renderedProject.height, outW, outH),
+          () => frameRenderer.transparent ? null : renderedProject.background);
+      }
+      const renderFrame = async t => {
+        if (frameRenderer) await frameRenderer.render(projCtx, t);
+        else {
+          if (captured && captured.videos && captured.videos.length) await FM.exportWorker.seekVideos(captured, t, {shouldCancel:() => FM._exportCancel});
+          if (!captured) await seekAllVideos(scene, t);
+          if (!captured) FM.renderScene(projCtx, scene, t);
+          else {
+            // The main compositor has synchronous preview globals. Scope the captured state only
+            // during this draw, never over an await, and restore the editor even if drawing throws.
+            const previous = {scene:FM.scene,time:FM.time,transparent:FM._exportTransparent,
+              isolate:FM.isolate,dragOrder:FM._dragOrderIds,media:FM.media};
+            try {
+              FM.scene=scene;FM.time=t;FM._exportTransparent=captured.transparent;
+              FM.isolate=null;FM._dragOrderIds=null;FM.media=captured.media;
+              FM.renderScene(projCtx, scene, t);
+            } finally {
+              FM.scene=previous.scene;FM.time=previous.time;FM._exportTransparent=previous.transparent;
+              FM.isolate=previous.isolate;FM._dragOrderIds=previous.dragOrder;FM.media=previous.media;
+            }
+          }
+        }
+        if (FM._exportCancel) throw new Error('CANCELLED');
+      };
       const XR = FM.exportResume;
+      const resumeDocument = frameRenderer ? frameRenderer.document : scene;
+      // Old non-letterboxed transparent MP4s accumulated earlier frames on the output canvas.
+      // Their main-renderer prefixes predate the clear below and must start fresh. Opaque legacy
+      // jobs keep their existing identity; Worker jobs already carry the revised renderer version.
+      let resumeRenderer = frameRenderer ? frameRenderer.id
+        : (((captured ? captured.transparent : FM._exportTransparent) || !resumeDocument.project.background) ? 'main-transparent-clear-1' : null);
+      if (!frameRenderer && captured && FM.exportWorker.mediaID(captured)) {
+        resumeRenderer = (resumeRenderer || 'main') + ';' + FM.exportWorker.mediaID(captured);
+      }
       let sig = null, saved = null;
       if (XR) {
         try {
-          sig = XR.signature({ project: P, layers: scene.layers, w: outW, h: outH, fps: fps,
+          sig = XR.signature({ project: resumeDocument.project, layers: resumeDocument.layers, w: outW, h: outH, fps: fps,
                                bitrate: bitrate, codec: codec, from: start, to: end,
-                               frames: totalFrames, audio: !!mix });
+                               frames: totalFrames, audio: !!mix, renderer: resumeRenderer });
           saved = await XR.load(sig);
         } catch (e) { console.warn('resume lookup failed', e); sig = sig || null; saved = null; }
       }
@@ -1064,7 +1126,7 @@ window.FM = window.FM || {};
        * `if (encErr) throw encErr` after its flush. Same shape, and the asymmetry was the whole of the
        * QA report's point. Thrown after flush() so the encoder is drained first. */
       let vidErr = null;
-      const encoder = new VideoEncoder({
+      encoder = new VideoEncoder({
         output: (chunk, meta) => { muxer.addVideoChunk(chunk, meta); if (recorder) recorder.add(chunk, meta); },
         error: e => { vidErr = e; console.error('video encode', e); },
       });
@@ -1091,8 +1153,7 @@ window.FM = window.FM || {};
         for (let f = warmFrom; f < resumeFrom; f++) {
           if (FM._exportCancel) { encoder.close(); throw new Error('CANCELLED'); }
           const t = start + f / fps;
-          await seekAllVideos(scene, t);
-          FM.renderScene(projCtx, scene, t);   // rendered for its side effect on the temporal caches only
+          await renderFrame(t);   // rendered for its side effect on the temporal caches only
           await nextTick();
         }
       }
@@ -1100,8 +1161,10 @@ window.FM = window.FM || {};
       for (let f = resumeFrom; f < totalFrames; f++) {
         if (FM._exportCancel) { encoder.close(); throw new Error('CANCELLED'); }
         const t = start + f / fps;
-        await seekAllVideos(scene, t);
-        FM.renderScene(projCtx, scene, t);
+        await renderFrame(t);
+        // Each encoded frame replaces the previous one. A transparent project plate cannot erase
+        // old pixels with source-over; without this clear, moving layers leave trails in MP4s.
+        outCtx.clearRect(0, 0, outW, outH);
         blit(outCtx);
         /* A small still of the first frame we encode, for the "export ready" card (queue 141 part 4).
          * Taken from the FIRST frame rather than the last, because the last frame of a video is very
@@ -1249,6 +1312,9 @@ window.FM = window.FM || {};
       }
       delivered = true;
       } finally {
+        if (frameRenderer) frameRenderer.dispose();
+        // A failed Worker frame must release the encoder too, without erasing recoverable chunks.
+        if (encoder && encoder.state !== 'closed') { try { encoder.close(); } catch (e) {} }
         // Free the full-res export frame caches (built by prepareCaches) on success, cancel, OR error so
         // a heavy reversed/slow clip doesn't keep multiple GB resident and OOM mobile Safari. Preview
         // re-decodes a lightweight downscaled cache on the next scrub/play. (#3)
@@ -1259,11 +1325,17 @@ window.FM = window.FM || {};
          * an exception on the way out is precisely the case this whole file exists for, and deleting
          * the render on the way past would be the bug, not the tidy-up. (A real crash never reaches
          * this block at all, which is the point.) */
+        if (recorder) {
+          // Preserve the last partial batch on failure; settle writes before another run can start.
+          if (!delivered && !FM._exportCancel) { try { await recorder.settle(); } catch (e) {} }
+          try { await recorder.stop(); } catch (e) {}
+        }
         if (FM.exportResume && (delivered || FM._exportCancel)) {
-          // Drain the recorder BEFORE the delete, or a write still in flight re-creates what we erase.
-          if (recorder) { try { await recorder.stop(); } catch (e) {} }
           try { await FM.exportResume.clear(); } catch (e) {}
         }
+      }
+      } finally {
+        if (captured && FM.exportWorker.release) FM.exportWorker.release(captured);
       }
     },
 

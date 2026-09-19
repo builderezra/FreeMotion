@@ -1,0 +1,356 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>FreeMotion #47: real worker MP4 integration</title>
+<style>body{background:#111;color:#eee;font:15px system-ui;margin:24px}pre{white-space:pre-wrap}iframe{position:fixed;left:-10000px;width:900px;height:760px}</style>
+<h1>Worker exports: complete MP4s, fallback, cancellation and resume</h1>
+<pre id="result">Loading the actual app…</pre>
+<iframe id="app"></iframe>
+<script>
+(async function () {
+  const checks = [], frame = document.getElementById('app'), output = document.getElementById('result');
+  const assert = (ok, reason) => { if (!ok) throw new Error(reason); };
+  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+  async function waitFor(fn, reason) {
+    const until = performance.now() + 10000;
+    while (performance.now() < until) { if (fn()) return; await sleep(20); }
+    throw new Error(reason);
+  }
+  function passed(name) { checks.push(name); output.textContent = checks.join('\n'); }
+  function sampleCount(bytes) {
+    // Parse box boundaries, not arbitrary compressed bytes that might happen to spell stsz.
+    const view = new DataView(bytes), counts = [];
+    function scan(start, end) {
+      for (let at = start; at + 8 <= end;) {
+        let size = view.getUint32(at), header = 8;
+        const type = String.fromCharCode(...new Uint8Array(bytes, at + 4, 4));
+        if (size === 1) { size = view.getUint32(at + 8) * 4294967296 + view.getUint32(at + 12); header = 16; }
+        if (size === 0) size = end - at;
+        assert(size >= header && at + size <= end, 'Invalid MP4 box ' + type);
+        if (type === 'stsz') counts.push(view.getUint32(at + header + 8));
+        if (['moov','trak','mdia','minf','stbl'].includes(type)) scan(at + header, at + size);
+        at += size;
+      }
+    }
+    scan(0, bytes.byteLength);
+    assert(counts.length === 1, 'Expected one video sample table');
+    return counts[0];
+  }
+  async function decodedMotion(blob) {
+    const video = document.createElement('video'), url = URL.createObjectURL(blob);
+    const canvas = document.createElement('canvas'); canvas.width = 160; canvas.height = 120;
+    const ctx = canvas.getContext('2d', {willReadFrequently:true});
+    try {
+      video.muted = true; video.preload = 'auto'; video.src = url; video.load();
+      await waitFor(() => video.readyState >= 2 || video.error, 'MP4 never decoded');
+      assert(!video.error, 'MP4 decoder rejected output');
+      assert(video.videoWidth === 160 && video.videoHeight === 120, 'Decoded MP4 dimensions differ');
+      const centers = [];
+      for (const time of [.05, .85]) {
+        video.currentTime = time;
+        await waitFor(() => !video.seeking && video.readyState >= 2, 'MP4 seek never completed');
+        ctx.clearRect(0,0,160,120);ctx.drawImage(video, 0, 0);
+        const data = ctx.getImageData(0,0,160,120).data;
+        let sum = 0, count = 0;
+        for (let i=0; i<data.length; i+=4) if (data[i]>140 && data[i+1]<120 && data[i+2]<130) {sum += (i/4)%160; count++;}
+        assert(count > 200, 'Decoded MP4 shape has only '+count+' red pixels at '+time+'s'); centers.push(sum/count);
+      }
+      assert(centers[1] - centers[0] > 50, 'Decoded MP4 did not animate: red centers '+JSON.stringify(centers));
+    } finally { video.removeAttribute('src'); video.load(); URL.revokeObjectURL(url); }
+  }
+  async function decodedFrame(blob, width, height, time=.05) {
+    const video=document.createElement('video'),url=URL.createObjectURL(blob);
+    const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
+    try {
+      video.muted=true;video.preload='auto';video.src=url;video.load();
+      await waitFor(()=>video.readyState>=2||video.error,'Snapshot MP4 never decoded');
+      assert(!video.error && video.videoWidth===width && video.videoHeight===height,'Snapshot MP4 dimensions/decoder differ');
+      video.currentTime=time;
+      await waitFor(()=>!video.seeking&&video.readyState>=2,'Snapshot MP4 seek never finished');
+      const ctx=canvas.getContext('2d');ctx.drawImage(video,0,0);
+      return ctx.getImageData(0,0,width,height).data;
+    }finally{video.removeAttribute('src');video.load();URL.revokeObjectURL(url);}
+  }
+  function pixel(data,width,x,y){return Array.from(data.slice((y*width+x)*4,(y*width+x)*4+3));}
+  function nearColor(actual,expected){return actual.every((v,i)=>Math.abs(v-expected[i])<10);}
+  try {
+    const loaded = new Promise(resolve => frame.addEventListener('load', resolve, {once:true}));
+    frame.style.width=Math.min(900,innerWidth)+'px';
+    frame.src = '../index.html'; await loaded;
+    const w = frame.contentWindow;
+    assert(w.innerWidth===Math.min(900,innerWidth),'Actual app viewport differs from probe width');
+    await waitFor(() => w.FM && w.FM.exporter && w.FM.exportWorker && w.FM.storage, 'App did not initialize');
+    const FM = w.FM, XR = FM.exportResume, NativeWorker = w.Worker;
+    assert(typeof w.VideoEncoder === 'function', 'WebCodecs unavailable');
+    let mode = 'normal', jobs = [], signatures = [];
+    w.Worker = class extends NativeWorker {
+      constructor(url, options) {
+        if (mode === 'startup-failure') throw new Error('TEST_STARTUP_FAILURE');
+        super(url, options);
+        this.job = {sent:0, replies:0, terminated:0, inFlight:0, max:0}; jobs.push(this.job);
+        this.addEventListener('message', e => {
+          if(e.data.bitmap) {this.job.replies++; this.job.inFlight--;}
+          if(e.data.ready && mode==='startup-edit') FM.scene.layers[0].fill='#0044ff';
+          if(e.data.ready && mode==='startup-background-edit') FM.scene.project.background='#0033ff';
+          if(e.data.ready && mode==='startup-transparency-edit') FM._exportTransparent=false;
+        });
+      }
+      postMessage(msg, transfer) {
+        if(msg.type === 'render') {this.job.sent++; this.job.inFlight++; this.job.max=Math.max(this.job.max,this.job.inFlight);}
+        if(mode==='frame-failure' && msg.type==='render' && this.job.sent===3) msg=Object.assign({},msg,{type:'test-invalid-frame'});
+        return super.postMessage(msg, transfer);
+      }
+      terminate() { this.job.terminated++; return super.terminate(); }
+    };
+    const realCreate = FM.exportWorker.create, realSignature = XR.signature, realRecorder = XR.createRecorder;
+    XR.signature = function(o) {const value=realSignature(o); signatures.push({value,renderer:o.renderer,fill:o.layers[0]&&o.layers[0].fill}); return value;};
+    function useScene() {
+      const scene = FM.newScene();
+      Object.assign(scene.project,{width:160,height:120,fps:10,duration:1,background:'#101820',markers:[]});
+      FM.scene = scene; FM.time = 0; FM.isolate = null; FM._dragOrderIds = null;
+      const layer=FM.makeLayer('shape',{shape:'rect',x:20,y:60,shapeW:30,shapeH:30,fill:'#ff4050',duration:1});
+      layer.transform.x={kf:[{t:0,v:20,e:'linear'},{t:1,v:140,e:'linear'}]};
+      scene.layers=[layer]; return layer;
+    }
+    async function run(extra={}) {
+      let ready, loops = 0;
+      await FM.exporter.run(Object.assign({fps:10,bitrate:300000,from:0,to:1,outW:160,outH:120,
+        onProgress(p,phase) {if(phase==='video')loops++;},
+        onReady:async payload => {ready=payload;}
+      },extra));
+      return {ready,loops};
+    }
+    async function checkMP4(runResult, expected=10) {
+      assert(runResult.ready && runResult.ready.blob.type === 'video/mp4','No complete MP4 delivered');
+      assert(sampleCount(await runResult.ready.blob.arrayBuffer()) === expected,'MP4 has missing/duplicated frames');
+      await decodedMotion(runResult.ready.blob);
+    }
+    async function job() {return FM.storage.readMedia(XR.JOB_KEY);}
+    async function expectError(extra, message) {
+      let caught, delivered = false;
+      try {await run(Object.assign({onReady:async()=>{delivered=true;}},extra));}catch(e){caught=e;}
+      assert(caught && caught.message === message,'Expected '+message+', got '+(caught&&caught.message));
+      assert(!delivered,'Failed export delivered a partial MP4');
+      assert(!FM._exporting,'Failed export retained exporting state');
+    }
+    try {
+      await XR.clear(); useScene();
+      assert(FM.exportWorker.eligible(FM.scene),'Fixture did not reach worker eligibility');
+      const success=await run(); await checkMP4(success);
+      assert(jobs.length===1 && jobs[0].sent===10 && jobs[0].replies===10 && jobs[0].max===1 && jobs[0].terminated===1,'Worker was not used/bounded/terminated');
+      assert(signatures[signatures.length-1].renderer,'Resume signature lacks worker identity');
+      assert(!(await job()),'Successful job left resume data');
+      passed('Actual app worker export: 10 decoded, animated MP4 frames; one frame in flight; worker terminated');
+
+      useScene(); mode='startup-edit';
+      const snapshotRun=await run(); mode='normal';
+      await checkMP4(snapshotRun);
+      assert(FM.scene.layers[0].fill==='#0044ff','Concurrent-edit control never changed the live scene');
+      assert(signatures[signatures.length-1].fill==='#ff4050','Resume signature describes the edited scene instead of the worker snapshot');
+      passed('Resume signature follows the rendered snapshot when the live scene changes during startup');
+
+      useScene();mode='startup-background-edit';
+      const borderRun=await run({outW:160,outH:160});mode='normal';
+      assert(FM.scene.project.background==='#0033ff','Background-edit control never changed the live project');
+      assert(sampleCount(await borderRun.ready.blob.arrayBuffer())===10,'Border MP4 frame count differs');
+      const borderPixels=await decodedFrame(borderRun.ready.blob,160,160);
+      assert(nearColor(pixel(borderPixels,160,155,80),[16,24,32]),'Worker frame lost its captured background');
+      assert(nearColor(pixel(borderPixels,160,80,4),[16,24,32]),'Letterbox bars used the live background instead of the worker snapshot');
+      passed('Worker frame and letterbox bars retain the captured background during a live startup edit');
+
+      useScene();FM._exportTransparent=true;mode='startup-transparency-edit';
+      let transparentRun;
+      try{transparentRun=await run({outW:160,outH:160});}finally{mode='normal';FM._exportTransparent=false;}
+      const transparentPixels=await decodedFrame(transparentRun.ready.blob,160,160);
+      assert(nearColor(pixel(transparentPixels,160,155,80),[0,0,0]),'Transparent worker frame was not encoded against black');
+      assert(nearColor(pixel(transparentPixels,160,80,4),[0,0,0]),'Letterbox bars lost the captured transparent setting');
+      passed('Worker frame and letterbox bars share the captured transparency setting');
+
+      const resizedLayer=useScene(),realSupport=w.VideoEncoder.isConfigSupported;
+      let resized=false,sizeRun;
+      w.VideoEncoder.isConfigSupported=function(config){
+        if(!resized){
+          resized=true;Object.assign(FM.scene.project,{width:120,height:160});
+          resizedLayer.transform.x=60;resizedLayer.transform.y=140;
+        }
+        return realSupport.call(this,config);
+      };
+      try{sizeRun=await run({outW:160,outH:120});}finally{w.VideoEncoder.isConfigSupported=realSupport;}
+      assert(resized,'Resize control never changed the project before worker creation');
+      assert(FM.scene.project.width===120&&FM.scene.project.height===160&&resizedLayer.transform.y===140,'The live resize was undone by export');
+      await checkMP4(sizeRun);
+      const sizePixels=await decodedFrame(sizeRun.ready.blob,160,120),subject=pixel(sizePixels,160,20,60);
+      assert(subject[0]>140&&subject[1]<120&&subject[2]<130,'Export lost the original subject after a startup resize');
+      assert(nearColor(pixel(sizePixels,160,80,105),[16,24,32]),'A later resized subject entered the captured output');
+      passed('Export keeps its original dimensions and motion while startup resize edits remain in the editor');
+
+      // Compare real full-app compositor against the worker at non-endpoint parameterized easings.
+      for (const family of [null,{fam:'steps',preset:'steps',p:{n:4}}]) {
+        useScene();
+        if(family) {
+          assert(FM.easeApply(family,.27) != null && Math.abs(FM.easeApply(family,.27)-.27)>.01,'Parameterized easing control is inert');
+          FM.scene.layers[0].transform.x.kf[1].ez=family;
+        }
+        const l=FM.scene.layers[0]; l.transform.opacity=.45;
+        l.fillGradient={enabled:true,type:'radial',c0:'#ff4050',c1:'#30cfff',ox:.1,oy:-.1,angle:35};
+        FM.scene.project.background=null;
+        const renderer=await realCreate(FM.scene,{time:0});
+        assert(renderer,'Full app parity renderer failed to initialize');
+        try {
+          for(const t of [0,.27,.54,.81,1]) {
+            const a=w.document.createElement('canvas'),b=w.document.createElement('canvas');
+            a.width=b.width=160;a.height=b.height=120;
+            FM.time=t;FM._exporting=true;
+            const ac=a.getContext('2d'),bc=b.getContext('2d');
+            FM.renderScene(ac,FM.scene,t);await renderer.render(bc,t);
+            const expected=ac.getImageData(0,0,160,120).data,actual=bc.getImageData(0,0,160,120).data;
+            assert(actual.every((v,i)=>v===expected[i]),'Full-app worker parity differs at '+t);
+          }
+        }finally{renderer.dispose();FM._exporting=false;}
+      }
+      passed('Full app parity: transparent gradient, opacity, visibility boundary and parameterized easing');
+
+      useScene().effects=[{type:'brightness',params:{amount:.8}},{type:'blur',params:{radius:2}},{type:'gamma',params:{gamma:1.4}},{type:'posterize',params:{levels:5,mix:.5}}];
+      const effectJob=jobs.length;
+      await checkMP4(await run());
+      assert(jobs.length===effectJob+1 && jobs[effectJob].replies===10,'Effect MP4 did not use the worker for every frame');
+      passed('Brightness, Blur, Gamma and Posterize export as a complete decoded animated worker MP4');
+
+      useScene().effects=[{type:'contrast',params:{amount:1.2}},{type:'saturate',params:{amount:.9}},{type:'hue',params:{deg:8}},{type:'grayscale',params:{amount:.1}},{type:'sepia',params:{amount:.1}},{type:'invert',params:{amount:.04}},{type:'temperature',params:{amount:20,tint:10,preserve:30}},{type:'vibrance',params:{amount:1.2,skin:40,highlights:40}},{type:'exposure',params:{stops:.2,offset:3,rolloff:40}}];
+      const colourJob=jobs.length;
+      await checkMP4(await run());
+      assert(jobs.length===colourJob+1 && jobs[colourJob].replies===10,'Colour-control MP4 did not use the worker for every frame');
+      passed('Nine additional colour controls export as a complete decoded animated worker MP4');
+
+      for(const shape of 'rect ellipse line arc pie semicircle ring polygon star triangle heart plus arrow chevron trapezoid parallelogram speech moon snowflake shield droplet cloud play spiral sparkle bolt puzzle pushpin flag paperplane house laurel bookmark flame banner ribbon wreath diamond plane umbrella bomb boat magnifier sun person rocket woman stamp check thumbsup pointhand envelope key car squircle cross pin lock gear crown eye note starburst clock'.split(' ')){
+        const outlined=useScene();outlined.shape=shape;outlined.shapeW=72;outlined.shapeH=64;
+        outlined.transform.x={kf:[{t:0,v:40,e:'linear'},{t:1,v:120,e:'linear'}]};
+        if(shape==='rect')outlined.cornerRadius=12;
+        outlined.stroke={enabled:true,width:6,color:'#39adff',position:'outside'};
+        const geometryJob=jobs.length;
+        const preview=w.document.createElement('canvas');preview.width=160;preview.height=120;
+        const previewCtx=preview.getContext('2d');FM.renderScene(previewCtx,FM.scene,0);
+        const previewPixels=previewCtx.getImageData(0,0,160,120).data;
+        let expectedRed=0;for(let i=0;i<previewPixels.length;i+=4)if(previewPixels[i]>140&&previewPixels[i+1]<120&&previewPixels[i+2]<130)expectedRed++;
+        assert(expectedRed>200,shape+': MP4 fixture has only '+expectedRed+' red preview pixels');
+        try{await checkMP4(await run());}catch(e){throw new Error(shape+' ('+expectedRed+' red preview pixels): '+e.message);}
+        assert(jobs.length===geometryJob+1&&jobs[geometryJob].replies===10,shape+': outlined MP4 did not use worker for every frame');
+      }
+      passed('All 64 built-in shape kinds with outside borders, including rounded rectangles, decode as complete animated worker MP4s');
+
+      const insideLayer=useScene();insideLayer.stroke={enabled:true,width:4,color:'#39adff',position:'inside'};
+      const beforeInside=jobs.length;
+      await checkMP4(await run());
+      assert(jobs.length===beforeInside,'Inside border lost its existing-renderer fallback');
+      assert(!signatures[signatures.length-1].renderer,'Inside border fallback used a worker resume signature');
+      passed('Inside borders retain complete animated MP4 export through the existing renderer');
+
+      const dashedLayer=useScene();dashedLayer.stroke.enabled=true;dashedLayer.stroke.dash={enabled:true,length:6,gap:3,offset:0};
+      const beforeFallback=jobs.length;
+      await checkMP4(await run());
+      assert(jobs.length===beforeFallback,'Unsupported dashed outline started a worker');
+      assert(!signatures[signatures.length-1].renderer,'Main fallback carries worker signature');
+      passed('Unsupported scene: existing main renderer delivers complete animated MP4');
+
+      useScene();mode='startup-failure';
+      await checkMP4(await run()); mode='normal';
+      assert(!signatures[signatures.length-1].renderer,'Startup failure chose worker resume signature');
+      passed('Worker startup failure: complete main-renderer fallback before resume selection');
+
+      useScene();mode='frame-failure';
+      await expectError({},'Unknown renderer request');mode='normal';
+      assert(jobs[jobs.length-1].terminated===1,'Failed worker leaked');
+      await XR.clear();
+      passed('Actual worker error response: export rejects, delivers no partial file and terminates worker');
+
+      useScene();
+      await expectError({onProgress(p,phase){if(phase==='video'&&p>=.2)FM._exportCancel=true;}},'CANCELLED');
+      assert(jobs[jobs.length-1].terminated===1 && !(await job()),'Cancel leaked worker or resume data');
+      await checkMP4(await run());
+      passed('Cancel: worker and resume data cleaned; next export completes normally');
+
+      useScene();
+      XR.createRecorder=function(sig,opts){
+        const rec=realRecorder(sig,Object.assign({},opts,{batchChunks:1})),add=rec.add;let count=0;
+        rec.add=function(...args){if(++count<=3)add.apply(rec,args);};return rec;
+      };
+      let interrupted=false;
+      try{await run({onReady:async()=>{throw new Error('TEST_CRASH');}});}catch(e){interrupted=e.message==='TEST_CRASH';}
+      XR.createRecorder=realRecorder;
+      const saved=await job();
+      assert(interrupted && saved && saved.parts===3,'Real encoded prefix was not saved');
+      const resumed=await run();await checkMP4(resumed);
+      assert(resumed.ready.resumedPct===30 && resumed.loops===7,'Worker failed to resume at the saved boundary');
+      assert(!(await job()),'Resumed success left stored chunks');
+      passed('Real encoded prefix resumed at 30%: seven new frames, complete decodable ten-frame MP4');
+
+      useScene();FM.scene.project.background='#286ed2';
+      XR.createRecorder=function(sig,opts){
+        const rec=realRecorder(sig,Object.assign({},opts,{batchChunks:1})),add=rec.add;let count=0;
+        rec.add=function(...args){if(++count<=3)add.apply(rec,args);};return rec;
+      };
+      let opaquePrefix=false;
+      try{await run({onReady:async()=>{throw new Error('ALPHA_TEST_CRASH');}});}catch(e){opaquePrefix=e.message==='ALPHA_TEST_CRASH';}
+      finally{XR.createRecorder=realRecorder;}
+      const opaqueJob=await job();
+      assert(opaquePrefix&&opaqueJob&&opaqueJob.parts===3,'Transparency control did not save a real opaque prefix');
+      const opaqueSignature=signatures[signatures.length-1].value;
+      FM._exportTransparent=true;
+      let freshAlpha;
+      try{freshAlpha=await run();}finally{FM._exportTransparent=false;}
+      assert(freshAlpha.ready.resumedPct===0&&freshAlpha.loops===10,'Changed transparency reused an opaque saved prefix: '+JSON.stringify({resumedPct:freshAlpha.ready.resumedPct,loops:freshAlpha.loops}));
+      await checkMP4(freshAlpha);
+      assert(signatures[signatures.length-1].value!==opaqueSignature,'Transparency did not change the actual resume signature');
+      const alphaPixels=await decodedFrame(freshAlpha.ready.blob,160,120);
+      assert(nearColor(pixel(alphaPixels,160,155,5),[0,0,0]),'First frame kept the opaque prefix background');
+      const alphaEnd=await decodedFrame(freshAlpha.ready.blob,160,120,.85);
+      assert(nearColor(pixel(alphaEnd,160,10,60),[0,0,0]),'Transparent MP4 kept the moving shape at its old position');
+      assert(!(await job()),'Changed-transparency success left saved chunks');
+      passed('Changed transparency discards a genuine opaque prefix and exports all ten new frames with the captured background');
+
+      for(const renderMode of ['normal','startup-failure']){
+        useScene();FM.scene.project.background=null;mode=renderMode;
+        const priorJobs=jobs.length;let unbacked,legacyMainSignature;
+        if(renderMode==='startup-failure'){
+          // Seed the former main-renderer signature with genuine encoded chunks. Those old jobs
+          // could contain accumulated transparent frames and must not survive the output fix.
+          const captureSignature=XR.signature;
+          XR.signature=o=>captureSignature(Object.assign({},o,{renderer:null}));
+          XR.createRecorder=function(sig,opts){
+            const rec=realRecorder(sig,Object.assign({},opts,{batchChunks:1})),add=rec.add;let count=0;
+            rec.add=function(...args){if(++count<=3)add.apply(rec,args);};return rec;
+          };
+          let legacyCrash=false;
+          try{await run({onReady:async()=>{throw new Error('LEGACY_ALPHA_CRASH');}});}catch(e){legacyCrash=e.message==='LEGACY_ALPHA_CRASH';}
+          finally{XR.signature=captureSignature;XR.createRecorder=realRecorder;}
+          const legacyJob=await job();
+          assert(legacyCrash&&legacyJob&&legacyJob.parts===3,'Legacy transparent main prefix was not saved');
+          legacyMainSignature=signatures[signatures.length-1].value;
+        }
+        try{unbacked=await run();}finally{mode='normal';}
+        if(legacyMainSignature){
+          assert(unbacked.ready.resumedPct===0&&unbacked.loops===10,'Existing renderer resumed a legacy transparent prefix');
+          assert(signatures[signatures.length-1].value!==legacyMainSignature,'Existing renderer did not invalidate its old transparent identity');
+        }
+        assert(jobs.length===priorJobs+(renderMode==='normal'?1:0),'No-background fixture used the wrong renderer');
+        await checkMP4(unbacked);
+        const endPixels=await decodedFrame(unbacked.ready.blob,160,120,.85);
+        assert(nearColor(pixel(endPixels,160,10,60),[0,0,0]),renderMode+': no-background MP4 leaves a trail at the starting position');
+        const endSubject=pixel(endPixels,160,116,60);
+        assert(endSubject[0]>140&&endSubject[1]<120&&endSubject[2]<130,renderMode+': clearing removed the current subject');
+      }
+      passed('Projects with no background export without trails through worker and main fallback; legacy transparent prefixes are discarded');
+
+      const base={project:FM.scene.project,layers:FM.scene.layers,w:160,h:120,fps:10,bitrate:300000,codec:'avc1.42001f',from:0,to:1,frames:10,audio:false};
+      const main=realSignature(base),worker=realSignature(Object.assign({},base,{renderer:'worker-v1'})),newWorker=realSignature(Object.assign({},base,{renderer:'worker-v2'}));
+      assert(main!==worker && worker!==newWorker && main===realSignature(Object.assign({},base,{renderer:null})),'Renderer revisions can splice incompatible jobs');
+      passed('Resume signature separates worker revisions and retains legacy main-renderer identity');
+      assert(jobs.every(j=>j.terminated===1),'A created worker survived the tests');
+      window.__workerCanvasResult={ok:true,checks};
+    }finally{
+      w.Worker=NativeWorker;FM.exportWorker.create=realCreate;XR.signature=realSignature;XR.createRecorder=realRecorder;
+      FM._exportCancel=false;FM._exporting=false;FM._exportTransparent=false;await XR.clear();
+    }
+  }catch(e){window.__workerCanvasResult={ok:false,error:e.stack||String(e),checks};}
+  output.textContent=JSON.stringify(window.__workerCanvasResult,null,2);
+})();
+</script>

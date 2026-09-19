@@ -1,0 +1,105 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>FreeMotion #47: captured soundtracks</title>
+<style>body{background:#111;color:#eee;font:15px system-ui;margin:24px}pre{white-space:pre-wrap}iframe{position:fixed;left:-10000px;width:900px;height:760px}</style>
+<h1>Soundtracks in background exports</h1><pre id="result">Loading…</pre><iframe id="app"></iframe>
+<script>
+(async function(){
+  const checks=[], frame=document.getElementById('app'), output=document.getElementById('result');
+  const assert=(ok,message)=>{if(!ok)throw new Error(message);};
+  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  async function waitFor(fn,message){const end=performance.now()+10000;while(performance.now()<end){if(fn())return;await sleep(20);}throw new Error(message);}
+  async function decodedMotion(blob) {
+    const video = document.createElement('video'), url = URL.createObjectURL(blob);
+    const canvas = document.createElement('canvas'); canvas.width = 160; canvas.height = 120;
+    const ctx = canvas.getContext('2d', {willReadFrequently:true});
+    try {
+      video.muted = true; video.preload = 'auto'; video.src = url; video.load();
+      await waitFor(() => video.readyState >= 2 || video.error, 'MP4 never decoded');
+      assert(!video.error, 'MP4 decoder rejected output');
+      assert(video.videoWidth === 160 && video.videoHeight === 120, 'Decoded MP4 dimensions differ');
+      const centers = [];
+      for (const time of [.05, .85]) {
+        video.currentTime = time;
+        await waitFor(() => !video.seeking && video.readyState >= 2, 'MP4 seek never completed');
+        ctx.clearRect(0,0,160,120);ctx.drawImage(video, 0, 0);
+        const data = ctx.getImageData(0,0,160,120).data;
+        let sum = 0, count = 0;
+        for (let i=0; i<data.length; i+=4) if (data[i]>140 && data[i+1]<120 && data[i+2]<130) {sum += (i/4)%160; count++;}
+        assert(count > 200, 'Decoded MP4 shape has only '+count+' red pixels at '+time+'s'); centers.push(sum/count);
+      }
+      assert(centers[1] - centers[0] > 50, 'Decoded MP4 did not animate: red centers '+JSON.stringify(centers));
+    } finally { video.removeAttribute('src'); video.load(); URL.revokeObjectURL(url); }
+  }
+
+  function toneFile(w,hz){
+    const length=48000,bytes=new ArrayBuffer(44+length*2),v=new DataView(bytes);
+    const str=(at,s)=>{for(let i=0;i<s.length;i++)v.setUint8(at+i,s.charCodeAt(i));};
+    str(0,'RIFF');v.setUint32(4,bytes.byteLength-8,true);str(8,'WAVE');str(12,'fmt ');
+    v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
+    v.setUint32(24,48000,true);v.setUint32(28,96000,true);v.setUint16(32,2,true);v.setUint16(34,16,true);
+    str(36,'data');v.setUint32(40,length*2,true);
+    for(let i=0;i<length;i++)v.setInt16(44+i*2,Math.round(Math.sin(2*Math.PI*hz*i/48000)*.25*32767),true);
+    return new w.File([bytes],hz+'-tone.wav',{type:'audio/wav'});
+  }
+  function strength(buffer,hz){
+    const data=buffer.getChannelData(0),sr=buffer.sampleRate;
+    const from=Math.floor(sr*.2),to=Math.min(data.length,Math.floor(sr*.8));let re=0,im=0;
+    for(let i=from;i<to;i++){const phase=2*Math.PI*hz*i/sr;re+=data[i]*Math.cos(phase);im+=data[i]*Math.sin(phase);}
+    return 2*Math.hypot(re,im)/(to-from);
+  }
+  try{
+    const loaded=new Promise(resolve=>frame.addEventListener('load',resolve,{once:true}));
+    frame.style.width=Math.min(900,innerWidth)+'px';frame.src='../index.html';await loaded;
+    const w=frame.contentWindow,FM=w.FM,realDecode=FM.decodeAudio,NativeWorker=w.Worker,originalMedia=FM.media;
+    const leadFile=toneFile(w,220),soundFile=toneFile(w,440),replacementFile=toneFile(w,880);
+    let mode='worker',jobs=[];
+    w.Worker=class extends NativeWorker{
+      constructor(...args){if(mode==='main')throw new Error('SOUNDTRACK_FALLBACK');super(...args);this.job={terminated:0};jobs.push(this.job);}
+      postMessage(msg,transfer){if(msg.type==='init')this.job.scene=msg.scene;return super.postMessage(msg,transfer);}
+      terminate(){this.job.terminated++;return super.terminate();}
+    };
+    try{
+      for(const backend of ['worker','main']){
+        mode=backend;
+        const lead=await FM.loadVideoFile(leadFile),sound=await FM.loadVideoFile(soundFile),replacement=await FM.loadVideoFile(replacementFile);
+        const scene=FM.newScene();Object.assign(scene.project,{width:160,height:120,fps:10,duration:1,background:'#102030',markers:[]});
+        const shape=FM.makeLayer('shape',{shape:'rect',x:20,y:60,shapeW:30,shapeH:30,fill:'#ff4050',duration:1});
+        shape.transform.x={kf:[{t:0,v:20},{t:1,v:140}]};
+        const a=FM.makeLayer('video',{name:'Lead',duration:1}),b=FM.makeLayer('video',{name:'Soundtrack',duration:1});
+        a.volume=.4;b.volume=.6;b.fadeIn=.1;b.fadeOut=.1;
+        scene.layers=[shape,a,b];FM.scene=scene;FM.time=0;FM.isolate=null;FM._dragOrderIds=null;FM._exportTransparent=false;
+        FM.media.set(a.id,lead);FM.media.set(b.id,sound);
+        assert(FM.exportWorker.eligible(scene),'Normally imported WAV layers did not enter the background path');
+        let entered=false,release,ready;const gate=new Promise(resolve=>{release=resolve;}),before=jobs.length;
+        FM.decodeAudio=async function(file){if(file===leadFile&&!entered){entered=true;await gate;}return realDecode.call(FM,file);};
+        try{
+          const running=FM.exporter.run({bitrate:300000,onReady:async result=>{ready=result;}});
+          await waitFor(()=>entered,'Mix did not reach its first actual audio decode');
+          // Replacing media clears the outgoing element and buffer. Mutate the old record too,
+          // exercising why a shallow map copy is insufficient while the first source is decoding.
+          sound.file=replacementFile;b.volume=0;b.muted=true;
+          FM.media.set(b.id,replacement);release();await running;
+          assert(ready&&ready.hasAudio&&!ready.audioDropped,'Export lost its soundtrack');
+          assert(FM.scene===scene&&FM.media===originalMedia&&FM.media.get(b.id)===replacement&&b.muted&&b.volume===0,'Export undid the live replacement or mute');
+          if(backend==='worker'){
+            assert(jobs.length===before+1,'Soundtrack export did not use a Worker');
+            assert(jobs[before].scene.layers.some(l=>l.id===b.id&&l.type==='video'&&l.volume===.6&&!l.muted),'Worker lost the captured sound layer/solo context');
+          }else assert(jobs.length===before,'Forced main fallback started a Worker');
+          await decodedMotion(ready.blob);
+          const audio=await realDecode.call(FM,ready.blob);assert(audio&&audio.duration>.9,'The actual MP4 audio track did not decode');
+          const original=strength(audio,440),replaced=strength(audio,880);
+          assert(strength(audio,220)>.035&&original>.055&&original>replaced*4,'Captured mix followed the live mute/replacement: '+JSON.stringify({original,replaced}));
+          checks.push(backend+': real moving MP4 and original two-source AAC mix survive replacement/mute during decoding');
+        }finally{
+          release();FM.decodeAudio=realDecode;FM.media=originalMedia;
+          FM.media.remove(a.id);FM.media.remove(b.id);await FM.exportResume.clear();
+        }
+      }
+      assert(jobs.every(job=>job.terminated===1),'Soundtrack export leaked a Worker');
+      window.__workerCanvasResult={ok:true,checks};
+    }finally{w.Worker=NativeWorker;FM.decodeAudio=realDecode;FM.media=originalMedia;FM._exporting=false;FM._exportCancel=false;}
+  }catch(e){window.__workerCanvasResult={ok:false,error:e.stack||String(e),checks};}
+  output.textContent=JSON.stringify(window.__workerCanvasResult,null,2);
+})();
+</script>

@@ -77,8 +77,10 @@ window.FM = window.FM || {};
     let doc = '';
     try { doc = JSON.stringify({ project: o.project, layers: o.layers }, FM.jsonReplacer); }
     catch (e) { doc = String(Math.random()); }   // unserialisable scene → never matches, so never resumes
-    return [FORMAT, o.w, o.h, o.fps, o.bitrate, o.codec, round6(o.from), round6(o.to), o.frames,
-            o.audio ? 1 : 0, hash(doc)].join('|');
+    const base = [FORMAT, o.w, o.h, o.fps, o.bitrate, o.codec, round6(o.from), round6(o.to), o.frames,
+                  o.audio ? 1 : 0, hash(doc)].join('|');
+    // Preserve existing main-renderer jobs; workers must never splice into one or another build.
+    return o.renderer ? base + '|renderer:' + o.renderer : base;
   }
   function round6(n) { return Math.round((+n || 0) * 1e6) / 1e6; }
 

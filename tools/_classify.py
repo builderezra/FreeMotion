@@ -362,13 +362,13 @@ def closed_in_diff(diff):
 
 
 def next_up(md):
-    """The single lowest OPEN + ACTIONABLE entry — the one CLAUDE.md says to work.
+    """The single lowest open actionable or large entry — the one CLAUDE.md says to work.
        Returns (num, suffix, header) or None. `num` is None for an unnumbered entry."""
     best = None
     for body in entries(md):
         if not OPEN.match(body): continue
         if JUMPED.search(body): continue          # declared, with a reason, so it does not hold the queue
-        if classify(body) != 'ACTIONABLE': continue
+        if classify(body) not in ('ACTIONABLE', 'needs its own session'): continue
         m = NUM.match(body)
         num = int(m.group(1)) if m else None
         suf = m.group(2) if m else ''
@@ -529,6 +529,18 @@ _CASES = [
 # ── SELF-TEST FOR THE QUEUE-ORDER GATE ──────────────────────────────────────────────────────────────
 # Each case is the ordering bug it prevents, in the terms it actually happened in.
 _ORDER = [
+    ("""- [ ] **47 — move export rendering to a worker**
+      wants a session of its own
+- [ ] **610 — newer repair**
+      ready to build""",
+     (47, ''),
+     'size alone does not excuse skipping the oldest task in the release gate'),
+    ("""- [ ] **47 — export rendering**
+      wants a session of its own, held at his request
+- [ ] **610 — newer repair**
+      ready to build""",
+     (610, ''),
+     'an explicit hold still excludes a large task; size does not lift his hold'),
     # THE ONE IT WAS WRITTEN FOR (26 Aug). Three items shipped together while five lower-numbered ones
     # sat ACTIONABLE. Everything about the tooling was right; the order simply was not obeyed.
     ("""- [ ] **524 — drag past the end**
@@ -634,7 +646,11 @@ _KEY = [
 # it still excludes blocked items — a gate that demanded an unanswerable item be closed first would
 # stop every release. WORK includes blocked; CLOSE does not. Same file, different question.
 # 'held by Ezra' stays out: he has said explicitly not to do those, which is an answer, not a gap.
-WORKABLE = ('ACTIONABLE', 'blocked on Ezra')
+# A large request remains work. #47's worker renderer was silently omitted here for
+# weeks because its entry said 'wants a session of its own', despite Ezra explicitly
+# saying to do large projects too. Keep the size label, but include it in BOTH the
+# displayed work queue and next_up's release-order gate. A real hold still wins.
+WORKABLE = ('ACTIONABLE', 'blocked on Ezra', 'needs its own session')
 
 
 def work_queue(buckets, audit=()):
@@ -654,6 +670,10 @@ def work_queue(buckets, audit=()):
 
 
 _WORK = [
+    ({'ACTIONABLE': [('610', 'newer repair', 5)],
+      'needs its own session': [('47', 'worker export', 9)]},
+     ['47', '610'],
+     'large work is still work: the oldest export request must not disappear'),
     # THE BUG ITSELF: a blocked #47 must come out AHEAD of an actionable #610, not be hidden by it.
     ({'ACTIONABLE': [('610', 'border and shadow', 5)],
       'blocked on Ezra': [('47', 'export on a crash', 9)]},

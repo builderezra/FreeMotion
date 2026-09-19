@@ -2,7 +2,7 @@
  * Add-Effect browser all read. It DERIVES from FM.EFFECTS (compositor.js) — it never renames storage keys
  * and never replaces the catalog, so the compositor / AI validators keep working untouched. Adding a new
  * effect = add to FM.EFFECTS + a compositor render branch + a CATEGORY_OF entry; everything here derives. */
-window.FM = window.FM || {};
+globalThis.FM = globalThis.FM || {};
 (function (FM) {
   'use strict';
 
@@ -668,4 +668,4 @@ window.FM = window.FM || {};
       return true;
     },
   };
-})(window.FM);
+})(globalThis.FM);

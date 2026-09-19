@@ -1,0 +1,190 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>FreeMotion #47: early export capture</title>
+<style>body{background:#111;color:#eee;font:15px system-ui;margin:24px}pre{white-space:pre-wrap}iframe{position:fixed;left:-10000px;width:900px;height:760px}</style>
+<h1>One export snapshot across asynchronous setup</h1>
+<pre id="result">Loading the actual app…</pre>
+<iframe id="app"></iframe>
+<script>
+(async function () {
+  const checks = [], frame = document.getElementById('app'), output = document.getElementById('result');
+  const assert = (ok, reason) => { if (!ok) throw new Error(reason); };
+  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+  async function waitFor(fn, reason) {
+    const until = performance.now() + 10000;
+    while (performance.now() < until) { if (fn()) return; await sleep(20); }
+    throw new Error(reason);
+  }
+  function passed(name) { checks.push(name); output.textContent = checks.join('\n'); }
+  function sampleCount(bytes) {
+    // Parse box boundaries, not arbitrary compressed bytes that might happen to spell stsz.
+    const view = new DataView(bytes), counts = [];
+    function scan(start, end) {
+      for (let at = start; at + 8 <= end;) {
+        let size = view.getUint32(at), header = 8;
+        const type = String.fromCharCode(...new Uint8Array(bytes, at + 4, 4));
+        if (size === 1) { size = view.getUint32(at + 8) * 4294967296 + view.getUint32(at + 12); header = 16; }
+        if (size === 0) size = end - at;
+        assert(size >= header && at + size <= end, 'Invalid MP4 box ' + type);
+        if (type === 'stsz') counts.push(view.getUint32(at + header + 8));
+        if (['moov','trak','mdia','minf','stbl'].includes(type)) scan(at + header, at + size);
+        at += size;
+      }
+    }
+    scan(0, bytes.byteLength);
+    assert(counts.length === 1, 'Expected one video sample table');
+    return counts[0];
+  }
+  async function decodedMotion(blob) {
+    const video = document.createElement('video'), url = URL.createObjectURL(blob);
+    const canvas = document.createElement('canvas'); canvas.width = 160; canvas.height = 120;
+    const ctx = canvas.getContext('2d', {willReadFrequently:true});
+    try {
+      video.muted = true; video.preload = 'auto'; video.src = url; video.load();
+      await waitFor(() => video.readyState >= 2 || video.error, 'MP4 never decoded');
+      assert(!video.error, 'MP4 decoder rejected output');
+      assert(video.videoWidth === 160 && video.videoHeight === 120, 'Decoded MP4 dimensions differ');
+      const centers = [];
+      for (const time of [.05, .85]) {
+        video.currentTime = time;
+        await waitFor(() => !video.seeking && video.readyState >= 2, 'MP4 seek never completed');
+        ctx.clearRect(0,0,160,120);ctx.drawImage(video, 0, 0);
+        const data = ctx.getImageData(0,0,160,120).data;
+        let sum = 0, count = 0;
+        for (let i=0; i<data.length; i+=4) if (data[i]>140 && data[i+1]<120 && data[i+2]<130) {sum += (i/4)%160; count++;}
+        assert(count > 200, 'Decoded MP4 shape has only '+count+' red pixels at '+time+'s'); centers.push(sum/count);
+      }
+      assert(centers[1] - centers[0] > 50, 'Decoded MP4 did not animate: red centers '+JSON.stringify(centers));
+    } finally { video.removeAttribute('src'); video.load(); URL.revokeObjectURL(url); }
+  }
+  async function decodedFrame(blob, width, height, time=.05) {
+    const video=document.createElement('video'),url=URL.createObjectURL(blob);
+    const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
+    try {
+      video.muted=true;video.preload='auto';video.src=url;video.load();
+      await waitFor(()=>video.readyState>=2||video.error,'Snapshot MP4 never decoded');
+      assert(!video.error && video.videoWidth===width && video.videoHeight===height,'Snapshot MP4 dimensions/decoder differ');
+      video.currentTime=time;
+      await waitFor(()=>!video.seeking&&video.readyState>=2,'Snapshot MP4 seek never finished');
+      const ctx=canvas.getContext('2d');ctx.drawImage(video,0,0);
+      return ctx.getImageData(0,0,width,height).data;
+    }finally{video.removeAttribute('src');video.load();URL.revokeObjectURL(url);}
+  }
+  function pixel(data,width,x,y){return Array.from(data.slice((y*width+x)*4,(y*width+x)*4+3));}
+  function nearColor(actual,expected){return actual.every((v,i)=>Math.abs(v-expected[i])<10);}
+  try {
+    const loaded=new Promise(resolve=>frame.addEventListener('load',resolve,{once:true}));
+    frame.style.width=Math.min(900,innerWidth)+'px';frame.src='../index.html';await loaded;
+    const w=frame.contentWindow,FM=w.FM,XR=FM.exportResume;
+    assert(w.innerWidth===Math.min(900,innerWidth),'Actual app viewport differs from probe width');
+    assert(FM.exportWorker&&FM.exportWorker.capture,'Synchronous capture is unavailable');
+    const NativeWorker=w.Worker,RealOAC=w.OfflineAudioContext,realSupport=w.VideoEncoder.isConfigSupported;
+    const realSignature=XR.signature,realRender=FM.renderScene;
+    let backend='worker',jobs=[],signed=[];
+    w.Worker=class extends NativeWorker {
+      constructor(...args){
+        if(backend==='main')throw new Error('SNAPSHOT_STARTUP_FAILURE');
+        super(...args);this.job={terminated:0};jobs.push(this.job);
+      }
+      postMessage(msg,transfer){if(msg.type==='init')this.job.init=JSON.parse(JSON.stringify(msg.scene));return super.postMessage(msg,transfer);}
+      terminate(){this.job.terminated++;return super.terminate();}
+    };
+    XR.signature=o=>{signed.push(JSON.parse(JSON.stringify(o,FM.jsonReplacer)));return realSignature(o);};
+    function setup(){
+      const scene=FM.newScene();Object.assign(scene.project,{width:160,height:120,fps:10,duration:1,background:'#286ed2',markers:[]});
+      const layer=FM.makeLayer('shape',{shape:'rect',x:20,y:60,shapeW:30,shapeH:30,fill:'#ff4050',duration:1});
+      layer.transform.x={kf:[{t:0,v:20,e:'linear'},{t:1,v:140,e:'linear'}]};
+      const back=FM.makeLayer('shape',{shape:'ellipse',x:100,y:60,shapeW:36,shapeH:36,fill:'#20bf80',duration:1});
+      scene.layers=[layer,back];FM.scene=scene;FM.time=0;FM.isolate=null;FM._dragOrderIds=null;FM._exportTransparent=false;
+      const expected=JSON.stringify({project:scene.project,layers:scene.layers},FM.jsonReplacer);
+      const isolate={id:back.id,mode:1},drag=[back.id,layer.id];
+      let changed=false;
+      function edit(){
+        assert(!changed,'Edit trigger ran twice');changed=true;
+        Object.assign(scene.project,{width:120,height:160,duration:2,fps:20,background:'#0033ff'});
+        layer.fill='#0044ff';layer.transform.x=60;layer.transform.y=140;layer.duration=2;
+        FM.time=.65; /* Keep the live playhead on a frame at the edited 20 fps. */FM._exportTransparent=true;FM.isolate=isolate;FM._dragOrderIds=drag;
+      }
+      function retained(){
+        assert(changed,'Live-edit control never ran');
+        assert(FM.scene===scene&&scene.project.width===120&&layer.fill==='#0044ff','Export replaced or undid live scene edits');
+        assert(FM.time===.65&&FM._exportTransparent===true&&FM.isolate===isolate&&FM._dragOrderIds===drag,'Fallback failed to restore exact live preview state: '+JSON.stringify({time:FM.time,alpha:FM._exportTransparent,isolateSame:FM.isolate===isolate,dragSame:FM._dragOrderIds===drag,isolate:FM.isolate,drag:FM._dragOrderIds}));
+      }
+      return {scene,expected,edit,retained};
+    }
+    async function exportRun(extra={}){
+      let ready,loops=0;
+      await FM.exporter.run(Object.assign({bitrate:300000,onProgress(p,phase){if(phase==='video')loops++;},onReady:async value=>{ready=value;}},extra));
+      return {ready,loops};
+    }
+    async function checkCaptured(result,fixture,firstJob){
+      assert(result.ready&&result.ready.blob.type==='video/mp4','Captured export did not deliver an MP4');
+      assert(result.loops===10&&sampleCount(await result.ready.blob.arrayBuffer())===10,'Setup edit changed the output range or frame count');
+      await decodedMotion(result.ready.blob);
+      const pixels=await decodedFrame(result.ready.blob,160,120);
+      assert(nearColor(pixel(pixels,160,155,5),[40,110,210]),'Output lost its initial opaque project background');
+      const last=signed[signed.length-1];
+      assert(last.w===160&&last.h===120&&last.fps===10&&last.from===0&&last.to===1&&last.frames===10,'Resume settings followed the later project edit');
+      assert(JSON.stringify({project:last.project,layers:last.layers})===fixture.expected,'Resume document differs from the initial capture');
+      if(backend==='worker'){
+        assert(jobs.length===firstJob+1,'Prepared document did not reach the Worker');
+        const init=jobs[firstJob].init;assert(JSON.stringify({project:init.project,layers:init.layers})===fixture.expected,'Worker init differs from the document used by setup');
+      }else assert(jobs.length===firstJob,'Forced fallback created a Worker');
+    }
+    try {
+      for(const renderMode of ['worker','main'])for(const boundary of ['audio setup','codec pause']){
+        backend=renderMode;const fixture=setup(),firstJob=jobs.length;let mixLength,entered=false,release;
+        const gate=new Promise(resolve=>{release=resolve;});
+        w.OfflineAudioContext=class extends RealOAC {
+          constructor(...args){super(...args);mixLength=args[1];if(boundary==='audio setup')fixture.edit();}
+        };
+        w.VideoEncoder.isConfigSupported=async function(config){
+          if(boundary==='codec pause'&&!entered){entered=true;await gate;}
+          return realSupport.call(this,config);
+        };
+        try {
+          const running=exportRun();
+          if(boundary==='codec pause'){
+            await waitFor(()=>entered,'Codec setup never reached its asynchronous pause');fixture.edit();release();
+          }
+          const result=await running;
+          fixture.retained();
+          assert(mixLength===48000,'Audio setup did not use the initial one-second range');
+          await checkCaptured(result,fixture,firstJob);
+          passed(renderMode+' / '+boundary+': one original document, output size, range and background; live edits restored');
+        }finally{release();w.OfflineAudioContext=RealOAC;w.VideoEncoder.isConfigSupported=realSupport;}
+      }
+      backend='main';const failure=setup();let threw=false;
+      w.OfflineAudioContext=class extends RealOAC {constructor(...args){super(...args);failure.edit();}};
+      FM.renderScene=function(ctx,scene,time){
+        if(FM._exporting&&scene!==failure.scene){assert(FM.scene===scene&&FM.time===time&&FM._exportTransparent===false&&!FM.isolate&&!FM._dragOrderIds,'Captured globals were not scoped before draw');throw new Error('SNAPSHOT_DRAW_FAILURE');}
+        return realRender.call(this,ctx,scene,time);
+      };
+      try{await exportRun();}catch(e){threw=e.message==='SNAPSHOT_DRAW_FAILURE';}
+      finally{FM.renderScene=realRender;w.OfflineAudioContext=RealOAC;}
+      assert(threw,'Fallback draw-error control did not run');failure.retained();
+      assert(!FM._exporting,'Draw error kept export active');
+      passed('Fallback draw failure restores every live preview reference before rejecting');
+      await XR.clear();
+
+      backend='worker';setup();const beforeCancel=jobs.length;let paused=false,releaseCancel,delivered=false,cancelError;
+      const cancellationGate=new Promise(resolve=>{releaseCancel=resolve;});
+      w.VideoEncoder.isConfigSupported=async function(config){if(!paused){paused=true;await cancellationGate;}return realSupport.call(this,config);};
+      try{
+        const running=exportRun({onReady:async()=>{delivered=true;}}).catch(e=>{cancelError=e;});
+        await waitFor(()=>paused,'Cancellation never reached codec setup');FM._exportCancel=true;releaseCancel();await running;
+      }finally{releaseCancel();w.VideoEncoder.isConfigSupported=realSupport;}
+      assert(cancelError&&cancelError.message==='CANCELLED'&&!delivered,'Cancellation delivered or silently completed a captured job');
+      assert(jobs.length===beforeCancel&&!FM._exporting,'Cancelled setup created a Worker or retained exporting state');
+      passed('Cancellation during asynchronous codec setup releases the capture without starting a Worker');
+      assert(jobs.every(job=>job.terminated===1),'Capture test leaked a Worker');
+      window.__workerCanvasResult={ok:true,checks};
+    }finally{
+      w.Worker=NativeWorker;w.OfflineAudioContext=RealOAC;w.VideoEncoder.isConfigSupported=realSupport;
+      FM.renderScene=realRender;XR.signature=realSignature;FM._exporting=false;FM._exportCancel=false;
+      FM._exportTransparent=false;FM.isolate=null;FM._dragOrderIds=null;await XR.clear();
+    }
+  }catch(e){window.__workerCanvasResult={ok:false,error:e.stack||String(e),checks};}
+  output.textContent=JSON.stringify(window.__workerCanvasResult,null,2);
+})();
+</script>

@@ -1,0 +1,94 @@
+<!doctype html>
+<meta charset="utf-8"><title>FreeMotion #47: captured still images</title>
+<style>body{background:#111;color:#eee;font:15px system-ui;margin:24px}pre{white-space:pre-wrap}iframe{position:fixed;left:-10000px;width:900px;height:760px}</style>
+<h1>Still images in background exports</h1><pre id="result">Loading…</pre><iframe id="app"></iframe>
+<script>
+(async function(){
+  const checks=[],frame=document.getElementById('app'),output=document.getElementById('result');
+  const assert=(ok,message)=>{if(!ok)throw new Error(message);};
+  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  async function waitFor(fn,message){const end=performance.now()+10000;while(performance.now()<end){if(fn())return;await sleep(20);}throw new Error(message);}
+  async function decodedFrame(blob, width, height, time=.05) {
+    const video=document.createElement('video'),url=URL.createObjectURL(blob);
+    const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
+    try {
+      video.muted=true;video.preload='auto';video.src=url;video.load();
+      await waitFor(()=>video.readyState>=2||video.error,'Snapshot MP4 never decoded');
+      assert(!video.error && video.videoWidth===width && video.videoHeight===height,'Snapshot MP4 dimensions/decoder differ');
+      video.currentTime=time;
+      await waitFor(()=>!video.seeking&&video.readyState>=2,'Snapshot MP4 seek never finished');
+      const ctx=canvas.getContext('2d');ctx.drawImage(video,0,0);
+      return ctx.getImageData(0,0,width,height).data;
+    }finally{video.removeAttribute('src');video.load();URL.revokeObjectURL(url);}
+  }
+
+  function rawPixels(source){const c=document.createElement('canvas');c.width=160;c.height=120;const ctx=c.getContext('2d');ctx.drawImage(source,0,0);return ctx.getImageData(0,0,160,120).data;}
+  function error(a,b){let total=0,max=0;for(let i=0;i<a.length;i++){const d=Math.abs(a[i]-b[i]);total+=d;max=Math.max(max,d);}return {mean:total/a.length,max};}
+  async function makeImage(w,type,replacement=false){
+    const c=document.createElement('canvas');c.width=144;c.height=88;const ctx=c.getContext('2d');
+    ctx.fillStyle=replacement?'#12d044':'#e54138';ctx.fillRect(0,0,72,44);
+    ctx.fillStyle=replacement?'#12d044':'#2d71de';ctx.fillRect(72,0,72,44);
+    ctx.fillStyle=replacement?'#12d044':'#f5cd32';ctx.fillRect(0,44,72,44);
+    ctx.fillStyle=replacement?'#12d044':(type==='image/png'?'#ec72e899':'#ec72e8');ctx.fillRect(72,44,72,44);
+    ctx.fillStyle='#ffffff';ctx.fillRect(17,13,13,29);
+    const blob=await new Promise(resolve=>c.toBlob(resolve,type,.94));let bytes=new Uint8Array(await blob.arrayBuffer());
+    if(type==='image/jpeg'){
+      // Orientation6 exercises the browser's ordinary EXIF decode, including swapped natural size.
+      const exif=new Uint8Array([255,225,0,34,69,120,105,102,0,0,73,73,42,0,8,0,0,0,1,0,18,1,3,0,1,0,0,0,6,0,0,0,0,0,0,0]);
+      bytes=new Uint8Array([...bytes.subarray(0,2),...exif,...bytes.subarray(2)]);
+    }
+    return new w.File([bytes],replacement?'replacement.jpg':type==='image/jpeg'?'oriented.jpg':'overlay.png',{type});
+  }
+  async function digest(file){const hash=await crypto.subtle.digest('SHA-256',await file.arrayBuffer());return Array.from(new Uint8Array(hash),b=>b.toString(16).padStart(2,'0')).join('');}
+  try{
+    const loaded=new Promise(resolve=>frame.addEventListener('load',resolve,{once:true}));frame.style.width=Math.min(900,innerWidth)+'px';frame.src='../index.html';await loaded;
+    const w=frame.contentWindow,FM=w.FM,NativeWorker=w.Worker,realRender=FM.renderScene,realCapture=FM.exportWorker.capture;
+    const realSupport=w.VideoEncoder.isConfigSupported,realSignature=FM.exportResume.signature,originalMedia=FM.media;
+    const jpeg=await makeImage(w,'image/jpeg'),png=await makeImage(w,'image/png'),replacementFile=await makeImage(w,'image/jpeg',true);
+    const expectedHash=await digest(jpeg),replacementHash=await digest(replacementFile);
+    let mode='worker',jobs=[],raw=null,activeCapture=null,signed=null;
+    FM.exportWorker.capture=function(...args){activeCapture=realCapture.apply(this,args);return activeCapture;};
+    FM.exportResume.signature=function(args){signed=args;return realSignature(args);};
+    w.Worker=class extends NativeWorker{
+      constructor(...args){if(mode==='main')throw new Error('IMAGE_STARTUP_FALLBACK');super(...args);this.job={terminated:0};jobs.push(this.job);
+        this.addEventListener('message',e=>{if(e.data.bitmap&&!raw)raw=rawPixels(e.data.bitmap);});}
+      terminate(){this.job.terminated++;return super.terminate();}
+    };
+    FM.renderScene=function(ctx,scene,time){const result=realRender.call(this,ctx,scene,time);if(FM._exporting&&activeCapture&&scene===activeCapture.document&&!raw)raw=ctx.getImageData(0,0,160,120).data;return result;};
+    try{
+      for(const backend of ['worker','main']){
+        mode=backend;raw=null;signed=null;activeCapture=null;
+        const photo=await FM.loadImageFile(jpeg),overlay=await FM.loadImageFile(png),replacement=await FM.loadImageFile(replacementFile);
+        assert(photo.width===88&&photo.height===144,'EXIF orientation fixture did not swap natural dimensions');
+        const scene=FM.newScene();Object.assign(scene.project,{width:160,height:120,fps:10,duration:1,background:'#102030',markers:[]});
+        const a=FM.makeLayer('image',{name:'Photo',x:40,y:60,scale:.8,duration:1}),b=FM.makeLayer('image',{name:'Overlay',x:112,y:60,scale:.7,duration:1});
+        a.crop={x:8.5,y:7.25,w:65.5,h:110.25};a.transform.rotation=-12;a.transform.x={kf:[{t:0,v:40},{t:1,v:85}]};
+        b.crop={x:10.5,y:5.5,w:110.5,h:72.5};b.transform.rotation=18;b.transform.opacity=.65;b.effects=[{type:'gamma',params:{gamma:1.3}}];
+        scene.layers=[a,b];FM.scene=scene;FM.time=0;FM.isolate=null;FM._dragOrderIds=null;FM._exportTransparent=false;
+        FM.media.set(a.id,photo);FM.media.set(b.id,overlay);
+        assert(FM.exportWorker.eligible(scene),'Ordinary JPEG/PNG images were not admitted');
+        const c=document.createElement('canvas');c.width=160;c.height=120;const ctx=c.getContext('2d');
+        FM._exporting=true;realRender(ctx,scene,0);FM._exporting=false;const expected=ctx.getImageData(0,0,160,120).data;
+        let entered=false,release,ready;const gate=new Promise(resolve=>{release=resolve;}),before=jobs.length;
+        w.VideoEncoder.isConfigSupported=async function(config){if(!entered){entered=true;await gate;}return realSupport.call(this,config);};
+        try{
+          const running=FM.exporter.run({bitrate:500000,onReady:async result=>{ready=result;}});
+          await waitFor(()=>entered,'Image export never reached codec setup');
+          FM.media.set(a.id,replacement);a.transform.x=130;release();await running;
+          assert(ready&&raw,'Image export did not deliver its frame/file');
+          const parity=error(raw,expected);assert(parity.max===0,'Captured image pixels differ from the native image preview: '+JSON.stringify(parity));
+          const decoded=await decodedFrame(ready.blob,160,120),encodedError=error(decoded,expected);
+          assert(encodedError.mean<8,'Encoded MP4 did not retain its initial images: '+JSON.stringify(encodedError));
+          assert(FM.scene===scene&&FM.media===originalMedia&&FM.media.get(a.id)===replacement&&a.transform.x===130,'Export undid the live photo replacement');
+          assert(signed.renderer.includes(expectedHash)&&!signed.renderer.includes(replacementHash),'Resume signature did not retain the original image content');
+          assert(activeCapture.images.every(id=>activeCapture.media.get(id).el===null),'Export retained page image bitmaps after completion');
+          assert(jobs.length===before+(backend==='worker'?1:0),'Incorrect renderer selected');
+          checks.push(backend+': oriented JPEG + cropped/rotated transparent PNG match preview, survive replacement and include original source hashes');
+        }finally{release();w.VideoEncoder.isConfigSupported=realSupport;FM.media=originalMedia;FM.media.remove(a.id);FM.media.remove(b.id);await FM.exportResume.clear();}
+      }
+      assert(jobs.every(job=>job.terminated===1),'Image export leaked a Worker');window.__workerCanvasResult={ok:true,checks};
+    }finally{w.Worker=NativeWorker;FM.renderScene=realRender;FM.exportWorker.capture=realCapture;FM.exportResume.signature=realSignature;w.VideoEncoder.isConfigSupported=realSupport;FM.media=originalMedia;FM._exporting=false;FM._exportCancel=false;}
+  }catch(e){window.__workerCanvasResult={ok:false,error:e.stack||String(e),checks};}
+  output.textContent=JSON.stringify(window.__workerCanvasResult,null,2);
+})();
+</script>
