@@ -465,18 +465,32 @@ window.FM = window.FM || {};
   FM.storage.releaseSceneMedia = releaseSceneMedia;
   FM.storage.warmReverseCaches = warmReverseCaches;
 
+  /* ⚠️ WHAT THIS LEAVES OUT IS NOW RECORDED, AND IT USED TO VANISH (queue 888). Anything over
+   * EMBED_LIMIT is skipped — which is a fair trade for a file you SHARE and was silently catastrophic
+   * while this was also the app's only backup. A 40-second phone clip is 60-120MB, so the written file
+   * came out at about 4KB with "media":{}, the toast said "Project file saved", and re-importing gave
+   * a project whose video layer was present, correctly timed, correctly keyframed and completely
+   * blank — with no message at any point. Someone who then cleared their storage on the strength of
+   * having "a backup" had destroyed the only copy of the footage.
+   * The skips are collected here rather than at the caller because this is the one place that knows
+   * WHICH file was dropped and how big it was, and `omitted` travels INSIDE the written file so the
+   * file can answer "is my video in here" a year later without the app's help. */
   FM.storage.serializeScene = async function (scene) {
-    const media = {};
+    const media = {}, omitted = [];
     for (const layer of scene.layers) {
       if (layer.type === 'text' || layer.type === 'shape' || layer.type === 'null') continue;
       const m = FM.media.get(layer.id);
-      if (m && m.file && m.file.size <= EMBED_LIMIT) {
-        const dataURL = await fileToDataURL(m.file);
-        if (dataURL) media[layer.id] = { kind: m.kind, name: m.file.name, dataURL: dataURL };
+      if (!m || !m.file) continue;                     // nothing loaded for this layer — not an omission
+      if (m.file.size > EMBED_LIMIT) {
+        omitted.push({ layer: layer.name || layer.type || 'a layer', file: m.file.name || 'a clip', mb: Math.round(m.file.size / 1048576) });
+        continue;
       }
+      const dataURL = await fileToDataURL(m.file);
+      if (dataURL) media[layer.id] = { kind: m.kind, name: m.file.name, dataURL: dataURL };
+      else omitted.push({ layer: layer.name || layer.type || 'a layer', file: m.file.name || 'a clip', mb: Math.round(m.file.size / 1048576) });
     }
     const fonts = await embedFonts(scene.layers);
-    return { app: 'freemotion', v: 1, project: scene.project, layers: scene.layers, selectedId: scene.selectedId, selectedIds: scene.selectedIds, media: media, fonts: fonts };
+    return { app: 'freemotion', v: 1, project: scene.project, layers: scene.layers, selectedId: scene.selectedId, selectedIds: scene.selectedIds, media: media, fonts: fonts, omitted: omitted };
   };
 
   /* Embed the custom fonts the text layers actually use, so the file still renders correctly when it is
@@ -1105,6 +1119,27 @@ window.FM = window.FM || {};
         } catch (e) { /* a missing/corrupt embed → that layer loads media-less (relink via Replace media…) */ }
       }
     }
+    /* ⚠️ AND SAY WHICH LAYERS CAME BACK EMPTY (queue 888). The loop above only ever walks obj.media,
+     * so a video whose file was too big to embed is restored as a layer that is present, correctly
+     * timed, correctly keyframed and completely BLANK — and nothing anywhere said so. That silence is
+     * the dangerous half: the project LOOKS like it opened fine, which is exactly what someone checks
+     * before deleting the original. A video or image layer with no media entry is unambiguous, so it
+     * can be named. Read from the file's own `omitted` list when it has one (written since v16.33) and
+     * worked out from the layers otherwise, so files saved BEFORE this fix still get the warning. */
+    try {
+      const want = (obj.layers || []).filter(l => l && (l.type === 'video' || l.type === 'image'));
+      const blank = want.filter(l => !(obj.media && obj.media[l.id])).map(l => l.name || l.type);
+      if (blank.length) {
+        const om = obj.omitted || [];
+        const named = om.slice(0, 2).map(o => o.file).join(', ');
+        const omMany = om.length > 1;
+        if (FM.toast) FM.toast(blank.length + (blank.length === 1 ? ' layer has' : ' layers have') + ' no footage in this file' +
+          (named ? ' (' + named + (om.length > 2 ? ' and more' : '') + (omMany ? ' were' : ' was') + ' too big to embed)' : '') +
+          ' — ' + blank.slice(0, 3).join(', ') + (blank.length > 3 ? ' and more' : '') +
+          '. Use Replace media… on ' + (blank.length === 1 ? 'it' : 'each') + ', or restore from a full backup.', 12000);
+      }
+    } catch (e) {}                                    // a warning must never break an import
+
     if (FM.resizeCanvas) FM.resizeCanvas();
     if (FM.refreshAll) FM.refreshAll();
     if (FM.seekVideosToTime) FM.seekVideosToTime();
@@ -1120,7 +1155,17 @@ window.FM = window.FM || {};
     const a = document.createElement('a'); a.href = url; a.download = name + '.fmotion.json';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    if (FM.toast) FM.toast('Project file saved');
+    /* SAY WHAT IS NOT IN IT (queue 888). This used to toast "Project file saved" whatever happened,
+       including when the only thing in the project was a video too big to embed and the file was 4KB
+       of nothing. Naming the clips is the whole fix: a file that says what it is missing can be
+       trusted, and one that does not cannot. */
+    const miss = obj.omitted || [];
+    if (!miss.length) { if (FM.toast) FM.toast('Project file saved'); return; }
+    const names = miss.slice(0, 2).map(m => m.file + ' (' + m.mb + ' MB)').join(', ');
+    const many = miss.length > 1;
+    if (FM.toast) FM.toast('Project file saved WITHOUT ' + miss.length + (many ? ' clips — ' : ' clip — ') +
+      names + (miss.length > 2 ? ' and more' : '') + (many ? ' are' : ' is') +
+      ' too big to fit in a project file. Use Settings → Back up every project to keep the footage.', 12000);
   };
 
   /* ═══ BACK UP EVERY PROJECT TO ONE FILE (queue 869) ═══════════════════════════════════════════

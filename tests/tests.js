@@ -65543,4 +65543,74 @@
     }
   });
 
+
+  /* ── queue 888: a project file that silently left the footage out, then said it had saved ──────
+   * serializeScene skips any media over EMBED_LIMIT (6MB). Fair for a file you SHARE, and silently
+   * catastrophic while this was also the app's only backup: a 40-second phone clip is 60-120MB, so
+   * the written file came out around 4KB with "media":{}, the toast said 'Project file saved', and
+   * re-importing gave a project whose video layer was present, correctly timed, correctly keyframed
+   * and completely BLANK — with no message at any point. Someone who cleared their storage on the
+   * strength of having 'a backup' had destroyed the only copy of the footage.
+   * ⚠️ THE SILENCE IS THE BUG, not the size limit. The limit is a deliberate trade; saying nothing
+   * about it is what turns it into data loss. So this tests what the app SAYS, in both places it had
+   * nothing to say: on the way out, and on the way back in.
+   * ⚠️ AND THE CLEAN CASE IS A CONTROL, NOT A FORMALITY. A warning that fires on every save would be
+   * ignored within a week, which is the same failure as no warning at all. */
+  test('888: a project file names the clips too big to fit, warns again on import, and stays quiet when nothing was left out', { item: '888', budgetMs: 30000 }, async function () {
+    if (!FM.storage || !FM.storage.serializeScene) throw new Error('FM.storage.serializeScene is not reachable');
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    var said = [], toast0 = FM.toast;
+    FM.toast = function (m) { said.push(String(m)); };
+    function bigFile(name) { return new File([new Blob([new Uint8Array(7 * 1024 * 1024)], { type: 'video/mp4' })], name, { type: 'video/mp4' }); }
+    function tinyFile(name) { return new File([new Blob([new Uint8Array(64)], { type: 'image/png' })], name, { type: 'image/png' }); }
+    try {
+      // ── a project holding one clip that fits and one that does not
+      FM.scene.layers.length = 0;
+      var small = FM.makeLayer('image', { x: 100, y: 100, start: 0, duration: 2 }); small.name = 'FX888_SMALL';
+      var big = FM.makeLayer('video', { x: 200, y: 100, start: 0, duration: 4 }); big.name = 'FX888_BIG';
+      FM.scene.layers.push(small, big);
+      FM.media.set(small.id, { file: tinyFile('tiny.png'), kind: 'image', el: document.createElement('canvas') });
+      FM.media.set(big.id, { file: bigFile('holiday.mp4'), kind: 'video', el: document.createElement('canvas') });
+      await sleep(180);
+
+      var obj = await FM.storage.serializeScene(FM.scene);
+      if (Object.keys(obj.media || {}).length !== 1) throw new Error('the fixture did not produce exactly one embedded clip and one skipped one (embedded ' + Object.keys(obj.media || {}).length + ') — nothing below is measuring what it claims');
+      if (!obj.omitted || !obj.omitted.length) throw new Error('a clip was too big to embed and the written file records NOTHING about it — the file cannot answer "is my video in here" and neither can the app');
+      if (obj.omitted[0].file.indexOf('holiday') < 0) throw new Error('something was recorded as omitted, but not the clip that was actually dropped: ' + JSON.stringify(obj.omitted).slice(0, 120));
+
+      // ── 1. ON THE WAY OUT it must name the clip rather than claim a clean save
+      said.length = 0;
+      await FM.storage.exportFile();
+      await sleep(250);
+      if (!said.length) throw new Error('exporting said nothing at all');
+      if (!/holiday/.test(said[0])) throw new Error('the save message does not name the clip that was left out: ' + said[0].slice(0, 120));
+      if (/^Project file saved$/.test(said[0])) throw new Error('the save reported a clean save while the footage was missing — this is the exact message someone reads before deleting the original');
+
+      // ── 2. ON THE WAY BACK IN it must say which layer came back empty
+      said.length = 0;
+      await FM.storage.applyScene(JSON.parse(JSON.stringify(obj)));
+      await sleep(350);
+      var warned = said.filter(function (m) { return /no footage/.test(m); })[0];
+      if (!warned) throw new Error('importing a file whose video was never embedded restored a blank layer and said NOTHING — the project looks like it opened fine, which is what someone checks before deleting the original');
+      if (warned.indexOf('FX888_BIG') < 0) throw new Error('the import warning does not name the layer that is empty: ' + warned.slice(0, 120));
+      if (warned.indexOf('FX888_SMALL') >= 0) throw new Error('the import warning names a layer whose media DID come back — it is warning about everything rather than the ones that are actually empty');
+
+      // ── 3. THE CONTROL: nothing left out must produce the plain message, or the warning is noise
+      FM.scene.layers.length = 0;
+      var ok = FM.makeLayer('image', { x: 100, y: 100, start: 0, duration: 2 }); ok.name = 'FX888_OK';
+      FM.scene.layers.push(ok);
+      FM.media.set(ok.id, { file: tinyFile('ok.png'), kind: 'image', el: document.createElement('canvas') });
+      await sleep(180);
+      said.length = 0;
+      await FM.storage.exportFile();
+      await sleep(250);
+      if (!/^Project file saved$/.test(said[0] || '')) throw new Error('a project with nothing left out still warned ("' + (said[0] || '').slice(0, 90) + '") — a warning that fires every time is ignored within a week, which is the same as no warning');
+    } finally {
+      FM.toast = toast0;
+      FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
+      FM.refreshAll();
+    }
+  });
+
 })();

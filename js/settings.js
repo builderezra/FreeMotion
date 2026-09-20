@@ -343,7 +343,7 @@ window.FM = window.FM || {};
          What is left in this panel for a project is the one thing that genuinely has nowhere else on a
          desktop: saving a .fmotion.json. On an app with no cloud copy, that file IS the backup. */
       body.appendChild(group(
-        actionRow('Save a project file', 'Downloads this project as a .fmotion.json you can keep or re-open later. Nothing here is backed up anywhere else.', 'Save…',
+        actionRow('Save a project file', 'Downloads THIS project as a .fmotion.json to keep or send to someone. Clips over 6 MB are too big to fit and it will tell you which — for the footage as well, use Back up every project below.', 'Save…',
           () => press('btn-save-proj')),
       ));
       /* THE REPORTS ARE A LONG WAY DOWN IN A PROJECT (queue 785): measured at 380x800 the "Your last playback" row was
