@@ -13372,6 +13372,19 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return Math.min(ax, bx) <= 0.01 && Math.min(ay, by) <= 0.01
       && Math.max(ax, bx) >= PW - 0.01 && Math.max(ay, by) >= PH - 0.01;
   }
+  /* SEAM (queue 906). The renderer has been computing "this Backfill has nothing to fill" every
+     frame since it shipped — purely to SKIP the work — while the effects browser said nothing about
+     it. The app knew and did not tell him, which is the shape of every "I added it and nothing
+     happened" report. Exported so fx-browser asks the REAL test rather than reimplementing a second,
+     subtly different one that could disagree with what the renderer actually does. */
+  FM._fillBehindCovered = function (layer, t, scene) {
+    try {
+      const P = (scene && scene.project) || (FM.scene && FM.scene.project);
+      if (!P) return false;
+      return fillBehindCovered(layer, t || 0, scene || FM.scene, P.width, P.height);
+    } catch (e) { return false; }     // a hint must never break a render
+  };
+
   /* Paints ONE layer's Fill Behind backdrop onto ctx — the fill only, never the subject, which
    * draws for itself at its own z afterwards. Returns TRUE when a fill was painted; FALSE when
    * there is nothing to fill (the layer already reaches every edge, or it drew no pixels), which is

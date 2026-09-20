@@ -65068,4 +65068,69 @@
     }
   });
 
+
+  /* ── queue 906: two effects the app KNEW were dead on a photo and never said so ────────────────
+   * Found by judging the Blur category BY EYE on a photograph (#859 clause 1) and then measuring what
+   * the eye saw: of 19 blur effects, five render nothing at all on a still photo. Three already say
+   * why — Motion Blur (Object) and (Footage) via the motion family, Compound Blur via its "Needs a
+   * setting" marker. Backfill and Temporal Denoise said NOTHING, and in both cases the condition was
+   * already written down in this codebase: the renderer has called fillBehindCovered() every frame
+   * since it shipped purely to SKIP the work, and Temporal Denoise's own description says it is for
+   * footage. The app knew and did not tell him.
+   * ⚠️ BOTH CONTROLS MATTER MORE THAN THE CLAIM. A badge that fires on everything tells him nothing
+   * (queue 603's control caught exactly that), and "scaled down" is the case that proves the cache
+   * key carries the answer's inputs — without it he shrinks the photo, Backfill starts having
+   * something to fill, and a cached "no empty space" badge goes on lying. That is not hypothetical:
+   * it is the third time a stale key has done this here (movement, then colour, now coverage). */
+  test('906: Backfill and Temporal Denoise say why they do nothing on a photo — and go quiet the moment they would work', { item: '906', budgetMs: 30000 }, async function () {
+    if (typeof FM._fxDeadHereWhy !== 'function') throw new Error('FM._fxDeadHereWhy is not reachable');
+    if (typeof FM._fillBehindCovered !== 'function') throw new Error('FM._fillBehindCovered is not exposed — fx-browser would have to reimplement the renderer test and could then disagree with it');
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    var P = FM.scene.project;
+    try {
+      // a FULL-FRAME photograph, sized like a real import — a smaller one genuinely does not cover
+      // the frame, and an earlier version of this fixture measured exactly that and blamed the code
+      var c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
+      var g = c.getContext('2d'); g.fillStyle = '#446688'; g.fillRect(0, 0, P.width, P.height);
+      FM.scene.layers.length = 0;
+      var L = FM.makeLayer('image', { x: P.width / 2, y: P.height / 2, start: 0, duration: 3 });
+      L.name = 'FX906';
+      FM.scene.layers.push(L);
+      FM.media.set(L.id, { el: c, kind: 'image', w: P.width, h: P.height, width: P.width, height: P.height });
+      FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(180);
+
+      if (!FM._fillBehindCovered(L, 0, FM.scene)) throw new Error('the fixture photo does not cover the frame, so Backfill genuinely has something to fill and this test is measuring nothing');
+
+      // ── THE CLAIMS
+      var bf = FM._fxDeadHereWhy('fillbehind');
+      if (!bf) throw new Error('Backfill does nothing on a photo that already fills the frame, and the app said nothing — the renderer has been computing exactly this every frame to skip the work');
+      var td = FM._fxDeadHereWhy('temporaldenoise');
+      if (!td) throw new Error('Temporal Denoise has no frames to average on a still photo and the app said nothing');
+
+      // ── CONTROL 1: an effect that plainly works must stay silent, or the badge means nothing
+      if (FM._fxDeadHereWhy('blur')) throw new Error('Gaussian Blur was called dead on a photograph — the badge is firing on effects that work, which trains him to ignore it');
+
+      // ── CONTROL 2: shrink the photo and Backfill HAS something to fill, so the badge must go —
+      //    and it must go THROUGH the cache, which is the half that rots.
+      L.transform.scale = 0.4; FM.refreshAll(); await sleep(180);
+      if (FM._fillBehindCovered(L, 0, FM.scene)) throw new Error('a photo at 0.4 scale still reports as covering the frame — the control cannot distinguish the two states');
+      if (FM._fxDeadHereWhy('fillbehind')) throw new Error('Backfill still says "no empty space behind it" after the photo was scaled down to 40% — the cache key does not carry coverage, so the badge lies about a layer he has just resized');
+      L.transform.scale = 1; FM.refreshAll(); await sleep(180);
+      if (!FM._fxDeadHereWhy('fillbehind')) throw new Error('Backfill went quiet and stayed quiet after the photo was scaled back to full frame');
+
+      // ── CONTROL 3: Temporal Denoise on VIDEO is the thing it is for — it must never badge there
+      var V = FM.makeLayer('video', { x: P.width / 2, y: P.height / 2, start: 0, duration: 3 });
+      V.name = 'FX906V';
+      FM.scene.layers.push(V);
+      FM.media.set(V.id, { el: document.createElement('canvas'), kind: 'video', w: P.width, h: P.height });
+      FM.selectLayer(V.id); await sleep(180);
+      if (FM._fxDeadHereWhy('temporaldenoise')) throw new Error('Temporal Denoise was called dead on a VIDEO layer, which is exactly what it is for');
+    } finally {
+      FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
+      FM.refreshAll();
+    }
+  });
+
 })();

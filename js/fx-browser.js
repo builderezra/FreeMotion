@@ -871,11 +871,40 @@ window.FM = window.FM || {};
        shared a cache slot and inherited each other's badges. _fxProbeKey carries a signature of the
        colours actually sampled, and still returns the plain hex for a flat fill, so nothing about the
        shape/text path changes. */
+    /* queue 906: …and "does this layer already fill the frame" is an input too, for Backfill and only
+       for Backfill. Leaving it out would be the SAME bug the two notes above record: he scales the
+       photo down, the effect starts having something to fill, and a cached "no empty space" badge
+       goes on lying. Computed only for that one id, because it costs a layer CTM and every other tile
+       would pay for an answer it never reads. */
+    const covered = (id === 'fillbehind' && FM._fillBehindCovered)
+      ? (FM._fillBehindCovered(layer, FM.time, FM.scene) ? '|C' : '|c') : '';
     const key = layer.id + '|' + ((layer.effects || []).length) + '|' + (cannotMove(layer) ? 'S' : 'M')
-              + '|' + (FM._fxProbeKey ? (FM._fxProbeKey(layer) || '-') : (FM.flatColorOf ? (FM.flatColorOf(layer) || '-') : '?')) + '|' + id;
+              + '|' + (FM._fxProbeKey ? (FM._fxProbeKey(layer) || '-') : (FM.flatColorOf ? (FM.flatColorOf(layer) || '-') : '?')) + covered + '|' + id;
     if (_deadCache.has(key)) return _deadCache.get(key);
     // The motion family first — it is a cheaper question than pushing a pixel through a filter.
     if (MOTION_FX[id] && cannotMove(layer)) { _deadCache.set(key, MOTION_FX[id]); return MOTION_FX[id]; }
+    /* ── queue 906: two more effects the app KNEW were dead and never said so ────────────────────
+     * Found by judging the Blur category by eye on a photograph (#859 clause 1) and then measuring
+     * what the eye saw: of 19 blur effects, five render nothing on a still photo. Three already say
+     * why — Motion Blur (Object) and (Footage) via the motion family above, Compound Blur via its
+     * "Needs a setting" marker. These two said NOTHING, and in both cases the condition was already
+     * written down somewhere in this codebase:
+     *  · Backfill — the renderer has called fillBehindCovered() every frame since it shipped, purely
+     *    to skip the work, and the registry's own description ends "Does nothing if the layer already
+     *    covers the canvas". Asked through FM._fillBehindCovered so this cannot drift from the test
+     *    the renderer actually uses.
+     *  · Temporal Denoise — its description says "For low-light footage" and it averages across
+     *    FRAMES. A photograph, a shape or a line of text has one frame, so there is nothing to
+     *    average. Same certainty as the motion family, which is already badged.
+     * Both are conservative in the same direction as everything else here: silent unless certain. */
+    if (id === 'fillbehind' && FM._fillBehindCovered && FM._fillBehindCovered(layer, FM.time, FM.scene)) {
+      const w = 'This layer already fills the frame, so there is no empty space behind it to fill.';
+      _deadCache.set(key, w); return w;
+    }
+    if (id === 'temporaldenoise' && layer.type !== 'video') {
+      const w = 'This layer has no footage to compare frames across, so there is no grain to melt. It works on video.';
+      _deadCache.set(key, w); return w;
+    }
     let why = null;
     try {
       const inst = FM.fxRegistry.makeInstance(id);
