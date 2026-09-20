@@ -55948,6 +55948,191 @@
     }
   });
 
+  /* ═══ 896 + 900: NOTHING ON THE SKETCHING BAR IS PAINTED OUTSIDE IT, AT ANY PHONE WIDTH.
+     Two reported symptoms, one cause. `.db-hint` held the stroke count with a scrollWidth of 52px and a
+     computed width of **0px** — so the count has never been readable on a phone (896) — and a crushed
+     flex item still makes its demand, so those 52px kept pushing `.db-cancel` out of the pill (900).
+     MEASURED at 360px before: Cancel's right edge at 361 against a bar ending at 349.
+     ⚠️ IT TOOK FOUR LEVERS AND THE FIRST THREE EACH LOOKED LIKE THE FIX. Standing the hint down took the
+     overflow 12px → 5px at 360 and it would have been easy to stop there; the slider giving up 8px and
+     the bar taking 97vw closed 344 and 360; 320px still clipped by 18px until the bar was allowed to
+     wrap. "Better" is not "fixed", which is why this asserts across FOUR widths rather than his.
+     ⚠️ AND IT ASSERTS THE WIDTHS EXPLICITLY, not whatever the runner happens to be. A `@media` rule
+     cannot be verified from a desktop-width frame — it does not fire there, so the assertion meant to
+     guard it passes against the bug. This file already learned that on the draw bar once (see the note
+     in styles.css about the first `max-width: 700px` version). */
+  test('896/900: no sketching-bar control is painted outside the bar, at 320/344/360/380px', { item: '900' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const fe = window.frameElement;
+    if (!fe) throw new Error("this test needs run.html's iframe to reach phone widths");
+    const w0 = fe.style.width;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const bad = [];
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(150);
+      for (const W of [320, 344, 360, 380]) {
+        fe.style.width = W + 'px';
+        window.dispatchEvent(new Event('resize'));
+        await sleep(140);
+        if (window.innerWidth !== W) { bad.push('could not reach ' + W + 'px (got ' + window.innerWidth + ') — the frame is not narrowing, so nothing below was tested'); break; }
+        let bar = document.getElementById('draw-bar');
+        if (!bar || bar.classList.contains('hidden')) { try { FM.startDraw('brush'); } catch (e) {} await sleep(500); bar = document.getElementById('draw-bar'); }
+        if (!bar || bar.classList.contains('hidden')) { bad.push('the sketching bar would not open at ' + W + 'px, so this test could not run'); break; }
+        const slider = bar.querySelector('.db-width');
+        if (slider) slider.style.display = '';          // the state the report was made in
+        await sleep(160);
+        const br = bar.getBoundingClientRect();
+        [].slice.call(bar.children).forEach(function (c) {
+          const r = c.getBoundingClientRect();
+          if (r.width <= 0) return;
+          const over = r.right - br.right;
+          if (over > 1) bad.push('at ' + W + 'px, .' + String(c.className).split(' ')[0] + ' is painted ' + Math.round(over) + 'px outside the bar' + (r.right > W ? ' AND past the screen edge' : ''));
+        });
+        /* …and the stroke count must never be a crushed item claiming space it cannot use (896). */
+        const hint = bar.querySelector('.db-hint');
+        if (hint) { const hs = getComputedStyle(hint), hr = hint.getBoundingClientRect();
+          if (hs.display !== 'none' && hr.width < 8 && hint.scrollWidth > 8)
+            bad.push('at ' + W + 'px the stroke count is crushed to ' + Math.round(hr.width) + 'px while wanting ' + hint.scrollWidth + ' — unreadable AND still pushing the controls along (queue 896)'); }
+      }
+    } finally {
+      try { if (FM.drawTool && FM.drawTool.active && FM.drawTool._stop) FM.drawTool._stop(); } catch (e) {}
+      fe.style.width = w0; window.dispatchEvent(new Event('resize'));
+      await sleep(140);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* ═══ 863 — RESTORED FROM `tools/held-863/` on 20 Sep, which is what that folder was for.
+     It was built and passing on 12 Sep and deliberately NOT shipped: it is a finding of mine, and the
+     classifier correctly ranks those behind his own words, so it waited for #865 to be worked rather than
+     jumping it. #865 shipped in v16.18, so the debt is paid and this goes in.
+     ⚠️ Its README pointed at `863-test-clean.js`, which does not exist — the file in the folder is
+     `863-test.js`, and at 51 lines it IS the clean one the README describes. A stale pointer in the
+     instructions for restoring parked work is exactly the kind of thing that makes the next reader think
+     the work was lost, so: the folder is deleted now that this has landed, as its own README asked. */
+  test('a still photo gets the never-moves badge that a shape already got (queue 863)', { item: '863', budgetMs: 30000 }, async function () {
+    /* Found while answering his question "how confident are you that every effect is actually good?" — by
+       asking the RUNNING app, effect by effect, whether it warns when one cannot work. On a shape that is
+       never animated, Motion Blur (Object) is badged "This layer never moves, so there is no movement to
+       smear". On a PHOTOGRAPH in the identical situation it said nothing, because the rule read "shape or
+       text, otherwise it moves by itself" — true of video, whose picture changes frame to frame, and false
+       of a still image, which is as still as a rectangle. A photo is the commonest layer in the app, so
+       this is the exact shape of every "I added it and nothing happened". */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM._fxDeadHereWhy) throw new Error('the effect browser’s dead-here badge cannot be observed');
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedLayers = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const mid = '_q863';
+    try {
+      const S = 64, cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+      const g = cv.getContext('2d'); g.fillStyle = '#7ab'; g.fillRect(0, 0, S, S);
+      FM.media.set(mid, { kind: 'image', el: cv, width: S, height: S, duration: 0 });
+      if (FM.media.pin) FM.media.pin(mid);
+      const img = FM.makeLayer('image', { x: 300, y: 300, start: 0, duration: 4 });
+      img.id = mid;
+      FM.scene.layers.push(img);
+      FM.timeline.rebuild(); FM.selectLayer(img.id); FM.refreshAll(); await sleep(140);
+
+      for (const id of ['motionflow', 'objectblur']) {
+        const why = FM._fxDeadHereWhy(id);
+        if (!why) throw new Error('#' + id + ' on a still photograph gives no warning at all — you add it, nothing happens, and the app says nothing. The same effect on a never-animated SHAPE is badged.');
+        if (!/move/i.test(why)) throw new Error('the badge on ' + id + ' says "' + why + '", which does not name the reason');
+      }
+
+      /* CONTROL 1 — ANIMATE IT AND THE BADGE MUST GO. A badge that always fires tells him nothing, which
+         is the fault the queue-603 control was written for. */
+      img.transform.x = { kf: [{ t: 0, v: 300, e: 'linear' }, { t: 2, v: 800, e: 'linear' }] };
+      FM.refreshAll(); await sleep(120);
+      for (const id of ['motionflow', 'objectblur']) {
+        if (FM._fxDeadHereWhy(id)) throw new Error('#' + id + ' is still badged "never moves" on a photograph that IS animated — the badge now lies in the other direction');
+      }
+
+      /* CONTROL 2 — A VIDEO IS NOT STILL. Its picture changes frame to frame whether or not the layer is
+         animated, which is the whole reason that line excluded it. */
+      const fake = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 40, shapeH: 40, fill: '#fff', start: 0, duration: 4 });
+      fake.type = 'video';
+      FM.scene.layers.push(fake); FM.timeline.rebuild(); FM.selectLayer(fake.id); FM.refreshAll(); await sleep(120);
+      if (FM._fxDeadHereWhy('motionflow')) throw new Error('control: a VIDEO layer is badged "nothing moves inside this layer" — its picture changes frame to frame, which is exactly why the rule excluded it');
+    } finally {
+      try { if (FM.media.remove) FM.media.remove(mid); } catch (e) {}
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0 || null); FM.timeline.rebuild(); FM.refreshAll(); await sleep(80);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  /* ═══ 897: THE KEYFRAME DIAMOND IS A REAL TAP TARGET, AND IT DOES NOT OVERLAP ITS NEIGHBOUR.
+     MEASURED at 380px: `.fx-kf` drew 20 × 20 with its left edge at x=24, and `.fx-ease` — which opens
+     the EASING EDITOR, a different thing entirely — sat 24 × 24 with its left edge at x=52. Two
+     unrelated destinations sharing a 44px strip, with 8px between them. A finger pad is about 45px
+     across, so a thumb aimed at the diamond that landed 10px off opened the wrong panel.
+     ⚠️ ASSERTS BOTH HALVES, because fixing one alone just moves the mis-tap: the region has to be big
+     enough to hit AND the two regions must not overlap. Enlarging both to 40px while leaving them 8px
+     apart would have them fighting over the same 32px of screen.
+     ⚠️ AND IT ASSERTS THE DRAWN SIZE IS UNCHANGED. The fix is a pseudo-element, so the diamond still
+     renders at 20px and nothing in this dense panel reflows — if someone ever "simplifies" it by growing
+     the element itself, this fails, because that is a layout change wearing a tap-target's clothes. */
+  test('897: the keyframe diamond is a 40px tap target and does not overlap the easing button', { item: '897' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    /* ⚠️ IT BUILDS THE STATE ITSELF. The first version read `.fx-kf` and RETURNED if there was none — and
+       in the suite there never is, so it passed against a reverted fix and `ship.sh` called it DEAD. A
+       test that quietly does nothing is worse than no test: it occupies the slot where a real one would
+       go, and it reports success. So this opens a layer, puts an effect on it and expands the row, and
+       FAILS if it cannot get there — because then it has measured nothing and should say so. */
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    let kf = null, ease = null;
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(150);
+      if (!FM.scene.layers.length) {
+        const L = FM.makeLayer('shape', { name: 'kfprobe', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+        L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      }
+      const layer = FM.scene.layers[0];
+      if (!(layer.effects || []).length) { (layer.effects = layer.effects || []).push({ type: 'glow' }); }
+      FM.selectLayer(layer.id); FM.refreshAll(); await sleep(400);
+      const insp = document.getElementById('inspector');
+      if (insp) {
+        const cat = [].slice.call(insp.querySelectorAll('button,[role="button"],.ins-card,.ins-cat'))
+          .filter(function (b) { const t = (b.textContent || '').trim(); return /Effects$/i.test(t) && t.length < 14 && b.getBoundingClientRect().height > 0; })[0];
+        if (cat) { cat.click(); await sleep(600); }
+      }
+      const disc = document.querySelector('.fx-disc') || document.querySelector('.fx-head');
+      if (disc) { disc.click(); await sleep(600); }
+      kf = document.querySelector('.fx-kf');
+      ease = document.querySelector('.fx-ease');
+      if (!kf) throw new Error('could not get an effect row open, so this test measured NOTHING — it is not passing, it is failing to run (the first version returned quietly here and ship.sh called it dead)');
+      const region = (el) => {
+        const r = el.getBoundingClientRect(), a = getComputedStyle(el, '::after');
+        const w = parseInt(a.width) || r.width, h = parseInt(a.height) || r.height;
+        const cx = r.left + r.width / 2;
+        return { drawn: r.width, w: w, h: h, cx: cx, left: cx - w / 2, right: cx + w / 2 };
+      };
+      const k = region(kf);
+      if (k.w < 40 || k.h < 40) throw new Error('the keyframe diamond is only a ' + Math.round(k.w) + '×' + Math.round(k.h) +
+        'px tap target — a finger pad is about 45px, and it sits beside a button that opens the easing editor (queue 897)');
+      if (k.drawn > 26) throw new Error('the keyframe diamond now DRAWS at ' + Math.round(k.drawn) +
+        'px — the tap area was meant to grow without the icon growing, or the whole scrub row reflows around it');
+      if (ease) {
+        const e = region(ease);
+        if (e.w < 40 || e.h < 40) throw new Error('the easing button is only a ' + Math.round(e.w) + 'px tap target');
+        const overlap = Math.min(k.right, e.right) - Math.max(k.left, e.left);
+        if (overlap > 0) throw new Error('the keyframe and easing tap regions overlap by ' + Math.round(overlap) +
+          'px — both are big enough now, but they are fighting over the same screen, which relocates the mis-tap rather than fixing it');
+      }
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      try { FM.selectLayer(sel0 || null); } catch (e) {}
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(120);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
   test('497: every element the suite reaches for actually exists', { item: '497' }, async function () {
     const ASSERTED_ABSENT = {
       'btn-more':      'queue 35 — the ⋯ button was removed; two tests check it has not come back',

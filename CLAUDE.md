@@ -1,5 +1,32 @@
 # FreeMotion — project notes for Claude
 
+## 🚀 FIRST MESSAGE OF A NEW CHAT? DO THIS WITHOUT BEING ASKED.
+
+**He should not have to type "start the loop" every time — he has asked for it in almost every session
+and it is the same three steps each time.** Unless his first message is plainly a one-off question
+("what does X do?", "explain Y"), do this before replying:
+
+1. **`./tools/tick.sh`** — computes the facts a tick needs (INBOX, queue, proof debt, reminders). It
+   is the one command that tells you where everything stands, so nothing has to be remembered.
+2. **Arm the loop**, because it dies with the chat that made it. `CronCreate` with `*/1 * * * *`,
+   `recurring: true`, and this prompt:
+   *"Continue the FreeMotion loop — read LOOP.md first, then run ./tools/next.sh and work the oldest
+   actionable item."*
+   The cadence is HIS, confirmed 20 Sep when asked directly whether to slow it down: *"That was on
+   chatgpt, u dont do that. so its fine."* Do not re-litigate it and do not quietly run slower.
+3. **Check for an unshipped release.** `git status --short` — if the tree is dirty, a previous chat
+   was interrupted mid-ship and the fixes are NOT on his phone. Ship it before starting anything new;
+   the work is already done and verified, it just needs to land.
+
+Then tell him in ONE line what you found and what you are working on. He has asked twice for less
+repetition, so do not narrate the three steps back to him — just the state and the next item.
+
+⚠️ **"I want to feel and see progress" (20 Sep).** Prefer items he can SEE over internal ones. Findings
+from your own hunts carry `(hunt HIGH/MEDIUM/LOW #n)` in their header and sort behind anything in his
+own words — `tools/ship.sh` enforces it, so tag them or the gate will refuse the release.
+
+---
+
 Vanilla HTML/CSS/JS, no build step, no framework. Local-only (localStorage + IndexedDB).
 Mobile-first — verify at ~380px. `index.html`'s version label is the source of truth; bump it
 plus the `?v=` cache-busters and add a POLISH-LOG.md entry per release. Commit locally, then PUSH —

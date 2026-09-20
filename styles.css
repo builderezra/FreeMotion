@@ -1650,7 +1650,30 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
    strip only ~23px wide — unusable. order:2 wraps the strip onto its own line. */
 .fx-scrub-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .fx-scrub-row > .fx-scrub-label { flex: 1; }
-.fx-kf { width: 20px; height: 20px; background: none; border: none; color: #4a5468; cursor: pointer; font-size: 11px; flex: none; padding: 0; }
+/* ═══ QUEUE 897 — THE KEYFRAME DIAMOND WAS A 20px TARGET 8px FROM A BUTTON THAT DOES SOMETHING ELSE.
+   MEASURED at 380px: `.fx-kf` renders 20.0 × 20.0 with its left edge at x=24, and `.fx-ease` — which
+   opens the EASING EDITOR — is 24 × 24 with its left edge at x=52. So two unrelated controls share a
+   44px strip, and a thumb aimed at the diamond that lands 10px right of where it thought opens a
+   different panel instead. A finger pad is about 45px across; 20px with an 8px neighbour is not a
+   target, it is a coin toss with a consequence.
+   🔑 THE HIT AREA GROWS, THE DIAMOND DOES NOT. A pseudo-element extends the touch region to 40px in
+   both directions without moving anything on screen — the row's spacing, the icon's size and the
+   alignment are all untouched, so nothing else in this dense panel reflows. Growing the element itself
+   would have pushed the whole scrub row around, which is how a tap-target fix becomes a layout bug.
+   ⚠️ The two are also pushed apart: 8px between two different destinations is the other half of the
+   fault, and an overlap of the two enlarged regions would just move the mis-tap rather than fix it. */
+.fx-kf { width: 20px; height: 20px; background: none; border: none; color: #4a5468; cursor: pointer; font-size: 11px; flex: none; padding: 0; position: relative; }
+.fx-kf::after {
+  content: ''; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 40px; height: 40px;           /* the touch region, invisible and laid out as nothing */
+}
+.fx-ease { position: relative; }
+.fx-ease::after {
+  content: ''; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 40px; height: 40px;
+}
+/* …and the gap between them, so the two 40px regions do not overlap and simply relocate the mis-tap. */
+.fx-scrub-row > .fx-kf + .fx-ease, .fx-scrub-row > .fx-ease + .fx-kf { margin-left: 12px; }
 .fx-kf.active { color: var(--accent); }
 .fx-kf.here { color: var(--kf); }
 .fx-kf-spacer { width: 20px; flex: none; }
@@ -5408,6 +5431,51 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
    goes down to 40 before anything is clipped. Measured after: 347px of content in a 355px box. */
 #draw-bar .db-width { flex: 0 1 92px; min-width: 40px; }
 #draw-bar .db-width input { width: 100%; min-width: 0; }
+/* ═══ QUEUE 896 + 900 — ONE OVERFLOW, TWO SYMPTOMS, and the stroke count was the thing paying for it.
+   MEASURED at 380px: `.db-hint` held the text "3 strokes" with a scrollWidth of 52px and a computed
+   width of **0px** — so the count has never once been readable on a phone. It was not hidden; it was
+   CRUSHED, and a crushed flex item still takes part in the layout, so those 52px of demand were still
+   pushing everything to its right. At 360px — Galaxy S8/S9/S10/S20 and most 360px Androids — that
+   pushed `.db-cancel` to a right edge of 361 against a bar ending at 349: **12px of Cancel painted
+   outside the pill and past the viewport**, unpressable. At 344px it was 16.6px.
+   🔑 So the hint STANDS DOWN instead of being crushed. Seven controls and a text label do not fit in
+   355px, and of the eight the label is the only one that is not a control — losing a word beats losing
+   a button you cannot press. Below 420px it is `display: none`, which returns its 52px to the row and
+   lets Cancel back inside the bar; above that it shows exactly as before.
+   ⚠️ `display: none`, not `visibility` or a zero width — those keep the item in the layout, which is the
+   precise bug being fixed here. An element crushed to 0px is not free. */
+@media (max-width: 419px) {
+  #draw-bar .db-hint { display: none; }
+  /* …AND THE SLIDER GIVES UP ANOTHER 8px, because standing the hint down was NOT ENOUGH on its own.
+     MEASURED at 360px with the hint removed: Cancel's right edge went 361 → 354 against a bar ending at
+     349, so it came back inside the VIEWPORT but was still painted 5px outside the pill. Recorded
+     because "better" was not "fixed", and the difference is exactly the kind that gets called done.
+     This bar's own note above says the brush slider is the only element on it with any slack —
+     everything else is already at its minimum — so it is the one that pays, 40px → 32px, and only below
+     420px. 32px is still a draggable track: the thumb is 16px and needs two of its own widths to be
+     worth touching. */
+  #draw-bar .db-width { min-width: 32px; }
+  /* …and the bar itself is allowed a little more of the screen. 94vw is 323px on a 344px phone and the
+     row needs 328, so even after the hint stood down and the slider gave up 8px, Cancel was STILL 5px
+     outside the pill at 344 — measured, and visible in the screenshot as the word touching the edge.
+     97vw leaves ~5px of margin each side, which is enough for a floating pill that already carries its
+     own shadow, and it buys the 10px that closes this at every width from 344 up.
+     ⚠️ 360px WAS ALREADY PASSING AT THIS POINT, and stopping there would have been the easy mistake:
+     "better" is not "fixed", and his phones are not all one width. */
+  #draw-bar { gap: 6px; padding: 8px 7px; max-width: 97vw; }
+}
+/* …AND BELOW 336px IT WRAPS, because at some width the arithmetic simply runs out. MEASURED at 320px
+   (the original iPhone SE, and a phone at large accessibility text): even with the hint gone, the
+   slider at its 32px floor and the bar taking 97vw, Cancel was still **18px outside the pill**. Ten
+   controls do not fit in 310px and no amount of shaving makes them.
+   ⚠️ THE NOTE ABOVE REJECTED WRAPPING, and it was right to at 360-380px — a taller bar eats the drawing
+   surface, which is queue 165's first complaint. But that trade only holds while the alternative is a
+   slightly tight row. Here the alternative is a button you CANNOT PRESS, and a canvas 40px shorter
+   beats a Cancel that is not there. So wrapping is the floor of the ladder rather than the first rung:
+   it only engages where every other lever has already been pulled. */
+@media (max-width: 335px) {
+  #draw-bar { flex-wrap: wrap; justify-content: center; }
+}
 /* Vector mode grows a second row: the precision trackpad spans the bar, the controls sit under it. */
 #draw-bar.db-vector { flex-wrap: wrap; width: min(94vw, 420px); }
 #draw-bar .db-pad {
