@@ -65133,4 +65133,71 @@
     }
   });
 
+
+  /* ── queue 907: four more effects that do nothing on a photo and never said so ─────────────────
+   * Found the same way as 906 — the Stylize category rendered onto one of his photographs, LOOKED
+   * at, then measured. Two of these are worse than a silent no-op: Backdrop Clone and Backdrop Lens
+   * render the layer 100% BLACK when there is nothing behind it, so his picture is replaced rather
+   * than merely unchanged, which reads as the app breaking.
+   * ⚠️ EVERY CONDITION HERE WAS VERIFIED BY EXPERIMENT BEFORE IT WAS WRITTEN, and two of them looked
+   * settled and were wrong the first time:
+   *  · Drop Shadow measured 0 at full frame AND at half size, which said "it never works on a photo".
+   *    It was a BLACK shadow on a BLACK background. On white: 0 full-frame, 19.04 at half size.
+   *  · "Nothing behind" was an assumption about z-order until it was measured: index 0 is the FRONT,
+   *    and with one shape behind, Backdrop Clone reproduces it exactly.
+   * So each assertion below carries the control that would have caught the wrong version. */
+  test('907: Drop Shadow, Frame Stutter and the two Backdrop effects say why they do nothing — and go quiet when they would work', { item: '907', budgetMs: 30000 }, async function () {
+    if (typeof FM._fxDeadHereWhy !== 'function') throw new Error('FM._fxDeadHereWhy is not reachable');
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    var P = FM.scene.project;
+    function ask(id) { return FM._fxDeadHereWhy(id); }
+    try {
+      var c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
+      var g = c.getContext('2d'); g.fillStyle = '#88aacc'; g.fillRect(0, 0, P.width, P.height);
+      FM.scene.layers.length = 0;
+      var L = FM.makeLayer('image', { x: P.width / 2, y: P.height / 2, start: 0, duration: 3 });
+      L.name = 'FX907';
+      FM.scene.layers.push(L);
+      FM.media.set(L.id, { el: c, kind: 'image', w: P.width, h: P.height, width: P.width, height: P.height });
+      FM.selectLayer(L.id); FM.refreshAll(); await sleep(200);
+
+      // ── THE CLAIMS, on a full-frame photo that is the only layer
+      if (!ask('dropshadow')) throw new Error('Drop Shadow on a layer that fills the whole frame throws its shadow outside the edges where it cannot be seen, and the app said nothing');
+      if (!ask('framestutter')) throw new Error('Frame Stutter has no footage to hold and repeat on a still photo, and the app said nothing');
+      if (!ask('copybg')) throw new Error('Backdrop Clone renders the layer 100% BLACK when there is nothing behind it, and the app said nothing — his picture is replaced, not merely unchanged');
+      if (!ask('magnifybg')) throw new Error('Backdrop Lens renders the layer 100% BLACK when there is nothing behind it, and the app said nothing');
+
+      // ── CONTROL 1: an effect that plainly works here must stay silent
+      if (ask('solarize')) throw new Error('Solarize was called dead on a photograph — the badge is firing on effects that work');
+
+      // ── CONTROL 2: shrink the layer. Drop Shadow now has edges inside the frame, so it must go
+      //    quiet — and go quiet THROUGH the cache, which is the half that rots.
+      L.transform.scale = 0.5; FM.refreshAll(); await sleep(200);
+      if (ask('dropshadow')) throw new Error('Drop Shadow still says its shadow falls outside the frame after the layer was scaled to 50% — the cache key does not carry coverage, so the badge lies about a layer he has just resized');
+      L.transform.scale = 1; FM.refreshAll(); await sleep(200);
+      if (!ask('dropshadow')) throw new Error('Drop Shadow went quiet and stayed quiet after the layer was scaled back to full frame');
+
+      // ── CONTROL 3: put a layer behind. Both backdrop effects now have something to work on.
+      var bg = FM.makeLayer('shape', { shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: P.width, shapeH: P.height, fill: '#cc3366' });
+      bg.start = 0; bg.duration = 3; bg.name = 'FX907BG';
+      FM.scene.layers.push(bg); FM.refreshAll(); await sleep(220);
+      if (ask('copybg')) throw new Error('Backdrop Clone still says there is nothing behind the layer after a layer was put behind it');
+      if (ask('magnifybg')) throw new Error('Backdrop Lens still says there is nothing behind the layer after a layer was put behind it');
+
+      // ── CONTROL 4: a VIDEO layer is what the footage pair is FOR — they must never badge there
+      FM.scene.layers.length = 0;
+      var V = FM.makeLayer('video', { x: P.width / 2, y: P.height / 2, start: 0, duration: 3 });
+      V.name = 'FX907V';
+      FM.scene.layers.push(V);
+      FM.media.set(V.id, { el: document.createElement('canvas'), kind: 'video', w: P.width, h: P.height });
+      FM.selectLayer(V.id); await sleep(200);
+      if (ask('framestutter')) throw new Error('Frame Stutter was called dead on a VIDEO layer, which is exactly what it is for');
+      if (ask('temporaldenoise')) throw new Error('Temporal Denoise was called dead on a VIDEO layer');
+    } finally {
+      FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
+      FM.refreshAll();
+    }
+  });
+
 })();

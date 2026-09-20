@@ -846,6 +846,40 @@ window.FM = window.FM || {};
     return true;
   }
 
+  /* ── THREE FAMILIES THE APP COULD ALWAYS HAVE EXPLAINED, AND NEVER DID (queue 906/907) ──────────
+   * Every one of these was found by rendering a category onto one of HIS photographs and looking at
+   * it (#859 clause 1), then measuring what the eye saw. Every condition below was verified by
+   * experiment before it was written — not read off the source and assumed — because two of them
+   * looked settled and were wrong:
+   *  · Drop Shadow measured 0 whether the layer filled the frame or not, which said "it never works
+   *    on a photo". It was a BLACK shadow on a BLACK background. On white: 0 at full frame, 19.04 at
+   *    half size. So "the layer fills the frame" is the condition, and the first reading was the test.
+   *  · Backdrop Clone was assumed to need "something behind"; measured, alone it renders 100% BLACK
+   *    and with one shape behind it clones it exactly (mean RGB 204,51,102 for a #cc3366 shape).
+   * That last one is worse than a silent no-op: his picture is REPLACED BY BLACK, which reads as the
+   * app breaking rather than as an effect with nothing to work on. */
+  const COVERS_FRAME_FX = {
+    fillbehind: 'This layer already fills the frame, so there is no empty space behind it to fill.',
+    dropshadow: 'This layer fills the whole frame, so its shadow falls outside the edges where you cannot see it. Shrink the layer first.',
+  };
+  const NEEDS_FOOTAGE_FX = {
+    temporaldenoise: 'This layer has no footage to compare frames across, so there is no grain to melt. It works on video.',
+    framestutter: 'This layer has no footage to hold and repeat — every frame of it is the same picture. It works on video.',
+  };
+  const NEEDS_BACKDROP_FX = {
+    copybg: 'There is nothing behind this layer to copy, so it comes out black. Put a layer underneath it first.',
+    magnifybg: 'There is nothing behind this layer to magnify, so it comes out black. Put a layer underneath it first.',
+  };
+  /* Is there any layer BEHIND this one? Measured, not assumed: index 0 is the FRONT, so "behind"
+     means a higher index. Deliberately conservative — it claims only when the array holds nothing at
+     all after this layer, never when something behind is merely hidden or not yet started, because
+     those are answers that change with the playhead and a badge that flickers is worse than none. */
+  function nothingBehind(layer) {
+    const ls = (FM.scene && FM.scene.layers) || [];
+    const i = ls.indexOf(layer);
+    return i >= 0 && i === ls.length - 1;
+  }
+
   let _deadCache = new Map();
   function deadHereWhy(id) {
     if (NEEDS_INPUT[id] || needsSourceLayer(id)) return null;   // that tile already carries the other marker
@@ -876,10 +910,13 @@ window.FM = window.FM || {};
        photo down, the effect starts having something to fill, and a cached "no empty space" badge
        goes on lying. Computed only for that one id, because it costs a layer CTM and every other tile
        would pay for an answer it never reads. */
-    const covered = (id === 'fillbehind' && FM._fillBehindCovered)
+    /* …computed ONLY for the ids that read them, because each costs something no other tile wants:
+       coverage costs a layer CTM, and the backdrop answer changes when he adds or removes any layer. */
+    const covered = (COVERS_FRAME_FX[id] && FM._fillBehindCovered)
       ? (FM._fillBehindCovered(layer, FM.time, FM.scene) ? '|C' : '|c') : '';
+    const behind = NEEDS_BACKDROP_FX[id] ? (nothingBehind(layer) ? '|B0' : '|B1') : '';
     const key = layer.id + '|' + ((layer.effects || []).length) + '|' + (cannotMove(layer) ? 'S' : 'M')
-              + '|' + (FM._fxProbeKey ? (FM._fxProbeKey(layer) || '-') : (FM.flatColorOf ? (FM.flatColorOf(layer) || '-') : '?')) + covered + '|' + id;
+              + '|' + (FM._fxProbeKey ? (FM._fxProbeKey(layer) || '-') : (FM.flatColorOf ? (FM.flatColorOf(layer) || '-') : '?')) + covered + behind + '|' + id;
     if (_deadCache.has(key)) return _deadCache.get(key);
     // The motion family first — it is a cheaper question than pushing a pixel through a filter.
     if (MOTION_FX[id] && cannotMove(layer)) { _deadCache.set(key, MOTION_FX[id]); return MOTION_FX[id]; }
@@ -897,13 +934,14 @@ window.FM = window.FM || {};
      *    FRAMES. A photograph, a shape or a line of text has one frame, so there is nothing to
      *    average. Same certainty as the motion family, which is already badged.
      * Both are conservative in the same direction as everything else here: silent unless certain. */
-    if (id === 'fillbehind' && FM._fillBehindCovered && FM._fillBehindCovered(layer, FM.time, FM.scene)) {
-      const w = 'This layer already fills the frame, so there is no empty space behind it to fill.';
-      _deadCache.set(key, w); return w;
+    if (COVERS_FRAME_FX[id] && FM._fillBehindCovered && FM._fillBehindCovered(layer, FM.time, FM.scene)) {
+      const w = COVERS_FRAME_FX[id]; _deadCache.set(key, w); return w;
     }
-    if (id === 'temporaldenoise' && layer.type !== 'video') {
-      const w = 'This layer has no footage to compare frames across, so there is no grain to melt. It works on video.';
-      _deadCache.set(key, w); return w;
+    if (NEEDS_FOOTAGE_FX[id] && layer.type !== 'video') {
+      const w = NEEDS_FOOTAGE_FX[id]; _deadCache.set(key, w); return w;
+    }
+    if (NEEDS_BACKDROP_FX[id] && nothingBehind(layer)) {
+      const w = NEEDS_BACKDROP_FX[id]; _deadCache.set(key, w); return w;
     }
     let why = null;
     try {
