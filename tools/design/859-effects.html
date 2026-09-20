@@ -36,16 +36,51 @@ async function run(w){
   var SCALE = (/scale=([0-9.]+)/.exec(location.hash||'')||[,1])[1];
   var BG = (/bg=(%23|#)([0-9a-fA-F]{3,6})/.exec(location.hash||'')||[,,'000000']);
   BG = '#' + BG[2];
+  /* #layer=text builds a TEXT layer instead of a photograph, and #frames=N renders the effect at N
+     moments across its own duration side by side instead of one still (queue 911).
+     Both exist because the last three categories cannot be judged without them, and pointing the
+     photo sheet at them would have produced a grid of confident nonsense:
+      · TEXT effects (Type-On, Scramble, Text Curve, Letter Spread…) act on the CHARACTERS of a text
+        layer. On a photograph they have nothing to act on and every tile would read as dead.
+      · MOVE is motion, and most of OPACITY is a cycle. A single frame of a wiggle is a still picture
+        of a layer sitting somewhere — it cannot tell "it moves" from "it is offset and frozen", which
+        is exactly the distinction the judgement is about.
+     The photo fixture has already caused nine false readings in this pass; the fix for that is a
+     better instrument, not more care. */
+  var FRAMES = Math.max(1, Math.min(6, Number((/frames=(\d+)/.exec(location.hash||'')||[,1])[1])||1));
+  var LAYERKIND = (/layer=([a-z]+)/.exec(location.hash||'')||[,'image'])[1];
+  var TW = S*FRAMES + (FRAMES-1)*2;   // a strip is N frames wide, 2px apart
+
+  function buildLayer(effect, c, mid){
+    var l;
+    if (LAYERKIND === 'text') {
+      l = FM.makeLayer('text', { x:S/2, y:S/2, start:0, duration:2 });
+      l.text = 'Motion 24';            // letters AND digits: the counter/timecode effects need digits
+      l.fontSize = Math.round(S*0.20);
+      l.color = '#ffffff';
+      l.align = 'center';
+    } else {
+      FM.media.set(mid,{kind:'image',el:c,width:S,height:S,duration:0}); FM.media.pin(mid);
+      l = FM.makeLayer('image',{x:S/2,y:S/2,start:0,duration:2}); l.id=mid;
+    }
+    l.effects = effect?[effect]:[];
+    l.transform.scale = Number(SCALE)||1;
+    return l;
+  }
   async function tile(effect){
     if(!photos[KEY]) photos[KEY]=await loadPhoto(w,KEY);
     var im=photos[KEY], side=Math.min(im.naturalWidth,im.naturalHeight);
     var c=doc.createElement('canvas'); c.width=S; c.height=S;
     c.getContext('2d').drawImage(im,(im.naturalWidth-side)/2,(im.naturalHeight-side)/2,side,side,0,0,S,S);
-    var mid='_ef_'+(effect?effect.type:'raw'); FM.media.set(mid,{kind:'image',el:c,width:S,height:S,duration:0}); FM.media.pin(mid);
-    var l=FM.makeLayer('image',{x:S/2,y:S/2,start:0,duration:2}); l.id=mid; l.effects=effect?[effect]:[];
-    l.transform.scale = Number(SCALE)||1;
-    var o=doc.createElement('canvas'); o.width=S; o.height=S;
-    FM.renderScene(o.getContext('2d'),{project:{width:S,height:S,fps:30,duration:2,background:BG},layers:[l]},0.4);
+    var mid='_ef_'+(effect?effect.type:'raw');
+    var o=doc.createElement('canvas'); o.width=TW; o.height=S;
+    var oc=o.getContext('2d');
+    for(var f=0; f<FRAMES; f++){
+      var t = FRAMES===1 ? 0.4 : (f/(FRAMES-1))*1.8;   // spread across the layer's own 2s life
+      var one=doc.createElement('canvas'); one.width=S; one.height=S;
+      FM.renderScene(one.getContext('2d'),{project:{width:S,height:S,fps:30,duration:2,background:BG},layers:[buildLayer(effect,c,mid)]},t);
+      oc.drawImage(one, f*(S+2), 0);
+    }
     return o;
   }
   var plain=await tile(null), cells=[];
@@ -57,12 +92,12 @@ async function run(w){
     cells.push({type:t, label:reg.label||t, cv:cv, params:(FM.fxRegistry.paramsOf(t)||[]).map(function(p){return p.key;})});
     say('rendered '+(i+1)+'/'+mine.length+'  '+t);
   }
-  var W=GAP+COLS*(S+GAP), rows=Math.ceil((cells.length+1)/COLS), H=GAP+rows*(S+LAB+GAP);
+  var W=GAP+COLS*(TW+GAP), rows=Math.ceil((cells.length+1)/COLS), H=GAP+rows*(S+LAB+GAP);
   var sheet=document.createElement('canvas'); sheet.width=W; sheet.height=H; var g=sheet.getContext('2d');
   g.fillStyle='#0f1420'; g.fillRect(0,0,W,H); g.textBaseline='top';
   function put(i,cv,label,sub){
-    var col=i%COLS, row=Math.floor(i/COLS), x=GAP+col*(S+GAP), y=GAP+row*(S+LAB+GAP);
-    if(cv) g.drawImage(cv,x,y+LAB); else { g.fillStyle='#401'; g.fillRect(x,y+LAB,S,S); }
+    var col=i%COLS, row=Math.floor(i/COLS), x=GAP+col*(TW+GAP), y=GAP+row*(S+LAB+GAP);
+    if(cv) g.drawImage(cv,x,y+LAB); else { g.fillStyle='#401'; g.fillRect(x,y+LAB,TW,S); }
     g.fillStyle=sub?'#8fb3d9':'#e6ebf2'; g.font='600 11px -apple-system, system-ui, sans-serif';
     g.fillText(label.slice(0,20),x,y);
   }

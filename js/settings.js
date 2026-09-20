@@ -426,6 +426,58 @@ window.FM = window.FM || {};
     body.appendChild(group(
       actionRow('Import a project file', 'Open a .fmotion.json backup as a project of its own.', 'Import…',
         () => { if (FM.storage && FM.storage.importFile) FM.storage.importFile(() => { if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close(); }); }),
+      /* ── BACK UP EVERYTHING (queue 869) ────────────────────────────────────────────────────────
+       * The row above saves ONE project, by hand, before anything goes wrong. These two are the
+       * whole library in one file. Until now there was no backup for his projects at all — the code
+       * is on GitHub and tools/rollback.sh can restore any release, but the projects live only in
+       * this browser's storage on this device, and home.js says so at the delete prompt: "there is
+       * no undo and no backup".
+       * Deliberately a FILE HE SAVES, which is option A of #869 and the only one that changes
+       * nothing about what this app is: no server, no account, nothing of his on anyone else's
+       * machine. Say the word and it can become something else. */
+      actionRow('Back up every project', 'Writes ALL your projects into one file you keep wherever you like. Nothing is uploaded anywhere — it saves to this device like any download.', 'Back up…',
+        async () => {
+          if (!FM.storage || !FM.storage.backupAll) return;
+          /* actionRow closes the panel before it runs the handler, so progress has to live in a toast
+             rather than on the button. A library of videos takes a few seconds and silence in that gap
+             reads as "nothing happened", which is how people tap a thing twice. */
+          if (FM.toast) FM.toast('Packing up your projects…', 4000);
+          let r = null;
+          try {
+            r = await FM.storage.backupAll(null);
+          } catch (e) { r = { ok: false, reason: 'The backup could not be written.' }; }
+          if (!r || !r.ok) { if (FM.toast) FM.toast((r && r.reason) || 'The backup could not be written.', 6000); return; }
+          /* ⚠️ SAY WHAT IS NOT IN IT, EVERY TIME. A backup that quietly leaves a clip out is worse
+             than no backup, because he would trust it and find out when it mattered. */
+          const miss = (r.notIncluded && r.notIncluded.media) || [];
+          const mb = Math.round((r.bytes || 0) / 1048576);
+          let msg = 'Backed up ' + r.count + (r.count === 1 ? ' project' : ' projects') + ' (' + (mb >= 1 ? mb + ' MB' : 'under 1 MB') + ').';
+          if (miss.length) {
+            const names = miss.slice(0, 3).map(m => m.file + ' (' + m.mb + ' MB)').join(', ');
+            msg += ' ⚠️ ' + miss.length + (miss.length === 1 ? ' clip was' : ' clips were') + ' too big to include: ' + names + (miss.length > 3 ? ' and more' : '') + '. Everything else is in the file.';
+          }
+          if (FM.toast) FM.toast(msg, miss.length ? 12000 : 6000);
+        }),
+      actionRow('Restore from a backup', 'Adds every project from a backup file back in. It never replaces or deletes what is already here.', 'Restore…',
+        () => {
+          const input = document.createElement('input');
+          input.type = 'file'; input.accept = '.json,application/json'; input.style.display = 'none';
+          input.addEventListener('change', async () => {
+            const file = input.files && input.files[0]; input.remove();
+            if (!file) return;
+            let obj = null;
+            try { obj = JSON.parse(await file.text()); }
+            catch (e) { if (FM.toast) FM.toast('That file is not readable — it may be truncated.', 5000); return; }
+            if (FM.toast) FM.toast('Restoring…', 3000);
+            const r = await FM.storage.restoreBackup(obj, null);
+            if (!r.ok) { if (FM.toast) FM.toast(r.reason || 'Nothing in that file could be restored.', 6000); return; }
+            let msg = 'Restored ' + r.restored + (r.restored === 1 ? ' project' : ' projects') + '.';
+            if (r.failed && r.failed.length) msg += ' ' + r.failed.length + ' could not be read: ' + r.failed.slice(0, 3).join(', ') + '.';
+            if (FM.toast) FM.toast(msg, 8000);
+            if (FM.home && FM.home.isOpen && FM.home.isOpen() && FM.home.refresh) FM.home.refresh();
+          });
+          document.body.appendChild(input); input.click();
+        }),
       actionRow('Keyboard shortcuts', 'The full list, including the ones that have no button.', 'Show',
         () => { if (FM.shortcuts) FM.shortcuts.toggle(); }),
     ));

@@ -65375,4 +65375,101 @@
     }
   });
 
+
+  /* ── queue 869: a backup for his PROJECTS, not just the code ───────────────────────────────────
+   * tools/rollback.sh can put the app back to any release and every release is on GitHub — but his
+   * projects are not in the repo. They live in localStorage and IndexedDB on whichever device made
+   * them, and js/home.js says so at the delete prompt: "there is no undo and no backup". Clear the
+   * site data, lose the phone, or tap delete once, and they are gone.
+   * ⚠️ THE LOAD-BEARING ASSERTION HERE IS THE LAST ONE. A backup that quietly leaves a clip out is
+   * WORSE than no backup, because he would trust it and find out when it mattered. So "anything too
+   * big to carry is NAMED" is tested, and it is why the size limit is a seam rather than a constant —
+   * no suite is going to build a 96MB file, and an untestable safety property is not a safety
+   * property. */
+  test('869: a backup carries every project, puts them back, never deletes, and NAMES anything it could not include', { item: '869', budgetMs: 45000 }, async function () {
+    if (!FM.storage || typeof FM.storage.buildBackup !== 'function') throw new Error('FM.storage.buildBackup is not reachable — there is no backup for his projects at all');
+    if (typeof FM.storage.restoreBackup !== 'function') throw new Error('FM.storage.restoreBackup is not reachable — a backup you cannot put back is not a backup');
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    var limit0 = FM.storage._backupEmbedLimit;
+    var made = [];
+    try {
+      // a project with content worth losing
+      await FM.projects.create({ name: 'FX869 ROUNDTRIP', width: 720, height: 1280 });
+      made.push(FM.projects.currentId());
+      FM.scene.layers.length = 0;
+      var t = FM.makeLayer('text', { text: 'KEEPME-869', x: 360, y: 640, fontSize: 80, color: '#ff8800' });
+      t.start = 0; t.duration = 3; t.name = 'KeepLayer';
+      FM.scene.layers.push(t);
+      FM.storage.markDirty(); await FM.storage.save(); FM.projects.touchCurrent(true);
+      await sleep(250);
+
+      // 1 ── the backup contains it, with its content
+      var obj = await FM.storage.buildBackup(null);
+      if (!obj || !Array.isArray(obj.projects)) throw new Error('buildBackup returned nothing usable');
+      var mine = obj.projects.filter(function (p) { return p.project && p.project.name === 'FX869 ROUNDTRIP'; })[0];
+      if (!mine) throw new Error('the project was on the device and is NOT in the backup — the backup does not cover everything');
+      if (mine.project.width !== 720 || mine.project.height !== 1280) throw new Error('the backed-up project has the wrong size (' + mine.project.width + 'x' + mine.project.height + ')');
+      var txt = (mine.layers || []).filter(function (l) { return l.type === 'text'; })[0];
+      if (!txt || txt.text !== 'KEEPME-869') throw new Error('the layer content did not survive into the backup');
+
+      // 2 ── delete it, restore it, and check the CONTENT came back rather than just the name
+      var idBefore = FM.projects.list().length;
+      var target = FM.projects.list().filter(function (p) { return p.name === 'FX869 ROUNDTRIP'; })[0];
+      await FM.projects.remove(target.id);
+      await sleep(300);
+      if (FM.projects.list().some(function (p) { return p.name === 'FX869 ROUNDTRIP'; })) throw new Error('the fixture project did not actually delete, so the restore below proves nothing');
+      var afterDelete = FM.projects.list().length;
+
+      /* A SENTINEL THAT IS NOT IN THE BACKUP, created after it was built. Counting projects cannot
+         tell "added three" from "wiped everything and added three back" — proved by mutation: a
+         restore that deleted the whole library first passed the count check. This one cannot: the
+         bystander exists nowhere in the file, so if it is gone afterwards the restore destroyed it. */
+      await FM.projects.create({ name: 'FX869 BYSTANDER', width: 640, height: 640 });
+      var bystanderId = FM.projects.currentId();
+      made.push(bystanderId);
+      await sleep(250);
+
+      var r = await FM.storage.restoreBackup(obj, null);
+      await sleep(400);
+      if (!r.ok || !r.restored) throw new Error('restoreBackup restored nothing (' + JSON.stringify(r) + ')');
+      if (!FM.projects.list().some(function (p) { return p.id === bystanderId; })) throw new Error('restoring DESTROYED a project that was not in the backup file — a restore that wipes first is a brand new way to lose everything, which is the exact failure this feature exists to prevent');
+      var back = FM.projects.list().filter(function (p) { return p.name === 'FX869 ROUNDTRIP'; })[0];
+      if (!back) throw new Error('the project was deleted and the restore did not bring it back');
+      made.push(back.id);
+      await FM.projects.open(back.id);
+      await sleep(350);
+      var got = FM.scene.layers.filter(function (l) { return l.type === 'text'; })[0];
+      if (!got || got.text !== 'KEEPME-869') throw new Error('the project came back but its content did not — restored text was ' + JSON.stringify(got && got.text));
+
+      // 3 ── RESTORE MUST NEVER DELETE. Losing work is the failure this whole thing exists to prevent.
+      if (FM.projects.list().length < afterDelete) throw new Error('restoring REMOVED projects — it must only ever add, because a restore that wipes first is a new way to lose everything');
+
+      // 4 ── a file that is not a backup is refused with a reason, not silently half-applied
+      var bad = await FM.storage.restoreBackup({ app: 'freemotion', v: 1, project: {}, layers: [] }, null);
+      if (bad.ok) throw new Error('a single project file was accepted as a whole-library backup');
+      if (!bad.reason) throw new Error('a bad file was refused with no reason given');
+
+      // 5 ── THE HONESTY PROPERTY: anything too big to embed must be NAMED, not silently dropped.
+      FM.storage._backupEmbedLimit = 8;          // any real media is now "too big"
+      var probeId = FM.projects.currentId();
+      var L = FM.makeLayer('image', { x: 100, y: 100, start: 0, duration: 2 });
+      L.name = 'FX869BIG';
+      FM.scene.layers.push(L);
+      var blob = new Blob([new Uint8Array(512)], { type: 'image/png' });
+      var file = new File([blob], 'huge-clip.png', { type: 'image/png' });
+      FM.media.set(L.id, { file: file, kind: 'image', el: document.createElement('canvas') });
+      FM.storage.markDirty(); await FM.storage.save(); FM.projects.touchCurrent(true);
+      await sleep(300);
+
+      var obj2 = await FM.storage.buildBackup(null);
+      var miss = (obj2.notIncluded && obj2.notIncluded.media) || [];
+      if (!miss.length) throw new Error('a media file too big to embed was left out of the backup and NOTHING said so — he would trust a file that does not contain his clip');
+      if (!miss.some(function (m) { return String(m.file).indexOf('huge-clip') >= 0; })) throw new Error('something was reported as not included, but not the file that was actually dropped: ' + JSON.stringify(miss).slice(0, 120));
+    } finally {
+      FM.storage._backupEmbedLimit = limit0;
+      for (var i = 0; i < made.length; i++) { try { await FM.projects.remove(made[i]); } catch (e) {} }
+      try { var strays = FM.projects.list().filter(function (p) { return /FX869/.test(p.name); }); for (var j = 0; j < strays.length; j++) await FM.projects.remove(strays[j].id); } catch (e) {}
+    }
+  });
+
 })();

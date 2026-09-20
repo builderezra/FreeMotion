@@ -1123,6 +1123,111 @@ window.FM = window.FM || {};
     if (FM.toast) FM.toast('Project file saved');
   };
 
+  /* ═══ BACK UP EVERY PROJECT TO ONE FILE (queue 869) ═══════════════════════════════════════════
+   * Until now the ONLY backup was exportFile above: one project, by hand, before anything went
+   * wrong. tools/rollback.sh can put the CODE back to any release and every release is on GitHub —
+   * but his projects are not in the repo. They live in localStorage and IndexedDB on whichever device
+   * made them, and js/home.js says so in its own words at the delete prompt: "there is no undo and no
+   * backup". Clear the site data, lose the phone, or tap delete once, and they are gone.
+   *
+   * ⚠️ THE ONE THING A BACKUP MUST NEVER DO IS LIE ABOUT WHAT IT CONTAINS. exportFile skips any media
+   * file over EMBED_LIMIT silently, which is a reasonable trade for SHARING one project and a
+   * terrible one for a backup: a single long video would be dropped, the file would look fine, and he
+   * would find out only when he needed it. So this uses a much larger ceiling, and — more importantly
+   * — it COUNTS AND NAMES everything it could not carry, returns that to the caller, and writes it
+   * into the file itself. A backup that says "these three clips are not in here" is honest. One that
+   * quietly leaves them out is worse than no backup at all, because he would trust it.
+   *
+   * Local-only is untouched: this writes a file HE saves, exactly like exportFile. Nothing leaves the
+   * device, there is no server and no account. That was the point of option A in #869. */
+  /* A SEAM, not a constant, and the reason is that the honesty property is the one that matters most
+     here. "Anything too big to carry is NAMED rather than silently dropped" cannot be tested with a
+     hard 96MB ceiling — no suite is going to build a 96MB file — so the limit is readable and
+     settable and the test lowers it to a few bytes. Untestable safety is not safety. */
+  FM.storage._backupEmbedLimit = 96 * 1024 * 1024;   // a backup is MEANT to be big; a shared project is not
+
+  FM.storage.buildBackup = async function (onProgress) {
+    const idx = (FM.projects && FM.projects.list()) || [];
+    const projects = [], skippedProjects = [], skippedMedia = [];
+    for (let i = 0; i < idx.length; i++) {
+      const p = idx[i];
+      if (onProgress) { try { onProgress(i + 1, idx.length, p.name || 'Untitled'); } catch (e) {} }
+      let got = null;
+      try { got = await packFromProject(p.id, true); } catch (e) { got = null; }
+      if (!got || !got.pack) { skippedProjects.push(p.name || p.id); continue; }
+      const pack = got.pack, media = {};
+      for (const lid in pack.media) {
+        const rec = pack.media[lid];
+        if (!rec || !rec.file) continue;
+        if (rec.file.size > FM.storage._backupEmbedLimit) {
+          skippedMedia.push({ project: p.name || 'Untitled', file: rec.file.name || 'a clip', mb: Math.round(rec.file.size / 1048576) });
+          continue;
+        }
+        const durl = await fileToDataURL(rec.file);
+        if (durl) media[lid] = { kind: rec.kind, name: rec.file.name, dataURL: durl };
+        else skippedMedia.push({ project: p.name || 'Untitled', file: rec.file.name || 'a clip', mb: Math.round(rec.file.size / 1048576) });
+      }
+      /* The INDEX's name wins over the packed project's, for the same reason templates.exportFile
+         gives: the doc's own name can be stale ("Untitled 3") while the card he recognises is right. */
+      const project = Object.assign({}, pack.project, { name: p.name || pack.project.name || 'Untitled' });
+      projects.push({ app: 'freemotion', v: 1, project: project, layers: pack.layers, media: media, fonts: await embedFonts(pack.layers) });
+    }
+    return {
+      app: 'freemotion', backup: 1, v: 1,
+      projects: projects,
+      /* Written INTO the file, not only shown once in a toast he may not be looking at. A year from
+         now the file has to be able to answer "is my video in here" by itself. */
+      notIncluded: { projects: skippedProjects, media: skippedMedia },
+      count: projects.length,
+    };
+  };
+
+  FM.storage.backupAll = async function (onProgress) {
+    const obj = await FM.storage.buildBackup(onProgress);
+    if (!obj.count) return { ok: false, reason: 'There are no projects to back up yet.', report: obj };
+    let blob;
+    try { blob = new Blob([JSON.stringify(obj, FM.jsonReplacer)], { type: 'application/json' }); }
+    catch (e) {
+      /* A library of big videos can exceed what one JSON string can hold. Saying so beats a silent
+         half-file or a crash, and it names the only lever he has. */
+      return { ok: false, reason: 'That is too much to put in one file — back up a few projects at a time, or shorten the longest ones.', report: obj };
+    }
+    const stamp = FM.storage._backupStamp ? FM.storage._backupStamp() : 'backup';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'FreeMotion-' + stamp + '.fmbackup.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return { ok: true, count: obj.count, notIncluded: obj.notIncluded, bytes: blob.size, report: obj };
+  };
+  // Split out so the suite can pin the filename without a clock in the test.
+  FM.storage._backupStamp = function () {
+    const d = new Date();
+    const two = n => (n < 10 ? '0' : '') + n;
+    return d.getFullYear() + '-' + two(d.getMonth() + 1) + '-' + two(d.getDate());
+  };
+
+  /* Put it back. Each project in the file goes through importObject, which is the SAME validated door
+     a single .fmotion.json import uses — so a corrupt or foreign entry is refused with a reason
+     rather than becoming an empty project, which is exactly what queue 673 fixed for the single case.
+     ⚠️ IT ADDS, IT NEVER REPLACES. Restoring cannot destroy what is already on the device, because
+     the failure this whole item exists to prevent is losing work — and a restore that wiped first
+     would be a new way to do exactly that. */
+  FM.storage.restoreBackup = async function (obj, onProgress) {
+    if (!obj || obj.app !== 'freemotion' || !obj.backup || !Array.isArray(obj.projects)) {
+      return { ok: false, reason: 'That is not a FreeMotion backup file.' };
+    }
+    let restored = 0; const failed = [];
+    for (let i = 0; i < obj.projects.length; i++) {
+      const one = obj.projects[i];
+      const nm = (one && one.project && one.project.name) || 'Untitled';
+      if (onProgress) { try { onProgress(i + 1, obj.projects.length, nm); } catch (e) {} }
+      let ok = false;
+      try { ok = await FM.storage.importObject(one, null, { quiet: true }); } catch (e) { ok = false; }
+      if (ok) restored++; else failed.push(nm);
+    }
+    return { ok: restored > 0, restored: restored, failed: failed, total: obj.projects.length };
+  };
+
   /* ═══ WHAT IS WRONG WITH THIS FILE, IN WORDS (queue 673) ══════════════════════════════════════
    * The import used to create the project FIRST and validate second, and `applyScene` returns FALSE
    * rather than throwing when a file is malformed — with no `else` on that branch. So a bad file left
@@ -1146,7 +1251,10 @@ window.FM = window.FM || {};
   /* Split out of importFile so the ORDER can be tested. The bug was never in the parsing or the
      applying — it was that "create the project" happened before "is this file any good", and a file
      input is not something a test can fill. */
-  FM.storage.importObject = async function (obj, onDone) {
+  /* `opts.quiet` exists for the backup RESTORE (queue 869), which calls this once per project: a
+     twenty-project restore would otherwise fire twenty "Project imported" toasts on top of each
+     other and say nothing useful. The restore reports once, at the end, with the real count. */
+  FM.storage.importObject = async function (obj, onDone, opts) {
     const problem = FM.storage.sceneFileProblem(obj);
     if (problem) { if (FM.toast) FM.toast(problem, 5000); return false; }
     if (FM.projects) await FM.projects.create({ name: (obj.project && obj.project.name ? obj.project.name : 'Imported project'), width: obj.project && obj.project.width, height: obj.project && obj.project.height });
@@ -1160,7 +1268,7 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.reset();
     FM.storage.markDirty(); FM.storage.save();
     if (FM.projects) FM.projects.touchCurrent(true);
-    if (FM.toast) FM.toast('Project imported');
+    if (FM.toast && !(opts && opts.quiet)) FM.toast('Project imported');
     if (onDone) onDone();
     return true;
   };
