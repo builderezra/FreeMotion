@@ -65200,4 +65200,65 @@
     }
   });
 
+
+  /* ── queue 908: Depth Push joins the "this layer fills the frame" family ───────────────────────
+   * Found judging 3D by eye (#859 clause 1), and it is the clearest example yet of why the control
+   * matters more than the claim. Depth Push rendered IDENTICALLY to the untouched photo, and a sweep
+   * of its own three controls said it stayed at zero even with depth at its maximum — which reads as
+   * "this effect is completely dead, at every setting". It is not. The fixture was FULL-FRAME, where
+   * the solid sides it builds fall outside the edges, exactly as Drop Shadow's shadow does. Measured
+   * at half scale: 9.89 on a dark background, 35 on a light one, 49.49 with depth at 100.
+   * "Depth Push does nothing at any setting" would have been a false accusation against a working
+   * effect, and it is the kind that costs a rewrite. So this test asserts BOTH halves. */
+  test('908: Depth Push says why it does nothing on a frame-filling layer, and still works when the layer is smaller', { item: '908', budgetMs: 25000 }, async function () {
+    if (typeof FM._fxDeadHereWhy !== 'function') throw new Error('FM._fxDeadHereWhy is not reachable');
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    var P = FM.scene.project;
+    try {
+      var c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
+      var g = c.getContext('2d'); g.fillStyle = '#88aacc'; g.fillRect(0, 0, P.width, P.height);
+      FM.scene.layers.length = 0;
+      var L = FM.makeLayer('image', { x: P.width / 2, y: P.height / 2, start: 0, duration: 3 });
+      L.name = 'FX908';
+      FM.scene.layers.push(L);
+      FM.media.set(L.id, { el: c, kind: 'image', w: P.width, h: P.height, width: P.width, height: P.height });
+      FM.selectLayer(L.id); FM.refreshAll(); await sleep(200);
+
+      if (!FM._fxDeadHereWhy('rasterextrude')) throw new Error('Depth Push builds its solid sides outside a frame-filling layer where they cannot be seen, and the app said nothing');
+
+      // ── THE CONTROL THAT STOPS THIS BECOMING A FALSE ACCUSATION: shrink it and the effect works,
+      //    so the badge must go. If this ever fires, the app is telling him a working effect is dead.
+      L.transform.scale = 0.5; FM.refreshAll(); await sleep(200);
+      if (FM._fxDeadHereWhy('rasterextrude')) throw new Error('Depth Push still says its sides fall outside the frame after the layer was scaled to 50%, where it measurably DOES work (9.89 dark / 35 light) — the app would be calling a working effect dead');
+
+      /* …and it really does draw something at that size, or the control above is vacuous.
+         ⚠️ THE MEDIA MUST BE SMALL TOO. The first version of this reused the 1080x1920 layer inside a
+         120px probe scene, so "scale 0.5" was still hundreds of times the frame — it measured 0.00 and
+         read as "Depth Push draws nothing at any size", which is the very false accusation this test
+         exists to prevent. The probe now uses its own media sized to the probe's own frame. */
+      var S = 120;
+      var pc = document.createElement('canvas'); pc.width = pc.height = S;
+      var pg = pc.getContext('2d'); pg.fillStyle = '#88aacc'; pg.fillRect(0, 0, S, S);
+      var pid = '_fx908probe';
+      FM.media.set(pid, { kind: 'image', el: pc, width: S, height: S, duration: 0 });
+      FM.media.pin(pid);
+      function shot(withFx) {
+        var l = FM.makeLayer('image', { x: S / 2, y: S / 2, start: 0, duration: 2 });
+        l.id = pid; l.transform.scale = 0.5;
+        l.effects = withFx ? [FM.fxRegistry.makeInstance('rasterextrude')] : [];
+        var o = document.createElement('canvas'); o.width = o.height = S;
+        FM.renderScene(o.getContext('2d'), { project: { width: S, height: S, fps: 30, duration: 2, background: '#ffffff' }, layers: [l] }, 0.4);
+        return o.getContext('2d').getImageData(0, 0, S, S).data;
+      }
+      var a = shot(false), b = shot(true), sum = 0, n = 0;
+      for (var i = 0; i < a.length; i += 4) { n++; sum += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); }
+      var d = sum / n / 3;
+      if (!(d > 1)) throw new Error('Depth Push drew nothing at half scale either (mean ' + d.toFixed(2) + ') — then the silent case above is not "it fills the frame", and this whole reading is about something else');
+    } finally {
+      FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
+      FM.refreshAll();
+    }
+  });
+
 })();

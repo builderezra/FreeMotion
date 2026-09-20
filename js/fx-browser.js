@@ -861,6 +861,14 @@ window.FM = window.FM || {};
   const COVERS_FRAME_FX = {
     fillbehind: 'This layer already fills the frame, so there is no empty space behind it to fill.',
     dropshadow: 'This layer fills the whole frame, so its shadow falls outside the edges where you cannot see it. Shrink the layer first.',
+    /* queue 908, and it nearly went in as something far worse. Judging 3D by eye, Depth Push rendered
+     * IDENTICALLY to the untouched photo — and a sweep of its own controls said it stayed at zero even
+     * with depth at 100, which reads as "this effect is completely dead". It is not: the fixture was
+     * full-frame, where the extruded sides fall outside the edges exactly as Drop Shadow's does.
+     * Measured at half scale: 9.89 on a dark background, 35 on a light one, 49.49 at depth 100.
+     * So it belongs in this family, and "Depth Push does nothing at any setting" would have been a
+     * false accusation against a working effect. */
+    rasterextrude: 'This layer fills the whole frame, so the solid sides it builds fall outside the edges where you cannot see them. Shrink the layer first.',
   };
   const NEEDS_FOOTAGE_FX = {
     temporaldenoise: 'This layer has no footage to compare frames across, so there is no grain to melt. It works on video.',
