@@ -775,9 +775,27 @@ html[data-home="light"] .hm-search-hint { color: #5a6478; }
 /* THE TOP BAR: light, and carrying the colour rather than sitting above it. The same hues as the
    bleed below it — which are the + button's, enforced by an existing test — so the bar and the page
    are one wash rather than two ideas. */
+/* ⚠️ FLAT, NOT FADED — queue 903. Ezra, 20 Sep, looking at his own phone: *"there's a white bar
+   that's fading on top of the buttons in the main menu … it's got this like terrible like fade at the
+   top where it's like this is colour fighting over all the buttons and it just looks really janky just
+   like make it look like an app how it should look."*
+   The veil here poured `rgba(255,255,255,.88) → .62`, so the bar was whitest at its top edge and let
+   38% of the colour through at the bottom — which is exactly where the wordmark and the three buttons
+   sit. That is the "colour fighting over all the buttons": the tint was at its STRONGEST across the
+   controls and weakest over empty space, which is backwards.
+   It was invisible for months only because the page behind it was also pure white (the intro's ramp,
+   which never switched off — #883). Nothing was added here; #883 stopped hiding it.
+   🔑 So the veil is now ONE EVEN LEVEL. A top bar is a surface, not a gradient: every normal app
+   draws it flat and lets the content below it carry the interest. `.94` rather than the old average of
+   `.75`, because his complaint is that the colour competes with the controls — the tint is now a
+   whisper under the glass instead of a wash across it.
+   ⚠️ THE COLOUR ITSELF STAYS, and that is deliberate: queue 615 is him asking for a colourful top bar
+   ("keep the top bar colourful like it is now"). He is objecting to the FADE and to the strength over
+   the buttons, not to the hue — so the hue is kept and only evened out. `#hm-bleed` below still leans
+   the colour onto the page, which is the other half of what he asked for there. */
 html[data-home="light"] .hm-top {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, .88), rgba(255, 255, 255, .62)),
+    linear-gradient(180deg, rgba(255, 255, 255, .94), rgba(255, 255, 255, .94)),
     linear-gradient(105deg,
       rgba(127, 216, 255, .55) 0%,
       rgba(74, 236, 208, .42) 34%,

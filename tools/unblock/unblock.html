@@ -158,15 +158,71 @@
 <div class="wrap">
   <header>
     <h1>Everything FreeMotion is waiting on you for</h1>
-    <p class="stand">Twenty-two open items are built as far as they can go without you. Nothing here needs
+    <p class="stand">Twenty-nine open items are built as far as they can go without you. Nothing here needs
       more than a tap or a letter. Pick as you go — the page remembers — then hit <b>Copy my answers</b> and
       paste the lot back in one message.</p>
     <ul class="tally">
+      <li><span class="n">3</span> new today</li>
       <li><span class="n">12</span> need a report pasted</li>
       <li><span class="n">7</span> need a letter</li>
       <li><span class="n">4</span> need a quick look</li>
     </ul>
   </header>
+
+  <!-- ══ 0. NEW SINCE YOU LAST LOOKED ══ 20 Sep. Put first on purpose: one confirms a fix that
+       shipped today and cannot be confirmed from this Mac, the other is holding a queue item. -->
+  <section id="new">
+    <div class="shead"><h2>New today</h2><span class="count">3 items</span></div>
+    <p class="sdesc">Two of these came out of today&rsquo;s work and one is about your own projects. The first
+      one I genuinely cannot answer myself &mdash; it only shows on a real installed app.</p>
+
+    <div class="card" data-id="883" data-kind="say">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#883</span> Is the white bar gone?</h3>
+        <p>You reported a white bar at the top when you&rsquo;re inside a project. Found it: the intro fades the page
+          from dark to white and switches that on with a class &mdash; and nothing ever switched it off, so the page
+          behind everything stayed white all session. Invisible on the home screen because the home paints over it;
+          obvious in a project, where the editor is dark and any strip it doesn&rsquo;t cover shows through.</p>
+        <p><b>Why I need you:</b> that strip only exists on a web view bigger than its page, which is the installed
+          app on a phone. A desktop browser has no such strip, so I can measure the cause but I cannot see your bar.
+          Say <b>gone</b> &mdash; or if it is still there, say so and I will keep looking, because that would mean a
+          second cause.</p>
+        <p class="mono" style="color:var(--faint);font-size:12px">Not ChatGPT, by the way &mdash; it made no changes to this app at all.</p>
+      </div>
+      <textarea class="note" rows="2" placeholder="&ldquo;gone&rdquo; &mdash; or what you still see"></textarea>
+    </div>
+
+    <div class="card" data-id="867" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#867</span> Controller &amp; New group tiles</h3>
+        <p>You were right about the colour, and the numbers agree: New group and Custom elements are 38 apart in RGB
+          where this menu&rsquo;s own rule says 60 minimum. At the opacity these tiles are painted at, that is no
+          difference at all. They are also both dashed outlines, which is why they read as the same kind of thing.</p>
+        <p>Three options are drawn at the real PC tile size next to their actual neighbours, and again at phone size.
+          Controller stays red in all three &mdash; &ldquo;Null being red is good&rdquo; is yours and I left it alone.</p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="1"><span class="key">1</span><span>New group joins the coloured family, in green &mdash; every other card here <em>adds a layer</em>, while Custom elements <em>opens a browser</em>, so the quiet grey should be its alone <span class="rec">&mdash; recommended</span></span></button>
+        <button class="opt" data-v="2"><span class="key">2</span><span>Keep it quiet, but make it properly blue instead of grey &mdash; the smaller change</span></button>
+        <button class="opt" data-v="3"><span class="key">3</span><span>Option 1, plus a stronger plate on both tiles &mdash; if &ldquo;washed out&rdquo; is as much the problem as &ldquo;too alike&rdquo;</span></button>
+      </div>
+    </div>
+
+    <div class="card" data-id="869" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#869</span> Your projects have no backup</h3>
+        <p>The code is on GitHub and can be put back to any release. <b>Your projects are not.</b> They live only in
+          this browser&rsquo;s storage on whichever device made them &mdash; clear site data, lose the phone, or delete
+          one by mistake, and there is no undo. The only route today is exporting a file by hand, beforehand.</p>
+        <p>This is your data, and the sensible answers differ a lot, so I am not choosing it for you. The app is
+          local-only by design and I am not changing that without you saying so.</p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="A"><span class="key">A</span><span>One button that writes <em>every</em> project to a single file you save wherever you like, and one obvious place to put it back from <span class="rec">&mdash; recommended</span></span></button>
+        <button class="opt" data-v="B"><span class="key">B</span><span>Leave it &mdash; I export by hand when it matters</span></button>
+      </div>
+    </div>
+  </section>
 
   <!-- ══ 1. THE REPORTS ══ ordered by how many items each one frees -->
   <section id="reports">

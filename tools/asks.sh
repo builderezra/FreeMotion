@@ -22,7 +22,17 @@ for n, i in enumerate(starts):
     if not lines[i].startswith('- [ ] '): continue
     end = starts[n + 1] if n + 1 < len(starts) else len(lines)
     body = '\n'.join(lines[i:end])
-    if classify(body) != 'blocked on Ezra': continue
+    # 🚨 BOTH BUCKETS, NOT ONE (queue 777, 20 Sep). This read `!= 'blocked on Ezra'` and skipped
+    # everything else — but the classifier has TWO buckets that mean "waiting on him", and the bigger
+    # one by far is `built out — waiting on him`. Measured the day this was found: 4 items were
+    # `blocked on Ezra` and **25** were `built out`, so this tool reported 4 of the 29 things he
+    # actually owes an answer on, and the unblock page built from it was missing 86% of its content.
+    # CLAUDE.md says in as many words that the page collects "every open item that is *built out —
+    # waiting on him* (the bucket `tools/next.sh` lists)" — the exact bucket this line filtered out.
+    # It is the `next.sh` grep bug again (a tool meant to stop things rotting was the thing rotting
+    # them), and it is why he has said more than once that he is answering the same questions twice.
+    b = classify(body)
+    if b not in ('blocked on Ezra', 'built out — waiting on him'): continue
     m = re.match(r'- \[ \] \*\*(\d+[a-z]?)', lines[i])
     tag = m.group(1) if m else '(unnumbered)'
     title = re.sub(r'\*\*|✅|🔴|🚨|⚠️', '', lines[i][6:]).strip()[:64]
@@ -43,22 +53,24 @@ for n, i in enumerate(starts):
                 t = ln.strip()
                 if t.startswith('❓') or ('?' in t and re.search(r'\b(does|do|is|which|what|would|should|can)\b', t, re.I)):
                     ask = re.sub(r'^[^A-Za-z]*', '', t)[:110]; break
-    rows.append((tag, title, ask))
+    rows.append((tag, title, ask, b))
 def key(r):
     m = re.match(r'(\d+)([a-z]?)$', r[0])
     return (1, int(m.group(1)), m.group(2)) if m else (0, 0, '')
 rows.sort(key=key)
-print('%d open item(s) are waiting on an answer from Ezra.\n' % len(rows))
+nb = len([r for r in rows if r[3] == 'blocked on Ezra'])
+no = len(rows) - nb
+print('%d open item(s) are waiting on an answer from Ezra  (%d blocked, %d built out).\n' % (len(rows), nb, no))
 withask = [r for r in rows if r[2]]
 print('── THESE NAME WHAT THEY NEED (%d) ──' % len(withask))
-for tag, title, ask in withask:
+for tag, title, ask, b in withask:
     print('  #%-5s %s' % (tag, title))
     print('         %s' % ask)
 print()
 rest = [r for r in rows if not r[2]]
 print('── THESE DO NOT NAME A QUESTION (%d) — that is a bug in the ENTRY, not in him ──' % len(rest))
 print('   Fix by adding one line to the entry:  ❓ASK: <the question, answerable in a word or a letter>')
-for tag, title, _ in rest[:14]:
+for tag, title, _, b in rest[:20]:
     print('  #%-5s %s' % (tag, title))
-if len(rest) > 14: print('  …and %d more' % (len(rest) - 14))
+if len(rest) > 20: print('  …and %d more' % (len(rest) - 20))
 PY

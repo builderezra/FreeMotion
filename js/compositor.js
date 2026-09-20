@@ -5011,6 +5011,13 @@ window.FM = window.FM || {};
       var dt_rP=p.radius==null?0.32:FM.evalProp(p.radius,t); if(dt_rP<0.05)dt_rP=0.05; if(dt_rP>0.7)dt_rP=0.7;
       var dt_aP=p.opacity==null?0.85:FM.evalProp(p.opacity,t); if(dt_aP<0)dt_aP=0; if(dt_aP>1)dt_aP=1; if(dt_aP<=0)return;
       var dt_sf=p.softness==null?0:FM.evalProp(p.softness,t); if(dt_sf<0)dt_sf=0; if(dt_sf>8)dt_sf=8;
+      /* × ps — queue 899. `dt_sz` is scaled to the plate and this was not, so on a reduced preview the
+         feather stayed full width while the cell shrank around it and the dots dissolved into a wash.
+         Measured on a flat 140-grey plate at spacing 16, softness 4: export (ps=1) mean 201 / sd 35.3,
+         the dots still reading; phone (ps=0.28) mean 227 / sd 10.7, nearly flat. At softness 8 it was
+         sd 19.4 against sd 5.4. He dials the softness he likes on the phone and exports harder dots.
+         Capped at half the cell so the feather can never swallow the gap between dots. */
+      dt_sf=dt_sf*(ps||1); if(dt_sf>dt_sz*0.5)dt_sf=dt_sz*0.5;
       var dt_cr=dt_rP===0.32?dt_sz*0.32:dt_sz*dt_rP, dt_r2=dt_cr*dt_cr, dt_a=dt_aP, dt_ia=1-dt_a, dt_w4=W*4; for(var dt_y=0;dt_y<H;dt_y++){ var dt_dcy=dt_y-(Math.floor(dt_y/dt_sz)*dt_sz+dt_sz/2); var dt_row=dt_y*dt_w4; for(var dt_x=0;dt_x<W;dt_x++){ var dt_i=dt_row+dt_x*4; if(d[dt_i+3]===0)continue; var dt_dcx=dt_x-(Math.floor(dt_x/dt_sz)*dt_sz+dt_sz/2); var dt_q=dt_dcx*dt_dcx+dt_dcy*dt_dcy;
         if(dt_sf<=0){ if(dt_q<=dt_r2){ d[dt_i]=d[dt_i]*dt_ia+dt_col[0]*dt_a; d[dt_i+1]=d[dt_i+1]*dt_ia+dt_col[1]*dt_a; d[dt_i+2]=d[dt_i+2]*dt_ia+dt_col[2]*dt_a; } }
         else { var dt_dd=Math.sqrt(dt_q); if(dt_dd>=dt_cr+dt_sf) continue;
@@ -5038,6 +5045,27 @@ window.FM = window.FM || {};
       var htlRad=htlAng*Math.PI/180, htlCos=Math.cos(htlRad), htlSin=Math.sin(htlRad);
       var htlWt=p.weight==null?1:FM.evalProp(p.weight,t); if(htlWt<0.2)htlWt=0.2; if(htlWt>2.5)htlWt=2.5;
       var htlSoft=p.softness==null?0:FM.evalProp(p.softness,t); if(htlSoft<0)htlSoft=0; if(htlSoft>4)htlSoft=4;
+      /* × ps — queue 889. `htlSize` is scaled to the plate just above and this was not, so the feather
+         kept its full width while the period it feathers shrank: the ramp then spans most of a much
+         smaller period and the screen fills in. Measured on a flat 140-grey plate at pitch 8, softness 1:
+         the export (ps=1) came out mean 108 / sd 118 — a proper screen — and the phone's ps=0.28 plate
+         came out mean 12.4 / sd 12.5, which is a near-solid black rectangle.
+         Capped under the period for the same reason the crosshatch weight is: a feather wider than the
+         thing it softens has nothing left to be an edge OF. */
+      htlSoft=htlSoft*(ps||1); if(htlSoft>htlSize*0.5)htlSoft=htlSize*0.5;
+      /* ⚠️ AND A SUB-PIXEL FEATHER IS A HARD EDGE, NOT A FAINT ONE — scaling alone did not finish this.
+         `htlM` only ever takes INTEGER offsets, so the ramp is sampled once per pixel. At ps=0.28 the
+         feather is 0.28 of a pixel and the single sample that ought to come out white instead lands
+         0.35 of the way up the ramp — grey 89 — so the whole screen reads dark. Measured after scaling
+         but before this line: mean 44.1 / sd 44.5 against the export's 108.1 / sd 118.1, which is
+         better than the 12.4 it started at and still plainly not the same picture.
+         You cannot draw a feather narrower than a pixel; the honest rendering of one is the hard edge
+         it is indistinguishable from. With this, the phone plate comes out mean 126.2 / sd 127.5 — the
+         STRUCTURE now matches the export's sd 118.1 closely, which is what he actually sees.
+         ⚠️ GUARDED ON `ps < 1` SO THE EXPORT IS BYTE-FOR-BYTE UNTOUCHED. At full plate a softness of 0.5
+         is a real, deliberate sub-pixel feather he may have dialled in, and this must not quietly
+         harden it — that would be fixing the preview by changing the thing it is supposed to predict. */
+      if(ps&&ps<1&&htlSoft<1)htlSoft=0;
       for(var htlY=0;htlY<H;htlY++){ var htlRowMod=((htlY%htlSize)+htlSize)%htlSize; var htlRowBase=htlY*htlW4;
         for(var htlX=0;htlX<W;htlX++){ var htlI=htlRowBase+htlX*4; if(d[htlI+3]===0)continue;
           var htlL=(0.299*d[htlI]+0.587*d[htlI+1]+0.114*d[htlI+2])/255; if(htlL<0)htlL=0; else if(htlL>1)htlL=1;
@@ -6231,6 +6259,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var chDen=p.density==null?50:FM.evalProp(p.density,t); if(chDen<0)chDen=0; if(chDen>100)chDen=100;
       var chF=chDen/50, chT1=0.75*chF, chT2=0.5*chF, chT3=0.25*chF;
       var chWt=p.weight==null?1:FM.evalProp(p.weight,t); if(chWt<1)chWt=1; if(chWt>5)chWt=5;
+      /* × ps, AND CAPPED UNDER THE PERIOD — queue 890. `spacing` above is scaled to the plate and this
+         was not, so on a reduced preview the gap shrank while the stroke did not. `xy<chWt` then matched
+         EVERY offset and the layer came out a solid slab of ink. Measured on a 40→190 luminance ramp:
+         export plate (ps=1) inked 40.5% of the frame — a readable hatch — while the phone's ps=0.28 plate
+         inked 100.0%, and even at the default weight of 1 it was 21.5% against 50.5%. So he dials a hatch
+         on his phone and exports something that is not the picture he approved.
+         THE CAP IS NOT COSMETIC, and it is the SAME failure the halftone kernel already documents a few
+         hundred lines up: once the threshold reaches the period there is no gap left to leave white, at
+         ANY scale. Scaling alone would have fixed today's number and left the cliff in place. The floor
+         keeps a 1px line visible — `xy` is an integer, so any weight above 0 still inks offset 0. */
+      chWt=chWt*(ps||1); if(chWt<0.5)chWt=0.5; if(chWt>sp-1)chWt=Math.max(0.5,sp-1);
       var chAng=p.angle==null?0:FM.evalProp(p.angle,t);
       var chRot=((chAng%360)+360)%360!==0;
       var chRad=chAng*Math.PI/180, chCos=Math.cos(chRad), chSin=Math.sin(chRad);

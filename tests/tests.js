@@ -55690,6 +55690,64 @@
      The exceptions are ids asserted to be ABSENT ("this button must not come back"), which are listed
      and explained rather than pattern-matched, because a clever pattern would eventually let a real
      typo through as an intentional one. */
+  /* ═══ 889 / 890 / 899: A PATTERN EFFECT MUST LOOK THE SAME ON THE PREVIEW PLATE AS IN THE EXPORT.
+     This is the #691 class for the third time: a kernel whose parameter is in ABSOLUTE PIXELS has to
+     multiply it by `ps`, the plate scale, or the reduced preview draws a different picture from the
+     file. #691 cured 32 kernels that ignored `ps` entirely; these three ignored it for SOME of their
+     parameters while honouring it for others, which is worse — the pattern's period shrank with the
+     plate and the ink laid into it did not, so the two fought each other.
+     Measured on his phone's plate scale (0.28, from his own perf report) before the fix:
+       · Crosshatch inked **100.0%** of the frame against the export's 40.5% — a solid slab of ink.
+       · Halftone Lines came out mean **12.4** against the export's 108 — a black rectangle.
+       · Dots washed out to sd **10.7** against the export's 35.3 — the dots dissolved.
+     ⚠️ ASSERTED ON STRUCTURE (sd / ink coverage), NOT ON EXACT EQUALITY. A quarter-scale plate cannot
+     reproduce an 8px screen pixel for pixel, and demanding that would be demanding the impossible and
+     would fail forever. What CAN be demanded is that the preview is recognisably the same picture:
+     the same order of contrast, and not a solid block. The thresholds below are deliberately loose
+     enough to survive resampling and tight enough that every one of the three failures above trips
+     them by a wide margin. */
+  test('889/890/899: Halftone Lines, Crosshatch and Dots draw the same picture on a reduced plate as in the export', { item: '889' }, async function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.halftonelines || !K.crosshatch || !K.dots) throw new Error('FM._FX_TABLES.PIXEL_FX is not reachable — the suite cannot test the real kernels');
+    const PS = 0.28;              // his own measured playback plate scale
+    const WE = 360, WP = 101;     // the export plate, and that plate at PS
+
+    const plate = (W, ramp) => {
+      const d = new Uint8ClampedArray(W * W * 4);
+      for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4, v = ramp ? Math.round(40 + 150 * (x / (W - 1))) : 140;
+        d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+      }
+      return d;
+    };
+    const sd = (d) => { let s = 0, n = 0; for (let i = 0; i < d.length; i += 4) { s += d[i]; n++; }
+      const m = s / n; let v = 0; for (let i = 0; i < d.length; i += 4) { const q = d[i] - m; v += q * q; }
+      return Math.sqrt(v / n); };
+    const ink = (d) => { let c = 0, n = 0; for (let i = 0; i < d.length; i += 4) { if (d[i] < 100) c++; n++; } return 100 * c / n; };
+    const run = (fn, W, ps, params, ramp) => { const d = plate(W, ramp); fn(d, W, W, params, 0, ps); return d; };
+
+    // ---- Crosshatch: the ink must not swallow the frame (queue 890) ----
+    const chE = ink(run(K.crosshatch, WE, 1, { spacing: 7, density: 50, weight: 2, angle: 0, color: '#101014' }, true));
+    const chP = ink(run(K.crosshatch, WP, PS, { spacing: 7, density: 50, weight: 2, angle: 0, color: '#101014' }, true));
+    if (chE > 90) throw new Error('control: the EXPORT plate is already ' + chE.toFixed(1) + '% ink, so "the preview inks too much" cannot be told apart from the effect itself');
+    if (chP > 90) throw new Error('Crosshatch inks ' + chP.toFixed(1) + '% of the preview plate against ' + chE.toFixed(1) +
+      '% in the export — the stroke weight is not scaled to the plate, so it is wider than the gap and every offset matches (queue 890: it measured 100%)');
+
+    // ---- Halftone Lines: the screen must keep its contrast (queue 889) ----
+    const htE = sd(run(K.halftonelines, WE, 1, { size: 8, angle: 0, weight: 1, softness: 1 }, false));
+    const htP = sd(run(K.halftonelines, WP, PS, { size: 8, angle: 0, weight: 1, softness: 1 }, false));
+    if (htE < 60) throw new Error('control: the EXPORT plate only reaches sd ' + htE.toFixed(1) + ', so it is not drawing a screen and the comparison below means nothing');
+    if (htP < htE * 0.6) throw new Error('Halftone Lines collapses to sd ' + htP.toFixed(1) + ' on the preview plate against sd ' + htE.toFixed(1) +
+      ' in the export — the edge softness is not scaled, so the feather swamps a period that did shrink (queue 889: it measured sd 12.5 against 118)');
+
+    // ---- Dots: the screen must not wash out (queue 899) ----
+    const dtE = sd(run(K.dots, WE, 1, { size: 16, radius: 0.32, opacity: 0.85, softness: 4, color: '#ffffff' }, false));
+    const dtP = sd(run(K.dots, WP, PS, { size: 16, radius: 0.32, opacity: 0.85, softness: 4, color: '#ffffff' }, false));
+    if (dtE < 20) throw new Error('control: the EXPORT plate only reaches sd ' + dtE.toFixed(1) + ', so the dots are not reading there either and this proves nothing');
+    if (dtP < dtE * 0.6) throw new Error('Dots washes out to sd ' + dtP.toFixed(1) + ' on the preview plate against sd ' + dtE.toFixed(1) +
+      ' in the export — the edge softness is not scaled, so the feather swallows a cell that did shrink (queue 899: it measured sd 10.7 against 35.3)');
+  });
+
   test('497: every element the suite reaches for actually exists', { item: '497' }, async function () {
     const ASSERTED_ABSENT = {
       'btn-more':      'queue 35 — the ⋯ button was removed; two tests check it has not come back',
