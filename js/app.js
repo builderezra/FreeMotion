@@ -5040,8 +5040,28 @@ window.FM = window.FM || {};
     const amHeightNow = () => parseInt(getComputedStyle(root).getPropertyValue('--am-h'), 10) || 0;
     /* queue 805: the Effects/Filters/Audio browser is a fixed overlay pinned to the panel's rect ONCE at
        open and re-placed only on a canvas or window resize — a float causes neither, so every write that
-       moves the panel tells the sheet to follow. */
-    const amSheetFollow = () => { try { if (FM.fxSheetReplace) FM.fxSheetReplace(); } catch (_) {} };
+       moves the panel tells the sheet to follow.
+       ⚠️ AND IT IS A FAMILY, NOT ONE ELEMENT — queue 866, which is queue 811 a second time in a second
+       menu. Ezra: *"The timeline options menu on PC is kind of glitchy because if you move the timeline
+       up and down while it's active it doesn't move with it. The view options menu moves with it and it's
+       great but the timeline view options doesn't get altered and it just kinda end up going on top of
+       other stuff and really buggy."*
+       He names the working case himself, and the reason it works is that the view RAIL is laid out in CSS
+       against the stage, so it follows the band for free. The ⚙ pop-up (`#opt-bar`) does NOT: its height
+       and its ceiling are MEASURED in `FM.fitBarsTogether` from the panel's own rect and the stage's top,
+       and that function only ran on a bar opening/closing and on `window resize`. Dragging the divider is
+       neither — the band moves, `--tl-h` is rewritten, and the pop-up keeps the geometry it was given
+       when it opened. That is "it just kinda ends up going on top of other stuff".
+       🔑 SO THIS IS ONE HELPER FOR EVERYTHING PINNED TO THE BAND, rather than a second one-liner beside
+       the first. The recurring defect in this codebase is a family rule that misses a member (#647, #864,
+       #883, and now this) — and the shape that causes it is exactly a list of individual follow-up calls
+       that a later feature forgets to join. Anything that measures itself against the timeline band goes
+       in HERE, and then every writer of `--tl-h` gets it without knowing it exists. */
+    const bandMoved = () => {
+      try { if (FM.fxSheetReplace) FM.fxSheetReplace(); } catch (_) {}       // queue 805/811 — the fx browser sheet
+      try { if (FM.fitBarsTogether) FM.fitBarsTogether(); } catch (_) {}     // queue 866 — the ⚙ timeline-options pop-up
+    };
+    const amSheetFollow = bandMoved;   // the old name, kept so every existing call site still reads right
 
     let dragging = false, startY = 0, startH = 0;
     rez.addEventListener('pointerdown', (e) => {

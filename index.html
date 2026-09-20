@@ -143,7 +143,30 @@
         try { document.dispatchEvent(new CustomEvent('fm:splash-dismiss', { detail: { quick: !!quick } })); } catch (e) {}
         setTimeout(function () {
           sp.remove();
-          try { document.documentElement.classList.remove('splash-on'); } catch (e) {}   // theme light back
+          /* BOTH classes come off here, and the second one is queue 883 — HIS WHITE BAR.
+             `splash-on-light` was added at the top of this IIFE and REMOVED NOWHERE IN THE CODEBASE.
+             Its rule is `html.splash-on-light, html.splash-on-light body { animation: splash-ground
+             2.05s ease-in forwards; }` (theme-glass.css:859) and that animation ENDS ON #fff with
+             `forwards`, so it HOLDS the document canvas pure white for the rest of the session — on
+             the home screen, and inside a project, and until the page is reloaded.
+             On the home screen that is invisible: the home paints #f4f6fa over it. INSIDE A PROJECT
+             the editor is near-black, so every strip the editor does not cover shows white — and on
+             iOS with viewport-fit=cover the web view is LARGER than the layout viewport, so there is
+             always a strip at the top. That is the bar he photographed: "when ur in a project theres
+             a white bar at the top that shouldn't be there."
+             ⚠️ THIS IS THE BLACK-BAR BUG FROM queue 135/143 WITH THE COLOUR INVERTED, and index.html's
+             own note at the top of this file says how that one ended: five attempts failed because
+             they went looking for an ELEMENT that was too small. There was no such element then and
+             there is none now — the canvas is not an element, it is painted from <html>, and the only
+             thing wrong is its colour. Measured, in a project, before the fix: html and body both
+             rgb(255,255,255); removing this one class alone returns them to rgb(6,12,15).
+             ⚠️ WHY IT WAS NEVER NOTICED: queue 646 fixed a `var` hoisting bug that had meant
+             `splash-on-light` was NEVER ADDED at all. Until that fix the class did nothing, so nothing
+             ever needed to take it off — and the removal was simply never written when it started
+             working. The ground ramp itself is correct and stays: the film ends white, so under the
+             light look the page has to end white TOO or the last frame is a white rectangle on a black
+             page, which is the seam queue 162 fixed. It just must not outlive the splash. */
+          try { document.documentElement.classList.remove('splash-on', 'splash-on-light'); } catch (e) {}
         }, quick ? 320 : 1000);
       }
       // Begin the hand-off BEFORE the last frame, not on it. `ended` stays as the backstop for a
@@ -231,7 +254,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v16.17</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v16.18</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1000,7 +1023,7 @@
   <script src="js/filters.js?v=17"></script>
   <script src="js/fx-presets.js?v=11"></script>
   <script src="js/fx-thumbs.js?v=49"></script>
-  <script src="js/timeline.js?v=245"></script>
+  <script src="js/timeline.js?v=246"></script>
   <script src="js/addmenu.js?v=76"></script>
   <script src="js/inspector.js?v=378"></script>
   <script src="js/fx-browser.js?v=85"></script>
@@ -1040,7 +1063,7 @@
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=53"></script>
   <script src="js/audio-health.js?v=6"></script>
-  <script src="js/app.js?v=432"></script>
+  <script src="js/app.js?v=433"></script>
   <script src="js/audio-tools.js?v=5"></script>
   <script src="js/loading.js?v=3"></script>
   <script src="js/sfx.js?v=14"></script>

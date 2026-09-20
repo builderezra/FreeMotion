@@ -1694,8 +1694,38 @@ window.FM = window.FM || {};
            the drop. A drag that does not cross the marker computes the value it already has, so
            `applyDrop`'s `!== FM.addAt` guard keeps it a no-op — the marker only moves when the block
            actually crosses it. */
+        /* ⚠️ AND WHEN THERE IS NO ADD ROW ON SCREEN, COMPUTE IT ANYWAY — queue 865, his THIRD report.
+           Ezra: "the switch still doesn't update live when you are moving around layers", after #416
+           and #570 both shipped as fixed. Both really did fix it, and the ≡ reorder and the add-row
+           grip are both measured live and correct at 380px today (0.5 → 0.25 exactly as the layer
+           crosses the marker). What neither covered is the state where the add row is NOT DRAWN AT ALL.
+           `addRowWanted()` is `!liveGroupCtx()`, so INSIDE EDIT GROUP there is no `.tl-addrow` — while
+           the reorder handles are still built (they only depend on `!soloId`). So you can reorder, and
+           `statics.findIndex(isAdd)` is −1, and `dropAddAt` was set to NULL for the whole gesture.
+           `addSwitchProportion` then falls back to `FM.addAt`, which CANNOT change during a deferred
+           reorder — so the switch shows one stale number from pointerdown to pointerup, and `applyDrop`
+           skips the marker too, leaving it stale AFTER the drop as well. MEASURED, 380px, touch, four
+           layers, marker at 2: with the add row removed the switch sat at 0.5 for all eight samples of
+           the drag while the layer order genuinely changed underneath it. That is his bug exactly.
+           🔑 THE MARKER EXISTS EVEN WHEN ITS ROW DOES NOT. `FM.addAt` is a number of layers, not a
+           DOM node, so it can be carried through the reorder arithmetically: the marker should stay
+           between the same two NON-DRAGGED layers it is between now. `k` is how many non-dragged layers
+           are above it today; `baseAbove(g)` is where the block will be inserted among those same
+           non-dragged layers; and if the block lands at or above `k` the marker gains the whole block.
+           That is the identical shape as the add-row formula, expressed in `restOrder` space instead of
+           in `statics` space — which is why the test below can demand the two AGREE whenever both are
+           available, rather than trusting that I got a second copy of the rule right. */
         const ai = statics.findIndex(sr => sr.isAdd);
-        dropAddAt = ai < 0 ? null : (baseAbove(ai) + (g <= ai ? dragged.length : 0));
+        if (ai >= 0) {
+          dropAddAt = baseAbove(ai) + (g <= ai ? dragged.length : 0);
+        } else {
+          const at = (FM.clampAddAt ? FM.clampAddAt() : (FM.addAt | 0));
+          let k = 0;
+          for (let i2 = 0; i2 < at && i2 < FM.scene.layers.length; i2++) if (!groupSet[FM.scene.layers[i2].id]) k++;
+          const ins = baseAbove(g);
+          dropAddAt = k + (ins <= k ? dragged.length : 0);
+        }
+        FM._dragAddAtFromRow = ai >= 0;   // for the suite: which of the two branches produced this number
         FM.dragAddAt = dropAddAt;
         if (FM.syncAddSwitch) FM.syncAddSwitch();
         if (g !== lastGap) {

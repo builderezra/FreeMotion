@@ -4142,6 +4142,97 @@
     }
   });
 
+  test('865: the switch still tracks the drag when there is NO ADD ROW on screen (Edit Group)', { item: '865' }, async function () {
+    /* Queue 865 — his THIRD report of this. "Log that the switch still doesn't update live when you are
+       moving around layers", after #416 and #570 both shipped as fixed.
+       Both of those really did fix what they looked at, and **#438 above still covers the case where the
+       add row IS on screen** — which is why this test deliberately does NOT re-measure it. What none of
+       them covered is the state where THE ADD ROW IS NOT DRAWN AT ALL. `addRowWanted()` is
+       `!liveGroupCtx()`, so inside Edit Group there is no `.tl-addrow`, while the reorder handles are
+       still built because those only depend on `!soloId`. So you can reorder, `statics.findIndex(isAdd)`
+       is −1, and `dropAddAt` was NULL for the whole gesture; `addSwitchProportion` then falls back to
+       `FM.addAt`, which cannot change during a deferred reorder. MEASURED before the fix, 380px, touch,
+       four layers, marker at 3: the switch sat on 0.50 for all eight samples while the order genuinely
+       changed underneath it, and `applyDrop` skipped the marker too so it was still stale after the drop.
+       ⚠️ THE ADD ROW IS REMOVED FROM THE DOM RATHER THAN ENTERING A REAL GROUP, on purpose. The condition
+       the code branches on is "is there an `.tl-addrow` among the rows this gesture acquired", and Edit
+       Group is only one way to reach it. Removing the row reproduces the branch exactly, and keeps doing
+       so if some future state also stops drawing it — which is the failure this whole entry is about.
+       ⚠️ AND IT ASSERTS WHICH BRANCH RAN. `FM._dragAddAtFromRow` is false only on the new path, so a
+       regression that quietly restored the add row (and therefore tested nothing) fails here loudly
+       instead of passing green. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), at0 = FM.addAt, dur0 = FM.scene.project.duration;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(120);
+      return await atPhoneWidth(async function () {
+        FM.scene.layers.length = 0;
+        for (let i = 0; i < 6; i++) {
+          const L = FM.makeLayer('shape', { name: 'L' + i, shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+          L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+        }
+        FM.scene.project.duration = 6;
+        FM.addAt = 3;                       // the MIDDLE, so the switch can move either way
+        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(180);
+
+        const sw = document.getElementById('btn-addside');
+        if (!sw) throw new Error('#btn-addside is not on screen, so there is no switch to watch');
+        const swv = () => parseFloat(getComputedStyle(sw).getPropertyValue('--sw')) || 0;
+        if (Math.abs(swv() - 0.5) > 0.02) throw new Error('setup: the switch did not start in the middle (' + swv() + '), so a move cannot be told from a no-op');
+
+        // THE ONE THING THAT DIFFERS FROM #438: the add row is not among the rows the gesture acquires.
+        const addRow = document.querySelector('#tl-tracks .tl-addrow');
+        if (!addRow) throw new Error('setup: no .tl-addrow to take away — this test cannot create the state it is about');
+        addRow.remove();
+
+        const handle = document.querySelector('#tl-tracks .track-row .row-drag');
+        if (!handle) throw new Error('no .row-drag handle on a track row to grab');
+        const orderBefore = FM.scene.layers.map(l => l.name).join(',');
+        const pe = (type, x, y) => new PointerEvent(type, { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, pointerId: 57, pointerType: 'touch', isPrimary: true, button: 0, buttons: type === 'pointerup' ? 0 : 1 });
+        const r = handle.getBoundingClientRect();
+        const x = r.left + r.width / 2, y = r.top + r.height / 2;
+        const seen = [swv()]; let sawNewBranch = false;
+        handle.dispatchEvent(pe('pointerdown', x, y));
+        await sleep(40);
+        for (let k = 1; k <= 8; k++) {
+          await sleep(28);
+          handle.dispatchEvent(pe('pointermove', x, y + 170 * k / 8));
+          await sleep(28);
+          seen.push(swv());
+          if (FM._dragAddAtFromRow === false) sawNewBranch = true;
+        }
+        handle.dispatchEvent(pe('pointerup', x, y + 170));
+        await sleep(420);
+        const spread = Math.max.apply(null, seen) - Math.min.apply(null, seen);
+
+        // CONTROLS — a gesture that never happened passes the real assertion by accident.
+        if (FM.scene.layers.map(l => l.name).join(',') === orderBefore)
+          throw new Error('control: the layer order did not change (' + orderBefore + '), so the drag never happened and the switch reading proves nothing — see #438 on listener homes');
+        if (!sawNewBranch)
+          throw new Error('control: FM._dragAddAtFromRow was never false, so the no-add-row branch never ran and this test is measuring the same path #438 already covers');
+
+        // his bug, both halves
+        if (spread < 0.05)
+          throw new Error('with no add row on screen the switch sat on ' + seen[0].toFixed(2) + ' for the whole drag (' +
+            seen.map(v => v.toFixed(2)).join(' ') + ') — that is queue 865, and it is what Edit Group does every time');
+        if (FM.addAt === 3)
+          throw new Error('the switch moved during the drag but the drop left FM.addAt on 3 — applyDrop is still skipping the marker, so it is stale again the moment you let go');
+      }, 380);
+    } finally {
+      FM.dragAddAt = null; FM.dragLayerId = null; FM._dragAddAtFromRow = undefined;
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.addAt = at0; FM.scene.project.duration = dur0; FM.groupContext = null;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+      if (FM.syncAddSwitch) FM.syncAddSwitch();
+      await new Promise(r => setTimeout(r, 80));
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
   test('440: the colour swatch is the FIRST control in the text toolbar', { item: '440' }, async function () {
     /* Queue 440. Ezra sent the toolbar with an arrow drawn from the white swatch — fourth of six,
        between the size box and Aa — round to the far LEFT: "As per image, move the colouring button
@@ -34952,6 +35043,77 @@
     }
   });
 
+  test('dragging the TIMELINE’s divider carries the open ⚙ options pop-up with it (queue 866)', { item: '866' }, async function () {
+    /* Queue 866, and it is queue 811 for a second time in a second menu. Ezra: *"The timeline options
+       menu on PC is kind of glitchy because if you move the timeline up and down while it's active it
+       doesn't move with it. The view options menu moves with it and it's great but the timeline view
+       options doesn't get altered and it just kinda end up going on top of other stuff and really buggy."*
+       He names the working case himself, and WHY it works is the point: the view RAIL is laid out in CSS
+       against the stage, so it follows for free. The ⚙ pop-up (#opt-bar) is MEASURED — `FM.fitBarsTogether`
+       computes its max-height from its own rect and the stage's top — and that only ran when a bar opened
+       or closed and on `window resize`. A divider drag is neither, so the band moved out from under a
+       pop-up holding the geometry it was given at open.
+       MEASURED at 1280x860 with the new call stubbed out: the band's top went 602 → 462 and the pop-up's
+       top stayed on 87 for all six samples of the drag.
+       ⚠️ OPENED THROUGH `FM.setSideBar`, NOT BY CLICKING THE BUTTON. The first version of this test
+       clicked #btn-opts and failed with "the pop-up did not open" — in the suite's frame the click does
+       not always land, and a test that cannot open the thing it is about reports a bug that is not there.
+       The seam opens it the same way the button does and cannot miss.
+       ⚠️ atWideWidth, not `if (innerWidth < 701) return` — otherwise this silently does nothing on the
+       380px pass, which is the hole queue 521 fell into through three repairs.
+       ⚠️ THE CONTROL IS THE WHOLE TEST: "the pop-up is somewhere sensible afterwards" passes just as well
+       when nothing moved at all. So it asserts the BAND really moved first, then that the pop-up moved
+       with it, then that it did not merely catch up at the END (the "glitchy" half), and finally that it
+       is not left overlapping the band. It does NOT assert a fixed offset — the pop-up is centred on the
+       stage (queue 854) so it travels about half what the band's edge does, and pinning that would assert
+       today's layout rather than his complaint. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const rootEl = document.documentElement;
+    const savedTlH = rootEl.style.getPropertyValue('--tl-h');
+    let savedStore = null; try { savedStore = localStorage.getItem('fm_tl_h'); } catch (e) {}
+    let bar = null, btn = null, wasOpen = false;
+    try {
+      await sleep(120);
+      return await atWideWidth(async function () {
+        const rez = document.getElementById('tl-resizer');
+        bar = document.getElementById('opt-bar');
+        btn = document.getElementById('btn-opts');
+        const panel = document.getElementById('timeline-panel');
+        if (!rez || !bar || !btn || !panel) throw new Error('the divider, the ⚙ button or the pop-up is missing at a desktop width');
+        wasOpen = !bar.classList.contains('hidden');
+        if (!wasOpen) { FM.setSideBar(bar, btn, true); await sleep(420); }
+        if (bar.classList.contains('hidden')) throw new Error('the ⚙ options pop-up did not open, so there is nothing to follow the band');
+
+        const p0 = panel.getBoundingClientRect(), b0 = bar.getBoundingClientRect();
+        const r = rez.getBoundingClientRect(), x = r.left + r.width / 2, y0 = r.top + r.height / 2;
+        const ev = (t, cy, b) => rez.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 6, pointerType: 'mouse', clientX: x, clientY: cy, buttons: b }));
+        const during = [];
+        ev('pointerdown', y0, 1);
+        for (let i = 1; i <= 6; i++) { ev('pointermove', y0 - (140 * i / 6), 1); await sleep(50); during.push(Math.round(bar.getBoundingClientRect().top)); }
+        ev('pointerup', y0 - 140, 0);
+        await sleep(320);
+
+        const p1 = panel.getBoundingClientRect(), b1 = bar.getBoundingClientRect();
+        if (Math.abs(p1.top - p0.top) < 20) throw new Error('control: the band did not actually move (' + Math.round(p0.top) + ' → ' + Math.round(p1.top) + '), so nothing below is being tested');
+        if (Math.abs(b1.top - b0.top) < 2) throw new Error('the band moved to y=' + Math.round(p1.top) + ' and the ⚙ options pop-up stayed at y=' + Math.round(b1.top) +
+          ' for the whole drag (' + during.join(' ') + ') — that is queue 866, and the view rail beside it does follow');
+        if (during.length > 1 && during[0] === during[during.length - 1]) throw new Error('the pop-up only caught up at the END of the drag (' + during.join(' ') +
+          ') — he can see it lagging while he drags, which is the "glitchy" half of his report');
+        if (b1.bottom > p1.top + 1) throw new Error('after the drag the pop-up (bottom ' + Math.round(b1.bottom) + ') overlaps the timeline band (top ' +
+          Math.round(p1.top) + ') — "it just kinda ends up going on top of other stuff"');
+      }, 1280);
+    } finally {
+      try { if (bar && btn && !wasOpen && !bar.classList.contains('hidden')) FM.setSideBar(bar, btn, false); } catch (e) {}
+      if (savedTlH) rootEl.style.setProperty('--tl-h', savedTlH); else rootEl.style.removeProperty('--tl-h');
+      try { if (savedStore === null) localStorage.removeItem('fm_tl_h'); else localStorage.setItem('fm_tl_h', savedStore); } catch (e) {}
+      try { if (FM.fitBarsTogether) FM.fitBarsTogether(); } catch (e) {}
+      await new Promise(r => setTimeout(r, 80));
+      if (hadHome && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
   test('favouriting a FILTER row stars that filter, so it reaches the Filters tab (queue 812)', { item: '812' }, async function () {
     /* Driven through the REAL ⋯ menu, because the bug was invisible from any seam: every filter is one
        container whose `type` is the hidden 'filter', and the menu starred that TYPE. The toast said
@@ -55543,7 +55705,37 @@
     ]);
     const files = (html.match(/js\/[a-z0-9_-]+\.js/gi) || []).filter((v, i, a) => a.indexOf(v) === i);
     if (files.length < 10) throw new Error('only found ' + files.length + ' scripts in index.html — the scan is not reading what it thinks it is');
-    const code = (await Promise.all(files.map(f => fetch(f, { cache: 'no-store' }).then(r => r.text()).catch(() => '')))).join('\n');
+    /* ⚠️ A FILE THAT FAILED TO LOAD MUST NOT READ AS "THE ID IS NOT THERE" (20 Sep). This was
+       `.catch(() => '')`, which turns a dropped request into an EMPTY FILE — and every id that lives
+       only in that file then looks missing. It failed a release exactly that way: it named 7 ids
+       (t-far, t-sel, ctx-menu, shortcuts-overlay, loading-dot, ai-panel, ar-sheet) as existing
+       "nowhere in the markup or the code" while all 7 were sitting in js/app.js, contextmenu.js,
+       shortcuts.js, loading.js, ai-panel.js and audio-react.js on disk. The same scan run by hand
+       against the same tree reported `missing: []`. Six files had silently come back blank.
+       This is 71 parallel fetches at the busiest moment of the run, so an occasional drop is a fact
+       about the machine, not about the app — but the failure it produced pointed at the app, in
+       detail, and confidently. **That is the exact fault this test exists to prevent**, and the same
+       one `tools/inbox.sh` records in its own words: a check that can report "nothing there" when
+       there IS something there is worse than no check.
+       So: retry once, serially, and then FAIL LOUDLY naming the file. A scan that could not read its
+       inputs now says so instead of blaming whatever those inputs contained. */
+    const fetchSrc = async (f) => {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const r = await fetch(f, { cache: 'no-store' });
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          const t = await r.text();
+          if (t.length) return t;
+          throw new Error('empty body');
+        } catch (e) {
+          if (attempt) throw new Error('could not read ' + f + ' (' + e.message + ') — the scan cannot say anything about the ids in it, so it is failing rather than reporting them missing');
+          await new Promise(r => setTimeout(r, 150));   // no outer `sleep` in this test's scope
+        }
+      }
+    };
+    const sources = [];
+    for (const f of files) sources.push(await fetchSrc(f));   // serial: the parallel burst is what dropped
+    const code = sources.join('\n');
 
     const ids = (tests.match(/getElementById\(\s*'[A-Za-z0-9_-]+'\s*\)/g) || [])
       .map(m => m.replace(/.*'([A-Za-z0-9_-]+)'.*/, '$1'))
@@ -56567,6 +56759,60 @@
      during a parked or paused push shows as a black bar — his screenshot's bottom edge. The rule paints the page the
      home's own colour while the home is up. Measured through computed style, in the parked state he photographed, and
      the control proves the rule leaves with the home. */
+  /* ═══ 883: THE WHITE BAR AT THE TOP OF A PROJECT — the intro's ground ramp must not outlive the intro.
+     Ezra, 20 Sep: *"when ur in a project theres a white bar at the top that shouldn't be there"*.
+     `splash-on-light` was ADDED at boot and REMOVED NOWHERE. Its rule animates the canvas to #fff with
+     `forwards`, which HOLDS — so <html> and <body> stayed rgb(255,255,255) for the entire session. Invisible
+     on the home screen (the home paints #f4f6fa over it) and glaring inside a project, where every strip the
+     dark editor does not cover shows white. On iOS with viewport-fit=cover the web view is LARGER than the
+     layout viewport, so there is always such a strip at the top. Measured before the fix, inside a project:
+     html and body both rgb(255,255,255); removing this one class returned them to rgb(6,12,15).
+     ⚠️ THIS IS THE BLACK BAR OF queue 135/143 WITH THE COLOUR INVERTED. That one cost five failed attempts
+     because each went hunting an ELEMENT that was too small. The canvas is not an element.
+     ⚠️ TESTED AT THE SOURCE for the removal, like #646 above and for the same reason — the splash runs once
+     per session from an inline script and deletes itself, so a live read cannot prove what it did on the way
+     out. The runtime half below is the CONTROL: it proves the class still paints white, so the source half
+     can never pass vacuously if someone retires the ramp. */
+  test('#883: the intro ground ramp is taken off with the intro, so a project is not left on a white canvas', { item: '883' }, async function () {
+    const html = await (await fetch('index.html?t=' + Date.now())).text();
+    // a) it must come off at all
+    const off = /classList\.remove\(([^)]*)\)/g;
+    let m, removesLight = false, removesOn = false, together = false;
+    while ((m = off.exec(html))) {
+      const args = m[1];
+      if (args.indexOf('splash-on-light') >= 0) { removesLight = true; if (args.indexOf("'splash-on'") >= 0) together = true; }
+      if (/'splash-on'/.test(args)) removesOn = true;
+    }
+    if (!removesOn) throw new Error("index.html no longer removes 'splash-on' — the splash's own ground would outlive it");
+    if (!removesLight) throw new Error(
+      "index.html never removes 'splash-on-light'. Its rule (theme-glass.css: animation splash-ground ... forwards) " +
+      'ENDS ON #fff and holds, so <html> and <body> stay pure white for the whole session and every strip the dark ' +
+      'editor does not cover shows as a white bar at the top of a project. That is queue 883, exactly as it shipped.');
+    if (!together) throw new Error(
+      "'splash-on-light' is removed somewhere other than alongside 'splash-on'. They are armed together and they must " +
+      'come off together, or one of them outlives the splash again — which is the whole of queue 883.');
+
+    // b) CONTROL — the class must still be capable of painting the canvas white, or (a) proves nothing.
+    const root = document.documentElement;
+    const had = root.classList.contains('splash-on-light');
+    const before = getComputedStyle(root).backgroundColor;
+    try {
+      root.classList.add('splash-on-light');
+      await new Promise(r => setTimeout(r, 2200));   // the ramp is 2.05s and only turns white at its end
+      const during = getComputedStyle(root).backgroundColor;
+      if (during === before) throw new Error(
+        'control failed: adding splash-on-light no longer changes the canvas (still ' + during + '). The source check ' +
+        'above would now pass for a class that does nothing, which is a test that cannot fail. Retire both halves ' +
+        'together, or re-point this at whatever paints the ground now.');
+      if (during !== 'rgb(255, 255, 255)') throw new Error(
+        'control: splash-on-light paints the canvas ' + during + ', not white. The bug this guards was specifically a ' +
+        'WHITE canvas; if the ramp now ends elsewhere, update the expectation deliberately rather than by accident.');
+    } finally {
+      if (!had) root.classList.remove('splash-on-light');
+      await new Promise(r => setTimeout(r, 60));
+    }
+  });
+
   test('553: while a light home is up (parked push included) the page behind it is the home colour, and the editor gets its own back', { item: '553' }, async function () {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const html = document.documentElement, home = document.getElementById('home-screen'), body = document.body;
@@ -56575,8 +56821,13 @@
     const was = html.getAttribute('data-home'), wasOpen = !!(FM.home.isOpen && FM.home.isOpen()), gate = FM.home._pushAllowed;
     const bg = el => getComputedStyle(el).backgroundColor;
     /* The intro's ground ramp (`html.splash-on-light`, an animation with fill: forwards) holds the page white and an
-       ANIMATED property beats any static rule. In the app the class leaves with the intro; in the suite the intro is cut
-       short and the class lingers, which painted this probe white and hid the rule under test. Take the leftover off. */
+       ANIMATED property beats any static rule, so this probe has to take the leftover off to see the rule under test.
+       ⚠️ THIS COMMENT USED TO SAY "in the app the class leaves with the intro; in the suite the intro is cut short
+       and the class lingers". THAT WAS FALSE, and believing it is why queue 883 survived: the class left NOWHERE.
+       index.html removed `splash-on` and not `splash-on-light`, so the canvas stayed pure white for the whole
+       session in the real app too, which is the white bar Ezra reported at the top of a project. Fixed in v16.18;
+       the removal below is now belt-and-braces for a suite that cuts the intro short, not a cover for a real bug.
+       The guarantee that it leaves is asserted by '#883' below — do not rely on this line for it. */
     const hadSplash = html.classList.contains('splash-on-light');
     try {
       html.classList.remove('splash-on-light');

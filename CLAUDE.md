@@ -21,6 +21,34 @@ curl -s https://builderezra.github.io/FreeMotion/index.html | grep -o '>v[0-9][0
 Pages takes a minute or so after a push, so a check straight after `ship.sh` can show the previous
 version — that is normal, not a failure.
 
+## ⚠️ IF `git` OR `python3` SAYS "YOU HAVE NOT AGREED TO THE XCODE LICENSE" — READ THIS FIRST
+
+**Symptom (20 Sep 2026, queue #881): every `git` command AND every `python3` command fails with**
+
+> You have not agreed to the Xcode license agreements. Please run 'sudo xcodebuild -license'…
+
+**It is not a git problem and not a python problem.** `xcode-select -p` points at
+`/Applications/Xcode.app/Contents/Developer`, and full Xcode refuses to run any of its command-line
+shims until its licence is accepted — which needs `sudo`, which Claude cannot do. Because `tools/`
+is shell + python, **this takes out `next.sh`, `ship.sh`, `inbox.sh`, the suite and the dev server
+all at once.** It is silent in the worst way: it reads as "the repo is broken", and it is why nothing
+was pushed between 12 and 20 Sep.
+
+**The fix needs no sudo and no licence** — point at the Command Line Tools, same binaries, no gate:
+
+```bash
+export DEVELOPER_DIR=/Library/Developer/CommandLineTools
+```
+
+Already made permanent in `~/.zshenv` (read by EVERY zsh, interactive or not). If a command still
+fails, it was spawned without a login shell and so never read it — that is exactly why the dev server
+goes through **`tools/serve.sh`** (which exports it itself) and why `.claude/launch.json` points there
+rather than at a bare `python3`. The desktop app's `preview_start` also caches the old launch config;
+running `tools/serve.sh` from Bash and using `navigate` works around it.
+
+Ezra can make it properly permanent in one line, and it is worth doing because it affects his whole
+Mac and not just this repo: `sudo xcode-select -s /Library/Developer/CommandLineTools`.
+
 ## ⚠️ SAFEGUARDS MUST BE STRUCTURAL, NOT REMEMBERED
 
 His words, after watching me write myself a note about a mistake I had just made twice:

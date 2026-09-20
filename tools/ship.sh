@@ -57,9 +57,20 @@ touch .ship-in-progress; trap 'rm -f .ship-in-progress' EXIT INT TERM
 # five tests and shipped nothing. The proof step is the expensive half, so the check belongs BEFORE it,
 # and a missing server is not a decision anybody needs to make: start one. Started detached, from the
 # repo root, and left running — the suite, the probes and the browser pane all want the same thing.
+#
+# 🚨 AND IT MUST BE `tools/serve.sh`, NOT `python3 -m http.server` (queue 865, 20 Sep). The stdlib
+# server's `request_queue_size` is **5**, and this page pulls 71 scripts while test 497 fetches every
+# source file — so the accept queue overflows and the kernel refuses the surplus. MEASURED against the
+# server this line used to start: **7 of 40 parallel requests failed**, all 40 succeeded serially, and
+# 0 of 60 fail against serve.sh. A refused script load does not arrive as a network error: it arrives
+# as `FM.loadingDot is missing`, as `no #loading-dot to check`, and as test 497 announcing that seven
+# element ids "exist nowhere in the markup or the code" while all seven were on disk. Three red tests
+# in one run, every one blaming the app for a dropped connection. **So every green run was luck and
+# every red one had to be re-read before it could be believed** — which is the most expensive kind of
+# broken instrument, and exactly the class of fault this file exists to remove.
 if ! curl -sf -o /dev/null "http://localhost:8777/tests/run.html"; then
   echo "→ nothing is serving port 8777 — starting one (the suite does not start its own)…"
-  nohup python3 -m http.server 8777 --bind 127.0.0.1 >/dev/null 2>&1 </dev/null &
+  nohup "$(dirname "$0")/serve.sh" 8777 >/dev/null 2>&1 </dev/null &
   for _ in 1 2 3 4 5 6 7 8 9 10; do
     sleep 0.5
     curl -sf -o /dev/null "http://localhost:8777/tests/run.html" && break

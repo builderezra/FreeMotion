@@ -43,6 +43,17 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
      the answer is one line — not switching off the thing he asked for.
    If a tick ever genuinely has nothing: say so in ONE LINE and let the next tick fire. Do not touch the
    cron. If the queue looks empty for several ticks running, that is a signal to AUDIT THE CLASSIFIER
+   ⚠️ **AMENDED 20 Sep, by him, and this half is NEWER than everything above it (queue #877, #880).** He
+   said, unprompted, at the end of the restart brief: *"you can stop the loop if you truely run out of
+   productive things to do."* That REVERSES "stopping is never mine to choose". It does NOT reverse the
+   rest of 8b, and the distinction is the whole point: **"truly out of productive things" is still not
+   the classifier's opinion** — 24 items are parked on his answers and 8 are actionable as of today, so
+   the queue is nowhere near empty and this clause does not apply yet. It applies when the ACTIONABLE
+   list is genuinely dry and the only thing left is waiting on him. Then: say so, and stop — do not
+   manufacture work, and do not keep firing an empty cron at his quota.
+   ⚠️ **The one-minute cadence is CONFIRMED, 20 Sep.** Asked directly whether to slow it down given that
+   he ran out of quota in an evening on 19 Sep, he said: *"That was on chatgpt, u dont do that. so its
+   fine."* The blowout was Codex's. One minute stands; do not re-litigate it.
    (re-read the entries by hand), not a signal to stop.
 9. **A green run proves nothing unless the probe exercised the code.** Every new assertion carries a
    control that fails if the thing being measured was not happening. Mutation-check both directions
