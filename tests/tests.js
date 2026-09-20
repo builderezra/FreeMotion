@@ -55748,6 +55748,83 @@
       ' in the export — the edge softness is not scaled, so the feather swallows a cell that did shrink (queue 899: it measured sd 10.7 against 35.3)');
   });
 
+  /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
+     Ezra asked the question this answers: *"How confident are you that every effect is actually good?"*
+     Three separate times now a kernel has drawn a different picture on the reduced preview plate than
+     in the exported file — #691 (32 kernels ignored `ps` outright), then #889/#890/#899 (three honoured
+     it for some parameters and not others). Each was found by hand, one effect at a time, after HE
+     noticed something. This sweeps all of them at once so the fourth one is found by the suite instead.
+     ⚠️ IT MUST RENDER THE WAY THE APP RENDERS, AND THIS IS THE WHOLE TRAP. A kernel that does not
+     declare `ps` (fn.length < 6) never sees it — the app pre-scales its `unit: 'px'` params through
+     `FM._pxToPlate` instead. A sweep that calls the kernels DIRECTLY therefore mis-measures every one
+     of those, and the first run of this very sweep did exactly that: it reported Glow Scan as losing
+     62% of its contrast, which was entirely an artefact of the probe. Through the real path it comes
+     out at a ratio of 1.00. So `_pxToPlate` is asserted reachable below, as a control — if it is ever
+     renamed, this test must fail loudly rather than quietly go back to measuring the wrong thing.
+     ⚠️ INHERENT DIVERGENCE IS NAMED, NOT PATTERN-MATCHED. Some effects CANNOT be resolution-invariant,
+     and #691 already said which kind: a derivative operator reads its neighbours, and on a smaller
+     plate those neighbours are further apart in project space; a procedural noise field generated at a
+     quarter size is a different field. Those are listed by name with the reason, so a genuinely broken
+     effect can never hide behind a clever regex. */
+  test('859: every pixel effect draws the same picture on the preview plate as in the export', { item: '859' }, async function () {
+    const T = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!T) throw new Error('FM._FX_TABLES.PIXEL_FX is not reachable — the suite cannot sweep the real kernels');
+    if (typeof FM._pxToPlate !== 'function' || typeof FM._pxParamKeys !== 'function')
+      throw new Error('FM._pxToPlate is gone — without it this sweep silently measures kernels the app never calls that way, which is how it first reported Glow Scan as broken when it was not');
+
+    /* Each of these diverges BY CONSTRUCTION. Reason required; a bare list would rot into a dumping ground. */
+    const INHERENT = {
+      emboss:        'a derivative operator — it reads adjacent pixels, which are further apart in project space on a smaller plate',
+      edge:          'same: edge detection is a difference between neighbours, so its scale IS the sampling resolution',
+      sharpen:       'same, and #691 already recorded it as inherent',
+      clouds:        'a procedural noise field generated at the plate size — a quarter-size field is a different field',
+      grunge:        'same as clouds, and #691 already recorded it as inherent',
+      halftonelines: 'period quantisation: an 8px pitch becomes 2px at a quarter plate, which leaves no room for the feather. Measured and accepted in #902',
+      halftone:      'same period quantisation as halftonelines',
+      crosshatch:    'same: the hatch period floors at 1px, so the ink ratio cannot match exactly (#890, #902)',
+    };
+    const LO = 0.5, HI = 2.2, MEAN_GAP = 55;   // would have caught #889 (0.11), #890 (~0) and #899 (0.30)
+
+    const byType = {}; (Array.isArray(FM.EFFECTS) ? FM.EFFECTS : []).forEach(e => { if (e && e.type) byType[e.type] = e; });
+    const defs = (ty) => { const e = byType[ty], p = {};
+      if (e && e.params) e.params.forEach(q => { if (q.def != null) p[q.key] = q.def; });
+      if (e && e.color) p.color = e.defColor || '#ffffff';
+      if (e && e.defColor2) p.color2 = e.defColor2;
+      return p; };
+    const plate = (W) => { const d = new Uint8ClampedArray(W * W * 4);
+      for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4, v = Math.round(40 + 150 * (x / (W - 1)));
+        d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
+      return d; };
+    const stat = (d) => { let s = 0, n = 0; for (let i = 0; i < d.length; i += 4) { s += d[i]; n++; }
+      const m = s / n; let v = 0; for (let i = 0; i < d.length; i += 4) { const q = d[i] - m; v += q * q; }
+      return { m: m, s: Math.sqrt(v / n) }; };
+
+    const WE = 240, WP = 67, PS = 0.28;        // his own measured playback plate scale
+    const base = stat(plate(WE));
+    const bad = [], swept = [];
+    for (const type of Object.keys(T)) {
+      const fn = T[type], params = defs(type);
+      if (!Object.keys(params).length) continue;         // no catalog entry to drive it with
+      const fx = { type: type };
+      let e, ph;
+      try { const de = plate(WE); fn(de, WE, WE, FM._pxToPlate(fx, params, 0, 1, fn), 0, 1); e = stat(de); } catch (err) { continue; }
+      try { const dp = plate(WP); fn(dp, WP, WP, FM._pxToPlate(fx, params, 0, PS, fn), 0, PS); ph = stat(dp); } catch (err) { continue; }
+      if (!isFinite(e.s) || !isFinite(ph.s)) continue;
+      if (Math.abs(e.s - base.s) < 0.5 && Math.abs(e.m - base.m) < 0.5) continue;   // inert at its defaults
+      swept.push(type);
+      if (INHERENT[type]) continue;
+      const ratio = e.s > 1 ? ph.s / e.s : 1;
+      const gap = Math.abs(e.m - ph.m);
+      if (ratio < LO || ratio > HI || gap > MEAN_GAP)
+        bad.push(type + ' (contrast ' + ratio.toFixed(2) + 'x, brightness off by ' + gap.toFixed(0) + ')');
+    }
+    /* CONTROL: a sweep that drove almost nothing would pass however broken the app is. */
+    if (swept.length < 40) throw new Error('only ' + swept.length + ' effects were actually driven — the catalog defaults are not reaching the kernels, so a clean result here means nothing');
+    if (bad.length) throw new Error(bad.length + ' effect(s) draw a different picture on the preview plate than in the export, which is what the user sees when he dials a look on his phone and exports something else: ' +
+      bad.join(' · ') + '. Either scale the parameter to the plate (see #889/#890/#899), or add it to INHERENT above with the reason it cannot match.');
+  });
+
   test('497: every element the suite reaches for actually exists', { item: '497' }, async function () {
     const ASSERTED_ABSENT = {
       'btn-more':      'queue 35 — the ⋯ button was removed; two tests check it has not come back',
