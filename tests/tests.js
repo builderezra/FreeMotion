@@ -64915,4 +64915,98 @@
     }
   });
 
+
+  /* ── queue 859: the app can now say "this does nothing here" about a PHOTOGRAPH ────────────────
+   * MEASURED FIRST, 21 Sep, which is the only reason this was built: with a photo selected,
+   * FM.fxDeadOnLayer returned null for ALL 194 effects a photo accepts, because flatColorOf is null
+   * for an image. The only badge a photograph could ever show was the motion pair, which arrives by a
+   * different route entirely. So "I put Grayscale on my black-and-white photo and nothing happened"
+   * was unanswerable BY CONSTRUCTION — in the app's commonest layer type.
+   * ⚠️ THE CONTROLS ARE THE POINT, not decoration. The 11 Sep attempt at this measurement reported
+   * "0 of 27 warned", which read as damning and was worthless: its control case returned nothing too,
+   * so the harness could not see badges at all and every number in the run was noise. A badge test
+   * without a silent case also proves nothing — a badge that fires on everything tells him nothing,
+   * which is the exact bug queue 603's control caught. So both directions are asserted here. */
+  test('859: a black-and-white photo is told why Grayscale does nothing, and a colour photo is not', { item: '859', budgetMs: 30000 }, async function () {
+    if (typeof FM._fxProbeColors !== 'function') throw new Error('FM._fxProbeColors is not reachable — the photo probe seam is gone, and every number below would be meaningless');
+    if (!FM.fxDeadOnLayer) throw new Error('FM.fxDeadOnLayer is not exported');
+
+    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    function makePhoto(paint, name) {
+      var c = document.createElement('canvas'); c.width = c.height = 64;
+      paint(c.getContext('2d'));
+      var img = new Image(); img.src = c.toDataURL('image/png');
+      return new Promise(function (res) {
+        img.onload = function () {
+          var L = FM.makeLayer('image', { x: 100, y: 100 });
+          L.start = 0; L.duration = 3; L.name = name; L.w = 64; L.h = 64;
+          FM.scene.layers.push(L);
+          FM.media.set(L.id, { el: img, kind: 'image', w: 64, h: 64 });
+          res(L);
+        };
+      });
+    }
+    function why(L, type) {
+      FM.scene.selectedId = L.id; FM.scene.selectedIds = [L.id];
+      return FM.fxDeadOnLayer(FM.fxRegistry.makeInstance(type), L, 0);
+    }
+
+    try {
+      var bw = await makePhoto(function (g) {
+        for (var y = 0; y < 64; y++) for (var x = 0; x < 64; x++) { var v = (x + y) * 2; g.fillStyle = 'rgb(' + v + ',' + v + ',' + v + ')'; g.fillRect(x, y, 1, 1); }
+      }, 'FX859_BW');
+      var colour = await makePhoto(function (g) {
+        for (var y = 0; y < 64; y++) for (var x = 0; x < 64; x++) { g.fillStyle = 'rgb(' + (x * 4) + ',' + (255 - y * 4) + ',' + ((x * y) % 255) + ')'; g.fillRect(x, y, 1, 1); }
+      }, 'FX859_COLOUR');
+
+      // the probe must actually be reading pixels, or every verdict below is about nothing
+      var samples = FM._fxProbeColors(bw);
+      if (!samples || samples.length < 2) throw new Error('the photo probe sampled ' + (samples ? samples.length : 0) + ' colours — it is not reading the picture, so this test proves nothing');
+
+      // ── CONTROL 1, the silent case: grayscale plainly WORKS on a colour photo, so it must say nothing.
+      var quiet = why(colour, 'grayscale');
+      if (quiet) throw new Error('Grayscale was called dead on a COLOUR photo ("' + quiet + '") — a badge that fires where the effect works tells him nothing and trains him to ignore it');
+
+      // ── CONTROL 2, the silent case again, same photo different axis: Brightness DOES change a grey
+      //    picture, so a black-and-white photo must not badge it. Without this, "photo ⇒ badge" passes.
+      var bright = why(bw, 'brightness');
+      if (bright) throw new Error('Brightness was called dead on a black-and-white photo ("' + bright + '") — it works fine on grey, so this is the badge over-firing on any photo');
+
+      // ── THE CLAIM: a picture with no colour in it says so, in words he can read.
+      var grey = why(bw, 'grayscale');
+      if (!grey) throw new Error('Grayscale does nothing to a black-and-white photo and the app said NOTHING — this is the "I added it and nothing happened" report, in the commonest layer type in the app');
+      if (grey.toLowerCase().indexOf('photo') < 0) throw new Error('the reason given talks about a "layer", not a photo: "' + grey + '" — "give the layer a colour first" is advice about a shape and nonsense about a photograph');
+      var sat = why(bw, 'saturate');
+      if (!sat) throw new Error('Saturation does nothing to a black-and-white photo and the app said nothing');
+    } finally {
+      FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
+      FM.refreshAll();
+    }
+  });
+
+  /* A VIDEO'S PIXELS ARE UNKNOWN AND MUST STAY THAT WAY (queue 859). The photo probe reads decoded
+     pixels, and the tempting next step is "a video has pixels too" — but they change frame to frame,
+     so a badge that is right at this instant is wrong a second later. There is an older test pinning
+     that fxDeadOnLayer makes no claim on a video; this pins the NEW seam the same way, because the
+     new code is where that invariant would be broken. */
+  test('859: the photo probe refuses a video, whose pixels change frame to frame', { item: '859' }, function () {
+    if (typeof FM._fxProbeColors !== 'function') throw new Error('FM._fxProbeColors is not reachable');
+    var layers0 = FM.scene.layers.slice();
+    try {
+      var V = FM.makeLayer('video', { x: 100, y: 100 });
+      V.start = 0; V.duration = 3; V.name = 'FX859_VID';
+      FM.scene.layers.push(V);
+      FM.media.set(V.id, { el: document.createElement('canvas'), kind: 'video', w: 64, h: 64 });
+      var got = FM._fxProbeColors(V);
+      if (got) throw new Error('the probe sampled a VIDEO (' + JSON.stringify(got).slice(0, 60) + ') — a claim true at this frame can be false at the next one');
+      // …and the control: the same call on a photo DOES return colours, or the line above passes for
+      // the wrong reason (a probe that samples nothing at all would also "refuse" a video).
+      var S = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 40, shapeH: 40, fill: '#3366cc' });
+      S.name = 'FX859_CTRL'; FM.scene.layers.push(S);
+      if (!FM._fxProbeColors(S)) throw new Error('the probe returned nothing for a plain coloured shape either — it is refusing everything, so the video assertion above is meaningless');
+    } finally {
+      FM.scene.layers = layers0;
+    }
+  });
+
 })();

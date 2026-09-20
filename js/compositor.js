@@ -1880,6 +1880,69 @@ window.FM = window.FM || {};
     return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(s) ? s : null;
   }
 
+  /* ── JUDGING A PHOTOGRAPH, NOT ONLY A FLAT COLOUR (queue 859) ──────────────────────────────────
+   * MEASURED 21 Sep in the running app, which is the only reason this exists: with a photo selected,
+   * `flatColorOf` returns null, so `fxDeadOnLayer` returned null for ALL 194 effects a photo accepts,
+   * and the only badge a photograph could EVER show was the motion pair — which arrives by a different
+   * route (`cannotMove` in fx-browser) and never touches this code. So "I put Grayscale on my
+   * black-and-white photo and nothing happened" was unanswerable BY CONSTRUCTION. Not a missing case:
+   * a missing capability, in the app's commonest layer type, for the exact complaint Ezra reports most.
+   * ⚠️ IT KEEPS EVERY PROPERTY THE FLAT PROBE WAS BUILT FOR. Still colour-only (FLAT_TESTABLE), still
+   * self-proving on every call, still silent whenever it cannot answer honestly. The one change is that
+   * a layer is described by a SET of colours rather than one, and an effect counts as dead only if it
+   * moves NONE of them — strictly MORE conservative than the single-pixel test, never less.
+   * ⚠️ VIDEO IS STILL REFUSED, on purpose. Its pixels change frame to frame, so a claim that is true at
+   * this instant can be false a second later; the test "a video's pixels are unknown" pins that, and a
+   * badge that is right now and wrong in a moment is worse than no badge.
+   * ⚠️ A TAINTED CANVAS RETURNS NULL, not a guess: getImageData throws on cross-origin media, and the
+   * honest answer there is no claim at all. */
+  let _sampleCache = new Map();
+  function sampleHexes(layer) {
+    const m = FM.media && FM.media.get(layer.id);
+    if (!m || !m.el || m.kind === 'video') return null;
+    const el = m.el;
+    // the signature changes when the PICTURE does, so replacing a photo re-samples instead of reusing
+    const sig = String(el.currentSrc || el.src || '').slice(-72) + '|' + (el.naturalWidth || el.width || 0);
+    const hit = _sampleCache.get(layer.id);
+    if (hit && hit.sig === sig) return hit.hexes;
+    let hexes = null;
+    try {
+      const N = 6;                                   // 36 samples across the picture — plenty, and cheap
+      const c = document.createElement('canvas'); c.width = c.height = N;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.drawImage(el, 0, 0, N, N);
+      const d = g.getImageData(0, 0, N, N).data;
+      const seen = Object.create(null), out = [];
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] < 8) continue;                  // a transparent pixel says nothing about the picture
+        const h = '#' + [d[i], d[i + 1], d[i + 2]].map(v => v.toString(16).padStart(2, '0')).join('');
+        if (!seen[h]) { seen[h] = 1; out.push(h); }
+      }
+      hexes = out.length ? out.slice(0, 12) : null;
+    } catch (e) { hexes = null; }
+    if (_sampleCache.size > 64) _sampleCache = new Map();
+    _sampleCache.set(layer.id, { sig: sig, hexes: hexes });
+    return hexes;
+  }
+  /* What colours describe this layer? One for a flat fill, a sample for a photo, null for anything
+     that cannot be answered. Exported so the suite asks the real thing rather than a copy of it. */
+  function probeColorsOf(layer) {
+    const flat = flatColorOf(layer);
+    if (flat) return [flat];
+    if (layer && layer.type === 'image') return sampleHexes(layer);
+    return null;
+  }
+  FM._fxProbeColors = function (layer) { try { return probeColorsOf(layer); } catch (e) { return null; } };
+  /* fx-browser caches a badge per layer, and the colour is an INPUT to the answer — the note beside
+     that cache key records a real bug from leaving it out. A photo's flat colour is always null, so
+     without this every photograph would share one cache slot and a replaced picture would keep the
+     old badge. */
+  FM._fxProbeKey = function (layer) {
+    const p = FM._fxProbeColors(layer);
+    if (!p || !p.length) return '-';
+    return p.length === 1 ? p[0] : ('p' + p.length + ':' + p[0] + p[p.length - 1]);
+  };
+
   let _fcA = null, _fcB = null;
   function throughFilter(hex, filter) {
     if (!_fcA) {
@@ -1895,31 +1958,39 @@ window.FM = window.FM || {};
 
   // Why it is dead, in words worth putting on screen. Reads the colour AS THE EFFECT SEES IT (after
   // everything below it), so the sentence stays true inside a stack rather than describing the fill.
-  function deadWhy(type, rgb) {
+  /* `photo` (queue 859) changes only the WORDS, never the verdict. "Give the layer a colour first" is
+     good advice about a shape you can recolour and nonsense about a photograph, where the right thing
+     to hear is that the picture itself has no colour in it. Worth saying that the grey branch is not a
+     guess on a photo: nothing moved across EVERY sample, and grayscale on any coloured pixel must move
+     it, so a dead grayscale here proves the whole picture is already grey. */
+  function deadWhy(type, rgb, photo) {
     const label = FX_LABEL[type] || type;
     const grey = Math.abs(rgb[0] - rgb[1]) <= 2 && Math.abs(rgb[1] - rgb[2]) <= 2;
+    const it = photo ? 'this photo' : 'this layer';
     if (type === 'saturate' || type === 'hue' || type === 'grayscale') {
-      return grey
-        ? label + ' can’t change this layer — it has no colour to work on. Give the layer a colour first.'
-        : label + ' can’t change this layer at this value.';
+      if (!grey) return label + ' can’t change ' + it + ' at this value.';
+      return photo
+        ? label + ' can’t change this photo — it is already black and white, so there is no colour to work on.'
+        : label + ' can’t change this layer — it has no colour to work on. Give the layer a colour first.';
     }
     if (type === 'brightness' || type === 'contrast') {
       if (rgb[0] > 250 && rgb[1] > 250 && rgb[2] > 250) {
-        return label + ' is turned UP and this layer is already pure white — drag it below 1 to see anything.';
+        return label + ' is turned UP and ' + it + ' is already pure white — drag it below 1 to see anything.';
       }
       if (rgb[0] < 5 && rgb[1] < 5 && rgb[2] < 5) {
         return label + ' can’t change pure black at this value — drag it the other way.';
       }
     }
-    return label + ' can’t change this layer at this value.';
+    return label + ' can’t change ' + it + ' at this value.';
   }
 
   /* null = no claim (it works, or this layer cannot be judged). A string = this effect provably
    * cannot change this layer, explained. */
   FM.fxDeadOnLayer = function (inst, layer, t) {
     if (!inst || inst.enabled === false || !FLAT_TESTABLE[inst.type]) return null;
-    const hex = flatColorOf(layer);
-    if (!hex) return null;
+    const hexes = probeColorsOf(layer);        // [one flat colour] · a photo's sampled colours · null
+    if (!hexes || !hexes.length) return null;
+    const hex = hexes[0];
     /* ═══ THE INSTRUMENT MUST PROVE ITSELF, EVERY CALL (queue 661) ════════════════════════════════
      * Ezra, on a phone, with a RED square selected: Brightness, Contrast, Saturation, Hue Shift,
      * **Grayscale, Sepia and Invert** all badged "no change at this value".
@@ -1945,13 +2016,22 @@ window.FM = window.FM || {};
     const at = list.indexOf(inst);
     // Everything BELOW it in the stack, which is what it is actually being handed.
     const under = (at < 0 ? list : list.slice(0, at)).filter(e => e && e !== inst && e.enabled !== false);
-    let before, after;
-    try {
-      before = throughFilter(hex, effectFilter({ effects: under }, time, 1));
-      after = throughFilter(hex, effectFilter({ effects: under.concat([inst]) }, time, 1));
-    } catch (e) { return null; }                                   // never break a render over a hint
-    for (let i = 0; i < 4; i++) if (Math.abs(before[i] - after[i]) > 1) return null;   // it does something
-    return deadWhy(inst.type, before);
+    /* EVERY sample must stay still before this says the effect is dead. One that moves is proof it
+       works, so the loop exits on the first one — which also means a colour photo costs the same as a
+       flat fill in the common case, because the first sample already settles it. */
+    const fUnder = effectFilter({ effects: under }, time, 1);
+    const fWith = effectFilter({ effects: under.concat([inst]) }, time, 1);
+    let first = null;
+    for (let h = 0; h < hexes.length; h++) {
+      let before, after;
+      try {
+        before = throughFilter(hexes[h], fUnder);
+        after = throughFilter(hexes[h], fWith);
+      } catch (e) { return null; }                                 // never break a render over a hint
+      if (h === 0) first = before;
+      for (let i = 0; i < 4; i++) if (Math.abs(before[i] - after[i]) > 1) return null;   // it does something
+    }
+    return deadWhy(inst.type, first, hexes.length > 1);
   };
 
   /* ⚠️ IS THIS EFFECT WIPED OUT BY WHAT COMES AFTER IT? (queue 603, and 579 and 593 before it.)

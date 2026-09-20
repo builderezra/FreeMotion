@@ -29,10 +29,12 @@ set -uo pipefail
 # this one away, so the very release that added .last-ship never wrote one. Everything that must happen
 # on the way out lives in this one function.
 SHIPPED=0
+_WHY=""            # a refusal may be the repo working as INTENDED (see the docs-only batch gate) — say which
 _verdict() {
   _rc=$?
   rm -f .ship-in-progress
   { if [ "${SHIPPED:-0}" = 1 ]; then printf 'PUSHED %s\n' "$(git rev-parse --short HEAD 2>/dev/null)"
+    elif [ -n "${_WHY:-}" ]; then printf 'REFUSED rc=%s %s\n' "$_rc" "$_WHY"
     else printf 'REFUSED rc=%s\n' "$_rc"; fi; } > .last-ship 2>/dev/null
 }
 trap _verdict EXIT INT TERM
@@ -88,9 +90,15 @@ fi
 # Safe here and nowhere else: this runs before ship.sh starts anything, and the two locks above have
 # already established that no other run owns this tree.
 if ! pgrep -f '_cdp\.py' >/dev/null 2>&1; then
-  _ORPH="$(pgrep -f 'fm-cdp-' 2>/dev/null | wc -l | tr -d ' ')"
+  # ⚠️ MATCH THE CHROME BINARY, NOT THE BARE PROFILE PREFIX. `pgrep -f 'fm-cdp-'` also matches any
+  # SHELL whose command line happens to carry that string — including this script if someone ever
+  # ships a commit message containing it, in which case pkill would kill the ship mid-flight. That is
+  # the same self-matching shape as the pgrep wait-loop that span for hours on 1 Sep (CLAUDE.md), so
+  # the pattern is anchored to the thing actually being reaped: a headless Chrome on an fm-cdp profile.
+  _PAT='Google Chrome.*fm-cdp-'
+  _ORPH="$(pgrep -f "$_PAT" 2>/dev/null | wc -l | tr -d ' ')"
   if [ "${_ORPH:-0}" -gt 0 ]; then
-    pkill -9 -f 'fm-cdp-' 2>/dev/null || true
+    pkill -9 -f "$_PAT" 2>/dev/null || true
     echo "→ reaped $_ORPH orphaned headless Chrome process(es) left by an interrupted run (they make a green tree read RED)"
   fi
 fi
@@ -183,6 +191,11 @@ if [ "${BATCH:-1}" = "1" ]; then
       echo "   Every ship runs the suite. On 27 Aug, 51 of 99 commits were docs-only: hours of waiting"
       echo "   for nothing. Keep writing notes and let them ride out with the next real change."
       echo "   Nothing is lost -- the working tree keeps them. (BATCH=0 tools/ship.sh ... to override.)"
+      # Tell .last-ship WHY, because "REFUSED" alone makes the next tick shout that the tree is a broken
+      # unshipped release when it is nothing of the kind — this gate is the repo working as intended and
+      # the right response is to carry on, not to investigate. An alarm that cries wolf gets ignored,
+      # which would cost the real refusals this file exists to surface.
+      _WHY="batched — docs-only, riding out with the next real change"
       exit 1
     fi
   fi

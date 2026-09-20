@@ -865,8 +865,14 @@ window.FM = window.FM || {};
        would then work perfectly while the tile went on saying it could not. Caught by the control half
        of the 603 test ("a badge that always fires tells him nothing") on its first run, which is the
        whole argument for writing the control. */
+    /* queue 859: the colour component is now FM._fxProbeKey, not FM.flatColorOf. Same reason the note
+       above gives, extended to photographs: flatColorOf is null for EVERY image, so a photo's key was
+       "-" whatever picture was in it, and two different photos — or one photo replaced by another —
+       shared a cache slot and inherited each other's badges. _fxProbeKey carries a signature of the
+       colours actually sampled, and still returns the plain hex for a flat fill, so nothing about the
+       shape/text path changes. */
     const key = layer.id + '|' + ((layer.effects || []).length) + '|' + (cannotMove(layer) ? 'S' : 'M')
-              + '|' + (FM.flatColorOf ? (FM.flatColorOf(layer) || '-') : '?') + '|' + id;
+              + '|' + (FM._fxProbeKey ? (FM._fxProbeKey(layer) || '-') : (FM.flatColorOf ? (FM.flatColorOf(layer) || '-') : '?')) + '|' + id;
     if (_deadCache.has(key)) return _deadCache.get(key);
     // The motion family first — it is a cheaper question than pushing a pixel through a filter.
     if (MOTION_FX[id] && cannotMove(layer)) { _deadCache.set(key, MOTION_FX[id]); return MOTION_FX[id]; }

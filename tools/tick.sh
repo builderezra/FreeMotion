@@ -27,8 +27,12 @@ SUITES="$(pgrep -fl 'tests/_cdp.py' 2>/dev/null | grep -v pgrep | wc -l | tr -d 
 if [ -f .last-ship ]; then
   _V="$(cat .last-ship 2>/dev/null)"
   case "$_V" in
-    REFUSED*) echo "🚨 THE LAST SHIP REFUSED ($_V) — the tree above is an UNSHIPPED release, not work in progress. Read the log, fix the gate it tripped, ship again." ;;
-    *)        echo "last ship: $_V" ;;
+    # A refusal is not automatically a problem — the docs-only batch gate refuses ON PURPOSE and says so.
+    # Shouting at that one would teach the next session to scroll past the banner, which costs the real
+    # refusals this line exists to surface. So the alarm is reserved for a refusal with no stated reason.
+    *batched*) echo "last ship: held back on purpose ($_V) — carry on; the notes ride out with the next real change" ;;
+    REFUSED*)  echo "🚨 THE LAST SHIP REFUSED ($_V) — the tree above is an UNSHIPPED release, not work in progress. Read the log, fix the gate it tripped, ship again." ;;
+    *)         echo "last ship: $_V" ;;
   esac
 fi
 

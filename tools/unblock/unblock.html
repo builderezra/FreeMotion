@@ -1,3 +1,13 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- ⚠️ These three lines were MISSING and it is not cosmetic (21 Sep). This page is written for
+     HIS PHONE and it is handed to him as a FILE whenever the artifact cannot be republished — which
+     is the situation it has been in since 20 Sep. Opened as a file, with no charset, every em-dash
+     and curly quote in it renders as mojibake; with no viewport, a phone lays it out at 980px and
+     zooms out, so the 380px layout that was carefully verified never actually reaches him. Both
+     faults are invisible when it is served as an artifact, because the platform supplies the
+     headers — which is exactly why nobody saw them. -->
 <title>FreeMotion Unblock List</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -86,7 +96,13 @@
   .path {
     font-family: "IBM Plex Mono", monospace; font-size: 12.5px; font-weight: 500;
     background: var(--sunk); border: 1px solid var(--line-soft); border-radius: 6px;
-    padding: 1px 5px; white-space: nowrap; color: var(--text);
+    padding: 1px 5px; color: var(--text);
+    /* WAS `white-space: nowrap`, and at 380px that put the page into horizontal scroll (21 Sep):
+       "Settings → Your last project open → Copy" measures 312px and starts at x=75, so it ended 7px
+       past the screen — and a fixed bar with left:0;right:0 then stretches to the scroll width, so one
+       un-wrappable chip drags the whole layout sideways. It wraps at the arrows, which reads fine.
+       A path he can READ beats a path that keeps its shape off the edge of the screen. */
+    white-space: normal; overflow-wrap: break-word;
   }
   .items { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
   .items span {
@@ -158,7 +174,10 @@
 <div class="wrap">
   <header>
     <h1>Everything FreeMotion is waiting on you for</h1>
-    <p class="stand">Twenty-nine open items are built as far as they can go without you. Nothing here needs
+    <!-- No number in this sentence on purpose (21 Sep): it said "Twenty-nine" while the real figure was
+         25, and a hand-written count is a thing that rots between the day it is typed and the day he
+         opens the page. The chips underneath count themselves; this line just says what the page IS. -->
+    <p class="stand">Every open item that is built as far as it can go without you is here. Nothing here needs
       more than a tap or a letter. Pick as you go — the page remembers — then hit <b>Copy my answers</b> and
       paste the lot back in one message.</p>
     <ul class="tally">
@@ -172,7 +191,7 @@
   <!-- ══ 0. NEW SINCE YOU LAST LOOKED ══ 20 Sep. Put first on purpose: one confirms a fix that
        shipped today and cannot be confirmed from this Mac, the other is holding a queue item. -->
   <section id="new">
-    <div class="shead"><h2>New today</h2><span class="count">3 items</span></div>
+    <div class="shead"><h2>New today</h2><span class="count">4 items</span></div>
     <p class="sdesc">Two of these came out of today&rsquo;s work and one is about your own projects. The first
       one I genuinely cannot answer myself &mdash; it only shows on a real installed app.</p>
 
@@ -222,11 +241,30 @@
         <button class="opt" data-v="B"><span class="key">B</span><span>Leave it &mdash; I export by hand when it matters</span></button>
       </div>
     </div>
+
+    <div class="card" data-id="856" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#856</span> The Assistant&rsquo;s paid keys</h3>
+        <p><b>The talking AI is built and live in v16.23</b> &mdash; open a layer&rsquo;s &ctdot; menu, tap
+          &ldquo;Ask the Assistant&rdquo;, and tell it what to change. That part is done and needs nothing from you.</p>
+        <p>What is left is the last line of what you asked for: <em>&ldquo;later when you pay for the pro version,
+          it&rsquo;ll unlock an API key for you to use like our own inbuilt but hidden API keys&rdquo;</em>.
+          <b>That one cannot be built the way it is described, and you should hear it from me.</b> FreeMotion has no
+          server &mdash; a key shipped inside the app is readable in the source and visible in the network call, so
+          &ldquo;hidden&rdquo; is not possible. Hiding it needs a server of ours sitting between the app and the AI,
+          and that would be the first thing in FreeMotion that stops being local-only.</p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="A"><span class="key">A</span><span>Stay local-only: everyone brings their own key, and paying unlocks <em>features</em> instead of a key <span class="rec">&mdash; recommended, and the only one that changes nothing about what the app is</span></span></button>
+        <button class="opt" data-v="B"><span class="key">B</span><span>Build a small server of ours that passes the requests through for paying users &mdash; real cost per user, real accounts, and nothing is local-only any more</span></button>
+        <button class="opt" data-v="C"><span class="key">C</span><span>Park the whole paid-key question until after launch</span></button>
+      </div>
+    </div>
   </section>
 
   <!-- ══ 1. THE REPORTS ══ ordered by how many items each one frees -->
   <section id="reports">
-    <div class="shead"><h2>Eight copies, twelve items</h2><span class="count">12 items</span></div>
+    <div class="shead"><h2>Reports to paste</h2><span class="count">12 items</span></div>
     <p class="sdesc">The app already records these on your own device. Each one replaces a guess I would
       otherwise keep making — several bugs here have survived because everything measures fine on this Mac.</p>
 
@@ -336,7 +374,7 @@
 
   <!-- ══ 2. THE PICKS ══ -->
   <section id="picks">
-    <div class="shead"><h2>Seven letters</h2><span class="count">7 items</span></div>
+    <div class="shead"><h2>Letters to send</h2><span class="count">7 items</span></div>
     <p class="sdesc">Nothing visual ships before you have seen it — your standing rule. Where I drew options and
       sent them, the letters below are those same options.</p>
 
@@ -432,7 +470,7 @@
 
   <!-- ══ 3. QUICK LOOKS ══ -->
   <section id="looks">
-    <div class="shead"><h2>Four quick looks</h2><span class="count">4 items</span></div>
+    <div class="shead"><h2>Quick looks</h2><span class="count">4 items</span></div>
     <p class="sdesc">Each of these is a thing only your device can answer. The test harness genuinely cannot see them.</p>
 
     <div class="card" data-id="676" data-item="676 + 706" data-kind="say">
@@ -486,6 +524,43 @@
   </div>
 </div>
 
+<script>
+/* ⚠️ THE NUMBERS ON THIS PAGE COUNT THEMSELVES (21 Sep). Every figure here was hand-written prose, and
+   prose has no test: the tally said "3 new today" beside a section holding 4 cards, and "Four quick
+   looks" sat over 3. That is the same failure the version stamp in REQUESTS.md is gated for — a summary
+   quietly describing a state that has moved on. This page is the ONE thing Ezra opens to answer
+   everything, so a count he cannot trust is worse here than anywhere else. Now the cards are the source
+   of truth and the numbers are derived, so adding a card is the whole job. */
+(function () {
+  function countUp() {
+    var cards = document.querySelectorAll('.card');
+    if (!cards.length) return;                       // never blank the page out if the markup moves
+    var kind = { tap: 0, pick: 0, say: 0 };
+    cards.forEach(function (c) { var k = c.dataset.kind; if (k in kind) kind[k]++; });
+    var newToday = document.querySelectorAll('#new .card').length;
+    var rows = [[newToday, 'new today'], [kind.tap, 'need a report pasted'],
+                [kind.pick, 'need a letter'], [kind.say, 'need a quick look']];
+    var ul = document.querySelector('.tally');
+    if (ul) {
+      ul.textContent = '';
+      rows.forEach(function (r) {
+        if (!r[0]) return;                            // a category with nothing in it is not news
+        var li = document.createElement('li');
+        var n = document.createElement('span'); n.className = 'n'; n.textContent = r[0];
+        li.appendChild(n); li.appendChild(document.createTextNode(' ' + r[1]));
+        ul.appendChild(li);
+      });
+    }
+    document.querySelectorAll('section').forEach(function (sec) {
+      var c = sec.querySelector('.count'); if (!c) return;
+      var n = sec.querySelectorAll('.card').length;
+      c.textContent = n + (n === 1 ? ' item' : ' items');
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', countUp);
+  else countUp();
+})();
+</script>
 <script>
   (function () {
     var KEY = 'fm.unblock.v1';
