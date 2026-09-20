@@ -869,6 +869,11 @@ window.FM = window.FM || {};
      * So it belongs in this family, and "Depth Push does nothing at any setting" would have been a
      * false accusation against a working effect. */
     rasterextrude: 'This layer fills the whole frame, so the solid sides it builds fall outside the edges where you cannot see them. Shrink the layer first.',
+    /* queue 910, from judging Repeat by eye. Tiles repeats the layer INTO the space around it, so a
+     * layer that already reaches every edge has nowhere to tile. Measured as a clean gradient rather
+     * than a cliff, which is what makes coverage the right condition: 0 at full frame, 6.46 at 95%,
+     * 17.7 at 85%, 29 at 70%, 35.45 at half. */
+    tiles: 'This layer already reaches every edge, so there is no room around it to repeat into. Shrink the layer first.',
   };
   const NEEDS_FOOTAGE_FX = {
     temporaldenoise: 'This layer has no footage to compare frames across, so there is no grain to melt. It works on video.',

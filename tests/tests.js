@@ -65314,4 +65314,65 @@
     if (FM.fxRegistry.makeInstance('glowscan').params.amount !== 1) throw new Error('the Strength default is not 1, so adding this control changed how existing projects look');
   });
 
+
+  /* ── queue 910: Tiles has nowhere to tile when the layer fills the frame ───────────────────────
+   * Found judging Repeat by eye (#859 clause 1). Tiles repeats the layer INTO the space around it, so
+   * a layer that already reaches every edge has nowhere to put the copies and renders unchanged.
+   * Measured as a clean GRADIENT, which is what makes coverage the right condition rather than a
+   * guess: 0 at full frame, 6.46 at 95%, 17.7 at 85%, 29 at 70%, 35.45 at half.
+   * ⚠️ Trail was measured in the same pass and is DELIBERATELY NOT badged here, because its numbers do
+   * not fit this condition — it is still 0.00 at 85%, where the layer plainly does not cover the frame.
+   * Its cause is the Spacing default (a % of the content's own size), which the #904 controls audit
+   * found independently. Badging it "the layer fills the frame" would be a true-sounding reason that
+   * is not the real one, and a wrong explanation is worse than silence. */
+  test('910: Tiles says why it does nothing on a layer that reaches every edge, and still tiles when the layer is smaller', { item: '910', budgetMs: 25000 }, async function () {
+    if (typeof FM._fxDeadHereWhy !== 'function') throw new Error('FM._fxDeadHereWhy is not reachable');
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    var P = FM.scene.project;
+    try {
+      var c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
+      var g = c.getContext('2d');
+      g.fillStyle = '#88aacc'; g.fillRect(0, 0, P.width, P.height);
+      g.fillStyle = '#332211'; g.fillRect(0, 0, P.width / 2, P.height / 2);
+      FM.scene.layers.length = 0;
+      var L = FM.makeLayer('image', { x: P.width / 2, y: P.height / 2, start: 0, duration: 3 });
+      L.name = 'FX910';
+      FM.scene.layers.push(L);
+      FM.media.set(L.id, { el: c, kind: 'image', w: P.width, h: P.height, width: P.width, height: P.height });
+      FM.selectLayer(L.id); FM.refreshAll(); await sleep(200);
+
+      if (!FM._fxDeadHereWhy('tiles')) throw new Error('Tiles has no room to repeat into on a layer that reaches every edge, and the app said nothing');
+
+      // CONTROL: shrink it and Tiles has somewhere to go, so the badge must lift
+      L.transform.scale = 0.5; FM.refreshAll(); await sleep(200);
+      if (FM._fxDeadHereWhy('tiles')) throw new Error('Tiles still says it has no room after the layer was scaled to 50%, where it measurably DOES tile (35.45) — the app would be calling a working effect dead');
+
+      // …and it really tiles at that size, or the control above is vacuous
+      var S = 120;
+      var pc = document.createElement('canvas'); pc.width = pc.height = S;
+      var pg = pc.getContext('2d');
+      pg.fillStyle = '#88aacc'; pg.fillRect(0, 0, S, S);
+      pg.fillStyle = '#332211'; pg.fillRect(0, 0, S / 2, S / 2);
+      var pid = '_fx910probe';
+      FM.media.set(pid, { kind: 'image', el: pc, width: S, height: S, duration: 0 });
+      FM.media.pin(pid);
+      function shot(withFx) {
+        var l = FM.makeLayer('image', { x: S / 2, y: S / 2, start: 0, duration: 2 });
+        l.id = pid; l.transform.scale = 0.5;
+        l.effects = withFx ? [FM.fxRegistry.makeInstance('tiles')] : [];
+        var o = document.createElement('canvas'); o.width = o.height = S;
+        FM.renderScene(o.getContext('2d'), { project: { width: S, height: S, fps: 30, duration: 2, background: '#202838' }, layers: [l] }, 0.4);
+        return o.getContext('2d').getImageData(0, 0, S, S).data;
+      }
+      var a = shot(false), b = shot(true), sum = 0, n = 0;
+      for (var i = 0; i < a.length; i += 4) { n++; sum += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); }
+      var d = sum / n / 3;
+      if (!(d > 1)) throw new Error('Tiles drew nothing at half scale either (mean ' + d.toFixed(2) + ') — then the silent case above is not "it reaches every edge", and this reading is about something else');
+    } finally {
+      FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
+      FM.refreshAll();
+    }
+  });
+
 })();
