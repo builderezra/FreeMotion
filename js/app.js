@@ -4513,6 +4513,12 @@ window.FM = window.FM || {};
   // solo itself happens deep inside run(), so without this the picker's EFFECT is untestable and only
   // its label gets guarded — which is how a control that looks right but does nothing ships.
   FM._exportSoloId = () => expSoloId;
+  /* SETTER seam (queue 884). The getter alone could only ever confirm what the picker says, not
+     drive the export that ignored it — and the bug WAS the export, not the picker. A test that
+     cannot choose a layer cannot reach this fault at all, which is why it lived through every
+     release until a hunt read the source. */
+  FM._setExportSoloId = (id) => { expSoloId = id || null; if (typeof syncSoloBtn === 'function') { try { syncSoloBtn(); } catch (e) {} } };
+  FM._runExport = () => runExport();   // suite seam: the real entry the Export button calls
   function syncSoloBtn() {
     const btn = document.getElementById('exp-solo-btn');
     const L = expSoloId ? FM.layerById(FM.scene, expSoloId) : null;
@@ -4756,7 +4762,21 @@ window.FM = window.FM || {};
        drop reporting added in v7.90 for free, so a clip the mixer cannot read still says so. */
     const _fmt = ((document.getElementById('exp-format') || {}).value);
     if (_fmt === 'audio' || _fmt === 'audiom4a') {
-      await runAudioOnlyExport();
+      /* ⚠️ "EXPORT JUST THIS LAYER" WAS SILENTLY IGNORED HERE (queue 884). This branch returns BEFORE
+       * the solo prep further down, and runAudioOnlyExport hands FM.exporter.buildAudioMix the
+       * UNMODIFIED scene — so picking "Voiceover" and exporting a WAV wrote Music and Voiceover mixed
+       * together, with nothing on screen saying the picker had been dropped. Every other format
+       * honours it, including the single-frame PNG (snapshotPNG takes soloId), so audio was the one
+       * path out of step.
+       * Fixed with exportSoloPrep, which is the SAME function the video and PNG paths use, rather
+       * than a second way of saying "just this layer" that could drift from them — buildAudioMix
+       * already mirrors the compositor's solo gate (js/exporter.js:332), so nothing new was needed.
+       * try/finally because an export that throws must not leave his layers soloed: solo survives a
+       * save, and there is no per-layer control left in the UI to clear it. */
+      const _soloT = expSoloId ? FM.layerById(FM.scene, expSoloId) : null;
+      const _soloR = _soloT ? exportSoloPrep(_soloT) : null;
+      try { await runAudioOnlyExport(); }
+      finally { if (_soloR) { _soloR.forEach(([l, v]) => { l.solo = v; }); FM.requestRender(); } }
       return;
     }
     /* Custom size hands the exporter explicit dimensions; every other rung is a uniform scale of the

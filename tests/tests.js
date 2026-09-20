@@ -65472,4 +65472,75 @@
     }
   });
 
+
+  /* ── queue 884: "Export just this layer" was silently ignored by the AUDIO formats ─────────────
+   * runExport's audio branch returned BEFORE the solo prep further down, and runAudioOnlyExport hands
+   * FM.exporter.buildAudioMix the UNMODIFIED scene. So picking "Voiceover" and exporting a WAV wrote
+   * Music and Voiceover mixed together — and nothing on screen said the picker had been dropped. The
+   * picture path honours it, and so does the single-frame PNG, so audio was the one format out of step.
+   * ⚠️ THREE ASSERTIONS, AND THE LAST TWO ARE WHY THIS IS TRUSTWORTHY. Isolating the chosen layer is
+   * the fix; "no layer chosen still exports EVERYTHING" is the control that stops the fix becoming
+   * "always solo something"; and "his solo flags are put back afterwards" matters more than it looks,
+   * because `solo` survives a save and there is no per-layer control left in the UI to clear it — an
+   * export that threw halfway would otherwise leave his project permanently gutted. */
+  /* Title uses NO double quotes on purpose: ship.sh and mutate.sh read the runner's JSON with
+     grep -o 'FAIL[^"]*', so a quote in a test name truncates its own failure report. There is a gate
+     for it, and the first version of this title tripped it — visible in the mutation runs above,
+     which printed 'FAIL884: an audio-only export honours \' and nothing more. */
+  test('884: an audio-only export honours Export just this layer, still exports everything when nothing is picked, and puts solo back', { item: '884', budgetMs: 25000 }, async function () {
+    if (typeof FM._setExportSoloId !== 'function' || typeof FM._runExport !== 'function') throw new Error('FM._setExportSoloId / FM._runExport are not reachable — the export that ignored the picker cannot be driven, which is why this fault survived every release');
+    if (!FM.exporter || !FM.exporter.buildAudioMix) throw new Error('FM.exporter.buildAudioMix is not reachable');
+    var fmtEl = document.getElementById('exp-format');
+    if (!fmtEl) throw new Error('#exp-format is not in the DOM');
+
+    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    var mix0 = FM.exporter.buildAudioMix, fmt0 = fmtEl.value, solo0 = FM._exportSoloId();
+    var seen = null;
+    try {
+      FM.scene.layers.length = 0;
+      var A = FM.makeLayer('shape', { shape: 'rect', x: 50, y: 50, shapeW: 40, shapeH: 40, fill: '#884400' });
+      A.start = 0; A.duration = 5; A.name = 'FX884_MUSIC';
+      var B = FM.makeLayer('shape', { shape: 'rect', x: 90, y: 50, shapeW: 40, shapeH: 40, fill: '#004488' });
+      B.start = 0; B.duration = 5; B.name = 'FX884_VOICE';
+      FM.scene.layers.push(A, B);
+      FM.scene.project.duration = Math.max(FM.scene.project.duration || 0, 5);
+
+      /* Intercept the MIXER rather than write a file: the whole question is what scene the mix is
+         built from, and buildAudioMix already mirrors the compositor's solo gate (exporter.js), so
+         "which layers are soloed when it is called" IS the behaviour under test. */
+      FM.exporter.buildAudioMix = function (scene) {
+        seen = scene.layers.map(function (l) { return [l.name, !!l.solo]; });
+        return Promise.resolve(null);   // null makes runAudioOnlyExport bail politely, no file written
+      };
+      fmtEl.value = 'audio';
+
+      // 1 ── a layer IS picked: only that one may be soloed when the mix is built
+      seen = null;
+      FM._setExportSoloId(B.id);
+      await FM._runExport();
+      if (!seen) throw new Error('the audio export never reached buildAudioMix, so nothing below was measured');
+      var soloed = seen.filter(function (r) { return r[1]; }).map(function (r) { return r[0]; });
+      if (soloed.length !== 1 || soloed[0] !== 'FX884_VOICE') throw new Error('"Export just this layer" picked FX884_VOICE and the mix was built with these layers soloed: ' + JSON.stringify(soloed) + ' — the written file would contain the other layers too, with nothing on screen saying so');
+
+      // 2 ── CONTROL: nothing picked must export EVERYTHING, not "whatever was soloed last"
+      seen = null;
+      FM._setExportSoloId(null);
+      await FM._runExport();
+      if (!seen) throw new Error('the second audio export never reached buildAudioMix');
+      var stillSolo = seen.filter(function (r) { return r[1]; }).map(function (r) { return r[0]; });
+      if (stillSolo.length) throw new Error('no layer was picked and the mix was still built with ' + JSON.stringify(stillSolo) + ' soloed — the fix is isolating something he did not choose');
+
+      // 3 ── CONTROL: his own solo flags must be back afterwards. solo survives a save and no UI
+      //      control clears it, so leaving them set would quietly gut the project.
+      var leftSoloed = FM.scene.layers.filter(function (l) { return l.solo; }).map(function (l) { return l.name; });
+      if (leftSoloed.length) throw new Error('the export finished and left ' + JSON.stringify(leftSoloed) + ' soloed — solo survives a save and there is no control left in the UI to clear it, so his project would come back gutted');
+    } finally {
+      FM.exporter.buildAudioMix = mix0;
+      fmtEl.value = fmt0;
+      try { FM._setExportSoloId(solo0); } catch (e) {}
+      FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
+      FM.refreshAll();
+    }
+  });
+
 })();
