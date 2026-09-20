@@ -37,6 +37,12 @@ window.FM = window.FM || {};
     'setProp', 'setStroke', 'setGradientFill', 'setTextAnim', 'setTextCurve', 'setColorGrade',
     'setMask', 'setWiggle', 'setMotionBlur', 'setShadow', 'setCaptionBg',
     'addEffect', 'addKeyframe', 'setParent',
+    /* queue 856 — the four verbs a CONVERSATION needs and a scene BUILDER never did. The twenty-one
+     * above can compose a scene from nothing but cannot delete, duplicate, select or move the
+     * playhead, and "delete that", "duplicate it", "select the title", "show me two seconds in" are
+     * exactly the sentences people say to CapCut. They are HERE, inside the closed vocabulary, rather
+     * than called directly from ai-chat.js, so that ai-ops.js stays the only door into the scene. */
+    'deleteLayer', 'duplicateLayer', 'selectLayer', 'setTime',
   ];
   FM.AI_OP_NAMES = OP_NAMES;
 
@@ -122,6 +128,9 @@ window.FM = window.FM || {};
       // generic prop
       path: { type: 'string' }, value: { type: ['number', 'string', 'boolean'] },
       enabled: { type: 'boolean' },
+      // queue 856: where duplicateLayer puts the copy's handle, so a later op in the SAME batch can
+      // style the copy rather than the original (without it the model can only make a copy and stop)
+      newRef: { type: 'string', description: 'duplicateLayer: a handle for the NEW copy, usable by later ops' },
       // effect
       type: { type: 'string', description: 'effect type for addEffect' },
       params: { type: 'object', additionalProperties: true, description: 'effect params, e.g. {"radius":8} or {"amount":1,"color":"#ff3366"}' },

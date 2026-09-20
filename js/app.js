@@ -5581,6 +5581,13 @@ window.FM = window.FM || {};
     // has a single caller — the phone's ⋯ — because the PC top bar's ⋯ is gone.)
     FM.layerMoreItems = function (sel) {
       const items = [];
+      /* queue 856 — FIRST, and this placement is the load-bearing part. The Assistant's other door is
+         in the ADD menu, which only exists when NOTHING is selected; but "make this bigger" is a
+         sentence you say WITH a layer selected, so without an entry here the feature is unreachable in
+         the exact situation it was built for. Opening from a layer also means "this" already has a
+         referent, which is what stops the first thing he types being answered with "which one?". */
+      items.push({ label: 'Ask the Assistant…', action: () => FM.aiChat && FM.aiChat.askAbout(sel.id) });
+      items.push({ sep: true });
       items.push({ label: (sel.flipH ? '✓ ' : '') + 'Flip Horizontally', action: () => FM.flipLayer(sel, 'h') });
       items.push({ label: (sel.flipV ? '✓ ' : '') + 'Flip Vertically', action: () => FM.flipLayer(sel, 'v') });
       if (sel.type !== 'group' && sel.type !== 'null') {
@@ -7124,7 +7131,11 @@ window.FM = window.FM || {};
     };
 
     (function deselectOnEmptyTap() {
-      const KEEP = '#preview, #select-box, #timeline, #transport, #inspector-panel, #ai-panel,' +
+      // #ai-chat (queue 856) belongs here for the same reason as #ai-panel, and MORE so: the whole
+      // point of the assistant is that you keep tapping layers on the canvas while it is open, so a
+      // tap on the panel itself must not read as an empty-background tap and throw the selection —
+      // "this" in the next sentence is that selection.
+      const KEEP = '#preview, #select-box, #timeline, #transport, #inspector-panel, #ai-panel, #ai-chat,' +
         ' #ctx-menu, #shortcuts-overlay, #export-overlay, #export-dialog, #canvas-dialog, #add-sheet,' +
         ' #splash,' +   // tap-to-skip on the launch splash must NOT read as an empty-background tap (it deselected the restored layer)
         ' #topbar, #topbar-m, .sb-handle, button, input, select, textarea, label, a, option, [contenteditable],' +

@@ -81,7 +81,46 @@ window.FM = window.FM || {};
     }
   }
 
+  /* queue 856 — the CHAT fixture. It returns the SAME `{content:[…]}` shape a real response has, text
+     blocks and an optional tool_use, so the dry-run path through ai-chat.js is the same code as the
+     live one. A mock that hands back a different shape only ever tests the mock. It reads a few real
+     verbs out of the sentence so the suite can drive a believable edit with no key and no tokens. */
+  function chat(text, scene) {
+    var t = String(text || '').toLowerCase();
+    var target = (scene && scene.selectedId) || (scene && scene.layers && scene.layers.length ? scene.layers[scene.layers.length - 1].id : null);
+    var ops = [], said;
+    if (!target) {
+      said = 'There is nothing in the project yet — add a layer and tell me what to do with it.';
+    } else if (/bigger|larger|grow/.test(t)) {
+      ops.push({ op: 'setProp', ref: target, path: 'transform.scale', value: 1.4 });
+      said = 'Made it bigger.';
+    } else if (/smaller|shrink/.test(t)) {
+      ops.push({ op: 'setProp', ref: target, path: 'transform.scale', value: 0.7 });
+      said = 'Made it smaller.';
+    } else if (/delete|remove|get rid/.test(t)) {
+      ops.push({ op: 'deleteLayer', ref: target });
+      said = 'Deleted it.';
+    } else if (/duplicate|copy/.test(t)) {
+      ops.push({ op: 'duplicateLayer', ref: target, newRef: 'dup' });
+      said = 'Duplicated it.';
+    } else if (/glow|blur/.test(t)) {
+      ops.push({ op: 'addEffect', ref: target, type: /blur/.test(t) ? 'blur' : 'glow', params: {} });
+      said = 'Added it.';
+    } else if (/red|blue|green|gold|white|black/.test(t)) {
+      var c = /red/.test(t) ? '#ff4d4d' : /blue/.test(t) ? '#4d8bf0' : /green/.test(t) ? '#46c98a'
+            : /gold/.test(t) ? '#ffce4a' : /white/.test(t) ? '#ffffff' : '#000000';
+      ops.push({ op: 'setProp', ref: target, path: 'color', value: c });
+      said = 'Recoloured it.';
+    } else {
+      said = 'I can change size, colour, timing and effects — tell me which layer and what to do.';
+    }
+    var content = [{ type: 'text', text: said }];
+    if (ops.length) content.push({ type: 'tool_use', id: 'mock_chat', name: 'emit_ops', input: { ops: ops } });
+    return { content: content, stop: 'mock', out: { ops: ops } };
+  }
+
   FM.aiMock = {
+    chat: chat,
     respond: function (toolName, ctx) {
       ctx = ctx || {};
       switch (toolName) {

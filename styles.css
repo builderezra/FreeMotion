@@ -9392,3 +9392,107 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
 }
 
 /* (The 46px strip the head column reserved for the seam rail in v15.78 is gone with the rail — queue 803 put the keys in the band.) */
+
+/* ---------- AI assistant: the panel you TALK to (queue 856 clause 1) ---------- */
+/* Docks right on PC and is a bottom sheet on phones, the same shape as the Director panel above —
+   it is the same feature family and a second geometry would just be a thing to re-learn. The wash is
+   the Director's prism turned down and thrown from the opposite corner, so the two read as siblings
+   without being the same picture. Radial only, never conic: a conic's transparent stop lands on a hard
+   edge and drew a visible seam across a panel this narrow (the note on #ai-panel records that). */
+#ai-chat {
+  position: fixed; top: 0; right: 0; bottom: var(--tl-h, 232px); width: 376px; z-index: 58;
+  display: flex; flex-direction: column;
+  background:
+    radial-gradient(120% 58% at 0% -8%,
+      rgba(107, 240, 200, .22), rgba(127, 212, 255, .15) 42%, rgba(200, 107, 255, .09) 66%, transparent 82%),
+    var(--panel);
+  border-left: 1px solid var(--line);
+  box-shadow: -14px 0 40px rgba(0,0,0,.45);
+  transform: translateX(102%); transition: transform .24s ease;
+  overscroll-behavior: contain;
+}
+#ai-chat.open { transform: translateX(0); }
+/* Parked off-screen it must cast NO shadow — a panel nobody can see was still throwing black over the
+   edge of the app, which is the bug the sheet-shadow test walks every parked sheet for. */
+#ai-chat:not(.open) { box-shadow: none; }
+
+.aic-grab { display: none; }
+
+.aic-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 12px 10px; border-bottom: 1px solid var(--line-soft); flex: 0 0 auto;
+}
+.aic-title { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 700; color: var(--text); }
+.aic-spark { color: var(--accent); font-size: 13px; }
+.aic-status { margin-left: auto; font-size: 11.5px; color: var(--text-faint); }
+.aic-close {
+  flex: 0 0 auto; background: transparent; border: 0; color: var(--text-dim);
+  width: 30px; height: 30px; border-radius: 8px; cursor: pointer; font-size: 14px; line-height: 1;
+}
+.aic-close:hover { background: var(--panel-2); color: var(--text); }
+
+.aic-list {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: 12px; display: flex; flex-direction: column; gap: 10px;
+}
+
+.aic-msg { display: flex; }
+.aic-me { justify-content: flex-end; }
+.aic-ai { justify-content: flex-start; }
+.aic-bubble {
+  max-width: 86%; padding: 9px 12px; border-radius: 13px;
+  font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+}
+.aic-me .aic-bubble { background: var(--accent); color: #05121a; border-bottom-right-radius: 5px; font-weight: 500; }
+.aic-ai .aic-bubble { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-bottom-left-radius: 5px; }
+
+.aic-note { font-size: 11.5px; color: var(--text-faint); line-height: 1.55; padding: 0 2px; }
+.aic-applied { color: var(--good); font-weight: 600; }
+.aic-warn { color: var(--text-dim); }
+.aic-err {
+  color: #ef9a9a; background: rgba(223,91,91,.1); border: 1px solid rgba(223,91,91,.3);
+  border-radius: 8px; padding: 9px 11px; font-size: 12.5px;
+}
+.aic-linkbtn {
+  align-self: flex-start; background: var(--panel-2); border: 1px solid var(--accent); color: var(--accent);
+  border-radius: 8px; padding: 7px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+
+.aic-compose {
+  flex: 0 0 auto; display: flex; gap: 8px; align-items: flex-end;
+  padding: 10px 12px calc(10px + var(--aic-kb, 0px));
+  border-top: 1px solid var(--line-soft); background: var(--panel);
+}
+/* 16px is not a style choice — below it iOS zooms the whole page on focus, which is why the codebase
+   enforces a 16px floor on every text field. The Director's own .ai-prompt is 13.5px and does zoom. */
+.aic-input {
+  flex: 1 1 auto; min-width: 0; resize: none; overflow-y: auto; max-height: 120px;
+  font-family: inherit; font-size: 16px; line-height: 1.45;
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 11px; padding: 9px 11px;
+}
+.aic-input:focus { outline: none; border-color: var(--accent); }
+.aic-input:disabled { opacity: .55; }
+.aic-send {
+  flex: 0 0 auto; width: 40px; height: 40px; border-radius: 11px; cursor: pointer;
+  background: var(--accent); color: #05121a; border: 0; font-size: 17px; font-weight: 800; line-height: 1;
+}
+.aic-send:disabled { opacity: .45; cursor: default; }
+
+@media (max-width: 700px) {
+  #ai-chat {
+    top: auto; left: 0; right: 0; bottom: 0; width: auto;
+    height: 74svh; max-height: 74svh; border-left: none; border-top: 1px solid var(--line);
+    border-radius: 16px 16px 0 0; box-shadow: 0 -12px 40px rgba(0,0,0,.55);
+    transform: translateY(100%);
+  }
+  #ai-chat.open { transform: translateY(0); }
+  #ai-chat:not(.open) { box-shadow: none; }
+  /* A phone sheet needs something to pull down on, and a 44px target rather than the ✕ alone. */
+  .aic-grab {
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; padding: 10px 0 6px; margin: 0; border: 0; background: transparent;
+    cursor: pointer; border-radius: 16px 16px 0 0;
+  }
+  .aic-head { padding-top: 4px; }
+}

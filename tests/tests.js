@@ -53918,7 +53918,7 @@
      identifiers that really carry his words. */
   test('no user-supplied text is ever written through innerHTML', { item: 'xss-innerhtml' }, async function () {
     const FILES = ['app','inspector','timeline','storage','home','addmenu','compositor','captions','medialib',
-                   'elements-browser','fx-browser','ai-panel','notepad','sfx','voice-rec','draw-tool','crop-tool',
+                   'elements-browser','fx-browser','ai-panel','ai-chat','notepad','sfx','voice-rec','draw-tool','crop-tool',
                    'text-edit','template-fill','ai-templates','masks','tracker','graph-editor','settings'];
     const USER = /\.(name|text|caption|filename)\b/;
     const grab = l => (l.match(/\.innerHTML\s*=\s*([^;]*)/) || [, null])[1];
@@ -53957,7 +53957,7 @@
      Comment lines are skipped on purpose — the codebase documents attacks it defends against
      (`https://attacker/beacon`, `http://evil/x`), and flagging prose would make the guard noise. */
   test('the app makes network calls to exactly one host, and it is the AI endpoint', { item: 'local-only' }, async function () {
-    const FILES = ['app','ai','ai-key','ai-ops','ai-panel','ai-templates','storage','home','media','medialib',
+    const FILES = ['app','ai','ai-key','ai-ops','ai-panel','ai-chat','ai-templates','storage','home','media','medialib',
                    'exporter','compositor','inspector','timeline','captions','sfx','voice-rec','settings',
                    'tracker','notepad','zip-write','gif-encode','audio-tools','fx-browser'];
     const ALLOWED = [
@@ -64796,4 +64796,123 @@
       await sleep(120);
     }
   });
+
+  /* ── queue 856: the AI you can TALK TO ─────────────────────────────────────────────────────────
+   * Ezra asked for CapCut's "just talk to her and say what you want and then it goes and does it for
+   * you inside the edit". These four cover the things that would actually hurt him, not the things
+   * that are easy to assert:
+   *   1. a sentence is ONE undo step — the whole reason he can trust it, and the one that breaks
+   *      silently the moment an op routes around FM.history.mute()
+   *   2. every op name the model may emit has a handler — a name without a case is a SILENT drop:
+   *      the model says "done", the reply reads fine, and nothing happened
+   *   3. the composer is 16px — under that, iOS zooms the page the instant he taps it
+   *   4. nothing the model says becomes markup
+   * All four run with FM.ai.DRY_RUN, so they need no key, no network and no tokens. */
+
+  test('ai chat: one sentence is ONE undo step', { item: '856' }, async function () {
+    if (!FM.aiChat || !FM.aiChat.send) throw new Error('FM.aiChat is not exposed — the suite cannot drive the chat at all');
+    var dry0 = FM.ai.DRY_RUN, layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    FM.ai.DRY_RUN = true;
+    try {
+      var L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#ffffff' });
+      L.start = 0; L.duration = 3; L.name = 'CHATTARGET';
+      FM.scene.layers.push(L);
+      FM.scene.selectedId = L.id; FM.scene.selectedIds = [L.id];
+      FM.aiChat.reset();
+      FM.aiChat.show();
+
+      var input = document.querySelector('#ai-chat .aic-input');
+      if (!input) throw new Error('the composer is not in the DOM — #ai-chat .aic-input');
+      var scale0 = L.transform.scale;
+      var steps0 = FM.history._steps().len;
+
+      input.value = 'make it bigger';
+      await FM.aiChat.send();
+
+      if (L.transform.scale === scale0) throw new Error('the sentence changed nothing — scale is still ' + scale0 + ', so the chat never reached FM.aiOps.applyOps');
+      var added = FM.history._steps().len - steps0;
+      if (added !== 1) throw new Error('one sentence produced ' + added + ' undo steps, expected exactly 1');
+
+      /* ⚠️ AND NOW THE FIXTURE THAT CAN ACTUALLY TELL THE DIFFERENCE, BECAUSE THE ONE ABOVE CANNOT —
+       * and I only know that because deleting FM.history.mute() left it GREEN.
+       * Two things have to be true at once before a missing mute shows up as a step count:
+       *   1. an op that COMMITS FOR ITSELF (FM.deleteLayer does; setProp does not), and
+       *   2. a LATER op in the same batch that changes something else.
+       * Without (2) it still reads as one step, because commit() returns early when the snapshot is
+       * identical to the top of the stack (js/history.js) — so the stray commit collapses into the
+       * real one and the bug hides. With both, an unmuted batch is TWO steps: the delete lands on its
+       * own, and one Ctrl+Z hands him back the layer with the REST of the sentence still applied.
+       * Driven through FM.aiChat._apply (which owns the mute) rather than through a sentence, because
+       * the fixture has to be a specific two-op batch and the mock emits one op per sentence. */
+      var gone = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#ff0000' });
+      gone.start = 0; gone.duration = 2; gone.name = 'CHATDELETE';
+      var kept = FM.makeLayer('shape', { shape: 'rect', x: 90, y: 90, shapeW: 40, shapeH: 40, fill: '#00ff00' });
+      kept.start = 0; kept.duration = 2; kept.name = 'CHATKEPT';
+      FM.scene.layers.push(gone, kept);
+      var steps1 = FM.history._steps().len;
+      FM.aiChat._apply([
+        { op: 'deleteLayer', ref: gone.id },                                  // commits for itself
+        { op: 'setProp', ref: kept.id, path: 'transform.scale', value: 2 },   // …and this must land in the SAME step
+      ]);
+      if (FM.scene.layers.some(function (l) { return l.name === 'CHATDELETE'; })) throw new Error('the deleteLayer op never reached FM.deleteLayer — this fixture proves nothing');
+      if (kept.transform.scale !== 2) throw new Error('the op after the delete did not apply — the fixture is no longer two effective ops, so it can no longer see the bug');
+      var added2 = FM.history._steps().len - steps1;
+      if (added2 !== 1) throw new Error('one sentence produced ' + added2 + ' undo steps, expected exactly 1 — the batch escaped FM.history.mute(), so one Ctrl+Z gives back the deleted layer with the rest of the sentence still applied');
+    } finally {
+      FM.ai.DRY_RUN = dry0;
+      FM.aiChat.hide();
+      FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
+      FM.refreshAll();
+    }
+  });
+
+  /* A name in FM.AI_OP_NAMES with no `case` in ai-ops.js falls to `default: drop(…, 'unhandled op')`.
+     Nothing anywhere would notice: applyOps returns a clean object, the chat says "Done.", and the
+     project is untouched. That is the exact shape of "I asked for it and nothing happened", and it is
+     one typo away every time the vocabulary grows — which is what queue 856 did by adding four. */
+  test('ai chat: every op name the model may emit has a handler in ai-ops.js', { item: '856' }, async function () {
+    var src = await (await fetch('../js/ai-ops.js?boot=' + FM.AI_OP_NAMES.length)).text();
+    if (!/case '/.test(src)) throw new Error('ai-ops.js came back without a single `case` — the fetch matched nothing, so this test proves nothing');
+    var names = FM.AI_OP_NAMES || [];
+    if (names.length < 20) throw new Error('FM.AI_OP_NAMES is only ' + names.length + ' long — the vocabulary did not load');
+    var missing = names.filter(function (n) { return src.indexOf("case '" + n + "':") < 0; });
+    if (missing.length) throw new Error('these op names can be emitted but have no handler, so they drop silently: ' + missing.join(', '));
+    // …and the control: a name that is NOT in the vocabulary must not be found, or the search above
+    // would pass for anything and this test would be decoration.
+    if (src.indexOf("case 'definitelyNotAnOp':") >= 0) throw new Error('the control matched — the search is not discriminating');
+  });
+
+  test('ai chat: the composer is at least 16px so a phone does not zoom on focus', { item: '856' }, async function () {
+    await atPhoneWidth(async function () {
+      FM.aiChat.show();
+      var input = document.querySelector('#ai-chat .aic-input');
+      if (!input) throw new Error('#ai-chat .aic-input is not in the DOM at phone width');
+      var fs = parseFloat(getComputedStyle(input).fontSize);
+      if (!isFinite(fs)) throw new Error('could not measure the composer font size (got ' + getComputedStyle(input).fontSize + ')');
+      if (fs < 16) throw new Error('the composer is ' + fs + 'px — under 16px iOS zooms the whole page the moment he taps it, and he then has to pinch back out to see the canvas he is editing');
+      FM.aiChat.hide();
+    }, 380);
+  });
+
+  test('ai chat: nothing the model says can become markup', { item: '856' }, async function () {
+    var dry0 = FM.ai.DRY_RUN;
+    FM.ai.DRY_RUN = true;
+    try {
+      FM.aiChat.reset(); FM.aiChat.show();
+      var input = document.querySelector('#ai-chat .aic-input');
+      input.value = '<img src=x onerror="window.__fmXSS=1"> make it bigger';
+      await FM.aiChat.send();
+      var list = document.querySelector('#ai-chat .aic-list');
+      if (!list) throw new Error('#ai-chat .aic-list is missing');
+      if (list.querySelector('img, script, iframe')) throw new Error('an element was built from message text — the transcript is using innerHTML somewhere');
+      if (window.__fmXSS) throw new Error('injected markup EXECUTED');
+      var shown = list.textContent || '';
+      if (shown.indexOf('<img src=x') < 0) throw new Error('the message text was not rendered at all, so this test did not exercise the escaping path');
+    } finally {
+      FM.ai.DRY_RUN = dry0;
+      try { delete window.__fmXSS; } catch (e) {}
+      FM.aiChat.hide();
+    }
+  });
+
 })();

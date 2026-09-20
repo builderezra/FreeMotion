@@ -390,6 +390,55 @@ window.FM = window.FM || {};
             ok(o.op, ref); break;
           }
 
+          /* ── queue 856: the four verbs a CONVERSATION needs ──────────────────────────────────
+           * Each is a thin VALIDATOR over a function the app already owns. They live here, and not
+           * in ai-chat.js, for the reason this file's header states: it is the only code that turns
+           * AI output into scene mutations. Calling FM.deleteLayer straight from model output would
+           * be a second path with no whitelist, no clamping and no logged reason — and it would also
+           * break "one sentence = one undo step", because these functions commit for themselves.
+           * They are safe inside the caller's FM.history.mute(), which makes those commits return
+           * early; called outside one, each would be its own undo step. */
+          case 'deleteLayer': {
+            layer = resolveExisting(ref);
+            if (!layer) { drop(o.op, ref, 'no such layer'); break; }
+            if (layer.locked) { drop(o.op, ref, 'that layer is locked'); break; }
+            FM.deleteLayer(layer.id);   // cascades into a group's members, and tears down its media/audio
+            ok(o.op, ref); break;
+          }
+          case 'duplicateLayer': {
+            layer = resolveExisting(ref);
+            if (!layer) { drop(o.op, ref, 'no such layer'); break; }
+            /* ⚠️ VIDEO, IMAGE AND GROUP ARE REFUSED, AND THE REASON IS A REAL BUG, NOT TIDINESS.
+             * FM.duplicateLayer is `async` because it awaits reloadMediaTo(old, new) — a copy's media
+             * lives in IndexedDB keyed by LAYER ID, so a clone made without that await is a media
+             * layer pointing at nothing: a clip that is there, has the right name and duration, and
+             * renders BLANK. That is queue 129's exact complaint. applyOps is synchronous and every
+             * one of its callers relies on that, so the honest move is to say so rather than to make
+             * a broken copy. A group is refused for the sibling reason: cloning the group ROW without
+             * its subtree makes an empty invisible group. Both routes work from the layer ⋯ menu. */
+            if (layer.type === 'video' || layer.type === 'image') { drop(o.op, ref, 'duplicating video and photos has to copy the media too — use the layer ⋯ menu'); break; }
+            if (layer.type === 'group') { drop(o.op, ref, 'duplicating a group has to copy everything inside it — use the layer ⋯ menu'); break; }
+            if (layer.type === 'camera') { drop(o.op, ref, 'a scene may only have one camera'); break; }
+            var copy = FM.cloneLayer(layer);
+            FM.insertLayer(copy);
+            P.duration = Math.max(P.duration || 0, (copy.start || 0) + (copy.duration || 0));
+            if (o.newRef != null) refMap[o.newRef] = copy.id;
+            ok(o.op, ref); break;
+          }
+          case 'selectLayer': {
+            layer = resolveExisting(ref);
+            if (!layer) { drop(o.op, ref, 'no such layer'); break; }
+            FM.selectLayer(layer.id);   // so the NEXT thing he says — "make it bigger" — has a referent
+            ok(o.op, ref); break;
+          }
+          case 'setTime': {
+            // FM.setTime clamps to the project's own duration, so this only has to reject nonsense
+            var tt = num(o.value != null ? o.value : o.start, null);
+            if (tt == null) { drop(o.op, ref, 'no time given'); break; }
+            FM.setTime(Math.max(0, tt));
+            ok(o.op, ref); break;
+          }
+
           default: drop(o.op, ref, 'unhandled op');
         }
       } catch (e) {

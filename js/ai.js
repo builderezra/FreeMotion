@@ -19,10 +19,26 @@ window.FM = window.FM || {};
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
   function panel() { return FM.aiPanel || { reset: function () {}, row: function () {}, done: function () {}, error: function () {}, note: function () {} }; }
 
-  // ---- one forced-tool call. Returns { out: <tool input object>, stop }. ----
+  /* ---- one tool call. Returns { out: <tool input object>, stop, content }. ----
+   * `tool` may be one tool or an array. `opts.toolChoice` overrides the forced form.
+   *
+   * ⚠️ WHY THOSE TWO EXIST (queue 856). Every caller here wants a FORCED tool call, and forcing one
+   * means the model physically cannot emit a text block — it can only act, never answer, never ask
+   * which layer you meant, never say "I can't do that". That is right for a builder and fatal for a
+   * CONVERSATION, so ai-chat.js passes `{type:'auto'}` and reads the text blocks itself.
+   * `content` is returned for the same reason: a multi-turn exchange has to replay the assistant's
+   * own tool_use block (and its id) back as history, and this used to throw all of that away and
+   * return only `block.input`. The defaults are unchanged, so the four existing callers are untouched. */
   async function call(model, system, messages, tool, opts) {
     opts = opts || {};
-    if (FM.ai.DRY_RUN || state.dry) { await sleep(opts.dryDelay || 240); return { out: FM.aiMock.respond(tool.name, opts.mock || {}), stop: 'mock' }; }
+    var tools = Array.isArray(tool) ? tool : [tool];
+    // the mock returns a tool INPUT; wrap it so dry-run and live hand back the same shape (else every
+    // consumer needs two code paths and the dry-run one is the one no test exercises)
+    if (FM.ai.DRY_RUN || state.dry) {
+      await sleep(opts.dryDelay || 240);
+      var mk = FM.aiMock.respond(tools[0].name, opts.mock || {});
+      return { out: mk, stop: 'mock', content: [{ type: 'tool_use', id: 'mock_' + tools[0].name, name: tools[0].name, input: mk }] };
+    }
     var key = FM.aiKey.get();
     if (!key) throw new Error('No API key');
     var attempt = opts.attempt || 0;
@@ -40,8 +56,8 @@ window.FM = window.FM || {};
           model: model,
           max_tokens: opts.maxTokens || 2048,
           system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
-          tools: [tool],
-          tool_choice: { type: 'tool', name: tool.name },
+          tools: tools,
+          tool_choice: opts.toolChoice || { type: 'tool', name: tools[0].name },
           messages: messages,
         }),
       });
@@ -67,7 +83,7 @@ window.FM = window.FM || {};
     if (FM.aiBudget) FM.aiBudget.add(data.usage, model);
     var block = (data.content || []).find(function (b) { return b.type === 'tool_use'; });
     if (data.stop_reason === 'max_tokens') throw new Error('Output truncated (max_tokens)');
-    return { out: block ? block.input : null, stop: data.stop_reason };
+    return { out: block ? block.input : null, stop: data.stop_reason, content: data.content || [] };
   }
 
   // ---- render the current scene to a small base64 PNG for the vision critic (token-thrifty) ----
@@ -321,6 +337,7 @@ window.FM = window.FM || {};
   FM.ai = {
     DRY_RUN: false,
     MODELS: MODELS,
+    call: call,                        // queue 856: ai-chat.js drives its own conversation through this one door
     generateScene: generateScene,
     rerollTask: rerollTask,
     refine: refine,

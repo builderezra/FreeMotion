@@ -420,6 +420,15 @@ window.FM = window.FM || {};
         { label: 'AI Scene', icon: ico(
           '<path d="M10.5 3.8l1.75 4.15 4.15 1.75-4.15 1.75-1.75 4.15-1.75-4.15L4.6 9.7l4.15-1.75Z"/>'
           + '<path d="M17.4 14.2l.85 2 2 .85-2 .85-.85 2-.85-2-2-.85 2-.85Z"/>'), add: function () { FM.aiPanel && FM.aiPanel.show(); } },
+        /* ASSISTANT (queue 856) — the one you TALK to, as against AI Scene which builds a whole scene
+           from one prompt and stops. A speech bubble, because that is what it is, and because the
+           sparkle pair next door already means "AI makes something": two sparkles here would read as
+           two doors to the same room. No box in the silhouette, same as its neighbour, which is what
+           makes both easy to find in a grid of rectangles. */
+        { label: 'Assistant', icon: ico(
+          '<path d="M20.2 11.3c0 3.5-3.4 6.3-7.6 6.3-.9 0-1.8-.13-2.6-.37L5.3 18.8l1.2-3.1A5.9 5.9 0 0 1 5 11.3C5 7.8 8.4 5 12.6 5s7.6 2.8 7.6 6.3Z"/>'
+          + '<path d="M9.7 11.3h.01M12.6 11.3h.01M15.5 11.3h.01" stroke-linecap="round" stroke-width="2.2"/>'),
+          add: function () { FM.aiChat && FM.aiChat.show(); } },
       ];
       // …then everything you've imported before, newest first. One tap re-adds it — no picker, no
       // trip through the Photos app. (A browser can't read the camera roll; this is the closest

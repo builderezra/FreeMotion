@@ -10,6 +10,32 @@
 # success is confirmed by comparing HEAD to ssh/main rather than by trusting the push output.
 # A red suite was pushed once by running the tests and the commit in the same breath; not possible now.
 set -uo pipefail
+# ⚠️ A SHIP'S VERDICT IS A FILE, NOT SCROLLBACK (20 Sep). This script exits 1 on every refusal and says
+# exactly why — and on 20 Sep none of that reached the session that called it. Two reasons, both
+# structural rather than careless:
+#   1. THE DOCUMENTED WAY TO CALL IT EATS THE EXIT CODE. CLAUDE.md's own timeout section shows
+#      `tools/ship.sh "…" 2>&1 | tail -60`, and a pipeline's status is the LAST command's — so the
+#      caller reads TAIL's 0, never this script's 1. `pipefail` above governs pipelines INSIDE this
+#      script; it cannot reach out and fix the caller's pipe.
+#   2. This script routinely lands in the BACKGROUND (same section), where its verdict is one line
+#      somewhere in an output file a later session may never read.
+# On 20 Sep the phone pass timed out, this script printed "Nothing committed or pushed" and exited 1,
+# and the harness reported "completed (exit code 0)". A refusal that reads as a success is the worst
+# way for a gate to fail, because the next session ships on top of a release that never landed.
+# The EXIT trap covers EVERY path — including the ones that exit long before this line is reached by
+# any future edit — so it is a gate rather than another place to remember to write.
+# ⚠️ ONE EXIT HANDLER, NOT TWO. A second `trap … EXIT` REPLACES the first — it does not add to it — and
+# the first version of this fix learned that the hard way: the cleanup trap further down silently threw
+# this one away, so the very release that added .last-ship never wrote one. Everything that must happen
+# on the way out lives in this one function.
+SHIPPED=0
+_verdict() {
+  _rc=$?
+  rm -f .ship-in-progress
+  { if [ "${SHIPPED:-0}" = 1 ]; then printf 'PUSHED %s\n' "$(git rev-parse --short HEAD 2>/dev/null)"
+    else printf 'REFUSED rc=%s\n' "$_rc"; fi; } > .last-ship 2>/dev/null
+}
+trap _verdict EXIT INT TERM
 # ⚠️ THE MESSAGE CAN COME FROM A FILE, AND FOR ANYTHING WITH CODE IN IT, IT SHOULD (25 Aug).
 # Backticks inside a double-quoted shell argument are COMMAND SUBSTITUTION, not code quotes. The gate
 # below has guarded that since a message containing `void ic.offsetWidth` executed it and committed the
@@ -49,7 +75,26 @@ fi
 # two-commit spot-check running under the v15.71 ship's phone pass flaked test 699 ("the CONTROL swipe moved nothing") and cost
 # the whole ship. spotcheck.sh holds .spotcheck-in-progress while it runs and refuses while this lock exists; same here.
 [ -f .spotcheck-in-progress ] && { echo "❌ a spot-check is running (.spotcheck-in-progress) — its suite slices would contend with this ship's; wait for it"; exit 1; }
-touch .ship-in-progress; trap 'rm -f .ship-in-progress' EXIT INT TERM
+
+# ⚠️ REAP ORPHANED HEADLESS CHROMES BEFORE ANY SUITE RUN (20 Sep, and it cost two ships in one evening).
+# tests/_cdp.py reaps at startup but DELIBERATELY stands down whenever another _cdp.py is alive, because
+# killing a live ship's browser is worse than leaving a dead one (its own note records doing exactly that
+# to 8 processes). prove.sh then fires a dozen sequential runs in seconds — which is precisely the window
+# where run N's browser is still dying as run N+1 starts, so the reaper never fires and orphans pile up
+# DURING THE PROOF ITSELF. The symptom is never "Chrome is broken": it is app-state nonsense inside a
+# test — "FM.glintRing is not a function", "the bar would not open", "the badge cannot be observed" — on
+# a tree whose FULL suite is green at both widths. It happened twice on 20 Sep, to v16.22 and then to
+# v16.23, and believing either red would have meant rewriting three correct tests.
+# Safe here and nowhere else: this runs before ship.sh starts anything, and the two locks above have
+# already established that no other run owns this tree.
+if ! pgrep -f '_cdp\.py' >/dev/null 2>&1; then
+  _ORPH="$(pgrep -f 'fm-cdp-' 2>/dev/null | wc -l | tr -d ' ')"
+  if [ "${_ORPH:-0}" -gt 0 ]; then
+    pkill -9 -f 'fm-cdp-' 2>/dev/null || true
+    echo "→ reaped $_ORPH orphaned headless Chrome process(es) left by an interrupted run (they make a green tree read RED)"
+  fi
+fi
+touch .ship-in-progress   # removed by _verdict() — deliberately NOT its own trap, see the note up top
 
 # ⚠️ A RELEASE CANNOT RUN WITHOUT A LOCAL SERVER, AND THE OLD FAILURE WAS DISCOVERED TOO LATE (queue 814,
 # 6 Sep). `tests/_cdp.py` does not start one — it expects port 8777 to be serving — and when nothing was,
@@ -599,4 +644,5 @@ git commit -q -m "$MSG" || { echo "ship: nothing to commit"; exit 1; }
 git push -q ssh main 2>&1 | tail -2
 H="$(git rev-parse HEAD)"; R="$(git rev-parse ssh/main 2>/dev/null || echo none)"
 if [ "$H" != "$R" ]; then echo "❌ PUSH DID NOT LAND — HEAD $H vs ssh/main $R"; exit 1; fi
+SHIPPED=1   # the ONE place this is set: after the push is verified, not after it is attempted
 echo "✅ pushed and verified: HEAD == ssh/main ($H)"
