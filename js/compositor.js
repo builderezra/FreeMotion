@@ -663,7 +663,14 @@ window.FM = window.FM || {};
          with a square root, which lifts soft edges and leaves a hard edge (magnitude 1) exactly where it was. `legacy: 0`
          keeps every saved instance the render it had. */
       { key: 'soft', label: 'Soft edges', min: 0, max: 100, step: 1, def: 70, legacy: 0, unit: '%' }], color: true, defColor: '#7df9ff', colorLabel: 'Electric' },
-    { type: 'glowscan', label: 'Glow Scan', params: [{ key: 'speed', label: 'Speed', min: 0, max: 8, step: 0.1, def: 1.5, unit: 'Hz' }, { key: 'width', label: 'Width', min: 10, max: 200, step: 1, def: 60, unit: 'px' }], color: true, defColor: '#ffffff', colorLabel: 'Scan' },
+    /* queue 909: STRENGTH was missing, and it is the reason this effect could not be used gently.
+     The kernel screens the scan colour at full value wherever the band peaks, so at every sweep the
+     layer is blown out — measured over one cycle on a photograph: brightness +33 at the edges of the
+     sweep and +125 at its centre, where the correlation with the original picture goes NEGATIVE, i.e.
+     the picture is gone under the band. Speed and Width move the band; nothing could turn it DOWN.
+     Default 1 is exactly today's behaviour, so every saved project renders unchanged — the control
+     only adds the half of the range that never existed. */
+    { type: 'glowscan', label: 'Glow Scan', params: [{ key: 'speed', label: 'Speed', min: 0, max: 8, step: 0.1, def: 1.5, unit: 'Hz' }, { key: 'width', label: 'Width', min: 10, max: 200, step: 1, def: 60, unit: 'px' }, { key: 'amount', label: 'Strength', min: 0, max: 1, step: 0.02, def: 1 }], color: true, defColor: '#ffffff', colorLabel: 'Scan' },
     { type: 'spinstreaks', label: 'Spin Streaks', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
@@ -5964,7 +5971,7 @@ window.FM = window.FM || {};
    amount and flicker that left a lift of about 4% of full scale. The gain restores the intended
    look; nothing visible is lost by changing it, because at a p95 of 2 there was nothing to see. */
 var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var eeSr=255-(255-d[eei])*(255-eeR*eeAdd)/255; var eeSg=255-(255-d[eei+1])*(255-eeG*eeAdd)/255; var eeSb=255-(255-d[eei+2])*(255-eeB*eeAdd)/255; d[eei]=eeSr; d[eei+1]=eeSg; d[eei+2]=eeSb; } } },
-    glowscan: function(d,W,H,p,t){ var gsSpeed = fparam(p, 'speed', 1.5, t); if(gsSpeed<0)gsSpeed=0; if(gsSpeed>8)gsSpeed=8; var gsWidth = fparam(p, 'width', 60, t); if(gsWidth<10)gsWidth=10; if(gsWidth>200)gsWidth=200; var gsCol=hexToRGB(p.color); var gsCr=gsCol[0],gsCg=gsCol[1],gsCb=gsCol[2]; var gsSigma=gsWidth*0.5; if(gsSigma<0.5)gsSigma=0.5; var gsDen=2*gsSigma*gsSigma; var gsPhase=(t*gsSpeed)%1; if(gsPhase<0)gsPhase+=1; var gsScanY=gsPhase*H; var gsW4=W*4; for(var gsY=0;gsY<H;gsY++){ var gsDist=Math.abs(gsY-gsScanY); var gsAlt=H-gsDist; if(gsAlt<gsDist)gsDist=gsAlt; var gsBr=Math.exp(-(gsDist*gsDist)/gsDen); if(gsBr<0.002)continue; var gsAddR=gsCr*gsBr,gsAddG=gsCg*gsBr,gsAddB=gsCb*gsBr; var gsRow=gsY*gsW4; for(var gsX=0;gsX<W;gsX++){ var gsI=gsRow+gsX*4; if(d[gsI+3]<=0)continue; var gsR=d[gsI],gsG=d[gsI+1],gsB=d[gsI+2]; d[gsI]=255-(255-gsR)*(255-gsAddR)/255; d[gsI+1]=255-(255-gsG)*(255-gsAddG)/255; d[gsI+2]=255-(255-gsB)*(255-gsAddB)/255; } } },
+    glowscan: function(d,W,H,p,t){ var gsSpeed = fparam(p, 'speed', 1.5, t); if(gsSpeed<0)gsSpeed=0; if(gsSpeed>8)gsSpeed=8; var gsWidth = fparam(p, 'width', 60, t); if(gsWidth<10)gsWidth=10; if(gsWidth>200)gsWidth=200; var gsCol=hexToRGB(p.color); var gsCr=gsCol[0],gsCg=gsCol[1],gsCb=gsCol[2]; var gsAmt=fparam(p,'amount',1,t); if(gsAmt<0)gsAmt=0; if(gsAmt>1)gsAmt=1; gsCr*=gsAmt; gsCg*=gsAmt; gsCb*=gsAmt; var gsSigma=gsWidth*0.5; if(gsSigma<0.5)gsSigma=0.5; var gsDen=2*gsSigma*gsSigma; var gsPhase=(t*gsSpeed)%1; if(gsPhase<0)gsPhase+=1; var gsScanY=gsPhase*H; var gsW4=W*4; for(var gsY=0;gsY<H;gsY++){ var gsDist=Math.abs(gsY-gsScanY); var gsAlt=H-gsDist; if(gsAlt<gsDist)gsDist=gsAlt; var gsBr=Math.exp(-(gsDist*gsDist)/gsDen); if(gsBr<0.002)continue; var gsAddR=gsCr*gsBr,gsAddG=gsCg*gsBr,gsAddB=gsCb*gsBr; var gsRow=gsY*gsW4; for(var gsX=0;gsX<W;gsX++){ var gsI=gsRow+gsX*4; if(d[gsI+3]<=0)continue; var gsR=d[gsI],gsG=d[gsI+1],gsB=d[gsI+2]; d[gsI]=255-(255-gsR)*(255-gsAddR)/255; d[gsI+1]=255-(255-gsG)*(255-gsAddG)/255; d[gsI+2]=255-(255-gsB)*(255-gsAddB)/255; } } },
     spinstreaks: function(d,W,H,p,t){ var ssBB=arguments[6];
       /* SKIP WHAT THE STREAKS CANNOT REACH (#692) — 99.6ms at its defaults on a 180x150 subject in a
          1080x1920 plate, the most expensive kernel in the catalog once the others were bounded.

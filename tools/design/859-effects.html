@@ -25,6 +25,17 @@ async function run(w){
   var m = /types=([a-z0-9,]+)/.exec(location.hash || '');
   if (m) { var want = m[1].split(','); mine = all.filter(function(t){ return want.indexOf(t) >= 0; }); }
   var KEY = 'dusk';
+  /* #scale=0.6 renders the photo SMALLER THAN THE FRAME, and for whole categories that is the only
+     honest way to look at them (queue 908/909). An outline, a bevel, a drop shadow or an extrude has
+     nothing to draw on a layer with no visible edge — a full-frame photo has none, so the Drawing and
+     Matte families would come out as a grid of blanks and the judgement would be about this fixture
+     rather than about his effects. It has already happened twice: Drop Shadow and Depth Push both
+     measured 0.00 at full frame and work perfectly at half size.
+     #bg=#ffffff goes with it, because a black shadow on a black background is invisible too — which
+     is the OTHER way the same fixture lied. */
+  var SCALE = (/scale=([0-9.]+)/.exec(location.hash||'')||[,1])[1];
+  var BG = (/bg=(%23|#)([0-9a-fA-F]{3,6})/.exec(location.hash||'')||[,,'000000']);
+  BG = '#' + BG[2];
   async function tile(effect){
     if(!photos[KEY]) photos[KEY]=await loadPhoto(w,KEY);
     var im=photos[KEY], side=Math.min(im.naturalWidth,im.naturalHeight);
@@ -32,8 +43,9 @@ async function run(w){
     c.getContext('2d').drawImage(im,(im.naturalWidth-side)/2,(im.naturalHeight-side)/2,side,side,0,0,S,S);
     var mid='_ef_'+(effect?effect.type:'raw'); FM.media.set(mid,{kind:'image',el:c,width:S,height:S,duration:0}); FM.media.pin(mid);
     var l=FM.makeLayer('image',{x:S/2,y:S/2,start:0,duration:2}); l.id=mid; l.effects=effect?[effect]:[];
+    l.transform.scale = Number(SCALE)||1;
     var o=doc.createElement('canvas'); o.width=S; o.height=S;
-    FM.renderScene(o.getContext('2d'),{project:{width:S,height:S,fps:30,duration:2,background:'#000'},layers:[l]},0.4);
+    FM.renderScene(o.getContext('2d'),{project:{width:S,height:S,fps:30,duration:2,background:BG},layers:[l]},0.4);
     return o;
   }
   var plain=await tile(null), cells=[];

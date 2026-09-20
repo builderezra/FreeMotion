@@ -65261,4 +65261,57 @@
     }
   });
 
+
+  /* ── queue 909: Glow Scan gains the Strength it never had ──────────────────────────────────────
+   * Found judging Drawing by eye (#859 clause 1) and confirmed by measuring the sweep over a whole
+   * cycle: the band screens its colour at FULL value wherever it peaks, so on a photograph the layer
+   * reads +33 brightness at the edges of the sweep and +125 at its centre — where the correlation
+   * with the original picture goes NEGATIVE, i.e. the picture is gone under the band. Speed and Width
+   * moved the band; nothing could turn it DOWN. (The #904 controls audit predicted exactly this
+   * independently, which is the first time the two passes have met on the same effect.)
+   * ⚠️ THE OLD-PROJECT RULE IS THE HALF THAT WOULD ROT SILENTLY. A saved instance from before today
+   * has no `amount` key at all, and if that read as 0 every existing Glow Scan would render as
+   * NOTHING with no error anywhere — the exact failure that made 39 effects render at zero in the
+   * v15.7x audit. So the missing key must behave as 1, and that is asserted here, not assumed. */
+  test('909: Glow Scan has a Strength control, it is wired, and an old project without it renders exactly as before', { item: '909', budgetMs: 25000 }, function () {
+    var reg = FM.fxRegistry.all().filter(function (e) { return e.id === 'glowscan'; })[0];
+    if (!reg) throw new Error('glowscan is not in the registry');
+    var keys = (reg.params || []).map(function (p) { return p.key; });
+    if (keys.indexOf('amount') < 0) throw new Error('Glow Scan still has no Strength control — its controls are ' + keys.join(', ') + ', none of which can turn the band down');
+
+    var S = 140, SC = 0.62, BG = '#f2f2f2', T = 0.4;
+    var c = document.createElement('canvas'); c.width = c.height = S;
+    var g = c.getContext('2d');
+    for (var y = 0; y < S; y++) { g.fillStyle = 'rgb(40,' + Math.round(40 + y) + ',90)'; g.fillRect(0, y, S, 1); }
+    var mid = '_fx909';
+    FM.media.set(mid, { kind: 'image', el: c, width: S, height: S, duration: 0 });
+    FM.media.pin(mid);
+    function shot(make) {
+      var l = FM.makeLayer('image', { x: S / 2, y: S / 2, start: 0, duration: 2 });
+      l.id = mid; l.transform.scale = SC; l.effects = make ? [make()] : [];
+      var o = document.createElement('canvas'); o.width = o.height = S;
+      FM.renderScene(o.getContext('2d'), { project: { width: S, height: S, fps: 30, duration: 2, background: BG }, layers: [l] }, T);
+      return o.getContext('2d').getImageData(0, 0, S, S).data;
+    }
+    var lo = Math.round(S * (1 - SC) / 2) + 2, hi = Math.round(S * (1 + SC) / 2) - 2;
+    function lum(d) { var s = 0, n = 0; for (var y2 = lo; y2 < hi; y2++) for (var x = lo; x < hi; x++) { var i = (y2 * S + x) * 4; n++; s += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; } return s / n; }
+    function diff(a, b) { var s = 0, n = 0; for (var y2 = lo; y2 < hi; y2++) for (var x = lo; x < hi; x++) { var i = (y2 * S + x) * 4; n++; s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); } return s / n / 3; }
+    var at = function (v) { return shot(function () { var f = FM.fxRegistry.makeInstance('glowscan'); if (v !== undefined) f.params.amount = v; return f; }); };
+
+    var plain = shot(null), full = at(1), half = at(0.5), none = at(0);
+    var bFull = lum(full) - lum(plain), bHalf = lum(half) - lum(plain);
+
+    // the band must actually be blowing the layer out at full, or nothing below is being measured
+    if (!(bFull > 20)) throw new Error('Glow Scan barely brightened the layer at Strength 1 (+' + bFull.toFixed(1) + ') — the fixture is not catching the band, so the readings below mean nothing');
+    // …and the control must be WIRED, not merely present in the catalog
+    if (!(bHalf < bFull * 0.75)) throw new Error('Strength 0.5 brightened the layer by +' + bHalf.toFixed(1) + ' against +' + bFull.toFixed(1) + ' at full — the slider is in the panel and the kernel is ignoring it');
+    if (diff(none, plain) > 0.5) throw new Error('Strength 0 still changed the picture — the band cannot be turned off');
+
+    /* THE OLD-PROJECT RULE: no `amount` key at all must behave as 1. If it read as 0, every Glow Scan
+       he has ever saved would silently render as nothing. */
+    var legacy = shot(function () { var f = FM.fxRegistry.makeInstance('glowscan'); delete f.params.amount; return f; });
+    if (diff(legacy, full) > 0.5) throw new Error('a Glow Scan saved before Strength existed no longer renders like it used to — a missing key must read as 1, or every old project loses its scan silently');
+    if (FM.fxRegistry.makeInstance('glowscan').params.amount !== 1) throw new Error('the Strength default is not 1, so adding this control changed how existing projects look');
+  });
+
 })();
