@@ -65009,4 +65009,63 @@
     }
   });
 
+
+  /* ── queue 905 (found by hammering under #860) ─────────────────────────────────────────────────
+   * FM.deleteLayer already stops the text editor, the crop tool, the point editor, the fill drag and
+   * the tracker when the layer under them disappears. The EFFECTS BROWSER was the sixth such tool and
+   * was never added, so deleting a layer with it open left a full panel of tiles sitting over a layer
+   * that no longer existed: measured on the real path — the sheet stays up, the selection goes to
+   * null, and tapping a tile changes nothing at all. No wrong-layer damage, but a screen that looks
+   * live and is inert, which is Ezra's "a bit broken and foggy" in as many words.
+   * ⚠️ THE CONTROL IS THE HALF THAT MAKES THIS TRUSTWORTHY: deleting a DIFFERENT layer must leave the
+   * browser open, because it is still editing a live one. Without that, "close it whenever anything is
+   * deleted" passes — and that would shut the panel under him every time he tidies up another layer.
+   * ⚠️ AND open() TAKES A LAYER OBJECT, NOT AN ID. The first version of this measurement passed an id,
+   * which made _layer a STRING, and every reading came from a state no user can reach. The test asserts
+   * the browser really did bind to the layer before it deletes anything, so that can never pass quietly
+   * again. */
+  test('905: deleting a layer closes the effects browser that was adding to it — and not one adding to another layer', { item: '905', budgetMs: 25000 }, async function () {
+    if (!FM.fxBrowser || typeof FM.fxBrowser.open !== 'function') throw new Error('FM.fxBrowser.open is not reachable');
+    if (typeof FM.fxBrowser.layerId !== 'function') throw new Error('FM.fxBrowser.layerId is not exposed — deleteLayer cannot ask which layer the browser is on, so the fix cannot exist');
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+
+    async function open2(name) {
+      if (FM.fxSheetExit) FM.fxSheetExit();
+      await sleep(120);
+      FM.scene.layers.length = 0;
+      var a = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#44cc88' });
+      a.start = 0; a.duration = 3; a.name = name + '_BOUND';
+      var b = FM.makeLayer('shape', { shape: 'ellipse', x: 200, y: 100, shapeW: 60, shapeH: 60, fill: '#cc8844' });
+      b.start = 0; b.duration = 3; b.name = name + '_OTHER';
+      FM.scene.layers.push(a, b);
+      FM.selectLayer(a.id); FM.refreshAll();
+      await sleep(100);
+      FM.fxBrowser.open(a);                 // the OBJECT — what every real caller passes
+      await sleep(220);
+      if (!FM.fxBrowser.isOpen()) throw new Error('the effects browser did not open, so nothing below is being measured');
+      if (FM.fxBrowser.layerId() !== a.id) throw new Error('the browser did not bind to the layer (layerId=' + FM.fxBrowser.layerId() + ') — the reading would be from a state no user can reach');
+      return [a, b];
+    }
+
+    try {
+      // THE FIX: delete the layer it is adding to → it must go.
+      var pair = await open2('X');
+      FM.deleteLayer(pair[0].id);
+      await sleep(220);
+      if (FM.fxBrowser.isOpen()) throw new Error('the effects browser is still open over a layer that has been deleted — tapping a tile there does nothing at all, which reads as the app being broken');
+
+      // THE CONTROL: delete a DIFFERENT layer → it must stay, it is still editing a live one.
+      var pair2 = await open2('Y');
+      FM.deleteLayer(pair2[1].id);
+      await sleep(220);
+      if (!FM.fxBrowser.isOpen()) throw new Error('deleting an UNRELATED layer closed the effects browser — the teardown is firing on any delete, which would shut the panel under him whenever he tidies up something else');
+      if (FM.fxBrowser.layerId() !== pair2[0].id) throw new Error('the browser lost its binding when an unrelated layer was deleted');
+    } finally {
+      if (FM.fxSheetExit) FM.fxSheetExit();
+      FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
+      FM.refreshAll();
+    }
+  });
+
 })();

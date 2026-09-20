@@ -2953,6 +2953,17 @@ window.FM = window.FM || {};
     if (FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive()) FM.cropTool.stop();
     if (FM.fillDrag && FM.fillDrag.isActive && FM.fillDrag.isActive()) FM.fillDrag.stop();
     if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive() && FM.textEdit.layerId() === id) FM.textEdit.stop();   // don't leave a dead text editor over a deleted layer
+    /* …AND THE EFFECTS BROWSER, for exactly the same reason (queue 905, found by hammering under #860).
+     * Every tool above is stopped when the layer under it disappears; this one was the sixth to arrive
+     * and was never added, so deleting a layer with the effects browser open left a full panel of tiles
+     * sitting over a layer that no longer existed. Measured: the sheet stays up, the selection goes to
+     * null, and tapping a tile does nothing at all — no wrong-layer damage, but a screen that looks live
+     * and is inert, which is his "a bit broken and foggy" in as many words.
+     * ⚠️ close(), NOT the usual exit. Queue 389 made every ordinary exit mean Done and COMMIT the picks,
+     * which is right when you are leaving a layer and wrong when the layer has been deleted — there is
+     * nothing left to commit them to. */
+    if (FM.fxBrowser && FM.fxBrowser.isOpen && FM.fxBrowser.isOpen()
+        && FM.fxBrowser.layerId && FM.fxBrowser.layerId() === id && FM.fxBrowser.close) FM.fxBrowser.close();
     if (FM.groupContext === id && FM.exitGroup) FM.exitGroup(true);   // deleting the group you're inside
     // Deleting a GROUP deletes its members too (AM). Recurse first so nested groups cascade and
     // each member's media/audio teardown runs through this same path — but refresh/undo commit

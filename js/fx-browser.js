@@ -1663,6 +1663,12 @@ window.FM = window.FM || {};
     // Suite seams: whether the sheet is up, and a way to open a category sub-view without hunting for
     // its tile in the grid.
     isOpen: function () { return !!(root && !root.classList.contains('hidden')); },
+    /* WHICH LAYER THIS BROWSER IS ADDING TO (queue 905). Needed by FM.deleteLayer, which already stops
+       the text editor, the crop tool, the point editor, the fill drag and the tracker when the layer
+       under them disappears — and did not know about this one, so the effects browser sat open over a
+       layer that no longer existed. Asked rather than stored anywhere else, for the same reason
+       FM.fxSheetOpen asks instead of keeping a list of ids. */
+    layerId: function () { return _layer ? _layer.id : null; },
     /* Takes the category OBJECT or just its key. It used to take only the object, and passing a key
        did not throw — `cat.key` came back undefined, byCategory(undefined) returned nothing, and you
        got a category view containing an empty grid. A sweep written against that reaches zero tiles and
