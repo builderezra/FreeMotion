@@ -3434,7 +3434,13 @@ window.FM = window.FM || {};
     function tick(now) { t.push(now); if (live || now < tailUntil) raf = requestAnimationFrame(tick); else { raf = 0; finish(); } }
     function begin(info) { if (raf) cancelAnimationFrame(raf); t = []; live = true; tailUntil = 0; meta = info || {}; raf = requestAnimationFrame(tick); }
     function settle() { if (!live) return; live = false; tailUntil = performance.now() + 250; }   // through the release fling
-    function cancel() { if (raf) cancelAnimationFrame(raf); raf = 0; live = false; t = []; }
+    /* tailUntil is reset too (queue 887). Without it, a cancel arriving inside the 250ms release tail
+       left a future timestamp behind, so anything asking "is this still running" got a stale yes. */
+    function cancel() { if (raf) cancelAnimationFrame(raf); raf = 0; live = false; tailUntil = 0; t = []; }
+    /* SEAM (queue 887): whether the probe's rAF loop is still armed. The leak this exists to catch is
+       invisible from outside — a loop firing 60x/second forever looks exactly like an idle app until
+       the battery and the memory say otherwise — so a test cannot reach it without being able to ask. */
+    function isLive() { return !!raf; }
     function finish() {
       if (t.length < 4) return;
       const gaps = []; for (let i = 1; i < t.length; i++) gaps.push(t[i] - t[i - 1]);
@@ -3453,7 +3459,7 @@ window.FM = window.FM || {};
       ];
       try { localStorage.setItem('fm.lastScrubReport', lines.join('\n')); } catch (e) {}
     }
-    return { begin: begin, settle: settle, cancel: cancel, last: function () { try { return localStorage.getItem('fm.lastScrubReport') || ''; } catch (e) { return ''; } } };
+    return { begin: begin, settle: settle, cancel: cancel, isLive: isLive, last: function () { try { return localStorage.getItem('fm.lastScrubReport') || ''; } catch (e) { return ''; } } };
   })();
   FM._scrubProbe = scrubProbe;   // seam: the suite drives a real scrub and reads the report back
   function beginScrub(e) {
@@ -4688,6 +4694,18 @@ window.FM = window.FM || {};
         if (trimScrollRAF) { cancelAnimationFrame(trimScrollRAF); trimScrollRAF = 0; }
         endClipEdgeScroll();
         abortGestures();   // RESTORE half-applied clip/trim/kf edits — never leave them in the scene
+        /* ⚠️ AND THE SCRUB PROBE, WHICH THIS HANDLER FORGOT (queue 887). Every timeline scrub arms a
+         * self-re-arming rAF loop, and the ONLY place that stopped it was the pointerup path. So any
+         * touch the OS took away — a notification banner, an edge gesture, or the captured node being
+         * replaced by the rebuild an arriving waveform triggers — left `live` true, and tick() went on
+         * re-arming requestAnimationFrame at ~60fps FOR THE REST OF THE SESSION, pushing one timestamp
+         * into an array per frame. Roughly 216,000 numbers an hour, the tab never idle, on the device
+         * he says gets slow fastest. Every other RAF in this handler was already torn down; this was
+         * the one that was not.
+         * cancel(), not settle(): an interrupted gesture is not a reading, and writing a report for it
+         * would pollute the very diagnostic (#768) he is asked to paste. The pointerup path makes the
+         * same distinction one line at a time. */
+        scrubProbe.cancel();
         dragging = false; scrub = null; pinch = null; pointers.clear(); hideSnap();
       });
       // A LAYOUT switch (classic ⇄ Studio, or drawing mode collapsing the inspector column) moves the

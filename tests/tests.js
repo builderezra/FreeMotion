@@ -46029,12 +46029,22 @@
    * The FIRST clause turned out to be the same bug as queue 360's Done button and is asserted here too:
    * with effects picked, Done must ADD them. It used to call close() and nothing else, so the whole
    * numbered selection was discarded — "the effects I have selected do nothing", exactly. */
-  test('every tile in the browser picks instead of applying, and Done adds what you picked (queue 333)', { item: 'fx-sweep', budgetMs: 240000 }, async function () {
-    /* budgetMs 240s, NOT the 45s default (2 Sep): this test visits every tile in every category and each return
+  test('every tile in the browser picks instead of applying, and Done adds what you picked (queue 333)', { item: 'fx-sweep', budgetMs: 420000 }, async function () {
+    /* budgetMs 420s, NOT the 45s default (2 Sep): this test visits every tile in every category and each return
      * to the overview re-renders that category's thumbnails SYNCHRONOUSLY — measured 6.9s for blur and 30.3s for
      * distort on a cold cache (tests/_rt… probe, Runtime.evaluate stalled for exactly those spans). In the full suite
      * an earlier test has warmed the cache and this takes ~49s; alone it is cold and takes minutes. Both are the
-     * same test being honest about a real cost — see queue 712 for the app side of it. */
+     * same test being honest about a real cost — see queue 712 for the app side of it.
+     * ⚠️ RAISED 240s → 420s ON 21 SEP, AFTER IT STARTED FAILING EVERY PHONE PASS. Measured three times alone at
+     * 380px: 261s, 266s (with the release's own change reverted, so it is not that), and 279s. It is not a flake
+     * and it is not a regression from any one release — the suite and the catalogue have both grown, and 240s
+     * simply stopped being enough for ~200 tiles across 12 categories at phone width.
+     * ⚠️ AND A HYPOTHESIS THAT WAS WRONG, recorded so nobody spends the time again: the per-category `back` click
+     * looks like the expensive part (the comment above is about exactly that cost) and removing it made the test
+     * SLOWER, 279s. The cost is `_openCategory` rendering each category's own tiles, not the overview round trip.
+     * ⚠️ THIS TEST IS THE SINGLE BIGGEST COST IN THE PHONE PASS. The pass sits around 20 minutes against a 30-minute
+     * ceiling in ship.sh; this raise spends ~3 more of the 10 minutes of headroom left. The next thing to grow past
+     * its budget should be looked at as a suite-wide problem rather than given another raise. */
     await atPhoneWidth(async function () {
       var L = FM.scene.layers[0];
       if (!L) {   // stand alone: this test used to depend on whatever an earlier test had left (2 Sep)
@@ -65610,6 +65620,48 @@
       FM.toast = toast0;
       FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
       FM.refreshAll();
+    }
+  });
+
+
+  /* ── queue 887: a scrub probe that never stopped when the OS took the touch away ────────────────
+   * Every timeline scrub arms a self-re-arming rAF loop, and the ONLY thing that stopped it was the
+   * pointerup path. Any touch the system took instead — a notification banner, an edge gesture, or the
+   * captured node being replaced by the rebuild an arriving waveform triggers — fires pointercancel,
+   * so the loop stayed armed and tick() went on calling requestAnimationFrame at ~60fps FOR THE REST
+   * OF THE SESSION, pushing one timestamp into an array per frame. Roughly 216,000 numbers an hour,
+   * the tab never idle, on the device he says slows down fastest. It also meant finish() never ran, so
+   * the #768 scrub report he is asked to paste was silently never written for that gesture.
+   * ⚠️ THE LEAK IS INVISIBLE FROM OUTSIDE — a loop firing forever looks exactly like an idle app — so
+   * the probe had to be able to say whether it is armed before this could be tested at all. And the
+   * CONTROL matters as much as the claim: if isLive() returned false unconditionally, the assertion
+   * would pass while the leak ran. So it also checks the loop IS running when nothing has stopped it. */
+  test('887: a cancelled timeline touch stops the scrub probe, and a live scrub still runs', { item: '887', budgetMs: 20000 }, async function () {
+    var P = FM._scrubProbe;
+    if (!P) throw new Error('FM._scrubProbe is not reachable');
+    if (typeof P.isLive !== 'function') throw new Error('the probe cannot say whether its loop is armed — the leak this test exists for is invisible without that');
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    try {
+      // ── CONTROL FIRST: armed and left alone, it must be RUNNING. Without this, a broken isLive()
+      //    that always says false would make the real assertion below pass while the leak continued.
+      P.begin({ selected: 'none', panel: 'test', layers: 0, effects: 0 });
+      await sleep(150);
+      if (!P.isLive()) throw new Error('the probe reports NOT running immediately after begin() — the check cannot see the loop at all, so nothing below means anything');
+
+      // ── THE CLAIM: the OS takes the touch, and the loop must stop.
+      window.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true }));
+      await sleep(220);
+      if (P.isLive()) throw new Error('the timeline touch was CANCELLED and the scrub probe is still running — it re-arms requestAnimationFrame ~60 times a second for the rest of the session and grows an array by ~216,000 numbers an hour, on the device that slows down fastest');
+
+      // ── and it is genuinely stoppable by its own cancel, so the fix is not masking a dead check
+      P.begin({ selected: 'none', panel: 'test', layers: 0, effects: 0 });
+      await sleep(150);
+      if (!P.isLive()) throw new Error('the probe would not re-arm for a second scrub');
+      P.cancel();
+      await sleep(80);
+      if (P.isLive()) throw new Error('cancel() did not stop the loop');
+    } finally {
+      try { P.cancel(); } catch (e) {}
     }
   });
 
