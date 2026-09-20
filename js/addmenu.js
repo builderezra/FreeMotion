@@ -249,7 +249,14 @@ window.FM = window.FM || {};
            and only saying it somewhere he is not looking is the same fault as not knowing it.
            ⚠️ **Kept to one sentence each, naming the USE rather than the concept.** "A null object with no
            spatial extent" is accurate and would tell him nothing. */
-        { label: 'Controller', icon: ico('<rect x="5" y="5" width="14" height="14" rx="1" stroke-dasharray="3 2"/><path d="M9 12h6M12 9v6"/>'),
+        /* ⚠️ CORNER TICKS + CROSSHAIR, NOT A DASHED BOX — queue 867. Ezra: *"The controller and New group
+           options are both very similar looking while also both looking kind of shit"*. They were BOTH a
+           dashed rectangle with a cross in it, which is why they read as the same kind of thing — and
+           `js/addmenu.js` already warned at ~520 that dashes carry two meanings in this app. They now carry
+           one: the invisible thing. This is the standard null-object mark in every motion app, and it reads
+           at 24px far better than a dashed box, whose dashes blur into a solid rim at that size.
+           🔒 THE RED IS UNTOUCHED AND MUST STAY — "Null being red is good" is his, from queue 416. */
+        { label: 'Controller', icon: ico('<path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"/><path d="M12 9.5v5M9.5 12h5"/>'),
           desc: 'An invisible handle — parent layers to it, then move it to move them all together.',
           add: function () { FM.addNullLayer && FM.addNullLayer(); if (FM.toast) FM.toast('Controller: an invisible handle. Parent layers to it, then move it to move them all at once.', 4200); } },
         { label: 'Adjustment', icon: ico('<circle cx="12" cy="12" r="8"/><path d="M4 12h16"/>'),
@@ -258,7 +265,10 @@ window.FM = window.FM || {};
         // An EMPTY group: grouping used to require selecting two layers first, so there was no way to
         // make the container and then fill it. Drag layers onto it, or parent them to it.
         // "New group", not "Empty group" (queue 412) — his words: "Rename empty group to new group".
-        { label: 'New group', icon: ico('<rect x="3" y="6" width="18" height="14" rx="2" stroke-dasharray="3 2"/><path d="M8 13h8M12 9v8"/>'), add: function () { FM.addEmptyGroup && FM.addEmptyGroup(); } },
+        /* ⚠️ SOLID, AND A CONTAINER RATHER THAN A BOX — queue 867, the other half. The dashes come OFF here
+           so "dashed" means Controller and nothing else, and the shape is a folder holding a plus: a group
+           is a thing you put layers INTO, which a plain rectangle does not say. */
+        { label: 'New group', icon: ico('<path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2.5h7A1.5 1.5 0 0 1 19 10v7.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 3 17.5z"/><path d="M11 12.5h4M13 10.5v4"/>'), add: function () { FM.addEmptyGroup && FM.addEmptyGroup(); } },
       ]);
       // "Save selection as element…" is gone from here — it acts on a SELECTION, and this menu only
       // ever appears when nothing is selected, so the one state it needed was the one state it could
@@ -905,11 +915,20 @@ window.FM = window.FM || {};
     'Camera': '156, 124, 255',           // violet, matching its lens
     'Controller': '255, 118, 140',       // "Null being red is good" — the value it already had, pinned. Keyed by LABEL, so this HAD to be renamed with the tile (queue 363) or the red he asked to keep would have silently fallen back to the generic ring.
     'Adjustment': '84, 226, 190',        // mint
-    'New group': '150, 165, 190',        // steel — a container, deliberately the quiet one (renamed, queue 412)
+    'New group': '110, 205, 125',        // leaf green — see the note below (queue 867)
     'Custom elements': 'MULTI',          // "you could make the custom elements button be multicoloured"
-    /* Empty group and Custom elements are the two quiet ones, and giving them the same neutral put two
-       identical plates side by side — the "similar to a lot of them" complaint in miniature. They are a
-       steel and a lilac-grey now: still both quiet, still clearly two things. */
+    /* ⚠️ THIS NOTE USED TO SAY New group and Custom elements were "a steel and a lilac-grey … still both
+       quiet, still clearly two things". THAT WAS FALSE AND HE CAUGHT IT: *"the problem with the new group
+       button is that like the exact same colour as the custom elements background"* (queue 867).
+       MEASURED: `150,165,190` against Custom elements' resolved `172,158,196` is a distance of **38** in
+       RGB, where this menu's OWN rule (queue 271) is that no two cards may sit within 60 — and at the
+       .085 alpha these plates are painted at, 38 is no difference at all. The note was an intention, not
+       a measurement, and it read as a reassurance for months.
+       🔑 WHY GREEN, AND WHY IT STOPS BEING ONE OF "THE QUIET ONES" AT ALL. Every other card in this grid
+       ADDS A LAYER. `Custom elements` OPENS A BROWSER — it is navigation, not an action — so the quiet
+       plate should be ITS alone, and New group belongs with the coloured family it actually behaves like.
+       Green is the one clear gap in this menu's palette: 167 from Sketching's yellow, 73 from Adjustment's
+       mint and 105 from Custom elements, all clear of the 60 rule with headroom. */
   };
 
   /* Elements: "choose more subtle background colours, the main icon can stay bright but the backdrop

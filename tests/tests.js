@@ -55825,6 +55825,129 @@
       bad.join(' · ') + '. Either scale the parameter to the plate (see #889/#890/#899), or add it to INHERENT above with the reason it cannot match.');
   });
 
+  /* ═══ 860: EVERY ICON ON SCREEN ACTUALLY HAS INK, IN EVERY STATE THE SUITE CAN REACH.
+     Ezra, 11 Sep: *"the icons don't display properly"* — and he has said it more than once, which is why
+     two hand-hunts finding nothing does not close it. The first hunt photographed the app AT REST and
+     found nothing; the second drove it through 19 states (every home tab, inside a project, every add-menu
+     tab, a layer selected, the effects browser, a forced rebuild, back home) and also found nothing. So
+     this is not a fix — it is a GUARD, put in the suite so that if an icon ever does lose its ink, the
+     release that does it fails instead of reaching him.
+     ⚠️ THE INK IS ON THE CHILDREN, NOT ON THE <svg>. The first version of this check read `fill`/`stroke`
+     off the svg root and accused SEVEN healthy icons, because the paint lives on the paths inside.
+     ⚠️ AND IT CARRIES ITS OWN CONTROL, for a reason that is by now a pattern on this project: on the day
+     this was written, THREE separate instruments lied before they were caught — the suite's own server
+     refusing 7 of 40 parallel requests, test 497 naming seven element ids that were sitting on disk, and an
+     effects sweep reporting a Glow Scan fault that did not exist. The first version of THIS check failed
+     its own control too: it blanked a hidden icon, so blanking proved nothing. A check that cannot see the
+     fault it is looking for reports a clean app however broken it is. So: blank a VISIBLE icon, require the
+     audit to notice, then put it back. */
+  test('860: no icon on screen is missing its ink, in any state the suite can drive', { item: '860' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const audit = () => {
+      const out = [];
+      document.querySelectorAll('svg').forEach(svg => {
+        const r = svg.getBoundingClientRect();
+        if (r.width < 4 || r.height < 4) return;                 // off screen is not this test's business
+        const cs = getComputedStyle(svg);
+        if (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity === 0) return;
+        const kids = svg.querySelectorAll('path,rect,circle,ellipse,line,polyline,polygon,text,use,image');
+        const owner = svg.closest('[aria-label]');
+        const label = owner ? owner.getAttribute('aria-label') : String((svg.parentElement || {}).className || '?').slice(0, 40);
+        if (!kids.length) { out.push(label + ' (no drawable children)'); return; }
+        let inked = false;
+        kids.forEach(k => {
+          const ks = getComputedStyle(k), f = ks.fill, st = ks.stroke;
+          const hasF = f && f !== 'none' && f !== 'rgba(0, 0, 0, 0)';
+          const hasS = st && st !== 'none' && st !== 'rgba(0, 0, 0, 0)' && parseFloat(ks.strokeWidth) > 0;
+          if ((hasF || hasS) && +ks.opacity > 0 && ks.visibility !== 'hidden') inked = true;
+        });
+        if (!inked) out.push(label + ' (no visible ink on any child)');
+      });
+      return out;
+    };
+
+    /* CONTROL FIRST. */
+    const visible = [].slice.call(document.querySelectorAll('svg')).filter(function (sv) {
+      const r = sv.getBoundingClientRect();
+      return r.width > 8 && r.height > 8 && sv.querySelectorAll('path,rect,circle,line,polyline,polygon').length;
+    });
+    if (visible.length < 5) throw new Error('only ' + visible.length + ' drawable icons are on screen — the app is not in a state this test can say anything about');
+    const victim = visible[0], kids = victim.querySelectorAll('path,rect,circle,line,polyline,polygon');
+    const saved = []; kids.forEach(k => { saved.push([k, k.getAttribute('style')]); k.style.setProperty('fill', 'none', 'important'); k.style.setProperty('stroke', 'none', 'important'); });
+    const sawBlank = audit().length;
+    saved.forEach(pair => { if (pair[1] === null) pair[0].removeAttribute('style'); else pair[0].setAttribute('style', pair[1]); });
+    if (!sawBlank) throw new Error('control: blanking a visible icon did not make the audit report it, so a clean result from it would mean nothing — the ink is on the CHILDREN of the svg, check what this is reading');
+
+    /* …then the real sweep, across the states that are cheap to reach from here. */
+    const seen = [];
+    const at = async (state) => { await sleep(260); const f = audit(); if (f.length) seen.push(state + ': ' + f.join(', ')); };
+    await at('as found');
+    const tabs = [].slice.call(document.querySelectorAll('.hm-tab'));
+    for (let i = 0; i < tabs.length; i++) { tabs[i].click(); await at('home tab ' + (tabs[i].textContent || '').trim()); }
+    if (tabs.length) { const pj = tabs.filter(b => /Projects/.test(b.textContent || ''))[0]; if (pj) { pj.click(); await sleep(200); } }
+    const amTabs = [].slice.call(document.querySelectorAll('.addmenu-tab'));
+    for (let i = 0; i < amTabs.length; i++) { amTabs[i].click(); await at('add-menu tab ' + (amTabs[i].textContent || '').trim()); }
+
+    if (seen.length) throw new Error('icons with no ink on screen — this is what he means by "the icons don\'t display properly": ' + seen.join(' | '));
+  });
+
+  /* ═══ 903: NOTHING PAINTS A HEAVY COLOUR WASH BEHIND THE HOME SCREEN'S CONTROLS.
+     He reported this THREE times and the first two fixes missed, because both of them went after the
+     BAR: *"a white bar that's fading on top of the buttons in the main menu"*, then after `.hm-top` was
+     flattened, *"the bar the top of the screen still fading over the buttons"*.
+     The bar was never it. `#hm-bleed` was **52vh — 426px at his width** — starting at y=0 and opening at
+     **62% cyan**, while the bar holding the wordmark and his three buttons is **63px**. So the densest
+     part of a half-screen wash sat directly behind and just below the controls. Not a bar: a wash with
+     the controls floating in its thickest part.
+     ⚠️ ASSERTED AGAINST THE CONTROLS' OWN HEIGHT, not against a magic number. The fault was never "this
+     gradient is too strong" in the abstract — it was that it was strong WHERE THE BUTTONS ARE. So the
+     test measures the alpha this element actually paints at the bottom edge of `.hm-top` and requires it
+     to be faint THERE. That survives someone changing the bar's height or the wash's, which a hard-coded
+     "26vh" would not.
+     ⚠️ AND IT HAS A CONTROL, because an element that has been deleted or renamed would pass every
+     assertion below by being absent — which is exactly how a guard rots into decoration. */
+  test('903: the home screen paints no heavy colour wash behind its own top controls', { item: '903' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const html = document.documentElement, was = html.getAttribute('data-home');
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      html.setAttribute('data-home', 'light');
+      if (FM.home && FM.home.open && !FM.home.isOpen()) { FM.home.open(); await sleep(260); }
+      await sleep(200);
+      const bleed = document.getElementById('hm-bleed');
+      const top = document.querySelector('.hm-top');
+      if (!top) throw new Error('control: .hm-top is not on screen, so there are no controls to be washed over and this test cannot say anything');
+      if (!bleed) return;                       // the wash was removed outright — that is the strong form of the fix
+
+      const tb = top.getBoundingClientRect().bottom;
+      const br = bleed.getBoundingClientRect();
+      if (br.height < 1) return;                // painted nothing at all
+      const css = getComputedStyle(bleed).backgroundImage;
+      const stops = css.match(/rgba?\([^)]*\)\s*\d+(?:\.\d+)?%/g) || [];
+      if (!stops.length) throw new Error('control: could not read any gradient stops off #hm-bleed (' + css.slice(0, 80) + ') — the check cannot see what it is judging, so a pass would mean nothing');
+
+      /* the alpha this wash is still carrying at the bottom edge of the bar the buttons live in */
+      let worst = 0;
+      stops.forEach(function (st) {
+        const a = st.match(/rgba?\(([^)]*)\)/)[1].split(',').map(Number);
+        const alpha = a.length > 3 ? a[3] : 1;
+        const pct = parseFloat(st.match(/(\d+(?:\.\d+)?)%$/)[1]) / 100;
+        const y = br.top + br.height * pct;
+        if (y <= tb + 1 && alpha > worst) worst = alpha;     // this stop lands at or above the controls' bottom edge
+      });
+      if (worst > 0.30) throw new Error('the home screen paints a colour wash at ' + worst.toFixed(2) +
+        ' alpha behind its own top controls (the bar ends at y=' + Math.round(tb) + ', the wash runs to y=' + Math.round(br.bottom) +
+        ') — that is queue 903, reported three times: "colour fighting over all the buttons". It opened at 0.62 before the fix.');
+      /* …and it must not run half the screen either, or it is a wash however faint it starts. */
+      if (br.height > window.innerHeight * 0.4) throw new Error('#hm-bleed covers ' + Math.round(100 * br.height / window.innerHeight) +
+        'vh of the screen — it was 52vh when he complained, and a wash that long reads as a fade down the page rather than a tint at the top');
+    } finally {
+      if (was == null) html.removeAttribute('data-home'); else html.setAttribute('data-home', was);
+      if (!homeWasOpen && FM.home && FM.home.close) { try { FM.home.close(); } catch (e) {} }
+      await sleep(80);
+    }
+  });
+
   test('497: every element the suite reaches for actually exists', { item: '497' }, async function () {
     const ASSERTED_ABSENT = {
       'btn-more':      'queue 35 — the ⋯ button was removed; two tests check it has not come back',

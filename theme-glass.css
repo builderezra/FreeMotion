@@ -576,17 +576,37 @@ html[data-home="light"] #home-screen::after {
   background: radial-gradient(52vmax 44vmax at 33.87% 72.58%, rgba(41, 217, 187, .10), transparent 60%);
 }
 
+/* ⚠️ CUT RIGHT BACK — queue 903, his second and third report of the same thing.
+   *"there's a white bar that's fading on top of the buttons in the main menu … it's got this like
+   terrible like fade at the top where it's like this is colour fighting over all the buttons and it
+   just looks really janky just like make it look like an app how it should look"*, and then, after the
+   top bar itself was flattened and it was still there: *"fixing the bar the top of the screen still
+   fading over the buttons"*.
+   THE BAR WAS NEVER THE PROBLEM — THIS WAS, and that is why flattening `.hm-top` did not fix it.
+   MEASURED at 380px: this element is **52vh — 426px** tall and starts at y=0, opening at 62% cyan,
+   while the bar holding the wordmark and the three buttons is **63px**. So the strongest part of a
+   426px wash sat directly behind and immediately below the controls and faded downward from there.
+   That is exactly "a fade at the top, over the buttons": not a bar, a wash the height of half the
+   screen, with the controls floating in its densest part.
+   🔑 THE HUE STAYS, THE WASH GOES. Queue 615 is him asking for colour up here ("keep the top bar
+   colourful… like the top colourful bar is leaning onto the page") and he has not withdrawn that — he
+   is objecting to how MUCH of it there is and to it competing with the controls. So the opening stop
+   drops .62 → .17, every stop below it comes down with it, and the whole thing shortens 52vh → 26vh so
+   it reads as a tint at the very top rather than as half a screen of colour. A hint of the look he
+   asked for; none of the wash he has now complained about twice.
+   ⚠️ DO NOT "restore" this by raising the numbers because #615 reads like it wants them high. #615 is
+   older than this and he is looking at the result. */
 html[data-home="light"] #hm-bleed {
-  position: absolute; left: 0; right: 0; top: 0; height: 52vh;
+  position: absolute; left: 0; right: 0; top: 0; height: 26vh;
   pointer-events: none; z-index: 0;
   background:
     linear-gradient(180deg,
-      rgba(127, 216, 255, .62) 0%,
-      rgba(74, 236, 208, .38) 17%,
-      rgba(41, 217, 187, .26) 32%,
-      rgba(90, 168, 255, .18) 50%,
-      rgba(38, 132, 255, .11) 66%,
-      rgba(150, 122, 255, .06) 82%,
+      rgba(127, 216, 255, .17) 0%,
+      rgba(74, 236, 208, .11) 17%,
+      rgba(41, 217, 187, .075) 32%,
+      rgba(90, 168, 255, .05) 50%,
+      rgba(38, 132, 255, .03) 66%,
+      rgba(150, 122, 255, .015) 82%,
       rgba(122, 92, 255, 0) 100%);
 }
 
