@@ -630,6 +630,7 @@ window.FM = window.FM || {};
       { key: 'offsetx', label: 'Seam X', min: -1600, max: 1600, step: 1, def: 0, unit: 'px' },
       { key: 'offsety', label: 'Seam Y', min: -1600, max: 1600, step: 1, def: 0, unit: 'px' },
       { key: 'axis', label: 'Folds on', def: 0, options: [[0, 'Both'], [1, 'Across'], [2, 'Down']] },
+      { key: 'shape', label: 'Tile shape', def: 1, legacy: 0, options: [[0, 'Square'], [1, 'Like the frame']] },   // queue 904: a square tile squashed a 9:16 picture by 1.78x
     ] },
     // ---- batch 16: Other / Color / Procedural / Drawing ----
     { type: 'channelremap', label: 'Channel Remap', params: [
@@ -8814,9 +8815,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var mt_oy=p.offsety==null?0:FM.evalProp(p.offsety,t);
       var mt_ax=p.axis==null?0:(Math.round(FM.evalProp(p.axis,t))|0);
       var mt_x=mt_ox===0?x:x-mt_ox*(ps||1), mt_y=mt_oy===0?y:y-mt_oy*(ps||1);
-      var mt_cix=Math.floor(mt_x/mt_size); var mt_lx=mt_x-mt_cix*mt_size; if((mt_ax===0||mt_ax===1)&&(mt_cix&1)) mt_lx=mt_size-mt_lx;
+      /* TILE SHAPE (queue 904): each tile is the whole picture shrunk into it, so a SQUARE tile squashed a portrait frame 1.78x. 'Like
+         the frame' keeps Tile size as the tile's HEIGHT and makes its width follow the frame's aspect. Square is the old tile exactly. */
+      var mt_sw=(p.shape!=null&&(Math.round(FM.evalProp(p.shape,t))|0)===1)?mt_size*W/H:mt_size;
+      var mt_cix=Math.floor(mt_x/mt_sw); var mt_lx=mt_x-mt_cix*mt_sw; if((mt_ax===0||mt_ax===1)&&(mt_cix&1)) mt_lx=mt_sw-mt_lx;
       var mt_ciy=Math.floor(mt_y/mt_size); var mt_ly=mt_y-mt_ciy*mt_size; if((mt_ax===0||mt_ax===2)&&(mt_ciy&1)) mt_ly=mt_size-mt_ly;
-      var mt_sx=(mt_lx/mt_size)*W; var mt_sy=(mt_ly/mt_size)*H; return [mt_sx,mt_sy]; },
+      var mt_sx=(mt_lx/mt_sw)*W; var mt_sy=(mt_ly/mt_size)*H; return [mt_sx,mt_sy]; },
     // ---- batch 18 (warp) ----
     /* PREPPED (shape 1 — hoist only, exact). Amount, centre, radius percentage and the resolved disc
      * radius were all per-pixel; the early `ip_rad <= 0` bail is hoisted with them. */
@@ -9164,15 +9168,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     var ox = p.offsetx == null ? 0 : FM.evalProp(p.offsetx, t);
     var oy = p.offsety == null ? 0 : FM.evalProp(p.offsety, t);
     var ax = p.axis == null ? 0 : (Math.round(FM.evalProp(p.axis, t)) | 0);
-    return { size: size, oxp: ox === 0 ? 0 : ox * k, oyp: oy === 0 ? 0 : oy * k, ax: ax };
+    var sizex = (p.shape != null && (Math.round(FM.evalProp(p.shape, t)) | 0) === 1) ? size * W / H : size;   // queue 904: Tile shape — mirrors the CPU kernel
+    return { size: size, sizex: sizex, oxp: ox === 0 ? 0 : ox * k, oyp: oy === 0 ? 0 : oy * k, ax: ax };
   };
   WARP_FX.mirrortile.glsl = [
     'float mx = xy.x - u_oxp, my = xy.y - u_oyp;',
-    'float cix = floor(mx / u_size); float lx = mx - cix * u_size;',
-    'if ((u_ax == 0.0 || u_ax == 1.0) && mod(cix, 2.0) >= 0.5) lx = u_size - lx;',
+    'float cix = floor(mx / u_sizex); float lx = mx - cix * u_sizex;',
+    'if ((u_ax == 0.0 || u_ax == 1.0) && mod(cix, 2.0) >= 0.5) lx = u_sizex - lx;',
     'float ciy = floor(my / u_size); float ly = my - ciy * u_size;',
     'if ((u_ax == 0.0 || u_ax == 2.0) && mod(ciy, 2.0) >= 0.5) ly = u_size - ly;',
-    'return vec2((lx / u_size) * res.x, (ly / u_size) * res.y);'
+    'return vec2((lx / u_sizex) * res.x, (ly / u_size) * res.y);'
   ].join('\n');
 
   /* POLAR COORDS — rectangular <-> polar, blended by Amount. Reads the RAW cx/cy/maxR, hence fmCx etc.

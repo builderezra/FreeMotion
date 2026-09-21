@@ -37215,8 +37215,8 @@
         moved: { rows: 5, mirror: 3, stagger: 0.5 } },
       { type: 'radialrepeat', old: { count: 6 },  legacyKeys: { rotate: 0, mirror: 0, twist: 0 },
         moved: { rotate: 40, mirror: 1, twist: 120 } },
-      { type: 'mirrortile',   old: { size: 140 }, legacyKeys: { offsetx: 0, offsety: 0, axis: 0 },
-        moved: { offsetx: 70, offsety: 70, axis: 1 } },
+      { type: 'mirrortile',   old: { size: 140 }, legacyKeys: { offsetx: 0, offsety: 0, axis: 0, shape: 0 },
+        moved: { offsetx: 70, offsety: 70, axis: 1, shape: 1 } },
     ];
     CASES.forEach(function (c) {
       var withKeys = {}; Object.keys(c.old).forEach(function (k) { withKeys[k] = c.old[k]; });
@@ -37233,6 +37233,10 @@
       var inst = FM.fxRegistry.makeInstance(c.type);
       if (inst) {
         var stamped = {}; Object.keys(inst.params).forEach(function (k) { stamped[k] = inst.params[k]; });
+        /* A param that DECLARES a `legacy` different from its default starts differently on a NEW instance ON PURPOSE (queue 904:
+           Mirror Tile's Tile shape) — a catalogued decision, not drift. It is held at its legacy value here so the rest of the new
+           instance is still checked against the old one; its own test covers what the new default does. */
+        (FM.fxRegistry.paramsOf(c.type) || []).forEach(function (pd) { if (pd && pd.legacy != null && pd.legacy !== pd.default && pd.key in stamped) stamped[pd.key] = pd.legacy; });
         if (warpDiff(bare, warpGrid(c.type, stamped))) fails.push(c.type + ': a NEW instance maps differently from an old one');
       }
     });
@@ -56246,6 +56250,22 @@
       if (!(lit(long) > lit(a) * 1.3)) throw new Error('Smear length 5 does not reach further than 1 at t=' + t + ' (' + lit(long) + ' lit px vs ' + lit(a) + ')');
     }
     if (!checked) throw new Error('Smear length 5 changed nothing at any of six moments — the smear still cannot be lengthened (queue 904)');
+  });
+
+  /* ═══ 904: Mirror Tile's tile can follow the frame's shape, so a portrait picture is not squashed into a square. */
+  test('904: Mirror Tile tiles can keep the frame shape instead of squashing it square', { item: '904' }, function () {
+    const X = FM._FX_TABLES && FM._FX_TABLES.WARP_FX, f = X && X.mirrortile;
+    if (!f || !f.glslPrep) throw new Error('WARP_FX.mirrortile is not reachable');
+    const W = 90, H = 160, P = (o) => Object.assign({ size: 40, offsetx: 0, offsety: 0, axis: 0 }, o);
+    const firstFold = (p) => { let prev = f(0, 50, W, H, W / 2, H / 2, 100, p, 0, 1)[0]; for (let x = 1; x < W; x++) { const u = f(x, 50, W, H, W / 2, H / 2, 100, p, 0, 1)[0]; if (u < prev) return x; prev = u; } return -1; };
+    for (let x = 0; x < W; x += 3) { const a = f(x, 70, W, H, 45, 80, 100, P({}), 0, 1), b = f(x, 70, W, H, 45, 80, 100, P({ shape: 0 }), 0, 1); if (a[0] !== b[0] || a[1] !== b[1]) throw new Error('Square is not the old tile at x=' + x); }
+    const sq = firstFold(P({})), fr = firstFold(P({ shape: 1 }));
+    if (!(Math.abs(sq - 41) <= 1)) throw new Error('control: the square tile should fold at x≈40, folded at ' + sq);
+    if (!(Math.abs(fr - 23.5) <= 1.5)) throw new Error('Like the frame should fold at 40·90/160 ≈ 22.5, folded at ' + fr + ' — the tile is still square (queue 904)');
+    // the GPU shader reads the same width
+    const g = f.glslPrep(W, H, 45, 80, 100, P({ shape: 1 }), 0, 1), g0 = f.glslPrep(W, H, 45, 80, 100, P({}), 0, 1);
+    if (!(Math.abs(g.sizex - 22.5) < 1e-9) || g0.sizex !== g0.size) throw new Error('the GPU prep does not carry the tile width (sizex ' + g.sizex + ', square ' + g0.sizex + ' vs ' + g0.size + ')');
+    if (FM.fxRegistry.makeInstance('mirrortile').params.shape !== 1) throw new Error('a new Mirror Tile does not start with the frame shape');
   });
 
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
