@@ -641,7 +641,7 @@ window.FM = window.FM || {};
        candidate list but it changes the param shape for every saved project, and he asked for blending
        first. */
     { type: 'gradientoverlay', label: 'Gradient Overlay', params: [
-        { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' },
+        { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°', overriddenBy: 'shape', liveWhen: [0, 2] },   // a Radial gradient has no direction (queue 904)
         { key: 'shape', label: 'Shape', def: 0, options: [[0, 'Linear'], [1, 'Radial'], [2, 'Conic']] },
         { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Multiply'], [2, 'Screen'], [3, 'Overlay'], [4, 'Soft Light'], [5, 'Hard Light'], [6, 'Add'], [7, 'Difference']] },
         { key: 'mid', label: 'Midpoint', min: 0.05, max: 0.95, step: 0.01, def: 0.5 },
@@ -920,13 +920,13 @@ window.FM = window.FM || {};
       // legacy = what an instance saved BEFORE this param existed still renders as, so the panel
       // highlights the button that is actually drawing rather than the new default.
       { key: 'mode', label: 'Layout', options: ['Extend', 'Grid'], def: 0, legacy: 1 },   // Extend = clip stays put, copies fill outward; Grid = classic n×n shrink
-      { key: 'count', label: 'Tiles', min: 1, max: 8, step: 1, def: 3 },
+      { key: 'count', label: 'Tiles', min: 1, max: 8, step: 1, def: 3, overriddenBy: 'mode', liveWhen: 1 },   // Extend never reads it — and Extend is the DEFAULT (queue 904)
       { key: 'gap', label: 'Gap', min: 0, max: 40, step: 1, def: 0, legacy: 8, unit: '%' },
       { key: 'mirror', label: 'Mirror', options: ['Off', 'On'], def: 1, legacy: 0 },      // mirrored copies join seamlessly — "the clip keeps going"
       // What gets repeated. "On screen" is the original behaviour: it tiles whatever alpha survives
       // inside the frame, so a clip dragged half off the edge repeats a sliver. "Whole clip" renders
       // the layer past the frame first and repeats all of it.
-      { key: 'source', label: 'Repeat', options: ['On screen', 'Whole clip'], def: 1, legacy: 0 },
+      { key: 'source', label: 'Repeat', options: ['On screen', 'Whole clip'], def: 1, legacy: 0, overriddenBy: 'mode', liveWhen: 0 },   // Grid returns before reading it (queue 904)
     ] },
     // ---- batch 25: content-aware motion blur — blurs what MOVES INSIDE the clip (frame-to-frame),
     // not how the clip is transformed. Four styles like other editors: optical-flow Pixel Motion

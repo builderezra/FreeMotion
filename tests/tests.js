@@ -27257,7 +27257,7 @@
       const pd = ps.find(x => x.key === key);
       if (!pd || typeof pd.min !== 'number' || typeof pd.max !== 'number') { missing.push(type + '.' + key + ' — the raised param is gone'); return; }
       const defs = {}; ps.forEach(x => { if (x.default !== undefined) defs[x.key] = x.default; });
-      if (pd.overriddenBy && pd.liveWhen !== undefined) defs[pd.overriddenBy] = pd.liveWhen;
+      if (pd.overriddenBy && pd.liveWhen !== undefined) defs[pd.overriddenBy] = Array.isArray(pd.liveWhen) ? pd.liveWhen[0] : pd.liveWhen;   // several live values since queue 904
       const at = v => shot(type, Object.assign({}, defs, { [key]: v }));
       const mid = at(pd.min + (pd.max - pd.min) * 0.5), top = at(pd.max);
       /* TRAP 2: prove the metric can read zero before believing a non-zero reading. */
@@ -66232,6 +66232,84 @@
       var off = mad(a, static60);
       if (!(off < 0.5)) throw new Error('animated ' + cs[0] + ': at rest it differs from the static curved text by ' + off.toFixed(2) + ' (a bend is ' + bend.toFixed(2) + ') — the letters are not sitting on the same arc');
     });
+  });
+
+
+  /* ── queue 904 [A]: controls shown live in a mode where they do nothing ─────────────────────────────
+   * Gradient Overlay's Angle in Radial (a radial gradient has no direction); Tiles' "Tiles" slider in Extend
+   * — the DEFAULT mode, which never reads it — and its "Repeat" option row in Grid, which returns before
+   * reading it. All three read as "the effect is broken". Each now declares the mode it is used in, and the
+   * panel greys it and says so, with the same row #482 already gives HSL Bands and Frame Stutter.
+   * Two generalisations were needed and each has its own check: several live values (Angle steers Linear AND
+   * Conic), and an OPTION row being gated, not only a slider.
+   * ⚠️ THE LEGACY CASE: an old Tiles saved before Layout existed has no mode and DRAWS as Grid (the kernel's
+   * fallback, `legacy: 1`). The panel used to read the DEFAULT (Extend), and would have told that project its
+   * working Tiles slider did nothing. The last block is that project. */
+  test('904 dead-in-mode: Gradient Overlay Angle and both Tiles controls say which mode uses them, and an old Tiles is judged by what it draws', { item: '904', budgetMs: 30000 }, async function () {
+    var reg = FM.fxRegistry;
+    if (!reg || !reg.makeInstance || !reg.paramsOf) throw new Error('the effect registry is not reachable');
+    var saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    var hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    var inst = null;
+    function rowFor(label) {
+      var lab = [].slice.call(document.querySelectorAll('.fx-scrub-label')).filter(function (e) { return (e.textContent || '').trim() === label; })[0];
+      return lab ? lab.closest('.fx-scrub-row, .fx-seg-row') : null;
+    }
+    async function show(type, set) {
+      FM.scene.layers.length = 0;
+      var L = FM.makeLayer('shape', { name: 'S904', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 5;
+      inst = reg.makeInstance(type);
+      if (!inst) throw new Error('could not make a ' + type + ' instance');
+      inst._expanded = true;
+      set(inst.params);
+      L.effects = [inst];
+      FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll();
+      FM.inspector.openCategory('effects'); FM.inspector.refresh();
+      await sleep(160);
+    }
+    function expect(type, label, dead, words) {
+      var row = rowFor(label);
+      if (!row) throw new Error(type + ': no "' + label + '" row on screen — nothing was measured');
+      var isDead = row.classList.contains('fx-overridden');
+      var tag = row.querySelector('.fx-ovr-tag'), said = tag ? tag.textContent : '';
+      if (dead && !isDead) throw new Error(type + ': "' + label + '" is shown LIVE in a mode that never reads it — the slider moves and the picture does not, which reads as a broken effect');
+      if (!dead && isDead) throw new Error(type + ': "' + label + '" is greyed out in the very mode that uses it — ' + said);
+      if (dead && said !== words) throw new Error(type + ': "' + label + '" says ' + JSON.stringify(said) + ', expected ' + JSON.stringify(words));
+      if (dead && getComputedStyle(row).pointerEvents !== 'none') throw new Error(type + ': the greyed "' + label + '" row can still be pressed (pointer-events ' + getComputedStyle(row).pointerEvents + ')');
+      /* AN OPTION ROW'S PILL SITS UNDER ITS BUTTONS, not beside them. On one line the nowrap pill took the buttons'
+         width: at 380px the two options stacked into a column and the pill ran off the screen edge. Found in a
+         screenshot, not by this test — so now it is in this test. Below-the-buttons holds at every width. */
+      var seg = row.querySelector('.fx-seg');
+      if (dead && seg && tag) {
+        var sb = seg.getBoundingClientRect(), tb = tag.getBoundingClientRect(), rb = row.getBoundingClientRect();
+        if (tb.top < sb.bottom - 1) throw new Error(type + ': the "' + label + '" pill sits BESIDE its option buttons (pill top ' + Math.round(tb.top) + ', buttons end ' + Math.round(sb.bottom) + ') — on a phone that squeezes the buttons into a column and runs the pill off the edge');
+        if (tb.right > rb.right + 1) throw new Error(type + ': the "' + label + '" pill runs past its row (' + Math.round(tb.right) + ' > ' + Math.round(rb.right) + ')');
+      }
+    }
+    try {
+      if (hadHome) FM.home.close();
+      // ── Gradient Overlay: Angle is used by Linear and Conic, not by Radial.
+      await show('gradientoverlay', function (p) { p.shape = 0; }); expect('gradientoverlay', 'Angle', false);
+      await show('gradientoverlay', function (p) { p.shape = 2; }); expect('gradientoverlay', 'Angle', false);
+      await show('gradientoverlay', function (p) { p.shape = 1; }); expect('gradientoverlay', 'Angle', true, 'Only used when Shape is Linear or Conic');
+      // ── Tiles: the slider belongs to Grid, the Repeat option row to Extend.
+      await show('tiles', function (p) { p.mode = 0; });
+      expect('tiles', 'Tiles', true, 'Only used when Layout is Grid');
+      expect('tiles', 'Repeat', false);
+      await show('tiles', function (p) { p.mode = 1; });
+      expect('tiles', 'Tiles', false);
+      expect('tiles', 'Repeat', true, 'Only used when Layout is Extend');
+      // ── The OLD project: no mode stored, so it draws as Grid — judge it by that.
+      await show('tiles', function (p) { delete p.mode; });
+      expect('tiles', 'Tiles', false);
+      expect('tiles', 'Repeat', true, 'Only used when Layout is Extend');
+    } finally {
+      FM.scene.layers = saved.layers; FM.scene.selectedId = saved.sel; FM.scene.selectedIds = saved.sel ? [saved.sel] : [];
+      FM.refreshAll();
+      if (hadHome && FM.home.open) FM.home.open();
+    }
   });
 
 })();

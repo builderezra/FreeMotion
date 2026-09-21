@@ -1058,6 +1058,56 @@ window.FM = window.FM || {};
     return row;
   }
 
+  /* A CONTROL THAT ANOTHER CONTROL SWITCHES OFF says so (queue 482, and queue 904 for segments and several
+     live values). Lifted out of the slider loop so a SEGMENT can use it too: Tiles' Repeat is dead in Grid. */
+  function markOverridden(row, fx, p, reg) {
+    if (!p.overriddenBy) return;
+    const ctrl = reg.params.find(q => q.key === p.overriddenBy);
+    const raw = fx.params[p.overriddenBy];
+    /* An ABSENT controller renders at its LEGACY value when it has one, not its default — the kernel falls back to
+       legacy so an old instance keeps its look, and fxSegment highlights the same button. Reading the default here
+       marked the wrong control dead on an old project: a Tiles saved before Layout existed DRAWS as Grid (legacy 1),
+       and would have been told its Tiles slider did nothing. (queue 904) */
+    const cur = (raw == null) ? (ctrl && (ctrl.legacy != null ? ctrl.legacy : ctrl.default)) : raw;
+    /* ⚠️ A TICK BOX AND A LIST OF MODES ARE NOT THE SAME TEST (queue 482).
+       This was written for a TOGGLE, where truthy means "the override is on", and it was then
+       pointed at two SEGMENT controls, where truthy just means "any option except the first".
+       So it locked the slider in exactly the mode the slider is FOR, and left it looking live
+       in the modes where it does nothing:
+       · HSL Bands → Custom greyed out "Custom centre" and "Custom width" — and the row is
+         `pointer-events: none`, so choosing Custom gave you a band you could not customise.
+       · Frame Stutter → Strobe greyed out "Strobe on-time", its only mode.
+       · Either of them on the FIRST option (Red / Hold) left both sliders bright and inert.
+       `liveWhen` says which value of the controlling param actually uses this slider; without
+       it the old truthy test stands, which is right for the real toggle (Rounded Corners). */
+    let active, why;
+    if (p.liveWhen !== undefined) {
+      /* SEVERAL live values allowed (queue 904): Gradient Overlay's Angle steers Linear AND Conic and only Radial
+         ignores it, which a single value could not say. */
+      const lives = Array.isArray(p.liveWhen) ? p.liveWhen : [p.liveWhen];
+      active = lives.every(v => Number(cur) !== Number(v));
+      const opts = (ctrl && ctrl.options) || [];
+      const lbl = lives.map(v => {
+        for (let oi = 0; oi < opts.length; oi++) {
+          const o = opts[oi], val = Array.isArray(o) ? o[0] : oi;
+          if (Number(val) === Number(v)) return Array.isArray(o) ? o[1] : o;
+        }
+        return String(v);
+      }).join(' or ');
+      why = 'Only used when ' + ((ctrl && ctrl.label) || p.overriddenBy) + ' is ' + lbl;
+    } else {
+      active = !!cur;
+      why = 'Overridden by ' + ((ctrl && ctrl.label) || p.overriddenBy);
+    }
+    if (active) {
+      row.classList.add('fx-overridden');
+      row.setAttribute('aria-disabled', 'true');
+      const tag = el('span', 'fx-ovr-tag');
+      tag.textContent = why;
+      row.appendChild(tag);
+    }
+  }
+
   function fxSegment(fx, p) {
     const row = el('div', 'fx-seg-row');
     row.appendChild(el('span', 'fx-scrub-label', p.label));
@@ -1554,47 +1604,11 @@ window.FM = window.FM || {};
           const row = fxScrubber(fx, p, layer, idx);
           // Dim and lock a slider whose value is currently being overridden by a tick box above it,
           // and say WHICH one — a greyed control with no explanation just reads as broken.
-          if (p.overriddenBy) {
-            const ctrl = reg.params.find(q => q.key === p.overriddenBy);
-            const raw = fx.params[p.overriddenBy];
-            const cur = (raw == null) ? (ctrl && ctrl.default) : raw;
-            /* ⚠️ A TICK BOX AND A LIST OF MODES ARE NOT THE SAME TEST (queue 482).
-               This was written for a TOGGLE, where truthy means "the override is on", and it was then
-               pointed at two SEGMENT controls, where truthy just means "any option except the first".
-               So it locked the slider in exactly the mode the slider is FOR, and left it looking live
-               in the modes where it does nothing:
-               · HSL Bands → Custom greyed out "Custom centre" and "Custom width" — and the row is
-                 `pointer-events: none`, so choosing Custom gave you a band you could not customise.
-               · Frame Stutter → Strobe greyed out "Strobe on-time", its only mode.
-               · Either of them on the FIRST option (Red / Hold) left both sliders bright and inert.
-               `liveWhen` says which value of the controlling param actually uses this slider; without
-               it the old truthy test stands, which is right for the real toggle (Rounded Corners). */
-            let active, why;
-            if (p.liveWhen !== undefined) {
-              active = Number(cur) !== Number(p.liveWhen);
-              const opts = (ctrl && ctrl.options) || [];
-              let lbl = String(p.liveWhen);
-              for (let oi = 0; oi < opts.length; oi++) {
-                const o = opts[oi], val = Array.isArray(o) ? o[0] : oi;
-                if (Number(val) === Number(p.liveWhen)) { lbl = Array.isArray(o) ? o[1] : o; break; }
-              }
-              why = 'Only used when ' + ((ctrl && ctrl.label) || p.overriddenBy) + ' is ' + lbl;
-            } else {
-              active = !!cur;
-              why = 'Overridden by ' + ((ctrl && ctrl.label) || p.overriddenBy);
-            }
-            if (active) {
-              row.classList.add('fx-overridden');
-              row.setAttribute('aria-disabled', 'true');
-              const tag = el('span', 'fx-ovr-tag');
-              tag.textContent = why;
-              row.appendChild(tag);
-            }
-          }
+          markOverridden(row, fx, p, reg);
           body.appendChild(row);
         }
         else if (p.type === 'toggle') body.appendChild(fxToggle(fx, p));
-        else if (p.type === 'segment') body.appendChild(fxSegment(fx, p));
+        else if (p.type === 'segment') { const srow = fxSegment(fx, p); markOverridden(srow, fx, p, reg); body.appendChild(srow); }
         /* ⚠️ EFFECT COLOURS KEYFRAME NOW (queue 555). Ezra, with a Gradient Overlay open: *"Colours for
            every effect like gradient overly should be key frame able"* — his screenshot shows Amount
            carrying a ◆ and a curve while Start and End have neither.

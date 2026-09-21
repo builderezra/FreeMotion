@@ -1713,10 +1713,17 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 
 /* A slider currently overridden by that tick box: dimmed, non-interactive, and labelled so it
    never just looks broken. */
-.fx-scrub-row.fx-overridden { opacity: .38; pointer-events: none; position: relative; }
-.fx-scrub-row.fx-overridden .fx-ovr-tag { pointer-events: none; font-size: 10px; letter-spacing: .04em;
+.fx-scrub-row.fx-overridden, .fx-seg-row.fx-overridden { opacity: .38; pointer-events: none; position: relative; }   /* option rows too (queue 904) */
+.fx-scrub-row.fx-overridden .fx-ovr-tag, .fx-seg-row.fx-overridden .fx-ovr-tag { pointer-events: none; font-size: 10px; letter-spacing: .04em;
   text-transform: uppercase; color: var(--text-dim); border: 1px solid var(--line); border-radius: 99px;
   padding: 1px 7px; margin-left: 8px; white-space: nowrap; align-self: center; }
+/* AN OPTION ROW LETS ITS "Only used when…" PILL WRAP ONTO A LINE OF ITS OWN (queue 904). The row was one flex line
+   with no wrap, so the pill — nowrap, ~200px — took the buttons' width: at 380px the two options were squeezed into a
+   stacked column and the pill ran off the right edge. Seen in a screenshot; the test only knew the row was greyed and
+   could not be pressed, both true — it now checks the pill sits under the buttons. A forced line break (::after) was
+   tried too and measured to change nothing even at 1280, where the panel is still narrow, so it is not here. */
+.fx-seg-row.fx-overridden { flex-wrap: wrap; }
+.fx-seg-row.fx-overridden .fx-ovr-tag { margin-left: 0; }
 
 /* WRAPS, so an option row can never put a button somewhere you cannot reach.
    Measured at 375px before this: Channel Remap's row was 686px wide and FIVE of its eight options sat
