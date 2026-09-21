@@ -55894,6 +55894,35 @@
     if (!/same as columns/.test(rows.note || '')) throw new Error("Tile Grid's Rows reaches the panel without its '0 = same as columns' note, so a new grid reads 'Rows 0'");
   });
 
+  /* ═══ 904 (batch): every Scanlines Line weight draws lines; Zoom Streaks at Amount 0 is off. */
+  test('904: Scanlines Line weight never floods the frame, and Zoom Streaks Amount 0 turns it off', { item: '904' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.scanlines || !K.zoomstreaks) throw new Error('FM._FX_TABLES.PIXEL_FX is not reachable');
+    const W = 40, H = 60;
+    const flat = () => { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = d[i + 1] = d[i + 2] = 200; d[i + 3] = 255; } return d; };
+    const rowsDark = (d) => { let n = 0; for (let y = 0; y < H; y++) if (d[(y * W + 5) * 4] < 200) n++; return n; };
+    const sc = (params) => { const d = flat(); K.scanlines(d, W, H, params, 0, 1); return d; };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    // weights under the pitch are untouched
+    if (!same(sc({ amount: 0.6, spacing: 6, thickness: 2 }), (() => { const d = flat(); for (let y = 0; y < H; y++) if (y % 6 >= 4) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; d[i] *= 0.4; d[i + 1] *= 0.4; d[i + 2] *= 0.4; } return d; })()))
+      throw new Error('Scanlines at Pitch 6 / weight 2 no longer draws what a saved project drew');
+    const w1 = rowsDark(sc({ amount: 0.6, spacing: 2, thickness: 1 }));
+    if (w1 !== H / 2) throw new Error('control: the default scanlines darken ' + w1 + ' of ' + H + ' rows, expected every other one');
+    let prev = -1;
+    for (const th of [2, 5, 20]) {
+      const n = rowsDark(sc({ amount: 0.6, spacing: 2, thickness: th }));
+      if (n >= H) throw new Error('Scanlines at Pitch 2, Line weight ' + th + ' darkens EVERY row — a flat wash, not scanlines (queue 904)');
+      if (n <= prev) throw new Error('Scanlines Line weight ' + th + ' is not heavier than the step below it (' + n + ' dark rows vs ' + prev + ')');
+      prev = n;
+    }
+    // Zoom Streaks
+    const box = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 15; y < 45; y++) for (let x = 10; x < 30; x++) { const i = (y * W + x) * 4; d[i] = 240; d[i + 1] = 240; d[i + 2] = 240; d[i + 3] = 255; } return d; };
+    const z0 = box(); K.zoomstreaks(z0, W, H, { amount: 0, centerx: 50, centery: 50, threshold: 0 }, 0, 1);
+    if (!same(z0, box())) throw new Error('Zoom Streaks at Amount 0 still changes the picture — the bottom of the slider is not off');
+    const z5 = box(); K.zoomstreaks(z5, W, H, { amount: 0.5, centerx: 50, centery: 50, threshold: 0 }, 0, 1);
+    if (same(z5, box())) throw new Error('control: Zoom Streaks at 0.5 changes nothing either, so the Amount 0 check proves nothing');
+  });
+
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
      Ezra asked the question this answers: *"How confident are you that every effect is actually good?"*
      Three separate times now a kernel has drawn a different picture on the reduced preview plate than

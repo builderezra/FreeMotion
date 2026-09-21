@@ -4587,10 +4587,14 @@ window.FM = window.FM || {};
       const th = p.thickness == null ? 1 : Math.max(1, Math.round(FM.evalProp(p.thickness, t)));
       const roll = p.roll == null ? 0 : FM.evalProp(p.roll, t);
       const plain = sp === 2 && th === 1 && !roll;
-      const off = roll ? roll * t : 0, lo = sp - Math.min(th, sp), k = 1 - amt;
+      /* A LINE NEVER FILLS ITS OWN PITCH (queue 904). Weight was clamped to Pitch, so at the default Pitch of 2, weights 2-20 — 19 of the
+         slider's 20 stops — all darkened EVERY row: a flat wash, no lines. Now a weight at or past the pitch widens the pitch to keep a
+         one-row gap, so every stop draws visible scanlines, heavier as it goes. Weight below Pitch is untouched (byte-identical). */
+      const spE = th >= sp ? th + 1 : sp;
+      const off = roll ? roll * t : 0, lo = spE - th, k = 1 - amt;
       for (let y = 0; y < H; y++) {
         if (plain) { if (y % 2 === 0) continue; }                 // darken every other row
-        else { const ph = ((y - off) % sp + sp) % sp; if (ph < lo) continue; }
+        else { const ph = ((y - off) % spE + spE) % spE; if (ph < lo) continue; }
         const row = y * W * 4;
         for (let x = 0; x < W; x++) { const i = row + x * 4; d[i] *= k; d[i + 1] *= k; d[i + 2] *= k; }
       }
@@ -6370,7 +6374,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          which on a full-size plate is the whole frame, and the bound simply stops helping rather than
          becoming wrong. Nothing is written where the weight sum is zero, so outside that region it is a
          pure skip. */
-      var zs_amt = fparam(p, 'amount', 0.5, t); if(zs_amt<0) zs_amt=0; if(zs_amt>1) zs_amt=1; var zs_s=fxSrc(d);
+      var zs_amt = fparam(p, 'amount', 0.5, t); if(zs_amt<0) zs_amt=0; if(zs_amt>1) zs_amt=1; if(zs_amt<=0) return; /* AMOUNT 0 IS OFF (queue 904): the strength below floors at 0.16, so 0 still laid a screen-blended glow over the picture and the only way to stop it was to delete the effect. Everything above 0 is untouched. */ var zs_s=fxSrc(d);
       // CENTRE was W/2, H/2 — rays always came out of the middle of the frame rather than out of the
       // light in the shot. THRESHOLD gates which pixels are allowed to streak at all: legacy weights
       // every tap by (lum/255)^2, which is small for a mid-tone but not zero, so ten thousand mid-tones
