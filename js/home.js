@@ -2276,10 +2276,15 @@ window.FM = window.FM || {};
          that matches one, and Delete removed all three. Templates and elements are IndexedDB packs with
          their media inside them, there is no undo and no backup, and the confirm only shows a COUNT — so
          the two he could not see were gone with nothing on screen having named them. */
-      pruneSelection();
       // A template being edited has a workspace (queue 505 clause 4); it is hidden from Projects, so it
       // has to be visible HERE or a failed commit would leave it nowhere he can see or delete it.
       (FM.projects.list() || []).filter(p => p.templateDraft).forEach(p => { shownIds.push(p.id); grid.appendChild(elementDraftCard(p)); });
+      /* ⚠️ …AND THE PRUNE COMES AFTER THE DRAFTS, NOT BEFORE THEM (queue 898). It used to sit above the line
+         that adds them to shownIds, so every render dropped a ticked draft as "not on screen" while its card
+         was right there: holding a draft card entered Select mode with nothing ticked, and Select all ticked
+         only the templates — so Delete removed those and silently left behind the draft, the one card holding
+         unsaved work. The Elements branch below already had the order right; this is that order. */
+      pruneSelection();
     } else {
       // ELEMENTS — same shape as the templates branch, including the forgiving name search.
       let list = pinSort('elements', FM.elements.list(), e => e.id);

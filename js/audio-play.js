@@ -9,6 +9,7 @@ window.FM = window.FM || {};
 
   let active = [];   // live AudioBufferSourceNodes
   let chains = [];   // audio-effect chains built for this playback pass
+  let voices = [];   // { layer, gain, buf } for each started source — what retune() re-schedules (queue 894)
 
   // iOS caps live AudioContexts (~4) — audio-fx.js owns THE one; never construct another here.
   // Guarded like every other audio-fx entry point: without that file, preview stays silent, not broken.
@@ -94,6 +95,61 @@ window.FM = window.FM || {};
     return out;
   }
 
+  /* THE FADE / VOLUME ENVELOPE FOR ONE REVERSED VOICE, scheduled onto its gain from context time `when`, with
+   * the playhead `into` seconds into the clip. Lifted out of start() UNCHANGED (queue 894) so that retune() can
+   * run the very same schedule on the LIVE node when only a fade has moved — rather than start() tearing every
+   * voice down and splicing a fresh buffer in, which is what dragging a fade slider used to do 60 times a second. */
+  function scheduleGain(gain, layer, buf, when, into) {
+    const vol = FM.layerVolume(layer, FM.time);   // static level for non-animated clips
+    const clipDur = layer.duration;
+    const win = FM.fadeWindows(layer, clipDur), fi = win.fi, fo = win.fo;   // scaled so fades never overlap
+    const animVol = FM.isAnimated(layer.volume);
+    if (animVol) {
+      // Keyframed volume: schedule the volume×fade envelope along the reversed buffer's scaled
+      // timeline so the reversed PREVIEW matches the now-animated export. Buffer position b (= clip
+      // -local time b) is reached at real time base + b/pr; volume there = level(start+b)×fade(b).
+      const pr = FM.previewRate || 1;
+      const base = when - into / pr;
+      const audibleDur = Math.min(clipDur, buf.duration);
+      const startB = Math.max(0, into);
+      if (audibleDur <= startB + 1e-3) {
+        gain.gain.value = Math.max(0, FM.layerVolume(layer, layer.start + startB) * FM.fadeMul(layer, startB, clipDur));
+      } else {
+        const steps = Math.max(2, Math.ceil((audibleDur - startB) * 30));
+        for (let i = 0; i <= steps; i++) {
+          const b = startB + (audibleDur - startB) * (i / steps);
+          const g = Math.max(0, FM.layerVolume(layer, layer.start + b) * FM.fadeMul(layer, b, clipDur));
+          const rt = Math.max(when, base + b / pr);
+          if (i === 0) gain.gain.setValueAtTime(g, rt); else gain.gain.linearRampToValueAtTime(g, rt);
+        }
+      }
+    } else if (fi > 0 || fo > 0) {
+      // Reversed audio plays at previewRate (pr): buffer position b is reached at real time
+      // when + (b - into)/pr. Schedule every fade point in that scaled timeline so fades land ON the
+      // audio at any preview speed (at 2x the old 1x offsets fired after the audio had already ended).
+      const pr = FM.previewRate || 1;
+      const base = when - into / pr;   // real context time at buffer position 0
+      // The reversed buffer is only buf.duration long; anchor the fade-out to the AUDIBLE end so
+      // it completes instead of being cut off mid-ramp when source audio is shorter than the clip.
+      const audibleDur = Math.min(clipDur, buf.duration);
+      gain.gain.setValueAtTime(FM.fadeMul(layer, Math.max(0, into), clipDur) * vol, when);
+      /* Re-anchor at the audio's REAL start when the clip begins in the future. `into` is negative
+       * there, so `base` (buffer position 0) is LATER than `when`, and a single ramp from `when` to
+       * `base + fi/pr` spans the silent gap AND the fade window as one straight line. By the time
+       * the audio actually starts at `base`, the gain has already climbed to
+       * vol * |into| / (|into| + fi) — so a fade-in begins part-way up, which is a pop.
+       * The keyframed-volume branch directly above gets this right by clamping every point with
+       * `Math.max(when, base + b/pr)`; this branch just never did, which is what makes it an
+       * oversight rather than a decision. At into >= 0, base <= when and this is a no-op. */
+      const fadeT0 = Math.max(when, base);
+      if (fadeT0 > when) gain.gain.setValueAtTime(FM.fadeMul(layer, 0, clipDur) * vol, fadeT0);
+      if (fi > 0 && base + fi / pr > fadeT0) gain.gain.linearRampToValueAtTime(vol, base + fi / pr);
+      if (fo > 0) { const fs = base + (audibleDur - fo) / pr; if (fs > when) gain.gain.setValueAtTime(vol, fs); gain.gain.linearRampToValueAtTime(0, base + audibleDur / pr); }
+    } else {
+      gain.gain.value = vol;
+    }
+  }
+
   FM.audioPlay = {
     // Start reversed-audio for every reversed clip, aligned to the current playhead.
     start() {
@@ -112,54 +168,7 @@ window.FM = window.FM || {};
         const pr = FM.previewRate || 1;
         node.playbackRate.value = pr;   // reversed audio must follow the preview speed (start() is re-run on rate change)
         const gain = audioCtx.createGain();
-        const vol = FM.layerVolume(layer, FM.time);   // static level for non-animated clips
-        const clipDur = layer.duration;
-        const win = FM.fadeWindows(layer, clipDur), fi = win.fi, fo = win.fo;   // scaled so fades never overlap
-        const animVol = FM.isAnimated(layer.volume);
-        if (animVol) {
-          // Keyframed volume: schedule the volume×fade envelope along the reversed buffer's scaled
-          // timeline so the reversed PREVIEW matches the now-animated export. Buffer position b (= clip
-          // -local time b) is reached at real time base + b/pr; volume there = level(start+b)×fade(b).
-          const pr = FM.previewRate || 1;
-          const base = when - into / pr;
-          const audibleDur = Math.min(clipDur, buf.duration);
-          const startB = Math.max(0, into);
-          if (audibleDur <= startB + 1e-3) {
-            gain.gain.value = Math.max(0, FM.layerVolume(layer, layer.start + startB) * FM.fadeMul(layer, startB, clipDur));
-          } else {
-            const steps = Math.max(2, Math.ceil((audibleDur - startB) * 30));
-            for (let i = 0; i <= steps; i++) {
-              const b = startB + (audibleDur - startB) * (i / steps);
-              const g = Math.max(0, FM.layerVolume(layer, layer.start + b) * FM.fadeMul(layer, b, clipDur));
-              const rt = Math.max(when, base + b / pr);
-              if (i === 0) gain.gain.setValueAtTime(g, rt); else gain.gain.linearRampToValueAtTime(g, rt);
-            }
-          }
-        } else if (fi > 0 || fo > 0) {
-          // Reversed audio plays at previewRate (pr): buffer position b is reached at real time
-          // when + (b - into)/pr. Schedule every fade point in that scaled timeline so fades land ON the
-          // audio at any preview speed (at 2x the old 1x offsets fired after the audio had already ended).
-          const pr = FM.previewRate || 1;
-          const base = when - into / pr;   // real context time at buffer position 0
-          // The reversed buffer is only buf.duration long; anchor the fade-out to the AUDIBLE end so
-          // it completes instead of being cut off mid-ramp when source audio is shorter than the clip.
-          const audibleDur = Math.min(clipDur, buf.duration);
-          gain.gain.setValueAtTime(FM.fadeMul(layer, Math.max(0, into), clipDur) * vol, when);
-          /* Re-anchor at the audio's REAL start when the clip begins in the future. `into` is negative
-           * there, so `base` (buffer position 0) is LATER than `when`, and a single ramp from `when` to
-           * `base + fi/pr` spans the silent gap AND the fade window as one straight line. By the time
-           * the audio actually starts at `base`, the gain has already climbed to
-           * vol * |into| / (|into| + fi) — so a fade-in begins part-way up, which is a pop.
-           * The keyframed-volume branch directly above gets this right by clamping every point with
-           * `Math.max(when, base + b/pr)`; this branch just never did, which is what makes it an
-           * oversight rather than a decision. At into >= 0, base <= when and this is a no-op. */
-          const fadeT0 = Math.max(when, base);
-          if (fadeT0 > when) gain.gain.setValueAtTime(FM.fadeMul(layer, 0, clipDur) * vol, fadeT0);
-          if (fi > 0 && base + fi / pr > fadeT0) gain.gain.linearRampToValueAtTime(vol, base + fi / pr);
-          if (fo > 0) { const fs = base + (audibleDur - fo) / pr; if (fs > when) gain.gain.setValueAtTime(vol, fs); gain.gain.linearRampToValueAtTime(0, base + audibleDur / pr); }
-        } else {
-          gain.gain.value = vol;
-        }
+        scheduleGain(gain, layer, buf, when, into);
         // Audio effects sit AFTER the volume/fade envelope, matching the exporter's clip mix order.
         const chain = FM.buildAudioFxChain ? FM.buildAudioFxChain(audioCtx, layer) : null;
         node.connect(gain);
@@ -171,8 +180,8 @@ window.FM = window.FM || {};
         } else {
           gain.connect(audioCtx.destination);
         }
-        if (into <= 0) { node.start(when - into / pr, 0); active.push(node); }     // clip starts later — delay is REAL time, so scale the scene-second gap by the preview rate (was 2s late at 2×)
-        else if (into < buf.duration) { node.start(when, into); active.push(node); } // mid-clip
+        if (into <= 0) { node.start(when - into / pr, 0); active.push(node); voices.push({ layer, gain, buf }); }     // clip starts later — delay is REAL time, so scale the scene-second gap by the preview rate (was 2s late at 2×)
+        else if (into < buf.duration) { node.start(when, into); active.push(node); voices.push({ layer, gain, buf }); } // mid-clip
         else {                                                                       // source exhausted → silence
           try { node.disconnect(); } catch (e) {}
           if (chain) { const i = chains.indexOf(chain); if (i >= 0) chains.splice(i, 1); try { chain.dispose(); } catch (e) {} }
@@ -182,8 +191,31 @@ window.FM = window.FM || {};
     stop() {
       active.forEach(n => { try { n.stop(); n.disconnect(); } catch (e) {} });
       active = [];
+      voices = [];
       chains.forEach(c => { try { c.dispose(); } catch (e) {} });
       chains = [];
+    },
+    /* A FADE MOVED: RE-SCHEDULE THE LIVE VOICES, DO NOT RESTART THEM (queue 894). The fade strips used to reach
+     * start() on every pointermove while playing, and start() begins with stop(): every reversed clip's source was
+     * cut mid-sample and a new one spliced in at a non-zero crossing, and its effect chain — a reverb's Convolver
+     * and its impulse response included — was thrown away and rebuilt, ~60 times a second on a phone. Heard as a
+     * buzz instead of a fade, with the main thread stalling under the rebuilds. A fade changes neither which
+     * buffer plays nor where it is, only the envelope on its gain, so that is all this touches: hold the value
+     * where it is right now, and lay the new schedule down from here. You hear the fade change as you drag.
+     * Returns false when there is no live voice, so a caller knows nothing was retuned. */
+    retune() {
+      if (!voices.length) return false;
+      const audioCtx = ctx();
+      if (!audioCtx) return false;
+      const now = audioCtx.currentTime;
+      voices.forEach(v => {
+        try {
+          const p = v.gain.gain;
+          if (p.cancelAndHoldAtTime) p.cancelAndHoldAtTime(now); else p.cancelScheduledValues(now);
+          scheduleGain(v.gain, v.layer, v.buf, now, FM.time - v.layer.start);
+        } catch (e) {}
+      });
+      return true;
     },
     // Keyframed audio-effect params on a reversed clip animate from the rAF tick, like forward clips.
     applyAt(sceneTime) {

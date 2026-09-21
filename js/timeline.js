@@ -4249,6 +4249,17 @@ window.FM = window.FM || {};
       timelineEl.addEventListener('pointerdown', (e) => {
         if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
         if (e.target.closest('.clip, .clip-grip, .kf-dot, .track-head, .tl-marker, input, button, select, textarea')) return;
+        /* ⚠️ A MOUSE PRESS ON THE PHONE-LAYOUT ADD ROW IS THE ROW'S, NOT THE SCRUB'S (queue 895). That row opens the
+         * add menu on `click` and nothing else — and at <=700px it is the ONLY way in, #add-fab being hidden there.
+         * onDown -> beginScrub captures the pointer on #tl-inner, and for a MOUSE Chrome then retargets mouseup, and
+         * so the click, to #tl-inner: the row never hears it and the menu cannot be opened at all (measured: the
+         * click landed on DIV#tl-inner, openAdd ran 0 times; neutering only the capture made it 1).
+         * MOUSE ONLY, and that is deliberate. #timeline is `touch-action: none` — this handler IS the vertical pan
+         * on a phone — so excluding the row for touch would make a swipe that starts on it do nothing, on the one
+         * device he uses. A trusted touch is not retargeted, so a real phone never had this bug and keeps its
+         * behaviour byte for byte. The PC line (.tl-addrow--line) detects its own tap on window pointerup, which
+         * capture cannot steal, so it is left alone too. */
+        if (e.pointerType === 'mouse' && e.target.closest('.tl-addrow:not(.tl-addrow--line)')) return;
         onDown(e);
       });
       // right-click ruler → add / remove a marker

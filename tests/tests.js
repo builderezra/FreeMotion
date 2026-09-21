@@ -65986,4 +65986,195 @@
     }
   });
 
+
+  /* ── queue 894: dragging a fade on a playing REVERSED clip restarted its audio on every step ──────
+   * The fade strips called reconcileAudio() on every pointermove, and while playing that runs
+   * FM.audioPlay.start(), which begins with stop(): the reversed clip's source was cut mid-sample and a
+   * new one spliced in, and its effect chain rebuilt — ~60 times a second. Heard as a buzz; the same
+   * drag on an un-reversed clip is clean. A fade only changes the envelope on the clip's gain, so the
+   * fix re-schedules that envelope on the LIVE voice (FM.audioPlay.retune) and restarts nothing.
+   * DRIVES THE REAL FADE FIELD in the volume panel: its 'change' handler runs the very setter the drag
+   * strip runs, so reverting inspector.js to reconcileAudio is caught here.
+   * ⚠️ A CONTROL, because the cheapest fake of this fix is to call NOTHING on a fade change: no restarts,
+   * and the slider silently stops affecting the sound until the next restart. So the test also reads the
+   * schedule laid onto the live gain and checks the fade-out it describes is the length the slider says. */
+  test('894: dragging a fade on a playing reversed clip reshapes its sound instead of restarting it every step', { item: '894', budgetMs: 25000 }, async function () {
+    if (!FM.audioPlay || typeof FM.audioPlay.start !== 'function') throw new Error('FM.audioPlay.start is not reachable');
+    if (!FM.inspector || typeof FM.inspector.openCategory !== 'function') throw new Error('FM.inspector.openCategory is not reachable — the volume panel cannot be opened');
+    var AC = FM.audioCtx && FM.audioCtx();
+    if (!AC) throw new Error('no AudioContext here, so a reversed clip has no audio to measure');
+    var frame = function () { return new Promise(function (r) { setTimeout(r, 90); }); };
+    var saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId, t: FM.time, playing: FM.playing, dur: FM.scene.project.duration };
+    var cbs0 = AC.createBufferSource, cg0 = AC.createGain, L = null, sources = 0, gains = [];
+    try {
+      FM.scene.layers.length = 0;
+      L = FM.makeLayer('video', { name: 'FX894', start: 0, duration: 4 });
+      L.name = 'FX894'; L.start = 0; L.duration = 4; L.reversed = true; L.visible = true;
+      L.volume = 1; L.fadeIn = 0; L.fadeOut = 0.5;
+      FM.scene.layers.push(L); FM.scene.project.duration = Math.max(FM.scene.project.duration || 0, 4);
+      FM.media.set(L.id, { kind: 'video', audioBuffer: AC.createBuffer(2, 48000 * 4, 48000), duration: 4, width: 2, height: 2 });
+      FM.selectLayer(L.id);
+      FM.inspector.openCategory('volume');
+      await frame();
+      var row = Array.prototype.slice.call(document.querySelectorAll('.vol-panel .prop-row')).filter(function (r) {
+        var lb = r.querySelector('label'); return lb && lb.textContent.trim() === 'Fade out (s)';
+      })[0];
+      if (!row) throw new Error('no Fade out (s) row in the volume panel — the control this entry is about cannot be found');
+      var field = row.querySelector('.fx-scrub-val');
+      if (!field) throw new Error('the Fade out row has no value field to drive');
+
+      // Playing, half a second into the reversed clip.
+      FM.setTime(0.5);
+      AC.createBufferSource = function () { sources++; return cbs0.apply(AC, arguments); };
+      AC.createGain = function () { var g = cg0.apply(AC, arguments); gains.push(g); return g; };
+      FM.playing = true;
+      FM.audioPlay.start();
+      // ── CONTROL: exactly one live reversed voice, or every assertion below is about nothing.
+      if (sources !== 1 || gains.length !== 1) throw new Error('starting playback built ' + sources + ' source(s) and ' + gains.length + ' gain(s) for one reversed clip — the fixture is not a single live reversed voice, so nothing below is measured');
+      var gp = gains[0].gain, events = [];
+      ['setValueAtTime', 'linearRampToValueAtTime'].forEach(function (k) {
+        var f = gp[k]; gp[k] = function (v, t) { events.push([k, v, t]); return f.apply(gp, arguments); };
+      });
+      sources = 0;
+
+      // ── THE CLAIM: five drag steps through the real field. Nothing may be restarted.
+      [0.8, 1.1, 1.3, 1.4, 1.5].forEach(function (v) {
+        field.value = String(v);
+        field.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      if (Math.abs(L.fadeOut - 1.5) > 1e-9) throw new Error('driving the field left fadeOut at ' + L.fadeOut + ', not 1.5 — the steps never reached the layer');
+      if (sources) throw new Error('five fade steps built ' + sources + ' new audio source(s): each one cut the playing reversed clip mid-sample and spliced a fresh one in — that is the buzz. A fade should reshape the sound, not restart it');
+
+      // ── CONTROL: the fade must still REACH the playing sound. The schedule ends in a ramp to silence,
+      //    preceded by a hold at full level; the gap between them is the fade-out the voice will play.
+      var ramps = events.filter(function (e) { return e[0] === 'linearRampToValueAtTime' && e[1] === 0; });
+      if (!ramps.length) throw new Error('the fade steps never reached the playing clip’s gain — the slider moved and the sound kept its old fade');
+      var last = ramps[ramps.length - 1];
+      var holds = events.filter(function (e) { return e[0] === 'setValueAtTime' && e[2] < last[2]; });
+      if (!holds.length) throw new Error('the new schedule has no hold before its fade-out, so its length cannot be read');
+      var len = last[2] - holds[holds.length - 1][2];
+      if (Math.abs(len - 1.5) > 0.02) throw new Error('the playing clip’s fade-out is ' + len.toFixed(3) + 's where the slider says 1.5s');
+    } finally {
+      AC.createBufferSource = cbs0; AC.createGain = cg0;
+      try { FM.audioPlay.stop(); } catch (e) {}
+      FM.playing = saved.playing;
+      if (L) { try { FM.media.delete(L.id); } catch (e) {} }
+      FM.scene.layers = saved.layers; FM.scene.project.duration = saved.dur;
+      FM.scene.selectedId = saved.sel; FM.scene.selectedIds = saved.sel ? [saved.sel] : [];
+      FM.setTime(saved.t);
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
+
+  /* ── queue 895: at phone width, a MOUSE could not open the Add menu at all ─────────────────────────
+   * The phone-layout Add row opens the menu on `click`, and at <=700px it is the only way in (#add-fab is
+   * hidden there). The timeline's own pointerdown did not exclude it, so a press on the row ran onDown ->
+   * beginScrub, which captures the pointer on #tl-inner; for a MOUSE, Chrome then retargets the mouseup and
+   * the click to #tl-inner and the row never hears it. Measured by the hunt with a trusted click: openAdd 0
+   * times, and 1 once only the capture was neutered.
+   * A SYNTHETIC CLICK CANNOT SHOW THE RETARGETING — only a trusted pointer can be captured — so this asserts
+   * the proven CAUSE instead: a mouse press on the row must not make the timeline grab the pointer.
+   * ⚠️ TWO CONTROLS. #timeline is touch-action:none, so this handler IS the vertical pan on a phone: a fix that
+   * simply excluded the row would make a swipe starting on it dead, on the device he uses — so a TOUCH press on
+   * the row must still start the grab. And a mouse press on empty timeline must still scrub, or the fix has
+   * switched scrubbing off rather than stepped the row out of it. */
+  test('895: at phone width a mouse press on the Add row is left to the row, so its click can open the Add menu', { item: '895', budgetMs: 25000 }, async function () {
+    if (!FM.timeline || typeof FM.timeline.rebuild !== 'function') throw new Error('FM.timeline.rebuild is not reachable');
+    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    var spc0 = Element.prototype.setPointerCapture, caps = 0;
+    var open0 = FM.mobile && FM.mobile.openAdd, opens = 0;
+    var settle = function () { return new Promise(function (r) { setTimeout(r, 60); }); };
+    function press(el, type, id) {
+      var r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      var o = { bubbles: true, cancelable: true, pointerId: id, pointerType: type, isPrimary: true, button: 0, buttons: 1, clientX: x, clientY: y };
+      el.dispatchEvent(new PointerEvent('pointerdown', o));
+      o.buttons = 0;
+      el.dispatchEvent(new PointerEvent('pointerup', o));
+    }
+    try {
+      await atPhoneWidth(async function () {
+        FM.scene.layers.length = 0;
+        var A = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#558844' });
+        A.start = 0; A.duration = 4; A.name = 'FX895';
+        FM.scene.layers.push(A);
+        FM.selectLayer(null);
+        FM.timeline.rebuild(); await settle();
+        Element.prototype.setPointerCapture = function (pid) { if (this && this.id === 'tl-inner') caps++; try { return spc0.call(this, pid); } catch (e) {} };
+        if (FM.mobile) FM.mobile.openAdd = function () { opens++; };
+
+        var label = attached(document.querySelector('#timeline .tl-addrow:not(.tl-addrow--line) .tl-addrow-label'), 'the phone-layout Add row label');
+        if (label.closest('.tl-addrow').classList.contains('tl-addrow--line')) throw new Error('at phone width the Add row was built as the PC line — this is not the layout the entry is about');
+
+        // ── THE CLAIM: a mouse press on the row must not make the timeline grab the pointer.
+        caps = 0; press(label, 'mouse', 31); await settle();
+        if (caps) throw new Error('a MOUSE press on the phone-layout Add row made the timeline capture the pointer on #tl-inner — for a mouse that retargets the click away from the row, so the Add menu cannot be opened at this width (and #add-fab is hidden here, so there is no other way in)');
+
+        // ── CONTROL: the row's own path works — its click reaches openAdd.
+        label = attached(document.querySelector('#timeline .tl-addrow:not(.tl-addrow--line) .tl-addrow-label'), 'the Add row label after the press');
+        opens = 0; label.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        if (opens !== 1) throw new Error('a click on the Add row ran openAdd ' + opens + ' time(s) — the row itself is not opening the menu, so the claim above proves nothing about it');
+
+        // ── CONTROL: a TOUCH press on the row still starts the grab. This handler is the phone’s vertical pan.
+        label = attached(document.querySelector('#timeline .tl-addrow:not(.tl-addrow--line) .tl-addrow-label'), 'the Add row label before the touch press');
+        caps = 0; press(label, 'touch', 32); await settle();
+        if (caps !== 1) throw new Error('a TOUCH press on the Add row no longer starts the timeline grab (' + caps + ' captures) — on a phone that makes a swipe starting on the row do nothing, since #timeline is touch-action:none and this handler is its pan');
+
+        // ── CONTROL: a mouse press on empty timeline still scrubs.
+        var inner = attached(document.getElementById('tl-inner'), '#tl-inner');
+        caps = 0; press(inner, 'mouse', 33); await settle();
+        if (caps !== 1) throw new Error('a mouse press on empty timeline made ' + caps + ' captures — scrubbing has been switched off, not just stepped out of the Add row');
+      }, 390);
+    } finally {
+      Element.prototype.setPointerCapture = spc0;
+      if (FM.mobile && open0) FM.mobile.openAdd = open0;
+      FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
+      FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
+
+  /* ── queue 898: on the Templates tab a template being edited could never stay ticked ──────────────
+   * render() resets shownIds and each branch pushes what it draws; pruneSelection() then drops every tick
+   * that is not in it. The Templates branch pruned BEFORE pushing its template-draft cards, so a ticked
+   * draft was dropped on every render while its card was on screen: holding one entered Select mode with
+   * nothing ticked, and Select all ticked only the templates — Delete removed those and left the draft,
+   * the one card holding unsaved work. The Elements branch had the order right all along.
+   * ⚠️ CONTROLS: both cards must be on screen (or this is not the Templates case at all), the template must
+   * stay ticked, and an id that is NOT on screen must still be dropped — or the "fix" stopped pruning. */
+  test('898: a template being edited stays ticked on the Templates tab, so Select all and Delete include it', { item: '898', budgetMs: 20000 }, async function () {
+    if (!FM.home || !FM.home._selectionState || !FM.home._setSelection || !FM.home._render) throw new Error('Home exposes no way to see what is ticked against what is on screen, so this cannot be measured');
+    if (!FM.templates || !FM.projects) throw new Error('FM.templates / FM.projects are not reachable');
+    var st0 = FM.home._selectionState(), tl0 = FM.templates.list, pl0 = FM.projects.list;
+    try {
+      var TPL = { id: 'q898-tpl', name: 'Q898 template', width: 1080, height: 1920, duration: 5 };
+      var DRAFT = { id: 'q898-draft', name: 'Q898 draft', templateDraft: 'q898-tpl' };
+      FM.templates.list = function () { return [TPL]; };
+      FM.projects.list = function () { return (pl0.apply(FM.projects, arguments) || []).concat([DRAFT]); };
+
+      FM.home._setSelection(['q898-tpl', 'q898-draft']);
+      FM.home._render('templates');
+      await sleep(220);
+      var after = FM.home._selectionState();
+      // CONTROL: both cards on screen.
+      if (after.shown.indexOf('q898-tpl') < 0 || after.shown.indexOf('q898-draft') < 0) throw new Error('the Templates tab did not show both the template and the draft (' + JSON.stringify(after.shown) + ') — a search may be active, or the fixture is not the case');
+      // CONTROL: the template stayed ticked, so the prune is not simply dropping everything.
+      if (after.selected.indexOf('q898-tpl') < 0) throw new Error('the template itself was un-ticked by a render — the prune is dropping on-screen cards wholesale');
+      // THE CLAIM.
+      if (after.selected.indexOf('q898-draft') < 0) throw new Error('the template draft was ticked, its card is on screen, and a render un-ticked it — so Select all and Delete skip the one card holding unsaved work, and holding it enters Select mode with nothing ticked');
+
+      // CONTROL: pruning still happens — an id that is not on screen is dropped.
+      FM.home._setSelection(['q898-draft', 'q898-not-on-screen']);
+      FM.home._render('templates');
+      await sleep(220);
+      var again = FM.home._selectionState();
+      if (again.selected.indexOf('q898-not-on-screen') >= 0) throw new Error('an id that is not on screen survived the render — the fix stopped pruning instead of moving it, and Delete would take items nobody can see');
+      if (again.selected.indexOf('q898-draft') < 0) throw new Error('the draft was un-ticked on the second render');
+    } finally {
+      FM.templates.list = tl0; FM.projects.list = pl0;
+      try { FM.home._setSelection(st0.selected); } catch (e) {}
+    }
+  });
+
 })();

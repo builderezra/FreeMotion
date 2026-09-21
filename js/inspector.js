@@ -5103,8 +5103,10 @@ window.FM = window.FM || {};
 
     if (layer.fadeIn == null) layer.fadeIn = 0; if (layer.fadeOut == null) layer.fadeOut = 0;
     const fmax = Math.max(1, Math.min(10, round(layer.duration, 1)));
-    control.appendChild(rangeRow('Fade in (s)', () => round(layer.fadeIn, 1), v => { layer.fadeIn = Math.max(0, v); if (FM.reconcileAudio) FM.reconcileAudio(); }, 0, fmax, 0.1));
-    control.appendChild(rangeRow('Fade out (s)', () => round(layer.fadeOut, 1), v => { layer.fadeOut = Math.max(0, v); if (FM.reconcileAudio) FM.reconcileAudio(); }, 0, fmax, 0.1));
+    // reconcileFades, NOT reconcileAudio: these fire on every pointermove, and the full reconcile restarts every
+    // reversed clip's audio each time — a buzz while dragging (queue 894). See FM.reconcileFades in js/app.js.
+    control.appendChild(rangeRow('Fade in (s)', () => round(layer.fadeIn, 1), v => { layer.fadeIn = Math.max(0, v); if (FM.reconcileFades) FM.reconcileFades(); }, 0, fmax, 0.1));
+    control.appendChild(rangeRow('Fade out (s)', () => round(layer.fadeOut, 1), v => { layer.fadeOut = Math.max(0, v); if (FM.reconcileFades) FM.reconcileFades(); }, 0, fmax, 0.1));
 
     // Audio tools live WITH the Volume section (the ⋯ menu path was easy to miss on PC).
     const tools = el('div', 'vol-tools');

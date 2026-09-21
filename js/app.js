@@ -2283,6 +2283,17 @@ window.FM = window.FM || {};
     FM.audioPlay.start();
   };
 
+  /* THE FADE STRIPS' OWN RECONCILE (queue 894). A fade changes the envelope on a clip's gain and nothing else —
+   * not which buffer plays, not where it is, not the effect routing — but the strips used to call
+   * reconcileAudio() on every pointermove, and while playing that restarts EVERY reversed clip: its source cut
+   * mid-sample and re-spliced, its effect chain (a reverb's Convolver and impulse response included) thrown away
+   * and rebuilt, ~60 times a second. Heard as a buzz, un-reversed clips being clean. So a fade only retunes the
+   * live voices. Forward clips need nothing here: the playback tick re-reads fadeMul every frame. */
+  FM.reconcileFades = function () {
+    if (FM.audioFxLive) FM.audioFxLive.syncAll();   // cheap and a no-op for a fade (queue 885) — kept so routing never lags
+    if (FM.playing && FM.audioPlay && FM.audioPlay.retune) FM.audioPlay.retune();
+  };
+
   /* ---------- layers ---------- */
   // Default length for a layer with no length of its own (photo, text, shape, drawing). Video keeps
   // its own duration. Settings owns the value; this clamps it so a hand-edited pref can't spawn a
