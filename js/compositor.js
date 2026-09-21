@@ -781,8 +781,8 @@ window.FM = window.FM || {};
       { key: 'side', label: 'Side', def: 0, options: [[0, 'Before'], [1, 'After']] },
     ] },
     { type: 'textspacing', label: 'Letter Spread', params: [
-      { key: 'spacing', label: 'Letter spacing', min: -20, max: 120, step: 1, def: 24, unit: 'px' },
-      { key: 'word', label: 'Word spacing', min: -40, max: 200, step: 1, def: 0, unit: 'px' },
+      { key: 'spacing', label: 'Letter spacing', min: -20, max: 120, step: 1, def: 24, unit: 'px', needs: 'letter' },   // FM.textSpacingOK (queue 904)
+      { key: 'word', label: 'Word spacing', min: -40, max: 200, step: 1, def: 0, unit: 'px', needs: 'word' },
       { key: 'line', label: 'Line height', min: 0.25, max: 4, step: 0.05, def: 1, unit: '\u00d7' },
       { key: 'mode', label: 'Applies', def: 0, options: [[0, 'Replaces'], [1, 'Adds to layer']] },
     ] },

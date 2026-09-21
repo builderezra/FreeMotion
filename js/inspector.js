@@ -1108,6 +1108,22 @@ window.FM = window.FM || {};
     }
   }
 
+  /* A CONTROL THIS BROWSER CANNOT CARRY OUT SAYS SO (queue 904, textspacing). Letter Spread's spacing rows need the
+     canvas to space letters and words, which older iOS Safari cannot — the slider moved and the text did not, while the
+     text panel's own identical Spacing row one panel over already said "does nothing here" (queue 645/661). Same pill,
+     same sentence, same measurement (FM.textSpacingOK measures, it does not ask whether the property exists).
+     NOT greyed, unlike a mode gate: the value is still stored and draws on a browser that can, so a project made on an
+     old phone still looks right on the PC. Per control, never per effect — Line height works everywhere, and a false
+     warning is the same defect as a false reassurance. */
+  function markUnsupported(row, p) {
+    if (!p.needs || !FM.textSpacingOK) return;
+    const ok = FM.textSpacingOK();
+    if (!ok || ok[p.needs] !== false) return;
+    const dt = el('span', 'fx-dead-tag', 'does nothing here');
+    dt.title = "This browser's canvas cannot space " + (p.needs === 'word' ? 'words' : 'letters') + ', so this slider will move but the text will not.';
+    row.appendChild(dt);
+  }
+
   function fxSegment(fx, p) {
     const row = el('div', 'fx-seg-row');
     row.appendChild(el('span', 'fx-scrub-label', p.label));
@@ -1605,6 +1621,7 @@ window.FM = window.FM || {};
           // Dim and lock a slider whose value is currently being overridden by a tick box above it,
           // and say WHICH one — a greyed control with no explanation just reads as broken.
           markOverridden(row, fx, p, reg);
+          markUnsupported(row, p);
           body.appendChild(row);
         }
         else if (p.type === 'toggle') body.appendChild(fxToggle(fx, p));

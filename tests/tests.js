@@ -66312,4 +66312,69 @@
     }
   });
 
+
+  /* ── queue 904 [A] textspacing: Letter Spread said nothing on a browser that cannot space text ────────
+   * Older iOS Safari's canvas cannot space letters or words. The text panel's own Spacing row already says
+   * "does nothing here" there (queue 645/661); Letter Spread's identical sliders moved their number and the
+   * text did not budge, with no word about why — and its Word spacing row is the app's only word spacing.
+   * Each spacing control now declares what it needs, and the effect row wears the text panel's pill.
+   * This suite's browser CAN space text, so each kind of browser is stood in for by answering the same
+   * measurement (FM.textSpacingOK) the app asks.
+   * ⚠️ CONTROLS: a capable browser shows no pill at all (a warning that is always there is noise); Line
+   * height works everywhere and must never be flagged; and each gap flags ONLY its own row. The rows stay
+   * usable — the value is stored and draws on a browser that can. */
+  test('904 textspacing: Letter Spread flags exactly the spacing its browser cannot draw, and nothing else', { item: '904', budgetMs: 30000 }, async function () {
+    var reg = FM.fxRegistry;
+    if (!reg || !reg.makeInstance) throw new Error('the effect registry is not reachable');
+    if (typeof FM.textSpacingOK !== 'function') throw new Error('FM.textSpacingOK is not reachable — the measurement the pill depends on');
+    var ok0 = FM.textSpacingOK, saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    var hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    function rowFor(label) {
+      var lab = [].slice.call(document.querySelectorAll('.fx-scrub-label')).filter(function (e) { return (e.textContent || '').trim() === label; })[0];
+      return lab ? lab.closest('.fx-scrub-row') : null;
+    }
+    async function show(caps) {
+      FM.textSpacingOK = function () { return caps; };
+      FM.scene.layers.length = 0;
+      var L = FM.makeLayer('text', { text: 'Letter Spread', fontSize: 80, x: 540, y: 960, start: 0, duration: 5 });
+      var inst = reg.makeInstance('textspacing'); inst._expanded = true;
+      L.effects = [inst]; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.openCategory('effects'); FM.inspector.refresh();
+      await sleep(160);
+      var out = {};
+      ['Letter spacing', 'Word spacing', 'Line height'].forEach(function (lbl) {
+        var r = rowFor(lbl);
+        if (!r) throw new Error('no "' + lbl + '" row on screen — nothing was measured');
+        out[lbl] = { pill: !!r.querySelector('.fx-dead-tag'), usable: getComputedStyle(r).pointerEvents !== 'none', why: (r.querySelector('.fx-dead-tag') || {}).title || '' };
+      });
+      return out;
+    }
+    try {
+      if (hadHome) FM.home.close();
+      // CONTROL: a browser that can do both shows no pill anywhere.
+      var both = await show({ letter: true, word: true });
+      Object.keys(both).forEach(function (k) { if (both[k].pill) throw new Error('"' + k + '" says it does nothing on a browser that CAN space text — a warning that is always there is noise'); });
+      // THE CLAIM: no letter spacing — only that row, and it says which thing is missing.
+      var noLetter = await show({ letter: false, word: true });
+      if (!noLetter['Letter spacing'].pill) throw new Error('on a browser that cannot space letters, Letter Spread’s Letter spacing row says nothing — the slider moves and the text does not budge, while the text panel’s identical row explains it');
+      if (!/space letters/.test(noLetter['Letter spacing'].why)) throw new Error('the pill does not say what is missing: ' + JSON.stringify(noLetter['Letter spacing'].why));
+      if (noLetter['Word spacing'].pill) throw new Error('Word spacing was flagged on a browser that CAN space words');
+      // …and no word spacing — only that row.
+      var noWord = await show({ letter: true, word: false });
+      if (!noWord['Word spacing'].pill) throw new Error('on a browser that cannot space words, the app’s only Word spacing control says nothing');
+      if (!/space words/.test(noWord['Word spacing'].why)) throw new Error('the pill does not say what is missing: ' + JSON.stringify(noWord['Word spacing'].why));
+      if (noWord['Letter spacing'].pill) throw new Error('Letter spacing was flagged on a browser that CAN space letters');
+      // CONTROL: Line height works everywhere and is never flagged; the flagged rows stay usable.
+      [noLetter, noWord].forEach(function (o) {
+        if (o['Line height'].pill) throw new Error('Line height was flagged — it works on every browser, and a false warning is the same defect as a false reassurance');
+        if (!o['Letter spacing'].usable || !o['Word spacing'].usable) throw new Error('a flagged spacing row was locked — the value must stay settable, it draws on a browser that can');
+      });
+    } finally {
+      FM.textSpacingOK = ok0;
+      FM.scene.layers = saved.layers; FM.scene.selectedId = saved.sel; FM.scene.selectedIds = saved.sel ? [saved.sel] : [];
+      FM.refreshAll();
+      if (hadHome && FM.home.open) FM.home.open();
+    }
+  });
+
 })();
