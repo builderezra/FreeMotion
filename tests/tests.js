@@ -66433,4 +66433,92 @@
     });
   });
 
+
+  /* ── queue 904 [B] lightglow: Light Glow and Soft Glow could only ever glow WHITE ─────────────────
+   * Every other glow in the app takes a colour; these two screened a hardcoded white, so a warm bloom or a
+   * coloured neon haze was out of reach with the two effects named for it. Each now has a Glow colour row
+   * defaulting to white.
+   * ⚠️ BYTE-IDENTITY, and a trap: an instance saved before this has NO colour, and hexToRGB(undefined)
+   * returns BLACK, not nothing — a naive `hexToRGB(p.color)` would have made every saved glow black. So the
+   * test compares a saved instance (no colour) against the old white render, exactly, and a '#ffffff' one too.
+   * Then a real colour must actually tint the glow: in the glowing area a warm colour lifts red more than blue. */
+  test('904 [B] Light Glow and Soft Glow take a colour, and every saved glow stays exactly white', { item: '904', budgetMs: 30000 }, function () {
+    var P = FM._pixelFx;
+    if (!P || !P.lightglow || !P.softglow) throw new Error('the glow kernels are not reachable');
+    var W = 96, H = 96;
+    function fixture() {       // a bright block on a mid-grey field, so there is a glow to see and room for it to spread
+      var d = new Uint8ClampedArray(W * H * 4);
+      for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+        var i = (y * W + x) * 4, hot = x > 36 && x < 60 && y > 36 && y < 60;
+        d[i] = d[i + 1] = d[i + 2] = hot ? 250 : 70; d[i + 3] = 255;
+      }
+      return d;
+    }
+    function run(type, params) { var d = fixture(); P[type](d, W, H, params, 0.37, 1); return d; }
+    function same(A, B) { for (var i = 0; i < A.length; i++) if (A[i] !== B[i]) return false; return true; }
+    [['lightglow', { amount: 0.8, radius: 8, threshold: 60 }], ['softglow', { amount: 0.8, radius: 100, threshold: 35 }]].forEach(function (c) {
+      var type = c[0], base = c[1];
+      var entry = (FM.fxRegistry.paramsOf(type) || []).filter(function (x) { return x.key === 'color'; })[0];
+      if (!entry) throw new Error(type + ' has no colour row — the glow can still only be white');
+      if (String(entry.default).toLowerCase() !== '#ffffff') throw new Error(type + '’s colour defaults to ' + entry.default + ', not the white it always drew');
+      var saved = run(type, base);
+      var white = run(type, Object.assign({}, base, { color: '#ffffff' }));
+      // CONTROL: the fixture actually glows (or every comparison below is between two untouched pictures).
+      if (same(saved, fixture())) throw new Error(type + ': the fixture did not glow at all, so nothing below is measured');
+      if (!same(saved, white)) throw new Error(type + ': a saved glow (no colour) and a white one render differently — every saved glow would change (a missing colour read as hexToRGB(undefined) is BLACK)');
+      var warm = run(type, Object.assign({}, base, { color: '#ff7a1a' }));
+      if (same(warm, white)) throw new Error(type + ': an orange glow rendered identically to white — the colour is not wired');
+      // in the halo OUTSIDE the bright block, orange must lift red more than blue. The halo pixel is FOUND, not assumed:
+      // Soft Glow's radius here is ~4px, and a fixed sample 5px out read 0 and 0 — the glow was simply not there.
+      var f0 = fixture(), bestI = -1, bestLift = 0;
+      for (var yy = 0; yy < H; yy++) for (var xx = 0; xx < W; xx++) {
+        if (xx > 36 && xx < 60 && yy > 36 && yy < 60) continue;   // outside the block only
+        var k = (yy * W + xx) * 4, lift = white[k] - f0[k];
+        if (lift > bestLift) { bestLift = lift; bestI = k; }
+      }
+      if (bestI < 0 || bestLift < 8) throw new Error(type + ': the white glow lifts nothing outside the bright block (' + bestLift + ') — there is no halo to judge the colour by');
+      var i = bestI, dR = warm[i] - f0[i], dB = warm[i + 2] - f0[i + 2];
+      if (!(dR > dB + 3)) throw new Error(type + ': in the halo an orange glow lifted red by ' + dR + ' and blue by ' + dB + ' — it is not tinting the glow orange');
+    });
+  });
+
+
+  /* ── queue 904 [B]: CRT's tube vignette and Dissolve's sweep front were fixed numbers ─────────────────
+   * CRT darkened its corners by a fixed 0.55 × Amount, so lightening them meant turning the whole effect down,
+   * scanlines and mask included — while its two siblings each had a slider. Dissolve's directional sweep had a
+   * ramp exactly one frame wide, so there was never a crisp front travelling across, only a permanent gradient.
+   * Same two claims as the other [B] fixes, on the kernels: a saved instance (no new key) is byte-identical to
+   * the default, and moving the new control changes the picture. Dissolve's is measured in a sweep mode, the
+   * only place it applies (and the panel greys it in "Everywhere" — the dead-in-mode gate covers that).
+   * ⚠️ Dissolve's check also asserts the front got TIGHTER, not merely different: at a narrow front, fewer
+   * pixels sit part-way between kept and gone than at the full-frame ramp. */
+  test('904 [B] CRT vignette and Dissolve front width are controls, and saved projects are untouched', { item: '904', budgetMs: 30000 }, function () {
+    var P = FM._pixelFx;
+    if (!P || !P.crt || !P.dissolve) throw new Error('the CRT / Dissolve kernels are not reachable');
+    var W = 96, H = 96;
+    function fixture() { var d = new Uint8ClampedArray(W * H * 4); for (var i = 0; i < d.length; i += 4) { d[i] = 200; d[i + 1] = 180; d[i + 2] = 160; d[i + 3] = 255; } return d; }
+    function run(type, params) { var d = fixture(); P[type](d, W, H, params, 0.37, 1); return d; }
+    function same(A, B) { for (var i = 0; i < A.length; i++) if (A[i] !== B[i]) return false; return true; }
+    function mad(A, B) { var s = 0; for (var i = 0; i < A.length; i++) s += Math.abs(A[i] - B[i]); return s / A.length; }
+    [['crt', { amount: 0.8, scale: 1, scanline: 0.45, mask: 0.18 }, 'vignette', 0.55, 0],
+     ['dissolve', { amount: 0.5, direction: 1, soft: 0, speed: 0 }, 'front', 100, 10]].forEach(function (c) {
+      var type = c[0], old = c[1], key = c[2], def = c[3], moved = c[4];
+      var pd = (FM.fxRegistry.paramsOf(type) || []).filter(function (x) { return x.key === key; })[0];
+      if (!pd) throw new Error(type + ' has no "' + key + '" control');
+      if (pd.default !== def) throw new Error(type + '.' + key + ' defaults to ' + pd.default + ', not the old fixed ' + def);
+      var saved = run(type, old), o1 = Object.assign({}, old), o2 = Object.assign({}, old);
+      o1[key] = def; o2[key] = moved;
+      if (same(saved, fixture())) throw new Error(type + ': the fixture was untouched, so nothing below is measured');
+      if (!same(saved, run(type, o1))) throw new Error(type + ': a saved instance (no "' + key + '") and one at the default render differently — saved projects would change');
+      var m = run(type, o2), diff = mad(saved, m);
+      if (!(diff > 0.5)) throw new Error(type + ': moving "' + key + '" to ' + moved + ' changed the picture by ' + diff.toFixed(3) + ' — not wired');
+      if (type === 'dissolve') {
+        // with no softness each pixel is kept or gone; a narrow front means the gone pixels bunch at the left.
+        var leftGone = function (A) { var n = 0; for (var y = 0; y < H; y++) for (var x = 0; x < W / 4; x++) if (A[(y * W + x) * 4 + 3] === 0) n++; return n; };
+        var rightGone = function (A) { var n = 0; for (var y = 0; y < H; y++) for (var x = W * 3 / 4; x < W; x++) if (A[(y * W + x) * 4 + 3] === 0) n++; return n; };
+        if (!(leftGone(m) > leftGone(saved) && rightGone(m) < rightGone(saved))) throw new Error('dissolve: a 10% front did not make the sweep crisper — left quarter gone ' + leftGone(saved) + '→' + leftGone(m) + ', right quarter gone ' + rightGone(saved) + '→' + rightGone(m));
+      }
+    });
+  });
+
 })();

@@ -276,6 +276,7 @@ window.FM = window.FM || {};
       { key: 'scale', label: 'Cell size', min: 1, max: 40, step: 1, def: 1, unit: 'px' },
       { key: 'scanline', label: 'Scanlines', min: 0, max: 1, step: 0.02, def: 0.45 },
       { key: 'mask', label: 'Phosphor mask', min: 0, max: 1, step: 0.02, def: 0.18 },
+      { key: 'vignette', label: 'Vignette', min: 0, max: 1, step: 0.02, def: 0.55 },   // queue 904: was a fixed 0.55 welded to Amount
     ] },
     // ---- batch 6 ----
     { type: 'boxblur', label: 'Box Blur', params: [
@@ -346,7 +347,7 @@ window.FM = window.FM || {};
       { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
     ] },
     // ---- batch 8 ----
-    { type: 'lightglow', label: 'Light Glow', params: [
+    { type: 'lightglow', label: 'Light Glow', color: true, defColor: '#ffffff', colorLabel: 'Glow', params: [   // queue 904: was hardcoded white
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'radius', label: 'Radius', min: 1, max: 80, step: 1, def: 6, unit: 'px' },
       { key: 'threshold', label: 'Threshold', min: 0, max: 100, step: 1, def: 60, unit: '%' },
@@ -554,6 +555,7 @@ window.FM = window.FM || {};
       { key: 'direction', label: 'Sweeps', def: 0, options: [[0, 'Everywhere'], [1, 'From the left'], [2, 'From the right'], [3, 'From the top'], [4, 'From the bottom']] },
       { key: 'soft', label: 'Edge softness', min: 0, max: 0.5, step: 0.02, def: 0 },
       { key: 'speed', label: 'Boil', min: 0, max: 30, step: 1, def: 0, unit: 'Hz' },
+      { key: 'front', label: 'Front width', min: 2, max: 100, step: 1, def: 100, unit: '%', overriddenBy: 'direction', liveWhen: [1, 2, 3, 4] },   // queue 904: the sweep's ramp was always the whole frame
     ] },
     { type: 'blockdissolve', label: 'Block Dissolve', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'size', label: 'Block Size', min: 4, max: 60, step: 1, def: 16, unit: 'px' }] },
     // ---- batch 14: Matte / Mask / Key (alpha geometry) ----
@@ -987,7 +989,7 @@ window.FM = window.FM || {};
       { key: 'samples', label: 'Samples', min: 2, max: 48, step: 1, def: 8 },
     ] },
     // ---- batch 26 (AM parity fill-ins: glow / selective colour / generative) ----
-    { type: 'softglow', label: 'Soft Glow', params: [
+    { type: 'softglow', label: 'Soft Glow', color: true, defColor: '#ffffff', colorLabel: 'Glow', params: [   // queue 904: was hardcoded white
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'radius', label: 'Radius', min: 10, max: 400, step: 5, def: 100, unit: '%' },
       { key: 'threshold', label: 'Threshold', min: 0, max: 100, step: 1, def: 35, unit: '%' },
@@ -4973,6 +4975,9 @@ window.FM = window.FM || {};
       const sc = p.scale == null ? 1 : Math.max(1, Math.round(FM.evalProp(p.scale, t)));
       const sl = p.scanline == null ? 0.45 : FM.evalProp(p.scanline, t);
       const mk = p.mask == null ? 0.18 : FM.evalProp(p.mask, t);
+      // VIGNETTE (queue 904): the tube darkening was a fixed 0.55 × Amount, so the only way to lighten the corners was to
+      // turn the whole effect down — scanlines and mask with it. Its siblings each got a slider; this is the third.
+      const vgS = p.vignette == null ? 0.55 : clamp01(FM.evalProp(p.vignette, t));
       const one = sc === 1;
       for (let y = 0; y < H; y++) {
         const gy = one ? y : Math.floor(y / sc);
@@ -4981,7 +4986,7 @@ window.FM = window.FM || {};
           const i = (row + x) * 4, ph = (one ? x : Math.floor(x / sc)) % 3;
           let kr = scan, kg = scan, kb = scan;
           if (ph === 0) { kg *= 1 - amt * mk; kb *= 1 - amt * mk; } else if (ph === 1) { kr *= 1 - amt * mk; kb *= 1 - amt * mk; } else { kr *= 1 - amt * mk; kg *= 1 - amt * mk; }
-          const r = Math.hypot(x - cx, y - cy) / maxR, vg = 1 - amt * 0.55 * Math.max(0, r - 0.4);
+          const r = Math.hypot(x - cx, y - cy) / maxR, vg = 1 - amt * vgS * Math.max(0, r - 0.4);
           d[i] *= kr * vg; d[i + 1] *= kg * vg; d[i + 2] *= kb * vg;
         }
       }
@@ -5190,7 +5195,8 @@ window.FM = window.FM || {};
           d[dt_i]=d[dt_i]*dt_ik+dt_col[0]*dt_kk; d[dt_i+1]=d[dt_i+1]*dt_ik+dt_col[1]*dt_kk; d[dt_i+2]=d[dt_i+2]*dt_ik+dt_col[2]*dt_kk; }
       } } },
     // ---- batch 8 (pixel) ----
-    lightglow: function(d,W,H,p,t){ var lgAmt = fparam(p, 'amount', 0.6, t); lgAmt=lgAmt<0?0:(lgAmt>1?1:lgAmt); if(lgAmt<=0)return; var lgThr=p.threshold==null?60:FM.evalProp(p.threshold,t); var lgN=W*H, lgBright=new Float32Array(lgN), lgTmp=new Float32Array(lgN), lgi, lgp4; for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0){lgBright[lgi]=0;continue;} var lgL=0.299*d[lgp4]+0.587*d[lgp4+1]+0.114*d[lgp4+2]; lgBright[lgi]=lgL>(lgThr===60?153:lgThr/100*255)?lgL:0; } var lgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))), lgDiv=2*lgR+1, lgx, lgy, lgRow, lgSum, lgIdx; for(lgy=0;lgy<H;lgy++){ lgRow=lgy*W; lgSum=0; for(lgx=-lgR;lgx<=lgR;lgx++){ var lgcx=lgx<0?0:(lgx>=W?W-1:lgx); lgSum+=lgBright[lgRow+lgcx]; } for(lgx=0;lgx<W;lgx++){ lgTmp[lgRow+lgx]=lgSum/lgDiv; var lgAddX=lgx+lgR+1; lgAddX=lgAddX>=W?W-1:lgAddX; var lgSubX=lgx-lgR; lgSubX=lgSubX<0?0:lgSubX; lgSum+=lgBright[lgRow+lgAddX]-lgBright[lgRow+lgSubX]; } } for(lgx=0;lgx<W;lgx++){ lgSum=0; for(lgy=-lgR;lgy<=lgR;lgy++){ var lgcy=lgy<0?0:(lgy>=H?H-1:lgy); lgSum+=lgTmp[lgcy*W+lgx]; } for(lgy=0;lgy<H;lgy++){ lgBright[lgy*W+lgx]=lgSum/lgDiv; var lgAddY=lgy+lgR+1; lgAddY=lgAddY>=H?H-1:lgAddY; var lgSubY=lgy-lgR; lgSubY=lgSubY<0?0:lgSubY; lgSum+=lgTmp[lgAddY*W+lgx]-lgTmp[lgSubY*W+lgx]; } } for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0)continue; var lgGlow=lgBright[lgi]*lgAmt; if(lgGlow<=0)continue; if(lgGlow>255)lgGlow=255; var lgF=(255-lgGlow)/255; d[lgp4]=255-(255-d[lgp4])*lgF; d[lgp4+1]=255-(255-d[lgp4+1])*lgF; d[lgp4+2]=255-(255-d[lgp4+2])*lgF; } },
+    lightglow: function(d,W,H,p,t){ /* GLOW COLOUR (queue 904): it was hardcoded white. A missing colour is WHITE, not hexToRGB(undefined) — that
+       returns BLACK — and white takes the old line exactly, so every saved glow is byte-identical. */ var lgC=p.color?hexToRGB(p.color):null, lgWh=!lgC||(lgC[0]===255&&lgC[1]===255&&lgC[2]===255); var lgAmt = fparam(p, 'amount', 0.6, t); lgAmt=lgAmt<0?0:(lgAmt>1?1:lgAmt); if(lgAmt<=0)return; var lgThr=p.threshold==null?60:FM.evalProp(p.threshold,t); var lgN=W*H, lgBright=new Float32Array(lgN), lgTmp=new Float32Array(lgN), lgi, lgp4; for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0){lgBright[lgi]=0;continue;} var lgL=0.299*d[lgp4]+0.587*d[lgp4+1]+0.114*d[lgp4+2]; lgBright[lgi]=lgL>(lgThr===60?153:lgThr/100*255)?lgL:0; } var lgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))), lgDiv=2*lgR+1, lgx, lgy, lgRow, lgSum, lgIdx; for(lgy=0;lgy<H;lgy++){ lgRow=lgy*W; lgSum=0; for(lgx=-lgR;lgx<=lgR;lgx++){ var lgcx=lgx<0?0:(lgx>=W?W-1:lgx); lgSum+=lgBright[lgRow+lgcx]; } for(lgx=0;lgx<W;lgx++){ lgTmp[lgRow+lgx]=lgSum/lgDiv; var lgAddX=lgx+lgR+1; lgAddX=lgAddX>=W?W-1:lgAddX; var lgSubX=lgx-lgR; lgSubX=lgSubX<0?0:lgSubX; lgSum+=lgBright[lgRow+lgAddX]-lgBright[lgRow+lgSubX]; } } for(lgx=0;lgx<W;lgx++){ lgSum=0; for(lgy=-lgR;lgy<=lgR;lgy++){ var lgcy=lgy<0?0:(lgy>=H?H-1:lgy); lgSum+=lgTmp[lgcy*W+lgx]; } for(lgy=0;lgy<H;lgy++){ lgBright[lgy*W+lgx]=lgSum/lgDiv; var lgAddY=lgy+lgR+1; lgAddY=lgAddY>=H?H-1:lgAddY; var lgSubY=lgy-lgR; lgSubY=lgSubY<0?0:lgSubY; lgSum+=lgTmp[lgAddY*W+lgx]-lgTmp[lgSubY*W+lgx]; } } for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0)continue; var lgGlow=lgBright[lgi]*lgAmt; if(lgGlow<=0)continue; if(lgGlow>255)lgGlow=255; if(lgWh){ var lgF=(255-lgGlow)/255; d[lgp4]=255-(255-d[lgp4])*lgF; d[lgp4+1]=255-(255-d[lgp4+1])*lgF; d[lgp4+2]=255-(255-d[lgp4+2])*lgF; } else { var lgK=lgGlow/255; d[lgp4]=255-(255-d[lgp4])*(255-lgC[0]*lgK)/255; d[lgp4+1]=255-(255-d[lgp4+1])*(255-lgC[1]*lgK)/255; d[lgp4+2]=255-(255-d[lgp4+2])*(255-lgC[2]*lgK)/255; } } },
     longshadow: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(80,Math.round(lsLen))); if(lsLen<=0)return; var lsCol=hexToRGB(p.color)||[0,0,0]; var lsR=lsCol[0]&255,lsG=lsCol[1]&255,lsB=lsCol[2]&255; var s=fxSrc(d); var lsND=W+H-1, lsDiag; for(lsDiag=0;lsDiag<lsND;lsDiag++){ var lsX0,lsY0; if(lsDiag<W){lsX0=lsDiag;lsY0=0;}else{lsX0=0;lsY0=lsDiag-W+1;} var lsX=lsX0,lsY=lsY0,lsCount=lsLen; while(lsX<W&&lsY<H){ var lsI=(lsY*W+lsX)*4; if(s[lsI+3]>0){lsCount=0;}else if(lsCount<lsLen){ lsCount++; d[lsI]=lsR; d[lsI+1]=lsG; d[lsI+2]=lsB; d[lsI+3]=255; } lsX++; lsY++; } } },
     halftonelines: function(d,W,H,p,t,ps){ var htlSize=FM.evalProp(p.size,t); if(htlSize==null||isNaN(htlSize))htlSize=8; htlSize=Math.max(3,Math.min(40,Math.round(htlSize))); /* FLOOR THE SCALED PERIOD AT 2, NOT 1 (queue 261). A stripe needs two rows: at a period of 1 every
        row has the same rowMod of 0, the threshold beats it for any luminance below pure white, and the
@@ -5874,7 +5880,10 @@ window.FM = window.FM || {};
            Getting this backwards makes "from the left" eat the right-hand side, which is what the
            first version did — the test caught it by counting holes per half rather than in total. */
         if(dsDir){ var dsU=dsDir===1?(dsX/(W-1||1)):(dsDir===2?(1-dsX/(W-1||1)):(dsDir===3?(dsY/(H-1||1)):(1-dsY/(H-1||1))));
-          dsA=dsAmt*2-dsU; if(dsA<0)dsA=0; else if(dsA>1)dsA=1; }
+          /* FRONT WIDTH (queue 904): the ramp was always the whole frame, so a sweep never had a crisp edge travelling
+             across it — the picture was always partly eaten. At 100% (w = 1) this is the old `amount*2 - u` exactly. */
+          var dsW=(p.front==null?100:FM.evalProp(p.front,t))/100;   /* the fallback in the control's own units (%), which test 793 reads */ if(!(dsW>=0.02))dsW=0.02; if(dsW>1)dsW=1;
+          dsA=(dsAmt*(1+dsW)-dsU)/dsW; if(dsA<0)dsA=0; else if(dsA>1)dsA=1; }
         var dsR=dsH/4294967296;
         if(dsSoft<=0){ if(dsR<dsA)d[dsI+3]=0; continue; }
         var dsE=(dsA-dsR)/dsSoft;                    // partial edge instead of a binary hole
@@ -6574,7 +6583,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Soft Glow: wide low-threshold bloom — bright-pass, separable box blur, screen-composite.
     // Same skeleton as lightglow but the pass threshold is 90 (not 153) and the radius scales with
     // frame size, so mid-tones haze softly instead of only hot highlights blooming.
-    softglow: function(d,W,H,p,t){ var sgA = fparam(p, 'amount', 0.6, t); var sgThr=p.threshold==null?35:FM.evalProp(p.threshold,t); var sgThrV=sgThr===35?90:sgThr/100*255; sgA=sgA<0?0:(sgA>1?1:sgA); if(sgA<=0)return; var sgN=W*H, sgB=new Float32Array(sgN), sgT=new Float32Array(sgN), sgi, sg4; for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0){sgB[sgi]=0;continue;} var sgL=0.299*d[sg4]+0.587*d[sg4+1]+0.114*d[sg4+2]; sgB[sgi]=sgL>sgThrV?(sgL-sgThrV)*1.55:0; } var sgRad=p.radius==null?100:FM.evalProp(p.radius,t); var sgR=sgRad===100?Math.max(4,Math.round(Math.min(W,H)/40)):Math.max(1,Math.round(Math.min(W,H)/40*(sgRad/100))), sgWin=2*sgR+1, sgx, sgy, sgS, sgRow; for(sgy=0;sgy<H;sgy++){ sgRow=sgy*W; sgS=0; for(sgx=-sgR;sgx<=sgR;sgx++){ var sgc=sgx<0?0:(sgx>=W?W-1:sgx); sgS+=sgB[sgRow+sgc]; } for(sgx=0;sgx<W;sgx++){ sgT[sgRow+sgx]=sgS/sgWin; var sgAX=sgx+sgR+1; sgAX=sgAX>=W?W-1:sgAX; var sgBX=sgx-sgR; sgBX=sgBX<0?0:sgBX; sgS+=sgB[sgRow+sgAX]-sgB[sgRow+sgBX]; } } for(sgx=0;sgx<W;sgx++){ sgS=0; for(sgy=-sgR;sgy<=sgR;sgy++){ var sgcy=sgy<0?0:(sgy>=H?H-1:sgy); sgS+=sgT[sgcy*W+sgx]; } for(sgy=0;sgy<H;sgy++){ sgB[sgy*W+sgx]=sgS/sgWin; var sgAY=sgy+sgR+1; sgAY=sgAY>=H?H-1:sgAY; var sgBY=sgy-sgR; sgBY=sgBY<0?0:sgBY; sgS+=sgT[sgAY*W+sgx]-sgT[sgBY*W+sgx]; } } for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0)continue; var sgG=sgB[sgi]*sgA; if(sgG<=0)continue; if(sgG>255)sgG=255; var sgF=(255-sgG)/255; d[sg4]=255-(255-d[sg4])*sgF; d[sg4+1]=255-(255-d[sg4+1])*sgF; d[sg4+2]=255-(255-d[sg4+2])*sgF; } },
+    softglow: function(d,W,H,p,t){ /* GLOW COLOUR (queue 904) — see lightglow: missing = white, white = the old line exactly. */ var sgC=p.color?hexToRGB(p.color):null, sgWh=!sgC||(sgC[0]===255&&sgC[1]===255&&sgC[2]===255); var sgA = fparam(p, 'amount', 0.6, t); var sgThr=p.threshold==null?35:FM.evalProp(p.threshold,t); var sgThrV=sgThr===35?90:sgThr/100*255; sgA=sgA<0?0:(sgA>1?1:sgA); if(sgA<=0)return; var sgN=W*H, sgB=new Float32Array(sgN), sgT=new Float32Array(sgN), sgi, sg4; for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0){sgB[sgi]=0;continue;} var sgL=0.299*d[sg4]+0.587*d[sg4+1]+0.114*d[sg4+2]; sgB[sgi]=sgL>sgThrV?(sgL-sgThrV)*1.55:0; } var sgRad=p.radius==null?100:FM.evalProp(p.radius,t); var sgR=sgRad===100?Math.max(4,Math.round(Math.min(W,H)/40)):Math.max(1,Math.round(Math.min(W,H)/40*(sgRad/100))), sgWin=2*sgR+1, sgx, sgy, sgS, sgRow; for(sgy=0;sgy<H;sgy++){ sgRow=sgy*W; sgS=0; for(sgx=-sgR;sgx<=sgR;sgx++){ var sgc=sgx<0?0:(sgx>=W?W-1:sgx); sgS+=sgB[sgRow+sgc]; } for(sgx=0;sgx<W;sgx++){ sgT[sgRow+sgx]=sgS/sgWin; var sgAX=sgx+sgR+1; sgAX=sgAX>=W?W-1:sgAX; var sgBX=sgx-sgR; sgBX=sgBX<0?0:sgBX; sgS+=sgB[sgRow+sgAX]-sgB[sgRow+sgBX]; } } for(sgx=0;sgx<W;sgx++){ sgS=0; for(sgy=-sgR;sgy<=sgR;sgy++){ var sgcy=sgy<0?0:(sgy>=H?H-1:sgy); sgS+=sgT[sgcy*W+sgx]; } for(sgy=0;sgy<H;sgy++){ sgB[sgy*W+sgx]=sgS/sgWin; var sgAY=sgy+sgR+1; sgAY=sgAY>=H?H-1:sgAY; var sgBY=sgy-sgR; sgBY=sgBY<0?0:sgBY; sgS+=sgT[sgAY*W+sgx]-sgT[sgBY*W+sgx]; } } for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0)continue; var sgG=sgB[sgi]*sgA; if(sgG<=0)continue; if(sgG>255)sgG=255; if(sgWh){ var sgF=(255-sgG)/255; d[sg4]=255-(255-d[sg4])*sgF; d[sg4+1]=255-(255-d[sg4+1])*sgF; d[sg4+2]=255-(255-d[sg4+2])*sgF; } else { var sgK=sgG/255; d[sg4]=255-(255-d[sg4])*(255-sgC[0]*sgK)/255; d[sg4+1]=255-(255-d[sg4+1])*(255-sgC[1]*sgK)/255; d[sg4+2]=255-(255-d[sg4+2])*(255-sgC[2]*sgK)/255; } } },
     // Replace Color: pixels whose hue sits within the tolerance window of the From colour get their hue
     // shifted to the To colour (sat/val kept), with a soft falloff to the window edge. Near-greys are
     // skipped — they carry no meaningful hue to replace.
