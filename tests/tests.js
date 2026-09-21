@@ -55923,6 +55923,33 @@
     if (same(z5, box())) throw new Error('control: Zoom Streaks at 0.5 changes nothing either, so the Amount 0 check proves nothing');
   });
 
+  /* ═══ 904 (batch): Scramble Text can match the text it resolves into; Stroke's Softness never erases the stroke. */
+  test('904: Scramble Text matches case and digits, and Stroke softness never fades the stroke away', { item: '904' }, function () {
+    const T = FM._FX_TABLES && FM._FX_TABLES.TEXT_FX, K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!T || !T.textrandomizer || !K || !K.stroke) throw new Error('FM._FX_TABLES is not reachable');
+    const scr = (p) => { const st = { text: 'hello world 2026', letterSpacing: 0 }; T.textrandomizer(st, Object.assign({ progress: 0, speed: 12 }, p), 1.23); return st.text; };
+    if (scr({}) !== scr({ chars: 0 })) throw new Error('a saved Scramble with no "Scrambles into" key does not draw the old Anything set');
+    if (!/[A-Z#%&@?!]/.test(scr({}).replace(/\s/g, '')) || /[a-z]/.test(scr({}))) throw new Error('control: the old set is not CAPS + symbols, so the match test below cannot tell the modes apart');
+    const m = scr({ chars: 1 });
+    for (let i = 0; i < m.length; i++) {
+      const src = 'hello world 2026'[i], c = m[i];
+      if (/[a-z]/.test(src) && !/[a-z]/.test(c)) throw new Error('Match the text turned lowercase "' + src + '" into "' + c + '" — the noise does not match the words (' + m + ')');
+      if (/[0-9]/.test(src) && !/[0-9]/.test(c)) throw new Error('Match the text turned the digit "' + src + '" into "' + c + '" (' + m + ')');
+      if (src === ' ' && c !== ' ') throw new Error('Match the text scrambled a space');
+    }
+    if (!/^[0-9 ]+$/.test(scr({ chars: 2 }))) throw new Error('Digits mode put a non-digit in: ' + scr({ chars: 2 }));
+    if (FM.fxRegistry.makeInstance('textrandomizer').params.chars !== 1) throw new Error('a NEW Scramble does not default to Match the text');
+
+    // Stroke: a 4px outline at every softness must keep a solid core, and a softness under band-1 is untouched.
+    const W = 40, H = 40;
+    const sq = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 12; y < 28; y++) for (let x = 12; x < 28; x++) { const i = (y * W + x) * 4; d[i] = 30; d[i + 1] = 30; d[i + 2] = 200; d[i + 3] = 255; } return d; };
+    const st = (soft, ps) => { const d = sq(); K.stroke(d, W, H, { width: 4, position: 0, shape: 0, softness: soft, color: '#ffffff' }, 0, ps || 1); return d; };
+    const peak = (d) => { let m = 0; for (let x = 28; x < 34; x++) m = Math.max(m, d[(20 * W + x) * 4 + 3]); return m; };
+    if (peak(st(0)) !== 255) throw new Error('control: a hard 4px stroke is not opaque beside the layer');
+    for (const soft of [3, 6, 12]) if (peak(st(soft)) < 250) throw new Error('Stroke at Softness ' + soft + ' has faded its own core to alpha ' + peak(st(soft)) + ' — softness is erasing the stroke (queue 904)');
+    if (peak(st(12, 0.28)) < 250) throw new Error('on the phone plate a softened stroke peaks at alpha ' + peak(st(12, 0.28)) + ' — it vanishes there while the export keeps it');
+  });
+
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
      Ezra asked the question this answers: *"How confident are you that every effect is actually good?"*
      Three separate times now a kernel has drawn a different picture on the reduced preview plate than

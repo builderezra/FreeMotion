@@ -763,7 +763,7 @@ window.FM = window.FM || {};
       { key: 'dir', label: 'From', def: 0, options: [[0, 'Start'], [1, 'End'], [2, 'Middle']] },
       { key: 'cursor', label: 'Caret', def: 0, options: [[0, 'None'], [1, '/'], [2, '_'], [3, '\u258c']] },
     ] },
-    { type: 'textrandomizer', label: 'Scramble Text', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'speed', label: 'Speed', min: 0, max: 30, step: 1, def: 12, unit: 'Hz' }] },
+    { type: 'textrandomizer', label: 'Scramble Text', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'speed', label: 'Speed', min: 0, max: 30, step: 1, def: 12, unit: 'Hz' }, { key: 'chars', label: 'Scrambles into', def: 1, legacy: 0, options: [[0, 'Any'], [1, 'Match'], [2, 'Digits'], [3, 'Letters']] }] },   // queue 904: the alphabet was one hardcoded CAPS+symbols string
     /* WORD SPACING AND LINE HEIGHT were named as "still open from that same request" in the oldest
        entry in REQUESTS.md and then left, because they are a LAYOUT change rather than a slider and I
        did not want to bolt them on badly. They are here now.
@@ -2121,6 +2121,7 @@ window.FM = window.FM || {};
   function tnum(v, d) { return (v == null || (typeof v === 'number' && isNaN(v))) ? d : v; }
   function tpad(n) { n = Math.floor(n); return (n < 10 ? '0' : '') + n; }
   const TEXT_SCRAMBLE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#%&@?!';
+  const TS_UP = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', TS_LO = 'abcdefghijklmnopqrstuvwxyz', TS_DG = '0123456789', TS_SY = '#%&@?!';
   const TEXT_FX = {
     counter: function (st, p, t) {
       var from = fparam(p, 'from', 0, t), to = fparam(p, 'to', 100, t);
@@ -2165,10 +2166,19 @@ window.FM = window.FM || {};
       var pr = clamp01(fparam(p, 'progress', 0.5, t));
       var spd = fparam(p, 'speed', 12, t);
       var s = st.text, n = Math.floor(s.length * pr), frame = Math.floor(t * spd), out = '';
+      var mode = p.chars == null ? 0 : (Math.round(FM.evalProp(p.chars, t)) | 0);
       for (var i = 0; i < s.length; i++) {
         var c = s[i];
         if (i < n || c === ' ' || c === '\n' || c === '\t') { out += c; }
-        else { var h = (i * 2654435761 + frame * 40503) >>> 0; h = (h ^ (h >>> 13)) >>> 0; out += TEXT_SCRAMBLE[h % TEXT_SCRAMBLE.length]; }
+        else { var h = (i * 2654435761 + frame * 40503) >>> 0; h = (h ^ (h >>> 13)) >>> 0;
+          /* WHAT IT SCRAMBLES INTO (queue 904). 'Anything' is the old CAPS + digits + symbols set and is what a saved Scramble with no
+             key draws, character for character. 'Match the text' keeps each character's kind — lowercase stays lowercase, a digit
+             stays a digit — so the noise looks like the words it resolves into; it is the default for a NEW Scramble. */
+          var set = TEXT_SCRAMBLE;
+          if (mode === 1) set = (c >= 'a' && c <= 'z') ? TS_LO : (c >= 'A' && c <= 'Z') ? TS_UP : (c >= '0' && c <= '9') ? TS_DG : (c.toLowerCase() !== c.toUpperCase() ? (c === c.toLowerCase() ? TS_LO : TS_UP) : TS_SY);
+          else if (mode === 2) set = TS_DG;
+          else if (mode === 3) set = (c >= 'a' && c <= 'z') ? TS_LO : TS_UP;
+          out += set[h % set.length]; }
       }
       st.text = out;
     },
@@ -5330,8 +5340,13 @@ window.FM = window.FM || {};
         if(stInW>0){ stInv=new Uint8Array(st_N); for(st_i=0;st_i<st_N;st_i++)stInv[st_i]=st_src[st_i]?0:1;
           stFi=distanceField(stInv,W,H,stRound); }                     // shape px -> nearest background
         // Fully opaque out to (band - softness), fading to nothing at the band edge.
+        /* SOFTNESS NEVER WIDER THAN THE STROKE (queue 904). The fade ran inward from the band edge over `st_sft`, so a softness past the
+           band faded the stroke's own core: a 4px outline at softness 12 topped out 25% opaque, and on the phone plate — where the
+           width rounds to a whole pixel and the softness does not — it vanished while the export kept it at 50%. Capped at band - 1
+           (the innermost ring stays solid), the most softness can do is ramp across the whole stroke; a 1px band — the phone's — stays a
+           solid line. Softness at or under band - 1 is untouched, byte for byte. */
         var stCov=function(dist,band){ if(dist>band)return 0; if(st_sft<=0)return 1;
-          var e=band-dist; if(e>=st_sft)return 1; return e/st_sft; };
+          var sf=st_sft>band-1?band-1:st_sft; if(sf<=0)return 1; var e=band-dist; if(e>=sf)return 1; return e/sf; };
         for(st_i=0;st_i<st_N;st_i++){
           var stA=0;
           if(st_src[st_i]===0){ if(stOutW>0&&stFo[st_i]>0) stA=stCov(stFo[st_i],stOutW); }
