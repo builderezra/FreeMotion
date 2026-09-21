@@ -56277,6 +56277,25 @@
     if (st.text !== 'HELLO WORLD') throw new Error('control: mode 0 no longer uppercases');
   });
 
+  /* ═══ 904: Palette Map gets a palette. Levels (no mode key) = the old per-channel quantise; Your colours = nearest of up to 4 picks. */
+  test('904: Palette Map snaps to colours you choose, and Colours 4 means four', { item: '904' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.palettemap) throw new Error('PIXEL_FX.palettemap is not reachable');
+    const W = 64, H = 32;
+    const grad = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; d[i] = x * 4; d[i + 1] = y * 8; d[i + 2] = 255 - x * 4; d[i + 3] = 255; } return d; };
+    const run = (p) => { const d = grad(); K.palettemap(d, W, H, p, 0, 1); return d; };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    const distinct = (d) => { const s = new Set(); for (let i = 0; i < d.length; i += 4) s.add(d[i] + ',' + d[i + 1] + ',' + d[i + 2]); return s; };
+    if (!same(run({ count: 4, amount: 1 }), run({ count: 4, amount: 1, mode: 0 }))) throw new Error('Levels is not the old per-channel Palette Map');
+    if (!(distinct(run({ count: 4, amount: 1 })).size > 8)) throw new Error('control: Levels at 4 should give many more than 4 colours (it is 4 per channel)');
+    const pal = { mode: 1, count: 4, amount: 1, color: '#000000', color2: '#ff0000', color3: '#00ff00', color4: '#ffffff' };
+    const out = distinct(run(pal));
+    if (out.size > 4) throw new Error('Your colours at Colours 4 produced ' + out.size + ' colours, not 4 (queue 904)');
+    for (const c of out) if (!['0,0,0', '255,0,0', '0,255,0', '255,255,255'].includes(c)) throw new Error('Your colours produced ' + c + ', which is not one of the chosen four');
+    if (distinct(run(Object.assign({}, pal, { count: 2 }))).size > 2) throw new Error('Your colours at Colours 2 used more than the first two');
+    if (FM.fxRegistry.makeInstance('palettemap').params.mode !== 1) throw new Error('a new Palette Map does not start with Your colours');
+  });
+
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
      Ezra asked the question this answers: *"How confident are you that every effect is actually good?"*
      Three separate times now a kernel has drawn a different picture on the reduced preview plate than

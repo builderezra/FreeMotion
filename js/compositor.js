@@ -1074,8 +1074,12 @@ window.FM = window.FM || {};
       { key: 'offsetx', label: 'Shift X', min: -100, max: 100, step: 1, def: 25, unit: '%' },
       { key: 'offsety', label: 'Shift Y', min: -100, max: 100, step: 1, def: 0, unit: '%' },
     ] },
-    { type: 'palettemap', label: 'Palette Map', params: [
-      { key: 'count', label: 'Colours', min: 2, max: 8, step: 1, def: 4 },
+    /* queue 904: there was no palette to pick — 'Colours 4' meant 4 levels PER CHANNEL, i.e. 64 colours. 'Your colours' snaps every
+       pixel to the nearest of up to four colours you choose; a saved Palette Map (no mode key) keeps the old per-channel levels. */
+    { type: 'palettemap', label: 'Palette Map', color: true, defColor: '#1d1b3a', colorLabel: 'Colour 1', color2: true, defColor2: '#e4572e', color2Label: 'Colour 2',
+      color3: true, defColor3: '#f3a712', color3Label: 'Colour 3', color4: true, defColor4: '#f5f1e3', color4Label: 'Colour 4', params: [
+      { key: 'mode', label: 'Palette', def: 1, legacy: 0, options: [[0, 'Levels'], [1, 'Your colours']] },
+      { key: 'count', label: 'Colours', min: 2, max: 8, step: 1, def: 4, note: 'Your colours uses the first 2–4 below; Levels makes this many steps per red, green and blue' },
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
     ] },
     /* MORE TO TURN (queue 403 clause 2). Ezra: "Lighting bolt effect could use some other variables and
@@ -6946,7 +6950,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // ---- batch 28 (AM parity fill-ins) ----
     // Palette Map: quantize every pixel to the nearest of a small evenly-spaced palette (posterize in
     // 3D RGB space → banded, screen-print look). Count = palette steps per axis; Amount blends toward it.
-    palettemap: function(d,W,H,p,t){ var pm_c = fparam(p, 'count', 4, t); pm_c=Math.round(pm_c); if(pm_c<2)pm_c=2; if(pm_c>8)pm_c=8; var pm_amt = fparam(p, 'amount', 1, t); if(pm_amt<0)pm_amt=0; if(pm_amt>1)pm_amt=1; if(pm_amt<=0)return; var pm_step=255/(pm_c-1); for(var pm_i=0;pm_i<d.length;pm_i+=4){ if(d[pm_i+3]===0)continue; var pm_nr=Math.round(d[pm_i]/pm_step)*pm_step, pm_ng=Math.round(d[pm_i+1]/pm_step)*pm_step, pm_nb=Math.round(d[pm_i+2]/pm_step)*pm_step; d[pm_i]+=(pm_nr-d[pm_i])*pm_amt; d[pm_i+1]+=(pm_ng-d[pm_i+1])*pm_amt; d[pm_i+2]+=(pm_nb-d[pm_i+2])*pm_amt; } },
+    palettemap: function(d,W,H,p,t){ var pm_c = fparam(p, 'count', 4, t); pm_c=Math.round(pm_c); if(pm_c<2)pm_c=2; if(pm_c>8)pm_c=8; var pm_amt = fparam(p, 'amount', 1, t); if(pm_amt<0)pm_amt=0; if(pm_amt>1)pm_amt=1; if(pm_amt<=0)return;
+      if(p.mode!=null&&(Math.round(FM.evalProp(p.mode,t))|0)===1){ var pm_k=Math.min(4,pm_c), pm_P=[], pm_ks=['color','color2','color3','color4'], pm_df=['#1d1b3a','#e4572e','#f3a712','#f5f1e3'];
+        for(var pm_j=0;pm_j<pm_k;pm_j++){ var pm_rgb=hexToRGB(p[pm_ks[pm_j]]||pm_df[pm_j])||hexToRGB(pm_df[pm_j]); pm_P.push(pm_rgb); }
+        for(var pm_q=0;pm_q<d.length;pm_q+=4){ if(d[pm_q+3]===0)continue; var pm_r=d[pm_q], pm_g=d[pm_q+1], pm_b=d[pm_q+2], pm_best=0, pm_bd=1e9;
+          for(var pm_m=0;pm_m<pm_k;pm_m++){ var pc=pm_P[pm_m], er=pm_r-pc[0], eg=pm_g-pc[1], eb=pm_b-pc[2], dd=er*er*0.30+eg*eg*0.59+eb*eb*0.11; if(dd<pm_bd){pm_bd=dd;pm_best=pm_m;} }
+          var pw=pm_P[pm_best]; d[pm_q]+=(pw[0]-pm_r)*pm_amt; d[pm_q+1]+=(pw[1]-pm_g)*pm_amt; d[pm_q+2]+=(pw[2]-pm_b)*pm_amt; }
+        return; }
+      var pm_step=255/(pm_c-1); for(var pm_i=0;pm_i<d.length;pm_i+=4){ if(d[pm_i+3]===0)continue; var pm_nr=Math.round(d[pm_i]/pm_step)*pm_step, pm_ng=Math.round(d[pm_i+1]/pm_step)*pm_step, pm_nb=Math.round(d[pm_i+2]/pm_step)*pm_step; d[pm_i]+=(pm_nr-d[pm_i])*pm_amt; d[pm_i+1]+=(pm_ng-d[pm_i+1])*pm_amt; d[pm_i+2]+=(pm_nb-d[pm_i+2])*pm_amt; } },
     // Lightning: procedural bolts — a few jagged vertical paths (deterministic sine-hash jitter, phase
     // driven by t so they flicker), each drawn as an additive glow that fades with distance. Screen-
     // composited over the content in the bolt colour. Count/Intensity params; no random (export-safe).
