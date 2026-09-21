@@ -5212,7 +5212,7 @@ window.FM = window.FM || {};
        the exported file was perfectly fine, which is close to unreportable from the user's side.
        At the smallest sizes the preview's stripes are now slightly coarser than the export's — that is
        the resolution limit, and it beats solid black. */
-      htlSize=Math.max(2,Math.round(htlSize*(ps||1))); var htlW4=W*4;
+      var htlSize0=htlSize; htlSize=Math.max(2,Math.round(htlSize*(ps||1))); var htlW4=W*4;
       // The screen was permanently HORIZONTAL, which is the one angle a real engraving never uses, and
       // its edges were 1-bit hard. ANGLE turns the whole line screen, WEIGHT scales the ink so a tone
       // can be run heavy or light independently of the source exposure, SOFTNESS takes the aliased
@@ -5229,7 +5229,7 @@ window.FM = window.FM || {};
          came out mean 12.4 / sd 12.5, which is a near-solid black rectangle.
          Capped under the period for the same reason the crosshatch weight is: a feather wider than the
          thing it softens has nothing left to be an edge OF. */
-      htlSoft=htlSoft*(ps||1); if(htlSoft>htlSize*0.5)htlSoft=htlSize*0.5;
+      var htlSoft0=htlSoft>htlSize0*0.5?htlSize0*0.5:htlSoft; htlSoft=htlSoft*(ps||1); if(htlSoft>htlSize*0.5)htlSoft=htlSize*0.5;
       /* ⚠️ AND A SUB-PIXEL FEATHER IS A HARD EDGE, NOT A FAINT ONE — scaling alone did not finish this.
          `htlM` only ever takes INTEGER offsets, so the ramp is sampled once per pixel. At ps=0.28 the
          feather is 0.28 of a pixel and the single sample that ought to come out white instead lands
@@ -5243,6 +5243,26 @@ window.FM = window.FM || {};
          is a real, deliberate sub-pixel feather he may have dialled in, and this must not quietly
          harden it — that would be fixing the preview by changing the thing it is supposed to predict. */
       if(ps&&ps<1&&htlSoft<1)htlSoft=0;
+      /* SUPERSAMPLED ON A REDUCED PLATE — queue 902. Everything above makes the preview's screen the right SHAPE, but a
+         2px period has no room for a feather or a heavier line, so Edge softness sat inert on the phone while it moved the
+         export (mean 126.2 at softness 0, 1 and 3, against the export's 127.5 / 108.1 / 76.1). So on a reduced plate the
+         screen is not redrawn small; it is drawn at EXPORT size and averaged into each plate pixel — k×k integer export
+         pixels per plate pixel, which is what the exported file looks like shown at the preview's size. Modelled on a flat
+         140 grey at pitch 8: softness 0 / 1 / 3 now give mean 128.9 / 109.2 / 76.8 against the export's 127.5 / 108.1 / 76.1.
+         The export (ps = 1) never enters this branch, so every file already made is byte-identical. */
+      if(ps&&ps<1){ var htlK=Math.min(4,Math.ceil(1/ps)), htlKK=htlK*htlK, htlInv=1/ps, htlQ, htlSx, htlSy, htlEX, htlEY, htlM0, htlT0, htlE0, htlAcc;
+        for(var htlPY=0;htlPY<H;htlPY++){ for(var htlPX=0;htlPX<W;htlPX++){ var htlJ=(htlPY*W+htlPX)*4; if(d[htlJ+3]===0)continue;
+          var htlL0=(0.299*d[htlJ]+0.587*d[htlJ+1]+0.114*d[htlJ+2])/255; if(htlL0<0)htlL0=0; else if(htlL0>1)htlL0=1;
+          if(htlWt===1) htlT0=(1-htlL0)*htlSize0; else { htlT0=(1-htlL0)*htlSize0*htlWt; if(htlT0>htlSize0-1)htlT0=htlSize0-1; }
+          htlAcc=0;
+          for(htlSy=0;htlSy<htlK;htlSy++){ htlEY=Math.floor((htlPY+(htlSy+0.5)/htlK)*htlInv);
+            for(htlSx=0;htlSx<htlK;htlSx++){
+              if(htlRot){ htlEX=Math.floor((htlPX+(htlSx+0.5)/htlK)*htlInv); htlM0=(-htlEX*htlSin+htlEY*htlCos)%htlSize0; if(htlM0<0)htlM0+=htlSize0; }
+              else htlM0=htlEY%htlSize0;
+              if(htlSoft0>0){ htlE0=(htlM0-htlT0)/htlSoft0; htlAcc+=htlE0<=0?0:(htlE0>=1?255:Math.round(htlE0*255)); }
+              else htlAcc+=htlM0<htlT0?0:255; } }
+          htlQ=Math.round(htlAcc/htlKK); d[htlJ]=htlQ; d[htlJ+1]=htlQ; d[htlJ+2]=htlQ; } }
+        return; }
       for(var htlY=0;htlY<H;htlY++){ var htlRowMod=((htlY%htlSize)+htlSize)%htlSize; var htlRowBase=htlY*htlW4;
         for(var htlX=0;htlX<W;htlX++){ var htlI=htlRowBase+htlX*4; if(d[htlI+3]===0)continue;
           var htlL=(0.299*d[htlI]+0.587*d[htlI+1]+0.114*d[htlI+2])/255; if(htlL<0)htlL=0; else if(htlL>1)htlL=1;
@@ -6444,7 +6464,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var cs_alt=p.alternate==null?0.4:FM.evalProp(p.alternate,t); if(cs_alt<0)cs_alt=0; if(cs_alt>1)cs_alt=1;
       var cs_off=p.offset==null?0:FM.evalProp(p.offset,t); if(cs_off<-0.5)cs_off=-0.5; if(cs_off>0.5)cs_off=0.5;
       var cs_levels = fparam(p, 'levels', 5, t); cs_levels=Math.round(cs_levels); if(cs_levels<2)cs_levels=2; if(cs_levels>12)cs_levels=12; var cs_lo=hexToRGB(p.color); var cs_hi=hexToRGB(p.color2); var cs_n=W*H, cs_i, cs_idx, cs_a, cs_r, cs_g, cs_b, cs_l, cs_band, cs_frac, cs_br, cs_bg, cs_bb, cs_mix; for(cs_i=0; cs_i<cs_n; cs_i++){ cs_idx=cs_i*4; cs_a=d[cs_idx+3]; if(cs_a<=0)continue; cs_r=d[cs_idx]; cs_g=d[cs_idx+1]; cs_b=d[cs_idx+2]; cs_l=(0.299*cs_r+0.587*cs_g+0.114*cs_b)/255; if(cs_l<0)cs_l=0; if(cs_l>1)cs_l=1; cs_band=Math.floor((cs_l+cs_off)*cs_levels); if(cs_band<0)cs_band=0; if(cs_band>=cs_levels)cs_band=cs_levels-1; cs_frac=cs_levels>1?cs_band/(cs_levels-1):0; cs_br=cs_lo[0]+(cs_hi[0]-cs_lo[0])*cs_frac; cs_bg=cs_lo[1]+(cs_hi[1]-cs_lo[1])*cs_frac; cs_bb=cs_lo[2]+(cs_hi[2]-cs_lo[2])*cs_frac; cs_mix=((cs_band&1)?1.0:cs_alt)*cs_amt; d[cs_idx]=cs_r+(cs_br-cs_r)*cs_mix; d[cs_idx+1]=cs_g+(cs_bg-cs_g)*cs_mix; d[cs_idx+2]=cs_b+(cs_bb-cs_b)*cs_mix; } },
-    crosshatch: function(d,W,H,p,t,ps){ var sp = fparam(p, 'spacing', 7, t); sp=Math.round(sp); if(sp<3)sp=3; if(sp>30)sp=30; sp=Math.max(1,Math.round(sp*(ps||1))); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var col=hexToRGB(p.color); var ir=col[0],ig=col[1],ib=col[2]; var W4=W*4;
+    crosshatch: function(d,W,H,p,t,ps){ var sp = fparam(p, 'spacing', 7, t); sp=Math.round(sp); if(sp<3)sp=3; if(sp>30)sp=30; var sp0=sp; sp=Math.max(1,Math.round(sp*(ps||1))); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var col=hexToRGB(p.color); var ir=col[0],ig=col[1],ib=col[2]; var W4=W*4;
       // The three hatch tiers fired at hardcoded luminances of 0.75/0.5/0.25 with 1px strokes on fixed
       // axes, so how much ink went down was dictated entirely by how the source happened to be exposed
       // — and a 1px stroke is invisible at 1080p, which is the resolution everything here is.
@@ -6463,10 +6483,28 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          hundred lines up: once the threshold reaches the period there is no gap left to leave white, at
          ANY scale. Scaling alone would have fixed today's number and left the cliff in place. The floor
          keeps a 1px line visible — `xy` is an integer, so any weight above 0 still inks offset 0. */
-      chWt=chWt*(ps||1); if(chWt<0.5)chWt=0.5; if(chWt>sp-1)chWt=Math.max(0.5,sp-1);
+      var chWt0=chWt>sp0-1?Math.max(0.5,sp0-1):chWt; chWt=chWt*(ps||1); if(chWt<0.5)chWt=0.5; if(chWt>sp-1)chWt=Math.max(0.5,sp-1);
       var chAng=p.angle==null?0:FM.evalProp(p.angle,t);
       var chRot=((chAng%360)+360)%360!==0;
       var chRad=chAng*Math.PI/180, chCos=Math.cos(chRad), chSin=Math.sin(chRad);
+      /* SUPERSAMPLED ON A REDUCED PLATE — queue 902, the same cure as Halftone Lines. With the period scaled to a couple of
+         plate pixels the weight clamp above pins every stroke to one pixel, so Stroke weight 2 and 5 both inked 69.8% of the
+         phone preview while the export went 60.8% → 86.6%. The hatch is now drawn at EXPORT size, k×k integer export pixels
+         per plate pixel, and the ink laid down in proportion to how much of the pixel it covers. The export (ps = 1) never
+         enters this branch. */
+      if(ps&&ps<1){ var chK=Math.min(4,Math.ceil(1/ps)), chKK=chK*chK, chInv=1/ps;
+        for(var cy=0;cy<H;cy++){ for(var cx=0;cx<W;cx++){ var cj=(cy*W+cx)*4; if(d[cj+3]===0)continue;
+          var cl=(0.299*d[cj]+0.587*d[cj+1]+0.114*d[cj+2])/255, cHit=0;
+          if(cl>=chT1&&cl>=chT2&&cl>=chT3)continue;
+          for(var csy=0;csy<chK;csy++){ var cEY=Math.floor((cy+(csy+0.5)/chK)*chInv);
+            for(var csx=0;csx<chK;csx++){ var cEX=Math.floor((cx+(csx+0.5)/chK)*chInv), chx=cEX, chy=cEY, chym, cq;
+              if(chRot){ chx=cEX*chCos+cEY*chSin; chy=-cEX*chSin+cEY*chCos; }
+              chym=chy%sp0; if(chym<0)chym+=sp0;
+              if(cl<chT1){ cq=(chx+chy)%sp0; if(cq<0)cq+=sp0; if(cq<chWt0){cHit++;continue;} }
+              if(cl<chT2){ cq=(chx-chy)%sp0; if(cq<0)cq+=sp0; if(cq<chWt0){cHit++;continue;} }
+              if(cl<chT3&&chym<chWt0)cHit++; } }
+          if(cHit){ var cf=cHit/chKK; d[cj]+= (ir-d[cj])*cf; d[cj+1]+=(ig-d[cj+1])*cf; d[cj+2]+=(ib-d[cj+2])*cf; } } }
+        return; }
       for(var y=0;y<H;y++){ var row=y*W4; var ymod=y%sp;
         for(var x=0;x<W;x++){ var ci=row+x*4; var a=d[ci+3]; if(a===0)continue;
           var r=d[ci],g=d[ci+1],b=d[ci+2]; var l=(0.299*r+0.587*g+0.114*b)/255; var hatch=false;

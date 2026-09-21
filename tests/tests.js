@@ -27044,22 +27044,28 @@
     L.effects = [R.makeInstance('halftonelines')];
     L.effects[0].params = Object.assign(L.effects[0].params || {}, { size: 3 });   // the slider's own MINIMUM
     const S = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 5, background: '#000000' } });
-    // Count pure-white pixels: the halftone writes only 0 or 255, so white rows ARE the stripes.
-    const whiteAt = (w, h) => {
+    /* MEASURED AS BRIGHTNESS, NOT AS PURE-WHITE PIXELS (changed for queue 902). This used to count pixels above 240,
+       because the kernel only ever wrote 0 or 255. Since 902 a reduced plate is SUPERSAMPLED — the screen is drawn at
+       export size and averaged into each plate pixel — so a 3px screen at a third of its size is an even grey of the
+       right tone, which is what the file looks like at that size. The defect this test is for is SOLID BLACK, so it
+       asks the question directly: the preview must carry most of the full-resolution render's brightness. The old
+       bug scored 0 here. */
+    const meanAt = (w, h) => {
       const c = offscreen(w, h), ctx = c.getContext('2d');
       FM.renderScene(ctx, S, 0.5);
       const d = ctx.getImageData(0, 0, w, h).data;
-      let n = 0;
-      for (let i = 0; i < d.length; i += 4) if (d[i] > 240 && d[i + 1] > 240 && d[i + 2] > 240) n++;
-      return n;
+      let s = 0;
+      for (let i = 0; i < d.length; i += 4) s += d[i] + d[i + 1] + d[i + 2];
+      return s / (d.length / 4) / 3;
     };
-    const full = whiteAt(1080, 1920);
-    if (!(full > 0)) throw new Error('no stripes even at full resolution, so this test cannot see the defect it is for');
+    const full = meanAt(1080, 1920);
+    if (!(full > 40)) throw new Error('the full-resolution render only reaches mean ' + full.toFixed(1) + ', so it is not drawing stripes and this test cannot see the defect it is for');
     /* The preview scale that broke it: 1080 -> 360 is a third, which rounds a period of 3 down to 1. */
-    const prev = whiteAt(360, 640);
-    if (prev === 0) throw new Error('the downscaled preview is SOLID BLACK — the stripes collapsed (full res had ' + full + ' white pixels)');
+    const prev = meanAt(360, 640);
+    if (prev < full * 0.6) throw new Error('the downscaled preview is near SOLID BLACK — mean ' + prev.toFixed(1) + ' against ' + full.toFixed(1) + ' at full resolution');
     // and a half-scale preview, so this is not accidentally passing at one specific ratio
-    if (whiteAt(540, 960) === 0) throw new Error('the half-scale preview is solid black');
+    const half = meanAt(540, 960);
+    if (half < full * 0.6) throw new Error('the half-scale preview is near solid black — mean ' + half.toFixed(1) + ' against ' + full.toFixed(1));
   });
 
   test('Hot Colour survives its Low and High sliders crossing (queue 262)', { item: 'thermal-range' }, function () {
@@ -55764,6 +55770,36 @@
     if (dtE < 20) throw new Error('control: the EXPORT plate only reaches sd ' + dtE.toFixed(1) + ', so the dots are not reading there either and this proves nothing');
     if (dtP < dtE * 0.6) throw new Error('Dots washes out to sd ' + dtP.toFixed(1) + ' on the preview plate against sd ' + dtE.toFixed(1) +
       ' in the export — the edge softness is not scaled, so the feather swallows a cell that did shrink (queue 899: it measured sd 10.7 against 35.3)');
+  });
+
+  /* ═══ 902: ON THE PHONE'S PLATE, A PATTERN EFFECT'S FINE CONTROLS MUST STILL DO SOMETHING — AND DO WHAT THE EXPORT DOES.
+     After 889/890 the preview had the right SHAPE but a 2px period has no room for a feather or a heavier line, so Halftone
+     Lines' Edge softness gave mean 126.2 at 0, 1 and 3 on a 0.28 plate while the export went 127.5 / 108.1 / 76.1, and
+     Crosshatch inked the same at weight 2 and 5. The slider moved and the preview did not. The assertion is on TONE (mean),
+     because tone is what survives a quarter-size preview: each setting's preview mean must sit near the export's, and the
+     two ends of each slider must be told apart on the preview. The control is the export itself moving by a wide margin. */
+  test('902: Halftone Lines softness and Crosshatch weight still change the phone preview, and match the export tone', { item: '902' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.halftonelines || !K.crosshatch) throw new Error('FM._FX_TABLES.PIXEL_FX is not reachable');
+    const PS = 0.28, WE = 360, WP = 101;
+    const plate = (W, ramp) => { const d = new Uint8ClampedArray(W * W * 4);
+      for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, v = ramp ? Math.round(40 + 150 * (x / (W - 1))) : 140;
+        d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; } return d; };
+    const mean = (d) => { let s = 0, n = 0; for (let i = 0; i < d.length; i += 4) { s += d[i]; n++; } return s / n; };
+    const run = (fn, W, ps, params, ramp) => { const d = plate(W, ramp); fn(d, W, W, params, 0, ps); return mean(d); };
+    const cases = [
+      ['Halftone Lines softness', K.halftonelines, false, [0, 3].map(v => ({ size: 8, angle: 0, weight: 1, softness: v }))],
+      ['Crosshatch stroke weight', K.crosshatch, true, [2, 5].map(v => ({ spacing: 7, density: 50, weight: v, angle: 0, color: '#101014' }))],
+    ];
+    for (const [name, fn, ramp, [lo, hi]] of cases) {
+      const eLo = run(fn, WE, 1, lo, ramp), eHi = run(fn, WE, 1, hi, ramp);
+      const pLo = run(fn, WP, PS, lo, ramp), pHi = run(fn, WP, PS, hi, ramp);
+      if (Math.abs(eLo - eHi) < 15) throw new Error('control: ' + name + ' barely moves even the EXPORT (' + eLo.toFixed(1) + ' → ' + eHi.toFixed(1) + '), so the preview cannot be judged against it');
+      if (Math.abs(pLo - pHi) < Math.abs(eLo - eHi) * 0.5) throw new Error(name + ' is inert on the phone preview: mean ' + pLo.toFixed(1) + ' → ' + pHi.toFixed(1) +
+        ' while the export goes ' + eLo.toFixed(1) + ' → ' + eHi.toFixed(1) + ' (queue 902: it measured 126.2 → 126.2)');
+      for (const [p, e, which] of [[pLo, eLo, 'low'], [pHi, eHi, 'high']]) if (Math.abs(p - e) > 12)
+        throw new Error(name + ' at its ' + which + ' setting: the preview tone is ' + p.toFixed(1) + ' against the export\'s ' + e.toFixed(1) + ' — a different picture from the file');
+    }
   });
 
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
