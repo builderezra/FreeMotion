@@ -27258,6 +27258,7 @@
       if (!pd || typeof pd.min !== 'number' || typeof pd.max !== 'number') { missing.push(type + '.' + key + ' — the raised param is gone'); return; }
       const defs = {}; ps.forEach(x => { if (x.default !== undefined) defs[x.key] = x.default; });
       if (pd.overriddenBy && pd.liveWhen !== undefined) defs[pd.overriddenBy] = Array.isArray(pd.liveWhen) ? pd.liveWhen[0] : pd.liveWhen;   // several live values since queue 904
+      if (pd.overriddenBy && pd.liveAbove !== undefined) { const ctl = ps.find(x => x.key === pd.overriddenBy); defs[pd.overriddenBy] = ctl && typeof ctl.max === 'number' ? ctl.max : Number(pd.liveAbove) + 1; }
       const at = v => shot(type, Object.assign({}, defs, { [key]: v }));
       const mid = at(pd.min + (pd.max - pd.min) * 0.5), top = at(pd.max);
       /* TRAP 2: prove the metric can read zero before believing a non-zero reading. */
@@ -62909,7 +62910,10 @@
       ps.filter(p => typeof p.min === 'number' && typeof p.max === 'number' && p.max > p.min).forEach(p => {
         checked++;
         const base = Object.assign({}, defs);
-        if (p.overriddenBy && p.liveWhen !== undefined) base[p.overriddenBy] = p.liveWhen;
+        if (p.overriddenBy && p.liveWhen !== undefined) base[p.overriddenBy] = Array.isArray(p.liveWhen) ? p.liveWhen[0] : p.liveWhen;
+        if (p.overriddenBy && p.liveAbove !== undefined) {   // a slider live only ABOVE its controller's level (queue 904): turn the controller all the way up
+          const ctl = ps.find(q => q.key === p.overriddenBy); base[p.overriddenBy] = ctl && typeof ctl.max === 'number' ? ctl.max : Number(p.liveAbove) + 1;
+        }
         let best = 0;
         for (const mk of FRAMES) {
           /* FIVE TIMES, NOT TWO, and the first draft of this test proved why: Blink's `min` (how far it
@@ -66301,6 +66305,9 @@
       await show('tiles', function (p) { p.mode = 1; });
       expect('tiles', 'Tiles', false);
       expect('tiles', 'Repeat', true, 'Only used when Layout is Extend');
+      // ── Starfield: Twinkle speed is used only once Twinkle is above 0 (a LEVEL, not a mode).
+      await show('starfield', function (p) { p.twinkle = 0; });   expect('starfield', 'Twinkle speed', true, 'Only used when Twinkle is above 0');
+      await show('starfield', function (p) { p.twinkle = 0.4; }); expect('starfield', 'Twinkle speed', false);
       // ── The OLD project: no mode stored, so it draws as Grid — judge it by that.
       await show('tiles', function (p) { delete p.mode; });
       expect('tiles', 'Tiles', false);
@@ -66375,6 +66382,55 @@
       FM.refreshAll();
       if (hadHome && FM.home.open) FM.home.open();
     }
+  });
+
+
+  /* ── queue 904 [B]: three hardcoded numbers where a control should be ─────────────────────────────
+   * Tilt Shift's blur radius (8px, no strength control), Starfield's twinkle rate (3 rad/s — the only
+   * animated generative effect with no speed), and Voronoi's wall thickness (8% of the cell — "Edge" only
+   * ever set how DARK the wall is). Each is now a control whose default IS the old number, so every
+   * saved project renders exactly as before and the new control only does something once moved.
+   * Two claims per effect, measured on the kernel itself: a saved instance WITHOUT the new key renders
+   * byte-for-byte what it did (the default is the old constant, not merely close to it), and moving the
+   * new control changes the picture (it is wired, not decorative).
+   * MEASURED (21 Sep, this fixture): saved == default exactly for all three; moving the control changes the picture by
+   * 2.27 (Starfield, sparse stars), 5.98 (Tilt Shift) and 22.7 (Voronoi). The 0.5 floor sits below the smallest. */
+  test('904 [B] Tilt Shift blur, Starfield twinkle speed and Voronoi wall thickness are controls, and saved projects are untouched', { item: '904', budgetMs: 30000 }, function () {
+    var P = FM._pixelFx;
+    if (!P) throw new Error('FM._pixelFx is not reachable — the kernels cannot be measured');
+    var W = 96, H = 96;
+    function fixture() {                       // detail everywhere: a blur, a twinkle and a cell wall all show up on it
+      var d = new Uint8ClampedArray(W * H * 4);
+      for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+        var i = (y * W + x) * 4, c = ((x >> 2) + (y >> 2)) & 1 ? 230 : 25;
+        d[i] = c; d[i + 1] = (x * 7 + y * 3) & 255; d[i + 2] = 255 - c; d[i + 3] = 255;
+      }
+      return d;
+    }
+    function run(type, params, t) { var d = fixture(); P[type](d, W, H, params, t == null ? 0.37 : t, 1); return d; }
+    function same(A, B) { for (var i = 0; i < A.length; i++) if (A[i] !== B[i]) return false; return true; }
+    function mad(A, B) { var s = 0; for (var i = 0; i < A.length; i++) s += Math.abs(A[i] - B[i]); return s / A.length; }
+    var cases = [
+      // [type, the params an OLD instance carries, the new key, its default, a moved value, time]
+      ['tiltshift', { center: 0.5, softness: 0.2 }, 'blur', 1, 3, 0.37],
+      // colour given: with none, hexToRGB(undefined) makes BLACK stars, and a black star dimmed by any twinkle is still
+      // black — the first run of this test read exactly 0.000 for that reason. The app always sets the white default.
+      ['starfield', { amount: 0.6, size: 2, variation: 0, twinkle: 1, color: '#ffffff' }, 'twinklespeed', 1, 3.7, 1.9],
+      ['voronoi', { cells: 10, edge: 1, motion: 0, speed: 0.5 }, 'wall', 8, 30, 0.37],
+    ];
+    cases.forEach(function (c) {
+      var type = c[0], old = c[1], key = c[2], def = c[3], moved = c[4], t = c[5];
+      if (!P[type]) throw new Error('no kernel for ' + type);
+      var pd = (FM.fxRegistry.paramsOf(type) || []).filter(function (x) { return x.key === key; })[0];
+      if (!pd) throw new Error(type + ' has no "' + key + '" control — the hardcoded number is still hardcoded');
+      if (pd.default !== def) throw new Error(type + '.' + key + ' defaults to ' + pd.default + ', not the old hardcoded ' + def + ' — every new instance would look different from before');
+      var saved = run(type, old, t);
+      var atDef = run(type, Object.assign({}, old, (function () { var o = {}; o[key] = def; return o; })()), t);
+      if (!same(saved, atDef)) throw new Error(type + ': a saved instance (no "' + key + '") and one at the default render differently (' + mad(saved, atDef).toFixed(3) + ') — saved projects would change');
+      var atMoved = run(type, Object.assign({}, old, (function () { var o = {}; o[key] = moved; return o; })()), t);
+      var diff = mad(saved, atMoved);
+      if (!(diff > 0.5)) throw new Error(type + ': moving "' + key + '" from ' + def + ' to ' + moved + ' changed the picture by ' + diff.toFixed(3) + ' — the control is not wired to anything');
+    });
   });
 
 })();

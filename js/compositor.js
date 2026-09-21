@@ -440,6 +440,7 @@ window.FM = window.FM || {};
       { key: 'size', label: 'Star size', min: 1, max: 8, step: 1, def: 1, unit: 'px' },
       { key: 'variation', label: 'Brightness spread', min: 0, max: 1, step: 0.05, def: 0 },
       { key: 'twinkle', label: 'Twinkle', min: 0, max: 1, step: 0.05, def: 0 },
+      { key: 'twinklespeed', label: 'Twinkle speed', min: 0.1, max: 5, step: 0.1, def: 1, unit: '×', overriddenBy: 'twinkle', liveAbove: 0 },   // queue 904: the rate was a fixed 3 rad/s — and it does nothing while Twinkle is 0
     ] },
     { type: 'curl', label: 'Curl', params: [
       { key: 'amount', label: 'Amount', min: -1, max: 1, step: 0.02, def: 0.5 },
@@ -523,7 +524,7 @@ window.FM = window.FM || {};
       params: [{ key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 20, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },
     { type: 'colorbalance', label: 'Colour Balance', params: [{ key: 'red', label: 'Red', min: -100, max: 100, step: 1, def: 25 }, { key: 'green', label: 'Green', min: -100, max: 100, step: 1, def: 0 }, { key: 'blue', label: 'Blue', min: -100, max: 100, step: 1, def: -25 }] },
     { type: 'highlightsshadows', label: 'Highlights & Shadows', params: [{ key: 'highlights', label: 'Highlights', min: -100, max: 100, step: 1, def: -40 }, { key: 'shadows', label: 'Shadows', min: -100, max: 100, step: 1, def: 50 }] },
-    { type: 'tiltshift', label: 'Tilt Shift', params: [{ key: 'center', label: 'Focus', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.5 }] },
+    { type: 'tiltshift', label: 'Tilt Shift', params: [{ key: 'center', label: 'Focus', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'blur', label: 'Blur amount', min: 0.25, max: 4, step: 0.05, def: 1, unit: '×' }] },   // queue 904: a multiple of the old fixed 8, so 1× IS the old look and it stays clear of pxToPlate
     // ---- batch 12 ----
     { type: 'dropshadow', label: 'Drop Shadow', params: [{ key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 18, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 135, unit: '°' }, { key: 'softness', label: 'Softness', min: 0, max: 20, step: 1, def: 6, unit: 'px' }], color: true, defColor: '#000000', colorLabel: 'Shadow' },
     { type: 'chromaticaberration', label: 'Chromatic Aberration', params: [{ key: 'amount', label: 'Amount', min: 0, max: 30, step: 1, def: 8, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' },
@@ -1026,6 +1027,7 @@ window.FM = window.FM || {};
          effect saved BEFORE this release carries no motion param at all and renders exactly as it did. */
       { key: 'motion', label: 'Motion', min: 0, max: 1, step: 0.02, def: 0.4, legacy: 0 },   // queue 756: an instance saved before motion existed is frozen (0), and the inspector says so
       { key: 'speed', label: 'Speed', min: 0, max: 2, step: 0.02, def: 0.5 },
+      { key: 'wall', label: 'Wall thickness', min: 1, max: 40, step: 1, def: 8, unit: '%' },   // queue 904: was welded to 8% of the cell — Edge only ever set how DARK
     ] },
     { type: 'tunnel', label: 'Tunnel', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -5331,6 +5333,7 @@ window.FM = window.FM || {};
       // instead of reading as a flat stipple; TWINKLE moves them.
       var sf_szP=sf_p.size==null?1:Math.round(FM.evalProp(sf_p.size,sf_t)); if(sf_szP<1)sf_szP=1; if(sf_szP>8)sf_szP=8;
       var sf_tw=sf_p.twinkle==null?0:FM.evalProp(sf_p.twinkle,sf_t); if(sf_tw<0)sf_tw=0; if(sf_tw>1)sf_tw=1;
+      var sf_tws=sf_p.twinklespeed==null?1:FM.evalProp(sf_p.twinklespeed,sf_t); if(!(sf_tws>0.1))sf_tws=0.1; if(sf_tws>5)sf_tws=5;   // queue 904: 1× = the old fixed 3 rad/s
       var sf_var=sf_p.variation==null?0:FM.evalProp(sf_p.variation,sf_t); if(sf_var<0)sf_var=0; if(sf_var>1)sf_var=1;
       var sf_plain=sf_szP===1&&sf_tw===0&&sf_var===0;
       for(var sf_y=0;sf_y<sf_H;sf_y++){ var sf_row=sf_y*sf_w4; for(var sf_x=0;sf_x<sf_W;sf_x++){ var sf_i=sf_row+sf_x*4; if(sf_d[sf_i+3]<=0)continue;
@@ -5349,7 +5352,7 @@ window.FM = window.FM || {};
             // control read as dead. Same mix as sf_h two lines up, which does it correctly.
             if(sf_tw>0){ var sf_ht=((sf_cx*40503)^(sf_cy*12289))|0; sf_ht=(sf_ht^(sf_ht>>>13))*1274126177|0; sf_ht=(sf_ht^(sf_ht>>>16))>>>0;
               var sf_pz=(sf_ht/4294967295)*6.283;
-              sf_b*=1-sf_tw*0.5*(1-Math.sin(sf_t*3+sf_pz)); }
+              sf_b*=1-sf_tw*0.5*(1-Math.sin(sf_t*3*sf_tws+sf_pz)); }
             if(sf_b<0)sf_b=0;
             sf_d[sf_i]=sf_col[0]*sf_b; sf_d[sf_i+1]=sf_col[1]*sf_b; sf_d[sf_i+2]=sf_col[2]*sf_b; sf_d[sf_i+3]=255; }
         } } } },
@@ -5704,7 +5707,10 @@ window.FM = window.FM || {};
       var tsBB=arguments[6];
       var tsCenter = fparam(p, 'center', 0.5, t); tsCenter=tsCenter<0?0:(tsCenter>1?1:tsCenter);
       var tsSoft = fparam(p, 'softness', 0.5, t); tsSoft=tsSoft<0?0:(tsSoft>1?1:tsSoft);
-      var tsW4=W*4, tsLen=d.length, tsR=8, tsWin=tsR*2+1;
+      /* BLUR AMOUNT (queue 904): the radius was a fixed 8 with no control. A MULTIPLE of it rather than a px value, so the
+         default 1× is the old radius exactly and the param is not a px key pxToPlate would have to learn about. */
+      var tsAmt = fparam(p, 'blur', 1, t); tsAmt = tsAmt < 0.25 ? 0.25 : (tsAmt > 4 ? 4 : tsAmt);
+      var tsW4=W*4, tsLen=d.length, tsR=Math.max(1, Math.round(8 * tsAmt)), tsWin=tsR*2+1;
       var tsPad=tsR+1;
       var tsY0=tsBB?Math.max(0,tsBB.y-tsPad):0, tsY1=tsBB?Math.min(H-1,tsBB.y+tsBB.h-1+tsPad):H-1;
       var tsX0=tsBB?Math.max(0,tsBB.x):0,       tsX1=tsBB?Math.min(W-1,tsBB.x+tsBB.w-1):W-1;
@@ -6669,7 +6675,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Voronoi Cells: stained-glass mosaic — jittered-grid seeds (hash-based, deterministic so preview
     // and export match), each pixel takes its nearest seed's colour; near-equidistant borders darken by
     // Edge. O(9) neighbour checks per pixel, no seed list scan.
-    voronoi: function(d,W,H,p,t){ var vcN=Math.round(FM.evalProp(p.cells,t)||16); if(vcN<4)vcN=4; if(vcN>48)vcN=48; var vcE = fparam(p, 'edge', 0.35, t); vcE=vcE<0?0:(vcE>1?1:vcE); var vcG=Math.max(6,W/vcN), vcS=fxSrc(d); function vcH(ix,iy,k){ var n=Math.sin(ix*127.1+iy*311.7+k*74.7)*43758.5453; return n-Math.floor(n); }
+    voronoi: function(d,W,H,p,t){ var vcN=Math.round(FM.evalProp(p.cells,t)||16); if(vcN<4)vcN=4; if(vcN>48)vcN=48; var vcWall=(p.wall==null?8:FM.evalProp(p.wall,t))/100; if(!(vcWall>=0.01))vcWall=0.01; if(vcWall>0.4)vcWall=0.4;   /* queue 904: the wall was a fixed 8% of the cell; 8/100 === 0.08 exactly, so a saved instance is byte-identical */ var vcE = fparam(p, 'edge', 0.35, t); vcE=vcE<0?0:(vcE>1?1:vcE); var vcG=Math.max(6,W/vcN), vcS=fxSrc(d); function vcH(ix,iy,k){ var n=Math.sin(ix*127.1+iy*311.7+k*74.7)*43758.5453; return n-Math.floor(n); }
       /* MOTION (queue 350). Ezra: "Voronoi cells needs the ability to make them move, and I want it to
          actually move in a cool way and not just a drag it up and down, like they're alive."
          "Not just a drag it up and down" rules out the cheap answer — scrolling the whole field, which
@@ -6698,7 +6704,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         var vcOx=vcH(vcCx,vcCy,1), vcOy=vcH(vcCx,vcCy,2);
         if(vcR){ vcOx+=vcR*Math.cos(vcW+vcH(vcCx,vcCy,3)*vcTAU); vcOy+=vcR*Math.sin(vcW*0.73+vcH(vcCx,vcCy,4)*vcTAU); }
         vcPX[vcIdx]=(vcCx+vcOx)*vcG; vcPY[vcIdx]=(vcCy+vcOy)*vcG;
-      } for(var vcy=0;vcy<H;vcy++){ var vcRow=vcy*W; for(var vcx=0;vcx<W;vcx++){ var vci=(vcRow+vcx)*4; if(vcS[vci+3]===0)continue; var vcx0=Math.floor(vcx/vcG), vcy0=Math.floor(vcy/vcG), vcD1=1e18, vcD2=1e18, vcSx=vcx, vcSy=vcy; for(var vcoy=-1;vcoy<=1;vcoy++)for(var vcox=-1;vcox<=1;vcox++){ var vccx=vcx0+vcox, vccy=vcy0+vcoy; var vcJ=(vccy+1)*vcGX+(vccx+1), vcpx=vcPX[vcJ], vcpy=vcPY[vcJ]; var vcdd=(vcx-vcpx)*(vcx-vcpx)+(vcy-vcpy)*(vcy-vcpy); if(vcdd<vcD1){ vcD2=vcD1; vcD1=vcdd; vcSx=vcpx; vcSy=vcpy; } else if(vcdd<vcD2){ vcD2=vcdd; } } var vcSix=Math.max(0,Math.min(W-1,Math.round(vcSx))), vcSiy=Math.max(0,Math.min(H-1,Math.round(vcSy))); var vcSi=(vcSiy*W+vcSix)*4; if(vcS[vcSi+3]>0){ d[vci]=vcS[vcSi]; d[vci+1]=vcS[vcSi+1]; d[vci+2]=vcS[vcSi+2]; } var vcEw=Math.sqrt(vcD2)-Math.sqrt(vcD1); if(vcE>0 && vcEw<vcG*0.08){ var vcF=1-vcE*(1-vcEw/(vcG*0.08)); d[vci]*=vcF; d[vci+1]*=vcF; d[vci+2]*=vcF; } } } },
+      } for(var vcy=0;vcy<H;vcy++){ var vcRow=vcy*W; for(var vcx=0;vcx<W;vcx++){ var vci=(vcRow+vcx)*4; if(vcS[vci+3]===0)continue; var vcx0=Math.floor(vcx/vcG), vcy0=Math.floor(vcy/vcG), vcD1=1e18, vcD2=1e18, vcSx=vcx, vcSy=vcy; for(var vcoy=-1;vcoy<=1;vcoy++)for(var vcox=-1;vcox<=1;vcox++){ var vccx=vcx0+vcox, vccy=vcy0+vcoy; var vcJ=(vccy+1)*vcGX+(vccx+1), vcpx=vcPX[vcJ], vcpy=vcPY[vcJ]; var vcdd=(vcx-vcpx)*(vcx-vcpx)+(vcy-vcpy)*(vcy-vcpy); if(vcdd<vcD1){ vcD2=vcD1; vcD1=vcdd; vcSx=vcpx; vcSy=vcpy; } else if(vcdd<vcD2){ vcD2=vcdd; } } var vcSix=Math.max(0,Math.min(W-1,Math.round(vcSx))), vcSiy=Math.max(0,Math.min(H-1,Math.round(vcSy))); var vcSi=(vcSiy*W+vcSix)*4; if(vcS[vcSi+3]>0){ d[vci]=vcS[vcSi]; d[vci+1]=vcS[vcSi+1]; d[vci+2]=vcS[vcSi+2]; } var vcEw=Math.sqrt(vcD2)-Math.sqrt(vcD1); if(vcE>0 && vcEw<vcG*vcWall){ var vcF=1-vcE*(1-vcEw/(vcG*vcWall)); d[vci]*=vcF; d[vci+1]*=vcF; d[vci+2]*=vcF; } } } },
     // ---- batch 27: Remove Object — content-aware fill of a rectangular region (watermark/subtitle
     // removal). Patch = ffmpeg-delogo: each region pixel is the 1/distance-weighted mix of the four
     // border samples just OUTSIDE the rect — all four channels incl. alpha, so on a transparent plate

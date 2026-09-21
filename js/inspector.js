@@ -1081,7 +1081,12 @@ window.FM = window.FM || {};
        `liveWhen` says which value of the controlling param actually uses this slider; without
        it the old truthy test stands, which is right for the real toggle (Rounded Corners). */
     let active, why;
-    if (p.liveWhen !== undefined) {
+    /* LIVE ABOVE a level, not at one value (queue 904): Starfield's Twinkle speed does nothing while Twinkle is 0,
+       and Twinkle is a slider, not a set of modes, so no single `liveWhen` value could say it. */
+    if (p.liveAbove !== undefined) {
+      active = !(Number(cur) > Number(p.liveAbove));
+      why = 'Only used when ' + ((ctrl && ctrl.label) || p.overriddenBy) + ' is above ' + p.liveAbove;
+    } else if (p.liveWhen !== undefined) {
       /* SEVERAL live values allowed (queue 904): Gradient Overlay's Angle steers Linear AND Conic and only Radial
          ignores it, which a single value could not say. */
       const lives = Array.isArray(p.liveWhen) ? p.liveWhen : [p.liveWhen];
