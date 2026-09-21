@@ -56155,6 +56155,24 @@
     if (!same(run(img(false), { dir: 1 }), img(false))) throw new Error('Glitch Up / down changed a picture whose columns are flat — it is not tearing vertically');
   });
 
+  /* ═══ 904: Lightning can strike from any side. 0 is the old straight-down strike exactly; 90 turns the bolts to run across. */
+  test('904: Lightning strikes from any direction', { item: '904' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.lightning) throw new Error('PIXEL_FX.lightning is not reachable');
+    const W = 160, H = 160;
+    const base = () => { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = d[i + 1] = d[i + 2] = 10; d[i + 3] = 255; } return d; };
+    const run = (p) => { const d = base(); K.lightning(d, W, H, Object.assign({ count: 1, intensity: 1, thickness: 1, jitter: 0.3, forks: 0, flicker: 0, seed: 3 }, p), 0, 1); return d; };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    // how many ROWS vs COLUMNS the bolt touches: a vertical bolt spans every row and few columns
+    const span = (d) => { const rows = new Set(), cols = new Set(); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (d[(y * W + x) * 4] > 120) { rows.add(y); cols.add(x); } return [rows.size, cols.size]; };
+    const down = run({});
+    if (!same(down, run({ angle: 0 }))) throw new Error('Lightning at 0° is not byte-identical to a saved bolt');
+    const [r0, c0] = span(down);
+    if (!(r0 > c0 * 1.5)) throw new Error('control: the default bolt does not run top-to-bottom (' + r0 + ' rows, ' + c0 + ' columns)');
+    const [r1, c1] = span(run({ angle: 90 }));
+    if (!(c1 > r1 * 1.5)) throw new Error('Lightning at 90° still runs top-to-bottom (' + r1 + ' rows, ' + c1 + ' columns) — the angle is ignored (queue 904)');
+  });
+
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
      Ezra asked the question this answers: *"How confident are you that every effect is actually good?"*
      Three separate times now a kernel has drawn a different picture on the reduced preview plate than

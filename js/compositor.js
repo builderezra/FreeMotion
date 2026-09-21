@@ -1085,6 +1085,7 @@ window.FM = window.FM || {};
       { key: 'forks', label: 'Branches', min: 0, max: 8, step: 1, def: 3 },
       { key: 'flicker', label: 'Flicker', min: 0, max: 24, step: 1, def: 8, unit: '/s' },
       { key: 'seed', label: 'Seed', min: 0, max: 999, step: 1, def: 0 },
+      { key: 'angle', label: 'Strikes from', min: -180, max: 180, step: 1, def: 0, unit: '°' },   // queue 904: it could only strike straight down
     ], color: true, defColor: '#96c8ff', colorLabel: 'Colour' },
     // ---- batch 29: Displacement maps — warp this layer by ANOTHER layer's pixels (the "Map layer").
     // `layer: true` gives the effect a source-layer picker; with none chosen it self-displaces by luma.
@@ -7025,6 +7026,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         }
       };
 
+      /* STRIKES FROM (queue 904): the whole bolt — channel and forks — is turned about the middle of the layer's box, so 0 is the
+         old straight-down strike exactly (the rotation is skipped), 90 strikes from the right, -90 from the left, 180 from below. */
+      const angD = _num(p.angle, 0), rotOn = (angD % 360) !== 0, rA = -angD * Math.PI / 180, rCos = Math.cos(rA), rSin = Math.sin(rA);
+      const RCX = BX + BW / 2, RCY = BY + BH / 2;
       // Walk a path, stamping along it. `taper` fades width and brightness toward the far end, which
       // is what makes a fork read as dying out rather than as being cut off.
       const draw = (pts, wScale, aScale) => {
@@ -7035,8 +7040,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           for (let k = 0; k <= steps; k++) {
             const f = (s - 1 + k / steps) / (pts.length - 1);
             const taper = 1 - f * 0.75;
-            const x = a[0] + (b[0] - a[0]) * (k / steps);
-            const y = a[1] + (b[1] - a[1]) * (k / steps);
+            let x = a[0] + (b[0] - a[0]) * (k / steps);
+            let y = a[1] + (b[1] - a[1]) * (k / steps);
+            if (rotOn) { const ux = x - RCX, uy = y - RCY; x = RCX + ux * rCos - uy * rSin; y = RCY + ux * rSin + uy * rCos; }
             stamp(x, y, unit * 0.016 * wScale * thick * taper, 0.16 * intensity * aScale * taper, col);
             stamp(x, y, unit * 0.0035 * wScale * thick * taper + 0.6, 0.95 * intensity * aScale * taper, core);
           }
