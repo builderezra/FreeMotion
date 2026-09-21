@@ -56064,6 +56064,26 @@
     if (inst.params.despill !== 0.5) throw new Error('a new Chroma Key does not start with Despill 0.5');
   });
 
+  /* ═══ 904: Block Dissolve gets a Pattern (seed) and an Order (direction). Both 0 = the old fixed order. */
+  test('904: Block Dissolve can reshuffle its blocks and sweep in a direction', { item: '904' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.blockdissolve) throw new Error('PIXEL_FX.blockdissolve is not reachable');
+    const W = 160, H = 80;
+    const full = () => { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = 200; d[i + 3] = 255; } return d; };
+    const run = (p) => { const d = full(); K.blockdissolve(d, W, H, Object.assign({ amount: 0.5, size: 8 }, p), 0, 1); return d; };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    const gone = (d, x0, x1) => { let n = 0, m = 0; for (let y = 0; y < H; y++) for (let x = x0; x < x1; x++) { m++; if (d[(y * W + x) * 4 + 3] === 0) n++; } return n / m; };
+    const old = run({});
+    if (!same(old, run({ seed: 0, dir: 0 }))) throw new Error('Pattern 0 / Order Random is not byte-identical to a saved Block Dissolve');
+    if (same(old, run({ seed: 7 }))) throw new Error('Pattern 7 dissolves exactly the same blocks — the order is still a fixed constant (queue 904)');
+    const oldL = gone(old, 0, 40), oldR = gone(old, 120, 160);
+    if (Math.abs(oldL - oldR) > 0.3) throw new Error('control: random order is already lopsided (' + oldL.toFixed(2) + ' vs ' + oldR.toFixed(2) + ')');
+    const lr = run({ dir: 1 });
+    if (!(gone(lr, 0, 40) > 0.9 && gone(lr, 120, 160) < 0.1)) throw new Error('Order → at 50% should have cleared the left and kept the right: left ' + gone(lr, 0, 40).toFixed(2) + ', right ' + gone(lr, 120, 160).toFixed(2));
+    const rl = run({ dir: 2 });
+    if (!(gone(rl, 120, 160) > 0.9 && gone(rl, 0, 40) < 0.1)) throw new Error('Order ← does not sweep from the right');
+  });
+
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
      Ezra asked the question this answers: *"How confident are you that every effect is actually good?"*
      Three separate times now a kernel has drawn a different picture on the reduced preview plate than

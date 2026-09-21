@@ -558,7 +558,7 @@ window.FM = window.FM || {};
       { key: 'speed', label: 'Boil', min: 0, max: 30, step: 1, def: 0, unit: 'Hz' },
       { key: 'front', label: 'Front width', min: 2, max: 100, step: 1, def: 100, unit: '%', overriddenBy: 'direction', liveWhen: [1, 2, 3, 4] },   // queue 904: the sweep's ramp was always the whole frame
     ] },
-    { type: 'blockdissolve', label: 'Block Dissolve', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'size', label: 'Block Size', min: 4, max: 60, step: 1, def: 16, unit: 'px' }] },
+    { type: 'blockdissolve', label: 'Block Dissolve', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'size', label: 'Block Size', min: 4, max: 60, step: 1, def: 16, unit: 'px' }, { key: 'dir', label: 'Order', def: 0, options: [[0, 'Random'], [1, '→'], [2, '←'], [3, '↓'], [4, '↑']] }, { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0 }] },   // queue 904: the block order was one fixed constant — no seed, no direction
     // ---- batch 14: Matte / Mask / Key (alpha geometry) ----
     /* ⚠️ THE WIPES' PROGRESS IS FINE-GRAINED ON PURPOSE (queue 559). Ezra: "The wipe effects sliders
        need to be more gradual they do too much too fast so I can't be precise."
@@ -5969,7 +5969,14 @@ window.FM = window.FM || {};
         if(dsE<=0)continue; if(dsE>=1){ d[dsI+3]=0; continue; }
         d[dsI+3]=d[dsI+3]*(1-dsE);
       } } },
-    blockdissolve: function(d, W, H, p, t, ps){ var bd_amt = fparam(p, 'amount', 0.5, t); bd_amt = bd_amt<0?0:(bd_amt>1?1:bd_amt); var bd_size = fparam(p, 'size', 16, t); bd_size = bd_size<4?4:(bd_size>60?60:bd_size); bd_size = Math.floor(bd_size*(ps||1)); if(bd_size<1) bd_size = 1; if(bd_amt<=0) return; var bd_x, bd_y, bd_i, bd_bx, bd_by, bd_h, bd_r; for(bd_y=0; bd_y<H; bd_y++){ bd_by = Math.floor(bd_y/bd_size); for(bd_x=0; bd_x<W; bd_x++){ bd_i = (bd_y*W + bd_x)*4; if(d[bd_i+3]===0) continue; bd_bx = Math.floor(bd_x/bd_size); bd_h = (bd_bx*73856093) ^ (bd_by*19349663); bd_h = bd_h ^ (bd_h>>>13); bd_h = (bd_h*1274126177) >>> 0; bd_r = (bd_h >>> 0) / 4294967295; if(bd_r < bd_amt){ d[bd_i+3] = 0; } } } },
+    blockdissolve: function(d, W, H, p, t, ps){ var bd_amt = fparam(p, 'amount', 0.5, t); bd_amt = bd_amt<0?0:(bd_amt>1?1:bd_amt); var bd_size = fparam(p, 'size', 16, t); bd_size = bd_size<4?4:(bd_size>60?60:bd_size); bd_size = Math.floor(bd_size*(ps||1)); if(bd_size<1) bd_size = 1; if(bd_amt<=0) return;
+      /* PATTERN and ORDER (queue 904). Pattern reshuffles which blocks go first (0 = the old order, bit for bit). Order sweeps the
+         dissolve across the layer — blocks near the leading edge go first, with a ragged 30% of randomness so it still reads as
+         blocks rather than a wipe. Random is the old behaviour. */
+      var bd_seed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0), bd_dir = p.dir == null ? 0 : (Math.round(FM.evalProp(p.dir, t)) | 0);
+      var bd_nx = Math.max(1, Math.ceil(W / bd_size) - 1), bd_ny = Math.max(1, Math.ceil(H / bd_size) - 1);
+      var bd_pos = function(bx, by){ return bd_dir === 1 ? bx / bd_nx : bd_dir === 2 ? 1 - bx / bd_nx : bd_dir === 3 ? by / bd_ny : 1 - by / bd_ny; };
+      var bd_x, bd_y, bd_i, bd_bx, bd_by, bd_h, bd_r; for(bd_y=0; bd_y<H; bd_y++){ bd_by = Math.floor(bd_y/bd_size); for(bd_x=0; bd_x<W; bd_x++){ bd_i = (bd_y*W + bd_x)*4; if(d[bd_i+3]===0) continue; bd_bx = Math.floor(bd_x/bd_size); bd_h = (bd_bx*73856093) ^ (bd_by*19349663); if(bd_seed) bd_h = bd_h ^ Math.imul(bd_seed, 0x9e3779b1); bd_h = bd_h ^ (bd_h>>>13); bd_h = (bd_h*1274126177) >>> 0; bd_r = (bd_h >>> 0) / 4294967295; if(bd_dir){ bd_r = bd_pos(bd_bx, bd_by)*0.7 + bd_r*0.3; } if(bd_r < bd_amt){ d[bd_i+3] = 0; } } } },
     // ---- batch 14 (matte / mask / key) ----
     wipe: function(d, W, H, p, t){ var wp_prog = FM.evalProp(p.progress, t); if(wp_prog===null||wp_prog===undefined) wp_prog=0.5; if(wp_prog<0) wp_prog=0; if(wp_prog>1) wp_prog=1; var wp_ang = FM.evalProp(p.angle, t); if(wp_ang===null||wp_ang===undefined) wp_ang=0; var wp_rad = wp_ang*Math.PI/180; var wp_dx = Math.cos(wp_rad); var wp_dy = Math.sin(wp_rad); var wp_cx = W*0.5; var wp_cy = H*0.5; var wp_den = Math.abs(W*wp_dx)+Math.abs(H*wp_dy); if(wp_den<1e-6) wp_den=1e-6; var wp_inv = 1/wp_den;
       /* EDGE SOFTNESS (queue 904), in project px (pxToPlate scales it). The feather is centred on the edge and multiplies the alpha, so
