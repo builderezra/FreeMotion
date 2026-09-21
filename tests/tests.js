@@ -56003,6 +56003,27 @@
     if (!(from && from.min < 0)) throw new Error('Number Roll\'s From slider still cannot go below zero');
   });
 
+  /* ═══ 904: Flicker gets a Pattern, Breathe / Swing / Pulse a Phase, Orbit a Start angle — two layers can be offset at last. */
+  test('904: Flicker, Breathe, Swing, Pulse and Orbit can be de-synced between layers', { item: '904' }, function () {
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    const render = (type, extra, t) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 80, shapeH: 50, fill: '#35dcaf' }); L.start = 0; L.duration = 4;
+      const e = FM.fxRegistry.makeInstance(type); if (!e) throw new Error('no effect ' + type);
+      if (extra === null) delete e.params[(type === 'flicker' || type === 'flashdark') ? 'seed' : 'phase']; else Object.assign(e.params, extra);
+      L.effects = [e]; const c = offscreen(320, 240), ctx = c.getContext('2d');
+      FM.renderScene(ctx, { project: { width: 320, height: 240, fps: 30, duration: 4, background: '#000000' }, layers: [L] }, t);
+      return ctx.getImageData(0, 0, 320, 240).data; };
+    const cases = [['flicker', 'seed', 37], ['flashdark', 'seed', 37], ['pulseopacity', 'phase', 180], ['swing', 'phase', 90], ['pulse', 'phase', 90], ['orbit', 'phase', 90]];
+    for (const [type, key, v] of cases) {
+      // the old picture, byte for byte, when the new key is absent or 0
+      for (const t of [0.37, 1.61]) if (!same(render(type, null, t), render(type, { [key]: 0 }, t))) throw new Error(type + ': ' + key + ' 0 is not byte-identical to a saved instance at t=' + t);
+      // and a non-zero value really moves it at SOME moment
+      let moved = false;
+      for (const t of [0.13, 0.37, 0.71, 1.61, 2.29]) if (!same(render(type, { [key]: 0 }, t), render(type, { [key]: v }, t))) { moved = true; break; }
+      if (!moved) throw new Error(type + ': ' + key + ' ' + v + ' changes nothing at any of five moments — two layers still run in lockstep (queue 904)');
+    }
+  });
+
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
      Ezra asked the question this answers: *"How confident are you that every effect is actually good?"*
      Three separate times now a kernel has drawn a different picture on the reduced preview plate than
