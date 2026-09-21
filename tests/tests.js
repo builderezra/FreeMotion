@@ -56140,6 +56140,21 @@
     if (!(sharp(up, 60, 10) > sharp(up, 10, 60) * 3)) throw new Error('Tilt Shift at 90° does not stand the band upright: top-middle ' + sharp(up, 60, 10) + ', left-middle ' + sharp(up, 10, 60) + ' (queue 904)');
   });
 
+  /* ═══ 904: Glitch can tear up/down. Sideways is the old tear exactly; Up / down is that tear on the transposed picture. */
+  test('904: Glitch tears up and down as well as sideways', { item: '904' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.glitch) throw new Error('PIXEL_FX.glitch is not reachable');
+    const W = 64, H = 48;
+    const img = (vert) => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, v = vert ? y * 5 : x * 4; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; } return d; };
+    const run = (d, p) => { K.glitch(d, W, H, Object.assign({ amount: 0.8, bands: 8, speed: 10, split: 0 }, p), 0.25); return d; };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    if (!same(run(img(false), {}), run(img(false), { dir: 0 }))) throw new Error('Sideways is not byte-identical to a saved Glitch');
+    // A vertical gradient is untouched by a sideways tear (every row is one colour) but torn by an up/down one; a horizontal one the opposite.
+    if (!same(run(img(true), {}), img(true))) throw new Error('control: a sideways tear changed a picture whose rows are flat, so this test cannot tell the directions apart');
+    if (same(run(img(true), { dir: 1 }), img(true))) throw new Error('Glitch Up / down left a vertical gradient untouched — it is still tearing sideways (queue 904)');
+    if (!same(run(img(false), { dir: 1 }), img(false))) throw new Error('Glitch Up / down changed a picture whose columns are flat — it is not tearing vertically');
+  });
+
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
      Ezra asked the question this answers: *"How confident are you that every effect is actually good?"*
      Three separate times now a kernel has drawn a different picture on the reduced preview plate than

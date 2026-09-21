@@ -265,6 +265,7 @@ window.FM = window.FM || {};
       { key: 'bands', label: 'Slices', min: 2, max: 240, step: 1, def: 14 },
       { key: 'speed', label: 'Re-roll', min: 0, max: 30, step: 1, def: 10, unit: 'Hz' },
       { key: 'split', label: 'RGB tear', min: 0, max: 20, step: 0.1, def: 1, unit: '×' },
+      { key: 'dir', label: 'Tears', def: 0, options: [[0, 'Sideways'], [1, 'Up / down']] },   // queue 904: it could only ever tear horizontally
     ] },
     { type: 'zoomblur', label: 'Zoom Blur', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -4943,8 +4944,17 @@ window.FM = window.FM || {};
       }
     },
     // ---- batch 5 ----
-    glitch: function (d, W, H, p, t) {
+    glitch: function glitchFx(d, W, H, p, t) {
       const amt = clamp01(FM.evalProp(p.amount, t)); if (amt <= 0) return;
+      /* UP / DOWN (queue 904). The tear is the same algorithm on the picture turned on its side: transpose, glitch sideways, transpose
+         back — so the slices become columns, the shift runs vertically and the RGB fringe splits up/down. Sideways is untouched. */
+      if (p.dir != null && (Math.round(FM.evalProp(p.dir, t)) | 0) === 1) {
+        const T = new Uint8ClampedArray(d.length);
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const a = (y * W + x) * 4, b = (x * H + y) * 4; T[b] = d[a]; T[b + 1] = d[a + 1]; T[b + 2] = d[a + 2]; T[b + 3] = d[a + 3]; }
+        glitchFx(T, H, W, Object.assign({}, p, { dir: 0 }), t);
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const a = (y * W + x) * 4, b = (x * H + y) * 4; d[a] = T[b]; d[a + 1] = T[b + 1]; d[a + 2] = T[b + 2]; d[a + 3] = T[b + 3]; }
+        return;
+      }
       // BANDS is the slice count, SPEED the re-roll rate in Hz — 0 freezes the pattern on frame 0, which
       // is how you get a single held tear instead of a permanent 10 Hz stutter. SPLIT scales the RGB
       // fringe on its own; it used to be welded to Amount, so a big displacement forced a big fringe.
