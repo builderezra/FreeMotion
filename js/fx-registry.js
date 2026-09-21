@@ -507,6 +507,7 @@ window.FM = window.FM || {};
    * ⚠️ A DEAD KEY HERE WOULD BE SILENT — the alias would simply never match, and nobody would know. A
    * test asserts every key is a real effect AND that each alias actually surfaces its effect. */
   const SEARCH_ALIASES = {
+    texttransform:     ['uppercase', 'lowercase', 'caps', 'title case', 'per-letter motion'],   // queue 904: renamed to Change Case; the old name still finds it
     turbulentdisplace: ['drift field', 'random displacement', 'noise warp'],
     rays:              ['star burst', 'starburst', 'star', 'energy rays'],
     framestutter:      ['step time', 'time quantization', 'stop motion', 'choppy', 'strobe'],

@@ -798,7 +798,7 @@ window.FM = window.FM || {};
       { key: 'line', label: 'Line height', min: 0.25, max: 4, step: 0.05, def: 1, unit: '\u00d7' },
       { key: 'mode', label: 'Applies', def: 0, options: [[0, 'Replaces'], [1, 'Adds to layer']] },
     ] },
-    { type: 'texttransform', label: 'Per-Letter Motion', param: 'mode', def: 0, options: [[0, 'UPPERCASE'], [1, 'lowercase'], [2, 'Capitalize Words'], [3, 'Sentence case']] },
+    { type: 'texttransform', label: 'Change Case', /* queue 904: was 'Per-Letter Motion', which promised animation it never does — it converts case */ param: 'mode', def: 0, options: [[0, 'UPPERCASE'], [1, 'lowercase'], [2, 'Capitalize Words'], [3, 'Sentence case']] },
     { type: 'timecode', label: 'Timecode', params: [
       { key: 'mode', label: 'Format', def: 0, options: [[0, 'MM:SS:FF'], [1, 'HH:MM:SS'], [2, 'SS:FF'], [3, 'Seconds']] },
       { key: 'offset', label: 'Start at', min: 0, max: 3600, step: 1, def: 0, unit: 's' },

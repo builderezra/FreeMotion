@@ -56268,6 +56268,15 @@
     if (FM.fxRegistry.makeInstance('mirrortile').params.shape !== 1) throw new Error('a new Mirror Tile does not start with the frame shape');
   });
 
+  /* ═══ 904: the case converter is called what it does. "Per-Letter Motion" promised animation; it changes case. */
+  test('904: Text Transform is labelled Change Case, and the old name still finds it', { item: '904' }, function () {
+    const all = FM.fxRegistry.all ? FM.fxRegistry.all() : null;
+    const lab = FM.fxRegistry.labelOf ? FM.fxRegistry.labelOf('texttransform') : ((all || []).find(e => e.type === 'texttransform') || {}).label;
+    if (lab !== 'Change Case') throw new Error('the case converter is labelled "' + lab + '" — a name that promises something it does not do (queue 904)');
+    const st = { text: 'hello world', letterSpacing: 0 }; FM._FX_TABLES.TEXT_FX.texttransform(st, { mode: 0 }, 0);
+    if (st.text !== 'HELLO WORLD') throw new Error('control: mode 0 no longer uppercases');
+  });
+
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
      Ezra asked the question this answers: *"How confident are you that every effect is actually good?"*
      Three separate times now a kernel has drawn a different picture on the reduced preview plate than
