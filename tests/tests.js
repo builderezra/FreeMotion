@@ -56212,6 +56212,21 @@
     }
   });
 
+  /* ═══ 904: Stretch Segment gets an Edge softness. 0 = the old hard tear; above 0 the sample row never jumps. */
+  test('904: Stretch Segment edges no longer tear when softened', { item: '904' }, function () {
+    const X = FM._FX_TABLES && FM._FX_TABLES.WARP_FX;
+    if (!X || !X.stretchseg) throw new Error('WARP_FX.stretchseg is not reachable');
+    const W = 100, H = 400, f = X.stretchseg;
+    const P = (o) => Object.assign({ y: 50, height: 25, amount: 0.6 }, o);
+    const maxJump = (p) => { let m = 0, prev = f(10, 0, W, H, 50, 200, 200, p, 0)[1]; for (let y = 1; y < H; y++) { const v = f(10, y, W, H, 50, 200, 200, p, 0)[1]; m = Math.max(m, Math.abs(v - prev)); prev = v; } return m; };
+    for (let y = 0; y < H; y += 7) { const a = f(10, y, W, H, 50, 200, 200, P({}), 0), b = f(10, y, W, H, 50, 200, 200, P({ softness: 0 }), 0); if (a[0] !== b[0] || a[1] !== b[1]) throw new Error('softness 0 is not the old mapping at y=' + y); }
+    const hard = maxJump(P({}));
+    if (!(hard > 20)) throw new Error('control: the hard edge only jumps ' + hard.toFixed(1) + ' rows, so there is no tear to soften');
+    const soft = maxJump(P({ softness: 10 }));
+    if (!(soft < 3)) throw new Error('with Edge softness 10 the sample still jumps ' + soft.toFixed(1) + ' rows between neighbouring pixels — the edge still tears (queue 904)');
+    if (FM.fxRegistry.makeInstance('stretchseg').params.softness !== 10) throw new Error('a new Stretch Segment does not start soft');
+  });
+
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
      Ezra asked the question this answers: *"How confident are you that every effect is actually good?"*
      Three separate times now a kernel has drawn a different picture on the reduced preview plate than

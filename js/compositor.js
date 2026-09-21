@@ -1057,6 +1057,7 @@ window.FM = window.FM || {};
       { key: 'y', label: 'Position', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'height', label: 'Band', min: 2, max: 100, step: 1, def: 25, unit: '%' },
       { key: 'amount', label: 'Stretch', min: 0, max: 0.95, step: 0.02, def: 0.6 },
+      { key: 'softness', label: 'Edge softness', min: 0, max: 50, step: 1, def: 10, legacy: 0, unit: '%' },   // queue 904: both band edges tore hard; a new one starts soft, a saved one stays hard
     ] },
     { type: 'tileshift', label: 'Tile Shift', params: [
       { key: 'size', label: 'Tile', min: 8, max: 600, step: 1, def: 120, unit: 'px' },
@@ -8894,7 +8895,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Stretch Segment: grab a horizontal band and pull it vertically — content inside the band is
     // sampled from a THINNER source band (compress in → stretch out), feathered at the edges so it
     // blends. y/height are % of frame. Outside the band = identity.
-    stretchseg: function(x,y,W,H,cx,cy,maxR,p,t){ var ss_y = fparam(p, 'y', 50, t); var ss_h = fparam(p, 'height', 25, t); var ss_amt = fparam(p, 'amount', 0.6, t); if(ss_amt<0)ss_amt=0; if(ss_amt>0.95)ss_amt=0.95; var ss_cy=H*ss_y/100, ss_half=H*ss_h/200; if(ss_half<1)return [x,y]; var ss_d=y-ss_cy; if(ss_d<-ss_half||ss_d>ss_half)return [x,y]; var ss_f=1-ss_amt; var ss_sy=ss_cy+ss_d*ss_f; return [x, ss_sy]; },
+    stretchseg: function(x,y,W,H,cx,cy,maxR,p,t){ var ss_y = fparam(p, 'y', 50, t); var ss_h = fparam(p, 'height', 25, t); var ss_amt = fparam(p, 'amount', 0.6, t); if(ss_amt<0)ss_amt=0; if(ss_amt>0.95)ss_amt=0.95; var ss_cy=H*ss_y/100, ss_half=H*ss_h/200; if(ss_half<1)return [x,y]; var ss_d=y-ss_cy;
+      /* EDGE SOFTNESS (queue 904). Inside the band the sample is pulled toward the centre by d*amt, and one row outside it by 0 — a
+         jump of half*amt rows, which is the tear. A soft edge lets that pull fall to 0 across a margin OUTSIDE the band instead, so the
+         mapping stays continuous (and monotonic: its slope there is 1 + half*amt/soft). 0 is the old hard edge exactly. */
+      var ss_sf=p.softness==null?0:(FM.evalProp(p.softness,t)||0)*H/100;
+      if(ss_sf>0){ var ss_ad=ss_d<0?-ss_d:ss_d; if(ss_ad>ss_half){ if(ss_ad>=ss_half+ss_sf)return [x,y]; var ss_pull=ss_half*ss_amt*(1-(ss_ad-ss_half)/ss_sf); return [x, y-(ss_d<0?-ss_pull:ss_pull)]; } }
+      if(ss_d<-ss_half||ss_d>ss_half)return [x,y]; var ss_f=1-ss_amt; var ss_sy=ss_cy+ss_d*ss_f; return [x, ss_sy]; },
     // Tile Shift: chop into square tiles, offset alternate ROWS sideways (and alt columns down) by a
     // fraction of the tile — the classic sliced/glitch-tile displacement. Samples wrap via the source.
     tileshift: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var ts_sz = fparam(p, 'size', 120, t); if(ts_sz<8)ts_sz=8; ts_sz=Math.max(2,ts_sz*(ps||1)); /* tile size is px; the offset is a FRACTION of it, so it rides along */ var ts_off = fparam(p, 'amount', 0.5, t); var ts_row=Math.floor(y/ts_sz), ts_col=Math.floor(x/ts_sz); var ts_sx=x+((ts_row&1)?ts_off*ts_sz:0); var ts_sy=y+((ts_col&1)?ts_off*ts_sz:0); ts_sx=((ts_sx%W)+W)%W; ts_sy=((ts_sy%H)+H)%H; return [ts_sx,ts_sy]; },
