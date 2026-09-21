@@ -1632,7 +1632,7 @@ window.FM = window.FM || {};
           if (p.note) body.appendChild(el('div', 'fx-tog-note fx-range-note', p.note));
         }
         else if (p.type === 'toggle') body.appendChild(fxToggle(fx, p));
-        else if (p.type === 'segment') { const srow = fxSegment(fx, p); markOverridden(srow, fx, p, reg); body.appendChild(srow); }
+        else if (p.type === 'segment') { const srow = fxSegment(fx, p); markOverridden(srow, fx, p, reg); body.appendChild(srow); if (p.note) body.appendChild(el('div', 'fx-tog-note fx-range-note', p.note)); }
         /* ⚠️ EFFECT COLOURS KEYFRAME NOW (queue 555). Ezra, with a Gradient Overlay open: *"Colours for
            every effect like gradient overly should be key frame able"* — his screenshot shows Amount
            carrying a ◆ and a curve while Start and End have neither.

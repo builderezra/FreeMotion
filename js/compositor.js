@@ -756,7 +756,9 @@ window.FM = window.FM || {};
       { key: 'angle', label: 'Angle', min: 0, max: 90, step: 1, def: 0, unit: '°' },
     ] },
     // ---- batch 19: TEXT effects (folded into the text string/spacing via TEXT_FX, text layers only) ----
-    { type: 'counter', label: 'Number Roll', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'from', label: 'From', min: 0, max: 100000, step: 1, def: 0 }, { key: 'to', label: 'To', min: 0, max: 100000, step: 1, def: 100 }, { key: 'decimals', label: 'Decimals', min: 0, max: 4, step: 1, def: 0 }] },
+    { type: 'counter', label: 'Number Roll', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'from', label: 'From', min: -100000, max: 100000, step: 1, def: 0 }, { key: 'to', label: 'To', min: -100000, max: 100000, step: 1, def: 100 }, { key: 'decimals', label: 'Decimals', min: 0, max: 4, step: 1, def: 0 },
+      { key: 'group', label: 'Thousands', def: 1, legacy: 0, options: [[0, '1234'], [1, '1,234'], [2, '1 234'], [3, '1.234']] },
+      { key: 'wrap', label: 'Your text', def: 1, legacy: 0, options: [[0, 'Replace'], [1, 'Keep'] ], note: 'Keep: type e.g. $0 or 0% or Subscribers: 0 — the number rolls in place of the 0' }] },   // queue 904: could not go negative, no separator, and the layer's own text was thrown away
     { type: 'textprogress', label: 'Type-On', params: [
       { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 },
       { key: 'unit', label: 'Reveal by', def: 0, options: [[0, 'Letter'], [1, 'Word'], [2, 'Line']] },
@@ -2127,7 +2129,18 @@ window.FM = window.FM || {};
       var from = fparam(p, 'from', 0, t), to = fparam(p, 'to', 100, t);
       var dec = Math.max(0, Math.min(4, Math.round(fparam(p, 'decimals', 0, t))));
       var pr = clamp01(fparam(p, 'progress', 0.5, t));
-      st.text = (from + (to - from) * pr).toFixed(dec);
+      /* THOUSANDS and YOUR TEXT (queue 904). Both absent = the old line exactly: the bare number replaces the whole layer. A NEW
+         Number Roll groups thousands and keeps the text around the first number in the layer, so "$0" rolls as "$12,345" and
+         "Subscribers: 0" keeps its label — before, the layer's own text was discarded and a symbol or suffix was impossible. */
+      var grp = p.group == null ? 0 : (Math.round(FM.evalProp(p.group, t)) | 0);
+      var wrap = p.wrap == null ? 0 : (Math.round(FM.evalProp(p.wrap, t)) | 0);
+      var num = (from + (to - from) * pr).toFixed(dec);
+      if (grp > 0) { var neg = num.charAt(0) === '-', body = neg ? num.slice(1) : num, dot = body.indexOf('.'), ip = dot < 0 ? body : body.slice(0, dot), fp = dot < 0 ? '' : body.slice(dot + 1);
+        var sep = grp === 1 ? ',' : (grp === 2 ? '\u202f' : '.'), dsep = grp === 3 ? ',' : '.';
+        ip = ip.replace(/\B(?=(\d{3})+(?!\d))/g, sep); num = (neg ? '-' : '') + ip + (fp ? dsep + fp : ''); }
+      if (wrap === 1) { var src = st.text || '', m = /-?\d(?:[\d,.\u202f ]*\d)?/.exec(src);
+        st.text = m ? src.slice(0, m.index) + num + src.slice(m.index + m[0].length) : num; return; }   // no number in the layer's text to keep a place for: the number is the text, as before
+      st.text = num;
     },
     textprogress: function (st, p, t) {
       var pr = clamp01(fparam(p, 'progress', 0.5, t));

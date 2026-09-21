@@ -222,7 +222,7 @@ window.FM = window.FM || {};
         // The UI needs it so the highlighted button matches what actually draws.
         // overriddenBy/liveWhen ride a SEGMENT too since queue 904 (Tiles' Repeat is dead in Grid) — this copy is a
         // whitelist, and a field not named here is silently dropped, which is how liveWhen was lost once already.
-        else if (pp.options) out.push({ key: pp.key, label: pp.label, type: 'segment', options: normOptions(pp.options), default: pp.def, legacy: pp.legacy, keyframable: false, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen });
+        else if (pp.options) out.push({ key: pp.key, label: pp.label, type: 'segment', options: normOptions(pp.options), default: pp.def, legacy: pp.legacy, keyframable: false, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen, note: pp.note || '' });   // note: queue 904 (Number Roll)
         // A RANGE carries `legacy` for the same reason a segment does: an absent key renders at the
         // renderer's fallback, which for a param added to an existing effect is the value that effect
         // used to hardcode — not the new schema default. Without this the panel shows Edge Glow's

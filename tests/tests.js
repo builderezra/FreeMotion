@@ -55980,6 +55980,29 @@
     if (same(run('new'), plain)) throw new Error('a NEW Trail on a full-frame clip draws nothing — every copy lands off the frame (queue 904)');
   });
 
+  /* ═══ 904: Number Roll can go negative, group thousands, and keep the text around the number. */
+  test('904: Number Roll counts below zero, groups thousands and keeps $ / % / a label around the number', { item: '904' }, function () {
+    const T = FM._FX_TABLES && FM._FX_TABLES.TEXT_FX;
+    if (!T || !T.counter) throw new Error('TEXT_FX.counter is not reachable');
+    const roll = (text, p) => { const st = { text: text, letterSpacing: 0 }; T.counter(st, p, 0); return st.text; };
+    // a saved Number Roll (no new keys) is the old line exactly
+    if (roll('Subscribers: 0', { progress: 1, from: 0, to: 12345, decimals: 0 }) !== '12345') throw new Error('a saved Number Roll no longer replaces the whole text with the bare number');
+    const inst = FM.fxRegistry.makeInstance('counter').params;
+    if (inst.group !== 1 || inst.wrap !== 1) throw new Error('a new Number Roll does not default to grouped thousands and keeping the text');
+    const P = (o) => Object.assign({ progress: 1, from: 0, decimals: 0, group: 1, wrap: 1 }, o);
+    const cases = [
+      ['$0', P({ to: 12345 }), '$12,345'],
+      ['0%', P({ to: 95 }), '95%'],
+      ['Subscribers: 0', P({ to: 99999 }), 'Subscribers: 99,999'],
+      ['Text', P({ to: 4200 }), '4,200'],
+      ['0', P({ to: -2500 }), '-2,500'],
+      ['0', P({ to: 1234.5, decimals: 1, group: 3 }), '1.234,5'],
+    ];
+    for (const [txt, p, want] of cases) { const got = roll(txt, p); if (got !== want) throw new Error('Number Roll on "' + txt + '" gave "' + got + '", expected "' + want + '"'); }
+    const from = (FM.fxRegistry.paramsOf('counter') || []).find(q => q.key === 'from');
+    if (!(from && from.min < 0)) throw new Error('Number Roll\'s From slider still cannot go below zero');
+  });
+
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
      Ezra asked the question this answers: *"How confident are you that every effect is actually good?"*
      Three separate times now a kernel has drawn a different picture on the reduced preview plate than
