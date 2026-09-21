@@ -77,6 +77,22 @@ bad = [v for v in latest.values() if ('NOT-PROVEN' in v or 'NO-TEST' in v) and '
 if bad: print("❌ releases whose LATEST proof FAILED — each is an open defect in a test or a fix (re-run supersedes):"); [print("  " + b) for b in bad[-10:]]
 PY
 
+# WEAK PROOFS STILL OWED (queue 901). prove.sh logs a test whose only catch was a missing seam; it stays listed
+# here until a RESOLVED line for the same title records the mutation that proved the behaviour itself.
+if [ -f tools/.weak-proofs.log ]; then
+  python3 - <<'PYW'
+open_ = {}
+for l in open('tools/.weak-proofs.log', encoding='utf-8'):
+    p = l.rstrip('\n').split('\t')
+    if len(p) < 3: continue
+    if p[1] == 'WEAK': open_[p[2]] = p[0]
+    elif p[1] == 'RESOLVED': open_.pop(p[2], None)
+if open_:
+    print("\n── WEAK PROOFS STILL OWED — each caught only on a missing seam; prove the BEHAVIOUR by a mutation that keeps the seam, then log RESOLVED ──")
+    for t, d in open_.items(): print("  " + d + "  " + t[:110])
+PYW
+fi
+
 hr "SAY IN EVERY REPLY UNTIL HE ANSWERS (from LOOP.md)"
 awk '/SAY THESE IN EVERY REPLY/{f=1; next} f && /^\*\*▶️|^\*\*📌|^## /{exit} f && /^- \*\*#/{print}' LOOP.md | cut -c1-200
 echo

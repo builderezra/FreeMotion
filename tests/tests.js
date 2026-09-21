@@ -66177,4 +66177,61 @@
     }
   });
 
+
+  /* ── queue 904 (textcurve): an animated text layer ignored its curve entirely ──────────────────────
+   * drawAnimatedText never read one, so any Animate preset (Fade in, Pop, Typewriter…) switched off BOTH
+   * the Text Curve effect and the layer's own Curve slider: the number moved and the text stayed flat.
+   * The fix bends the animated units along drawArcLine's arc and applies each unit's animation in its own
+   * turned frame. So at REST — the entrance finished, nothing offset — the animated render must land
+   * exactly where the static curved render does: same characters, same arc positions, same turns.
+   * That equality is the claim, checked by CHARACTER and by WORD (the word path lays each word's letters
+   * relative to the word's own centre, so it is the one that could drift), and through the EFFECT as well
+   * as the layer's own slider, since the finding is about the effect.
+   * ⚠️ CONTROLS: the static curve must actually bend the fixture (or equality with it proves nothing), and
+   * the animated curved render must differ from the animated FLAT one.
+   * TOLERANCES FROM MEASUREMENT (21 Sep). On a one-word fixture a 60° bend moved the picture by 11.28 and the animated
+   * curve at rest differed from the static one by 0.000 — by character, word and line, through the effect, and at −60°.
+   * On this two-word fixture the bend is 8.47, and a word laid out without turning into its own frame reads 8.45 off.
+   * So the thresholds (> 2 for 'it moved', < 0.5 for 'it matches') sit far from every reading. */
+  test('904 textcurve: a curve bends animated text too, and at rest lands exactly where static curved text does', { item: '904', budgetMs: 30000 }, function () {
+    if (!FM.fxRegistry || !FM.fxRegistry.makeInstance) throw new Error('the effect registry is not reachable');
+    var RES = 480;
+    function mk(curve, anim, viaEffect) {
+      /* TWO WORDS, NOT ONE. With a single word the word unit sits dead centre on the arc, where the turn is zero —
+         so laying its letters out WITHOUT turning into the word's frame changed nothing and a mutation doing exactly
+         that survived. Each of these words is centred off the middle, so a wrong word layout moves its letters. */
+      var L = FM.makeLayer('text', { text: 'FREE MOTION', fontSize: 56, color: '#ffffff', x: RES / 2, y: RES / 2, start: 0, duration: 3 });
+      L.textCurve = viaEffect ? 0 : curve;
+      L.effects = [];
+      if (viaEffect) { var fx = FM.fxRegistry.makeInstance('textcurve'); fx.params = fx.params || {}; fx.params.curve = curve; fx.params.mode = 0; L.effects = [fx]; }
+      L.textAnim = anim ? { preset: 'fade', unit: anim, durIn: 0.6, stagger: 0.04, durOut: 0 } : { preset: 'none' };
+      return L;
+    }
+    function shot(L) {
+      var c = offscreen(RES, RES), g = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, scene([L], { project: { width: RES, height: RES, fps: 30, duration: 3, background: '#000000' } }), 1.5);   // 1.5s: every unit has long finished entering
+      return g.getImageData(0, 0, RES, RES).data;
+    }
+    function mad(A, B) { var s = 0; for (var i = 0; i < A.length; i += 4) s += Math.abs(A[i] - B[i]) + Math.abs(A[i + 1] - B[i + 1]) + Math.abs(A[i + 2] - B[i + 2]); return s / (A.length * 0.75); }
+    function ink(A) { var n = 0; for (var i = 0; i < A.length; i += 4) if (A[i] > 128) n++; return n; }
+
+    var static60 = shot(mk(60, null)), staticFlat = shot(mk(0, null));
+    // CONTROL: the fixture has ink, and the STATIC curve really bends it.
+    if (ink(static60) < 1500) throw new Error('setup: the curved text drew only ' + ink(static60) + ' bright pixels');
+    var bend = mad(static60, staticFlat);
+    if (!(bend > 2)) throw new Error('setup: a 60° curve on the static path moved the picture by only ' + bend.toFixed(2) + ' — the fixture is not bent, so matching it proves nothing');
+
+    var animFlat = shot(mk(0, 'char'));
+    var cases = [['by character, the layer’s own Curve', mk(60, 'char')], ['by word, the layer’s own Curve', mk(60, 'word')], ['by character, the Text Curve EFFECT', mk(60, 'char', true)]];
+    cases.forEach(function (cs) {
+      var a = shot(cs[1]);
+      // CLAIM 1: the curve does something on an animated layer at all.
+      var moved = mad(a, animFlat);
+      if (!(moved > 2)) throw new Error('animated ' + cs[0] + ': a 60° curve changed the picture by ' + moved.toFixed(2) + ' — the text is still flat, so the curve does nothing the moment an Animate preset is on');
+      // CLAIM 2: at rest it lands exactly where the static curve does.
+      var off = mad(a, static60);
+      if (!(off < 0.5)) throw new Error('animated ' + cs[0] + ': at rest it differs from the static curved text by ' + off.toFixed(2) + ' (a bend is ' + bend.toFixed(2) + ') — the letters are not sitting on the same arc');
+    });
+  });
+
 })();

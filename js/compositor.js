@@ -2369,7 +2369,7 @@ window.FM = window.FM || {};
   function hexToRGB(h) { h = String(h || '#000000').replace('#', ''); if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]; return [parseInt(h.slice(0, 2), 16) || 0, parseInt(h.slice(2, 4), 16) || 0, parseInt(h.slice(4, 6), 16) || 0]; }
   function lerpHex(a, b, f) { f = Math.max(0, Math.min(1, f)); const A = hexToRGB(a), B = hexToRGB(b); return 'rgb(' + Math.round(A[0] + (B[0] - A[0]) * f) + ',' + Math.round(A[1] + (B[1] - A[1]) * f) + ',' + Math.round(A[2] + (B[2] - A[2]) * f) + ')'; }
 
-  function drawAnimatedText(ctx, layer, t, lines, lh, total) {
+  function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg) {
     const an = layer.textAnim || {};
     const preset = an.preset || 'fade';
     /* Landing with a bounce rather than an ease — the standard piecewise curve. `drop` is the only
@@ -2402,6 +2402,123 @@ window.FM = window.FM || {};
     const prevAlign = ctx.textAlign;
     ctx.textAlign = 'left';
     const grad = FM.layerHasGradient(layer) ? layer.fillGradient : null;   // per-unit gradient sampling
+    /* ONE UNIT'S ANIMATION AT STAGGER INDEX gi — lifted out of the flat loop below UNCHANGED (queue 904,
+       textcurve) so the flat path and the curved path read the very same numbers. */
+    const animFor = (gi) => {
+      const p = durIn > 0 ? Math.min(1, Math.max(0, (tIn - gi * stagger) / durIn)) : (tIn >= gi * stagger ? 1 : 0);
+      const pe = easeOutCubic(p);
+      const outA = durOut > 0 ? Math.min(1, Math.max(0, tToEnd / durOut)) : 1;
+      /* ---- SIX MORE, AND THEY ARE DELIBERATELY NOT MORE OF THE SAME (queue 573) -----------------
+       * Ezra: "Add more text effects", straight after complaining that the Colouring browser was thin
+       * over a text layer. There were FIVE, and measured against each other they are all one idea:
+       * an ENTRANCE built from alpha, a shift and a scale. Adding a sixth entrance that fades from a
+       * slightly different direction would be the queue-563 trap — the Bell that turned out to be the
+       * Ding — where every "does it do something" check passes and he gets the same effect twice.
+       * So each of these differs from its NEAREST existing neighbour in kind, not degree:
+       *   drop     vs fade-up  — opposite direction AND it lands with a bounce rather than an ease.
+       *   spin     vs pop      — pop only scales; nothing here could ROTATE until now.
+       *   zoom-out vs pop      — pop grows from nothing and overshoots; this falls in from oversized.
+       *   stretch  vs pop      — the first NON-UNIFORM scale: flat and wide, snapping to square.
+       *   wave     vs (none)   — ONGOING. It never settles, so it is not an entrance at all.
+       *   jitter   vs (none)   — ongoing too, and the only one that is not smooth.
+       * ⚠️ WAVE AND JITTER ARE A NEW CATEGORY and that is the point: every previous preset finishes
+       * and leaves the text sitting still. These keep going for the layer's whole life, which is the
+       * kind of thing he was looking for and could not find.
+       * ⚠️ JITTER IS DETERMINISTIC, NOT RANDOM. Math.random() would re-roll every frame, so the text
+       * would boil differently on each render and — worse — the EXPORT would not match the preview.
+       * A hash of (unit index, time-step) gives the same shake for the same frame every time.
+       * ⚠️ Both ongoing presets still fade in on `p`, so the stagger and Duration-in controls keep
+       * meaning what they say rather than silently doing nothing on two of the eleven. */
+      let alpha = 1, dx = 0, dy = 0, sc = 1, scx = 1, scy = 1, rot = 0;
+      if (preset === 'fade') alpha = p;
+      else if (preset === 'fade-up') { alpha = p; dy = (1 - pe) * fs * 0.6; }
+      else if (preset === 'typewriter') alpha = p > 0 ? 1 : 0;
+      else if (preset === 'pop') { sc = Math.max(0, easeOutBack(p)); alpha = Math.min(1, p * 2.2); }
+      else if (preset === 'slide') { alpha = p; dx = (1 - pe) * fs * 0.9; }
+      else if (preset === 'drop') { alpha = Math.min(1, p * 2.5); dy = -(1 - easeOutBounce(p)) * fs * 0.9; }
+      else if (preset === 'spin') { alpha = Math.min(1, p * 2); sc = Math.max(0, easeOutBack(p)); rot = (1 - pe) * -Math.PI; }
+      else if (preset === 'zoom-out') { alpha = Math.min(1, p * 1.6); sc = 1 + (1 - pe) * 1.8; }
+      else if (preset === 'stretch') { alpha = Math.min(1, p * 2); scx = 0.25 + 0.75 * easeOutBack(p); scy = 1.9 - 0.9 * easeOutBack(p); }
+      else if (preset === 'wave') { alpha = p; dy = Math.sin(tIn * 3.4 + gi * 0.55) * fs * 0.13; }
+      else if (preset === 'jitter') {
+        alpha = p;
+        // 24 steps a second: fast enough to read as a shake, slow enough not to look like noise.
+        const step = Math.floor(tIn * 24);
+        dx = (hash2(gi, step) - 0.5) * fs * 0.09;
+        dy = (hash2(gi + 977, step) - 0.5) * fs * 0.09;
+      }
+      return { alpha, dx, dy, sc, scx, scy, rot, outA };
+    };
+    /* ⚠️ AN ANIMATED LAYER IGNORED ITS CURVE ENTIRELY (queue 904, textcurve). This function never read one, so the
+       moment a text layer had any Animate preset — Fade in, Pop, Typewriter — both the Text Curve EFFECT and the
+       layer's OWN Curve slider stopped doing anything: the number moved and the text stayed dead flat, with nothing
+       on screen saying why. The static path (drawArcLine) has bent text since long before; this is that arc, with
+       the animation laid on top of it.
+       HOW: the text becomes one line exactly as drawArcLine joins it, each character gets drawArcLine's own arc
+       position, and each animated UNIT (character, word or line) is placed at the arc point of its centre and
+       turned to the tangent there. Its animation — shift, spin, scale — is applied in THAT frame, about the
+       unit's own centre, and its characters are then laid out relative to it so the unit bends with the arc
+       rather than sitting straight across it. For a single character this is drawArcLine's placement exactly;
+       a "wave" bobs each letter at right angles to the curve rather than straight up.
+       Spacing is neutralised for measuring and added back by hand, for the reason drawArcLine gives. */
+    if (curveDeg != null && Math.abs(curveDeg) > 0.5) {
+      const line = lines.join(' ');
+      const prevLS = ('letterSpacing' in ctx) ? ctx.letterSpacing : null, lsp = parseFloat(prevLS) || 0;
+      const prevWS = ('wordSpacing' in ctx) ? ctx.wordSpacing : null, wsp = parseFloat(prevWS) || 0;
+      if (prevLS != null) ctx.letterSpacing = '0px';
+      if (prevWS != null) ctx.wordSpacing = '0px';
+      const prevBase = ctx.textBaseline;
+      const done = () => { if (prevLS != null) ctx.letterSpacing = prevLS; if (prevWS != null) ctx.wordSpacing = prevWS; ctx.textAlign = prevAlign; ctx.textBaseline = prevBase; };
+      const chars = Array.from(line);
+      const cw = chars.map(c => ctx.measureText(c).width + (c === ' ' ? wsp : 0));
+      const tw = cw.reduce((a, b) => a + b, 0) + lsp * Math.max(0, chars.length - 1);
+      if (tw <= 0) { done(); return; }
+      const aa = Math.abs(curveDeg * Math.PI / 180), R = tw / aa, sign = curveDeg >= 0 ? 1 : -1;
+      const arcAt = (sAlong) => { const a = (sAlong / tw - 0.5) * aa; return { a: a, x: R * Math.sin(a), y: sign * (R - R * Math.cos(a)) }; };
+      const cMid = []; let run = 0;
+      chars.forEach((c, i) => { cMid.push(run + cw[i] / 2); run += cw[i] + lsp; });
+      // units as [first, last+1) character ranges, in the same order and with the same membership as the flat path
+      const ranges = [];
+      if (unit === 'line') { if (chars.length) ranges.push([0, chars.length]); }
+      else if (unit === 'word') { let i = 0; line.split(/(\s+)/).filter(x => x.length).forEach(wd => { const n = Array.from(wd).length; ranges.push([i, i + n]); i += n; }); }
+      else chars.forEach((c, i) => ranges.push([i, i + 1]));
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ranges.forEach((rg, gi) => {
+        const A = animFor(gi);
+        const i0 = rg[0], i1 = rg[1] - 1;
+        const U = arcAt(((cMid[i0] - cw[i0] / 2) + (cMid[i1] + cw[i1] / 2)) / 2);
+        ctx.save();
+        ctx.globalAlpha = baseAlpha * Math.max(0, Math.min(1, A.alpha)) * A.outA;
+        ctx.translate(U.x, U.y);
+        ctx.rotate(sign * U.a);
+        ctx.translate(A.dx, A.dy);
+        if (A.rot) ctx.rotate(A.rot);
+        if (A.sc !== 1 || A.scx !== 1 || A.scy !== 1) ctx.scale(A.sc * A.scx, A.sc * A.scy);
+        if (grad) {   // sampled where the unit actually sits on the arc
+          let f;
+          if (grad.type === 'radial') f = Math.hypot(U.x, U.y) / (Math.max(tw, total + fs) / 2 || 1);
+          else {
+            const ang = (grad.angle || 0) * Math.PI / 180, co = Math.cos(ang), si = Math.sin(ang);
+            const half = (Math.abs(co) * tw + Math.abs(si) * (total + fs)) / 2 || 1;
+            f = (U.x * co + U.y * si) / half / 2 + 0.5;
+          }
+          ctx.fillStyle = lerpHex(grad.c0, grad.c1, Math.max(0, Math.min(1, f)));
+        }
+        const ca = Math.cos(-sign * U.a), sa = Math.sin(-sign * U.a);
+        for (let i = rg[0]; i < rg[1]; i++) {
+          const C = arcAt(cMid[i]), rx = C.x - U.x, ry = C.y - U.y;
+          ctx.save();
+          ctx.translate(rx * ca - ry * sa, rx * sa + ry * ca);   // the character's place, in the unit's own turned frame
+          ctx.rotate(sign * (C.a - U.a));
+          if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(chars[i], 0, 0); }
+          ctx.fillText(chars[i], 0, 0);
+          ctx.restore();
+        }
+        ctx.restore();
+      });
+      done();
+      return;
+    }
     let gi = 0;
     lines.forEach((line, li) => {
       const yy = li * lh - total / 2;
@@ -2417,48 +2534,7 @@ window.FM = window.FM || {};
       units.forEach((u, ui) => {
         const w = widths[ui];
         const wDraw = Math.max(0, w - sp);   // visual width = measured minus the over-counted trailing gap; advance still uses w (= inter-unit gap) (#5)
-        const p = durIn > 0 ? Math.min(1, Math.max(0, (tIn - gi * stagger) / durIn)) : (tIn >= gi * stagger ? 1 : 0);
-        const pe = easeOutCubic(p);
-        const outA = durOut > 0 ? Math.min(1, Math.max(0, tToEnd / durOut)) : 1;
-        /* ---- SIX MORE, AND THEY ARE DELIBERATELY NOT MORE OF THE SAME (queue 573) -----------------
-         * Ezra: "Add more text effects", straight after complaining that the Colouring browser was thin
-         * over a text layer. There were FIVE, and measured against each other they are all one idea:
-         * an ENTRANCE built from alpha, a shift and a scale. Adding a sixth entrance that fades from a
-         * slightly different direction would be the queue-563 trap — the Bell that turned out to be the
-         * Ding — where every "does it do something" check passes and he gets the same effect twice.
-         * So each of these differs from its NEAREST existing neighbour in kind, not degree:
-         *   drop     vs fade-up  — opposite direction AND it lands with a bounce rather than an ease.
-         *   spin     vs pop      — pop only scales; nothing here could ROTATE until now.
-         *   zoom-out vs pop      — pop grows from nothing and overshoots; this falls in from oversized.
-         *   stretch  vs pop      — the first NON-UNIFORM scale: flat and wide, snapping to square.
-         *   wave     vs (none)   — ONGOING. It never settles, so it is not an entrance at all.
-         *   jitter   vs (none)   — ongoing too, and the only one that is not smooth.
-         * ⚠️ WAVE AND JITTER ARE A NEW CATEGORY and that is the point: every previous preset finishes
-         * and leaves the text sitting still. These keep going for the layer's whole life, which is the
-         * kind of thing he was looking for and could not find.
-         * ⚠️ JITTER IS DETERMINISTIC, NOT RANDOM. Math.random() would re-roll every frame, so the text
-         * would boil differently on each render and — worse — the EXPORT would not match the preview.
-         * A hash of (unit index, time-step) gives the same shake for the same frame every time.
-         * ⚠️ Both ongoing presets still fade in on `p`, so the stagger and Duration-in controls keep
-         * meaning what they say rather than silently doing nothing on two of the eleven. */
-        let alpha = 1, dx = 0, dy = 0, sc = 1, scx = 1, scy = 1, rot = 0;
-        if (preset === 'fade') alpha = p;
-        else if (preset === 'fade-up') { alpha = p; dy = (1 - pe) * fs * 0.6; }
-        else if (preset === 'typewriter') alpha = p > 0 ? 1 : 0;
-        else if (preset === 'pop') { sc = Math.max(0, easeOutBack(p)); alpha = Math.min(1, p * 2.2); }
-        else if (preset === 'slide') { alpha = p; dx = (1 - pe) * fs * 0.9; }
-        else if (preset === 'drop') { alpha = Math.min(1, p * 2.5); dy = -(1 - easeOutBounce(p)) * fs * 0.9; }
-        else if (preset === 'spin') { alpha = Math.min(1, p * 2); sc = Math.max(0, easeOutBack(p)); rot = (1 - pe) * -Math.PI; }
-        else if (preset === 'zoom-out') { alpha = Math.min(1, p * 1.6); sc = 1 + (1 - pe) * 1.8; }
-        else if (preset === 'stretch') { alpha = Math.min(1, p * 2); scx = 0.25 + 0.75 * easeOutBack(p); scy = 1.9 - 0.9 * easeOutBack(p); }
-        else if (preset === 'wave') { alpha = p; dy = Math.sin(tIn * 3.4 + gi * 0.55) * fs * 0.13; }
-        else if (preset === 'jitter') {
-          alpha = p;
-          // 24 steps a second: fast enough to read as a shake, slow enough not to look like noise.
-          const step = Math.floor(tIn * 24);
-          dx = (hash2(gi, step) - 0.5) * fs * 0.09;
-          dy = (hash2(gi + 977, step) - 0.5) * fs * 0.09;
-        }
+        const { alpha, dx, dy, sc, scx, scy, rot, outA } = animFor(gi);
         ctx.save();
         ctx.globalAlpha = baseAlpha * Math.max(0, Math.min(1, alpha)) * outA;
         ctx.translate(x + wDraw / 2 + dx, yy + dy);
@@ -14007,8 +14083,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         ctx.fill();
         ctx.fillStyle = prevFill; ctx.filter = prevFilter; ctx.shadowColor = prevShadow; ctx.shadowBlur = prevBlur;
       }
+      // The curve the EFFECTS resolved, not the layer's raw field (queue 664) — resolved ONCE here so the animated
+      // path gets it too; it used to be computed inside the static branch only (queue 904, textcurve).
+      const curve = (_tEff && _tEff.curve != null) ? _tEff.curve : (layer.textCurve || 0);
       if (FM.textHasAnim(layer)) {
-        drawAnimatedText(ctx, layer, t, lines, lh, total);
+        drawAnimatedText(ctx, layer, t, lines, lh, total, curve);
       } else {
         const stk = layer.stroke;
         const bw = stk ? (FM.evalProp(stk.width, t) || 0) : 0;             // border size (keyframeable)
@@ -14021,9 +14100,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           const bx = align === 'center' ? -maxW / 2 : align === 'right' ? -maxW : 0;
           ctx.fillStyle = buildGradient(ctx, layer.fillGradient, { x: bx, y: -(total + fs) / 2, w: maxW, h: total + fs }, t);
         }
-        // …and the curve the EFFECTS resolved, not the layer's raw field (queue 664). Identical when no
-        // curve effect is present, because applyTextEffects seeds it from exactly that field.
-        const curve = (_tEff && _tEff.curve != null) ? _tEff.curve : (layer.textCurve || 0);
+        // `curve` is resolved above the branch (queue 664, 904). Identical when no curve effect is present,
+        // because applyTextEffects seeds it from exactly the layer's own field.
         if (Math.abs(curve) > 0.5) drawArcLine(ctx, lines.join(' '), layer, curve, drawStroke, bw, bcol);   // text on a curve
         else lines.forEach((line, i) => {
           const yy = i * lh - total / 2;
