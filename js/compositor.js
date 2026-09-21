@@ -910,6 +910,7 @@ window.FM = window.FM || {};
       { key: 'zoom', label: 'Zoom punch', min: 0, max: 60, step: 0.5, def: 12, legacy: 0, unit: '%' },
       { key: 'jitter', label: 'Hardness', min: 0, max: 1, step: 0.02, def: 0.65, legacy: 0 },
       { key: 'smear', label: 'Smear', min: 0, max: 1, step: 0.02, def: 0.3, legacy: 0 },
+      { key: 'smearlen', label: 'Smear length', min: 1, max: 6, step: 0.5, def: 1, unit: '×', overriddenBy: 'smear', liveAbove: 0 },   // queue 904: the smear was 3 fixed ghosts over one frame of motion
       { key: 'direction', label: 'Direction', options: ['Omni', 'Horizontal', 'Vertical'], def: 0 },
     ] },
     { type: 'swing', label: 'Swing', params: [{ key: 'angle', label: 'Angle', min: 0, max: 180, step: 1, def: 15, unit: '°' }, { key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1, unit: 'Hz' }, { key: 'pivotx', label: 'Pivot X', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'pivoty', label: 'Pivot Y', min: 0, max: 100, step: 1, def: 0, unit: '%' }, { key: 'phase', label: 'Phase', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },   // queue 904: Phase
@@ -11423,7 +11424,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const d1 = disp((tl - 1 / fps) * spd);
         const ddx = d0[0] - d1[0], ddy = d0[1] - d1[1];
         if (Math.hypot(ddx, ddy) > 1.5) {
-          for (let g = 3; g >= 1; g--) stamp(d0[0] - ddx * (g / 4), d0[1] - ddy * (g / 4), smear * 0.38 * (1 - g / 4.5));
+          /* SMEAR LENGTH (queue 904): how many frames of motion the trail reaches back, with ghosts added in proportion so a long smear
+             stays continuous. 1 runs the old three-ghost loop exactly. */
+          const sl = p.smearlen == null ? 1 : Math.max(1, Math.min(6, FM.evalProp(p.smearlen, t) || 1));
+          if (sl === 1) { for (let g = 3; g >= 1; g--) stamp(d0[0] - ddx * (g / 4), d0[1] - ddy * (g / 4), smear * 0.38 * (1 - g / 4.5)); }
+          else { const ng = Math.min(18, Math.round(3 * sl)); for (let g = ng; g >= 1; g--) stamp(d0[0] - ddx * sl * (g / (ng + 1)), d0[1] - ddy * sl * (g / (ng + 1)), smear * 0.38 * (1 - g / (ng + 1.5))); }
         }
       }
       stamp(d0[0], d0[1], 1);

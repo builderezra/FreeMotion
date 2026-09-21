@@ -56227,6 +56227,27 @@
     if (FM.fxRegistry.makeInstance('stretchseg').params.softness !== 10) throw new Error('a new Stretch Segment does not start soft');
   });
 
+  /* ═══ 904: Shake's smear can be lengthened. Length 1 = the old three ghosts exactly; longer reaches further back along the motion. */
+  test('904: Shake Smear length stretches the trail', { item: '904' }, function () {
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    const render = (extra, t) => { const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 30, shapeH: 30, fill: '#ffffff' }); L.start = 0; L.duration = 4;
+      const e = FM.fxRegistry.makeInstance('shake'); Object.assign(e.params, { amount: 60, speed: 14, twist: 0, zoom: 0, jitter: 0.65, smear: 1 }, extra); if (extra.smearlen === undefined) delete e.params.smearlen;
+      L.effects = [e]; const c = offscreen(320, 240), ctx = c.getContext('2d');
+      FM.renderScene(ctx, { project: { width: 320, height: 240, fps: 30, duration: 4, background: '#000000' }, layers: [L] }, t);
+      return ctx.getImageData(0, 0, 320, 240).data; };
+    const lit = (d) => { let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 12) n++; return n; };
+    let checked = 0;
+    for (const t of [0.4, 0.9, 1.3, 1.7, 2.2, 2.9]) {
+      const a = render({}, t), b = render({ smearlen: 1 }, t);
+      if (!same(a, b)) throw new Error('Smear length 1 is not byte-identical to a saved shake at t=' + t);
+      const long = render({ smearlen: 5 }, t);
+      if (same(a, long)) continue;   // a frame with too little motion to smear
+      checked++;
+      if (!(lit(long) > lit(a) * 1.3)) throw new Error('Smear length 5 does not reach further than 1 at t=' + t + ' (' + lit(long) + ' lit px vs ' + lit(a) + ')');
+    }
+    if (!checked) throw new Error('Smear length 5 changed nothing at any of six moments — the smear still cannot be lengthened (queue 904)');
+  });
+
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
      Ezra asked the question this answers: *"How confident are you that every effect is actually good?"*
      Three separate times now a kernel has drawn a different picture on the reduced preview plate than
