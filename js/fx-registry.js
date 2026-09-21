@@ -346,7 +346,7 @@ window.FM = window.FM || {};
     thermal: 'Maps brightness onto a heat palette — darks go cold, highlights go white-hot.',
     lightglow: 'Blooms only the areas brighter than the threshold, so highlights glow and the rest stays put.',
     darkglow: 'The inverse bloom — the DARK areas spread instead, which sinks a shot rather than lifting it.',
-    longshadow: 'Throws a long flat shadow off the layer at 45°, the way flat-design posters do.',
+    longshadow: 'Throws a long flat shadow off the layer in any direction, the way flat-design posters do.',
     radialshadow: 'Casts a shadow away from a light you place, so it stretches further the further it falls.',
     bumpmap: 'Shades the picture as though its own brightness were height — flat art picks up relief.',
     iridescence: 'An oil-slick sheen that shimmers across the picture. Motion sets how much it moves, Blur how soft it is.',

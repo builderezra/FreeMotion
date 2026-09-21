@@ -3379,7 +3379,11 @@
       const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 140, shapeH: 100, fill: '#d84a2a' }); L.start = 0; L.duration = 4;
       const mask = FM.masks.make('add'); mask.path = [[110, 70], [230, 70], [230, 190], [110, 190]]; mask.feather = 6;
       const fx = (id) => { const e = FM.fxRegistry.makeInstance(id); if (!e) throw new Error('no effect ' + id);
-        (FM.fxRegistry.paramsOf(id) || []).forEach(pd => { if (typeof pd.max === 'number' && typeof pd.min === 'number' && pd.key !== 'seed') e.params[pd.key] = pd.min + (pd.max - pd.min) * 0.75; }); return e; };
+        /* A control ADDED AFTER these hashes were frozen stays at its default here — that default is what every saved project
+           gets, and each such control carries its own byte-identity test. Pushing it to 75% would change the picture for a
+           reason that has nothing to do with masks. Listed by name so a new one is a visible edit, not a silent pass. */
+        const ADDED_AFTER_560 = { dropshadow: ['opacity'] };   // queue 904, v16.48
+        (FM.fxRegistry.paramsOf(id) || []).forEach(pd => { if (typeof pd.max === 'number' && typeof pd.min === 'number' && pd.key !== 'seed' && !(ADDED_AFTER_560[id] || []).includes(pd.key)) e.params[pd.key] = pd.min + (pd.max - pd.min) * 0.75; }); return e; };
       build(L, mask, fx);
       FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.scene.selectedId = null;
       const cv = document.createElement('canvas'); cv.width = 320; cv.height = 240; const ctx = cv.getContext('2d');
@@ -55800,6 +55804,62 @@
       for (const [p, e, which] of [[pLo, eLo, 'low'], [pHi, eHi, 'high']]) if (Math.abs(p - e) > 12)
         throw new Error(name + ' at its ' + which + ' setting: the preview tone is ' + p.toFixed(1) + ' against the export\'s ' + e.toFixed(1) + ' — a different picture from the file');
     }
+  });
+
+  /* ═══ 904 (batch): Long Shadow ANGLE, Drop Shadow OPACITY, Unsharp Mask THRESHOLD. Each default must reproduce the old
+     picture byte for byte (saved projects), and each new control must actually move the picture in the way its name says. */
+  test('904: Long Shadow throws at any angle, Drop Shadow has an opacity, Unsharp Mask skips flat areas', { item: '904' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.longshadow || !K.dropshadow || !K.unsharpmask) throw new Error('FM._FX_TABLES.PIXEL_FX is not reachable');
+    const W = 60, H = 60;
+    const square = () => { const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 20; y < 40; y++) for (let x = 20; x < 40; x++) { const i = (y * W + x) * 4; d[i] = 200; d[i + 1] = 60; d[i + 2] = 60; d[i + 3] = 255; } return d; };
+    const run = (fn, params, mk) => { const d = (mk || square)(); fn(d, W, H, params, 0, 1); return d; };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    const aAt = (d, x, y) => d[(y * W + x) * 4 + 3];
+
+    // ---- Long Shadow ----
+    const lsOld = run(K.longshadow, { length: 12, color: '#000000' });
+    if (!same(lsOld, run(K.longshadow, { length: 12, angle: 45, color: '#000000' }))) throw new Error('Long Shadow at Angle 45 is not byte-identical to a saved shadow with no angle');
+    if (!(aAt(lsOld, 45, 45) === 255 && aAt(lsOld, 15, 15) === 0)) throw new Error('control: the default shadow does not fall down-right, so the angle test below means nothing');
+    const lsUp = run(K.longshadow, { length: 12, angle: 225, color: '#000000' });
+    if (aAt(lsUp, 15, 15) !== 255) throw new Error('Long Shadow at Angle 225 does not throw up-left — the angle is ignored');
+    if (aAt(lsUp, 45, 45) !== 0) throw new Error('Long Shadow at Angle 225 still throws down-right as well');
+    const lsR = run(K.longshadow, { length: 12, angle: 0, color: '#000000' });
+    if (!(aAt(lsR, 50, 30) === 255 && aAt(lsR, 30, 50) === 0)) throw new Error('Long Shadow at Angle 0 does not throw straight right');
+
+    // ---- Drop Shadow ----
+    const dsBase = { distance: 10, angle: 45, softness: 0, color: '#000000' };
+    const ds100 = run(K.dropshadow, dsBase), ds50 = run(K.dropshadow, Object.assign({ opacity: 50 }, dsBase));
+    if (!same(ds100, run(K.dropshadow, Object.assign({ opacity: 100 }, dsBase)))) throw new Error('Drop Shadow at Opacity 100 is not byte-identical to a saved shadow');
+    /* AND THROUGH THE APP, not only the bare kernel: the dispatcher fills an absent key from the fallback literal written in the
+       kernel (#793), so a fallback of 1 on a 0-100 scale rendered every saved shadow at 1% while the kernel alone looked fine.
+       This is how it was caught (queue 560's frozen hashes) — so it is asserted here, where the change was made. */
+    const viaApp = (op) => { const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 120, shapeH: 90, fill: '#35dcaf' });
+      const e = FM.fxRegistry.makeInstance('dropshadow'); if (op === undefined) delete e.params.opacity; else e.params.opacity = op; L.effects = [e];
+      const c = offscreen(320, 240), ctx = c.getContext('2d');
+      FM.renderScene(ctx, { project: { width: 320, height: 240, fps: 30, duration: 2, background: '#ffffff' }, layers: [L] }, 0.5);
+      return ctx.getImageData(0, 0, 320, 240).data; };
+    const savedOld = viaApp(undefined), full = viaApp(100), none = viaApp(0);
+    if (same(full, none)) throw new Error('control: a drop shadow at 100 and at 0 render the same, so the saved-shadow check below cannot see anything');
+    if (!same(savedOld, full)) throw new Error('a saved Drop Shadow with no Opacity key does not render at full strength through the app — the absent key is filled with the wrong value');
+    const sx = 45, sy = 45;   // inside the shadow, outside the layer
+    if (aAt(ds100, sx, sy) < 250) throw new Error('control: no full shadow at (' + sx + ',' + sy + '), alpha ' + aAt(ds100, sx, sy));
+    if (Math.abs(aAt(ds50, sx, sy) - 128) > 2) throw new Error('Drop Shadow at Opacity 50 has alpha ' + aAt(ds50, sx, sy) + ' — expected about half of 255');
+
+    // ---- Unsharp Mask ----
+    const scene = () => { const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4;
+        const v = x < 30 ? 100 + ((x * 7 + y * 13) % 5) - 2 : 200;   // faint grain on the left, a hard edge at x = 30
+        d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; } return d; };
+    const src = scene();
+    const um0 = run(K.unsharpmask, { amount: 2, radius: 3 }, scene), umT = run(K.unsharpmask, { amount: 2, radius: 3, threshold: 12 }, scene);
+    if (!same(um0, run(K.unsharpmask, { amount: 2, radius: 3, threshold: 0 }, scene))) throw new Error('Unsharp Mask at threshold 0 is not byte-identical to a saved one');
+    const grain = (d) => { let n = 0; for (let y = 5; y < 55; y++) for (let x = 5; x < 20; x++) { const i = (y * W + x) * 4; n += Math.abs(d[i] - src[i]); } return n; };
+    if (grain(um0) < 200) throw new Error('control: with no threshold the grain is barely touched (' + grain(um0) + '), so skipping it proves nothing');
+    if (grain(umT) !== 0) throw new Error('Unsharp Mask with Skip flat areas 12 still hardens the grain (total change ' + grain(umT) + ')');
+    const edge = (d) => d[(30 * W + 28) * 4];
+    if (edge(umT) >= src[(30 * W + 28) * 4]) throw new Error('Unsharp Mask with a threshold no longer sharpens the real edge');
   });
 
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
