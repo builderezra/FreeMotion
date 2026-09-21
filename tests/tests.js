@@ -56123,6 +56123,23 @@
     if (!(tv1(m32) < tv1(m9) * 0.8)) throw new Error('Directional Blur at 32 taps is not smoother than 9 (variation ' + tv1(m32) + ' vs ' + tv1(m9) + ') — the smear is still a ghost train');
   });
 
+  /* ═══ 904: Tilt Shift's focus band can be turned. 0° is the old horizontal band exactly; 90° stands it upright. */
+  test('904: Tilt Shift focus band turns with its Angle', { item: '904' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.tiltshift) throw new Error('PIXEL_FX.tiltshift is not reachable');
+    const W = 120, H = 120;
+    const checker = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, v = ((x >> 1) + (y >> 1)) & 1 ? 230 : 30; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; } return d; };
+    const run = (p) => { const d = checker(); K.tiltshift(d, W, H, Object.assign({ center: 0.5, softness: 0.3, blur: 1 }, p), 0, 1); return d; };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    const sharp = (d, cx, cy) => { let v = 0; for (let y = cy - 4; y < cy + 4; y++) for (let x = cx - 4; x < cx + 4; x++) { const i = (y * W + x) * 4; v += Math.abs(d[i] - d[i + 4]); } return v; };
+    const flat = run({});
+    if (!same(flat, run({ angle: 0 }))) throw new Error('Tilt Shift at 0° is not byte-identical to a saved one');
+    // horizontal band: the left/right middle is in focus, the top middle is blurred
+    if (!(sharp(flat, 10, 60) > sharp(flat, 60, 10) * 3)) throw new Error('control: the 0° band does not keep the left-middle sharp and blur the top (' + sharp(flat, 10, 60) + ' vs ' + sharp(flat, 60, 10) + ')');
+    const up = run({ angle: 90 });
+    if (!(sharp(up, 60, 10) > sharp(up, 10, 60) * 3)) throw new Error('Tilt Shift at 90° does not stand the band upright: top-middle ' + sharp(up, 60, 10) + ', left-middle ' + sharp(up, 10, 60) + ' (queue 904)');
+  });
+
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
      Ezra asked the question this answers: *"How confident are you that every effect is actually good?"*
      Three separate times now a kernel has drawn a different picture on the reduced preview plate than

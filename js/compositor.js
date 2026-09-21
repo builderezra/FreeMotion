@@ -526,7 +526,7 @@ window.FM = window.FM || {};
       params: [{ key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 20, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 9, unit: ' taps' }] },   // queue 904: Quality — 9 taps was welded, so a long smear broke into a ghost train
     { type: 'colorbalance', label: 'Colour Balance', params: [{ key: 'red', label: 'Red', min: -100, max: 100, step: 1, def: 25 }, { key: 'green', label: 'Green', min: -100, max: 100, step: 1, def: 0 }, { key: 'blue', label: 'Blue', min: -100, max: 100, step: 1, def: -25 }] },
     { type: 'highlightsshadows', label: 'Highlights & Shadows', params: [{ key: 'highlights', label: 'Highlights', min: -100, max: 100, step: 1, def: -40 }, { key: 'shadows', label: 'Shadows', min: -100, max: 100, step: 1, def: 50 }] },
-    { type: 'tiltshift', label: 'Tilt Shift', params: [{ key: 'center', label: 'Focus', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'blur', label: 'Blur amount', min: 0.25, max: 4, step: 0.05, def: 1, unit: '×' }] },   // queue 904: a multiple of the old fixed 8, so 1× IS the old look and it stays clear of pxToPlate
+    { type: 'tiltshift', label: 'Tilt Shift', params: [{ key: 'center', label: 'Focus', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'blur', label: 'Blur amount', min: 0.25, max: 4, step: 0.05, def: 1, unit: '×' }, { key: 'angle', label: 'Angle', min: -90, max: 90, step: 1, def: 0, unit: '°' }] },   // queue 904: a multiple of the old fixed 8, so 1× IS the old look and it stays clear of pxToPlate
     // ---- batch 12 ----
     { type: 'dropshadow', label: 'Drop Shadow', params: [{ key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 18, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 135, unit: '°' }, { key: 'softness', label: 'Softness', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'opacity', label: 'Opacity', min: 0, max: 100, step: 1, def: 100, unit: '%' }], color: true, defColor: '#000000', colorLabel: 'Shadow' },   // queue 904: Opacity — every shadow was full strength
     { type: 'chromaticaberration', label: 'Chromatic Aberration', params: [{ key: 'amount', label: 'Amount', min: 0, max: 30, step: 1, def: 8, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' },
@@ -5832,6 +5832,16 @@ window.FM = window.FM || {};
         }
       }
       var tsLine=tsCenter*H; var tsDenom=0.05+(1-tsSoft)*0.5; if(tsDenom<0.0001)tsDenom=0.0001;
+      /* ANGLE (queue 904): the focus band was welded horizontal. It now turns about the point it always passed through — the middle
+         of the frame at the Focus height — and the distance from it is measured square to the band, still as a fraction of H so
+         Softness means what it did. 0° takes the loop below, untouched. */
+      var tsAng = p.angle == null ? 0 : (FM.evalProp(p.angle, t) || 0);
+      if (tsAng % 180 !== 0) { var tsRa = tsAng * Math.PI / 180, tsCa = Math.cos(tsRa), tsSa = Math.sin(tsRa), tsMx = W / 2;
+        for (tsy = tsY0; tsy <= tsY1; tsy++) { var tsRowA = tsy * tsW4, tsDy = tsy - tsLine;
+          for (tsx = tsX0; tsx <= tsX1; tsx++) { tsi = tsRowA + tsx * 4; if (d[tsi + 3] <= 0) continue;
+            var tsBa = Math.abs(tsDy * tsCa - (tsx - tsMx) * tsSa) / H / tsDenom; if (tsBa > 1) tsBa = 1; var tsIa = 1 - tsBa;
+            d[tsi] = tsSrc[tsi] * tsIa + tsBlur[tsi] * tsBa; d[tsi + 1] = tsSrc[tsi + 1] * tsIa + tsBlur[tsi + 1] * tsBa; d[tsi + 2] = tsSrc[tsi + 2] * tsIa + tsBlur[tsi + 2] * tsBa; } }
+        return; }
       for(tsy=tsY0;tsy<=tsY1;tsy++){
         var tsDist=Math.abs(tsy-tsLine)/H; var tsBw=tsDist/tsDenom; if(tsBw<0)tsBw=0; else if(tsBw>1)tsBw=1;
         var tsInv=1-tsBw; var tsRowI=tsy*tsW4;
