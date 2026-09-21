@@ -31,6 +31,7 @@ if [ -f .last-ship ]; then
     # Shouting at that one would teach the next session to scroll past the banner, which costs the real
     # refusals this line exists to surface. So the alarm is reserved for a refusal with no stated reason.
     *batched*) echo "last ship: held back on purpose ($_V) — carry on; the notes ride out with the next real change" ;;
+    *overloaded*) echo "⏸ last ship: the MAC was overloaded, not the code ($_V) — the tree is a finished release; ship it again once \`sysctl -n vm.loadavg\` is under ~10 (ship.sh refuses in a second otherwise, so trying costs nothing)" ;;
     REFUSED*)  echo "🚨 THE LAST SHIP REFUSED ($_V) — the tree above is an UNSHIPPED release, not work in progress. Read the log, fix the gate it tripped, ship again." ;;
     *)         echo "last ship: $_V" ;;
   esac

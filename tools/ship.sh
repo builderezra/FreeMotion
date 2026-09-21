@@ -104,6 +104,29 @@ if ! pgrep -f '_cdp\.py' >/dev/null 2>&1; then
 fi
 touch .ship-in-progress   # removed by _verdict() — deliberately NOT its own trap, see the note up top
 
+# ⚠️ DO NOT START A HALF-HOUR RUN ON A MACHINE THAT CANNOT FINISH IT (21 Sep). The timeout diagnosis (_whyslow, below)
+# explains a stall AFTER it has cost 30 minutes. Twice on 21 Sep the machine was already visibly unable before a single
+# test ran: once a Spotlight/Photos indexing storm, once an 8GB Mac with 8GB of swap in use and a load average of 63 —
+# and the suite's own headless Chrome is what tipped it over, so retrying made it worse. A 1-minute load above three
+# times the core count is past anything a green ship has ever run at (they run at 4-8 on 6 cores); refuse up front, say
+# why, and name the cure. FM_SHIP_IGNORE_LOAD=1 is the deliberate override.
+_NCPU="$(sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+_LOAD1="$(sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}')"
+# THE BAR IS 1.6× THE CORE COUNT, AND IT WAS SET BY MEASUREMENT (21 Sep, 6 cores). Ships that STALLED (not one test run in
+# 30 minutes) started at load 13.4 and 12.1; every green ship that day started between 3 and 8. A swap-used bar was tried
+# as well and DISPROVEN the same evening: a run at 9.1GB of swap and load ~4 went all the way through. Swap-used is
+# history — macOS does not shrink it when the machine goes idle — while load is what is happening now.
+if [ -z "${FM_SHIP_IGNORE_LOAD:-}" ] && [ -n "$_LOAD1" ] && awk -v l="$_LOAD1" -v n="$_NCPU" 'BEGIN{exit !(l > 1.6*n)}'; then
+  _SWAP="$(sysctl -n vm.swapusage 2>/dev/null | sed 's/  */ /g')"
+  echo "❌ THE MAC IS TOO BUSY TO RUN THE SUITE — load average ${_LOAD1} on ${_NCPU} cores (green ships start at 3-8; stalled ones at 12+)."
+  echo "   swap: ${_SWAP}"
+  echo "   Nothing is wrong with the code. A heavily swapping or throttling Mac stalls the suite for 30 minutes and then"
+  echo "   times out; starting it anyway only adds a headless browser to the pile. Wait for the load to fall, or free memory"
+  echo "   (quit apps not in use, or restart if swap is several GB), then ship again."
+  _WHY="machine overloaded (load ${_LOAD1} on ${_NCPU} cores) — not a code fault"
+  exit 1
+fi
+
 # ⚠️ A RELEASE CANNOT RUN WITHOUT A LOCAL SERVER, AND THE OLD FAILURE WAS DISCOVERED TOO LATE (queue 814,
 # 6 Sep). `tests/_cdp.py` does not start one — it expects port 8777 to be serving — and when nothing was,
 # a ship spent its whole proof step and then died at the suite with "Connection refused", having proved

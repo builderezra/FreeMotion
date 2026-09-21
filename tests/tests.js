@@ -27176,6 +27176,13 @@
          point in the cycle, i.e. the legacy phase. Blink's real coverage is the fx-atmos test, which
          drives it at times where the settings genuinely disagree. */
       'blink:duty=min': 1, 'blink:min=min': 1, 'blink:phase=min': 1, 'blink:phase=max': 1,
+      /* THE CENTRES OF queue 904, and each is geometry, not a fault. Radial Wipe at its default (50% progress, 0° start)
+         keeps the half BELOW its pivot — so a pivot on the bottom edge keeps nothing, exactly as wipe:progress=min does.
+         Ring Array repeats one seed wedge around the hub, pointing right from it at the default Seam angle; with the hub
+         on the right or bottom edge that wedge is off the layer and there is nothing to repeat. Seam angle turns the wedge
+         back in, so the panel already has the way out. Narrowing the range would not help: at 95% the wedge still misses
+         this fixture's layer entirely. The opposite ends (centre at 0%) keep the layer, and are not listed. */
+      'radialwipe:centery=max': 1, 'radialrepeat:centerx=max': 1, 'radialrepeat:centery=max': 1,
     };
     const all = R.allIncludingHidden ? R.allIncludingHidden() : R.all();
     const gone = [], crashed = [];
@@ -62914,24 +62921,44 @@
         if (p.overriddenBy && p.liveAbove !== undefined) {   // a slider live only ABOVE its controller's level (queue 904): turn the controller all the way up
           const ctl = ps.find(q => q.key === p.overriddenBy); base[p.overriddenBy] = ctl && typeof ctl.max === 'number' ? ctl.max : Number(p.liveAbove) + 1;
         }
-        let best = 0;
-        for (const mk of FRAMES) {
-          /* FIVE TIMES, NOT TWO, and the first draft of this test proved why: Blink's `min` (how far it
-             dims to) scored a flat 0.000 on t = 0.37 and 1.4 because BOTH land in the blink's "on"
-             phase, where the dim level has nothing to do. That is fault 4 out of fx-sweep.js's header
-             catching the very test written to enforce it. These are the same five the tool uses. */
-          for (const t of [0, 0.23, 0.61, 1.4, 2.7]) {
-            const shots = [];
-            for (let k = 0; k < FRAC.length; k++) {
-              const d = mk();
-              try { P[fx.type](d, W, H, Object.assign({}, base, { [p.key]: p.min + (p.max - p.min) * FRAC[k] }), t, 1); }
-              catch (e) { return; }               // a kernel that throws on this fixture is not this test's subject
-              shots.push(d);
+        const measure = (b) => {
+          let best = 0;
+          for (const mk of FRAMES) {
+            /* FIVE TIMES, NOT TWO, and the first draft of this test proved why: Blink's `min` (how far it
+               dims to) scored a flat 0.000 on t = 0.37 and 1.4 because BOTH land in the blink's "on"
+               phase, where the dim level has nothing to do. That is fault 4 out of fx-sweep.js's header
+               catching the very test written to enforce it. These are the same five the tool uses. */
+            for (const t of [0, 0.23, 0.61, 1.4, 2.7]) {
+              const shots = [];
+              for (let k = 0; k < FRAC.length; k++) {
+                const d = mk();
+                try { P[fx.type](d, W, H, Object.assign({}, b, { [p.key]: p.min + (p.max - p.min) * FRAC[k] }), t, 1); }
+                catch (e) { return Infinity; }               // a kernel that throws on this fixture is not this test's subject
+                shots.push(d);
+              }
+              let tot = 0; for (let k = 1; k < shots.length; k++) tot += mad(shots[k - 1], shots[k]);
+              if (tot > best) best = tot;
+              if (best >= 0.05) return best;             // alive — stop paying for it
             }
-            let tot = 0; for (let k = 1; k < shots.length; k++) tot += mad(shots[k - 1], shots[k]);
-            if (tot > best) best = tot;
-            if (best >= 0.05) return;             // alive — stop paying for it
           }
+          return best;
+        };
+        let best = measure(base);
+        /* ⚠️ ONE RETRY, WITH MID-RANGE SIBLINGS NUDGED — AND ONLY THOSE (queue 904). A slider can be motionless at the
+           DEFAULTS for a reason of geometry, not a fault: Radial Wipe at 50% progress and 0° start is a horizontal cut, and
+           sliding a horizontal line sideways changes nothing — so its new Centre X read 0.000 here and would have been
+           reported as broken while it moves the wipe in every other configuration. Nudging each sibling whose default sits
+           INSIDE its range clears that. A sibling whose default is its MINIMUM (0 = off) is deliberately NOT switched on:
+           a slider that is dead until something is turned on — Starfield's Twinkle speed before Twinkle — must still be
+           flagged here, because that is a panel that should grey the row, and this sweep is what makes that happen. */
+        if (best < 0.05) {
+          const nudged = Object.assign({}, base); let any = false;
+          ps.forEach(q => {
+            if (q.key === p.key || q.key === p.overriddenBy || typeof q.min !== 'number' || typeof q.max !== 'number' || !(q.max > q.min)) return;
+            if (!(q.default > q.min)) return;                       // off by default: leave it off (see above)
+            nudged[q.key] = q.min + (q.max - q.min) * 0.3; any = true;
+          });
+          if (any) best = measure(nudged);
         }
         if (best < 0.05) dead.push(fx.label + ' · ' + p.key + ' (' + best.toFixed(3) + ')');
       });
@@ -66556,6 +66583,133 @@
       if (!same(saved, run('touchup', checker, Object.assign({}, old, { strength: 1 })))) throw new Error('Remove Object mode ' + mode + ': a saved instance and one at Strength 1 differ — saved projects would change');
       if (same(saved, run('touchup', checker, Object.assign({}, old, { strength: 3 })))) throw new Error('Remove Object mode ' + mode + ': Strength 3 changed nothing — not wired');
     });
+  });
+
+
+  /* ── queue 904: three effects welded to the FRAME centre — Radial Wipe, Ring Array, Polar Displacement ──────
+   * Each now has Centre X / Centre Y (the 0–100% convention twelve effects already use) through the shared wCx/wCy,
+   * which hand back the old centre itself at 50% — so a saved instance is byte-identical, by construction and here
+   * by measurement.
+   * ⚠️ RING ARRAY HAS TWO PATHS and that is the trap. Its GPU shader read the frame centre (fmCx) directly; the
+   * existing GPU-vs-CPU parity test runs every warp at its DEFAULTS, where Centre is 50% and a shader still on the
+   * frame centre would pass. So this moves the centre and compares the two paths THERE, and asserts the GPU ran. */
+  test('904 centre: Radial Wipe, Ring Array and Polar Displacement take a centre, saved projects are untouched, and Ring Array’s GPU agrees', { item: '904', budgetMs: 60000 }, async function () {
+    var PX = FM._pixelFx;
+    if (!PX || !PX.radialwipe) throw new Error('the Radial Wipe kernel is not reachable');
+    if (!FM.glWarp || !FM.glWarp.stats) throw new Error('FM.glWarp is not reachable — the GPU half cannot be checked');
+    function same(A, B) { for (var i = 0; i < A.length; i++) if (A[i] !== B[i]) return false; return true; }
+
+    // ── Radial Wipe (a pixel kernel)
+    var W = 96, H = 96;
+    function opaque() { var d = new Uint8ClampedArray(W * H * 4); for (var i = 0; i < d.length; i += 4) { d[i] = 90; d[i + 1] = 180; d[i + 2] = 60; d[i + 3] = 255; } return d; }
+    function wipe(extra) { var d = opaque(); PX.radialwipe(d, W, H, Object.assign({ progress: 0.4, start: 30 }, extra || {}), 0.37, 1); return d; }
+    if (!same(wipe(), wipe({ centerx: 50, centery: 50 }))) throw new Error('radialwipe: a saved wipe and one centred at 50% differ — saved projects would change');
+    if (same(wipe(), wipe({ centerx: 20, centery: 70 }))) throw new Error('radialwipe: moving the centre changed nothing — not wired');
+
+    // ── Ring Array and Polar Displacement (rendered, since both need the scene)
+    var P = FM.scene.project, keep = { layers: FM.scene.layers.slice(), w: P.width, h: P.height, d: P.duration, noGL: FM._noGL };
+    try {
+      var RW = 360, RH = 360; P.width = RW; P.height = RH; P.duration = 3;
+      var cv = document.createElement('canvas'); cv.width = RW; cv.height = RH;
+      var g = cv.getContext('2d', { willReadFrequently: true });
+      function shot() { g.clearRect(0, 0, RW, RH); FM.renderScene(g, FM.scene, 0.5); return g.getImageData(0, 0, RW, RH).data; }
+      function build(type, params, withMap) {
+        FM.scene.layers.length = 0;
+        var L = FM.makeLayer('shape', { shape: 'rect', x: 180, y: 180, shapeW: 230, shapeH: 290, fill: '#4fd1ff' }); L.start = 0; L.duration = 3;
+        var L2 = FM.makeLayer('shape', { shape: 'rect', x: 110, y: 100, shapeW: 90, shapeH: 90, fill: '#ff9a4f' }); L2.start = 0; L2.duration = 3;
+        var inst = FM.fxRegistry.makeInstance(type); Object.assign(inst.params, params);
+        L.effects = [inst];
+        FM.scene.layers.push(L2, L);
+        /* THE MAP GOES LAST. layers[0] is the TOP of the stack, and the first version pushed this full-frame map
+           first — so it sat on top of everything, every render was solid orange, and moving the centre "changed
+           nothing" for the honest reason that nothing below the map could be seen. */
+        if (withMap) { var M = FM.makeLayer('shape', { shape: 'rect', x: 180, y: 180, shapeW: 360, shapeH: 360, fill: '#ff8000' }); M.start = 0; M.duration = 3; inst.params.source = M.id; FM.scene.layers.push(M); }
+        return inst;
+      }
+      function L_fx_off() { FM.scene.layers.forEach(function (l) { if (l.effects && l.effects.length) l.effects = []; }); }
+      function cpuShot(type, params, withMap) { FM._noGL = true; FM.glWarp._reset(); var inst = build(type, params, withMap); var s = shot(); return s; }
+
+      [['radialrepeat', false], ['polardisplace', true]].forEach(function (c) {
+        var type = c[0], withMap = c[1];
+        var saved = (function () { var inst = build(type, {}, withMap); delete inst.params.centerx; delete inst.params.centery; FM._noGL = true; FM.glWarp._reset(); return shot(); })();
+        var at50 = cpuShot(type, { centerx: 50, centery: 50 }, withMap);
+        var bare = (function () { var inst = build(type, {}, withMap); L_fx_off(); FM._noGL = true; FM.glWarp._reset(); return shot(); })();
+        if (same(bare, at50)) throw new Error(type + ': the effect changes nothing in this fixture at all — so a centre that "changes nothing" would prove nothing');
+        if (!same(saved, at50)) throw new Error(type + ': a saved instance (no centre) and one centred at 50% render differently — saved projects would change');
+        var moved = cpuShot(type, { centerx: 30, centery: 65 }, withMap);
+        if (same(at50, moved)) throw new Error(type + ': moving the centre to 30% / 65% changed nothing — not wired');
+      });
+
+      // ── Ring Array on the GPU, with the centre MOVED, must match the CPU.
+      var cpu = cpuShot('radialrepeat', { centerx: 30, centery: 65 }, false);
+      FM._noGL = false; FM.glWarp._reset();
+      build('radialrepeat', { centerx: 30, centery: 65 }, false);
+      var gpu = shot(), st = FM.glWarp.stats();
+      if (!(st.gpu > 0)) throw new Error('the GPU path did not run for Ring Array (' + st.reason + ') — the comparison below would be the CPU against itself');
+      var big = 0; for (var i = 0; i < cpu.length; i += 4) { var e = Math.max(Math.abs(cpu[i] - gpu[i]), Math.abs(cpu[i + 1] - gpu[i + 1]), Math.abs(cpu[i + 2] - gpu[i + 2]), Math.abs(cpu[i + 3] - gpu[i + 3])); if (e > 24) big++; }
+      if (big / (RW * RH) > 0.005) throw new Error('Ring Array with its centre moved: the GPU disagrees with the CPU on ' + (100 * big / (RW * RH)).toFixed(2) + '% of pixels — the shader is still turning about the frame centre');
+    } finally {
+      FM._noGL = keep.noGL; if (FM.glWarp._reset) FM.glWarp._reset();
+      FM.scene.layers = keep.layers; P.width = keep.w; P.height = keep.h; P.duration = keep.d;
+      FM.refreshAll();
+    }
+  });
+
+
+  /* ── queue 904 [B] swing: the pendulum always hung from the top-centre of the layer ─────────────────────
+   * A sign could not hang from a corner, a sword could not swing from its handle, a card could not rock on its bottom
+   * edge — the three things Swing is for. It now has Spin's Pivot X / Pivot Y (0–100% of the layer), defaulting to the
+   * old top-centre and taking the old expressions exactly there, so a saved swing is byte-identical.
+   * Measured on the kernel itself, at the peak of the swing: saved == default, and a pivot on the BOTTOM edge keeps the
+   * bottom of the layer where it was while the top swings — the opposite of the old top pivot. */
+  test('904 [B] Swing can pivot anywhere on the layer, and a saved swing is untouched', { item: '904', budgetMs: 20000 }, function () {
+    var T = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX;
+    if (!T || typeof T.swing !== 'function') throw new Error('the Swing kernel is not reachable');
+    var pd = (FM.fxRegistry.paramsOf('swing') || []).filter(function (x) { return x.key === 'pivoty'; })[0];
+    if (!pd) throw new Error('Swing has no Pivot Y — it can still only hang from the top');
+    if (pd.default !== 0) throw new Error('Swing Pivot Y defaults to ' + pd.default + ', not the top (0) it always hung from');
+    var W = 120, H = 120, bb = { x: 30, y: 20, w: 60, h: 80 };
+    var A = document.createElement('canvas'); A.width = W; A.height = H;
+    var a = A.getContext('2d'); a.fillStyle = '#e8a33d'; a.fillRect(bb.x, bb.y, bb.w, bb.h);
+    function run(params) {
+      var c = document.createElement('canvas'); c.width = W; c.height = H;
+      var g = c.getContext('2d', { willReadFrequently: true });
+      T.swing(A, g, W, H, bb, Object.assign({ angle: 30, speed: 1 }, params), 0.25, 0.25);   // tl = 0.25s at 1Hz: the peak of the swing
+      return g.getImageData(0, 0, W, H).data;
+    }
+    function same(A1, B1) { for (var i = 0; i < A1.length; i++) if (A1[i] !== B1[i]) return false; return true; }
+    function inkAt(d, x, y) { return d[(y * W + x) * 4 + 3] > 128; }
+    var saved = run({}), top = run({ pivotx: 50, pivoty: 0 }), bottom = run({ pivotx: 50, pivoty: 100 });
+    if (!same(saved, top)) throw new Error('a saved swing (no pivot) and one pivoting at the top-centre differ — saved projects would change');
+    if (same(saved, bottom)) throw new Error('moving the pivot to the bottom edge changed nothing — not wired');
+    // the pivot point itself does not move: with a TOP pivot the top-centre is still ink; with a BOTTOM pivot the bottom-centre is.
+    if (!inkAt(top, 60, 22)) throw new Error('with the top pivot, the top-centre of the layer moved away from its pivot');
+    if (!inkAt(bottom, 60, 97)) throw new Error('with the pivot on the bottom edge, the bottom-centre moved — it is not swinging from there');
+  });
+
+
+  /* ── queue 904 [B] glowscan: the scan only ever swept DOWN ───────────────────────────────────────────────
+   * (Its other half, a strength control, shipped earlier as "Strength".) A scan across a wide title, or upward, was out
+   * of reach. Sweeps: Down / Up / Right / Left. Down is the old loop untouched, so a saved scan is byte-identical.
+   * The bar is judged by WHERE it is: at a quarter of the way through a cycle, Down's bright band sits a quarter of the
+   * way DOWN, Up's a quarter of the way UP (three quarters down), Right's a quarter of the way ACROSS — and a sideways
+   * scan brightens a column, not a row. */
+  test('904 [B] Glow Scan can sweep up, right and left as well as down, and a saved scan is untouched', { item: '904', budgetMs: 20000 }, function () {
+    var P = FM._pixelFx;
+    if (!P || !P.glowscan) throw new Error('the Glow Scan kernel is not reachable');
+    var W = 100, H = 100;
+    function flat() { var d = new Uint8ClampedArray(W * H * 4); for (var i = 0; i < d.length; i += 4) { d[i] = 40; d[i + 1] = 40; d[i + 2] = 40; d[i + 3] = 255; } return d; }
+    // t = 0.25s at speed 1 (1Hz) → a quarter of a cycle; width 10 keeps the band narrow enough to locate
+    function run(extra) { var d = flat(); P.glowscan(d, W, H, Object.assign({ speed: 1, width: 10, amount: 1, color: '#ffffff' }, extra || {}), 0.25, 1); return d; }
+    function same(A, B) { for (var i = 0; i < A.length; i++) if (A[i] !== B[i]) return false; return true; }
+    function at(d, x, y) { return d[(y * W + x) * 4]; }
+    var saved = run(), down = run({ direction: 0 }), up = run({ direction: 1 }), right = run({ direction: 2 }), left = run({ direction: 3 });
+    if (!same(saved, down)) throw new Error('a saved scan (no direction) and a Down one differ — saved projects would change');
+    if (!(at(down, 50, 25) > 200 && at(down, 50, 75) < 80)) throw new Error('Down: the band is not a quarter of the way down (' + at(down, 50, 25) + ' at 25, ' + at(down, 50, 75) + ' at 75) — the fixture is not locating the bar');
+    if (!(at(up, 50, 75) > 200 && at(up, 50, 25) < 80)) throw new Error('Up: the band is not three quarters down (' + at(up, 50, 75) + ' at 75, ' + at(up, 50, 25) + ' at 25) — it is not sweeping upward');
+    if (!(at(right, 25, 50) > 200 && at(right, 75, 50) < 80)) throw new Error('Right: the band is not a quarter of the way across (' + at(right, 25, 50) + ' at x25, ' + at(right, 75, 50) + ' at x75)');
+    if (!(at(right, 25, 5) > 200 && at(right, 25, 95) > 200)) throw new Error('Right: the bright band is not a whole COLUMN — a sideways scan must light top to bottom');
+    if (!(at(left, 75, 50) > 200 && at(left, 25, 50) < 80)) throw new Error('Left: the band is not three quarters across (' + at(left, 75, 50) + ' at x75, ' + at(left, 25, 50) + ' at x25)');
   });
 
 })();

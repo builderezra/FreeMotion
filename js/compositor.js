@@ -576,7 +576,7 @@ window.FM = window.FM || {};
        silently re-render every project that already uses these. A step change cannot — every value the
        old step could hold is still exactly representable. */
     { type: 'wipe', label: 'Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },
-    { type: 'radialwipe', label: 'Radial Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'start', label: 'Start', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },
+    { type: 'radialwipe', label: 'Radial Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'start', label: 'Start', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' }] },   // queue 904: the pivot was welded to the frame centre
     { type: 'solidmatte', label: 'Fill Silhouette', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#ffffff', colorLabel: 'Fill' },
     { type: 'mattechoker', label: 'Matte Choker', params: [
       { key: 'choke', label: 'Choke', min: -20, max: 20, step: 1, def: -4, unit: 'px' },
@@ -620,6 +620,8 @@ window.FM = window.FM || {};
       { key: 'rotate', label: 'Seam angle', min: -360, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'mirror', label: 'Mirror wedges', def: 0, options: [[0, 'Off'], [1, 'On']] },
       { key: 'twist', label: 'Twist', min: -360, max: 360, step: 1, def: 0, unit: '°' },
+      { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },   // queue 904: the hub was welded to the frame centre
+      { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
     ] },
     { type: 'mirrortile', label: 'Mirror Tile', params: [
       { key: 'size', label: 'Tile size', min: 20, max: 1600, step: 1, def: 140, unit: 'px' },
@@ -673,7 +675,7 @@ window.FM = window.FM || {};
      the picture is gone under the band. Speed and Width move the band; nothing could turn it DOWN.
      Default 1 is exactly today's behaviour, so every saved project renders unchanged — the control
      only adds the half of the range that never existed. */
-    { type: 'glowscan', label: 'Glow Scan', params: [{ key: 'speed', label: 'Speed', min: 0, max: 8, step: 0.1, def: 1.5, unit: 'Hz' }, { key: 'width', label: 'Width', min: 10, max: 200, step: 1, def: 60, unit: 'px' }, { key: 'amount', label: 'Strength', min: 0, max: 1, step: 0.02, def: 1 }], color: true, defColor: '#ffffff', colorLabel: 'Scan' },
+    { type: 'glowscan', label: 'Glow Scan', params: [{ key: 'speed', label: 'Speed', min: 0, max: 8, step: 0.1, def: 1.5, unit: 'Hz' }, { key: 'width', label: 'Width', min: 10, max: 200, step: 1, def: 60, unit: 'px' }, { key: 'amount', label: 'Strength', min: 0, max: 1, step: 0.02, def: 1 }, { key: 'direction', label: 'Sweeps', def: 0, options: [[0, 'Down'], [1, 'Up'], [2, 'Right'], [3, 'Left']] }], color: true, defColor: '#ffffff', colorLabel: 'Scan' },   // direction: queue 904, it only ever swept down
     { type: 'spinstreaks', label: 'Spin Streaks', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
@@ -904,7 +906,7 @@ window.FM = window.FM || {};
       { key: 'smear', label: 'Smear', min: 0, max: 1, step: 0.02, def: 0.3, legacy: 0 },
       { key: 'direction', label: 'Direction', options: ['Omni', 'Horizontal', 'Vertical'], def: 0 },
     ] },
-    { type: 'swing', label: 'Swing', params: [{ key: 'angle', label: 'Angle', min: 0, max: 180, step: 1, def: 15, unit: '°' }, { key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1, unit: 'Hz' }] },
+    { type: 'swing', label: 'Swing', params: [{ key: 'angle', label: 'Angle', min: 0, max: 180, step: 1, def: 15, unit: '°' }, { key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1, unit: 'Hz' }, { key: 'pivotx', label: 'Pivot X', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'pivoty', label: 'Pivot Y', min: 0, max: 100, step: 1, def: 0, unit: '%' }] },
     { type: 'spin', label: 'Spin', params: [
       { key: 'speed', label: 'Speed', min: -720, max: 720, step: 5, def: 90, unit: '°/s' },
       { key: 'offset', label: 'Start angle', min: -360, max: 360, step: 5, def: 0, unit: '°' },
@@ -1087,6 +1089,8 @@ window.FM = window.FM || {};
     { type: 'polardisplace', label: 'Polar Displacement', layer: true, layerLabel: 'Map layer', params: [
       { key: 'radius', label: 'Radius', min: -200, max: 200, step: 1, def: 40, unit: 'px' },
       { key: 'angle', label: 'Twist', min: -180, max: 180, step: 1, def: 30, unit: '°' },
+      { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },   // queue 904: locked to the frame centre
+      { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
     ] },
     // ---- batch 27: Remove Object — content-aware removal of watermarks/subtitles/logos in a
     // rectangular region (x/y = top-left as % of comp). Patch = ffmpeg-delogo border interpolation;
@@ -5895,7 +5899,7 @@ window.FM = window.FM || {};
     blockdissolve: function(d, W, H, p, t, ps){ var bd_amt = fparam(p, 'amount', 0.5, t); bd_amt = bd_amt<0?0:(bd_amt>1?1:bd_amt); var bd_size = fparam(p, 'size', 16, t); bd_size = bd_size<4?4:(bd_size>60?60:bd_size); bd_size = Math.floor(bd_size*(ps||1)); if(bd_size<1) bd_size = 1; if(bd_amt<=0) return; var bd_x, bd_y, bd_i, bd_bx, bd_by, bd_h, bd_r; for(bd_y=0; bd_y<H; bd_y++){ bd_by = Math.floor(bd_y/bd_size); for(bd_x=0; bd_x<W; bd_x++){ bd_i = (bd_y*W + bd_x)*4; if(d[bd_i+3]===0) continue; bd_bx = Math.floor(bd_x/bd_size); bd_h = (bd_bx*73856093) ^ (bd_by*19349663); bd_h = bd_h ^ (bd_h>>>13); bd_h = (bd_h*1274126177) >>> 0; bd_r = (bd_h >>> 0) / 4294967295; if(bd_r < bd_amt){ d[bd_i+3] = 0; } } } },
     // ---- batch 14 (matte / mask / key) ----
     wipe: function(d, W, H, p, t){ var wp_prog = FM.evalProp(p.progress, t); if(wp_prog===null||wp_prog===undefined) wp_prog=0.5; if(wp_prog<0) wp_prog=0; if(wp_prog>1) wp_prog=1; var wp_ang = FM.evalProp(p.angle, t); if(wp_ang===null||wp_ang===undefined) wp_ang=0; var wp_rad = wp_ang*Math.PI/180; var wp_dx = Math.cos(wp_rad); var wp_dy = Math.sin(wp_rad); var wp_cx = W*0.5; var wp_cy = H*0.5; var wp_den = Math.abs(W*wp_dx)+Math.abs(H*wp_dy); if(wp_den<1e-6) wp_den=1e-6; var wp_inv = 1/wp_den; for(var wp_y=0; wp_y<H; wp_y++){ var wp_row = wp_y*W; var wp_py = (wp_y-wp_cy)*wp_dy; for(var wp_x=0; wp_x<W; wp_x++){ var wp_proj = ((wp_x-wp_cx)*wp_dx + wp_py)*wp_inv + 0.5; if(wp_proj > wp_prog){ d[(wp_row+wp_x)*4+3] = 0; } } } },
-    radialwipe: function(d, W, H, p, t){ var rw_prog = FM.evalProp(p.progress, t); if(rw_prog===null||rw_prog===undefined) rw_prog=0.5; if(rw_prog<0) rw_prog=0; if(rw_prog>1) rw_prog=1; var rw_start = FM.evalProp(p.start, t); if(rw_start===null||rw_start===undefined) rw_start=0; var rw_TAU = Math.PI*2; var rw_startRad = (rw_start*Math.PI/180) % rw_TAU; if(rw_startRad<0) rw_startRad += rw_TAU; var rw_cx = W/2, rw_cy = H/2; for(var rw_y=0; rw_y<H; rw_y++){ var rw_dy = rw_y - rw_cy; var rw_row = rw_y*W; for(var rw_x=0; rw_x<W; rw_x++){ var rw_dx = rw_x - rw_cx; var rw_ang = Math.atan2(rw_dy, rw_dx); var rw_frac = (rw_ang - rw_startRad) % rw_TAU; if(rw_frac<0) rw_frac += rw_TAU; rw_frac = rw_frac / rw_TAU; if(rw_frac > rw_prog){ d[(rw_row + rw_x)*4 + 3] = 0; } } } },
+    radialwipe: function(d, W, H, p, t){ var rw_prog = FM.evalProp(p.progress, t); if(rw_prog===null||rw_prog===undefined) rw_prog=0.5; if(rw_prog<0) rw_prog=0; if(rw_prog>1) rw_prog=1; var rw_start = FM.evalProp(p.start, t); if(rw_start===null||rw_start===undefined) rw_start=0; var rw_TAU = Math.PI*2; var rw_startRad = (rw_start*Math.PI/180) % rw_TAU; if(rw_startRad<0) rw_startRad += rw_TAU; var rw_cx = wCx(p, t, W, W/2), rw_cy = wCy(p, t, H, H/2);   /* queue 904: wCx returns W/2 itself at 50, so a saved wipe is byte-identical */ for(var rw_y=0; rw_y<H; rw_y++){ var rw_dy = rw_y - rw_cy; var rw_row = rw_y*W; for(var rw_x=0; rw_x<W; rw_x++){ var rw_dx = rw_x - rw_cx; var rw_ang = Math.atan2(rw_dy, rw_dx); var rw_frac = (rw_ang - rw_startRad) % rw_TAU; if(rw_frac<0) rw_frac += rw_TAU; rw_frac = rw_frac / rw_TAU; if(rw_frac > rw_prog){ d[(rw_row + rw_x)*4 + 3] = 0; } } } },
     solidmatte: function(d,W,H,p,t){ var sm_amt = fparam(p, 'amount', 1, t); if(sm_amt<0) sm_amt=0; if(sm_amt>1) sm_amt=1; var sm_col=hexToRGB(p.color); var sm_cr=sm_col[0], sm_cg=sm_col[1], sm_cb=sm_col[2]; var sm_n=W*H, sm_i=0; for(var sm_k=0; sm_k<sm_n; sm_k++){ if(d[sm_i+3]>0){ d[sm_i]=d[sm_i]+(sm_cr-d[sm_i])*sm_amt; d[sm_i+1]=d[sm_i+1]+(sm_cg-d[sm_i+1])*sm_amt; d[sm_i+2]=d[sm_i+2]+(sm_cb-d[sm_i+2])*sm_amt; } sm_i+=4; } },
     mattechoker: function(d,W,H,p,t){ var mcBB=arguments[6];
       /* Erode/dilate ran on whole pixels with a hard square kernel and no post-softening, so a choked
@@ -6064,7 +6068,17 @@ window.FM = window.FM || {};
    amount and flicker that left a lift of about 4% of full scale. The gain restores the intended
    look; nothing visible is lost by changing it, because at a p95 of 2 there was nothing to see. */
 var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var eeSr=255-(255-d[eei])*(255-eeR*eeAdd)/255; var eeSg=255-(255-d[eei+1])*(255-eeG*eeAdd)/255; var eeSb=255-(255-d[eei+2])*(255-eeB*eeAdd)/255; d[eei]=eeSr; d[eei+1]=eeSg; d[eei+2]=eeSb; } } },
-    glowscan: function(d,W,H,p,t){ var gsSpeed = fparam(p, 'speed', 1.5, t); if(gsSpeed<0)gsSpeed=0; if(gsSpeed>8)gsSpeed=8; var gsWidth = fparam(p, 'width', 60, t); if(gsWidth<10)gsWidth=10; if(gsWidth>200)gsWidth=200; var gsCol=hexToRGB(p.color); var gsCr=gsCol[0],gsCg=gsCol[1],gsCb=gsCol[2]; var gsAmt=fparam(p,'amount',1,t); if(gsAmt<0)gsAmt=0; if(gsAmt>1)gsAmt=1; gsCr*=gsAmt; gsCg*=gsAmt; gsCb*=gsAmt; var gsSigma=gsWidth*0.5; if(gsSigma<0.5)gsSigma=0.5; var gsDen=2*gsSigma*gsSigma; var gsPhase=(t*gsSpeed)%1; if(gsPhase<0)gsPhase+=1; var gsScanY=gsPhase*H; var gsW4=W*4; for(var gsY=0;gsY<H;gsY++){ var gsDist=Math.abs(gsY-gsScanY); var gsAlt=H-gsDist; if(gsAlt<gsDist)gsDist=gsAlt; var gsBr=Math.exp(-(gsDist*gsDist)/gsDen); if(gsBr<0.002)continue; var gsAddR=gsCr*gsBr,gsAddG=gsCg*gsBr,gsAddB=gsCb*gsBr; var gsRow=gsY*gsW4; for(var gsX=0;gsX<W;gsX++){ var gsI=gsRow+gsX*4; if(d[gsI+3]<=0)continue; var gsR=d[gsI],gsG=d[gsI+1],gsB=d[gsI+2]; d[gsI]=255-(255-gsR)*(255-gsAddR)/255; d[gsI+1]=255-(255-gsG)*(255-gsAddG)/255; d[gsI+2]=255-(255-gsB)*(255-gsAddB)/255; } } },
+    glowscan: function(d,W,H,p,t){ var gsSpeed = fparam(p, 'speed', 1.5, t); if(gsSpeed<0)gsSpeed=0; if(gsSpeed>8)gsSpeed=8; var gsWidth = fparam(p, 'width', 60, t); if(gsWidth<10)gsWidth=10; if(gsWidth>200)gsWidth=200; var gsCol=hexToRGB(p.color); var gsCr=gsCol[0],gsCg=gsCol[1],gsCb=gsCol[2]; var gsAmt=fparam(p,'amount',1,t); if(gsAmt<0)gsAmt=0; if(gsAmt>1)gsAmt=1; gsCr*=gsAmt; gsCg*=gsAmt; gsCb*=gsAmt; var gsSigma=gsWidth*0.5; if(gsSigma<0.5)gsSigma=0.5; var gsDen=2*gsSigma*gsSigma; var gsPhase=(t*gsSpeed)%1; if(gsPhase<0)gsPhase+=1; var gsScanY=gsPhase*H; var gsW4=W*4;
+      /* DIRECTION (queue 904): every Glow Scan swept top to bottom, so a scan across a wide title, or upward, was out of reach.
+         Down is the loop below, untouched — a saved scan is byte-identical. Up runs the same line backwards; Right and Left are
+         the same maths along COLUMNS, with the same wrap-around distance. */
+      var gsDir=p.direction==null?0:(Math.round(FM.evalProp(p.direction,t))|0);
+      if(gsDir===1) gsScanY=(1-gsPhase)*H;
+      if(gsDir===2||gsDir===3){ var gsScanX=(gsDir===2?gsPhase:1-gsPhase)*W, gsBx=new Float32Array(W);
+        for(var gsXa=0;gsXa<W;gsXa++){ var gsDx=Math.abs(gsXa-gsScanX), gsAx=W-gsDx; if(gsAx<gsDx)gsDx=gsAx; gsBx[gsXa]=Math.exp(-(gsDx*gsDx)/gsDen); }
+        for(var gsYb=0;gsYb<H;gsYb++){ var gsRowb=gsYb*gsW4; for(var gsXb=0;gsXb<W;gsXb++){ var gsBb=gsBx[gsXb]; if(gsBb<0.002)continue; var gsIb=gsRowb+gsXb*4; if(d[gsIb+3]<=0)continue;
+          var gsAr=gsCr*gsBb, gsAg=gsCg*gsBb, gsAb=gsCb*gsBb; d[gsIb]=255-(255-d[gsIb])*(255-gsAr)/255; d[gsIb+1]=255-(255-d[gsIb+1])*(255-gsAg)/255; d[gsIb+2]=255-(255-d[gsIb+2])*(255-gsAb)/255; } }
+        return; } for(var gsY=0;gsY<H;gsY++){ var gsDist=Math.abs(gsY-gsScanY); var gsAlt=H-gsDist; if(gsAlt<gsDist)gsDist=gsAlt; var gsBr=Math.exp(-(gsDist*gsDist)/gsDen); if(gsBr<0.002)continue; var gsAddR=gsCr*gsBr,gsAddG=gsCg*gsBr,gsAddB=gsCb*gsBr; var gsRow=gsY*gsW4; for(var gsX=0;gsX<W;gsX++){ var gsI=gsRow+gsX*4; if(d[gsI+3]<=0)continue; var gsR=d[gsI],gsG=d[gsI+1],gsB=d[gsI+2]; d[gsI]=255-(255-gsR)*(255-gsAddR)/255; d[gsI+1]=255-(255-gsG)*(255-gsAddG)/255; d[gsI+2]=255-(255-gsB)*(255-gsAddB)/255; } } },
     spinstreaks: function(d,W,H,p,t){ var ssBB=arguments[6];
       /* SKIP WHAT THE STREAKS CANNOT REACH (#692) — 99.6ms at its defaults on a 180x150 subject in a
          1080x1920 plate, the most expensive kernel in the catalog once the others were bounded.
@@ -8322,7 +8336,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     } else {
       const rAmt = FM.evalProp(pr.radius, t); const radius = (rAmt == null ? 40 : rAmt) * ps;   // PROJECT px → plate px
       const aAmt = FM.evalProp(pr.angle, t); const angAmt = ((aAmt == null ? 30 : aAmt)) * Math.PI / 180;   // an angle: scale-free
-      const cx = W / 2, cy = H / 2;
+      const cx = wCx(pr, t, W, W / 2), cy = wCy(pr, t, H, H / 2);   // queue 904: was locked to the frame centre; W/2 itself at 50%
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
           const mi = (y * W + x) * 4;
@@ -8618,7 +8632,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        in CANVAS_FX now. */
     /* PREPPED — see the note on kaleidoscope; atan2 stays here too, this one folds as well. Four
      * evalProps plus the segment division were per-pixel. Pure hoist, must be exact. */
-    radialrepeat: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.radialrepeat.prep(W,H,cx,cy,maxR,p,t,ps);
+    radialrepeat: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.radialrepeat.prep(W,H,cx,cy,maxR,p,t,ps); cx=C.cx; cy=C.cy;   // queue 904: the hub prep resolved
       var rr_dx=x-cx, rr_dy=y-cy, rr_r=Math.hypot(rr_dx,rr_dy);
       var rr_seg=C.seg, rr_a=Math.atan2(rr_dy,rr_dx), rr_rr=C.rr;
       var rr_base=rr_rr===0?rr_a:rr_a-rr_rr;
@@ -8854,8 +8868,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     var rr_rot = p.rotate == null ? 0 : FM.evalProp(p.rotate, t);
     var rr_mir = (p.mirror == null ? 0 : (Math.round(FM.evalProp(p.mirror, t)) | 0)) === 1;
     var rr_tw = p.twist == null ? 0 : FM.evalProp(p.twist, t);
+    /* THE HUB, resolved ONCE here (queue 904) so the CPU kernel and the GPU shader (which turns every number this returns
+       into a u_ uniform, js/gl-warp.js) read the same centre. wCx/wCy return cx/cy themselves at 50%. */
     return { seg: Math.PI * 2 / rr_count, rr: rr_rot === 0 ? 0 : rr_rot * Math.PI / 180,
-             mir: rr_mir, tw: rr_tw, twRad: rr_tw * Math.PI / 180 };
+             mir: rr_mir, tw: rr_tw, twRad: rr_tw * Math.PI / 180, cx: wCx(p, t, W, cx), cy: wCy(p, t, H, cy) };
   };
 
   WARP_FX.gridrepeat.prep = function (W, H, cx, cy, maxR, p, t, ps) {
@@ -9165,7 +9181,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      drawWarpEffect's RAW cx/cy/maxR arguments rather than its own prep, which is why the shader wrapper
      exposes fmCx/fmCy/fmMaxR derived from res. */
   WARP_FX.radialrepeat.glsl = [
-    'vec2 dxy = xy - vec2(fmCx, fmCy);',
+    'vec2 dxy = xy - vec2(u_cx, u_cy);',   // queue 904: the hub prep resolved, not the frame centre
     'float r = length(dxy);',
     'float base = atan(dxy.y, dxy.x) - u_rr;',
     'float k = floor(base / u_seg);',
@@ -9173,7 +9189,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     'if (u_mir > 0.5 && mod(k, 2.0) >= 0.5) a2 = u_seg - a2;',
     'if (u_tw != 0.0 && fmMaxR > 0.0) a2 += u_twRad * (r / fmMaxR);',
     'a2 += u_rr;',
-    'return vec2(fmCx + cos(a2) * r, fmCy + sin(a2) * r);'
+    'return vec2(u_cx + cos(a2) * r, u_cy + sin(a2) * r);'
   ].join('\n');
 
   WARP_FX.fractalwarp.prep = function (W, H, cx, cy, maxR, p, t, ps) {
@@ -11253,7 +11269,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     },
     swing: function (A, B, W, H, bb, p, t, tl) {
       const amp = fparam(p, 'angle', 15, t), spd = fparam(p, 'speed', 1, t);
-      const px = bb.x + bb.w / 2, py = bb.y;   // pendulum pivot: top-centre of the layer
+      /* THE PIVOT (queue 904): it was welded to the top-centre of the layer, so a sign could not hang from a corner, a sword
+         could not swing from its handle, a card could not rock on its bottom edge. Spin's Pivot X/Y, same units; the
+         defaults are the old top-centre and take the old expressions exactly, so a saved swing is byte-identical. */
+      const fx = p.pivotx == null ? 50 : FM.evalProp(p.pivotx, t), fy = p.pivoty == null ? 0 : FM.evalProp(p.pivoty, t);
+      const px = fx === 50 ? bb.x + bb.w / 2 : bb.x + bb.w * (fx / 100);
+      const py = fy === 0 ? bb.y : bb.y + bb.h * (fy / 100);
       B.save();
       B.translate(px, py);
       B.rotate(amp * Math.sin(2 * Math.PI * spd * tl) * Math.PI / 180);
