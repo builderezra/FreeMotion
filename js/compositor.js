@@ -129,7 +129,7 @@ window.FM = window.FM || {};
     { type: 'noise', label: 'Noise', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 35, unit: '%' },
       { key: 'speed', label: 'Speed', min: 0, max: 60, step: 1, def: 24, unit: 'Hz' },
-      { key: 'size', label: 'Grain size', min: 1, max: 48, step: 0.5, def: 1 },
+      { key: 'size', label: 'Grain size', min: 1, max: 48, step: 0.5, def: 1, unit: 'px' },   // unit 'px' (queue 904): the grain is PROJECT pixels, so pxToPlate now scales it to the preview plate — it was 3.5x coarser on the phone than in the export
       /* Queue 319: *"give the noise effect a toggle to circle noise or square noise"*. Square is the
          default because it is what the effect has always done — a grain is a whole cell of the grid —
          and changing what an existing project renders as is not a rename. Round punches the cell down
@@ -602,7 +602,7 @@ window.FM = window.FM || {};
        to and simply stops squishing. */
     { type: 'linearrepeat', label: 'Trail', params: [
       { key: 'count', label: 'Copies', min: 1, max: 12, step: 1, def: 4 },
-      { key: 'spacing', label: 'Spacing', min: 10, max: 300, step: 5, def: 100, unit: '%' },   // % of the content's own width along the axis — 100 = edge to edge
+      { key: 'spacing', label: 'Spacing', min: 10, max: 300, step: 5, def: 35, legacy: 100, unit: '%' },   // % of the content's own width along the axis — 100 = edge to edge. A NEW Trail starts at 35 (queue 904): at 100 a full-frame clip's copies all land off the frame and the effect looks dead. A saved Trail with no key still draws 100.
       { key: 'angle', label: 'Direction', min: 0, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'fade', label: 'Fade out', min: 0, max: 100, step: 1, def: 0, unit: '%' },        // 0 = every copy solid, as before
     ] },

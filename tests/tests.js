@@ -55950,6 +55950,36 @@
     if (peak(st(12, 0.28)) < 250) throw new Error('on the phone plate a softened stroke peaks at alpha ' + peak(st(12, 0.28)) + ' — it vanishes there while the export keeps it');
   });
 
+  /* ═══ 904 (batch): Noise grain is project pixels (the preview shrinks it with the plate); a new Trail is visible on a full-frame clip. */
+  test('904: Noise grain size scales to the preview plate, and a new Trail shows copies on a full-frame clip', { item: '904' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.noise || !FM._pxToPlate) throw new Error('the noise kernel or the pxToPlate seam is not reachable');
+    const fx = FM.fxRegistry.makeInstance('noise');
+    const ctl = FM._pxToPlate(FM.fxRegistry.makeInstance('boxblur'), { radius: 10 }, 0, 0.28, function (a, b, c, d, e) {});
+    if (!(Math.abs(ctl.radius - 2.8) < 1e-9)) throw new Error('control: pxToPlate does not scale Box Blur radius either (' + ctl.radius + '), so it cannot judge Noise');
+    const out = FM._pxToPlate(fx, { amount: 35, speed: 24, size: 8 }, 0, 0.28, K.noise);
+    if (!(Math.abs(out.size - 2.24) < 1e-9)) throw new Error('Noise Grain size reaches the phone plate as ' + out.size + ' — it is not scaled, so the preview grain is 3.5x coarser than the export (queue 904)');
+    if (FM._pxToPlate(fx, { amount: 35, size: 8 }, 0, 1, K.noise).size !== 8) throw new Error('the export plate (ps 1) changed the grain size');
+
+    // Trail on a full-frame layer
+    const run = (spacing) => { const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, fill: '#35dcaf' });
+      L.gradient = null; L.fillGradient = { enabled: true, type: 'linear', angle: 0, c0: '#000000', c1: '#ffffff' };
+      const e = FM.fxRegistry.makeInstance('linearrepeat'); if (spacing === undefined) delete e.params.spacing; else if (spacing !== 'new') e.params.spacing = spacing;
+      L.effects = [e]; const c = offscreen(320, 240), ctx = c.getContext('2d');
+      FM.renderScene(ctx, { project: { width: 320, height: 240, fps: 30, duration: 2, background: '#000000' }, layers: [L] }, 0.5);
+      return ctx.getImageData(0, 0, 320, 240).data; };
+    const plain = (() => { const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, fill: '#35dcaf' });
+      L.fillGradient = { enabled: true, type: 'linear', angle: 0, c0: '#000000', c1: '#ffffff' };
+      const c = offscreen(320, 240), ctx = c.getContext('2d');
+      FM.renderScene(ctx, { project: { width: 320, height: 240, fps: 30, duration: 2, background: '#000000' }, layers: [L] }, 0.5);
+      return ctx.getImageData(0, 0, 320, 240).data; })();
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    if (FM.fxRegistry.makeInstance('linearrepeat').params.spacing !== 35) throw new Error('a new Trail does not start at 35% spacing');
+    if (!same(run(undefined), run(100))) throw new Error('a saved Trail with no spacing key does not draw what 100% draws');
+    if (!same(run(100), plain)) throw new Error('control: at 100% a full-frame Trail already shows copies, so this test cannot see the defect');
+    if (same(run('new'), plain)) throw new Error('a NEW Trail on a full-frame clip draws nothing — every copy lands off the frame (queue 904)');
+  });
+
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
      Ezra asked the question this answers: *"How confident are you that every effect is actually good?"*
      Three separate times now a kernel has drawn a different picture on the reduced preview plate than
