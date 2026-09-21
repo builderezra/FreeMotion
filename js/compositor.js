@@ -469,7 +469,7 @@ window.FM = window.FM || {};
       // still SAYS 3 in the panel instead of advertising the new default it is not drawing.
       { key: 'radius', label: 'Radius', min: 2, max: 60, step: 1, def: 8, legacy: 3, unit: 'px' },
     ], color: true, defColor: '#ffffff', colorLabel: 'Colour' },
-    { type: 'contourlines', label: 'Contour Lines', params: [
+    { type: 'contourlines', label: 'Contour Lines', color: true, defColor: '#000000', colorLabel: 'Lines', color2: true, defColor2: '#ffffff', color2Label: 'Paper', params: [   // queue 904: ink and paper were hardcoded black on white
       { key: 'levels', label: 'Levels', min: 2, max: 24, step: 1, def: 8 },
       { key: 'smooth', label: 'Smooth first', min: 0, max: 8, step: 1, def: 0, unit: 'px' },
       { key: 'thickness', label: 'Line weight', min: 1, max: 6, step: 1, def: 1, unit: 'px' },
@@ -5608,6 +5608,9 @@ window.FM = window.FM || {};
       var clSm=p.smooth==null?0:Math.round(FM.evalProp(p.smooth,t)); if(clSm<0)clSm=0; if(clSm>8)clSm=8;
       var clTh=p.thickness==null?1:Math.round(FM.evalProp(p.thickness,t)); if(clTh<1)clTh=1; if(clTh>6)clTh=6;
       var clPaper=(p.paper==null?0:(Math.round(FM.evalProp(p.paper,t))|0))===1;
+      /* LINE AND PAPER COLOURS (queue 904) — they were hardcoded black on white, so a blueprint or a gold contour was out of reach.
+         An absent colour is the old black / white (hexToRGB(undefined) is black, which is right for the ink but NOT the paper). */
+      var clIk=p.color?hexToRGB(FM.evalProp(p.color,t)):null, clPp=p.color2?hexToRGB(FM.evalProp(p.color2,t)):null; if(!clIk)clIk=[0,0,0]; if(!clPp)clPp=[255,255,255];
       var clHit=new Uint8Array(W*H);
       var clLumA=new Float32Array(W*H);
       /* BOUND BY THE FRAME, NOT THE BUFFER (queue 474). `clS` is the SHARED scratch, which only ever
@@ -5636,8 +5639,8 @@ window.FM = window.FM || {};
       /* PAPER: "Lines only" clears to white first, which is the difference between a topographic MAP
          and a photo with lines scribbled on it — the thing the row actually asks for. */
       for(var cq=0;cq<W*H;cq++){ var co=cq*4; if(clS[co+3]===0)continue;
-        if(clPaper){ if(clHit[cq]){ d[co]=0; d[co+1]=0; d[co+2]=0; } else { d[co]=255; d[co+1]=255; d[co+2]=255; } }
-        else if(clHit[cq]){ d[co]=0; d[co+1]=0; d[co+2]=0; } }
+        if(clPaper){ if(clHit[cq]){ d[co]=clIk[0]; d[co+1]=clIk[1]; d[co+2]=clIk[2]; } else { d[co]=clPp[0]; d[co+1]=clPp[1]; d[co+2]=clPp[2]; } }
+        else if(clHit[cq]){ d[co]=clIk[0]; d[co+1]=clIk[1]; d[co+2]=clIk[2]; } }
     },
     grunge: function(gr_d,gr_W,gr_H,gr_p,gr_t){ var gr_amt=FM.evalProp(gr_p.amount,gr_t); if(gr_amt==null)gr_amt=0.5; gr_amt=Math.max(0,Math.min(1,gr_amt)); var gr_thr=gr_amt*0.55, gr_mot=gr_amt*0.15; var gr_w4=gr_W*4;
       // The dirt was a single-pixel speckle that always dried to black — which at 1080p reads as

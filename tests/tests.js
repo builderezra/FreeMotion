@@ -55862,6 +55862,38 @@
     if (edge(umT) >= src[(30 * W + 28) * 4]) throw new Error('Unsharp Mask with a threshold no longer sharpens the real edge');
   });
 
+  /* ═══ 904 (batch): Contour Lines gets LINE and PAPER colours; Tile Grid's "0 = same as columns" reaches the panel. */
+  test('904: Contour Lines draws in any colour on any paper, and Tile Grid explains Rows 0', { item: '904' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.contourlines) throw new Error('FM._FX_TABLES.PIXEL_FX is not reachable');
+    const W = 64, H = 64;
+    const ramp = () => { const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, v = Math.round(255 * x / (W - 1)); d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; } return d; };
+    const run = (params) => { const d = ramp(); K.contourlines(d, W, H, params, 0, 1); return d; };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    for (const paper of [0, 1]) {
+      const old = run({ levels: 8, paper: paper });
+      if (!same(old, run({ levels: 8, paper: paper, color: '#000000', color2: '#ffffff' }))) throw new Error('Contour Lines with black on white is not byte-identical to a saved one (paper ' + paper + ')');
+    }
+    const bp = run({ levels: 8, paper: 1, color: '#ffffff', color2: '#1030a0' });
+    let ink = 0, paperPx = 0, other = 0;
+    for (let i = 0; i < bp.length; i += 4) {
+      if (bp[i] === 255 && bp[i + 1] === 255 && bp[i + 2] === 255) ink++;
+      else if (bp[i] === 0x10 && bp[i + 1] === 0x30 && bp[i + 2] === 0xa0) paperPx++;
+      else other++;
+    }
+    if (!(ink > 0)) throw new Error('control: a blueprint (white on blue) drew no white lines at all');
+    if (!(paperPx > ink)) throw new Error('Contour Lines ignores the Paper colour — only ' + paperPx + ' blue pixels against ' + ink + ' line pixels');
+    if (other) throw new Error('Contour Lines in Lines-only mode left ' + other + ' pixels that are neither line nor paper colour');
+    const over = run({ levels: 8, paper: 0, color: '#ff0000' });
+    let red = 0; for (let i = 0; i < over.length; i += 4) if (over[i] === 255 && over[i + 1] === 0 && over[i + 2] === 0) red++;
+    if (!(red > 0)) throw new Error('Contour Lines over the image ignores the Lines colour');
+    // Tile Grid: the note must survive the registry's whitelist copy, which is where it was being dropped.
+    const rows = (FM.fxRegistry.paramsOf('gridrepeat') || []).find(q => q.key === 'rows');
+    if (!rows) throw new Error('Tile Grid has no Rows param');
+    if (!/same as columns/.test(rows.note || '')) throw new Error("Tile Grid's Rows reaches the panel without its '0 = same as columns' note, so a new grid reads 'Rows 0'");
+  });
+
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
      Ezra asked the question this answers: *"How confident are you that every effect is actually good?"*
      Three separate times now a kernel has drawn a different picture on the reduced preview plate than

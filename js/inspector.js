@@ -1628,6 +1628,8 @@ window.FM = window.FM || {};
           markOverridden(row, fx, p, reg);
           markUnsupported(row, p);
           body.appendChild(row);
+          // A slider's NOTE (queue 904): the only way to say what a special value means — Tile Grid's Rows 0 is 'same as columns'.
+          if (p.note) body.appendChild(el('div', 'fx-tog-note fx-range-note', p.note));
         }
         else if (p.type === 'toggle') body.appendChild(fxToggle(fx, p));
         else if (p.type === 'segment') { const srow = fxSegment(fx, p); markOverridden(srow, fx, p, reg); body.appendChild(srow); }
