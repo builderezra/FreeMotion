@@ -197,8 +197,17 @@ window.FM = window.FM || {};
     setBoost(layer, vol) {
       const m = layer && FM.media.get(layer.id);
       if (!m || !m._boost) return false;
+      /* ⚠️ THE FALLBACK MUST INCLUDE THE FADE (queue 886). sync() seeds the stage by calling this with
+       * no vol, and reading the RAW layer volume meant a clip with a fade-in came up at FULL boost
+       * while its element was still fading from silence — audibly too loud for the first frames, before
+       * the playback tick could correct it. The tick's own figure is layerVolume x fadeMul x declick;
+       * the first two are what matter at seed time (declick is a transient the tick owns), and using
+       * them here means the graph starts where the fade says it should. */
+      const _t = FM.time || 0;
       const v = (typeof vol === 'number') ? vol
-        : (FM.layerVolume ? FM.layerVolume(layer, FM.time || 0) : 1);
+        : (FM.layerVolume
+            ? FM.layerVolume(layer, _t) * (FM.fadeMul ? FM.fadeMul(layer, _t - (layer.start || 0), layer.duration) : 1)
+            : 1);
       const g = Math.max(1, Math.min(10, isFinite(v) ? v : 1));
       try {
         const ctx = FM.audioCtx();

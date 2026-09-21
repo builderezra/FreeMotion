@@ -1958,7 +1958,22 @@ window.FM = window.FM || {};
              * result is the volume asked for without reimplementing any of the above. A layer at or
              * below 100% never reaches setBoost and is never routed into Web Audio at all. */
             m.el.volume = Math.max(0, Math.min(1, vol));
-            if (vol > 1 && FM.audioFxLive && FM.audioFxLive.setBoost) FM.audioFxLive.setBoost(layer, vol);
+            /* ⚠️ THE BOOST MUST BE WRITTEN ON EVERY TICK, NOT ONLY WHEN THE LEVEL IS ABOVE UNITY
+             * (queue 886). The split above is right: el.volume carries everything up to 1 and the
+             * boost node carries the rest, and the two multiply. But guarding the WRITE on `vol > 1`
+             * meant that as soon as a fade took the combined level to or below unity, the boost node
+             * simply KEPT whatever it last held — and setBoost floors at 1 by design, because
+             * attenuation is el.volume's job. So a 300% clip with a 2s fade-in started at full boost
+             * (sync() seeds it from the RAW layer volume, with no fade applied), and at half a second
+             * in the audible gain was 0.75 x 3.0 = 2.25 where it should have been 0.75 — about 9.5dB
+             * too loud — until the level crossed 1.0, at which point setBoost finally ran and dropped
+             * it from 3.0 to ~1.0 in one step. Loud, then a lurch, then a climb.
+             * The exporter never had this: it schedules one gain of layerVolume x fadeMul across the
+             * whole range (js/exporter.js), so the file and the preview disagreed — and the FILE was
+             * right, which is the worse way round for judging a mix.
+             * Gated on m._boost rather than on the level, so only layers that actually own a boost
+             * stage pay for it — and those were already paying it on every tick above unity. */
+            if (m._boost && FM.audioFxLive && FM.audioFxLive.setBoost) FM.audioFxLive.setBoost(layer, vol);
           }
           /* DID IT ACTUALLY MAKE A SOUND? (queues 95, 96, 663 — all three end on "this needs a number
              from HIS phone".) Everything above measures how well the sound is SYNCHRONISED; nothing

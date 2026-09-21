@@ -520,6 +520,24 @@ echo "→ proving the release (its changed tests must fail without the fix)…"
 tools/prove.sh || { echo "   Not committing, not pushing."; exit 1; }
 
 SUITE_TIMEOUT=1800
+# ⚠️ A TIMEOUT'S REAL CAUSE IS USUALLY THE MACHINE, AND NOTHING HERE MEASURED IT (21 Sep). Three ship
+# cycles went on "the suite ran out of time" — first at prove's 600s, then at the suite's 1800s — before
+# anyone thought to run `uptime`. The answer was a 6-core Mac in a Spotlight/Photos indexing storm
+# (duetexpertd 58%, photolibraryd 41%, corespotlightd 29%) with kernel_task at 52%, which on a Mac means it
+# is stealing CPU to cool the machine down. The suite is CPU-bound, so it ran at well under half speed and
+# could not finish. NOTHING WAS WRONG WITH THE CODE OR THE TESTS.
+# The giveaway that it is load rather than one hung test is that the STALL POINT MOVES between runs — it
+# stopped at queue 294 on one pass and at 433 on the next. So print the evidence right here, where the
+# timeout is announced, instead of leaving the next session to rediscover it by hand.
+_whyslow() {
+  echo "   ── the usual cause is the machine, not a broken test. Evidence:"
+  echo "      load average:$(uptime | sed 's/.*load averages*://') across $(sysctl -n hw.ncpu) cores"
+  top -l 2 -o cpu -n 6 -s 2 2>/dev/null | awk '/^PID/{c++; next} c==2 && NF>3 {print "      " substr($0,1,58)}' | head -6
+  echo "      macOS daemons (duetexpertd, photolibraryd, corespotlightd, mediaanalysisd, suggestd) or a high"
+  echo "      kernel_task mean the Mac is indexing or thermally throttling. Wait for it to settle, then ship"
+  echo "      again — and confirm it is load by checking whether the last test above MOVES between runs."
+}
+
 echo "→ running the suite (4-5 minutes)…"
 OUT="$(python3 tests/_cdp.py --port 8777 --timeout $SUITE_TIMEOUT 2>&1)"
 SUM="$(printf '%s' "$OUT" | grep -o '"summary": "[^"]*"' | head -1)"
@@ -528,6 +546,7 @@ if printf '%s' "$OUT" | grep -q 'did not finish within'; then
   printf '%s' "$OUT" | grep -o '"lastTest": "[^"]*"' | head -1
   echo "   Nothing here says a test is broken. Either the machine is loaded or the suite has outgrown"
   echo "   ${SUITE_TIMEOUT}s — check the last test above before assuming a regression."
+  _whyslow
   exit 1
 fi
 if ! printf '%s' "$OUT" | grep -q '"ok": true'; then
@@ -632,6 +651,7 @@ if printf '%s' "$PHONE_RELEVANT" | grep -qE '^(styles\.css|index\.html|js/)'; th
   if printf '%s' "$POUT" | grep -q 'did not finish within'; then
     echo "⏱  THE PHONE PASS RAN OUT OF TIME after ${SUITE_TIMEOUT}s — it did NOT fail. Nothing committed or pushed."
     printf '%s' "$POUT" | grep -o '"lastTest": "[^"]*"' | head -1
+    _whyslow
     exit 1
   fi
   if ! printf '%s' "$POUT" | grep -q '"ok": true' && ! printf '%s' "$POUT" | grep -q 'FAIL'; then

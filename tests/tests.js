@@ -65713,4 +65713,88 @@
     if (IC({ _afxChain: { fake: true }, _boost: null, _afxSig: 'eq1|', _afxInsts: [{ type: 'eq' }] }, withChain)) throw new Error('the chain reports current after its instances were replaced — undo would stay inaudible, which is the bug that identity check was written for');
   });
 
+
+  /* ── queue 886: a fade-in on a boosted clip played at FULL boost, then lurched ─────────────────
+   * "Split at unity" (queue 195) is right: el.volume carries everything up to 1, the Web Audio boost
+   * node carries the rest, and the two multiply. But the WRITE was guarded on `vol > 1`, and setBoost
+   * floors at 1 by design (attenuation is el.volume's job). So the moment a fade took the combined
+   * level to or below unity the boost node simply KEPT its last value — seeded by sync() from the RAW
+   * layer volume, fade ignored. A 300% clip with a 2s fade-in therefore opened at 3x and stayed there:
+   * half a second in the audible gain was 0.75 x 3.0 = 2.25 where it should have been 0.75, about
+   * 9.5dB too loud, until the level crossed 1.0 and setBoost finally ran and dropped it in one step.
+   * Loud, then a lurch, then a climb.
+   * The exporter schedules one gain of layerVolume x fadeMul across the whole range, so the FILE was
+   * right and the PREVIEW was wrong — the worse way round for judging a mix.
+   * ⚠️ TWO CONTROLS, because both halves of this fix can be faked by a one-liner that returns 1 more
+   * often, and that would silently kill the boost everyone else depends on. Each claim is paired with
+   * the same measurement OUTSIDE the fade, where the answer must still be full boost. */
+  test('886: a fade-in on a boosted clip is heard at the faded level, not at full boost', { item: '886', budgetMs: 20000 }, function () {
+    if (!FM._syncMediaToClock) throw new Error('FM._syncMediaToClock is not exposed — the playback tick cannot be driven, so this test cannot reach the volume reconcile');
+    if (!FM.audioFxLive || !FM.audioFxLive.setBoost) throw new Error('FM.audioFxLive.setBoost is not reachable');
+
+    // Records every gain written, through BOTH paths setBoost can take (the ramp, and the bare
+    // assignment it falls back to when there is no usable AudioContext).
+    function boostNode() {
+      var w = [];
+      var g = { _v: 1, setTargetAtTime: function (v) { w.push(v); g._v = v; } };
+      Object.defineProperty(g, 'value', { get: function () { return g._v; }, set: function (v) { w.push(v); g._v = v; } });
+      return { node: { gain: { gain: g } }, writes: w, last: function () { return w.length ? w[w.length - 1] : null; } };
+    }
+
+    var saved = { layers: FM.scene.layers.slice(), dur: FM.scene.project.duration, t: FM.time, playing: FM.playing };
+    var L = null;
+    try {
+      FM.scene.layers.length = 0;
+      L = FM.makeLayer('video', { name: 'BOOST886', start: 0, duration: 10, trimStart: 0, speed: 1 });
+      L.volume = 3; L.fadeIn = 2; L.visible = true;          // 300% with a two-second fade-in
+      FM.scene.layers.push(L); FM.scene.project.duration = 10;
+
+      var B = boostNode();
+      var el = { paused: false, muted: false, volume: 1, readyState: 4, duration: 10, currentTime: 0,
+                 play: function () { el.paused = false; return Promise.resolve(); },
+                 pause: function () { el.paused = true; } };
+      FM.media.set(L.id, { kind: 'video', el: el, width: 320, height: 240, duration: 10, _boost: B.node });
+      FM.playing = true;
+
+      // What the mix is SUPPOSED to be, from the same two functions the exporter schedules from.
+      function wanted(t) { return FM.layerVolume(L, t) * FM.fadeMul(L, t - L.start, L.duration); }
+      function heard() { return el.volume * B.last(); }
+
+      // ── CONTROL. Above unity the boost was always written, fix or no fix. If this fails the fixture
+      //    never reaches the volume reconcile and every assertion below would be vacuously green.
+      FM.setTime(4); B.writes.length = 0; FM._syncMediaToClock();
+      if (B.last() == null) throw new Error('the playback tick never wrote the boost gain even at full volume — the fixture is not reaching the volume reconcile, so this test proves nothing');
+      if (Math.abs(heard() - wanted(4)) > 0.02) throw new Error('outside the fade the clip is heard at ' + heard().toFixed(2) + 'x where the mix says ' + wanted(4).toFixed(2) + 'x — the ordinary boost path is broken');
+
+      // ── THE CLAIM. Half a second in, the fade has the mix at 0.75x. The tick must write the boost
+      //    even though that is BELOW unity, or the node keeps the 3x it was seeded with.
+      FM.setTime(0.5); B.writes.length = 0; FM._syncMediaToClock();
+      if (B.last() == null) throw new Error('the playback tick skipped the boost write because the faded level was below unity, so the boost node keeps whatever it last held — a 300% clip fading in from silence is heard at 0.75 x 3.0 = 2.25x, about 9.5dB too loud, until the level crosses 1.0 and drops in one step');
+      if (Math.abs(heard() - wanted(0.5)) > 0.02) throw new Error('half a second into the fade the clip is heard at ' + heard().toFixed(2) + 'x where the mix says ' + wanted(0.5).toFixed(2) + 'x');
+
+      // …and at the point the old guard would finally have fired, there must be no step.
+      FM.setTime(1); B.writes.length = 0; FM._syncMediaToClock();
+      if (Math.abs(heard() - wanted(1)) > 0.02) throw new Error('one second into the fade the clip is heard at ' + heard().toFixed(2) + 'x where the mix says ' + wanted(1).toFixed(2) + 'x');
+
+      // ── THE SEED. sync() calls setBoost with no level; reading the RAW layer volume there meant a
+      //    boosted clip came up at full boost for the frames before the first tick corrected it.
+      FM.setTime(0.5); B.writes.length = 0;
+      FM.audioFxLive.setBoost(L);
+      if (B.last() == null) throw new Error('setBoost wrote nothing when called with no level — the seed path is unreachable and this half of the test is vacuous');
+      if (B.last() > 1.01) throw new Error('the seed used the raw layer volume (' + B.last().toFixed(2) + 'x) instead of the faded level ' + wanted(0.5).toFixed(2) + 'x, so the stage opens at full boost while the element is still fading up from silence');
+
+      // ── CONTROL for the seed: outside the fade it must still seed at full boost. Guards the
+      //    one-character fake of the line above, which would leave every boosted clip playing at 1x.
+      FM.setTime(4); B.writes.length = 0;
+      FM.audioFxLive.setBoost(L);
+      if (Math.abs(B.last() - 3) > 0.01) throw new Error('outside any fade the seed is ' + B.last().toFixed(2) + 'x where the layer asks for 3x — the fade fix has killed the ordinary boost');
+    } finally {
+      try { if (L) FM.media.delete(L.id); } catch (e) {}
+      FM.playing = saved.playing; FM.scene.layers = saved.layers;
+      FM.scene.project.duration = saved.dur; FM.setTime(saved.t);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
 })();
