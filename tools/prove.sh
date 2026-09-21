@@ -41,7 +41,12 @@ waitfor() { for _ in $(seq 1 20); do curl -s -o /dev/null "http://127.0.0.1:$1/t
 echo "→ prove: $(printf '%s\n' "$TITLES" | wc -l | tr -d ' ') changed test(s) must PASS here and FAIL against HEAD's source"
 printf '%s\n' "$TITLES" | sed 's/^/    · /' | cut -c1-120
 # CONTROL — the working tree as it will ship
-P1="$(freeport)"; ( exec python3 -m http.server "$P1" --bind 127.0.0.1 ) >/dev/null 2>&1 & SRV1=$!
+# 🚨 tools/serve.sh, NOT `python3 -m http.server` (21 Sep). The stdlib server's accept queue is 5 and
+# this page pulls ~71 scripts, so the kernel refuses the surplus: measured 7 of 40 parallel requests
+# dropped. A refused script is not a loud error — the app half-loads and the red lands on whichever
+# test first touches a missing piece. ship.sh has used serve.sh since queue 865; THIS file never got
+# the fix, and that cost three refused releases in one day before run.html started naming it.
+P1="$(freeport)"; ( exec "$(dirname "$0")/serve.sh" "$P1" ) >/dev/null 2>&1 & SRV1=$!
 waitfor "$P1" || { echo "prove: could not serve the working tree"; exit 2; }
 run() { python3 tests/_cdp.py --url "http://127.0.0.1:$1/tests/run.html?only=$Q" --width "$2" --timeout 600 > "$3" 2>&1; }
 run "$P1" "$WIDTH" "$TMP/ctrl"
@@ -49,7 +54,10 @@ python3 tools/_spotjudge.py "$TMP/ctrl" "$TMP/titles" > "$TMP/ctrl.v"
 # REVERTED — HEAD's source with the working tree's tests
 git worktree add -q "$WT" HEAD || { echo "prove: could not create a worktree"; exit 2; }
 rsync -a --delete tests/ "$WT/tests/"
-P2="$(freeport)"; ( cd "$WT" && exec python3 -m http.server "$P2" --bind 127.0.0.1 ) >/dev/null 2>&1 & SRV2=$!
+# …and the same for the REVERTED worktree, which is where it actually bit: FM came up missing
+# renderScene (compositor.js, 1.1MB — the likeliest casualty of a refused connection) and prove
+# reported "no test matched" for a test that was simply never reached.
+P2="$(freeport)"; ( exec "$(dirname "$0")/serve.sh" "$P2" "$WT" ) >/dev/null 2>&1 & SRV2=$!
 waitfor "$P2" || { echo "prove: could not serve the HEAD worktree"; exit 2; }
 run "$P2" "$WIDTH" "$TMP/rev"
 python3 tools/_spotjudge.py "$TMP/rev" "$TMP/titles" > "$TMP/rev.v"

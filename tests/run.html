@@ -41,6 +41,22 @@
       // could report green against a version of the suite that no longer exists on disk. A test
       // harness that silently tests stale code is worse than no harness.
       fetch('tests.js', { cache: 'no-store' }).then(function (r) { return r.text(); }).then(function (src) {
+        /* ⚠️ THE APP MUST ACTUALLY BE THERE BEFORE A SINGLE TEST RUNS (21 Sep). The iframe's `load`
+           event fires when the document and its subresources are done — but if ONE of the app's ~40
+           script tags fails to execute (a dropped request under load is the observed case), FM is
+           left half-built and the suite runs anyway. The first test to touch the missing piece then
+           reports something like "FM.makeLayer is not a function", which reads as a bug in THAT test
+           and is nothing of the kind. It has cost two ship cycles: v16.31 (`Cannot read properties of
+           undefined (reading 'refresh')`) and v16.35 (`FM.makeLayer is not a function`), each ~20
+           minutes of diagnosis before the answer turned out to be "the app never loaded".
+           Same argument as the no-store fetch above: a harness that silently tests something other
+           than what it claims is worse than no harness. Naming the failure costs one line. */
+        var CORE = ['makeLayer', 'renderScene', 'newScene', 'layerById', 'refreshAll', 'scene'];
+        var missing = CORE.filter(function (k) { return !w.FM || w.FM[k] === undefined; });
+        if (missing.length) throw new Error('THE APP DID NOT LOAD IN THE TEST FRAME — FM is missing ' +
+          missing.join(', ') + '. Every failure below would be misattributed to whichever test touched ' +
+          'it first. This is usually a dropped script request under load: re-run, and if it repeats, ' +
+          'check for stale headless Chrome processes (see tests/_cdp.py).');
         var s = w.document.createElement('script'); s.textContent = src; w.document.body.appendChild(s);
         if (!w.FMTests) throw new Error('FMTests did not load (is FM initialised?)');
         return w.FMTests.run();

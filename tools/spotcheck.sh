@@ -57,7 +57,10 @@ if ! grep -q "qs.get('only')" "$WT/tests/tests.js" 2>/dev/null; then
   printf '%s %s pre-filter\n' "$(date '+%Y-%m-%d %H:%M')" "$SHORT" >> tools/.spotcheck.log; exit 0
 fi
 PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')"
-( cd "$WT" && exec python3 -m http.server "$PORT" --bind 127.0.0.1 ) >/dev/null 2>&1 &
+# 🚨 tools/serve.sh, NOT `python3 -m http.server` (21 Sep) — same reason prove.sh was fixed: the
+# stdlib accept queue is 5, this page pulls ~71 scripts, and a refused one half-loads the app so the
+# red lands on an innocent test. A spot-check that cannot be trusted is worse than none.
+( exec "$(dirname "$0")/serve.sh" "$PORT" "$WT" ) >/dev/null 2>&1 &
 SRV=$!
 for _ in 1 2 3 4 5 6 7 8 9 10; do curl -s -o /dev/null "http://127.0.0.1:$PORT/tests/run.html" && break; sleep 0.5; done
 

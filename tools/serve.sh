@@ -26,8 +26,16 @@
 #    red tests in one run, every one of them blaming the app for the server dropping its connection.
 #    **Every green suite run was therefore luck-dependent, and every red one had to be re-read before
 #    it could be believed.** That is the most expensive kind of broken instrument.
+#
+# 4) IT TAKES A DIRECTORY (21 Sep), because prove.sh and spotcheck.sh serve a git WORKTREE rather than
+#    this checkout — and until today they did that with plain `python3 -m http.server`, i.e. with the
+#    exact request_queue_size=5 bug that every word of point 3 above is about. The fix existed here
+#    and those two never got it, so every proof and every spot-check was rolling the same dice this
+#    file was written to stop rolling. It cost three refused releases in one day: the app half-loads
+#    in the frame (compositor.js is 1.1MB and the most likely casualty), FM comes up missing pieces,
+#    and the red lands on whatever test touches one first. One server implementation, three callers.
 [ -x /Library/Developer/CommandLineTools/usr/bin/git ] && export DEVELOPER_DIR=/Library/Developer/CommandLineTools
-cd "$(dirname "$0")/.."
+cd "${2:-$(dirname "$0")/..}"
 exec python3 - "${1:-8791}" <<'PY'
 import sys
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer

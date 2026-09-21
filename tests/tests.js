@@ -65665,4 +65665,52 @@
     }
   });
 
+
+  /* ── queue 885: a boosted clip rebuilt its whole audio stage on every sync ──────────────────────
+   * chainIsCurrent bailed on `!m._afxChain`, and sync()'s boost-only branch deliberately never sets
+   * one — when a layer is routed purely because its volume is over 100%, the boost IS the whole path.
+   * So every such layer answered "not current" on EVERY call, and sync() disconnected the source,
+   * threw away the live GainNode and DynamicsCompressor and built fresh ones at gain 1, which setBoost
+   * then ramps back toward the target over 10ms.
+   * AUDIBLE, and it is his own repeated complaint (audio cutting in and out, glitching). Drag Fade in
+   * on a boosted song while it plays: that setter calls FM.reconcileAudio on every pointermove, so
+   * syncAll runs ~60 times a second, the gain never arrives, and the clip warbles between 1.0x and
+   * ~2.6x with a click on every reconnect instead of holding a steady 3x.
+   * ⚠️ FOUR CONTROLS, because "return true more often" is a one-character way to fake this fix and it
+   * would break undo (the identity check), effect edits, and the not-yet-routed case. */
+  test('885: a boost-only clip keeps its live audio stage instead of rebuilding it on every sync', { item: '885', budgetMs: 20000 }, function () {
+    if (!FM.audioFxLive || !FM.audioFxLive.isChainCurrent) throw new Error('FM.audioFxLive.isChainCurrent is not reachable');
+    var IC = FM.audioFxLive.isChainCurrent;
+    function layerWith(vol, fx) {
+      var L = FM.makeLayer('video', { x: 100, y: 100, start: 0, duration: 5 });
+      L.name = 'FX885'; L.volume = vol; if (fx) L.audioFx = fx;
+      return L;
+    }
+    function boostMedia() { return { _afxChain: null, _boost: { fake: true }, _afxSig: 'B|', _afxInsts: null }; }
+
+    var boosted = layerWith(3);
+    if (FM.audioFxLive.needsBoost && !FM.audioFxLive.needsBoost(boosted)) throw new Error('a 300% layer does not report as needing a boost, so this test is not exercising the boost-only path at all');
+
+    // ── THE CLAIM: a boost-only routing whose signature has not moved is CURRENT.
+    if (!IC(boostMedia(), boosted)) throw new Error('a clip routed only for its volume reports its live stage as stale, so every sync tears down the GainNode and limiter and rebuilds them at gain 1 — that is an audible click plus a gain that restarts from unity, ~60 times a second while a fade slider is dragged');
+
+    // ── the reproduce: the values that ride setBoost must NOT force a rebuild
+    boosted.fadeIn = 1.5; boosted.volume = 2.5;
+    if (!IC(boostMedia(), boosted)) throw new Error('changing Fade in / Volume invalidated the live stage — those ride setBoost and applyAt by design, and rebuilding on them is exactly the warble this fixes');
+
+    // ── CONTROL 1: nothing built yet must still be "not current", or sync would never route the clip
+    if (IC({ _afxChain: null, _boost: null, _afxSig: 'B|', _afxInsts: null }, boosted)) throw new Error('a clip with no boost stage built yet reported current — it would never get routed and would play at 100% forever');
+
+    // ── CONTROL 2: a moved signature must still invalidate
+    if (IC({ _afxChain: null, _boost: { fake: true }, _afxSig: 'WRONG', _afxInsts: null }, boosted)) throw new Error('a stale signature reported current on the boost-only path');
+
+    // ── CONTROL 3: gaining an audio effect needs a real chain, which this media does not have
+    if (IC(boostMedia(), layerWith(3, [{ type: 'eq', enabled: true }]))) throw new Error('a layer that has gained an audio effect reported current while its media has no fx chain — the effect would never be heard');
+
+    // ── CONTROL 4: THE CHAIN PATH IS UNTOUCHED, including the identity check that makes undo audible
+    var withChain = layerWith(1, [{ type: 'eq', enabled: true }]);
+    if (!IC({ _afxChain: { fake: true }, _boost: null, _afxSig: 'eq1|', _afxInsts: withChain.audioFx.slice() }, withChain)) throw new Error('a freshly built fx chain now reports stale — the boost fix has damaged the normal path');
+    if (IC({ _afxChain: { fake: true }, _boost: null, _afxSig: 'eq1|', _afxInsts: [{ type: 'eq' }] }, withChain)) throw new Error('the chain reports current after its instances were replaced — undo would stay inaudible, which is the bug that identity check was written for');
+  });
+
 })();

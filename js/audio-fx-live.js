@@ -117,7 +117,25 @@ window.FM = window.FM || {};
   // Identity is compared over the WHOLE audioFx array rather than the built subset, so this never has
   // to re-derive buildAudioFxChain's filter; a normal param drag mutates in place and stays equal.
   function chainIsCurrent(m, layer) {
-    if (!m || !m._afxChain) return false;
+    if (!m) return false;
+    /* ⚠️ A BOOST-ONLY ROUTING IS A REAL, CURRENT ROUTING — it just has no fx chain (queue 885).
+     * This used to bail on `!m._afxChain`, and sync()'s boost-only branch deliberately never sets one:
+     * it writes _afxSig and leaves _afxChain null, because when a layer is routed purely for its
+     * volume the boost IS the whole path. So every such layer answered "not current" on EVERY call,
+     * and sync() went on to disconnect the source, throw away the live GainNode and DynamicsCompressor
+     * and build fresh ones at gain 1 — which setBoost then ramps back toward the target over 10ms.
+     * AUDIBLE, and it is his own repeated complaint. Drag "Fade in" on a boosted song while it plays:
+     * that setter calls FM.reconcileAudio directly on every pointermove, so syncAll runs ~60 times a
+     * second, the gain never reaches its target, and the clip warbles between 1.0x and ~2.6x with a
+     * click on every reconnect instead of holding a steady 3x.
+     * signature() encodes exactly what forces a REBUILD — the boost's presence, and each effect's type
+     * and enabled flag — and deliberately NOT the values that ride applyAt/setBoost. So comparing it is
+     * the right question on this path too, and a volume or fade change correctly does not rebuild. */
+    if (!m._afxChain) {
+      if (!m._boost) return false;                                          // not routed at all yet
+      if (FM.layerHasAudioFx && FM.layerHasAudioFx(layer)) return false;    // it needs a chain now and has none
+      return m._afxSig === signature(layer);
+    }
     if (m._afxSig !== signature(layer)) return false;
     const list = (layer && layer.audioFx) || [];
     const cached = m._afxInsts;
