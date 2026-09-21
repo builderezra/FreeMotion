@@ -65797,4 +65797,193 @@
     }
   });
 
+
+  /* ── queue 891: resuming an interrupted export erased the no-sound warning ──────────────────────
+   * #export-note has two writers. exportSay (js/exporter.js) APPENDS each audio-loss line and marks the
+   * node amber. The crash-resume sentence arrived through app.js's onNote, which REPLACED the text
+   * outright — and every exportSay in run() happens before the resume block. So on the export where both
+   * fire (a project with an unreadable clip, killed by iOS mid-render, exported again) the card showed
+   * only "Picking up an interrupted export…", in amber, and the reason the file had no sound was gone.
+   * DRIVEN THROUGH THE REAL EXPORT BUTTON (FM._runExport), because the defect lived in the onNote that
+   * app.js builds inside it — a closure no test had ever reached. Test 47 drives FM.exporter.run with
+   * its OWN onNote, which is exactly why this survived. The encoder is stood in for by a stub that does
+   * what run() does, in run()'s order: clear the note on entry, warn, then announce the resume.
+   * ⚠️ A CONTROL, because the easy wrong fix is to route onNote through exportSay: that keeps the warning
+   * and paints every clean resume amber, which is the other half of what the entry reported. */
+  test('891: resuming an interrupted export keeps the no-sound warning on screen instead of replacing it', { item: '891', budgetMs: 25000 }, async function () {
+    if (typeof FM._runExport !== 'function') throw new Error('FM._runExport is not reachable — the real Export button cannot be driven, and the fault lived in the onNote it builds');
+    if (typeof FM._exportSay !== 'function') throw new Error('FM._exportSay is not reachable — the audio-loss warnings have no writer');
+    if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
+    var fmtEl = document.getElementById('exp-format'), note = document.getElementById('export-note');
+    if (!fmtEl || !note) throw new Error('#exp-format or #export-note is not in the DOM');
+
+    var WARN = 'Exporting with NO SOUND — 1 audio clip could not be read';
+    var RESUME = 'Picking up an interrupted export at 62%. The part already rendered was kept, so that time is not being spent again.';
+    var run0 = FM.exporter.run, fmt0 = fmtEl.value, layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    var snap = null, reached = false;
+    // What run() does on entry (js/exporter.js) — so the stub starts every export exactly where the real one does.
+    function clearLikeRun() { note.textContent = ''; note.classList.add('hidden'); note.classList.remove('export-note-warn'); }
+    function take() { return { text: note.textContent, warn: note.classList.contains('export-note-warn'), hidden: note.classList.contains('hidden') }; }
+    try {
+      FM.scene.layers.length = 0;
+      var A = FM.makeLayer('shape', { shape: 'rect', x: 50, y: 50, shapeW: 40, shapeH: 40, fill: '#884400' });
+      A.start = 0; A.duration = 3; A.name = 'FX891';
+      FM.scene.layers.push(A);
+      FM.scene.project.duration = Math.max(FM.scene.project.duration || 0, 3);
+      fmtEl.value = 'mp4';
+
+      // 1 ── THE CLAIM: a warning, then the resume, in run()'s own order. Both must be on the card.
+      FM.exporter.run = async function (opts) {
+        reached = true; clearLikeRun();
+        FM._exportSay(WARN);
+        if (opts && opts.onNote) opts.onNote(RESUME);
+        snap = take();
+      };
+      await FM._runExport();
+      if (!reached) throw new Error('the Export button never reached FM.exporter.run, so nothing below was measured');
+      if (snap.text.indexOf(WARN) < 0) throw new Error('the resume note ERASED the no-sound warning — the card reads only: ' + JSON.stringify(snap.text) + '. The one on-screen explanation for a silent file is gone');
+      if (snap.text.indexOf(RESUME) < 0) throw new Error('the resume sentence never reached the card (it reads ' + JSON.stringify(snap.text) + ') — the warning must not be kept by dropping the resume');
+      if (snap.hidden) throw new Error('the note is hidden with both messages in it');
+      if (!snap.warn) throw new Error('the no-sound warning lost its warning style when the resume line joined it');
+
+      // 2 ── CONTROL: a resume with nothing wrong is news, not a problem — it must not turn amber.
+      //      Starts from what a PREVIOUS export's warning leaves on the node, the way a real second export does.
+      snap = null; reached = false;
+      note.classList.add('export-note-warn');
+      FM.exporter.run = async function (opts) {
+        reached = true; clearLikeRun();
+        if (opts && opts.onNote) opts.onNote(RESUME);
+        snap = take();
+      };
+      await FM._runExport();
+      if (!reached) throw new Error('the second export never reached FM.exporter.run');
+      if (snap.text !== RESUME) throw new Error('a clean resume should put exactly its own sentence on the card, and it reads ' + JSON.stringify(snap.text));
+      if (snap.warn) throw new Error('a resume with nothing wrong is drawn in the amber warning style, as if resuming were itself a problem');
+      if (snap.hidden) throw new Error('a clean resume left the note hidden, so nobody can see that the export picked up where it stopped');
+    } finally {
+      FM.exporter.run = run0;
+      fmtEl.value = fmt0;
+      clearLikeRun();
+      var ov = document.getElementById('export-overlay'); if (ov) ov.classList.add('hidden');
+      FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
+      FM.refreshAll();
+    }
+  });
+
+
+  /* ── queue 892: a forgotten solo silenced a sub-range export and nothing said so ─────────────────
+   * The all-suppressed report was gated on `wholeProject`, a rule borrowed from the out-of-range report
+   * beside it — where it is right, because leaving a clip out by choosing a range is the user's own
+   * instruction. Suppression has nothing to do with the range. So "Selected clip only" or "Loop region"
+   * with a solo left on a shape made an MP4 with no audio track, nothing on the card, and a ready card
+   * reading "no soundtrack" — while the same scene exported WHOLE said exactly what was wrong.
+   * Drives the mixer directly: a suppressed clip is never decoded, so no audio has to be real.
+   * ⚠️ TWO CONTROLS. The whole-project case proves the fixture reaches the report at all; the
+   * out-of-range case catches the naive fix — deleting the whole-project check outright — which would
+   * blame the solo for a clip the RANGE had already left out, and a warning that cries wolf stops being read. */
+  test('892: a forgotten solo that silences a part-of-the-project export says so, not only a whole-project one', { item: '892', budgetMs: 20000 }, async function () {
+    if (!FM.exporter || typeof FM.exporter.buildAudioMix !== 'function') throw new Error('FM.exporter.buildAudioMix is not reachable');
+    var P = FM.scene.project, note = document.getElementById('export-note');
+    if (!note) throw new Error('#export-note is not in the DOM');
+    var saved = { layers: FM.scene.layers.slice(), dur: P.duration }, made = [];
+    function clearNote() { note.textContent = ''; note.classList.add('hidden'); note.classList.remove('export-note-warn'); }
+    function build(songStart, songDur) {
+      FM.scene.layers.length = 0;
+      var song = FM.makeLayer('video', { name: 'FX892_SONG', start: songStart, duration: songDur });
+      song.name = 'FX892_SONG'; song.start = songStart; song.duration = songDur;
+      var box = FM.makeLayer('shape', { shape: 'rect', x: 50, y: 50, shapeW: 40, shapeH: 40, fill: '#446688' });
+      box.name = 'FX892_BOX'; box.start = 0; box.duration = 10;
+      box.solo = true;                         // soloed to look at on its own, and forgotten
+      FM.scene.layers.push(song, box);
+      FM.media.set(song.id, { kind: 'video', file: new Blob(['never decoded: a suppressed clip is skipped first']), duration: songDur });
+      made.push(song.id);
+      P.duration = 10;
+    }
+    async function mix(from, to) {
+      FM._audioTrackDropped = null; clearNote();
+      var m = await FM.exporter.buildAudioMix(FM.scene, from, to);
+      return { mix: m, flag: FM._audioTrackDropped, card: note.textContent };
+    }
+    try {
+      // ── CONTROL: the whole project said so before this fix. If it does not, the fixture never reaches the report.
+      build(0, 10);
+      var whole = await mix(0, 10);
+      if (whole.mix) throw new Error('the fixture produced a soundtrack, so this is not the silent case at all');
+      if (whole.flag !== 'all-suppressed') throw new Error('even the WHOLE-project export did not flag the solo (' + JSON.stringify(whole.flag) + ') — the fixture is not reaching the report, so nothing below is measured');
+
+      // ── THE CLAIM: the same scene, exported 2–5s, the way "Selected clip only" or "Loop region" does.
+      var part = await mix(2, 5);
+      if (part.mix) throw new Error('the 2–5s export produced a soundtrack, so it is not the silent case');
+      if (part.flag !== 'all-suppressed') throw new Error('a 2–5s export silenced entirely by a forgotten solo flagged ' + JSON.stringify(part.flag) + ' — the ready card says "no soundtrack", the words a project with no audio in it gets, and the pasteable report says dropped no');
+      if (!/NO SOUND/.test(part.card) || !/solo/.test(part.card)) throw new Error('the silent 2–5s export put nothing about the solo on the export card — it reads ' + JSON.stringify(part.card));
+
+      // ── CONTROL: a song the RANGE already left out must not be blamed on the solo.
+      build(6, 4);                             // the song sits at 6–10s
+      var outside = await mix(1, 4);           // …and the export is 1–4s
+      if (outside.flag === 'all-suppressed') throw new Error('the song sits at 6–10s and the export is 1–4s, so the RANGE left it out — blaming the solo for it is a false alarm');
+      if (/solo/.test(outside.card)) throw new Error('the card blamed a solo for a clip the range had already excluded: ' + JSON.stringify(outside.card));
+    } finally {
+      made.forEach(function (id) { try { FM.media.delete(id); } catch (e) {} });
+      FM.scene.layers = saved.layers; P.duration = saved.dur;
+      FM._audioTrackDropped = null; clearNote();
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
+
+  /* ── queue 893: the export report printed the PREVIOUS export's mix peak ─────────────────────────
+   * run() resets the report's globals on entry precisely so the pasteable report cannot describe an
+   * earlier export — and the list missed FM._lastMixRawPeak and FM._lastMixGain, which the mixer only
+   * writes once it has decided there IS a mix. So an export with no soundtrack read `audio NO TRACK`
+   * beside `mix peak 1.520 (turned down x0.654)`: numbers from a mix that was never built. That report
+   * is the thing he is asked to copy from Settings when a file comes out silent.
+   * TWO HALVES. The first is the class, not the instance: every FM global the report READS must be reset
+   * before the mixer runs. A hand-kept reset list drifted from the report once, and a sixth line added
+   * later would drift the same way — so the list is derived from the report's own source. The second is
+   * the behaviour: plant export #1's numbers, run a real export with no audio, read the stored report. */
+  test('893: an export with no soundtrack does not print the previous export’s mix peak in its report', { item: '893', budgetMs: 45000 }, async function () {
+    if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
+
+    // ── 1. THE CLASS: every global the report reads is reset before the mixer runs.
+    var src = String(FM.exporter.run).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    var a = src.indexOf("'FreeMotion export report'"), b = src.indexOf('].join(', a), mixAt = src.indexOf('buildAudioMix(');
+    if (a < 0 || b < 0 || mixAt < 0) throw new Error('cannot find the report block or the mixer call in run() — the source scan is reading the wrong thing, so it would pass vacuously');
+    var read = [], re = /FM\._([A-Za-z]\w*)/g, mm, block = src.slice(a, b);
+    while ((mm = re.exec(block))) if (read.indexOf(mm[1]) < 0) read.push(mm[1]);
+    // CONTROL on the scan itself: these five are in the report today. Finding fewer means the scan is broken.
+    ['_audioTrackDropped', '_lastMixRawPeak', '_lastMixGain', '_lastAudioDrops', '_lastAudioSuppressed'].forEach(function (g) {
+      if (read.indexOf(g.slice(1)) < 0 && read.indexOf(g) < 0 && read.indexOf(g.replace(/^_/, '')) < 0) throw new Error('the scan of the report block did not find FM.' + g + ', which the report prints — the scan is broken, so its verdict means nothing');
+    });
+    var head = src.slice(0, mixAt);
+    var missing = read.filter(function (g) { return !new RegExp('FM\\._' + g + '\\s*=(?!=)').test(head); });
+    if (missing.length) throw new Error('the export report prints ' + missing.map(function (g) { return 'FM._' + g; }).join(', ') + ' but run() never resets ' + (missing.length === 1 ? 'it' : 'them') + ' before the mixer — so an export that builds no mix reports the PREVIOUS export’s values as its own');
+
+    // ── 2. THE BEHAVIOUR: a real export with no audio, carrying export #1's numbers in.
+    if (typeof VideoEncoder === 'undefined') return;        // no WebCodecs here; the half above still stands
+    var P = FM.scene.project, keep = FM.scene.layers.slice(), dims = { w: P.width, h: P.height, d: P.duration, f: P.fps };
+    var rep0 = null; try { rep0 = localStorage.getItem('fm.lastExportReport'); } catch (e) {}
+    try {
+      P.width = 128; P.height = 128; P.duration = 1; P.fps = 10;
+      FM.scene.layers.length = 0;
+      var L = FM.makeLayer('shape', { shape: 'rect', x: 64, y: 64, shapeW: 80, shapeH: 80, fill: '#3f7fbf' });
+      L.start = 0; L.duration = 1; FM.scene.layers.push(L);
+      FM.refreshAll();
+      FM._lastMixRawPeak = 1.52; FM._lastMixGain = 0.654; FM._lastMixPeak = 0.994;   // export #1: two clips, summed hot, turned down
+      try { localStorage.removeItem('fm.lastExportReport'); } catch (e) {}
+      await FM.exporter.run({ scale: 1, fps: 10, bitrate: 300000, name: 'x893probe', from: 0, to: 1, outW: 128, outH: 128, onReady: function () {} });
+      var rep = null; try { rep = localStorage.getItem('fm.lastExportReport'); } catch (e) {}
+      if (!rep) throw new Error('the export wrote no report, so nothing below was measured');
+      if (!/^audio\s+NO TRACK/m.test(rep)) throw new Error('the fixture built a soundtrack, so this is not the no-mix case: ' + JSON.stringify(rep.split('\n').filter(function (l) { return /^audio/.test(l); })));
+      var line = rep.split('\n').filter(function (l) { return /^mix peak/.test(l); })[0] || '';
+      if (/1\.520|0\.654|turned down/.test(line)) throw new Error('the report for an export with NO soundtrack reads ' + JSON.stringify(line) + ' — the previous export’s mix, printed as this one’s');
+      if (!/^mix peak\s+-\s*$/.test(line)) throw new Error('an export that built no mix should report its peak as "-", and it reads ' + JSON.stringify(line));
+    } finally {
+      FM.scene.layers = keep; P.width = dims.w; P.height = dims.h; P.duration = dims.d; P.fps = dims.f;
+      FM._lastMixRawPeak = undefined; FM._lastMixGain = undefined; FM._lastMixPeak = undefined;
+      try { if (rep0 == null) localStorage.removeItem('fm.lastExportReport'); else localStorage.setItem('fm.lastExportReport', rep0); } catch (e) {}
+      var ov = document.getElementById('export-overlay'); if (ov) ov.classList.add('hidden');
+      FM.refreshAll();
+    }
+  });
+
 })();

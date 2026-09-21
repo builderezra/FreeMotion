@@ -4856,11 +4856,12 @@ window.FM = window.FM || {};
          audio warnings; this message was missed in that sweep. */
       const noteEl = document.getElementById('export-note');
       if (noteEl) { noteEl.textContent = ''; noteEl.classList.add('hidden'); }
-      const onNote = (text) => {
-        if (!noteEl) return;
-        noteEl.textContent = text;
-        noteEl.classList.toggle('hidden', !text);
-      };
+      /* ⚠️ APPEND, NEVER REPLACE (queue 891). This used to assign textContent outright, and the audio-loss
+         warnings live in the SAME node (exportSay, js/exporter.js) — written earlier in run() than the resume
+         sentence that arrives here. So a resumed export of a project with an unreadable clip showed only
+         "Picking up an interrupted export…", in amber, and the reason the file had no sound was gone. Both
+         writers now live side by side in exporter.js with one rule. */
+      const onNote = (text) => { if (FM._exportInfo) FM._exportInfo(text); };
       if (fmt === 'gif') {
         await FM.exporter.runGif({ scale, fps, from, to, name: expName, transparent, dither: true, onProgress });
       } else if (fmt === 'frames') {

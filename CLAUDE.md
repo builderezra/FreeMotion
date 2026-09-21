@@ -396,7 +396,10 @@ So, for any design request:
 
 ## ⚠️ THE UNBLOCK LIST — keep it current (his ask, 5 Sep: *"Make sure they keep this unblock list for me as well"*)
 
-**<https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7>** is one page collecting every open item
+**⚠️ THE LINK BELOW IS DEAD (21 Sep)** — the artifact was deleted or write access was lost, and the Artifact tool
+now refuses it. Do NOT publish without a url to "fix" it: that makes a second page at a new link, and he may have
+deleted it on purpose. The question is in #777; until he answers, keep the SOURCE current and do not publish.
+~~<https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7>~~ was one page collecting every open item
 that is *built out — waiting on him* (the bucket `tools/next.sh` lists), phrased for his phone, with a button that
 hands back all his answers as one message. It exists because 35 asks scattered through REQUESTS.md were unanswerable
 in practice. **Source: `tools/unblock/unblock.html`.** When that bucket changes — an item unblocked by his answer,

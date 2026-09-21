@@ -320,6 +320,28 @@ window.FM = window.FM || {};
   }
   FM._exportSay = exportSay;   // suite seam
 
+  /* THE SAME CARD HAS A SECOND WRITER, AND IT MUST FOLLOW THE SAME RULE (queue 891). exportSay above
+   * APPENDS, because #export-note is the one surface in the overlay the frame loop never touches and
+   * several audio-loss lines can land in it. But the crash-resume sentence reached the same node through
+   * app.js's onNote, which did `noteEl.textContent = text` — a flat REPLACE. Every exportSay call in run()
+   * happens before the resume block, so on the one export where both fired, the resume erased the only
+   * on-screen explanation for a silent file, and was then drawn in the amber warning style that
+   * exportSay had left on the node — as if resuming were the problem.
+   * Kept here, beside exportSay, so the two writers of that node cannot drift apart again: same append,
+   * same de-duplication, and the one difference that matters — news is not a warning, so this never
+   * adds export-note-warn. If a warning IS present the card stays amber, because something is wrong. */
+  function exportInfo(msg) {
+    try {
+      const el = document.getElementById('export-note');
+      if (!el || !msg) return;
+      const have = el.textContent ? el.textContent.split('\n').filter(Boolean) : [];
+      if (have.indexOf(msg) < 0) have.push(msg);
+      el.textContent = have.join('\n');
+      el.classList.remove('hidden');
+    } catch (e) {}
+  }
+  FM._exportInfo = exportInfo;   // the writer app.js's onNote hands the resume sentence to
+
   async function buildAudioMix(scene, from, to) {
     const P = scene.project;
     const sampleRate = 48000, channels = 2;
@@ -344,6 +366,7 @@ window.FM = window.FM || {};
      * would be noise. */
     const dropped = [];
     const suppressed = [];   // has audio, but hidden or solo-suppressed — see the skip below
+    const suppressedHere = [];   // …and would have been IN this export: its window overlaps [from, to] (queue 892)
     const nameOf = l => l.name || l.type || l.id;
     // Is this the whole project, or a sub-range the user deliberately chose? Decides whether a clip
     // outside the range is a surprise worth reporting or the user's own instruction. See below.
@@ -365,6 +388,12 @@ window.FM = window.FM || {};
         if (sm && (sm.file || sm.audioBuffer)) {
           suppressed.push(nameOf(layer) + (layer.visible === false ? ' (hidden)'
                           : (soloActive && !layer.solo) ? ' (another layer is soloed)' : ' (inside a hidden group)'));
+          /* Would it have been in THIS export? A suppressed clip is never decoded, so its real audio length is
+           * unknown here; its timeline window is the honest stand-in, and the same overlap rule the decoded
+           * path uses below. Without this, a sub-range export would blame a solo for a clip the range had
+           * already left out (queue 892). */
+          const _sEnd = layer.start + (layer.duration || 0);
+          if (Math.min(_sEnd, to) > Math.max(layer.start, from)) suppressedHere.push(suppressed[suppressed.length - 1]);
         }
         continue;
       }
@@ -525,17 +554,23 @@ window.FM = window.FM || {};
     }
     /* AND THE LAST SILENT REASON OF ALL: nothing was dropped, nothing was broken, and every clip that
      * could contribute was hidden or solo-suppressed. Reported only when the export ends up with NO
-     * sound at all AND covers the whole project — the same rule the out-of-range report uses, and for
-     * the same reason: suppressing a clip you can see is suppressed is not a surprise, but a completely
-     * silent export whose only cause is a solo you forgot about very much is. */
-    if (!any && suppressed.length && wholeProject) {
-      console.warn('[export] the soundtrack is empty because these layers are hidden or solo-suppressed:\n  · ' + suppressed.join('\n  · '));
+     * sound at all: suppressing a clip you can see is suppressed is not a surprise, but a completely
+     * silent export whose only cause is a solo you forgot about very much is.
+     * ⚠️ IT USED TO ALSO REQUIRE THE WHOLE PROJECT, AND THAT WAS BORROWED FROM THE WRONG RULE (queue 892).
+     * The out-of-range report above needs `wholeProject`, because leaving out a clip by choosing a range is
+     * the user's own instruction. Suppression has nothing to do with the range. So "Selected clip only" or
+     * "Loop region" with a forgotten solo made an MP4 with no audio track, no line on the card, and a ready
+     * card reading "no soundtrack" — the wording a project with no audio in it gets — while the same scene
+     * exported whole said exactly what was wrong. It now counts the suppressed clips that fall INSIDE the
+     * range, which is the question that was always being asked: would this clip have been in the file?
+     * The card line no longer waits on FM.toast either. The toast is drawn BEHIND the export overlay
+     * (#47), so the card is the one of the two anyone can actually read. */
+    if (!any && suppressedHere.length) {
+      console.warn('[export] the soundtrack is empty because these layers are hidden or solo-suppressed:\n  · ' + suppressedHere.join('\n  · '));
       FM._audioTrackDropped = 'all-suppressed';
-      if (FM.toast) {
-        exportSay('Exporting with NO SOUND — ' + suppressed.length + ' audio clip' + (suppressed.length === 1 ? ' is' : 's are') + ' hidden or muted by solo');
-        FM.toast('Exporting with NO SOUND — ' + suppressed.length + ' audio clip' + (suppressed.length === 1 ? ' is' : 's are') +
-                 ' hidden or muted by solo', 5600);
-      }
+      const _sup = 'Exporting with NO SOUND — ' + suppressedHere.length + ' audio clip' + (suppressedHere.length === 1 ? ' is' : 's are') + ' hidden or muted by solo';
+      exportSay(_sup);
+      if (FM.toast) FM.toast(_sup, 5600);
     }
     FM._lastAudioDrops = dropped;   // the suite reads this rather than scraping toasts
     FM._lastAudioSuppressed = suppressed;
@@ -860,6 +895,15 @@ window.FM = window.FM || {};
       FM._audioTrackDropped = null;
       FM._lastAudioDrops = [];
       FM._lastAudioSuppressed = [];
+      /* …AND THE MIX'S OWN NUMBERS, which the list above missed (queue 893). The report prints `mix peak` from
+       * these, and buildAudioMix only writes them AFTER `if (!any) return null` — so an export that builds no
+       * mix (the audio layers deleted, or the OfflineAudioContext throwing on a long project) printed the
+       * PREVIOUS export's peak and gain beside `audio NO TRACK`, describing a mix that was never built.
+       * The same carry-over this block was written to end, in three fields nobody added to it. The suite now
+       * checks that every FM global the report reads is reset here, so a new report line cannot drift the same way. */
+      FM._lastMixRawPeak = null;
+      FM._lastMixGain = null;
+      FM._lastMixPeak = null;
       /* ⚠️ AND THE NOTE IS CLEARED HERE, IN run(), NOT ONLY IN THE CALLER. js/app.js clears it too, but
        * that is the click handler — so every other entry point (the suite, a re-render, anything added
        * later) would carry the LAST export's warning onto this one's card. That is the same defect as

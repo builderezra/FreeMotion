@@ -188,12 +188,12 @@
     </ul>
   </header>
 
-  <!-- ══ 0. NEW SINCE YOU LAST LOOKED ══ 20 Sep. Put first on purpose: one confirms a fix that
+  <!-- ══ 0. NEW SINCE YOU LAST LOOKED ══ 21 Sep. Put first on purpose: one confirms a fix that
        shipped today and cannot be confirmed from this Mac, the other is holding a queue item. -->
   <section id="new">
     <div class="shead"><h2>New today</h2><span class="count">4 items</span></div>
-    <p class="sdesc">Two of these came out of today&rsquo;s work and one is about your own projects. The first
-      one I genuinely cannot answer myself &mdash; it only shows on a real installed app.</p>
+    <p class="sdesc">The newest asks. The first one I genuinely cannot answer myself &mdash; it only shows on a
+      real installed app. The last two are about your Mac rather than the app, and neither is urgent.</p>
 
     <div class="card" data-id="883" data-kind="say">
       <div class="ask">
@@ -227,21 +227,6 @@
       </div>
     </div>
 
-    <div class="card" data-id="869" data-kind="pick">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#869</span> Your projects have no backup</h3>
-        <p>The code is on GitHub and can be put back to any release. <b>Your projects are not.</b> They live only in
-          this browser&rsquo;s storage on whichever device made them &mdash; clear site data, lose the phone, or delete
-          one by mistake, and there is no undo. The only route today is exporting a file by hand, beforehand.</p>
-        <p>This is your data, and the sensible answers differ a lot, so I am not choosing it for you. The app is
-          local-only by design and I am not changing that without you saying so.</p>
-      </div>
-      <div class="opts">
-        <button class="opt" data-v="A"><span class="key">A</span><span>One button that writes <em>every</em> project to a single file you save wherever you like, and one obvious place to put it back from <span class="rec">&mdash; recommended</span></span></button>
-        <button class="opt" data-v="B"><span class="key">B</span><span>Leave it &mdash; I export by hand when it matters</span></button>
-      </div>
-    </div>
-
     <div class="card" data-id="856" data-kind="pick">
       <div class="ask">
         <h3><span class="mono" style="color:var(--faint)">#856</span> The Assistant&rsquo;s paid keys</h3>
@@ -260,6 +245,33 @@
         <button class="opt" data-v="C"><span class="key">C</span><span>Park the whole paid-key question until after launch</span></button>
       </div>
     </div>
+
+    <div class="card" data-id="882x" data-item="882 (Xcode)" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#882</span> One line for your Mac (optional)</h3>
+        <p>Earlier this month an Xcode licence prompt quietly broke every <code>git</code> and <code>python3</code>
+          command on this Mac, which stopped releases reaching your phone. I worked around it without needing your
+          password, and that workaround is permanent &mdash; <b>nothing is broken right now</b>.</p>
+        <p>The proper fix covers your whole Mac, not just this app, and needs your password, so only you can run it.
+          Paste it into Terminal:</p>
+        <p><span class="path">sudo xcode-select -s /Library/Developer/CommandLineTools</span></p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="A"><span class="key">A</span><span>I ran it <span class="rec">&mdash; recommended, it takes ten seconds</span></span></button>
+        <button class="opt" data-v="B"><span class="key">B</span><span>Leave the workaround as it is</span></button>
+      </div>
+    </div>
+
+    <div class="card" data-id="882c" data-item="882 (ChatGPT logs)" data-kind="say">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#882</span> The ChatGPT chat logs you offered</h3>
+        <p>They will not contain code &mdash; ChatGPT made no changes to this app. But they may contain <b>things you
+          asked Codex for that never made it onto this list</b>, and the list is only worth anything if nothing you
+          asked for is missing from it.</p>
+        <p>Send them in a chat if you still have them, or just tell me here that there was nothing new in them.</p>
+      </div>
+      <textarea class="note" rows="2" placeholder="&ldquo;nothing new in them&rdquo; &mdash; or what you asked it for"></textarea>
+    </div>
   </section>
 
   <!-- ══ 1. THE REPORTS ══ ordered by how many items each one frees -->
@@ -273,10 +285,12 @@
         <button class="tick" aria-pressed="false" aria-label="Mark done"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></svg></button>
         <div class="ask">
           <h3>Your last playback</h3>
-          <p>On the phone: play until the sound cuts out, stop, then <span class="path">Settings → Your last playback → Copy</span>.</p>
-          <p>This is the one I most want. Three separate audio complaints wait on it, and since 5 Sep so does the lag item:
+          <p>On the phone: play a clip <b>with an effect or two on it</b> until the sound cuts out, stop, then <span class="path">Settings → Your last playback → Copy</span>.</p>
+          <p>This is the one I most want. Four separate audio complaints wait on it &mdash; you said the sound is fine until
+            effects go on (#845), which is why the clip should have some. <b>Three audio fixes shipped on 21 Sep</b> (v16.34
+            to v16.36), so a fresh report also tells us whether those were the cause. Since 5 Sep the lag item waits on it too:
             every effect the numbers pointed at is now cropped or bounded, and whether the phone still lags is a number only it has.</p>
-          <div class="items"><span>#95</span><span>#96</span><span>#663</span><span>#692</span></div>
+          <div class="items"><span>#95</span><span>#96</span><span>#663</span><span>#692</span><span>#845</span></div>
         </div>
       </div>
     </div>
@@ -430,6 +444,21 @@
       </div>
     </div>
 
+    <div class="card" data-id="847" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#847</span> Keep the loop going when this chat is closed?</h3>
+        <p>The every-minute loop lives inside this chat. <b>Close the chat or restart the Claude app and it stops</b>,
+          until a new FreeMotion chat starts it again &mdash; which every new chat now does on its own, first thing.</p>
+        <p>The only thing that survives on its own is a routine scheduled in the cloud. It works, but it runs as a
+          <em>second</em> worker on its own copy of the project, so it and this chat could both be editing your request
+          list at once &mdash; the exact clash the inbox was set up to avoid &mdash; and it uses quota alongside this one.</p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="A"><span class="key">A</span><span>Leave it &mdash; opening a new FreeMotion chat restarts it <span class="rec">&mdash; recommended</span></span></button>
+        <button class="opt" data-v="B"><span class="key">B</span><span>Set up the cloud routine anyway, so work carries on with no chat open</span></button>
+      </div>
+    </div>
+
     <div class="card" data-id="406" data-kind="say">
       <div class="ask">
         <h3><span class="mono" style="color:var(--faint)">#406</span> Which menu did you mean?</h3>
@@ -504,6 +533,18 @@
       </div>
       <textarea class="note" rows="2" placeholder="Yes, still want the fill-in flow — or no, editing is enough"></textarea>
     </div>
+
+    <div class="card" data-id="860" data-kind="say">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#860</span> One screenshot of an icon not showing</h3>
+        <p>You said some icons do not display. I have checked all 37 on the PC across 19 different states of the app,
+          and added a guard that fails a release if one ever loses its ink &mdash; and I cannot make one disappear.
+          That does not mean you did not see it. It means I am looking in the wrong place.</p>
+        <p><b>Next time one is missing, take a screenshot.</b> Your two screenshots turned #903 around in minutes; one
+          here would do the same.</p>
+      </div>
+      <textarea class="note" rows="2" placeholder="Where it was and on which device &mdash; or &ldquo;haven&rsquo;t seen it since&rdquo;"></textarea>
+    </div>
   </section>
 
     <p class="sdesc" style="margin-top:16px">Three more were decided for you while you were away, under the rule that
@@ -512,8 +553,11 @@
       is waiting on them — one word changes any of them whenever you like.</p>
 
   <footer>
-    Built from REQUESTS.md at v16.09 · <b>10 Sep — the counts on this page were wrong and are now the queue's own:</b> 22 items, and every one of them is on this page (12 · 7 · 4, with #834 wanting both a letter and a look). The old header promised 19 letters, 6 looks and 2 screenshots; there were 10 letter cards, 3 look cards and the screenshots section was empty, because items that left the page were never subtracted from the tally. <b>#813 and #760 left today</b> — both shipped as the recommended option · <b>#834 is new on 7 Sep:</b> sixteen of its twenty findings are fixed and shipped, and the two above are the ones I will not guess at · <b>#835 shipped the same day</b> — you asked for the CLIP OPTIONS / Done row to go and it is gone, which also takes <b>#654</b> off this page for good (its Done button was the row) · #810 and #813 are new on 6 Sep: where the Audio effects menu should sit on PC, and how heavy Comic Ink should be (both measured, both with a recommendation) · #482 changed on 6 Sep: Colouring and Warping judged by eye, the rest swept by number, the ask is the next category to judge by eye · #606 left this page on 6 Sep: measured centred at 380 and at your 440 · #765 and #772 left this page on 6 Sep: the keycap rail is built (the look the sheet recommended) · #760 left this page on 5 Sep: size and colour decided from the drawn options; the people come back as a new picture · #654 left this page on 5 Sep: the clip panel has a Done button (option A) · #674 left this page on 5 Sep: both taste questions decided (you had answered one before), the error handler built · #763 left this page on 5 Sep: the PC skip gap is the drawn 12px, the pill stays A · #484 left this page on 5 Sep: Silk Ribbon is a shape now, one word changes it · #544, #564 and #642 left this page on 5 Sep: #544 you had answered on 24 Aug, #564's options were never drawn (the fix is being built instead), #642 keeps A · #712 left this page on 5 Sep: the phone measures Back itself now (Settings → Your last Back from an effects category) · #429 left this page on 5 Sep: the + is pinned under a swipe now, nothing to look at · #570 left this page on 5 Sep: your answer ("stepped") had been in its entry since 26 Aug · #592 and #624 left it the same day: neither was waiting on you after all (nothing had been built; both are now fixed) · every item here is open, built as far as it goes, and waiting only on you.
-    Anything you skip stays exactly where it is — nothing gets dropped.
+    Built from REQUESTS.md at v16.36 · <b>21 Sep:</b> #869 left &mdash; built as the recommended option in v16.31 ·
+    #845, #847, #860 and #882 were waiting on you but missing from this page, and are on it now · #883 stays, because
+    the fix shipped but only your phone can confirm it. The counts at the top of each section are worked out by the
+    page itself, so they cannot go stale the way the ones written here used to.<br>
+    Anything you skip stays exactly where it is &mdash; nothing gets dropped.
   </footer>
 </div>
 
