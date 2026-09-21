@@ -56192,6 +56192,26 @@
     if (!(at(up, 40, 22) > at(up, 40, 57) + 20)) throw new Error('Light from 90° (above) does not light the top edge');
   });
 
+  /* ═══ 904: Turbulent Displace gets a Boil speed (0 freezes it) and a Pattern. Both absent = the old boil exactly, and the fast
+     prepped lattice must agree with the direct kernel for the new controls too (they share one phase helper). */
+  test('904: Turbulent Displace boil can be slowed, frozen and reshuffled', { item: '904' }, function () {
+    const X = FM._FX_TABLES && FM._FX_TABLES.WARP_FX;
+    if (!X || !X.turbulentdisplace || !X.turbulentdisplace.prep) throw new Error('WARP_FX.turbulentdisplace is not reachable');
+    const W = 200, H = 200, f = X.turbulentdisplace;
+    const at = (p, t, pre) => f(73, 91, W, H, W / 2, H / 2, 140, Object.assign({ amount: 30, scale: 60 }, p), t, 1, pre);
+    const eq = (a, b) => a[0] === b[0] && a[1] === b[1];
+    if (!eq(at({}, 1.3), at({ evolve: 1, seed: 0 }, 1.3))) throw new Error('Boil speed 1 / Pattern 0 is not the old displacement exactly');
+    if (eq(at({}, 0), at({}, 2))) throw new Error('control: the default does not move between t=0 and t=2, so freezing cannot be seen');
+    if (!eq(at({ evolve: 0 }, 0), at({ evolve: 0 }, 2))) throw new Error('Boil speed 0 still boils — the pattern moved between t=0 and t=2 (queue 904)');
+    if (eq(at({ seed: 5 }, 1.3), at({}, 1.3))) throw new Error('Pattern 5 displaces exactly like Pattern 0');
+    // the fast path agrees with the direct kernel under the new controls
+    for (const p of [{ seed: 5 }, { evolve: 2.5 }]) {
+      const P = Object.assign({ amount: 30, scale: 60 }, p), pre = f.prep(W, H, W / 2, H / 2, 140, P, 1.3, 1);
+      const a = f(73, 91, W, H, W / 2, H / 2, 140, P, 1.3, 1, pre), b = f(73, 91, W, H, W / 2, H / 2, 140, P, 1.3, 1);
+      if (Math.hypot(a[0] - b[0], a[1] - b[1]) > 0.5) throw new Error('the prepped lattice and the direct kernel disagree by ' + Math.hypot(a[0] - b[0], a[1] - b[1]).toFixed(2) + 'px with ' + JSON.stringify(p));
+    }
+  });
+
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
      Ezra asked the question this answers: *"How confident are you that every effect is actually good?"*
      Three separate times now a kernel has drawn a different picture on the reduced preview plate than

@@ -1050,6 +1050,8 @@ window.FM = window.FM || {};
     { type: 'turbulentdisplace', label: 'Turbulent Displace', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 80, step: 1, def: 30, unit: 'px' },
       { key: 'scale', label: 'Detail', min: 10, max: 400, step: 1, def: 60 },
+      { key: 'evolve', label: 'Boil speed', min: 0, max: 5, step: 0.05, def: 1, unit: '×' },   // queue 904: it boiled at a fixed, unstoppable rate
+      { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0 },
     ] },
     { type: 'stretchseg', label: 'Stretch Segment', params: [
       { key: 'y', label: 'Position', min: 0, max: 100, step: 1, def: 50, unit: '%' },
@@ -8884,7 +8886,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var td_a = fparam(p, 'amount', 30, t); if(td_a<0)td_a=0; if(td_a>80)td_a=80; if(td_a<=0)return [x,y];
       var td_sc = fparam(p, 'scale', 60, t); if(td_sc<10)td_sc=10;
       td_a*=(ps||1); td_sc=Math.max(1,td_sc*(ps||1));
-      var td_ph=t*0.6;
+      var td_ph=tdPhase(p,t);   // queue 904: Boil speed and Pattern — the same helper the prep uses, so the two cannot drift
       var td_wx=td_noise(x/td_sc+td_ph, y/td_sc), td_wy=td_noise(x/td_sc, y/td_sc-td_ph*0.8);
       var td_dx=td_noise(x/td_sc+td_wx+5.2, y/td_sc+td_wy), td_dy=td_noise(x/td_sc-td_wy, y/td_sc+td_wx+1.7);
       return [x+td_dx*td_a, y+td_dy*td_a];
@@ -9394,6 +9396,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * reference kernel computes. That is the case where an error would be most visible, and it is the
    * case that has none. */
   const _tdGrid = { DX: null, DY: null };          // grow-only, reused per frame — see below
+  /* BOIL SPEED and PATTERN (queue 904). The boil was t * 0.6 with nothing to slow, stop or reshuffle it. Speed multiplies the clock
+     (1 is exactly the old t * 0.6, 0 freezes it); Pattern slides the whole noise field to a different place, so two layers boil
+     differently. Both absent is the old phase to the bit. */
+  function tdPhase(p, t) {
+    let ph = t * 0.6;
+    if (p.evolve != null) { const k = FM.evalProp(p.evolve, t); if (isFinite(k) && k !== 1) ph = t * 0.6 * Math.max(0, k); }
+    if (p.seed != null) { const sd = Math.round(FM.evalProp(p.seed, t)) | 0; if (sd) ph += sd * 17.31; }
+    return ph;
+  }
   WARP_FX.turbulentdisplace.prep = function (W, H, cx, cy, maxR, p, t, ps) {
     let a = FM.evalProp(p.amount, t);
     if (a == null) a = 30; if (a < 0) a = 0; if (a > 80) a = 80;
@@ -9401,7 +9412,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     let sc = FM.evalProp(p.scale, t);
     if (sc == null) sc = 60; if (sc < 10) sc = 10;
     a *= (ps || 1); sc = Math.max(1, sc * (ps || 1));
-    const ph = t * 0.6;
+    const ph = tdPhase(p, t);
 
     /* The step comes from the noise scale, not from the raster: a coarse churn can be sampled coarsely,
        a fine crawl cannot. Capped at 6 because past that the win is already ~36x and the error starts
