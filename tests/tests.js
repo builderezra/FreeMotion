@@ -56173,6 +56173,25 @@
     if (!(c1 > r1 * 1.5)) throw new Error('Lightning at 90° still runs top-to-bottom (' + r1 + ' rows, ' + c1 + ' columns) — the angle is ignored (queue 904)');
   });
 
+  /* ═══ 904: Smooth Bevel's light can be moved. 135 is the old top-left light exactly; 315 lights the opposite edges. */
+  test('904: Smooth Bevel light angle moves the highlight', { item: '904' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.smoothbevel) throw new Error('PIXEL_FX.smoothbevel is not reachable');
+    const W = 80, H = 80;
+    const sq = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 20; y < 60; y++) for (let x = 20; x < 60; x++) { const i = (y * W + x) * 4; d[i] = d[i + 1] = d[i + 2] = 128; d[i + 3] = 255; } return d; };
+    const run = (p) => { const d = sq(); K.smoothbevel(d, W, H, Object.assign({ depth: 6, strength: 1 }, p), 0, 1); return d; };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    const at = (d, x, y) => d[(y * W + x) * 4];
+    const old = run({});
+    if (!same(old, run({ angle: 315 }))) throw new Error('Smooth Bevel at 315° is not byte-identical to a saved bevel');
+    // the saved light is from the bottom-right: bottom and right edges bright, top and left dark
+    if (!(at(old, 40, 57) > at(old, 40, 22) + 20 && at(old, 57, 40) > at(old, 22, 40) + 20)) throw new Error('control: the default bevel is not lit from the bottom-right (bottom ' + at(old, 40, 57) + ' top ' + at(old, 40, 22) + ' right ' + at(old, 57, 40) + ' left ' + at(old, 22, 40) + ')');
+    const tl = run({ angle: 135 });
+    if (!(at(tl, 40, 22) > at(tl, 40, 57) + 20 && at(tl, 22, 40) > at(tl, 57, 40) + 20)) throw new Error('Smooth Bevel with Light from 135° (top-left) does not light the top and left edges (top ' + at(tl, 40, 22) + ' bottom ' + at(tl, 40, 57) + ') — the light is welded (queue 904)');
+    const up = run({ angle: 90 });
+    if (!(at(up, 40, 22) > at(up, 40, 57) + 20)) throw new Error('Light from 90° (above) does not light the top edge');
+  });
+
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
      Ezra asked the question this answers: *"How confident are you that every effect is actually good?"*
      Three separate times now a kernel has drawn a different picture on the reduced preview plate than
