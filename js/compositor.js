@@ -67,6 +67,7 @@ window.FM = window.FM || {};
     { type: 'chromakey', label: 'Chroma Key', color: true, defColor: '#00ff00', params: [
       { key: 'tolerance', label: 'Tolerance', min: 0, max: 1, step: 0.02, def: 0.3 },
       { key: 'softness', label: 'Edge softness', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'despill', label: 'Despill', min: 0, max: 1, step: 0.02, def: 0.5, legacy: 0 },   // queue 904: the green rim every key leaves had no cure here. A saved key (no key) draws 0.
     ] },
     { type: 'lumakey', label: 'Luma Key', params: [
       { key: 'threshold', label: 'Threshold', min: 0, max: 1, step: 0.02, def: 0.25 },
@@ -1374,7 +1375,7 @@ window.FM = window.FM || {};
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
   // recompute when the source frame and params are unchanged (static images, paused/scrub
   // redraws, repeated renders of one frame). Stats exposed for verification.
-  FM._chromaKey = function (src, w, h, keyHex, tol, filterStr, soft) { return chromaKey(src, w, h, keyHex, tol, filterStr, soft); };   // suite seam (queue 734)
+  FM._chromaKey = function (src, w, h, keyHex, tol, filterStr, soft, spill) { return chromaKey(src, w, h, keyHex, tol, filterStr, soft, spill); };   // suite seam (queue 734)
   FM._lumaKey = function (src, w, h, threshold, filterStr, soft, mode) { return lumaKey(src, w, h, threshold, filterStr, soft, mode); };   // suite seam (queue 735)
   FM._fxStats = { ckCompute: 0, lkCompute: 0, plates: 0 };   // plates: expanded plates rendered (queue 730 — the suite counts them)
   // Bumped whenever a reused offscreen canvas (grade/key/blend) is (re)computed, so srcToken varies for
@@ -1395,10 +1396,10 @@ window.FM = window.FM || {};
   // SOFT is the new one, and it has to be in the cache key below or dragging the slider repaints
   // nothing: this canvas is reused whenever every remembered input matches, and a param the key does
   // not mention is a param the user cannot see the effect of.
-  function chromaKey(src, w, h, keyHex, tol, filterStr, soft) {
+  function chromaKey(src, w, h, keyHex, tol, filterStr, soft, spill) {
     const tok = srcToken(src);
-    soft = soft || 0;
-    if (_ckLast && _ckCanvas && _ckLast.tok === tok && _ckLast.w === w && _ckLast.h === h && _ckLast.key === keyHex && _ckLast.tol === tol && _ckLast.filter === filterStr && _ckLast.soft === soft) return _ckCanvas;
+    soft = soft || 0; spill = spill || 0;
+    if (_ckLast && _ckCanvas && _ckLast.tok === tok && _ckLast.w === w && _ckLast.h === h && _ckLast.key === keyHex && _ckLast.tol === tol && _ckLast.filter === filterStr && _ckLast.soft === soft && _ckLast.spill === spill) return _ckCanvas;
     if (!_ckCanvas) _ckCanvas = document.createElement('canvas');
     const oc = _ckCanvas; oc.width = w; oc.height = h;
     const octx = oc.getContext('2d');
@@ -1417,14 +1418,22 @@ window.FM = window.FM || {};
     // real subject's edge pixels live: they are part background, part subject. At 0 the band is zero
     // wide and the branch never runs, so an existing key cuts exactly where it always did.
     const band = (soft || 0) * 441;
+    const kc = kg >= kr && kg >= kb ? 1 : (kb >= kr ? 2 : 0);   // the key's dominant channel, for despill
     for (let i = 0; i < d.length; i += 4) {
       const dr = d[i] - kr, dg = d[i + 1] - kg, db = d[i + 2] - kb;
       const dist = Math.sqrt(dr * dr + dg * dg + db * db);
       if (dist < thr) d[i + 3] = 0;
       else if (band > 0 && dist < thr + band) d[i + 3] = Math.round(d[i + 3] * (dist - thr) / band);
+      /* DESPILL (queue 904) — what Chroma Key Pro already does, for any key colour. The key's STRONGEST channel (green for a green
+         screen) bouncing onto the subject is the rim every key leaves; where a surviving pixel carries more of that channel than of
+         the other two, it is pulled down toward their maximum. 0 = the old loop, untouched. */
+      if (spill > 0 && d[i + 3] > 0) {
+        const c = kc, o1 = d[i + (c + 1) % 3], o2 = d[i + (c + 2) % 3], mx = o1 > o2 ? o1 : o2, v = d[i + c];
+        if (v > mx) d[i + c] = v - (v - mx) * spill;
+      }
     }
     octx.putImageData(img, 0, 0);
-    _ckLast = { tok, w, h, key: keyHex, tol, filter: filterStr, soft }; FM._fxStats.ckCompute++;
+    _ckLast = { tok, w, h, key: keyHex, tol, filter: filterStr, soft, spill }; FM._fxStats.ckCompute++;
     oc._fmGen = ++_gen;
     return oc;
   }
@@ -14495,7 +14504,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           // is always false → the key silently does nothing the moment you animate it
           const tol = p.tolerance == null ? 0.3 : FM.evalProp(p.tolerance, t);
           const cks = p.softness == null ? 0 : Math.max(0, Math.min(1, FM.evalProp(p.softness, t)));
-          src = chromaKey(src, w, h, p.color || '#00ff00', tol, ctx.filter, cks); keyed = true;
+          const ckd = p.despill == null ? 0 : Math.max(0, Math.min(1, FM.evalProp(p.despill, t)));
+          src = chromaKey(src, w, h, p.color || '#00ff00', tol, ctx.filter, cks, ckd); keyed = true;
         }
         if (lk && src) {
           const p = lk.params || {};

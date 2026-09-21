@@ -56046,6 +56046,24 @@
     }
   });
 
+  /* ═══ 904: Chroma Key gets Despill — the green rim left on a keyed subject. 0 is the old key exactly. */
+  test('904: Chroma Key despill pulls the green rim off what survives the key', { item: '904' }, function () {
+    if (!FM._chromaKey) throw new Error('the chromaKey seam is not reachable');
+    const src = offscreen(3, 1), c = src.getContext('2d'), im = c.createImageData(3, 1);
+    [[0, 255, 0], [200, 232, 150], [60, 90, 220]].forEach((px, i) => { im.data[i * 4] = px[0]; im.data[i * 4 + 1] = px[1]; im.data[i * 4 + 2] = px[2]; im.data[i * 4 + 3] = 255; });
+    c.putImageData(im, 0, 0);
+    const key = (spill) => { const out = FM._chromaKey(src, 3, 1, '#00ff00', 0.3, 'none', 0, spill); return Array.from(out.getContext('2d').getImageData(0, 0, 3, 1).data); };
+    const k0 = key(0), kU = key(undefined), k1 = key(1), kH = key(0.5);
+    if (k0.join() !== kU.join()) throw new Error('Despill 0 is not the old key');
+    if (k0[3] !== 0) throw new Error('control: the pure green pixel was not keyed out');
+    if (k0[5] !== 232) throw new Error('control: without despill the green-tinted pixel should keep G 232, got ' + k0[5]);
+    if (k1[5] !== 200) throw new Error('Despill 1 left G at ' + k1[5] + ' on a green-tinted pixel — expected it pulled to 200, the larger of R and B (queue 904)');
+    if (!(kH[5] > 200 && kH[5] < 232)) throw new Error('Despill 0.5 should land between: G ' + kH[5]);
+    if (k1.slice(8, 11).join() !== k0.slice(8, 11).join()) throw new Error('Despill changed a pixel that has no green spill (a blue one)');
+    const inst = FM.fxRegistry.makeInstance('chromakey');
+    if (inst.params.despill !== 0.5) throw new Error('a new Chroma Key does not start with Despill 0.5');
+  });
+
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
      Ezra asked the question this answers: *"How confident are you that every effect is actually good?"*
      Three separate times now a kernel has drawn a different picture on the reduced preview plate than
