@@ -56024,6 +56024,28 @@
     }
   });
 
+  /* ═══ 904: Wipe and Radial Wipe get an Edge softness. 0 is the old 1-bit cut; above 0 the edge is a gradient, and progress 0 / 1
+     still mean nothing / everything. */
+  test('904: Wipe and Radial Wipe have a soft edge, and 0 / 1 progress still show nothing / everything', { item: '904' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.wipe || !K.radialwipe) throw new Error('PIXEL_FX wipes are not reachable');
+    const W = 80, H = 60;
+    const full = () => { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = 200; d[i + 3] = 255; } return d; };
+    const run = (type, p) => { const d = full(); K[type](d, W, H, p, 0, 1); return d; };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    const partial = (d) => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0 && d[i] < 255) n++; return n; };
+    const lit = (d) => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; };
+    for (const [type, base] of [['wipe', { progress: 0.5, angle: 30 }], ['radialwipe', { progress: 0.4, start: 0, centerx: 50, centery: 50 }]]) {
+      const hard = run(type, base);
+      if (!same(hard, run(type, Object.assign({ softness: 0 }, base)))) throw new Error(type + ': softness 0 is not byte-identical to a saved wipe');
+      if (partial(hard) !== 0) throw new Error('control: the hard ' + type + ' already has partial alpha, so softness cannot be seen');
+      const soft = run(type, Object.assign({ softness: 12 }, base));
+      if (partial(soft) < 40) throw new Error(type + ' with Edge softness 12 has only ' + partial(soft) + ' partly-transparent pixels — the edge is still a hard cut (queue 904)');
+      if (lit(run(type, Object.assign({ softness: 12 }, base, { progress: 0 }))) !== 0) throw new Error(type + ' with softness shows something at progress 0');
+      if (!same(run(type, Object.assign({ softness: 12 }, base, { progress: 1 })), full())) throw new Error(type + ' with softness is not the whole layer at progress 1');
+    }
+  });
+
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
      Ezra asked the question this answers: *"How confident are you that every effect is actually good?"*
      Three separate times now a kernel has drawn a different picture on the reduced preview plate than
