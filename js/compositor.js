@@ -523,7 +523,7 @@ window.FM = window.FM || {};
     // something that knew the movement would not need to be told the direction. The type id stays
     // 'motionblur' so saved projects, presets and the AI vocabulary all still resolve.
     { type: 'motionblur', label: 'Directional Blur', desc: 'A fixed smear along an angle you choose. It does not read movement — a still clip blurs exactly as much as a moving one.',
-      params: [{ key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 20, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },
+      params: [{ key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 20, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 9, unit: ' taps' }] },   // queue 904: Quality — 9 taps was welded, so a long smear broke into a ghost train
     { type: 'colorbalance', label: 'Colour Balance', params: [{ key: 'red', label: 'Red', min: -100, max: 100, step: 1, def: 25 }, { key: 'green', label: 'Green', min: -100, max: 100, step: 1, def: 0 }, { key: 'blue', label: 'Blue', min: -100, max: 100, step: 1, def: -25 }] },
     { type: 'highlightsshadows', label: 'Highlights & Shadows', params: [{ key: 'highlights', label: 'Highlights', min: -100, max: 100, step: 1, def: -40 }, { key: 'shadows', label: 'Shadows', min: -100, max: 100, step: 1, def: 50 }] },
     { type: 'tiltshift', label: 'Tilt Shift', params: [{ key: 'center', label: 'Focus', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'blur', label: 'Blur amount', min: 0.25, max: 4, step: 0.05, def: 1, unit: '×' }] },   // queue 904: a multiple of the old fixed 8, so 1× IS the old look and it stays clear of pxToPlate
@@ -538,7 +538,7 @@ window.FM = window.FM || {};
     { type: 'innerglow', label: 'Inner Glow', params: [{ key: 'radius', label: 'Radius', min: 1, max: 30, step: 1, def: 10, unit: 'px' }, { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 }], color: true, defColor: '#ffe08a', colorLabel: 'Glow' },
     { type: 'unsharpmask', label: 'Unsharp Mask', params: [{ key: 'amount', label: 'Amount', min: 0, max: 3, step: 0.05, def: 1.2 }, { key: 'radius', label: 'Radius', min: 1, max: 20, step: 1, def: 3, unit: 'px' }, { key: 'threshold', label: 'Skip flat areas', min: 0, max: 64, step: 1, def: 0 }] },   // queue 904: the Threshold Unsharp Mask is named for, as Sharpen has
     { type: 'hextiles', label: 'Hexagon Tiles', param: 'size', min: 4, max: 80, step: 1, def: 20, unit: 'px' },
-    { type: 'linstreaks', label: 'Linear Streaks', params: [{ key: 'length', label: 'Length', min: 0, max: 80, step: 1, def: 30, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 90, unit: '°' }] },
+    { type: 'linstreaks', label: 'Linear Streaks', params: [{ key: 'length', label: 'Length', min: 0, max: 80, step: 1, def: 30, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 90, unit: '°' }, { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 8, unit: ' taps' }] },
     // ---- batch 13: Opacity / Visibility (time-based alpha) ----
     { type: 'blink', label: 'Blink', params: [
       { key: 'rate', label: 'Rate', min: 0.5, max: 12, step: 0.1, def: 2, unit: 'Hz' },
@@ -682,6 +682,7 @@ window.FM = window.FM || {};
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'decay', label: 'Trail falloff', min: 0, max: 2, step: 0.05, def: 0.6 },
+      { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 10, unit: ' taps' },   // queue 904: the tap count was a hardcoded 10 while the Blur twins expose it
     ] },
     /* FRACTAL RIDGES — reworked. It shipped with two sliders over a picture that never moved and had
      * no colour at all. Measured before the rework (real app, real renderScene, 240x240, ps 1): the
@@ -722,6 +723,7 @@ window.FM = window.FM || {};
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'threshold', label: 'Only above', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 10, unit: ' taps' },   // queue 904: the tap count was a hardcoded 10 while the Blur twins expose it
     ] },
     { type: 'innerblur', label: 'Inner Blur', params: [
       { key: 'radius', label: 'Radius', min: 0, max: 30, step: 1, def: 8, unit: 'px' },
@@ -5878,7 +5880,7 @@ window.FM = window.FM || {};
       var hxY0=hxBB?Math.max(0,hxBB.y-hxM):0, hxY1=hxBB?Math.min(H-1,hxBB.y+hxBB.h-1+hxM):H-1;
       var hxX0=hxBB?Math.max(0,hxBB.x-hxM):0, hxX1=hxBB?Math.min(W-1,hxBB.x+hxBB.w-1+hxM):W-1;
       for(var hxY=hxY0;hxY<=hxY1;hxY++){ var hxRow=Math.floor(hxY/hxRowH); var hxShift=(hxRow&1)?hxHalf:0; for(var hxX=hxX0;hxX<=hxX1;hxX++){ var hxCol=Math.floor((hxX-hxShift)/hxSize); var hxBestDx=1e9,hxBestX=hxX,hxBestY=hxY; for(var hxRO=-1;hxRO<=1;hxRO++){ var hxR2=hxRow+hxRO; var hxCY=hxR2*hxRowH+hxRowH*0.5; var hxSh2=(hxR2&1)?hxHalf:0; for(var hxCO=-1;hxCO<=1;hxCO++){ var hxC2=hxCol+hxCO; var hxCX=hxC2*hxSize+hxSh2+hxHalf; var hxDX=hxX-hxCX, hxDY=hxY-hxCY; var hxDist=hxDX*hxDX+hxDY*hxDY; if(hxDist<hxBestDx){ hxBestDx=hxDist; hxBestX=Math.round(hxCX); hxBestY=Math.round(hxCY); } } } if(hxBestX<0)hxBestX=0; else if(hxBestX>=W)hxBestX=W-1; if(hxBestY<0)hxBestY=0; else if(hxBestY>=H)hxBestY=H-1; var hxSi=(hxBestY*W+hxBestX)*4; var hxDi=hxY*hxW4+hxX*4; d[hxDi]=hxSrc[hxSi]; d[hxDi+1]=hxSrc[hxSi+1]; d[hxDi+2]=hxSrc[hxSi+2]; d[hxDi+3]=hxSrc[hxSi+3]; } } },
-    linstreaks: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(80,lsLen)); if(lsLen<1)return; var lsAng = fparam(p, 'angle', 90, t); var lsRad=lsAng*Math.PI/180; var lsDx=Math.cos(lsRad), lsDy=Math.sin(lsRad); var lsSamp=8; var lsStep=lsLen/lsSamp; var lsW4=W*4; var lsS=fxSrc(d); for(var lsY=0;lsY<H;lsY++){ var lsRow=lsY*lsW4; for(var lsX=0;lsX<W;lsX++){ var lsI=lsRow+lsX*4; if(lsS[lsI+3]<=0)continue; var lsAr=0,lsAg=0,lsAb=0; for(var lsK=1;lsK<=lsSamp;lsK++){ var lsOff=lsK*lsStep; var lsSx=lsX-lsDx*lsOff, lsSy=lsY-lsDy*lsOff; var lsXi=lsSx<0?0:(lsSx>W-1?W-1:Math.round(lsSx)); var lsYi=lsSy<0?0:(lsSy>H-1?H-1:Math.round(lsSy)); var lsSi=lsYi*lsW4+lsXi*4; if(lsS[lsSi+3]<=0)continue; var lsSr=lsS[lsSi], lsSg=lsS[lsSi+1], lsSb=lsS[lsSi+2]; var lsBright=(lsSr*0.299+lsSg*0.587+lsSb*0.114)/255; lsBright=lsBright*lsBright; var lsDecay=1-(lsK/(lsSamp+1)); var lsWt=lsBright*lsDecay; lsAr+=lsSr*lsWt; lsAg+=lsSg*lsWt; lsAb+=lsSb*lsWt; } var lsNorm=lsSamp*0.5; var lsTr=lsAr/lsNorm, lsTg=lsAg/lsNorm, lsTb=lsAb/lsNorm; if(lsTr>255)lsTr=255; if(lsTg>255)lsTg=255; if(lsTb>255)lsTb=255; var lsR=d[lsI], lsG=d[lsI+1], lsB=d[lsI+2]; d[lsI]=255-(255-lsR)*(255-lsTr)/255; d[lsI+1]=255-(255-lsG)*(255-lsTg)/255; d[lsI+2]=255-(255-lsB)*(255-lsTb)/255; } } },
+    linstreaks: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(80,lsLen)); if(lsLen<1)return; var lsAng = fparam(p, 'angle', 90, t); var lsRad=lsAng*Math.PI/180; var lsDx=Math.cos(lsRad), lsDy=Math.sin(lsRad); var lsSamp=p.samples==null?8:Math.max(4,Math.min(32,Math.round(FM.evalProp(p.samples,t))||8));   /* QUALITY (queue 904); 8 = the old taps */ var lsStep=lsLen/lsSamp; var lsW4=W*4; var lsS=fxSrc(d); for(var lsY=0;lsY<H;lsY++){ var lsRow=lsY*lsW4; for(var lsX=0;lsX<W;lsX++){ var lsI=lsRow+lsX*4; if(lsS[lsI+3]<=0)continue; var lsAr=0,lsAg=0,lsAb=0; for(var lsK=1;lsK<=lsSamp;lsK++){ var lsOff=lsK*lsStep; var lsSx=lsX-lsDx*lsOff, lsSy=lsY-lsDy*lsOff; var lsXi=lsSx<0?0:(lsSx>W-1?W-1:Math.round(lsSx)); var lsYi=lsSy<0?0:(lsSy>H-1?H-1:Math.round(lsSy)); var lsSi=lsYi*lsW4+lsXi*4; if(lsS[lsSi+3]<=0)continue; var lsSr=lsS[lsSi], lsSg=lsS[lsSi+1], lsSb=lsS[lsSi+2]; var lsBright=(lsSr*0.299+lsSg*0.587+lsSb*0.114)/255; lsBright=lsBright*lsBright; var lsDecay=1-(lsK/(lsSamp+1)); var lsWt=lsBright*lsDecay; lsAr+=lsSr*lsWt; lsAg+=lsSg*lsWt; lsAb+=lsSb*lsWt; } var lsNorm=lsSamp*0.5; var lsTr=lsAr/lsNorm, lsTg=lsAg/lsNorm, lsTb=lsAb/lsNorm; if(lsTr>255)lsTr=255; if(lsTg>255)lsTg=255; if(lsTb>255)lsTb=255; var lsR=d[lsI], lsG=d[lsI+1], lsB=d[lsI+2]; d[lsI]=255-(255-lsR)*(255-lsTr)/255; d[lsI+1]=255-(255-lsG)*(255-lsTg)/255; d[lsI+2]=255-(255-lsB)*(255-lsTb)/255; } } },
     // ---- batch 13 (opacity / visibility) ----
     blink: function(d, W, H, p, t) { var blkRate = FM.evalProp(p.rate, t); if (blkRate == null || !isFinite(blkRate)) blkRate = 2; if (blkRate < 0.5) blkRate = 0.5; if (blkRate > 12) blkRate = 12; var blkTime = (typeof t === 'number' && isFinite(t)) ? t : 0; if (blkTime < 0) blkTime = 0; 
       // Every blink in every project was the same hard 50/50 square wave locked to t=0. DUTY makes a
@@ -6188,7 +6190,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // CENTRE was W/2, H/2. DECAY was the hardcoded 0.6 in 1/(1+k*0.6): at 0 every tap weighs the same
       // and the streak becomes a long even comet tail, at 2 it collapses to a tight ghost right behind
       // the subject. 0.6 read from the param is the same double as the literal, so the default is exact.
-      var ssCx=wCx(p,t,W,W/2), ssCy=wCy(p,t,H,H/2), ssW4=W*4; var ssSpan=ssAmt*0.5; var ssN=10; var ssDa=ssSpan/(ssN-1);
+      var ssCx=wCx(p,t,W,W/2), ssCy=wCy(p,t,H,H/2), ssW4=W*4; var ssSpan=ssAmt*0.5; var ssN=p.samples==null?10:Math.max(4,Math.min(32,Math.round(FM.evalProp(p.samples,t))||10)); var ssDa=ssSpan/(ssN-1);   /* QUALITY (queue 904); 10 = the old taps */
       var ssDec=p.decay==null?0.6:FM.evalProp(p.decay,t); if(ssDec<0)ssDec=0; if(ssDec>2)ssDec=2;
       /* NO TRIGONOMETRY IN THE PIXEL LOOP (queue 474, v11.75). Second most expensive effect in the app —
          319.68ms at 1080x1350 against a 14.85ms median — because it did 22 TRIG CALLS PER PIXEL: a sqrt
@@ -6206,7 +6208,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          is why the suite pins this with a BOUNDED-difference assertion rather than the byte-identity one
          used for tilt shift. See the test for why exact equality is not reachable here. */
       var ssCos=new Float64Array(ssN), ssSin=new Float64Array(ssN), ssWts=new Float64Array(ssN), ssWtot=0;
-      for(var ssP=0; ssP<ssN; ssP++){ var ssAng=ssP*ssDa; ssCos[ssP]=Math.cos(ssAng); ssSin[ssP]=Math.sin(ssAng); ssWts[ssP]=1/(1+ssP*ssDec); ssWtot+=ssWts[ssP]; }
+      for(var ssP=0; ssP<ssN; ssP++){ var ssAng=ssP*ssDa; ssCos[ssP]=Math.cos(ssAng); ssSin[ssP]=Math.sin(ssAng); ssWts[ssP]=1/(1+ssP*(9/(ssN-1))*ssDec);   /* falloff per ANGLE, not per tap, so more taps smooth the trail without shortening it; 9/9 is exactly 1 at the old 10 */ ssWtot+=ssWts[ssP]; }
       var ssY0=0, ssY1=H-1, ssX0=0, ssX1=W-1;
        /* ⚠️ NOT WHEN THE LAYER TOUCHES A FRAME EDGE. A tap whose sample falls outside the frame is
           CLAMPED to the border rather than dropped, so if the layer is ON that border a pixel arbitrarily
@@ -6439,7 +6441,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // light in the shot. THRESHOLD gates which pixels are allowed to streak at all: legacy weights
       // every tap by (lum/255)^2, which is small for a mid-tone but not zero, so ten thousand mid-tones
       // each contributing a little added up to a grey haze over the whole picture instead of rays.
-      var zs_cx=wCx(p,t,W,W/2), zs_cy=wCy(p,t,H,H/2); var zs_w4=W*4; var zs_steps=10; var zs_strength=0.16+0.74*zs_amt;
+      var zs_cx=wCx(p,t,W,W/2), zs_cy=wCy(p,t,H,H/2); var zs_w4=W*4; var zs_steps=p.samples==null?10:Math.max(4,Math.min(32,Math.round(FM.evalProp(p.samples,t))||10));   /* QUALITY (queue 904); 10 = the old taps */ var zs_strength=0.16+0.74*zs_amt;
       var zs_thrP=p.threshold==null?0:FM.evalProp(p.threshold,t); if(zs_thrP<0)zs_thrP=0; if(zs_thrP>100)zs_thrP=100;
       var zs_gate=zs_thrP>0, zs_thr=zs_thrP/100, zs_span=zs_gate?(1-zs_thr):1;
       var zs_y0=0, zs_y1=H-1, zs_x0=0, zs_x1=W-1;
@@ -11122,14 +11124,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       dist *= PS;
       let ang = fparam(p, 'angle', 0, t);
       const rad = Math.max(0, Math.min(360, ang)) * Math.PI / 180;
-      const dx = Math.cos(rad), dy = Math.sin(rad), step = dist / 8;
-      // additive 'lighter' at 1/9 each = true premultiplied MEAN of the 9 taps — successive-alpha
+      // QUALITY (queue 904): the tap count was welded at 9, so a 60px smear showed as nine separate ghosts. 9 is the old loop exactly.
+      const N = p.samples == null ? 9 : Math.max(4, Math.min(32, Math.round(FM.evalProp(p.samples, t)) || 9)), half = (N - 1) / 2;
+      const dx = Math.cos(rad), dy = Math.sin(rad), step = dist / (N - 1);
+      // additive 'lighter' at 1/N each = true premultiplied MEAN of the N taps — successive-alpha
       // source-over skews partial-coverage edge pixels to full opacity (hard edge, no smear)
       B.save();
       B.globalCompositeOperation = 'lighter';
-      B.globalAlpha = 1 / 9;
-      for (let k = 0; k <= 8; k++) {
-        const off = (k - 4) * step;
+      B.globalAlpha = 1 / N;
+      for (let k = 0; k < N; k++) {
+        const off = (k - half) * step;
         B.drawImage(A, dx * off, dy * off);
       }
       B.restore();

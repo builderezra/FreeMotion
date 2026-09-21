@@ -56084,6 +56084,45 @@
     if (!(gone(rl, 120, 160) > 0.9 && gone(rl, 0, 40) < 0.1)) throw new Error('Order ← does not sweep from the right');
   });
 
+  /* ═══ 904: Directional Blur and the three Streaks get a Quality (tap count). The old count is the old picture; more taps turn a
+     ghost train into a smooth smear, measured as less total variation along the smear. */
+  test('904: Directional Blur and Linear / Spin / Zoom Streaks smooth out with more Quality taps', { item: '904' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.linstreaks || !K.spinstreaks || !K.zoomstreaks) throw new Error('PIXEL_FX streaks are not reachable');
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    const W = 120, H = 120;
+    const dot = () => { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = d[i + 1] = d[i + 2] = 20; d[i + 3] = 255; }
+      for (let y = 80; y < 84; y++) for (let x = 80; x < 84; x++) { const i = (y * W + x) * 4; d[i] = d[i + 1] = d[i + 2] = 255; } return d; };
+    const tv = (d) => { let v = 0; for (let y = 1; y < H; y++) for (let x = 1; x < W; x++) { const i = (y * W + x) * 4; v += Math.abs(d[i] - d[i - 4]) + Math.abs(d[i] - d[i - W * 4]); } return v; };
+    const run = (k, p) => { const d = dot(); K[k](d, W, H, p, 0, 1); return d; };
+    for (const [k, base, dv] of [['linstreaks', { length: 60, angle: 45 }, 8], ['spinstreaks', { amount: 0.8, centerx: 50, centery: 50, decay: 0.6 }, 10], ]) {
+      const old = run(k, base);
+      if (!same(old, run(k, Object.assign({ samples: dv }, base)))) throw new Error(k + ': Quality ' + dv + ' is not byte-identical to a saved one');
+      const hi = run(k, Object.assign({ samples: 32 }, base));
+      if (same(old, hi)) throw new Error(k + ': Quality 32 draws exactly what ' + dv + ' draws — the tap count is still hardcoded (queue 904)');
+      if (!(tv(hi) < tv(old))) throw new Error(k + ': more taps should give a smoother trail (total variation ' + tv(hi) + ' vs ' + tv(old) + ')');
+    }
+    /* Zoom Streaks: a longer, continuous trail ADDS edges at its sides, so total variation is the wrong measure there. The ghost
+       train shows as GAPS — background pixels between lit ones along the ray from the centre through a dot. */
+    { const ZW = 200, zd = () => { const d = new Uint8ClampedArray(ZW * ZW * 4); for (let i = 0; i < d.length; i += 4) { d[i] = d[i + 1] = d[i + 2] = 20; d[i + 3] = 255; }
+        for (let y = 60; y < 64; y++) for (let x = 60; x < 64; x++) { const i = (y * ZW + x) * 4; d[i] = d[i + 1] = d[i + 2] = 255; } return d; };
+      const zr = (p) => { const d = zd(); K.zoomstreaks(d, ZW, ZW, Object.assign({ amount: 0.9, centerx: 50, centery: 50, threshold: 0 }, p), 0, 1); return d; };
+      const gaps = (d) => { const r = []; for (let x = 62; x >= 0; x--) r.push(d[(x * ZW + x) * 4]); let last = 0; r.forEach((v, i) => { if (v > 20) last = i; }); return r.slice(0, last).filter(v => v === 20).length; };
+      const z10 = zr({}); if (!same(z10, zr({ samples: 10 }))) throw new Error('zoomstreaks: Quality 10 is not byte-identical to a saved one');
+      if (!(gaps(z10) >= 5)) throw new Error('control: the 10-tap zoom trail has only ' + gaps(z10) + ' gaps, so it is not the ghost train this test is for');
+      if (gaps(zr({ samples: 32 })) !== 0) throw new Error('zoomstreaks at 32 taps still has ' + gaps(zr({ samples: 32 })) + ' gaps along the trail (queue 904)'); }
+    // Directional Blur is a canvas effect — through the app
+    const mb = (samples) => { const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 60, shapeW: 4, shapeH: 60, fill: '#ffffff' });
+      const e = FM.fxRegistry.makeInstance('motionblur'); e.params.distance = 60; e.params.angle = 0; if (samples === undefined) delete e.params.samples; else e.params.samples = samples; L.effects = [e];
+      const c = offscreen(200, 120), ctx = c.getContext('2d');
+      FM.renderScene(ctx, { project: { width: 200, height: 120, fps: 30, duration: 2, background: '#000000' }, layers: [L] }, 0.5);
+      const d = ctx.getImageData(0, 0, 200, 120).data, row = []; for (let x = 0; x < 200; x++) row.push(d[(60 * 200 + x) * 4]); return row; };
+    const m9 = mb(undefined), m32 = mb(32);
+    if (m9.join() !== mb(9).join()) throw new Error('Directional Blur at Quality 9 is not the saved picture');
+    const tv1 = (r) => r.slice(1).reduce((a, v, i) => a + Math.abs(v - r[i]), 0);
+    if (!(tv1(m32) < tv1(m9) * 0.8)) throw new Error('Directional Blur at 32 taps is not smoother than 9 (variation ' + tv1(m32) + ' vs ' + tv1(m9) + ') — the smear is still a ghost train');
+  });
+
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
      Ezra asked the question this answers: *"How confident are you that every effect is actually good?"*
      Three separate times now a kernel has drawn a different picture on the reduced preview plate than
