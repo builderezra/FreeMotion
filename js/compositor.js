@@ -829,9 +829,10 @@ window.FM = window.FM || {};
      * is the measurement; the paint stays inside the layer in both modes.
      * On a full-frame layer the two are the same number, so every existing instance on the common
      * case is byte-identical either way — verified across size 0/14/30/45 at render scale 1/0.35/2. */
-    { type: 'letterbox', label: 'Letterbox', params: [
+    { type: 'letterbox', label: 'Letterbox', color: true, defColor: '#000000', colorLabel: 'Bars', params: [   // queue 904: bars were hardcoded black and horizontal-only
       { key: 'size', label: 'Size', min: 0, max: 45, step: 1, def: 14, unit: '%' },
       { key: 'metric', label: 'Bars sized to', options: [[0, 'Layer'], [1, 'Frame']], def: 0, legacy: 1 },
+      { key: 'orient', label: 'Bars at', options: [[0, 'Top & bottom'], [1, 'Left & right']], def: 0 },   // Left & right = pillarbox
     ] },
     { type: 'border', label: 'Border Frame', color: true, defColor: '#ffffff', colorLabel: 'Border', params: [
       { key: 'width', label: 'Width', min: 1, max: 180, step: 1, def: 10, unit: 'px' },
@@ -1097,6 +1098,7 @@ window.FM = window.FM || {};
       { key: 'h', label: 'Height', min: 1, max: 100, step: 0.5, def: 15, unit: '%' },
       { key: 'mode', label: 'Fill', def: 0, options: [[0, 'Patch'], [1, 'Blur'], [2, 'Mosaic']] },
       { key: 'feather', label: 'Feather', min: 0, max: 60, step: 1, def: 12, unit: 'px' },
+      { key: 'strength', label: 'Strength', min: 0.25, max: 4, step: 0.05, def: 1, unit: '×', overriddenBy: 'mode', liveWhen: [1, 2] },   // queue 904: blur radius and mosaic block were fixed; Patch uses neither
     ] },
     // ---- Copy Background: this layer shows a live copy of everything rendered BELOW it, clipped to
     // its own shape. Add colour/blur/grade effects on top → they cover the whole scene beneath. A
@@ -6531,9 +6533,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // the FRAME's height. Absent key => 1, so an instance saved before v6.35 keeps its bar
       // thickness; `legacy: 1` in the schema at :394 says the same thing to the inspector.
       var met=(p.metric==null)?1:Math.round(FM.evalProp(p.metric,t)||0);
-      var bar=Math.round((met===1?H:bh)*s/100); if(bar<=0)return;
-      var half=Math.floor(bh/2); if(bar>half)bar=half;   // frame-metric bars on a short layer would otherwise exceed it; never engages full-frame (s caps at 48% vs half at 50%)
-      for(var y=y0;y<y1;y++){ if(y>=y0+bar && y<y1-bar) continue; var row=y*W*4; for(var x=x0;x<x1;x++){ var i=row+x*4; d[i]=0; d[i+1]=0; d[i+2]=0; if(d[i+3]<255)d[i+3]=255; } } },
+      /* COLOUR AND SIDE (queue 904): the bars were hardcoded black and could only sit top and bottom. A missing colour is
+         black by name — not by hexToRGB(undefined) happening to return black — and Top & bottom is the old loop, untouched. */
+      var lbC=p.color?hexToRGB(p.color):[0,0,0], lbR=lbC[0], lbG=lbC[1], lbB=lbC[2];
+      var lbSide=(p.orient==null?0:Math.round(FM.evalProp(p.orient,t)||0))===1, bw=x1-x0;
+      var bar=Math.round((met===1?(lbSide?W:H):(lbSide?bw:bh))*s/100); if(bar<=0)return;
+      var half=Math.floor((lbSide?bw:bh)/2); if(bar>half)bar=half;   // frame-metric bars on a short layer would otherwise exceed it; never engages full-frame (s caps at 48% vs half at 50%)
+      if(lbSide){ for(var yy=y0;yy<y1;yy++){ var rr=yy*W*4; for(var xx=x0;xx<x1;xx++){ if(xx>=x0+bar && xx<x1-bar) continue; var ii=rr+xx*4; d[ii]=lbR; d[ii+1]=lbG; d[ii+2]=lbB; if(d[ii+3]<255)d[ii+3]=255; } } return; }
+      for(var y=y0;y<y1;y++){ if(y>=y0+bar && y<y1-bar) continue; var row=y*W*4; for(var x=x0;x<x1;x++){ var i=row+x*4; d[i]=lbR; d[i+1]=lbG; d[i+2]=lbB; if(d[i+3]<255)d[i+3]=255; } } },
     border: function(d,W,H,p,t,ps,bb){ var w = fparam(p, 'width', 10, t); w=Math.round(w*(ps||1)); if(w<1)w=1;
       // `width` does NOT change meaning: it is absolute project px (schema :396) already multiplied
       // by plateScale, and it stays that. Only the rectangle it hugs moved from the frame to the layer.
@@ -6728,6 +6735,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if(rw<2||rh<2)return;
       var x1=rx+rw, y1=ry+rh, toM=Math.round(FM.evalProp(p.mode,t)||0);
       var toF=Math.round(p.feather==null?12:FM.evalProp(p.feather,t)); if(toF<0)toF=0;
+      var toStr=p.strength==null?1:FM.evalProp(p.strength,t); if(!(toStr>=0.25))toStr=0.25; if(toStr>4)toStr=4;
       var toS=fxSrc(d), tox, toy, toi, toc, tok;
       // feather weight: 1 = fully patched; smoothstep of distance-to-nearest-region-edge / feather
       function toK(px,py){ if(toF<=0)return 1; var de=Math.min(px-rx+1,x1-px,py-ry+1,y1-py); if(de>=toF)return 1; var u=de/toF; return u*u*(3-2*u); }
@@ -6743,7 +6751,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           }
         }
       } else if(toM===1){ // Blur: separable box blur of the region's own content, clamped to the region
-        var toR=Math.max(6,Math.round(Math.min(rw,rh)/8)), toWin=2*toR+1, toN=rw*rh;
+        /* STRENGTH (queue 904): radius and block were one fixed formula. round(max(6, m/8) × k) is max(6, round(m/8)) exactly
+           at k = 1 — the old value for every region size, so a saved project is byte-identical. */
+        var toR=Math.max(1,Math.round(Math.max(6,Math.min(rw,rh)/8)*toStr)), toWin=2*toR+1, toN=rw*rh;
         var toA=new Float32Array(toN*4), toB=new Float32Array(toN*4), s0, s1, s2, s3, ci, oi;
         for(toy=0;toy<rh;toy++){ var sR=((ry+toy)*W+rx)*4, dR=toy*rw*4; for(tox=0;tox<rw*4;tox++) toA[dR+tox]=toS[sR+tox]; }
         for(toy=0;toy<rh;toy++){ // horizontal pass → toB
@@ -6763,7 +6773,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         for(toy=0;toy<rh;toy++){ for(tox=0;tox<rw;tox++){ toi=((ry+toy)*W+rx+tox)*4; var ri=(toy*rw+tox)*4; tok=toK(rx+tox,ry+toy);
           for(toc=0;toc<4;toc++) d[toi+toc]=tok>=1?toA[ri+toc]:d[toi+toc]+(toA[ri+toc]-d[toi+toc])*tok; } }
       } else { // Mosaic: each block = the average of its own pixels
-        var toBk=Math.max(6,Math.round(Math.min(rw,rh)/8));
+        var toBk=Math.max(1,Math.round(Math.max(6,Math.min(rw,rh)/8)*toStr));   // queue 904 — see the blur branch
         for(var by0=ry;by0<y1;by0+=toBk){ var bh=Math.min(toBk,y1-by0);
           for(var bx0=rx;bx0<x1;bx0+=toBk){ var bw=Math.min(toBk,x1-bx0), a0=0, a1=0, a2=0, a3=0, cnt=bw*bh;
             for(toy=by0;toy<by0+bh;toy++){ var mr=toy*W; for(tox=bx0;tox<bx0+bw;tox++){ toi=(mr+tox)*4; a0+=toS[toi]; a1+=toS[toi+1]; a2+=toS[toi+2]; a3+=toS[toi+3]; } }

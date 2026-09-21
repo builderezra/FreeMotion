@@ -66521,4 +66521,41 @@
     });
   });
 
+
+  /* ── queue 904 [B]: Letterbox bars were black and horizontal only; Remove Object's Blur and Mosaic had no strength ──
+   * Letterbox now takes a bar colour and can put the bars left and right (pillarbox). Remove Object's blur radius and
+   * mosaic block were one fixed formula — now a Strength multiplier, greyed in Patch, which uses neither.
+   * Claims, on the kernels: saved instances (none of the new keys) are byte-identical to the defaults; the bar colour
+   * paints the bars; Left & right puts them at the sides and NOT at the top; and Strength changes both fill modes. */
+  test('904 [B] Letterbox takes a colour and can pillarbox, Remove Object Blur and Mosaic take a strength, saved projects untouched', { item: '904', budgetMs: 30000 }, function () {
+    var P = FM._pixelFx;
+    if (!P || !P.letterbox || !P.touchup) throw new Error('the Letterbox / Remove Object kernels are not reachable');
+    var W = 96, H = 96;
+    function flat() { var d = new Uint8ClampedArray(W * H * 4); for (var i = 0; i < d.length; i += 4) { d[i] = 120; d[i + 1] = 160; d[i + 2] = 200; d[i + 3] = 255; } return d; }
+    function checker() { var d = new Uint8ClampedArray(W * H * 4); for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) { var i = (y * W + x) * 4, c = ((x >> 1) + (y >> 1)) & 1 ? 235 : 20; d[i] = c; d[i + 1] = 255 - c; d[i + 2] = c; d[i + 3] = 255; } return d; }
+    function run(type, mk, params) { var d = mk(); P[type](d, W, H, params, 0.37, 1); return d; }
+    function same(A, B) { for (var i = 0; i < A.length; i++) if (A[i] !== B[i]) return false; return true; }
+    function px(A, x, y) { var i = (y * W + x) * 4; return [A[i], A[i + 1], A[i + 2]]; }
+
+    // ── Letterbox
+    var lbOld = { size: 20, metric: 0 };
+    var lbSaved = run('letterbox', flat, lbOld);
+    if (same(lbSaved, flat())) throw new Error('setup: the letterbox drew no bars');
+    if (!same(lbSaved, run('letterbox', flat, Object.assign({}, lbOld, { color: '#000000', orient: 0 })))) throw new Error('letterbox: a saved instance and one at the new defaults differ — saved projects would change');
+    var red = run('letterbox', flat, Object.assign({}, lbOld, { color: '#ff0000' }));
+    if (px(red, 48, 2).join() !== '255,0,0') throw new Error('letterbox: a red bar colour painted the top bar ' + px(red, 48, 2).join() + ' — the colour is not wired');
+    var side = run('letterbox', flat, Object.assign({}, lbOld, { orient: 1 }));
+    if (px(side, 2, 48).join() !== '0,0,0') throw new Error('letterbox: Left & right left the left edge ' + px(side, 2, 48).join() + ' — no pillarbox bar there');
+    if (px(side, 48, 2).join() !== '120,160,200') throw new Error('letterbox: Left & right still painted the TOP (' + px(side, 48, 2).join() + ') — it drew letterbox bars, not pillarbox');
+
+    // ── Remove Object: both fill modes that have a strength
+    [1, 2].forEach(function (mode) {
+      var old = { x: 20, y: 20, w: 60, h: 60, mode: mode, feather: 0 };
+      var saved = run('touchup', checker, old);
+      if (same(saved, checker())) throw new Error('setup: Remove Object mode ' + mode + ' changed nothing');
+      if (!same(saved, run('touchup', checker, Object.assign({}, old, { strength: 1 })))) throw new Error('Remove Object mode ' + mode + ': a saved instance and one at Strength 1 differ — saved projects would change');
+      if (same(saved, run('touchup', checker, Object.assign({}, old, { strength: 3 })))) throw new Error('Remove Object mode ' + mode + ': Strength 3 changed nothing — not wired');
+    });
+  });
+
 })();
