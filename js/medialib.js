@@ -10,6 +10,11 @@
  * id (storage.js save()), so an entry just points at that key — a library of 200 clips costs a few
  * KB of index, not a second copy of every video. FM.projects.pruneOrphans() is taught to keep any
  * key the library references, so deleting the project that first imported a file doesn't evict it.
+ * ⚠️ That was true of the INDEX and not of reuse (queue 915 clause 5): tapping a tile wrote the whole
+ * file again under the new layer's id, every time — four copies of a photo used three times. His answer
+ * was "Yes, one copy (Recommended)", so use() now moves the file to ONE shared copy under 'lib:<mid>' the
+ * first time a tile is reused, and every clip made from the tile — the original import included, once
+ * it is not on screen — stores a pointer at it (storage.js, shareMedia / swapToShared).
  * Thumbnails are generated lazily on first display (after waiting for a real decoded frame —
  * see frameReady) and cached at 'libthumb2:<mid>'.
  */
@@ -35,6 +40,27 @@ window.FM = window.FM || {};
     if (!file) return '';
     return [file.name || '', file.size || 0, file.lastModified || 0].join('|');
   }
+  /* queue 915 clause 5: move a tile onto its ONE shared copy and say so in the index. Resolves the
+     shareMedia result, or null (never rejects) — null just means this reuse stores a copy the old way.
+     Held busy until the index is written, so the boot sweep cannot find the shared copy while nothing
+     refers to it yet. */
+  const sharing = new Map();   // mid -> the move in flight
+  async function shareAndIndex(key, mid) {
+    FM._mediaBusy = (FM._mediaBusy || 0) + 1;
+    try {
+      const shared = (FM.storage && FM.storage.shareMedia) ? await FM.storage.shareMedia(key, mid) : null;
+      if (shared) {
+        const list = readIndex(), me = list.find(x => x.mid === mid);
+        if (me && me.key !== shared.key) {   // only a MOVE records `from` — a tile already on its shared copy keeps any swap still owed
+          me.key = shared.key;
+          if (shared.from) { me.from = shared.from; me.fromRev = shared.rev || 0; }
+          writeIndex(list);
+        }
+      }
+      return shared;
+    } catch (err) { return null; }
+    finally { FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1); }
+  }
 
   FM.mediaLib = {
     // Newest first. Entries are NOT verified here (that would mean an IDB read per tile on every
@@ -46,7 +72,9 @@ window.FM = window.FM || {};
       if (!rec || !key || !rec.file) return null;
       const fp = fingerprint(rec.file);
       const list = readIndex();
-      const hit = list.find(e => e.fp === fp);
+      // …or a clip made FROM a tile (queue 915): it points at that tile's shared copy, so it IS that tile — a
+      // backfilled tile has no fingerprint to match, and reusing one used to leave a second tile behind.
+      const hit = list.find(e => e.fp === fp) || (rec.ref ? list.find(e => e.key === rec.ref) : null);
       if (hit) {
         // Already known — float it to the front, but DON'T repoint it at this import's blob. The
         // old anchor may live in a project the user is keeping; re-pointing it at a copy inside a
@@ -107,6 +135,23 @@ window.FM = window.FM || {};
     // Every IDB key the library still points at — pruneOrphans must not sweep these.
     keys() { return readIndex().map(e => e.key).filter(Boolean); },
 
+    /* queue 915 clause 5: finish the moves that had to wait. A tile first reused while its original clip was
+       on screen kept that clip's full copy (storage.js swapToShared says why), and records it as `from`. The
+       boot sweep calls this; a clip that is still live answers 'live' and simply waits for the next boot. */
+    async settle() {
+      if (!FM.storage || !FM.storage.settleShared) return 0;
+      let n = 0;
+      for (const e of readIndex()) {
+        if (!e || !e.from) continue;
+        const r = await FM.storage.settleShared(e.from, e.key, e.fromRev || 0);
+        if (r !== 'done' && r !== 'gone') continue;
+        const list = readIndex(), me = list.find(x => x.mid === e.mid);   // re-read: the index can move while that awaited
+        if (me && me.from === e.from) { delete me.from; delete me.fromRev; writeIndex(list); }
+        if (r === 'done') n++;
+      }
+      return n;
+    },
+
     async getFile(mid) {
       const e = readIndex().find(x => x.mid === mid);
       if (!e) return null;
@@ -118,6 +163,15 @@ window.FM = window.FM || {};
     async use(mid) {
       const e = readIndex().find(x => x.mid === mid);
       if (!e) return false;
+      /* ONE STORED COPY (queue 915 clause 5). Point the tile at its shared copy BEFORE reading the file, so
+         the new clip is built from — and saved as a pointer at — the copy that will stay. A null here is
+         never an error: the clip is simply stored the old way, as a copy of its own. The FIRST reuse of a
+         tile waits for that copy to be written (measured on desktop Chrome: 80 MB in 0.63 s); every reuse
+         after it writes a few bytes. A second tap while the first is still moving the file JOINS that
+         move — two writers of one shared copy would rewrite it under a clip that may already be playing. */
+      let move = sharing.get(mid);
+      if (!move) { move = shareAndIndex(e.key, mid); sharing.set(mid, move); move.then(() => sharing.delete(mid)); }
+      const shared = await move;
       const file = await this.getFile(mid);
       if (!file) {   // the blob went away (project deleted before this shipped, storage cleared)
         this.remove(mid);
@@ -126,6 +180,7 @@ window.FM = window.FM || {};
       }
       try {
         const loaded = e.kind === 'image' ? await FM.loadImageFile(file) : await FM.loadVideoFile(file);
+        if (shared) loaded.ref = shared.key;   // → storage.save writes a few bytes, not the file again
         FM.addMediaLayer(loaded);
         return true;
       } catch (err) {
@@ -194,7 +249,8 @@ window.FM = window.FM || {};
     //
     // What this does NOT do is delete your media. An entry is a POINTER at a blob some project's layer
     // already owns (see the header) — dropping the pointer only takes away the one-tap shortcut. Any
-    // project using that file keeps it, because pruneOrphans keeps every key a project references;
+    // project using that file keeps it, because pruneOrphans keeps every key a project references —
+    // and, since queue 915, every shared 'lib:' copy a project's reused clip points at, tile or no tile;
     // a blob no project references is collected on the next sweep, which is what you wanted anyway if
     // you are clearing the history. Nothing here can reach into a project and empty a layer.
     clear(kind) {

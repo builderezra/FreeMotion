@@ -130,6 +130,76 @@ window.FM = window.FM || {};
   function idbDel(db, key) { return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).delete(key); tx.oncomplete = () => res(); tx.onerror = () => res(); } catch (e) { res(); } }); }
   function idbKeys(db) { return new Promise((res) => { try { const rq = db.transaction(STORE, 'readonly').objectStore(STORE).getAllKeys(); rq.onsuccess = () => res(rq.result || []); rq.onerror = () => res([]); } catch (e) { res([]); } }); }
 
+  /* ═══ ONE STORED COPY OF A REUSED CLIP (queue 915 clause 5) ═══════════════════════════════════════
+   * His answer, 22 Sep: "Yes, one copy (Recommended)". Every tap on a tile in Add → Media wrote the
+   * WHOLE file again under the new layer's id — measured: one 8.4 MB photo used three times left four
+   * same-size records and +33.6 MB of storage, and on a phone that is how "Not enough storage to save
+   * that media" arrives.
+   * So a reused clip's record is now a POINTER, `{ ref: 'lib:<mid>', kind, rev }`, at one copy the
+   * library owns. The copy lives under its own `lib:` key and not under a layer id on purpose: a layer's
+   * key is REWRITTEN by Replace media and DELETED with its project, so a pointer at a layer id would
+   * change picture, or go blank, the day he replaced or deleted the clip it was first imported into.
+   * Nothing writes a `lib:` key except shareMedia below, and only pruneOrphans deletes one.
+   * Every reader of a layer's record goes through idbGetMedia, so a pointer reads exactly like the file
+   * it points at, and a record stored the old way — a full file — reads exactly as it always did. */
+  const LIB_PREFIX = 'lib:';
+  function isRef(v) { return !!v && typeof v === 'object' && !v.file && typeof v.ref === 'string' && !!v.ref; }
+  async function idbGetMedia(db, key) {
+    const v = await idbGet(db, key);
+    if (!isRef(v)) return v;
+    const t = await idbGet(db, v.ref);
+    if (!t || !t.file) return v;   // the shared copy is gone: no file, which every caller already reads as "nothing stored"
+    return { file: t.file, kind: v.kind || t.kind, rev: v.rev || 0, ref: v.ref };
+  }
+  // Every key some record points at — the sweep must not collect a shared copy a project still uses.
+  // null means "could not tell", and the caller then keeps every shared copy rather than guess.
+  function idbRefTargets(db) {
+    return new Promise((res) => {
+      try {
+        const out = new Set();
+        const rq = db.transaction(STORE, 'readonly').objectStore(STORE).openCursor();
+        rq.onsuccess = () => { const c = rq.result; if (!c) { res(out); return; } if (isRef(c.value)) out.add(c.value.ref); c.continue(); };
+        rq.onerror = () => res(null);
+      } catch (e) { res(null); }
+    });
+  }
+  function sameFile(a, b) {
+    return !!a && !!b && a.size === b.size && (a.type || '') === (b.type || '') && (a.name || '') === (b.name || '') && (a.lastModified || 0) === (b.lastModified || 0);
+  }
+  /* Turn the ORIGINAL import's full copy into a pointer at the shared one, so the file is stored once
+   * rather than twice. ⚠️ NEVER WHILE THAT CLIP IS LIVE: a clip on screen plays from a Blob read out of
+   * this very record, and overwriting the record under it is a risk this app has never taken (the sweep
+   * refuses to delete a resident key for the same reason). So a clip in the open scene, or still held for
+   * undo, answers 'live' and the swap waits for a boot when it is not.
+   * ONE readwrite transaction does the whole check-and-write, so nothing can slip between them: the
+   * shared copy must be there, and the original must still hold the SAME file at the SAME rev — a
+   * Replace media since then means it is a different clip now, and it is left alone ('gone'). */
+  function swapToShared(db, from, lk, rev) {
+    if (FM.media.get(from) || ((FM.scene && FM.scene.layers) || []).some(l => l && l.id === from)) return Promise.resolve('live');
+    return new Promise((res) => {
+      let out = 'fail';
+      try {
+        const tx = db.transaction(STORE, 'readwrite'), st = tx.objectStore(STORE);
+        const gt = st.get(lk);
+        gt.onsuccess = () => {
+          const t = gt.result;
+          if (!t || !t.file) return;                                   // no shared copy — never take the original's file away
+          const gf = st.get(from);
+          gf.onsuccess = () => {
+            const cur = gf.result;
+            if (isRef(cur)) { out = cur.ref === lk ? 'done' : 'gone'; return; }
+            if (!cur || !cur.file || (cur.rev || 0) !== (rev || 0) || !sameFile(cur.file, t.file)) { out = 'gone'; return; }
+            st.put({ ref: lk, kind: cur.kind, rev: cur.rev || 0 }, from);
+            out = 'done';
+          };
+        };
+        tx.oncomplete = () => res(out);
+        tx.onerror = () => res('fail');
+        tx.onabort = () => res('fail');
+      } catch (e) { res('fail'); }
+    });
+  }
+
   // Repair a circular parent link carried by an already-saved (or imported) document, and SAY SO.
   // Silent repair would be worse than the bug: the user's group nesting genuinely changes, and a
   // change to their work that nobody announces is indistinguishable from corruption. Returns nothing
@@ -221,9 +291,10 @@ window.FM = window.FM || {};
         if (!layer || layer.type === 'text') continue;
         if (onlyMissing && FM.media.get(layer.id)) continue;   // still resident — a fresh load, or never released
         try {   // per-layer: ONE corrupt/undecodable blob must not abort the restore of every later layer
-          const rec = await idbGet(db, layer.id);
+          const rec = await idbGetMedia(db, layer.id);   // queue 915: a reused clip's pointer reads as its file
           if (rec && rec.file) {
             const loaded = rec.kind === 'video' ? await FM.loadVideoFile(rec.file) : await FM.loadImageFile(rec.file);
+            if (rec.ref) loaded.ref = rec.ref;   // …and stays a pointer: the next save must not write the whole file back under this layer
             FM.media.set(layer.id, loaded);
             if (loaded.kind === 'video') loaded.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); });
             if (FM.wireVideoRepaint) FM.wireVideoRepaint(loaded);   // a reopened project decodes from cold — repaint when the frame lands
@@ -285,6 +356,8 @@ window.FM = window.FM || {};
         if (!FM.media.get(id)) continue;                                  // nothing resident to free
         if (FM.media.isPinned && FM.media.isPinned(id)) continue;         // owned by something other than the scene
         if (!keys.has(id)) continue;                                      // ← IDB cannot give it back, so it is not ours to free
+        const m = FM.media.get(id);
+        if (m && m.ref && !keys.has(m.ref)) continue;                     // queue 915: a pointer whose shared copy is missing cannot give it back either
         ids.push(id);
       }
     } catch (e) { return 0; }
@@ -300,7 +373,7 @@ window.FM = window.FM || {};
     (FM.scene.layers || []).forEach(layer => {
       if (!layer || layer.type === 'text') return;
       const m = FM.media.get(layer.id);
-      if (m && m.file) jobs.push({ id: layer.id, file: m.file, kind: m.kind, rev: layer.mediaRev || 0 });
+      if (m && m.file) jobs.push({ id: layer.id, file: m.file, kind: m.kind, rev: layer.mediaRev || 0, ref: m.ref || null });
     });
     return jobs;
   }
@@ -375,7 +448,14 @@ window.FM = window.FM || {};
              * re-write on first launch. `kind` rides along, which also fixes a video→image replace
              * saving the layer as one type against a stored record marked the other. */
             const existing = await idbGet(db, job.id);
-            if (!existing || (existing.rev || 0) !== job.rev) await idbPut(db, job.id, { file: job.file, kind: job.kind, rev: job.rev });
+            if (!existing || (existing.rev || 0) !== job.rev) {
+              /* queue 915 clause 5: a clip reused from Add → Media is written as a POINTER at the one shared
+                 copy — but only once that copy is really there. If it is not, the whole file is written as
+                 before: a pointer at nothing would be a blank clip, and the file is in memory to write. */
+              let val = { file: job.file, kind: job.kind, rev: job.rev };
+              if (job.ref) { const t = await idbGet(db, job.ref); if (t && t.file) val = { ref: job.ref, kind: job.kind, rev: job.rev }; }
+              await idbPut(db, job.id, val);
+            }
           }
         }
         // NOTE: no blanket prune here any more — media blobs are shared across ALL projects (plus
@@ -392,10 +472,43 @@ window.FM = window.FM || {};
 
     // Generic single-key access to the media store, for features that need to read or write a blob
     // outside the scene document (the Media library reads imported files and caches its thumbnails).
-    async readMedia(key) { try { const db = await openDB(); const v = await idbGet(db, key); db.close(); return v; } catch (e) { return null; } },
+    async readMedia(key) { try { const db = await openDB(); const v = await idbGetMedia(db, key); db.close(); return v; } catch (e) { return null; } },   // queue 915: a pointer reads as its file
     // Reports what actually happened. It used to return a hardcoded true, so callers could not tell a
     // stored clip from one the browser refused on quota.
     async writeMedia(key, val) { try { const db = await openDB(); const ok = await idbPut(db, key, val); db.close(); return ok; } catch (e) { return false; } },
+    /* queue 915 clause 5: the ONE copy a library tile's clip lives in, so reusing it can point instead of
+       copying. `key` is the tile's key, `mid` its id. Resolves null when there is nothing safe to point at
+       (the caller then reuses the old way, a full copy — never worse than before), else
+       `{ key: 'lib:<mid>', from, rev }`. `from` is set only while the ORIGINAL import still holds a full
+       copy it could not give up yet (see swapToShared): the library records it, and settleShared finishes
+       the job at a boot when that clip is not live. The first reuse writes the shared copy; every one
+       after it writes a pointer of a few bytes. */
+    async shareMedia(key, mid) {
+      if (!key || !mid) return null;
+      FM._mediaBusy = (FM._mediaBusy || 0) + 1;   // the sweep stands down while a shared copy is written and not yet indexed
+      let db = null;
+      try {
+        db = await openDB();
+        const rec = await idbGet(db, key);
+        if (isRef(rec)) { const t = await idbGet(db, rec.ref); return (t && t.file) ? { key: rec.ref, from: null, rev: 0 } : null; }
+        if (!rec || !rec.file) return null;
+        if (typeof key === 'string' && key.indexOf(LIB_PREFIX) === 0) return { key: key, from: null, rev: 0 };   // already the shared copy
+        const lk = LIB_PREFIX + mid;
+        const have = await idbGet(db, lk);   // already written by a move the index never heard about — it may be playing, so never rewrite it
+        if (!(have && have.file && sameFile(have.file, rec.file)) && !(await idbPut(db, lk, { file: rec.file, kind: rec.kind }))) return null;   // no room for it — reuse the old way
+        const r = await swapToShared(db, key, lk, rec.rev || 0);
+        return { key: lk, from: (r === 'done' || r === 'gone') ? null : key, rev: rec.rev || 0 };
+      } catch (e) { return null; }
+      finally {
+        try { if (db) db.close(); } catch (e) {}
+        FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1);
+      }
+    },
+    // …and the deferred half: 'done' / 'gone' mean the library can forget `from`; 'live' / 'fail' mean try again later.
+    async settleShared(from, lk, rev) {
+      if (!from || !lk) return 'gone';
+      try { const db = await openDB(); const r = await swapToShared(db, from, lk, rev); db.close(); return r; } catch (e) { return 'fail'; }
+    },
     // Every key in the store, optionally narrowed to one prefix. Export crash-resume needs it to sweep
     // its own leftovers (`xr:part:*`) without knowing how many there were — a job that died mid-write
     // is precisely the case where the count on record is not to be trusted.
@@ -1859,7 +1972,7 @@ window.FM = window.FM || {};
       try {
         const db = await openDB();
         for (const oldId of Object.keys(re.map)) {
-          const rec = await idbGet(db, oldId);
+          const rec = await idbGet(db, oldId);   // RAW on purpose (queue 915): a reused clip's pointer is copied AS a pointer, and the sweep keeps what it points at for as long as either project does
           if (!rec) continue;
           if (!(await idbPut(db, re.map[oldId], rec))) { whole = false; break; }
           wrote.push(re.map[oldId]);
@@ -1976,6 +2089,9 @@ window.FM = window.FM || {};
          * them at the first boot after a crash, which is the exact boot on which they are the point.
          * They are exempted from the scan (see the prefix list) and reaped by their own rules instead. */
         if (FM.exportResume && FM.exportResume.sweep) { try { await FM.exportResume.sweep(); } catch (e) {} }
+        // queue 915 clause 5: an original import that was live when it was first reused gives up its full copy now
+        if (FM.mediaLib && FM.mediaLib.settle) { try { await FM.mediaLib.settle(); } catch (e) {} }
+        if (FM._mediaBusy) return;
         const projIds = new Set();   // EVERY stored project doc — scanned from localStorage, not just the index (an unindexed doc's media must never be mass-deleted)
         const collectKeep = () => {
           const keep = new Set();
@@ -2018,8 +2134,20 @@ window.FM = window.FM || {};
         if (candidates.length) {
           if (FM._mediaBusy) { db.close(); return; }   // something started writing mid-scan
           const keep2 = collectKeep();                  // fresh snapshot at delete time
+          /* ⚠️ queue 915 clause 5: A SHARED COPY IS KEPT WHILE ANYTHING POINTS AT IT — a project's reused clip, a
+             duplicate of that project, a clip in memory whose pointer is not written yet — not only while its
+             library tile exists. Clearing the Media history drops the tile; it must never blank a clip in a
+             project. Read only when a shared copy is actually up for collection, so a device that never
+             reused a clip pays nothing at boot; and a scan that fails keeps every one rather than guess. */
+          const isLib = k => typeof k === 'string' && k.indexOf(LIB_PREFIX) === 0;
+          const refd = candidates.some(isLib) ? await idbRefTargets(db) : new Set();
+          if (FM._mediaBusy) { db.close(); return; }   // …and that read awaited: a copy or a pack may have started writing
+          const liveRefs = new Set();
+          const all = (FM.media.all && FM.media.all()) || {};
+          Object.keys(all).forEach(id => { const m = all[id]; if (m && m.ref) liveRefs.add(m.ref); });
           for (const k of candidates) {
             if (keep2.has(k) || FM.media.get(k)) continue;   // referenced since the scan / live in memory
+            if (isLib(k) && (!refd || refd.has(k) || liveRefs.has(k))) continue;
             await idbDel(db, k);
           }
         }
@@ -2072,7 +2200,7 @@ window.FM = window.FM || {};
       for (const l of pack.layers) {
         const mem = (id === curId()) ? FM.media.get(l.id) : null;
         if (mem && mem.file) pack.media[l.id] = { file: mem.file, kind: mem.kind };
-        else { const rec = await idbGet(db, l.id); if (rec && rec.file) pack.media[l.id] = { file: rec.file, kind: rec.kind }; }
+        else { const rec = await idbGetMedia(db, l.id); if (rec && rec.file) pack.media[l.id] = { file: rec.file, kind: rec.kind }; }   // queue 915: a pack (and so a backup) carries the FILE, never a pointer into this device's store
       }
       db.close();
     } catch (e) { return null; }

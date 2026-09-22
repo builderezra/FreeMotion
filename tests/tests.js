@@ -64647,6 +64647,368 @@
     }
   });
 
+  /* ── queue 915 clause 5: A CLIP REUSED FROM Add → Media IS STORED ONCE ─────────────────────────────
+   * His answer, 22 Sep: "Yes, one copy (Recommended)". Every tap on a library tile wrote the whole file
+   * again under the new layer's id — the audit measured four same-size records for one photo used three
+   * times. This is HIS data on HIS phone, so the four tests below are about the paths around the change
+   * as much as the change: each reopens projects from IndexedDB (not from memory), and the sweep, the
+   * duplicate, the packs and the backup are all driven through the app's own functions.
+   * The helpers read the store RAW — readMedia now turns a pointer into its file, and the question
+   * these tests ask is what is actually on disk. */
+  function q9155Raw() {
+    return new Promise(function (res, rej) {
+      const rq = indexedDB.open('freemotion', 1);
+      rq.onerror = function () { rej(rq.error); };
+      rq.onsuccess = function () {
+        const db = rq.result, out = {};
+        const c = db.transaction('media', 'readonly').objectStore('media').openCursor();
+        c.onsuccess = function () { const cur = c.result; if (!cur) { db.close(); res(out); return; } out[cur.key] = cur.value; cur.continue(); };
+        c.onerror = function () { db.close(); rej(c.error); };
+      };
+    });
+  }
+  // Every record that holds the FILE itself (not a pointer) — the number that fills his phone.
+  function q9155Copies(raw, file) { return Object.keys(raw).filter(function (k) { const v = raw[k]; return v && v.file && v.file.name === file.name && v.file.size === file.size; }); }
+  async function q9155Png(tag, rgb) {
+    const c = document.createElement('canvas'); c.width = 32; c.height = 24;
+    const g = c.getContext('2d'); g.fillStyle = rgb; g.fillRect(0, 0, 32, 24); g.fillStyle = '#fff'; g.fillRect(3, 3, 7, 5);
+    const blob = await new Promise(function (r) { c.toBlob(r, 'image/png'); });
+    return new File([blob], 'q9155-' + tag + '-' + Date.now() + '.png', { type: 'image/png', lastModified: Date.now() });
+  }
+  // A project with the file imported through the REAL import (registry, save, library tile), then left.
+  async function q9155Import(name, file) {
+    const id = await FM.projects.create({ name: name, width: 320, height: 240 });
+    FM.addMediaLayer(await FM.loadImageFile(file));
+    const L1 = FM.scene.selectedId;
+    await sleep(60); await FM.storage.save();
+    const fp = [file.name, file.size, file.lastModified].join('|');
+    const tile = FM.mediaLib.list().filter(function (e) { return e.fp === fp; })[0];
+    if (!tile) throw new Error('setup: importing ' + file.name + ' made no library tile, so there is nothing to reuse');
+    return { id: id, L1: L1, mid: tile.mid };
+  }
+  async function q9155Use(mid) {
+    if (!(await FM.mediaLib.use(mid))) throw new Error('setup: mediaLib.use refused the tile');
+    const lid = FM.scene.selectedId;
+    await sleep(60); await FM.storage.save();   // use() does not await its own save
+    return lid;
+  }
+  function q9155Has(id, file) { const m = FM.media.get(id); return !!(m && m.file && m.file.size === file.size); }
+  async function q9155Cleanup(ids, orig, idx0, wasOpen) {
+    try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig); } catch (e) {}
+    for (const id of ids) { try { if (FM.projects.list().some(function (p) { return p.id === id; })) await FM.projects.remove(id); } catch (e) {} }
+    try { if (idx0 == null) localStorage.removeItem('fm.medialib'); else localStorage.setItem('fm.medialib', idx0); } catch (e) {}
+    try { await FM.projects.pruneOrphans(); } catch (e) {}   // collects the shared copy now nothing points at it
+    try { if (wasOpen) FM.home.open(); } catch (e) {}
+  }
+
+  test('915.5 a clip reused from Add → Media three times is stored ONCE, and every project using it still opens with it', { item: '915', budgetMs: 40000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const file = await q9155Png('once', '#2a9d8f');
+      const a = await q9155Import('FX9155 imported', file); made.push(a.id);
+      if (q9155Copies(await q9155Raw(), file).length !== 1) throw new Error('setup: the import itself did not leave exactly one stored copy');
+      const bId = await FM.projects.create({ name: 'FX9155 reused', width: 320, height: 240 }); made.push(bId);
+      const lids = [];
+      for (let i = 0; i < 3; i++) lids.push(await q9155Use(a.mid));
+
+      const raw = await q9155Raw();
+      const copies = q9155Copies(raw, file);
+      if (copies.length !== 1) throw new Error('reusing one photo three times left ' + copies.length + ' full copies in storage (' + copies.join(', ') + ') — on his phone that is how a few reused videos become "Not enough storage"');
+      const shared = copies[0];
+      if (!/^lib:/.test(shared)) throw new Error('the one copy lives under ' + shared + ' — a layer key is rewritten by Replace media and deleted with its project, so the library must own it');
+      const notPointers = lids.concat([a.L1]).filter(function (id) { const v = raw[id]; return !(v && !v.file && v.ref === shared); });
+      if (notPointers.length) throw new Error(notPointers.length + ' clip(s) using the photo are not a pointer at ' + shared + ': ' + notPointers.map(function (id) { return id + '=' + JSON.stringify(raw[id] && Object.keys(raw[id])); }).join(' '));
+      const tiles = FM.mediaLib.list().filter(function (e) { return e.mid === a.mid || e.key === shared; });
+      if (tiles.length !== 1 || tiles[0].key !== shared) throw new Error('the library shows ' + tiles.length + ' tile(s) for the photo, keyed ' + tiles.map(function (e) { return e.key; }).join(', ') + ' — reusing it must not add tiles');
+
+      // ── and every clip still comes back from DISK: open the other project, then this one again
+      await FM.projects.open(a.id);
+      if (!q9155Has(a.L1, file)) throw new Error('the project the photo was first imported into reopened with the clip BLANK — its record is a pointer now, and it did not read through');
+      await FM.projects.open(bId);
+      const blank = lids.filter(function (id) { return !q9155Has(id, file); });
+      if (blank.length) throw new Error(blank.length + ' of 3 reused clips reopened BLANK');
+      /* …and a save of the reopened project must not write the file back under each layer */
+      FM.storage.markDirty(); await FM.storage.save();
+      const again = q9155Copies(await q9155Raw(), file).length;
+      if (again !== 1) throw new Error('reopening and saving the project put the copies back (' + again + ') — the pointer was lost on the way in');
+      /* …and going Home never frees a clip IndexedDB cannot give back (queue 385's first rule). With the
+         shared copy gone, the clips in memory are the only copies left — so they must stay resident; put
+         the copy back and the same release must free them (the control: it was not blocked by anything else). */
+      const sharedRec = raw[shared];
+      await FM.storage.removeMedia(shared);
+      await q385AsIfHome(function () { return FM.storage.releaseSceneMedia(); });
+      const freedBlind = lids.filter(function (id) { return !FM.media.get(id); });
+      if (freedBlind.length) throw new Error('leaving for Home freed ' + freedBlind.length + ' reused clip(s) whose shared copy is missing — nothing could bring them back');
+      await FM.storage.writeMedia(shared, sharedRec);
+      const freed = await q385AsIfHome(function () { return FM.storage.releaseSceneMedia(); });
+      if (!(freed >= 3)) throw new Error('control: with the shared copy back, the release freed ' + freed + ' — so the refusal above was not what was measured');
+      await FM.storage.hydrateSceneMedia({ onlyMissing: true });
+    } finally {
+      await q9155Cleanup(made, orig, idx0, wasOpen);
+    }
+  });
+
+  test('915.5 two quick taps on a tile write its shared copy once, and both clips point at it', { item: '915', budgetMs: 30000 }, async function () {
+    /* The second tap lands while the first is still copying the file. Two writers of one shared copy
+       means the second REWRITES it — under a clip the first tap may already be playing from — so the
+       second tap must join the first move, not start its own. Counted at the store's own put(). */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [];
+    const realPut = IDBObjectStore.prototype.put;
+    let libPuts = 0;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const file = await q9155Png('twotaps', '#9b5de5');
+      const a = await q9155Import('FX9155 two taps', file); made.push(a.id);
+      const bId = await FM.projects.create({ name: 'FX9155 two taps user', width: 320, height: 240 }); made.push(bId);
+      IDBObjectStore.prototype.put = function (val, key) { if (typeof key === 'string' && key.indexOf('lib:') === 0) libPuts++; return realPut.apply(this, arguments); };
+      const n0 = FM.scene.layers.length;
+      const r = await Promise.all([FM.mediaLib.use(a.mid), FM.mediaLib.use(a.mid)]);
+      IDBObjectStore.prototype.put = realPut;
+      if (!r[0] || !r[1]) throw new Error('a tap was refused (' + r.join(', ') + ')');
+      await sleep(60); await FM.storage.save();
+      const lids = FM.scene.layers.slice(n0).map(function (l) { return l.id; });
+      if (lids.length !== 2) throw new Error('two taps added ' + lids.length + ' clips');
+      if (libPuts === 0) throw new Error('two taps wrote no shared copy at all — each clip stored the whole file again');
+      if (libPuts !== 1) throw new Error('two quick taps wrote the shared copy ' + libPuts + ' times — the second rewrote it under a clip that may already be playing from it');
+      const raw = await q9155Raw();
+      const bad = lids.filter(function (id) { return !(raw[id] && !raw[id].file && /^lib:/.test(raw[id].ref || '')); });
+      if (bad.length) throw new Error(bad.length + ' of the 2 clips is not a pointer at the shared copy');
+      if (q9155Copies(raw, file).length !== 1) throw new Error('two quick taps left ' + q9155Copies(raw, file).length + ' copies');
+    } finally {
+      IDBObjectStore.prototype.put = realPut;
+      await q9155Cleanup(made, orig, idx0, wasOpen);
+    }
+  });
+
+  test('915.5 reusing a clip in the project it came from keeps that clip on screen, and the boot sweep finishes the job', { item: '915', budgetMs: 40000 }, async function () {
+    /* The ORIGINAL import is live here — the clip on screen plays from a Blob read out of its own record —
+       so its full copy is not touched while it is open (storage.js swapToShared). What must happen instead:
+       the reuse is a pointer straight away, the tile remembers what it still owes, and the boot sweep
+       collects it once that project is not the one on screen. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const file = await q9155Png('live', '#e76f51');
+      const a = await q9155Import('FX9155 same project', file); made.push(a.id);
+      const L2 = await q9155Use(a.mid);           // the same project, so the original is on screen
+      let raw = await q9155Raw();
+      const tile = FM.mediaLib.list().filter(function (e) { return e.mid === a.mid; })[0] || {};
+      if (!(raw[L2] && !raw[L2].file && /^lib:/.test(raw[L2].ref || ''))) throw new Error('the reused clip was stored as ' + JSON.stringify(raw[L2] && Object.keys(raw[L2])) + ', not as a pointer at a shared copy');
+      if (!(raw[a.L1] && raw[a.L1].file)) throw new Error('the clip ON SCREEN had its stored file taken away while it was playing from it');
+      if (tile.from !== a.L1) throw new Error('the tile does not record that the original still owes its copy (from=' + tile.from + '), so the second copy would stay for good');
+      if (!q9155Has(a.L1, file) || !q9155Has(L2, file)) throw new Error('a clip went blank on screen during the reuse');
+
+      const cId = await FM.projects.create({ name: 'FX9155 elsewhere', width: 320, height: 240 }); made.push(cId);
+      await FM.projects.pruneOrphans();
+      raw = await q9155Raw();
+      const copies = q9155Copies(raw, file);
+      if (copies.length !== 1) throw new Error('after the boot sweep with that project closed, ' + copies.length + ' full copies remain (' + copies.join(', ') + ')');
+      if ((FM.mediaLib.list().filter(function (e) { return e.mid === a.mid; })[0] || {}).from) throw new Error('the tile still says the original owes its copy after the sweep collected it');
+      await FM.projects.open(a.id);
+      if (!q9155Has(a.L1, file) || !q9155Has(L2, file)) throw new Error('after the sweep the project reopened with ' + (!q9155Has(a.L1, file) ? 'the original' : 'the reused') + ' clip BLANK');
+    } finally {
+      await q9155Cleanup(made, orig, idx0, wasOpen);
+    }
+  });
+
+  test('915.5 a clip replaced before the sweep keeps its NEW file — the sweep only ever gives up an unchanged copy', { item: '915', budgetMs: 40000 }, async function () {
+    /* The move the sweep finishes was decided earlier, about the file the clip held THEN. Replace media in
+       between makes it a different clip, and turning it into a pointer at the old file would quietly put
+       the picture he replaced back — on a clip he may have replaced precisely because it was wrong. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [];
+    const nameOf = function (id) { const m = FM.media.get(id); return m && m.file ? m.file.name : null; };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const file = await q9155Png('before', '#3d5a80');
+      const a = await q9155Import('FX9155 replaced', file); made.push(a.id);
+      const L2 = await q9155Use(a.mid);           // the original is on screen, so its move waits for the sweep
+      if ((FM.mediaLib.list().filter(function (e) { return e.mid === a.mid; })[0] || {}).from !== a.L1) throw new Error('setup: no move is waiting, so the sweep has nothing to get wrong');
+      // Replace media on the ORIGINAL, the way FM.replaceMedia does it after its picker
+      const file2 = await q9155Png('after', '#ee6c4d');
+      const nrec = await FM.loadImageFile(file2);
+      FM.replaceMediaWith(a.L1, nrec);
+      const layer = FM.layerById(FM.scene, a.L1);
+      layer.mediaRev = (layer.mediaRev || 0) + 1; nrec.rev = layer.mediaRev;
+      FM.storage.markDirty(); await FM.storage.save();
+      FM.mediaLib.add(nrec, a.L1);
+      if (((await q9155Raw())[a.L1] || {}).file === undefined) throw new Error('setup: the replacement never reached IndexedDB');
+
+      const cId = await FM.projects.create({ name: 'FX9155 away', width: 320, height: 240 }); made.push(cId);
+      await FM.projects.pruneOrphans();
+      const raw = await q9155Raw();
+      const rec = raw[a.L1] || {};
+      if (!(rec.file && rec.file.name === file2.name)) throw new Error('the sweep turned a REPLACED clip into ' + (rec.ref ? 'a pointer at the file he replaced' : JSON.stringify(Object.keys(rec))) + ' — his replacement is gone');
+      if ((FM.mediaLib.list().filter(function (e) { return e.mid === a.mid; })[0] || {}).from) throw new Error('the tile still owes a move on a clip that is no longer the same file');
+      await FM.projects.open(a.id);
+      if (nameOf(a.L1) !== file2.name) throw new Error('the replaced clip reopened showing ' + nameOf(a.L1) + ', not the replacement');
+      if (nameOf(L2) !== file.name) throw new Error('the clip reused from the tile reopened showing ' + nameOf(L2) + ' — it must keep the ORIGINAL photo it was made from');
+    } finally {
+      await q9155Cleanup(made, orig, idx0, wasOpen);
+    }
+  });
+
+  test('915.5 a project made from reused clips duplicates, packs, backs up and restores with its footage', { item: '915', budgetMs: 45000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], tpl = [], elem = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const file = await q9155Png('paths', '#264653');
+      const a = await q9155Import('FX9155 source', file); made.push(a.id);
+      const bId = await FM.projects.create({ name: 'FX9155 built', width: 320, height: 240 }); made.push(bId);
+      const L2 = await q9155Use(a.mid);
+      const raw = await q9155Raw();
+      if (!(raw[L2] && !raw[L2].file && raw[L2].ref)) throw new Error('the reused clip was stored as a full copy, so nothing below exercises a pointer');
+      await FM.projects.open(a.id);                // B is CLOSED now: every path below has to read it from disk
+
+      // ── templates and elements carry the FILE (a pack must never point into this device's store)
+      if (!(await FM.templates.save('FX9155 tpl', bId))) throw new Error('saving a template from the project failed');
+      const t = FM.templates.list().filter(function (x) { return x.name === 'FX9155 tpl'; })[0]; if (t) tpl.push(t.id);
+      const tp = t && await FM.templates.getPack(t.id);
+      const tf = tp && tp.media && tp.media[L2] && tp.media[L2].file;
+      if (!(tf && tf.size === file.size)) throw new Error('a template saved from the project carries ' + (tf ? tf.size + ' bytes' : 'NO file') + ' for the reused clip — a new project from it would open blank');
+      if (!(await FM.elements.saveFromProject(bId, 'FX9155 elem'))) throw new Error('saving an element from the project failed');
+      const el = FM.elements.list().filter(function (x) { return x.name === 'FX9155 elem'; })[0]; if (el) elem.push(el.id);
+      const ep = el && await FM.elements.getPack(el.id);
+      const ef = ep && ep.media && ep.media[L2] && ep.media[L2].file;
+      if (!(ef && ef.size === file.size)) throw new Error('an element saved from the project carries ' + (ef ? ef.size + ' bytes' : 'NO file') + ' for the reused clip');
+
+      // ── a backup carries the footage, and a restore brings it back
+      const obj = await FM.storage.buildBackup(null);
+      const entry = obj.projects.filter(function (p) { return p.project && p.project.name === 'FX9155 built'; })[0];
+      const md = entry && entry.media && entry.media[L2];
+      if (!(md && /^data:image\/png/.test(md.dataURL || ''))) throw new Error('the backup of the project has no footage for the reused clip — he would trust a file that does not contain it');
+      obj.projects = [entry];
+      const r = await FM.storage.restoreBackup(obj, null);
+      if (!r.ok) throw new Error('restoring that backup failed');
+      const back = FM.projects.list().filter(function (p) { return p.name === 'FX9155 built' && made.indexOf(p.id) < 0; })[0];
+      if (!back) throw new Error('the restore did not bring the project back');
+      made.push(back.id);
+      const doc = JSON.parse(localStorage.getItem('fm.proj.' + back.id) || '{}');
+      const rl = (doc.layers || []).filter(function (l) { return l.type === 'image'; })[0];
+      for (let i = 0; i < 40 && rl && !((await FM.storage.readMedia(rl.id)) || {}).file; i++) await sleep(100);   // the restore's own save is not awaited
+      await FM.projects.open(back.id);
+      if (!(rl && q9155Has(rl.id, file))) throw new Error('the restored project opened with its clip BLANK');
+
+      // ── duplicate, then delete the ORIGINAL and sweep: the copy must keep its footage
+      if ((await FM.projects.duplicate(bId)) !== true) throw new Error('duplicating the project failed');
+      const dup = FM.projects.list().filter(function (p) { return p.name === 'FX9155 built copy'; })[0];
+      if (!dup) throw new Error('no copy appeared');
+      made.push(dup.id);
+      await FM.projects.remove(bId);
+      await FM.projects.pruneOrphans();
+      await FM.projects.open(dup.id);
+      const dl = FM.scene.layers.filter(function (l) { return l.type === 'image'; })[0];
+      if (!(dl && q9155Has(dl.id, file))) throw new Error('the duplicate opened BLANK after its original was deleted and the sweep ran — they were sharing one pointer record, or the sweep took the shared copy');
+    } finally {
+      for (const id of tpl) { try { await FM.templates.remove(id); } catch (e) {} }
+      for (const id of elem) { try { await FM.elements.remove(id); } catch (e) {} }
+      await q9155Cleanup(made, orig, idx0, wasOpen);
+    }
+  });
+
+  test('915.5 the sweep never takes a shared copy a project still uses, tile or no tile — and old-style clips are untouched', { item: '915', budgetMs: 40000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      // an OLD-STYLE project: its clip's record is the file itself, written the way every existing project's is
+      const oldFile = await q9155Png('old', '#f4a261');
+      const oId = await FM.projects.create({ name: 'FX9155 old style', width: 320, height: 240 }); made.push(oId);
+      const OL = FM.makeLayer('image', { name: 'q9155 old', x: 160, y: 120, start: 0, duration: 3 });
+      FM.scene.layers.push(OL);
+      if (!(await FM.storage.writeMedia(OL.id, { file: oldFile, kind: 'image' }))) throw new Error('setup: the old-style clip never reached IndexedDB');
+      FM.storage.markDirty(); await FM.storage.save();
+
+      const file = await q9155Png('sweep', '#8ab17d');
+      const a = await q9155Import('FX9155 sweep source', file); made.push(a.id);
+      const bId = await FM.projects.create({ name: 'FX9155 sweep user', width: 320, height: 240 }); made.push(bId);
+      const L2 = await q9155Use(a.mid);
+      const shared = ((await q9155Raw())[L2] || {}).ref;
+      if (!shared) throw new Error('the reused clip was stored as a full copy, so there is no shared copy for the sweep to protect');
+
+      // ── Clear the Media history (the tile goes), then the boot sweep: the projects must keep the photo
+      FM.mediaLib.remove(a.mid);
+      await FM.projects.pruneOrphans();
+      let raw = await q9155Raw();
+      if (!(raw[shared] && raw[shared].file)) throw new Error('clearing the Media history and running the boot sweep DELETED the shared copy two projects still use — both clips are now blank for good');
+      if (!(raw[OL.id] && raw[OL.id].file && raw[OL.id].file.size === oldFile.size)) throw new Error('the sweep touched an old-style clip\'s record');
+      await FM.projects.open(a.id);
+      if (!q9155Has(a.L1, file)) throw new Error('with the tile gone, the original project reopened BLANK');
+      await FM.projects.open(oId);
+      if (!q9155Has(OL.id, oldFile)) throw new Error('an old-style project (the file stored under its own layer) reopened BLANK');
+
+      // ── one project deleted: the other still points at it, so it stays
+      await FM.projects.remove(a.id);
+      await FM.projects.pruneOrphans();
+      if (!((await q9155Raw())[shared] || {}).file) throw new Error('deleting the ORIGINAL project and sweeping took the copy the other project still uses');
+      await FM.projects.open(bId);
+      if (!q9155Has(L2, file)) throw new Error('the reusing project reopened BLANK after the original was deleted');
+
+      // ── CONTROL: nothing points at it any more, so the sweep collects it — the protection above is not "keep every lib: key for ever"
+      await FM.projects.open(oId);
+      await FM.projects.remove(bId);
+      await FM.projects.pruneOrphans();
+      raw = await q9155Raw();
+      if (raw[shared]) throw new Error('with no project and no tile left using it, the shared copy was never collected — deleted work would fill his phone for good');
+    } finally {
+      await q9155Cleanup(made, orig, idx0, wasOpen);
+    }
+  });
+
+  test('915.5 an old backfilled tile reuses without a second tile, and a tile left on a pointer still hands back its file', { item: '915', budgetMs: 40000 }, async function () {
+    /* Two library rows his phone can really hold. A BACKFILLED row (written by backfill() from old
+       projects) has no fingerprint, so the clip made from it matched nothing and became a second tile —
+       pointed at a layer whose record is now a pointer. And a row whose move was interrupted between the
+       store and the index (a killed tab) still names the original layer, which is a pointer too. Both
+       must read through to the file, never report "That file is no longer stored" and drop the tile. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const file = await q9155Png('backfill', '#6d597a');
+      const a = await q9155Import('FX9155 backfilled', file); made.push(a.id);
+      // turn its tile into exactly what backfill() writes: keyed at the layer, no fingerprint
+      const list = FM.mediaLib.list();
+      const row = list.filter(function (e) { return e.mid === a.mid; })[0];
+      row.fp = ''; row.size = 0; row.w = 0; row.h = 0; row.audio = false;
+      localStorage.setItem('fm.medialib', JSON.stringify(list));
+      const bId = await FM.projects.create({ name: 'FX9155 backfill user', width: 320, height: 240 }); made.push(bId);
+      const L2 = await q9155Use(a.mid);
+      const raw = await q9155Raw();
+      if (!(raw[L2] && !raw[L2].file && raw[L2].ref)) throw new Error('the clip made from a backfilled tile was stored as a full copy');
+      const tiles = FM.mediaLib.list().filter(function (e) { return e.mid === a.mid || e.key === raw[L2].ref || e.key === L2 || (e.name === file.name); });
+      if (tiles.length !== 1) throw new Error('reusing a backfilled tile left ' + tiles.length + ' tiles for one photo: ' + tiles.map(function (e) { return e.key + (e.fp ? ' (fp)' : ' (backfilled)'); }).join(', '));
+
+      // …and a row still naming the ORIGINAL layer, whose record is a pointer now (the interrupted move)
+      const l2 = FM.mediaLib.list();
+      const r2 = l2.filter(function (e) { return e.mid === a.mid; })[0];
+      r2.key = a.L1; delete r2.from; delete r2.fromRev;
+      localStorage.setItem('fm.medialib', JSON.stringify(l2));
+      if (!((await q9155Raw())[a.L1] || {}).ref) throw new Error('setup: the original layer is not a pointer, so this proves nothing');
+      const got = await FM.mediaLib.getFile(a.mid);
+      if (!(got && got.size === file.size)) throw new Error('a tile keyed at a layer whose record is a pointer hands back ' + (got ? got.size + ' bytes' : 'nothing') + ' — tapping it would say "no longer stored" and delete the tile');
+      const L3 = await q9155Use(a.mid);
+      const r3 = FM.mediaLib.list().filter(function (e) { return e.mid === a.mid; })[0] || {};
+      if (!/^lib:/.test(r3.key || '')) throw new Error('reusing that tile did not move it onto its shared copy (key ' + r3.key + ')');
+      if (!q9155Has(L3, file)) throw new Error('the clip made from that tile is blank');
+      if (q9155Copies(await q9155Raw(), file).length !== 1) throw new Error('the photo is stored more than once after all that');
+    } finally {
+      await q9155Cleanup(made, orig, idx0, wasOpen);
+    }
+  });
+
   test('timeline: Replace media repaints the clip bar, it does not keep the old picture', { item: 'q686-replace-strip' }, async function () {
     /* #686. "Replace media…" deliberately swaps the file UNDER THE SAME LAYER, so layer.id — which is
      * what stripCache is keyed by — is the one thing guaranteed not to change. Every other part of the
