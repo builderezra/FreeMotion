@@ -1233,6 +1233,19 @@ window.FM = window.FM || {};
       { key: 'y', label: 'Focus Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'blend', label: 'Blend', options: [[0, 'Normal'], [1, 'Add']], def: 0 },
     ], color: true, defColor: '#0d0d12', colorLabel: 'Ink' },
+    // Snow & Rain (queue 911, his pick) — full-frame weather over the clip. Particles emits from one point;
+    // this fills the frame. Flake count is independent of plate size, so the phone preview and the export
+    // show the same weather; sizes scale with the plate.
+    { type: 'weather', label: 'Snow & Rain', desc: 'Falling snow or rain across the whole frame, with wind, speed and depth.', params: [
+      { key: 'kind', label: 'Type', options: [[0, 'Snow'], [1, 'Rain']], def: 0 },
+      { key: 'amount', label: 'Amount', min: 10, max: 1500, step: 10, def: 300 },
+      { key: 'size', label: 'Size', min: 1, max: 30, step: 0.5, def: 5, unit: 'px' },
+      { key: 'speed', label: 'Speed', min: 0, max: 4, step: 0.05, def: 1, unit: '×' },
+      { key: 'wind', label: 'Wind', min: -100, max: 100, step: 1, def: 20, unit: '%' },
+      { key: 'length', label: 'Streak length', min: 5, max: 300, step: 1, def: 60, unit: 'px', overriddenBy: 'kind', liveWhen: 1 },
+      { key: 'depth', label: 'Depth', min: 0, max: 1, step: 0.02, def: 0.6 },
+      { key: 'opacity', label: 'Opacity', min: 0, max: 1, step: 0.02, def: 0.85 },
+    ], color: true, defColor: '#ffffff', colorLabel: 'Colour' },
     // HSL Bands — push one colour band's hue, saturation and luminance. The saturation gate is the
     // whole trick: weighting by the pixel's own saturation is what leaves skin and neutrals alone
     // while a plain hue window would wreck them.
@@ -3136,7 +3149,7 @@ window.FM = window.FM || {};
     softglow: 1, replacecolor: 1, spotcolor: 1, fourcolor: 1, spectralmap: 1, radialshadow: 1, voronoi: 1, tunnel: 1,
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, wrapshift: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
-    touchup: 1, levels: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, hslbands: 1,
+    touchup: 1, levels: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, weather: 1, hslbands: 1,
     timewarp: 1, chromakeypro: 1, lightwrap: 1, dispersion: 1, vhstape: 1, compresscrunch: 1, temporaldenoise: 1, lensdistort: 1, pixelsort: 1, lumamatte: 1, compoundblur: 1, matchgrade: 1 };
   // Bracket lookups below are bare (POSTFX[type]), so an inherited key like 'toString' would read as
   // a truthy hit and route a junk effect into the pixel path. Cut the prototype off — own keys only.
@@ -9578,7 +9591,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   let _cfDepth = 0;
   const _expPool = [];
   let _expDepth = 0;
-  let _cfTex = null, _reC = null, _tileC = null, _halC = null, _slC = null, _lwA = null, _lwB = null, _dnA = null, _dnB = null, _dnM = null, _dnC = null;
+  let _cfTex = null, _reC = null, _tileC = null, _halC = null, _slC = null, _wxSprite = null, _wxSpriteCol = '', _lwA = null, _lwB = null, _dnA = null, _dnB = null, _dnM = null, _dnC = null;
   // Alpha-bounds scan at 1/4 scale: reading back a full 1080×1920 frame (~8MB) per canvas-effect
   // per FRAME was the priciest single op in the effect pipeline. Scanning a 4×-downsampled copy is
   // 16× less data; the box is re-padded a scan-cell outward, so it's a slightly LOOSER region of
@@ -9641,7 +9654,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      expanded-plate cost off frames where the layer is nowhere near an edge — and the full-frame placeholder this list
      hands them made `near` always true, so all three rendered a second full plate every frame. They get the fast
      alpha scan like everything else; pixels unchanged, one drawLayer per frame again. */
-  const CFX_NO_BBOX = { rasterextrude: 1, motionflow: 1, particles: 1, motionblur: 1, halation: 1, framestutter: 1, speedlines: 1, timewarp: 1, lightwrap: 1, temporaldenoise: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
+  const CFX_NO_BBOX = { rasterextrude: 1, motionflow: 1, particles: 1, motionblur: 1, halation: 1, framestutter: 1, speedlines: 1, weather: 1, timewarp: 1, lightwrap: 1, temporaldenoise: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
   Object.setPrototypeOf(CFX_NO_BBOX, null);   // own keys only — see POSTFX
   /* A plate is normally the size of the COMP, so anything the layer draws outside the frame is
    * clipped away before an effect ever sees it. Tiles' whole-layer repeat needs that lost content:
@@ -10643,6 +10656,79 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B.save();
       if (add) B.globalCompositeOperation = 'lighter';
       B.drawImage(_slC, 0, 0);                       // ...then the ink over it
+      B.restore();
+    },
+    /* ---- Snow & Rain (queue 911) ------------------------------------------------------------------
+     * Every flake is a pure function of its index and the layer's own clock — no state, so scrubbing,
+     * export and the preview all agree, and a seek lands on the right frame. Depth gives parallax: a
+     * far flake is smaller, slower and fainter. Positions wrap with a margin so nothing pops in on the
+     * edge. Snow sways; rain is a streak along its own velocity, so Wind slants it. */
+    weather: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+      const ev = (k, d) => (p[k] == null ? d : FM.evalProp(p[k], t));
+      const rain = Math.round(ev('kind', 0)) === 1;
+      const n = Math.max(0, Math.min(3000, Math.round(ev('amount', 300))));
+      const sc = ps == null ? 1 : ps;
+      const size = Math.max(0.2, ev('size', 5)) * sc;
+      const speed = Math.max(0, ev('speed', 1));
+      const wind = ev('wind', 20) / 100;
+      const len = Math.max(1, ev('length', 60)) * sc;
+      const depth = clamp01(ev('depth', 0.6));
+      const op = clamp01(ev('opacity', 0.85));
+      const col = p.color || '#ffffff', rgb = hexToRGB(col);
+      const time = tl == null ? t : tl;
+      B.drawImage(A, 0, 0);
+      if (!n || op <= 0) return;
+      // murmur3's finaliser: the speed-lines hash on sequential i*4+k inputs left visible diagonal clumps in heavy snow
+      const hash = function (k) { k = Math.imul(k + 1, 0x9e3779b1); k ^= k >>> 16; k = Math.imul(k, 0x85ebca6b); k ^= k >>> 13; k = Math.imul(k, 0xc2b2ae35); k ^= k >>> 16; return (k >>> 0) / 4294967296; };
+      const fall = (rain ? 1.4 : 0.12) * speed;          // frame heights per second, nearest layer
+      const mY = rain ? (len / H + 0.02) : (size * 2 / H + 0.02), mX = 0.08;
+      const wrap = (v, lo, hi) => { const r = hi - lo; return lo + (((v - lo) % r) + r) % r; };
+      B.save();
+      if (rain) {
+        B.lineCap = 'round';
+        B.strokeStyle = 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
+        // three depth bands, one path each: lineWidth and alpha are per-path
+        for (let band = 0; band < 3; band++) {
+          const nearness = 1 - depth * (band / 2) * 0.8;   // 1 = nearest
+          B.globalAlpha = op * (0.35 + 0.65 * nearness);
+          B.lineWidth = Math.max(0.6 * sc, size * 0.35 * nearness);
+          B.beginPath();
+          for (let i = band; i < n; i += 3) {
+            const h1 = hash(i * 4 + 1), h2 = hash(i * 4 + 2), h3 = hash(i * 4 + 3);
+            const v = nearness * (0.85 + 0.3 * h3);
+            const dy = fall * v * time;                      // in frame heights
+            const y = wrap(h2 + dy, -mY, 1 + mY) * H;
+            const x = wrap(h1 + wind * dy * H / W, -mX, 1 + mX) * W;
+            const L = len * nearness * (0.7 + 0.6 * h3);
+            const dl = Math.hypot(wind, 1) || 1;
+            B.moveTo(x, y); B.lineTo(x - wind / dl * L, y - 1 / dl * L);
+          }
+          B.stroke();
+        }
+      } else {
+        const S = 32;
+        if (!_wxSprite) { _wxSprite = document.createElement('canvas'); _wxSprite.width = _wxSprite.height = S; }
+        if (_wxSpriteCol !== col) {
+          const g = _wxSprite.getContext('2d');
+          g.clearRect(0, 0, S, S);
+          const gr = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+          const c = rgb[0] + ',' + rgb[1] + ',' + rgb[2];
+          gr.addColorStop(0, 'rgba(' + c + ',1)'); gr.addColorStop(0.45, 'rgba(' + c + ',0.85)'); gr.addColorStop(1, 'rgba(' + c + ',0)');
+          g.fillStyle = gr; g.fillRect(0, 0, S, S);
+          _wxSpriteCol = col;
+        }
+        for (let i = 0; i < n; i++) {
+          const h1 = hash(i * 4 + 1), h2 = hash(i * 4 + 2), h3 = hash(i * 4 + 3), h4 = hash(i * 4 + 4);
+          const nearness = 1 - depth * h3 * 0.8;
+          const dy = fall * nearness * (0.8 + 0.4 * h4) * time;
+          const sway = 0.012 * Math.sin(time * (0.7 + h4) * 1.6 + h1 * 6.283);
+          const y = wrap(h2 + dy, -mY, 1 + mY) * H;
+          const x = wrap(h1 + (wind * dy * 0.6) * H / W + sway, -mX, 1 + mX) * W;
+          const d = size * 2 * nearness * (0.7 + 0.6 * h4);  // sprite's soft edge takes up half its width
+          B.globalAlpha = op * (0.4 + 0.6 * nearness);
+          B.drawImage(_wxSprite, x - d / 2, y - d / 2, d, d);
+        }
+      }
       B.restore();
     },
     /* ---- Frame Stutter -------------------------------------------------------------------------

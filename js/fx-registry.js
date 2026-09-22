@@ -94,7 +94,7 @@ window.FM = window.FM || {};
     // batch 32 (time + impact)
     framestutter: 'stylize', shockwave: 'distort',
     // batch 33 (manga lines + the HSL panel)
-    speedlines: 'proc', hslbands: 'color',
+    speedlines: 'proc', weather: 'proc', hslbands: 'color',
     // batch 34 (the scan bar + a key that survives bad lighting)
     timewarp: 'stylize', chromakeypro: 'matte',
     // batch 35 (the compositing shot)
@@ -526,6 +526,7 @@ window.FM = window.FM || {};
     wiggle:            ['random jitter', 'jitter'],
     starfield:         ['simple starfield', 'stars'],
     lightning:         ['energy beam', 'laser beam', 'bolt'],
+    weather:           ['snow', 'rain', 'weather', 'snowfall', 'rainfall', 'storm'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam

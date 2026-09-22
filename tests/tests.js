@@ -67392,6 +67392,43 @@
   });
 
 
+  /* ── queue 911: Snow & Rain, his pick of the new effects ──────────────────────────────────────────────────
+   * Full-frame weather. Held: it exists and is findable by "snow" and "rain"; it adds light over the picture
+   * and leaves the picture under it; it moves with the clock but the same instant always draws the same frame
+   * (so scrub, preview and export agree); Rain is not Snow; Wind changes it. */
+  test('911 Snow & Rain falls across the frame, moves with time, and draws the same frame for the same instant', { item: '911', budgetMs: 20000 }, function () {
+    var T = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX, R = FM.fxRegistry;
+    if (!T || typeof T.weather !== 'function') throw new Error('there is no Snow & Rain kernel');
+    if (!R.makeInstance('weather')) throw new Error('Snow & Rain is not in the effects registry');
+    var W = 160, H = 280, bb = { x: 0, y: 0, w: W, h: H };
+    var A = document.createElement('canvas'); A.width = W; A.height = H;
+    var a = A.getContext('2d'); a.fillStyle = '#203040'; a.fillRect(0, 0, W, H);
+    function run(params, tl) {
+      var c = document.createElement('canvas'); c.width = W; c.height = H;
+      var g = c.getContext('2d', { willReadFrequently: true });
+      T.weather(A, g, W, H, bb, Object.assign(R.makeInstance('weather').params, params), tl, tl, null, 1);
+      return g.getImageData(0, 0, W, H).data;
+    }
+    function same(P, Q) { for (var i = 0; i < P.length; i++) if (P[i] !== Q[i]) return false; return true; }
+    function lit(d) { var n = 0; for (var i = 0; i < d.length; i += 4) if (d[i] > 0x60) n++; return n; }
+    function top(d) { var n = 0; for (var i = 0; i < W * 40 * 4; i += 4) if (d[i] > 0x60) n++; return n; }
+    function bottom(d) { var n = 0; for (var i = W * (H - 40) * 4; i < d.length; i += 4) if (d[i] > 0x60) n++; return n; }
+    var bad = [];
+    var snow = run({}, 1.5);
+    if (lit(snow) < 200) bad.push('default snow lit only ' + lit(snow) + ' px of the frame');
+    if (!top(snow) || !bottom(snow)) bad.push('the snow does not reach both the top and the bottom of the frame');
+    if (snow[4 * (W * 140 + 3)] === 0 && snow[4 * (W * 140 + 3) + 2] === 0) bad.push('the picture under the snow is gone');
+    if (!same(snow, run({}, 1.5))) bad.push('the same instant drew two different frames — scrub and export would disagree');
+    if (same(snow, run({}, 2.0))) bad.push('snow at 1.5 s and 2.0 s is the same frame — it is not falling');
+    if (same(snow, run({ kind: 1 }, 1.5))) bad.push('Rain draws the same as Snow');
+    if (same(snow, run({ wind: -80 }, 1.5))) bad.push('Wind changed nothing');
+    if (!(lit(run({ amount: 1200 }, 1.5)) > lit(run({ amount: 100 }, 1.5)) * 2)) bad.push('more Amount did not mean more snow');
+    var al = (FM.fxSearchAliases && FM.fxSearchAliases.weather) || [];
+    ['snow', 'rain'].forEach(function (q) { if (al.indexOf(q) < 0) bad.push('"' + q + '" is not a search word for it'); });
+    if (bad.length) throw new Error(bad.join(' · ') + ' (queue 911)');
+  });
+
+
   /* ── queue 904 [B] glowscan: the scan only ever swept DOWN ───────────────────────────────────────────────
    * (Its other half, a strength control, shipped earlier as "Strength".) A scan across a wide title, or upward, was out
    * of reach. Sweeps: Down / Up / Right / Left. Down is the old loop untouched, so a saved scan is byte-identical.
