@@ -1,71 +1,97 @@
 #!/usr/bin/env python3
-"""Take a REAL screenshot of the app at a given size, and write it to a PNG.
+"""Screenshot the app in a throwaway headless Chrome, after running your own JS in it.
 
-Why this exists.  CLAUDE.md says every UI change is verified at ~380px "load, resize, screenshot,
-read console" — and until now the only screenshot a session could take was one it looked at itself.
-Ezra could not see it.  A picture he cannot open is not proof, and half the rules in this repo exist
-because a claim went unchecked.  This writes the picture to disk so it can be sent to him.
+    python3 tools/shot.py --out /path/a.png                      # home screen, 380x800, light home
+    python3 tools/shot.py --home dark --out b.png                # the dark home look
+    python3 tools/shot.py --js "document.querySelector('[aria-label=Settings]').click()" --wait 900 --out c.png
+    python3 tools/shot.py --width 1280 --height 900 --js-file probe.js --out d.png
+    python3 tools/shot.py --frames 0,120,240 --js "..." --out e.png   # e-0.png, e-120.png, e-240.png: an animation, mid-flight
 
-  python3 tools/shot.py out.png --width 380 --height 820 \
-      --setup 'FM.selectLayer(FM.scene.layers[0].id); FM.refreshAll();' --wait 600
-  python3 tools/shot.py out.png --port 8778        # some other checkout, for a before/after pair
+Why it exists (22 Sep, #912): several agents had to LOOK at menus in light and dark at phone width at the
+same time, and the built-in browser pane is one shared tab — two drivers in it corrupt each other's state.
+Each call here gets its own Chrome, its own profile and its own port, so they cannot collide.
+
+--js runs AFTER the app has loaded (and, with --home, after the home look is applied). Its value — if it
+returns one, or a Promise — is printed as JSON, so one call can both act and measure. Throws are printed,
+and the screenshot is still taken, because "what does the screen look like when this failed" is usually
+the question. Needs the dev server on --port (tools/serve.sh).
 """
-import argparse, os, base64, sys, tempfile, time, importlib.util
+import argparse, json, os, shutil, sys, tempfile, time
 
-_spec = importlib.util.spec_from_file_location(
-    "_cdp", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests", "_cdp.py"))
-_cdp = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(_cdp)
-
-
-def shoot(out, port, width, height, setup, wait_ms, path):
-    dbg = _cdp.free_port()
-    prof = tempfile.mkdtemp(prefix="fm-shot-")
-    proc = _cdp.launch(dbg, width, height, prof)
-    try:
-        c = _cdp.CDP(_cdp.ws_url(dbg))
-        c.send("Page.enable")
-        # the window size is the OUTER window headless, so pin the viewport itself
-        c.send("Emulation.setDeviceMetricsOverride", width=width, height=height,
-               deviceScaleFactor=2, mobile=True)
-        c.send("Page.navigate", url=f"http://localhost:{port}{path}")
-        time.sleep(4.0)
-        # ⚠️ THE POINTER, NOT THE WIDTH, IS WHAT THE APP ASKS ABOUT — and a narrow headless window still
-        # has a MOUSE.  `@media (hover: none) { .cat-num { display: none } }` is how queue 797 took the
-        # 1-9 keycaps off the clip cards on a phone; without the two calls below the shot shows a badge on
-        # every card that his phone does not show, and the picture then accuses a shipped fix of being
-        # broken.  Both are issued AFTER the navigation on purpose: setEmulatedMedia sent before it is
-        # dropped by the load (measured 7 Sep — matchMedia read false), and the media override only holds
-        # once touch emulation is on.
-        c.send("Emulation.setTouchEmulationEnabled", enabled=True, maxTouchPoints=5)
-        c.send("Emulation.setEmulatedMedia", features=[{"name": "hover", "value": "none"},
-                                                       {"name": "any-hover", "value": "none"},
-                                                       {"name": "pointer", "value": "coarse"},
-                                                       {"name": "any-pointer", "value": "coarse"}])
-        if not c.eval("matchMedia('(hover: none)').matches"):
-            raise RuntimeError("the shot is not a phone: (hover: none) does not match, so touch-only rules are off")
-        # tolerant on purpose: this also shoots plain pages (a drawn-options sheet), where FM does not exist
-        c.eval("(function(){ try { if (window.FM && FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {} })()")
-        time.sleep(0.6)
-        if setup:
-            c.eval(f"(function(){{ {setup} }})()")
-        time.sleep(wait_ms / 1000.0)
-        png = c.send("Page.captureScreenshot", format="png")["data"]
-        with open(out, "wb") as f:
-            f.write(base64.b64decode(png))
-        c.close()
-    finally:
-        proc.terminate()
-    return out
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'tests'))
+import _cdp  # noqa: E402  (launch / ws_url / CDP)
 
 
-if __name__ == "__main__":
+def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("out")
-    ap.add_argument("--port", type=int, default=8777)
-    ap.add_argument("--path", default="/index.html")
-    ap.add_argument("--width", type=int, default=380)
-    ap.add_argument("--height", type=int, default=820)
-    ap.add_argument("--wait", type=int, default=800, help="ms to settle after the setup snippet")
-    ap.add_argument("--setup", default="")
+    ap.add_argument('--port', type=int, default=8777)
+    ap.add_argument('--path', default='/index.html')
+    ap.add_argument('--width', type=int, default=380)
+    ap.add_argument('--height', type=int, default=800)
+    ap.add_argument('--home', choices=['light', 'dark'], default=None, help='force the Home look before --js')
+    ap.add_argument('--js', default=None)
+    ap.add_argument('--js-file', default=None)
+    ap.add_argument('--wait', type=int, default=600, help='ms to wait after --js before the shot')
+    ap.add_argument('--frames', default=None, help='comma list of ms offsets after --js: one PNG each')
+    ap.add_argument('--out', required=True)
     a = ap.parse_args()
-    print(shoot(a.out, a.port, a.width, a.height, a.setup, a.wait, a.path))
+
+    profile = tempfile.mkdtemp(prefix='fm-shot-')
+    dport = _cdp.free_port()
+    proc = _cdp.launch(dport, a.width, a.height, profile)
+    cdp = None
+    try:
+        cdp = _cdp.CDP(_cdp.ws_url(dport))
+        cdp.send('Emulation.setDeviceMetricsOverride', width=a.width, height=a.height,
+                 deviceScaleFactor=2 if a.width < 768 else 1, mobile=a.width < 768)
+        cdp.send('Page.enable')
+        cdp.send('Page.navigate', url=f'http://localhost:{a.port}{a.path}')
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            try:
+                if cdp.eval("!!(window.FM && FM.scene && document.readyState === 'complete')"):
+                    break
+            except Exception:
+                pass
+            time.sleep(0.25)
+        time.sleep(1.2)   # the intro and the home cards' rise
+        if a.home:
+            cdp.eval("(FM.settings && FM.settings.set) ? FM.settings.set('homeLight', %s) : 0; "
+                     "document.documentElement.setAttribute('data-home', '%s'); 1"
+                     % ('true' if a.home == 'light' else 'false', a.home))
+            time.sleep(0.3)
+        js = a.js
+        if a.js_file:
+            js = open(a.js_file).read()
+        if js:
+            try:
+                val = cdp.eval('(async () => { %s\n })()' % js if 'return' in js else js, await_promise=True)
+                print(json.dumps({'js': val})[:4000])
+            except Exception as e:
+                print(json.dumps({'js_error': str(e)[:1200]}))
+        offsets = [int(x) for x in a.frames.split(',')] if a.frames else [a.wait]
+        t0 = time.time()
+        base, ext = os.path.splitext(a.out)
+        for off in offsets:
+            lag = off / 1000 - (time.time() - t0)
+            if lag > 0:
+                time.sleep(lag)
+            shot = cdp.send('Page.captureScreenshot', format='png')
+            path = a.out if not a.frames else f'{base}-{off}{ext or ".png"}'
+            import base64
+            with open(path, 'wb') as f:
+                f.write(base64.b64decode(shot['data']))
+            print(path)
+    finally:
+        if cdp:
+            cdp.close()
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except Exception:
+            proc.kill()
+        shutil.rmtree(profile, ignore_errors=True)
+
+
+if __name__ == '__main__':
+    main()
