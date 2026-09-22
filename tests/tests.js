@@ -67338,6 +67338,60 @@
   });
 
 
+  /* ── queue 904 [B] ellipsoid3d: the axis ratios were welded ────────────────────────────────────────────────
+   * 1.15 × 0.62 × 0.62, always — the same control set as Spherize, on the one effect named for its shape. Height and
+   * Depth are now controls (radii in % of the sphere's, default 62 = the old 0.62, so saved ones are byte-identical).
+   * Judged by the silhouette: a taller Height draws a taller ball; a different Depth changes it once it is turned. */
+  test('904 [B] Ellipsoid takes a height and a depth, and a saved ellipsoid is untouched', { item: '904', budgetMs: 20000 }, function () {
+    var T = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX;
+    if (!T || typeof T.ellipsoid3d !== 'function') throw new Error('the Ellipsoid kernel is not reachable');
+    var W = 200, H = 200, bb = { x: 50, y: 50, w: 100, h: 100 };
+    var A = document.createElement('canvas'); A.width = W; A.height = H;
+    var a = A.getContext('2d'); a.fillStyle = '#5a9ad0'; a.fillRect(bb.x, bb.y, bb.w, bb.h);
+    function run(params) {
+      var c = document.createElement('canvas'); c.width = W; c.height = H;
+      var g = c.getContext('2d', { willReadFrequently: true });
+      T.ellipsoid3d(A, g, W, H, bb, params, 0, 0);
+      return g.getImageData(0, 0, W, H).data;
+    }
+    function same(P, Q) { for (var i = 0; i < P.length; i++) if (P[i] !== Q[i]) return false; return true; }
+    function tall(d) { var lo = H, hi = -1; for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3] > 128) { if (y < lo) lo = y; if (y > hi) hi = y; } return hi - lo; }
+    var flat = { rotx: 0, roty: 0, rotz: 0 };
+    var bad = [];
+    if (!same(run({}), run({ height: 62, depth: 62 }))) bad.push('a saved ellipsoid and one at the default 62 / 62 differ — saved projects would change');
+    var h0 = tall(run(flat)), h1 = tall(run(Object.assign({ height: 120 }, flat)));
+    if (!(h1 > h0 * 1.5)) bad.push('Height 120 drew ' + h1 + 'px tall against ' + h0 + 'px at 62 — Height is not wired');
+    var turned = { rotx: 0, roty: 70, rotz: 0 };
+    if (same(run(turned), run(Object.assign({ depth: 140 }, turned)))) bad.push('Depth 140 changed nothing on a turned ellipsoid');
+    if (bad.length) throw new Error(bad.join(' · ') + ' (queue 904)');
+  });
+
+
+  /* ── queue 904 [B] starprism3d: point count, but not point sharpness ─────────────────────────────────────
+   * Every Star Prism had the same stubby 0.45 waist. Inner radius (10–90 %, default 45 = the old 0.45, so saved
+   * stars are byte-identical) now sets it. Judged face-on: a spikier star covers less of the frame than a fat one. */
+  test('904 [B] Star Prism takes an inner radius, and a saved star prism is untouched', { item: '904', budgetMs: 20000 }, function () {
+    var T = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX;
+    if (!T || typeof T.starprism3d !== 'function') throw new Error('the Star Prism kernel is not reachable');
+    var W = 200, H = 200, bb = { x: 50, y: 50, w: 100, h: 100 };
+    var A = document.createElement('canvas'); A.width = W; A.height = H;
+    var a = A.getContext('2d'); a.fillStyle = '#e8e050'; a.fillRect(bb.x, bb.y, bb.w, bb.h);
+    function run(params) {
+      var c = document.createElement('canvas'); c.width = W; c.height = H;
+      var g = c.getContext('2d', { willReadFrequently: true });
+      T.starprism3d(A, g, W, H, bb, params, 0, 0);
+      return g.getImageData(0, 0, W, H).data;
+    }
+    function same(P, Q) { for (var i = 0; i < P.length; i++) if (P[i] !== Q[i]) return false; return true; }
+    function ink(d) { var n = 0; for (var i = 3; i < d.length; i += 4) if (d[i] > 128) n++; return n; }
+    var bad = [], face = { rotx: 0, roty: 0, rotz: 0 };
+    if (!same(run({}), run({ inner: 45 }))) bad.push('a saved star prism and one at the default 45 differ — saved projects would change');
+    var spiky = ink(run(Object.assign({ inner: 15 }, face))), fat = ink(run(Object.assign({ inner: 80 }, face)));
+    if (!(spiky < fat * 0.7)) bad.push('Inner radius 15 covered ' + spiky + 'px against ' + fat + 'px at 80 — the waist is not wired');
+    if (bad.length) throw new Error(bad.join(' · ') + ' (queue 904)');
+  });
+
+
   /* ── queue 904 [B] glowscan: the scan only ever swept DOWN ───────────────────────────────────────────────
    * (Its other half, a strength control, shipped earlier as "Strength".) A scan across a wide title, or upward, was out
    * of reach. Sweeps: Down / Up / Right / Left. Down is the old loop untouched, so a saved scan is byte-identical.
