@@ -497,6 +497,108 @@ window.FM = window.FM || {};
                 /* Tuff carries the flash — his second half of that request, and the suite holds every
                    filter in the section to it. */
                 e('flashdark', { amount: 0.3, speed: 14, soft: 0.25, floor: 0.35 })] },
+
+    /* ==== #912 candidates — he picks ===========================================================
+     * His words (#912, clause 1): "add some more filters". His standing rule is that no visual ships
+     * that he has not seen, so these ten are CANDIDATES: each was rendered through FM.renderScene on
+     * real photographs beside its nearest existing filters, for a contact sheet he picks from. Three were
+     * changed from the audit's recipes after LOOKING at them (Cyberpunk, Digicam, HDR — the reason is
+     * written on each).
+     * ⚠️ WHEN HE HAS PICKED: delete the unpicked entries from this block, and their lines from the
+     * matching '#912 candidates' block of FILTER_SUBJECT in js/fx-thumbs.js. Nothing else refers to
+     * them — the '912' test takes whichever of these ids are still here.
+     * Every one is placed where the set is EMPTY, not beside something it copies: no filter used
+     * `sepia`, `hslbands` or `spotcolor`, and none split-toned by brightness (colorbalance `range`,
+     * queue 904) until these. Each lands at the END of its section's row, in declaration order. */
+    { id: 'sepia', name: 'Sepia', section: 'retro',
+      desc: 'Warm brown monotone — an old family photograph, faded and grained at the edges.',
+      // Retro, not B/W: the mono section's test caps colour spread at 4, and brown IS the look.
+      effects: [e('sepia', { amount: 1 }), e('contrast', { amount: 1.12 }), e('brightness', { amount: 1.04 }),
+                e('faded', { amount: 0.35, lift: 16, desat: 0, tone: 150 }),
+                e('vignette', { amount: 0.42, size: 34 }), e('filmgrain', { amount: 22, size: 2 })] },
+    { id: 'digicam', name: 'Digicam', section: 'retro',
+      desc: 'A 2000s pocket camera — cool and a touch magenta, over-sharpened, highlights clipping into a hard glow.',
+      /* Square grain (shape 0) on purpose: a CCD's noise is per-pixel, not a round silver grain.
+         Glow threshold 88, not the audit's 78: rendered on a 1080 frame, 78 caught the whole sky around a sunset
+         sun and drew it as a pale hard-edged OCTAGON — read as a bug, not a look. At 88 only the clipped core glows. */
+      effects: [e('brightness', { amount: 1.08 }), e('contrast', { amount: 1.14 }), e('saturate', { amount: 1.12 }),
+                e('temperature', { amount: -14, tint: 10 }),
+                e('unsharpmask', { amount: 1.6, radius: 1 }),
+                e('levels', { inblack: 8, inwhite: 226 }),
+                e('lightglow', { amount: 0.3, radius: 6, threshold: 88 }),
+                e('filmgrain', { amount: 16, size: 1, shape: 0, color: 70 })] },
+    /* "Portrait Film", not "Portra": Portra is a live Kodak product name. It is the look people ask
+       for by that name, so the name is his call — the recipe does not change either way. */
+    { id: 'portra', name: 'Portrait Film', section: 'retro',
+      desc: 'Soft, warm portrait film — gentle contrast, creamy highlights, cool-green shadows kept quiet.',
+      // Two colorbalance passes split by brightness: warm into the Lights (range 3), cool-green into the Darks (1).
+      effects: [e('contrast', { amount: 0.88 }), e('saturate', { amount: 0.86 }),
+                e('temperature', { amount: 22, tint: 5 }),
+                e('highlightsshadows', { highlights: -32, shadows: 24 }),
+                e('colorbalance', { red: 12, green: 5, blue: -14, range: 3 }),
+                e('colorbalance', { red: -8, green: 4, blue: 8, range: 1 }),
+                e('filmgrain', { amount: 14, size: 1.5 })] },
+    { id: 'moody', name: 'Moody', section: 'cinematic',
+      desc: 'Dark and muted, leaning green — greens sink to olive-teal, shadows cool, highlights warm and held down.',
+      // band 3 is Green in HSL Bands: turned toward teal, drained and darkened. Nothing else in the set leans green.
+      effects: [e('brightness', { amount: 0.88 }), e('contrast', { amount: 1.14 }), e('saturate', { amount: 0.72 }),
+                e('hslbands', { band: 3, hue: 18, sat: -40, lum: -30, range: 1.3 }),
+                e('colorbalance', { red: -16, green: 8, blue: 6, range: 1 }),
+                e('colorbalance', { red: 10, green: 6, blue: -10, range: 3 }),
+                e('highlightsshadows', { highlights: -24, shadows: -6 }),
+                e('vignette', { amount: 0.38, size: 34 })] },
+    { id: 'cyberpunk', name: 'Cyberpunk', section: 'cinematic',
+      desc: 'Oranges turned hot pink, shadows pushed teal, the lights glowing — a neon city grade.',
+      /* ⚠️ REWORKED BEFORE HE SAW IT. The audit's version was a colorbalance split alone (teal darks, magenta
+         lights), and rendered on six photographs beside Teal & Orange it was the same picture on four of them:
+         the lights in a real photo are ORANGE, and a magenta push on orange lands back on orange-red. What sells
+         the look is moving orange and yellow themselves toward pink (HSL Bands 1 and 2) and THEN splitting — the
+         sky stays blue, which is also what keeps it apart from Ultraviolet's whole-frame hue spin. */
+      effects: [e('contrast', { amount: 1.25 }), e('saturate', { amount: 1.3 }), e('brightness', { amount: 0.9 }),
+                e('hslbands', { band: 1, hue: -40, sat: 10, lum: 0, range: 1.6 }),
+                e('hslbands', { band: 2, hue: -60, sat: 0, lum: 0, range: 1.2 }),
+                e('colorbalance', { red: -40, green: 10, blue: 40, range: 1 }),
+                e('colorbalance', { red: 30, green: -40, blue: 40, range: 3 }),
+                e('lightglow', { amount: 0.5, radius: 14, threshold: 58 })] },
+    { id: 'tungsten', name: 'Tungsten', section: 'glow',
+      desc: 'Night film balanced for lamplight — everything cool, with a red halo around every bright light.',
+      effects: [e('contrast', { amount: 1.12 }), e('saturate', { amount: 0.92 }),
+                e('temperature', { amount: -42, tint: -6 }),
+                e('colorbalance', { red: -14, green: 6, blue: 16, range: 1 }),
+                e('halation', { amount: 1.8, threshold: 0.45, tightness: 0.35, spread: 10 }),
+                e('filmgrain', { amount: 24, size: 2 })] },
+    { id: 'airy', name: 'Airy', section: 'glow',
+      desc: 'Bright and clean — lifted, soft and a little pastel, light pouring through rather than blooming.',
+      // inblack is SET to 0: Levels defaults to 14, which would crush the very blacks this lifts.
+      effects: [e('brightness', { amount: 1.14 }), e('contrast', { amount: 0.86 }), e('saturate', { amount: 0.85 }),
+                e('temperature', { amount: 6, tint: 2 }),
+                e('highlightsshadows', { highlights: -20, shadows: 30 }),
+                e('levels', { inblack: 0, inwhite: 245, outblack: 18 })] },
+    { id: 'splash', name: 'Colour Splash', section: 'stylised',
+      desc: 'Everything black and white except the reds — the one colour left, pushed so it pops.',
+      // The kept colour is Spot Colour's own swatch, so it can be changed inside the filter.
+      effects: [e('contrast', { amount: 1.18 }),
+                e('spotcolor', { tolerance: 0.14, desat: 100, boost: 160, color: '#e03131' }),
+                e('vignette', { amount: 0.3, size: 40 })] },
+    { id: 'cyanotype', name: 'Cyanotype', section: 'stylised',
+      desc: 'The old blueprint photo process — the whole picture printed in Prussian blue on white paper.',
+      // Continuous tone, unlike Blueprint's line work; Stylised, because a blue monotone fails the mono spread cap.
+      effects: [e('grayscale', { amount: 1 }), e('contrast', { amount: 1.12 }), e('brightness', { amount: 1.06 }),
+                e('duotone', { amount: 1, color: '#0b2a66', color2: '#eef3f5' }),
+                e('filmgrain', { amount: 12, size: 2 })] },
+    { id: 'hdr', name: 'HDR', section: 'vivid',
+      desc: 'Shadows opened, highlights held and every edge crisp — the phone-HDR look pushed a step further.',
+      /* unsharpmask BEFORE highlightsshadows: the other way round, a clipped sun sharpens per channel
+         against orange sky and turns BLUE. Measured on sunpath at 320px, mean of the 53 sun-core pixels:
+         this order (201,202,206); swapped (193,196,245). */
+      /* Pushed past the audit's -32/+38: at those values, on a 1080 frame, a backlit figure stayed black and the
+         result sat beside Tropic as "more orange" — the opened shadows ARE the look, so they have to show. */
+      effects: [e('saturate', { amount: 1.12 }),
+                e('unsharpmask', { amount: 1.2, radius: 4 }),
+                e('highlightsshadows', { highlights: -45, shadows: 60 }),
+                e('vibrance', { amount: 2.0, highlights: 30 }),
+                e('levels', { inblack: 6, inwhite: 250 })] },
+    /* ==== end of #912 candidates ============================================================== */
   ];
 
   /* Validate a definition against the LIVE registry and build a real container instance from it.

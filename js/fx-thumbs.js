@@ -518,6 +518,18 @@ window.FM = window.FM || {};
        'clouds'.   · arctic wants pale open tones to chill — 'clouds' (a different section from moonbeam).   · desert
        wants warmth and skin against shadow — 'figures' (a different section from polaroid). */
     tropic: 'bush',    popsicle: 'pair',    hivis: 'run',    polaroid: 'figures',    kodachrome: 'bay',    technicolor: 'dusk',    halo: 'city',    moonbeam: 'clouds',    arctic: 'clouds',    desert: 'figures',
+    /* ==== #912 candidates — he picks (the matching block in js/filters.js) ====
+       Same two standing rules: no cars outside Tuff, no subject repeated inside a section. When he has
+       picked, delete the unpicked lines here along with their definitions.
+       · sepia needs colour to turn brown and open tones for the fade — 'shore'.   · digicam clips and sharpens, so it
+       wants a bright sky and a hard horizon — 'run'.   · portra is soft warm film, and needs pastel highlights to be
+       kind to — 'clouds'.   · moody sinks greens, so it needs trees — 'dusk'.   · cyberpunk splits by brightness, so it
+       wants a lit city with deep shadow — 'towers'.   · tungsten needs bright lights to halo — 'run' (a different
+       section from digicam).   · airy lifts and softens, so it wants an open daylit scene — 'dog'.   · splash keeps the
+       reds, so it needs red to keep — 'bay'.   · cyanotype needs a full tonal range to print — 'shore' (a different
+       section from sepia).   · hdr needs a sun and a dark foreground at once — 'sunpath'. */
+    sepia: 'shore',    digicam: 'run',      portra: 'clouds',   moody: 'dusk',     cyberpunk: 'towers',
+    tungsten: 'run',   airy: 'dog',         splash: 'bay',      cyanotype: 'shore', hdr: 'sunpath',
   };
   Object.setPrototypeOf(FILTER_SUBJECT, null);   // an id like 'constructor' must miss, not inherit
 

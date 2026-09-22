@@ -42160,6 +42160,51 @@
     if (dead.length) throw new Error(dead.join(' · ') + ' (queue 778)');
   });
 
+  /* #912 clause 1 — his words: "add some more filters". Ten CANDIDATES in js/filters.js ('#912 candidates — he
+     picks'), shown to him on a contact sheet; the unpicked ones get deleted. So this takes WHICHEVER of the ten are
+     still there (none left is a failure: that is the block gone, not a pick), and holds each to three things, rendered
+     through FM.renderScene on two real photographs (bay: red sky over blue water; dusk: greens and lit windows):
+     it changes the picture, it is not a copy of a filter the library already has, and no two candidates are one look.
+     Numbers are mean channel difference (0..255) averaged over both photos at 96px. MEASURED when written: a filterless
+     render against itself 0; smallest move 16.6 (Portrait Film); nearest existing 8.3 (Portrait Film ↔ Faded Film —
+     the library's own closest pair, Blackout ↔ Midnight, measures 6.0 by the same yardstick on 14 photos); nearest two
+     candidates 19.6 (Cyberpunk ↔ Tungsten). The thresholds sit between the null and those. */
+  test('912 the candidate filters each render their own look — not the photo, not an existing filter, not each other', { item: '912', budgetMs: 40000 }, async function () {
+    const CANDS = ['sepia', 'digicam', 'portra', 'moody', 'cyberpunk', 'tungsten', 'airy', 'splash', 'cyanotype', 'hdr'];
+    const here = CANDS.filter(id => FM.FILTERS.some(f => f.id === id));
+    if (!here.length) throw new Error('none of the ten #912 candidate filters is in the library — the block in js/filters.js is gone, not picked from');
+    const S = 96, PHOTOS = ['bay', 'dusk'];
+    const mad = (A, B) => { let s = 0; for (let i = 0; i < A.length; i += 4) s += Math.abs(A[i] - B[i]) + Math.abs(A[i + 1] - B[i + 1]) + Math.abs(A[i + 2] - B[i + 2]); return s / (A.length / 4) / 3; };
+    const R = {};
+    for (const key of PHOTOS) {
+      const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('no photo ' + key)); i.src = 'fx-art/' + key + '.jpg?v=1'; });
+      const side = Math.min(im.naturalWidth, im.naturalHeight), c = document.createElement('canvas'); c.width = S; c.height = S;
+      c.getContext('2d').drawImage(im, (im.naturalWidth - side) / 2, (im.naturalHeight - side) / 2, side, side, 0, 0, S, S);
+      const mid = '_t912_' + key; FM.media.set(mid, { kind: 'image', el: c, width: S, height: S, duration: 0 }); FM.media.pin(mid);
+      const shot = id => {
+        const l = FM.makeLayer('image', { x: S / 2, y: S / 2, start: 0, duration: 2 }); l.id = mid;
+        if (id) { const box = FM.filters.makeInstance(id); if (!box) throw new Error(id + ' builds nothing'); l.effects = [box]; }
+        const o = document.createElement('canvas'); o.width = S; o.height = S; const g = o.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(g, { project: { width: S, height: S, fps: 30, duration: 2, background: '#000000' }, layers: [l] }, 0.001);
+        return g.getImageData(0, 0, S, S).data;
+      };
+      R[key] = { '': shot(null) };
+      if (mad(R[key][''], shot(null)) !== 0) throw new Error('a filterless render of ' + key + ' differs from itself, so nothing below means anything');
+      FM.FILTERS.forEach(f => { R[key][f.id] = shot(f.id); });
+      try { FM.media.unpin && FM.media.unpin(mid); } catch (e) {}
+    }
+    const d = (a, b) => PHOTOS.reduce((s, k) => s + mad(R[k][a], R[k][b]), 0) / PHOTOS.length;
+    const bad = [], existing = FM.FILTERS.filter(f => CANDS.indexOf(f.id) < 0);
+    here.forEach((id, i) => {
+      const moved = d(id, '');
+      if (moved < 8) bad.push(id + ' moves the photographs by only ' + moved.toFixed(1));
+      const near = existing.map(f => ({ id: f.id, v: d(id, f.id) })).sort((p, q) => p.v - q.v)[0];
+      if (near && near.v < 5) bad.push(id + ' is ' + near.v.toFixed(1) + ' from the existing ' + near.id + ' — the same look under a new name');
+      here.slice(i + 1).forEach(other => { const v = d(id, other); if (v < 8) bad.push(id + ' and ' + other + ' are only ' + v.toFixed(1) + ' apart'); });
+    });
+    if (bad.length) throw new Error(bad.join(' · ') + ' (#912)');
+  });
+
   test('filter library: CSS-filter effects are authored first, so the list matches the render order', { item: 'fx-library' }, function () {
     var bad = [];
     FM.filters.all().forEach(function (f) {
