@@ -1000,6 +1000,7 @@ window.FM = window.FM || {};
    * instead of possibly re-measuring after a scrollbar appeared. Cleared in rebuild()'s finally, so a
    * genuine resize between rebuilds is still measured fresh. */
   let _laneW = 0, _laneFrozen = 0;
+  let builtGeom = null;   // { pad, lane } the last rebuild laid the clips out with (queue 918.5, see the ResizeObserver)
   function laneViewW() {
     if (_laneFrozen && _laneW) return _laneW;
     const w = Math.max(1, ((timelineEl ? timelineEl.clientWidth : (tracksEl ? tracksEl.clientWidth : 800)) || 800) - HEAD_W);
@@ -2630,7 +2631,16 @@ window.FM = window.FM || {};
      reason. Without this the row moved correctly and never looked grabbed. */
   let addDragging = false;
 
-  function isPhoneNow() { return !!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone()); }
+  /* ⚠️ THE WIDTH, NOT FM.mobile (queue 917 finding 2). This used to ask `FM.mobile.isPhone()` — and
+     FM.mobile is created by js/mobile.js, which loads AFTER app.js and sets itself up on
+     DOMContentLoaded, after the app's first timeline build has already run. So on every launch the
+     first build asked a module that did not exist yet, got "not a phone", and drew the PC's 7px line
+     with the playhead through it — no big "+ Tap here to start creating", no readable way to add
+     anything. Opening the project from Home does not rebuild the timeline, so it stayed wrong until
+     something else happened to (FM.refreshAll, for one, redraws it correctly).
+     Measured at 380px on a fresh launch: row `tl-addrow tl-addrow--line`, no `.tl-empty-start`.
+     isPhone() above is the same media query FM.mobile.isPhone runs, and it exists from the first line. */
+  function isPhoneNow() { return isPhone(); }
 
   /* ---- THE SOLO VIEW, AND THE SCROLL POSITION IT DESTROYS (queue 312) ---------------------------
    * His words: *"every time I click off of a layer it moves my position in the timeline so the layer is
@@ -4757,11 +4767,28 @@ window.FM = window.FM || {};
       // the playhead back off-centre. Observing the panel catches every one of those. Writing the var
       // can't change the panel's own size, so this cannot feed back into itself.
       const panelEl = document.getElementById('timeline-panel');
+      /* ⚠️ …BUT A NEW PAD IS ONLY HALF OF IT (queue 918.5). applyInnerWidth() moves the centre line's
+         number and the strip's width; every CLIP was positioned by the last rebuild, at
+         HEAD_W + PAD + start × px-per-second, and keeps those numbers until the next one. On PC, opening
+         the text editor hides the inspector (queue 519) and the timeline widens across the whole window
+         — measured at 1280x900: PAD 229 → 536 and the lane 869 → 1176px, and with no rebuild every
+         clip stayed at x=333 under a playhead at 641 reading 00:00:00, so the line crossed each clip a
+         third of the way in until ✓ rebuilt it. Nothing else fires: the window did not resize.
+         So when the panel's width changes the geometry a clip is drawn with, rebuild — only then, so a
+         band-HEIGHT drag (the common case this observer sees) stays the cheap path it was. A hidden
+         panel (0 wide) is skipped: laying clips out against a 1px lane is work thrown away the moment
+         it comes back, and coming back is itself a resize that lands here. */
       if (panelEl && window.ResizeObserver) {
         let t0 = 0;
         new ResizeObserver(() => {
           clearTimeout(t0);
-          t0 = setTimeout(() => { applyInnerWidth(); FM.timeline.updatePlayhead(); }, 60);
+          t0 = setTimeout(() => {
+            applyInnerWidth();
+            const moved = builtGeom && timelineEl && timelineEl.clientWidth > 0 &&
+              (Math.abs(PAD - builtGeom.pad) > 0.5 || Math.abs(laneViewW() - builtGeom.lane) > 0.5);
+            if (moved) FM.timeline.rebuild();
+            else FM.timeline.updatePlayhead();
+          }, 60);
         }).observe(panelEl);
       }
       /* The clip-nudge pair beside the playhead (v5.01). Same two actions the inspector used to
@@ -4840,6 +4867,7 @@ window.FM = window.FM || {};
         // BEFORE applyInnerWidth, not after — the whole point. See syncGroupClass.
         syncGroupClass();
         applyInnerWidth();
+        builtGeom = { pad: PAD, lane: laneViewW() };   // queue 918.5: what every clip below is laid out with
         buildRuler();
         buildTracks();
         this.updateLoopRegion();

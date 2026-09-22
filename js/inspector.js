@@ -4042,7 +4042,25 @@ window.FM = window.FM || {};
       if (selectable) lab.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onName(e); } });
     }
     const fmtS = () => round(getVal(), dp).toFixed(dp) + (opts.unit || '');
-    const refresh = () => { if (!val.isContentEditable) val.textContent = fmtS(); };
+    /* THE NUMBER SHRINKS TO ITS BOX, it is never cut (queue 917 finding 8). Three boxes share the row
+       between the pad's two button columns, so at 320px each is 59px wide — and an off-canvas X like
+       -1234.5 needed 74, so the box showed "-1234." and spilled the 5 into its neighbour. No fixed size
+       fits every value (it is whatever he types or drags to), so the box measures the text it was given
+       and steps the type down only when it has to; a value that fits keeps the full 18px. The first
+       call runs before the box is in the document (clientWidth 0), so it re-measures on the next frame. */
+    const fitVal = () => {
+      val.style.fontSize = '';
+      const room = val.clientWidth;
+      if (!room) { if (!val._fitQueued) { val._fitQueued = true; requestAnimationFrame(() => { val._fitQueued = false; if (val.isConnected && val.clientWidth) fitVal(); }); } return; }
+      if (val.scrollWidth <= room) return;
+      const cs = getComputedStyle(val);
+      const inner = room - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      const rg = document.createRange(); rg.selectNodeContents(val);
+      const textW = rg.getBoundingClientRect().width;
+      if (!(textW > 0) || !(inner > 0)) return;
+      val.style.fontSize = Math.max(10, Math.floor(parseFloat(cs.fontSize) * inner / textW * 10) / 10) + 'px';
+    };
+    const refresh = () => { if (!val.isContentEditable) { val.textContent = fmtS(); fitVal(); } };
     refresh(); box.appendChild(val); box.appendChild(lab);
     // Per-slider keyframe diamond (Ezra: "Every single Individual slider needs to have its own key
     // frames … moving the clip around and zooming in need to be seperate"). It keys ONLY opts.kfKey,

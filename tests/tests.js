@@ -2526,6 +2526,51 @@
     }
   });
 
+  test('918.10 — the Layer actions menu opens under its own button, right edge to right edge', { item: '918' }, async function () {
+    /* From the #912 audit: the ⧉ click handler placed the menu at `r.right - 200`, but the menu is only as
+       wide as its longest row (~152px), so its right edge landed 49px LEFT of the button — at 1280 it
+       opened over the Back chevron (menu 322-473, button 488-522), at 900 over the inspector's tiles. And
+       with the band at the bottom of the window it did not fit below, so the clamp slid it up over the
+       button that opened it.
+       Measured off the menu's own style box, not getBoundingClientRect: the menu hinges open with a
+       rotateX, and a rotated box measures a fraction of its real size mid-swing. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      await atWideWidth(async function () {
+        FM.scene.layers.length = 0;
+        const L = FM.makeLayer('shape', { name: 'M', shape: 'rect', x: 300, y: 400, shapeW: 200, shapeH: 160, fill: '#3a7bd5' });
+        L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+        FM.refreshAll(); FM.selectLayer(L.id);
+        await sleep(150);
+        const btn = document.getElementById('btn-layermenu');
+        if (!btn || !btn.getBoundingClientRect().width) throw new Error('#btn-layermenu is not on screen at a PC width');
+        if (FM.contextMenu.isOpen()) { FM.contextMenu.hide(); await sleep(80); }
+        btn.click(); await sleep(150);
+        const menu = document.getElementById('ctx-menu');
+        try {
+          if (!FM.contextMenu.isOpen()) throw new Error('the ⧉ menu did not open');
+          const br = btn.getBoundingClientRect();
+          const mL = parseFloat(menu.style.left), mT = parseFloat(menu.style.top);
+          const mR = mL + menu.offsetWidth, mB = mT + menu.offsetHeight;
+          if (Math.abs(mR - br.right) > 1)
+            throw new Error('the menu\'s right edge is at ' + Math.round(mR) + ' and its button\'s at ' + Math.round(br.right) + ' — it opens ' + Math.round(br.right - mR) + 'px adrift of the button that opened it');
+          const overlaps = mT < br.bottom - 1 && mB > br.top + 1;
+          if (overlaps)
+            throw new Error('the menu (' + Math.round(mT) + '-' + Math.round(mB) + ') is drawn over its own button (' + Math.round(br.top) + '-' + Math.round(br.bottom) + ')');
+        } finally { FM.contextMenu.hide(); await sleep(80); }
+      }, 1280);
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.selectLayer) FM.selectLayer(null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+
   test('595: the camera says when Field of view and Distance cannot do anything', { item: '595' }, async function () {
     /* Queue 595. Ezra: "Field of view and distance sliders don't work in camera", with two screenshots
      * proving it — FOV 5 → 159, Distance −2000 → 4000, identical picture.
@@ -7489,6 +7534,105 @@
     }
   });
 
+  test('914.13 deleting a layer others follow (a Null) leaves them exactly where they are, and one undo puts it all back', { item: '914' }, async function () {
+    /* The sweep above covers deleting a GROUP, which takes its members with it. Any OTHER parent was filtered out
+       and its children kept a parent id that points at nothing: they drew at their raw local numbers and jumped —
+       the #912 audit saw a square go from the middle of the canvas to its top-left corner — and the dead id was
+       saved. His answer (22 Sep): "Stay exactly where they are". Measured on the renderer's own matrix
+       (FM._layerCTM), as 914.4 is, so position, turn and scale are one comparison. */
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time, ctx0 = FM.groupContext, sel0 = FM.scene.selectedId, toast0 = FM.toast;
+    const said = [];
+    const M = (l, t) => { const m = FM._layerCTM(l, t, FM.scene); return [m.a, m.b, m.c, m.d, m.e, m.f]; };
+    const same = (p, q) => p.every((v, i) => Math.abs(v - q[i]) <= 1e-6 * Math.max(1, Math.abs(q[i])));
+    const fmt = m => '[' + m.map(v => (+v).toFixed(3)).join(', ') + ']';
+    const check = (what, L, times, before) => times.forEach((t, i) => {
+      const now = M(L, t);
+      if (!same(now, before[i])) throw new Error(what + ': at t=' + t + ' its on-screen matrix went ' + fmt(before[i]) + ' → ' + fmt(now) + ' — deleting the parent moved it');
+    });
+    const live = () => { const ids = new Set(FM.scene.layers.map(l => l.id)); FM.scene.layers.forEach(l => { if (l.parent && !ids.has(l.parent)) throw new Error('“' + l.name + '” is parented to a layer that no longer exists (' + l.parent + ')'); }); };
+    const state = () => JSON.stringify(FM.scene.layers.map(l => [l.id, l.parent || null, l.transform]));
+    const shape = (name, x, y) => { const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: y, shapeW: 120, shapeH: 80, fill: '#e04040' }); L.start = 0; L.duration = 4; return L; };
+    const rig = () => {
+      FM.scene.layers.length = 0; FM.groupContext = null;
+      const N = FM.makeLayer('null', { name: 'Null', x: 540, y: 1400 }); N.start = 0; N.duration = 4;
+      N.transform.rotation = 30; N.transform.scale = 1.5;
+      const A = shape('A', 100, -50); A.parent = N.id; A.transform.rotation = 10; A.transform.scale = 0.8;
+      const B = shape('B', 0, 0); B.parent = N.id;            // local (0,0) — the audit's exact case
+      FM.scene.layers.push(A, B, N);
+      return { N: N, A: A, B: B };
+    };
+    try {
+      FM.time = 1;
+      FM.toast = function (m) { said.push(String(m)); };
+      /* ── 1. The ⋯-menu / phone-bin path (FM.deleteLayer). CONTROL first: the Null must actually place them. */
+      let r = rig();
+      const withNull = M(r.B, 1), p0 = r.B.parent; r.B.parent = null; const bare = M(r.B, 1); r.B.parent = p0;
+      if (same(withNull, bare)) throw new Error('control: the Null does not move its child here, so this test cannot see a jump');
+      const times = [0.5, 1, 3];
+      let bA = times.map(t => M(r.A, t)), bB = times.map(t => M(r.B, t));
+      FM.history.commit();
+      let snap = state();
+      FM.deleteLayer(r.N.id);
+      if (FM.layerById(FM.scene, r.N.id)) throw new Error('control: the Null was not deleted');
+      live();
+      if (r.A.parent || r.B.parent) throw new Error('the children still name a parent (' + r.A.parent + ', ' + r.B.parent + ') after it was deleted');
+      check('a turned, scaled child of a deleted Null', r.A, times, bA);
+      check('a child at local (0,0) of a deleted Null', r.B, times, bB);
+      /* …and ONE undo puts the Null, its children's numbers and their links back exactly. */
+      FM.history.undo(); await sleep(60);
+      if (state() !== snap) throw new Error('one Undo after deleting the Null did not restore every layer’s link and numbers exactly');
+
+      /* ── 2. The Delete-key / multi-select path (FM.deleteSelected), with the Null hung on ANOTHER Null that
+         survives: the child lands on the survivor, still in place, so it keeps following what is left. */
+      r = rig(); FM.time = 1;                                  // (undo can clamp the playhead to the restored project's length)
+      const G = FM.makeLayer('null', { name: 'Outer', x: -200, y: 300 }); G.start = 0; G.duration = 4; G.transform.rotation = -20;
+      r.N.parent = G.id; FM.scene.layers.push(G);
+      const X = shape('X', 10, 10); FM.scene.layers.push(X);
+      bA = times.map(t => M(r.A, t)); bB = times.map(t => M(r.B, t));
+      FM.history.commit(); snap = state();
+      FM.scene.selectedIds = [r.N.id, X.id]; FM.scene.selectedId = X.id;
+      FM.deleteSelected();
+      if (FM.layerById(FM.scene, r.N.id) || FM.layerById(FM.scene, X.id)) throw new Error('control: Delete did not remove the selection');
+      live();
+      if (r.A.parent !== G.id || r.B.parent !== G.id) throw new Error('the children of a deleted Null did not move up to the Null above it (' + r.A.parent + ', ' + r.B.parent + ')');
+      check('a child of a deleted Null inside another Null', r.A, times, bA);
+      check('a (0,0) child of a deleted Null inside another Null', r.B, times, bB);
+      FM.history.undo(); await sleep(60);
+      if (state() !== snap) throw new Error('one Undo after Delete did not restore every layer’s link and numbers exactly');
+
+      /* ── 3. A Null that MOVES: matched where he is looking — the playhead — and SAID. */
+      r = rig(); FM.time = 1;
+      r.N.transform.x = { kf: [{ t: 0, v: 300, e: 'linear' }, { t: 4, v: 800, e: 'linear' }] };
+      bA = [M(r.A, 1)];
+      said.length = 0;
+      FM.deleteLayer(r.N.id);
+      check('a child of a deleted animated Null, at the playhead', r.A, [1], bA);
+      if (!said.some(s => /moves/.test(s) && /“A”/.test(s))) throw new Error('deleting a moving parent froze its child without saying so (toasts: ' + (said.join(' | ') || 'none') + ')');
+
+      /* ── 4. The head half of a split parent, deleted with the playhead in the TAIL: the child was following the
+         tail, so it keeps following the tail rather than freezing. */
+      FM.scene.layers.length = 0;
+      const P = shape('P', 0, 300); P.duration = 8;
+      P.transform.x = { kf: [{ t: 0, v: 100, e: 'linear' }, { t: 8, v: 500, e: 'linear' }] };
+      const C = shape('C', 40, 0); C.duration = 8; C.parent = P.id;
+      FM.scene.layers.push(C, P);
+      FM.time = 3; await FM.splitLayer(P.id);
+      const T = FM.scene.layers.filter(l => l !== P && l !== C)[0];
+      if (!T || !T.splitOf) throw new Error('fixture: the parent did not split');
+      FM.time = 5;
+      const bC = [5, 6.5].map(t => M(C, t));
+      FM.deleteLayer(P.id);
+      if (C.parent !== T.id) throw new Error('deleting the head half of a split parent did not hand its child to the tail half still on screen (parent ' + C.parent + ')');
+      check('a child of a deleted head half, following the tail', C, [5, 6.5], bC);
+    } finally {
+      FM.toast = toast0;
+      FM.scene.layers = layers0; FM.time = t0; FM.groupContext = ctx0;
+      FM.scene.selectedIds = []; FM.scene.selectedId = null;
+      FM.selectLayer(sel0 || null);
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('dragging a keyframe past its neighbour keeps the curve correct DURING the drag', { item: 'kf-sort-live' }, function () {
     /* BUG HUNT (21 Aug). `FM.evalProp` is the one evaluator every animated property goes through, and
        its whole structure depends on `kf` being sorted ascending by t — both early-outs and the pair
@@ -8190,6 +8334,44 @@
     }
   });
 
+  test('914.14 Select All then Duplicate with a camera counts only real copies and leaves the camera out of the new selection', { item: '914' }, async function () {
+    /* A scene has one camera, so FM.duplicateLayer refuses it — and leaves the selection alone. Select All puts
+       the camera first, so the selection it left behind was the CAMERA ITSELF, and duplicateSelection pushed it
+       as a copy: the #912 audit saw "Scene already has a camera" then "Duplicated 3 layers" for 2, with the
+       ORIGINAL camera still in the new selection — so his next move or delete took it too. */
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, ctx0 = FM.groupContext, toast0 = FM.toast;
+    const said = [];
+    try {
+      FM.scene.layers.length = 0; FM.groupContext = null;
+      const cam = FM.makeLayer('camera', { name: 'Camera', start: 0, duration: 5 });
+      const A = FM.makeLayer('shape', { name: 'A', shape: 'rect', x: 10, y: 10, shapeW: 20, shapeH: 20, fill: '#fff' });
+      const B = FM.makeLayer('shape', { name: 'B', shape: 'rect', x: 60, y: 10, shapeW: 20, shapeH: 20, fill: '#fff' });
+      [A, B].forEach(l => { l.start = 0; l.duration = 5; });
+      FM.scene.layers.push(cam, A, B);
+      FM.refreshAll();
+      FM.selectAll();
+      if (FM.scene.selectedId !== cam.id) throw new Error('fixture: Select All left "' + ((FM.layerById(FM.scene, FM.scene.selectedId) || {}).name) + '" as the primary selection, not the camera — the audit’s case is not set up');
+      FM.toast = function (m) { said.push(String(m)); };
+      await FM.duplicateSelection();
+      FM.toast = toast0;
+      if (FM.scene.layers.filter(l => l.type === 'camera').length !== 1) throw new Error('Duplicate made a second camera');
+      const copies = FM.scene.layers.filter(l => l !== cam && l !== A && l !== B);
+      if (copies.length !== 2) throw new Error('control: Select All then Duplicate made ' + copies.length + ' copies, expected 2 (A and B)');
+      const sel = FM.selectionIds();
+      if (sel.indexOf(cam.id) >= 0) throw new Error('the ORIGINAL camera is in the selection after Duplicate (' + sel.map(id => (FM.layerById(FM.scene, id) || {}).name).join(', ') + ') — his next move or delete acts on it too');
+      if (sel.length !== 2 || !copies.every(c => sel.indexOf(c.id) >= 0)) throw new Error('the new selection is ' + sel.map(id => (FM.layerById(FM.scene, id) || {}).name).join(', ') + ', not the two copies');
+      if (FM.scene.selectedId === cam.id) throw new Error('the camera is still the primary selection after Duplicate');
+      const toast = said.filter(s => /^Duplicated/.test(s))[0] || '(none)';
+      if (!/\b2 layers\b/.test(toast)) throw new Error('the toast said "' + toast + '" for 2 copies — a refused camera was counted as one');
+    } finally {
+      FM.toast = toast0;
+      FM.scene.layers = layers0; FM.groupContext = ctx0;
+      FM.scene.selectedIds = []; FM.scene.selectedId = null;
+      FM.selectLayer(sel0 || null);
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('split: the cut does not duck the sound to silence in preview', { item: 'split-declick' }, async function () {
     /* BUG HUNT (21 Aug), eleventh verified lead from BUG-HUNT §34 and the last of the split family.
        The 45ms anti-click ramp is measured from each clip's OWN edges. The two halves of a split are the
@@ -8805,6 +8987,100 @@
     } finally {
       FM.scene.layers = layers0; FM.time = t0;
       FM.scene.project.width = pw; FM.scene.project.height = ph;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
+  test('914.8 a duplicated or pasted half of a split parent does not take over the original’s children', { item: '914' }, async function () {
+    /* The test above gave the halves of a split a shared `splitOf` lineage, so a child follows whichever half
+       covers the moment. FM.cloneLayer copied that lineage into every COPY, so a duplicated or pasted half joined
+       it: FM.clipAt found the copy first, the original's child followed it, and flew off when the copy was moved
+       (#912 audit, p11_splitdup.png). The other side is kept too: copies made TOGETHER — the whole rig, or an
+       element inserted twice — must stay halves of each other and of nothing else.
+       MEASURED ON THE RENDERER'S OWN MATRIX (FM._layerCTM), so "follows" means where it is drawn. */
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time, sel0 = FM.scene.selectedId, clip0 = FM.clipboard, ctx0 = FM.groupContext;
+    const at = (l, t) => { const m = FM._layerCTM(l, t, FM.scene); return [m.e, m.f]; };
+    const fmt = p => '(' + p.map(v => v.toFixed(1)).join(', ') + ')';
+    const same = (what, now, was) => { if (Math.abs(now[0] - was[0]) > 1e-6 || Math.abs(now[1] - was[1]) > 1e-6) throw new Error(what + ': drawn at ' + fmt(now) + ', was ' + fmt(was)); };
+    const nudge = (L, dx) => L.transform.x.kf.forEach(k => { k.v += dx; });
+    const rig = async () => {
+      FM.scene.layers.length = 0; FM.groupContext = null;
+      const P = FM.makeLayer('shape', { name: 'Parent', shape: 'rect', x: 0, y: 200, shapeW: 20, shapeH: 20, fill: '#222' });
+      P.start = 0; P.duration = 10;
+      P.transform.x = { kf: [{ t: 0, v: 100, e: 'linear' }, { t: 10, v: 300, e: 'linear' }] };
+      const C = FM.makeLayer('shape', { name: 'Child', shape: 'rect', x: 40, y: 0, shapeW: 20, shapeH: 20, fill: '#f00' });
+      C.start = 0; C.duration = 10; C.parent = P.id;
+      FM.scene.layers.push(C, P);
+      FM.time = 4;
+      await FM.splitLayer(P.id);
+      const B = FM.scene.layers.filter(l => l !== P && l !== C)[0];
+      if (!B || !B.splitOf || B.splitOf !== P.splitOf) throw new Error('fixture: splitting the parent made no tail half sharing its lineage');
+      if (FM.clipAt(FM.scene, P.id, 6) !== B) throw new Error('control: at 6s the child does not follow the tail half, so nothing below can be seen');
+      return { P: P, B: B, C: C };
+    };
+    try {
+      /* ── 1. Duplicate the tail half and move the copy — the audit's repro. */
+      let r = await rig();
+      let was = at(r.C, 6);
+      FM.scene.selectedIds = [r.B.id]; FM.scene.selectedId = r.B.id;
+      await FM.duplicateLayer(r.B.id);
+      const D = FM.layerById(FM.scene, FM.scene.selectedId);
+      if (!D || D === r.B) throw new Error('control: duplicating the tail half made no copy');
+      nudge(D, 400);
+      if (FM.clipAt(FM.scene, r.P.id, 6) !== r.B) throw new Error('after duplicating the tail half, the child follows "' + FM.clipAt(FM.scene, r.P.id, 6).name + '" at 6s — the copy joined the original’s split');
+      same('the original’s child after its parent’s tail half was duplicated and the copy moved', at(r.C, 6), was);
+
+      /* ── 2. Copy and paste the tail half over the same time, then move the paste. */
+      r = await rig();
+      was = at(r.C, 8);
+      FM.scene.selectedIds = [r.B.id]; FM.scene.selectedId = r.B.id;
+      FM.copySelection();
+      FM.time = 7;
+      await FM.pasteClipboard(0);
+      const Q = FM.layerById(FM.scene, FM.scene.selectedId);
+      if (!Q || Q === r.B || Q.start < 6.9) throw new Error('control: pasting the tail half made no copy at the playhead');
+      nudge(Q, 400);
+      same('the original’s child after its parent’s tail half was pasted and the paste moved', at(r.C, 8), was);
+
+      /* ── 3. The whole rig duplicated together: the copied child must follow the copied TAIL, not freeze on the
+         copied head — and the original must still follow its own. */
+      r = await rig();
+      was = at(r.C, 6);
+      FM.scene.selectedIds = [r.C.id, r.P.id, r.B.id]; FM.scene.selectedId = r.B.id;
+      await FM.duplicateSelection(true);
+      const cp = FM.scene.layers.filter(l => l !== r.C && l !== r.P && l !== r.B);
+      const C2 = cp.filter(l => l.name === 'Child')[0], halves = cp.filter(l => l.name === 'Parent');
+      if (!C2 || halves.length !== 2 || !halves.some(h => h.id === C2.parent)) throw new Error('control: duplicating the whole rig did not make a child on a copied parent and two copied halves');
+      halves.forEach(h => nudge(h, 400));
+      same('the original’s child after the whole rig was duplicated and the copy moved', at(r.C, 6), was);
+      same('the COPIED child at 6s (it must follow the copied tail, 400px right of the original)', at(C2, 6), [was[0] + 400, was[1]]);
+
+      /* ── 4. …and pasted together. */
+      r = await rig();
+      was = at(r.C, 6);
+      FM.scene.selectedIds = [r.C.id, r.P.id, r.B.id]; FM.scene.selectedId = r.B.id;
+      FM.copySelection();
+      FM.time = 0;
+      await FM.pasteClipboard(0);
+      const pp = FM.scene.layers.filter(l => l !== r.C && l !== r.P && l !== r.B);
+      const C3 = pp.filter(l => l.name === 'Child copy')[0], ph = pp.filter(l => l.name === 'Parent copy');
+      if (!C3 || ph.length !== 2 || !ph.some(h => h.id === C3.parent)) throw new Error('control: pasting the whole rig did not make a child on a pasted parent and two pasted halves');
+      ph.forEach(h => nudge(h, 400));
+      same('the original’s child after the whole rig was pasted and the paste moved', at(r.C, 6), was);
+      same('the PASTED child at 6s (it must follow the pasted tail)', at(C3, 6), [was[0] + 400, was[1]]);
+
+      /* ── 5. An element inserted twice: each batch keeps its halves together, and no two batches share. */
+      r = await rig();
+      const one = FM.storage._reIdLayers([r.C, r.P, r.B]).layers, two = FM.storage._reIdLayers([r.C, r.P, r.B]).layers;
+      const lin = ls => ls.filter(l => l.splitOf).map(l => l.splitOf);
+      const l1 = lin(one), l2 = lin(two);
+      if (l1.length !== 2 || l1[0] !== l1[1]) throw new Error('an inserted rig’s two halves do not share a lineage (' + l1.join(', ') + '), so its child freezes at the cut');
+      if (l1[0] === l2[0] || l1[0] === r.P.splitOf) throw new Error('two insertions of the same element share one split lineage (' + l1[0] + ') — a child in one follows a half of the other');
+    } finally {
+      FM.clipboard = clip0;
+      FM.scene.layers = layers0; FM.time = t0; FM.groupContext = ctx0;
+      FM.scene.selectedIds = []; FM.scene.selectedId = null;
+      FM.selectLayer(sel0 || null);
       if (FM.refreshAll) FM.refreshAll();
     }
   });
@@ -9803,6 +10079,84 @@
       if (FM.selectLayer) FM.selectLayer(sel0 || null);
       if (FM.refreshAll) FM.refreshAll();
       if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
+  /* 917.2 — THE FIRST BUILD HAPPENS BEFORE FM.mobile EXISTS. js/mobile.js loads after app.js and creates
+     FM.mobile on DOMContentLoaded, after the app's first timeline build. The add row asked FM.mobile
+     whether this is a phone, got nothing, and drew the PC's thin line — so an empty project opened from
+     Home on a fresh launch had no "+ Tap here to start creating" at all (measured at 380px: row
+     `tl-addrow tl-addrow--line`, no .tl-empty-start). This recreates that order: build with FM.mobile
+     absent, at a phone width, and require the phone row. */
+  test('917.2 an empty project on a phone gets the big + even when the timeline is built before FM.mobile exists', { item: '917' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, mobile0 = FM.mobile;
+    if (!mobile0) throw new Error('FM.mobile is missing, so the boot order this test recreates could not be put back afterwards');
+    try {
+      return await atPhoneWidth(async function () {
+        FM.scene.layers.length = 0; FM.selectLayer(null);
+        // CONTROL: with FM.mobile present the row is the phone one, so a PC line below can only be the boot order.
+        FM.timeline.rebuild(); await sleep(60);
+        const row0 = document.querySelector('.tl-addrow');
+        if (!row0 || row0.classList.contains('tl-addrow--line')) throw new Error('even with FM.mobile present the empty phone timeline drew ' + (row0 ? '"' + row0.className + '"' : 'no add row') + ', so this test cannot isolate the boot order');
+        await sleep(250);   // let atPhoneWidth's resize-debounced rebuild (150ms) land first, so nothing rebuilds under the read below
+        // The boot order: app.js builds the timeline before js/mobile.js has created FM.mobile. Read the
+        // result SYNCHRONOUSLY, before FM.mobile is put back — any later rebuild would redraw it correctly
+        // and hide exactly the build this is about.
+        let row, emptyOn;
+        FM.mobile = undefined;
+        try {
+          FM.timeline.rebuild();
+          row = document.querySelector('.tl-addrow');
+          emptyOn = document.getElementById('timeline-panel').classList.contains('tl-empty-start');
+        } finally { FM.mobile = mobile0; }
+        if (!row) throw new Error('no add row at all after the boot-order build');
+        if (row.classList.contains('tl-addrow--line')) throw new Error('an empty project at 380px drew the PC add LINE ("' + row.className + '") because FM.mobile did not exist yet — on a fresh launch the phone shows no readable way to add anything');
+        if (!emptyOn) throw new Error('the empty-project state (.tl-empty-start, the big + and the hidden playhead) was not applied on the boot-order build');
+      }, 380);
+    } finally {
+      FM.mobile = mobile0;
+      FM.scene.layers = layers0;
+      if (FM.selectLayer) FM.selectLayer(sel0 || null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
+  /* 917.14 — the empty canvas told a PHONE to "Drag a video or image here or click Import media": no drag,
+     no such button. The phone gets its own words; the PC keeps its sentence. And at 320 the PC sentence
+     wrapped with "here" alone on a line, so the phone wording must not wrap past its own two lines. */
+  test('917.14 the empty canvas hint tells a phone what it can do, and the PC keeps drag and Import media', { item: '917' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const shown = () => {
+      const d = document.getElementById('drop-hint');
+      if (!d || d.classList.contains('hidden') || !(d.getBoundingClientRect().width > 0)) throw new Error('the empty-canvas hint is not on screen with no layers, so there is nothing to read');
+      return d;
+    };
+    try {
+      if (homeWasOpen) FM.home.close();
+      FM.scene.layers.length = 0; FM.selectLayer(null); FM.refreshAll(); await sleep(80);
+      await atPhoneWidth(async function () {
+        const d = shown(), txt = d.innerText.replace(/\s+/g, ' ').trim();
+        if (/drag|click|import media/i.test(txt)) throw new Error('at 320px the empty canvas says "' + txt + '" — a phone has no drag-and-drop and no Import media button');
+        if (!/tap/i.test(txt)) throw new Error('at 320px the empty canvas says "' + txt + '", which does not tell him what to tap');
+        const vis = [].slice.call(d.children).filter(c => !c.classList.contains('dh-icon') && c.getBoundingClientRect().width > 0)[0];
+        const rg = document.createRange(); rg.selectNodeContents(vis);
+        const tops = new Set([].slice.call(rg.getClientRects()).filter(r => r.width > 1).map(r => Math.round(r.top)));
+        const want = vis.querySelectorAll('br').length + 1;
+        if (tops.size > want) throw new Error('at 320px the phone hint wraps onto ' + tops.size + ' lines instead of its own ' + want + ' — a word is left alone on a line');
+      }, 320);
+      await atWideWidth(async function () {
+        const txt = shown().innerText.replace(/\s+/g, ' ').trim();
+        if (!/drag/i.test(txt) || !/import media/i.test(txt)) throw new Error('on PC the empty canvas lost its drag / Import media wording: "' + txt + '"');
+      });
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.selectLayer) FM.selectLayer(sel0 || null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
     }
   });
 
@@ -14977,6 +15331,29 @@
     });
   });
 
+  test('918.15 — the PC text bar\'s top row reaches the right edge of the field under it', { item: '918' }, async function () {
+    /* From the #912 audit, measured at 1280x900: the card is 560px (CARD_MAX), the font button is capped,
+       and the row of controls stopped at x=885 while the field under it ran to 909 — a 10px inset on the
+       left and 34px on the right, so the row read as off-centre and unfinished. Asserted where the cap
+       binds (the widest card), which is the only width it showed at. */
+    if (!FM.textEdit) throw new Error('FM.textEdit is missing');
+    return await atWideWidth(async function () {
+      withTextEditor(function () {
+        const panel = document.querySelector('.te-panel'), bar = document.querySelector('.te-bar'), inp = document.getElementById('te-input');
+        if (!panel || !bar || !inp) throw new Error('the editor did not open');
+        const pw = panel.getBoundingClientRect().width;
+        if (pw < 540) throw new Error('the card is ' + Math.round(pw) + 'px — narrower than the width where the font button\'s cap leaves a gap, so this proves nothing');
+        const kids = [].slice.call(bar.children).filter(c => c.getBoundingClientRect().width > 0);
+        const lastR = Math.max.apply(null, kids.map(c => c.getBoundingClientRect().right));
+        const firstL = Math.min.apply(null, kids.map(c => c.getBoundingClientRect().left));
+        const ir = inp.getBoundingClientRect();
+        if (Math.abs(lastR - ir.right) > 1.5)
+          throw new Error('the top row ends at x=' + Math.round(lastR) + ' and the field under it at ' + Math.round(ir.right) + ' — ' + Math.round(ir.right - lastR) + 'px short on the right while it starts flush on the left');
+        if (Math.abs(firstL - ir.left) > 1.5) throw new Error('the top row starts at x=' + Math.round(firstL) + ' and the field at ' + Math.round(ir.left));
+      });
+    }, 1280);
+  });
+
   test('text editor (desktop): it does not wreck the app layout it opens over', { item: 'text-edit-desktop' }, function () {
     /* v6.17, the second half of the same screenshot: the canvas was a small black rectangle jammed to
      * the middle-right while the Studio rail's duplicate/bin/export/cog buttons floated across the
@@ -19023,6 +19400,39 @@
       try { FM.syncSelectionChrome(); } catch (e) {}
       await sleep(60);
       try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 917.3 — at 320px the bar's fixed parts came to 300px, so the project name got 20px (one stray letter)
+     and a selected layer's name got 14px (nothing). Measured on the real inputs: the whole name must fit. */
+  test('917.3 at 320px the phone top bar shows the whole project name and the whole layer name', { item: '917' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const savedScene = FM.scene;
+    const pn = document.getElementById('proj-name-m'), cn = document.getElementById('clip-name-m');
+    if (!pn || !cn) throw new Error('#proj-name-m or #clip-name-m is missing');
+    const pn0 = pn.value;
+    const fits = el => {
+      const r = el.getBoundingClientRect();
+      if (!(r.width > 0) || getComputedStyle(el).display === 'none') return 'not on screen';
+      return el.scrollWidth <= el.clientWidth + 1 ? '' : 'needs ' + el.scrollWidth + 'px, has ' + el.clientWidth + 'px';
+    };
+    try {
+      return await atPhoneWidth(async function () {
+        FM.scene = scene([FM.makeLayer('shape', { shape: 'rect', name: 'Square', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#39c' })]);
+        FM.selectLayer(null); FM.refreshAll(); await sleep(80);
+        pn.value = 'Untitled';
+        const p = fits(pn);
+        if (p) throw new Error('"Untitled" does not fit the project-name field at 320px (' + p + ') — the bar shows a stray letter instead of the name');
+        FM.selectLayer(FM.scene.layers[0].id); await sleep(80);
+        if (cn.value !== 'Square') throw new Error('the layer-name field reads "' + cn.value + '", not the selected layer\'s name, so this is not measuring the editing bar');
+        const c = fits(cn);
+        if (c) throw new Error('"Square" does not fit the layer-name field at 320px (' + c + ') — the bar shows nothing where the layer name should be');
+      }, 320);
+    } finally {
+      pn.value = pn0;
+      FM.scene = savedScene;
+      try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+      await sleep(60);
     }
   });
 
@@ -25673,6 +26083,43 @@
       if (FM.media.remove) FM.media.remove(id);
       FM.scene = savedScene;
       FM.selectLayer(null); FM.timeline.rebuild(); FM.refreshAll();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(40);
+    }
+  });
+
+  test('914.9 Extract Audio is one undo step, and that undo puts back the single clip', { item: '914' }, async function () {
+    /* FM.extractAudio duplicates the clip with FM.duplicateLayer — which commits history itself — and then makes
+       the copy audio-only and mutes the original, and commits again. Two steps for one press: the first Undo
+       landed on a state he never made, two identical VISIBLE and UNMUTED clips with the sound playing twice
+       (#912 audit). Counted on the stack, not by calls: a muted batch still calls commit. */
+    if (!FM.history || !FM.history._steps) throw new Error('the undo stack cannot be counted, so Extract Audio could still leave two steps');
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedLayers = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const ids = [];
+    try {
+      FM.scene.layers.length = 0;
+      const layer = FM.makeLayer('video', { name: 'Clip', start: 0, duration: 3 });
+      ids.push(layer.id);
+      FM.scene.layers.push(layer);
+      const cv = document.createElement('canvas'); cv.width = 64; cv.height = 36;
+      FM.media.set(layer.id, { kind: 'video', el: cv, file: new Blob(['x']), width: 64, height: 36, duration: 3, waveform: null });
+      FM.refreshAll();
+      FM.history.commit();                      // the state before, on the stack — where one Undo must land
+      const steps0 = FM.history._steps().len;
+      await FM.extractAudio(layer);
+      FM.scene.layers.forEach(l => { if (ids.indexOf(l.id) < 0) ids.push(l.id); });
+      if (FM.scene.layers.length !== 2 || !FM.scene.layers.some(l => l.audioOnly)) throw new Error('control: Extract Audio did not make its audio twin (' + FM.scene.layers.length + ' layers)');
+      const added = FM.history._steps().len - steps0;
+      if (added !== 1) throw new Error('one Extract Audio added ' + added + ' undo steps — the first Undo leaves a state he never made');
+      FM.history.undo(); await sleep(60);
+      const ls = FM.scene.layers;
+      if (ls.length !== 1 || ls[0].muted) throw new Error('one Undo after Extract Audio left ' + ls.map(l => '“' + l.name + '”' + (l.muted ? ' muted' : ' unmuted') + (l.transform && l.transform.opacity === 0 ? ' hidden' : ' visible')).join(', ') + ' — not the single clip he had');
+    } finally {
+      ids.forEach(id => { if (FM.media.remove) FM.media.remove(id); });
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0 || null); FM.timeline.rebuild(); FM.refreshAll();
       if (hadHome && FM.home && FM.home.open) FM.home.open();
       await sleep(40);
     }
@@ -34710,6 +35157,57 @@
     }
   });
 
+  test('918.5 — with the PC text editor open, a clip at 0s still starts under the playhead', { item: '918' }, async function () {
+    /* From the #912 audit, measured at 1280x900: the 519 rule above hides the inspector while text is being
+       edited, so the timeline widens across the whole window — but nothing re-laid the clips out. The
+       panel's ResizeObserver moved the centre line's numbers (PAD 229 → 536) and left every clip where
+       the last rebuild drew it, so a clip starting at 0s sat at x=333 under a playhead at 641 reading
+       00:00:00, the line crossing it a third of the way in, until ✓ closed the editor.
+       Asserted as the thing on screen: at time 0 the clip's left edge is under the playhead, before the
+       editor opens (the control — it proves the measurement) and while it is open. */
+    if (!FM.textEdit || !FM.textEdit.start) throw new Error('FM.textEdit is not reachable — this test cannot open the editor');
+    const saved = FM.scene.layers.slice(), sel = FM.scene.selectedId;
+    return await atWideWidth(async function () {
+      try {
+        FM.scene.layers.length = 0;
+        const t = FM.makeLayer('text', { text: 'Probe', x: 60, y: 45, size: 40, fill: '#fff' });
+        t.start = 0; t.duration = 4; FM.scene.layers.push(t);
+        FM.selectLayer(t.id);
+        if (FM.refreshAll) FM.refreshAll();
+        if (FM.seek) FM.seek(0); else FM.time = 0;
+        if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+        await sleep(200);
+        const line = document.getElementById('tl-centerline');
+        if (!line) throw new Error('#tl-centerline is missing');
+        const gap = function () {
+          const clip = document.querySelector('#timeline .clip[data-id="' + t.id + '"]');
+          if (!clip) throw new Error('the text layer has no clip on the timeline');
+          const lb = line.getBoundingClientRect();
+          const mid = lb.left + (parseFloat(getComputedStyle(line).borderLeftWidth) || 0) / 2;
+          return clip.getBoundingClientRect().left - mid;
+        };
+        const g0 = gap();
+        if (Math.abs(g0) > 3) throw new Error('before the editor opens the 0s clip is already ' + Math.round(g0) + 'px off the playhead — this test cannot tell the fix from the bug');
+        const w0 = document.getElementById('timeline-panel').getBoundingClientRect().width;
+        FM.textEdit.start(t.id);
+        await sleep(350);                                      // the observer's 60ms debounce, then the rebuild
+        if (!document.body.classList.contains('text-editing')) throw new Error('starting the editor did not put the app into text-editing');
+        const w1 = document.getElementById('timeline-panel').getBoundingClientRect().width;
+        if (w1 < w0 + 40) throw new Error('the timeline did not widen when the inspector hid (' + Math.round(w0) + ' → ' + Math.round(w1) + 'px) — the case this guards never happened');
+        const g1 = gap();
+        if (Math.abs(g1) > 3)
+          throw new Error('with the text editor open, a clip starting at 0s is ' + Math.round(g1) + 'px from the playhead reading 00:00:00 — the clips kept the narrower timeline\'s layout');
+      } finally {
+        if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) { if (FM.textEdit.stop) FM.textEdit.stop(); }
+        FM.scene.layers.length = 0;
+        saved.forEach(l => FM.scene.layers.push(l));
+        FM.selectLayer(sel || null);
+        if (FM.refreshAll) FM.refreshAll();
+        await sleep(120);
+      }
+    }, 1280);
+  });
+
   test('the inspector panel fits its own contents for every layer type (queue 518)', { item: '518' }, async function () {
     /* Ezra, with a text layer selected: "The menu when you have text selected is really bugged out and
        looks weird."
@@ -36595,6 +37093,40 @@
     }
   });
 
+  test('914.11 the phone’s “Split all at playhead” is one undo step for the whole selection', { item: '914' }, async function () {
+    /* The test above is the S key. The phone has no key rail, so its multi-select row IS its S — and that row kept
+       its own loop of FM.splitLayer calls, each committing: three clips, three undo steps, and the first Undo
+       rejoined only one of them (#912 audit). Driven through the REAL button, which is in the DOM at every width
+       (CSS only hides it on desktop), so a private copy that drifts from the key again fails here. */
+    if (!FM.history || !FM.history._steps) throw new Error('the undo stack cannot be counted');
+    const savedSel = FM.scene.selectedId, savedLayers = FM.scene.layers.slice(), t0 = FM.time;
+    try {
+      FM.scene.layers.length = 0;
+      const made = [];
+      for (let i = 0; i < 3; i++) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 40 + 40 * i, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: 0, duration: 4 });
+        FM.scene.layers.push(L); made.push(L);
+      }
+      FM.time = 2;
+      FM.selectLayer(made[0].id); FM.scene.selectedIds = made.map(l => l.id); FM.scene.selectedId = made[2].id;
+      FM.refreshAll(); await sleep(160);
+      const b = [].slice.call(document.querySelectorAll('#inspector .qr-btn')).filter(x => x.title === 'Split all at playhead')[0];
+      if (!b) throw new Error('fixture: no "Split all at playhead" button in the edit panel for three selected clips');
+      if (b.disabled) throw new Error('fixture: "Split all at playhead" is disabled with the playhead inside all three clips');
+      FM.history.commit();
+      const steps0 = FM.history._steps().len;
+      b.click(); await sleep(400);
+      if (FM.scene.layers.length !== 6) throw new Error('control: "Split all at playhead" did not split the three clips (' + FM.scene.layers.length + ' layers)');
+      const added = FM.history._steps().len - steps0;
+      if (added !== 1) throw new Error('one press of the phone’s "Split all at playhead" added ' + added + ' undo steps for 3 clips — undo takes them apart one at a time');
+      FM.history.undo(); await sleep(80);
+      if (FM.scene.layers.length !== 3) throw new Error('one Undo after "Split all" left ' + FM.scene.layers.length + ' layers, not the 3 whole clips');
+    } finally {
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.time = t0; FM.selectLayer(savedSel || null); FM.timeline.rebuild(); FM.refreshAll(); await sleep(40);
+    }
+  });
+
   test('on a finger, a swipe across a selected clip scrubs — only a hold slips its media (queue 822)', { item: '822' }, async function () {
     /* The ⇄ pill is centred on the clip, which on a phone lane is where a thumb lands to scrub, and it used
        to take EVERY pointer at once. The clip's own handler never ran and the timeline sets
@@ -37317,6 +37849,64 @@
     } finally {
       try { FM.canvasEdit._finishDrag && FM.canvasEdit._finishDrag(); } catch (e) {}
       [63, 64].forEach(id => window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: id, pointerType: 'mouse', button: 0, buttons: 0, clientX: 0, clientY: 0 })));
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      if (FM.seek) FM.seek(t0); else FM.time = t0;
+      FM.selectLayer(sel0 || null); FM.timeline.rebuild(); FM.refreshAll(); await sleep(60);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  test('914.10 a two-finger pinch on a layer scaled to nothing is refused too, instead of lifting every scale keyframe off zero', { item: '914' }, async function () {
+    /* The test above closed the corner handle. The pinch multiplies the scale it starts from in exactly the same
+       way and kept the old `|| 0.0001` base, so on a pop-in at its first frame the #912 audit's two-finger pinch
+       turned keyframes [0 → 0, 1 → 1] into [0 → 0.02, 1 → 1.02] and committed it: nothing moved on screen, and
+       the layer never fully vanished again. Driven with real touch pointer events on #preview. */
+    const pv = document.getElementById('preview');
+    if (!pv) throw new Error('#preview missing, so the pinch cannot be driven');
+    if (!FM.history || !FM.history._steps) throw new Error('the undo stack cannot be counted');
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedLayers = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time, toast0 = FM.toast;
+    const vp0 = { scale: FM.viewport.scale, x: FM.viewport.x, y: FM.viewport.y };
+    const said = [];
+    const pinch = id0 => {
+      const r = pv.getBoundingClientRect();
+      if (!r.width) throw new Error('#preview has no size to pinch on');
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const ev = (type, id, x, y) => pv.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: id, pointerType: 'touch', isPrimary: id === id0, clientX: x, clientY: y, button: 0 }));
+      ev('pointerdown', id0, cx - 30, cy); ev('pointerdown', id0 + 1, cx + 30, cy);
+      for (let k = 1; k <= 6; k++) { const R = 30 + 40 * k / 6; ev('pointermove', id0, cx - R, cy); ev('pointermove', id0 + 1, cx + R, cy); }
+      ev('pointerup', id0, cx - 70, cy); ev('pointerup', id0 + 1, cx + 70, cy);
+    };
+    try {
+      const P = FM.scene.project;
+      const L = FM.makeLayer('shape', { name: 'u10-popin', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: P.width / 3, shapeH: P.height / 3, fill: '#fff', start: 0, duration: 5 });
+      L.transform.scale = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 1, e: 'linear' }] };
+      FM.scene.layers.push(L);
+      FM.seek ? FM.seek(0) : (FM.time = 0);
+      FM.timeline.rebuild(); FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(180);
+      if (Math.abs(FM.evalProp(L.transform.scale, FM.time)) > 1e-6) throw new Error('setup: the layer is not at scale 0 at the playhead');
+      FM.toast = function (m) { said.push(String(m)); };
+      const kf0 = L.transform.scale.kf.map(k => k.v).join(','), steps0 = FM.history._steps().len;
+      pinch(71);
+      await sleep(80);
+      const kf1 = L.transform.scale.kf.map(k => k.v).join(',');
+      if (kf1 !== kf0) throw new Error('a pinch on a layer scaled to nothing rewrote its scale keyframes (' + kf0 + ' → ' + kf1 + ') — nothing moved on screen and the pop-in never reaches zero again');
+      if (FM.history._steps().len !== steps0) throw new Error('a pinch that changed nothing still left an undo step');
+      if (!said.some(s => /scaled to nothing/.test(s))) throw new Error('the refused pinch said nothing (toasts: ' + (said.join(' | ') || 'none') + ') — it would read as the gesture being broken');
+      if (Math.abs(FM.viewport.scale - vp0.scale) > 1e-9) throw new Error('with a layer selected the refused pinch zoomed the VIEW instead (' + vp0.scale + ' → ' + FM.viewport.scale + ')');
+
+      /* CONTROL — where the layer HAS a size the same pinch must still scale it, or a guard that refuses
+         everywhere would pass the assertions above and take the gesture away. */
+      FM.seek ? FM.seek(1) : (FM.time = 1);
+      FM.refreshAll(); await sleep(140);
+      pinch(81);
+      await sleep(80);
+      if (L.transform.scale.kf.map(k => k.v).join(',') === kf0) throw new Error('control: at a frame where the layer is visible the pinch no longer scales it either — the guard is refusing everywhere');
+    } finally {
+      FM.toast = toast0;
+      FM.viewport.scale = vp0.scale; FM.viewport.x = vp0.x; FM.viewport.y = vp0.y; if (FM.viewport.apply) FM.viewport.apply();
       FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
       if (FM.seek) FM.seek(t0); else FM.time = t0;
       FM.selectLayer(sel0 || null); FM.timeline.rebuild(); FM.refreshAll(); await sleep(60);
@@ -39921,6 +40511,42 @@
     }
   });
 
+  /* 917.11 — at 320px the real Add sheet cut its own words: "Elem…", "Templ…" (the tabs) and
+     "Custom eleme…" (a card). Opened the way the + opens it, on every tab, every label must be whole. */
+  test('917.11 at 320px no tab or card label in the Add sheet is cut off', { item: '917' }, async function () {
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (homeWasOpen) FM.home.close();
+    try {
+      return await atPhoneWidth(async function () {
+        if (!FM.mobile || !FM.mobile.openAdd) throw new Error('FM.mobile.openAdd is missing');
+        FM.selectLayer(null);
+        FM.mobile.openAdd();
+        await sleep(450);
+        const sheet = document.getElementById('add-sheet');
+        if (!sheet || !sheet.classList.contains('open')) throw new Error('the Add sheet did not open at 320px');
+        const cut = [];
+        const sweep = (where, sel) => [].slice.call(sheet.querySelectorAll(sel)).forEach(l => {
+          if (l.getBoundingClientRect().width > 0 && l.scrollWidth > l.clientWidth + 1) cut.push(where + ': "' + l.textContent.trim() + '" needs ' + l.scrollWidth + 'px, has ' + l.clientWidth);
+        });
+        const tabs = [].slice.call(sheet.querySelectorAll('.addmenu-tab'));
+        if (tabs.length < 5) throw new Error('only ' + tabs.length + ' tabs in the Add sheet — not the row the finding is about');
+        /* The tab row on every tab, and the cards on the two tabs whose labels are the app's own words.
+           Media, Audio and Template cards carry HIS file and template names, which may be long by right. */
+        for (const t of tabs) {
+          t.click(); await sleep(160);
+          const name = t.textContent.trim();
+          sweep(name + ' tab', '.addmenu-tab .addmenu-lbl');
+          if (/^(Elements|Shape)$/.test(name)) sweep(name + ' tab', '.addmenu-card .addmenu-lbl');
+        }
+        if (cut.length) throw new Error('labels cut off with an ellipsis in the Add sheet at 320px — ' + cut.join('; '));
+      }, 320);
+    } finally {
+      try { FM.mobile.closeAdd(); } catch (e) {}
+      await sleep(300);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
   /* ---------------- queue 253: sliders too fast to hit an exact number ----------------
    * "when editing a shape the sliders move to quickly, i cant precisely get the exact size i want,
    * cos it jumps a lot of numbers, leaving me to type in what i want."
@@ -41839,6 +42465,37 @@
     }
   });
 
+  test('914.12 splitting a caption track gives each half its own copy of a cue’s effects', { item: '914' }, async function () {
+    /* The test above gives one cue an effect stack of its own. FM.splitLayer rebuilt both halves' captions from
+       the ORIGINAL cues with a shallow `{ ...c }`, so the cue that spans the cut kept ONE effects array in both
+       halves: retuning the tail's blur retuned the head's, and "Apply to the whole track" emptied both (#912
+       audit). The editor changes these in place (inspector cueFxList), which is exactly what sharing breaks. */
+    const keep = FM.scene.layers.slice(), keepT = FM.time, sel0 = FM.scene.selectedId;
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('text', { text: '', x: 100, y: 100, start: 0, duration: 6 });
+      const fx = FM.fxRegistry.makeInstance('blur');
+      fx.params.radius = 6;
+      L.captions = [{ start: 0, end: 4, text: 'spans the cut', effects: [fx] }, { start: 4, end: 6, text: 'after' }];
+      FM.scene.layers.push(L);
+      FM.time = 2;
+      await FM.splitLayer(L.id);
+      const B = FM.scene.layers.filter(l => l !== L)[0];
+      if (!B) throw new Error('control: the caption track did not split');
+      const head = L.captions[0], tail = B.captions[0];
+      if (!head || !tail || !Array.isArray(head.effects) || !Array.isArray(tail.effects) || !head.effects.length || !tail.effects.length) throw new Error('control: the cue that spans the cut did not keep its effect in both halves');
+      if (head.effects === tail.effects) throw new Error('both halves hold the SAME effects array for the cue that spans the cut — editing one half edits the other');
+      tail.effects[0].params.radius = 40;
+      if (head.effects[0].params.radius !== 6) throw new Error('retuning the tail half’s cue blur to 40 changed the HEAD half’s to ' + head.effects[0].params.radius);
+      tail.effects.splice(0, 1);
+      if (head.effects.length !== 1) throw new Error('removing the effect from the tail half’s cue removed it from the head half’s too');
+    } finally {
+      FM.scene.layers = keep; FM.time = keepT;
+      FM.selectLayer(sel0 || null);
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   /* ---------------- #150 part 1: "make the auto detect captions button way easier to access" -------
    * It was text layer → text editor → Aa sheet → scroll, inside a 46vh scroller. Now it is a tile on
    * the property grid. The two things worth asserting are that the door EXISTS for a text layer and
@@ -42198,6 +42855,55 @@
       }
     } finally {
       if (hid) d.classList.add('hidden');
+    }
+  });
+
+  test('918.12 — on PC the export dialog shows the project size and rate in full, and the layer picker has an arrow', { item: '918' }, async function () {
+    /* From the #912 audit, measured at 1280x900: the card was 330px and the control column 179px, so
+       "Same as project — 1080×1920" and "Same as project — 30 fps" both read "Same as project …" — the size
+       and the rate, the two things those options exist to say, never showed. And "Export just this layer"
+       (#exp-solo-btn) is a button doing a select's job that was the only control in the stack with no
+       arrow. The text is measured in the select's own font; the allowance is the padding plus the
+       native arrow's lane (measured: 238px still cut this 184px string, 252px showed it whole). */
+    if (!FM.showExportDialog) throw new Error('FM.showExportDialog is not reachable');
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const p0 = { w: FM.scene.project.width, h: FM.scene.project.height, fps: FM.scene.project.fps };
+    const close = () => {
+      const cancel = document.getElementById('exp-cancel');
+      if (cancel) { cancel.click(); return; }
+      const d = document.getElementById('export-dialog'); if (d) d.classList.add('hidden');
+    };
+    try {
+      if (hadHome) FM.home.close();
+      await atWideWidth(async function () {
+        FM.scene.project.width = 1080; FM.scene.project.height = 1920; FM.scene.project.fps = 30;
+        FM.showExportDialog(); await sleep(250);
+        const ctx = document.createElement('canvas').getContext('2d');
+        for (const id of ['exp-res', 'exp-fps']) {
+          const sel = document.getElementById(id);
+          if (!sel || !sel.offsetParent) throw new Error('#' + id + ' is not on screen in the export dialog');
+          const txt = sel.options[sel.selectedIndex].text;
+          if (!/same as project — /i.test(txt)) throw new Error('#' + id + ' does not open on its "Same as project — …" option (reads "' + txt + '") — nothing below would mean anything');
+          const cs = getComputedStyle(sel);
+          ctx.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+          const need = ctx.measureText(txt).width + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + 22;
+          const have = sel.getBoundingClientRect().width;
+          if (have < need)
+            throw new Error('#' + id + ' is ' + Math.round(have) + 'px wide and "' + txt + '" needs ' + Math.round(need) + ' — it reads "Same as project …" and the value it names is cut off');
+        }
+        const solo = document.getElementById('exp-solo-btn');
+        if (!solo || !solo.offsetParent) throw new Error('#exp-solo-btn is not on screen');
+        const a = getComputedStyle(solo, '::after');
+        if (a.content === 'none' || !(parseFloat(a.borderRightWidth) > 0) || !(parseFloat(a.width) > 0))
+          throw new Error('"Export just this layer" has no dropdown arrow — the one control in the column that opens a list and does not say so');
+        const card = document.querySelector('#export-dialog .export-card');
+        if (card.getBoundingClientRect().width > window.innerWidth) throw new Error('the export card is wider than the window');
+      }, 1280);
+    } finally {
+      close();
+      FM.scene.project.width = p0.w; FM.scene.project.height = p0.h; FM.scene.project.fps = p0.fps;
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
     }
   });
 
@@ -43284,6 +43990,89 @@
       var want = mid + 60 - 240;
       if (Math.abs(got - mid) <= 8) throw new Error('X is stuck on the frame centre (' + got + ') after 240px of dragging past it — the box cannot be dragged off a snap target');
       if (Math.abs(got - want) > 14) throw new Error('X ended at ' + got + ', expected about ' + want + ' (started ' + (mid + 60) + ', dragged 240 left on a ' + P.width + '-wide project) — the drag lost ' + Math.round(Math.abs(got - want)) + ' units on the way');
+    } finally {
+      FM.scene.layers.length = 0;
+      Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.selectLayer(null); FM._mtMode = 'move';
+      FM.inspector.refresh();
+    }
+  });
+
+  /* 917.8 — the X / Y / Z boxes at 320px are 59px wide. An off-canvas X of -1234.5 needed 74 and was drawn
+     as "-1234." with the 5 spilling into the Y box, and the per-box ◆ sat level with the digits, on top of
+     the last one. Measured on the real boxes: the text must sit inside its box, and the diamond's glyph must
+     end above where the digits' ink begins. */
+  test('917.8 at 320px an off-canvas X value fits its box and the keyframe diamond clears the digits', { item: '917' }, async function () {
+    var frame = function () { return new Promise(function (r) { setTimeout(r, 90); }); };
+    var layers0 = FM.scene.layers.slice();
+    try {
+      return await atPhoneWidth(async function () {
+        var L = FM.makeLayer('shape', { shape: 'rect', x: 540, y: 960, shapeW: 120, shapeH: 120, fill: '#4af' });
+        L.start = 0; L.duration = 4;
+        FM.scene.layers.push(L); FM.selectLayer(L.id);
+        FM.setTransform(L, 'x', -1234.5, FM.time);
+        FM.inspector.openCategory('transform');
+        FM._mtAxis = 'xy'; FM._mtMode = 'move';
+        FM.inspector.refresh();
+        await frame(); await frame();
+        var boxes = [].slice.call(document.querySelectorAll('.mt-vbox')).filter(function (b) { return b.getBoundingClientRect().width > 0 && b.querySelector('.mt-vbox-kf'); });
+        var xbox = boxes.filter(function (b) { var l = b.querySelector('.mt-vbox-lab'); return l && l.textContent.trim() === 'X'; })[0];
+        if (!xbox) throw new Error('no X value box with a keyframe diamond on screen at 320px');
+        var xv = xbox.querySelector('.mt-vbox-val');
+        if (xv.textContent.trim() !== '-1234.5') throw new Error('the X box reads "' + xv.textContent + '", not -1234.5, so this is not the long value the finding is about');
+        boxes.forEach(function (b) {
+          var v = b.querySelector('.mt-vbox-val'), k = b.querySelector('.mt-vbox-kf svg');
+          var vr = v.getBoundingClientRect(), cs = getComputedStyle(v);
+          var rg = document.createRange(); rg.selectNodeContents(v); var tr = rg.getBoundingClientRect();
+          var name = (b.querySelector('.mt-vbox-lab') || {}).textContent;
+          if (v.scrollWidth > v.clientWidth + 1 || tr.left < vr.left || tr.right > vr.right)
+            throw new Error('the ' + name + ' box (' + vr.width.toFixed(0) + 'px) cuts off "' + v.textContent + '": text runs ' + tr.left.toFixed(1) + '..' + tr.right.toFixed(1) + ' in a box ' + vr.left.toFixed(1) + '..' + vr.right.toFixed(1));
+          // where the digits' INK starts: the line box's top plus the font's empty space above a digit
+          var c = document.createElement('canvas').getContext('2d');
+          c.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+          var m = c.measureText(v.textContent);
+          var inkTop = tr.top + (tr.height - (m.fontBoundingBoxAscent + m.fontBoundingBoxDescent)) / 2 + (m.fontBoundingBoxAscent - m.actualBoundingBoxAscent);
+          var kr = k.getBoundingClientRect();
+          var overlapX = Math.min(kr.right, tr.right) - Math.max(kr.left, tr.left);
+          if (overlapX > 0 && kr.bottom > inkTop + 0.5)
+            throw new Error('the ' + name + ' box draws its keyframe diamond on the digits: glyph y ' + (kr.top - vr.top).toFixed(1) + '..' + (kr.bottom - vr.top).toFixed(1) + ', digits start at y ' + (inkTop - vr.top).toFixed(1) + ', and they share ' + overlapX.toFixed(1) + 'px across');
+        });
+      }, 320);
+    } finally {
+      FM.scene.layers.length = 0;
+      Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.selectLayer(null); FM._mtMode = 'move';
+      FM.inspector.refresh();
+    }
+  });
+
+  /* 917.12 — the swipe pad's hint wraps on a phone, and every line started flush against the pad's left
+     edge (0px) while the corner brackets that frame the pad sit 12px in. Measured per wrapped line. */
+  test('917.12 the swipe pad hint sits inside the pad corner brackets on a phone, not against its edge', { item: '917' }, async function () {
+    var frame = function () { return new Promise(function (r) { setTimeout(r, 90); }); };
+    var layers0 = FM.scene.layers.slice();
+    try {
+      return await atPhoneWidth(async function () {
+        var L = FM.makeLayer('shape', { shape: 'rect', x: 540, y: 960, shapeW: 120, shapeH: 120, fill: '#4af' });
+        L.start = 0; L.duration = 4;
+        FM.scene.layers.push(L); FM.selectLayer(L.id);
+        FM.inspector.openCategory('transform');
+        FM._mtAxis = 'xy'; FM._mtMode = 'move';
+        FM.inspector.refresh();
+        await frame();
+        var pad = [].slice.call(document.querySelectorAll('.mt-trackpad')).filter(function (p) { return p.getBoundingClientRect().width > 0; })[0];
+        var hint = pad && pad.querySelector('.mt-trackpad-hint');
+        if (!hint || !hint.textContent.trim()) throw new Error('no swipe pad with a hint on screen in Position / Scale');
+        var pr = pad.getBoundingClientRect();
+        var rg = document.createRange(); rg.selectNodeContents(hint);
+        var lines = [].slice.call(rg.getClientRects()).filter(function (r) { return r.width > 2; });
+        if (lines.length < 2) throw new Error('the hint fits on one line at 380px (' + lines.length + '), so the wrap the finding is about is not being measured');
+        var BRACKET = parseFloat(getComputedStyle(pad, '::before').left) || 12;
+        lines.forEach(function (r, i) {
+          var l = r.left - pr.left, rr = pr.right - r.right;
+          if (l < BRACKET || rr < BRACKET) throw new Error('hint line ' + (i + 1) + ' sits ' + l.toFixed(1) + 'px from the pad\'s left edge and ' + rr.toFixed(1) + 'px from its right — inside the ' + BRACKET + 'px the corner brackets are inset');
+        });
+      }, 380);
     } finally {
       FM.scene.layers.length = 0;
       Array.prototype.push.apply(FM.scene.layers, layers0);
@@ -45958,6 +46747,37 @@
     }
   });
 
+  /* 917.13 — the auto-scrolling NEW row was clipped by its own box, 14px inside the sheet, so cards sliding
+     past were sliced by a hard line floating in the sheet. It runs to the sheet's edges now, with the
+     first card still under the section title at rest. */
+  test('917.13 the effects browser NEW row runs to the edges of the sheet, first card still under its title', { item: '917' }, async function () {
+    const layers0 = FM.scene.layers.slice();
+    try {
+      return await atPhoneWidth(async function () {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#c04070' });
+        L.start = 0; L.duration = 5;
+        FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll();
+        await sleep(160);
+        FM.fxBrowser.open(L);
+        await sleep(300);
+        const sheet = document.getElementById('fx-browser');
+        const row = document.querySelector('#fx-browser .fxb-featured');
+        const title = row && row.parentElement.querySelector('.fxb-sec-title');
+        if (!row || !title || !row.firstElementChild) throw new Error('the NEW row, its title or its first card did not render');
+        const rr = row.getBoundingClientRect(), sr = sheet.getBoundingClientRect();
+        const inL = sr.left + sheet.clientLeft, inR = inL + sheet.clientWidth;
+        if (rr.left > inL + 1 || rr.right < inR - 1) throw new Error('the NEW row is clipped at x ' + rr.left.toFixed(1) + '..' + rr.right.toFixed(1) + ' inside a sheet spanning ' + inL.toFixed(1) + '..' + inR.toFixed(1) + ' — cards sliding past are sliced by a hard edge in mid-sheet');
+        // The row auto-scrolls (1.2px a tick), so read the first card's rest position: where it is plus how far the row has moved.
+        const first = row.firstElementChild.getBoundingClientRect().left + row.scrollLeft, tl = title.getBoundingClientRect().left;
+        if (Math.abs(first - tl) > 1) throw new Error('at rest the first NEW card starts at x=' + first.toFixed(1) + ' but the section title at x=' + tl.toFixed(1) + ' — the row no longer lines up with its heading');
+      }, 380);
+    } finally {
+      if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); FM.refreshAll(); await sleep(100);
+    }
+  });
+
 
   /* ================= queue 319: noise grain — smaller preview, round or square ====================
    * *"For the noise preview make the noise smaller so it doesn't look shit, and also give the noise
@@ -46854,6 +47674,37 @@
     } finally {
       FM.layerPresets.remove(NAME);
       if (id0) FM.selectLayer(id0);
+      FM.inspector.openCategory('home');
+      await sleep(80);
+    }
+  });
+
+  /* 917.16 — the Presets card's two save buttons borrowed the 20px Copy/Paste chip: thin strips with 11px
+     type, a 20px-tall target on a phone, and 5px further in than the search field and headings above them. */
+  test('917.16 the Presets save buttons are full buttons, flush with the card column, on a phone', { item: '917' }, async function () {
+    var layers0 = FM.scene.layers.slice();
+    try {
+      return await atPhoneWidth(async function () {
+        var L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#4af' });
+        L.start = 0; L.duration = 4;
+        FM.scene.layers.push(L); FM.selectLayer(L.id);
+        FM.inspector.openCategory('presets');
+        await sleep(160);
+        var wrap = [].slice.call(document.querySelectorAll('#inspector .preset-wrap')).filter(function (w) { return w.getBoundingClientRect().width > 0; })[0];
+        if (!wrap) throw new Error('no Presets card on screen');
+        var saves = [].slice.call(wrap.children).filter(function (b) { return b.tagName === 'BUTTON' && /^Save /.test(b.textContent.trim()); });
+        var head = wrap.querySelector('.preset-sec');
+        if (saves.length < 2 || !head) throw new Error('expected both save buttons and a section heading in the Presets card, found ' + saves.length + ' buttons');
+        var hl = head.getBoundingClientRect().left;
+        saves.forEach(function (b) {
+          var r = b.getBoundingClientRect();
+          if (r.height < 36) throw new Error('"' + b.textContent.trim() + '" is ' + r.height.toFixed(0) + 'px tall — a thin strip, not a button a thumb can hit');
+          if (Math.abs(r.left - hl) > 1) throw new Error('"' + b.textContent.trim() + '" starts at x=' + r.left.toFixed(1) + ' while its heading starts at x=' + hl.toFixed(1) + ' — inset from the column it sits in');
+        });
+      }, 380);
+    } finally {
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.selectLayer(null);
       FM.inspector.openCategory('home');
       await sleep(80);
     }
@@ -51490,6 +52341,43 @@
     });
   });
 
+  test('918.8 — on PC the select bar does not cut the + in half: it hides while selecting and comes back after', { item: '918' }, async function () {
+    /* From the #912 audit, both looks at 1280x900: select mode puts its bar along the bottom edge (842-900)
+       and nothing hid the + (#hm-new, 818-876), so only the top of the round button peeked over the bar.
+       Asserted as what he would see — no part of the + showing above the bar — plus the control that
+       the + is really there again once select mode ends. */
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    return await atWideWidth(async function () {
+      try {
+        if (FM.home && FM.home.open) FM.home.open();
+        await sleep(500);
+        const plus = document.getElementById('hm-new');
+        const btn = document.getElementById('hm-select-btn');
+        if (!plus || !btn) throw new Error('#hm-new or #hm-select-btn is not on the home screen');
+        if (getComputedStyle(plus).visibility !== 'visible' || plus.getBoundingClientRect().height < 20)
+          throw new Error('the + is not showing on Home before select mode — this test cannot see it being cut');
+        btn.click();
+        await sleep(400);
+        const bar = document.querySelector('.hm-selbar');
+        if (!bar) throw new Error('the select bar did not appear, so this test measured nothing');
+        const pr = plus.getBoundingClientRect(), br = bar.getBoundingClientRect();
+        const showing = getComputedStyle(plus).visibility === 'visible' && pr.height > 0 && pr.top < br.top - 0.5;
+        if (showing)
+          throw new Error('the + still shows ' + Math.round(br.top - pr.top) + 'px of itself above the select bar (+ ' + Math.round(pr.top) + '-' + Math.round(pr.bottom) + ', bar from ' + Math.round(br.top) + ') — a half-circle peeking over the bar');
+        const cancel = [].slice.call(bar.querySelectorAll('.hm-selbtn')).filter(b => /cancel/i.test(b.textContent || ''))[0];
+        if (!cancel) throw new Error('no Cancel in the select bar');
+        cancel.click();
+        await sleep(300);
+        if (getComputedStyle(plus).visibility !== 'visible') throw new Error('the + did not come back after leaving select mode');
+      } finally {
+        const c = [].slice.call(document.querySelectorAll('.hm-selbtn')).filter(b => /cancel/i.test(b.textContent || ''))[0];
+        if (c) { try { c.click(); } catch (e) {} }
+        await sleep(150);
+        try { if (!wasOpen && FM.home && FM.home.close) FM.home.close(); } catch (e) {}
+      }
+    }, 1280);
+  });
+
   /* ═══ QUEUE 662 — THE EXPORT WRITES DOWN WHAT HAPPENED TO THE SOUND ═════════════════════════════
    * He has reported a silent export four times. Every round ended the same way: everything measurable
    * on a desktop is healthy, and the device it happens on cannot be inspected. On 28 Aug he settled the
@@ -51949,6 +52837,88 @@
     });
   });
 
+  /* 917.5 — THE SWATCH ROW ON A NARROW PHONE. The background swatch row (202px, unable to shrink or wrap)
+     ran past its field: New project at 320 ended at x=318 in a field ending at 288 and the dialog scrolled
+     sideways; Canvas settings stuck out 18px at 380 and ran off the card at 320, where its colour picker was
+     the browser's unstyled 50px well. Both dialogs are opened the real way and measured at 320 and 380. */
+  async function each917Dialog(widths, fn) {
+    const wasOpen = FM.home.isOpen();
+    const dlg = document.getElementById('hm-dialog');
+    try {
+      if (!wasOpen) { FM.home.open(); await sleep(600); }
+      for (const w of widths) {
+        await atPhoneWidth(async function () {
+          const tabBtn = document.querySelector('.hm-tab[data-tab="projects"]'); if (tabBtn) tabBtn.click();
+          await sleep(60);
+          document.getElementById('hm-new').click();
+          if (dlg.classList.contains('hidden')) throw new Error('tapping + did not open the New project dialog');
+          await sleep(450);
+          // the v16.76 hinge swings the card in; under a loaded full-suite run it can still be mid-swing at 450ms, and a
+          // rotated card measures skewed (917.15 read x=0 in the full suite, fine alone). Land it before measuring.
+          dlg.getAnimations({ subtree: true }).forEach(a => { try { a.finish(); } catch (e) {} });
+          await fn('new', dlg, w);
+          dlg.classList.add('hidden');
+        }, w);
+      }
+    } finally {
+      dlg.classList.add('hidden');
+      if (!wasOpen) FM.home.close();
+    }
+    await editorWithShape(async function () {
+      for (const w of widths) {
+        await atPhoneWidth(async function () {
+          FM.selectLayer(null); await sleep(120);
+          const cdlg = document.getElementById('canvas-dialog');
+          try {
+            FM.openCanvasDialog();
+            if (cdlg.classList.contains('hidden')) throw new Error('Canvas settings did not open');
+            await sleep(450);
+            cdlg.getAnimations({ subtree: true }).forEach(a => { try { a.finish(); } catch (e) {} });   // see above
+            await fn('canvas', cdlg, w);
+          } finally {
+            const c = document.getElementById('cv-cancel'); if (c && !cdlg.classList.contains('hidden')) c.click();
+            cdlg.classList.add('hidden');
+          }
+        }, w);
+      }
+    });
+  }
+  test('917.5 the background swatches stay inside the New project and Canvas settings dialogs at 320 and 380', { item: '917' }, async function () {
+    await each917Dialog([320, 380], async function (which, dlg, w) {
+      const where = (which === 'new' ? 'New project' : 'Canvas settings') + ' at ' + w;
+      const row = which === 'new' ? dlg.querySelector('.hm-bg-row') : (document.getElementById('cv-bg') || { closest() { return null; } }).closest('.hm-bg-row');
+      const box = which === 'new' ? dlg.querySelector('.hm-dlg-scroll') : dlg.querySelector('.export-card');
+      if (!row || !box) throw new Error(where + ': no swatch row, or no dialog box around it');
+      const r = row.getBoundingClientRect(), f = row.parentElement.getBoundingClientRect();
+      if (r.right > f.right + 0.5) throw new Error(where + ': the swatch row ends at x=' + r.right.toFixed(1) + ', past its field at x=' + f.right.toFixed(1));
+      [].slice.call(row.children).forEach(k => {
+        const b = k.getBoundingClientRect();
+        if (b.width < 27) throw new Error(where + ': a swatch was squeezed to ' + b.width.toFixed(1) + 'px — too small to tap');
+      });
+      if (box.scrollWidth > box.clientWidth + 1) throw new Error(where + ': the dialog scrolls sideways (' + box.scrollWidth + ' > ' + box.clientWidth + ')');
+    });
+  });
+
+  /* 917.15 — each dialog's two dropdowns shrink-wrapped their own longest option, so Resolution and Frame rate
+     were different widths and their left edges sat 13px (New project) and 40px (Canvas settings) apart. */
+  test('917.15 the Resolution and Frame rate dropdowns share one left edge in New project and Canvas settings', { item: '917' }, async function () {
+    await each917Dialog([380], async function (which, dlg, w) {
+      const [a, b] = which === 'new' ? ['hm-new-res', 'hm-new-fps'] : ['cv-res', 'cv-fps'];
+      /* Canvas settings HIDES the Resolution row when the project is a custom size (app.js cv-res-row), and an earlier
+         test in the full run leaves the project custom — so #cv-res measured x=0, width 0, and this failed only in the
+         full suite. Pick a preset chip first so there is a Resolution row to line up; the dialog is cancelled after. */
+      if (which === 'canvas' && document.getElementById('cv-res-row').classList.contains('hidden')) {
+        const chip = dlg.querySelector('.aspect-chip[data-aspect="9:16"]') || dlg.querySelector('.aspect-chip:not([data-aspect="custom"])');
+        if (!chip) throw new Error('Canvas settings has no preset aspect chip to pick');
+        chip.click(); await sleep(60);
+        if (document.getElementById('cv-res-row').classList.contains('hidden')) throw new Error('picking a preset aspect did not bring back the Resolution row');
+      }
+      const la = document.getElementById(a).getBoundingClientRect().left, lb = document.getElementById(b).getBoundingClientRect().left;
+      const diag = id => { const e = document.getElementById(id), r = e.getBoundingClientRect(), cs = getComputedStyle(e); return id + '{' + cs.display + ' w' + r.width.toFixed(0) + ' in ' + (e.parentElement && (e.parentElement.id || e.parentElement.className)) + '}'; };
+      if (Math.abs(la - lb) > 1) throw new Error((which === 'new' ? 'New project' : 'Canvas settings') + ' at ' + w + ': #' + a + ' starts at x=' + la.toFixed(1) + ' and #' + b + ' at x=' + lb.toFixed(1) + ' — the two dropdowns do not line up [' + diag(a) + ' ' + diag(b) + ' frame ' + innerWidth + ']');
+    });
+  });
+
   test('912 the Export dialog opens with an animation on the phone', { item: '912' }, async function () {
     await editorWithShape(async function () {
       await atPhoneWidth(async function () {
@@ -52040,6 +53010,43 @@
       for (let i = 0; i < 20 && getComputedStyle(t).animationName !== 'none'; i++) await sleep(25);
       if (getComputedStyle(t).animationName !== 'none') throw new Error('a toast that has arrived still declares animation "' + getComputedStyle(t).animationName + '" — at rest it must look exactly as it did');
     } finally { FM.hideToast(); }
+  });
+
+  test('918.14 — in the PC editor a toast sits above the timeline band, not on its buttons', { item: '918' }, async function () {
+    /* From the #912 audit: #toast is pinned at bottom 244px, which clears the PHONE's bottom chrome — but the
+       PC band is --tl-h tall (270 at 1280x900), so every editor toast landed on the band's top row. Measured:
+       the effects browser's "Tip: hold any effect…" covered copy, record, skip and the timecode at 1280, and
+       Back and the play controls at 900. Asserted against the band's own box, and at a DRAGGED band height
+       too, because the band is his to resize and a fixed number would be wrong again at the next size. */
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const root = document.documentElement, bandWas = root.style.getPropertyValue('--tl-h');
+    const t = document.getElementById('toast');
+    try {
+      if (hadHome) FM.home.close();
+      await atWideWidth(async function () {
+        const band = document.getElementById('timeline-panel');
+        if (!band || !band.getBoundingClientRect().height) throw new Error('#timeline-panel is not on screen at a PC width');
+        for (const h of [270, 360]) {
+          root.style.setProperty('--tl-h', h + 'px');
+          await sleep(80);
+          FM.hideToast(); getComputedStyle(t).display;
+          FM.toast('918.14 probe', 4000);
+          await sleep(40);
+          const a = t.getAnimations ? t.getAnimations() : [];
+          a.forEach(x => x.finish());
+          const tr = t.getBoundingClientRect(), br = band.getBoundingClientRect();
+          if (!tr.height) throw new Error('the toast did not show');
+          if (br.height < h - 20) throw new Error('the band did not follow --tl-h (' + Math.round(br.height) + 'px for ' + h + ') — this measures nothing');
+          if (tr.bottom > br.top - 2)
+            throw new Error('with a ' + h + 'px band the toast ends at y=' + Math.round(tr.bottom) + ' and the band starts at ' + Math.round(br.top) + ' — it is drawn over the transport buttons');
+        }
+      }, 1280);
+    } finally {
+      FM.hideToast();
+      if (bandWas) root.style.setProperty('--tl-h', bandWas); else root.style.removeProperty('--tl-h');
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
   });
 
   test('912 a text pop-over swings out of the button that opened it', { item: '912' }, async function () {
@@ -58842,6 +59849,31 @@
     }
   });
 
+  /* 917.4 — at 320px three of the four home tabs were cut to "Templ…", "Eleme…", "Tutori…" (each pill 64px,
+     "Templates" needs 73), and the wordmark ran flush into the search button (0px between them). */
+  test('917.4 at 320px every home tab label is whole and the wordmark keeps clear of the search button', { item: '917' }, async function () {
+    if (!FM.home || !FM.home.open) throw new Error('FM.home is missing');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wasOpen = FM.home.isOpen && FM.home.isOpen();
+    try {
+      return await atPhoneWidth(async function () {
+        if (!FM.home.isOpen()) FM.home.open();
+        await sleep(1500);   // the first-open intro moves things; measure the settled screen
+        const tabs = [].slice.call(document.querySelectorAll('#home-screen .hm-tab'));
+        if (tabs.length < 4) throw new Error('only ' + tabs.length + ' home tabs found — this is not the row the finding is about');
+        const cut = tabs.filter(t => t.scrollWidth > t.clientWidth + 1).map(t => t.textContent.trim() + ' needs ' + t.scrollWidth + 'px, has ' + t.clientWidth);
+        if (cut.length) throw new Error('home tabs are cut off with an ellipsis at 320px: ' + cut.join('; '));
+        const img = document.querySelector('#home-screen .hm-brand-img'), btn = document.getElementById('hm-search-btn');
+        if (!img || !btn) throw new Error('the wordmark or the search button is missing');
+        const gap = btn.getBoundingClientRect().left - img.getBoundingClientRect().right;
+        if (gap < 4) throw new Error('the FreeMotion wordmark is ' + gap.toFixed(1) + 'px from the search button at 320px — it runs straight into it');
+      }, 320);
+    } finally {
+      if (!wasOpen && FM.home.close) FM.home.close();
+      await sleep(200);
+    }
+  });
+
   /* ═══ 505: EDITING AN ELEMENT EDITS THAT ELEMENT — one element, changed, and no new project.
      Ezra, for the third time (340, 342, then this): "Elements and templates are still not working…
      I don't like that when you tap on them they created as a project… stop doing the lazy way out."
@@ -62975,6 +64007,58 @@
       throw new Error('the empty panel is being built with innerHTML — it carries prose that will one day carry a user-supplied name');
   });
 
+  test('918.4 — on PC the empty Template panel starts at the top of its box and every line can be scrolled to', { item: '918' }, async function () {
+    /* From the #912 audit, measured at 900x700: the PC panel's pager is what the band leaves after the
+       tabs (110px) and the explanation above needs ~250px. `.am-empty` centred itself with max-height 100%,
+       so the overflow went BOTH ways — "No templates yet" sat at y 532-550 above a pager starting at 548,
+       where no scroll can reach, and the last paragraph was cut in half at the bottom.
+       Asserted as what a reader needs: the title starts inside the pager, and the last paragraph's bottom
+       is within what the pager can scroll to. The template list is emptied for the run so the empty
+       state is what renders whatever this profile has saved. */
+    if (!FM.addMenu || !FM.addMenu.openTab) throw new Error('FM.addMenu.openTab is missing');
+    const realList = FM.templates && FM.templates.list;
+    const selWas = FM.scene.selectedId;
+    const root = document.documentElement, bandWas = root.style.getPropertyValue('--tl-h');
+    return await atWideWidth(async function () {
+      try {
+        if (FM.templates) FM.templates.list = function () { return []; };
+        root.style.setProperty('--tl-h', '270px');   // the band a 1280x900 window opens with (30vh)
+        FM.selectLayer(null); if (FM.refreshAll) FM.refreshAll();
+        await sleep(120);
+        /* THE WAY HE GETS THERE: the menu opens on a tile tab, which the fit plan measures and sizes, and
+           then he clicks Template. The empty panel returns before any plan is made, so it inherits the
+           tile tab's pager height — opened on Template directly, the fallback layout is used and the bug
+           never shows. */
+        FM.addMenu.openTab('shape');
+        await sleep(250);
+        const am = document.querySelector('#inspector-panel .addmenu--panel');
+        if (!am || !am.classList.contains('addmenu--fit')) throw new Error('the PC add menu is not in its measured (fit) layout on the Shape tab — this would test the fallback, where the empty state was never cut');
+        const tabBtn = am.querySelector('.addmenu-tab[data-key="template"]');
+        if (!tabBtn) throw new Error('no Template tab in the PC add menu');
+        tabBtn.click();
+        await sleep(300);
+        const box = document.querySelector('#inspector-panel .am-empty');
+        if (!box) throw new Error('no empty Template panel in the PC inspector — the add menu is not what the band is showing');
+        const pager = box.closest('.addmenu-pager');
+        const title = box.querySelector('.am-empty-title');
+        const last = box.lastElementChild;
+        const pr = pager.getBoundingClientRect(), tr = title.getBoundingClientRect(), lr = last.getBoundingClientRect();
+        /* CONTROL: the case only exists when the words outgrow the box. If they fit, nothing here is tested. */
+        if (lr.bottom - tr.top < pr.height) throw new Error('the explanation fits its ' + Math.round(pr.height) + 'px pager at this size, so this test cannot see the overflow it guards');
+        if (tr.top < pr.top - 0.5)
+          throw new Error('"No templates yet" starts ' + Math.round(pr.top - tr.top) + 'px ABOVE the top of its pager — centring pushed it off the top, where no scroll can reach');
+        const reach = pr.top + pager.scrollHeight;
+        if (lr.bottom > reach + 1)
+          throw new Error('the last line ends ' + Math.round(lr.bottom - reach) + 'px past anything the pager can scroll to — it is cut off, not scrolled');
+      } finally {
+        if (FM.templates) FM.templates.list = realList;
+        if (bandWas) root.style.setProperty('--tl-h', bandWas); else root.style.removeProperty('--tl-h');
+        FM.selectLayer(selWas || null); if (FM.refreshAll) FM.refreshAll();
+        await sleep(60);
+      }
+    }, 1280);
+  });
+
   test('652 — the ⋯ is bare until you point at it, and the dots are three real things', { item: '652' }, async function () {
     /* Ezra: "the three dots on any project in the home meny shouldnt have the circle box around them
        until u hover over but then the circle box should be like a blue circle around it that glints
@@ -63039,6 +64123,48 @@
       if (more.classList.contains('hm-more-pop'))
         throw new Error('the ⋯ is still marked as animating almost a second later — the class never gets removed, so the button stays lit and the next tap has nothing to restart');
     } finally { if (!wasOpen && FM.home.close) FM.home.close(); }
+  });
+
+  test('918.13 — a Home card ⋯ menu hangs under the ⋯ inside the card column, at every window width', { item: '918' }, async function () {
+    /* From the #912 audit: the project ⋯ opened its menu at `min(r.left, innerWidth - 210)` — from the
+       dot's LEFT edge, so at 1280 it hung 106px past the card column (menu 946-1096, card edge 990), while
+       at 900 the clamp right-aligned it somewhere else again. Now its right edge is the ⋯'s right edge at
+       every width; asserted at the two PC widths the audit measured and on the phone. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const fe = window.frameElement;
+    if (!fe) throw new Error('this test needs run.html\'s iframe to change the window width');
+    const w0 = fe.style.width;
+    try {
+      for (const w of [1280, 900, 380]) {
+        fe.style.width = w + 'px'; window.dispatchEvent(new Event('resize'));
+        await sleep(120);
+        if (FM.home && FM.home.open && !FM.home.isOpen()) FM.home.open();
+        await sleep(400);
+        const more = document.querySelector('#home-screen .hm-card[data-pid] .hm-card-more, #home-screen .hm-card .hm-card-more');
+        if (!more) throw new Error('no ⋯ on a Home card at ' + w + 'px — this test has no menu to measure');
+        const card = more.closest('.hm-card');
+        if (FM.contextMenu.isOpen()) { FM.contextMenu.hide(); await sleep(60); }
+        /* Measured BEFORE the click: the menu is placed from the button's rect at that moment, and a Home
+           re-render after a width change can swap the card out from under a later read. */
+        const br = more.getBoundingClientRect(), cr = card.getBoundingClientRect();
+        if (!(br.width > 0)) throw new Error('the ⋯ measured 0px wide at ' + w + 'px — it is not laid out');
+        more.click(); await sleep(150);
+        const menu = document.getElementById('ctx-menu');
+        try {
+          if (!FM.contextMenu.isOpen()) throw new Error('the ⋯ opened no menu at ' + w + 'px');
+          const mR = parseFloat(menu.style.left) + menu.offsetWidth;
+          if (Math.abs(mR - br.right) > 1)
+            throw new Error('at ' + w + 'px the menu\'s right edge is ' + Math.round(mR) + ' and the ⋯\'s is ' + Math.round(br.right) + ' — it is not hanging from the button that opened it');
+          if (mR > cr.right + 1)
+            throw new Error('at ' + w + 'px the menu runs ' + Math.round(mR - cr.right) + 'px past the card column');
+        } finally { FM.contextMenu.hide(); await sleep(60); }
+      }
+    } finally {
+      fe.style.width = w0; window.dispatchEvent(new Event('resize'));
+      await sleep(150);
+      if (!wasOpen && FM.home && FM.home.close) FM.home.close();
+    }
   });
 
   test('652 — the hover ring is gated to a mouse, and lit from the cursor rather than by a static colour', { item: '652' }, async function () {
@@ -63740,6 +64866,62 @@
         await new Promise(r => setTimeout(r, 80));
       }
     });
+  });
+
+  test('918.3 — a PC category label shows whole lines only, and both lines of a wrapping one', { item: '918' }, async function () {
+    /* From the #912 audit, measured before the fix at 1280x900: "Outline & Shadows" had scrollHeight 24
+       against clientHeight 14, so it read "Outline &" with the TOPS of "Shadows" as stray marks under it;
+       "Position / Scale" and "Customise Shape" the same. At 1280x700 the room (9.2px) was under ONE line
+       and every descender went: "Colourina", "Mixina". The 672 test above only asks that a label is not
+       0px and does not hang below its card, and both of those were true the whole time.
+       So this asks the two things he would see: (1) the visible box is a WHOLE number of lines — never a
+       sliver — and (2) at the bands a PC actually opens at (232px is the floor of --tl-h) a label that
+       wraps to two lines shows both of them. A line is measured, not assumed: the same label holding one
+       short word. */
+    return await atWideWidth(async function () {
+      const root = document.documentElement;
+      const prev = root.style.getPropertyValue('--tl-h');
+      const keep = FM.scene.layers.slice();
+      try {
+        FM.scene.layers.length = 0;
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 200, y: 200, shapeW: 200, shapeH: 200 });
+        L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+        FM.refreshAll(); FM.selectLayer(L.id);
+        await new Promise(r => setTimeout(r, 250));
+        if (!document.querySelector('#inspector-panel .cat-card')) throw new Error('no category cards in the PC inspector — this test cannot see the labels it guards');
+        let sawWrap = 0;
+        for (const h of [180, 232, 264, 300, 353, 420]) {
+          root.style.setProperty('--tl-h', h + 'px');
+          await new Promise(r => setTimeout(r, 90));
+          for (const c of document.querySelectorAll('#inspector-panel .cat-card')) {
+            const lab = c.querySelector('.cat-label');
+            const txt = lab && (lab.textContent || '').trim();
+            if (!txt) continue;
+            const full = lab.scrollHeight, shown = lab.clientHeight;
+            lab.textContent = 'Xg'; const line = lab.scrollHeight; lab.textContent = txt;
+            if (!(line > 4)) throw new Error('a one-word label measured ' + line + 'px tall — the line height could not be read');
+            const lines = shown / line;
+            if (lines < 0.95 || Math.abs(lines - Math.round(lines)) > 0.12)
+              throw new Error('at a band of ' + h + 'px "' + txt + '" shows ' + lines.toFixed(2) + ' lines (' + shown + 'px of ' + line + 'px lines) — a part-line is the stray marks, or the cut descenders, under the label');
+            const needs = Math.round(full / line);
+            if (needs === 2) sawWrap++;
+            if (h >= 232 && needs <= 2 && full > shown + 1)
+              throw new Error('at a band of ' + h + 'px "' + txt + '" needs ' + full + 'px and shows ' + shown + 'px — it reads as a cut-off word on a laptop window');
+            const lr = lab.getBoundingClientRect(), cr = c.getBoundingClientRect();
+            if (lr.top < cr.top - 0.6 || lr.bottom > cr.bottom + 0.6)
+              throw new Error('at a band of ' + h + 'px "' + txt + '" runs outside its card (' + Math.round(lr.top) + '-' + Math.round(lr.bottom) + ' in ' + Math.round(cr.top) + '-' + Math.round(cr.bottom) + ')');
+          }
+        }
+        /* CONTROL: a shape layer's grid has three two-word labels that wrap in a PC tile. If none did, the
+           "both lines" half above never ran. */
+        if (!sawWrap) throw new Error('no label wrapped to two lines at any band — the two-line assertion was never exercised');
+      } finally {
+        if (prev) root.style.setProperty('--tl-h', prev); else root.style.removeProperty('--tl-h');
+        FM.scene.layers.length = 0; keep.forEach(l => FM.scene.layers.push(l));
+        FM.selectLayer(null); FM.refreshAll();
+        await new Promise(r => setTimeout(r, 80));
+      }
+    }, 1280);
   });
 
   test('673 — a malformed project file makes no junk project, and says what was wrong', { item: '673' }, async function () {
@@ -67424,6 +68606,52 @@
       try { document.getElementById('hm-dialog').classList.add('hidden'); } catch (e) {}
       if (was == null) html.removeAttribute('data-home'); else html.setAttribute('data-home', was);
       try { if (!wasOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep912(120);
+    }
+  });
+
+  test('918.16 — with the light Home look on, the editor\'s Canvas settings still shows its Size in light ink', { item: '918' }, async function () {
+    /* Found while re-verifying #918 (not one of the audit's 15): `html[data-home="light"] .cv-size
+       { color: #10151f }` above was written for the New project dialog, but `.cv-size` is also the
+       "1080 × 1920" beside Size in the EDITOR's Canvas settings, which stays dark — and data-home stays
+       "light" inside the editor (the #864 trap). Measured at 1280x900 on the default light look: the size
+       read rgb(16,21,31) on the near-black card, i.e. the row said "Size" and nothing else. The same
+       leak put the paper's navy rim on the dialog's colour swatches. The New project dialog must keep
+       its dark ink, so both halves are asserted. */
+    if (!FM.openCanvasDialog) throw new Error('FM.openCanvasDialog is not reachable');
+    const html = document.documentElement, was = html.getAttribute('data-home'), wasOpen = FM.home.isOpen();
+    const dlg = document.getElementById('canvas-dialog');
+    try {
+      html.setAttribute('data-home', 'light');
+      if (FM.home.isOpen()) { FM.home.close(); await sleep912(200); }
+      FM.openCanvasDialog(); await sleep912(250);
+      const size = document.getElementById('cv-size');
+      if (!size || !size.getBoundingClientRect().width) throw new Error('setup: #cv-size is not on screen in Canvas settings');
+      const card = dlg.querySelector('.export-card');
+      const bg = over912(getComputedStyle(card).backgroundColor, 'rgb(12,16,22)');
+      if (lum912(bg) > 0.2) throw new Error('setup: the Canvas settings card is not dark (' + getComputedStyle(card).backgroundColor + ') — the case this guards is a dark card');
+      const r = ratio912(getComputedStyle(size).color, bg);
+      if (r < 4.5) throw new Error('Canvas settings\' size "' + size.textContent + '" is ' + getComputedStyle(size).color + ' on the dark card (' + r.toFixed(2) + ':1) — the light Home\'s ink leaked into the editor');
+      const cancel = document.getElementById('cv-cancel'); if (cancel) cancel.click(); else dlg.classList.add('hidden');
+      await sleep912(120);
+
+      /* …and the New project dialog on the light Home keeps its dark ink on paper. */
+      FM.home.open(); await sleep912(260);
+      const plus = document.getElementById('hm-new');
+      plus.click(); await sleep912(200);
+      const nd = document.getElementById('hm-dialog');
+      const ns = document.getElementById('hm-new-size');
+      if (!ns || !ns.getBoundingClientRect().width) throw new Error('setup: the New project dialog shows no size');
+      const nbg = over912(getComputedStyle(nd.querySelector('.hm-dlg-card')).backgroundColor, PAPER912);
+      if (ratio912(getComputedStyle(ns).color, nbg) < 4.5) throw new Error('scoping the rule lost the New project dialog\'s dark size ink: ' + getComputedStyle(ns).color + ' on ' + nbg);
+      const no = nd.querySelector('.hm-dlg-actions button:not(.accent)');
+      if (no) no.click(); else nd.classList.add('hidden');
+      await sleep912(120);
+    } finally {
+      try { if (!dlg.classList.contains('hidden')) { const c = document.getElementById('cv-cancel'); if (c) c.click(); else dlg.classList.add('hidden'); } } catch (e) {}
+      try { document.getElementById('hm-dialog').classList.add('hidden'); } catch (e) {}
+      if (was == null) html.removeAttribute('data-home'); else html.setAttribute('data-home', was);
+      try { if (wasOpen && !FM.home.isOpen()) FM.home.open(); if (!wasOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
       await sleep912(120);
     }
   });

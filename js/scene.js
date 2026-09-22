@@ -779,6 +779,12 @@ window.FM = window.FM || {};
   FM.cloneLayer = function (layer, plain) {
     const c = JSON.parse(JSON.stringify(layer, FM.jsonReplacer));
     c.id = uid('layer');
+    /* ⚠️ queue 914.8: A COPY IS NOT A HALF OF THE ORIGINAL'S SPLIT. `splitOf` is the lineage FM.clipAt reads to
+       decide which half a child follows, and a copy that kept it JOINED that lineage: the original's children
+       then followed the COPY whenever it covered the moment, and flew off with it when it was moved (#912
+       audit, duplicate and paste alike). splitLayer stamps both halves itself after cloning; a batch that
+       copies several halves together gives them a lineage of their own (FM.relinkSplitCopies). */
+    delete c.splitOf;
     if (!plain) {
       c.clipColor = CLIP_COLORS[_colorIdx++ % CLIP_COLORS.length];
       c.name = (layer.name || 'Layer') + ' copy';

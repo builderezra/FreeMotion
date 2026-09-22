@@ -1034,11 +1034,16 @@ html[data-home="light"] .hm-aspect .ac-frame { color: #5f6b7d; }
 html[data-home="light"] .hm-aspect.active { border-color: rgba(23, 128, 180, .75); color: #0f6f9e; background-color: rgba(90, 199, 237, .13); }
 html[data-home="light"] .hm-aspect.active .ac-frame,
 html[data-home="light"] .hm-aspect.active span { color: #0f6f9e; }
+/* `#hm-dialog` on the swatches and on .cv-size below (queue 918.16): both classes are SHARED with the
+   editor's Canvas settings (#canvas-dialog), which stays dark whatever the Home look is — and data-home
+   stays "light" inside the editor (the #864 trap). Unscoped, these reached the dark card: the swatch rims
+   went to the paper's navy hairline, and "1080 × 1920" beside Size was painted #10151f on the near-black
+   card, i.e. not there at all. */
 html[data-home="light"] #hm-new-name:focus,
 #fm-ask.fm-ask-light .fm-ask-input:focus,
-html[data-home="light"] .hm-bg-sw.active { border-color: rgba(23, 128, 180, .8); }
-html[data-home="light"] .hm-bg-sw.active { box-shadow: 0 0 0 2px rgba(23, 128, 180, .8) inset; }
-html[data-home="light"] .hm-bg-sw { border-color: rgba(16, 30, 52, .18); }
+html[data-home="light"] #hm-dialog .hm-bg-sw.active { border-color: rgba(23, 128, 180, .8); }
+html[data-home="light"] #hm-dialog .hm-bg-sw.active { box-shadow: 0 0 0 2px rgba(23, 128, 180, .8) inset; }
+html[data-home="light"] #hm-dialog .hm-bg-sw { border-color: rgba(16, 30, 52, .18); }
 /* Cancel is quiet paper; Create keeps the app's blue as a FILL, with white ink — on white the pale
    cyan fill with near-black ink is the third instance of the same white-on-white class. */
 html[data-home="light"] .hm-dlg-actions button,
@@ -1056,7 +1061,7 @@ html[data-home="light"] .hm-dlg-actions button.accent,
      the white ink ended up on pale cyan. This file warns four times that the shorthand wipes the
      glass sheen; this is the same seam from the other side, and the lesson is the same one: on this
      theme a fill is TWO properties, and setting one of them is a no-op you cannot see. */
-html[data-home="light"] .cv-size { color: #10151f; }
+html[data-home="light"] #hm-dialog .cv-size { color: #10151f; }
 html[data-home="light"] .hm-dlg-actions button.accent,
 #fm-ask.fm-ask-light .fm-ask-actions button.accent {
   background-image: linear-gradient(180deg, #2a97cb, #1780b4);

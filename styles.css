@@ -408,7 +408,10 @@ body {
 .mt-center { flex: 1; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .mt-values { display: flex; gap: 8px; align-items: flex-start; justify-content: center; }
 .mt-vbox { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; }
-.mt-vbox-val { width: 100%; box-sizing: border-box; text-align: center; font-size: 18px; font-weight: 600; color: var(--accent); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 4px; cursor: ew-resize; user-select: none; font-variant-numeric: tabular-nums; touch-action: none; }
+/* line-height is FIXED (queue 917 finding 8): the number now steps its type down when it would not fit
+   (js/inspector.js, mtVBox fitVal), and with `normal` a smaller font meant a shorter box — X a few px
+   shorter than Y beside it. 21px is what `normal` measured at 18px, so an unshrunk box is unchanged. */
+.mt-vbox-val { width: 100%; box-sizing: border-box; text-align: center; font-size: 18px; line-height: 21px; white-space: nowrap; font-weight: 600; color: var(--accent); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 4px; cursor: ew-resize; user-select: none; font-variant-numeric: tabular-nums; touch-action: none; }
 .mt-vbox-val.editing { outline: 2px solid var(--accent); outline-offset: -1px; cursor: text; color: #fff; }
 .mt-vbox-lab { font-size: 11px; color: #7d8ca5; }
 /* X / Y / Z as the move pad's mode switch (v5.43). The LABEL is the target, not the number — tapping
@@ -451,7 +454,11 @@ body {
 /* 2D move trackpad */
 .mt-trackpad { flex: 1; position: relative; border-radius: 12px; background: var(--panel-2); display: flex; align-items: center; justify-content: center; min-height: 124px; touch-action: none; cursor: grab; overflow: hidden; }
 .mt-trackpad:active { cursor: grabbing; }
-.mt-trackpad-hint { color: #56657c; font-size: 13px; pointer-events: none; }
+/* Inset like the pad's own corner brackets, and centred (queue 917 finding 12). The hint had no padding
+   and text-align:start, so on a phone — where "Swipe here to move layer · snaps to centre, edges &
+   earlier keyframes" wraps — every line started hard against the pad's left edge, 12px outside the
+   brackets that frame it. */
+.mt-trackpad-hint { color: #56657c; font-size: 13px; pointer-events: none; padding: 0 16px; text-align: center; }
 .mt-trackpad::before, .mt-trackpad::after { content: ''; position: absolute; width: 20px; height: 20px; border: 2px solid #475774; }
 .mt-trackpad::before { left: 12px; top: 12px; border-right: 0; border-bottom: 0; border-radius: 6px 0 0 0; }
 .mt-trackpad::after { right: 12px; bottom: 12px; border-left: 0; border-top: 0; border-radius: 0 0 6px 0; }
@@ -665,6 +672,14 @@ body.text-editing .sb-wrap { display: none !important; }
   pointer-events: none;
 }
 .dh-icon { font-size: 44px; opacity: .85; }
+/* Two wordings, one per layout (queue 917 finding 14): a phone told to "drag" and to "click Import
+   media" is being told about controls it does not have, and at 320 the PC sentence also wrapped with
+   "here" alone on a line. */
+#drop-hint .dh-phone { display: none; }
+@media (max-width: 700px) {
+  #drop-hint .dh-pc { display: none; }
+  #drop-hint .dh-phone { display: block; }
+}
 #stage.dragover { box-shadow: inset 0 0 0 2px var(--accent); }
 
 /* ═══ THE TWO SIDE PANELS (queue 853) ══════════════════════════════════════════════════════════════
@@ -1186,8 +1201,14 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
   .te-bar  { position: static; padding: 8px 10px; background: none; box-shadow: none; }
   .te-dock { position: static; top: auto; padding: 8px 10px; background: none; border-top: 0; border-bottom: 0; box-shadow: none; }
   /* Capped. The font button absorbing every spare pixel is correct on a 380px phone bar, where filling
-   * the row is the design; in a 560px card it just makes one button enormous again. */
-  .te-font { max-width: 220px; }
+   * the row is the design; in a 560px card it just makes one button enormous again.
+   * ⚠️ …BUT AT 220 THE ROW STOPPED SHORT (queue 918.15). The card is at most 560px (CARD_MAX in
+   * text-edit.js), and at 560 the capped row ended 24px before the text box's right edge — measured at
+   * 1280x900, ✓ at 839-885 over a field running to 909, so the row read as unfinished on the right. 240 is
+   * the widest the desktop layout test allows a single button; ✓ takes `margin-left: auto`, so whatever the
+   * cap leaves goes in front of it and ✓ lands on the field's right edge at every card width. */
+  .te-font { max-width: 240px; }
+  .te-done { margin-left: auto; }
   #te-input { min-height: 64px; max-height: 34vh; }
   /* The card is at the BOTTOM of the stage, so its popovers open UPWARDS — JS sets left/width/bottom
    * to match the card. The base rule's left:8/right:8 is the phone's full-window inset and would give
@@ -1247,6 +1268,12 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 .addmenu--panel .addmenu-tabs { display: grid; grid-template-columns: repeat(3, 1fr); overflow: visible; }
 .addmenu--panel .addmenu-tab { flex: none; min-width: 0; }
 .addmenu--sheet .addmenu-lbl { max-width: 100%; }
+/* …which at 320 leaves 39px of label in a 51px tab, and "Elements" needs 44: the sheet read "Elem…",
+   "Templ…" and "Custom eleme…" (queue 917 finding 11). The words matter more than 6px of side padding
+   the tile does not need at that width. Gated at 360 like the editor's other narrow tiers. */
+@media (max-width: 360px) {
+  .addmenu--sheet .addmenu-tab, .addmenu--sheet .addmenu-card { padding-left: 3px; padding-right: 3px; }
+}
 /* ============ QUEUE 145 — a button that CHANGES SECTION must not look like one that ADDS A THING.
    Ezra: "make the background of all the buttons like elements shape etc a different colour to the
    ones in inside each section, like text etc. so it shows the difference in action, and then you can
@@ -1501,6 +1528,12 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
    this layer with that preset on it (queue "Check I changed the right Presets"). */
 .preset-wrap.rows { flex-wrap: nowrap; flex-direction: column; align-items: stretch; gap: 8px; }
 .preset-wrap.rows .fxp-row { width: 100%; }
+/* THE SAVE BUTTONS ARE REAL BUTTONS (queue 917 finding 16). They borrowed `.fx-act` — the 20px, 11px-type
+   chip that sits in a row beside Copy / Paste — so in the Presets card, where each one leads its section
+   on its own line, they came out as thin strips 5px further in than the search field and headings above
+   them, and on a phone a 20px-tall target. Same shape as "+ Add Effect", the other lone action in the
+   inspector, and flush with the column. Scoped to this card, so Copy / Paste keep their chips. */
+.preset-wrap.rows > .fx-act { margin-left: 0; padding: 11px 12px; border-radius: 10px; background: var(--panel-2); border-color: var(--line); color: var(--text); font-size: 13px; font-weight: 600; }
 .insp-preset-row .fxp-name { background: none; border: 0; padding: 0; color: var(--text); text-align: left; cursor: pointer; }
 .insp-preset-row.builtin { border-color: rgba(106,160,255,.38); }
 .insp-preset-row.broken { border-color: rgba(255,170,60,.42); background: rgba(255,170,60,.09); }
@@ -1803,7 +1836,13 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 .fxb-scroll { flex: 1; overflow-y: auto; padding: 14px; padding-bottom: max(14px, env(safe-area-inset-bottom)); overscroll-behavior-y: contain;   /* the pull-down at scrollTop 0 must be OURS, not the page bouncing behind the browser (queue 92) */ -webkit-overflow-scrolling: touch; }
 .fxb-section { margin-bottom: 22px; }
 .fxb-sec-title { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 10px; }
-.fxb-featured { display: flex; gap: 12px; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; }
+/* EDGE TO EDGE (queue 917 finding 13). The row scrolls sideways on its own, and it used to be clipped by
+   its OWN box, 14px inside the sheet — so a card sliding past was sliced by a hard vertical line floating
+   in the sheet ("quish" with its left border gone), which reads as a rendering fault rather than as "there
+   is more this way". The negative margin takes the row out to the sheet's edges and the padding puts the
+   first card straight back under the section title, so at rest nothing moves; a card now slides under the
+   edge of the SCREEN, the way every sideways shelf on a phone does. */
+.fxb-featured { display: flex; gap: 12px; overflow-x: auto; scrollbar-width: none; margin: 0 -14px; padding: 0 14px 4px; scroll-padding-inline: 14px; }
 .fxb-featured::-webkit-scrollbar { display: none; }
 .fxb-card { position: relative; flex: 0 0 150px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 0; overflow: hidden; cursor: pointer; }   /* relative so the ★ pins to the CARD, not to the scroller (#62) */
 .fxb-card .fxb-thumb { height: 94px; border-radius: 0; }
@@ -3388,6 +3427,25 @@ body.white-chrome #time-readout:active {
   height: 34px; justify-content: space-between; text-align: left;
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
 }
+/* …and it wears a select's chevron (queue 918.12). Shaped like a select for the reason above, it was the
+   only control in the stack with no arrow, so "All layers" read as a filled-in field rather than a choice.
+   A drawn chevron (two borders of a rotated square) because a button has no native one to borrow; it sits
+   where the selects' arrows sit and takes the text colour. */
+#export-dialog .field #exp-solo-btn::after {
+  content: ''; flex: none; width: 6px; height: 6px; margin: 0 -8px 3px 8px;   /* -8: into the button's 13px padding, level with the selects' arrows */
+  border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+  transform: rotate(45deg); opacity: .9;
+}
+/* THE VALUES WERE CUT TO "Same as project …" ON PC (queue 918.12). Measured at 1280x900: the card is 330px,
+   the control column 179px, and "Same as project — 1080×1920" is 184px of text plus 35 of padding plus the
+   native arrow's own lane — measured, a 238px select still cut it and 252 showed it whole — so the size and
+   the frame rate, the two facts that option exists to state, never showed. A phone has no room to give (the
+   card is already the screen minus its gutters), but a PC window does: the card grows to 420px and the
+   column to 253, which fits the project's own size and rate, a 4K one or a 29.97 one included. */
+@media (min-width: 701px) {
+  #export-dialog .export-card { width: min(420px, calc(100vw - 28px)); }
+  #export-dialog .field { grid-template-columns: minmax(64px, 1fr) clamp(150px, 68%, 256px); }
+}
 /* Room for the native chevron. A shrink-wrapped select sized itself around its longest option and
    the arrow came free; in a fixed column the two collide — measured, "Same as project — 64×48" ran
    under the arrow at 375px. The padding reserves the arrow's lane and the ellipsis makes a long
@@ -3542,6 +3600,14 @@ body.white-chrome #time-readout:active {
    rule above about never covering a modal's buttons still holds. body.fm-pushing's 213 is further down this
    file and wins during the push, as it must. */
 body.home-open #toast { z-index: 205; }
+/* ON PC THE 244px WAS THE TRANSPORT ROW (queue 918.14). That number clears the phone's bottom chrome; the
+   PC editor's band is `--tl-h` tall (270px at 1280x900, 272 at 900x700), so every editor toast landed ON
+   its top row — measured, "Tip: hold any effect to browse its presets" sat over copy, record, skip and the
+   timecode at 1280, over Back and the play controls at 900. Pinned to the band's own height instead, so it
+   clears it at any window size and follows the band when he drags it. Home keeps the old spot. */
+@media (min-width: 701px) {
+  body:not(.home-open) #toast { bottom: calc(var(--tl-h, 264px) + 14px); }
+}
 
 /* A toast that DOES something when you tap it (the "playback is struggling" offer). It has to read
    as tappable without a button inside it — on a phone the whole pill is the target, and 44px is the
@@ -4102,6 +4168,23 @@ body.home-open #toast { z-index: 205; }
     font-size: 16px; font-weight: 600; padding: 7px 6px; border-radius: 8px; text-overflow: ellipsis; text-align: left;
   }
   .m-projname:focus { outline: none; background: var(--bg); border-color: var(--accent); }
+  /* THE NAME HAS TO FIT AT 320 (queue 917 finding 3). The bar is back · name · version chip · four
+     42px buttons, and at 320px the fixed parts come to 300px — so the project name got 20px and showed
+     one stray letter, and a selected layer's name got 14px and showed nothing at all. Same answer as the
+     transport row's narrow tiers above (styles.css, #transport at 360/340): the same controls in the same
+     order stop paying for padding they cannot afford. The ↻ glyph goes from the chip (the chip itself
+     stays, and still taps to update) because it is 13px of the 50 the name needs. Measured at 320: name
+     20 → 77px, "Untitled" and "Square" both whole. Gated at 360, so his 440 phone and 375/390 are
+     untouched. */
+  @media (max-width: 360px) {
+    .m-tbtn { width: 34px; }
+    .m-ver { padding: 2px 5px; }
+    .m-ver::before { content: none; }
+    .m-projname { padding-left: 4px; padding-right: 4px; }
+  }
+  @media (max-width: 340px) {
+    .m-tbtn { width: 32px; }   /* 32x42 — still taller than the 28x40 the transport row goes down to */
+  }
   /* "3 layers selected" — the bar's title while a selection owns it. pointer-events:none because it
      spans the slots the cog and Export just vacated: a tap there must do NOTHING, not something else. */
   .m-selcount {
@@ -4607,6 +4690,14 @@ body.home-open #toast { z-index: 205; }
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .hm-tabs { gap: 7px; }
 }
+/* …and at 320 that row is 64px a pill, while "Templates" needs 73 and "Elements" 68, so three of the
+   four read "Templ…", "Eleme…", "Tutori…" (queue 917 finding 4). The pill is sized by the row, so the
+   room has to come out of the gaps and the padding, and a half-point of type. Gated at 360 like the
+   editor's narrow tiers, so 375/390 and his 440 are untouched. */
+@media (max-width: 360px) {
+  .hm-tabs { gap: 5px; }
+  .hm-tab { padding-left: 2px; padding-right: 2px; font-size: 12px; }
+}
 .hm-tab.active { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
 .hm-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px 16px 110px; }
 /* AM-style project LIST rows: thumb left, name + meta stacked, actions right */
@@ -5084,6 +5175,12 @@ body.hm-selecting .hm-pin { display: none; }
 .hm-selbtn { padding: 8px 14px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); font-size: 13px; font-weight: 700; cursor: pointer; }
 .hm-selbtn:disabled { opacity: .4; cursor: default; }
 .hm-selbtn.danger { background: #e0313122; border-color: #e0313166; color: #ff8a8a; }
+/* THE + GOES WHILE THE BAR IS UP (queue 918.8). The bar takes the bottom edge the + sits on, and nothing
+   hid it: measured at 1280x900, #hm-new at 818-876 under a bar from 842, so the round + was cut in half
+   with only its top peeking out, in both looks. On a phone the two-row bar covered it completely, which is
+   why it only showed on PC. Select mode is for acting on what exists — there is nothing to create from it —
+   so it hides, the same way it already hides on the Tutorials tab, and comes back with Done / Cancel. */
+body.hm-selecting #hm-new { visibility: hidden; pointer-events: none; }
 /* The home Create button is the SAME glass orb as the editor's + FAB (v4.92). Ezra: "the create
    button still is the old design in the main menu, I think you forgot it's gotta be done there too."
    It was — this one still had the flat accent disc. Everything the FAB does applies here: the orb's +
@@ -5142,11 +5239,28 @@ body.hm-selecting .hm-pin { display: none; }
 .hm-fld > span:first-child { color: var(--text-dim); font-size: 13px; }
 .hm-fld select { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 9px; font-size: 13px; }
 .hm-num-pair { display: flex; align-items: center; gap: 6px; color: var(--text-dim); }
-.hm-bg-row { display: flex; align-items: center; gap: 7px; }
-.hm-bg-sw { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); cursor: pointer; padding: 0; }
+/* THE SWATCH ROW NEVER RUNS PAST ITS OWN DIALOG (queue 917 finding 5). Four 34px swatches, a 38px
+   picker and four gaps are 202px, and the row could neither shrink nor move, so wherever the label left
+   it less than that it simply overflowed: New project at 320 ended at x=318 in a field ending at 288 and
+   the dialog grew a sideways scrollbar; Canvas settings stuck out 18px at 380 and ran off the card at 320.
+   Two steps, in order. The swatches may SHRINK (to 28px, the floor the transport row uses) so a row a little short
+   of room stays on the label's line — that is Canvas settings at 380. Below 168px, which no shrinking
+   can fit, the field WRAPS and the row takes a line of its own at full size. Right-aligned either way,
+   so it still ends where every other control in the dialog ends. */
+.hm-fld:has(> .hm-bg-row), .field:has(> .hm-bg-row) { flex-wrap: wrap; row-gap: 8px; }
+.hm-bg-row { display: flex; align-items: center; justify-content: flex-end; gap: 7px; flex: 1 1 auto; min-width: 168px; }
+.hm-bg-sw { flex: 0 1 34px; min-width: 28px; height: auto; aspect-ratio: 1; border-radius: 8px; border: 1px solid var(--line); cursor: pointer; padding: 0; }
 .hm-bg-sw.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
 .hm-bg-none { background: repeating-conic-gradient(#8b93a5 0% 25%, #464d5c 0% 50%) 50% / 10px 10px; }
-#hm-new-bg { width: 38px; height: 34px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); cursor: pointer; }
+/* #cv-bg is the SAME control in the Canvas settings dialog and was never given this rule — it rendered
+   as the browser's default 50x27 colour well with a white rim, which is most of why that row overflowed. */
+#hm-new-bg, #cv-bg { flex: 0 1 38px; min-width: 31px; height: auto; aspect-ratio: 38 / 34; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); cursor: pointer; }
+/* ONE LEFT EDGE FOR THE TWO DROPDOWNS (queue 917 finding 15). A <select> shrink-wraps its longest
+   option, so Resolution came out 118px and Frame rate 131 ("60 fps (smooth)") and their left edges sat
+   13px apart, one above the other — the same ragged column the export dialog fixed for itself in queue
+   141. The Canvas settings pair had the same fault the other way round. One width fits every option in
+   both lists. */
+.hm-fld select, #canvas-dialog .field select { width: 132px; max-width: 100%; }
 .hm-dlg-actions, .fm-ask-actions { flex: none; display: flex; gap: 8px; justify-content: flex-end; padding-top: 12px; }
 .hm-dlg-actions button, .fm-ask-actions button { padding: 9px 16px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font-weight: 600; cursor: pointer; }
 .hm-dlg-actions button.accent, .fm-ask-actions button.accent { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
@@ -6004,9 +6118,13 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 /* Per-slider keyframe diamond inside a Move & Transform value box (v4.78). Each slider owns its own
    track now — X and Y are independent — so the ◆ has to live ON the row, not just on the mode. */
 .mt-vbox { position: relative; }
+/* The ◆ sits in the box's top-right corner ABOVE the digits' cap height, not level with them (queue 917
+   finding 8): at top:2px, centred, its glyph spanned y 6.5-15.5 of the box and the digits' ink starts at
+   13 — so any number reaching the right edge (540.0 at 320px, -1234.5 at 380) had the diamond drawn on
+   its last digit. Same 18px hit area; only the glyph moves up and right, to y 3-12. */
 .mt-vbox-kf {
-  position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; padding: 0;
-  display: flex; align-items: center; justify-content: center;
+  position: absolute; top: 0; right: 0; width: 18px; height: 18px; padding: 3px 0 0;
+  display: flex; align-items: flex-start; justify-content: center;
   border: 0; background: transparent; cursor: pointer; border-radius: 5px;
   color: var(--text-faint); opacity: .55; transition: opacity .12s, color .12s, background .12s;
 }
@@ -6083,7 +6201,11 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
    which is what fixed the "FreeMoti" clipping at 375px. Leaving the clip in place would have swallowed
    the glow below — the halo's whole job is to spill past the letters, and a clip on the box it lives in
    cuts it off at the glyphs. (Exactly what overflow:hidden was doing to the + button's glow.) */
-.hm-brand { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: visible; }
+/* margin-right (queue 917 finding 4): the brand is `flex: 1`, so its box always runs right up to the
+   search button — invisible while the wordmark is narrower than the box, but at 320 the wordmark shrinks
+   to fill it and sat flush against the button (measured: brand right 133.69 = search left 133.69). The
+   8px is the same gap the three buttons keep between each other. */
+.hm-brand { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: visible; margin-right: 8px; }
 .hm-brand-mark { font-size: 17px; line-height: 1; color: var(--text); flex: none; }
 /* height-driven so it tracks the type it replaced, but min-width:0 + max-width let it SHRINK instead
    of being clipped by .hm-brand's overflow:hidden — at 375px the four action buttons and their gaps
@@ -8402,17 +8524,37 @@ body.fm-pushing #toast { z-index: 213; }
      ("Outline & Shadows" goes to two lines) would take its full 22px and spill out of a card that is a
      fixed height by design. Bounded to exactly the room left after the padding, gap and icon, it shows
      the first line and crops the second — which is what "a long label crops" always claimed and never
-     did. One readable line beats a silent nothing, and beats text hanging outside its own card. */
+     did. One readable line beats a silent nothing, and beats text hanging outside its own card.
+     ⚠️ …BUT THAT BOUND WAS NEVER A WHOLE NUMBER OF LINES (queue 918.3). Measured at 1280x900: the room
+     left was 13.5px and a line is 12px, so "Outline & Shadows" read "Outline &" with the TOPS of
+     "Shadows" showing as stray marks under it, and at 1280x700 the room (9.2px) was less than ONE line,
+     so every descender went — "Colourina", "Mixina". Two causes. The line-height clamp below mixed a
+     number (1.05) with a length (the calc), which is invalid, so it silently fell back to `normal` and
+     nobody knew how tall a line was. And the bound only counted the CONTENT box: the card is a centred
+     flex column, so the padding either side is room a label can use without leaving its card.
+     So: a line is a stated length (--cat-lh), and the bound is the room inside the card's border
+     (height − icon − gap − 2px each side) ROUNDED DOWN TO WHOLE LINES, at least one, at most two. A
+     label that wraps shows both lines wherever they fit — they fit at every band the 672 sweep drives —
+     and nothing ever shows a sliver of a line. */
   body #inspector-panel .cat-label {
     overflow: hidden; flex: none;
-    max-height: calc(var(--cat-h) - 2 * var(--cat-pad) - var(--cat-inner-gap) - var(--cat-ico));
+    max-height: var(--cat-lh);   /* one whole line where round() is missing (Safari < 15.4, Chrome < 125) */
+  }
+  @supports (max-height: round(down, 10px, 3px)) {
+    body #inspector-panel .cat-label {
+      max-height: clamp(var(--cat-lh), round(down, calc(var(--cat-h) - var(--cat-ico) - var(--cat-inner-gap) - 4px), var(--cat-lh)), calc(2 * var(--cat-lh)));
+    }
   }
   body #inspector-panel .cat-ico svg { width: var(--cat-ico); height: var(--cat-ico); }
   /* The label follows, or a 14px icon sits under text as tall as it is. Its line-height tightens with
-     it — at three rows, 1.3 line-height is another 10px of nothing. */
+     it — at three rows, 1.3 line-height is another 10px of nothing.
+     queue 918.3: the line-height is a LENGTH now, so the bound above can count lines. 1.15 is about what
+     `normal` was measuring (the invalid clamp's silent fallback), so a one-line label sits where it did. */
   body #inspector-panel .cat-label {
-    font-size: clamp(9.5px, calc((var(--tl-h, 264px) - 120px) / 12.5), 11.5px);
-    line-height: clamp(1.05, calc((var(--tl-h, 264px) - 120px) / 110), 1.3);
+    --cat-fs: clamp(9.5px, calc((var(--tl-h, 264px) - 120px) / 12.5), 11.5px);
+    --cat-lh: calc(var(--cat-fs) * 1.15);
+    font-size: var(--cat-fs);
+    line-height: var(--cat-lh);
   }
 }
 
@@ -9469,6 +9611,31 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
 .am-empty-mark { font-size: 26px; line-height: 1; color: var(--accent); opacity: .55; }
 .am-empty-title { font-size: 15.5px; font-weight: 700; color: var(--text); letter-spacing: .2px; }
 .am-empty p { margin: 0; max-width: 40ch; line-height: 1.5; }
+/* ⚠️ …AND ON PC THE WORDS DO NOT FIT, SO THE CENTRING PUSHED THE TITLE OFF THE TOP (queue 918.4). The PC
+   panel's pager is whatever the band leaves after the tabs — measured 108px at 1280x900 — and this box
+   needs ~250px. `justify-content: center` with `max-height: 100%` split the overflow both ways: "No
+   templates yet" sat ABOVE the pager's top edge (title 532-550, pager from 548 at 900x700), where no
+   scroll can ever reach, and the last paragraph was cut through the middle at the bottom.
+   Why the box was that short: the empty tab returns before any fit plan is made, so it kept the TILE tab's
+   pager height (`--am-pager`, a grid with a dots row) it was switched from.
+   The sheet's rule above (nothing scrolls) is the PHONE's; the PC panel already scrolls whenever its
+   content outgrows it (the add menu's body, queue 542). So here the box grows to its words, starts at the
+   top when it overflows (`safe center` still centres it whenever it fits), the type is a step tighter,
+   and the pager shows a thin scrollbar so the rest reads as "more below" rather than as cut off. */
+@media (min-width: 701px) {
+  .addmenu--panel .am-empty {
+    justify-content: safe center; max-height: none; min-height: 100%; box-sizing: border-box;
+    gap: 6px; padding: 12px 14px 14px;
+  }
+  .addmenu--panel .am-empty-mark { font-size: 20px; }
+  .addmenu--panel .am-empty-title { font-size: 14.5px; }
+  .addmenu--panel .am-empty p { font-size: 12.5px; line-height: 1.45; }
+  .addmenu--panel .addmenu-pager:has(> .addmenu-page > .am-empty) { scrollbar-width: thin; }
+  /* The fit plan sizes the pager for a GRID with a dots row under it; an empty tab has no dots, so that
+     row's 28px was left blank under text that was being cut off. The words take it. */
+  .addmenu--fit .addmenu-body:has(> .addmenu-pager > .addmenu-page > .am-empty) { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .addmenu--fit .addmenu-pager:has(> .addmenu-page > .am-empty) { height: auto; flex: 1 1 auto; min-height: 0; }
+}
 
 /* ── …the blue ring, and it is LIT FROM THE CURSOR (queue 652, v14.37) ───────────────────────────
    "the circle box should be like a blue circle around it that glints depending on where the curser is".

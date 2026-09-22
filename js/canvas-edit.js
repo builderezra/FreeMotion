@@ -295,8 +295,21 @@ window.FM = window.FM || {};
     // every move is an absolute write and the multiplicative shiftTransform converges.
     const sel = FM.selectedLayer(FM.scene);
     if (sel && sel.type !== 'camera' && !sel.locked) {
+      /* ⚠️ queue 914.10: THE CORNER HANDLE'S GUARD, ON THE PINCH TOO (queue 834 u18). The pinch multiplies the
+         scale it starts from exactly as the corner drag does, so on a layer scaled to nothing it did the same
+         damage: `|| 0.0001` rounded every product to zero, the 0.02 floor caught it, and shiftTransform lifted
+         EVERY scale keyframe of a pop-in by 0.02 — nothing moved on screen, the layer never fully vanished
+         again, and it was committed (#912 audit). Refused with the handle's own words. The whole pinch is
+         dropped rather than turned into a view zoom: with a layer selected he is aiming at the layer, and the
+         view jumping instead would read as a second bug. */
+      const s0 = FM.evalProp(sel.transform.scale, FM.time);
+      if (!(s0 > 0.005)) {
+        vpPinch = null;
+        if (FM.toast) FM.toast('This layer is scaled to nothing at the playhead — move to a frame where you can see it, or set Scale in Move & Transform');
+        return;
+      }
       vpPinch.layer = sel;
-      vpPinch.startScale = FM.evalProp(sel.transform.scale, FM.time) || 0.0001;
+      vpPinch.startScale = s0;
       vpPinch.startRot = FM.evalProp(sel.transform.rotation, FM.time) || 0;
       // a group scales about its visible bounds centre, so its members don't fly off-frame —
       // same pivot the corner handle builds in startHandle

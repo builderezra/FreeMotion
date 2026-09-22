@@ -1,4 +1,4 @@
-/* FreeMotion — Right-click context menu. FM.contextMenu.show(x, y, items). */
+/* FreeMotion — Right-click context menu. FM.contextMenu.show(x, y, items[, { right, above }]) — right/above anchor it to a button. */
 window.FM = window.FM || {};
 (function (FM) {
   'use strict';
@@ -50,7 +50,7 @@ window.FM = window.FM || {};
     return menu;
   }
   FM.contextMenu = {
-    show(x, y, items) {
+    show(x, y, items, opts) {
       ensure();
       // Second tap on the trigger that just closed this menu → leave it closed.
       if (sameTriggerAsLastOpen()) { closedOpener = null; openedBy = null; FM.contextMenu.hide(); return; }
@@ -121,12 +121,27 @@ window.FM = window.FM || {};
          viewport. The FIRST open was always fine, which is exactly what makes it the kind of bug that
          ships. */
       menu.classList.remove('ctx-hinge');
-      const r = menu.getBoundingClientRect();
+      let r = menu.getBoundingClientRect();
+      /* ANCHORED UNDER A BUTTON, RIGHT EDGE TO RIGHT EDGE (queue 918.10 / 918.13). The callers that open
+         a menu from a button used to GUESS its width — `r.right - 200` for Layer actions, `min(r.left,
+         innerWidth - 210)` for Home's ⋯ — and the menu is only as wide as its longest item (min 152px).
+         Measured at 1280: the Layer actions menu landed 49px left of its button, over the Back chevron;
+         Home's ⋯ menu opened from the dot's LEFT edge and hung 106px past the card column at 1280 but
+         sat right-aligned at 900. `opts.right` says where the right edge goes and the menu's own
+         measured width does the rest — so it cannot drift from its button whatever it holds. */
+      const alignR = !!opts && typeof opts.right === 'number' && isFinite(opts.right);
+      if (alignR) { menu.style.left = Math.max(6, opts.right - r.width) + 'px'; r = menu.getBoundingClientRect(); }
       if (r.right > window.innerWidth) menu.style.left = Math.max(6, window.innerWidth - r.width - 6) + 'px';   // see the hinge note below: measured BEFORE any transform
       // Math.max(6,…): a menu TALLER than the viewport pushed top NEGATIVE, clipping its first items
       // off the top with no way to reach them — clamp to 6 and let CSS max-height/overflow scroll it.
-      const flipX = r.right > window.innerWidth, flipY = r.bottom > window.innerHeight;
-      if (flipY) menu.style.top = Math.max(6, window.innerHeight - r.height - 6) + 'px';
+      // A right-anchored menu hangs from its top-RIGHT corner, under the button, so it hinges from there.
+      const flipX = alignR || r.right > window.innerWidth, flipY = r.bottom > window.innerHeight;
+      /* …and when it does not fit BELOW its button it opens ABOVE it (`opts.above` = the button's top),
+         rather than being slid up until it covers the very button that opened it — measured at 1280x900,
+         Layer actions (button 634-668, menu 247 tall) was clamped to 647-894, on top of its own button.
+         Only when there is room above; otherwise the old clamp, which at least keeps every item on screen. */
+      const upTop = (alignR && typeof opts.above === 'number') ? opts.above - 4 - r.height : -1;
+      if (flipY) menu.style.top = (upTop >= 6 ? upTop : Math.max(6, window.innerHeight - r.height - 6)) + 'px';
       /* ═══ THE HINGE GOES ON LAST, AND THAT ORDER IS THE WHOLE TRICK (queue 612) ═══════════════
        * He picked the hinge: *"also do hinge for the animations"*. The menu swings open about the
        * corner it came from — but the clamping directly above measures `getBoundingClientRect()` to

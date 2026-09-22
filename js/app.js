@@ -916,7 +916,14 @@ window.FM = window.FM || {};
   };
   FM.extractAudio = async function (layer) {   // audio-only twin of a video clip
     const before = new Set(FM.scene.layers.map(l => l.id));
-    await FM.duplicateLayer(layer.id, true);
+    /* ⚠️ queue 914.9: ONE PRESS, ONE UNDO. duplicateLayer commits history itself, so Extract Audio left TWO
+       steps, and the first Undo landed on a state he never made: two identical visible, UNMUTED clips, the
+       sound playing twice (#912 audit). Muted like duplicateSelection and clipSplit, released in a finally so a
+       throw cannot leave history muted for the session; the single commit is the one at the end. */
+    const hist = FM.history;
+    if (hist && hist.mute) hist.mute();
+    try { await FM.duplicateLayer(layer.id, true); }
+    finally { if (hist && hist.unmute) hist.unmute(); }
     const dup = FM.scene.layers.find(l => !before.has(l.id));
     if (!dup) return;
     dup.name = (layer.name || 'Clip') + ' (audio)';
@@ -2955,6 +2962,49 @@ window.FM = window.FM || {};
     if (FM.exitGroup) FM.exitGroup(true); else FM.groupContext = null;
   }
 
+  /* ═══ DELETING A LAYER OTHERS FOLLOW LEAVES THEM WHERE THEY ARE (queue 914.13) ═══════════════════════════
+   * Only a GROUP took its children with it. Any other parent — a Null above all — was filtered out and its
+   * children kept a `parent` pointing at an id that no longer exists: applyParentChain stops at the missing link,
+   * so they drew at their raw LOCAL numbers and jumped (the #912 audit: a square from the middle of the canvas to
+   * its top-left corner), and the dead id was saved into the file — the corruption the orphan-parent sweep exists
+   * to catch. His answer, 22 Sep: *"Stay exactly where they are"*.
+   * So each surviving child is re-hung on the first ancestor that survives the delete (the project if none), with
+   * the deleted chain's placement baked in by planParentBake — the bake grouping does (queue 914.4), read off the
+   * renderer's own matrices. ALL plans are made BEFORE anything is removed or re-hung: the frames need the dead
+   * parent still there to be read. One exception: a surviving half of a split parent that is on screen at the
+   * playhead — the child was already following THAT half, so it keeps following it instead of freezing.
+   * What cannot be kept is SAID, in grouping's words: a parent that moved is matched at the playhead only, and a
+   * path that cannot be turned exactly drops into its new frame unbaked. One commit, so one undo puts every
+   * child's numbers and link back exactly. Returns the toast text, or '' when nothing needed saying. */
+  function rehomeOrphans(gone) {
+    const t = FM.time;
+    const covers = l => t >= (l.start || 0) - 1e-9 && t <= (l.start || 0) + (l.duration || 0) + 1e-9;
+    const lift = pid => {
+      const seen = new Set();
+      while (pid && gone.has(pid) && !seen.has(pid)) { seen.add(pid); const pl = FM.layerById(FM.scene, pid); pid = pl ? pl.parent : null; }
+      return (pid && FM.layerById(FM.scene, pid)) ? pid : null;
+    };
+    const todo = [];
+    FM.scene.layers.forEach(l => {
+      if (gone.has(l.id) || !l.parent || !gone.has(l.parent)) return;
+      const p = FM.layerById(FM.scene, l.parent);
+      const half = (p && p.splitOf) ? FM.scene.layers.find(s => s !== p && !gone.has(s.id) && s.splitOf === p.splitOf && covers(s)) : null;
+      const to = half ? half.id : lift(l.parent);
+      todo.push({ l: l, to: to, half: !!half, plan: planParentBake(l, to, t) });
+    });
+    const moved = [], unbaked = [];
+    todo.forEach(o => {
+      if (o.plan) { o.plan.apply(); if (o.plan.moving && !o.half) moved.push(o.l); }
+      else if (o.l.transform) unbaked.push(o.l);   // no transform = nothing on screen to keep
+      o.l.parent = o.to;
+    });
+    const names = ls => '“' + (ls[0].name || 'Layer') + '”' + (ls.length > 1 ? ' and ' + (ls.length - 1) + ' more' : '');
+    const notes = [];
+    if (moved.length) notes.push(names(moved) + ' followed a layer that moves — kept where ' + (moved.length > 1 ? 'they are' : 'it is') + ' now, without that motion');
+    if (unbaked.length) notes.push(names(unbaked) + ' could not keep ' + (unbaked.length > 1 ? 'their' : 'its') + ' place — a keyframed path cannot be turned onto the layer above without changing it');
+    return notes.join('. ');
+  }
+
   FM.deleteSelected = function () {
     const sel = FM.selectionIds(); if (!sel.length) return;
     // Tear down any open overlay tool first (deleteLayer already does) — Delete during crop/point-edit
@@ -2972,6 +3022,7 @@ window.FM = window.FM || {};
     // registry entry or its IDB blob: undo restores the layer JSON, and a wiped blob = permanently
     // blank clip + lost footage (same fix as deleteLayer). Orphans are reaped by the boot sweep.
     set.forEach(id => { const m = FM.media.get(id); if (m) { if (m.el) { try { m.el.pause(); m.el.muted = true; } catch (e) {} } FM.clearFrameCache(m); if (FM.clearClipStrip) FM.clearClipStrip(m); if (FM.audioFxLive) FM.audioFxLive.release(id); } });
+    const rehomed = rehomeOrphans(set);   // queue 914.13: BEFORE the filter — the bake reads the dead parents' frames
     FM.scene.layers = FM.scene.layers.filter(l => !set.has(l.id));
     /* …and if the group you were INSIDE was in that set, leave it. deleteLayer already validates this
      * and so does history.restore on undo; deleteSelected did not, and Select All inside a group
@@ -2994,6 +3045,7 @@ window.FM = window.FM || {};
     if (FM.playing && FM.audioPlay) { FM.audioPlay.stop(); FM.audioPlay.start(); }
     FM.refreshAll();   // FM.* (not the local) so the mobile wrapper runs → deleting the last layer drops the sheet (#13)
     if (FM.history) FM.history.commit();
+    if (rehomed && FM.toast) FM.toast('Deleted. ' + rehomed, 5000);
   };
 
   FM.deleteLayer = function (id, _nested) {
@@ -3018,6 +3070,15 @@ window.FM = window.FM || {};
     // each member's media/audio teardown runs through this same path — but refresh/undo commit
     // only once, at the outermost call (one Ctrl+Z restores the whole group). (#r7)
     const target = FM.scene.layers.find(l => l.id === id);
+    /* queue 914.13: the children of anything this delete removes keep their place — see rehomeOrphans. Once, at
+       the outermost call and before the cascade: the set is the layer plus a group's whole subtree, exactly what
+       the cascade below removes. */
+    let rehomed = '';
+    if (!_nested) {
+      const gone = new Set([id]);
+      if (target && target.type === 'group' && FM.groupDescendants) FM.groupDescendants(id).forEach(d => gone.add(d.id));
+      rehomed = rehomeOrphans(gone);
+    }
     if (target && target.type === 'group') {
       FM.scene.layers.filter(l => l.parent === id).forEach(child => FM.deleteLayer(child.id, true));
     }
@@ -3041,6 +3102,7 @@ window.FM = window.FM || {};
     if (!FM.scene.selectedIds.length && FM.scene.selectedId) FM.scene.selectedIds = [FM.scene.selectedId];
     FM.refreshAll();   // FM.* (not the local) so the mobile wrapper runs → deleting the last layer drops the sheet (#13)
     if (FM.history) FM.history.commit();
+    if (rehomed && FM.toast) FM.toast('Deleted. ' + rehomed, 5000);
   };
 
   // An EMPTY group (Add → Elements). Grouping otherwise requires selecting two layers first, so there
@@ -3554,8 +3616,25 @@ window.FM = window.FM || {};
     });
     if (layer.karaokeOf && idMap[layer.karaokeOf]) layer.karaokeOf = idMap[layer.karaokeOf];
   };
+  /* queue 914.8: HALVES COPIED TOGETHER STAY HALVES OF EACH OTHER. FM.cloneLayer drops `splitOf`, so a copy can
+     never join the ORIGINAL's split — but duplicating or pasting a whole rig (both halves of a split parent and
+     the layer hung on it) then left the copied child following only the copied HEAD half, frozen at the cut.
+     Copies whose sources shared a lineage get one of their own, named after the first of them; a half copied
+     alone gets none, which is exactly an unsplit clip. `pairs` is [{ src, copy }]. */
+  FM.relinkSplitCopies = function (pairs) {
+    const by = new Map();
+    (pairs || []).forEach(p => {
+      if (!p || !p.src || !p.src.splitOf || !p.copy) return;
+      if (!by.has(p.src.splitOf)) by.set(p.src.splitOf, []);
+      by.get(p.src.splitOf).push(p.copy);
+    });
+    by.forEach(cs => { if (cs.length > 1) cs.forEach(c => { c.splitOf = cs[0].id; }); });
+  };
 
   FM.duplicateLayer = async function (id, inPlace) {
+    /* queue 914.14: cleared FIRST, so a refused or failed duplicate cannot hand duplicateSelection the map left
+       over from the last one — it used to be merged into the batch and re-pointed an OLD copy's links. */
+    FM._lastDupMap = null;
     const src = FM.layerById(FM.scene, id);
     if (!src) return;
     if (src.type === 'camera') { if (FM.toast) FM.toast('Scene already has a camera'); return; }   // single-camera invariant — a 2nd (offset) camera would hijack the view
@@ -3569,13 +3648,15 @@ window.FM = window.FM || {};
     if (src.type === 'group' && FM.groupDescendants) {
       // a group is just a parent link — duplicating ONLY the group row made an empty invisible group.
       // Clone its whole subtree with fresh ids and remap parents through an idMap (like pasteClipboard).
-      const idMap = dupMap;
+      const idMap = dupMap, pairs = [];
       for (const d of FM.groupDescendants(id)) {
         const dc = FM.cloneLayer(d, true);   // plain copy — the group offset already moved the block
         idMap[d.id] = dc.id;
         await reloadMediaTo(d.id, dc.id);
         inserts.push(dc);
+        pairs.push({ src: d, copy: dc });
       }
+      FM.relinkSplitCopies(pairs);           // queue 914.8: both halves of a split inside the group stay halves
       inserts.forEach(l => {
         if (l.parent && idMap[l.parent]) l.parent = idMap[l.parent];
         // follow.targetId / audio.sourceId that point INSIDE the duplicated subtree must follow it —
@@ -3602,6 +3683,7 @@ window.FM = window.FM || {};
     FM.seekVideosToTime();
     if (FM.history) FM.history.commit();
     if (FM.storage && FM.storage.save) FM.storage.save();   // persist the duplicated layer's media blob immediately
+    return copy.id;   // queue 914.14: what was MADE — undefined when refused, so a caller cannot count a refusal as a copy
   };
 
   // Duplicate EVERY selected layer, not just the primary (Ezra: "when I selected multiple stuff I
@@ -3630,9 +3712,14 @@ window.FM = window.FM || {};
     if (hist && hist.mute) hist.mute();
     try {
       for (const id of todo) {
-        await FM.duplicateLayer(id, inPlace);
+        /* ⚠️ queue 914.14: COUNT WHAT WAS MADE, NOT WHAT IS SELECTED. A camera is refused (one per scene) and
+           leaves the selection alone — and Select All puts the camera first, so the selection it left was the
+           CAMERA ITSELF. It was pushed as a "copy": the toast said 3 for 2, and the original camera stayed in
+           the new selection, so his next move or delete took it too (#912 audit). */
+        const made1 = await FM.duplicateLayer(id, inPlace);
+        if (!made1) continue;
         Object.assign(batch, FM._lastDupMap || {});
-        if (FM.scene.selectedId && made.indexOf(FM.scene.selectedId) < 0) made.push(FM.scene.selectedId);
+        made.push(made1);
       }
     } finally { if (hist && hist.unmute) hist.unmute(); }
     /* THE WHOLE BATCH AT ONCE, once every copy exists. A per-layer pass cannot do this: when layer A is
@@ -3641,10 +3728,11 @@ window.FM = window.FM || {};
      * and a copy id is never a key in the batch map. */
     const copyIds = new Set(Object.keys(batch).map(k => batch[k]));
     FM.scene.layers.forEach(l => { if (copyIds.has(l.id)) FM.remapLayerRefs(l, batch); });
+    FM.relinkSplitCopies(Object.keys(batch).map(k => ({ src: FM.layerById(FM.scene, k), copy: FM.layerById(FM.scene, batch[k]) })));   // queue 914.8
     if (made.length) { FM.scene.selectedIds = made; FM.scene.selectedId = made[made.length - 1]; }
     FM.refreshAll();
     if (FM.history) FM.history.commit();
-    if (FM.toast) FM.toast('Duplicated ' + made.length + ' layers', 1600);
+    if (FM.toast && made.length) FM.toast('Duplicated ' + made.length + (made.length === 1 ? ' layer' : ' layers'), 1600);
   };
 
   // ---- copy / paste layers (in-memory clipboard; survives across the session) ----
@@ -3686,6 +3774,7 @@ window.FM = window.FM || {};
       idMap[entry.snapshot.id] = copy.id;
       return { copy, entry };
     });
+    FM.relinkSplitCopies(copies.map(c => ({ src: c.entry.snapshot, copy: c.copy })));   // queue 914.8
     // Paste at the PLAYHEAD (like AM) instead of back on the source clip's original time.
     // Anchor the earliest copied clip to the playhead and keep the relative offsets between
     // clips that were copied together. autoFitDuration (via refreshAll) grows the timeline if
@@ -4045,8 +4134,13 @@ window.FM = window.FM || {};
     if (Array.isArray(layer.captions)) {
       // captions use LOCAL time (t − layer.start): re-base B's segments to its new start and trim A's to its new length
       const orig = layer.captions;
-      B.captions = orig.map(c => ({ ...c, start: c.start - into, end: c.end - into })).filter(c => c.end > 0.01).map(c => ({ ...c, start: Math.max(0, c.start) }));
-      layer.captions = orig.filter(c => c.start < into - 0.01).map(c => ({ ...c, end: Math.min(c.end, into) }));
+      /* ⚠️ queue 914.12: DEEP copies. `{ ...c }` copied the cue and SHARED everything nested in it — a cue's own
+         effects (queue 834 u3) above all — so the cue that spans the cut had ONE effects array in both halves:
+         retuning the tail's blur retuned the head's, and "Apply to the whole track" emptied both (#912 audit).
+         B is already a deep clone, but its captions are rebuilt from the ORIGINAL cues here, so it needs its own. */
+      const own = c => JSON.parse(JSON.stringify(c, FM.jsonReplacer));   // the same copy cloneLayer and undo make
+      B.captions = orig.map(c => ({ ...own(c), start: c.start - into, end: c.end - into })).filter(c => c.end > 0.01).map(c => ({ ...c, start: Math.max(0, c.start) }));
+      layer.captions = orig.filter(c => c.start < into - 0.01).map(c => ({ ...own(c), end: Math.min(c.end, into) }));
     }
     // DIVIDE keyframes at the split (times are absolute): A keeps t ≤ split, B keeps t ≥ split, each
     // getting a boundary keyframe holding the interpolated value so the ENDPOINT value is seamless
@@ -6012,7 +6106,7 @@ window.FM = window.FM || {};
         // SEE which layer you're pasting above, not just read a name
         FM.scene.layers.forEach((L, i) => items.push({ label: 'Above: ' + (L.name || L.type || 'layer'), iconEl: mkThumb(L), action: () => FM.pasteClipboard(i) }));
         items.push({ label: 'At the bottom', iconEl: mkGlyph('⤓'), action: () => FM.pasteClipboard(FM.scene.layers.length) });
-        FM.contextMenu.show(Math.max(8, r.right - 240), r.bottom + 4, items);
+        FM.contextMenu.show(Math.max(8, r.right - 240), r.bottom + 4, items, { right: r.right, above: r.top });   // queue 918.10: under its button
       };
       /* ---- OUR OWN MENU, NOT ALIGHT MOTION'S (queue 437) --------------------------------------
        * Ezra, unprompted: "With this drop down menu also re order the buttons in it because it's the
@@ -6035,6 +6129,7 @@ window.FM = window.FM || {};
        *
        * "Paste look…" rather than "Paste Style…" pairs it with "Save look as preset" — one word for
        * one idea, where AM had two. */
+      // queue 918.10: the menu's right edge goes under the button's (it is ~152px wide, not the 200 guessed here)
       FM.contextMenu.show(Math.max(8, r.right - 200), r.bottom + 4, [
         { label: 'Select all layers', action: () => { if (FM.selectAll) FM.selectAll(); } },
         { sep: true },
@@ -6052,7 +6147,7 @@ window.FM = window.FM || {};
         { sep: true },
         { label: 'Save look as preset', disabled: !hasSel, action: () => FM.savePresetPrompt() },
         { label: 'Save as element…', disabled: !hasSel, action: () => FM.saveElementPrompt() },
-      ]);
+      ], { right: r.right, above: r.top });
     });
     // ⛶ → toggle AM's right-side VIEW toolbar (fit · grid · layers · camera · canvas zoom).
     const amFitBtn = document.getElementById('btn-amfit');

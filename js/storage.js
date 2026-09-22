@@ -1403,6 +1403,12 @@ window.FM = window.FM || {};
     sanitizeImportedLayers(out);
     out.forEach(l => { map[l.id] = newId('l'); l.id = map[l.id]; });
     out.forEach(l => { if (l.parent) l.parent = map[l.parent] || null; });
+    /* queue 914.8: the SPLIT LINEAGE is a cross-layer ref too. It is a plain string shared by the halves, so an
+       element inserted twice gave both copies the same one — and FM.clipAt then let a child in one copy follow a
+       half from the OTHER, flying off with it when that copy was moved. Renamed consistently per batch, so
+       halves that arrive together stay halves of each other and nothing already in the scene can join them. */
+    const lin = Object.create(null);
+    out.forEach(l => { if (l.splitOf) { if (!lin[l.splitOf]) lin[l.splitOf] = l.id; l.splitOf = lin[l.splitOf]; } });
     // Behaviors carry CROSS-LAYER id refs (follow.targetId, audio.sourceId). Remap them through the same
     // table or a follow/audio-drive silently dies in every shared/imported copy (the id points at the
     // source project's layer). map is null-proto, so a bogus id can't resolve to a prototype key.

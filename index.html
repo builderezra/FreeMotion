@@ -39,8 +39,8 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=708">
-<link rel="stylesheet" href="theme-glass.css?v=55">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
+<link rel="stylesheet" href="styles.css?v=709">
+<link rel="stylesheet" href="theme-glass.css?v=56">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
      v6.79 changed this to #000 and v6.80 to the app ground, both chasing a bar that turned out to be
@@ -260,7 +260,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v16.78</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v16.79</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -415,7 +415,11 @@
           <div id="pause-fx" aria-hidden="true"><svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor"><rect x="7" y="5" width="3.6" height="14" rx="1.2"/><rect x="13.4" y="5" width="3.6" height="14" rx="1.2"/></svg></div>
           <div id="drop-hint">
             <div class="dh-icon"><svg viewBox="0 0 24 24" width="54" height="54" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><!-- v5.92. Ezra: "this shape looks a little shitty, fix it up so the lines aren't going through." The clapstick was an OPEN path forming a wedge 4.5 thick at the hinge and 1.5 at the tip, and the three stripes were fixed-length diagonals that fitted neither end of it: measured against the wedge, all three overshot its TOP edge by ~1.0, and two crossed BELOW y=9 into the board — the third started at y=9.6, i.e. entirely inside it. Now the clapstick is a CLOSED bar of constant 3.6 thickness and the stripes are inset 0.8 from both of its edges, so nothing can protrude at either end. Declaration order is load-bearing, as it was for the Template icon: stripes first, bar over their ends, board last. --><path d="M7.55 7.5 7.28 5.53M12.0 6.9 11.73 4.93M16.44 6.3 16.18 4.33"/><path d="M3.2 8.9 21 6.5 20.52 2.93 2.72 5.33Z"/><path d="M3 9h18v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg></div>
-            <div>Drag a video or image here<br>or click <b>Import media</b></div>
+            <div class="dh-pc">Drag a video or image here<br>or click <b>Import media</b></div>
+            <!-- The phone has neither drag-and-drop nor an "Import media" button (queue 917 finding 14); what
+                 it has is the big + filling the timeline right under the canvas. Swapped by styles.css at
+                 the phone breakpoint — the same width everything else in the phone layout keys off. -->
+            <div class="dh-phone">Tap <b>+</b> below to add<br>a video or image</div>
           </div>
         </div>
         <!-- AM-style right-side VIEW toolbar (toggled by the ⛶ button): fit · layers · camera · canvas zoom · toggles.
@@ -1017,7 +1021,7 @@
   <script src="js/settings.js?v=38"></script>
   <script src="js/statusbar.js?v=1"></script>
   <script src="js/screen.js?v=1"></script>
-  <script src="js/scene.js?v=114"></script>
+  <script src="js/scene.js?v=115"></script>
   <script src="js/eases.js?v=3"></script>
   <script src="js/masks.js?v=4"></script>
   <script src="js/behaviors.js?v=5"></script>
@@ -1030,13 +1034,13 @@
   <script src="js/filters.js?v=17"></script>
   <script src="js/fx-presets.js?v=11"></script>
   <script src="js/fx-thumbs.js?v=50"></script>
-  <script src="js/timeline.js?v=249"></script>
+  <script src="js/timeline.js?v=250"></script>
   <script src="js/addmenu.js?v=78"></script>
-  <script src="js/inspector.js?v=386"></script>
+  <script src="js/inspector.js?v=387"></script>
   <script src="js/fx-browser.js?v=92"></script>
   <script src="js/elements-browser.js?v=3"></script>
   <script src="js/color-wheel.js?v=53"></script>
-  <script src="js/canvas-edit.js?v=115"></script>
+  <script src="js/canvas-edit.js?v=116"></script>
   <script src="js/notepad.js?v=6"></script>
   <script src="js/popfrom.js?v=10"></script>
   <script src="js/draw-tool.js?v=34"></script>
@@ -1055,23 +1059,23 @@
   <script src="js/audio-fx-live.js?v=7"></script>
   <script src="js/audio-fx-browser.js?v=11"></script>
   <script src="js/history.js?v=32"></script>
-  <script src="js/storage.js?v=45"></script>
+  <script src="js/storage.js?v=46"></script>
   <script src="js/export-resume.js?v=7"></script>
   <script src="js/medialib.js?v=6"></script>
   <script src="js/template-fill.js?v=3"></script>
-  <script src="js/home.js?v=177"></script>
+  <script src="js/home.js?v=178"></script>
   <script src="js/graph-editor.js?v=17"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
   <script src="js/exporter.js?v=120"></script>
   <script src="js/sample.js?v=10"></script>
-  <script src="js/contextmenu.js?v=45"></script>
+  <script src="js/contextmenu.js?v=46"></script>
   <script src="js/ask.js?v=1"></script>
   <script src="js/shortcuts.js?v=82"></script>
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=54"></script>
   <script src="js/audio-health.js?v=6"></script>
-  <script src="js/app.js?v=441"></script>
+  <script src="js/app.js?v=442"></script>
   <script src="js/audio-tools.js?v=6"></script>
   <script src="js/loading.js?v=3"></script>
   <script src="js/sfx.js?v=14"></script>

@@ -1283,6 +1283,10 @@ window.FM = window.FM || {};
     more.addEventListener('click', (ev) => {
       ev.stopPropagation();
       const r = more.getBoundingClientRect();
+      /* `{ right, above }` at the end of this call (queue 918.13), and on the template / element / draft ⋯
+         below: the menu hangs under the ⋯, right edge to right edge, at every window width (or sits above
+         it when there is no room below). It opened from the dot's LEFT edge and hung 106px past the card
+         column at 1280, and the `innerWidth - 210` clamp put it somewhere else again at 900. */
       FM.contextMenu.show(Math.min(r.left, window.innerWidth - 210), r.bottom + 4, [
         { label: 'Open', action: () => openProject(p.id) },
         pinMenuItem('projects', p.id),
@@ -1349,7 +1353,7 @@ window.FM = window.FM || {};
           if (!await FM.ask({ title: 'Delete project', message: 'Delete "' + (p.name || 'Untitled') + '"? This cannot be undone.', ok: 'Delete', danger: true })) return;
           await FM.projects.remove(p.id); render();
         } },
-      ]);
+      ], { right: r.right, above: r.top });
     });
     const body = el('div', 'hm-body');
     body.appendChild(name); body.appendChild(meta); body.appendChild(sub);
@@ -1727,7 +1731,7 @@ window.FM = window.FM || {};
         pinMenuItem('templates', t.id),
         { sep: true },
         { label: 'Delete template…', danger: true, action: async () => { if (!await FM.ask({ title: 'Delete template', message: 'Delete template "' + t.name + '"?', ok: 'Delete', danger: true })) return; await FM.templates.remove(t.id); render(); } },
-      ]);
+      ], { right: r.right, above: r.top });
     });
     more.setAttribute('aria-label', 'Template actions');
     /* ⚠️ TAPPING A TEMPLATE NOW EDITS THAT TEMPLATE (queue 505 clause 4). Ezra, 1 Sep: "The element opens
@@ -1817,7 +1821,7 @@ window.FM = window.FM || {};
         pinMenuItem('elements', e.id),
         { sep: true },
         { label: 'Delete element…', danger: true, action: async () => { if (!await FM.ask({ title: 'Delete element', message: 'Delete element "' + e.name + '"?', ok: 'Delete', danger: true })) return; await FM.elements.remove(e.id); render(); } },
-      ]);
+      ], { right: r.right, above: r.top });
     });
     more.setAttribute('aria-label', 'Element actions');
     /* OPENING AN ELEMENT NOW OPENS IT (queue 342 clause 1). Ezra: *"When you open an element as well in
@@ -1993,7 +1997,7 @@ window.FM = window.FM || {};
           }
           render();
         } },
-      ].filter(Boolean));
+      ].filter(Boolean), { right: r.right, above: r.top });
     });
     /* ⚠️ THE ⋯ IS APPENDED ONLY WHEN NOT SELECTING, exactly as projectCard does it — the tick occupies
        that same corner, and two overlapping controls in one corner on a phone is a coin flip about
