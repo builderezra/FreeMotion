@@ -746,8 +746,9 @@ html[data-home="light"] .hm-note {
    to anything inside it that does not set its own. Nothing is unreadable TODAY only because
    `.hm-selcount` and `.hm-selbtn` each happen to set theirs — the next child added would be invisible.
    Both halves fixed here, and the ink is declared in styles.css so it holds in the dark theme too. */
+/* Opaque (#912): at .96 the + orb parked behind the bar ghosted through between Cancel and Select all. */
 html[data-home="light"] .hm-selbar {
-  background: rgba(248, 250, 253, .96); border-top-color: rgba(16, 30, 52, .12); color: #10151f;
+  background: #f8fafd; border-top-color: rgba(16, 30, 52, .12); color: #10151f;
 }
 html[data-home="light"] .hm-selcount { color: #46566e; }
 /* ═══ THE SEARCH BAR ON THE LIGHT HOME (queue 656, v14.43) ═══════════════════════════════════════
@@ -1052,3 +1053,132 @@ html[data-home="light"] .cv-size { color: #10151f; }
 html[data-home="light"] .hm-dlg-actions button.accent {
   background-image: linear-gradient(180deg, #2a97cb, #1780b4);
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   #912 CLAUSE 5 — EVERYTHING HOME OPENS STAYS LIGHT ON THE LIGHT HOME.
+   Ezra, verbatim: *"Make sure light mode and dark mode in the main menu actually do what they are
+   supposed to. Like make sure the settings menu stays light in light mode."*
+   MEASURED before this block, 380x800, light home: Settings was a dark glass panel rgba(12,28,37,.82)
+   with rgb(233,244,247) ink, over a rgba(4,6,10,.62) scrim that turned the white page dark grey. The
+   keyboard-shortcuts card the same. The select bar's buttons were dark navy pills on the light bar,
+   the New project dialog's Custom width/height/fps boxes were dark on the white card, and the top
+   bar carried the dark theme's near-black hairline. Same shape as #864, again: a surface that lives
+   outside #home-screen (.set-scrim and #shortcuts-overlay are appended to <body>) or that the light
+   list simply never named.
+
+   ⚠️ SCOPED TO THE LIGHT HOME BEING *ON SCREEN* — `body.home-open` — NOT TO THE SETTING ALONE.
+   data-home stays "light" inside the editor, and the editor is dark whatever it is set to; Settings
+   and the shortcuts sheet both open from there too. `html[data-home="light"] .set-panel` would have
+   turned the editor's panel white. body.home-open is set and cleared by FM.home.open()/close() —
+   the same on-screen test contextmenu.js makes for .ctx-light, answered by CSS instead of a class, so
+   flipping "New light look" INSIDE the open panel re-themes it live with nothing to re-run.
+
+   HOW: the panel is built on the theme's variables, so it is re-pointed at a light set ON THE SCRIM
+   and everything inside inherits them; then the handful of colours the glass theme hard-codes are
+   overridden by name. Every value is one the light home already uses — the #f7f9fc paper, the white
+   cards, #10151f ink, #5a6478 hints, the rgba(16,30,52,x) lines, #hm-dialog's veil, .ctx-light's red.
+   ⚠️ background-COLOR wherever the glass theme paints a sheen in background-IMAGE (see the notes above).
+   ══════════════════════════════════════════════════════════════════════════════════════════════ */
+html[data-home="light"] body.home-open .set-scrim,
+html[data-home="light"] body.home-open #shortcuts-overlay {
+  --panel: #f7f9fc;
+  --panel-2: rgba(16, 30, 52, .035);
+  --panel-3: rgba(16, 30, 52, .06);
+  --line: rgba(16, 30, 52, .12);
+  --line-soft: rgba(16, 30, 52, .08);
+  --text: #10151f;
+  --text-dim: #5a6478;
+  --text-faint: #7d8798;
+  --glass-tint-strong: rgba(247, 249, 252, .96);
+  --glass-rim: rgba(255, 255, 255, .9);
+  --glass-rim-soft: rgba(16, 30, 52, .10);
+  color: #10151f;
+  color-scheme: light;   /* native bits — the select's list, the colour well, the scrollbar — follow */
+}
+/* The veil #hm-dialog uses, not a blackout. */
+html[data-home="light"] body.home-open .set-scrim.open { background: rgba(20, 38, 56, .34); }
+/* The panel is pinned to the left edge, so its shadow falls to the right — the same slate as the cards'. */
+html[data-home="light"] body.home-open .set-panel { box-shadow: 14px 0 44px -20px rgba(16, 30, 52, .45); }
+/* Groups are the home's own cards: white on the paper, the same rim and the same soft drop. */
+html[data-home="light"] body.home-open .set-group {
+  background-image: none;
+  background-color: rgba(255, 255, 255, .9);
+  border-color: rgba(16, 30, 52, .10);
+  box-shadow: 0 1px 2px rgba(16, 30, 52, .05);
+}
+html[data-home="light"] body.home-open .set-row + .set-row { border-top-color: rgba(16, 30, 52, .08); }
+/* The ✕ is the header's round search button in the light look. */
+html[data-home="light"] body.home-open .set-close {
+  background-color: rgba(255, 255, 255, .82); border-color: rgba(16, 30, 52, .12); color: #23304a;
+  box-shadow: 0 1px 2px rgba(16, 30, 52, .06);
+}
+/* A switch that is OFF needs a track you can see: at the fields' .06 the white knob sat on white. */
+html[data-home="light"] body.home-open .set-switch:not(.on) { background: rgba(16, 30, 52, .13); border-color: rgba(16, 30, 52, .08); }
+html[data-home="light"] body.home-open .set-knob { box-shadow: 0 1px 3px rgba(16, 30, 52, .35); }
+/* Action buttons and the select are #hm-dialog's fields and Cancel: the card's paper, one step down. */
+html[data-home="light"] body.home-open .set-action:not(:disabled),
+html[data-home="light"] body.home-open .set-select {
+  background-color: rgba(16, 30, 52, .05); border-color: rgba(16, 30, 52, .14); color: #10151f;
+}
+html[data-home="light"] body.home-open .set-action:not(:disabled):hover { border-color: rgba(23, 128, 180, .8); }
+/* DANGER STAYS THE DESTRUCTIVE ONE — .ctx-light's red (5.9:1 on paper). #ff8a8a is a salmon picked to glow
+   on near-black and reads as disabled on white. :not(:disabled) because an empty Clear drops its red on
+   purpose (styles.css) and this rule outranks that reset. */
+html[data-home="light"] body.home-open .set-action.danger:not(:disabled) {
+  color: #c62740; background-color: rgba(198, 39, 64, .08); border-color: rgba(198, 39, 64, .35);
+}
+html[data-home="light"] body.home-open .set-action.danger:not(:disabled):hover {
+  color: #b01f37; background-color: rgba(198, 39, 64, .14); border-color: rgba(198, 39, 64, .55);
+}
+/* The report boxes: a quiet well inside the white card, with ink that still reads at 11px. */
+html[data-home="light"] body.home-open .set-perf-out { background: #f3f5f9; border-color: rgba(16, 30, 52, .10); color: #46566e; }
+
+/* THE KEYBOARD SHORTCUTS SHEET — the same variables, set on its overlay above; the veil and card below.
+   Its Close is hard-coded #0c1c25 by this file (the sticky footer needed an opaque fill of its own), so
+   it is named here. `:not(.shortcuts-tut)` because this selector outranks the Tutorials button's (0,4,0)
+   accent fill and would otherwise paint over it. */
+html[data-home="light"] body.home-open #shortcuts-overlay { background: rgba(20, 38, 56, .34); }
+html[data-home="light"] body.home-open .shortcuts-card {
+  background-color: rgba(255, 255, 255, .96);
+  border-color: rgba(16, 30, 52, .12);
+  box-shadow: 0 1px 2px rgba(16, 30, 52, .06), 0 26px 60px -26px rgba(16, 30, 52, .6);
+}
+html[data-home="light"] body.home-open .shortcuts-foot { background: #f7f9fc; border-top-color: rgba(16, 30, 52, .10); }
+html[data-home="light"] body.home-open .shortcuts-card .btn:not(.shortcuts-tut) {
+  background: rgba(16, 30, 52, .05); border-color: rgba(16, 30, 52, .14); color: #10151f;
+}
+
+/* Devices without backdrop-filter get the solid version of the same light surfaces. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  html[data-home="light"] body.home-open .set-panel { background: #f7f9fc; }
+  html[data-home="light"] body.home-open .shortcuts-card { background: #ffffff; }
+}
+
+/* TOASTS ON THE LIGHT HOME. styles.css lifts #toast above #home-screen while it is up (it was painted
+   under it in both looks); on paper it is the white card with the app's blue rim, not a dark slab. */
+html[data-home="light"] body.home-open #toast {
+  background: #ffffff; color: #10151f; border-color: rgba(23, 128, 180, .55);
+  box-shadow: 0 1px 2px rgba(16, 30, 52, .06), 0 14px 32px -12px rgba(16, 30, 52, .45);
+}
+
+/* THE SELECT BAR'S BUTTONS. The bar went light in #649; its buttons kept --panel-2 and --text, so they
+   were dark navy pills on it, and Delete was #ff8a8a — faint pink that read as disabled while it was live. */
+html[data-home="light"] .hm-selbtn {
+  background-color: rgba(16, 30, 52, .05); border-color: rgba(16, 30, 52, .14); color: #10151f;
+}
+html[data-home="light"] .hm-selbtn.danger {
+  background-color: rgba(198, 39, 64, .08); border-color: rgba(198, 39, 64, .40); color: #c62740;
+}
+
+/* NEW PROJECT › CUSTOM. The three number boxes (width, height, custom fps) are .cv-num from the editor's
+   Canvas dialog, which the #864 field list above never named — so they were the dark theme's boxes on
+   the white card. The same paper-one-step-down as the name field beside them. */
+html[data-home="light"] #hm-dialog .cv-num {
+  background-color: rgba(16, 30, 52, .045); border-color: rgba(16, 30, 52, .14); color: #10151f;
+}
+html[data-home="light"] #hm-dialog .cv-num:focus { border-color: rgba(23, 128, 180, .8); }
+
+/* THE TOP BAR'S BOTTOM EDGE. The glass rule gives .hm-top `border-bottom: 1px solid var(--line-soft)`,
+   #122029 — the dark theme's hairline — and the light .hm-top rule never overrode it, so the white bar
+   carried a near-black line round its rounded corners. The cards' own light rim instead. */
+html[data-home="light"] .hm-top { border-bottom-color: rgba(16, 30, 52, .10); }

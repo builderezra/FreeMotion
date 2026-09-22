@@ -49621,8 +49621,15 @@
     const status = document.getElementById('export-status');
     if (!toast || !overlay) throw new Error('#toast or #export-overlay is not in the document');
     /* THE PREMISE, asserted rather than assumed — if the toast ever WERE above the overlay this whole
-       fix would be unnecessary, and a test that did not check would quietly guard nothing. */
-    const tz = parseInt(getComputedStyle(toast).zIndex, 10);
+       fix would be unnecessary, and a test that did not check would quietly guard nothing.
+       Read in the EDITOR's state (#912): on Home the toast is lifted to 205 so it clears #home-screen,
+       and the export overlay never shows over Home (Home's Export video… opens the project first). So
+       body.home-open is set aside for the one reading, whichever screen the suite happens to be on. */
+    const homeUp = document.body.classList.contains('home-open');
+    if (homeUp) document.body.classList.remove('home-open');
+    let tz;
+    try { tz = parseInt(getComputedStyle(toast).zIndex, 10); }
+    finally { if (homeUp) document.body.classList.add('home-open'); }
     const oz = parseInt(getComputedStyle(overlay).zIndex, 10);
     if (isFinite(tz) && isFinite(oz) && tz > oz)
       throw new Error('#toast (' + tz + ') is now ABOVE #export-overlay (' + oz + ') — that breaks the ' +
@@ -65433,6 +65440,266 @@
       if (was == null) html.removeAttribute('data-home'); else html.setAttribute('data-home', was);
       try { if (wasOpen && !FM.home.isOpen()) FM.home.open(); else if (!wasOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
       await sleep(120);
+    }
+  });
+
+  /* ══ #912 clause 5 — LIGHT AND DARK ON THE MAIN MENU DO WHAT THEY SAY ═══════════════════════════════
+   * Ezra: "Make sure light mode and dark mode in the main menu actually do what they are supposed to.
+   * Like make sure the settings menu stays light in light mode."
+   * Every surface Home opens was measured (audits/912-audit.json → theme-home). These hold the ones that were
+   * wrong: Settings and the shortcuts sheet (dark on the light Home — and they must STAY dark in the editor,
+   * where data-home is still "light"), toasts (painted UNDER Home in both looks), the select bar's buttons,
+   * New project's Custom fields, the top bar's hairline, and the Playback quality row that ran off its card
+   * at 380. Colours are read as luminance, so "light" is a number and not a colour name, and translucent
+   * surfaces are composited over what they sit on before they are judged. */
+  const lum912 = (c) => { const m = String(c).match(/[\d.]+/g).map(Number);
+    const f = m.slice(0, 3).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+    return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2]; };
+  const ratio912 = (a, b) => { const x = lum912(a), y = lum912(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  const over912 = (fg, back) => { const a = String(fg).match(/[\d.]+/g).map(Number), b = String(back).match(/[\d.]+/g).map(Number);
+    const al = a.length > 3 ? a[3] : 1;
+    return 'rgb(' + [0, 1, 2].map(i => Math.round(a[i] * al + b[i] * (1 - al))).join(',') + ')'; };
+  const PAPER912 = 'rgb(244,246,250)';   // the light Home's own ground (theme-glass.css #home-screen)
+  const sleep912 = ms => new Promise(r => setTimeout(r, ms));
+  const lastPanel912 = () => { const all = document.querySelectorAll('.set-scrim .set-panel'); return all[all.length - 1] || null; };
+
+  test('912 Settings from the light Home is a light panel, flips live with its own switch, and stays dark in the editor', { item: '912' }, async function () {
+    const html = document.documentElement;
+    if (!FM.settings || !FM.settings.open || !FM.home || !FM.home.open) throw new Error('FM.settings or FM.home missing');
+    const was = html.getAttribute('data-home'), wasOpen = FM.home.isOpen(), wasLight = FM.settings.get('homeLight');
+    let cleared = null;
+    try {
+      FM.settings.set('homeLight', true);
+      if (!FM.home.isOpen()) { FM.home.open(); await sleep912(240); }
+      if (!document.body.classList.contains('home-open')) throw new Error('setup: Home is open but body.home-open is not set — the light look has nothing to key on');
+      FM.settings.open(); await sleep912(340);
+      const p = lastPanel912();
+      if (!p) throw new Error('setup: Settings did not open');
+      const scrimBg = getComputedStyle(p.parentNode).backgroundColor;
+      const behind = over912(scrimBg, PAPER912);
+      if (lum912(behind) < 0.3) throw new Error('the scrim turns the white Home to ' + behind + ' (' + scrimBg + ') — a blackout, not the veil #hm-dialog uses');
+      const bg = getComputedStyle(p).backgroundColor, ink = getComputedStyle(p).color;
+      const surf = over912(bg, behind);
+      if (lum912(surf) < 0.8) throw new Error('on the LIGHT Home the Settings panel is ' + bg + ' (' + surf + ' as seen) — his words: "make sure the settings menu stays light in light mode"');
+      if (ratio912(ink, surf) < 12) throw new Error('the panel ink is ' + ink + ' on ' + surf + ' (' + ratio912(ink, surf).toFixed(2) + ':1) — light ink survived onto the light panel');
+      const group = p.querySelector('.set-group'), hint = p.querySelector('.set-hint');
+      const act = [].find.call(p.querySelectorAll('.set-action'), b => !b.classList.contains('danger') && !b.disabled);
+      const pre = p.querySelector('.set-perf-out');
+      if (!group || !hint || !act || !pre) throw new Error('setup: the panel has no group / hint / action button / report box to check');
+      const gsurf = over912(getComputedStyle(group).backgroundColor, surf);
+      if (lum912(gsurf) < 0.8) throw new Error('a settings group is ' + gsurf + ' on the light panel — a dark card left inside it');
+      if (ratio912(getComputedStyle(hint).color, gsurf) < 4.5) throw new Error('a hint reads ' + ratio912(getComputedStyle(hint).color, gsurf).toFixed(2) + ':1 on its card — too pale to read');
+      const asurf = over912(getComputedStyle(act).backgroundColor, gsurf);
+      if (lum912(asurf) < 0.7 || ratio912(getComputedStyle(act).color, asurf) < 7) throw new Error('the "' + act.textContent + '" button is ' + getComputedStyle(act).color + ' on ' + asurf + ' — a dark pill on the light panel');
+      const psurf = over912(getComputedStyle(pre).backgroundColor, gsurf);
+      if (lum912(psurf) < 0.7 || ratio912(getComputedStyle(pre).color, psurf) < 4.5) throw new Error('a report box is ' + getComputedStyle(pre).color + ' on ' + psurf + ' — the <pre> stayed dark or its text too pale');
+      // Clear is disabled on an empty library; enabled, it has to read as the destructive one on paper
+      const danger = p.querySelector('.set-action.danger');
+      if (!danger) throw new Error('setup: no danger (Clear) button in the panel to check');
+      cleared = { b: danger, d: danger.disabled }; danger.disabled = false;
+      const dsurf = over912(getComputedStyle(danger).backgroundColor, gsurf), dcol = getComputedStyle(danger).color;
+      const dc = String(dcol).match(/[\d.]+/g).map(Number);
+      if (ratio912(dcol, dsurf) < 4.5 || !(dc[0] > dc[1] + 60 && dc[0] > dc[2] + 60)) throw new Error('an enabled Clear is ' + dcol + ' on ' + dsurf + ' (' + ratio912(dcol, dsurf).toFixed(2) + ':1) — it reads as disabled, not dangerous');
+      danger.disabled = cleared.d; cleared = null;
+
+      /* LIVE: his switch, inside the open panel, re-themes it without closing it. */
+      const row = [].find.call(p.querySelectorAll('.set-row'), r => /New light look/.test(r.textContent));
+      const sw = row && row.querySelector('.set-switch');
+      if (!sw) throw new Error('setup: the New light look switch is not in the panel');
+      sw.click(); await sleep912(60);
+      if (html.getAttribute('data-home') !== 'dark') throw new Error('setup: the switch did not turn the light look off');
+      if (lum912(getComputedStyle(p).backgroundColor) > 0.15) throw new Error('light look switched OFF with Settings open and the panel is still ' + getComputedStyle(p).backgroundColor + ' — it only re-themes on the next open');
+      sw.click(); await sleep912(60);
+      if (lum912(over912(getComputedStyle(p).backgroundColor, behind)) < 0.8) throw new Error('switched back ON and the panel stayed dark (' + getComputedStyle(p).backgroundColor + ')');
+
+      /* THE CONTROL: the same panel, data-home still "light", opened inside the editor. */
+      FM.settings.close(); await sleep912(320);
+      FM.home.close(); await sleep912(300);
+      if (html.getAttribute('data-home') !== 'light') throw new Error('setup: data-home stopped being "light" in the editor — the control no longer tests the leak');
+      if (document.body.classList.contains('home-open')) throw new Error('setup: body.home-open is still set with Home closed');
+      FM.settings.open(); await sleep912(340);
+      const e = lastPanel912();
+      if (!e) throw new Error('setup: Settings did not open in the editor');
+      if (lum912(getComputedStyle(e).backgroundColor) > 0.15) throw new Error('control: Settings opened in the EDITOR is ' + getComputedStyle(e).backgroundColor + ' — the light look leaked out of Home into the dark editor');
+      if (lum912(getComputedStyle(e).color) < 0.6) throw new Error('control: the editor Settings ink is ' + getComputedStyle(e).color + ' — dark ink on the dark panel');
+    } finally {
+      if (cleared) cleared.b.disabled = cleared.d;
+      try { FM.settings.close(); } catch (e) {}
+      await sleep912(300);
+      FM.settings.set('homeLight', wasLight);
+      if (was == null) html.removeAttribute('data-home'); else html.setAttribute('data-home', was);
+      try { if (wasOpen && !FM.home.isOpen()) FM.home.open(); else if (!wasOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep912(150);
+    }
+  });
+
+  test('912 a toast on Home is drawn ON TOP of Home in both looks, and still under its dialogs', { item: '912' }, async function () {
+    const html = document.documentElement, was = html.getAttribute('data-home'), wasOpen = FM.home.isOpen();
+    const t = document.getElementById('toast');
+    if (!t || !FM.toast) throw new Error('#toast or FM.toast missing');
+    try {
+      if (!FM.home.isOpen()) { FM.home.open(); await sleep912(240); }
+      for (const look of ['light', 'dark']) {
+        html.setAttribute('data-home', look);
+        FM.toast('912 probe — backed up 3 projects', 5000); await sleep912(40);
+        const r = t.getBoundingClientRect();
+        if (!(r.width > 0)) throw new Error('setup: the toast has no box');
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        if (!hit || !(hit === t || t.contains(hit)))
+          throw new Error(look + ' Home: at the toast\'s centre the top element is ' + (hit ? (hit.id ? '#' + hit.id : '.' + String(hit.className).split(' ')[0]) : 'nothing') +
+                          ', not the toast (z-index ' + getComputedStyle(t).zIndex + ') — pin, duplicate, import errors and the backup warning all vanish under Home');
+        const z = parseInt(getComputedStyle(t).zIndex, 10), dz = parseInt(getComputedStyle(document.getElementById('hm-dialog')).zIndex, 10);
+        if (!(z < dz)) throw new Error('the toast (' + z + ') is now above #hm-dialog (' + dz + ') — a toast must never sit over a dialog\'s buttons (v5.11)');
+        const tb = getComputedStyle(t).backgroundColor, tc = getComputedStyle(t).color;
+        const seen = over912(tb, look === 'light' ? PAPER912 : 'rgb(6,12,15)');
+        if (look === 'light' && lum912(seen) < 0.8) throw new Error('on the LIGHT Home the toast is ' + tb + ' — a dark slab on paper');
+        if (look === 'dark' && lum912(seen) > 0.2) throw new Error('on the DARK Home the toast turned light (' + tb + ')');
+        if (ratio912(tc, seen) < 7) throw new Error(look + ' Home: toast text ' + tc + ' on ' + seen + ' reads ' + ratio912(tc, seen).toFixed(2) + ':1');
+        FM.hideToast();
+      }
+    } finally {
+      try { FM.hideToast(); } catch (e) {}
+      if (was == null) html.removeAttribute('data-home'); else html.setAttribute('data-home', was);
+      try { if (!wasOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep912(120);
+    }
+  });
+
+  test('912 Settings › Playback quality stays inside its card at 380, and the panel never scrolls sideways', { item: '912' }, async function () {
+    const wasOpen = FM.home.isOpen();
+    const check = async (w) => {
+      if (!FM.home.isOpen()) { FM.home.open(); await sleep912(240); }
+      FM.settings.open(); await sleep912(340);
+      try {
+        const p = lastPanel912(), body = p && p.querySelector('.set-body');
+        if (!body) throw new Error('setup: Settings did not open');
+        const row = [].find.call(p.querySelectorAll('.set-row'), r => /Playback quality/.test(r.textContent));
+        const seg = row && row.querySelector('.set-seg');
+        if (!seg) throw new Error('setup: no Playback quality segmented row');
+        const g = row.closest('.set-group'), gr = g.getBoundingClientRect(), gcs = getComputedStyle(g);
+        const inner = gr.right - parseFloat(gcs.borderRightWidth) - parseFloat(gcs.paddingRight);
+        const sr = seg.getBoundingClientRect();
+        if (sr.right > inner + 0.5) throw new Error('at ' + w + 'px Auto / Smooth / Sharp ends at ' + sr.right.toFixed(1) + ' and its card\'s content ends at ' + inner.toFixed(1) + ' — "Sharp" runs off the card');
+        if (body.scrollWidth > body.clientWidth + 0.5) throw new Error('at ' + w + 'px the Settings body is ' + body.scrollWidth + ' wide in a ' + body.clientWidth + ' box — it scrolls sideways (the grey strip along the bottom)');
+        // …and every other row's control still fits, so the fold did not push something else out
+        [].forEach.call(p.querySelectorAll('.set-row'), r => {
+          [].forEach.call(r.children, c => { if (c.getBoundingClientRect().right > r.getBoundingClientRect().right + 0.5) throw new Error('at ' + w + 'px a control in "' + (r.textContent || '').slice(0, 30) + '" runs past its row'); });
+        });
+      } finally {
+        FM.settings.close(); await sleep912(300);
+      }
+    };
+    try {
+      await atPhoneWidth(() => check(380), 380);
+      await atWideWidth(() => check(1280), 1280);
+    } finally {
+      try { if (!wasOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep912(120);
+    }
+  });
+
+  test('912 on the light Home the select bar buttons, New project Custom fields and the top bar edge are light', { item: '912' }, async function () {
+    const html = document.documentElement, was = html.getAttribute('data-home'), wasOpen = FM.home.isOpen();
+    const home = document.getElementById('home-screen');
+    try {
+      html.setAttribute('data-home', 'light');
+      if (!FM.home.isOpen()) { FM.home.open(); await sleep912(240); }
+      const tab = home.querySelector('.hm-tab[data-tab="projects"]');
+      if (tab && !tab.classList.contains('active')) { tab.click(); await sleep912(120); }
+
+      /* THE TOP BAR'S BOTTOM EDGE — was the dark theme's #122029 round a white bar. */
+      const top = home.querySelector('.hm-top');
+      if (!top) throw new Error('setup: no .hm-top');
+      const edge = over912(getComputedStyle(top).borderBottomColor, 'rgb(255,255,255)');
+      if (getComputedStyle(top).borderBottomStyle !== 'none' && lum912(edge) < 0.6) throw new Error('the light top bar has a ' + getComputedStyle(top).borderBottomColor + ' bottom border — a near-black line round a white bar');
+
+      /* THE SELECT BAR — dark navy pills and a faint pink Delete on the light bar. */
+      const selBtn = document.getElementById('hm-select-btn');
+      if (!selBtn) throw new Error('setup: no Select button');
+      selBtn.click(); await sleep912(120);
+      const bar = document.getElementById('hm-selbar');
+      if (!bar) throw new Error('setup: the select bar did not appear');
+      const barBg = over912(getComputedStyle(bar).backgroundColor, PAPER912);
+      const btns = [].slice.call(bar.querySelectorAll('.hm-selbtn'));
+      if (btns.length < 3) throw new Error('setup: the select bar has ' + btns.length + ' buttons');
+      btns.forEach(b => {
+        const s = over912(getComputedStyle(b).backgroundColor, barBg), c = getComputedStyle(b).color;
+        if (lum912(s) < 0.75) throw new Error('select bar "' + b.textContent + '" is ' + getComputedStyle(b).backgroundColor + ' — a dark pill on the light bar');
+        if (b.classList.contains('danger')) {
+          const k = String(c).match(/[\d.]+/g).map(Number);
+          if (ratio912(c, s) < 4.5 || !(k[0] > k[1] + 60 && k[0] > k[2] + 60)) throw new Error('Delete is ' + c + ' on ' + s + ' (' + ratio912(c, s).toFixed(2) + ':1) — faint pink that reads as disabled');
+        } else if (ratio912(c, s) < 7) throw new Error('select bar "' + b.textContent + '" reads ' + ratio912(c, s).toFixed(2) + ':1');
+      });
+      const cancel = btns.find(b => /cancel/i.test(b.textContent));
+      if (cancel) cancel.click(); else selBtn.click();
+      await sleep912(120);
+
+      /* NEW PROJECT › CUSTOM — the width, height and fps boxes. */
+      const plus = document.getElementById('hm-new');
+      if (!plus) throw new Error('setup: no + button');
+      plus.click(); await sleep912(200);
+      const dlg = document.getElementById('hm-dialog');
+      const custom = dlg && dlg.querySelector('.hm-aspect[data-aspect="custom"]');
+      if (!custom) throw new Error('setup: the New project dialog has no Custom tile');
+      custom.click(); await sleep912(60);
+      const card = dlg.querySelector('.hm-dlg-card');
+      const cardBg = over912(getComputedStyle(card).backgroundColor, PAPER912);
+      const nums = [].slice.call(dlg.querySelectorAll('.cv-num')).filter(n => n.getBoundingClientRect().width > 0);
+      if (!nums.length) throw new Error('setup: Custom shows no number fields');
+      nums.forEach(n => {
+        const s = over912(getComputedStyle(n).backgroundColor, cardBg), c = getComputedStyle(n).color;
+        if (lum912(s) < 0.75 || ratio912(c, s) < 7) throw new Error('New project ' + (n.id || '.cv-num') + ' is ' + c + ' on ' + s + ' — a dark box inside the white card');
+      });
+      const no = dlg.querySelector('.hm-dlg-actions button:not(.accent)');
+      if (no) no.click(); else dlg.classList.add('hidden');
+      await sleep912(120);
+    } finally {
+      try { const b = document.getElementById('hm-selbar'); if (b) { const c = [].find.call(b.querySelectorAll('.hm-selbtn'), x => /cancel/i.test(x.textContent)); if (c) c.click(); } } catch (e) {}
+      try { document.getElementById('hm-dialog').classList.add('hidden'); } catch (e) {}
+      if (was == null) html.removeAttribute('data-home'); else html.setAttribute('data-home', was);
+      try { if (!wasOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep912(120);
+    }
+  });
+
+  test('912 the shortcuts sheet is light over the light Home, does not anchor to the editor ? from Home, and stays dark in the editor', { item: '912' }, async function () {
+    const html = document.documentElement, was = html.getAttribute('data-home'), wasOpen = FM.home.isOpen();
+    if (!FM.shortcuts || !FM.shortcuts.show) throw new Error('FM.shortcuts missing');
+    try {
+      await atWideWidth(async () => {
+        html.setAttribute('data-home', 'light');
+        if (!FM.home.isOpen()) { FM.home.open(); await sleep912(240); }
+        const help = document.getElementById('btn-help');
+        if (!help || !(help.getBoundingClientRect().width > 0)) throw new Error('setup: the editor ? has no box at 1280 with Home up, so the stray-anchor half cannot occur');
+        FM.shortcuts.show(); await sleep912(80);
+        const ov = document.getElementById('shortcuts-overlay'), card = ov && ov.querySelector('.shortcuts-card');
+        if (!card) throw new Error('setup: the shortcuts sheet did not open');
+        if (help.classList.contains('pop-src') || card.classList.contains('pop-card'))
+          throw new Error('from Home the sheet anchored to the EDITOR\'s ? — it lifts that button over Home and points the card\'s tail at a control Home does not have');
+        const behind = over912(getComputedStyle(ov).backgroundColor, PAPER912);
+        if (lum912(behind) < 0.3) throw new Error('the shortcuts scrim turns the light Home to ' + behind);
+        const cs = over912(getComputedStyle(card).backgroundColor, behind);
+        if (lum912(cs) < 0.8) throw new Error('on the LIGHT Home the shortcuts card is ' + getComputedStyle(card).backgroundColor + ' — dark');
+        const key = card.querySelector('.shortcut-key'), desc = card.querySelector('.shortcut-desc');
+        if (ratio912(getComputedStyle(key).color, cs) < 7 || ratio912(getComputedStyle(desc).color, cs) < 4.5) throw new Error('shortcut text is ' + getComputedStyle(key).color + ' / ' + getComputedStyle(desc).color + ' on ' + cs + ' — light ink on the light card');
+        const close = [].find.call(card.querySelectorAll('.shortcuts-foot .btn'), b => !b.classList.contains('shortcuts-tut'));
+        const foot = card.querySelector('.shortcuts-foot');
+        const fs = over912(getComputedStyle(foot).backgroundColor, cs), clos = over912(getComputedStyle(close).backgroundColor, fs);
+        if (lum912(clos) < 0.7 || ratio912(getComputedStyle(close).color, clos) < 7) throw new Error('the shortcuts Close is ' + getComputedStyle(close).color + ' on ' + clos + ' — the hard-coded #0c1c25 pill survived');
+        FM.shortcuts.hide(); await sleep912(40);
+
+        /* THE CONTROL: inside the editor it is the dark sheet it always was. */
+        FM.home.close(); await sleep912(300);
+        if (html.getAttribute('data-home') !== 'light') throw new Error('setup: data-home stopped being "light" in the editor');
+        FM.shortcuts.show(); await sleep912(80);
+        if (lum912(getComputedStyle(card).backgroundColor) > 0.15) throw new Error('control: the shortcuts sheet in the EDITOR is ' + getComputedStyle(card).backgroundColor + ' — the light look leaked into the editor');
+        FM.shortcuts.hide();
+      }, 1280);
+    } finally {
+      try { FM.shortcuts.hide(); } catch (e) {}
+      if (was == null) html.removeAttribute('data-home'); else html.setAttribute('data-home', was);
+      try { if (wasOpen && !FM.home.isOpen()) FM.home.open(); else if (!wasOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep912(150);
     }
   });
 
