@@ -67289,6 +67289,55 @@
   });
 
 
+  /* ── queue 904 [B] the 16 mesh 3D effects: one welded key light ────────────────────────────────────────
+   * Every solid and Page Curl was lit from the same fixed direction; Shading only set how strong. Each now has a
+   * Light from (0 = right, 90 = top — Smooth Bevel's convention). MEASURED, not assumed: the welded vector lights
+   * the UPPER-RIGHT (the code comment said upper-left), so the default is 53 and a saved solid is byte-identical.
+   * Judged on a sphere: the brightest part of the ball sits on the side the light comes from. */
+  test('904 [B] the 3D solids take a light direction, the default is where the light always was, and saved solids are untouched', { item: '904', budgetMs: 30000 }, function () {
+    var T = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX, R = FM.fxRegistry;
+    ['cube3d', 'box3d', 'cylinder3d', 'sphere3d', 'ellipsoid3d', 'torus3d', 'ring3d', 'pyramid3d', 'octahedron3d', 'hexprism3d',
+     'starprism3d', 'starpoly3d', 'heart3d', 'hollowbox3d', 'axiscross3d', 'pagecurl'].forEach(function (ty) {
+      var pd = (R.paramsOf(ty) || []).filter(function (x) { return x.key === 'light'; })[0];
+      if (!pd) throw new Error(ty + ' has no Light from');
+      if (pd.default !== 53) throw new Error(ty + ' Light from defaults to ' + pd.default + ', not 53');
+    });
+    var W = 200, H = 200, bb = { x: 40, y: 40, w: 120, h: 120 };
+    var A = document.createElement('canvas'); A.width = W; A.height = H;
+    var a = A.getContext('2d'); a.fillStyle = '#c8c8c8'; a.fillRect(bb.x, bb.y, bb.w, bb.h);
+    function run(ty, params) {
+      var c = document.createElement('canvas'); c.width = W; c.height = H;
+      var g = c.getContext('2d', { willReadFrequently: true });
+      T[ty](A, g, W, H, bb, Object.assign({ rotx: 0, roty: 0, rotz: 0, shading: 1 }, params), 0, 0);
+      return g.getImageData(0, 0, W, H).data;
+    }
+    function same(P, Q) { for (var i = 0; i < P.length; i++) if (P[i] !== Q[i]) return false; return true; }
+    // brightest 5% of the ball: where is it, relative to the centre (screen y flipped so + is up)?
+    function lit(d) {
+      var v = [], i, x, y;
+      for (i = 0; i < W * H; i++) if (d[i * 4 + 3] > 200) v.push(d[i * 4]);
+      v.sort(function (p, q) { return q - p; });
+      var cut = v[Math.floor(v.length * 0.05)], sx = 0, sy = 0, n = 0;
+      for (y = 0; y < H; y++) for (x = 0; x < W; x++) { i = (y * W + x) * 4; if (d[i + 3] > 200 && d[i] >= cut) { sx += x - 100; sy += 100 - y; n++; } }
+      return Math.atan2(sy / n, sx / n) * 180 / Math.PI;
+    }
+    function off(a1, a2) { var d = Math.abs(((a1 - a2) % 360 + 540) % 360 - 180); return d; }
+    var bad = [];
+    var saved = run('sphere3d', {}), def = run('sphere3d', { light: 53 });
+    if (!same(saved, def)) bad.push('a saved sphere (no light) and one at the default 53 differ — saved projects would change');
+    if (off(lit(saved), 53) > 25) bad.push('the default light sits at ' + lit(saved).toFixed(0) + '°, not upper-right (53°)');
+    [0, 90, 180, 270].forEach(function (L) {
+      var got = lit(run('sphere3d', { light: L }));
+      if (off(got, L) > 25) bad.push('Light from ' + L + '° lit the ball at ' + got.toFixed(0) + '°');
+    });
+    var cs = run('cube3d', { rotx: 25, roty: 35 }), cl = run('cube3d', { rotx: 25, roty: 35, light: 200 });
+    if (same(cs, cl)) bad.push('turning the cube’s light changed nothing');
+    var ps = run('pagecurl', {}), pl = run('pagecurl', { light: 200 });
+    if (same(ps, pl)) bad.push('turning the page curl’s light changed nothing');
+    if (bad.length) throw new Error(bad.join(' · ') + ' (queue 904)');
+  });
+
+
   /* ── queue 904 [B] glowscan: the scan only ever swept DOWN ───────────────────────────────────────────────
    * (Its other half, a strength control, shipped earlier as "Strength".) A scan across a wide title, or upward, was out
    * of reach. Sweeps: Down / Up / Right / Left. Down is the old loop untouched, so a saved scan is byte-identical.
