@@ -87,8 +87,15 @@ window.FM = window.FM || {};
     const ls = clipCutTargets(); if (!ls.length) return false;
     ls.forEach(l => {
       const cut = FM.time - l.start;
+      /* ⚠️ queue 914.2: THE SOURCE CUT AWAY IS MEASURED BEFORE THE HEAD MOVES. layerSourceAdvance integrates the
+         speed curve from `l.start`, and speed keyframes are in absolute project time — so asked AFTER the head
+         had moved, it integrated [new start, new start + cut] instead of the part actually cut away, and on a
+         0.5x → 2x ramp the surviving picture jumped 0.375s of source forward (#912 audit). FM.trimLayerHead and
+         the trim grip both ask first; FM.headSourceDelta is that question. A flat speed gives the same number
+         either way, so only a ramped clip changes. Reversed stays untouched — its head is the window END. */
+      const src = FM.headSourceDelta ? FM.headSourceDelta(l, cut) : (FM.layerSourceAdvance ? FM.layerSourceAdvance(l, cut) : cut * (l.speed || 1));
       l.start = FM.time; l.duration -= cut;
-      if (l.type === 'video' && !l.reversed) l.trimStart = (l.trimStart || 0) + (FM.layerSourceAdvance ? FM.layerSourceAdvance(l, cut) : cut * (l.speed || 1));
+      if (l.type === 'video' && !l.reversed) l.trimStart = (l.trimStart || 0) + src;
       /* ⚠️ queue 817: AND THE CUES COME WITH IT. Caption times are stored LOCAL to the clip, so anything
          that moves `start` has to take the same amount back out of them — the comment on FM.shiftLayerCues
          says "a THIRD caller turned up and had lost it", and this key was the fourth. Without it, trimming
@@ -101,7 +108,19 @@ window.FM = window.FM || {};
   }
   function clipTrimEnd() {
     const ls = clipCutTargets(); if (!ls.length) return false;
-    ls.forEach(l => { l.duration = FM.time - l.start; });
+    ls.forEach(l => {
+      const nd = FM.time - l.start;
+      /* ⚠️ queue 914.3: A REVERSED CLIP'S TAIL IS THE SOURCE WINDOW'S START. It plays
+         `trimStart + (total - adv)`, so shortening `duration` alone shrank `total` and slid every frame that was
+         kept by the amount cut — the first frame was no longer the one he had been looking at (#912 audit). The
+         window's start has to come UP by the source the tail consumed, measured on the real curve before the
+         duration changes: the same rule the right trim grip's `rev` branch and FM.extendClipTo apply. */
+      if (l.type === 'video' && l.reversed) {
+        const gone = FM.speedAdvanceOver ? FM.speedAdvanceOver(l, nd, l.duration) : (l.duration - nd) * (FM.speedAt ? FM.speedAt(l, l.start) : 1);
+        l.trimStart = (l.trimStart || 0) + gone;
+      }
+      l.duration = nd;
+    });
     clipAfterCut(); return true;
   }
   async function clipSplit() {
@@ -150,6 +169,25 @@ window.FM = window.FM || {};
       (l, t) => FM.extendClipTo(l, t),
       (ls, t) => ls.reduce((moved, l) => (FM.extendClipTo(l, t) ? true : moved), false));
   }
+  /* queue 816: a key pressed on a locked clip has to SAY so. Silence would read as the key being
+     broken — and on the phone the rail is hidden in this state, so the keyboard is the only way in. */
+  function sayLocked() {
+    const all = clipToolAll();
+    if (all.length && all.every(l => l.locked) && FM.toast) FM.toast(all.length > 1 ? 'Those clips are locked' : 'That clip is locked', 1600);
+  }
+  /* ═══ THE PHONE'S BUTTONS ARE THESE BODIES TOO (queue 914.1). The phone has no key rail — styles.css hides it
+   * under 700px — so the quick row under a clip and the multi-select "Edit N clips" row are its A / S / D. They
+   * kept their own copies of every body, and each fix that landed here passed them by: a phone Trim-start put
+   * every caption a second late (817), made Drift/Spin jump (823), and trimmed, split and moved a clip he had
+   * LOCKED (816) — all measured by the #912 audit. The buttons call this by NAME rather than by key letter:
+   * each one is drawn for a side of the playhead, and a letter would re-decide the action from wherever the
+   * playhead is at the press. Returns what the body returns (split is async and returns its promise). */
+  function clipOpAction(name) {
+    const body = { trimStart: clipTrimStart, trimEnd: clipTrimEnd, split: clipSplit, move: clipMoveToPlayhead, extend: clipExtendToPlayhead }[name];
+    if (!body) return false;
+    if (!clipToolTargets().length) { sayLocked(); return false; }
+    return body();
+  }
   /* ═══ A / S / D (queue 765, clauses 2–4). His words: "A will be cut all the way to the left and jump to left, S will
    * be split down the middle, D will be Jump to the right. also for the split ones when hovering over a layer they
    * will be the same, but the others will have to change based on what side of the layer u are on. coz a is always
@@ -162,13 +200,7 @@ window.FM = window.FM || {};
    * REQUESTS.md #765 as a question he can correct. Returns true when something changed. */
   function clipKeyAction(k) {
     const targets = clipToolTargets();
-    if (!targets.length) {
-      /* queue 816: a key pressed on a locked clip has to SAY so. Silence would read as the key being
-         broken — and on the phone the rail is hidden in this state, so the keyboard is the only way in. */
-      const all = clipToolAll();
-      if (all.length && all.every(l => l.locked) && FM.toast) FM.toast(all.length > 1 ? 'Those clips are locked' : 'That clip is locked', 1600);
-      return false;
-    }
+    if (!targets.length) { sayLocked(); return false; }
     const side = clipToolSide(targets);
     if (side === 0) {
       if (k === 'a') return clipTrimStart();
@@ -621,6 +653,7 @@ window.FM = window.FM || {};
     if (layer.stroke && layer.stroke.dash) add(layer.stroke.dash, 'offset', 'dash.offset');
     if (layer.repeater) ['copies', 'offsetX', 'offsetY', 'rotation', 'scale', 'opacity'].forEach(k => add(layer.repeater, k, 'repeater.' + k));
     (layer.masks || []).forEach((m, i) => { if (m) add(m, 'path', 'mask.' + i + '.path'); });
+    if (layer.type === 'shape' && layer.subs) add(layer, 'subs', 'subs');   // queue 914.7: Edit Points' keyframed point set — see js/scene.js
     FM.eachFx(layer, (fx, path) => { if (fx.params) Object.keys(fx.params).forEach(k => add(fx.params, k, FM.fxAddr(path, k, 'effect', '.'), fx)); });
     (layer.audioFx || []).forEach((fx, i) => { if (fx && fx.params) Object.keys(fx.params).forEach(k => add(fx.params, k, 'audiofx.' + i + '.' + k, fx)); });
     return out;
@@ -4360,7 +4393,7 @@ window.FM = window.FM || {};
           { label: 'Add camera', action: () => FM.addCameraLayer && FM.addCameraLayer() },
           { label: 'Add sample clip', action: () => FM.addSampleClip && FM.addSampleClip() },
         ];
-        if (FM.clipboard && FM.clipboard.length) menu.push({ label: 'Paste (' + FM.clipboard.length + ')', action: () => FM.pasteClipboard && FM.pasteClipboard() });
+        if (FM.clipboard && FM.clipboard.length) menu.push({ label: 'Paste (' + (FM.clipboard.filter(e => !e.inside).length || FM.clipboard.length) + ')', action: () => FM.pasteClipboard && FM.pasteClipboard() });   // a copied group's members ride along uncounted (queue 914.5)
         if (FM.kfClipboard && FM.kfClipboard.length) menu.push({ label: 'Paste keyframe(s) at playhead', action: () => pasteKfAtPlayhead() });
         menu.push({ sep: true });
         menu.push({ label: 'Import media…', action: () => { FM._wantAudioOnly = false; const fi = document.getElementById('file-input'); if (fi) fi.click(); } });   // ordinary import: say so, or a stale Audio-tab stamp makes this a soundtrack (#686)
@@ -4830,6 +4863,7 @@ window.FM = window.FM || {};
     },
 
     clipKey(k) { return clipKeyAction(k); },   // queue 765: A / S / D from the keyboard (js/app.js) — see clipKeyAction
+    clipOp(name) { return clipOpAction(name); },   // queue 914.1: the phone's quick row and multi-select row — see clipOpAction
     /* THE CLIP KEYS (queue 765 + 772). One rail on the seam, three keycaps, the keyboard's own mapping: clipKeyAction decides what
        A / S / D do from where the playhead is, so the letters never change — only the tooltips and which far-side key is dimmed.
        Replaces syncNudge (the move/extend pair) and syncTrim (the trim/split trio), which floated on the playhead. */

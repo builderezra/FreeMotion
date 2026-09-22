@@ -58,9 +58,9 @@ window.FM = window.FM || {};
    * it only engages on what would have clipped, so ordinary boosts pass through unshaped.
    * The EXPORT gets the identical stage (exporter.js), because a preview that disagrees with the
    * file is the exact failure this whole entry exists to prevent. */
-  function makeBoostStage(ctx) {
-    const gain = ctx.createGain();
-    gain.gain.value = 1;
+  /* The limiter on its own, so the REVERSED preview (audio-play.js) can put the very same one at the end
+   * of its path (queue 916, clause 5) — one definition, not a second copy of five numbers to drift. */
+  function makeLimiter(ctx) {
     const lim = ctx.createDynamicsCompressor();
     try {
       lim.threshold.value = -1.5;    // dBFS — start holding just under the ceiling
@@ -69,6 +69,12 @@ window.FM = window.FM || {};
       lim.attack.value = 0.003;
       lim.release.value = 0.12;
     } catch (e) {}
+    return lim;
+  }
+  function makeBoostStage(ctx) {
+    const gain = ctx.createGain();
+    gain.gain.value = 1;
+    const lim = makeLimiter(ctx);
     gain.connect(lim);
     return { input: gain, output: lim, gain: gain };
   }
@@ -81,6 +87,29 @@ window.FM = window.FM || {};
      once is two things to listen to, and the stop paths (collapse, edit, panel close) would each have to
      know which one they meant. */
   let _aud = null;
+
+  /* WHERE ON THE TIMELINE THE AUDITIONED SOUND IS (queue 916, clause 10). The audition plays the
+   * element itself, so all it knows is a SOURCE position — and keyframed effect params are read at
+   * SCENE time. This used to be `start + (currentTime - trimStart)`, which is only the inverse of
+   * FM.layerLocalTime at 1x: on a 2x clip one source second is half a timeline second, so a keyframed
+   * sweep was driven at the wrong moment — out of step with the real playback and the export, which
+   * both read the params at the true timeline time. Static speed is a divide; a ramp inverts the same
+   * advance integral the picture uses (bisection — it is monotonic, speed never drops below 0.05x, and
+   * layerSourceAdvance is a table lookup, so thirty steps a frame cost nothing). Reversed clips never
+   * get here: audition() refuses them. */
+  function auditionSceneTime(layer, srcT) {
+    const start = layer.start || 0, dur = layer.duration || 0;
+    const adv = srcT - (layer.trimStart || 0);
+    if (!(FM.isAnimated && FM.isAnimated(layer.speed))) return start + adv / (FM.speedAt ? FM.speedAt(layer, start) : 1);
+    if (!(adv > 0)) return start;
+    if (FM.layerSourceAdvance(layer, dur) <= adv) return start + dur;
+    let lo = 0, hi = dur;
+    for (let i = 0; i < 30; i++) {
+      const mid = (lo + hi) / 2;
+      if (FM.layerSourceAdvance(layer, mid) > adv) hi = mid; else lo = mid;
+    }
+    return start + (lo + hi) / 2;
+  }
 
   function sourceFor(m) {
     if (m._mes) return m._mes;
@@ -259,7 +288,15 @@ window.FM = window.FM || {};
         const local = FM.layerLocalTime ? FM.layerLocalTime(layer, FM.time) : null;
         t0 = (local != null && local >= 0 && local <= (m.el.duration || Infinity)) ? local : (layer.trimStart || 0);
       } catch (e) { t0 = layer.trimStart || 0; }
-      const wasMuted = m.el.muted, wasTime = m.el.currentTime, wasVol = m.el.volume;
+      const wasMuted = m.el.muted, wasTime = m.el.currentTime, wasVol = m.el.volume, wasRate = m.el.playbackRate;
+      /* AT THE CLIP'S OWN SPEED, like the real playback (queue 916). The element keeps whatever rate it
+         was last given — 1 for a clip that has never played — so a 2x clip auditioned at 1x, and since
+         a sped-up clip now sounds sped up (clause 1), that is a different sound from the one it makes
+         in the project. A ramp is followed frame by frame in the tick below. */
+      const rateAt = function (srcT) {
+        const sp = FM.speedAt ? FM.speedAt(layer, auditionSceneTime(layer, srcT)) : 1;
+        return Math.min(16, Math.max(0.0625, sp || 1));
+      };
       /* Volume and mute are reconciled inside the playback tick, which is not running — so they are set
          by hand here, and put back on stop. Without this the element is still muted from the last frame
          of playback and the audition is silent for a reason nothing on screen would explain. */
@@ -268,12 +305,14 @@ window.FM = window.FM || {};
         const v = FM.layerVolume ? FM.layerVolume(layer, FM.time) : 1;
         m.el.volume = Math.max(0, Math.min(1, v == null ? 1 : v));
         m.el.currentTime = t0;
+        if (FM.pitchFollowsSpeed) FM.pitchFollowsSpeed(m.el);
+        try { m.el.playbackRate = rateAt(t0); } catch (e) {}
         const pr = m.el.play();
         if (pr && pr.catch) pr.catch(() => {});
       } catch (e) { return false; }
       const self = this;
       _aud = {
-        layer: layer, m: m, t0: t0, wasMuted: wasMuted, wasTime: wasTime, wasVol: wasVol, raf: 0,
+        layer: layer, m: m, t0: t0, wasMuted: wasMuted, wasTime: wasTime, wasVol: wasVol, wasRate: wasRate, raf: 0,
       };
       const tick = function () {
         if (!_aud || _aud.m !== m) return;
@@ -284,6 +323,12 @@ window.FM = window.FM || {};
            you hear what it was doing, and the chain is rebuilt under us — `applyAt` reads m._afxChain
            fresh every frame, so that keeps working by construction. */
         if (FM.playing) { self.stopAudition(); return; }                                   // the transport takes over
+        /* …and an EXPORT takes over too (queue 916, clause 2). The audition keeps FM.playing false on
+           purpose, so the line above never saw one — and its loop below jumps the element back to t0
+           every 2.5s, undoing the exporter's per-frame seeks: frames past that point were drawn from the
+           wrong moment, and the clip was still looping after the export finished. The export entry
+           points stop it before they begin; this is the backstop for any that forgets. */
+        if (FM._exporting) { self.stopAudition(); return; }
         const layers = (FM.scene && FM.scene.layers) || [];
         if (layers.indexOf(layer) < 0) { self.stopAudition(); return; }                    // the layer was deleted
         if (m.el.ended) { try { m.el.currentTime = _aud.t0; m.el.play(); } catch (e) {} }   // ran off the end
@@ -291,9 +336,14 @@ window.FM = window.FM || {};
           if (m.el.currentTime - _aud.t0 > seconds) m.el.currentTime = _aud.t0;   // a short loop, so you hear the change repeatedly
           /* THE LINE THE WHOLE FEATURE RESTS ON. applyAt re-reads the effect's params every call, so a
              slider being dragged right now is heard on the next frame — that is "hear it while you are
-             messing with it", and it costs nothing extra because the chain already works this way. */
-          const scene = (layer.start || 0) + (m.el.currentTime - (layer.trimStart || 0));
+             messing with it", and it costs nothing extra because the chain already works this way.
+             Scene time through the clip's SPEED (queue 916, clause 10) — see auditionSceneTime. */
+          const scene = auditionSceneTime(layer, m.el.currentTime);
           if (m._afxChain) m._afxChain.applyAt(scene);
+          if (FM.isAnimated && FM.isAnimated(layer.speed)) {   // a ramp: follow the curve, as the playback tick does
+            const r = rateAt(m.el.currentTime);
+            if (Math.abs((m.el.playbackRate || 1) - r) > 1e-3) m.el.playbackRate = r;
+          }
         } catch (e) {}
         _aud.raf = requestAnimationFrame(tick);
       };
@@ -309,7 +359,10 @@ window.FM = window.FM || {};
         a.m.el.pause();
         a.m.el.muted = a.wasMuted;
         a.m.el.volume = a.wasVol;
-        a.m.el.currentTime = a.wasTime;   // put the picture back where it was
+        if (a.wasRate > 0) a.m.el.playbackRate = a.wasRate;
+        // Put the picture back where it was — unless an export already owns the element, in which case
+        // its seeks are the truth and a restore here would be one more jump backwards (queue 916).
+        if (!FM._exporting) a.m.el.currentTime = a.wasTime;
       } catch (e) {}
       if (FM.requestRender) FM.requestRender();
       return true;
@@ -320,6 +373,7 @@ window.FM = window.FM || {};
     // Exposed so the suite can assert the routing decision without standing up a real graph.
     needsBoost(layer) { return needsBoost(layer); },
     boostOf(layer) { return boostOf(layer); },
+    makeLimiter(ctx) { return makeLimiter(ctx); },   // the reversed preview's output stage (queue 916)
 
     // Exposed so the invariant above can be asserted without standing up a real audio graph.
     isChainCurrent(m, layer) { return chainIsCurrent(m, layer); },

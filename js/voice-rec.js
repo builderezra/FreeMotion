@@ -147,6 +147,10 @@ window.FM = window.FM || {};
      a release. A promise is the signal itself: it cannot be raced, and a genuinely dead mic still
      rejects rather than hanging. */
   var micPending = null;
+  /* Is a request for the mic still waiting on its answer, and which request is the newest (queue 916)?
+     `arming` stops a return-from-background asking twice; `armGen` lets a late answer to an older
+     request know it has been superseded. */
+  var arming = false, armGen = 0;
   function openMic() {
     var md = navigator.mediaDevices;
     if (!md || !md.getUserMedia) {
@@ -188,6 +192,13 @@ window.FM = window.FM || {};
   function startMeter() {
     var AC = window.AudioContext || window.webkitAudioContext;
     if (!AC || !stream) return;
+    /* ONE meter at a time (queue 916, clause 6). A second call used to overwrite `ac` without closing it
+       and start a second drawLevel loop whose rAF id then overwrote the first — so releaseMic closed one
+       context and cancelled one loop, and the other of each ran until the page was reloaded. iOS allows
+       about four live contexts; this file's release note says what leaking them does. */
+    if (rafId) { try { cancelAnimationFrame(rafId); } catch (e) {} rafId = 0; }
+    if (srcNode) { try { srcNode.disconnect(); } catch (e) {} srcNode = null; }
+    if (ac) { try { if (ac.close) ac.close(); } catch (e) {} ac = null; }
     try {
       ac = new AC();
       if (ac.resume) { try { ac.resume(); } catch (e) {} }   // iOS hands back a suspended context
@@ -451,9 +462,14 @@ window.FM = window.FM || {};
        too-short branch below re-arms, and if the app was backgrounded at that moment it would open
        the microphone again while the app is not even on screen. So the too-short path refuses to
        re-arm while hidden, and this is what makes the panel usable again when you come back. */
+    /* NOT while an acquisition is already in flight (queue 916, clause 6). `idle && !stream` is also
+       exactly the state of a panel whose permission prompt is still up — paint() calls it "Asking for
+       the microphone…" — so switching apps and back during the prompt used to ask a SECOND time. Both
+       requests resolved, both became "the" stream, and only the second was ever released: the first
+       mic stayed live (recording light on until a reload) and its meter AudioContext leaked. */
     onVis = function () {
       if (document.hidden) bgStop();
-      else if (state === 'idle' && !stream) arm(true);
+      else if (state === 'idle' && !stream && !arming) arm(true);
     };
     document.addEventListener('visibilitychange', onVis);
     onHide = function () { releaseMic(); };   // the page is going away; nothing else will run
@@ -491,8 +507,15 @@ window.FM = window.FM || {};
      * And it resolves AFTER the tracks are assigned rather than when getUserMedia returns, so
      * awaiting it means "the mic is ready" rather than "the request came back" — otherwise a waiter
      * can wake before micTracks is set and find nothing, which is the same race one level down. */
+    var gen = ++armGen;
+    arming = true;
     var chain = Promise.resolve().then(FM.voiceRec._openMic).then(function (s) {
-      if (state === 'closed') { // closed while the permission prompt was up — never leave it running
+      if (gen === armGen) arming = false;
+      /* Closed while the permission prompt was up — or a mic is ALREADY held, because a second request
+         (an older one outliving a close-and-reopen, or any path that re-arms) resolved after the first
+         had delivered (queue 916). Either way this stream is surplus: stop it here, or nothing ever will —
+         releaseMic only knows the one in `stream`. */
+      if (state === 'closed' || stream) {
         try { s.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
         return s;
       }
@@ -505,6 +528,9 @@ window.FM = window.FM || {};
     });
     micPending = chain;
     chain.catch(function (err) {
+      if (gen === armGen) arming = false;
+      // A superseded request failing must not tear down a mic a newer one already delivered (queue 916).
+      if (gen !== armGen || stream) return;
       var n = (err && err.name) || '';
       var m = n === 'NotAllowedError' || n === 'PermissionDeniedError' ? 'Microphone blocked. Allow mic access for this site, then tap Retake.'
         : n === 'SecurityError' ? 'Recording needs a secure page (https, or localhost). Import an audio file instead.'

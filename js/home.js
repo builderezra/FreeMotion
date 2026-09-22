@@ -1287,7 +1287,8 @@ window.FM = window.FM || {};
         { label: 'Open', action: () => openProject(p.id) },
         pinMenuItem('projects', p.id),
         { label: 'Rename…', action: () => { const n = prompt('Project name:', p.name); if (n && n.trim()) { FM.projects.rename(p.id, n.trim()); render(); } } },
-        { label: 'Duplicate', action: async () => { if (FM.toast) FM.toast('Duplicating…', 1200); await FM.projects.duplicate(p.id); render(); } },
+        // queue 915 clause 3: duplicate() now says when there is no whole copy — the template/element twins' wording
+        { label: 'Duplicate', action: async () => { if (FM.toast) FM.toast('Duplicating…', 1200); const ok = await FM.projects.duplicate(p.id); render(); if (!ok && FM.toast) FM.toast('Could not duplicate — storage is full'); } },
         // Sits directly under Duplicate: both make a NEW thing out of this project, so they read as a
         // pair. It was buried below Select… (a mode, not a creation) and Ezra asked for a feature that
         // was already here — which is a findability problem, not a missing one.
@@ -1926,10 +1927,15 @@ window.FM = window.FM || {};
     /* THE PROMISE HAS TO BE TRUE (queue 771, hunt LOW #44). A draft whose template (or element) has since been deleted
        has nothing to save back to; the card used to promise "close it to save your changes back" anyway. */
     const orphanT = !!(p.ofTemplate && !tplEntry), orphanE = !!(p.ofElement && !ofName);
+    /* queue 915 clause 8: a TEMPLATE workspace with no template pointer — what a backup restore brings one
+       back as (the pointer is deliberately not restored; see storage.js buildBackup). It sits under
+       Templates, so it must not tell him to save it as an element. */
+    const looseT = !!(p.templateDraft && !p.ofTemplate);
     body.appendChild(el('div', 'hm-sub', p.ofTemplate
       ? (orphanT ? 'Its template was deleted — open it to keep the work, or delete this draft' : ('Editing ' + (ofTpl ? '“' + ofTpl + '”' : 'a template') + ' — close it to save your changes back'))
       : p.ofElement
       ? (orphanE ? 'Its element was deleted — open it to keep the work, or delete this draft' : ('Editing ' + (ofName ? '“' + ofName + '”' : 'an element') + ' — close it to save your changes back'))
+      : looseT ? 'Draft — open it, build it, then ⋯ → Save as template'
       : 'Draft — open it, build it, then ⋯ → Save as element'));
     card.appendChild(body);
     /* A WAY TO THROW ONE AWAY BY HAND (queue 525). Deliberately NOT automatic: an orphan may hold work
@@ -1955,7 +1961,13 @@ window.FM = window.FM || {};
            draft may be a sketch he never wants filed, and minting elements he did not ask for is the
            failure #505 is about. The instruction is now true; whether it should happen by itself is a
            separate question and his to answer. */
-        p.ofTemplate ? null : { label: 'Save as element…', action: async () => {
+        p.ofTemplate ? null : looseT ? { label: 'Save as template…', action: async () => {   // queue 915 clause 8
+          const n = prompt('Template name:', p.name || 'My template');
+          if (!n || !n.trim()) return;
+          const ok = await FM.templates.save(n.trim(), p.id);
+          if (FM.toast) FM.toast(ok ? 'Template saved' : 'Could not save template');
+          render();
+        } } : { label: 'Save as element…', action: async () => {
           const n = prompt('Element name:', p.name || 'My element');
           if (!n || !n.trim()) return;
           const ok = await FM.elements.saveFromProject(p.id, n.trim());
@@ -1964,7 +1976,7 @@ window.FM = window.FM || {};
         } },
         { sep: true },
         { label: 'Delete draft…', danger: true, action: async () => {
-          if (!confirm('Delete the draft “' + (p.name || 'Untitled') + '”? ' + (p.ofTemplate ? 'Anything in it that you have not saved back to its template will be lost.' : p.ofElement ? 'Anything in it that you have not saved back to its element will be lost.' : 'It was never saved as an element, so everything in it will be lost.'))) return;   // queue 771: the right noun
+          if (!confirm('Delete the draft “' + (p.name || 'Untitled') + '”? ' + (p.ofTemplate ? 'Anything in it that you have not saved back to its template will be lost.' : p.ofElement ? 'Anything in it that you have not saved back to its element will be lost.' : looseT ? 'It was never saved as a template, so everything in it will be lost.' : 'It was never saved as an element, so everything in it will be lost.'))) return;   // queue 771: the right noun
           /* DO IT FOR HIM (queue 617 clause 4). This used to call `discardDraft`, which refuses on the
              draft you have open, and then TOLD HIM to go and open another one first — so the last
              draft in the list could never be deleted. His words: "as long as there's one left I can't
@@ -2538,7 +2550,14 @@ window.FM = window.FM || {};
     else { fsel.value = 'custom'; fnum.value = wantFps; }
     if (/^#[0-9a-f]{6}$/i.test(npBg)) npEl('hm-new-bg').value = npBg;
     const input = npEl('hm-new-name');
-    input.value = 'Project ' + (FM.projects.list().length + 1);
+    /* queue 915 clause 9: COUNT WHAT HE CAN SEE, AND NEVER SUGGEST A NAME HE ALREADY HAS. list() includes
+       the hidden element/template workspaces, so two of those made "Project 5" with two projects on screen;
+       and a count is not a free name — delete "Project 2" of three and it offered "Project 3" again. */
+    const mine = projectsInGridOrder();
+    const taken = new Set(mine.map(p => String(p.name || '').trim().toLowerCase()));
+    let nth = mine.length + 1;
+    while (taken.has('project ' + nth)) nth++;
+    input.value = 'Project ' + nth;
     npUpdate();
     dlg.classList.remove('hidden');
     // Focus the name field on a real keyboard only. On a phone, auto-focus throws the software
@@ -2696,8 +2715,13 @@ window.FM = window.FM || {};
            to a real project — storage always has one — but that is plumbing, not where he should find
            himself. He came from Elements, he was editing an element, so that is the tab that should be
            in front when he gets back. It was dropping him on Projects. */
+        /* queue 915 clause 2: AND SAY SO WHEN IT DID NOT SAVE — the template twin below always has. A
+           refused write used to be reported as success (storage.js elements.updateFrom), so this silence
+           was never reached; now that a failure really returns false, the only message left was a vague
+           media toast. The draft is kept either way, and it lives under Elements, so that is where he lands. */
         FM.elements.commitDraft().then((ok) => {
-          if (ok) tab = 'elements';
+          tab = 'elements';
+          if (!ok && FM.toast) FM.toast('Could not save that edit back to the element — your work is kept as a draft under Elements', 4600);
           if (root && !root.classList.contains('hidden')) render();
         }).catch(() => {});
       }
@@ -2773,6 +2797,11 @@ window.FM = window.FM || {};
     // hides home instantly, and splitting that would show the previous project for the whole load.
     pushWillRun() { return pushAllowed(); },
     isOpen() { return !!root && !root.classList.contains('hidden') && !closing; },
+    /* queue 915 clause 4: Settings → Restore has called `FM.home.refresh` since the day it was written,
+       behind an `&& FM.home.refresh` that quietly made it a no-op — this method did not exist. So "Restored
+       2 projects" appeared over a grid that did not change, and the natural next move, restoring again,
+       ADDS everything a second time. Re-render only while Home is on screen; a hidden grid is rebuilt on open. */
+    refresh() { if (root && !root.classList.contains('hidden')) render(); },
     _splashIsUp: splashIsUp,   // exposed for the regression test — see armIntro
     /* The card-tap path itself, as a seam. "Save project file…" reaches it with keepOpen, which is the
        one route that leaves home OPEN and then serializes FM.media — so the media release (queue 385)

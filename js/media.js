@@ -74,11 +74,31 @@ window.FM = window.FM || {};
   };
 
 
+  /* A SPED-UP CLIP SOUNDS SPED UP (queue 916, clause 1). His answer, verbatim: "Idk if you speed
+   * something up it should sound sped up. That simple".
+   * `preservesPitch` defaults to TRUE, so a media element answers `playbackRate = 2` with a
+   * time-stretcher: twice as fast, same pitch. The export has never worked that way — makeClipBuffer
+   * resamples, so the same clip came out an octave up in the file (measured: a 440 Hz tone at 2x
+   * exports at 880 Hz) while the preview played it at 440. The reversed preview (audio-play.js) and a
+   * speed ramp's comment ("pitch/tempo follow the curve") already resample too, so the forward preview
+   * was the one path out of step. Turning it off makes preview and file agree, and it is a property
+   * of the ELEMENT, so every later rate write — a speed edit, a ramp driven by the tick, the preview-
+   * rate menu — inherits it without each site having to remember. Every prefixed spelling, because
+   * older Safari only knows `webkitPreservesPitch` and older Firefox `mozPreservesPitch`. */
+  FM.pitchFollowsSpeed = function (el) {
+    if (!el) return el;
+    try { el.preservesPitch = false; } catch (e) {}
+    try { el.webkitPreservesPitch = false; } catch (e) {}
+    try { el.mozPreservesPitch = false; } catch (e) {}
+    return el;
+  };
+
   /* Load a video file -> { kind:'video', el, width, height, duration, url } */
   FM.loadVideoFile = function (file) {
     return new Promise((resolve, reject) => {
       const url = URL.createObjectURL(file);
       const el = document.createElement('video');
+      FM.pitchFollowsSpeed(el);   // queue 916 — see above: the preview's pitch follows speed, like the export
       el.src = url;
       el.muted = true;            // preview is muted; export decodes audio separately
       el.playsInline = true;

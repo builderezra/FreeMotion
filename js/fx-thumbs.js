@@ -952,6 +952,11 @@ window.FM = window.FM || {};
     // out again (measured 11.22 mean at 44/34, 6.19 at 72/60), so this is the peak, not the maximum.
     lightwrap: function (l, h) { const p = h.effects[0].params; p.intensity = 2; p.reach = 44; p.radius = 34; },
     starfield: function (l, h) { h.effects[0].params.amount = 1; },
+    /* Snow & Rain (queue 913). Size is in absolute px, so the default 5 made each flake about a tenth of the 96-unit
+       tile — a handful of big soft balls that read as bokeh, not snow, beside Starfield. Rendered side by side at the
+       phone's 77px tile: size 1 is specks too faint to see, 2 reads as snow, and 450 flakes put back the density the
+       smaller flakes lose. Demo-only, like everything in this table; the effect's own defaults are untouched. */
+    weather: function (l, h) { const p = h.effects[0].params; p.size = 2; p.amount = 450; },
     contourstrips: function (l, h) { h.effects[0].params.levels = 11; },
     filmgrain: function (l, h) { const p = h.effects[0].params; p.amount = 100; p.size = 3; p.color = 60; p.shadows = 100; p.highlights = 100; },
     // A black shadow on a dark backdrop is a shadow you cannot see. Keep it black (that IS the

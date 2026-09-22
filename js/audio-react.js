@@ -7,7 +7,8 @@
  * The source->timeline mapping (trim / speed / reverse) MUST match the EXPORTER's makeClipBuffer, or
  * the envelope would line up with something other than what is actually HEARD. So this file mirrors
  * js/exporter.js makeClipBuffer sample-for-sample: static speed reads startSample + i*sp (reversed
- * from the far end of the covered span), ramped speed resamples along FM.layerSourceAdvance's integral.
+ * from the far end of the CLIP, silent where the audio runs out — queue 916), ramped speed resamples
+ * along FM.layerSourceAdvance's integral.
  */
 window.FM = window.FM || {};
 (function (FM) {
@@ -117,7 +118,10 @@ window.FM = window.FM || {};
     // THROUGH speedAt for the static case (queue 451) — a malformed speed prop is an object, and
     // `availSec / spStatic` below would be NaN.
     const spStatic = ramped ? 1 : FM.speedAt(layer, layer.start);
-    const lenSec = ramped ? 0 : Math.min(layer.duration, availSec / (spStatic || 1));
+    /* A reversed clip spans the whole clip, as the exporter's clipGeom now does (queue 916, clause 4):
+       reading back from the end of the AUDIO put the envelope a full second early on a clip whose audio
+       is a second short, which is the same misalignment the sound had. */
+    const lenSec = ramped ? 0 : (reversed ? layer.duration : Math.min(layer.duration, availSec / (spStatic || 1)));
 
     function srcSample(tLocal) {   // float source-sample index for a clip-local time, or -1 (silence)
       if (ramped) {
@@ -128,6 +132,7 @@ window.FM = window.FM || {};
       }
       if (tLocal < 0 || tLocal > lenSec) return -1;
       const from = reversed ? (lenSec - tLocal) : tLocal;
+      if (reversed && from * spStatic > availSec + 1e-6) return -1;   // past the end of the audio → silence (a forward span already stops there)
       return startSample + from * spStatic * sr;
     }
 

@@ -10,6 +10,7 @@ window.FM = window.FM || {};
   let active = [];   // live AudioBufferSourceNodes
   let chains = [];   // audio-effect chains built for this playback pass
   let voices = [];   // { layer, gain, buf } for each started source — what retune() re-schedules (queue 894)
+  let limiters = []; // the output limiter of each BOOSTED voice (queue 916) — disconnected on stop()
 
   // iOS caps live AudioContexts (~4) — audio-fx.js owns THE one; never construct another here.
   // Guarded like every other audio-fx entry point: without that file, preview stays silent, not broken.
@@ -80,8 +81,17 @@ window.FM = window.FM || {};
     // an OBJECT for a malformed speed prop, and `availSec / sp` is then NaN — a reversed clip that
     // renders as silence, in the preview mix, with nothing said.
     const sp = FM.speedAt(layer, layer.start);
-    const lenSec = Math.min(layer.duration, availSec / sp);
-    const lenSamples = Math.max(1, Math.floor(lenSec * sr));
+    /* THE WHOLE CLIP, NOT JUST THE PART THE AUDIO COVERS (queue 916, clause 4). This was
+     * `min(duration, availSec / sp)`, and reading backwards from the end of THAT span lines the sound
+     * up with the end of the AUDIO — while the picture (FM.layerLocalTime) reads
+     * `trimStart + (duration - t) * sp`, lined up with the end of the CLIP. On a clip whose audio track
+     * is shorter than its video (common for phone and screen recordings) the backwards sound ran ahead
+     * of the backwards picture by the difference, then went quiet before the clip ended. Spanning the
+     * clip puts both on the picture's mapping: a read past the audio's end falls off the source array
+     * (`src[i0] || 0`) and is silence, at the START — exactly what the ramped branch above does.
+     * When the audio covers the clip — every ordinary case — lenSamples is the same number as before,
+     * so those clips sound exactly as they did. */
+    const lenSamples = Math.max(1, Math.floor(layer.duration * sr));
     const out = audioCtx.createBuffer(ab.numberOfChannels, lenSamples, sr);
     for (let ch = 0; ch < ab.numberOfChannels; ch++) {
       const src = ab.getChannelData(ch), dst = out.getChannelData(ch);
@@ -171,14 +181,27 @@ window.FM = window.FM || {};
         scheduleGain(gain, layer, buf, when, into);
         // Audio effects sit AFTER the volume/fade envelope, matching the exporter's clip mix order.
         const chain = FM.buildAudioFxChain ? FM.buildAudioFxChain(audioCtx, layer) : null;
+        /* THE LIMITER, LAST, WHEN THE CLIP IS BOOSTED (queue 916, clause 5). The gain above carries the
+           whole volume — up to 1000% — and the forward preview and the export both end a boosted clip
+           in a -1.5 dBFS limiter so "preview and file agree above unity" (queue 195). This path had
+           none: a reversed song at 400% reached the speakers at 4x and hard-clipped into a crackle the
+           exported file does not have. Only when boosted, exactly like the other two paths, so a clip
+           at or below 100% keeps its old, unshaped route. */
+        const boosted = FM.audioFxLive && FM.audioFxLive.needsBoost && FM.audioFxLive.needsBoost(layer);
+        let lim = null;
+        if (boosted && FM.audioFxLive.makeLimiter) {
+          try { lim = FM.audioFxLive.makeLimiter(audioCtx); lim.connect(audioCtx.destination); limiters.push(lim); }
+          catch (e) { lim = null; }
+        }
+        const sink = lim || audioCtx.destination;
         node.connect(gain);
         if (chain) {
           gain.connect(chain.input);
-          chain.output.connect(audioCtx.destination);
+          chain.output.connect(sink);
           chain.applyAt(FM.time);
           chains.push(chain);
         } else {
-          gain.connect(audioCtx.destination);
+          gain.connect(sink);
         }
         if (into <= 0) { node.start(when - into / pr, 0); active.push(node); voices.push({ layer, gain, buf }); }     // clip starts later — delay is REAL time, so scale the scene-second gap by the preview rate (was 2s late at 2×)
         else if (into < buf.duration) { node.start(when, into); active.push(node); voices.push({ layer, gain, buf }); } // mid-clip
@@ -194,6 +217,8 @@ window.FM = window.FM || {};
       voices = [];
       chains.forEach(c => { try { c.dispose(); } catch (e) {} });
       chains = [];
+      limiters.forEach(l => { try { l.disconnect(); } catch (e) {} });   // queue 916 — never leave one wired to the speakers
+      limiters = [];
     },
     /* A FADE MOVED: RE-SCHEDULE THE LIVE VOICES, DO NOT RESTART THEM (queue 894). The fade strips used to reach
      * start() on every pointermove while playing, and start() begins with stop(): every reversed clip's source was

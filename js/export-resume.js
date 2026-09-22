@@ -77,8 +77,22 @@ window.FM = window.FM || {};
     let doc = '';
     try { doc = JSON.stringify({ project: o.project, layers: o.layers }, FM.jsonReplacer); }
     catch (e) { doc = String(Math.random()); }   // unserialisable scene → never matches, so never resumes
-    return [FORMAT, o.w, o.h, o.fps, o.bitrate, o.codec, round6(o.from), round6(o.to), o.frames,
+    return [FORMAT, appVersion(), o.w, o.h, o.fps, o.bitrate, o.codec, round6(o.from), round6(o.to), o.frames,
             o.audio ? 1 : 0, hash(doc)].join('|');
+  }
+  /* THE BUILD THAT RENDERED IT (queue 916, clause 9). The renderer is part of "everything that can change
+   * a single output byte", and it was the one thing missing: an export killed on one version and
+   * re-exported after the PWA had updated — which it does several times a day — replayed the old build's
+   * frames and rendered the rest with the new one, so the file could change look at the join. The
+   * version label in index.html is the version's single source of truth (it is bumped with every
+   * release, and ship.sh checks it), and it is read when the signature is made, so it always names the
+   * code that is actually running. No label (a stripped-down host) reads as '' and changes nothing. */
+  function appVersion() {
+    try {
+      const el = document.querySelector('.brand .ver') || document.querySelector('.ver');
+      const m = el && String(el.textContent || '').match(/v\d[\d.]*/);
+      return m ? m[0] : '';
+    } catch (e) { return ''; }
   }
   function round6(n) { return Math.round((+n || 0) * 1e6) / 1e6; }
 

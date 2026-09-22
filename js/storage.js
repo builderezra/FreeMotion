@@ -230,6 +230,9 @@ window.FM = window.FM || {};
             n++;
           }
         } catch (le) { /* this layer's media failed to decode — keep restoring the rest */ }
+        /* queue 915: tried — so the editor now shows whatever this layer really has, and a card
+           captured from here on is a true picture of it, even if the blob would not decode. */
+        _released.delete(layer.id);
       }
       db.close();
     } catch (e) { /* media restore failed — scene structure still loads */ }
@@ -251,6 +254,24 @@ window.FM = window.FM || {};
     return '';
   }
 
+  /* ⚠️ queue 915 clause 1: WHAT WAS RELEASED, SO NOTHING PHOTOGRAPHS THE GAP. The capture before the
+     release took a good picture — and then every route out of Home (tapping another card, + → Create,
+     a template, a restore) went through projects.open()/create(), whose touchCurrent(true) re-rendered
+     the OUTGOING scene with its media gone and wrote a solid black card over the good one. It stayed
+     black until he opened that project again. Ids, not a flag on the layer array: the array is replaced
+     by more paths than the ids are, and an id released here stops counting the moment its record is
+     back. makeThumb reads this, so every caller of it is covered at once rather than each route. */
+  const _released = new Set();
+  function sceneMediaReleased() {
+    if (!_released.size) return false;
+    const layers = (FM.scene && FM.scene.layers) || [];
+    for (let i = 0; i < layers.length; i++) {
+      const l = layers[i];
+      if (l && _released.has(l.id) && !FM.media.get(l.id)) return true;
+    }
+    return false;
+  }
+
   async function releaseSceneMedia() {
     if (releaseBlocked()) return 0;
     let ids = [];
@@ -268,7 +289,7 @@ window.FM = window.FM || {};
       }
     } catch (e) { return 0; }
     if (releaseBlocked()) return 0;   // re-checked: the reads above awaited, and he may be back inside
-    ids.forEach(id => FM.media.remove(id));
+    ids.forEach(id => { FM.media.remove(id); _released.add(id); });   // queue 915: remembered, see sceneMediaReleased
     return ids.length;
   }
 
@@ -1194,6 +1215,7 @@ window.FM = window.FM || {};
   FM.storage.buildBackup = async function (onProgress) {
     const idx = (FM.projects && FM.projects.list()) || [];
     const projects = [], skippedProjects = [], skippedMedia = [];
+    let drafts = 0;
     for (let i = 0; i < idx.length; i++) {
       const p = idx[i];
       if (onProgress) { try { onProgress(i + 1, idx.length, p.name || 'Untitled'); } catch (e) {} }
@@ -1215,7 +1237,17 @@ window.FM = window.FM || {};
       /* The INDEX's name wins over the packed project's, for the same reason templates.exportFile
          gives: the doc's own name can be stale ("Untitled 3") while the card he recognises is right. */
       const project = Object.assign({}, pack.project, { name: p.name || pack.project.name || 'Untitled' });
-      projects.push({ app: 'freemotion', v: 1, project: project, layers: pack.layers, media: media, fonts: await embedFonts(pack.layers) });
+      const entry = { app: 'freemotion', v: 1, project: project, layers: pack.layers, media: media, fonts: await embedFonts(pack.layers) };
+      /* ⚠️ queue 915 clause 8: SAY WHICH ONES ARE WORKSPACES. list() includes the hidden element and
+         template drafts, and restoring them through create() with no flag turned each into an ordinary
+         project — the Projects-list clutter queue 340 removed. Kept IN the file rather than skipped: a
+         "Build a new one…" draft is work that exists nowhere else, and elements/templates themselves are
+         not in a backup. Only the KIND travels — never the ofElement/ofTemplate pointer, which on
+         restore would write this old copy back over a live element the first time he came Home. */
+      if (p.elementDraft) entry.draft = 'element';
+      else if (p.templateDraft) entry.draft = 'template';
+      if (entry.draft) drafts++;
+      projects.push(entry);
     }
     return {
       app: 'freemotion', backup: 1, v: 1,
@@ -1224,6 +1256,7 @@ window.FM = window.FM || {};
          now the file has to be able to answer "is my video in here" by itself. */
       notIncluded: { projects: skippedProjects, media: skippedMedia },
       count: projects.length,
+      drafts: drafts,   // queue 915: of `count`, how many are element/template workspaces rather than projects
     };
   };
 
@@ -1242,7 +1275,7 @@ window.FM = window.FM || {};
     const a = document.createElement('a'); a.href = url; a.download = 'FreeMotion-' + stamp + '.fmbackup.json';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    return { ok: true, count: obj.count, notIncluded: obj.notIncluded, bytes: blob.size, report: obj };
+    return { ok: true, count: obj.count, drafts: obj.drafts || 0, notIncluded: obj.notIncluded, bytes: blob.size, report: obj };
   };
   // Split out so the suite can pin the filename without a clock in the test.
   FM.storage._backupStamp = function () {
@@ -1261,16 +1294,26 @@ window.FM = window.FM || {};
     if (!obj || obj.app !== 'freemotion' || !obj.backup || !Array.isArray(obj.projects)) {
       return { ok: false, reason: 'That is not a FreeMotion backup file.' };
     }
-    let restored = 0; const failed = [];
+    /* ⚠️ queue 915 clause 4: AND PUT HIM BACK WHERE HE WAS. importObject goes through projects.create(),
+       which switches the open project once per entry — so a restore left the EDITOR on the last restored
+       project while Home's OPEN badge still sat on his own, and a restore from inside a project dropped
+       him into a different one behind his back. Adding things must not move him. */
+    const wasOn = curId();
+    let restored = 0, drafts = 0; const failed = [];
     for (let i = 0; i < obj.projects.length; i++) {
       const one = obj.projects[i];
       const nm = (one && one.project && one.project.name) || 'Untitled';
       if (onProgress) { try { onProgress(i + 1, obj.projects.length, nm); } catch (e) {} }
+      /* queue 915 clause 8: a workspace comes back as the same KIND of workspace — see buildBackup */
+      const draft = one && (one.draft === 'element' || one.draft === 'template') ? one.draft : null;
       let ok = false;
-      try { ok = await FM.storage.importObject(one, null, { quiet: true }); } catch (e) { ok = false; }
-      if (ok) restored++; else failed.push(nm);
+      try { ok = await FM.storage.importObject(one, null, { quiet: true, draft: draft }); } catch (e) { ok = false; }
+      if (ok) { restored++; if (draft) drafts++; } else failed.push(nm);
     }
-    return { ok: restored > 0, restored: restored, failed: failed, total: obj.projects.length };
+    if (wasOn && FM.projects && curId() !== wasOn && FM.projects.list().some(p => p.id === wasOn)) {
+      try { await FM.projects.open(wasOn); } catch (e) {}
+    }
+    return { ok: restored > 0, restored: restored, drafts: drafts, failed: failed, total: obj.projects.length };
   };
 
   /* ═══ WHAT IS WRONG WITH THIS FILE, IN WORDS (queue 673) ══════════════════════════════════════
@@ -1302,7 +1345,9 @@ window.FM = window.FM || {};
   FM.storage.importObject = async function (obj, onDone, opts) {
     const problem = FM.storage.sceneFileProblem(obj);
     if (problem) { if (FM.toast) FM.toast(problem, 5000); return false; }
-    if (FM.projects) await FM.projects.create({ name: (obj.project && obj.project.name ? obj.project.name : 'Imported project'), width: obj.project && obj.project.width, height: obj.project && obj.project.height });
+    const kind = opts && opts.draft;   // queue 915 clause 8: only restoreBackup passes this, and only these two values
+    if (FM.projects) await FM.projects.create(Object.assign({ name: (obj.project && obj.project.name ? obj.project.name : 'Imported project'), width: obj.project && obj.project.width, height: obj.project && obj.project.height },
+      kind === 'element' ? { elementDraft: true } : kind === 'template' ? { templateDraft: true } : {}));
     const ok = await FM.storage.applyScene(obj);
     if (!ok) {
       /* Belt and braces: sceneFileProblem should have caught everything applyScene refuses, but if the
@@ -1425,6 +1470,10 @@ window.FM = window.FM || {};
   // retina-crisp at the list-row thumb size), PROGRESSIVE halving on the way down (a single
   // 1080→180 drawImage skipped most source pixels = the old mushy cards), JPEG q0.8.
   function makeThumb() {
+    /* queue 915 clause 1: NO PICTURE BEATS A BLACK ONE. With the scene's media released (Home, queue
+       385) a render is the project minus its photos and videos, and every caller already treats null as
+       "keep the card you have" — which is the good picture captured just before the release. */
+    if (sceneMediaReleased()) return null;
     try {
       const P = FM.scene.project;
       let src = document.createElement('canvas'); src.width = P.width; src.height = P.height;
@@ -1444,6 +1493,17 @@ window.FM = window.FM || {};
       g.drawImage(src, 0, 0, tw, th);
       return c.toDataURL('image/jpeg', 0.8);
     } catch (e) { return null; }
+  }
+  /* ⚠️ queue 915 clause 6: THE PICTURE OF WHAT IS BEING SAVED, NOT OF WHAT WAS AUTOSAVED A WHILE AGO.
+     Writing an element/template back (updateFrom) read the workspace's stored thumbnail first — but that
+     is only re-captured every 12s, and Home deliberately skips the capture on the way out (queue 128) —
+     so recolour red → blue → green inside 12s and the card came back BLUE over a pack that is green. It
+     reads as "my edit didn't save". When the source IS the open scene, render it now. Null (a pinned
+     picture he chose, media released on Home, not the open project) falls through to the stored one. */
+  function liveThumbOf(id) {
+    if (!id || id !== (boundId || curId())) return null;
+    if (FM.scene && FM.scene.project && FM.scene.project.thumbPinned) return null;
+    return makeThumb();
   }
 
   /* ═══ A PICTURE OF THE ELEMENT ITSELF (queue 342).
@@ -1716,8 +1776,9 @@ window.FM = window.FM || {};
       if (FM.maskTool && FM.maskTool.isActive && FM.maskTool.isActive()) FM.maskTool.stop();   // same — and it caches the path it is editing
       if (FM.pause) FM.pause(); else FM.playing = false;   // stop WebAudio + <video> sound, not just the flag (#r4)
       if (FM.groupContext && FM.exitGroup) FM.exitGroup(true);   // the group view belongs to the outgoing project
-      FM.storage.flushSync(); this.touchCurrent(true);
+      FM.storage.flushSync(); this.touchCurrent(true);   // queue 915: a no-op picture while its media are released (makeThumb)
       FM.releaseProjectMedia(FM.scene.layers);
+      _released.clear();   // a different scene from here on — the ids above no longer describe it
       try { localStorage.setItem(CUR_KEY, id); } catch (e) {}
       // Motion Blur (Footage) keeps a per-layer canvas of the previous frame. Those belong to the
       // OUTGOING project's layer ids and nothing else ever clears them (only the exporter did), so
@@ -1772,30 +1833,45 @@ window.FM = window.FM || {};
       await this.open(id);
       return id;
     },
+    /* ⚠️ queue 915 clause 3: TRUE ONLY WHEN THERE IS A WHOLE COPY. Every write here was unread and the
+       function returned nothing, so on a nearly-full phone the doc write failed, the copy was indexed
+       anyway, and "X copy · 40 layers" opened EMPTY — while the bulk bar, reading `!== false`, toasted
+       "Duplicated 1". He could reasonably delete the original next. So: no doc, stop before the card;
+       a clip that could not be copied, take the half-copy back out (every key below is one this call
+       minted a moment ago — nothing of his is touched) and say false. */
     async duplicate(id) {
       if (id === curId() && FM.storage && FM.storage.flushSync) FM.storage.flushSync();   // duplicating the OPEN project must copy the last 600ms of edits, not the stale doc
-      const doc = readJSON('fm.proj.' + id, null); if (!doc) return;
-      FM._mediaBusy = (FM._mediaBusy || 0) + 1;
+      const doc = readJSON('fm.proj.' + id, null); if (!doc) return false;
       const src = this.list().find(p => p.id === id) || {};
       const re = reIdLayers(doc.layers || []);
       const nid = newId('p');
-      writeJSON('fm.proj.' + nid, { project: JSON.parse(JSON.stringify(doc.project)), layers: re.layers, selectedId: null, selectedIds: [] });
+      if (!writeJSON('fm.proj.' + nid, { project: JSON.parse(JSON.stringify(doc.project)), layers: re.layers, selectedId: null, selectedIds: [] })) return false;
+      FM._mediaBusy = (FM._mediaBusy || 0) + 1;
+      const done = (ok) => { FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1); return ok; };
       // index the copy BEFORE the (slow, awaited) media copies — killing the tab mid-copy used to
       // strand an invisible doc that no home card showed and pruneOrphans then gutted
       const idx = this.list();
       idx.unshift(Object.assign({}, src, { id: nid, name: (src.name || 'Project') + ' copy', created: Date.now(), modified: Date.now(), layers: re.layers.length, thumb: null }));
-      this.saveIndex(idx);
+      if (!this.saveIndex(idx)) { try { localStorage.removeItem('fm.proj.' + nid); } catch (e) {} return done(false); }
       // duplicate the media blobs under the new layer ids so the copy survives deleting the original
+      const wrote = [];
+      let whole = true;
       try {
         const db = await openDB();
         for (const oldId of Object.keys(re.map)) {
           const rec = await idbGet(db, oldId);
-          if (rec) await idbPut(db, re.map[oldId], rec);
+          if (!rec) continue;
+          if (!(await idbPut(db, re.map[oldId], rec))) { whole = false; break; }
+          wrote.push(re.map[oldId]);
         }
-        const th = await idbGet(db, 'thumb:' + id); if (th) { await idbPut(db, 'thumb:' + nid, th); _thumbCache.set(nid, th); }   // copy the card thumbnail too
+        if (whole) { const th = await idbGet(db, 'thumb:' + id); if (th) { await idbPut(db, 'thumb:' + nid, th); _thumbCache.set(nid, th); } }   // copy the card thumbnail too (cosmetic — not part of "whole")
         db.close();
-      } catch (e) {}
-      FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1);
+      } catch (e) { whole = false; }
+      if (whole) return done(true);
+      try { const db = await openDB(); for (const k of wrote) await idbDel(db, k); await delThumb(db, nid); db.close(); } catch (e) {}
+      try { localStorage.removeItem('fm.proj.' + nid); } catch (e) {}
+      this.saveIndex(this.list().filter(p => p.id !== nid));
+      return done(false);
     },
     rename(id, name) {
       const idx = this.list(); const e = idx.find(p => p.id === id); if (!e) return;
@@ -2012,11 +2088,16 @@ window.FM = window.FM || {};
       if (!got) return false;
       const tid = newId('t');
       const pack = got.pack, id = got.srcId;
+      /* ⚠️ queue 915 clause 2: idbPut RESOLVES FALSE, IT NEVER THROWS — so this try/catch could not see a
+         refused write, and a template whose pack never landed got a card and a "Template saved". The
+         same unread result sat in all seven pack writers below; each now stops before the index. */
+      let put = false;
       try {
         const db = await openDB();
-        await idbPut(db, 'tpl:' + tid, pack);
+        put = await idbPut(db, 'tpl:' + tid, pack);
         db.close();
       } catch (e) { return false; }
+      if (!put) return false;
       const idx = this.list();
       const card = (await FM.projects.getThumb(id)) || (id === curId() ? makeThumb() : null);   // template cards keep an inline thumb (few templates); read the project's from IDB
       idx.unshift({ id: tid, name: name, width: pack.project.width, height: pack.project.height, duration: pack.project.duration, thumb: card });
@@ -2092,7 +2173,8 @@ window.FM = window.FM || {};
       FM._mediaBusy = (FM._mediaBusy || 0) + 1;
       let ok = false;
       try {
-        const db = await openDB(); await idbPut(db, 'tpl:' + nid, pack); db.close();
+        const db = await openDB(); const put = await idbPut(db, 'tpl:' + nid, pack); db.close();
+        if (!put) throw new Error('pack refused');   // queue 915: no copy landed, so no card for one
         const idx = this.list();
         idx.unshift(Object.assign({}, meta, { id: nid, name: (meta.name || 'Template') + ' copy' }));
         ok = writeJSON(TPL_INDEX, idx);
@@ -2235,11 +2317,15 @@ window.FM = window.FM || {};
       if (at < 0) return false;                      // deleted while it was being edited — refuse BEFORE writing
       const got = await packFromProject(projectId, true);
       if (!got) return false;
+      /* queue 915 clause 2: a refused write leaves the OLD pack in place, so reporting success here made
+         commitDraft discard the workspace holding the only copy of the edit. False keeps the draft. */
+      let put = false;
       try {
         const db = await openDB();
-        await idbPut(db, 'tpl:' + tid, got.pack);    // SAME key — this is the update
+        put = await idbPut(db, 'tpl:' + tid, got.pack);    // SAME key — this is the update
         db.close();
       } catch (e) { return false; }
+      if (!put) return false;
       /* The pack IS the template. If the index write fails the edit has still landed, so report success
          and leave the card's count/thumbnail stale — it self-heals on the next save. Returning false
          would make the caller keep a workspace for a template that is already up to date. */
@@ -2247,7 +2333,7 @@ window.FM = window.FM || {};
       // the card's own three numbers — templates.save writes them, so an in-place edit must too (review, 2 Sep)
       if (got.pack.project) { idx[at].width = got.pack.project.width; idx[at].height = got.pack.project.height; idx[at].duration = got.pack.project.duration; }
       idx[at].rev = (idx[at].rev || 0) + 1;   // a workspace built from an older pack re-adopts on reuse (openForEdit)
-      const th = (await FM.projects.getThumb(got.srcId)) || (got.srcId === curId() ? makeThumb() : null);
+      const th = liveThumbOf(got.srcId) || (await FM.projects.getThumb(got.srcId));   // queue 915 clause 6 — see liveThumbOf
       if (th) idx[at].thumb = th;
       // MOST RECENTLY EDITED FIRST — the same rule the Elements list got in v12.27, and his words for it:
       // "the element is at the top of the element list because you just edited it".
@@ -2280,7 +2366,9 @@ window.FM = window.FM || {};
       if (!layers || !layers.length) return false;
       const eid = newId('e');
       const pack = packLayers(layers);
-      try { const db = await openDB(); await idbPut(db, 'elem:' + eid, pack); db.close(); } catch (e) { return false; }
+      let put = false;   // queue 915 clause 2 — see templates.save
+      try { const db = await openDB(); put = await idbPut(db, 'elem:' + eid, pack); db.close(); } catch (e) { return false; }
+      if (!put) return false;
       const idx = this.list();
       idx.unshift({ id: eid, name: name, count: layers.length, thumb: makeLayerThumb(layers) });
       if (!writeJSON(ELEM_INDEX, idx)) { try { const db2 = await openDB(); await idbDel(db2, 'elem:' + eid); db2.close(); } catch (e) {} return false; }   // see templates.save
@@ -2296,11 +2384,13 @@ window.FM = window.FM || {};
       if (!got || !got.pack.layers.length) return false;    // an element with no layers is meaningless
       const eid = newId('e');
       const pack = got.pack, id = got.srcId;
+      let put = false;   // queue 915 clause 2 — see templates.save
       try {
         const db = await openDB();
-        await idbPut(db, 'elem:' + eid, pack);
+        put = await idbPut(db, 'elem:' + eid, pack);
         db.close();
       } catch (e) { return false; }
+      if (!put) return false;
       const idx = this.list();
       idx.unshift({ id: eid, name: name, count: pack.layers.length, thumb: (await FM.projects.getThumb(id)) || (id === curId() ? makeThumb() : null) });
       if (!writeJSON(ELEM_INDEX, idx)) { try { const db2 = await openDB(); await idbDel(db2, 'elem:' + eid); db2.close(); } catch (e) {} return false; }   // see templates.save
@@ -2406,16 +2496,21 @@ window.FM = window.FM || {};
       const got = await packFromProject(projectId, false);
       if (!got || !got.pack.layers.length) return false;    // an element with no layers is meaningless
       const pack = got.pack, id = got.srcId;
+      /* ⚠️ queue 915 clause 2: THIS IS THE ONE THAT LOST HIS EDIT. A refused write leaves the old pack in
+         place; the unread result made this report success, commitDraft then deleted the workspace that
+         held the only copy, and the card showed the new picture over the old element. */
+      let put = false;
       try {
         const db = await openDB();
-        await idbPut(db, 'elem:' + eid, pack);       // SAME key — this is the update
+        put = await idbPut(db, 'elem:' + eid, pack);       // SAME key — this is the update
         db.close();
       } catch (e) { return false; }
+      if (!put) return false;
       /* The pack is the element. If the index write fails the edit has still landed, so report success
          and leave the card's count/thumbnail stale — it self-heals on the next save. Returning false
          here would make the caller keep a draft for an element that is already up to date. */
       idx[at].count = pack.layers.length;
-      const th = (await FM.projects.getThumb(id)) || (id === curId() ? makeThumb() : null);
+      const th = liveThumbOf(id) || (await FM.projects.getThumb(id));   // queue 915 clause 6 — see liveThumbOf
       if (th) idx[at].thumb = th;
       /* MOST RECENTLY EDITED FIRST. Ezra: "the element is at the top of the element list because you
          just edited it". The Projects tab has sorted this way for months; the Elements list kept its
@@ -2437,7 +2532,8 @@ window.FM = window.FM || {};
       FM._mediaBusy = (FM._mediaBusy || 0) + 1;
       let ok = false;
       try {
-        const db = await openDB(); await idbPut(db, 'elem:' + nid, pack); db.close();
+        const db = await openDB(); const put = await idbPut(db, 'elem:' + nid, pack); db.close();
+        if (!put) throw new Error('pack refused');   // queue 915: no copy landed, so no card for one
         const idx = this.list();
         idx.unshift(Object.assign({}, meta, { id: nid, name: (meta.name || 'Element') + ' copy' }));
         ok = writeJSON(ELEM_INDEX, idx);
@@ -2534,7 +2630,15 @@ window.FM = window.FM || {};
       const css = family + ', sans-serif';
       if (!await registerFace(family, file)) { if (FM.toast) FM.toast("Couldn't read that font file"); return null; }
       _fontReg.add(id);
-      try { const db = await openDB(); await idbPut(db, 'font:' + id, { file: file }); db.close(); } catch (e) {}
+      /* queue 915 clause 2: the font file is the font. Unread, a refused write still said "added" and
+         listed it — and after a reload its text fell back to the default face with nothing to explain it. */
+      let put = false;
+      try { const db = await openDB(); put = await idbPut(db, 'font:' + id, { file: file }); db.close(); } catch (e) {}
+      if (!put) {
+        _fontReg.delete(id);
+        if (FM.toast) FM.toast('Storage is full — that font could not be saved');
+        return null;
+      }
       const name = ((file.name || 'Custom font').replace(/\.[^.]+$/, '').replace(/[_\-]+/g, ' ').replace(/\s+/g, ' ').trim()) || 'Custom font';
       const idx = this.list(); idx.push({ id: id, name: name, family: family, css: css });
       if (!writeJSON(FONT_INDEX, idx)) {   // see templates.save — a font that cannot be indexed is not imported
@@ -2575,7 +2679,9 @@ window.FM = window.FM || {};
         const file = await dataURLToFile(fd.dataURL, fd.name || 'font');   // rejects non-data: URLs
         if (!file || !await registerFace(fd.family, file)) continue;
         const nid = newId('f'); _fontReg.add(nid);
-        try { const db = await openDB(); await idbPut(db, 'font:' + nid, { file: file }); db.close(); } catch (e) {}
+        let put = false;   // queue 915 clause 2: registered for this session either way, but only a stored font is listed
+        try { const db = await openDB(); put = await idbPut(db, 'font:' + nid, { file: file }); db.close(); } catch (e) {}
+        if (!put) { _fontReg.delete(nid); continue; }
         idx.push({ id: nid, name: fd.name || 'Imported font', family: fd.family, css: fd.css || (fd.family + ', sans-serif') });
         haveFam.add(fd.family);
       }

@@ -5159,7 +5159,9 @@ window.FM = window.FM || {};
           else chkOn=((((chkX/chkSz)|0)+chkRow)&1)!==0;
           if(chkOn){ var chkI=chkBase+chkX*4; if(d[chkI+3]>0){
             d[chkI]=d[chkI]+(chkR-d[chkI])*chkMix; d[chkI+1]=d[chkI+1]+(chkG-d[chkI+1])*chkMix; d[chkI+2]=d[chkI+2]+(chkB-d[chkI+2])*chkMix; } } } } },
-    grid: function(d,W,H,p,t){ var grSize=FM.evalProp(p.size,t); grSize=(grSize==null?32:grSize); grSize=Math.round(grSize); if(grSize<4)grSize=4; if(grSize>160)grSize=160;
+    /* The 4..160 clamp is in PLATE pixels for the reason hexarray's is (queue 913), floored at 2 so a fine grid on the
+       phone's 28% plate still draws a line and a gap rather than a solid fill. At ps 1 it is the old 4 and 160. */
+    grid: function(d,W,H,p,t){ var grPs=arguments[5]>0?arguments[5]:1; var grSize=FM.evalProp(p.size,t); grSize=(grSize==null?32:grSize); grSize=Math.round(grSize); var grLo=Math.max(2,Math.round(4*grPs)), grHi=Math.round(160*grPs); if(grSize<grLo)grSize=grLo; if(grSize>grHi)grSize=grHi;
       // THICKNESS was welded to 6% of the spacing, so asking for a wide grid forced fat lines with it —
       // a 160px grid could only draw 10px bars. MIX: the lines punched in at full opacity, so a faint
       // guide grid was unreachable. ANGLE: axis-aligned only, so no isometric or diagonal lattice.
@@ -5239,8 +5241,16 @@ window.FM = window.FM || {};
          blurs BOTH axes can be bounded. Outside the layer's box grown by lb_r, every tap in the disc is
          transparent, so the pixel would be written 0 over the 0 already there. The most expensive kernel
          in the app: 190ms on a 140x120 subject in a 1080x1920 plate, nearly all of it on empty pixels. */
-      var lbY0=lbBB?Math.max(0,lbBB.y-lb_r-1):0, lbY1=lbBB?Math.min(H-1,lbBB.y+lbBB.h-1+lb_r+1):H-1;
-      var lbX0=lbBB?Math.max(0,lbBB.x-lb_r-1):0, lbX1=lbBB?Math.min(W-1,lbBB.x+lbBB.w-1+lb_r+1):W-1;
+      /* ⚠️ AN INTEGER PAD, NOT lb_r (queue 913). The radius is a float — any slider value on a reduced plate
+         (pxToPlate multiplies it by ps) and every in-between frame of a keyframed one — and these bounds are the
+         loop counters, so a fractional lb_r made lb_x/lb_y fractional and lb_di with them. A fractional index
+         into the Uint8ClampedArray is a silently dropped write (Radius 7, 9, 12 at the phone's 0.4 plate drew
+         the layer SHARP); a whole number off by a fraction lands 1-3 bytes into the next pixel, which is the
+         green/teal stripes an exported 7.5px frame showed. ceil(r)+1 is lb_r+1 exactly at a whole radius, so
+         every value that already worked renders byte-identically; the taps keep the float radius. */
+      var lbPad=Math.ceil(lb_r)+1;
+      var lbY0=lbBB?Math.max(0,lbBB.y-lbPad):0, lbY1=lbBB?Math.min(H-1,lbBB.y+lbBB.h-1+lbPad):H-1;
+      var lbX0=lbBB?Math.max(0,lbBB.x-lbPad):0, lbX1=lbBB?Math.min(W-1,lbBB.x+lbBB.w-1+lbPad):W-1;
       for(var lb_y=lbY0;lb_y<=lbY1;lb_y++){for(var lb_x=lbX0;lb_x<=lbX1;lb_x++){ var lb_sr=0,lb_sg=0,lb_sb=0,lb_sa=0,lb_ws=0;
         for(lb_k=0;lb_k<lb_n;lb_k++){ var lb_sx=lb_x+lb_ox[lb_k]|0,lb_sy=lb_y+lb_oy[lb_k]|0;
           if(lb_sx<0)lb_sx=0; else if(lb_sx>=W)lb_sx=W-1; if(lb_sy<0)lb_sy=0; else if(lb_sy>=H)lb_sy=H-1;
@@ -5452,6 +5462,9 @@ window.FM = window.FM || {};
       var sf_tw=sf_p.twinkle==null?0:FM.evalProp(sf_p.twinkle,sf_t); if(sf_tw<0)sf_tw=0; if(sf_tw>1)sf_tw=1;
       var sf_tws=sf_p.twinklespeed==null?1:FM.evalProp(sf_p.twinklespeed,sf_t); if(!(sf_tws>0.1))sf_tws=0.1; if(sf_tws>5)sf_tws=5;   // queue 904: 1× = the old fixed 3 rad/s
       var sf_var=sf_p.variation==null?0:FM.evalProp(sf_p.variation,sf_t); if(sf_var<0)sf_var=0; if(sf_var>1)sf_var=1;
+      /* queue 913: a KEYFRAMED Twinkle speed is integrated (FM.integrateProp) — t × speed(now) re-timed the whole
+         clip on every frame, so a ramp played as a burst of frantic flicker. Unkeyframed: the old phase, to the bit. */
+      var sf_twPh=FM.isAnimated(sf_p.twinklespeed)?3*FM.integrateProp(sf_p.twinklespeed,0,sf_t,function(u){ var k=FM.evalProp(sf_p.twinklespeed,u); return !(k>0.1)?0.1:(k>5?5:k); }):null;
       var sf_plain=sf_szP===1&&sf_tw===0&&sf_var===0;
       for(var sf_y=0;sf_y<sf_H;sf_y++){ var sf_row=sf_y*sf_w4; for(var sf_x=0;sf_x<sf_W;sf_x++){ var sf_i=sf_row+sf_x*4; if(sf_d[sf_i+3]<=0)continue;
         var sf_cx=sf_szP===1?sf_x:Math.floor(sf_x/sf_szP), sf_cy=sf_szP===1?sf_y:Math.floor(sf_y/sf_szP);
@@ -5469,7 +5482,7 @@ window.FM = window.FM || {};
             // control read as dead. Same mix as sf_h two lines up, which does it correctly.
             if(sf_tw>0){ var sf_ht=((sf_cx*40503)^(sf_cy*12289))|0; sf_ht=(sf_ht^(sf_ht>>>13))*1274126177|0; sf_ht=(sf_ht^(sf_ht>>>16))>>>0;
               var sf_pz=(sf_ht/4294967295)*6.283;
-              sf_b*=1-sf_tw*0.5*(1-Math.sin(sf_t*3*sf_tws+sf_pz)); }
+              sf_b*=1-sf_tw*0.5*(1-Math.sin((sf_twPh===null?sf_t*3*sf_tws:sf_twPh)+sf_pz)); }
             if(sf_b<0)sf_b=0;
             sf_d[sf_i]=sf_col[0]*sf_b; sf_d[sf_i+1]=sf_col[1]*sf_b; sf_d[sf_i+2]=sf_col[2]*sf_b; sf_d[sf_i+3]=255; }
         } } } },
@@ -6196,7 +6209,12 @@ window.FM = window.FM || {};
     },
     lensflare: function(d,W,H,p,t){ var lfx = fparam(p, 'x', 0.3, t); if(lfx<0)lfx=0; if(lfx>1)lfx=1; var lfy = fparam(p, 'y', 0.3, t); if(lfy<0)lfy=0; if(lfy>1)lfy=1; var lfI = fparam(p, 'intensity', 1, t); if(lfI<0)lfI=0; if(lfI>2)lfI=2; var lfLX=lfx*W, lfLY=lfy*H; var lfSig=W*0.18; if(lfSig<1)lfSig=1; var lfDen=2*lfSig*lfSig; /* QUEUE 558 — "Lens flair should have colour options". The flare was hardcoded warm white (255,240,210 = #fff0d2), and it draws TWO things: the round core and the six streaks. Both get their own colour, so the anamorphic look (warm core, cold streaks) is reachable; both DEFAULT to the old hardcoded value, so an existing flare and a newly added one render exactly as before. */ var lfC1=hexToRGB(p.color||'#fff0d2'), lfFR=lfC1[0], lfFG=lfC1[1], lfFB=lfC1[2]; var lfC2=hexToRGB(p.color2||'#fff0d2'), lfRR=lfC2[0], lfRG=lfC2[1], lfRB=lfC2[2]; var lfSame=(lfRR===lfFR&&lfRG===lfFG&&lfRB===lfFB); var lfRays=[0.0,1.0471975512,2.0943951024,3.1415926536,4.1887902048,5.2359877560]; var lfNR=lfRays.length; var lfMaxR=Math.sqrt(W*W+H*H); var lfw4=W*4; for(var lfYY=0;lfYY<H;lfYY++){ var lfrow=lfYY*lfw4; for(var lfXX=0;lfXX<W;lfXX++){ var lfi=lfrow+lfXX*4; if(d[lfi+3]<=0) continue; var lfDX=lfXX-lfLX, lfDY=lfYY-lfLY; var lfd2=lfDX*lfDX+lfDY*lfDY; var lfDist=Math.sqrt(lfd2); var lfCore=lfI*255*Math.exp(-lfd2/lfDen); var lfRay=0; if(lfDist>0.5){ var lfAng=Math.atan2(lfDY,lfDX); /* SIX COSINES FOR THE NEAREST OF SIX EVENLY-SPACED RAYS (queue 474). The rays sit every 60 deg around the circle, so the best-aligned one is simply the NEAREST — cos is largest where |dA| is smallest — and the nearest is one rounding away. Six cos calls and twelve wrap-tests per pixel become one cos. Equal in exact arithmetic; the float order differs, so the test bounds the difference rather than demanding bit-equality. |dA| <= 30 deg always, so lfBest >= 0.866 and the branch below is always taken, exactly as before. */ var lfStep=1.0471975512; var lfdA=lfAng-Math.round(lfAng/lfStep)*lfStep; var lfBest=Math.cos(lfdA); if(lfBest>0){ /* pow(b,32) is five squarings — checked byte-identical against Math.pow here, and the exponent is a literal so it can never drift out of step with the code. */ var lfB2=lfBest*lfBest, lfB4=lfB2*lfB2, lfB8=lfB4*lfB4, lfB16=lfB8*lfB8; var lfShape=lfB16*lfB16; var lfFall=Math.exp(-lfDist/(lfMaxR*0.35)); lfRay=lfI*150*lfShape*lfFall; } } var lfAmt=lfCore+lfRay; if(lfAmt<=0) continue; /* The equal-colour branch is not an optimisation, it is BYTE-IDENTITY. c*(core+ray) and (c*core + c*ray) are equal in exact arithmetic and can differ in the last float bit, and queue 474's test asserts this kernel byte-for-byte against the original six-ray implementation. Same colour => same expression as before, so that proof survives. */ var lfAddR, lfAddG, lfAddB; if(lfSame){ lfAddR=lfFR*lfAmt/255; lfAddG=lfFG*lfAmt/255; lfAddB=lfFB*lfAmt/255; } else { lfAddR=(lfFR*lfCore+lfRR*lfRay)/255; lfAddG=(lfFG*lfCore+lfRG*lfRay)/255; lfAddB=(lfFB*lfCore+lfRB*lfRay)/255; } var lfR=d[lfi], lfG=d[lfi+1], lfB=d[lfi+2]; var lfNR2=255-(255-lfR)*(255-lfAddR)/255; var lfNG2=255-(255-lfG)*(255-lfAddG)/255; var lfNB2=255-(255-lfB)*(255-lfAddB)/255; d[lfi]=lfNR2; d[lfi+1]=lfNG2; d[lfi+2]=lfNB2; } } },
     roughenedges: function(d,W,H,p,t){ var re_amt = fparam(p, 'amount', 6, t); re_amt=Math.max(0,Math.min(20,re_amt)); var re_scl = fparam(p, 'scale', 10, t); re_scl=Math.max(2,Math.min(40,re_scl)); if(re_amt<=0)return; var re_s=fxSrc(d); var re_w4=W*4; var re_inv=1/re_scl; function re_hash(ix,iy,sd){ var re_h=(ix*374761393+iy*668265263+sd*2147483647)|0; re_h=(re_h^(re_h>>>13))*1274126177|0; re_h=(re_h^(re_h>>>16))>>>0; return re_h/4294967295; } function re_noise(fx,fy,sd){ var re_x0=Math.floor(fx), re_y0=Math.floor(fy); var re_tx=fx-re_x0, re_ty=fy-re_y0; var re_ux=re_tx*re_tx*(3-2*re_tx), re_uy=re_ty*re_ty*(3-2*re_ty); var re_n00=re_hash(re_x0,re_y0,sd), re_n10=re_hash(re_x0+1,re_y0,sd); var re_n01=re_hash(re_x0,re_y0+1,sd), re_n11=re_hash(re_x0+1,re_y0+1,sd); var re_a=re_n00+(re_n10-re_n00)*re_ux; var re_b=re_n01+(re_n11-re_n01)*re_ux; return re_a+(re_b-re_a)*re_uy; } for(var re_y=0;re_y<H;re_y++){ for(var re_x=0;re_x<W;re_x++){ var re_fx=re_x*re_inv, re_fy=re_y*re_inv; var re_dx=(re_noise(re_fx,re_fy,11)*2-1)*re_amt; var re_dy=(re_noise(re_fx,re_fy,29)*2-1)*re_amt; var re_sx=re_x+(re_dx|0); var re_sy=re_y+(re_dy|0); if(re_sx<0)re_sx=0; else if(re_sx>=W)re_sx=W-1; if(re_sy<0)re_sy=0; else if(re_sy>=H)re_sy=H-1; d[(re_y*W+re_x)*4+3]=re_s[(re_sy*W+re_sx)*4+3]; } } },
-    hexarray: function(d,W,H,p,t){ var hx_s = fparam(p, 'size', 24, t); if(hx_s<8) hx_s=8; if(hx_s>80) hx_s=80; var hx_col=hexToRGB(p.color||'#19d6c0'); var hx_cr=hx_col[0], hx_cg=hx_col[1], hx_cb=hx_col[2]; var hx_rh=hx_s*0.8660254;
+    /* ⚠️ THE CLAMP IS IN PLATE PIXELS (queue 913). pxToPlate has already multiplied `size` by the plate scale, so the
+       catalogue's 8..80 has to be too — `arguments[5]`, because naming `ps` would lift the arity past pxToPlate's check
+       and silently drop the scaling (#691). Clamping at a flat 8 turned the default 24 (6.72 plate px at the 28%
+       playback plate) into 8: cells ~19% larger than the export. At ps 1 the bounds are the old 8 and 80 exactly.
+       Grid and Glow Scan clamp the same way, below. */
+    hexarray: function(d,W,H,p,t){ var hx_ps=arguments[5]>0?arguments[5]:1; var hx_s = fparam(p, 'size', 24, t); if(hx_s<8*hx_ps) hx_s=8*hx_ps; if(hx_s>80*hx_ps) hx_s=80*hx_ps; var hx_col=hexToRGB(p.color||'#19d6c0'); var hx_cr=hx_col[0], hx_cg=hx_col[1], hx_cb=hx_col[2]; var hx_rh=hx_s*0.8660254;
       /* Outline weight was locked to 12% of the cell, so scaling the hexes always dragged the line
          weight with them — you could never have big cells with a fine line. OPACITY lets the lattice
          sit over the picture instead of on top of it. */
@@ -6214,7 +6232,7 @@ window.FM = window.FM || {};
    amount and flicker that left a lift of about 4% of full scale. The gain restores the intended
    look; nothing visible is lost by changing it, because at a p95 of 2 there was nothing to see. */
 var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var eeSr=255-(255-d[eei])*(255-eeR*eeAdd)/255; var eeSg=255-(255-d[eei+1])*(255-eeG*eeAdd)/255; var eeSb=255-(255-d[eei+2])*(255-eeB*eeAdd)/255; d[eei]=eeSr; d[eei+1]=eeSg; d[eei+2]=eeSb; } } },
-    glowscan: function(d,W,H,p,t){ var gsSpeed = fparam(p, 'speed', 1.5, t); if(gsSpeed<0)gsSpeed=0; if(gsSpeed>8)gsSpeed=8; var gsWidth = fparam(p, 'width', 60, t); if(gsWidth<10)gsWidth=10; if(gsWidth>200)gsWidth=200; var gsCol=hexToRGB(p.color); var gsCr=gsCol[0],gsCg=gsCol[1],gsCb=gsCol[2]; var gsAmt=fparam(p,'amount',1,t); if(gsAmt<0)gsAmt=0; if(gsAmt>1)gsAmt=1; gsCr*=gsAmt; gsCg*=gsAmt; gsCb*=gsAmt; var gsSigma=gsWidth*0.5; if(gsSigma<0.5)gsSigma=0.5; var gsDen=2*gsSigma*gsSigma; var gsPhase=(t*gsSpeed)%1; if(gsPhase<0)gsPhase+=1; var gsScanY=gsPhase*H; var gsW4=W*4;
+    glowscan: function(d,W,H,p,t){ var gsPs=arguments[5]>0?arguments[5]:1; /* queue 913: the 10..200 clamp is in plate px — see hexarray */ var gsSpeed = fparam(p, 'speed', 1.5, t); if(gsSpeed<0)gsSpeed=0; if(gsSpeed>8)gsSpeed=8; var gsWidth = fparam(p, 'width', 60, t); if(gsWidth<10*gsPs)gsWidth=10*gsPs; if(gsWidth>200*gsPs)gsWidth=200*gsPs; var gsCol=hexToRGB(p.color); var gsCr=gsCol[0],gsCg=gsCol[1],gsCb=gsCol[2]; var gsAmt=fparam(p,'amount',1,t); if(gsAmt<0)gsAmt=0; if(gsAmt>1)gsAmt=1; gsCr*=gsAmt; gsCg*=gsAmt; gsCb*=gsAmt; var gsSigma=gsWidth*0.5; if(gsSigma<0.5)gsSigma=0.5; var gsDen=2*gsSigma*gsSigma; var gsPhase=(t*gsSpeed)%1; if(gsPhase<0)gsPhase+=1; var gsScanY=gsPhase*H; var gsW4=W*4;
       /* DIRECTION (queue 904): every Glow Scan swept top to bottom, so a scan across a wide title, or upward, was out of reach.
          Down is the loop below, untouched — a saved scan is byte-identical. Up runs the same line backwards; Right and Left are
          the same maths along COLUMNS, with the same wrap-around distance. */
@@ -8745,7 +8763,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var fwScP=p.scale==null?100:FM.evalProp(p.scale,t); if(fwScP<20)fwScP=20; if(fwScP>400)fwScP=400;
       var fwDet=p.detail==null?3:Math.round(FM.evalProp(p.detail,t)); if(fwDet<1)fwDet=1; if(fwDet>3)fwDet=3;
       var fwS=fwScP===100?fwK:fwK*(fwScP/100);
-      var fwPh=fwEv===0?0:t*fwEv;
+      var fwPh=fwPhase(p,t,fwEv);   // queue 913: keyframed Churn is integrated — see tdPhase
       var fwNx=Math.sin(x/(57*fwS)+y/(40*fwS)+fwPh), fwNy=Math.cos(x/(47*fwS)-y/(61*fwS)+fwPh);
       if(fwDet>1){ fwNx+=Math.sin(x/(29*fwS)-y/(53*fwS)+fwPh*1.7)*0.6; fwNy+=Math.sin(x/(35*fwS)+y/(27*fwS)+fwPh*1.7)*0.6; }
       if(fwDet>2){ fwNx+=Math.sin(x/(15*fwS)+y/(19*fwS)+fwPh*2.9)*0.35; fwNy+=Math.cos(x/(13*fwS)-y/(21*fwS)+fwPh*2.9)*0.35; }
@@ -9394,7 +9412,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     var fwScP = p.scale == null ? 100 : FM.evalProp(p.scale, t); if (fwScP < 20) fwScP = 20; if (fwScP > 400) fwScP = 400;
     var fwDet = p.detail == null ? 3 : Math.round(FM.evalProp(p.detail, t)); if (fwDet < 1) fwDet = 1; if (fwDet > 3) fwDet = 3;
     var fwS = fwScP === 100 ? fwK : fwK * (fwScP / 100);
-    var fwPh = fwEv === 0 ? 0 : t * fwEv;
+    var fwPh = fwPhase(p, t, fwEv);   // queue 913: a keyframed Churn is integrated, like Boil speed — see tdPhase
     return { det: fwDet, ph: fwPh, ph17: fwPh * 1.7, ph29: fwPh * 2.9, amt04: fwAmt * 0.4,
              i57: 1 / (57 * fwS), i40: 1 / (40 * fwS), i47: 1 / (47 * fwS), i61: 1 / (61 * fwS),
              i29: 1 / (29 * fwS), i53: 1 / (53 * fwS), i35: 1 / (35 * fwS), i27: 1 / (27 * fwS),
@@ -9452,11 +9470,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   /* BOIL SPEED and PATTERN (queue 904). The boil was t * 0.6 with nothing to slow, stop or reshuffle it. Speed multiplies the clock
      (1 is exactly the old t * 0.6, 0 freezes it); Pattern slides the whole noise field to a different place, so two layers boil
      differently. Both absent is the old phase to the bit. */
+  /* A KEYFRAMED Boil speed is INTEGRATED (queue 913). t × speed(now) rescaled the whole history every frame, so
+     ramping it to 0 to stop the boil snapped the pattern back to its first-frame shape (frame 3 s == frame 0 s,
+     measured). The phase is how far the boil has run: ∫ 0.6·speed dτ — see FM.integrateProp. Unkeyframed is the
+     line below it, unchanged. Fractal Warp's Churn had the identical product and shares the cure (fwPhase). */
   function tdPhase(p, t) {
     let ph = t * 0.6;
-    if (p.evolve != null) { const k = FM.evalProp(p.evolve, t); if (isFinite(k) && k !== 1) ph = t * 0.6 * Math.max(0, k); }
+    if (FM.isAnimated(p.evolve)) ph = 0.6 * FM.integrateProp(p.evolve, 0, t, (u) => { const k = FM.evalProp(p.evolve, u); return isFinite(k) ? Math.max(0, k) : 1; });
+    else if (p.evolve != null) { const k = FM.evalProp(p.evolve, t); if (isFinite(k) && k !== 1) ph = t * 0.6 * Math.max(0, k); }
     if (p.seed != null) { const sd = Math.round(FM.evalProp(p.seed, t)) | 0; if (sd) ph += sd * 17.31; }
     return ph;
+  }
+  function fwPhase(p, t, ev) {
+    if (!FM.isAnimated(p.evolve)) return ev === 0 ? 0 : t * ev;   // the old phase, to the bit
+    return FM.integrateProp(p.evolve, 0, t, (u) => { const k = FM.evalProp(p.evolve, u); return k < 0 ? 0 : (k > 5 ? 5 : k); });
   }
   WARP_FX.turbulentdisplace.prep = function (W, H, cx, cy, maxR, p, t, ps) {
     let a = FM.evalProp(p.amount, t);
@@ -9648,6 +9675,23 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const x2 = Math.min(W, (bb.x + bb.w) * S + S), y2 = Math.min(H, (bb.y + bb.h) * S + S);
     return { x: x, y: y, w: x2 - x, h: y2 - y };
   }
+  /* THE 3D SOLIDS WRAP THE BOX, SO THE BOX HAS TO BE THE CONTENT (queue 913). A solid crops its rect out of the
+   * plate with extractTex and maps that texture edge-to-edge onto every face — so the loose box above, padded a
+   * scan cell or more of TRANSPARENT plate on every side, put a clear border round each face: see-through
+   * notches at every seam of Cube / Box / Open Box / Cross Beam, a torn Ring rim, and on a ~12px layer Ring
+   * and Open Box drew nothing at all (their faces sample the border and little else). Measured by calling the
+   * kernels on one plate with the exact rect, rect+4 and rect+8: the exact rect is clean, the padded ones
+   * carry the defects. Tiles pays for an exact full-frame scan (above); this reads back ONLY the loose box,
+   * which is the layer plus a few pixels, so a small subject in a 1080x1920 frame costs a small readback.
+   * The fast box can only miss an isolated pixel too faint to lift its whole scan cell past 8 — invisible,
+   * and the same threshold the exact scan uses. Pagecurl is NOT in the list: a flat sheet shows the border as
+   * margin rather than holes, and its curl line is placed by the box, so every saved curl would move. */
+  const SOLID_FX = Object.assign(Object.create(null), { cube3d: 1, box3d: 1, cylinder3d: 1, sphere3d: 1, ellipsoid3d: 1, torus3d: 1, ring3d: 1,
+    pyramid3d: 1, octahedron3d: 1, hexprism3d: 1, starprism3d: 1, starpoly3d: 1, heart3d: 1, hollowbox3d: 1, axiscross3d: 1 });
+  function alphaBBoxWithin(g, bb) {
+    const e = alphaBBoxExact(g.getImageData(bb.x, bb.y, bb.w, bb.h).data, bb.w, bb.h);
+    return e ? { x: bb.x + e.x, y: bb.y + e.y, w: e.w, h: e.h } : null;
+  }
   // Effects that never read the alpha bbox (no texture wrap, no pivot): skip the full-frame
   // getImageData scan — it was the single most expensive part of running them per frame.
   /* wiggle / drift / orbit LEFT the list too (queue 730, hunt MEDIUM #13): each has a `near` test meant to keep the
@@ -9760,7 +9804,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     else if (fx.type === 'roundcorners') { try { bbox = alphaBBox(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bbox = null; } }
     // tiles spaces its copies BY this rectangle, so it needs the exact one for the same reason
     else if (fx.type === 'tiles') { try { bbox = alphaBBoxExact(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bbox = null; } }
-    else try { bbox = alphaBBoxFast(_cfA, W, H); } catch (e) { bbox = null; }  // tainted-canvas guard
+    else try { bbox = alphaBBoxFast(_cfA, W, H); if (bbox && SOLID_FX[fx.type]) bbox = alphaBBoxWithin(actx, bbox) || bbox; } catch (e) { bbox = null; }  // tainted-canvas guard
     // Tiles in "Whole clip" mode builds its OWN plate reaching past the frame and takes its rect from
     // THAT (the `whole && expand` branch in tiles() overwrites src/sx/sy/bw/bh/bx/by wholesale). But
     // the call below is gated on the CANVAS bbox, so a clip dragged fully off-frame never got the
@@ -10680,7 +10724,24 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (!n || op <= 0) return;
       // murmur3's finaliser: the speed-lines hash on sequential i*4+k inputs left visible diagonal clumps in heavy snow
       const hash = function (k) { k = Math.imul(k + 1, 0x9e3779b1); k ^= k >>> 16; k = Math.imul(k, 0x85ebca6b); k ^= k >>> 13; k = Math.imul(k, 0xc2b2ae35); k ^= k >>> 16; return (k >>> 0) / 4294967296; };
-      const fall = (rain ? 1.4 : 0.12) * speed;          // frame heights per second, nearest layer
+      let fall = (rain ? 1.4 : 0.12) * speed;            // frame heights per second, nearest layer
+      /* A KEYFRAMED SPEED OR WIND IS INTEGRATED, NOT MULTIPLIED (queue 913). `fall * time` is only the distance
+         fallen while the speed never changes; with Speed keyframed 1 → 0 it rewound every flake to its first-frame
+         spot (the frame at 3 s was byte-identical to the frame at 0 s), and a Wind change late in the clip threw
+         each flake sideways by the whole distance it had fallen since the start. Here the clock becomes the
+         speed's integral since the clip began, and `drift` the wind that integral actually carried, so a flake
+         goes where the speed and wind it lived through took it. Neither keyframed: the old expressions, to the
+         bit — `drift` IS `wind` and `clock` IS `time`. The streak's slant stays the wind of THIS frame. */
+      let clock = time, drift = wind;
+      if (FM.isAnimated(p.speed) || FM.isAnimated(p.wind)) {
+        const spAt = (tau) => Math.max(0, p.speed == null ? 1 : FM.evalProp(p.speed, tau));
+        const wiAt = (tau) => (p.wind == null ? 20 : FM.evalProp(p.wind, tau)) / 100;
+        const t0 = t - time, ks = [p.speed, p.wind];
+        clock = FM.integrateProp(ks, t0, t, spAt);
+        const carried = FM.integrateProp(ks, t0, t, (tau) => wiAt(tau) * spAt(tau));
+        fall = rain ? 1.4 : 0.12;
+        drift = clock !== 0 ? carried / clock : wind;
+      }
       const mY = rain ? (len / H + 0.02) : (size * 2 / H + 0.02), mX = 0.08;
       const wrap = (v, lo, hi) => { const r = hi - lo; return lo + (((v - lo) % r) + r) % r; };
       B.save();
@@ -10696,9 +10757,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           for (let i = band; i < n; i += 3) {
             const h1 = hash(i * 4 + 1), h2 = hash(i * 4 + 2), h3 = hash(i * 4 + 3);
             const v = nearness * (0.85 + 0.3 * h3);
-            const dy = fall * v * time;                      // in frame heights
+            const dy = fall * v * clock;                     // in frame heights
             const y = wrap(h2 + dy, -mY, 1 + mY) * H;
-            const x = wrap(h1 + wind * dy * H / W, -mX, 1 + mX) * W;
+            const x = wrap(h1 + drift * dy * H / W, -mX, 1 + mX) * W;
             const L = len * nearness * (0.7 + 0.6 * h3);
             const dl = Math.hypot(wind, 1) || 1;
             B.moveTo(x, y); B.lineTo(x - wind / dl * L, y - 1 / dl * L);
@@ -10720,10 +10781,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         for (let i = 0; i < n; i++) {
           const h1 = hash(i * 4 + 1), h2 = hash(i * 4 + 2), h3 = hash(i * 4 + 3), h4 = hash(i * 4 + 4);
           const nearness = 1 - depth * h3 * 0.8;
-          const dy = fall * nearness * (0.8 + 0.4 * h4) * time;
+          const dy = fall * nearness * (0.8 + 0.4 * h4) * clock;
           const sway = 0.012 * Math.sin(time * (0.7 + h4) * 1.6 + h1 * 6.283);
           const y = wrap(h2 + dy, -mY, 1 + mY) * H;
-          const x = wrap(h1 + (wind * dy * 0.6) * H / W + sway, -mX, 1 + mX) * W;
+          const x = wrap(h1 + (drift * dy * 0.6) * H / W + sway, -mX, 1 + mX) * W;
           const d = size * 2 * nearness * (0.7 + 0.6 * h4);  // sprite's soft edge takes up half its width
           B.globalAlpha = op * (0.4 + 0.6 * nearness);
           B.drawImage(_wxSprite, x - d / 2, y - d / 2, d, d);
@@ -11109,13 +11170,19 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // bottom-right) built by subtracting an offset copy of the layer's own alpha from itself.
     liquidglass: (function () {
       let _gA = null, _gB = null;
-      return function (A, B, W, H, bb, p, t) {
+      /* `ps` (queue 913). Frost and Edge are catalogued `unit: 'px'`, but a canvas kernel scales for itself — the
+         canvas path never runs pxToPlate — and this one never took the plate scale, so both ran in PLATE pixels: on
+         the phone's 28% playback plate the Edge rim drew ~4.8x as thick as in the file and Frost 8 washed a pattern
+         flat that the export kept readable. (The #691b source check could not see it: it slices `name: function (`,
+         and this kernel is a closure.) At ps 1 — the export — both are multiplied by 1, so the file is unchanged. */
+      return function (A, B, W, H, bb, p, t, tl, layer, ps) {
+        const sc = ps > 0 ? ps : 1;
         const amt = Math.max(0, Math.min(1, fparam(p, 'amount', 1, t)));
         if (amt <= 0) { B.drawImage(A, 0, 0); return; }
-        const frost = Math.max(0, fparam(p, 'frost', 8, t));
+        const frost = Math.max(0, fparam(p, 'frost', 8, t)) * sc;
         const clarity = Math.max(0, Math.min(100, fparam(p, 'clarity', 35, t))) / 100;
         const sheen = Math.max(0, Math.min(100, fparam(p, 'sheen', 45, t))) / 100;
-        const bevel = Math.max(0, fparam(p, 'bevel', 4, t));
+        const bevel = Math.max(0, fparam(p, 'bevel', 4, t));   // project px — the gate below keeps judging the value he set
         const tintA = Math.max(0, Math.min(100, fparam(p, 'tint', 12, t))) / 100;
         const C = hexToRGB(p.color || '#ffffff');
         const ang = fparam(p, 'angle', 135, t) * Math.PI / 180;
@@ -11156,7 +11223,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // ---- bevel: A minus A-shifted leaves a crescent along one side of every edge, whatever
         // the silhouette is. Two passes, opposite offsets, light then dark.
         if (bevel > 0.2) {
-          const dx = Math.cos(ang) * bevel, dy = Math.sin(ang) * bevel;
+          const dx = Math.cos(ang) * bevel * sc, dy = Math.sin(ang) * bevel * sc;
           [[-dx, -dy, '255,255,255', 0.55], [dx, dy, '0,0,0', 0.30]].forEach(([ox, oy, rgb, a]) => {
             g2.setTransform(1, 0, 0, 1, 0, 0); g2.clearRect(0, 0, W, H);
             g2.globalCompositeOperation = 'source-over'; g2.globalAlpha = 1;

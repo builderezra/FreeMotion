@@ -698,7 +698,10 @@ window.FM = window.FM || {};
     FM.scene.layers.forEach(layer => {
       if (layer.type !== 'video') return;
       const m = FM.media.get(layer.id);
-      if (m && m.el && !layer.reversed) { try { m.el.playbackRate = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * FM.previewRate)); } catch (e) {} }
+      if (m && m.el && !layer.reversed) {
+        if (FM.pitchFollowsSpeed) FM.pitchFollowsSpeed(m.el);   // queue 916: the pitch rides the rate, like the export
+        try { m.el.playbackRate = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * FM.previewRate)); } catch (e) {}
+      }
     });
     /* The <select> is a display like any other, so it is driven from here rather than patched by each
        caller — two of them were already doing it by hand, which is the same duplication in miniature. */
@@ -1895,6 +1898,9 @@ window.FM = window.FM || {};
              * audible, and what it sounds like is scratchy. No sample is ever dropped, so none of
              * this showed up in the seek counter or as a hole in the waveform — which is why five
              * separate readings of this file found nothing.
+             * (Since queue 916 preservesPitch is OFF — his rule is that a sped-up clip sounds sped up,
+             * as the export always did — so a write is now a plain resample and a trim is a slight
+             * pitch bend rather than a stretcher re-prime. Rate-limiting the writes matters as much.)
              *
              * WHY IT NEVER CONVERGED, which is the actual defect. `el.currentTime` is not the
              * instantaneous audible position: it is latched to the last block the element handed the
@@ -2115,6 +2121,9 @@ window.FM = window.FM || {};
         // A new pass learns its own output latency from scratch (queue 148) — the offset from the
         // last one belongs to a different position, and on a phone often to a different device state.
         m._errBias = null; m._rateAt = 0; m._baseRate = null; m._warmCt = null;
+        /* A sped-up clip sounds sped up (queue 916) — set on the element when it is made (js/media.js),
+           and asserted again here so an element that reached the scene by any other route still does. */
+        if (FM.pitchFollowsSpeed) FM.pitchFollowsSpeed(m.el);
         try { m.el.playbackRate = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * (FM.previewRate || 1))); } catch (e) {}
         m.el.muted = FM.soloSilenced(layer);   // solo silences the others' audio, not just their picture
         // Pressing PLAY is the other place a waveform gets opened at an arbitrary sample — and the one
@@ -3051,6 +3060,125 @@ window.FM = window.FM || {};
     return g;
   };
 
+  /* ═══ A LAYER THAT FOLLOWS SOMETHING ELSE KEEPS ITS PLACE WHEN IT CHANGES PARENT (queue 914.4) ═══════════
+   * A layer has ONE parent. Grouping re-parents every top-level member to the new group, so a member hung on
+   * a Null (or on any layer left out of the selection) lost that link — its x/y had been LOCAL to the Null,
+   * and they now landed in the group's identity frame. The #912 audit watched a square jump from the middle
+   * of the canvas into its top-left corner. His answer, 22 Sep: *"Stay exactly where they are"*. So the old
+   * parent's placement is BAKED into the layer before it moves — bakeGroupTransform's algebra, on the way in.
+   * The two frames are read from the RENDERER (FM._layerCTM on a bare probe hung where the layer hangs), not
+   * re-derived: applyParentChain resolves split halves, behaviors and a group's pivot, and a second copy of
+   * that walk is how the canvas overlay and the picture came to disagree (queue 832). A parent chain only
+   * translates, rotates and scales uniformly, so old-against-new is one similarity — an offset, a turn and a
+   * factor — which folds exactly into x/y, rotation and scale, keyframes included.
+   * Returns null when that cannot be done without changing his animation: a keyframed position that has to
+   * be TURNED needs x and y keyed at the same moments with the same easing, and anything else would be a
+   * silent approximation of his motion path. The caller leaves such a layer where it is and says so.
+   * Not carried: jitter the renderer adds in the parent's frame (Wiggle) keeps its own numbers. */
+  function frameAt(pid, t) {
+    if (!FM._layerCTM) return null;
+    return FM._layerCTM({ id: '__frame_probe', parent: pid || null, transform: { x: 0, y: 0, rotation: 0, scale: 1 } }, t, FM.scene);
+  }
+  // Degrees, UNWRAPPED, summed exactly as applyParentChain sums them — a weighted child keeps a FRACTION of
+  // this, so 370° and 10° are different answers there even though the matrix cannot tell them apart.
+  function chainTurn(pid, t) {
+    let deg = 0; const seen = new Set();
+    while (pid && !seen.has(pid)) {
+      seen.add(pid);
+      const pl = FM.clipAt(FM.scene, pid, t); if (!pl) break;
+      const v = FM.evalProp((pl.transform || {}).rotation, t);
+      deg += (FM.behaviorValue ? FM.behaviorValue(pl, 'rotation', v, t) : v) || 0;
+      pid = pl.parent;
+    }
+    return deg;
+  }
+  // Does anything between the old parent and the new frame move over time? Then the bake is exact at the
+  // playhead only — where he is looking when he groups — and the layer stops following that motion.
+  function chainMoves(fromId, toId) {
+    const moving = pl => ['x', 'y', 'rotation', 'scale'].some(k => FM.isAnimated((pl.transform || {})[k]))
+      || !!pl.splitOf || (Array.isArray(pl.behaviors) && pl.behaviors.some(b => b && b.enabled !== false && ['x', 'y', 'rotation', 'scale'].indexOf(b.prop) >= 0));
+    const walk = (pid, stop) => {
+      const seen = new Set();
+      while (pid && pid !== stop && !seen.has(pid)) {
+        seen.add(pid);
+        const pl = FM.layerById(FM.scene, pid); if (!pl) break;
+        if (moving(pl)) return { moves: true, reached: false };
+        pid = pl.parent;
+      }
+      return { moves: false, reached: pid === stop };
+    };
+    const up = walk(fromId, toId || null);
+    return up.moves || (!up.reached && !!toId && walk(toId, null).moves);
+  }
+  function sameKeying(p, q) {
+    if (p.kf.length !== q.kf.length || (p.loopMode || 'none') !== (q.loopMode || 'none')) return false;
+    return p.kf.every((a, i) => {
+      const b = q.kf[i];
+      return Math.abs(a.t - b.t) < 1e-9 && (a.e || '') === (b.e || '')
+        && JSON.stringify(a.bez || null) === JSON.stringify(b.bez || null) && JSON.stringify(a.ez || null) === JSON.stringify(b.ez || null)
+        && (a.to == null) === (b.to == null) && (a.ti == null) === (b.ti == null);
+    });
+  }
+  function planParentBake(l, toId, t) {
+    const tr = l && l.transform;
+    if (!tr) return null;
+    const Mo = frameAt(l.parent, t), Mn = frameAt(toId, t);
+    if (!Mo || !Mn) return null;
+    const R = Mn.inverse().multiply(Mo);                     // local-to-old-parent → local-to-new-frame
+    const s = Math.hypot(R.a, R.b);
+    if (!(s > 0) || !isFinite(s) || ![R.c, R.d, R.e, R.f].every(isFinite)) return null;
+    const turned = Math.abs(R.b) > 1e-9 * s || R.a < 0;
+    const anim = FM.isAnimated, ax = anim(tr.x), ay = anim(tr.y);
+    const x0 = ax ? 0 : (FM.evalProp(tr.x, t) || 0), y0 = ay ? 0 : (FM.evalProp(tr.y, t) || 0);
+    // Rebuild a keyframed prop on `src`'s keying: value and tangents from the i-th keyframe of the source(s).
+    const rekey = (src, val, tan) => {
+      const out = JSON.parse(JSON.stringify(src));
+      out.kf.forEach((k, i) => {
+        k.v = val(i);
+        if (k.to != null) k.to = tan(i, 'to');
+        if (k.ti != null) k.ti = tan(i, 'ti');
+      });
+      return out;
+    };
+    const num = v => (typeof v === 'number' && isFinite(v)) ? v : 0;
+    let nx, ny;
+    if (!ax && !ay) { nx = R.e + R.a * x0 + R.c * y0; ny = R.f + R.b * x0 + R.d * y0; }
+    else if (!turned) {                                        // no turn: each axis maps on its own, exactly
+      nx = ax ? rekey(tr.x, i => R.e + R.a * num(tr.x.kf[i].v), (i, k) => R.a * num(tr.x.kf[i][k])) : R.e + R.a * x0;
+      ny = ay ? rekey(tr.y, i => R.f + R.d * num(tr.y.kf[i].v), (i, k) => R.d * num(tr.y.kf[i][k])) : R.f + R.d * y0;
+    } else if (ax && !ay) {                                    // x moves, y is still: both follow x's keying
+      nx = rekey(tr.x, i => R.e + R.a * num(tr.x.kf[i].v) + R.c * y0, (i, k) => R.a * num(tr.x.kf[i][k]));
+      ny = rekey(tr.x, i => R.f + R.b * num(tr.x.kf[i].v) + R.d * y0, (i, k) => R.b * num(tr.x.kf[i][k]));
+    } else if (!ax && ay) {
+      nx = rekey(tr.y, i => R.e + R.a * x0 + R.c * num(tr.y.kf[i].v), (i, k) => R.c * num(tr.y.kf[i][k]));
+      ny = rekey(tr.y, i => R.f + R.b * x0 + R.d * num(tr.y.kf[i].v), (i, k) => R.d * num(tr.y.kf[i][k]));
+    } else if (sameKeying(tr.x, tr.y)) {
+      const X = tr.x.kf, Y = tr.y.kf;
+      nx = rekey(tr.x, i => R.e + R.a * num(X[i].v) + R.c * num(Y[i].v), (i, k) => R.a * num(X[i][k]) + R.c * num(Y[i][k]));
+      ny = rekey(tr.x, i => R.f + R.b * num(X[i].v) + R.d * num(Y[i].v), (i, k) => R.b * num(X[i][k]) + R.d * num(Y[i][k]));
+    } else return null;
+    // The turn the layer's own ANGLE inherits: all of it normally, none when 'locked', a fraction when
+    // 'weighted' — exactly what applyParentRotMode takes back off it in the renderer.
+    const mode = l.parentMode || 'normal';
+    const w = mode === 'locked' ? 0 : mode === 'weighted' ? Math.max(0, Math.min(1, l.parentWeight != null ? +l.parentWeight || 0 : 0.5)) : 1;
+    const turn = (chainTurn(l.parent, t) - chainTurn(toId, t)) * w;
+    return {
+      moving: chainMoves(l.parent, toId),
+      apply() {
+        tr.x = nx; tr.y = ny;
+        if (turn) {
+          if (anim(tr.rotation)) tr.rotation.kf.forEach(k => { k.v = num(k.v) + turn; });
+          else tr.rotation = num(FM.evalProp(tr.rotation, t)) + turn;
+        }
+        if (Math.abs(s - 1) > 1e-12 && tr.scale != null) {
+          if (anim(tr.scale)) tr.scale.kf.forEach(k => { k.v = num(k.v) * s; if (k.to != null) k.to = num(k.to) * s; if (k.ti != null) k.ti = num(k.ti) * s; });
+          else tr.scale = num(FM.evalProp(tr.scale, t)) * s;
+        }
+      },
+    };
+  }
+  FM._planParentBake = planParentBake;   // suite seam (queue 914.4)
+
   // ---- AM-style grouping: a 'group' layer is an invisible transform parent; members follow it
   // via the existing parent chain. Timeline shows the group as a collapsible row.
   // opts.mask → MASKING group: the top member clips the rest (composited as one unit in renderScene).
@@ -3069,8 +3197,31 @@ window.FM = window.FM || {};
       const up = FM.scene.layers.find(l => l.id === a);
       a = up && up.parent;
     }
-    const members = FM.scene.layers.filter(l => ids.includes(l.id) && l.type !== 'camera' && !ancestors.has(l.id));
-    if (members.length < 2) return;
+    let members = FM.scene.layers.filter(l => ids.includes(l.id) && l.type !== 'camera' && !ancestors.has(l.id));
+    /* queue 914.4: A MEMBER HUNG ON SOMETHING OUTSIDE THE SELECTION STAYS WHERE IT IS. The group starts at
+       identity, so a member lands in the group's PARENT's frame — the open group, or the project. Every member
+       whose parent is neither another member nor that frame gets the old parent's placement baked in before it
+       is re-parented (see planParentBake). One that cannot be baked without changing its animation stays out of
+       the group, on its old parent; a member hung on THAT one then needs a bake of its own, hence the loop —
+       it always ends, because every pass that goes round again has removed a member. */
+    const frameId = FM.groupContext || null;
+    const plans = new Map(), leftOut = [];
+    for (;;) {
+      const inSet = new Set(members.map(l => l.id)), out = [];
+      plans.clear();
+      members.forEach(l => {
+        if (l.parent && inSet.has(l.parent)) return;          // follows another member: that link is kept
+        if ((l.parent || null) === frameId) return;            // already hangs in the frame it lands in
+        const plan = planParentBake(l, frameId, FM.time);
+        if (plan) plans.set(l.id, plan); else out.push(l);
+      });
+      if (!out.length) break;
+      members = members.filter(l => out.indexOf(l) < 0);
+      out.forEach(l => leftOut.push(l));
+    }
+    const nameList = ls => '“' + (ls[0].name || 'Layer') + '”' + (ls.length > 1 ? ' and ' + (ls.length - 1) + ' more' : '');
+    const leftMsg = leftOut.length ? nameList(leftOut) + ' stayed outside — ' + (leftOut.length > 1 ? 'their' : 'its') + ' keyframed path follows another layer and cannot be turned into the group without changing it' : '';
+    if (members.length < 2) { if (leftMsg && FM.toast) FM.toast(leftMsg, 5000); return; }
     const start = Math.min.apply(null, members.map(l => l.start));
     const end = Math.max.apply(null, members.map(l => l.start + l.duration));
     // NEUTRAL transform (0,0) — the group becomes the members' PARENT, so any x/y here would
@@ -3111,7 +3262,12 @@ window.FM = window.FM || {};
       }
     });
     const moving = FM.scene.layers.filter(l => movingIds.has(l.id));   // current array order = current stacking
-    members.forEach(l => { if (!l.parent || !memberIds.has(l.parent)) l.parent = g.id; });
+    members.forEach(l => {
+      if (l.parent && memberIds.has(l.parent)) return;
+      const plan = plans.get(l.id);
+      if (plan) plan.apply();                                   // queue 914.4: BEFORE the link changes — see above
+      l.parent = g.id;
+    });
     // Pull them contiguous directly under the group row (top-most mover's slot).
     const topIdx = FM.scene.layers.findIndex(l => movingIds.has(l.id));
     FM.scene.layers = FM.scene.layers.filter(l => !movingIds.has(l.id));
@@ -3119,7 +3275,13 @@ window.FM = window.FM || {};
     Array.prototype.splice.apply(FM.scene.layers, [FM.scene.layers.indexOf(g) + 1, 0].concat(moving));
     FM.selectMode = false;
     FM.selectLayer(g.id);
-    if (FM.toast) FM.toast(opts.mask ? 'Masking group — its top layer clips the rest' : 'Grouped ' + members.length + ' layers');
+    /* …and what the bake could not keep is SAID: a parent that moves over time can be matched at the playhead
+       only, and after that the layer no longer follows it. */
+    const followed = members.filter(l => plans.has(l.id) && plans.get(l.id).moving);
+    const notes = [];
+    if (followed.length) notes.push(nameList(followed) + ' followed a layer that moves — kept where ' + (followed.length > 1 ? 'they are' : 'it is') + ' now, without that motion');
+    if (leftMsg) notes.push(leftMsg);
+    if (FM.toast) FM.toast((opts.mask ? 'Masking group — its top layer clips the rest' : 'Grouped ' + members.length + ' layers') + (notes.length ? '. ' + notes.join('. ') : ''), notes.length ? 5000 : undefined);
     if (FM.history) FM.history.commit();
   };
   /* BAKE THE GROUP'S TRANSFORM INTO ITS MEMBERS ON THE WAY OUT (bug hunt, 21 Aug).
@@ -3490,11 +3652,23 @@ window.FM = window.FM || {};
   FM.copySelection = function () {
     const ids = FM.selectionIds ? FM.selectionIds() : (FM.scene.selectedId ? [FM.scene.selectedId] : []);
     if (!ids.length) return 0;
+    /* ⚠️ queue 914.5: A GROUP BRINGS ITS LAYERS. A group row is only a parent link — its members are not in the
+       selection — so copying one snapshotted the empty row and Paste made a "Group copy" with nothing inside it
+       (#912 audit). FM.duplicateLayer walks FM.groupDescendants for exactly this reason; paste already remaps
+       parents through its idMap, so the members re-attach to the pasted group by themselves. They are marked
+       `inside` so paste selects the GROUP, as Duplicate does, and not the group plus everything in it. */
+    const want = new Set(ids), inside = new Set();
+    ids.forEach(id => {
+      const l = FM.layerById(FM.scene, id);
+      if (l && l.type === 'group' && FM.groupDescendants) FM.groupDescendants(id).forEach(d => { if (!want.has(d.id)) { want.add(d.id); inside.add(d.id); } });
+    });
     // Preserve array order so a copied parent/child keep their relative stacking.
-    const ordered = FM.scene.layers.filter(l => ids.includes(l.id));
+    const ordered = FM.scene.layers.filter(l => want.has(l.id));
     FM.clipboard = ordered.map(layer => {
       const rec = FM.media.get(layer.id);
-      return { snapshot: JSON.parse(JSON.stringify(layer)), file: (rec && rec.file) ? rec.file : null, kind: rec ? rec.kind : null };
+      const entry = { snapshot: JSON.parse(JSON.stringify(layer)), file: (rec && rec.file) ? rec.file : null, kind: rec ? rec.kind : null };
+      if (inside.has(layer.id)) entry.inside = true;
+      return entry;
     });
     return FM.clipboard.length;
   };
@@ -3531,11 +3705,25 @@ window.FM = window.FM || {};
        falls back to the top. */
     const _dflt = FM.groupContext ? 0 : (FM.clampAddAt ? FM.clampAddAt() : 0);
     let insertAt = (typeof insertIndex === 'number' && insertIndex >= 0) ? Math.min(insertIndex, FM.scene.layers.length) : _dflt;
+    const batchIds = new Set(copies.map(c => c.copy.id));
     for (const { copy, entry } of copies) {
       // Remap parent: a parent copied in the same batch → its new clone; else keep if still present, else drop.
       if (copy.parent) {
         if (idMap[copy.parent]) copy.parent = idMap[copy.parent];
         else if (!FM.layerById(FM.scene, copy.parent)) copy.parent = null;
+      }
+      /* ⚠️ queue 914.6: INSIDE EDIT GROUP, WHAT YOU PASTE GOES IN THE GROUP. FM.insertLayer gives every add the
+         open group as its parent; paste never did, so the pasted layer landed at the top level — and on the
+         phone, where the timeline shows only the open group's rows AND solos the selection, it drew no rows at
+         all (#912 audit). Same rule as insertLayer for a layer with no parent. One hung on a layer OUTSIDE the
+         open group would be just as invisible, so it moves into the group too — with its old parent's
+         placement baked in, the answer he gave for grouping (queue 914.4), so it still lands exactly on the
+         source. A batch-mate's link is kept: its root is the one that goes in. */
+      const gctx = FM.groupContext;
+      if (gctx && !(copy.parent && batchIds.has(copy.parent)) && copy.parent !== gctx && !(copy.parent && FM.isAncestor(FM.scene, gctx, copy.parent))) {
+        const plan = copy.parent ? planParentBake(copy, gctx, FM.time) : null;
+        if (plan) plan.apply();
+        if (plan || !copy.parent) copy.parent = gctx;   // no plan = a path that cannot be carried; it keeps its parent
       }
       // Behaviors carry CROSS-LAYER id refs too (follow.targetId / audio.sourceId) — same rule as
       // parent, mirroring storage.js reIdLayers: batch-mate → its clone; a live outside layer keeps;
@@ -3579,7 +3767,7 @@ window.FM = window.FM || {};
       }
       FM.scene.layers.splice(insertAt++, 0, copy);
     }
-    const newIds = copies.map(c => c.copy.id);
+    const newIds = copies.filter(c => !c.entry.inside).map(c => c.copy.id);   // queue 914.5: a pasted group is selected as the group
     FM.scene.selectedIds = newIds;
     FM.scene.selectedId = newIds[newIds.length - 1] || null;
     refreshAll();
@@ -3875,7 +4063,12 @@ window.FM = window.FM || {};
         // instead of interpolating.
         const arrKf = p.kf.some(k => Array.isArray(k.v));
         const before = arrKf ? [...p.kf].reverse().find(k => k.t <= t + 1e-9) : null;
-        const v = arrKf
+        /* queue 914.7: an animated POINT SET has its own evaluator, which morphs between two keys of the same
+           shape — so its seam takes the shape AT the cut, not the key before it, or the tail half would snap
+           back to that key and morph again. (Before 914.7 the halves kept the whole list, so nothing snapped.) */
+        const v = (p === lyr.subs && FM.evalShapeSubs)
+          ? JSON.parse(JSON.stringify(FM.evalShapeSubs(lyr, t)))
+          : arrKf
           ? JSON.parse(JSON.stringify((before || p.kf[0]).v))
           : FM.evalProp(p, t);
         const b = p.kf.find(k => k.t >= t - 1e-9);   // segment-END keyframe bracketing the split: its ease governs the segment we're cutting
@@ -4777,6 +4970,10 @@ window.FM = window.FM || {};
   async function runExport() {
     expPrefsSave();   // whatever you just chose becomes the default everywhere, including a new project
     hideExportDialog();
+    /* An audio-effect audition is not the transport, so the FM.pause() below never reaches it — stop it
+       here, for EVERY format (queue 916, clause 2). The exporter's own entry points do the same; this one
+       also covers the WAV/M4A and single-frame branches, which return before them. */
+    if (FM.audioFxLive && FM.audioFxLive.stopAudition) { try { FM.audioFxLive.stopAudition(); } catch (e) {} }
     if (!FM.scene.layers.length) { alert('Add some media first.'); return; }
     /* "This frame (PNG)" is an export of one frame, so it lives on the format list — but it shares
        nothing else with the encoders: no range, no fps, no bitrate, no progress overlay to show for

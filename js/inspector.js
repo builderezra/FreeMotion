@@ -1081,16 +1081,24 @@ window.FM = window.FM || {};
        `liveWhen` says which value of the controlling param actually uses this slider; without
        it the old truthy test stands, which is right for the real toggle (Rounded Corners). */
     let active, why;
+    /* A KEYFRAMED CONTROLLER IS SEVERAL VALUES, NOT ONE (queue 913). `cur` was the stored {kf:[…]} object, so
+       Number(cur) was NaN, `!(NaN > 0)` was true, and keyframing Shading greyed out and LOCKED Light from on all 15
+       solids and Page Curl — the row is pointer-events:none — while Shading never came near 0. Smear locked Smear
+       length and Twinkle locked Twinkle speed the same way, 18 rows in all, keyframes already on them included.
+       A row is dead only if it is dead at EVERY keyframe: a controller that passes through a value which uses the
+       row makes it live, and it must stay editable. A plain value is a list of one, so an unanimated controller is
+       judged exactly as before. (An empty track evaluates to 0, as evalProp reads it.) */
+    const vals = FM.isAnimated(raw) ? (raw.kf.length ? raw.kf.map(k => k.v) : [0]) : [cur];
     /* LIVE ABOVE a level, not at one value (queue 904): Starfield's Twinkle speed does nothing while Twinkle is 0,
        and Twinkle is a slider, not a set of modes, so no single `liveWhen` value could say it. */
     if (p.liveAbove !== undefined) {
-      active = !(Number(cur) > Number(p.liveAbove));
+      active = vals.every(v => !(Number(v) > Number(p.liveAbove)));
       why = 'Only used when ' + ((ctrl && ctrl.label) || p.overriddenBy) + ' is above ' + p.liveAbove;
     } else if (p.liveWhen !== undefined) {
       /* SEVERAL live values allowed (queue 904): Gradient Overlay's Angle steers Linear AND Conic and only Radial
          ignores it, which a single value could not say. */
       const lives = Array.isArray(p.liveWhen) ? p.liveWhen : [p.liveWhen];
-      active = lives.every(v => Number(cur) !== Number(v));
+      active = vals.every(c => lives.every(v => Number(c) !== Number(v)));
       const opts = (ctrl && ctrl.options) || [];
       const lbl = lives.map(v => {
         for (let oi = 0; oi < opts.length; oi++) {
@@ -1101,7 +1109,7 @@ window.FM = window.FM || {};
       }).join(' or ');
       why = 'Only used when ' + ((ctrl && ctrl.label) || p.overriddenBy) + ' is ' + lbl;
     } else {
-      active = !!cur;
+      active = vals.every(v => !!v);
       why = 'Overridden by ' + ((ctrl && ctrl.label) || p.overriddenBy);
     }
     if (active) {
@@ -3195,7 +3203,6 @@ window.FM = window.FM || {};
       if (opts.disabled) b.disabled = true; else b.addEventListener('click', fn);
       return b;
     }
-    const after = () => { FM.requestRender(); FM.timeline.rebuild(); FM.inspector.refresh(); commitH(); };
     const onClip = FM.time > layer.start + 1e-4 && FM.time < layer.start + layer.duration - 1e-4;   // playhead inside the clip
     // AM's media row order: Speed | trim-in | trim-out | Volume. Split keeps a slot between the
     // trims (AM parks split in its timeline bar; we keep it here so it stays one tap away).
@@ -3234,7 +3241,7 @@ window.FM = window.FM || {};
         { html: right
           ? '<path d="M3.5 8.5h8.5v7H3.5z" fill="currentColor" stroke="none"/><path d="M14 10l2 2-2 2M17 10l2 2-2 2"/><path d="M21 4.5v15"/>'
           : '<path d="M12 8.5h8.5v7H12z" fill="currentColor" stroke="none"/><path d="M10 10l-2 2 2 2M7 10l-2 2 2 2"/><path d="M3 4.5v15"/>' },
-        () => { if (FM.moveClipTo(layer, FM.time)) after(); });
+        () => { FM.timeline.clipOp('move'); });   // queue 914.1: the key's own body — lock check, commit and all
       mv.classList.add('qr-nudge');
       row.appendChild(mv);
       // open-ended box = that edge stretches; closed box above = the whole clip travels
@@ -3242,28 +3249,19 @@ window.FM = window.FM || {};
         { html: right
           ? '<path d="M12 8.5H3.5v7H12"/><path d="M12.5 12h6" stroke-dasharray="2 2"/><path d="M17 10l2 2-2 2"/><path d="M21 4.5v15"/>'
           : '<path d="M12 8.5h8.5v7H12"/><path d="M11.5 12h-6" stroke-dasharray="2 2"/><path d="M7 10l-2 2 2 2"/><path d="M3 4.5v15"/>' },
-        () => { if (FM.extendClipTo(layer, FM.time)) after(); else if (FM.toast) FM.toast('No more source to extend into', 1500); });
+        () => { FM.timeline.clipOp('extend'); });   // …which also says "No more source to extend into"
       ex.classList.add('qr-nudge');
       row.appendChild(ex);
     } else {
-      // trim START to playhead (drop everything before the playhead)
-      // disabled state is evaluated at BUILD, but the panel doesn't rebuild on scrub — leave the
-      // buttons live and guard inside each handler with the CURRENT playhead instead
-      row.appendChild(qbtn('Trim start to playhead', 'M6 4v16M6 4h4M6 20h4M14 4v16', { cls: 'qr-trim' }, () => {
-        const cut = FM.time - layer.start; if (cut <= 0 || cut >= layer.duration) return;
-        layer.start = FM.time; layer.duration -= cut;
-        // Forward: advance the source trim by the dropped wall-time × speed. Reversed: trimStart anchors
-        // the source tail, so the kept (later) span keeps the same trimStart — matches splitLayer. (#12)
-        if (layer.type === 'video' && !layer.reversed) layer.trimStart = (layer.trimStart || 0) + (FM.layerSourceAdvance ? FM.layerSourceAdvance(layer, cut) : cut * (layer.speed || 1));   // ramp-safe: animated speed is an object (raw × = NaN)
-        after();
-      }));
-      // split at playhead
-      row.appendChild(qbtn('Split at playhead', 'M12 3v18M16 8l4 4-4 4M8 8l-4 4 4 4', { cls: 'qr-trim' }, () => { if (FM.time > layer.start + 1e-4 && FM.time < layer.start + layer.duration - 1e-4) FM.splitLayer(layer.id); }));
-      // trim END to playhead (drop everything after the playhead)
-      row.appendChild(qbtn('Trim end to playhead', 'M18 4v16M18 4h-4M18 20h-4M10 4v16', { cls: 'qr-trim' }, () => {
-        const nd = FM.time - layer.start; if (nd <= 0 || nd >= layer.duration) return;
-        layer.duration = nd; after();
-      }));
+      /* ⚠️ queue 914.1: THESE THREE ARE THE A / S / D BODIES (js/timeline.js clipOpAction), not copies of them.
+         The copies that lived here missed every fix the keys got — the lock check (816), the cues riding with
+         the head (817), the effect clock (823), a ramp measured before the head moves and a reversed clip's
+         tail (both 914) — so on the phone, where these ARE the keys, all five were still broken. Disabled state
+         is evaluated at BUILD but the panel does not rebuild on scrub, so the buttons stay live and the body
+         re-checks the CURRENT playhead (clipCutTargets). */
+      row.appendChild(qbtn('Trim start to playhead', 'M6 4v16M6 4h4M6 20h4M14 4v16', { cls: 'qr-trim' }, () => { FM.timeline.clipOp('trimStart'); }));
+      row.appendChild(qbtn('Split at playhead', 'M12 3v18M16 8l4 4-4 4M8 8l-4 4 4 4', { cls: 'qr-trim' }, () => { FM.timeline.clipOp('split'); }));
+      row.appendChild(qbtn('Trim end to playhead', 'M18 4v16M18 4h-4M18 20h-4M10 4v16', { cls: 'qr-trim' }, () => { FM.timeline.clipOp('trimEnd'); }));
     }
     return row;
   }
@@ -3338,38 +3336,20 @@ window.FM = window.FM || {};
            complaint, one of them never applied — found by re-auditing closed requests. */
         '', { html: right
           ? '<path d="M3.5 8.5h8.5v7H3.5z" fill="currentColor" stroke="none"/><path d="M14 10l2 2-2 2M17 10l2 2-2 2"/><path d="M21 4.5v15"/>'
-          : '<path d="M20.5 8.5H12v7h8.5z" fill="currentColor" stroke="none"/><path d="M10 10l-2 2 2 2M7 10l-2 2 2 2"/><path d="M3 4.5v15"/>' }, () => {
-        const d = groupShift();   // recomputed at press: the panel doesn't rebuild on scrub
-        layers.forEach(l => setStart(l, l.start + d));
-        done();
-      });
+          : '<path d="M20.5 8.5H12v7h8.5z" fill="currentColor" stroke="none"/><path d="M10 10l-2 2 2 2M7 10l-2 2 2 2"/><path d="M3 4.5v15"/>' },
+        () => { FM.timeline.clipOp('move'); });   // queue 914.1: the D/A key's body — the block shift, minus any LOCKED clip
       // EXTEND is per-clip: each one's nearest edge reaches the playhead, so clips on either side of it
       // grow toward it from their own direction and they all end up meeting there.
       ab('Extend all ' + n + ' clips to the playhead', '', { html:
-        '<path d="M12 8.5H3.5v7H12"/><path d="M12.5 12h6" stroke-dasharray="2 2"/><path d="M17 10l2 2-2 2"/><path d="M21 4.5v15"/>' }, () => {
-        let moved = 0;
-        layers.forEach(l => { if (FM.extendClipTo(l, FM.time)) moved++; });
-        if (!moved && FM.toast) FM.toast('No more source to extend into', 1500);
-        done();
-      });
+        '<path d="M12 8.5H3.5v7H12"/><path d="M12.5 12h6" stroke-dasharray="2 2"/><path d="M17 10l2 2-2 2"/><path d="M21 4.5v15"/>' },
+        () => { FM.timeline.clipOp('extend'); });
     } else {
-    ab('Trim starts to playhead', 'M6 4v16M6 4h4M6 20h4M14 4v16', { disabled: !onAny }, () => {
-      layers.forEach(l => {
-        if (!inside(l)) return;
-        const cut = FM.time - l.start;
-        l.start = FM.time; l.duration -= cut;
-        if (l.type === 'video' && !l.reversed) l.trimStart = (l.trimStart || 0) + (FM.layerSourceAdvance ? FM.layerSourceAdvance(l, cut) : cut * (l.speed || 1));
-      });
-      done();
-    });
-    ab('Split all at playhead', 'M12 3v18M16 8l4 4-4 4M8 8l-4 4 4 4', { disabled: !onAny }, async () => {
-      for (const l of layers) { if (inside(l)) await FM.splitLayer(l.id); }   // sequential: splitLayer clones media safely one at a time
-      done();
-    });
-    ab('Trim ends to playhead', 'M18 4v16M18 4h-4M18 20h-4M10 4v16', { disabled: !onAny }, () => {
-      layers.forEach(l => { if (inside(l)) l.duration = FM.time - l.start; });
-      done();
-    });
+    /* queue 914.1: the same three bodies as the single-clip row and the A / S / D keys (js/timeline.js
+       clipOpAction) — each already acts on every selected clip the playhead is inside, skips a LOCKED one, and
+       splits the lot as one undo step (queue 823). The private copies here had none of that. */
+    ab('Trim starts to playhead', 'M6 4v16M6 4h4M6 20h4M14 4v16', { disabled: !onAny }, () => { FM.timeline.clipOp('trimStart'); });
+    ab('Split all at playhead', 'M12 3v18M16 8l4 4-4 4M8 8l-4 4 4 4', { disabled: !onAny }, () => { FM.timeline.clipOp('split'); });
+    ab('Trim ends to playhead', 'M18 4v16M18 4h-4M18 20h-4M10 4v16', { disabled: !onAny }, () => { FM.timeline.clipOp('trimEnd'); });
     }
     acts.appendChild(bar);
     wrap.appendChild(acts);

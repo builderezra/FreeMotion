@@ -451,7 +451,9 @@ window.FM = window.FM || {};
              than no backup, because he would trust it and find out when it mattered. */
           const miss = (r.notIncluded && r.notIncluded.media) || [];
           const mb = Math.round((r.bytes || 0) / 1048576);
-          let msg = 'Backed up ' + r.count + (r.count === 1 ? ' project' : ' projects') + ' (' + (mb >= 1 ? mb + ' MB' : 'under 1 MB') + ').';
+          /* queue 915 clause 8: drafts are counted as what they are, not as projects he would go looking for */
+          const nd = r.drafts || 0, np = r.count - nd;
+          let msg = 'Backed up ' + np + (np === 1 ? ' project' : ' projects') + (nd ? ' and ' + nd + (nd === 1 ? ' draft' : ' drafts') : '') + ' (' + (mb >= 1 ? mb + ' MB' : 'under 1 MB') + ').';
           if (miss.length) {
             const names = miss.slice(0, 3).map(m => m.file + ' (' + m.mb + ' MB)').join(', ');
             msg += ' ⚠️ ' + miss.length + (miss.length === 1 ? ' clip was' : ' clips were') + ' too big to include: ' + names + (miss.length > 3 ? ' and more' : '') + '. Everything else is in the file.';
@@ -471,10 +473,12 @@ window.FM = window.FM || {};
             if (FM.toast) FM.toast('Restoring…', 3000);
             const r = await FM.storage.restoreBackup(obj, null);
             if (!r.ok) { if (FM.toast) FM.toast(r.reason || 'Nothing in that file could be restored.', 6000); return; }
-            let msg = 'Restored ' + r.restored + (r.restored === 1 ? ' project' : ' projects') + '.';
+            const rd = r.drafts || 0, rp = r.restored - rd;   // queue 915 clause 8
+            let msg = 'Restored ' + rp + (rp === 1 ? ' project' : ' projects') + (rd ? ' and ' + rd + (rd === 1 ? ' draft' : ' drafts') : '') + '.';
             if (r.failed && r.failed.length) msg += ' ' + r.failed.length + ' could not be read: ' + r.failed.slice(0, 3).join(', ') + '.';
             if (FM.toast) FM.toast(msg, 8000);
-            if (FM.home && FM.home.isOpen && FM.home.isOpen() && FM.home.refresh) FM.home.refresh();
+            // queue 915 clause 4: FM.home.refresh did not exist, so this line did nothing and the grid stayed stale
+            if (FM.home && FM.home.refresh) FM.home.refresh();
           });
           document.body.appendChild(input); input.click();
         }),

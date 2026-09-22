@@ -131,6 +131,58 @@ window.FM = window.FM || {};
   }
   FM.evalProp = evalProp;
 
+  /* HOW FAR A RATE HAS CARRIED SOMETHING: ∫ f(τ) dτ over [t0, t1] (queue 913). An effect whose motion is driven by
+   * a keyframable RATE — Snow & Rain's Speed and Wind, Turbulent Displace's Boil speed, Fractal Warp's Churn,
+   * Starfield's Twinkle speed — was positioned by rate(now) × elapsed. That product rescales the WHOLE history on
+   * every frame: ramping Speed to 0 flew every flake back up to where it started and landed it on the clip's first
+   * frame, and a late Wind change swept each flake sideways by all the distance it had fallen since the start. The
+   * position is the rate's integral. `props` are the keyframed inputs of `f` (one prop or an array): the range is
+   * cut at every keyframe time they have — including each pass of a looped track — so a hold step or an ease's
+   * corner never falls inside a piece, and each piece takes 3-point Gauss-Legendre on four sub-pieces. That is exact
+   * for a linear ramp and for a product of two (degree 2), and it never samples a piece's END, which is where a hold
+   * keyframe has already stepped. `f` defaults to the prop's own value. Callers keep their old rate × time for an
+   * UNANIMATED rate, so a constant speed renders byte-identically. */
+  const GL3 = [[-Math.sqrt(0.6), 5 / 9], [0, 8 / 9], [Math.sqrt(0.6), 5 / 9]];
+  FM.integrateProp = function (props, t0, t1, f) {
+    if (!Array.isArray(props)) props = [props];
+    if (!f) { const p0 = props[0]; f = function (tau) { return evalProp(p0, tau); }; }
+    if (!(isFinite(t0) && isFinite(t1)) || t1 === t0) return 0;
+    let sign = 1;
+    if (t1 < t0) { const s = t0; t0 = t1; t1 = s; sign = -1; }
+    const cuts = [t0, t1];
+    const cut = function (x) { if (x > t0 && x < t1) cuts.push(x); };
+    for (let i = 0; i < props.length; i++) {
+      const p = props[i];
+      if (!isAnimated(p) || !p.kf.length) continue;
+      const kf = p.kf;
+      for (let j = 0; j < kf.length; j++) cut(kf[j].t);
+      if (p.loopMode && p.loopMode !== 'none' && kf.length >= 2) {
+        const lo = kf[0].t, hi = kf[kf.length - 1].t, span = hi - lo;
+        if (span > 0 && t1 > hi) {
+          // every later pass repeats the keyframe times (cycle) or mirrors them (pingpong) — cut at both; an extra
+          // cut costs nine evaluations and never costs accuracy. Capped so a tiny loop over a long clip stays cheap.
+          const c0 = Math.max(1, Math.floor((t0 - lo) / span)), c1 = Math.min(Math.floor((t1 - lo) / span), c0 + 400);
+          for (let c = c0; c <= c1; c++) {
+            const base = lo + c * span;
+            for (let j = 0; j < kf.length; j++) { cut(base + (kf[j].t - lo)); cut(base + (hi - kf[j].t)); }
+          }
+        }
+      }
+    }
+    cuts.sort(function (a, b) { return a - b; });
+    let sum = 0;
+    for (let i = 0; i + 1 < cuts.length; i++) {
+      const a = cuts[i], b = cuts[i + 1];
+      if (!(b > a)) continue;
+      const r = (b - a) / 8;                        // half of one of the four sub-pieces
+      for (let k = 0; k < 4; k++) {
+        const m = a + r * (2 * k + 1);
+        for (let g = 0; g < 3; g++) sum += GL3[g][1] * r * f(m + GL3[g][0] * r);
+      }
+    }
+    return sign * sum;
+  };
+
   /* Auto spatial tangents for a layer's motion path: Catmull-Rom over transform.x and transform.y
    * kf arrays (each axis independently, by index) in evalProp's ×3 convention — tangent at kf i =
    * (v[i+1] - v[i-1]) / 6, one-sided at the ends (the missing neighbour is the point itself).
@@ -507,6 +559,13 @@ window.FM = window.FM || {};
     if (layer.stroke && layer.stroke.dash && isAnimated(layer.stroke.dash.offset)) out.push(layer.stroke.dash.offset);   // marching-ants
     if (layer.repeater) ['copies', 'offsetX', 'offsetY', 'rotation', 'scale', 'opacity'].forEach(k => { if (isAnimated(layer.repeater[k])) out.push(layer.repeater[k]); });   // shape repeater
     if (layer.masks) layer.masks.forEach(m => { if (m && isAnimated(m.path)) out.push(m.path); });   // pen-mask path (moving reveal / roto) — its keyframes show on the clip and retime with it
+    /* ⚠️ queue 914.7: AN ANIMATED POINT SET (Edit Points' ◆, queue 254) is a keyframed prop like the mask path
+       above — `{ kf: [{ t, v: subpaths }] }` — and was listed nowhere, so moving, pasting or re-speeding the clip
+       carried every other keyframe and left the point morph at its old time, already finished before the clip
+       appeared (#912 audit), with no diamond on the clip to find it by. Only a shape's; the value is an array,
+       which everything that walks this list already handles (copy deep-clones; a split takes the shape AT the cut —
+       see splitAnimated in js/app.js). */
+    if (layer.type === 'shape' && isAnimated(layer.subs)) out.push(layer.subs);
     FM.eachFx(layer, fx => { if (fx.params) Object.keys(fx.params).forEach(k => { if (isAnimated(fx.params[k])) out.push(fx.params[k]); }); });
     (layer.audioFx || []).forEach(fx => { if (fx && fx.params) Object.keys(fx.params).forEach(k => { if (isAnimated(fx.params[k])) out.push(fx.params[k]); }); });
     return out;

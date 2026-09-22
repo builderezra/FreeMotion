@@ -94,7 +94,7 @@ window.FM = window.FM || {};
     // batch 32 (time + impact)
     framestutter: 'stylize', shockwave: 'distort',
     // batch 33 (manga lines + the HSL panel)
-    speedlines: 'proc', weather: 'proc', hslbands: 'color',
+    speedlines: 'proc', hslbands: 'color',
     // batch 34 (the scan bar + a key that survives bad lighting)
     timewarp: 'stylize', chromakeypro: 'matte',
     // batch 35 (the compositing shot)
@@ -107,6 +107,9 @@ window.FM = window.FM || {};
     lensdistort: 'distort', pixelsort: 'stylize', lumamatte: 'matte', compoundblur: 'blur', matchgrade: 'color',
     // batch 39 (the frame edges become solid)
     squish: 'distort',
+    // batch 40 (queue 911, Snow & Rain). It shipped written into batch 33's line above, and this object's ORDER is
+    // the NEW row (FX_FEATURED reads it backwards), so the newest effect never appeared there (queue 913).
+    weather: 'proc',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 

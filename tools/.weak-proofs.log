@@ -1,2 +1,3 @@
 2026-09-20 00:00	WEAK	dragging the TIMELINE’s divider carries the open ⚙ options pop-up with it (queue 866)	FM.setSideBar is not a function (the seam was new in v16.18, so the reverted side lacked it)
 2026-09-21 13:41	RESOLVED	dragging the TIMELINE’s divider carries the open ⚙ options pop-up with it (queue 866)	mutation 21 Sep: fitBarsTogether removed from bandMoved, setSideBar kept -> fails as 'the pop-up stayed at y=120 for the whole drag'
+2026-09-22 20:54	WEAK	915.3 a project duplicate that could not be written says so and leaves no empty copy	with no room for the copy's document, duplicate() returned undefined — the bulk bar counts anything but false as done and toasts Duplicated 1

@@ -221,55 +221,83 @@ window.FM = window.FM || {};
   }
 
   // ---- audio: render the timeline's audio (with reverse/trim) to one buffer ----
-  function makeClipBuffer(oac, ab, layer) {
+  /* THE SHAPE OF A CLIP'S RENDERED AUDIO, without rendering it (queue 916, clause 8). Split out of
+   * makeClipBuffer so the mixer can know how long the clip's sound is — and so which of its samples
+   * an export range actually needs — BEFORE paying for any of them. */
+  function clipGeom(ab, layer) {
     const sr = ab.sampleRate;
     const startSample = Math.floor(layer.trimStart * sr);
     const availSec = Math.max(0, ab.duration - layer.trimStart);
-    const ramped = FM.isAnimated && FM.isAnimated(layer.speed);
-    if (ramped) {
+    if (FM.isAnimated && FM.isAnimated(layer.speed)) {
+      return { sr: sr, startSample: startSample, availSec: availSec, ramped: true,
+               totalAdv: FM.layerSourceAdvance(layer, layer.duration),
+               lenSamples: Math.max(1, Math.floor(layer.duration * sr)) };
+    }
+    // THROUGH speedAt (queue 451): a malformed prop is an object → NaN length → a clip silently dropped from the export mix
+    const sp = FM.speedAt(layer, layer.start);
+    /* A REVERSED clip spans the WHOLE clip (queue 916, clause 4). `min(duration, availSec / sp)` is
+     * right for a forward clip — its sound simply ends when the audio does — but reading a reversed
+     * clip backwards from the end of that span lined the sound up with the end of the AUDIO, while the
+     * picture (FM.layerLocalTime: `trimStart + (duration - t) * sp`) lines up with the end of the CLIP.
+     * With an audio track shorter than the video the backwards sound ran a full second early in the
+     * measurement (0-1s played what the picture shows at 1-2s) and went quiet before the clip ended —
+     * while the ramped branch, which already reads `totalAdv - adv`, was right. Spanning the clip puts
+     * the static branch on the picture's mapping: a read past the audio's end falls off the source
+     * array (`src[i0] || 0`) and is silence, at the START of the reversed clip. When the audio covers
+     * the clip — every ordinary case — this is the same length as before, so those files are unchanged. */
+    const lenSec = layer.reversed ? layer.duration : Math.min(layer.duration, availSec / sp); // timeline seconds this clip fills
+    return { sr: sr, startSample: startSample, availSec: availSec, ramped: false, sp: sp,
+             lenSamples: Math.max(1, Math.floor(lenSec * sr)) };
+  }
+  /* Output samples [k0, k1) of the clip's rendered audio — the whole clip when they are left out.
+   * ONLY THE PART AN EXPORT USES (queue 916, clause 8): this used to build the clip end to end whatever
+   * range was being exported, and then play one slice of it — so exporting one second of a project
+   * with a four-minute song in it resampled all four minutes (measured 138 ms against 3 ms, and a
+   * ~46 MB Float32 buffer per channel held for a one-second file, which is a real out-of-memory risk
+   * on a phone). Each output sample is computed by the same formula as before, at the same index, so a
+   * window is sample-for-sample the same as the matching stretch of the whole clip. */
+  function makeClipBuffer(oac, ab, layer, g, k0, k1) {
+    g = g || clipGeom(ab, layer);
+    const sr = g.sr, startSample = g.startSample, availSec = g.availSec, lenSamples = g.lenSamples;
+    const a0 = Math.max(0, Math.min(lenSamples - 1, k0 || 0));
+    const a1 = Math.max(a0 + 1, Math.min(lenSamples, k1 == null ? lenSamples : k1));
+    const out = oac.createBuffer(ab.numberOfChannels, a1 - a0, sr);
+    if (g.ramped) {
       // SPEED RAMP: resample along the SAME integral the video frames use (FM.layerSourceAdvance),
       // so pitch/tempo follow the curve and audio stays sample-locked to the picture.
-      const totalAdv = FM.layerSourceAdvance(layer, layer.duration);
-      const lenSamples = Math.max(1, Math.floor(layer.duration * sr));
-      const out = oac.createBuffer(ab.numberOfChannels, lenSamples, sr);
+      const totalAdv = g.totalAdv;
       for (let ch = 0; ch < ab.numberOfChannels; ch++) {
         const src = ab.getChannelData(ch);
         const dst = out.getChannelData(ch);
-        for (let i = 0; i < lenSamples; i++) {
+        for (let i = a0; i < a1; i++) {
           const adv = FM.layerSourceAdvance(layer, i / sr);
           const posSec = layer.reversed ? (totalAdv - adv) : adv;
           if (posSec < 0 || posSec > availSec) continue;   // ran past the source → silence
           const pos = startSample + posSec * sr;
           const i0 = Math.floor(pos), frac = pos - i0;
           const a = src[i0] || 0, b = src[i0 + 1] || 0;
-          dst[i] = a + (b - a) * frac;
+          dst[i - a0] = a + (b - a) * frac;
         }
       }
       return out;
     }
-    // source advances sp× per output sample. A RAMPED speed prop is an object (raw arithmetic = NaN
-    // = broken export audio); approximate it with the clip's average rate so audio spans the clip and
-    // stays synced at the endpoints (per-sample ramp resampling isn't worth the complexity here).
+    // source advances sp× per output sample.
     /* Which SOURCE sample output sample `i` reads from — pulled out as a pure function so the suite
      * can assert it (the loop it came from is inside an async export nothing can call). It was the
      * only part of the reversed-audio path with no coverage at all: the one reversed test in the suite
      * checks the WAVEFORM DRAWING, not a single exported sample. Fractional on purpose — the caller
      * interpolates, which is what keeps a non-1x rate smooth.
-     * Reversed reads from the end of the covered span, so output 0 is the clip's LAST source sample. */
-    const sp = FM.isAnimated && FM.isAnimated(layer.speed)
-      ? FM.layerSourceAdvance(layer, layer.duration) / Math.max(0.01, layer.duration)
-      : FM.speedAt(layer, layer.start);   // THROUGH speedAt (queue 451): a malformed prop is an object → NaN length → a clip silently dropped from the export mix
-    const lenSec = Math.min(layer.duration, availSec / sp); // timeline seconds this clip fills
-    const lenSamples = Math.max(1, Math.floor(lenSec * sr));
-    const out = oac.createBuffer(ab.numberOfChannels, lenSamples, sr);
+     * Reversed reads from the end of the clip's span, so output 0 is the clip's LAST source sample
+     * (or silence, when the audio ends before the clip does — see clipGeom). */
+    const sp = g.sp;
     for (let ch = 0; ch < ab.numberOfChannels; ch++) {
       const src = ab.getChannelData(ch);
       const dst = out.getChannelData(ch);
-      for (let i = 0; i < lenSamples; i++) {
+      for (let i = a0; i < a1; i++) {
         const pos = FM.srcSampleAt(startSample, i, lenSamples, sp, layer.reversed);
         const i0 = Math.floor(pos), frac = pos - i0;
         const a = src[i0] || 0, b = src[i0 + 1] || 0;
-        dst[i] = a + (b - a) * frac;                       // linear interp (smooth at non-1× rates)
+        dst[i - a0] = a + (b - a) * frac;                  // linear interp (smooth at non-1× rates)
       }
     }
     return out;
@@ -372,6 +400,11 @@ window.FM = window.FM || {};
     // outside the range is a surprise worth reporting or the user's own instruction. See below.
     const wholeProject = (from <= 0.001) && (to >= (P.duration || 0) - 0.001);
     for (const layer of scene.layers) {
+      /* Cancel lands between clips too (queue 916, clause 3) — a decode and a resample per clip is where
+         the time goes. Only inside an export: the audio-only WAV path shares this mixer and never resets
+         the flag, so a stale Cancel from an earlier export must not empty its soundtrack. run() turns
+         the null into CANCELLED on the very next line. */
+      if (FM._exporting && FM._exportCancel) return null;
       const hiddenOrSolo = layer.visible === false || (FM.groupHidden && FM.groupHidden(layer)) || (soloActive && !layer.solo);
       if (hiddenOrSolo) {
         /* SUPPRESSED IS NOT THE SAME AS SILENT, and this `continue` was the last one in the mixer with
@@ -426,8 +459,8 @@ window.FM = window.FM || {};
         catch (e) { m.audioBuffer = null; dropped.push(nameOf(layer) + ' (its audio would not decode: ' + (e && e.message ? e.message : e) + ')'); continue; }
       }
       if (!m.audioBuffer) { dropped.push(nameOf(layer) + ' (its audio would not decode)'); continue; }
-      const buf = makeClipBuffer(oac, m.audioBuffer, layer);
-      const clipEnd = layer.start + Math.min(layer.duration, buf.duration);
+      const geom = clipGeom(m.audioBuffer, layer);
+      const clipEnd = layer.start + Math.min(layer.duration, geom.lenSamples / geom.sr);   // = the old buf.duration, without building buf
       const oStart = Math.max(layer.start, from), oEnd = Math.min(clipEnd, to);   // overlap with [from,to]
       /* THE FOURTH SILENT LOSS (queue 215, v11.21) — and the only one of the four that survived a
        * layer having everything right. v7.90 made "the mixer could not read this clip" speak, v7.91
@@ -450,6 +483,14 @@ window.FM = window.FM || {};
         continue;
       }
       any = true;
+      /* Build only the stretch of the clip this export plays (queue 916, clause 8) — from the sample at
+         or before the overlap's start to a couple past its end (the interpolation reads one ahead). The
+         sub-sample remainder rides the node's offset, so the samples heard are the ones the whole-clip
+         buffer would have played. A whole-project export starts at the clip's own start: k0 is 0, the
+         offset is 0, and the buffer is the one it always was. */
+      const k0 = Math.max(0, Math.floor((oStart - layer.start) * geom.sr));
+      const k1 = Math.ceil((oEnd - layer.start) * geom.sr) + 2;
+      const buf = makeClipBuffer(oac, m.audioBuffer, layer, geom, k0, k1);
       const node = oac.createBufferSource(); node.buffer = buf;
       const gain = oac.createGain();
       const animVol = FM.isAnimated(layer.volume);
@@ -530,7 +571,9 @@ window.FM = window.FM || {};
         gain.connect(sink);
       }
       node.connect(gain);
-      node.start(oStart - from, oStart - layer.start, oEnd - oStart);   // when-in-range, offset-into-clip, play-len
+      // when-in-range, offset-into-THIS-BUFFER (it begins at clip sample k0), play-len. Clamped at 0: a
+      // float can put k0/sr one ulp past the true offset, and a negative offset throws.
+      node.start(oStart - from, Math.max(0, (oStart - layer.start) - k0 / geom.sr), oEnd - oStart);
     }
     /* Report before returning, whichever way it went (queue 215). The `!any` case is the one he hit —
      * an export with no soundtrack at all — and until now it returned null in silence. A layer that was
@@ -711,6 +754,16 @@ window.FM = window.FM || {};
     return new Promise(r => { _tickQ.push(r); _tickCh.port2.postMessage(0); });
   }
 
+  /* NO AUDITION SURVIVES INTO AN EXPORT (queue 916, clause 2). The audio-effect audition (the Hear
+   * button, queue 653) plays a clip's element on its own frame loop with FM.playing false, so pausing
+   * the transport does not reach it — and that loop jumps the element back to its start every 2.5s,
+   * undoing the exporter's per-frame seeks. Measured: export frames past that point rendered from
+   * currentTime 0, and the clip was still looping after the export finished. Every export entry point
+   * calls this first; audio-fx-live.js's own tick also stands down while FM._exporting is set. */
+  function endAudition() {
+    try { if (FM.audioFxLive && FM.audioFxLive.stopAudition) FM.audioFxLive.stopAudition(); } catch (e) {}
+  }
+
   async function prepareCaches(scene, fps, onStatus) {
     const built = [];   // media whose full-res export cache we (re)built — freed after export so it doesn't sit in memory (#3)
     for (const layer of scene.layers) {
@@ -847,6 +900,7 @@ window.FM = window.FM || {};
     encodeM4A,
     aacSupported,
     async run(opts) {
+      endAudition();   // queue 916 — see endAudition
       if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') {
         throw new Error('NO_WEBCODECS');
       }
@@ -935,6 +989,16 @@ window.FM = window.FM || {};
       // Hoisted out of the try so the finally can shut the recorder down before deciding what to keep.
       let delivered = false, recorder = null, poster = null;
       try {
+      /* CANCEL DURING "Decoding frames…" STOPS HERE (queue 916, clause 3). prepareCaches breaks out of its
+       * loop on the flag, and its own comment says that stops the export going on into "the audio mix,
+       * the AAC probe, the muxer and the codec pick" — but nothing here ever looked, so it went on into
+       * all four and only threw at the frame loop's first check. Measured: a 3-minute song, Cancel during
+       * the prepare phase, 5120 ms (desktop) of mixing and AAC-encoding a soundtrack that was about to
+       * be thrown away before the overlay came down, with Cancel looking ignored the whole time.
+       * Thrown INSIDE the try so the finally still frees the caches and bins the resume data. The same
+       * question is asked again after the two long awaits below (the mix and the AAC encode), which
+       * are the other places a Cancel tap can land and then wait. */
+      if (FM._exportCancel) throw new Error('CANCELLED');
       // audio (best-effort: never let it sink the whole export)
       let mix = null;
       /* THE FIFTH SILENT LOSS, and the last one left in this file (queue 47, v11.67). The other four
@@ -952,6 +1016,7 @@ window.FM = window.FM || {};
         if (FM.toast) FM.toast('The soundtrack could not be built — exporting WITHOUT SOUND', 6000);
         mix = null;
       }
+      if (FM._exportCancel) throw new Error('CANCELLED');   // queue 916 — tapped while the mix rendered
 
       // Only declare an audio track if AAC encoding will actually work (it's unavailable on some iOS
       // Safari versions). Otherwise the muxer commits an empty audio track to the moov → a broken/silent
@@ -1033,6 +1098,7 @@ window.FM = window.FM || {};
           if (FM.toast) FM.toast('The soundtrack failed to encode — exporting WITHOUT SOUND', 6000);
           mix = null; audioChunks = null;
         }
+        if (FM._exportCancel) throw new Error('CANCELLED');   // queue 916 — tapped while the soundtrack encoded
       }
 
       // Stream the file out to disk-backed blob storage instead of holding it whole on the JS heap.
@@ -1316,6 +1382,7 @@ window.FM = window.FM || {};
     // maxWidth (default 640) unless scale asks for smaller. Transparent = null the project background so
     // the encoder's per-frame transparent index shows through (renderScene clears to transparent first).
     async runGif(opts) {
+      endAudition();   // queue 916 — see endAudition
       if (!FM.gifEncoder) throw new Error('NO_GIF_ENCODER');
       const scene = FM.scene, P = scene.project;
       const scale = opts.scale || 1, fps = opts.fps || P.fps || 30;
@@ -1351,6 +1418,7 @@ window.FM = window.FM || {};
       const transparent = !!opts.transparent;
       FM._exporting = true;   // skip the compositor's preview-only hold-frame capture (#13,#22)
       try {
+        if (FM._exportCancel) throw new Error('CANCELLED');   // queue 916 — a Cancel during "Decoding frames…" stops here, not a frame later
         if (transparent) FM._exportTransparent = true;   // a FLAG, not a write to the saved project (BUG-HUNT)
         const gif = FM.gifEncoder.create(outW, outH, { transparent, dither: !!opts.dither, loop: true });
         const delayMs = 1000 / fps;
@@ -1378,6 +1446,7 @@ window.FM = window.FM || {};
     // PNG image sequence zipped via FM.zipWrite (store-only). Same frame loop; each frame is a PNG (with
     // alpha when transparent) added to the zip as name_NNNN.png. No audio. Honors cancel + FM._exporting.
     async runFrames(opts) {
+      endAudition();   // queue 916 — see endAudition
       if (!FM.zipWrite) throw new Error('NO_ZIP_WRITER');
       const scene = FM.scene, P = scene.project;
       const scale = opts.scale || 1, fps = opts.fps || P.fps || 30;
@@ -1412,6 +1481,7 @@ window.FM = window.FM || {};
       const transparent = !!opts.transparent;
       FM._exporting = true;
       try {
+        if (FM._exportCancel) throw new Error('CANCELLED');   // queue 916 — a Cancel during "Decoding frames…" stops here, not a frame later
         if (transparent) FM._exportTransparent = true;   // so exported PNGs carry alpha, without touching saved state
         const zip = FM.zipWrite.create();
         const base = opts.name || 'freemotion-export';

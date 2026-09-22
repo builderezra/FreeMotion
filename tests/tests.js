@@ -754,6 +754,71 @@
     }
   });
 
+  /* 915.3 — A PROJECT DUPLICATE ON A NEARLY-FULL PHONE. projects.duplicate threw away every write result and
+     returned nothing: the doc write failed, the copy was indexed anyway, and "X copy · 40 layers" opened
+     EMPTY — while the bulk bar, counting `!== false`, toasted "Duplicated 1". He might delete the original
+     next. Both halves are refused on purpose: the DOC write (localStorage full) and a CLIP copy
+     (IndexedDB full). Either way there must be no card, no stray doc, no stray clip, and a false. */
+  test('915.3 a project duplicate that could not be written says so and leaves no empty copy', { item: '915' }, async function () {
+    const wasOpen = FM.home.isOpen();
+    const orig = FM.projects.currentId();
+    const made = [];
+    let L = null;
+    const realSet = localStorage.setItem, realPut = IDBObjectStore.prototype.put;
+    const docKeys = function () { let n = 0; for (let i = 0; i < localStorage.length; i++) if (/^fm\.proj\./.test(localStorage.key(i))) n++; return n; };
+    const copies = function () { return FM.projects.list().filter(p => p.name === 'FX915 dup copy'); };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const aId = await FM.projects.create({ name: 'FX915 dup', width: 320, height: 240 });
+      made.push(aId);
+      L = FM.makeLayer('image', { name: 'q915 clip', x: 160, y: 120, start: 0, duration: 3 });
+      FM.scene.layers.push(L);
+      const T = FM.makeLayer('text', { text: 'q915', x: 160, y: 120 }); T.start = 0; T.duration = 3; FM.scene.layers.push(T);
+      const file = new File([new Uint8Array(64)], 'q915dup.png', { type: 'image/png' });
+      if (!(await FM.storage.writeMedia(L.id, { file: file, kind: 'image' }))) throw new Error('setup: the clip never reached IndexedDB, so there is nothing for the copy to fail on');
+      FM.storage.markDirty(); await FM.storage.save();
+      const docs0 = docKeys(), clips0 = (await FM.storage.listMediaKeys('l_')).length;
+
+      /* ── 1. no room for the copy's document ── */
+      localStorage.setItem = function (k, v) {
+        if (/^fm\.proj\./.test(k) && localStorage.getItem(k) === null) { const e = new Error('quota'); e.name = 'QuotaExceededError'; throw e; }
+        return realSet.call(localStorage, k, v);
+      };
+      let r1;
+      try { r1 = await FM.projects.duplicate(aId); } finally { localStorage.setItem = realSet; }
+      if (r1 !== false) throw new Error('with no room for the copy\'s document, duplicate() returned ' + r1 + ' — the bulk bar counts anything but false as done and toasts Duplicated 1');
+      if (copies().length) throw new Error('an FX915 dup copy card appeared although its document was never written — it opens EMPTY, and he might delete the original next');
+
+      /* ── 2. the document fits, a clip does not ── */
+      IDBObjectStore.prototype.put = function (val, key) {
+        if (typeof key === 'string' && /^l_/.test(key)) throw new DOMException('refused by the 915.3 test', 'QuotaExceededError');
+        return realPut.apply(this, arguments);
+      };
+      let r2;
+      try { r2 = await FM.projects.duplicate(aId); } finally { IDBObjectStore.prototype.put = realPut; }
+      if (r2 !== false) throw new Error('a copy whose clip could not be stored reported ' + r2 + ' — it would open with that clip blank');
+      if (copies().length) throw new Error('a copy with its clip missing was left in the Projects list');
+      if (docKeys() !== docs0) throw new Error('the failed copy left ' + (docKeys() - docs0) + ' project document(s) behind in localStorage, pointed at by nothing');
+      const clips = (await FM.storage.listMediaKeys('l_')).length;
+      if (clips !== clips0) throw new Error('the failed copy left ' + (clips - clips0) + ' clip(s) behind in IndexedDB');
+      if (!(await FM.storage.readMedia(L.id))) throw new Error('the ORIGINAL\'s clip is gone — taking the half-copy back out touched his project');
+
+      /* ── CONTROL: with room, the same call makes a whole copy and says true ── */
+      const r3 = await FM.projects.duplicate(aId);
+      const c = copies()[0];
+      if (c) made.push(c.id);
+      if (r3 !== true || !c) throw new Error('control: with room to write, duplicate() returned ' + r3 + ' and ' + (c ? 'made' : 'did not make') + ' a copy — so the refusals above are not what was measured');
+    } finally {
+      localStorage.setItem = realSet; IDBObjectStore.prototype.put = realPut;
+      try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig); } catch (e) {}
+      try { for (const p of copies()) if (made.indexOf(p.id) < 0) made.push(p.id); } catch (e) {}
+      for (const id of made) { try { await FM.projects.remove(id); } catch (e) {} }
+      if (L) { try { await FM.storage.removeMedia(L.id); } catch (e) {} }
+      try { if (wasOpen) FM.home.open(); } catch (e) {}
+    }
+  });
+
   test('the Add sheet\'s tab icons are one set, and the Template icon is balanced in its box', { item: 'tab-icons' }, function () {
     /* ⚠️ THE TEMPLATE HALF OF THIS TEST DESCRIBED A DRAWING HE HAS SINCE REPLACED — twice over.
        It was written for queue 375's frame + crossbar + centred block, and asserted that exact anatomy:
@@ -7225,6 +7290,125 @@
     }
   });
 
+  test('914.4 grouping a layer that follows a Null keeps it exactly where it is on screen', { item: '914' }, function () {
+    /* The test above is the way OUT of a group. This is the way IN, for a member hung on something that is NOT
+       being grouped: a layer has one parent, groupSelection gave it the group, and its x/y — local to the Null
+       — landed in the group's identity frame. The #912 audit watched a square jump from the middle of the canvas
+       to its top-left corner. His answer (22 Sep): "Stay exactly where they are".
+       MEASURED ON THE RENDERER'S OWN MATRIX (FM._layerCTM: parents, pivot, rotation mode and all), so position,
+       scale and rotation are one comparison and nothing is modelled by the test. The Null is moved, turned AND
+       scaled, so a bake that only translates fails. */
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time, ctx0 = FM.groupContext, sel0 = FM.scene.selectedId;
+    const M = (l, t) => { const m = FM._layerCTM(l, t, FM.scene); return [m.a, m.b, m.c, m.d, m.e, m.f]; };
+    const same = (p, q) => p.every((v, i) => Math.abs(v - q[i]) <= 1e-6 * Math.max(1, Math.abs(q[i])));
+    const fmt = m => '[' + m.map(v => (+v).toFixed(3)).join(', ') + ']';
+    const shape = (name, x, y) => { const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: y, shapeW: 120, shapeH: 80, fill: '#e04040' }); L.start = 0; L.duration = 4; return L; };
+    const rig = () => {
+      FM.scene.layers.length = 0; FM.groupContext = null;
+      const N = FM.makeLayer('null', { name: 'Null', x: 540, y: 1400 }); N.start = 0; N.duration = 4;
+      N.transform.rotation = 30; N.transform.scale = 1.5;
+      const A = shape('A', 100, -50); A.parent = N.id; A.transform.rotation = 10; A.transform.scale = 0.8;
+      const B = shape('B', 300, 300);
+      FM.scene.layers.push(A, B, N);
+      return { N: N, A: A, B: B };
+    };
+    const group = ids => {
+      FM.scene.selectedIds = ids.slice(); FM.scene.selectedId = ids[ids.length - 1];
+      FM.groupSelection();
+      return FM.scene.layers.filter(l => l.type === 'group')[0] || null;
+    };
+    const check = (what, L, times, before) => times.forEach((t, i) => {
+      const now = M(L, t);
+      if (!same(now, before[i])) throw new Error(what + ': at t=' + t + ' the layer’s on-screen matrix went ' + fmt(before[i]) + ' → ' + fmt(now) + ' — grouping moved it');
+    });
+    try {
+      FM.time = 1;
+      /* ── 1. Static: the plain case from the audit. CONTROL first — the Null must actually place the layer,
+         or "it did not move" is true of a bake that does nothing. */
+      let r = rig();
+      const withNull = M(r.A, 1), p0 = r.A.parent; r.A.parent = null; const bare = M(r.A, 1); r.A.parent = p0;
+      if (same(withNull, bare)) throw new Error('control: the Null does not move, turn or scale its child here, so this test cannot see a bake');
+      let times = [0.5, 1, 3], before = times.map(t => M(r.A, t));
+      let g = group([r.A.id, r.B.id]);
+      if (!g) throw new Error('grouping A and B made no group');
+      if (r.A.parent !== g.id) throw new Error('A is not in the new group (parent ' + r.A.parent + ')');
+      if (r.N.parent) throw new Error('the Null was pulled into the group although it was never selected');
+      check('a layer on a moved, turned, scaled Null', r.A, times, before);
+
+      /* ── 2. The layer's OWN motion path, keyed on both axes at the same moments, under the turned Null. */
+      r = rig();
+      r.A.transform.x = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 200, e: 'easeInOut' }] };
+      r.A.transform.y = { kf: [{ t: 0, v: -80, e: 'linear' }, { t: 2, v: 40, e: 'easeInOut' }] };
+      times = [0, 0.5, 1.3, 2, 3.5]; before = times.map(t => M(r.A, t));
+      g = group([r.A.id, r.B.id]);
+      if (!g || r.A.parent !== g.id) throw new Error('an animated layer on a Null was not grouped');
+      check('an animated layer (x and y keyed together)', r.A, times, before);
+
+      /* ── 3. x keyed, y still — both have to take x's keying once the Null's turn is folded in. */
+      r = rig();
+      r.A.transform.x = { kf: [{ t: 0, v: -60, e: 'linear' }, { t: 3, v: 150, e: 'linear' }] };
+      times = [0, 1, 2.2, 3]; before = times.map(t => M(r.A, t));
+      g = group([r.A.id, r.B.id]);
+      if (!g || r.A.parent !== g.id) throw new Error('a layer keyed on x alone was not grouped');
+      check('a layer keyed on x only', r.A, times, before);
+
+      /* ── 4. A child that keeps itself upright (parent mode "locked") must stay upright AND in place. */
+      r = rig(); r.A.parentMode = 'locked';
+      times = [1]; before = times.map(t => M(r.A, t));
+      g = group([r.A.id, r.B.id]);
+      check('a layer in "locked" rotation mode', r.A, times, before);
+      r = rig(); r.A.parentMode = 'weighted'; r.A.parentWeight = 0.3;
+      before = times.map(t => M(r.A, t));
+      g = group([r.A.id, r.B.id]);
+      check('a layer in "weighted" rotation mode', r.A, times, before);
+
+      /* ── 4b. Grouping INSIDE an open group that has been moved: the new group hangs in that group's frame, so
+         only the Null's share may be folded in — folding the open group's in as well would count it twice.
+         Moved, not turned or scaled, on purpose: a turned/scaled group pivots about the middle of its content
+         (FM.groupPivot), and that box counts a layer hung on a Null only once it hangs on a group, so the
+         OUTER pivot shifts when A joins — its neighbour B moves with it. That is the box's approximation
+         (FM.groupBoundsLocal), not this bake, and B would catch it as a control. */
+      r = rig();
+      const G = FM.makeLayer('group', { name: 'Outer', x: 0, y: 0 }); G.start = 0; G.duration = 4;
+      G.transform.x = 120; G.transform.y = -60;
+      r.N.parent = G.id; r.B.parent = G.id; FM.scene.layers.push(G);
+      FM.groupContext = G.id;
+      before = times.map(t => M(r.A, t)); const beforeB = times.map(t => M(r.B, t));
+      g = group([r.A.id, r.B.id]);
+      if (!g || g.parent !== G.id || r.A.parent !== g.id) throw new Error('grouping inside the open group did not nest A in a new group inside it');
+      check('its neighbour inside the same open group (control)', r.B, times, beforeB);
+      check('a layer on a Null inside a moved open group', r.A, times, before);
+      FM.groupContext = null;
+
+      /* ── 5. A Null that MOVES: matched where he is looking — the playhead. */
+      r = rig();
+      r.N.transform.x = { kf: [{ t: 0, v: 300, e: 'linear' }, { t: 4, v: 800, e: 'linear' }] };
+      times = [1]; before = times.map(t => M(r.A, t));
+      g = group([r.A.id, r.B.id]);
+      check('a layer on an animated Null, at the playhead', r.A, times, before);
+
+      /* ── 6. A path keyed on x and y at DIFFERENT moments cannot be turned exactly, so that layer stays on its
+         Null, untouched, and the rest are still grouped. */
+      r = rig();
+      const C = shape('C', 700, 900); FM.scene.layers.push(C);
+      r.A.transform.x = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 200, e: 'linear' }] };
+      r.A.transform.y = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 90, e: 'linear' }] };
+      const xs = JSON.stringify(r.A.transform);
+      times = [0.5, 1.5]; before = times.map(t => M(r.A, t));
+      g = group([r.A.id, r.B.id, C.id]);
+      if (!g) throw new Error('B and C were not grouped when A could not be');
+      if (r.A.parent !== r.N.id) throw new Error('A was taken off its Null although its path could not be carried into the group');
+      if (JSON.stringify(r.A.transform) !== xs) throw new Error('A’s keyframes were rewritten although it was left out');
+      if (r.B.parent !== g.id || C.parent !== g.id) throw new Error('B and C are not both in the group');
+      check('a layer left on its Null', r.A, times, before);
+    } finally {
+      FM.scene.layers = layers0; FM.time = t0; FM.groupContext = ctx0;
+      FM.scene.selectedIds = []; FM.scene.selectedId = null;
+      FM.selectLayer(sel0 || null);
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('no operation leaves a layer parented to something that no longer exists', { item: 'orphan-parent' }, async function () {
     /* BUG HUNT (21 Aug), the permanent sweep that came out of the group work. A layer's `parent` is an
        ID, and several operations remove layers: delete (which cascades into a group's members), ungroup,
@@ -8162,6 +8346,39 @@
     }
   });
 
+  test('914.2 trim-start-to-playhead (A key, rail, phone button) on a speed ramp keeps the surviving picture still', { item: '914' }, async function () {
+    /* The test above proves FM.trimLayerHead — the grip's head trim — measures the cut on the ramp BEFORE the
+       head moves. The A key's body (js/timeline.js clipTrimStart, which the phone's Trim-start button now calls
+       too) moved the head first and asked afterwards, so it integrated the wrong stretch of the curve: the #912
+       audit measured +0.375s of source at every kept frame on a 0.5x → 2x ramp. Same probe as above —
+       FM.layerLocalTime needs no media. The FLAT clip is the control: it must hold still either way. */
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time, sel0 = FM.scene.selectedId;
+    const made = [];
+    try {
+      for (const [what, ramped] of [['static 1.5x (CONTROL)', false], ['ramped 0.5x -> 2x', true]]) {
+        FM.scene.layers.length = 0;
+        const v = FM.makeLayer('video', { name: 'clip' });
+        v.start = 2; v.duration = 6; v.trimStart = 1;
+        v.speed = ramped ? { kf: [{ t: 2, v: 0.5, e: 'linear' }, { t: 8, v: 2, e: 'linear' }] } : 1.5;
+        FM.scene.layers.push(v); made.push(v.id);
+        FM.media.set(v.id, { kind: 'video', duration: 60, width: 2, height: 2 });
+        FM.selectLayer(v.id); FM.time = 3; await sleep(60);
+        const times = [4, 5, 6, 7];                       // all survive a 1s head trim (2..8 → 3..8)
+        const before = times.map(t => FM.layerLocalTime(v, t));
+        if (!FM.timeline.clipKey('a')) throw new Error('A did nothing on a ' + what + ' clip with the playhead inside it, so the trim under test never happened');
+        if (Math.abs(v.start - 3) > 1e-6) throw new Error('the head did not move to the playhead on the ' + what + ' clip (start ' + v.start + ')');
+        times.forEach((t, i) => {
+          const now = FM.layerLocalTime(v, t);
+          if (Math.abs(now - before[i]) > 0.01) throw new Error('trimming the head of a ' + what + ' clip moved the picture at t=' + t + ' from source ' + before[i].toFixed(4) + 's to ' + now.toFixed(4) + 's — the cut was measured on the ramp after the head had already moved');
+        });
+      }
+    } finally {
+      made.forEach(id => FM.media.remove(id));
+      FM.scene.layers = layers0; FM.time = t0;
+      FM.selectLayer(sel0 || null); if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('move: moving a GROUP clip takes the layers inside it along', { item: 'move-group' }, function () {
     /* BUG HUNT (21 Aug), seventh verified lead from BUG-HUNT §34. FM.moveLayerToPlayhead already knew a
        group bar carries its members — its own comment says so — and FM.moveClipTo did not. Same shape as
@@ -9049,6 +9266,51 @@
     }
   });
 
+  test('914.5 copying a GROUP and pasting it brings the layers inside it', { item: '914' }, async function () {
+    /* A group row is only a parent link, and its members are not in the selection — so Copy snapshotted the
+       empty row and Paste made a "Group copy" with nothing in it (#912 audit; Duplicate on the same group
+       copied everything, because it walks FM.groupDescendants). Asserted on the RENDERER'S matrices as well as
+       the tree: the pasted members must land exactly where the originals are, in the same stacking order. */
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time, clip0 = FM.clipboard, sel0 = FM.scene.selectedId;
+    const M = l => { const m = FM._layerCTM(l, FM.time, FM.scene); return [m.a, m.b, m.c, m.d, m.e, m.f]; };
+    try {
+      FM.scene.layers.length = 0;
+      const A = FM.makeLayer('shape', { name: 'A', shape: 'rect', x: 300, y: 400, shapeW: 200, shapeH: 120, fill: '#e04040' });
+      const B = FM.makeLayer('shape', { name: 'B', shape: 'ellipse', x: 700, y: 900, shapeW: 180, shapeH: 180, fill: '#4080e0' });
+      [A, B].forEach(l => { l.start = 1; l.duration = 3; FM.scene.layers.push(l); });
+      FM.scene.selectedIds = [A.id, B.id]; FM.scene.selectedId = B.id;
+      FM.groupSelection();
+      const g = FM.scene.layers.filter(l => l.type === 'group')[0];
+      if (!g || FM.groupDescendants(g.id).length !== 2) throw new Error('fixture: grouping A and B did not make a group holding both');
+      g.transform.x = 60; g.transform.rotation = 15;                 // the members' placement runs through the group
+      FM.selectLayer(g.id); FM.time = g.start; await sleep(40);   // playhead on the group's start: paste's retime is a no-op
+      const n0 = FM.scene.layers.length;
+      FM.copySelection();
+      await FM.pasteClipboard(0);
+      await sleep(80);
+      const groups = FM.scene.layers.filter(l => l.type === 'group');
+      const pg = groups.filter(l => l !== g)[0];
+      if (!pg) throw new Error('paste made no group at all');
+      const kids = FM.groupDescendants(pg.id);
+      if (kids.length !== 2) throw new Error('the pasted group holds ' + kids.length + ' layers, not 2 — Copy took the group row and left its layers behind');
+      if (FM.scene.layers.length !== n0 + 3) throw new Error('paste added ' + (FM.scene.layers.length - n0) + ' layers, expected the group and its two');
+      if (kids.some(k => k === A || k === B)) throw new Error('the pasted group took the ORIGINAL layers instead of copies');
+      const origOrder = FM.groupDescendants(g.id).map(l => l.name), pasteOrder = kids.map(l => l.name.replace(/ copy$/, ''));
+      if (origOrder.join() !== pasteOrder.join()) throw new Error('the pasted layers are stacked ' + pasteOrder.join(', ') + ' against the original ' + origOrder.join(', '));
+      [[A, kids.filter(k => /^A/.test(k.name))[0]], [B, kids.filter(k => /^B/.test(k.name))[0]]].forEach(([o, c]) => {
+        if (!c) throw new Error('no pasted copy of ' + o.name);
+        const mo = M(o), mc = M(c);
+        if (mo.some((v, i) => Math.abs(v - mc[i]) > 1e-6 * Math.max(1, Math.abs(v)))) throw new Error('the pasted ' + o.name + ' does not sit where the original does: ' + mc.map(v => v.toFixed(2)) + ' vs ' + mo.map(v => v.toFixed(2)));
+      });
+      const sel = FM.selectionIds();
+      if (sel.length !== 1 || sel[0] !== pg.id) throw new Error('after pasting a group the selection is ' + sel.length + ' layer(s) — it should be the pasted group alone, as Duplicate leaves it');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.clipboard = clip0; FM.time = t0;
+      FM.selectLayer(sel0 || null); FM.refreshAll(); await sleep(40);
+    }
+  });
+
   test('keyframes: every ease lands exactly on the value you set, at every keyframe', { item: 'kf-land' }, function () {
     /* The property a keyframe is FOR: at its own time it must give back exactly the number you typed,
        whatever easing is on it. This is not obvious from the code — a MIDDLE keyframe is reached as
@@ -9665,6 +9927,58 @@
       try { if (!wasOpen) FM.home.close(); } catch (e) {}
       await sleep(60);
       await q385Cleanup([L.id], layers0);
+    }
+  });
+
+  /* The centre pixel of a card thumbnail (a JPEG data URL), as [r,g,b] — queue 915's card checks. */
+  async function q915Centre(url) {
+    if (!url) return null;
+    const img = new Image(); img.src = url; await img.decode();
+    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+    const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+    return Array.prototype.slice.call(g.getImageData(img.width >> 1, img.height >> 1, 1, 1).data, 0, 3);
+  }
+
+  /* 915.1 — THE OTHER HALF OF THE ORDERING HAZARD ABOVE. The capture-then-release order protected the
+     picture on the way IN to Home; it did nothing about the way OUT. Tapping another card, or + → Create,
+     goes through projects.open()/create(), whose touchCurrent(true) re-rendered the project he had left —
+     media already released — and wrote a solid black card over the good one. His exact route, measured:
+     magenta card [255,0,254] on arrival, [0,0,0] after tapping another project, and it stayed black. */
+  test('915.1 a photo project keeps its card picture when you leave Home for another project', { item: '915' }, async function () {
+    const wasOpen = FM.home.isOpen();
+    const orig = FM.projects.currentId();
+    const made = [];
+    let L = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const aId = await FM.projects.create({ name: 'FX915 photo', width: 320, height: 240 });
+      made.push(aId);
+      L = FM.makeLayer('image', { name: 'q915 magenta', x: 160, y: 120, start: 0, duration: 3 });
+      FM.scene.layers.push(L);
+      const cv = document.createElement('canvas'); cv.width = 400; cv.height = 400;
+      const cg = cv.getContext('2d'); cg.fillStyle = '#ff00ff'; cg.fillRect(0, 0, 400, 400);
+      const file = await new Promise(r => cv.toBlob(b => r(new File([b], 'q915.png', { type: 'image/png' })), 'image/png'));
+      FM.media.set(L.id, { kind: 'image', el: cv, width: 400, height: 400, file: file });
+      if (!(await FM.storage.writeMedia(L.id, { file: file, kind: 'image' }))) throw new Error('setup: the photo never reached IndexedDB, so nothing can be released and the test proves nothing');
+      FM.time = 1;
+      FM.storage.markDirty(); await FM.storage.save();
+      FM.projects.touchCurrent(true);   // the capture Home takes on arrival (captureThumbSoon)
+      const good = await q915Centre(await FM.projects.getThumb(aId));
+      if (!good || !(good[0] > 200 && good[1] < 60 && good[2] > 200)) throw new Error('setup: the card was not magenta even with the photo resident (' + JSON.stringify(good) + '), so a black one later would not mean anything');
+      const freed = await q385AsIfHome(function () { return FM.storage.releaseSceneMedia(); });   // …and the release that follows it
+      if (!freed) throw new Error('setup: leaving released nothing, so this is not the state he was in');
+      /* ── + → Create (the same touchCurrent(true) as tapping another card: both go through open()) ── */
+      made.push(await FM.projects.create({ name: 'FX915 other', width: 320, height: 240 }));
+      const after = await q915Centre(await FM.projects.getThumb(aId));
+      if (!after || !(after[0] > 200 && after[1] < 60 && after[2] > 200)) {
+        throw new Error('the photo project\'s card turned ' + JSON.stringify(after) + ' (it was ' + JSON.stringify(good) + ') after leaving Home for another project — its media had been released, so the forced re-capture drew it without its photo');
+      }
+    } finally {
+      try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig); } catch (e) {}
+      for (const id of made) { try { await FM.projects.remove(id); } catch (e) {} }
+      if (L) { try { await FM.storage.removeMedia(L.id); } catch (e) {} }
+      try { if (wasOpen) FM.home.open(); } catch (e) {}
     }
   });
 
@@ -15773,6 +16087,41 @@
     if (bad.length) throw new Error('tiles indistinguishable from their subject: ' + bad.join('; '));
   });
 
+  /* ── queue 913 clause 9: the Snow & Rain tile was a few big blobs ─────────────────────────────────────────
+   * The opposite failure to the test above: plenty of change, the wrong KIND. Size is absolute px, so the
+   * default 5 made each flake about a tenth of the 96-unit tile, and 300 of them fused into soft white masses.
+   * MEASURED on the tile at 0.2 s, pixels the effect lifts by more than 40 grouped into 4-connected blobs:
+   *   default (size 5, 300)   19 blobs, the largest 4606 px (half the tile), 65% of the tile covered
+   *   tuned   (size 2, 450)  214 blobs, the largest 57 px, 22% covered
+   * The floors sit between the two: many separate flakes, none of them a mass, and still plainly snowing. */
+  test('913.9 the Snow & Rain tile shows falling snow, not a few big blurry blobs', { item: '913' }, function () {
+    var scene = FM.fxThumbs.previewScene('weather'), off = thumbWithout(scene, 'weather');
+    var hero = scene.layers.filter(function (l) { return l.effects && l.effects.some(function (e) { return e.type === 'weather'; }); })[0];
+    if (!hero) throw new Error('the Snow & Rain tile scene carries no Snow & Rain effect');
+    var a = thumbPix(scene, 0.2).slice(), b = thumbPix(off, 0.2);
+    var W = 96, on = new Uint8Array(W * W), seen = new Uint8Array(W * W), sizes = [];
+    for (var i = 0; i < W * W; i++) { var k = i * 4; on[i] = Math.max(Math.abs(a[k] - b[k]), Math.abs(a[k + 1] - b[k + 1]), Math.abs(a[k + 2] - b[k + 2])) > 40 ? 1 : 0; }
+    for (var s0 = 0; s0 < W * W; s0++) {
+      if (!on[s0] || seen[s0]) continue;
+      var st = [s0], n = 0; seen[s0] = 1;
+      while (st.length) {
+        var p = st.pop(), x = p % W, y = (p / W) | 0; n++;
+        [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (o) {
+          var nx = x + o[0], ny = y + o[1]; if (nx < 0 || ny < 0 || nx >= W || ny >= W) return;
+          var q = ny * W + nx; if (on[q] && !seen[q]) { seen[q] = 1; st.push(q); }
+        });
+      }
+      sizes.push(n);
+    }
+    var cover = sizes.reduce(function (t, v) { return t + v; }, 0) / (W * W), biggest = Math.max.apply(null, sizes.concat([0]));
+    var bad = [];
+    if (sizes.length < 100) bad.push('only ' + sizes.length + ' separate flakes on the tile');
+    if (biggest > 300) bad.push('one lump covers ' + biggest + ' px of the 96px tile — flakes are fusing into blobs');
+    if (cover > 0.45) bad.push('the snow covers ' + Math.round(cover * 100) + '% of the tile — a white-out, not snowfall');
+    if (cover < 0.05) bad.push('the snow covers only ' + Math.round(cover * 100) + '% of the tile — too faint to read');
+    if (bad.length) throw new Error(bad.join(' · ') + ' (queue 913)');
+  });
+
   /* ---- preset previews of the USER'S OWN LAYER ------------------------------------------------
    * Ezra: "the presets menu should show a preview of what the layer will look like when you add the
    * effects." Before this, every tile in a preset sheet was a pure function of the preset — the same
@@ -21053,6 +21402,45 @@
     });
   });
 
+  /* ── queue 916.6: coming back to the app while the mic prompt is up does not open the mic twice ──────
+   * `idle && !stream` — the condition the return-from-background handler re-arms on — is also exactly the
+   * state of a panel whose permission prompt is still up. So switching apps and back before answering
+   * asked a SECOND time: both requests resolved, both became "the" stream, and only the second was ever
+   * released. The first mic stayed live (the recording light on until a reload) and its meter's
+   * AudioContext leaked — iOS allows about four. The fake mic answers 400ms late, like a prompt. */
+  test('916.6 voice: coming back to the app while the mic prompt is up does not leave a second mic live', { item: '916', budgetMs: 30000 }, async function () {
+    if (!FM.voiceRec) throw new Error('FM.voiceRec missing — js/voice-rec.js is not loaded');
+    if (document.hidden) throw new Error('CONTROL: the test document reports hidden, so a visibilitychange would take the going-away path instead of the coming-back one');
+    vrCtx();   // the shared test-tone context exists BEFORE the constructor is watched, so it is not counted below
+    const real = FM.voiceRec._openMic, AC0 = window.AudioContext, mics = [], asked = [], made = [];
+    FM.voiceRec._openMic = function () {
+      const m = vrFakeMic(); mics.push(m);
+      const p = m.ready.then(function () { return new Promise(function (r) { setTimeout(function () { r(m.stream); }, 400); }); });
+      asked.push(p);
+      return p;
+    };
+    window.AudioContext = function (o) { const c = o ? new AC0(o) : new AC0(); made.push(c); return c; };
+    try {
+      FM.voiceRec.open();
+      document.dispatchEvent(new Event('visibilitychange'));   // away and back, while the prompt is still up
+      await vrWait(function () { return FM.voiceRec._state() === 'idle' && vrStates().join() === 'live'; }, 9000, 'the mic');
+      await Promise.all(asked.slice());
+      await sleep(60);
+      if (!mics.length) throw new Error('CONTROL: the recorder never asked for the mic, so nothing below is measured');
+      FM.voiceRec.close();
+      const live = [];
+      mics.forEach(function (m, i) { m.stream.getTracks().forEach(function (t) { if (t.readyState !== 'ended') live.push('request ' + (i + 1)); }); });
+      if (live.length) throw new Error(mics.length + ' mic request' + (mics.length === 1 ? ' was' : 's were') + ' made and ' + live.length + ' track(s) are still live after Cancel (' + live.join(', ') + ') — the recording light stays on until the app is reloaded');
+      try { await vrWait(function () { return made.every(function (c) { return c.state === 'closed'; }); }, 3000, 'the meter contexts to close'); }
+      catch (e) { throw new Error('the recorder made ' + made.length + ' meter AudioContext(s) and ' + made.filter(function (c) { return c.state !== 'closed'; }).length + ' are still open after Cancel — on iOS, leaked contexts eventually silence the whole app'); }
+    } finally {
+      window.AudioContext = AC0;
+      try { FM.voiceRec.close(); } catch (e) {}
+      FM.voiceRec._openMic = real;
+      mics.forEach(function (m) { m.dispose(); });
+    }
+  });
+
   test('voice: a take of no length never becomes a layer', { item: 'voice-rec' }, async function () {
     var savedScene = FM.scene, savedTime = FM.time;
     await withFakeMic(async function () {
@@ -23424,6 +23812,54 @@
       const err = Math.abs((rig.el.currentTime + 0.08) - FM.clockNow());
       if (err > FM.syncTuning.hard) throw new Error('the element ended ' + err.toFixed(3) + ' s from the playhead — the bias absorbed real drift too');
     } finally { rig.restore(); }
+  });
+
+  /* ── queue 916.1: a sped-up clip SOUNDS sped up — in the preview, not only in the file ────────────
+   * His answer, verbatim: "Idk if you speed something up it should sound sped up. That simple".
+   * The export resamples (a 440 Hz tone at 2x comes out at 880 Hz). The preview plays the clip's own
+   * media element, and `preservesPitch` defaults to TRUE — a time-stretcher: fast, at the SAME pitch.
+   * So a 2x clip sounded normal while editing and an octave up in the file. The fix turns it off on
+   * the element. Read off a REAL element from the real importer after a real speed change and a ramp,
+   * and off the element the transport plays when he presses play. */
+  test('916.1 a sped-up clip sounds sped up in the preview — its media element does not preserve pitch', { item: '916' }, async function () {
+    if (!FM.sfx || !FM.sfx.encodeWav || !FM.sfx.renderBuffer) throw new Error('FM.sfx is not reachable — there is no way to make a real audio file without the network');
+    // CONTROL: this browser really does preserve pitch by default — otherwise a `false` below proves nothing.
+    const pitchOf = function (el) { return el.preservesPitch !== undefined ? el.preservesPitch : el.webkitPreservesPitch; };
+    const probe = document.createElement('video');
+    if (pitchOf(probe) !== true) throw new Error('a fresh <video> here reads preservesPitch=' + pitchOf(probe) + ', so the default this fix overrides cannot be observed');
+    const wav = FM.sfx.encodeWav(await FM.sfx.renderBuffer(FM.sfx.byId('click')));
+    const file = new File([wav], 'x916-pitch.wav', { type: 'audio/wav' });
+    const saved = { scene: FM.scene, time: FM.time, rate: FM.previewRate };
+    const L = FM.makeLayer('video', { name: 'x916 pitch', start: 0, duration: 1, trimStart: 0, speed: 1 });
+    let rig = null;
+    try {
+      const rec = await FM.loadVideoFile(file);
+      if (!rec || !rec.el) throw new Error('the importer returned no media element');
+      if (pitchOf(rec.el) !== false) throw new Error('the imported clip’s element preserves pitch (' + pitchOf(rec.el) + ') — at 2x it plays at normal pitch while editing and an octave up in the export');
+      FM.scene = scene([L], { project: { width: 320, height: 240, fps: 30, duration: 1, background: '#000000' } });
+      FM.media.set(L.id, rec);
+      // A speed change mid-session: the new rate lands on the element, and the pitch rides it.
+      L.speed = 2; FM.time = 0.25; FM.setPreviewRate(1);
+      if (Math.abs(rec.el.playbackRate - 2) > 1e-6) throw new Error('speed 2 left the element at rate ' + rec.el.playbackRate + ' — the fixture is not driving the real rate path, so the reading below means nothing');
+      if (pitchOf(rec.el) !== false) throw new Error('after a speed change to 2x the element preserves pitch');
+      // A ramp: the rate follows the curve, and the pitch follows the rate.
+      L.speed = { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 1, v: 3, e: 'linear' }] }; FM.time = 0.5; FM.setPreviewRate(1);
+      if (Math.abs(rec.el.playbackRate - 2) > 0.01) throw new Error('a 1x→3x ramp at its midpoint left the element at rate ' + rec.el.playbackRate);
+      if (pitchOf(rec.el) !== false) throw new Error('on a speed ramp the element preserves pitch');
+      FM.media.remove(L.id); FM.scene = saved.scene;
+      // The element the TRANSPORT plays, whatever route it reached the scene by: pressing play asserts it too.
+      rig = transportRig({ duration: 4 });
+      rig.el.preservesPitch = true; rig.el.webkitPreservesPitch = true;
+      rig.layer.speed = 2;
+      FM.play(); await sleep(150); FM.pause();
+      if (!(rig.el.rateWrites > 0)) throw new Error('CONTROL: pressing play never set the clip’s rate, so it never reached the line under test');
+      if (rig.el.preservesPitch !== false || rig.el.webkitPreservesPitch !== false) throw new Error('pressing play on a 2x clip left its element preserving pitch — an element that did not come through the importer still time-stretches');
+    } finally {
+      if (rig) rig.restore();
+      try { FM.media.remove(L.id); } catch (e) {}
+      FM.scene = saved.scene; FM.time = saved.time; FM.previewRate = saved.rate;
+      try { FM.refreshAll(); } catch (e) {}
+    }
   });
 
   /* #142 — Ezra: "In the home settings menu, make a setting to change the default colour of shapes
@@ -27838,6 +28274,75 @@
     if (FM.srcSampleAt(0, 0, N, 2, true) !== (N - 1) * 2) throw new Error('speed is not scaling the reversed step');
   });
 
+  /* ── queue 916.4: a reversed clip whose audio is SHORTER than the clip ────────────────────────────────
+   * Common for phone and screen recordings. The picture reads a reversed clip at `trimStart + (duration -
+   * t) * sp` — lined up with the end of the CLIP. The static-speed sound read backwards from the end of
+   * `min(duration, audio / sp)` — lined up with the end of the AUDIO — so it ran ahead of the picture by
+   * the difference and went quiet before the clip ended (the ramped branch already had it right). The
+   * same formula was in three places: the export mix, the reversed preview and the audio-react envelope.
+   * Fixture: 2s of audio (a tone at 0.2, then at 0.6) under a 3s clip, so each second is identifiable. */
+  test('916.4 a reversed clip with audio shorter than the clip plays its sound in step with the picture — export, preview and audio-react', { item: '916', budgetMs: 30000 }, async function () {
+    if (!FM.exporter || !FM.exporter.buildAudioMix) throw new Error('FM.exporter.buildAudioMix is not reachable');
+    if (!FM.audioPlay || !FM.audioEnvelope) throw new Error('FM.audioPlay / FM.audioEnvelope are not reachable');
+    if (!(FM.audioCtx && FM.audioCtx())) throw new Error('no AudioContext here, so the reversed preview builds nothing to measure');
+    const SR = 48000;
+    const mkBuf = function () {
+      const b = new AudioBuffer({ numberOfChannels: 1, length: 2 * SR, sampleRate: SR });
+      const d = b.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.sin(2 * Math.PI * 440 * i / SR) * (i < SR ? 0.2 : 0.6);
+      return b;
+    };
+    const peakIn = function (d, sr, a, b) { let p = 0; for (let i = Math.floor(a * sr), n = Math.min(d.length, Math.floor(b * sr)); i < n; i++) { const v = d[i] < 0 ? -d[i] : d[i]; if (v > p) p = v; } return p; };
+    const thirds = function (d, sr) { return [peakIn(d, sr, 0.1, 0.9), peakIn(d, sr, 1.1, 1.9), peakIn(d, sr, 2.1, 2.9)]; };
+    const fmt = function (a) { return '[' + a.map(function (v) { return v.toFixed(2); }).join(', ') + ']'; };
+    const near = function (a, want) { return a.every(function (v, i) { return Math.abs(v - want[i]) < 0.05; }); };
+    const saved = { scene: FM.scene, time: FM.time, playing: FM.playing };
+    const P = { width: 64, height: 64, fps: 30, duration: 3, background: '#000000' };
+    const mk = function (reversed) {
+      const L = FM.makeLayer('video', { name: 'x916 short audio', start: 0, duration: 3, trimStart: 0 });
+      L.start = 0; L.duration = 3; L.trimStart = 0; L.speed = 1; L.reversed = reversed; L.volume = 1; L.fadeIn = 0; L.fadeOut = 0;
+      FM.media.set(L.id, { kind: 'video', file: new Blob(['x'], { type: 'audio/wav' }), audioBuffer: mkBuf(), duration: 2, width: 0, height: 0 });
+      return L;
+    };
+    let F = null, R = null;
+    try {
+      F = mk(false); R = mk(true);
+      // What the picture shows, which the sound has to follow: source 2.5 / 1.5 / 0.5 at 0.5 / 1.5 / 2.5s.
+      if (Math.abs(FM.layerLocalTime(R, 0.5) - 2.5) > 1e-9 || Math.abs(FM.layerLocalTime(R, 2.5) - 0.5) > 1e-9) throw new Error('the picture no longer maps a reversed clip the way this test assumes — re-derive the expectations');
+      // CONTROL: the same clip FORWARD — its sound ends when the audio does, and must not change.
+      FM.scene = scene([F], { project: P });
+      const fm = await FM.exporter.buildAudioMix(FM.scene, 0, 3);
+      if (!fm) throw new Error('CONTROL: the forward clip built no mix at all');
+      const f3 = thirds(fm.audioBuffer.getChannelData(0), fm.sampleRate);
+      if (!near(f3, [0.2, 0.6, 0])) throw new Error('CONTROL: the forward clip exported ' + fmt(f3) + ' per second, expected [0.20, 0.60, 0.00] — a forward clip must be untouched by this fix');
+      // 1 — THE EXPORT. Source past the audio's end is silence, at the START of the reversed clip.
+      FM.scene = scene([R], { project: P });
+      const rm = await FM.exporter.buildAudioMix(FM.scene, 0, 3);
+      if (!rm) throw new Error('the reversed clip built no mix at all');
+      const r3 = thirds(rm.audioBuffer.getChannelData(0), rm.sampleRate);
+      if (!near(r3, [0, 0.6, 0.2])) throw new Error('the reversed clip EXPORTED ' + fmt(r3) + ' per second, but the picture shows source 2.5s / 1.5s / 0.5s, i.e. [0.00, 0.60, 0.20] — the sound is lined up with the end of the audio, a second ahead of the picture');
+      // 2 — THE PREVIEW's reversed buffer, which is what the speakers get.
+      FM.time = 0; FM.playing = true;
+      try { FM.audioPlay.start(); } finally { FM.audioPlay.stop(); FM.playing = saved.playing; }
+      const rb = FM.media.get(R.id)._revBuf;
+      if (!rb) throw new Error('the preview built no reversed buffer, so nothing was measured');
+      const p3 = thirds(rb.getChannelData(0), rb.sampleRate);
+      if (!near(p3, [0, 0.6, 0.2])) throw new Error('the reversed PREVIEW plays ' + fmt(p3) + ' per second, expected [0.00, 0.60, 0.20] — the picture’s order');
+      // 3 — AUDIO-REACT's envelope, which drives motion from what is heard.
+      const env = await FM.audioEnvelope(R, { fps: 10, attack: 0.001, release: 0.001 });
+      if (!env) throw new Error('the audio-react envelope came back empty');
+      const ev = [0.5, 1.5, 2.5].map(function (t) { return env.values[Math.round(t * 10)]; });
+      if (!(ev[0] < 0.05 && ev[1] > 0.9 && Math.abs(ev[2] - 1 / 3) < 0.08)) throw new Error('the audio-react envelope reads ' + fmt(ev) + ' at 0.5 / 1.5 / 2.5s, expected about [0.00, 1.00, 0.33] — silent where the picture is past the audio');
+    } finally {
+      try { FM.audioPlay.stop(); } catch (e) {}
+      FM.playing = saved.playing;
+      try { if (F) FM.media.remove(F.id); if (R) FM.media.remove(R.id); } catch (e) {}
+      FM.scene = saved.scene; FM.time = saved.time;
+      FM._lastMixGain = undefined; FM._lastMixRawPeak = undefined; FM._lastMixPeak = undefined;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
   test('switching projects does not strand a deleted clip\'s media', { item: 'media-gc' }, function () {
     /* BUG-HUNT.md raised this twice (both entries point at js/storage.js:707) and v8.44's sweep did
        NOT cover it: that one runs when history DISCARDS a snapshot, and a project switch RESETS the
@@ -29119,6 +29624,54 @@
     }
   });
 
+  test('914.6 paste inside Edit Group puts the layer IN the group, where its row can be seen', { item: '914' }, async function () {
+    /* The test above says paste falls back to the top inside Edit Group. It also has to land INSIDE the group:
+       FM.insertLayer gives every add the open group as its parent, paste did not, so the pasted layer went to
+       the top level — out of the group's timeline view, and on the phone (which solos the selection) no rows
+       were drawn at all (#912 audit). Asserted on the drawn clip row as well as the parent link. A layer
+       copied off a layer outside the group (a Null) must move in too, and land exactly on its source. */
+    const layers0 = FM.scene.layers.slice(), clip0 = FM.clipboard, t0 = FM.time, sel0 = FM.scene.selectedId;
+    const M = l => { const m = FM._layerCTM(l, FM.time, FM.scene); return [m.a, m.b, m.c, m.d, m.e, m.f]; };
+    const shape = (name, x, y) => { const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: y, shapeW: 160, shapeH: 100, fill: '#40a060' }); L.start = 0; L.duration = 4; return L; };
+    try {
+      FM.scene.layers.length = 0; FM.time = 0;
+      const X = shape('Outside', 200, 300), A = shape('A', 500, 500), Bm = shape('B', 600, 900);
+      const N = FM.makeLayer('null', { name: 'Rig', x: 540, y: 1200 }); N.start = 0; N.duration = 4; N.transform.rotation = 25; N.transform.scale = 1.4;
+      const Y = shape('OnRig', 80, -40); Y.parent = N.id;
+      FM.scene.layers.push(X, A, Bm, Y, N);
+      FM.scene.selectedIds = [A.id, Bm.id]; FM.scene.selectedId = Bm.id;
+      FM.groupSelection();
+      const G = FM.scene.layers.filter(l => l.type === 'group')[0];
+      if (!G) throw new Error('fixture: no group');
+      G.transform.x = 70; G.transform.y = -30;                      // the group has been moved, so "in place" is not a no-op
+
+      // ── 1. A top-level layer, pasted inside the group.
+      FM.selectLayer(X.id); FM.copySelection();
+      FM.enterGroup(G.id); await sleep(80);
+      await FM.pasteClipboard(); await sleep(120);
+      const px = FM.scene.layers.filter(l => /^Outside copy/.test(l.name))[0];
+      if (!px) throw new Error('paste made nothing');
+      if (px.parent !== G.id) throw new Error('the layer pasted inside Edit Group has parent ' + px.parent + ' — it landed outside the group it was pasted into');
+      if (!document.querySelector('.clip[data-id="' + px.id + '"]')) throw new Error('the pasted layer has no row on the open group’s timeline');
+
+      // ── 2. A layer hung on a Null outside the group: in the group, and exactly where its source is.
+      FM.exitGroup(true); FM.selectLayer(Y.id); FM.copySelection();
+      FM.enterGroup(G.id); await sleep(80);
+      await FM.pasteClipboard(); await sleep(120);
+      const py = FM.scene.layers.filter(l => /^OnRig copy/.test(l.name))[0];
+      if (!py) throw new Error('paste of the rigged layer made nothing');
+      if (py.parent !== G.id) throw new Error('a copy of a layer on an outside Null was left on ' + py.parent + ', outside the open group');
+      const my = M(Y), mp = M(py);
+      if (my.some((v, i) => Math.abs(v - mp[i]) > 1e-6 * Math.max(1, Math.abs(v)))) throw new Error('the pasted copy jumped: ' + mp.map(v => v.toFixed(2)) + ' against its source ' + my.map(v => v.toFixed(2)));
+      if (!document.querySelector('.clip[data-id="' + py.id + '"]')) throw new Error('the pasted rigged layer has no row on the open group’s timeline');
+    } finally {
+      if (FM.groupContext) FM.exitGroup(true);
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.clipboard = clip0; FM.time = t0;
+      FM.selectLayer(sel0 || null); FM.refreshAll(); await sleep(60);
+    }
+  });
+
   test('the Add layer can be dragged by its grip, and the grip does not steal the tap (queue 294)', { item: 'add-row' }, async function () {
     /* "you can press the three lines on the right side drag it up and down" — the same grip every other
      * row has, in the same place. The second half of the title is the trap: the row is one big tap
@@ -29513,6 +30066,64 @@
     } finally {
       FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.kfClipboard = clip0;
       if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
+  test('914.7 an animated point set (Edit Points ◆) travels with its clip, shows a diamond, and splits cleanly', { item: '914' }, async function () {
+    /* The test above holds the two lists to each other; this is a container NEITHER list had. Edit Points'
+       keyframes live on `layer.subs` as `{ kf: [{ t, v: subpaths }] }`, and FM.animatedProps skipped them — so
+       moving the clip carried its position keys and left the point morph at its old time, finished before the
+       clip appeared, with no diamond to find it by (#912 audit). A split is the third reader: once the halves
+       divide the list, the seam must hold the shape AT the cut, or the tail half snaps back to the earlier key. */
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time;
+    const A = [[[0, 0], [0.25, 0], [0.25, 1], [0, 1]]], B = [[[0.75, 0], [1, 0], [1, 1], [0.75, 1]]];
+    const mk = () => {
+      const L = FM.makeLayer('shape', { shape: 'path', x: 540, y: 960, shapeW: 400, shapeH: 400, fill: '#ffffff' });
+      L.closed = true; L.points = null; L.start = 0; L.duration = 4;
+      L.subs = { kf: [{ t: 0, v: JSON.parse(JSON.stringify(A)), e: 'linear' }, { t: 2, v: JSON.parse(JSON.stringify(B)), e: 'linear' }] };
+      L.transform.x = { kf: [{ t: 0, v: 400, e: 'linear' }, { t: 2, v: 700, e: 'linear' }] };
+      return L;
+    };
+    const flat = subs => JSON.stringify(subs.map(sp => sp.map(p => [+p[0].toFixed(6), +p[1].toFixed(6)])));
+    try {
+      FM.scene.layers.length = 0;
+      const L = mk(); FM.scene.layers.push(L); FM.selectLayer(L.id);
+      const mid = flat(FM.evalShapeSubs(L, 1));
+      if (mid === flat(A) || mid === flat(B)) throw new Error('control: the point set does not morph between its keys, so a stranded morph could not be seen');
+      if (FM.animatedProps(L).indexOf(L.subs) < 0) throw new Error('FM.animatedProps does not list the animated point set, so nothing that retimes a clip can reach it');
+      const slot = FM._keyframeSlots(L).filter(sl => sl.c[sl.k] === L.subs)[0];
+      if (!slot) throw new Error('the animated point set has no keyframe slot — its diamond could be neither deleted nor copied');
+
+      // Move the clip 3s later: every key rides along, the point keys with the position keys.
+      FM.time = 3;
+      if (!FM.moveClipTo(L, 3)) throw new Error('moveClipTo did nothing');
+      const xt = L.transform.x.kf.map(k => k.t).join(), st = L.subs.kf.map(k => k.t).join();
+      if (xt !== '3,5') throw new Error('control: the position keys did not move with the clip (' + xt + ')');
+      if (st !== '3,5') throw new Error('the point keys stayed at ' + st + ' while the clip and its position keys moved to 3,5 — the morph is over before the clip appears');
+      if (flat(FM.evalShapeSubs(L, 4)) !== mid) throw new Error('one second into the moved clip the points are not where they were one second into the original');
+      FM.selectLayer(L.id); FM.timeline.rebuild(); await sleep(60);   // diamonds are drawn for the selected clip, on its lane
+      const dots = document.querySelectorAll('#tl-tracks .kf-dot').length;
+      if (dots !== 4) throw new Error('the clip shows ' + dots + ' keyframe diamonds, not 4 — two for position and two for the points');
+
+      // Split mid-morph: the tail half must carry on from the shape at the cut.
+      FM.scene.layers.length = 0;
+      const S = mk(); FM.scene.layers.push(S); FM.selectLayer(S.id);
+      const want = [1.2, 1.6, 2].map(t => flat(FM.evalShapeSubs(S, t)));
+      const wantHead = [0.3, 0.8].map(t => flat(FM.evalShapeSubs(S, t)));
+      FM.time = 1;
+      await FM.splitLayer(S.id); await sleep(60);
+      const tail = FM.scene.layers.filter(l => l !== S && l.type === 'shape')[0];
+      if (!tail) throw new Error('the split made no second half');
+      [1.2, 1.6, 2].forEach((t, i) => {
+        if (flat(FM.evalShapeSubs(tail, t)) !== want[i]) throw new Error('after the split the tail half draws a different shape at t=' + t + ' — the seam did not hold the shape at the cut');
+      });
+      [0.3, 0.8].forEach((t, i) => {
+        if (flat(FM.evalShapeSubs(S, t)) !== wantHead[i]) throw new Error('after the split the head half draws a different shape at t=' + t);
+      });
+      if (S.subs.kf.some(k => k.t > 1 + 1e-3)) throw new Error('the head half still owns point keys past the cut: ' + S.subs.kf.map(k => k.t).join());
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.time = t0; FM.selectLayer(sel0 || null); if (FM.refreshAll) FM.refreshAll(); await sleep(40);
     }
   });
 
@@ -35383,6 +35994,80 @@
     }
   });
 
+  test('914.1 the phone’s clip buttons refuse a locked clip and carry the captions and effect clock, like A/S/D', { item: '914' }, async function () {
+    /* The phone has no key rail (styles.css hides #key-rail under 700px): the quick row under a clip and
+       the "Edit N clips" row of a multi-select ARE its A / S / D. They kept private copies of the bodies,
+       and none of the copies got queue 816 (a locked clip is not a target), 817 (the cues ride with the
+       head) or 823 (and so does the effect clock). Measured by the #912 audit: the phone's Trim-start put
+       every caption a second late, and trimmed, split and moved a clip he had locked.
+       Driven through the REAL buttons — they are in the DOM at every width, CSS only hides them on desktop
+       — so a copy that drifts from the keys again fails here rather than on his phone. */
+    const savedSel = FM.scene.selectedId, savedLayers = FM.scene.layers.slice(), t0 = FM.time;
+    const btn = title => {
+      const b = [].slice.call(document.querySelectorAll('#inspector .qr-btn')).filter(x => x.title === title)[0];
+      if (!b) {
+        const have = [].slice.call(document.querySelectorAll('#inspector .qr-btn')).map(x => x.title).join(' | ');
+        throw new Error('fixture: no "' + title + '" button in the edit panel (it holds: ' + (have || 'no clip buttons at all') + ')');
+      }
+      return b;
+    };
+    const fresh = async (sel, t) => {
+      FM.time = t;
+      if (sel.length === 1) FM.selectLayer(sel[0]); else { FM.selectLayer(sel[0]); FM.scene.selectedIds = sel.slice(); FM.scene.selectedId = sel[sel.length - 1]; }
+      FM.refreshAll(); await sleep(140);
+    };
+    try {
+      /* ── 1. Trim start on a caption track: the cues and the effect clock ride with the head. This is also the
+         CONTROL for the refusals below — the button demonstrably trims an unlocked clip. */
+      FM.scene.layers.length = 0;
+      const C = FM.makeLayer('text', { text: 'hi', x: 50, y: 50, start: 0, duration: 6 });
+      C.captions = [{ start: 0, end: 2, text: 'One' }, { start: 2, end: 4, text: 'Two' }, { start: 4, end: 6, text: 'Three' }];
+      FM.scene.layers.push(C);
+      await fresh([C.id], 1);
+      const absBefore = C.captions.map(c => C.start + c.start);
+      btn('Trim start to playhead').click(); await sleep(120);
+      if (Math.abs(C.start - 1) > 1e-6) throw new Error('control: the phone Trim-start button did not trim an unlocked clip (start is ' + C.start + '), so nothing below means anything');
+      C.captions.forEach((c, i) => {
+        if (Math.abs((C.start + c.start) - absBefore[i]) > 1e-6) throw new Error('caption "' + c.text + '" moved from ' + absBefore[i] + 's to ' + (C.start + c.start) + 's — the phone Trim-start did not re-base the cues (queue 817), so every caption plays late');
+      });
+      if (!(Math.abs((parseFloat(C.fxTimeOffset) || 0) - 1) < 1e-6)) throw new Error('the effect clock stayed at ' + C.fxTimeOffset + ' after a 1s head trim — Drift/Spin/Orbit jump at the cut (queue 823)');
+
+      /* ── 2. A LOCKED clip: every one of the phone's buttons refuses, as the keys do. */
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: 1, duration: 3 });
+      L.locked = true;
+      FM.scene.layers.push(L);
+      const same = what => {
+        if (Math.abs(L.start - 1) > 1e-6 || Math.abs(L.duration - 3) > 1e-6) throw new Error(what + ' changed a LOCKED clip: start ' + L.start + ', duration ' + L.duration + ' (the A/S/D keys refuse it — queue 816)');
+        if (FM.scene.layers.length !== 1) throw new Error(what + ' split a LOCKED clip into ' + FM.scene.layers.length + ' layers');
+      };
+      for (const title of ['Trim start to playhead', 'Split at playhead', 'Trim end to playhead']) {
+        await fresh([L.id], 2); btn(title).click(); await sleep(160); same('"' + title + '"');
+      }
+      await fresh([L.id], 6); btn('Move clip right to the playhead').click(); await sleep(80); same('"Move clip right to the playhead"');
+      await fresh([L.id], 6); btn('Extend the end of the clip to the playhead').click(); await sleep(80); same('"Extend the end of the clip to the playhead"');
+
+      /* ── 3. The multi-select row: a locked member is left alone, an unlocked one is trimmed WITH its cues. */
+      FM.scene.layers.length = 0;
+      const A = FM.makeLayer('text', { text: 'a', x: 50, y: 50, start: 0, duration: 6 });
+      A.captions = [{ start: 0, end: 3, text: 'first' }, { start: 3, end: 6, text: 'second' }];
+      const B = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: 0, duration: 6 });
+      B.locked = true;
+      FM.scene.layers.push(A, B);
+      await fresh([A.id, B.id], 1);
+      const absA = A.captions.map(c => A.start + c.start);
+      btn('Trim starts to playhead').click(); await sleep(120);
+      if (Math.abs(A.start - 1) > 1e-6) throw new Error('control: "Trim starts to playhead" did not trim the unlocked clip (start ' + A.start + ')');
+      if (Math.abs(B.start) > 1e-6 || Math.abs(B.duration - 6) > 1e-6) throw new Error('"Trim starts to playhead" trimmed the LOCKED clip in the selection: start ' + B.start + ', duration ' + B.duration);
+      A.captions.forEach((c, i) => {
+        if (Math.abs((A.start + c.start) - absA[i]) > 1e-6) throw new Error('the multi-select Trim-starts moved caption "' + c.text + '" from ' + absA[i] + 's to ' + (A.start + c.start) + 's');
+      });
+    } finally {
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.time = t0; FM.selectLayer(savedSel || null); FM.refreshAll(); await sleep(40);
+    }
+  });
+
   test('trimming a captioned clip with the A key leaves every caption where it was (queue 817)', { item: '817' }, async function () {
     /* Cue times are stored LOCAL to the clip, so anything that moves `start` has to take the same amount
        back out of them. The comment on FM.shiftLayerCues says "a THIRD caller turned up and had lost it";
@@ -36086,6 +36771,130 @@
       FM.elements.list = realList;
       FM.elements.getPack = realGetPack;
       if (hadOf === undefined) delete P.ofElement; else P.ofElement = hadOf;
+    }
+  });
+
+  /* 915.2 — THE SAME LOSS ONE STEP LATER. Queue 825 kept the draft when the FLUSH failed; the PACK write
+     after it could fail too, and nothing read that. idbPut resolves false and never throws, so the
+     try/catch around it was blind: elements.updateFrom reported success over the old pack, commitDraft
+     deleted the workspace that held his edit, and the card showed the new picture. The same unread result
+     sat in every pack writer (save, saveFromProject, duplicate, both stores) and in the font import.
+     Simulated the way a full store refuses — the put itself fails — on these key prefixes only. */
+  test('915.2 a refused pack write keeps the element draft and never reports saved', { item: '915' }, async function () {
+    const realPut = IDBObjectStore.prototype.put;
+    const refuse = /^(elem|tpl|font):/;
+    const blocking = function () {
+      IDBObjectStore.prototype.put = function (val, key) {
+        if (typeof key === 'string' && refuse.test(key)) throw new DOMException('refused by the 915.2 test', 'QuotaExceededError');
+        return realPut.apply(this, arguments);
+      };
+    };
+    const unblock = function () { IDBObjectStore.prototype.put = realPut; };
+    const wasOpen = FM.home.isOpen();
+    const orig = FM.projects.currentId();
+    const madeP = [];
+    let eid = null, tid = null, draft = null;
+    const realFF = window.FontFace;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const aId = await FM.projects.create({ name: 'FX915 pack source', width: 320, height: 240 });
+      madeP.push(aId);
+      const L = FM.makeLayer('shape', { name: 'q915 red', shape: 'rect', x: 160, y: 120, shapeW: 120, shapeH: 120, fill: '#ff0000' });
+      L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      FM.storage.markDirty(); await FM.storage.save();
+      if (!(await FM.elements.saveFromProject(aId, 'FX915 element'))) throw new Error('setup: could not save the fixture element');
+      eid = (FM.elements.list().filter(e => e.name === 'FX915 element')[0] || {}).id;
+      if (!(await FM.templates.save('FX915 template', aId))) throw new Error('setup: could not save the fixture template');
+      tid = (FM.templates.list().filter(t => t.name === 'FX915 template')[0] || {}).id;
+      if (!eid || !tid) throw new Error('setup: the fixtures are not in their lists');
+
+      /* ── HIS ROUTE: tap the element, change it, go Home — with the write refused ── */
+      draft = await FM.elements.openForEdit(eid);
+      if (!draft) throw new Error('setup: the element did not open for editing');
+      const G = FM.makeLayer('shape', { name: 'q915 green', shape: 'ellipse', x: 540, y: 540, shapeW: 200, shapeH: 200, fill: '#00ff00' });
+      G.start = 0; G.duration = 3; FM.scene.layers.push(G);
+      FM.storage.markDirty(); await FM.storage.save();
+      const layersEdited = FM.scene.layers.length;
+      blocking();
+      let ok;
+      try { ok = await FM.elements.commitDraft(); } finally { unblock(); }
+      const stillThere = FM.projects.list().some(p => p.id === draft);
+      const pack = await FM.elements.getPack(eid);
+      if (ok) throw new Error('coming Home reported the element edit as saved although the element\'s write was refused (draft kept: ' + stillThere + ', element holds ' + (pack && pack.layers.length) + ' layer(s))');
+      if (!stillThere) throw new Error('the workspace holding his edit was DELETED after the element write was refused — that was the only copy of the edit');
+      if (!pack || pack.layers.length !== 1) throw new Error('the element changed although its write was refused (' + (pack && pack.layers.length) + ' layers)');
+      const card = FM.elements.list().filter(e => e.id === eid)[0];
+      if (!card || card.count !== 1) throw new Error('the element card now claims ' + (card && card.count) + ' layers over an element that still holds 1 — the picture of an edit that never landed');
+
+      /* ── …and through the REAL door: going Home is what commits, and it must SAY the edit is kept, and land
+         him on Elements where the kept draft is. The element twin was silent on failure (the template's was not). */
+      if (FM.projects.currentId() !== draft) throw new Error('setup: the kept draft is not the open project');
+      const said = [], realToast = FM.toast;
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      blocking();
+      try {
+        FM.home.open();
+        for (let i = 0; i < 40 && !said.some(m => /kept as a draft/.test(m)); i++) await sleep(75);
+      } finally { unblock(); FM.toast = realToast; }
+      const activeTab = (document.querySelector('#home-screen .hm-tab.active') || {}).dataset || {};
+      FM.home.close();
+      await sleep(80);
+      if (!said.some(m => /kept as a draft under Elements/.test(m))) throw new Error('going Home with the element write refused said [' + said.join(' | ') + '] — nothing tells him the edit did not save and is kept as a draft');
+      if (activeTab.tab !== 'elements') throw new Error('going Home with the element write refused landed on the ' + activeTab.tab + ' tab, not Elements where the kept draft is');
+      if (!FM.projects.list().some(p => p.id === draft)) throw new Error('the draft went missing on the way Home');
+
+      /* ── the other six writers: each must say false and leave no card behind ── */
+      blocking();
+      const r = {};
+      try {
+        r.eSave = await FM.elements.save('FX915 refused A', [L]);
+        r.eFromProject = await FM.elements.saveFromProject(aId, 'FX915 refused B');
+        r.eDup = await FM.elements.duplicate(eid);
+        r.tSave = await FM.templates.save('FX915 refused C', aId);
+        r.tDup = await FM.templates.duplicate(tid);
+        const rev0 = (FM.templates.list().filter(t => t.id === tid)[0] || {}).rev || 0;
+        r.tUpdate = await FM.templates.updateFrom(tid, aId);
+        r.tRevMoved = ((FM.templates.list().filter(t => t.id === tid)[0] || {}).rev || 0) !== rev0;
+        /* a font file whose bytes were refused: FontFace is stubbed so no real font is needed (and nothing is fetched) */
+        window.FontFace = function () { this.load = function () { return Promise.resolve(); }; };
+        document.fonts.add = function () {};
+        r.font = await FM.fonts.import(new File([new Uint8Array(32)], 'q915font.ttf', { type: 'font/ttf' }));
+        await FM.fonts.applyEmbedded({ q915: { family: 'FMFq915embedded', name: 'q915emb.ttf', dataURL: 'data:font/ttf;base64,AAAAAAAAAAA=' } });
+      } finally { unblock(); window.FontFace = realFF; delete document.fonts.add; }
+      const lies = [];
+      if (r.eSave) lies.push('elements.save');
+      if (r.eFromProject) lies.push('elements.saveFromProject');
+      if (r.eDup) lies.push('elements.duplicate');
+      if (r.tSave) lies.push('templates.save');
+      if (r.tDup) lies.push('templates.duplicate');
+      if (r.tUpdate || r.tRevMoved) lies.push('templates.updateFrom');
+      if (r.font) lies.push('fonts.import');
+      const ghostE = FM.elements.list().filter(e => /^FX915 (refused|element copy)/.test(e.name)).map(e => e.name);
+      const ghostT = FM.templates.list().filter(t => /^FX915 (refused|template copy)/.test(t.name)).map(t => t.name);
+      const ghostF = FM.fonts.list().filter(f => f.name === 'q915font' || f.family === 'FMFq915embedded').map(f => f.name);
+      if (lies.length || ghostE.length || ghostT.length || ghostF.length) {
+        throw new Error('with the pack write refused, ' + (lies.length ? lies.join(', ') + ' still reported success' : 'nothing reported success') +
+          (ghostE.concat(ghostT, ghostF).length ? ', and cards appeared for things that were never stored: ' + ghostE.concat(ghostT, ghostF).join(', ') : ''));
+      }
+
+      /* ── CONTROL: the same commit with the store accepting writes saves, so the refusal above was the write and not the fixture ── */
+      if (FM.projects.currentId() !== draft) await FM.projects.open(draft);
+      if (FM.scene.layers.length !== layersEdited) throw new Error('setup: the kept draft lost the edit (' + FM.scene.layers.length + ' layers, was ' + layersEdited + ')');
+      const ok2 = await FM.elements.commitDraft();
+      const pack2 = await FM.elements.getPack(eid);
+      if (!ok2 || !pack2 || pack2.layers.length !== layersEdited) throw new Error('control: with writes allowed the edit still did not reach the element (ok ' + ok2 + ', ' + (pack2 && pack2.layers.length) + ' layers), so the refusal above proves nothing');
+      draft = null;
+    } finally {
+      unblock(); window.FontFace = realFF; try { delete document.fonts.add; } catch (e) {}
+      try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig); } catch (e) {}
+      if (draft) { try { await FM.projects.discardDraftAnyway(draft); } catch (e) {} }
+      try { for (const p of FM.projects.list().filter(p => p.elementDraft && p.ofElement === eid)) await FM.projects.discardDraftAnyway(p.id); } catch (e) {}
+      for (const id of madeP) { try { await FM.projects.remove(id); } catch (e) {} }
+      try { for (const e of FM.elements.list().filter(e => /^FX915 /.test(e.name))) await FM.elements.remove(e.id); } catch (e) {}
+      try { for (const t of FM.templates.list().filter(t => /^FX915 /.test(t.name))) await FM.templates.remove(t.id); } catch (e) {}
+      try { for (const f of FM.fonts.list().filter(f => f.name === 'q915font' || f.family === 'FMFq915embedded')) await FM.fonts.remove(f.id); } catch (e) {}
+      try { if (wasOpen) FM.home.open(); } catch (e) {}
     }
   });
 
@@ -38161,6 +38970,42 @@
       FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
       FM.selectLayer(null); FM.refreshAll();
       await sleep(160);
+    }
+  });
+
+  test('914.3 trim-end-to-playhead (D key, rail, phone button) on a REVERSED clip keeps every kept frame', { item: '914' }, async function () {
+    /* The two tests above cover the grips. The D key's body (js/timeline.js clipTrimEnd — the phone's
+       Trim-end button calls it too) only shortened `duration`, and a reversed clip plays
+       `trimStart + (total - adv)`: its TAIL is the source window's START, so shrinking the total slid every
+       frame that was kept by the amount cut (#912 audit: source at t=0/1/2 went 5/4/3 → 4/3/2). Measured
+       through FM.layerLocalTime, which needs no media. A FORWARD clip is the control, and a ramped reversed
+       clip is included because the tail's source has to come off the curve, not a flat rate. */
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time, sel0 = FM.scene.selectedId;
+    const made = [];
+    try {
+      const cases = [['forward static (CONTROL)', false, 1], ['reversed static 1x', true, 1], ['reversed static 1.5x', true, 1.5],
+        ['reversed ramped 0.5x -> 2x', true, { kf: [{ t: 0, v: 0.5, e: 'linear' }, { t: 4, v: 2, e: 'linear' }] }]];
+      for (const [what, rev, speed] of cases) {
+        FM.scene.layers.length = 0;
+        const v = FM.makeLayer('video', { name: 'clip' });
+        v.start = 0; v.duration = 4; v.trimStart = 1; v.reversed = rev; v.speed = speed;
+        FM.scene.layers.push(v); made.push(v.id);
+        FM.media.set(v.id, { kind: 'video', duration: 60, width: 2, height: 2 });
+        FM.selectLayer(v.id); FM.time = 3; await sleep(60);
+        const times = [0, 1, 2, 2.9];                    // all survive cutting the last second off
+        const before = times.map(t => FM.layerLocalTime(v, t));
+        if (!FM.timeline.clipKey('d')) throw new Error('D did nothing on the ' + what + ' clip with the playhead inside it, so the trim under test never happened');
+        if (Math.abs(v.duration - 3) > 1e-6) throw new Error('the tail did not come in to the playhead on the ' + what + ' clip (duration ' + v.duration + ')');
+        times.forEach((t, i) => {
+          const now = FM.layerLocalTime(v, t);
+          if (Math.abs(now - before[i]) > 0.01) throw new Error('trimming the end of a ' + what + ' clip changed the frame at t=' + t + ' from source ' + before[i].toFixed(4) + 's to ' + now.toFixed(4) + 's — every kept frame slid by the cut');
+        });
+      }
+    } finally {
+      made.forEach(id => FM.media.remove(id));
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.time = t0; FM.selectLayer(sel0 || null); FM.refreshAll();
+      await sleep(80);
     }
   });
 
@@ -41062,6 +41907,56 @@
     if (C.fitCues(cap, [], 'project').cues.length !== 0) throw new Error('no findings should produce no cues');
   });
 
+  /* ── queue 916.7: detected speech lands where it is HEARD ─────────────────────────────────────────────
+   * sourceToLocal ignored `reversed`, so on a reversed voice clip speech heard near the END got a cue near
+   * the START (the mirror-image time). And the detector reads the whole file, so on a trimmed clip speech
+   * from the cut-away part became cues too — with "whole project" that dragged the caption clip to a
+   * negative start, before the timeline begins. Driven through the real FM.captions.detect with the
+   * decoder and the detector stubbed to hand back known speech, so only the placement is under test. */
+  test('916.7 captions: detected speech lands where it is heard on a reversed or trimmed clip, and never before 0:00', { item: '916' }, async function () {
+    const C = FM.captions;
+    if (!C || typeof C.detect !== 'function' || typeof C.fitCues !== 'function') throw new Error('FM.captions.detect / fitCues are not reachable');
+    const saved = { decode: FM.decodeAudio, detect: FM.detectSpeech };
+    let segs = [];
+    const ids = [];
+    const src = function (o) {
+      const l = FM.makeLayer('video', { name: 'x916 voice' });
+      Object.assign(l, { start: 0, duration: 10, trimStart: 0, speed: 1, reversed: false }, o);
+      FM.media.set(l.id, { kind: 'video', file: new Blob(['x'], { type: 'audio/wav' }), duration: 10, width: 0, height: 0 });
+      ids.push(l.id);
+      return l;
+    };
+    const cap = function (o) { const l = FM.makeLayer('text', { text: '' }); Object.assign(l, { start: 0, duration: 10, text: '' }, o); l.captions = []; return l; };
+    const cues = function (l) { return JSON.stringify((l.captions || []).map(function (c) { return [+c.start.toFixed(3), +c.end.toFixed(3)]; })); };
+    try {
+      FM.decodeAudio = async function () { return { sampleRate: 8000, length: 80000, duration: 10, numberOfChannels: 1 }; };
+      FM.detectSpeech = async function () { return { segments: segs.map(function (s) { return { start: s[0], end: s[1] }; }), stats: {} }; };
+      // CONTROL: a plain forward clip — speech at source 1-2s is captioned at 1-2s, exactly as before.
+      segs = [[1, 2]];
+      const c0 = cap(), s0 = src({});
+      await C.detect(c0, s0, null, 'clip');
+      if (cues(c0) !== '[[1,2]]') throw new Error('CONTROL: a forward clip’s speech at 1-2s became cues ' + cues(c0));
+      // 1 — REVERSED: source 1-2s is heard at 8-9s (the picture shows source 1.0s at 9.0s).
+      const c1 = cap(), s1 = src({ reversed: true });
+      if (Math.abs(FM.layerLocalTime(s1, 9) - 1) > 1e-9) throw new Error('the picture no longer maps a reversed clip as this test assumes');
+      await C.detect(c1, s1, null, 'clip');
+      if (cues(c1) !== '[[8,9]]') throw new Error('on a REVERSED clip, speech at source 1-2s became cue(s) ' + cues(c1) + ' — it is heard at 8-9s, and a cue at the mirror-image time captions silence');
+      // 2 — TRIMMED to source 5-10s, "whole project": speech at 2-3s was cut away; 7-8s plays at 2-3s.
+      segs = [[2, 3], [7, 8]];
+      const c2 = cap({ duration: 5 }), s2 = src({ trimStart: 5, duration: 5 });
+      await C.detect(c2, s2, null, 'project');
+      if (c2.start < 0) throw new Error('"whole project" moved the caption clip to ' + c2.start + 's — before the timeline starts, where its first cues can never be seen or exported');
+      if (cues(c2) !== '[[2,3]]') throw new Error('on a clip trimmed to source 5-10s, speech at 2-3s (cut away) and 7-8s became cues ' + cues(c2) + ' — only 7-8s is heard, at 2-3s on the timeline');
+      // 3 — the clamp itself, for anything that would still land before 0:00.
+      const fit = C.fitCues({ start: 1, duration: 4 }, [{ a: -3, b: -2 }, { a: -1.5, b: -0.5 }, { a: 1, b: 2 }], 'project');
+      if (fit.start < 0) throw new Error('fitCues("project") moved a caption clip at 1s to ' + fit.start + 's to meet speech before the timeline starts');
+      if (fit.cues.some(function (c) { return c.a < 0; })) throw new Error('fitCues("project") left a cue at a negative time: ' + JSON.stringify(fit.cues));
+    } finally {
+      FM.decodeAudio = saved.decode; FM.detectSpeech = saved.detect;
+      ids.forEach(function (id) { try { FM.media.remove(id); } catch (e) {} });
+    }
+  });
+
   /* ---------------- #148: the edges of a clip stop clicking ----------------
    * Ezra: "the audio i import is making a realy scratchy popping noise that hurts my ears."
    * Measured first (tests/_pops.html): the sync controller is NOT the cause — under real load it makes
@@ -41723,6 +42618,25 @@
         throw new Error('changing ' + k + ' left the export signature unchanged — a saved render from the OLD settings would be spliced into the new file');
       }
     }
+  });
+
+  /* ── queue 916.9: a render saved by an older build is not resumed by a newer one ──────────────────────
+   * The signature held everything about the EXPORT and nothing about the CODE: an export killed on one
+   * version and re-exported after the PWA updated (several times a day) replayed the old build's frames
+   * and rendered the rest with the new one, so the file could change look at the join. The version label
+   * is the build's single source of truth, so changing it must change the signature. */
+  test('916.9 export resume: a render saved by an older build of the app is not resumed by a newer one', { item: '916' }, function () {
+    const XR = FM.exportResume;
+    if (!XR) throw new Error('FM.exportResume is not loaded');
+    const lab = document.querySelector('.brand .ver') || document.querySelector('.ver');
+    if (!lab) throw new Error('no version label in the page — the build cannot be told apart');
+    const was = lab.textContent;
+    try {
+      const s0 = XR.signature(xrBaseSig());
+      if (XR.signature(xrBaseSig()) !== s0) throw new Error('CONTROL: the same export on the same build produced two signatures — resume could never fire at all');
+      lab.textContent = 'v0.01';
+      if (XR.signature(xrBaseSig()) === s0) throw new Error('the app version changed (' + String(was).trim() + ' → v0.01) and the export signature did not — a render half-done by the old build would be finished by the new one, and the file can change look at the join');
+    } finally { lab.textContent = was; }
   });
 
   test('export resume: what was saved replays back byte-for-byte, in order, config on the first chunk only', { item: 'export-resume-roundtrip' }, async function () {
@@ -48786,6 +49700,67 @@
     }
   });
 
+  /* ── queue 916.8: exporting a short range builds only that stretch of each clip's audio ────────────────
+   * makeClipBuffer built the WHOLE clip whatever range was exported, then played one slice of it — so one
+   * second of a project with a four-minute song resampled all four minutes (measured 138 ms against 3 ms,
+   * and a ~46 MB buffer per channel held for a one-second file: a real out-of-memory risk on a phone).
+   * Two halves. The size of what is built is read off every buffer the mixer's OfflineAudioContext
+   * creates. And because this changes how every range export is assembled, the samples must be the ones
+   * the whole-project export plays at the same moment — forward, reversed, and at a non-1x speed. */
+  test('916.8 exporting a short range builds only that stretch of each clip’s audio — and the samples match the whole export', { item: '916', budgetMs: 45000 }, async function () {
+    if (!FM.exporter || !FM.exporter.buildAudioMix) throw new Error('FM.exporter.buildAudioMix is not reachable');
+    const SR = 48000, LEN = 20, FROM = 5.25, TO = 6.25;
+    const saved = { scene: FM.scene };
+    const OP = OfflineAudioContext.prototype, own = Object.prototype.hasOwnProperty.call(OP, 'createBuffer'), cb0 = OP.createBuffer;
+    const made = [];
+    const mkBuf = function () {
+      const b = new AudioBuffer({ numberOfChannels: 1, length: LEN * SR, sampleRate: SR });
+      const d = b.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = 0.4 * Math.sin(2 * Math.PI * 220 * i / SR) * (0.5 + 0.5 * i / d.length);   // no two moments alike
+      return b;
+    };
+    const ab = mkBuf();
+    const cases = [
+      { label: 'forward 1x', speed: 1, reversed: false, dur: 18 },
+      { label: 'reversed 1x', speed: 1, reversed: true, dur: 18 },
+      { label: 'forward 1.5x', speed: 1.5, reversed: false, dur: 12 },
+    ];
+    const ids = [];
+    try {
+      OP.createBuffer = function (ch, len, sr) { made.push(len); return cb0.apply(this, arguments); };
+      for (let k = 0; k < cases.length; k++) {
+        const c = cases[k];
+        const L = FM.makeLayer('video', { name: 'x916 range ' + c.label, start: 0.5, duration: c.dur, trimStart: 0 });
+        L.start = 0.5; L.duration = c.dur; L.trimStart = 0; L.speed = c.speed; L.reversed = c.reversed; L.volume = 1; L.fadeIn = 0; L.fadeOut = 0;
+        FM.media.set(L.id, { kind: 'video', file: new Blob(['x'], { type: 'audio/wav' }), audioBuffer: ab, duration: LEN, width: 0, height: 0 });
+        ids.push(L.id);
+        FM.scene = scene([L], { project: { width: 64, height: 64, fps: 30, duration: 0.5 + c.dur, background: '#000000' } });
+        made.length = 0;
+        const whole = await FM.exporter.buildAudioMix(FM.scene, 0, 0.5 + c.dur);
+        if (!whole) throw new Error(c.label + ': CONTROL — the whole-project export built no mix');
+        const wholeMax = Math.max.apply(null, made);
+        if (wholeMax < c.dur * SR * 0.99) throw new Error(c.label + ': CONTROL — the whole export built no clip-length buffer (' + wholeMax + ' samples), so the spy is not seeing the mixer');
+        made.length = 0;
+        const part = await FM.exporter.buildAudioMix(FM.scene, FROM, TO);
+        if (!part) throw new Error(c.label + ': the ' + (TO - FROM) + 's range built no mix');
+        const partMax = Math.max.apply(null, made);
+        if (partMax > (TO - FROM) * SR * 1.1) throw new Error(c.label + ': exporting ' + (TO - FROM) + 's built a ' + (partMax / SR).toFixed(2) + 's buffer of the clip — it resampled the whole ' + c.dur + 's clip to play one second of it');
+        // …and the samples are the whole export's samples at the same moment.
+        const a = part.audioBuffer.getChannelData(0), w = whole.audioBuffer.getChannelData(0), off = Math.round(FROM * whole.sampleRate);
+        let worst = 0, energy = 0;
+        for (let i = 0; i < a.length && off + i < w.length; i++) { const d = Math.abs(a[i] - w[off + i]); if (d > worst) worst = d; energy += a[i] * a[i]; }
+        if (!(energy > 1)) throw new Error(c.label + ': CONTROL — the range mix is silent, so matching it proves nothing');
+        if (worst > 1e-4) throw new Error(c.label + ': the ' + FROM + '–' + TO + 's export differs from the whole export at the same moment by up to ' + worst.toExponential(2) + ' — a range export must play exactly the sound the full one does');
+      }
+    } finally {
+      if (own) OP.createBuffer = cb0; else delete OP.createBuffer;
+      ids.forEach(function (id) { try { FM.media.remove(id); } catch (e) {} });
+      FM.scene = saved.scene;
+      FM._lastMixGain = undefined; FM._lastMixRawPeak = undefined; FM._lastMixPeak = undefined;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
   /* ═══ THE GPU WARP PATH — the oldest open item's architectural half ════════════════════════════
    * "Editing lags, and gets bad fast" concluded, after three months, that the cost is a per-pixel JS
    * loop, the gap is ~50x, and no further kernel tuning closes it. js/gl-warp.js runs the WARP_FX
@@ -50888,6 +51863,48 @@
     } finally {
       dlg.classList.add('hidden');
       if (!wasOpen) FM.home.close();
+    }
+  });
+
+  /* 915.9 — THE SUGGESTED NAME. It was 'Project ' + (every index entry + 1): the index includes the hidden
+     element/template workspaces, so the number ran ahead of what he can see, and a count is not a free
+     name — delete one and it offered a name he already had. Two hidden drafts and a project already called
+     what a plain count would suggest: the old rule lands on neither of the right answers. */
+  test('915.9 the New project dialog suggests a name he does not already have, counting only his projects', { item: '915' }, async function () {
+    const wasOpen = FM.home.isOpen();
+    const orig = FM.projects.currentId();
+    const dlg = document.getElementById('hm-dialog');
+    const made = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(80);
+      made.push(await FM.projects.create({ name: 'FX915 hidden 1', elementDraft: true }));
+      made.push(await FM.projects.create({ name: 'FX915 hidden 2', templateDraft: true, ofTemplate: 't_q915_none' }));
+      const visibleNow = FM.projects.list().filter(p => !p.elementDraft && !p.templateDraft).length;
+      /* Named what a plain count of HIS projects would suggest once it exists (visibleNow + 1 projects, so
+         'Project ' + (visibleNow + 2)) — the deleted-one-of-three case, where the count lands on a name he has. */
+      made.push(await FM.projects.create({ name: 'Project ' + (visibleNow + 2) }));
+      if (orig) await FM.projects.open(orig);
+      const mineList = FM.projects.list().filter(p => !p.elementDraft && !p.templateDraft);
+      const taken = new Set(mineList.map(p => String(p.name || '').trim().toLowerCase()));
+      let want = mineList.length + 1;
+      while (taken.has('project ' + want)) want++;
+      const oldRule = FM.projects.list().length + 1;
+      if (oldRule === want) throw new Error('setup: the old rule would land on the right answer here too, so this cannot tell them apart');
+      if (!taken.has('project ' + (mineList.length + 1))) throw new Error('setup: a plain count of his projects does not land on a name he has, so the collision half is not exercised');
+      FM.home.open();
+      await sleep(500);
+      FM.home._render('projects');
+      document.getElementById('hm-new').click();
+      if (dlg.classList.contains('hidden')) throw new Error('tapping + on the Projects tab did not open the New project dialog');
+      const got = document.getElementById('hm-new-name').value;
+      if (taken.has(got.trim().toLowerCase())) throw new Error('the dialog suggests ' + got + ', which he already has');
+      if (got !== 'Project ' + want) throw new Error('the dialog suggests ' + got + ' with ' + mineList.length + ' projects on screen — expected Project ' + want + ' (hidden element/template drafts must not count)');
+    } finally {
+      dlg.classList.add('hidden');
+      try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig); } catch (e) {}
+      for (const id of made) { try { await FM.projects.discardDraftAnyway(id); } catch (e) {} }
+      try { if (!wasOpen) FM.home.close(); } catch (e) {}
     }
   });
 
@@ -56298,6 +57315,49 @@
     if (same(run('new'), plain)) throw new Error('a NEW Trail on a full-frame clip draws nothing — every copy lands off the frame (queue 904)');
   });
 
+  /* ── queue 913 clause 7: a clamp that ran AFTER the plate scaling ────────────────────────────────────────
+   * The test above proves pxToPlate scales a pixel-sized setting down to the plate. Honeycomb, Grid and Glow Scan
+   * then clamped the SCALED value against the catalogue's minimum as if it were still project pixels: Cell size
+   * 24 reaches the phone's 28% plate as 6.72 and was pushed back up to 8, so the preview's cells were ~19% bigger
+   * than the file's; a fine Grid or a narrow Glow Scan was clamped far wider still. Measured as the real path
+   * runs them — pxToPlate, then the kernel with ps — in PROJECT pixels: the honeycomb's cell pitch, the grid's
+   * line pitch and the scan band's width, at full plate and at 0.28. CONTROL: the full-plate numbers are the
+   * settings themselves, so the fixture is reading what it claims to. */
+  test('913.7 Honeycomb, Grid and Glow Scan are the same size on the phone preview plate as in the export', { item: '913' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.hexarray || !K.grid || !K.glowscan || !FM._pxToPlate) throw new Error('the kernels or the pxToPlate seam are not reachable');
+    const plate = (W, H) => { const d = new Uint8ClampedArray(W * H * 4); for (let i = 3; i < d.length; i += 4) d[i] = 255; return d; };
+    const through = (type, params, W, H, ps) => {
+      const d = plate(W, H), fx = FM.fxRegistry.makeInstance(type);
+      K[type](d, W, H, FM._pxToPlate(fx, params, 0, ps, K[type]), 0, ps);
+      return d;
+    };
+    // ANY light: on a small plate a 1px wall that falls between two pixels lights both of them only dimly
+    const runs = (d, W, y) => { let n = 0, on = false; for (let x = 0; x < W; x++) { const v = d[(y * W + x) * 4] > 0; if (v && !on) n++; on = v; } return n; };
+    // the lattice pitch along a row, in project px: a row through hex centres crosses one wall per cell
+    const hexPitch = (ps) => { const W = Math.round(1000 * ps), H = 4; const n = runs(through('hexarray', { size: 24, color: '#ffffff' }, W, H, ps), W, 0); return n ? 1000 / n : Infinity; };
+    const gridPitch = (ps) => { const W = Math.round(1000 * ps), H = 6; const n = runs(through('grid', { size: 8, color: '#ffffff' }, W, H, ps), W, H - 1); return n ? 1000 / n : Infinity; };
+    // the scan band's width at half its peak, down a column, in project px
+    const band = (ps) => {
+      const W = 4, H = Math.round(600 * ps);
+      const d = through('glowscan', { speed: 1, width: 10, amount: 1, color: '#ffffff' }, W, H, ps);
+      let peak = 0, n = 0;
+      for (let y = 0; y < H; y++) peak = Math.max(peak, d[(y * W) * 4]);
+      for (let y = 0; y < H; y++) if (d[(y * W) * 4] >= peak / 2) n++;
+      return n / ps;
+    };
+    const h1 = hexPitch(1), g1 = gridPitch(1), b1 = band(1);
+    if (!(Math.abs(h1 - 24) < 2)) throw new Error('harness: Cell size 24 measured a ' + h1.toFixed(1) + 'px pitch at full plate');
+    if (!(Math.abs(g1 - 8) < 1)) throw new Error('harness: Grid spacing 8 measured a ' + g1.toFixed(1) + 'px pitch at full plate');
+    if (!(b1 > 6 && b1 < 20)) throw new Error('harness: a Glow Scan of Width 10 measured ' + b1.toFixed(1) + 'px wide at full plate');
+    const bad = [];
+    const h = hexPitch(0.28), g = gridPitch(0.28), b = band(0.28);
+    if (Math.abs(h / h1 - 1) > 0.1) bad.push('Honeycomb cells are ' + h.toFixed(1) + ' project px on the 0.28 plate against ' + h1.toFixed(1) + ' in the export');
+    if (Math.abs(g / g1 - 1) > 0.3) bad.push('a Grid of spacing 8 pitches ' + g.toFixed(1) + ' project px on the 0.28 plate against ' + g1.toFixed(1) + ' in the export');
+    if (Math.abs(b / b1 - 1) > 0.4) bad.push('a Glow Scan of Width 10 is ' + b.toFixed(1) + ' project px wide on the 0.28 plate against ' + b1.toFixed(1) + ' in the export');
+    if (bad.length) throw new Error(bad.join(' · ') + ' (queue 913)');
+  });
+
   /* ═══ 904: Number Roll can go negative, group thousands, and keep the text around the number. */
   test('904: Number Roll counts below zero, groups thousands and keeps $ / % / a label around the number', { item: '904' }, function () {
     const T = FM._FX_TABLES && FM._FX_TABLES.TEXT_FX;
@@ -57980,6 +59040,61 @@
     }
   });
 
+  /* 915.6 — THE EDIT SAVED, THE CARD SAID IT DID NOT. updateFrom took the card picture from the workspace's
+     stored thumbnail, which the autosave only re-captures every 12s — and Home deliberately skips the
+     capture on the way out (queue 128). So red → blue → green inside 12s came back as a BLUE card over a
+     GREEN element, which reads as "my edit didn't save". The stored picture is taken red here, the edit
+     makes it green without a capture, and coming back must show green — for both stores. */
+  test('915.6 after editing an element or a template its card shows the edit, not an older autosave picture', { item: '915', budgetMs: 30000 }, async function () {
+    const wasOpen = FM.home.isOpen();
+    const orig = FM.projects.currentId();
+    const made = [];
+    let eid = null, tid = null;
+    const green = function (c) { return !!c && c[1] > 200 && c[0] < 60 && c[2] < 60; };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      made.push(await FM.projects.create({ name: 'FX915 card source', width: 1080, height: 1080 }));
+      const L = FM.makeLayer('shape', { name: 'q915 fill', shape: 'rect', x: 540, y: 540, shapeW: 700, shapeH: 700, fill: '#ff0000' });
+      L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      FM.storage.markDirty(); await FM.storage.save();
+      if (!(await FM.elements.saveFromProject(made[0], 'FX915 card element'))) throw new Error('setup: could not save the fixture element');
+      if (!(await FM.templates.save('FX915 card template', made[0]))) throw new Error('setup: could not save the fixture template');
+      eid = (FM.elements.list().filter(e => e.name === 'FX915 card element')[0] || {}).id;
+      tid = (FM.templates.list().filter(t => t.name === 'FX915 card template')[0] || {}).id;
+      const results = [];
+      for (const kind of ['element', 'template']) {
+        const store = kind === 'element' ? FM.elements : FM.templates, id = kind === 'element' ? eid : tid;
+        const draft = await store.openForEdit(id);
+        if (!draft) throw new Error('setup: the ' + kind + ' did not open for editing');
+        await sleep(150);
+        FM.time = 0.5;
+        FM.projects.touchCurrent(true);   // the autosave's picture: RED
+        const was = await q915Centre(await FM.projects.getThumb(draft));
+        if (!was || !(was[0] > 200 && was[1] < 60)) throw new Error('setup: the ' + kind + ' workspace\'s stored picture is ' + JSON.stringify(was) + ', not red, so a red card later would not mean it is stale');
+        const S = FM.scene.layers.filter(l => l.type === 'shape')[0];
+        if (!S) throw new Error('setup: the ' + kind + ' workspace has no shape to recolour');
+        S.fill = '#00ff00';                 // the edit — inside 12s of that picture, so the autosave takes no new one
+        FM.storage.markDirty(); await FM.storage.save();
+        if (!(await store.commitDraft())) throw new Error('coming back from the ' + kind + ' reported failure, so its card was never written');
+        const pack = await store.getPack(id);
+        const saved = pack && pack.layers.filter(l => l.type === 'shape')[0];
+        if (!saved || saved.fill !== '#00ff00') throw new Error('setup: the ' + kind + ' itself did not save green (' + (saved && saved.fill) + '), so this is a different bug');
+        const card = await q915Centre((store.list().filter(x => x.id === id)[0] || {}).thumb);
+        if (!green(card)) results.push('the ' + kind + ' card is ' + JSON.stringify(card) + ' although the ' + kind + ' itself is green');
+        if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig);
+      }
+      if (results.length) throw new Error(results.join('; ') + ' — the card was taken from the workspace\'s last autosave picture, so it shows the look BEFORE his edit');
+    } finally {
+      try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig); } catch (e) {}
+      try { for (const p of FM.projects.list().filter(p => (p.elementDraft && p.ofElement === eid) || (p.templateDraft && p.ofTemplate === tid))) await FM.projects.discardDraftAnyway(p.id); } catch (e) {}
+      if (eid) { try { await FM.elements.remove(eid); } catch (e) {} }
+      if (tid) { try { await FM.templates.remove(tid); } catch (e) {} }
+      for (const id of made) { try { await FM.projects.remove(id); } catch (e) {} }
+      try { if (wasOpen) FM.home.open(); } catch (e) {}
+    }
+  });
+
   /* ═══ 561, RE-OPENED (v15.04): THE POINT EDITOR'S DRAWING FOLLOWS THE ZOOMED PREVIEW'S CROP ORIGIN.
      His case, staged exactly: open Customise Points, THEN zoom to 200% and pan (start() resets the viewport,
      so on the phone the zoom always comes after). Above 1.35x the preview is a crop whose pixel (0,0) is
@@ -59421,11 +60536,47 @@
   test('745: the featured carousel is derived from batch order, so the newest effects lead it', { item: '745' }, async function () {
     const feat = FM.FX_FEATURED || [];
     if (!feat.length) throw new Error('FM.FX_FEATURED is empty');
-    if (feat[0] !== 'squish') throw new Error('the row leads with ' + feat[0] + ', not squish (batch 39, the newest) — the list is not derived from batch order');
-    ['lensdistort', 'pixelsort', 'compoundblur', 'matchgrade'].forEach(id => { if (feat.indexOf(id) < 0) throw new Error(id + ' (batch 38) is not in the featured row: ' + feat.join(', ')); });
+    /* squish WAS the newest when this was written, and the check read `feat[0] === 'squish'`; batch 40 (Snow & Rain,
+       queue 913) now leads, so what this test owns is the ORDER — batch 39 ahead of every batch-38 effect. Who leads
+       today is 913.8's claim, just below. */
+    if (feat.indexOf('squish') < 0) throw new Error('squish (batch 39) is not in the featured row: ' + feat.join(', '));
+    ['lensdistort', 'pixelsort', 'compoundblur', 'matchgrade'].forEach(id => { if (feat.indexOf(id) < 0) throw new Error(id + ' (batch 38) is not in the featured row: ' + feat.join(', ')); if (feat.indexOf(id) < feat.indexOf('squish')) throw new Error(id + ' (batch 38) sits ahead of squish (batch 39) — the list is not derived from batch order: ' + feat.join(', ')); });
     if (feat.length > 12) throw new Error('the row holds ' + feat.length + ' — more than the twelve the rule allows');
     if (feat[0] === 'tunnel') throw new Error('control: a batch-26 effect still heads the row');
     feat.forEach(id => { const r = FM.fxRegistry.get(id); if (!r) throw new Error(id + ' is featured but not a real effect'); if (r.hidden) throw new Error(id + ' is featured but hidden'); });
+  });
+
+  /* ── queue 913 clause 8: the newest effect was missing from the NEW row ───────────────────────────────────
+   * The row is CATEGORY_OF read backwards, and Snow & Rain (v16.74) was written into batch 33's line instead of a
+   * batch of its own after squish — so the newest effect in the app was nowhere in the row that exists to show the
+   * newest effects. Held on the data AND on the screen: it leads FX_FEATURED, and opening Add Effect draws its card
+   * in the featured row. CONTROL: squish, the batch before it, is still in the row too. */
+  test('913.8 Snow & Rain, the newest effect, leads the Effects browser NEW row', { item: '913' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const feat = FM.FX_FEATURED || [];
+    const reg = FM.fxRegistry.get('weather');
+    if (!reg) throw new Error('Snow & Rain is not in the registry');
+    const bad = [];
+    if (feat[0] !== 'weather') bad.push('the NEW row leads with ' + feat[0] + ' and Snow & Rain is ' + (feat.indexOf('weather') < 0 ? 'not in it at all' : 'at position ' + (feat.indexOf('weather') + 1)) + ': ' + feat.join(', '));
+    if (feat.indexOf('squish') < 0) bad.push('control: squish (batch 39) fell out of the row');
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#48f', start: 0, duration: 6 });
+      FM.scene = scene([L]); FM.selectLayer(L.id); FM.refreshAll();
+      FM.fxBrowser.open(L); await sleep(300);
+      const names = [...document.querySelectorAll('#fx-browser .fxb-card .fxb-card-name')].map(n => n.textContent);
+      if (!names.length) throw new Error('setup: the browser drew no featured cards at all');
+      if (names.indexOf(reg.label) < 0) bad.push('opening Add Effect draws no ' + reg.label + ' card in the featured row (it shows ' + names.slice(0, 4).join(', ') + '…)');
+    } finally {
+      try { FM.fxBrowser.close(); } catch (e) {}
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+    if (bad.length) throw new Error(bad.join(' · ') + ' (queue 913)');
   });
 
   /* ═══ 746 (hunt MEDIUM #29): "LAYER NEVER MOVES" IS NOT SAID OF A LAYER THAT MOVES. A shape parented to an animated
@@ -61943,6 +63094,130 @@
     }
   });
 
+  /* A stand-in media element for the queue-916 audition tests. It HOLDS STILL — currentTime moves only
+     when the test moves it — so what the audition's frame loop reads is exactly what the test set. */
+  function x916AudEl(dur) {
+    return { currentTime: 0, duration: dur, muted: true, volume: 1, playbackRate: 1, paused: true, ended: false,
+             play: function () { this.paused = false; return Promise.resolve(); }, pause: function () { this.paused = true; },
+             removeAttribute: function () {}, load: function () {} };
+  }
+  function x916Frames(n) {
+    return new Promise(function (r) { var k = 0; (function f() { if (++k > n) return r(); requestAnimationFrame(f); })(); });
+  }
+
+  /* ── queue 916.2: an export stops an audio-effect audition ─────────────────────────────────────────
+   * The audition (the Hear button, #653) plays the clip's element on its own frame loop and keeps
+   * FM.playing false on purpose, so the export's `if (FM.playing) FM.pause()` never reached it. Its loop
+   * jumps the element back to its start every 2.5s, undoing the exporter's per-frame seeks — measured:
+   * export frames past that point rendered from currentTime 0 — and it was still looping after the export
+   * had finished. Both halves are driven: every exporter entry point stops it before its first await, and
+   * the audition's own tick stands down while an export owns the element. */
+  test('916.2 starting an export stops an audio-effect audition, and an audition never runs under one', { item: '916', budgetMs: 30000 }, async function () {
+    if (!FM.audioFxLive || !FM.audioFxLive.audition) throw new Error('FM.audioFxLive.audition is not reachable');
+    const saved = { scene: FM.scene, time: FM.time, exporting: FM._exporting };
+    const L = FM.makeLayer('video', { name: 'x916 audition export', start: 0, duration: 1, trimStart: 0 });
+    L.start = 0; L.duration = 1; L.trimStart = 0;
+    const el = x916AudEl(2);
+    try {
+      FM.scene = scene([L], { project: { width: 64, height: 64, fps: 10, duration: 1, background: '#000000' } });
+      FM.media.set(L.id, { kind: 'video', el: el, width: 0, height: 0, duration: 2 });
+      FM.time = 0;
+      // 1 — the backstop inside the audition's own tick.
+      if (FM.audioFxLive.audition(L) !== true) throw new Error('the audition refused a plain clip, so nothing below is measured');
+      await x916Frames(3);
+      if (!FM.audioFxLive.auditioning(L) || el.paused) throw new Error('CONTROL: the audition stopped by itself with no export anywhere — the assertion below would pass for the wrong reason');
+      FM._exporting = true;
+      try { await x916Frames(3); } finally { FM._exporting = saved.exporting; }
+      if (FM.audioFxLive.auditioning()) throw new Error('the audition kept looping while an export owned the element — its 2.5s loop drags the clip back under the exporter’s seeks, so frames render from the wrong moment');
+      if (!el.paused) throw new Error('the audition stood down but left the element playing');
+      // 2 — every exporter entry point stops it before it does anything else.
+      const entries = [['MP4', 'run'], ['GIF', 'runGif'], ['PNG frames', 'runFrames']];
+      for (let i = 0; i < entries.length; i++) {
+        const label = entries[i][0], fn = entries[i][1];
+        if (typeof FM.exporter[fn] !== 'function') throw new Error('FM.exporter.' + fn + ' is not reachable');
+        if (FM.audioFxLive.audition(L) !== true || !FM.audioFxLive.auditioning(L)) throw new Error('could not start an audition before the ' + label + ' export');
+        const p = FM.exporter[fn]({ scale: 1, fps: 10, from: 0, to: 1, outW: 64, outH: 64, bitrate: 300000, name: 'x916aud', onReady: function () {} });
+        const still = FM.audioFxLive.auditioning();
+        FM._exportCancel = true;   // this test is about the audition, not the render — stop it at its first check
+        await p.catch(function () {});
+        FM._exportCancel = false;
+        if (still) throw new Error('the ' + label + ' export started with an audition still looping over its clip — the export never stops it');
+        if (FM.audioFxLive.auditioning()) throw new Error('an audition was still running after the ' + label + ' export ended');
+      }
+      // 3 — the Export button itself, for a format that never reaches the exporter's entry points (WAV).
+      //     The mixer is intercepted, as the 884 test does, so no file is written.
+      const fmtEl = document.getElementById('exp-format');
+      if (!fmtEl || typeof FM._runExport !== 'function') throw new Error('#exp-format / FM._runExport are not reachable — the Export button cannot be driven');
+      saved.fmt = fmtEl.value; saved.mix = FM.exporter.buildAudioMix;
+      let atMix = null;
+      FM.exporter.buildAudioMix = function () { atMix = FM.audioFxLive.auditioning(); return Promise.resolve(null); };
+      fmtEl.value = 'audio';
+      if (FM.audioFxLive.audition(L) !== true) throw new Error('could not start an audition before the WAV export');
+      await FM._runExport();
+      if (atMix === null) throw new Error('CONTROL: the WAV export never reached the mixer, so nothing was measured');
+      if (atMix) throw new Error('the WAV export built its soundtrack with an audition still looping — pressing Export does not stop it');
+    } finally {
+      if (saved.mix) FM.exporter.buildAudioMix = saved.mix;
+      if (saved.fmt != null) { const f = document.getElementById('exp-format'); if (f) f.value = saved.fmt; }
+      FM._exportCancel = false; FM._exporting = saved.exporting;
+      if (FM.audioFxLive.stopAudition) FM.audioFxLive.stopAudition();
+      try { FM.media.remove(L.id); } catch (e) {}
+      FM.scene = saved.scene; FM.time = saved.time;
+      const n = document.getElementById('export-note'); if (n) { n.textContent = ''; n.classList.add('hidden'); n.classList.remove('export-note-warn'); }
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* ── queue 916.10: the audition reads keyframed effect settings at the right timeline moment ──────
+   * The audition only knows the element's SOURCE position, and effect params are keyframed in SCENE
+   * time. It converted with `start + (currentTime - trimStart)` — right at 1x only. On a 2x clip one
+   * source second is half a timeline second, so a keyframed sweep ran out of step with the real playback
+   * and the export. The rig hands the audition a chain that records the times it is driven at, and the
+   * check is the round trip: FM.layerLocalTime of that time must be the source position being heard. */
+  test('916.10 the audition drives keyframed effect settings at the right timeline moment on a sped-up or ramped clip', { item: '916', budgetMs: 20000 }, async function () {
+    if (!FM.audioFxLive || !FM.audioFxLive.audition) throw new Error('FM.audioFxLive.audition is not reachable');
+    const saved = { scene: FM.scene, time: FM.time };
+    const L = FM.makeLayer('video', { name: 'x916 audition time', start: 1, duration: 2, trimStart: 0.5 });
+    L.start = 1; L.duration = 2; L.trimStart = 0.5; L.speed = 1;
+    const el = x916AudEl(10), seen = [];
+    const rec = { kind: 'video', el: el, width: 0, height: 0, duration: 10 };
+    const heardAt = async function (src) {
+      el.currentTime = src; seen.length = 0;
+      await x916Frames(3);
+      if (!seen.length) throw new Error('the audition’s frame loop never drove the effect chain, so nothing was measured');
+      return seen[seen.length - 1];
+    };
+    try {
+      FM.scene = scene([L], { project: { width: 64, height: 64, fps: 30, duration: 4, background: '#000000' } });
+      FM.media.set(L.id, rec);
+      FM.time = L.start;
+      if (FM.audioFxLive.audition(L) !== true) throw new Error('the audition refused a plain clip, so nothing below is measured');
+      rec._afxChain = { applyAt: function (t) { seen.push(t); }, dispose: function () {} };
+      // CONTROL at 1x, where the old formula and the right one agree: proves the rig reads what it should.
+      const t1 = await heardAt(1.5);
+      if (Math.abs(t1 - 2) > 1e-6) throw new Error('CONTROL: at 1x, source 1.5s of a clip at 1s trimmed 0.5s is heard at 2.0s, and the audition drove ' + t1);
+      // 2x: source 1.5s is heard at 1 + (1.5 - 0.5) / 2 = 1.5s.
+      L.speed = 2;
+      const t2 = await heardAt(1.5);
+      if (Math.abs(FM.layerLocalTime(L, t2) - 1.5) > 1e-6) throw new Error('on a 2x clip the audition drove the effect at ' + t2.toFixed(3) + 's while the sound was source 1.5s, which plays at 1.500s — a keyframed sweep heard out of step with playback and export');
+      // A ramp, 1x → 3x: the time has to come from the curve.
+      L.speed = { kf: [{ t: 1, v: 1, e: 'linear' }, { t: 3, v: 3, e: 'linear' }] };
+      const t3 = await heardAt(2.5);
+      if (Math.abs(FM.layerLocalTime(L, t3) - 2.5) > 2e-3) throw new Error('on a 1x→3x ramp the audition drove the effect at ' + t3.toFixed(3) + 's, where the picture shows source ' + FM.layerLocalTime(L, t3).toFixed(3) + 's — not the 2.5s being heard');
+      if (Math.abs(el.playbackRate - FM.speedAt(L, t3)) > 0.01) throw new Error('on a ramp the audition played at rate ' + el.playbackRate + ' where the curve says ' + FM.speedAt(L, t3).toFixed(3));
+      // …and it plays at the clip's own speed, like the real playback (a sped-up clip now sounds sped up).
+      FM.audioFxLive.stopAudition();
+      L.speed = 2; el.playbackRate = 1;
+      if (FM.audioFxLive.audition(L) !== true) throw new Error('could not restart the audition at 2x');
+      if (Math.abs(el.playbackRate - 2) > 1e-6) throw new Error('a 2x clip auditioned at rate ' + el.playbackRate + ' — it sounds different from the same clip playing in the project');
+    } finally {
+      if (FM.audioFxLive.stopAudition) FM.audioFxLive.stopAudition();
+      try { FM.media.remove(L.id); } catch (e) {}
+      FM.scene = saved.scene; FM.time = saved.time;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
   test('653 — the Hear button is on the expanded row, and it does not start by itself', { item: '653' }, async function () {
     /* His rule, in the entry: it must not auto-play when the row opens. A panel that starts making
        noise because you tapped it is a different feature from one that offers to. */
@@ -64059,6 +65334,62 @@
     if (offenders.length) throw new Error(offenders.length + ' canvas effect(s) have a pixel-sized setting and never scale it to the plate, so the preview and the export disagree: ' + offenders.join(' · '));
   });
 
+  /* ── queue 913 clause 6: Liquid Glass slipped past the check above ──────────────────────────────────────
+   * The source check slices `name: function (`, and Liquid Glass is a closure — `liquidglass: (function () {` — so
+   * it was never looked at, and its Frost and Edge (both `unit: 'px'`) ran in PLATE pixels: on the phone's 28%
+   * playback plate the rim drew ~4.8x as thick as in the file and the frost washed a pattern flat. Measured the
+   * #691b way, isolating the part that must scale: the Edge rim's width, and the Frost's soft transition across a
+   * hard black/white edge inside the layer, both in PROJECT pixels, full plate against 0.5 and 0.28. CONTROL:
+   * the full-plate numbers are the size they are set to, so the fixture is measuring the setting. */
+  test('913.6 Liquid Glass frost and edge mean the same thing on a reduced preview plate as in the export', { item: '913' }, function () {
+    const T = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX;
+    if (!T || typeof T.liquidglass !== 'function') throw new Error('CANVAS_FX.liquidglass is not reachable');
+    // the layer: a 200x120 slab in a 300x200 frame; `split` paints its left half black and right half white
+    const run = (ps, params, split) => {
+      const W = Math.round(300 * ps), H = Math.round(200 * ps);
+      const x0 = Math.round(50 * ps), y0 = Math.round(40 * ps), w = Math.round(200 * ps), h = Math.round(120 * ps);
+      const A = document.createElement('canvas'); A.width = W; A.height = H;
+      const a = A.getContext('2d');
+      if (split) { a.fillStyle = '#000000'; a.fillRect(x0, y0, w / 2, h); a.fillStyle = '#ffffff'; a.fillRect(x0 + w / 2, y0, w / 2, h); }
+      else { a.fillStyle = '#808080'; a.fillRect(x0, y0, w, h); }
+      const B = document.createElement('canvas'); B.width = W; B.height = H;
+      const g = B.getContext('2d', { willReadFrequently: true });
+      T.liquidglass(A, g, W, H, { x: x0, y: y0, w: w, h: h }, Object.assign({ amount: 1, clarity: 0, sheen: 0, tint: 0, angle: 180, color: '#ffffff' }, params), 0.3, 0.3, null, ps);
+      return { row: g.getImageData(0, Math.round(100 * ps), W, 1).data, x0: x0, w: w, W: W };
+    };
+    // Edge: the light rim runs in from the left side; its width is the run of pixels brighter than the slab
+    const rim = (ps) => {
+      const r = run(ps, { frost: 0, bevel: 10 }, false);
+      const mid = r.row[(r.x0 + (r.w >> 1)) * 4];
+      let n = 0;
+      for (let x = r.x0; x < r.x0 + r.w / 2; x++) if (r.row[x * 4] > mid + 20) n++;
+      return n / ps;
+    };
+    // Frost: how wide the blur spreads the black/white edge (10% to 90% of the way across)
+    const frost = (ps) => {
+      const r = run(ps, { frost: 8, bevel: 0 }, true);
+      const c = r.x0 + (r.w >> 1), lo = r.row[(r.x0 + 2) * 4], hi = r.row[(r.x0 + r.w - 3) * 4];
+      let a = -1, b = -1;
+      for (let x = r.x0 + 2; x < r.x0 + r.w - 2; x++) {
+        const v = (r.row[x * 4] - lo) / Math.max(1, hi - lo);
+        if (a < 0 && v > 0.1) a = x;
+        if (b < 0 && v > 0.9) b = x;
+      }
+      if (a < 0 || b < 0 || Math.abs((a + b) / 2 - c) > r.w / 4) throw new Error('harness: the frosted edge was not found at plate ' + ps);
+      return (b - a) / ps;
+    };
+    const bad = [];
+    const r1 = rim(1), f1 = frost(1);
+    if (!(r1 >= 7 && r1 <= 13)) throw new Error('harness: a 10px Edge measured ' + r1 + ' px at full plate — the fixture is not measuring the rim');
+    if (!(f1 > 8)) throw new Error('harness: Frost 8 spread the edge only ' + f1 + ' px at full plate — the fixture is not measuring the frost');
+    [0.5, 0.28].forEach(ps => {
+      const r = rim(ps), f = frost(ps);
+      if (r > r1 * 1.5 + 4) bad.push('at a ' + ps + ' plate the Edge rim is ' + r.toFixed(1) + ' project px against ' + r1 + ' in the export');
+      if (f > f1 * 1.5 + 4) bad.push('at a ' + ps + ' plate Frost spreads an edge ' + f.toFixed(1) + ' project px against ' + f1 + ' in the export');
+    });
+    if (bad.length) throw new Error(bad.join(' · ') + ' (queue 913)');
+  });
+
   test('effects: Motion Blur (Footage) reaches further than it used to, and every bit of it pays', { item: '578' }, function () {
     /* #578 clause 2, which he pre-approved in these words: "idc what the default is as long as it's
      * noticeable and also has a higher max". The Shutter ceiling was 2. MEASURED on a 70px block
@@ -65590,6 +66921,57 @@
     if (m[1].indexOf('lensblur') < 0) throw new Error('lensblur left BOUNDED_FX — the most expensive kernel in the app goes back to 190ms a frame on a small layer (#692)');
   });
 
+  /* ── queue 913 clause 1: the bounds above were grown by the FLOAT radius ─────────────────────────────────
+   * The test above only ever tried whole radii. The radius is a float everywhere else — any value on a reduced
+   * plate (pxToPlate multiplies it by ps) and every in-between frame of a keyframed one — and the bounds are the
+   * loop counters, so a fractional one made the write index fractional: a dropped write (Radius 9 on the
+   * phone's 0.4 plate drew the layer SHARP) or one landing a byte or three off (the green stripes on an exported
+   * 7.5px frame). Held two ways: the bounded kernel equals the unbounded one at fractional radii, byte for byte
+   * (the unbounded loop starts at 0, so it never had the fault — it is the reference); and through the real
+   * pipeline at a 0.4 plate, Radius 9 softens the square's edge where it used to leave it hard. Control: whole
+   * radii still match, as above. */
+  test('913.1 Lens Blur blurs at a fractional radius, and the bounded kernel matches the unbounded one there', { item: '913' }, function () {
+    const K = FM._pixelFx && FM._pixelFx.lensblur;
+    if (!K) throw new Error('the lens blur kernel is missing — the harness, not the feature');
+    const defs = {}; (FM.fxRegistry.paramsOf('lensblur') || []).forEach(p => { if (p.default !== undefined) defs[p.key] = p.default; });
+    const W = 160, H = 120, rx = 50, ry = 40, rw = 60, rh = 40;
+    const mk = () => {
+      const a = new Uint8ClampedArray(W * H * 4);
+      for (let y = ry; y < ry + rh; y++) for (let x = rx; x < rx + rw; x++) { const i = (y * W + x) * 4; a[i] = 220; a[i + 1] = 40; a[i + 2] = 200; a[i + 3] = 255; }
+      return a;
+    };
+    const bad = [];
+    [10, 7.5, 9.4, 3.6].forEach(r => {
+      const params = Object.assign({}, defs, { radius: r });
+      const a = mk(); K(a, W, H, params, 0.3, 1);
+      const b = mk(); K(b, W, H, params, 0.3, 1, { x: rx, y: ry, w: rw, h: rh });
+      let diff = 0, green = 0;
+      for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) diff++;
+      // the fixture is magenta: a pixel greener than it is red is RGBA read a byte or more out of step
+      for (let i = 0; i < b.length; i += 4) if (b[i + 3] > 40 && b[i + 1] > b[i] + 30) green++;
+      if (diff) bad.push('radius ' + r + ': the bounded blur differs from the unbounded one in ' + diff + ' bytes' + (green ? ' (' + green + ' pixels shifted green)' : ''));
+    });
+    // through the real pipeline, on the phone's 0.4 plate
+    const soft = (radius) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 200, y: 150, shapeW: 160, shapeH: 120, fill: '#ffffff' });
+      L.start = 0; L.duration = 5;
+      L.effects = radius ? [FM.fxRegistry.makeInstance('lensblur')] : [];
+      if (radius) L.effects[0].params.radius = radius;
+      const c = offscreen(Math.round(400 * 0.4), Math.round(300 * 0.4));
+      c.__fmRS = 0.4; c.__fmOX = 0; c.__fmOY = 0;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, scene([L], { project: { width: 400, height: 300, fps: 30, duration: 5, background: '#000000' } }), 1);
+      const row = g.getImageData(0, Math.round(150 * 0.4), c.width, 1).data;
+      let n = 0;
+      for (let x = 0; x < c.width; x++) { const v = row[x * 4]; if (v > 12 && v < 243) n++; }
+      return n;
+    };
+    const none = soft(0), r9 = soft(9), r10 = soft(10);
+    if (!(r10 > none + 2)) bad.push('harness: Radius 10 softened ' + r10 + ' pixels of the edge row against ' + none + ' with no blur, so the row is not measuring the blur');
+    if (!(r9 > none + 2)) bad.push('Radius 9 on a 0.4 plate softened ' + r9 + ' pixels of the edge row (no blur: ' + none + ', Radius 10: ' + r10 + ') — the layer stayed sharp');
+    if (bad.length) throw new Error(bad.join(' · ') + ' (queue 913)');
+  });
+
   test('effects: bounding the hex tiles to the layer changes NOTHING about the picture', { item: '692' }, async function () {
     /* #692, the fourth kernel: 97.7ms → 6.1ms on a 140x120 subject in a 1080x1920 plate, unchanged at
      * ~81ms on a layer filling the frame. Hexagon Tiles is a gather like lensblur — each output pixel
@@ -66650,6 +68032,104 @@
     }
   });
 
+  /* 915.4 — RESTORE FROM HOME, THROUGH THE REAL SETTINGS BUTTON. The handler re-rendered Home through
+     `FM.home.refresh`, behind an `&& FM.home.refresh` guard — and that method did not exist, so the line
+     was a silent no-op: "Restored 2 projects." over a grid that had not changed. And each restored entry
+     went through create(), which switches the open project, so the editor underneath ended up on the last
+     restored one while the OPEN badge stayed on his. The natural move next is to restore again, which ADDS
+     everything a second time. The file picker is the one thing a test cannot tap, so its click hands the
+     handler a real File instead — everything after that is the app's own code. */
+  test('915.4 restoring from Home shows the restored projects and leaves him on his own', { item: '915', budgetMs: 30000 }, async function () {
+    const wasOpen = FM.home.isOpen();
+    const orig = FM.projects.currentId();
+    const names = ['FX915 Restored A', 'FX915 Restored B'];
+    const backup = { app: 'freemotion', backup: 1, v: 1, count: 2, projects: names.map(function (n) {
+      return { app: 'freemotion', v: 1, project: { name: n, width: 320, height: 240, fps: 30, duration: 5, background: '#000000' }, layers: [], media: {} };
+    }) };
+    const realClick = HTMLInputElement.prototype.click;
+    const restored = function () { return FM.projects.list().filter(function (p) { return names.indexOf(p.name) >= 0; }); };
+    try {
+      if (!orig) throw new Error('setup: no project is open, so there is nothing for the restore to move him off');
+      if (!wasOpen) FM.home.open();
+      await sleep(700);
+      FM.home._render('projects');
+      HTMLInputElement.prototype.click = function () {
+        if (this.type !== 'file') return realClick.apply(this, arguments);
+        const dt = new DataTransfer();
+        dt.items.add(new File([JSON.stringify(backup)], 'q915.fmbackup.json', { type: 'application/json' }));
+        this.files = dt.files;
+        this.dispatchEvent(new Event('change'));
+      };
+      FM.settings.open();
+      await sleep(120);
+      const row = [].slice.call(document.querySelectorAll('.set-row')).filter(function (r) { return /Restore from a backup/.test((r.querySelector('.set-label') || {}).textContent || ''); })[0];
+      const btn = row && row.querySelector('button');
+      if (!btn) throw new Error('Settings has no Restore from a backup button');
+      btn.click();
+      for (let i = 0; i < 80 && restored().length < 2; i++) await sleep(100);
+      if (restored().length < 2) throw new Error('the restore did not add both projects (' + restored().length + ' of 2) — nothing below can be measured');
+      await sleep(300);
+      const shown = [].slice.call(document.querySelectorAll('#home-screen .hm-card .hm-name')).map(function (n) { return n.textContent; });
+      const missing = names.filter(function (n) { return shown.indexOf(n) < 0; });
+      if (missing.length) throw new Error('the toast says restored, but Home still does not show ' + missing.join(' and ') + ' — the grid was never re-rendered, and restoring again would add everything twice');
+      if (FM.projects.currentId() !== orig) throw new Error('the restore switched the open project to ' + ((FM.projects.list().filter(function (p) { return p.id === FM.projects.currentId(); })[0] || {}).name) + ' behind his back — the editor underneath is no longer the project he was in');
+      const badge = document.querySelector('#home-screen .hm-card.hm-open');
+      if (!badge || badge.dataset.pid !== orig) throw new Error('the OPEN badge is on ' + (badge ? badge.dataset.pid : 'no card') + ', not on the project he had open (' + orig + ')');
+    } finally {
+      HTMLInputElement.prototype.click = realClick;
+      try { if (FM.settings.close) FM.settings.close(); } catch (e) {}
+      try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig); } catch (e) {}
+      for (const p of restored()) { try { await FM.projects.remove(p.id); } catch (e) {} }
+      try { if (!wasOpen) FM.home.close(); } catch (e) {}
+      await sleep(80);
+    }
+  });
+
+  /* 915.8 — THE HIDDEN WORKSPACES CAME BACK AS PROJECTS. "Back up every project" walks the whole index,
+     which includes element and template drafts; restore sent each through create() with no flag, so they
+     landed in the Projects list — the clutter queue 340 removed. They stay IN the file (a "Build a new
+     one" draft is work that exists nowhere else) and come back as the same kind of draft. What must NOT
+     come back is the write-back pointer: restored next to a live element, it would write this old copy
+     over that element the first time he came Home. */
+  test('915.8 a backup restores element and template drafts as drafts, not as projects', { item: '915', budgetMs: 30000 }, async function () {
+    const orig = FM.projects.currentId();
+    const wasOpen = FM.home.isOpen();
+    const names = ['FX915 elem draft', 'FX915 elem edit', 'FX915 tpl edit'];
+    const mine = function () { return FM.projects.list().filter(function (p) { return names.indexOf(p.name) >= 0; }); };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      await FM.projects.create({ name: names[0], width: 320, height: 240, elementDraft: true });
+      await FM.projects.create({ name: names[1], width: 320, height: 240, elementDraft: true, ofElement: 'e_q915_live' });
+      await FM.projects.create({ name: names[2], width: 320, height: 240, templateDraft: true, ofTemplate: 't_q915_live' });
+      if (orig) await FM.projects.open(orig);
+      const obj = await FM.storage.buildBackup(null);
+      obj.projects = obj.projects.filter(function (p) { return p.project && names.indexOf(p.project.name) >= 0; });
+      if (obj.projects.length !== 3) throw new Error('setup: the backup carried ' + obj.projects.length + ' of the 3 drafts');
+      for (const p of mine()) { try { await FM.projects.discardDraftAnyway(p.id); } catch (e) {} }
+      if (mine().length) throw new Error('setup: the fixture drafts did not go away, so what comes back below cannot be told from what was there');
+      const r = await FM.storage.restoreBackup(obj, null);
+      if (!r.ok || r.restored !== 3) throw new Error('setup: the restore brought back ' + r.restored + ' of 3');
+      const back = mine();
+      const asProjects = back.filter(function (p) { return !p.elementDraft && !p.templateDraft; }).map(function (p) { return p.name; });
+      if (asProjects.length) throw new Error('restoring a backup turned ' + asProjects.join(', ') + ' into ordinary projects in his Projects list — hidden element/template workspaces, the clutter queue 340 removed');
+      const byName = function (n) { return back.filter(function (p) { return p.name === n; })[0] || {}; };
+      if (!byName(names[0]).elementDraft || !byName(names[1]).elementDraft) throw new Error('an element draft came back as something other than an element draft');
+      if (!byName(names[2]).templateDraft) throw new Error('the template draft came back as something other than a template draft');
+      const pointers = back.filter(function (p) { return p.ofElement || p.ofTemplate; }).map(function (p) { return p.name; });
+      if (pointers.length) throw new Error(pointers.join(', ') + ' came back still pointing at the element/template it was editing — coming Home from it would write this OLD copy over the live one');
+      if (r.drafts !== 3) throw new Error('the restore reported ' + r.drafts + ' drafts, so its toast would count workspaces as projects');
+      /* …and the loose template draft's card must not tell him to save it as an ELEMENT */
+      const card = FM.home._draftCard(byName(names[2]));
+      const sub = ((card.querySelector('.hm-sub') || {}).textContent || '');
+      if (!/Save as template/.test(sub)) throw new Error('a restored template draft is labelled [' + sub + '] — it sits under Templates, and its card points him at the wrong action');
+    } finally {
+      try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig); } catch (e) {}
+      for (const p of mine()) { try { await FM.projects.discardDraftAnyway(p.id); } catch (e) {} }
+      try { if (wasOpen) FM.home.open(); } catch (e) {}
+    }
+  });
+
 
   /* ── queue 884: "Export just this layer" was silently ignored by the AUDIO formats ─────────────
    * runExport's audio branch returned BEFORE the solo prep further down, and runAudioOnlyExport hands
@@ -67155,6 +68635,63 @@
   });
 
 
+  /* ── queue 916.3: Cancel pressed during "Decoding frames…" stops the export THERE ────────────────────
+   * prepareCaches breaks out of its loop on the flag, and its comment says that stops the export going on
+   * into "the audio mix, the AAC probe, the muxer and the codec pick". Nothing in run() looked: it went on
+   * into all four and only threw at the frame loop — measured, 5.1s on a desktop of mixing and AAC-encoding
+   * a 3-minute soundtrack that was about to be thrown away, with Cancel looking ignored the whole time.
+   * The Cancel is tapped from INSIDE the phase it is about (the prepare step's last call, then the mixer's
+   * first decode), and the witnesses are the next things the export would do: decode the next clip, and
+   * build the resume signature that follows the mix, the AAC probe and the codec pick. */
+  test('916.3 Cancel during the prepare phase or the mix stops the export before it does any more work', { item: '916', budgetMs: 45000 }, async function () {
+    if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
+    if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('no WebCodecs or muxer here, so run() stops at its first line and nothing below is measured');
+    const XR = FM.exportResume;
+    if (!XR || typeof XR.signature !== 'function') throw new Error('FM.exportResume.signature is not reachable — it is this test’s witness');
+    const saved = { scene: FM.scene, reset: FM.resetMotionFlowCache, decode: FM.decodeAudio, sig: XR.signature };
+    const mkSong = function (name) {
+      const l = FM.makeLayer('video', { name: name, start: 0, duration: 1, trimStart: 0 });
+      l.start = 0; l.duration = 1; l.trimStart = 0;
+      FM.media.set(l.id, { kind: 'video', file: new Blob(['x'], { type: 'audio/wav' }), duration: 1, width: 0, height: 0 });
+      return l;
+    };
+    const A = mkSong('x916 song A'), B = mkSong('x916 song B');
+    let prepared = 0, decodes = 0, sigs = 0;
+    const runOnce = async function () {
+      delete FM.media.get(A.id).audioBuffer; delete FM.media.get(B.id).audioBuffer;   // undecoded, so the mixer would decode them
+      try { await FM.exporter.run({ scale: 1, fps: 10, bitrate: 300000, name: 'x916cancel', from: 0, to: 1, outW: 64, outH: 64, onReady: function () {} }); }
+      catch (e) { return e; }
+      return null;
+    };
+    try {
+      FM.scene = scene([A, B], { project: { width: 64, height: 64, fps: 10, duration: 1, background: '#000000' } });
+      XR.signature = function () { sigs++; return saved.sig.apply(XR, arguments); };
+      // 1 — Cancel tapped during "Decoding frames…" (set by the prepare phase's own last step).
+      FM.resetMotionFlowCache = function () { prepared++; FM._exportCancel = true; if (saved.reset) return saved.reset.apply(this, arguments); };
+      FM.decodeAudio = async function () { decodes++; return null; };
+      let err = await runOnce();
+      if (!prepared) throw new Error('CONTROL: the prepare phase never ran, so the Cancel was never tapped where this test says it was');
+      if (!err || err.message !== 'CANCELLED') throw new Error('a Cancel during the prepare phase ended the export with ' + (err ? '"' + err.message + '"' : 'success') + ', not CANCELLED');
+      if (decodes) throw new Error('after Cancel the export went on into the audio mix (' + decodes + ' clip decode' + (decodes === 1 ? '' : 's') + ') — Cancel looks ignored for seconds while it builds a soundtrack it will throw away');
+      if (sigs) throw new Error('after Cancel the export went on past the mix, the AAC probe and the codec pick — it only stopped at the frame loop');
+      // 2 — Cancel tapped while the mix is being built: no further clip is decoded, and nothing after the mix runs.
+      FM.resetMotionFlowCache = saved.reset;
+      decodes = 0; sigs = 0;
+      FM.decodeAudio = async function () { decodes++; FM._exportCancel = true; return null; };
+      err = await runOnce();
+      if (!err || err.message !== 'CANCELLED') throw new Error('a Cancel during the mix ended the export with ' + (err ? '"' + err.message + '"' : 'success') + ', not CANCELLED');
+      if (decodes !== 1) throw new Error('Cancel landed while the first clip decoded, and the mixer went on to decode ' + (decodes - 1) + ' more');
+      if (sigs) throw new Error('Cancel landed during the mix and the export went on past it into the AAC probe, the codec pick and the resume lookup');
+    } finally {
+      FM.resetMotionFlowCache = saved.reset; FM.decodeAudio = saved.decode; XR.signature = saved.sig;
+      FM._exportCancel = false; FM._audioTrackDropped = null;
+      try { FM.media.remove(A.id); FM.media.remove(B.id); } catch (e) {}
+      FM.scene = saved.scene;
+      const n = document.getElementById('export-note'); if (n) { n.textContent = ''; n.classList.add('hidden'); n.classList.remove('export-note-warn'); }
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
   /* ── queue 894: dragging a fade on a playing REVERSED clip restarted its audio on every step ──────
    * The fade strips called reconcileAudio() on every pointermove, and while playing that runs
    * FM.audioPlay.start(), which begins with stop(): the reversed clip's source was cut mid-sample and a
@@ -67234,6 +68771,56 @@
     }
   });
 
+
+  /* ── queue 916.5: a boosted REVERSED clip is limited in the preview, as it is in the file ─────────────
+   * Volume goes to 1000%, and the forward preview and the export both end a boosted clip in the same
+   * -1.5 dBFS limiter so "preview and file agree above unity" (#195). The reversed preview had none: its
+   * gain went straight to the speakers, so a reversed song at 400% hard-clipped into a crackle the file
+   * does not have. Read off the real graph FM.audioPlay.start() builds, by recording every connect(). */
+  test('916.5 a boosted reversed clip ends in the same limiter the forward preview and the export use', { item: '916', budgetMs: 20000 }, async function () {
+    if (!FM.audioPlay || typeof FM.audioPlay.start !== 'function') throw new Error('FM.audioPlay.start is not reachable');
+    const AC = FM.audioCtx && FM.audioCtx();
+    if (!AC) throw new Error('no AudioContext here, so a reversed clip has no audio to measure');
+    const saved = { scene: FM.scene, time: FM.time, playing: FM.playing };
+    const connect0 = AudioNode.prototype.connect;
+    const kind = function (n) { return (n && n.constructor && n.constructor.name) || String(n); };
+    let L = null;
+    const wiring = function (vol) {
+      const edges = [];
+      L.volume = vol;
+      AudioNode.prototype.connect = function (dst) { edges.push({ from: this, to: dst }); return connect0.apply(this, arguments); };
+      FM.playing = true;
+      try { FM.audioPlay.start(); }
+      finally { AudioNode.prototype.connect = connect0; FM.audioPlay.stop(); FM.playing = saved.playing; }
+      return edges;
+    };
+    try {
+      L = FM.makeLayer('video', { name: 'x916 boost', start: 0, duration: 2 });
+      L.start = 0; L.duration = 2; L.reversed = true; L.visible = true; L.muted = false; L.fadeIn = 0; L.fadeOut = 0;
+      FM.scene = scene([L], { project: { width: 64, height: 64, fps: 30, duration: 2, background: '#000000' } });
+      FM.media.set(L.id, { kind: 'video', audioBuffer: AC.createBuffer(2, 48000 * 2, 48000), duration: 2, width: 0, height: 0 });
+      FM.time = 0.25;
+      // CONTROL: at 100% the route is what it always was — gain straight to the speakers, no limiter.
+      const plain = wiring(1);
+      if (!plain.some(function (e) { return e.from instanceof AudioBufferSourceNode; })) throw new Error('CONTROL: starting playback wired no reversed voice at all, so nothing below is measured');
+      if (plain.some(function (e) { return e.from instanceof DynamicsCompressorNode; })) throw new Error('a reversed clip at 100% got a limiter — an unboosted clip must keep its old, unshaped path');
+      if (!plain.some(function (e) { return e.from instanceof GainNode && e.to instanceof AudioDestinationNode; })) throw new Error('CONTROL: at 100% the voice’s gain does not reach the speakers, so the fixture is not the path this test is about');
+      // THE CASE: 400%.
+      const loud = wiring(4);
+      const lim = loud.filter(function (e) { return e.from instanceof DynamicsCompressorNode && e.to instanceof AudioDestinationNode; }).map(function (e) { return e.from; })[0];
+      if (!lim) throw new Error('a reversed clip at 400% reaches the speakers with no limiter (' + loud.map(function (e) { return kind(e.from) + '→' + kind(e.to); }).join(', ') + ') — the preview hard-clips into a crackle the exported file does not have');
+      if (Math.abs(lim.threshold.value + 1.5) > 1e-6 || lim.ratio.value !== 20 || lim.knee.value !== 0) throw new Error('the reversed preview’s limiter is not the one the export uses (threshold ' + lim.threshold.value + ', knee ' + lim.knee.value + ', ratio ' + lim.ratio.value + ')');
+      if (loud.some(function (e) { return e.from instanceof GainNode && e.to instanceof AudioDestinationNode; })) throw new Error('the boosted voice’s gain still has a direct line to the speakers, around the limiter');
+      if (!loud.some(function (e) { return e.from instanceof GainNode && e.to === lim; })) throw new Error('the boosted voice’s gain does not feed the limiter');
+    } finally {
+      AudioNode.prototype.connect = connect0;
+      try { FM.audioPlay.stop(); } catch (e) {}
+      FM.playing = saved.playing;
+      try { if (L) FM.media.remove(L.id); } catch (e) {}
+      FM.scene = saved.scene; FM.time = saved.time;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
 
   /* ── queue 895: at phone width, a MOUSE could not open the Add menu at all ─────────────────────────
    * The phone-layout Add row opens the menu on `click`, and at <=700px it is the only way in (#add-fab is
@@ -67481,6 +69068,65 @@
       FM.refreshAll();
       if (hadHome && FM.home.open) FM.home.open();
     }
+  });
+
+
+  /* ── queue 913 clause 3: KEYFRAMING the controller locked the row it controls ─────────────────────────────
+   * The test above only ever sets the controller to a plain number. Keyframed, the stored value is {kf:[…]},
+   * Number() of that is NaN, `!(NaN > 0)` is true — and Light from went grey and pointer-events:none on all 15
+   * solids and Page Curl while Shading never came near 0 (Smear length and Twinkle speed the same way, 18 rows).
+   * Held on the real panel: Shading keyframed 0.6 → 0.9 leaves Light from live and pressable; Twinkle keyframed
+   * 0 → 0.5 leaves Twinkle speed live (it is used from the moment Twinkle rises). CONTROLS: Shading keyframed
+   * 0 → 0 still greys Light from with the same words — a row dead at every keyframe is still dead — and a plain
+   * Shading of 0 still does. */
+  test('913.3 a keyframed Shading or Twinkle does not grey out and lock the row it controls', { item: '913', budgetMs: 30000 }, async function () {
+    var reg = FM.fxRegistry;
+    if (!reg || !reg.makeInstance) throw new Error('the effect registry is not reachable');
+    var saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    var hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    var kf = function (a, b) { return { kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] }; };
+    function rowFor(label) {
+      var lab = [].slice.call(document.querySelectorAll('.fx-scrub-label')).filter(function (e) { return (e.textContent || '').trim() === label; })[0];
+      return lab ? lab.closest('.fx-scrub-row, .fx-seg-row') : null;
+    }
+    async function show(type, set) {
+      FM.scene.layers.length = 0;
+      var L = FM.makeLayer('shape', { name: 'S913', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 5;
+      var inst = reg.makeInstance(type);
+      if (!inst) throw new Error('could not make a ' + type + ' instance');
+      inst._expanded = true;
+      set(inst.params);
+      L.effects = [inst];
+      FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll();
+      FM.inspector.openCategory('effects'); FM.inspector.refresh();
+      await sleep(160);
+    }
+    var bad = [];
+    function expect(what, label, dead, words) {
+      var row = rowFor(label);
+      if (!row) throw new Error(what + ': no "' + label + '" row on screen — nothing was measured');
+      var isDead = row.classList.contains('fx-overridden');
+      var tag = row.querySelector('.fx-ovr-tag'), said = tag ? tag.textContent : '';
+      if (!dead && isDead) bad.push(what + ': "' + label + '" is greyed out and locked (' + said + ')');
+      if (!dead && getComputedStyle(row).pointerEvents === 'none') bad.push(what + ': the "' + label + '" row cannot be pressed');
+      if (dead && !isDead) bad.push(what + ': control — "' + label + '" should still read dead');
+      if (dead && said !== words) bad.push(what + ': control — "' + label + '" says ' + JSON.stringify(said) + ', expected ' + JSON.stringify(words));
+    }
+    try {
+      if (hadHome) FM.home.close();
+      await show('cube3d', function (p) { p.shading = kf(0.6, 0.9); });   expect('Cube, Shading keyframed 0.6 → 0.9', 'Light from', false);
+      await show('pagecurl', function (p) { p.shading = kf(0.2, 0.8); }); expect('Page Curl, Shading keyframed 0.2 → 0.8', 'Light from', false);
+      await show('starfield', function (p) { p.twinkle = kf(0, 0.5); });  expect('Starfield, Twinkle keyframed 0 → 0.5', 'Twinkle speed', false);
+      await show('cube3d', function (p) { p.shading = kf(0, 0); });       expect('Cube, Shading keyframed 0 → 0', 'Light from', true, 'Only used when Shading is above 0');
+      await show('cube3d', function (p) { p.shading = 0; });              expect('Cube, Shading 0', 'Light from', true, 'Only used when Shading is above 0');
+    } finally {
+      FM.scene.layers = saved.layers; FM.scene.selectedId = saved.sel; FM.scene.selectedIds = saved.sel ? [saved.sel] : [];
+      FM.refreshAll();
+      if (hadHome && FM.home.open) FM.home.open();
+    }
+    if (bad.length) throw new Error(bad.join(' · ') + ' (queue 913)');
   });
 
 
@@ -67912,6 +69558,64 @@
   });
 
 
+  /* ── queue 913 clause 2: the solids were handed a PADDED box ─────────────────────────────────────────────
+   * The test above hands each kernel an exact rect, which is why it never saw this. The real pipeline gave the
+   * 15 solids the fast scan's loose box — the layer plus a transparent border of a scan cell or more — and each
+   * solid wraps that box edge to edge onto every face: see-through notches at Cube's seams, a torn Ring rim,
+   * and a Ring or Open Box on a ~12px layer drew nothing. Held through FM.renderScene: the pipeline's solid is
+   * the same picture the kernel draws from the layer's EXACT content rect (measured independently here), and on
+   * a 12px layer at the phone's 0.4 plate Ring and Open Box still draw. Control: a plain layer renders the same
+   * plate this test builds its reference from, so the comparison is between like and like. */
+  test('913.2 a 3D solid wraps the layer itself, not a transparent border round it, and small solids still draw', { item: '913', budgetMs: 30000 }, function () {
+    const T = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX;
+    if (!T || !T.cube3d || !T.ring3d || !T.hollowbox3d) throw new Error('the 3D solid kernels are not reachable');
+    const shot = (P, L, rs) => {
+      const c = offscreen(Math.round(P.width * rs), Math.round(P.height * rs));
+      const g = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, { project: P, layers: [L], selectedId: null, selectedIds: [] }, 0.5);
+      return { c: c, d: g.getImageData(0, 0, c.width, c.height).data };
+    };
+    const layerOf = (P, w, fx) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: w, shapeH: w, fill: '#c8c8c8' });
+      L.start = 0; L.duration = 5;
+      L.effects = fx ? [FM.fxRegistry.makeInstance(fx)] : [];
+      return L;
+    };
+    const exactBox = (d, W, H) => {
+      let x0 = W, y0 = H, x1 = -1, y1 = -1;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3] > 8) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      return x1 < 0 ? null : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+    };
+    const bad = [];
+    const P = { width: 240, height: 240, fps: 30, duration: 5, background: null };   // no fill: the layer's own alpha is the measurement
+    const plain = shot(P, layerOf(P, 120, null), 1);
+    const bb = exactBox(plain.d, 240, 240);
+    if (!bb || bb.w < 100) throw new Error('harness: the plain square measured ' + JSON.stringify(bb) + ' — the reference plate is wrong');
+    ['cube3d', 'ring3d', 'hollowbox3d', 'axiscross3d'].forEach(ty => {
+      const L = layerOf(P, 120, ty);
+      const got = shot(P, L, 1).d;
+      const ref = offscreen(240, 240), rg = ref.getContext('2d', { willReadFrequently: true });
+      T[ty](plain.c, rg, 240, 240, bb, L.effects[0].params, 0.5, FM.fxLocalTime(L, 0.5), L, 1);
+      const want = rg.getImageData(0, 0, 240, 240).data;
+      let off = 0;
+      for (let i = 0; i < want.length; i += 4) {
+        if (Math.abs(want[i] - got[i]) > 8 || Math.abs(want[i + 3] - got[i + 3]) > 8) off++;
+      }
+      if (off > 20) bad.push(ty + ': ' + off + ' pixels differ from the solid wrapped on the layer\'s exact box — the texture carries a border');
+    });
+    // a 12px layer on the phone's 0.4 plate (the audit measured 0 lit pixels for both)
+    const Ps = { width: 200, height: 200, fps: 30, duration: 5, background: null };
+    const lit = (d) => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 40) n++; return n; };
+    const base = lit(shot(Ps, layerOf(Ps, 12, null), 0.4).d);
+    if (!(base > 10)) throw new Error('harness: a plain 12px square lit only ' + base + ' pixels at 0.4 — nothing to wrap');
+    ['ring3d', 'hollowbox3d'].forEach(ty => {
+      const n = lit(shot(Ps, layerOf(Ps, 12, ty), 0.4).d);
+      if (n < base * 0.2) bad.push(ty + ' on a 12px layer at a 0.4 plate lit ' + n + ' pixels against ' + base + ' plain — it vanishes');
+    });
+    if (bad.length) throw new Error(bad.join(' · ') + ' (queue 913)');
+  });
+
+
   /* ── queue 904 [B] ellipsoid3d: the axis ratios were welded ────────────────────────────────────────────────
    * 1.15 × 0.62 × 0.62, always — the same control set as Spherize, on the one effect named for its shape. Height and
    * Depth are now controls (radii in % of the sphere's, default 62 = the old 0.62, so saved ones are byte-identical).
@@ -68000,6 +69704,81 @@
     var al = (FM.fxSearchAliases && FM.fxSearchAliases.weather) || [];
     ['snow', 'rain'].forEach(function (q) { if (al.indexOf(q) < 0) bad.push('"' + q + '" is not a search word for it'); });
     if (bad.length) throw new Error(bad.join(' · ') + ' (queue 911)');
+  });
+
+
+  /* ── queue 913 clause 4: a keyframed RATE rewound the motion it drives ───────────────────────────────────
+   * The test above only ever uses steady values. Snow & Rain's Speed and Wind, Turbulent Displace's Boil speed,
+   * Fractal Warp's Churn and Starfield's Twinkle speed all placed things at rate(now) × elapsed, which rescales the
+   * whole history every frame: Speed keyframed 1 → 0 flew every flake back to its first-frame spot (frame 3 s ==
+   * frame 0 s, measured), and a Wind that dropped took back all the drift it had blown. The motion is the rate's
+   * INTEGRAL (FM.integrateProp). The sharpest check there is: a rate ramped linearly 0 → 2r over 2 s has covered
+   * exactly what a steady r covers in 2 s, so the two must draw the same frame at 2 s — under rate × time the
+   * ramp is twice as far. CONTROLS: the measure tells a steady 1 from a steady 2; a keyframed constant draws the
+   * steady picture; and a stopped rate stays stopped. */
+  test('913.4 a keyframed speed, wind, boil or twinkle rate moves things by its integral, so a ramp never rewinds', { item: '913', budgetMs: 30000 }, function () {
+    var T = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX, X = FM._FX_TABLES && FM._FX_TABLES.WARP_FX, PX = FM._pixelFx, R = FM.fxRegistry;
+    if (!T || !T.weather || !X || !X.turbulentdisplace || !X.fractalwarp || !PX || !PX.starfield) throw new Error('the rate-driven kernels are not reachable');
+    var kf = function () { var a = [].slice.call(arguments), k = []; for (var i = 0; i < a.length; i += 2) k.push({ t: a[i], v: a[i + 1], e: 'linear' }); return { kf: k }; };
+    var bad = [];
+    // ── Snow & Rain, straight through the kernel (t and the clip clock are the same here, as in the 911 test)
+    var W = 160, H = 280, bb = { x: 0, y: 0, w: W, h: H };
+    var A = document.createElement('canvas'); A.width = W; A.height = H;
+    A.getContext('2d').fillStyle = '#203040'; A.getContext('2d').fillRect(0, 0, W, H);
+    function wx(params, t) {
+      var c = document.createElement('canvas'); c.width = W; c.height = H;
+      var g = c.getContext('2d', { willReadFrequently: true });
+      T.weather(A, g, W, H, bb, Object.assign(R.makeInstance('weather').params, params), t, t, null, 1);
+      return g.getImageData(0, 0, W, H).data;
+    }
+    function mad(P, Q) { var s = 0; for (var i = 0; i < P.length; i++) s += Math.abs(P[i] - Q[i]); return s / P.length; }
+    ['snow', 'rain'].forEach(function (kind) {
+      var k = kind === 'rain' ? 1 : 0;
+      var steady1 = wx({ kind: k, speed: 1 }, 2), steady2 = wx({ kind: k, speed: 2 }, 2);
+      var apart = mad(steady1, steady2);
+      if (!(apart > 1)) throw new Error('harness: ' + kind + ' at a steady Speed 1 and 2 differ by only ' + apart.toFixed(2) + ' at 2 s — the measure cannot see a speed');
+      var d = mad(wx({ kind: k, speed: kf(0, 0, 2, 2) }, 2), steady1);
+      if (d > apart * 0.05) bad.push(kind + ': Speed ramped 0 → 2 over 2 s is ' + d.toFixed(2) + ' from a steady 1 at 2 s (a whole speed apart is ' + apart.toFixed(2) + ') — it is placed by speed(now) × time');
+      var c = mad(wx({ kind: k, speed: kf(0, 1.3, 4, 1.3) }, 2), wx({ kind: k, speed: 1.3 }, 2));
+      if (c > apart * 0.05) bad.push(kind + ': control — a keyframed constant Speed 1.3 is ' + c.toFixed(2) + ' from a steady 1.3');
+      // (snow only: a raindrop is drawn slanted along THIS frame's wind, so two different winds at 2 s draw different
+      // streaks wherever the drops are — the wind that died, below, is the rain check)
+      if (kind === 'snow') {
+        var w = mad(wx({ kind: k, wind: kf(0, 0, 2, 40) }, 2), wx({ kind: k, wind: 20 }, 2));
+        if (w > apart * 0.05) bad.push(kind + ': Wind ramped 0 → 40 over 2 s is ' + w.toFixed(2) + ' from a steady 20 at 2 s — it is placed by wind(now) × distance fallen');
+      }
+      // stopping: Speed 1 until 2 s, down to 0 by 3 s
+      var stop = { kind: k, speed: kf(2, 1, 3, 0) };
+      var f0 = wx(stop, 0), f3 = wx(stop, 3), f35 = wx(stop, 3.5);
+      if (mad(f3, f0) < apart * 0.05) bad.push(kind + ': Speed keyframed down to 0 put every flake back where it started — the frame at 3 s is the frame at 0 s');
+      if (kind === 'rain' && mad(f35, f3) > 0.01) bad.push('rain: control — after Speed reached 0 the drops still moved between 3 s and 3.5 s');
+      // a wind that dies does not take back the drift it blew
+      var calm = mad(wx({ kind: k, wind: kf(0, 40, 2, 40, 2.2, 0) }, 3), wx({ kind: k, wind: 0 }, 3));
+      if (calm < apart * 0.05) bad.push(kind + ': Wind 40 that dropped to 0 at 2.2 s left the frame at 3 s identical to no wind ever — the drift it blew was taken back');
+    });
+    // ── Turbulent Displace and Fractal Warp: the direct kernel at one pixel (no prep — it evaluates its own phase)
+    var at = function (f, p, t) { return f(73, 91, 200, 200, 100, 100, 140, Object.assign({ amount: 30, scale: 60 }, p), t, 1); };
+    var far = function (a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1]); };
+    [['Turbulent Displace', X.turbulentdisplace], ['Fractal Warp', X.fractalwarp]].forEach(function (e) {
+      var steady = at(e[1], { evolve: 1 }, 2), ramp = at(e[1], { evolve: kf(0, 0, 2, 2) }, 2);
+      if (!(far(steady, at(e[1], { evolve: 2 }, 2)) > 0.5)) throw new Error('harness: ' + e[0] + ' speed 1 and 2 land the pixel in the same place at 2 s');
+      if (far(ramp, steady) > 1e-3) bad.push(e[0] + ': a speed ramped 0 → 2 over 2 s displaces ' + far(ramp, steady).toFixed(3) + 'px away from a steady 1 at 2 s');
+      var stop = { evolve: kf(2, 1, 3, 0) };
+      if (far(at(e[1], stop, 3), at(e[1], stop, 0)) < 1e-3) bad.push(e[0] + ': a speed keyframed down to 0 snapped the pattern back to its first frame');
+      if (far(at(e[1], stop, 3.5), at(e[1], stop, 3)) > 1e-9) bad.push(e[0] + ': control — frozen at 0, the pattern still moved');
+    });
+    // ── Starfield twinkle: Twinkle speed ramped 1 → 3 over 2 s has run exactly as far as a steady 2
+    var sf = function (tws, t) {
+      var n = 96, d = new Uint8ClampedArray(n * n * 4);
+      for (var i = 3; i < d.length; i += 4) d[i] = 255;
+      PX.starfield(d, n, n, { amount: 1, twinkle: 1, twinklespeed: tws, color: '#ffffff' }, t, 1);
+      return d;
+    };
+    var maxd = function (P, Q) { var m = 0; for (var i = 0; i < P.length; i++) m = Math.max(m, Math.abs(P[i] - Q[i])); return m; };
+    if (!(maxd(sf(2, 2), sf(3, 2)) > 20)) throw new Error('harness: a steady twinkle speed of 2 and 3 draw the same stars at 2 s');
+    var tw = maxd(sf(kf(0, 1, 2, 3), 2), sf(2, 2));
+    if (tw > 1) bad.push('Starfield: Twinkle speed ramped 1 → 3 over 2 s is ' + tw + ' levels off a steady 2 at 2 s — the twinkle clock is re-timed every frame');
+    if (bad.length) throw new Error(bad.join(' · ') + ' (queue 913)');
   });
 
 

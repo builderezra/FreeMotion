@@ -127,8 +127,38 @@ window.FM = window.FM || {};
       const sp = ramped
         ? (FM.layerSourceAdvance(srcLayer, srcLayer.duration) / Math.max(0.01, srcLayer.duration))
         : FM.speedAt(srcLayer, srcLayer.start);   // THROUGH speedAt (queue 451): a malformed prop is an object, and the divide below would be NaN
-      const projT = (srcLayer.start || 0) + (bufT - trim) / Math.max(0.01, sp);
+      /* A REVERSED clip plays its source backwards (queue 916, clause 7): the picture shows source
+         `trimStart + (duration - into) * sp` at `into` seconds in (FM.layerLocalTime), so source time
+         maps to the MIRROR of the forward answer. This ignored `reversed`, and speech heard near the
+         END of a reversed clip got a cue near its START. */
+      const into = srcLayer.reversed
+        ? (trim + (srcLayer.duration || 0) * sp - bufT) / Math.max(0.01, sp)
+        : (bufT - trim) / Math.max(0.01, sp);
+      const projT = (srcLayer.start || 0) + into;
       return projT - (capLayer.start || 0);
+    },
+
+    /* THE STRETCH OF SOURCE THE CLIP ACTUALLY PLAYS, in source seconds (queue 916, clause 7). The
+     * detector reads the whole file, so a trimmed clip hands back speech from the part that was cut
+     * away — and each of those became a cue, at a time before (or after) the clip is even on the
+     * timeline. With "whole project" that dragged the caption clip to a negative start. Anything
+     * outside this window is not heard in the project, so it gets no cue. */
+    sourceWindow(srcLayer) {
+      const trim = srcLayer.trimStart || 0;
+      const adv = FM.layerSourceAdvance ? FM.layerSourceAdvance(srcLayer, srcLayer.duration || 0)
+        : (srcLayer.duration || 0) * FM.speedAt(srcLayer, srcLayer.start);
+      return { a: trim, b: trim + (isFinite(adv) ? adv : 0) };
+    },
+
+    /* One detected stretch of speech [s, e] (source seconds) → a cue in caption-local time, or null when
+     * none of it is heard. Clipped to the played window first, then mapped; a reversed clip swaps the
+     * ends, because the later source time is heard first. */
+    segmentToLocal(capLayer, srcLayer, s, e) {
+      const w = C.sourceWindow(srcLayer);
+      const lo = Math.max(s, w.a), hi = Math.min(e, w.b);
+      if (!(hi > lo)) return null;
+      const x = C.sourceToLocal(capLayer, srcLayer, lo), y = C.sourceToLocal(capLayer, srcLayer, hi);
+      return { a: Math.min(x, y), b: Math.max(x, y) };
     },
 
     /* WHERE THE DETECTED CUES ARE ALLOWED TO LAND (queue 150).
@@ -163,12 +193,16 @@ window.FM = window.FM || {};
        * they all slide by however far it moved. */
       let minA = 0, maxB = 0;
       raw.forEach(c => { if (c.a < minA) minA = c.a; if (c.b > maxB) maxB = c.b; });
-      const shift = minA < 0 ? -minA : 0;
+      /* …BUT NEVER BACK PAST 0:00 (queue 916, clause 7). The timeline starts there; a caption clip moved
+         to -3s is a clip whose first cues can never be seen or exported. Anything that would land
+         before the start is trimmed to it, and a cue that lies wholly before it is dropped. */
+      const capStart = capLayer.start || 0;
+      const shift = Math.min(minA < 0 ? -minA : 0, Math.max(0, capStart));
       raw.forEach(c => {
-        const a = c.a + shift, b = c.b + shift;
+        const a = Math.max(0, c.a + shift), b = c.b + shift;
         if (b - a >= MIN_CUE) out.cues.push({ a: a, b: b, text: c.text });
       });
-      out.start = (capLayer.start || 0) - shift;
+      out.start = capStart - shift;
       out.duration = Math.max(capLayer.duration || 0, maxB + shift);
       return out;
     },
@@ -192,11 +226,9 @@ window.FM = window.FM || {};
       // Detecting on a PLAIN text layer converts it. Its existing string is real user work, so it
       // rides along as a whole-clip pseudo-cue and lands on the first detected cue.
       if (!old.length && (capLayer.text || '').trim()) old.push({ start: 0, end: isFinite(dur) ? dur : 1e9, text: capLayer.text });
-      // Every finding in the caption layer's local time, before any decision about what to keep.
-      const raw = res.segments.map(s => ({
-        a: C.sourceToLocal(capLayer, srcLayer, s.start),
-        b: C.sourceToLocal(capLayer, srcLayer, s.end),
-      }));
+      // Every finding in the caption layer's local time, before any decision about what to keep —
+      // minus what the clip never plays, and the right way round on a reversed clip (queue 916).
+      const raw = res.segments.map(s => C.segmentToLocal(capLayer, srcLayer, s.start, s.end)).filter(Boolean);
       const fit = C.fitCues(capLayer, raw, mode);
       const used = new Set();
       const cues = [];
