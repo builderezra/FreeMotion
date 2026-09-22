@@ -98,12 +98,41 @@ window.FM = window.FM || {};
     });
   }
   function idbGet(db, key) { return new Promise((res) => { try { const rq = db.transaction(STORE, 'readonly').objectStore(STORE).get(key); rq.onsuccess = () => res(rq.result); rq.onerror = () => res(null); } catch (e) { res(null); } }); }
+
+  /* ═══ THE POINTER READER (queue 915 clause 5, PHASE A) ════════════════════════════════════════════
+   * His answer, 22 Sep: "Yes, one copy (Recommended)" — a clip reused from Add → Media is to be stored
+   * ONCE, as a pointer `{ ref: 'lib:<mid>', kind, rev }` at one shared copy under `lib:<mid>`, instead of
+   * a whole new copy per tap. That was built (branch fm-store) and NOT shipped: its review
+   * (audits/915-5-review.json) found that a build which cannot read `lib:` — every release before this
+   * one — deletes the shared copy at its boot sweep and reads a pointer as "nothing stored", so one
+   * tools/rollback.sh past the writer would blank every reused clip, and his original import, for good.
+   * So it ships in two halves, and THIS is the first: it READS pointers everywhere a layer's record is
+   * read, and it NEVER DELETES and NEVER WRITES a `lib:` key or a pointer. Once it has run on his phone,
+   * a rollback from the writer release lands on a build that keeps and reads what the writer made.
+   * Both refusals live at the bottom (idbPut / idbDel), not at each caller, because "every deleter" is
+   * a list nobody can keep complete by hand — the phase-B writer has to lift them ON PURPOSE.
+   * A record stored the old way, the file itself, reads exactly as it always did. */
+  const LIB_PREFIX = 'lib:';
+  function isLibKey(k) { return typeof k === 'string' && k.indexOf(LIB_PREFIX) === 0; }
+  function isRef(v) { return !!v && typeof v === 'object' && !v.file && isLibKey(v.ref); }
+  /* A layer's record, with a pointer read through to the file it points at. A pointer whose shared copy
+     is gone answers null — exactly what a layer with no record has always answered — so every caller's
+     existing "nothing stored" path handles it, and none of them can copy the dead pointer onward. */
+  async function idbGetMedia(db, key) {
+    const v = await idbGet(db, key);
+    if (!isRef(v)) return v;
+    const t = await idbGet(db, v.ref);
+    if (!t || !t.file) return null;
+    return { file: t.file, kind: v.kind || t.kind, rev: v.rev || 0 };
+  }
   // Resolves TRUE only if the write actually landed. This used to resolve the same way on success and
   // on failure, and writeMedia returned a hardcoded true on top of it — so a video too big for the
   // origin quota was rejected by the browser, reported as saved, and silently missing after a reload.
   // On mobile, where the quota is far smaller and Safari rejects rather than prompting, that is most of
   // what "I cannot add long videos, it won't work" looks like from the outside.
-  function idbPut(db, key, val) { return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).put(val, key); tx.oncomplete = () => res(true); tx.onerror = () => { warnStore(tx.error); res(false); }; tx.onabort = () => { warnStore(tx.error); res(false); }; } catch (e) { warnStore(e); res(false); } }); }
+  function idbPut(db, key, val) {
+    if (isLibKey(key) || isRef(val)) return Promise.resolve(false);   // queue 915 phase A: this release never writes a shared copy or a pointer (see above)
+    return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).put(val, key); tx.oncomplete = () => res(true); tx.onerror = () => { warnStore(tx.error); res(false); }; tx.onabort = () => { warnStore(tx.error); res(false); }; } catch (e) { warnStore(e); res(false); } }); }
 
   // Say WHY, with the real numbers, instead of failing mutely. Separate latch from warnQuota so a
   // localStorage warning earlier in the session cannot suppress this one.
@@ -127,8 +156,33 @@ window.FM = window.FM || {};
       navigator.storage.persisted().then(p => { if (!p) return navigator.storage.persist(); }).catch(() => {});
     }
   } catch (e) {}
-  function idbDel(db, key) { return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).delete(key); tx.oncomplete = () => res(); tx.onerror = () => res(); } catch (e) { res(); } }); }
+  function idbDel(db, key) {
+    if (isLibKey(key)) return Promise.resolve();   // queue 915 phase A: no deleter in this release may take a shared copy — a later build's clips point at it
+    return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).delete(key); tx.oncomplete = () => res(); tx.onerror = () => res(); } catch (e) { res(); } }); }
   function idbKeys(db) { return new Promise((res) => { try { const rq = db.transaction(STORE, 'readonly').objectStore(STORE).getAllKeys(); rq.onsuccess = () => res(rq.result || []); rq.onerror = () => res([]); } catch (e) { res([]); } }); }
+
+  /* ═══ THE LAYER IDS A COLLAB CHECKPOINT CAN STILL BRING BACK (queue 921 S0, spec §12.4) ════════════
+   * A checkpoint — `collab:ckpt:<pid>:<ts>` — is the project's document as it stood before a share
+   * started, and it is what "Earlier versions…" restores from. So its layer ids are REACHABLE: every
+   * sweep that decides "no project doc names this id, delete the blob" has to count them, or restoring a
+   * save point would bring the layers back with every clip blank. Nothing writes one before stage 2;
+   * this reads them from the moment the app can, so a checkpoint written by a later build is never
+   * gutted by the boot sweep of this one.
+   * The value is the document as a JSON string. The regex fallback is deliberate: a half-written or
+   * truncated checkpoint cannot be parsed, and the safe reading of "I cannot tell what this names" is to
+   * keep everything it appears to name. */
+  function ckptLayerIds(v) {
+    const out = [];
+    const take = (d) => { if (d && Array.isArray(d.layers)) { d.layers.forEach(l => { if (l && typeof l.id === 'string') out.push(l.id); }); return true; } return false; };
+    if (v && typeof v === 'object' && take(v)) return out;
+    if (typeof v !== 'string') return out;
+    try { if (take(JSON.parse(v))) return out; } catch (e) {}
+    const re = /"id"\s*:\s*"([^"]{1,64})"/g;
+    let m;
+    while ((m = re.exec(v))) out.push(m[1]);
+    return out;
+  }
+  FM.storage_ckptLayerIds = ckptLayerIds;   // suite seam (queue 921 S0): the real reader, not a copy
 
   // Repair a circular parent link carried by an already-saved (or imported) document, and SAY SO.
   // Silent repair would be worse than the bug: the user's group nesting genuinely changes, and a
@@ -221,7 +275,7 @@ window.FM = window.FM || {};
         if (!layer || layer.type === 'text') continue;
         if (onlyMissing && FM.media.get(layer.id)) continue;   // still resident — a fresh load, or never released
         try {   // per-layer: ONE corrupt/undecodable blob must not abort the restore of every later layer
-          const rec = await idbGet(db, layer.id);
+          const rec = await idbGetMedia(db, layer.id);   // queue 915 phase A: a reused clip's pointer reads as its file
           if (rec && rec.file) {
             const loaded = rec.kind === 'video' ? await FM.loadVideoFile(rec.file) : await FM.loadImageFile(rec.file);
             FM.media.set(layer.id, loaded);
@@ -385,14 +439,17 @@ window.FM = window.FM || {};
       } catch (e) { /* storage unavailable — ignore */ }
     },
 
-    // Synchronous best-effort scene write for page unload (the 600ms debounce can't run there).
-    flushSync() { clearTimeout(saveTimer); return writeScene(); },
+    /* Synchronous best-effort scene write for page unload (the 600ms debounce can't run there).
+       queue 921 S0: collab gets the same last chance — beforeFlush runs a final diff and persists its
+       base, so a phone killed at pagehide comes back knowing what it had already sent. Inert until a
+       session is running. */
+    flushSync() { if (FM.collab && FM.collab.active) FM.collab.beforeFlush(); clearTimeout(saveTimer); return writeScene(); },
 
     async removeMedia(id) { try { const db = await openDB(); await idbDel(db, id); db.close(); } catch (e) {} },
 
     // Generic single-key access to the media store, for features that need to read or write a blob
     // outside the scene document (the Media library reads imported files and caches its thumbnails).
-    async readMedia(key) { try { const db = await openDB(); const v = await idbGet(db, key); db.close(); return v; } catch (e) { return null; } },
+    async readMedia(key) { try { const db = await openDB(); const v = await idbGetMedia(db, key); db.close(); return v; } catch (e) { return null; } },   // queue 915 phase A: a pointer reads as its file
     // Reports what actually happened. It used to return a hardcoded true, so callers could not tell a
     // stored clip from one the browser refused on quota.
     async writeMedia(key, val) { try { const db = await openDB(); const ok = await idbPut(db, key, val); db.close(); return ok; } catch (e) { return false; } },
@@ -626,6 +683,24 @@ window.FM = window.FM || {};
     if (['cycle', 'pingpong'].indexOf(p.loopMode) >= 0 && kf.length >= 2) out.loopMode = p.loopMode;
     return out;
   }
+  /* ═══ A STABLE `uid` SURVIVES THE REBUILD (queue 921 S0, spec D16) ════════════════════════════════
+   * Every sanitiser below REBUILDS its entries from the registry schema, keeping only known keys — which
+   * is what makes an untrusted file safe, and which also deletes any identity an entry carries. Live
+   * collaboration needs one: without it, two people editing the same layer's effects can only address an
+   * entry by its INDEX, and an index means a duplicate or a re-order silently re-points somebody's edit
+   * at a different effect (both judges named it as the divergence source).
+   * ⚠️ IT IS NOT MINTED HERE. Nothing in the app writes a uid outside a session (stampIds does, at S1),
+   * so a solo project never gains one and this is byte-for-byte what it always was — the S0 parity test
+   * pins exactly that. This only KEEPS one that is already there, and only if it is the shape stampIds
+   * writes, so a crafted file cannot smuggle an object or a 4KB string in under this name.
+   * Appended LAST, after params, so the key order of a uid-less entry is unchanged too. */
+  const UID_RE = /^[a-z0-9]{4,16}$/;
+  function keepUid(src, out) {
+    if (src && typeof src.uid === 'string' && UID_RE.test(src.uid)) out.uid = src.uid;
+    return out;
+  }
+  FM.storage._keepUid = keepUid;   // suite seam: the rule itself, not a copy of it
+
   function sanitizeAudioFx(l) {
     if (l.audioFx == null) return;
     // No registry (script failed to load) = no way to whitelist a type — drop rather than trust the file.
@@ -645,7 +720,7 @@ window.FM = window.FM || {};
       });
       // enabled !== false is the engine's own "on" test (layerHasAudioFx / buildAudioFxChain); an
       // omitted flag must stay ON, so absence — not falsiness — is what decides the boolean.
-      return { type: def.type, enabled: f.enabled !== false, params: params };
+      return keepUid(f, { type: def.type, enabled: f.enabled !== false, params: params });
     }).filter(Boolean);
   }
   // A number in [min,max], OR a validated animated prop, OR the default. Same untrusted-file discipline
@@ -725,7 +800,7 @@ window.FM = window.FM || {};
         }
       });
       // enabled: absence stays ON (matches makeInstance's enabled:true and the audioFx convention).
-      return { type: def.type, prop: b.prop, enabled: b.enabled !== false, params: params };
+      return keepUid(b, { type: def.type, prop: b.prop, enabled: b.enabled !== false, params: params });
     }).filter(Boolean);
   }
   // Pen masks (layer.masks — a NEW array, separate from the legacy layer.mask). Each mask's path is
@@ -938,7 +1013,10 @@ window.FM = window.FM || {};
         const id = (typeof f.maskId === 'string' && f.maskId && f.maskId.length <= 64) ? f.maskId : '';
         if (!id || !Array.isArray(l.masks) || !l.masks.some(m => m && m.id === id) || seenMarkers.has(id)) return null;
         seenMarkers.add(id);
-        return { type: 'penmask', maskId: id };
+        /* …and its uid, like every other entry in this array (queue 921 S0). A marker is an element of
+           `effects`, which collab keys BY uid — strip it here and the host's sanitize-on-clone would emit
+           a fix removing the uid that stampIds then re-adds, on every single diff. */
+        return keepUid(f, { type: 'penmask', maskId: id });
       }
 
       const reg = FM.fxRegistry.get(f.type);
@@ -956,7 +1034,7 @@ window.FM = window.FM || {};
       // enabled: absence stays ON — matches makeInstance and the engine's own `e.enabled === false` test.
       // Transient UI state (fx._expanded) is dropped by the rebuild, which is what the leading
       // underscore means everywhere else in this file.
-      const out = { type: f.type, enabled: f.enabled !== false, params: params };
+      const out = keepUid(f, { type: f.type, enabled: f.enabled !== false, params: params });
       if (container) {
         out.effects = f.effects.slice(0, FX_CHILD_MAX).map(c => sane(c, depth + 1)).filter(Boolean);
         // A library filter's own name. String-only and length-capped — it reaches the inspector row as
@@ -1233,6 +1311,20 @@ window.FM = window.FM || {};
         const durl = await fileToDataURL(rec.file);
         if (durl) media[lid] = { kind: rec.kind, name: rec.file.name, dataURL: durl };
         else skippedMedia.push({ project: p.name || 'Untitled', file: rec.file.name || 'a clip', mb: Math.round(rec.file.size / 1048576) });
+      }
+      /* ⚠️ queue 915 phase A: A CLIP WITH NOTHING STORED IS NAMED TOO. The loop above only walks what the
+         packer FOUND, so a video/image layer (a song is a video layer) with no file behind it — a record
+         that never landed, a pointer whose shared copy is gone — was simply absent, and the file claimed
+         to be complete. The review of the one-copy build traced
+         exactly that (audits/915-5-review.json): a backup taken while rolled back, with every reused clip
+         silently missing. Whatever the cause, a blank in a backup must never be silent. `missing` tells
+         these apart from the too-big ones, which DO exist and were only left out of the file. */
+      for (const l of pack.layers || []) {
+        if (!l || (l.type !== 'video' && l.type !== 'image')) continue;
+        const has = pack.media[l.id];
+        if (has && has.file) continue;
+        const nm = l.name || (l.type === 'video' ? 'a clip' : 'a photo');
+        skippedMedia.push({ project: p.name || 'Untitled', layer: nm, file: nm, mb: 0, missing: true });
       }
       /* The INDEX's name wins over the packed project's, for the same reason templates.exportFile
          gives: the doc's own name can be stale ("Untitled 3") while the card he recognises is right. */
@@ -1667,6 +1759,12 @@ window.FM = window.FM || {};
       if (FM.media.isPinned && FM.media.isPinned(id)) return;   // owned by something other than the scene
 
       for (let i = 0; i < snaps.length; i++) if (snaps[i].indexOf(id) >= 0) return;   // an undo or redo can still bring it back
+      /* …and so can a COLLAB undo (queue 921 S0). In a session undo walks collab's own per-person
+         steps, not this snapshot stack, so a layer deleted during the session is reachable from a
+         record no `snaps[i]` mentions. Freeing it here would make that undo bring the layer back
+         permanently blank — the exact data loss the paragraph above exists to prevent.
+         NOT gated on `active`: collab keeps owning undo until the project is switched (§10.5). */
+      if (FM.collab && FM.collab.reachable && FM.collab.reachable(id)) return;
       if (FM.releaseMediaFor(id)) freed++;
     });
     return freed;
@@ -1848,16 +1946,40 @@ window.FM = window.FM || {};
     async duplicate(id) {
       if (id === curId() && FM.storage && FM.storage.flushSync) FM.storage.flushSync();   // duplicating the OPEN project must copy the last 600ms of edits, not the stale doc
       const doc = readJSON('fm.proj.' + id, null); if (!doc) return false;
-      const src = this.list().find(p => p.id === id) || {};
+      /* THE BODY IS duplicateFrom (queue 921 S0). Behaviour-identical: `duplicate` still reads the doc off
+         disk and still answers true/false; everything below the read happens there. Split because collab
+         has two callers that must make the same kind of copy out of a document that is NOT on disk under
+         its own key — "Save my version as a copy" after an offline clash (§13.4), and detaching a linked
+         copy when a session ends (§12.3). A second copy of this code is a second set of the queue-915.3
+         rollback rules to keep in step, and those were paid for once already. */
+      return (await this.duplicateFrom(doc, { name: ((this.list().find(p => p.id === id) || {}).name || 'Project') + ' copy', srcIds: [id] })) !== null;
+    },
+    /* Make a NEW project out of a document — fresh project id, fresh layer ids, its media copied under
+       those ids, and the whole half-copy taken back out if any part of it fails (queue 915.3). Returns
+       the new project id, or null.
+       `opts.name`   the card's name. Default: the source card's name (or the doc's own) + " copy".
+       `opts.srcIds` project ids to inherit the card fields and the thumbnail from, first match wins.
+                     `duplicate` passes the project it copied; a collab caller holding a document that
+                     never had a card of its own passes nothing.
+       ⚠️ THE DOCUMENT IS CLONED FIRST. `duplicate` hands over a freshly-parsed doc, but a collab caller
+       hands over a live one — reIdLayers rewrites layer ids in place, and doing that to the caller's
+       object would re-id the project he is still editing. */
+    async duplicateFrom(doc, opts) {
+      opts = opts || {};
+      if (!doc || !doc.project) return null;
+      doc = JSON.parse(JSON.stringify(doc));
+      const src = (opts.srcIds || []).map(sid => this.list().find(p => p.id === sid)).filter(Boolean)[0] || {};
+      const id = (opts.srcIds || [])[0] || null;   // the thumbnail's source, when there is one
+      const name = opts.name || ((src.name || (doc.project && doc.project.name) || 'Project') + ' copy');
       const re = reIdLayers(doc.layers || []);
       const nid = newId('p');
-      if (!writeJSON('fm.proj.' + nid, { project: JSON.parse(JSON.stringify(doc.project)), layers: re.layers, selectedId: null, selectedIds: [] })) return false;
+      if (!writeJSON('fm.proj.' + nid, { project: JSON.parse(JSON.stringify(doc.project)), layers: re.layers, selectedId: null, selectedIds: [] })) return null;
       FM._mediaBusy = (FM._mediaBusy || 0) + 1;
-      const done = (ok) => { FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1); return ok; };
+      const done = (ok) => { FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1); return ok ? nid : null; };
       // index the copy BEFORE the (slow, awaited) media copies — killing the tab mid-copy used to
       // strand an invisible doc that no home card showed and pruneOrphans then gutted
       const idx = this.list();
-      idx.unshift(Object.assign({}, src, { id: nid, name: (src.name || 'Project') + ' copy', created: Date.now(), modified: Date.now(), layers: re.layers.length, thumb: null }));
+      idx.unshift(Object.assign({}, src, { id: nid, name: name, created: Date.now(), modified: Date.now(), layers: re.layers.length, thumb: null }));
       if (!this.saveIndex(idx)) { try { localStorage.removeItem('fm.proj.' + nid); } catch (e) {} return done(false); }
       // duplicate the media blobs under the new layer ids so the copy survives deleting the original
       const wrote = [];
@@ -1865,12 +1987,15 @@ window.FM = window.FM || {};
       try {
         const db = await openDB();
         for (const oldId of Object.keys(re.map)) {
-          const rec = await idbGet(db, oldId);
+          /* queue 915 phase A: RESOLVED, so a reused clip's pointer is copied as the FILE — this release writes
+             no pointers, and a whole copy is one every older build can read. A pointer at a shared copy that is
+             gone answers null, like a clip with no record, and is not copied onward. */
+          const rec = await idbGetMedia(db, oldId);
           if (!rec) continue;
           if (!(await idbPut(db, re.map[oldId], rec))) { whole = false; break; }
           wrote.push(re.map[oldId]);
         }
-        if (whole) { const th = await idbGet(db, 'thumb:' + id); if (th) { await idbPut(db, 'thumb:' + nid, th); _thumbCache.set(nid, th); } }   // copy the card thumbnail too (cosmetic — not part of "whole")
+        if (whole && id) { const th = await idbGet(db, 'thumb:' + id); if (th) { await idbPut(db, 'thumb:' + nid, th); _thumbCache.set(nid, th); } }   // copy the card thumbnail too (cosmetic — not part of "whole")
         db.close();
       } catch (e) { whole = false; }
       if (whole) return done(true);
@@ -1948,10 +2073,36 @@ window.FM = window.FM || {};
         // to. This path never goes through pruneOrphans, so it needs the same keep-set: without it,
         // deleting the project you imported a file into would silently gut the library grid.
         const libKeys = new Set(FM.mediaLib && FM.mediaLib.keys ? FM.mediaLib.keys() : []);
-        if (doc && Array.isArray(doc.layers)) for (const l of doc.layers) { if (!libKeys.has(l.id)) await idbDel(db, l.id); }
+        /* ═══ …AND NEVER A RECORD ANOTHER DOCUMENT STILL POINTS AT (queue 921 S0, spec §24) ═════════
+         * This loop deletes one blob per layer id in the doc, on the assumption that a layer id belongs
+         * to exactly one project — true while every copy re-ids (duplicate does), and NOT true once a
+         * collab guest holds a LINKED copy, which carries the host's layer ids on purpose so the ops
+         * line up. Deleting either project would then blank the other one's clips, permanently, with no
+         * error. The keep-set is every layer id in every OTHER stored project doc, plus the live scene
+         * when the project being removed is not the open one (its doc can be up to 600ms stale).
+         * Checkpoints count too: `collab:ckpt:*` is the save point a session can be rolled back to, so a
+         * record it names is still reachable — and the ones belonging to THIS project are going below. */
+        const elsewhere = new Set();
+        for (let i = 0; i < localStorage.length; i++) {
+          const lk = localStorage.key(i);
+          if (!lk || lk.indexOf('fm.proj.') !== 0 || lk.slice(8) === id) continue;
+          const d = readJSON(lk, null);
+          if (d && Array.isArray(d.layers)) d.layers.forEach(l => { if (l && l.id) elsewhere.add(l.id); });
+        }
+        if (id !== curId()) ((FM.scene && FM.scene.layers) || []).forEach(l => { if (l && l.id) elsewhere.add(l.id); });
+        const ckptPrefix = 'collab:ckpt:' + id + ':';
+        const allKeys = await idbKeys(db);
+        for (const k of allKeys) {
+          if (typeof k !== 'string' || k.indexOf('collab:ckpt:') !== 0 || k.indexOf(ckptPrefix) === 0) continue;
+          ckptLayerIds(await idbGet(db, k)).forEach(lid => elsewhere.add(lid));
+        }
+        if (doc && Array.isArray(doc.layers)) for (const l of doc.layers) { if (!libKeys.has(l.id) && !elsewhere.has(l.id)) await idbDel(db, l.id); }
+        // this project's own collab records go with it (spec §12.4): the checkpoints…
+        for (const k of allKeys) { if (typeof k === 'string' && k.indexOf(ckptPrefix) === 0) await idbDel(db, k); }
         await delThumb(db, id);
         db.close();
       } catch (e) {}
+      try { localStorage.removeItem('fm.collab.host.' + id); } catch (e) {}   // …and the room it was shared from
       try { localStorage.removeItem('fm.proj.' + id); } catch (e) {}
       this.saveIndex(this.list().filter(p => p.id !== id));
       if (id === curId()) {
@@ -2000,6 +2151,13 @@ window.FM = window.FM || {};
           return keep;
         };
         const keep = collectKeep();
+        /* ⚠️ queue 921 S0: A SAVE POINT IS A REFERENCE (spec §12.4, §24). `collab:ckpt:*` holds the
+           document as it was before a share started, so every layer id inside one is still reachable
+           through "Earlier versions…" — and collectKeep above only reads `fm.proj.*`, which a checkpoint
+           is not. Without this, the first boot after a session gutted exactly the media the save point
+           exists to bring back. Read once here and folded into BOTH keep-sets below, because the delete
+           pass re-collects and would otherwise have forgotten them again. */
+        const ckptKeep = new Set();
         // the three index-backed prefixes, so an unreferenced pack can finally be collected
         const tplIds = new Set((FM.templates.list() || []).map(t => t.id));
         const elemIds = new Set((FM.elements.list() || []).map(e => e.id));
@@ -2013,6 +2171,21 @@ window.FM = window.FM || {};
              two prefixes stay unconditional — libthumb2 is the media library's own cache and xr is the
              export-resume scratch, and neither has an index here to check against. */
           if (typeof k === 'string' && (k.indexOf('libthumb2:') === 0 || k.indexOf('xr:') === 0)) continue;
+          /* ⚠️ queue 915 phase A: A SHARED COPY IS NEVER A CANDIDATE. The one-copy writer (phase B) keeps clips
+             in any project as pointers at 'lib:<mid>', and whether one is still used can only be told by reading
+             every record — which this release does not do. Keeping them all is the only answer that cannot
+             blank a clip; collecting the truly unused ones is the writer's job, with the writer's knowledge.
+             (idbDel refuses them as well; this keeps them out of the list so nothing even tries.) */
+          if (isLibKey(k)) continue;
+          /* queue 921 S0: NOTHING UNDER `collab:` IS EVER A CANDIDATE (spec §4.2, §12.4). Three kinds
+             live there — the pre-session checkpoints, a guest's confirmed base, and part-received media —
+             and none of them is named by a project doc, so this sweep would read every one as an orphan
+             and delete it at the next boot: the save point, the offline recovery point and a half-arrived
+             file. They are collected by their own rules (FM.collab.gc), with the knowledge to do it. */
+          if (typeof k === 'string' && k.indexOf('collab:') === 0) {
+            if (k.indexOf('collab:ckpt:') === 0) ckptLayerIds(await idbGet(db, k)).forEach(id => ckptKeep.add(id));
+            continue;
+          }
           if (typeof k === 'string' && k.indexOf('tpl:') === 0) { if (tplIds.has(k.slice(4))) continue; candidates.push(k); continue; }
           if (typeof k === 'string' && k.indexOf('elem:') === 0) { if (elemIds.has(k.slice(5))) continue; candidates.push(k); continue; }
           if (typeof k === 'string' && k.indexOf('font:') === 0) { if (fontIds.has(k.slice(5))) continue; candidates.push(k); continue; }
@@ -2025,7 +2198,7 @@ window.FM = window.FM || {};
           if (FM._mediaBusy) { db.close(); return; }   // something started writing mid-scan
           const keep2 = collectKeep();                  // fresh snapshot at delete time
           for (const k of candidates) {
-            if (keep2.has(k) || FM.media.get(k)) continue;   // referenced since the scan / live in memory
+            if (keep2.has(k) || ckptKeep.has(k) || FM.media.get(k)) continue;   // referenced since the scan / by a collab save point (queue 921 S0) / live in memory
             await idbDel(db, k);
           }
         }
@@ -2078,7 +2251,7 @@ window.FM = window.FM || {};
       for (const l of pack.layers) {
         const mem = (id === curId()) ? FM.media.get(l.id) : null;
         if (mem && mem.file) pack.media[l.id] = { file: mem.file, kind: mem.kind };
-        else { const rec = await idbGet(db, l.id); if (rec && rec.file) pack.media[l.id] = { file: rec.file, kind: rec.kind }; }
+        else { const rec = await idbGetMedia(db, l.id); if (rec && rec.file) pack.media[l.id] = { file: rec.file, kind: rec.kind }; }   // queue 915 phase A: a pack (template, element, backup) carries the FILE, never a pointer into this device's store
       }
       db.close();
     } catch (e) { return null; }
@@ -2349,6 +2522,12 @@ window.FM = window.FM || {};
     },
     // Insert a template's layers INTO the current project at the playhead.
     async insertInto(tid) {
+      /* queue 921 S0 (spec §8.9): bracketed as a JOB. Between the layers landing and their media
+         arriving this scene is HALF-BUILT, and a collab diff taken in that window would send layers
+         whose clips nobody else can resolve yet. FM.jobDepth() says "wait"; solo behaviour is
+         unchanged, the counter is all that happens. */
+      const job = FM.jobBegin('templates.insertInto');   // the token, so an overlapping job closes its own bracket (queue 921 S0 review)
+      try {
       const pack = await this.getPack(tid); if (!pack) return false;
       const re = reIdLayers(pack.layers);
       const t0 = Math.min.apply(null, re.layers.length ? re.layers.map(l => l.start || 0) : [0]);
@@ -2362,6 +2541,7 @@ window.FM = window.FM || {};
       if (FM.history) FM.history.commit();
       FM.storage.autosave();
       return true;
+      } finally { FM.jobEnd(job); }
     },
   };
 
@@ -2550,6 +2730,8 @@ window.FM = window.FM || {};
     },
     // Insert an element's layers into the current project at the playhead.
     async insert(eid) {
+      const job = FM.jobBegin('elements.insert');   // queue 921 S0: same half-built window as templates.insertInto above
+      try {
       let pack = null;
       try { const db = await openDB(); pack = await idbGet(db, 'elem:' + eid); db.close(); } catch (e) {}
       if (!pack) return false;
@@ -2567,6 +2749,7 @@ window.FM = window.FM || {};
       if (FM.history) FM.history.commit();
       FM.storage.autosave();
       return true;
+      } finally { FM.jobEnd(job); }
     },
   };
 

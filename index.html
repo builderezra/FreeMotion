@@ -260,7 +260,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v16.79</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v16.80</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1018,10 +1018,10 @@
 
   <script src="vendor/mp4-muxer.js?v=9"></script>
   <script src="js/perf-probe.js?v=12"></script>
-  <script src="js/settings.js?v=38"></script>
+  <script src="js/settings.js?v=39"></script>
   <script src="js/statusbar.js?v=1"></script>
   <script src="js/screen.js?v=1"></script>
-  <script src="js/scene.js?v=115"></script>
+  <script src="js/scene.js?v=116"></script>
   <script src="js/eases.js?v=3"></script>
   <script src="js/masks.js?v=4"></script>
   <script src="js/behaviors.js?v=5"></script>
@@ -1034,37 +1034,37 @@
   <script src="js/filters.js?v=17"></script>
   <script src="js/fx-presets.js?v=11"></script>
   <script src="js/fx-thumbs.js?v=50"></script>
-  <script src="js/timeline.js?v=250"></script>
+  <script src="js/timeline.js?v=251"></script>
   <script src="js/addmenu.js?v=78"></script>
   <script src="js/inspector.js?v=387"></script>
   <script src="js/fx-browser.js?v=92"></script>
   <script src="js/elements-browser.js?v=3"></script>
   <script src="js/color-wheel.js?v=53"></script>
-  <script src="js/canvas-edit.js?v=116"></script>
+  <script src="js/canvas-edit.js?v=117"></script>
   <script src="js/notepad.js?v=6"></script>
   <script src="js/popfrom.js?v=10"></script>
-  <script src="js/draw-tool.js?v=34"></script>
+  <script src="js/draw-tool.js?v=35"></script>
   <script src="js/point-edit.js?v=20"></script>
   <script src="js/crop-tool.js?v=11"></script>
   <script src="js/fill-drag.js?v=1"></script>
   <script src="js/mask-tool.js?v=9"></script>
-  <script src="js/motion-path.js?v=7"></script>
-  <script src="js/touchup-tool.js?v=2"></script>
+  <script src="js/motion-path.js?v=8"></script>
+  <script src="js/touchup-tool.js?v=3"></script>
   <script src="js/eyedropper.js?v=2"></script>
   <script src="js/text-edit.js?v=22"></script>
-  <script src="js/tracker.js?v=9"></script>
+  <script src="js/tracker.js?v=10"></script>
   <script src="js/frames.js?v=20"></script>
   <script src="js/audio-fx.js?v=10"></script>
   <script src="js/audio-play.js?v=65"></script>
   <script src="js/audio-fx-live.js?v=7"></script>
   <script src="js/audio-fx-browser.js?v=11"></script>
-  <script src="js/history.js?v=32"></script>
-  <script src="js/storage.js?v=46"></script>
+  <script src="js/history.js?v=33"></script>
+  <script src="js/storage.js?v=47"></script>
   <script src="js/export-resume.js?v=7"></script>
   <script src="js/medialib.js?v=6"></script>
   <script src="js/template-fill.js?v=3"></script>
   <script src="js/home.js?v=178"></script>
-  <script src="js/graph-editor.js?v=17"></script>
+  <script src="js/graph-editor.js?v=18"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
   <script src="js/exporter.js?v=120"></script>
@@ -1075,7 +1075,7 @@
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=54"></script>
   <script src="js/audio-health.js?v=6"></script>
-  <script src="js/app.js?v=442"></script>
+  <script src="js/app.js?v=443"></script>
   <script src="js/audio-tools.js?v=6"></script>
   <script src="js/loading.js?v=3"></script>
   <script src="js/sfx.js?v=14"></script>
@@ -1090,7 +1090,7 @@
   <script src="js/ai-templates.js?v=2"></script>
   <script src="js/ai.js?v=8"></script>
   <script src="js/ai-panel.js?v=5"></script>
-  <script src="js/ai-chat.js?v=1"></script>   <!-- queue 856: the AI you TALK to; after ai-panel (reuses its key form) -->
+  <script src="js/ai-chat.js?v=2"></script>   <!-- queue 856: the AI you TALK to; after ai-panel (reuses its key form) -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {
@@ -1100,6 +1100,11 @@
         }).catch(function () {});
         var reloaded = false;
         navigator.serviceWorker.addEventListener('controllerchange', function () {
+          /* ⚠️ NOT WHILE A LIVE SESSION IS RUNNING (queue 921 S0, spec §14.8). A reload here drops the
+             connection, and with it any change that had not yet been sent — a new build landing mid-edit
+             would look exactly like "it lost my work". Collab holds the reload and runs it when the
+             session ends; the banner says the update is waiting. Inert until stage 3. */
+          if (window.FM && FM.collab && FM.collab.active) { FM.collab.deferReload(); return; }
           // A new service worker took over → reload ONCE so the installed PWA shows the latest build.
           // Skip the first-ever install's claim (hadController === false) so fresh installs don't reload.
           if (reloaded || !hadController) return;

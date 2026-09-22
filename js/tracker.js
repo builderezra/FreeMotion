@@ -160,6 +160,7 @@ window.FM = window.FM || {};
 
   FM.tracker = {
     isPicking() { return !!picking; },
+    layerId() { return picking && picking.layer ? picking.layer.id : null; },   // queue 921 S0: for FM.cancelGesturesOn
 
     // Enter pick mode: overlay captures ONE tap → seed point + adjustable box, then Track/Cancel.
     pick(layer) {

@@ -576,6 +576,47 @@ window.FM = window.FM || {};
     if (had) { hideSnap(); FM.timeline.rebuild(); FM.requestRender(); }
   }
 
+  /* ═══ WHOSE LAYERS ARE IN FLIGHT RIGHT NOW (queue 921 S0, spec §8.7) ══════════════════════════════
+   * The ids every live timeline gesture is holding, including the clips riding along in a multi-clip
+   * move. FM.cancelGesturesOn asks this: when somebody else deletes a layer you happen to be dragging,
+   * the drag has to be put back and dropped, or its pointerup writes a start time onto a layer that no
+   * longer exists — and the next diff sends that. */
+  function gestureLayerIds() {
+    const out = [];
+    const add = id => { if (id && out.indexOf(id) < 0) out.push(id); };
+    if (clipMove) { add(clipMove.layer && clipMove.layer.id); (clipMove.group || []).forEach(g => add(g.layer && g.layer.id)); }
+    if (trimDrag) add(trimDrag.layer && trimDrag.layer.id);
+    if (slipDrag) add(slipDrag.layer && slipDrag.layer.id);
+    if (kfDrag) add(kfDrag.layerId || (kfDrag.layer && kfDrag.layer.id));
+    if (cueDrag) add(cueDrag.layerId || (cueDrag.layer && cueDrag.layer.id));
+    /* …AND THE PENDING TOUCH GESTURE (review fix). clipTap is created on every touch pointerdown on a
+       clip and is a GRIP on that layer — its hold timer promotes it to a clipMove 350ms later, and that
+       timer's only guard is `clipTap.layer !== layer`, which passes because it closed over the same
+       object. Left out of this list, a cancel during the long-press window returned "nothing was held",
+       the timer then grabbed a layer that had just been deleted or leased away, and the release wrote
+       FM.scene.selectedId = <dead id> — re-breaking the 629 rule cancelGesturesOn had applied three
+       lines earlier. beginCue already tears clipTap down for the same reason. */
+    if (clipTap) add(clipTap.layer && clipTap.layer.id);
+    return out;
+  }
+  /* Newly-keyframed props (loopMode still undefined) INHERIT the layer's loopMode so they don't freeze
+     at their last keyframe — but initialize-only: an explicit per-prop loop set in the graph editor must
+     NOT be clobbered back to the layer value on every rebuild. (The clip-menu Loop toggle still writes
+     all props explicitly, so it keeps working.)
+     queue 921 S0: lifted out of rebuild() unchanged. It is a DERIVED WRITE — it edits the document from
+     the document — so collab has to run it before every diff, or the value would land as somebody's
+     "edit" on whichever device rebuilt its timeline first (spec §11.1). rebuild() still calls it. */
+  function inheritLoopModes() {
+    FM.scene.layers.forEach(l => { if (l.loopMode && l.loopMode !== 'none') FM.animatedProps(l).forEach(p => { if (p.loopMode == null) p.loopMode = l.loopMode; }); });
+  }
+  /* Listeners for "the rows on screen were just rebuilt" (queue 921 S0). Returns its own unsubscribe.
+     Each is isolated: a listener that throws must not take the rebuild — and therefore the timeline —
+     down with it. */
+  const rebuiltFns = [];
+  function fireRebuilt() {
+    for (let i = 0; i < rebuiltFns.length; i++) { try { rebuiltFns[i](); } catch (e) { try { console.warn('[timeline] an onRebuilt listener threw', e); } catch (_) {} } }
+  }
+
   // Snap a proposed clip start so the clip's start OR end lands on 0 / playhead / another clip edge.
   // Returns { v: snapped start, snapped: bool, guide: alignment time for the guide line }.
   function snapStart(layer, ns, pps, excl, sup) {
@@ -4064,6 +4105,29 @@ window.FM = window.FM || {};
     // test can tell "a trim started" from "nothing happened", and without this the mouse half of that
     // test can only assume it worked — which is not a test.
     _trimming: function () { return !!trimDrag; },
+    inheritLoopModes: inheritLoopModes,   // queue 921 S0: the derived write rebuild() has always done
+    /* WHERE A MOMENT IN TIME SITS ON THE RULER, in #tl-inner coordinates (queue 921 S0). The one place
+       this arithmetic is written for anything drawn ACROSS the timeline rather than inside a lane — the
+       snap line and the loop region already use exactly this, and presence's remote playheads will. A
+       second hand-written copy is how an overlay ends up a head-width out at one zoom and right at
+       another, which is the whole reason it is a function. */
+    timeToX: function (t) { return HEAD_W + PAD + (t || 0) * pxPerSec(); },
+    /* Call `fn` at the end of every REAL rebuild (never a deferred one). Returns the unsubscribe. */
+    onRebuilt: function (fn) {
+      if (typeof fn !== 'function') return function () {};
+      rebuiltFns.push(fn);
+      return function () { const i = rebuiltFns.indexOf(fn); if (i >= 0) rebuiltFns.splice(i, 1); };
+    },
+    /* Put every in-flight gesture back where it started and drop it (queue 921 S0, spec §8.7). With a
+       predicate, only when one of the layers being held matches — the restore itself is all-or-nothing
+       because restoreGestures is, and that is honest: at most one gesture is ever live, plus the clips
+       riding along with a multi-clip move. Returns whether anything was aborted. */
+    abortGestures: function (pred) {
+      if (typeof pred === 'function' && !gestureLayerIds().some(id => pred(id))) return false;
+      const live = !!(clipMove || trimDrag || kfDrag || slipDrag || cueDrag || clipTap);   // clipTap too: a finger inside the hold window is holding that layer (review fix)
+      abortGestures();
+      return live;
+    },
     // exposed for the suite (queue 364 clause 2): a real :hover cannot be synthesised, so the thing the
     // hover DRIVES is what gets driven.
     _markHover: markHover,
@@ -4852,11 +4916,7 @@ window.FM = window.FM || {};
          the number is still true. */
       const soloNow = !!soloLayerId();
       if (soloNow) { if (preSoloScroll === null) preSoloScroll = sTop; }   // guarded: a rebuild WHILE solo would capture the clamped 0 over the good value
-      // Newly-keyframed props (loopMode still undefined) INHERIT the layer's loopMode so they don't
-      // freeze at their last keyframe — but initialize-only: an explicit per-prop loop set in the graph
-      // editor must NOT be clobbered back to the layer value on every rebuild. (The clip-menu Loop toggle
-      // still writes all props explicitly, so it keeps working.)
-      FM.scene.layers.forEach(l => { if (l.loopMode && l.loopMode !== 'none') FM.animatedProps(l).forEach(p => { if (p.loopMode == null) p.loopMode = l.loopMode; }); });
+      FM.timeline.inheritLoopModes();   // queue 921 S0: same line, now callable on its own — see inheritLoopModes
       // Recompute the project length from the clips on EVERY rebuild — the timeline is drawn right
       // afterwards, so its length can never be stale no matter which edit triggered the rebuild.
       if (FM.autoFitDuration) FM.autoFitDuration();
@@ -4878,6 +4938,12 @@ window.FM = window.FM || {};
       let want = sTop;
       if (!soloNow && preSoloScroll !== null) { want = preSoloScroll; preSoloScroll = null; }
       if (timelineEl && timelineEl.scrollTop !== want) timelineEl.scrollTop = want;
+      /* queue 921 S0: …and tell whoever is drawing ON TOP of these rows that they are new elements now.
+         Presence paints other people's playheads and selections into the timeline, and buildTracks
+         above replaced every row it had them on. Last, so a listener sees the finished rows, and only
+         on a REAL rebuild — the deferred-during-a-gesture return above never reaches here, which is
+         what stops an overlay being placed against rows that are about to be rebuilt anyway. */
+      fireRebuilt();
     },
 
     updateLoopRegion() {

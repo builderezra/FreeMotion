@@ -860,6 +860,55 @@ window.FM = window.FM || {};
     return fixed.length ? fixed : null;
   };
 
+  /* ═══ THE ORDER REPAIR THAT DELIBERATELY REPAIRS ALMOST NOTHING (queue 921 S0, spec §11.3) ═════════
+   *
+   * What it was asked to be: a canonical pre-order — every group immediately followed by its members,
+   * recursively — with the collab host applying the difference as move ops after concurrent edits. The
+   * spec attached a Stage-0 gate to it in as many words: *"a solo op fuzz must leave it returning null
+   * after every step. If it ever would change an app-produced state, stop and redefine the invariant
+   * from what moveLayers and groupSelection actually maintain."*
+   *
+   * 📐 MEASURED, and it fires. Three ordinary things he can do today produce an order the canonical
+   * walk would rewrite:
+   *   · add a layer while inside Edit Group — `FM.insertLayer` splices at index 0 while the group sits
+   *     further down, so the new member lands ABOVE its own group row;
+   *   · drag one member of a group out from under it — the reorder handle expands a GROUP row to its
+   *     subtree, but a member row moves alone, and `moveLayers` will put it anywhere;
+   *   · drag a group row and tap the add-row switch — `FM.toggleAddSide` moves `[dragId]` only, so the
+   *     group row leaves its members behind.
+   * The compositor already knows this happens: `collectGroupUnits` speaks of *"the reversed scene order
+   * that Edit group → Add → Group produces"*, and it draws a group unit at the z-slot of its
+   * bottom-most member precisely so a scattered group still stacks correctly.
+   *
+   * So the array order is Z-ORDER, and group membership is the `parent` link — not the position. There
+   * is no contiguity invariant to restore, and "restoring" one would silently RE-STACK his picture, in
+   * a session, from an op nobody asked for. That is the failure this codebase pays for most often: a
+   * tidy-up nobody can see the reason for, applied to somebody's work.
+   * What `moveLayers` does maintain, and says so in its own guard — *"never drop/duplicate a layer"* —
+   * is that the array is a permutation of distinct layers. That is the invariant, and it is the only
+   * one here: a repeated id makes every id-keyed walk in the app ambiguous (which of the two does
+   * `parent` mean?) and nothing the app can do produces one. That is what this repairs.
+   *
+   * Returns null when the order is fine — which is every order the app can reach — or the id array the
+   * list should be, first occurrence of each id kept, when an id appears more than once.
+   * ⚠️ DO NOT "FIX" THIS BACK TO THE CANONICAL WALK without re-running the fuzz above (the S0 test
+   * `921 S0 normalizeGroupOrder` runs it, with a control proving the fuzz really does split groups). */
+  FM.normalizeGroupOrder = function (layers) {
+    if (!Array.isArray(layers) || layers.length < 2) return null;
+    const seen = new Set();
+    const ids = [];
+    let dup = false;
+    for (let i = 0; i < layers.length; i++) {
+      const l = layers[i];
+      const id = l && l.id;
+      if (!id) continue;              // a layer with no id at all is not an ORDER problem
+      if (seen.has(id)) { dup = true; continue; }
+      seen.add(id);
+      ids.push(id);
+    }
+    return dup ? ids : null;
+  };
+
   /* Local source time for a layer at global project time t.
    * Returns null when the layer is not on-screen at t. Accounts for reverse + trim. */
   // Source-seconds advanced after `into` clip-seconds. Static speed = plain multiply (old path,

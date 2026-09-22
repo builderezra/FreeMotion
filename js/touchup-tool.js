@@ -157,6 +157,7 @@ window.FM = window.FM || {};
 
   FM.touchupTool = {
     isOpen() { return !!active; },
+    layerId() { return active ? active.layerId : null; },   // queue 921 S0: for FM.cancelGesturesOn
     open(layerId, fxRef) {
       if (FM.viewport && !FM.viewport.isDefault()) FM.viewport.reset();   // overlay lays out in screen px — a zoomed viewport double-scales it
       if (active) FM.touchupTool.close();

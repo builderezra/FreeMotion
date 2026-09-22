@@ -119,9 +119,14 @@ window.FM = window.FM || {};
     if (!ops || !ops.length) return null;
     var res;
     FM.history.mute();
+    /* queue 921 S0: …and bracketed as a JOB (spec §8.9). A turn is a batch of edits with the document
+       part-changed between them, exactly like a paste — collab stands down while jobDepth is up, so a
+       diff cannot send half a turn. Costs a counter when no session is running. */
+    var job = FM.jobBegin ? FM.jobBegin('ai applyTurn') : null;
     try {
       res = FM.aiOps.applyOps(ops, {});
     } finally {
+      if (FM.jobEnd) FM.jobEnd(job);
       FM.history.unmute();
     }
     FM.refreshAll();

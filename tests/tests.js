@@ -819,6 +819,439 @@
     }
   });
 
+  /* ═══ #921 STAGE 0 (spec §12.3, §13.4) ═══════════════════════════════════════════════════════════
+     projects.duplicate's body is projects.duplicateFrom now, because collab has two callers that must
+     make exactly this kind of copy out of a document that is NOT on disk under its own key: "Save my
+     version as a copy" after an offline clash, and detaching a linked copy when a session ends. A second
+     copy of the code would be a second set of the queue-915.3 rollback rules to keep in step.
+     So: the copy is independent (fresh ids, its own media, the caller's document untouched), and a copy
+     that cannot be written whole is taken back out — the 915.3 contract, now on the new door too. */
+  test('921 S0 duplicateFrom copies independently and rolls back on failure', { item: '921', budgetMs: 60000 }, async function () {
+    if (!FM.projects || typeof FM.projects.duplicateFrom !== 'function') throw new Error('FM.projects.duplicateFrom is missing');
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    const realPut = IDBObjectStore.prototype.put;
+    const ts = Date.now().toString(36);
+    const srcLayer = 'l_921src' + ts;
+    const docKeys = () => { let n = 0; for (let i = 0; i < localStorage.length; i++) if (/^fm\.proj\./.test(localStorage.key(i))) n++; return n; };
+    const cards = name => FM.projects.list().filter(p => p.name === name);
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const f = await q915aPng('dupfrom', '#8ab17d');
+      await q915aPut(srcLayer, { file: f, kind: 'image' });
+      // a document held in memory, with no card and no fm.proj key of its own — exactly what a guest's
+      // "save my version as a copy" hands over
+      const doc = { project: { name: 'FX921 held', width: 320, height: 240, fps: 30, duration: 5 }, layers: [{ id: srcLayer, name: 'held clip', type: 'image', start: 0, duration: 2, transform: { x: 10, y: 10, scale: 1, rotation: 0, opacity: 1 } }], selectedId: null, selectedIds: [] };
+      const before = JSON.stringify(doc);
+
+      const docs0 = docKeys();
+      const nid = await FM.projects.duplicateFrom(doc, { name: 'FX921 saved copy' });
+      if (!nid) throw new Error('duplicateFrom refused a perfectly writable document (' + nid + ')');
+      made.push(nid);
+      if (JSON.stringify(doc) !== before) throw new Error('duplicateFrom rewrote the document it was HANDED (ids or all) — a collab caller passes the live one, so that would re-id the project he is still editing:\n' + JSON.stringify(doc).slice(0, 200));
+      const card = FM.projects.list().filter(p => p.id === nid)[0];
+      if (!card) throw new Error('the copy has no card on Home');
+      if (card.name !== 'FX921 saved copy') throw new Error('the copy is called ' + JSON.stringify(card.name) + ', not the name it was given');
+      const copyDoc = JSON.parse(localStorage.getItem('fm.proj.' + nid) || 'null');
+      if (!copyDoc || !copyDoc.layers.length) throw new Error('the copy\'s document is empty');
+      const newId = copyDoc.layers[0].id;
+      if (newId === srcLayer) throw new Error('the copy kept the SOURCE layer id — deleting either project would then gut the other');
+      const raw = await q915aRaw();
+      if (!raw[newId] || !raw[newId].file) throw new Error('the copy has no media of its own under its new id — it would open with a blank clip');
+      if (!raw[srcLayer]) throw new Error('the SOURCE record is gone — a copy must never move the original');
+
+      /* ── rollback: a clip that cannot be written takes the whole half-copy back out ── */
+      const docs1 = docKeys(), clips1 = Object.keys(await q915aRaw()).length;
+      IDBObjectStore.prototype.put = function (val, key) {
+        if (typeof key === 'string' && /^l_/.test(key) && key !== srcLayer) throw new DOMException('refused by the 921 test', 'QuotaExceededError');
+        return realPut.apply(this, arguments);
+      };
+      let r2;
+      try { r2 = await FM.projects.duplicateFrom(doc, { name: 'FX921 doomed' }); } finally { IDBObjectStore.prototype.put = realPut; }
+      if (r2 !== null) throw new Error('a copy whose clip could not be stored reported ' + r2 + ' — the caller would treat it as done, and it opens with that clip blank');
+      if (cards('FX921 doomed').length) throw new Error('a copy that could not be written whole was left on Home');
+      if (docKeys() !== docs1) throw new Error('the failed copy left ' + (docKeys() - docs1) + ' project document(s) behind in localStorage, pointed at by nothing');
+      const clips2 = Object.keys(await q915aRaw()).length;
+      if (clips2 !== clips1) throw new Error('the failed copy left ' + (clips2 - clips1) + ' clip record(s) behind in IndexedDB');
+
+      /* ── and the old door still behaves exactly as it did (the 915.3 contract) ── */
+      const pid = await FM.projects.create({ name: 'FX921 plain', width: 320, height: 240 });
+      made.push(pid);
+      const ok = await FM.projects.duplicate(pid);
+      if (ok !== true) throw new Error('projects.duplicate returned ' + ok + ' for a healthy project — it must still answer exactly true, because the bulk bar counts anything but false as done');
+      const copy = cards('FX921 plain copy')[0];
+      if (!copy) throw new Error('projects.duplicate made no "FX921 plain copy" card — the refactor changed the name it writes');
+      made.push(copy.id);
+      if (docs0 < 1) throw new Error('the fixture never had a project document to begin with');
+    } finally {
+      IDBObjectStore.prototype.put = realPut;
+      try { await q915aDel(srcLayer); } catch (e) {}
+      await q915aCleanup(made, orig, wasOpen, [], [], []);
+    }
+  });
+
+  /* ── queue 915 clause 5, PHASE A: THE POINTER READER ───────────────────────────────────────────────
+   * The one-copy build (branch fm-store) stores a clip reused from Add → Media as a POINTER,
+   * `{ ref: 'lib:<mid>', kind, rev }`, at one shared copy under `lib:<mid>`. Its review found that every
+   * build without a reader deletes the shared copy at its boot sweep and reads the pointer as nothing, so
+   * a rollback past the writer blanks those clips for good. This release is the reader, shipped first:
+   * it reads pointers wherever a layer's record is read, and never deletes or writes a `lib:` key or a
+   * pointer. Nothing in the app makes a pointer yet, so these tests make one BY HAND, exactly as the
+   * writer stores it, and write it straight to IndexedDB — the app's own writeMedia now refuses both. */
+  function q915aOpen() {
+    return new Promise(function (res, rej) { const rq = indexedDB.open('freemotion', 1); rq.onsuccess = function () { res(rq.result); }; rq.onerror = function () { rej(rq.error); }; });
+  }
+  async function q915aRaw() {   // every record, read RAW — readMedia turns a pointer into its file, and these tests ask what is on disk
+    const db = await q915aOpen();
+    return new Promise(function (res, rej) {
+      const out = {}, c = db.transaction('media', 'readonly').objectStore('media').openCursor();
+      c.onsuccess = function () { const cur = c.result; if (!cur) { db.close(); res(out); return; } out[cur.key] = cur.value; cur.continue(); };
+      c.onerror = function () { db.close(); rej(c.error); };
+    });
+  }
+  async function q915aTx(fn) {
+    const db = await q915aOpen();
+    return new Promise(function (res, rej) {
+      const tx = db.transaction('media', 'readwrite');
+      fn(tx.objectStore('media'));
+      tx.oncomplete = function () { db.close(); res(true); };
+      tx.onerror = tx.onabort = function () { db.close(); rej(tx.error); };
+    });
+  }
+  function q915aPut(key, val) { return q915aTx(function (st) { st.put(val, key); }); }
+  function q915aDel(key) { return q915aTx(function (st) { st.delete(key); }); }
+  async function q915aPng(tag, rgb) {
+    const c = document.createElement('canvas'); c.width = 32; c.height = 24;
+    const g = c.getContext('2d'); g.fillStyle = rgb; g.fillRect(0, 0, 32, 24); g.fillStyle = '#fff'; g.fillRect(3, 3, 7, 5);
+    const blob = await new Promise(function (r) { c.toBlob(r, 'image/png'); });
+    return new File([blob], 'q915a-' + tag + '-' + Date.now() + '.png', { type: 'image/png', lastModified: Date.now() });
+  }
+  // A project whose one photo is stored the way the one-copy writer stores a reused clip: a pointer, no file.
+  async function q915aPointerProject(name, ref) {
+    const id = await FM.projects.create({ name: name, width: 320, height: 240 });
+    const L = FM.makeLayer('image', { name: name + ' clip', x: 160, y: 120, start: 0, duration: 3 });
+    FM.scene.layers.push(L);
+    FM.storage.markDirty(); await FM.storage.save();   // the doc — nothing is resident for L, so no blob is written
+    await q915aPut(L.id, { ref: ref, kind: 'image', rev: 0 });
+    return { id: id, L: L.id };
+  }
+  function q915aHas(id, file) { const m = FM.media.get(id); return !!(m && m.file && m.file.size === file.size); }
+  function q915aShape(v) { return v === undefined ? 'nothing' : JSON.stringify(v && typeof v === 'object' ? Object.keys(v) : v); }
+  async function q915aCleanup(made, orig, wasOpen, tpl, elem, libs) {
+    for (const id of tpl || []) { try { await FM.templates.remove(id); } catch (e) {} }
+    for (const id of elem || []) { try { await FM.elements.remove(id); } catch (e) {} }
+    try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig); } catch (e) {}
+    for (const id of made) { try { if (FM.projects.list().some(function (p) { return p.id === id; })) await FM.projects.remove(id); } catch (e) {} }
+    for (const k of libs || []) { try { await q915aDel(k); } catch (e) {} }   // raw: the app itself will not delete a lib: key any more
+    try { if (wasOpen) FM.home.open(); } catch (e) {}
+  }
+
+  test('915.5A a clip stored as a pointer opens, duplicates, packs and backs up WITH its footage', { item: '915', budgetMs: 45000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], tpl = [], elem = [], libs = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const file = await q915aPng('ptr', '#2a9d8f');
+      const lk = 'lib:m_q915a' + Date.now().toString(36); libs.push(lk);
+      await q915aPut(lk, { file: file, kind: 'image' });
+      const p = await q915aPointerProject('FX915A pointer', lk); made.push(p.id);
+      made.push(await FM.projects.create({ name: 'FX915A away', width: 320, height: 240 }));
+      const away = FM.projects.currentId();   // the pointer project is CLOSED from here: every path below reads it from disk
+
+      // ── what the Media library reads a tile through
+      const rm = await FM.storage.readMedia(p.L);
+      if (!(rm && rm.file && rm.file.size === file.size)) throw new Error('readMedia on a pointer record answered ' + q915aShape(rm) + ' — a tile whose key is a pointer would say "no longer stored" and drop itself');
+
+      // ── opening the project
+      await FM.projects.open(p.id);
+      if (!q915aHas(p.L, file)) throw new Error('the project opened with its clip BLANK — the record is a pointer and the reader did not follow it to the shared copy');
+      FM.storage.markDirty(); await FM.storage.save();
+      const r1 = (await q915aRaw())[p.L];
+      if (!(r1 && r1.ref === lk && !r1.file)) throw new Error('saving the reopened project rewrote the pointer record as ' + q915aShape(r1) + ' — an unchanged clip must be left exactly as it was stored');
+      await FM.projects.open(away);
+
+      // ── templates and elements carry the FILE (a pack must never point into this device's store)
+      if (!(await FM.templates.save('FX915A tpl', p.id))) throw new Error('saving a template from the project failed');
+      const t = FM.templates.list().filter(function (x) { return x.name === 'FX915A tpl'; })[0]; if (t) tpl.push(t.id);
+      const tp = t && await FM.templates.getPack(t.id);
+      const tf = tp && tp.media && tp.media[p.L] && tp.media[p.L].file;
+      if (!(tf && tf.size === file.size)) throw new Error('a template saved from the project carries ' + (tf ? tf.size + ' bytes' : 'NO file') + ' for the clip — a project made from it would open blank');
+      if (!(await FM.elements.saveFromProject(p.id, 'FX915A elem'))) throw new Error('saving an element from the project failed');
+      const el = FM.elements.list().filter(function (x) { return x.name === 'FX915A elem'; })[0]; if (el) elem.push(el.id);
+      const ep = el && await FM.elements.getPack(el.id);
+      const ef = ep && ep.media && ep.media[p.L] && ep.media[p.L].file;
+      if (!(ef && ef.size === file.size)) throw new Error('an element saved from the project carries ' + (ef ? ef.size + ' bytes' : 'NO file') + ' for the clip');
+
+      // ── a backup carries the footage, and does not list it as missing
+      const obj = await FM.storage.buildBackup(null);
+      const entry = obj.projects.filter(function (x) { return x.project && x.project.name === 'FX915A pointer'; })[0];
+      const md = entry && entry.media && entry.media[p.L];
+      if (!(md && /^data:image\/png/.test(md.dataURL || ''))) throw new Error('the backup has no footage for the clip — he would trust a file that does not contain it');
+      const listed = ((obj.notIncluded && obj.notIncluded.media) || []).filter(function (m) { return m.project === 'FX915A pointer'; });
+      if (listed.length) throw new Error('the backup carries the clip and still lists it as not included: ' + JSON.stringify(listed));
+
+      // ── a duplicate gets the FILE under its own layer, not a second pointer
+      if ((await FM.projects.duplicate(p.id)) !== true) throw new Error('duplicating the project failed');
+      const dup = FM.projects.list().filter(function (x) { return x.name === 'FX915A pointer copy'; })[0];
+      if (!dup) throw new Error('no copy appeared');
+      made.push(dup.id);
+      const dl = ((JSON.parse(localStorage.getItem('fm.proj.' + dup.id) || '{}').layers) || []).filter(function (l) { return l.type === 'image'; })[0];
+      const dr = dl && (await q915aRaw())[dl.id];
+      if (!(dr && dr.file && dr.file.size === file.size && !dr.ref)) throw new Error('the duplicate\'s clip is stored as ' + q915aShape(dr) + ' — it must be the FILE: this release writes no pointers, and a whole copy is one every older build can read');
+      await FM.projects.open(dup.id);
+      if (!q915aHas(dl.id, file)) throw new Error('the duplicate opened with its clip BLANK');
+    } finally {
+      await q915aCleanup(made, orig, wasOpen, tpl, elem, libs);
+    }
+  });
+
+  test('915.5A a pointer whose shared copy is gone opens blank like a missing file, and is never copied onward', { item: '915', budgetMs: 40000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const gone = 'lib:m_q915agone' + Date.now().toString(36);   // never written: the shared copy this pointer names does not exist
+      const p = await q915aPointerProject('FX915A dangling', gone); made.push(p.id);
+      // the CONTROL beside it: a photo layer with no record at all — the missing-file state as it has always been
+      const C = FM.makeLayer('image', { name: 'FX915A no record', x: 160, y: 120, start: 0, duration: 3 });
+      FM.scene.layers.push(C);
+      FM.storage.markDirty(); await FM.storage.save();
+      made.push(await FM.projects.create({ name: 'FX915A dangling away', width: 320, height: 240 }));
+
+      const rm = await FM.storage.readMedia(p.L), rc = await FM.storage.readMedia(C.id);
+      if (rc) throw new Error('setup: the control layer has a record, so it is not the missing-file state');
+      if (rm) throw new Error('reading a clip whose shared copy is gone answered ' + q915aShape(rm) + ' — a missing file has always answered nothing, and anything else can be copied onward');
+      await FM.projects.open(p.id);   // must not throw
+      if (FM.projects.currentId() !== p.id) throw new Error('the project with a dangling pointer did not open');
+      if (!FM.scene.layers.some(function (l) { return l.id === p.L; })) throw new Error('the layer itself vanished on open — a blank clip must stay a blank clip he can Replace');
+      if (FM.media.get(p.L) || FM.media.get(C.id)) throw new Error('something was loaded for a clip with no file behind it');
+      await FM.projects.open(made[1]);
+
+      const got = await FM._packFromProject(p.id, true);
+      if (!(got && got.pack)) throw new Error('packing a project with a dangling pointer failed outright — a template or backup of it would be refused');
+      if (got.pack.media[p.L]) throw new Error('the pack carries ' + q915aShape(got.pack.media[p.L]) + ' for a clip with no file');
+
+      if ((await FM.projects.duplicate(p.id)) !== true) throw new Error('a project with a blank clip could not be duplicated');
+      const dup = FM.projects.list().filter(function (x) { return x.name === 'FX915A dangling copy'; })[0];
+      if (!dup) throw new Error('no copy appeared');
+      made.push(dup.id);
+      const dl = ((JSON.parse(localStorage.getItem('fm.proj.' + dup.id) || '{}').layers) || []).filter(function (l) { return l.name === 'FX915A dangling clip'; })[0];
+      if (!dl) throw new Error('the copy has no layer for the blank clip');
+      const dr = (await q915aRaw())[dl.id];
+      if (dr !== undefined) throw new Error('the duplicate copied the dead pointer onward (' + JSON.stringify(dr) + ') — a missing file is not copied, and this release writes no pointers');
+
+      const obj = await FM.storage.buildBackup(null);
+      const miss = ((obj.notIncluded && obj.notIncluded.media) || []).filter(function (m) { return m.project === 'FX915A dangling' && m.missing; }).map(function (m) { return m.file; });
+      ['FX915A dangling clip', 'FX915A no record'].forEach(function (n) {
+        if (miss.indexOf(n) < 0) throw new Error('the backup does not name “' + n + '”, a clip with no footage — the file would claim to be complete (named: ' + JSON.stringify(miss) + ')');
+      });
+    } finally {
+      await q915aCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('915.5A nothing deletes a shared copy: the sweep, a tile, Clear media history, deleting a project, a template or an element', { item: '915', budgetMs: 45000 }, async function () {
+    /* The review's high finding, turned round: a build that does not know `lib:` deletes it the moment no
+       library tile names it. This one must keep every one — used or not — because whether a later build's
+       clips still point at it is not something this release reads. The CONTROL is an ordinary orphan record
+       the same sweep must collect, so a sweep that silently stood down cannot pass for one that kept things. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], tpl = [], elem = [], libs = [];
+    const ts = Date.now().toString(36);
+    const ctl = 'l_q915aorphan' + ts;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const f1 = await q915aPng('orphan', '#e76f51'), f2 = await q915aPng('used', '#264653');
+      const orphan = 'lib:m_q915aorphan' + ts, used = 'lib:m_q915aused' + ts;
+      libs.push(orphan, used);
+      await q915aPut(orphan, { file: f1, kind: 'image' });   // once its tile is cleared below, nothing refers to it at all
+      await q915aPut(used, { file: f2, kind: 'image' });
+      const p = await q915aPointerProject('FX915A kept', used); made.push(p.id);
+      // tiles keyed at the shared copies, the way the writer release leaves its index
+      const tileOf = function (key, f) { return { mid: key.slice(4), key: key, fp: [f.name, f.size, f.lastModified].join('|'), name: f.name, kind: 'image', type: 'image/png', audio: false, w: 32, h: 24, dur: 0, size: f.size, added: Date.now() }; };
+      const list0 = FM.mediaLib.list();
+      localStorage.setItem('fm.medialib', JSON.stringify([tileOf(used, f2)].concat(list0)));
+      made.push(await FM.projects.create({ name: 'FX915A kept away', width: 320, height: 240 }));
+      if (!(await FM.templates.save('FX915A kept tpl', p.id))) throw new Error('setup: saving a template from the project failed');
+      const t = FM.templates.list().filter(function (x) { return x.name === 'FX915A kept tpl'; })[0]; if (t) tpl.push(t.id);
+      if (!(await FM.elements.saveFromProject(p.id, 'FX915A kept elem'))) throw new Error('setup: saving an element from the project failed');
+      const el = FM.elements.list().filter(function (x) { return x.name === 'FX915A kept elem'; })[0]; if (el) elem.push(el.id);
+      await q915aPut(ctl, { file: f1, kind: 'image' });
+
+      // every deleter he can reach, then the boot sweep
+      await FM.storage.removeMedia(orphan);            // the generic one every module shares
+      FM.mediaLib.remove(used.slice(4));               // the tile's own remove ("Projects already using it keep it")
+      /* Settings → Clear media history, with the index narrowed to the one tile so the clear cannot take
+         anyone else's tile — and put back BEFORE the sweep, so the sweep sees the index it normally would. */
+      localStorage.setItem('fm.medialib', JSON.stringify([tileOf(orphan, f1)]));
+      const cleared = FM.mediaLib.clear('visual');
+      localStorage.setItem('fm.medialib', JSON.stringify(list0));
+      if (cleared !== 1) throw new Error('setup: Clear media history cleared ' + cleared + ' tiles, not the one keyed at the shared copy');
+      if (t) { await FM.templates.remove(t.id); tpl.length = 0; }
+      if (el) { await FM.elements.remove(el.id); elem.length = 0; }
+      await FM.projects.remove(p.id);
+      await FM.projects.pruneOrphans();
+
+      const raw = await q915aRaw();
+      if (raw[ctl]) throw new Error('control: the sweep did not collect an ordinary orphan record, so it may not have run at all — nothing below was measured');
+      const lost = [orphan, used].filter(function (k) { return !(raw[k] && raw[k].file); });
+      if (lost.length) throw new Error('a shared copy was DELETED (' + lost.join(', ') + ') — a later build\'s clips point at it, so every one of them would come back blank for good');
+    } finally {
+      try { await q915aDel(ctl); } catch (e) {}
+      try { if (idx0 == null) localStorage.removeItem('fm.medialib'); else localStorage.setItem('fm.medialib', idx0); } catch (e) {}
+      await q915aCleanup(made, orig, wasOpen, tpl, elem, libs);
+    }
+  });
+
+  /* ═══ #921 STAGE 0 (spec §12.4, §24) ═════════════════════════════════════════════════════════════
+     The boot sweep deletes every media key that no project document names. Collaboration stores three
+     kinds of thing that no document names — the pre-session CHECKPOINT (what "Earlier versions…"
+     restores), a guest's confirmed base, and part-received media — so without this the first boot after
+     a session would delete the save point, the offline recovery point and a half-arrived file, silently.
+     And a checkpoint's own layer ids are reachable through it, so their blobs must be kept too, or the
+     save point comes back with every clip blank — which is the worst possible way for a backup to fail. */
+  test('921 S0 pruneOrphans keeps collab: keys and checkpoint layer ids', { item: '921', budgetMs: 45000 }, async function () {
+    const ts = Date.now().toString(36);
+    const ck = 'collab:ckpt:p_921' + ts + ':1', base = 'collab:base:p_921' + ts, part = 'collab:part:s921' + ts + ':fp:0';
+    const kept = 'l_921ckpt' + ts;     // named ONLY by the checkpoint
+    const ctl = 'l_921orphan' + ts;    // named by nothing at all — the control
+    const wasOpen = FM.home.isOpen();
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const f = await q915aPng('ckpt', '#e9c46a');
+      await q915aPut(ck, JSON.stringify({ project: { name: 't921', width: 320, height: 240 }, layers: [{ id: kept, type: 'image', start: 0, duration: 2 }] }));
+      await q915aPut(base, JSON.stringify({ project: {}, layers: [] }));
+      await q915aPut(part, { n: 0, bytes: 10 });
+      await q915aPut(kept, { file: f, kind: 'image' });
+      await q915aPut(ctl, { file: f, kind: 'image' });
+
+      await FM.projects.pruneOrphans();
+
+      const raw = await q915aRaw();
+      if (raw[ctl]) throw new Error('control: the sweep did not collect an ordinary orphan record, so it may not have run at all and nothing below was measured');
+      const lost = [ck, base, part].filter(k => raw[k] === undefined);
+      if (lost.length) throw new Error('the boot sweep DELETED ' + lost.join(', ') + ' — that is the save point, the offline recovery point and a half-received file, none of which any project document names');
+      if (!raw[kept]) throw new Error('the sweep deleted the media of a layer that only the CHECKPOINT names — restoring that save point would bring the project back with its clips permanently blank');
+      // …and the reader itself, on the shapes a half-written checkpoint can take
+      const ids = FM.storage_ckptLayerIds;
+      if (typeof ids !== 'function') throw new Error('FM.storage_ckptLayerIds is not exposed');
+      if (ids(JSON.stringify({ layers: [{ id: 'a' }, { id: 'b' }] })).join(',') !== 'a,b') throw new Error('the checkpoint reader missed the ids of a well-formed checkpoint');
+      if (ids('{"layers":[{"id":"trunc"},{"id":"cut').indexOf('trunc') < 0) throw new Error('a TRUNCATED checkpoint named a layer the reader could not see — "I cannot parse this" must keep everything it appears to name, not nothing');
+      if (ids(null).length || ids(42).length) throw new Error('the reader invented ids for a value that is not a checkpoint');
+    } finally {
+      for (const k of [ck, base, part, kept, ctl]) { try { await q915aDel(k); } catch (e) {} }
+      try { if (wasOpen) FM.home.open(); } catch (e) {}
+    }
+  });
+
+  /* ═══ #921 STAGE 0 (spec §24) ═════════════════════════════════════════════════════════════════════
+     Deleting a project deletes one media blob per layer id in it — which is right while every copy
+     re-ids, and wrong the moment a collab guest holds a LINKED copy, which carries the host's layer ids
+     on purpose so the ops line up. Deleting either project would then blank the other one's clips for
+     good, with no error and nothing on screen. */
+  test('921 S0 projects.remove spares records another doc references', { item: '921', budgetMs: 45000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const ts = Date.now().toString(36);
+    const shared = 'l_921shared' + ts, mine = 'l_921mine' + ts;
+    const linkedKey = 'fm.proj.p_921linked' + ts;
+    const otherCkpt = 'collab:ckpt:p_921other' + ts + ':1';
+    const made = [];
+    let pid = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const f = await q915aPng('rm', '#264653');
+      pid = await FM.projects.create({ name: 'FX921 host', width: 320, height: 240 });
+      made.push(pid);
+      /* Switch away BEFORE writing the documents by hand: opening another project flushSyncs the one
+         that was open, which would write its (empty) live scene straight back over the fixture — and
+         removing the CURRENT project is a different path anyway (it opens a landing project). */
+      made.push(await FM.projects.create({ name: 'FX921 away', width: 320, height: 240 }));
+      // the project being deleted names both records…
+      localStorage.setItem('fm.proj.' + pid, JSON.stringify({ project: { name: 'FX921 host', width: 320, height: 240, duration: 5 }, layers: [{ id: shared, type: 'image', start: 0, duration: 2 }, { id: mine, type: 'image', start: 0, duration: 2 }], selectedId: null, selectedIds: [] }));
+      // …and ANOTHER document — a guest's linked copy, on the host's ids — names one of them
+      localStorage.setItem(linkedKey, JSON.stringify({ project: { name: 'FX921 linked', width: 320, height: 240, duration: 5 }, layers: [{ id: shared, type: 'image', start: 0, duration: 2 }], selectedId: null, selectedIds: [] }));
+      localStorage.setItem('fm.collab.host.' + pid, JSON.stringify({ v: 1, sid: 's' + ts }));
+      await q915aPut(shared, { file: f, kind: 'image' });
+      await q915aPut(mine, { file: f, kind: 'image' });
+      await q915aPut('collab:ckpt:' + pid + ':1', JSON.stringify({ project: {}, layers: [{ id: mine }] }));
+      await q915aPut(otherCkpt, JSON.stringify({ project: {}, layers: [{ id: 'l_921elsewhere' + ts }] }));
+
+      await FM.projects.remove(pid);
+
+      const raw = await q915aRaw();
+      if (raw[mine]) throw new Error('control: deleting the project did NOT delete a record only it referenced, so the sparing below proves nothing');
+      if (!raw[shared]) throw new Error('deleting one project deleted a media record that ANOTHER document still points at — a guest\'s linked copy shares the host\'s layer ids, so his friend\'s project (or his own) comes back with blank clips, permanently');
+      if (raw['collab:ckpt:' + pid + ':1']) throw new Error('the deleted project\'s own checkpoints were left behind — they are the largest thing collab writes and nothing else would ever collect them');
+      if (!raw[otherCkpt]) throw new Error('deleting one project deleted ANOTHER project\'s checkpoint');
+      if (localStorage.getItem('fm.collab.host.' + pid) !== null) throw new Error('the room record for the deleted project survived it — its link would still be handed out');
+    } finally {
+      try { localStorage.removeItem(linkedKey); } catch (e) {}
+      try { localStorage.removeItem('fm.collab.host.' + pid); } catch (e) {}
+      for (const k of [shared, mine, otherCkpt, 'collab:ckpt:' + pid + ':1']) { try { await q915aDel(k); } catch (e) {} }
+      await q915aCleanup(made, orig, wasOpen, [], [], []);
+    }
+  });
+
+  test('915.5A this release never writes a shared copy or a pointer: three reuses of a tile are still three whole copies', { item: '915', budgetMs: 45000 }, async function () {
+    /* The reader must not start writing the new format by the back door — a pointer written by THIS build is
+       exactly what an older build cannot read. So: the whole everyday route (import, reuse a tile three
+       times, duplicate), and not one `lib:` key or pointer may appear; reuse stays byte-for-byte what it
+       was (a whole copy per tap — the writer release is what changes that). And the store itself refuses
+       both, so no future caller can do it by accident either. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [];
+    const ts = Date.now().toString(36);
+    const probeLib = 'lib:q915aprobe' + ts, probeRef = 'l_q915aprobe' + ts, probeCtl = 'l_q915actl' + ts;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const keys0 = new Set(Object.keys(await q915aRaw()));
+      const file = await q915aPng('reuse', '#9b5de5');
+      made.push(await FM.projects.create({ name: 'FX915A import', width: 320, height: 240 }));
+      FM.addMediaLayer(await FM.loadImageFile(file));
+      await sleep(60); await FM.storage.save();
+      const fp = [file.name, file.size, file.lastModified].join('|');
+      const tile = FM.mediaLib.list().filter(function (e) { return e.fp === fp; })[0];
+      if (!tile) throw new Error('setup: importing the photo made no library tile, so there is nothing to reuse');
+      made.push(await FM.projects.create({ name: 'FX915A reuse', width: 320, height: 240 }));
+      const bId = FM.projects.currentId();
+      for (let i = 0; i < 3; i++) {
+        if (!(await FM.mediaLib.use(tile.mid))) throw new Error('setup: reuse ' + (i + 1) + ' of the tile was refused');
+        await sleep(60); await FM.storage.save();   // use() does not await its own save
+      }
+      if ((await FM.projects.duplicate(bId)) !== true) throw new Error('setup: duplicating the project failed');
+      const dup = FM.projects.list().filter(function (x) { return x.name === 'FX915A reuse copy'; })[0]; if (dup) made.push(dup.id);
+
+      const raw = await q915aRaw();
+      const fresh = Object.keys(raw).filter(function (k) { return !keys0.has(k); });
+      const libs = fresh.filter(function (k) { return /^lib:/.test(k); });
+      if (libs.length) throw new Error('this release wrote shared copies (' + libs.join(', ') + ') — only the writer release may, once this reader is on his phone');
+      const refs = fresh.filter(function (k) { const v = raw[k]; return v && typeof v === 'object' && !v.file && typeof v.ref === 'string'; });
+      if (refs.length) throw new Error(refs.length + ' pointer record(s) written (' + refs.join(', ') + ') — a build before this one reads each as a blank clip');
+      const copies = fresh.filter(function (k) { const v = raw[k]; return v && v.file && v.file.name === file.name && v.file.size === file.size; });
+      if (copies.length !== 7) throw new Error('import + 3 reuses + a duplicate of the 3 left ' + copies.length + ' whole copies, not 7 — reuse is meant to be exactly what it was until the writer release');
+
+      // ── the store itself refuses both, and still takes an ordinary record (the control)
+      const okLib = await FM.storage.writeMedia(probeLib, { file: file, kind: 'image' });
+      const okRef = await FM.storage.writeMedia(probeRef, { ref: probeLib, kind: 'image', rev: 0 });
+      const okCtl = await FM.storage.writeMedia(probeCtl, { file: file, kind: 'image' });
+      const raw2 = await q915aRaw();
+      if (!okCtl || !raw2[probeCtl]) throw new Error('control: an ordinary record could not be written, so the refusals below prove nothing');
+      if (okLib || raw2[probeLib]) throw new Error('writeMedia wrote a “lib:” key (' + okLib + ') — this release must not make a shared copy by any route');
+      if (okRef || raw2[probeRef]) throw new Error('writeMedia wrote a pointer record (' + okRef + ') — a build before this one reads it as a blank clip');
+    } finally {
+      for (const k of [probeLib, probeRef, probeCtl]) { try { await q915aDel(k); } catch (e) {} }
+      try { if (idx0 == null) localStorage.removeItem('fm.medialib'); else localStorage.setItem('fm.medialib', idx0); } catch (e) {}
+      await q915aCleanup(made, orig, wasOpen);
+    }
+  });
+
   test('the Add sheet\'s tab icons are one set, and the Template icon is balanced in its box', { item: 'tab-icons' }, function () {
     /* ⚠️ THE TEMPLATE HALF OF THIS TEST DESCRIBED A DRAWING HE HAS SINCE REPLACED — twice over.
        It was written for queue 375's frame + crossbar + centred block, and asserted that exact anatomy:
@@ -5532,6 +5965,14 @@
       try { closeMenu(); } catch (e) {}
       if (fx) fx.classList.remove('on');
       FM.scene.layers = saved.layers; FM.selectLayer(saved.sel || null);
+      /* ⚠️ AND PUT THE FINGER DOWN THAT tapCanvas DELIBERATELY NEVER LIFTS. The tap is a pointerdown
+         with no pointerup on purpose — what it measures happens on the press — but that leaves finger 151
+         in canvas-edit's tracker for the REST OF THE RUN, plus a live `drag`. From then on the FIRST
+         finger of any later two-finger test is read as that stale pinch's SECOND finger and its own
+         second finger is refused as a third, so the pinch silently never starts and the test reports the
+         feature as broken. Found when the queue-921 S0 pinch-cancel leg became the first test to press
+         with pointer ids of its own; the same leg's own lift is in a finally for the same reason. */
+      if (FM._resetVpPointers) FM._resetVpPointers();
       if (FM.refreshAll) FM.refreshAll();
       if (FM.timeline) FM.timeline.rebuild();
       /* ⚠️ PUT THE PREVIEW RESOLUTION BACK, and this is not defensive tidying — it is a cross-test leak
@@ -8825,6 +9266,98 @@
     }
   });
 
+  /* ═══ #921 STAGE 0 (spec §11.3) ═══════════════════════════════════════════════════════════════════
+     The spec asked for a canonical group order — every group immediately followed by its members — and
+     attached a Stage-0 gate to it: run a solo op fuzz, and if the canonical walk would ever change an
+     app-produced state, STOP and redefine the invariant.
+     It fires. This test is that gate, kept: it runs the fuzz, asserts FM.normalizeGroupOrder leaves every
+     state alone, and — the control that makes those assertions mean something — asserts the canonical
+     walk would NOT have, i.e. that the fuzz really does reach split groups. The array order is Z-ORDER
+     in this app; "repairing" it would silently re-stack his picture from an op nobody asked for.
+     What is left to repair is the one thing no app path can produce and every id-keyed walk needs: a
+     layer id appearing twice. */
+  test('921 S0 normalizeGroupOrder: null on every app-produced order (op fuzz), repairs a duplicated id', { item: '921', budgetMs: 60000 }, async function () {
+    if (typeof FM.normalizeGroupOrder !== 'function') throw new Error('FM.normalizeGroupOrder is missing');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, ctx0 = FM.groupContext, clip0 = FM.clipboard;
+    // the canonical pre-order the spec proposed, written here so the test can say what it WOULD have done
+    const canonical = function (layers) {
+      const byId = {}; layers.forEach(l => { byId[l.id] = l; });
+      const isGroup = id => byId[id] && byId[id].type === 'group';
+      const seen = new Set(), out = [];
+      const emit = l => {
+        if (!l || seen.has(l.id)) return;
+        seen.add(l.id); out.push(l.id);
+        if (l.type === 'group') layers.forEach(c => { if (c.parent === l.id) emit(c); });
+      };
+      layers.forEach(l => { if (!(l.parent && isGroup(l.parent))) emit(l); });
+      layers.forEach(emit);
+      return out;
+    };
+    const splits = [];
+    const step = function (what) {
+      const cur = FM.scene.layers.map(l => l.id);
+      const r = FM.normalizeGroupOrder(FM.scene.layers);
+      if (r !== null) throw new Error('after "' + what + '" normalizeGroupOrder wanted to REORDER the layers (' + cur.join(',') + ' → ' + r.join(',') + ') — the array order is the stacking order, so that is a silent re-stack of his picture');
+      if (canonical(FM.scene.layers).join(',') !== cur.join(',')) splits.push(what);
+    };
+    try {
+      FM.scene.layers.length = 0; FM.scene.selectedId = null; FM.scene.selectedIds = []; FM.groupContext = null;
+      const mk = name => { const l = FM.makeLayer('shape', { name: name, shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#3a7bd5' }); l.start = 0; l.duration = 3; FM.insertLayer(l); return l; };
+      const A = mk('A'), B = mk('B'), C = mk('C'), D = mk('D');
+      step('four plain layers');
+
+      FM.scene.selectedIds = [B.id, C.id]; FM.scene.selectedId = B.id;
+      FM.groupSelection();
+      step('groupSelection');
+      const G = FM.scene.layers.filter(l => l.type === 'group')[0];
+      if (!G) throw new Error('grouping made no group — the fuzz below would be measuring nothing');
+
+      FM.enterGroup(G.id);
+      const E = mk('E');                       // insertLayer INSIDE Edit Group — splices at index 0
+      step('insertLayer inside Edit Group');
+      FM.exitGroup(true);
+
+      FM.moveLayers([C.id], A.id);             // one member dragged out from under its group
+      step('moveLayers a single member');
+
+      FM.moveLayers([G.id], null);             // the group row alone (FM.toggleAddSide does exactly this)
+      step('moveLayers the group row alone');
+
+      await FM.duplicateLayer(A.id);
+      step('duplicateLayer');
+
+      FM.clipboard = [{ snapshot: JSON.parse(JSON.stringify(D)) }];
+      await FM.pasteClipboard();
+      step('pasteClipboard');
+
+      await FM.splitLayer(A.id);
+      step('splitLayer');
+
+      FM.deleteLayer(E.id);
+      step('deleteLayer');
+
+      FM.ungroup(G.id);
+      step('ungroup');
+
+      /* THE CONTROL. If the fuzz never produced a split group, every assertion above would pass on a
+         build whose normaliser reorders everything, so the fuzz has to be shown to reach those states. */
+      if (!splits.length) throw new Error('none of the fuzz steps produced an order the canonical walk would rewrite — the fixture is not reaching the states this gate exists to judge, so its verdict means nothing');
+
+      /* ── the one repair that is left: a duplicated id ── */
+      const dup = [{ id: 'x1', type: 'shape' }, { id: 'x2', type: 'shape' }, { id: 'x1', type: 'shape' }];
+      const fixed = FM.normalizeGroupOrder(dup);
+      if (!fixed) throw new Error('a layer list holding the same id twice was reported as fine — every id-keyed walk in the app (parent, selection, media) is then ambiguous, and nothing the app does can produce it');
+      if (fixed.join(',') !== 'x1,x2') throw new Error('the repair for a duplicated id was ' + fixed.join(',') + ', expected x1,x2 (first occurrence kept, order otherwise untouched)');
+      if (FM.normalizeGroupOrder([{ id: 'x1' }, { id: 'x2' }]) !== null) throw new Error('a clean two-layer list was reported as needing a repair');
+    } finally {
+      FM.clipboard = clip0;
+      FM.groupContext = ctx0;
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('ungroup: the picture does not change — opacity and a hidden group come with it', { item: 'ungroup-look' }, function () {
     /* BUG HUNT (21 Aug), third verified lead from BUG-HUNT §34, and the same family as the earlier
        ungroup fix: that one caught the group's POSITION being thrown away, this catches everything else.
@@ -9539,6 +10072,181 @@
       if (FM.selectLayer) FM.selectLayer(null);
       if (FM.refreshAll) FM.refreshAll();
       if (FM.timeline) FM.timeline.rebuild();
+    }
+  });
+
+  /* ═══ #921 STAGE 0 (spec §8.9) ═══════════════════════════════════════════════════════════════════
+     Duplicate, paste, split, replace-media, template/element insert and an AI turn all rebuild the scene
+     in several steps with awaits in between, so the document is genuinely half-built for a moment. Only
+     this page ever looks today; a collab session looks constantly, and a diff taken in that window sends
+     layers nobody else can resolve. So they say when they are in flight.
+     The counter is the whole feature, so the things that can go wrong with it are: it is not closed when
+     the job throws (busy forever → the sync silently stops), and a site is forgotten (the window is back,
+     invisibly). Both are checked, the second by reading the source of every site the spec lists. */
+  test('921 S0 job brackets: depth returns to 0 even when the job throws; watchdog reports', { item: '921', budgetMs: 30000 }, async function () {
+    if (typeof FM.jobDepth !== 'function' || typeof FM.jobWrapped !== 'function') throw new Error('FM.jobDepth / FM.jobWrapped is missing');
+    if (FM.jobDepth() !== 0) throw new Error('a previous test left the job depth at ' + FM.jobDepth() + ' — everything below would read the leak, not this code');
+
+    /* ── the wrapper itself: every exit closes the job ── */
+    let seen = -1;
+    const sync = FM.jobWrapped('t921 sync', function () { seen = FM.jobDepth(); return 'v'; });
+    if (sync() !== 'v') throw new Error('the wrapper changed the return value');
+    if (seen !== 1) throw new Error('inside a wrapped call the depth read ' + seen + ', expected 1 — nothing would ever stand down');
+    if (FM.jobDepth() !== 0) throw new Error('depth stayed at ' + FM.jobDepth() + ' after a plain return');
+
+    const boom = FM.jobWrapped('t921 throw', function () { throw new Error('t921 deliberate'); });
+    let threw = false;
+    try { boom(); } catch (e) { threw = /t921 deliberate/.test(e.message); }
+    if (!threw) throw new Error('the wrapper swallowed the throw');
+    if (FM.jobDepth() !== 0) throw new Error('a job that THREW left the depth at ' + FM.jobDepth() + ' — busy forever, and collab never sends another change');
+
+    let during = -1;
+    const slow = FM.jobWrapped('t921 async', async function () { await sleep(30); during = FM.jobDepth(); return 1; });
+    const p = slow();
+    if (FM.jobDepth() !== 1) throw new Error('an async job read depth ' + FM.jobDepth() + ' while it was still running — the promise has to hold the bracket open, or the window is unguarded exactly where it matters');
+    await p;
+    if (during !== 1) throw new Error('mid-await the depth was ' + during);
+    if (FM.jobDepth() !== 0) throw new Error('an async job left the depth at ' + FM.jobDepth() + ' after resolving');
+
+    let rejected = false;
+    const bad = FM.jobWrapped('t921 reject', async function () { await sleep(10); throw new Error('t921 reject'); });
+    try { await bad(); } catch (e) { rejected = /t921 reject/.test(e.message); }
+    if (!rejected) throw new Error('a rejected job did not reject its caller');
+    if (FM.jobDepth() !== 0) throw new Error('a REJECTED async job left the depth at ' + FM.jobDepth());
+
+    /* ── a real site: a duplicate is in flight while it awaits its media ── */
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 't921 dup', shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#fff' });
+      L.start = 0; L.duration = 2; FM.scene.layers.push(L);
+      const dp = FM.duplicateLayer(L.id);
+      if (FM.jobDepth() < 1) throw new Error('FM.duplicateLayer is not bracketed — its media reload is awaited, so the scene is half-copied for that whole window');
+      await dp;
+      if (FM.jobDepth() !== 0) throw new Error('duplicateLayer left the depth at ' + FM.jobDepth());
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
+      if (FM.refreshAll) FM.refreshAll();
+    }
+
+    /* ── every site the spec lists is really bracketed (read from the source, not from a list here) ── */
+    const want = [
+      ['../js/app.js', /FM\.duplicateLayer\s*=\s*FM\.jobWrapped\(/, 'duplicateLayer'],
+      ['../js/app.js', /FM\.duplicateSelection\s*=\s*FM\.jobWrapped\(/, 'duplicateSelection'],
+      ['../js/app.js', /FM\.pasteClipboard\s*=\s*FM\.jobWrapped\(/, 'pasteClipboard'],
+      ['../js/app.js', /FM\.splitLayer\s*=\s*FM\.jobWrapped\(/, 'splitLayer'],
+      ['../js/app.js', /FM\.replaceMediaWith\s*=\s*FM\.jobWrapped\(/, 'replaceMediaWith'],
+      ['../js/storage.js', /async insertInto\(tid\)\s*\{[\s\S]{0,600}?FM\.jobBegin\(/, 'templates.insertInto'],
+      ['../js/storage.js', /async insert\(eid\)\s*\{\s*\n[^\n]{0,60}FM\.jobBegin\(/, 'elements.insert'],
+      ['../js/ai-chat.js', /function applyTurn\(ops\)[\s\S]{0,400}?FM\.jobBegin\(/, 'ai-chat applyTurn'],
+    ];
+    const src = {};
+    for (const [file] of want) {
+      if (src[file]) continue;
+      const r = await fetch(file + '?t921=' + Date.now());
+      if (!r.ok) throw new Error('could not read ' + file + ' to check its job brackets (' + r.status + ')');
+      src[file] = await r.text();
+    }
+    if (!/FM\.jobWrapped\s*=\s*function/.test(src['../js/app.js'])) throw new Error('control: the fetched app.js does not define FM.jobWrapped, so these checks are scanning the wrong file');
+    const missing = want.filter(([file, re]) => !re.test(src[file])).map(([, , name]) => name);
+    if (missing.length) throw new Error(missing.length + ' of the ' + want.length + ' async rebuild sites are no longer bracketed as jobs: ' + missing.join(', ') + ' — each one is a window where a diff sends a half-built document');
+    /* …and every one of them hands its TOKEN back (review fix). A bare FM.jobEnd() closes the NEWEST
+       open bracket, which is right only while jobs strictly nest — and two of these genuinely interleave
+       (a split still awaiting its media write when a tap starts a paste), so the bare form closed the
+       wrong one and the watchdog's report named a job that had already finished. */
+    const bare = Object.keys(src).filter(f => /FM\.jobEnd\(\s*\)/.test(src[f]));
+    if (bare.length) throw new Error('a job is closed with a bare FM.jobEnd() in ' + bare.join(', ') + ' — without its token it closes whichever bracket is newest, which is the wrong one the moment two jobs overlap');
+
+    /* ── the watchdog: a job that never ends is cleared and SAID, rather than freezing the sync ──
+       …and it says so in its OWN slot. 'fm.lastError' is the single report Settings renders with a Copy
+       button and tells him to send; a note about an internal bracket landing there either invents a
+       failure on a healthy install or overwrites the real report he was half-way through sending. */
+    const was = FM.JOB_WATCHDOG_MS, lastErr0 = localStorage.getItem('fm.lastError'), warn0 = localStorage.getItem('fm.lastJobWarning');
+    try {
+      const SENTINEL = 't921 a real report he was about to send';
+      localStorage.setItem('fm.lastError', SENTINEL);
+      localStorage.removeItem('fm.lastJobWarning');
+      FM.JOB_WATCHDOG_MS = 60;
+      FM.jobBegin('t921 never ends');
+      await sleep(400);
+      if (FM.jobDepth() !== 0) throw new Error('a job left open for ' + (400) + 'ms was not force-cleared (depth ' + FM.jobDepth() + ') — one unbalanced call would stop the sync for the rest of the session');
+      const rep = localStorage.getItem('fm.lastJobWarning') || '';
+      if (!/did not finish/.test(rep) || !/t921 never ends/.test(rep)) throw new Error('the watchdog cleared the job silently — fm.lastJobWarning was ' + JSON.stringify(rep.slice(0, 160)) + ', and a silent force-clear is how the half-state it guards comes back unnoticed');
+      if (localStorage.getItem('fm.lastError') !== SENTINEL) throw new Error('the watchdog wrote over fm.lastError — that slot holds the one report Settings tells him to Copy and send, and it now says ' + JSON.stringify((localStorage.getItem('fm.lastError') || '').slice(0, 120)));
+    } finally {
+      FM.JOB_WATCHDOG_MS = was;
+      while (FM.jobDepth() > 0) FM.jobEnd();
+      if (lastErr0 === null) localStorage.removeItem('fm.lastError'); else localStorage.setItem('fm.lastError', lastErr0);
+      if (warn0 === null) localStorage.removeItem('fm.lastJobWarning'); else localStorage.setItem('fm.lastJobWarning', warn0);
+    }
+  });
+
+  /* ═══ THE WATCHDOG MUST NOT CUT A BATCH THAT IS WORKING (queue 921 S0, review fix) ════════════════
+     One timer, armed at the OUTERMOST jobBegin and cleared only at depth 0, budgeted the whole nested
+     batch rather than any job's progress. duplicateSelection is that shape — one bracket held across a
+     per-layer loop that awaits a media reload each time — and FM.loadVideoFile alone waits up to
+     20000ms for ONE file, the same number as the watchdog. So Select-All → Duplicate on a phone tripped
+     a watchdog meant for a HANG, on a duplicate that finished fine: a false report, and a force-clear
+     that announced "idle" while the scene was still half-built.
+     The three things this pins: a batch making visible progress is never cut; a job the watchdog DID
+     clear cannot later close a different job's bracket; and jobEnd closes its own entry, not the newest,
+     so the report names the job that actually stuck. */
+  test('921 S0 the job watchdog budgets silence, not the length of the batch', { item: '921' }, async function () {
+    if (typeof FM.jobBegin !== 'function' || typeof FM.jobEnd !== 'function') throw new Error('FM.jobBegin / FM.jobEnd is missing');
+    if (FM.jobDepth() !== 0) throw new Error('a previous test left the job depth at ' + FM.jobDepth() + ' — everything below would read the leak, not this code');
+    const was = FM.JOB_WATCHDOG_MS, lastErr0 = localStorage.getItem('fm.lastError'), warn0 = localStorage.getItem('fm.lastJobWarning');
+    try {
+      FM.JOB_WATCHDOG_MS = 300;   // three times the gap between beats below — a slow frame must not read as silence
+      localStorage.removeItem('fm.lastJobWarning');
+
+      /* 1. the batch: one outer job (duplicateSelection) holding the bracket while six inner ones
+            (duplicateLayer) open and close under it, over four times the budget in total. */
+      const outer = FM.jobBegin('t921 batch outer');
+      for (let i = 0; i < 6; i++) {
+        const inner = FM.jobBegin('t921 batch inner ' + i);
+        await sleep(100);
+        FM.jobEnd(inner);
+        if (FM.jobDepth() !== 1) throw new Error('after inner job ' + i + ' the depth was ' + FM.jobDepth() + ', not 1 — the outer bracket was force-cleared ' + Math.round((i + 1) * 100) + 'ms into a batch that is plainly still working, which is exactly what a phone duplicate of six video layers does');
+      }
+      if (localStorage.getItem('fm.lastJobWarning')) throw new Error('a batch that made progress the whole way through was reported as a stuck job: ' + JSON.stringify((localStorage.getItem('fm.lastJobWarning') || '').slice(0, 160)));
+      FM.jobEnd(outer);
+      if (FM.jobDepth() !== 0) throw new Error('the outer job left the depth at ' + FM.jobDepth());
+
+      /* 2. a job the watchdog cleared must not close a LATER job's bracket. Nothing disables the UI
+            during a duplicate, so a tap can start a second job while a straggler from the cleared one
+            is still in flight — and a bare jobEnd() from that straggler took the new job's depth to 0,
+            which is "the scene is safe to diff" said in the middle of a paste. */
+      FM.JOB_WATCHDOG_MS = 100;
+      const stale = FM.jobBegin('t921 stale');
+      await sleep(300);
+      if (FM.jobDepth() !== 0) throw new Error('the stuck job was not force-cleared (depth ' + FM.jobDepth() + ')');
+      const fresh = FM.jobBegin('t921 fresh');
+      FM.JOB_WATCHDOG_MS = 20000;   // …so the fresh one is not cleared out from under the assertion
+      FM.jobEnd(stale);             // the straggler finally finishes
+      if (FM.jobDepth() !== 1) throw new Error('a job the watchdog had already force-cleared closed the bracket of the job that came after it (depth ' + FM.jobDepth() + ') — from here collab reads "idle" mid-paste');
+      FM.jobEnd(fresh);
+      if (FM.jobDepth() !== 0) throw new Error('the fresh job left the depth at ' + FM.jobDepth());
+
+      /* 3. jobEnd closes ITS OWN entry, not the newest. Two jobs genuinely interleave (a split still
+            awaiting its media write when a tap starts a paste); popping the newest made the watchdog's
+            report — its only output — name the job that had already finished. */
+      FM.JOB_WATCHDOG_MS = 200;
+      localStorage.removeItem('fm.lastJobWarning');
+      const first = FM.jobBegin('t921 finished first');
+      await sleep(20);
+      const second = FM.jobBegin('t921 the one that hung');
+      FM.jobEnd(first);
+      await sleep(500);
+      const rep = localStorage.getItem('fm.lastJobWarning') || '';
+      if (!/the one that hung/.test(rep)) throw new Error('the watchdog report named the wrong job: ' + JSON.stringify(rep.slice(0, 200)) + ' — jobEnd closed the newest entry instead of its own, so the only record of what stuck points at the job that finished');
+      if (/finished first/.test(rep)) throw new Error('the watchdog blamed a job that had already ended: ' + JSON.stringify(rep.slice(0, 200)));
+      FM.jobEnd(second);
+    } finally {
+      FM.JOB_WATCHDOG_MS = was;
+      while (FM.jobDepth() > 0) FM.jobEnd();
+      if (lastErr0 === null) localStorage.removeItem('fm.lastError'); else localStorage.setItem('fm.lastError', lastErr0);
+      if (warn0 === null) localStorage.removeItem('fm.lastJobWarning'); else localStorage.setItem('fm.lastJobWarning', warn0);
     }
   });
 
@@ -10454,6 +11162,226 @@
       try { FM.timeline._abortGestures(); } catch (e) {}
       FM.scene.layers = layers0; FM.scene.project.duration = dur0;
       if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
+  /* ═══ #921 STAGE 0 (spec §8.7) ════════════════════════════════════════════════════════════════════
+     When somebody else deletes the layer you are holding, everything with a grip on it has to let go:
+     the on-canvas tools, a canvas drag, and any timeline gesture. Left running, the finger that is still
+     down finishes its gesture against a layer that no longer exists — the pointerup writes a start time
+     onto a dead object and the next diff sends it.
+     Every case below has its CONTROL in the same call: a tool or a drag on a DIFFERENT layer, which must
+     be left exactly where it is. A cancel that stops everything is as wrong as one that stops nothing. */
+  test('921 S0 cancelGesturesOn stops tools and restores an in-flight clip drag', { item: '921', budgetMs: 45000 }, async function () {
+    if (typeof FM.cancelGesturesOn !== 'function') throw new Error('FM.cancelGesturesOn is missing');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    try {
+      FM.scene.layers.length = 0;
+      const A = FM.makeLayer('text', { name: 't921 A', text: 'alpha', x: 80, y: 60 }); A.start = 0; A.duration = 4;
+      const B = FM.makeLayer('text', { name: 't921 B', text: 'beta', x: 160, y: 120 }); B.start = 0; B.duration = 4;
+      FM.scene.layers.push(A, B);
+      FM.selectLayer(A.id);
+      if (FM.timeline) FM.timeline.rebuild();
+      await sleep(80);
+
+      /* ── 1. an on-canvas tool: text editing ── */
+      if (FM.textEdit && FM.textEdit.start) {
+        FM.textEdit.start(A.id);
+        await sleep(60);
+        if (!FM.textEdit.isActive()) throw new Error('the text editor did not open on A, so there is nothing to cancel');
+        FM.cancelGesturesOn(B.id);
+        if (!FM.textEdit.isActive()) throw new Error('cancelling gestures on ANOTHER layer closed the editor that was open on A — a remote delete elsewhere must not interrupt what he is typing');
+        FM.cancelGesturesOn(A.id);
+        await sleep(40);
+        if (FM.textEdit.isActive()) throw new Error('the text editor stayed open on a layer that was taken away — the next keystroke writes into a layer that is gone');
+      }
+
+      /* ── 2. a canvas drag: it is dropped, and stops writing to the layer ──
+         WHICH DRAG IS LIVE is read through cancelDrag's own predicate — it is called only when there
+         IS one, and returning false leaves it running. That is a fact about the gesture rather than a
+         guess from whether a coordinate moved: a drag that snapped to an align target writes the same
+         number twice, and an earlier test's leaked drag would make this one never start at all. */
+      const cv = document.getElementById('preview');
+      if (cv && FM.canvasEdit && FM.canvasEdit.cancelDrag) {
+        // clear anything an earlier test left holding the canvas, or this press is refused outright
+        FM.canvasEdit.cancelDrag(function () { return true; });
+        ['pointEdit', 'cropTool', 'fillDrag', 'maskTool', 'motionPath'].forEach(function (k) { const t = FM[k]; if (t && t.isActive && t.isActive() && t.stop) { try { t.stop(); } catch (e) {} } });
+        try { if (FM.touchupTool && FM.touchupTool.isOpen && FM.touchupTool.isOpen()) FM.touchupTool.close(); } catch (e) {}
+        try { if (FM.drawTool && FM.drawTool.active && FM.drawTools && FM.drawTools.stop) FM.drawTools.stop(); } catch (e) {}
+        try { if (FM.tracker && FM.tracker.isPicking && FM.tracker.isPicking()) FM.tracker.cancel(); } catch (e) {}
+        if (FM.viewport) FM.viewport.reset();
+        FM.selectLayer(A.id);
+        FM.canvasEdit.update();
+        await sleep(60);
+        const held = function () { let id; FM.canvasEdit.cancelDrag(function (v) { id = v; return false; }); return id; };
+        const r = cv.getBoundingClientRect();
+        const at = { x: r.left + r.width * 0.5, y: r.top + r.height * 0.5 };
+        const ev = (type, x, y, tgt) => (tgt || cv).dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 77, isPrimary: true, pointerType: 'mouse', button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: y }));
+        ev('pointerdown', at.x, at.y);
+        ev('pointermove', at.x + 30, at.y, window);
+        await sleep(30);
+        if (held() !== A.id) throw new Error('control: pressing the canvas with A selected started no drag on it (holding ' + held() + ') — the stop below would prove nothing');
+        FM.cancelGesturesOn(B.id);
+        if (held() !== A.id) throw new Error('cancelling gestures on ANOTHER layer dropped the canvas drag that was holding A — his own drag would die whenever anyone else edited anything');
+        const x0 = A.transform.x;
+        FM.cancelGesturesOn(A.id);
+        if (held() !== undefined) throw new Error('the canvas drag survived its layer being taken away (still holding ' + held() + ')');
+        ev('pointermove', at.x + 120, at.y, window);
+        await sleep(20);
+        if (A.transform.x !== x0) throw new Error('the canvas drag kept writing to A after it was dropped (' + x0 + ' → ' + A.transform.x + ')');
+        ev('pointerup', at.x + 120, at.y, window);
+        await sleep(30);
+      }
+
+      /* ── 3. a timeline clip drag: put back where it started, and dropped ──
+         ⚠️ CONDITIONAL ON THE DRAG REALLY STARTING, and that is not always possible here: clip rects
+         come back 0 in the runner's iframe in some layouts, which is why the timeline carries a scripted
+         drag seam at all. When it does start, everything below is asserted. */
+      if (FM.timeline && FM.timeline.abortGestures(function () { return true; }) === false && FM.timeline._dragState) {
+        FM.selectLayer(A.id);
+        FM.timeline.rebuild();
+        await sleep(80);
+        const rows = [].slice.call(document.querySelectorAll('.clip'));
+        const clipOf = (L) => rows.filter(function (el) { return el.dataset && el.dataset.id === L.id; })[0];
+        const cA = clipOf(A);
+        if (cA) {
+          const r = cA.getBoundingClientRect();
+          const y = r.top + r.height / 2, x = r.left + r.width / 2;
+          const ev = (type, cx, tgt) => (tgt || cA).dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 78, isPrimary: true, pointerType: 'mouse', button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: cx, clientY: y }));
+          const start0 = A.start;
+          ev('pointerdown', x);
+          ev('pointermove', x + 60, window);
+          await sleep(40);
+          const live = FM.timeline._dragState().any;
+          if (live) {
+            FM.cancelGesturesOn(B.id);
+            if (!FM.timeline._dragState().any) throw new Error('cancelling on another layer dropped a drag that was holding A — his own drag would die whenever anyone else edited anything');
+            FM.cancelGesturesOn(A.id);
+            if (FM.timeline._dragState().any) throw new Error('the clip drag survived its layer being taken away (' + JSON.stringify(FM.timeline._dragState().live) + ')');
+            if (Math.abs((A.start || 0) - start0) > 1e-6) throw new Error('the clip was left at ' + A.start + ' instead of back at ' + start0 + ' — an abandoned drag must restore, not keep wherever the finger got to');
+          }
+          ev('pointerup', x + 60, window);
+          try { FM.timeline._abortGestures(); } catch (e) {}
+        }
+      }
+
+      /* ── 3b. THE PENDING TOUCH GESTURE ON A CLIP (review fix) ──
+         On the phone every clip drag starts life as `clipTap`, created on pointerdown and promoted to a
+         clipMove 350ms later by a hold timer whose only guard is "same layer object" — which passes.
+         Left out of the timeline's held-ids list, a cancel inside that window reported that nothing was
+         holding the layer, the timer then grabbed a layer that had just been deleted or leased away, and
+         the release ran FM.selectLayer(<dead id>) — undoing the 629 rule applied three lines earlier. */
+      if (FM.timeline && FM.timeline._dragState) {
+        try { FM.timeline._abortGestures(); } catch (e) {}
+        FM.selectLayer(A.id);
+        FM.timeline.rebuild();
+        await sleep(80);
+        const clipOf = (L) => [].slice.call(document.querySelectorAll('.clip')).filter(function (el) { return el.dataset && el.dataset.id === L.id; })[0];
+        const cA2 = clipOf(A);
+        if (!cA2) throw new Error('control: A has no .clip element in the timeline, so the touch press below lands on nothing');
+        const touch = (type, tgt) => (tgt || cA2).dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 79, isPrimary: true, pointerType: 'touch', button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: 40, clientY: 40 }));
+        const pending = () => FM.timeline._dragState().live.indexOf('clipTap') >= 0;
+        touch('pointerdown');
+        if (!pending()) throw new Error('control: a touch press on A’s clip started no pending gesture (' + JSON.stringify(FM.timeline._dragState().live) + '), so the cancel below would prove nothing');
+        FM.cancelGesturesOn(B.id);
+        if (!pending()) throw new Error('cancelling gestures on ANOTHER layer dropped the finger that was down on A — his own press would die whenever anyone else edited anything');
+        if (!FM.cancelGesturesOn(A.id)) throw new Error('cancelGesturesOn reported that NOTHING was holding A while a finger was down on its clip inside the long-press window — that is the report §17.2 acts on, and the hold timer promotes the tap to a drag 350ms later regardless');
+        if (pending()) throw new Error('the pending touch gesture survived its layer being taken away (' + JSON.stringify(FM.timeline._dragState().live) + ')');
+        touch('pointerup', window);
+        await sleep(450);   // past the 350ms hold: the orphaned timer must not fire at all
+        if (FM.timeline._dragState().live.indexOf('clipMove') >= 0) throw new Error('the cancelled tap’s hold timer still promoted it to a clip drag (' + JSON.stringify(FM.timeline._dragState().live) + ')');
+        try { FM.timeline._abortGestures(); } catch (e) {}
+      }
+
+      /* ── 3c. THE TWO-FINGER CANVAS PINCH (review fix) ──
+         On his priority device this is the primary canvas gesture: two fingers with a layer selected
+         scale and twist THAT LAYER, through vpPinch and not `drag`. Both pinch entry points call
+         finishDrag() first, so `drag` is null for the whole gesture and cancelDrag's `if (!drag) return
+         false` missed every one of them — the pinch kept writing transforms to a layer that was gone and
+         the second finger lifting committed them. */
+      if (cv && FM.canvasEdit && FM.canvasEdit.cancelDrag) {
+        /* Fingers first: a stale one from an earlier test makes press #1 the SECOND finger of a pinch
+           that started long ago and press #2 a refused third, so the gesture below silently never runs
+           (that is exactly what queue 538's deliberate press-without-lift did). */
+        if (FM._resetVpPointers) FM._resetVpPointers(); else FM.canvasEdit.cancelDrag(function () { return true; });
+        FM.selectLayer(A.id);
+        FM.canvasEdit.update();
+        await sleep(40);
+        const r2 = cv.getBoundingClientRect();
+        const cx = r2.left + r2.width / 2, cy = r2.top + r2.height / 2;
+        const two = (type, pid, x, tgt) => (tgt || cv).dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: pid, isPrimary: pid === 81, pointerType: 'touch', button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: cy }));
+        const scale = () => FM.evalProp(A.transform.scale, FM.time);
+        const fingers = () => (FM._vpPointerCount ? FM._vpPointerCount() : -1);
+        const heldIds = () => { const out = []; try { FM.canvasEdit.cancelDrag(function (v) { out.push(v); return false; }); } catch (e) {} return out; };
+        const s0 = scale(), f0 = fingers();
+        /* ⚠️ THE LIFT IS IN A finally, ALWAYS. A finger left in the canvas pointer tracker makes every
+           LATER one-finger gesture read as a pinch's second finger — the exact leak the timeline's
+           _abortGestures comment warns about, and three unrelated pinch tests pay for it. */
+        try {
+          two('pointerdown', 81, cx - 40);
+          two('pointerdown', 82, cx + 40);
+          two('pointermove', 82, cx + 80, window);
+          const s1 = scale();
+          if (!(Math.abs(s1 - s0) > 1e-6)) throw new Error('control: two fingers on the canvas with A selected did not scale it (' + s0 + ' → ' + s1 + '), so nothing below is testing a live pinch [fingers before ' + f0 + ' → now ' + fingers() + '; selected ' + FM.scene.selectedId + ' vs A ' + A.id + '; preview ' + Math.round(r2.width) + 'x' + Math.round(r2.height) + '; held ' + JSON.stringify(heldIds()) + ']');
+          FM.cancelGesturesOn(B.id);
+          two('pointermove', 82, cx + 120, window);
+          const s2 = scale();
+          if (!(Math.abs(s2 - s1) > 1e-6)) throw new Error('cancelling gestures on ANOTHER layer killed the pinch he was doing on A (' + s1 + ' → ' + s2 + ')');
+          if (!FM.cancelGesturesOn(A.id)) throw new Error('cancelGesturesOn reported that NOTHING was holding A while two fingers were pinching it on the canvas — on the phone that is the most common way to be holding a layer');
+          two('pointermove', 82, cx + 200, window);
+          if (Math.abs(scale() - s2) > 1e-9) throw new Error('the pinch kept scaling A after its layer was taken away (' + s2 + ' → ' + scale() + ') — and the second finger lifting commits that to history as a diff');
+        } finally {
+          two('pointerup', 82, cx + 200, window);
+          two('pointerup', 81, cx - 40, window);
+          try { FM.canvasEdit.cancelDrag(function () { return true; }); } catch (e) {}
+        }
+        if (fingers() > f0) throw new Error('the pinch left ' + fingers() + ' finger(s) in the tracker (started at ' + f0 + ') — every later one-finger gesture then reads as a pinch’s second finger');
+      }
+
+      /* ── 3d. THE GRAPH EDITOR, the tenth tool §8.7 names (review fix) ──
+         Both of its drags were module-private, so FM.cancelGesturesOn had no way to reach them: a held
+         easing handle kept writing kf.bez through the window pointermove, and the release committed a
+         history step — a diff — for a layer he had just been denied or that had just been deleted. */
+      if (!FM.graphEditor || typeof FM.graphEditor.isActive !== 'function' || typeof FM.graphEditor.stop !== 'function')
+        throw new Error('FM.graphEditor is missing — §8.7 lists "…touchup, tracker or graph-editor", and with no seam here an easing handle is the one grip cancelGesturesOn cannot let go of');
+      if (FM.buildEasingEditor) {
+        A.transform.x = { kf: [{ t: 0, v: 0, e: 'easeInOut' }, { t: 2, v: 100, e: 'easeInOut' }] };
+        const host = document.createElement('div');
+        host.style.cssText = 'position:fixed;left:0;top:0;width:340px;height:360px;opacity:0;z-index:-1';
+        document.body.appendChild(host);
+        try {
+          host.appendChild(FM.buildEasingEditor(A, 'move'));
+          const gc = host.querySelector('.es-canvas');
+          if (!gc) throw new Error('control: the easing editor built no canvas, so nothing below is driving a real graph drag');
+          const gr = gc.getBoundingClientRect();
+          gc.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 80, isPrimary: true, pointerType: 'mouse', button: 0, buttons: 1, clientX: gr.left + gr.width * 0.3, clientY: gr.top + gr.height * 0.6 }));
+          if (!FM.graphEditor.isActive()) throw new Error('control: pressing the easing graph grabbed no handle, so the cancel below would prove nothing');
+          if (FM.graphEditor.layerId() !== A.id) throw new Error('the graph editor says it is editing ' + FM.graphEditor.layerId() + ', not A — every stop here is matched on the tool’s own layer id');
+          FM.cancelGesturesOn(B.id);
+          if (!FM.graphEditor.isActive()) throw new Error('cancelling gestures on ANOTHER layer dropped the easing handle he was dragging on A');
+          const bez0 = JSON.stringify(A.transform.x.kf[1].bez || null);
+          if (!FM.cancelGesturesOn(A.id)) throw new Error('cancelGesturesOn reported that nothing was holding A while an easing handle was being dragged on it');
+          if (FM.graphEditor.isActive()) throw new Error('the easing handle survived its layer being taken away — the window pointermove keeps rewriting kf.bez and the release commits a history step for a layer that is gone');
+          window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, pointerId: 80, pointerType: 'mouse', clientX: gr.left + gr.width * 0.85, clientY: gr.top + gr.height * 0.15 }));
+          if (JSON.stringify(A.transform.x.kf[1].bez || null) !== bez0) throw new Error('the cancelled easing drag kept writing kf.bez after it was dropped');
+          window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: 80, pointerType: 'mouse' }));
+        } finally { host.remove(); try { FM.graphEditor.stop(); } catch (e) {} }
+      }
+
+      /* ── 4. the 629 rule: if the layer that went was the one he was on, select nothing ── */
+      FM.scene.selectedId = A.id; FM.scene.selectedIds = [A.id, B.id];
+      FM.scene.layers = FM.scene.layers.filter(l => l.id !== A.id);   // as a remote delete leaves it
+      FM.cancelGesturesOn(A.id);
+      if (FM.scene.selectedId !== null) throw new Error('after the selected layer was deleted by someone else the selection was ' + FM.scene.selectedId + ', not nothing — that is how you edit the wrong layer without noticing (queue 629)');
+      if ((FM.scene.selectedIds || []).indexOf(A.id) >= 0) throw new Error('a dead id stayed in selectedIds');
+      if ((FM.scene.selectedIds || []).indexOf(B.id) < 0 && FM.scene.selectedIds.length) throw new Error('the surviving layer was dropped from the multi-selection as well');
+    } finally {
+      try { if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {}
+      try { FM.timeline._abortGestures(); } catch (e) {}
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(80);
     }
   });
 
@@ -21591,6 +22519,100 @@
     if (calls !== 3) throw new Error(calls + ' timeline rebuilds for 3 layer selections (expected 3) — layersPanel.refresh() IS rebuild(), so calling both doubles the most common interaction in the app');
   });
 
+  /* ═══ #921 STAGE 0 (spec §4.2, §11.1, §8.6) ══════════════════════════════════════════════════════
+     Three seams out of the timeline, none of which may change what a rebuild produces:
+       · inheritLoopModes — a DERIVED WRITE that rebuild() has always done. Collab has to run it before
+         every diff, or whichever device rebuilt first would send the value as its own "edit".
+       · timeToX — the one place that knows where a moment sits on the ruler, so an overlay drawn across
+         the timeline cannot be a head-width out at one zoom and right at another.
+       · onRebuilt — presence draws on rows that buildTracks replaces wholesale, and it must not hear
+         about a rebuild that was DEFERRED, because those rows are about to be replaced again. */
+  test('921 S0 inheritLoopModes/timeToX/onRebuilt: rebuild output unchanged, onRebuilt fires once', { item: '921', budgetMs: 30000 }, async function () {
+    if (!FM.timeline || typeof FM.timeline.inheritLoopModes !== 'function' || typeof FM.timeline.timeToX !== 'function' || typeof FM.timeline.onRebuilt !== 'function') throw new Error('one of FM.timeline.inheritLoopModes / timeToX / onRebuilt is missing');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    let off = null;
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 't921 loop', shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 4;
+      L.loopMode = 'cycle';
+      L.transform.x = { kf: [{ t: 0, v: 0 }, { t: 1, v: 50 }] };
+      L.transform.y = { kf: [{ t: 0, v: 0 }, { t: 1, v: 50 }], loopMode: 'pingpong' };
+      FM.scene.layers.push(L);
+      FM.selectLayer(null);
+
+      /* ── 1. the extracted line does what it did, on its own ── */
+      FM.timeline.inheritLoopModes();
+      if (L.transform.x.loopMode !== 'cycle') throw new Error('a newly-keyframed prop did not inherit the layer\'s loop mode (' + L.transform.x.loopMode + ') — it would freeze at its last keyframe');
+      if (L.transform.y.loopMode !== 'pingpong') throw new Error('an explicit per-prop loop mode was clobbered to ' + L.transform.y.loopMode + ' — initialize-only is the whole rule');
+
+      /* ── 2. …and rebuild() still does it, i.e. the extraction did not drop the call ── */
+      delete L.transform.x.loopMode;
+      FM.timeline.rebuild();
+      await sleep(40);
+      if (L.transform.x.loopMode !== 'cycle') throw new Error('rebuild() no longer inherits loop modes — the line was extracted and the caller lost');
+
+      /* ── 3. rebuild is still deterministic: the same scene twice gives the same rows ── */
+      FM.timeline.rebuild();
+      const html1 = (document.getElementById('tl-tracks') || {}).innerHTML;
+      FM.timeline.rebuild();
+      const html2 = (document.getElementById('tl-tracks') || {}).innerHTML;
+      if (!html1 || html1.length < 50) throw new Error('the timeline drew no rows, so nothing below measures a rebuild');
+      if (html1 !== html2) throw new Error('two rebuilds of the same scene produced different rows — the extraction changed what a rebuild does');
+
+      /* ── 4. timeToX agrees with the thing the app already draws at that x ── */
+      if (FM._showSnap) {
+        const snapEl = document.getElementById('tl-snapline');
+        if (!snapEl) throw new Error('no #tl-snapline to measure timeToX against');
+        [0, 1.25, 3].forEach(function (t) {
+          FM._showSnap(t);
+          const drawn = parseFloat(snapEl.style.left);
+          const said = FM.timeline.timeToX(t);
+          if (!isFinite(drawn)) throw new Error('the snap line has no left at t=' + t);
+          if (Math.abs(drawn - said) > 0.01) throw new Error('timeToX(' + t + ') says ' + said.toFixed(2) + 'px but the app draws that moment at ' + drawn.toFixed(2) + 'px — an overlay using it would sit a head-width out');
+        });
+        snapEl.classList.add('hidden');
+        if (Math.abs(FM.timeline.timeToX(3) - FM.timeline.timeToX(0)) < 1) throw new Error('control: timeToX returns the same x for t=0 and t=3, so the agreement above is with a constant');
+      }
+
+      /* ── 5. onRebuilt fires once per REAL rebuild, never for a deferred one, and unsubscribes ── */
+      let fired = 0;
+      off = FM.timeline.onRebuilt(function () { fired++; });
+      FM.timeline.rebuild();
+      if (fired !== 1) throw new Error('onRebuilt fired ' + fired + ' times for one rebuild');
+      FM.timeline.rebuild();
+      if (fired !== 2) throw new Error('onRebuilt fired ' + fired + ' times for two rebuilds');
+
+      // a rebuild DEFERRED by a live gesture must not fire it: those rows are about to be replaced
+      const clip = document.querySelector('.clip');
+      if (clip) {
+        const r = clip.getBoundingClientRect();
+        const ev = (type, x, tgt) => (tgt || clip).dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 91, isPrimary: true, pointerType: 'mouse', button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: r.top + r.height / 2 }));
+        ev('pointerdown', r.left + r.width / 2);
+        ev('pointermove', r.left + r.width / 2 + 40, window);
+        const live = FM.timeline._dragState && FM.timeline._dragState().any;
+        if (live) {
+          const at = fired;
+          FM.timeline.rebuild();
+          if (fired !== at) throw new Error('a rebuild deferred by a live gesture still told its listeners the rows were new (' + at + ' → ' + fired + ') — an overlay would be placed against rows that are about to be rebuilt');
+        }
+        try { FM.timeline._abortGestures(); } catch (e) {}
+        ev('pointerup', r.left + r.width / 2 + 40, window);
+      }
+      off(); off = null;
+      const after = fired;
+      FM.timeline.rebuild();
+      if (fired !== after) throw new Error('a listener kept firing after it unsubscribed');
+    } finally {
+      if (off) { try { off(); } catch (e) {} }
+      try { FM.timeline._abortGestures(); } catch (e) {}
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(80);
+    }
+  });
+
   test('timeline: a rebuild measures the lane width once, not once per clip', { item: 'select-cost' }, function () {
     if (!FM.timeline || !FM.timeline.rebuild) throw new Error('FM.timeline.rebuild is missing — skipping here would hide the rebuild disappearing');
     var d = Object.getOwnPropertyDescriptor(Element.prototype, 'clientWidth');
@@ -26459,6 +27481,77 @@
       if (!deepEq(before, layer.effects[0], '$', diff)) bad.push(e.type + ': ' + diff.slice(0, 3).join(' | '));
     });
     if (bad.length) throw new Error(bad.length + ' of ' + all.length + ' effects do not survive sanitising unchanged: ' + bad.slice(0, 6).join(' ;; '));
+  });
+
+  /* ═══ #921 STAGE 0 (spec D16) ═════════════════════════════════════════════════════════════════════
+     Live collaboration addresses one entry in a layer's `effects` / `audioFx` / `behaviors` by a stable
+     `uid`, because the only other handle is the INDEX — and an index silently re-points somebody's edit
+     at a different effect the moment anyone duplicates or re-orders one. Each of those three sanitisers
+     REBUILDS its entries from the registry schema, keeping only known keys, so until now a uid could not
+     survive a save. This keeps one, and only in the exact shape stampIds writes.
+     The other half is the half that can break his existing work: a project with NO uids must come out of
+     the sanitiser byte-for-byte as it always did. Checked as KEY ORDER as well as content, because a
+     re-ordered key changes the JSON string, and the JSON string is what a snapshot, an autosave and the
+     divergence hash all compare. */
+  test('921 S0 sanitizers keep a valid uid, drop an invalid one, uid-less output byte-identical', { item: '921' }, function () {
+    if (!FM.storage || !FM.storage._sanitizeLayers || !FM.storage._keepUid) throw new Error('FM.storage._sanitizeLayers / _keepUid is not exposed — the suite cannot test the real rule');
+    const keys = o => Object.keys(o).join(',');
+
+    /* ── 1. uid-less input: the output is what it always was, keys and order included ── */
+    const plain = {
+      id: 'l_921a', type: 'shape', shape: 'rect', start: 0, duration: 2,
+      transform: { x: 10, y: 10, scale: 1, rotation: 0, opacity: 1 },
+      effects: [{ type: 'blur', enabled: true, params: { radius: 4 } }],
+      audioFx: [{ type: 'reverb', enabled: true, params: {} }],
+      behaviors: [{ type: 'wiggle', prop: 'x', enabled: true, params: {} }],
+    };
+    const before = JSON.stringify(plain);
+    FM.storage._sanitizeLayers([plain]);
+    const outStr = JSON.stringify(plain);
+    if (/uid/.test(outStr)) throw new Error('a layer with no uid anywhere came out of the sanitiser carrying one: ' + outStr.slice(0, 200) + ' — solo projects must never gain one (the whole D16 bargain)');
+    if (keys(plain.effects[0]) !== 'type,enabled,params') throw new Error('an effect\'s keys are now ' + keys(plain.effects[0]) + ', not type,enabled,params — the JSON string changed shape, so every snapshot and autosave of his existing projects is rewritten');
+    if (plain.audioFx.length && keys(plain.audioFx[0]) !== 'type,enabled,params') throw new Error('an audioFx entry\'s keys are now ' + keys(plain.audioFx[0]));
+    if (plain.behaviors.length && keys(plain.behaviors[0]) !== 'type,prop,enabled,params') throw new Error('a behaviour\'s keys are now ' + keys(plain.behaviors[0]));
+    // …and it is a FIXED POINT: sanitising the output again changes nothing. The host pre-sanitises the
+    // document when a share is armed (§7.3) precisely so every guest's defensive pass is a no-op; if this
+    // ever stops being true, joining a session would show a "difference" on the first hash.
+    const twice = JSON.parse(outStr);
+    FM.storage._sanitizeLayers([twice]);
+    if (JSON.stringify(twice) !== outStr) throw new Error('the sanitiser is not idempotent — a second pass changed the document:\n' + outStr.slice(0, 200) + '\n' + JSON.stringify(twice).slice(0, 200));
+    if (before.length < 50) throw new Error('the fixture is too small to be measuring anything');
+
+    /* ── 2. a valid uid is kept, everywhere it can appear ── */
+    const L = {
+      id: 'l_921b', type: 'shape', shape: 'rect', start: 0, duration: 2,
+      transform: { x: 10, y: 10, scale: 1, rotation: 0, opacity: 1 },
+      masks: [{ id: 'm1', mode: 'add', path: [[0, 0], [10, 0], [10, 10]] }],
+      effects: [
+        { type: 'blur', enabled: true, params: { radius: 4 }, uid: 'k3f9a2qz' },
+        { type: FM.FX_CONTAINER, enabled: true, params: {}, uid: 'cont1234', effects: [{ type: 'blur', enabled: true, params: { radius: 2 }, uid: 'child567' }] },
+        { type: 'penmask', maskId: 'm1', uid: 'mark0001' },
+      ],
+      audioFx: [{ type: 'reverb', enabled: true, params: {}, uid: 'afx12345' }],
+      behaviors: [{ type: 'wiggle', prop: 'x', enabled: true, params: {}, uid: 'beh12345' }],
+    };
+    FM.storage._sanitizeLayers([L]);
+    const fx = L.effects || [];
+    const byType = t => fx.filter(e => e && e.type === t)[0];
+    if (!byType('blur') || byType('blur').uid !== 'k3f9a2qz') throw new Error('an effect lost its uid: ' + JSON.stringify(fx));
+    const cont = byType(FM.FX_CONTAINER);
+    if (!cont || cont.uid !== 'cont1234') throw new Error('a filter container lost its uid: ' + JSON.stringify(cont));
+    if (!cont.effects[0] || cont.effects[0].uid !== 'child567') throw new Error('a container CHILD lost its uid — nested effects are keyed the same way: ' + JSON.stringify(cont.effects));
+    const mark = byType('penmask');
+    if (!mark || mark.uid !== 'mark0001') throw new Error('a mask marker lost its uid — it is an element of the same keyed array, so the host would emit a fix removing it on every diff: ' + JSON.stringify(mark));
+    if (!L.audioFx[0] || L.audioFx[0].uid !== 'afx12345') throw new Error('an audioFx entry lost its uid: ' + JSON.stringify(L.audioFx));
+    if (!L.behaviors[0] || L.behaviors[0].uid !== 'beh12345') throw new Error('a behaviour lost its uid: ' + JSON.stringify(L.behaviors));
+
+    /* ── 3. anything that is not a uid is dropped: it arrives from files, so it is untrusted ── */
+    const bad = ['ABC12345', 'abc', 'a'.repeat(17), 'has-a-dash', '__proto__', 12345, null, {}, ['x']];
+    bad.forEach(function (v) {
+      const l2 = { id: 'l_921c', type: 'shape', shape: 'rect', start: 0, duration: 1, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'blur', enabled: true, params: { radius: 1 }, uid: v }] };
+      FM.storage._sanitizeLayers([l2]);
+      if ('uid' in (l2.effects[0] || {})) throw new Error('the sanitiser kept uid ' + JSON.stringify(v) + ' — only 4-16 lowercase alphanumerics may survive, or a crafted file writes whatever it likes into the key collab addresses entries by');
+    });
   });
 
   /* The one thing that separates this from sanitizeAudioFx, and the reason it is not a copy of it.
@@ -34345,6 +35438,208 @@
     }
   });
 
+  /* ═══ #921 STAGE 0 (spec §4.2, §8.6) ══════════════════════════════════════════════════════════════
+     Undo's post-swap repairs — the 629 rule, the media restore, the group-context exit, the mask resync
+     and the time clamp — are now FM.history._afterExternalChange, because live collaboration applies
+     somebody else's edits straight into FM.scene and needs every one of them for the same reason.
+     The one difference is the one that must not be a second copy of the block: an undo pauses playback
+     and a remote edit must not, or a friend renaming a layer stops your playhead. */
+  test('921 S0 restore uses _afterExternalChange (629 rule intact)', { item: '921' }, async function () {
+    if (!FM.history || typeof FM.history._afterExternalChange !== 'function') throw new Error('FM.history._afterExternalChange is missing');
+    const keep = FM.scene.layers.slice(), keepSel = FM.scene.selectedId;
+    const realAfter = FM.history._afterExternalChange, realPause = FM.pause, playing0 = FM.playing;
+    try {
+      /* ── 1. undo goes through it, with pause:true ── */
+      const calls = [];
+      FM.history._afterExternalChange = function (was, opts) { calls.push({ was: was, opts: opts }); return realAfter.apply(this, arguments); };
+      const a = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 10, shapeH: 10, fill: '#fff' });
+      a.start = 0; a.duration = 2;
+      FM.scene.layers.length = 0; FM.scene.layers.push(a);
+      FM.scene.selectedId = a.id; FM.scene.selectedIds = [a.id];
+      FM.history.commit();
+      const b = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 10, shapeH: 10, fill: '#0f0' });
+      b.start = 0; b.duration = 2;
+      FM.scene.layers.push(b);
+      FM.scene.selectedId = b.id; FM.scene.selectedIds = [b.id];
+      FM.history.commit();
+      calls.length = 0;
+      FM.history.undo();
+      await sleep(60);
+      if (calls.length !== 1) throw new Error('an undo called _afterExternalChange ' + calls.length + ' times, expected exactly 1 — restore must go through the shared block, or collab and undo drift apart');
+      if (calls[0].was !== b.id) throw new Error('restore passed ' + calls[0].was + ' as "what was selected", expected the layer that was selected BEFORE the swap (' + b.id + ')');
+      if (!calls[0].opts || calls[0].opts.pause !== true) throw new Error('restore did not ask for the pause (' + JSON.stringify(calls[0].opts) + ') — undo has always paused playback');
+      // …and the 629 rule still lands through it
+      if (FM.layerById(FM.scene, b.id)) throw new Error('the undo did not remove the new layer, so this proves nothing');
+      if (FM.scene.selectedId !== null) throw new Error('undo left selectedId as ' + FM.scene.selectedId + ' after the selected layer was removed — the 629 rule did not survive the extraction');
+      FM.history._afterExternalChange = realAfter;
+
+      /* ── 2. the pause is a PARAMETER, and pause:false really does not pause ── */
+      let paused = 0;
+      FM.pause = function () { paused++; FM.playing = false; };
+      FM.playing = true;
+      FM.history._afterExternalChange(null, { pause: false });
+      if (paused !== 0) throw new Error('a remote-style apply paused playback — someone else renaming a layer would stop your playhead');
+      FM.playing = true;
+      FM.history._afterExternalChange(null, { pause: true });
+      if (paused !== 1) throw new Error('control: with pause:true the block did NOT pause (' + paused + ') — so the check above proves nothing');
+
+      /* ── 3. it repairs a selection the caller did not make: dead ids out, 629 for the primary ── */
+      const c = FM.makeLayer('shape', { shape: 'rect', x: 5, y: 5, shapeW: 5, shapeH: 5, fill: '#00f' });
+      c.start = 0; c.duration = 1;
+      FM.scene.layers.length = 0; FM.scene.layers.push(c);
+      FM.scene.selectedId = c.id; FM.scene.selectedIds = [c.id, 'l_921gone'];
+      FM.history._afterExternalChange(c.id, { pause: false });
+      if ((FM.scene.selectedIds || []).indexOf('l_921gone') >= 0) throw new Error('a selected id that no longer exists survived — the inspector would act on a layer that is gone');
+      if (FM.scene.selectedId !== c.id) throw new Error('a LIVE primary selection was cleared (' + FM.scene.selectedId + ') — the 629 rule must only fire when the layer is gone');
+      FM.scene.layers.length = 0;
+      FM.history._afterExternalChange(c.id, { pause: false });
+      if (FM.scene.selectedId !== null || (FM.scene.selectedIds || []).length) throw new Error('when the layer someone else deleted WAS the selected one, the selection must become nothing (got ' + FM.scene.selectedId + ' / ' + JSON.stringify(FM.scene.selectedIds) + ')');
+
+      /* ── 4. the pre-session snapshots collab borrows are readable, and are a COPY ── */
+      if (typeof FM.history._snapshotsUpTo !== 'function') throw new Error('FM.history._snapshotsUpTo is missing — a session could not offer undo of anything he did before it started');
+      const s1 = FM.history._snapshotsUpTo();
+      if (!Array.isArray(s1) || !s1.length) throw new Error('_snapshotsUpTo returned ' + JSON.stringify(s1) + ' with a committed stack behind it');
+      s1.push('t921');
+      if (FM.history._snapshotsUpTo().indexOf('t921') >= 0) throw new Error('_snapshotsUpTo handed out the live stack — a caller could corrupt undo by writing to it');
+    } finally {
+      FM.history._afterExternalChange = realAfter;
+      FM.pause = realPause; FM.playing = playing0;
+      FM.scene.layers.length = 0;
+      keep.forEach(l => FM.scene.layers.push(l));
+      FM.scene.selectedId = keepSel; FM.scene.selectedIds = keepSel ? [keepSel] : [];
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
+  /* ═══ #921 STAGE 0 GUARDS (spec §23 b and c) ═══════════════════════════════════════════════════════
+     The two promises stage 0 makes to him, both of which are only worth anything if they are MEASURED:
+     (b) nothing leaves the device — no peer connection, no socket, no request to anywhere but this app's
+         own origin — while he edits, undoes, opens the export dialog and goes Home;
+     (c) solo undo still restores the document byte-for-byte, with collab absent.
+     Both are worded as "still true", so both carry a control that proves the instrument works. */
+  test('921 S0 nothing leaves the device, and solo undo still restores byte-for-byte', { item: '921', budgetMs: 45000 }, async function () {
+    const realRTC = window.RTCPeerConnection, realWS = window.WebSocket, realFetch = window.fetch, realXHR = XMLHttpRequest.prototype.open;
+    const counts = { rtc: 0, ws: 0, fetch: 0, xhr: 0 };
+    const offOrigin = (u) => {
+      let s = '';
+      try { s = String((u && u.url) || u || ''); } catch (e) { s = ''; }
+      if (/^(data|blob|about):/i.test(s)) return false;
+      try { return new URL(s, location.href).origin !== location.origin; } catch (e) { return false; }
+    };
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, wasHome = FM.home && FM.home.isOpen && FM.home.isOpen();
+    try {
+      // Counted AND blocked: the control below must not be able to reach the network even by accident.
+      if (realRTC) window.RTCPeerConnection = function () { counts.rtc++; throw new Error('t921 blocked'); };
+      window.WebSocket = function () { counts.ws++; throw new Error('t921 blocked'); };
+      window.fetch = function (u) { if (offOrigin(u)) { counts.fetch++; return Promise.reject(new TypeError('t921 blocked')); } return realFetch.apply(window, arguments); };
+      XMLHttpRequest.prototype.open = function (m, u) { if (offOrigin(u)) { counts.xhr++; throw new Error('t921 blocked'); } return realXHR.apply(this, arguments); };
+
+      /* CONTROL FIRST: the instrument sees the things it is watching for. Without this, a run where the
+         wrappers never installed reads exactly like a run where nothing phoned home. */
+      try { if (realRTC) new window.RTCPeerConnection(); } catch (e) {}
+      try { new window.WebSocket('wss://example.invalid/'); } catch (e) {}
+      try { await window.fetch('https://example.invalid/t921'); } catch (e) {}
+      try { const x = new XMLHttpRequest(); x.open('GET', 'https://example.invalid/t921'); } catch (e) {}
+      const control = counts.rtc + counts.ws + counts.fetch + counts.xhr;
+      if (control !== (realRTC ? 4 : 3)) throw new Error('the counters saw ' + control + ' of the ' + (realRTC ? 4 : 3) + ' deliberate calls (' + JSON.stringify(counts) + ') — they are not watching, so a silent zero below would mean nothing');
+      counts.rtc = counts.ws = counts.fetch = counts.xhr = 0;
+
+      /* …now a scripted session of ordinary use, with collab absent (it is: nothing defines FM.collab
+         before stage 1, and Labs is off). */
+      if (FM.collab && FM.collab.active) throw new Error('a collab session is somehow active in the suite — this guard is about the OFF state');
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 't921 edit', shape: 'rect', x: 60, y: 60, shapeW: 30, shapeH: 30, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      FM.selectLayer(L.id);
+      FM.history.commit();
+      L.transform.x = 120;
+      FM.history.commit();
+      FM.history.undo();
+      await sleep(60);
+      FM.history.redo();
+      await sleep(60);
+      if (FM.timeline) FM.timeline.rebuild();
+      if (FM.showExportDialog) { try { FM.showExportDialog(); } catch (e) {} await sleep(150); const d = document.getElementById('export-dialog'); if (d) d.classList.add('hidden'); }
+      if (FM.home && FM.home.open) { FM.home.open(); await sleep(250); FM.home.close(); await sleep(200); }
+      await sleep(150);
+
+      const leaked = [];
+      if (counts.rtc) leaked.push(counts.rtc + ' RTCPeerConnection');
+      if (counts.ws) leaked.push(counts.ws + ' WebSocket');
+      if (counts.fetch) leaked.push(counts.fetch + ' cross-origin fetch');
+      if (counts.xhr) leaked.push(counts.xhr + ' cross-origin XHR');
+      if (leaked.length) throw new Error('editing, undo, the export dialog and Home opened ' + leaked.join(' + ') + ' — with collaboration switched off this app talks to nobody, and that is the promise the whole feature is built behind');
+
+      /* ── every S0 hook is INSTALLED, and every one of them is guarded (spec §23's hook list) ──
+         The runtime half above proves the app behaves as it always did with FM.collab absent. This is
+         the other half: that the seams the later stages hang off are actually there. Read from the
+         source, because a hook that was dropped in a later edit is invisible from inside the page — it
+         simply never fires, which is exactly how it would reach him. */
+      const hooks = [
+        ['../js/history.js', /if \(cb\) FM\.collab\.beforeSnap\(\)/, 'history.commit → beforeSnap'],
+        ['../js/history.js', /if \(cb\) FM\.collab\.afterCommit\(\)/, 'history.commit → afterCommit'],
+        ['../js/history.js', /undo\(\) \{ if \(FM\.collab && FM\.collab\.undoActive && FM\.collab\.undoActive\(\)\) return FM\.collab\.undo\(\)/, 'history.undo delegates'],
+        ['../js/history.js', /redo\(\) \{ if \(FM\.collab && FM\.collab\.undoActive && FM\.collab\.undoActive\(\)\) return FM\.collab\.redo\(\)/, 'history.redo delegates'],
+        ['../js/history.js', /FM\.collab\.undoActive\(\)\);\s*\n\s*const canU = collabUndo/, 'history.syncButtons asks collab'],
+        ['../js/history.js', /if \(FM\.collab && FM\.collab\.onReset\) FM\.collab\.onReset\(\)/, 'history.reset → onReset'],
+        ['../js/storage.js', /flushSync\(\) \{ if \(FM\.collab && FM\.collab\.active\) FM\.collab\.beforeFlush\(\)/, 'storage.flushSync → beforeFlush'],
+        ['../js/storage.js', /if \(FM\.collab && FM\.collab\.reachable && FM\.collab\.reachable\(id\)\) return;/, 'releaseUnreachableMedia asks collab'],
+        ['../js/app.js', /if \(FM\.collab && FM\.collab\.active && FM\.collab\.presence\) FM\.collab\.presence\.onRender\(\)/, 'render → presence.onRender'],
+        ['../js/app.js', /if \(FM\.collab && FM\.collab\.isGuest && FM\.collab\.isGuest\(\)\) return false;/, 'warnOversizeProject stands down for a guest'],
+        ['../index.html', /if \(window\.FM && FM\.collab && FM\.collab\.active\) \{ FM\.collab\.deferReload\(\); return; \}/, 'controllerchange defers the reload'],
+      ];
+      const hsrc = {};
+      for (const [file] of hooks) {
+        if (hsrc[file]) continue;
+        const rr = await fetch(file + '?t921=' + Date.now());
+        if (!rr.ok) throw new Error('could not read ' + file + ' to check its collab seams (' + rr.status + ')');
+        hsrc[file] = await rr.text();
+      }
+      if (!/function restore\(str\)/.test(hsrc['../js/history.js'])) throw new Error('control: the fetched history.js is not the real one, so these checks are scanning the wrong file');
+      const gone = hooks.filter(([file, re]) => !re.test(hsrc[file])).map(([, , name]) => name);
+      if (gone.length) throw new Error(gone.length + ' of the ' + hooks.length + ' collab seams are missing or no longer guarded: ' + gone.join(' · ') + ' — a seam that was dropped fires nothing and says nothing, which is how it reaches his phone');
+
+      /* ── (c) undo parity: the document comes back as the exact string it was ── */
+      const snap = () => JSON.stringify({ project: FM.scene.project, layers: FM.scene.layers, selectedId: FM.scene.selectedId, selectedIds: FM.scene.selectedIds }, FM.jsonReplacer);
+      FM.scene.layers.length = 0;
+      const P = FM.makeLayer('text', { name: 't921 parity', text: 'hello', x: 50, y: 50 });
+      P.start = 0; P.duration = 2;
+      const Q = FM.makeLayer('shape', { name: 't921 parity 2', shape: 'ellipse', x: 80, y: 80, shapeW: 20, shapeH: 20, fill: '#f0f' });
+      Q.start = 0.5; Q.duration = 1.5;
+      Q.effects = [{ type: 'blur', enabled: true, params: { radius: 3 } }];
+      FM.scene.layers.push(P, Q);
+      FM.scene.selectedId = Q.id; FM.scene.selectedIds = [Q.id];
+      /* Settle the DERIVED values first (refreshAll runs autoFitDuration, which rewrites
+         project.duration from the clips). Without this the "before" snapshot carries a duration that
+         the next refresh recomputes, and the comparison below would be measuring that, not undo.
+         It is also the reason spec §11.1 exists: a derived write has to be normalised before anything
+         is compared, or it looks like somebody's edit. */
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(60);
+      FM.history.commit();
+      const before = snap();
+      Q.transform.x = 200; Q.duration = 2.5; P.text = 'changed';
+      FM.scene.layers.push(FM.makeLayer('shape', { name: 't921 extra', shape: 'rect', x: 10, y: 10 }));
+      FM.history.commit();
+      if (snap() === before) throw new Error('control: the edit changed nothing, so the undo below would pass on any build');
+      FM.history.undo();
+      await sleep(60);
+      const after = snap();
+      if (after !== before) throw new Error('one undo did not put the document back byte-for-byte with collab absent.\nbefore: ' + before.slice(0, 300) + '\nafter:  ' + after.slice(0, 300));
+    } finally {
+      if (realRTC) window.RTCPeerConnection = realRTC;
+      window.WebSocket = realWS;
+      window.fetch = realFetch;
+      XMLHttpRequest.prototype.open = realXHR;
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
+      try { if (wasHome && FM.home && !FM.home.isOpen()) FM.home.open(); } catch (e) {}
+      try { if (!wasHome && FM.home && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(120);
+    }
+  });
+
   test('#628: moving a group anchor does not move the group', { item: '628' }, function () {
     var keep = FM.scene.layers.slice();
     try {
@@ -35323,6 +36618,103 @@
       FM.selectLayer(saved || null);
       if (FM.refreshAll) FM.refreshAll();
       await sleep(40);
+    }
+  });
+
+  /* ═══ #921 STAGE 0 (spec §4.2, §18.3) ════════════════════════════════════════════════════════════
+     Presence draws an outline around the layers other people have selected. The geometry for that is
+     hard-won — parented (#832), grouped (#630), skewed (#9/#12), text with an alignment (#686) — and a
+     second copy of it would be wrong on exactly those layers. So it is one function, FM.canvasEdit.boxFor,
+     and update() draws the real #select-box from it.
+     This measures the two against each other: the corners computed from boxFor's numbers, mapped into the
+     page, against the box the browser actually laid out. Four shapes, because each one broke it once. */
+  test('921 S0 boxFor equals #select-box geometry (rotated, parented, group, skew, text wrap)', { item: '921', budgetMs: 45000 }, async function () {
+    if (!FM.canvasEdit || typeof FM.canvasEdit.boxFor !== 'function') throw new Error('FM.canvasEdit.boxFor is missing');
+    const box = document.getElementById('select-box');
+    if (!box) throw new Error('no #select-box in the DOM');
+    const wrap = document.getElementById('canvas-wrap');
+    if (!wrap) throw new Error('no #canvas-wrap');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, vp = FM.viewport ? { x: FM.viewport.x, y: FM.viewport.y, scale: FM.viewport.scale } : null;
+    const P = FM.scene.project, W0 = P.width, H0 = P.height;
+
+    // the box's four corners, from boxFor's numbers alone, in wrap-local px
+    const cornersFrom = (g) => {
+      const rad = g.rot * Math.PI / 180, cos = Math.cos(rad), sin = Math.sin(rad);
+      const tanX = Math.tan(g.skewX * Math.PI / 180), tanY = Math.tan(g.skewY * Math.PI / 180);
+      const sX = g.scaleX || 1e-6, sY = g.scaleY || 1e-6;
+      const b = (g.skewX || g.skewY) ? (sY * tanY / sX) : 0;   // the CSS matrix(1,b,c,1,0,0) update() writes
+      const c = (g.skewX || g.skewY) ? (sX * tanX / sY) : 0;
+      return [[0, 0], [g.w, 0], [g.w, g.h], [0, g.h]].map(function (p) {
+        let x = p[0] - g.w * g.ax + (g.shift || 0), y = p[1] - g.h * g.ay;   // origin-relative, translate applied first
+        const sx = x + c * y, sy = b * x + y;                                 // then the shear
+        return { x: g.cx + cos * sx - sin * sy, y: g.cy + sin * sx + cos * sy };   // then the rotation, about the pivot
+      });
+    };
+    const aabbOf = (pts) => {
+      const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+      return { left: Math.min.apply(null, xs), top: Math.min.apply(null, ys), w: Math.max.apply(null, xs) - Math.min.apply(null, xs), h: Math.max.apply(null, ys) - Math.min.apply(null, ys) };
+    };
+
+    const shapes = [];
+    try {
+      if (FM.viewport) FM.viewport.reset();
+      P.width = 320; P.height = 240;
+      FM.scene.layers.length = 0;
+      const mk = (over) => { const l = FM.makeLayer(over.type || 'shape', Object.assign({ shape: 'rect', x: 160, y: 120, shapeW: 80, shapeH: 60, fill: '#3a7bd5' }, over)); l.start = 0; l.duration = 5; FM.scene.layers.push(l); return l; };
+
+      const plain = mk({ name: 't921 plain' });
+      const rot = mk({ name: 't921 rot' }); rot.transform.rotation = 37; rot.transform.anchorX = 0.2; rot.transform.anchorY = 0.8;
+      const parent = mk({ name: 't921 parent', x: 60, y: 60 }); parent.transform.rotation = 20; parent.transform.scale = 1.4;
+      const child = mk({ name: 't921 child', x: 30, y: 10 }); child.parent = parent.id; child.transform.rotation = 15;
+      const skew = mk({ name: 't921 skew' }); skew.transform.skewX = 18; skew.transform.skewY = -9; skew.transform.scaleX = 1.3; skew.transform.scaleY = 0.7;
+      const txt = mk({ type: 'text', name: 't921 text', text: 'wrapping text here', x: 120, y: 90 }); txt.align = 'left'; txt.wrapWidth = 90;
+      const gm1 = mk({ name: 't921 gm1', x: 100, y: 100 });
+      const gm2 = mk({ name: 't921 gm2', x: 150, y: 140 });
+      FM.scene.selectedIds = [gm1.id, gm2.id]; FM.scene.selectedId = gm1.id;
+      FM.groupSelection();
+      const group = FM.scene.layers.filter(l => l.type === 'group')[0];
+      shapes.push(['plain', plain], ['rotated + off-centre anchor', rot], ['parented to a rotated, scaled parent', child], ['skewed and non-uniformly scaled', skew], ['text, left-aligned with a wrap width', txt]);
+      if (group) shapes.push(['a group (bounds-hugging box)', group]);
+
+      let sawRotated = false;
+      for (const [what, L] of shapes) {
+        FM.selectLayer(L.id);
+        FM.setTime ? FM.setTime(1) : (FM.time = 1);
+        FM.canvasEdit.update();
+        await sleep(40);
+        const g = FM.canvasEdit.boxFor(L, FM.time);
+        if (!g) throw new Error(what + ': boxFor returned nothing for a visible layer');
+        if (box.style.display === 'none') throw new Error(what + ': the app drew no outline, so there is nothing to compare against');
+        const wr = wrap.getBoundingClientRect();
+        const k = wrap.offsetWidth ? (wr.width / wrap.offsetWidth) : 1;   // wrap-local px → screen px (1 at the default viewport)
+        const want = aabbOf(cornersFrom(g));
+        const got = box.getBoundingClientRect();
+        const dx = Math.abs((wr.left + want.left * k) - got.left), dy = Math.abs((wr.top + want.top * k) - got.top);
+        const dw = Math.abs(want.w * k - got.width), dh = Math.abs(want.h * k - got.height);
+        if (dx > 1.5 || dy > 1.5 || dw > 1.5 || dh > 1.5) {
+          throw new Error(what + ': boxFor describes a box at ' + (wr.left + want.left * k).toFixed(1) + ',' + (wr.top + want.top * k).toFixed(1) + ' ' + (want.w * k).toFixed(1) + 'x' + (want.h * k).toFixed(1) +
+            ' while the app drew ' + got.left.toFixed(1) + ',' + got.top.toFixed(1) + ' ' + got.width.toFixed(1) + 'x' + got.height.toFixed(1) +
+            ' — presence would outline somebody else\'s layer in the wrong place on exactly this shape');
+        }
+        if (Math.abs(g.rot) > 1 || g.skewX || g.skewY) sawRotated = true;
+        if (!(got.width > 1 && got.height > 1)) throw new Error(what + ': the outline is ' + got.width.toFixed(1) + 'x' + got.height.toFixed(1) + ' — too small to be measuring anything');
+      }
+      if (!sawRotated) throw new Error('control: none of the cases carried a rotation or a skew, so the agreement above never exercised the transform chain');
+
+      // …and the cases where there is deliberately no box at all
+      if (FM.canvasEdit.boxFor(null, 0) !== null) throw new Error('boxFor invented a box for no layer');
+      const cam = FM.scene.layers.filter(l => l.type === 'camera')[0] || FM.makeLayer('camera', {});
+      if (FM.canvasEdit.boxFor(cam, 0) !== null) throw new Error('boxFor returned a box for the CAMERA — the camera pans globally and has never had one');
+      const hidden = shapes[0][1]; hidden.visible = false;
+      if (FM.canvasEdit.boxFor(hidden, FM.time) !== null) throw new Error('boxFor returned a box for a layer that is not visible at this time');
+      hidden.visible = true;
+    } finally {
+      P.width = W0; P.height = H0;
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
+      if (vp && FM.viewport) { FM.viewport.x = vp.x; FM.viewport.y = vp.y; FM.viewport.scale = vp.scale; FM.viewport.apply(); }
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(80);
     }
   });
 
@@ -69466,6 +70858,64 @@
     } finally {
       try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig); } catch (e) {}
       for (const p of mine()) { try { await FM.projects.discardDraftAnyway(p.id); } catch (e) {} }
+      try { if (wasOpen) FM.home.open(); } catch (e) {}
+    }
+  });
+
+  /* 915.5A — A BLANK IN A BACKUP IS NEVER SILENT. buildBackup only walked the media the packer FOUND, so a
+     photo, video or song layer with no file behind it was simply absent and the file claimed to be complete.
+     The one-copy review traced the worst case of it: a backup taken while rolled back to a build that cannot
+     read pointers, with every reused clip quietly missing. Whatever the cause, it is named now — and Settings,
+     which used to call everything in that list "too big", must not tell him a 0 MB clip was too big. */
+  test('915.5A a backup names every clip with no footage behind it, and Settings does not call it too big', { item: '915', budgetMs: 30000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const realBackup = FM.storage.backupAll;
+    const made = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      made.push(await FM.projects.create({ name: 'FX915A blank backup', width: 320, height: 240 }));
+      const V = FM.makeLayer('video', { name: 'FX915A blank song', x: 160, y: 120, start: 0, duration: 3 });   // a song rides the video type
+      const I = FM.makeLayer('image', { name: 'FX915A blank photo', x: 160, y: 120, start: 0, duration: 3 });
+      const T = FM.makeLayer('text', { text: 'q915a', x: 160, y: 120 }); T.start = 0; T.duration = 3; T.name = 'FX915A words';
+      FM.scene.layers.push(V, I, T);
+      FM.storage.markDirty(); await FM.storage.save();
+      if (orig) await FM.projects.open(orig);
+
+      const obj = await FM.storage.buildBackup(null);
+      const mine = ((obj.notIncluded && obj.notIncluded.media) || []).filter(function (m) { return m.project === 'FX915A blank backup'; });
+      const named = mine.map(function (m) { return m.file; });
+      ['FX915A blank song', 'FX915A blank photo'].forEach(function (n) {
+        if (named.indexOf(n) < 0) throw new Error('the backup does not name “' + n + '”, which has no footage — the file claims to be complete (named: ' + JSON.stringify(named) + ')');
+      });
+      if (named.indexOf('FX915A words') >= 0) throw new Error('a TEXT layer was listed as missing footage — it never has any');
+      if (mine.some(function (m) { return !m.missing; })) throw new Error('a clip with no footage is not marked missing, so it reads as one that was too big to carry: ' + JSON.stringify(mine));
+
+      // ── the toast, through the real Settings button, with one clip of each kind in the report
+      FM.storage.backupAll = async function () {
+        return { ok: true, count: 1, drafts: 0, bytes: 2048, notIncluded: { projects: [], media: [
+          { project: 'FX915A P', file: 'q915a-big.mp4', mb: 120 },
+          { project: 'FX915A P', layer: 'q915a beach', file: 'q915a beach', mb: 0, missing: true },
+        ] } };
+      };
+      FM.settings.open();
+      await sleep(120);
+      const row = [].slice.call(document.querySelectorAll('.set-row')).filter(function (r) { return /Back up every project/.test((r.querySelector('.set-label') || {}).textContent || ''); })[0];
+      const btn = row && row.querySelector('button');
+      if (!btn) throw new Error('Settings has no Back up every project button');
+      btn.click();
+      let msg = '';
+      for (let i = 0; i < 30 && !/Backed up/.test(msg); i++) { await sleep(50); msg = (document.getElementById('toast') || {}).textContent || ''; }
+      if (!/Backed up/.test(msg)) throw new Error('the backup toast never appeared (toast: ' + JSON.stringify(msg) + ')');
+      if (!/too big to include: q915a-big\.mp4 \(120 MB\)/.test(msg)) throw new Error('the too-big clip is no longer named the way it was: ' + JSON.stringify(msg));
+      if (/q915a beach \(0 MB\)/.test(msg) || /2 clips were too big/.test(msg)) throw new Error('Settings told him a clip with NO footage was too big to include: ' + JSON.stringify(msg));
+      if (!/no footage/.test(msg) || msg.indexOf('q915a beach') < 0) throw new Error('the clip with no footage is not named in the toast: ' + JSON.stringify(msg));
+    } finally {
+      FM.storage.backupAll = realBackup;
+      try { if (FM.settings.close) FM.settings.close(); } catch (e) {}
+      try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig); } catch (e) {}
+      for (const id of made) { try { await FM.projects.remove(id); } catch (e) {} }
+      try { if (FM.hideToast) FM.hideToast(); } catch (e) {}
       try { if (wasOpen) FM.home.open(); } catch (e) {}
     }
   });

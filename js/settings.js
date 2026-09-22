@@ -456,10 +456,18 @@ window.FM = window.FM || {};
           /* queue 915 clause 8: drafts are counted as what they are, not as projects he would go looking for */
           const nd = r.drafts || 0, np = r.count - nd;
           let msg = 'Backed up ' + np + (np === 1 ? ' project' : ' projects') + (nd ? ' and ' + nd + (nd === 1 ? ' draft' : ' drafts') : '') + ' (' + (mb >= 1 ? mb + ' MB' : 'under 1 MB') + ').';
-          if (miss.length) {
-            const names = miss.slice(0, 3).map(m => m.file + ' (' + m.mb + ' MB)').join(', ');
-            msg += ' ⚠️ ' + miss.length + (miss.length === 1 ? ' clip was' : ' clips were') + ' too big to include: ' + names + (miss.length > 3 ? ' and more' : '') + '. Everything else is in the file.';
+          /* queue 915 phase A: a clip with NO footage stored is listed too (`missing`), and it is not "too big" —
+             "Clip (0 MB) was too big" would be a second lie on top of the blank. Two sentences, each true. */
+          const big = miss.filter(m => !m.missing), gone = miss.filter(m => m.missing);
+          if (big.length) {
+            const names = big.slice(0, 3).map(m => m.file + ' (' + m.mb + ' MB)').join(', ');
+            msg += ' ⚠️ ' + big.length + (big.length === 1 ? ' clip was' : ' clips were') + ' too big to include: ' + names + (big.length > 3 ? ' and more' : '') + '.';
           }
+          if (gone.length) {
+            const names = gone.slice(0, 3).map(m => m.file + ' in ' + m.project).join(', ');
+            msg += ' ⚠️ ' + gone.length + (gone.length === 1 ? ' clip has' : ' clips have') + ' no footage stored on this device, so the file has none either: ' + names + (gone.length > 3 ? ' and more' : '') + '.';
+          }
+          if (miss.length) msg += ' Everything else is in the file.';
           if (FM.toast) FM.toast(msg, miss.length ? 12000 : 6000);
         }),
       actionRow('Restore from a backup', 'Adds every project from a backup file back in. It never replaces or deletes what is already here.', 'Restore…',

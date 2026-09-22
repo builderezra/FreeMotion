@@ -1,0 +1,162 @@
+<!doctype html><html><head><meta charset="utf-8"><title>#921 Stage-0 probes</title></head>
+<body style="margin:0;background:#111;color:#cfd;font:12px ui-monospace">
+<pre id="o" style="padding:10px;white-space:pre-wrap">running…</pre>
+<iframe id="app" src="../index.html" style="width:900px;height:600px;border:0;opacity:.12"></iframe>
+<script>
+/* ═══ #921 STAGE-0 PROBES (COLLAB-DESIGN.md §28) ═══════════════════════════════════════════════════
+ * Eight things the spec is built on that NOBODY HAD MEASURED. Each one decides a design later stages
+ * cannot change cheaply: whether the three-instance test rig can exist at all, whether WebRTC connects
+ * in this headless Chrome, how big a real offer is, what a diff will cost on a big project, and whether
+ * the sanitisers quietly delete the fields collab wants to add.
+ * Read-only: it renders nothing into a project, writes nothing to disk, and the one thing it opens is a
+ * pair of peer connections to ITSELF, with no ICE servers (nothing leaves the device).
+ *
+ * Run it:  tools/serve.sh 8821 "$PWD"  then
+ *   python3 tools/shot.py --port 8821 --path /tests/_collab-probe.html --width 1280 --height 900 \
+ *     --wait 9000 --js "document.getElementById('o').textContent" --out /tmp/probe.png
+ * Probe 4 (the public relays answering) is NOT here on purpose: it is the one that talks to a third
+ * party, and nothing in this repo may do that before he has said yes — spec Q1.
+ *
+ * 📐 MEASURED 22 Sep, headless Chrome, this machine (the numbers the later stages are built on):
+ *   1  a.localhost loads and is a SEPARATE origin → the three-instance rig works, no fmns shim needed
+ *   2  plain headless: 2 host candidates, both mDNS .local, and the data channel NEVER OPENED in 8s
+ *      with --disable-features=WebRtcHideLocalIpsWithMdns: **open in 23ms**, no .local candidates
+ *      → S3 must launch Chrome with that flag (the conditional tests/_cdp.py row in §4.2 is now a YES)
+ *   3  offer SDP 458 bytes · sctp maxMessageSize 262144 · CompressionStream available
+ *   5  500 layers: serialise 2-3ms, parse 1ms, re-serialise 1-3ms (unthrottled) — the diff's floor
+ *   7  a valid uid survives the sanitiser; layer.notes and project.comments survive a save unchanged
+ *   8  eachRefFx does reach a caption cue's own effects, and _fillFxParams exists */
+const lines = [];
+const say = (k, v) => { lines.push(k.padEnd(34) + ' ' + v); document.getElementById('o').textContent = lines.join('\n'); };
+const ms = t => Math.round(t) + 'ms';
+
+async function probeOrigins() {
+  /* 1. Do *.localhost iframes load, with SEPARATE storage? The whole Tier-3 test rig (three real app
+     instances in one page) rests on it; the fallback is an fmns storage shim, which is code we would
+     rather not write. Chrome maps *.localhost to loopback itself; serve.sh binds 127.0.0.1. */
+  const tag = 'p921_' + Date.now().toString(36);
+  const load = (host) => new Promise((res) => {
+    const f = document.createElement('iframe');
+    f.style.cssText = 'width:200px;height:120px;opacity:0;position:absolute;left:-9999px';
+    f.src = 'http://' + host + ':' + location.port + '/tests/_collab-probe.html?child=1&tag=' + tag;
+    const done = (v) => { res(v); };
+    f.onload = () => {
+      let win = null;
+      try { win = f.contentWindow; } catch (e) {}
+      if (!win) return done({ host: host, loaded: true, sameProcess: false });
+      // same-origin reads throw for a different origin — which is itself the answer we want
+      let cross = false, ls = null, locks = null, crypto_ = null;
+      try { ls = win.localStorage.getItem('fm.probe'); } catch (e) { cross = true; }
+      try { locks = !!win.navigator.locks; } catch (e) {}
+      try { crypto_ = !!(win.crypto && win.crypto.subtle); } catch (e) {}
+      done({ host: host, loaded: true, isolated: cross, sawValue: ls, locks: locks, subtle: crypto_ });
+    };
+    f.onerror = () => done({ host: host, loaded: false });
+    document.body.appendChild(f);
+    setTimeout(() => done({ host: host, loaded: false, timedOut: true }), 8000);
+  });
+  try { localStorage.setItem('fm.probe', tag); } catch (e) {}
+  const a = await load('a.localhost');
+  say('1 a.localhost iframe', JSON.stringify(a));
+  say('1 verdict', a.loaded ? (a.isolated ? 'SEPARATE ORIGIN — the Tier-3 rig works as designed'
+                                          : 'loaded but SAME storage — use the fmns fallback (§25.3)')
+                            : 'DID NOT LOAD — use the fmns fallback (§25.3)');
+}
+
+async function probeRtc() {
+  /* 2 + 3. Two RTCPeerConnections with no ICE servers, in this page. Measures: do they connect at all
+     headless, what candidate types appear (mDNS .local hosts are the flaky ones), how big the offer
+     really is (it has to fit in a QR code / a pasted code in the codes-only mode), and what one
+     message may be (media is chunked to it). */
+  if (!window.RTCPeerConnection) { say('2 RTCPeerConnection', 'MISSING — no WebRTC in this browser'); return; }
+  const a = new RTCPeerConnection({ iceServers: [] });
+  const b = new RTCPeerConnection({ iceServers: [] });
+  const cands = { a: [], b: [] };
+  a.onicecandidate = e => { if (e.candidate) { cands.a.push(e.candidate.candidate); b.addIceCandidate(e.candidate).catch(() => {}); } };
+  b.onicecandidate = e => { if (e.candidate) { cands.b.push(e.candidate.candidate); a.addIceCandidate(e.candidate).catch(() => {}); } };
+  const ch = a.createDataChannel('ctl', { ordered: true });
+  const t0 = performance.now();
+  const open = new Promise((res) => {
+    let done = false;
+    ch.onopen = () => { if (!done) { done = true; res({ ok: true, at: performance.now() - t0 }); } };
+    setTimeout(() => { if (!done) { done = true; res({ ok: false, at: performance.now() - t0 }); } }, 8000);
+  });
+  const offer = await a.createOffer();
+  await a.setLocalDescription(offer);
+  await b.setRemoteDescription(offer);
+  const answer = await b.createAnswer();
+  await b.setLocalDescription(answer);
+  await a.setRemoteDescription(answer);
+  const r = await open;
+  say('2 datachannel', r.ok ? 'OPEN in ' + ms(r.at) : 'DID NOT OPEN within 8s');
+  const types = s => (s.match(/typ \w+/g) || []).join(',');
+  say('2 candidates a/b', cands.a.length + '/' + cands.b.length + '  ' + types(cands.a.join(' ')));
+  say('2 mDNS hosts', /\.local/.test(cands.a.join(' ')) ? 'YES (.local) — add --disable-features=WebRtcHideLocalIpsWithMdns if flaky' : 'no');
+  say('3 offer SDP bytes', String(new Blob([offer.sdp || '']).size));
+  say('3 maxMessageSize', String((a.sctp && a.sctp.maxMessageSize) || 'unknown'));
+  say('3 CompressionStream', String(typeof window.CompressionStream));
+  try { ch.close(); } catch (e) {}
+  a.close(); b.close();
+}
+
+function probeApp(w) {
+  const FM = w.FM;
+  /* 5. What a full diff will COST. There is no diff engine until S1, so this measures its floor: a
+     canonical serialise of a 500-layer document, which any observer-diff has to do at least once. */
+  const layers = [];
+  for (let i = 0; i < 500; i++) {
+    const l = FM.makeLayer('shape', { name: 'L' + i, shape: 'rect', x: i, y: i, shapeW: 40, shapeH: 40, fill: '#3a7bd5' });
+    l.transform.x = { kf: [{ t: 0, v: 0 }, { t: 1, v: 100 }, { t: 2, v: 30 }] };
+    l.effects = [{ type: 'blur', enabled: true, params: { radius: 4 } }];
+    layers.push(l);
+  }
+  const doc = { project: JSON.parse(JSON.stringify(FM.scene.project)), layers: layers };
+  const t0 = performance.now();
+  const s1 = JSON.stringify(doc, FM.jsonReplacer);
+  const t1 = performance.now();
+  const parsed = JSON.parse(s1);
+  const t2 = performance.now();
+  say('5 500 layers serialise', ms(t1 - t0) + ' (' + Math.round(s1.length / 1024) + 'KB)');
+  say('5 500 layers parse', ms(t2 - t1) + '  → a hot tick must stay well under this; ×4 CPU throttle multiplies it');
+  say('5 deep compare floor', ms((function () { const t = performance.now(); JSON.stringify(parsed, FM.jsonReplacer); return performance.now() - t; })()));
+
+  /* 7. Do the sanitisers quietly delete what collab adds? Unknown project fields, layer notes, a
+     project.comments list, and — the one D16 depends on — a uid on an effect / audioFx / behaviour. */
+  const l = FM.makeLayer('shape', { shape: 'rect' });
+  l.effects = [{ type: 'blur', enabled: true, params: { radius: 3 }, uid: 'abc12345' }];
+  l.notes = [{ id: 'n1', text: 'hi', mine: 1 }];
+  FM.storage._sanitizeLayers([l]);
+  say('7 uid kept on an effect', (l.effects[0] && l.effects[0].uid) === 'abc12345' ? 'YES' : 'NO — D16 needs the sanitiser taught');
+  say('7 layer.notes survive', JSON.stringify(l.notes));
+  const S = { project: JSON.parse(JSON.stringify(FM.scene.project)), layers: [l], selectedId: null, selectedIds: [] };
+  S.project.comments = [{ id: 'c1', by: 'o', text: 'hello', t: 1.5 }];
+  const before = JSON.stringify(S.project.comments);
+  Promise.resolve(FM.storage.serializeScene(S)).then(function (out) {
+    say('7 project.comments survive', JSON.stringify((out.project || {}).comments) === before ? 'YES (through serializeScene)' : 'NO — whitelist it, with a byte-identity test: ' + JSON.stringify((out.project || {}).comments));
+    say('7 notes survive the save', JSON.stringify((out.layers[0] || {}).notes));
+  }).catch(function (e) { say('7 serializeScene threw', String(e)); });
+
+  /* 8. Does the fx walk reach a CAPTION CUE's own effects? If it does not, normalizeDerived leaves cue
+     params unfilled on one device and filled on another, and the hashes disagree forever. */
+  const cap = FM.makeLayer('text', { text: 'x' });
+  cap.captions = [{ start: 0, end: 1, text: 'a', effects: [{ type: 'blur', enabled: true, params: {} }] }];
+  let seen = 0;
+  if (FM.eachRefFx) FM.eachRefFx(cap, () => { seen++; });
+  say('8 eachRefFx sees cue fx', seen >= 1 ? 'YES (' + seen + ' effect(s))' : 'NO — cue effects are outside the walk');
+  say('8 _fillFxParams exists', String(typeof FM._fillFxParams));
+}
+
+(async function () {
+  if (/[?&]child=1/.test(location.search)) { document.getElementById('o').textContent = 'child frame ok'; return; }
+  try { await probeOrigins(); } catch (e) { say('1 threw', String(e)); }
+  try { await probeRtc(); } catch (e) { say('2/3 threw', String(e)); }
+  const f = document.getElementById('app');
+  const w = f.contentWindow;
+  let n = 0;
+  (function wait() {
+    if (!(w.FM && w.FM.scene && w.FM.storage && w.FM.storage._sanitizeLayers)) { if (n++ > 400) return say('app', 'never loaded'); return setTimeout(wait, 50); }
+    try { probeApp(w); } catch (e) { say('5/7/8 threw', String(e && e.stack || e)); }
+    say('done', new Date().toISOString());
+  })();
+})();
+</script></body></html>

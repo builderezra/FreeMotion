@@ -46,6 +46,36 @@ window.FM = window.FM || {};
     // Restore the full multi-selection (filtered to surviving layers), so undo right after a
     // multi-select edit doesn't collapse the set align/distribute/nudge act on. (#20)
     FM.scene.selectedIds = (Array.isArray(s.selectedIds) ? s.selectedIds : (s.selectedId ? [s.selectedId] : [])).filter(id => FM.layerById(FM.scene, id));
+    suppress = false;
+    /* The block that used to stand here — the 629 rule, restoreReplacedMedia, the groupContext exit, the
+       mask resync and the time clamp — is now _afterExternalChange below, WORD FOR WORD. See it for why
+       (queue 921 S0). `pause:true` is what restore has always done; nothing else moved. */
+    FM.history._afterExternalChange(wasSelected, { pause: true });
+    if (FM.resizeCanvas) FM.resizeCanvas();
+    FM.refreshAll();
+    if (FM.seekVideosToTime) FM.seekVideosToTime();
+  }
+
+  /* ═══ THE SCENE CHANGED UNDER THE UI — PUT THE UI BACK IN AGREEMENT WITH IT (queue 921 S0) ═════════
+   * Extracted from restore() with ZERO behaviour change, because a second caller is coming: live
+   * collaboration applies someone else's edits straight into FM.scene, and every repair below is needed
+   * there for the same reason it is needed after an undo — the layers were swapped without the tools,
+   * the selection or the playhead being asked.
+   * ONE difference, and it is why `opts.pause` exists: an undo pauses playback (it always has), and a
+   * remote edit must NOT — a friend renaming a layer cannot be allowed to stop your playback. So the
+   * pause is a parameter rather than a second copy of this block that will drift from this one.
+   * `wasSelected` is read by the caller BEFORE the swap: the whole question of the 629 rule is whether
+   * the layer he was working on survived it. */
+  function afterExternalChange(wasSelected, opts) {
+    const pause = !opts || opts.pause !== false;
+    /* Dead ids out of the multi-selection. restore() has already filtered them from the snapshot it
+       just installed, so this is a no-op there — it is here for the collab caller, whose layers were
+       removed by someone else — and it only writes when something is actually dead, so an undo cannot
+       even swap the array for an identical copy. */
+    const ids = FM.scene.selectedIds;
+    if (Array.isArray(ids) && ids.some(id => !FM.layerById(FM.scene, id))) {
+      FM.scene.selectedIds = ids.filter(id => FM.layerById(FM.scene, id));
+    }
     /* ═══ IF THE UNDO TOOK THE LAYER YOU WERE ON, SELECT NOTHING (queue 629) ═══════════════════════
      * Ezra: *"When you undo or redo when on a layer and it basically is undo the creation of the layer
      * … it shouldn't force you to have another previous layer selected it should just close everything."*
@@ -62,7 +92,6 @@ window.FM = window.FM || {};
       FM.scene.selectedId = null;
       FM.scene.selectedIds = [];
     }
-    suppress = false;
     /* queue 829: the layers are back — now bring the MEDIA back into agreement with them. An undo past a
        "Replace media…" restores a layer whose mediaRev is older than the file currently loaded for it, and
        the original was stashed at replace time for exactly this. Async and silent: the layer is already
@@ -84,10 +113,7 @@ window.FM = window.FM || {};
     // Snapshots don't include FM.time; clamp it into the restored duration so undoing a duration-grow
     // (with the playhead parked past the new end) doesn't blank the preview / divide-by-zero in pxPerSec.
     FM.time = Math.max(0, Math.min((FM.scene.project && FM.scene.project.duration) || 0, FM.time || 0));
-    if (FM.playing && FM.pause) FM.pause();
-    if (FM.resizeCanvas) FM.resizeCanvas();
-    FM.refreshAll();
-    if (FM.seekVideosToTime) FM.seekVideosToTime();
+    if (pause && FM.playing && FM.pause) FM.pause();
   }
 
   /* Grey the transport's undo/redo when there is nothing behind or ahead (Ezra). The state already
@@ -97,7 +123,13 @@ window.FM = window.FM || {};
    * (commit, undo, redo, reset) updates the buttons through one call and none can drift. */
   function syncButtons() {
     const u = document.getElementById('btn-undo'), r = document.getElementById('btn-redo');
-    const canU = index > 0, canR = index < stack.length - 1;
+    /* WHILE COLLAB OWNS UNDO, THE BUTTONS MUST ASK IT (queue 921 S0). In a session undo is per-person —
+       it walks that person's own ops, not this snapshot stack — so `index` says nothing about whether
+       there is anything to undo. Inert today: FM.collab does not exist until stage 1, and undoActive()
+       is false until a session starts. */
+    const collabUndo = !!(FM.collab && FM.collab.undoActive && FM.collab.undoActive());
+    const canU = collabUndo ? !!FM.collab.canUndo() : index > 0;
+    const canR = collabUndo ? !!FM.collab.canRedo() : index < stack.length - 1;
     if (u) { u.classList.toggle('is-off', !canU); u.setAttribute('aria-disabled', canU ? 'false' : 'true'); }
     if (r) { r.classList.toggle('is-off', !canR); r.setAttribute('aria-disabled', canR ? 'false' : 'true'); }
   }
@@ -110,6 +142,12 @@ window.FM = window.FM || {};
     _steps() { return { len: stack.length, index: index }; },
     canRedo() { return index < stack.length - 1; },
     syncButtons: syncButtons,
+    _afterExternalChange: afterExternalChange,   // queue 921 S0: restore's post-swap repairs, shared with collab
+    /* queue 921 S0 (§10.4): the snapshots BEHIND the playhead of the stack, oldest first. A session that
+       starts mid-project still has to be able to undo what he did BEFORE it started, and the only record
+       of that is this stack — collab reads it once, at arm, and diffs consecutive pairs lazily. A copy:
+       the array itself must never leave this closure. */
+    _snapshotsUpTo() { return stack.slice(0, index + 1); },
     // reset() runs on open/load/boot — its commit must not count as a user edit, or merely VIEWING
     // a project would bump it to the top of the home list (the autosave it schedules is harmless:
     // it rewrites the just-loaded doc).
@@ -128,6 +166,10 @@ window.FM = window.FM || {};
       if (FM.releaseUnreachableMedia) { try { FM.releaseUnreachableMedia(stack); } catch (e) {} }
       if (FM.storage && FM.storage.clearDirty) FM.storage.clearDirty();
       syncButtons();
+      /* queue 921 S0: reset() runs on every project open/import/boot, which is exactly when a hosted
+         session has to stand down (§12.1 `paused`) and when collab's borrowed undo has to be handed
+         back. NOT gated on `active`: the hand-back must happen after a session has ended too. */
+      if (FM.collab && FM.collab.onReset) FM.collab.onReset();
     },
     /* queue 826: batch a multi-step action with these instead of swapping `commit` out. Re-entrant by
        design — nested and overlapping batches each add one, and history resumes when the last one ends. */
@@ -137,8 +179,17 @@ window.FM = window.FM || {};
     commit() {
       if (suppress) return;
       if (muteDepth > 0) return;
+      /* ═══ THE TWO COLLAB SEAMS (queue 921 S0, spec §9) ════════════════════════════════════════════
+       * beforeSnap runs the derived-value normalisation and the diff, so the snapshot taken on the next
+       * line already contains everything the diff sent — otherwise an undo would restore a state the
+       * others never saw. afterCommit closes that person's undo step.
+       * ⚠️ PAIRED ON EVERY EXIT, including the identical-snapshot return below: a beforeSnap whose
+       * afterCommit never ran leaves an undo step open, and the next action merges into it. Both are
+       * no-ops while no session is running, and FM.collab does not exist at all before stage 1. */
+      const cb = FM.collab && FM.collab.active;
+      if (cb) FM.collab.beforeSnap();
       const s = snap();
-      if (index >= 0 && stack[index] === s) return;   // identical to the current state → a no-op action can never add a stray undo step
+      if (index >= 0 && stack[index] === s) { if (cb) FM.collab.afterCommit(); return; }   // identical to the current state → a no-op action can never add a stray undo step
       // Discarding the redo tail can strand a clip just as an eviction can — a layer that only ever
       // existed "forward" of here is gone the moment the tail goes.
       let discarded = stack.length > index + 1;
@@ -155,10 +206,15 @@ window.FM = window.FM || {};
        * restores JSON only, so freeing it there made an undone delete come back blank); the record is
        * released here instead, once no snapshot on the stack can bring the layer back. */
       if (discarded && FM.releaseUnreachableMedia) { try { FM.releaseUnreachableMedia(stack); } catch (e) {} }
+      if (cb) FM.collab.afterCommit();   // queue 921 S0: close this person's undo step (see beforeSnap above)
       if (FM.storage) FM.storage.autosave();
       syncButtons();   // a new edit drops the redo tail, so redo greys out here too
     },
-    undo() { if (FM.flushPendingCommit) FM.flushPendingCommit(); if (index > 0) { index--; restore(stack[index]); if (FM.storage) FM.storage.autosave(); } syncButtons(); },   // persist so a hard kill after undo can't resurrect the edit
-    redo() { if (FM.flushPendingCommit) FM.flushPendingCommit(); if (index < stack.length - 1) { index++; restore(stack[index]); if (FM.storage) FM.storage.autosave(); } syncButtons(); },
+    /* ⚠️ IN A SESSION, UNDO IS NOT THIS STACK (queue 921 S0, spec §10). A snapshot restore would put the
+       WHOLE document back, wiping out everything the other people have done since — his rule for the
+       feature was "undo only undoes your own changes". So while collab owns undo, it answers instead.
+       One line, first, and false until a session starts. */
+    undo() { if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) return FM.collab.undo(); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (index > 0) { index--; restore(stack[index]); if (FM.storage) FM.storage.autosave(); } syncButtons(); },   // persist so a hard kill after undo can't resurrect the edit
+    redo() { if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) return FM.collab.redo(); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (index < stack.length - 1) { index++; restore(stack[index]); if (FM.storage) FM.storage.autosave(); } syncButtons(); },
   };
 })(window.FM);

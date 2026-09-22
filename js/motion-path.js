@@ -234,6 +234,7 @@ window.FM = window.FM || {};
   FM.motionPath = {
     _ensureKf: ensureKf,   // queue 834 (u10) suite seam: the seeding rule itself, which is where the bug was
     isActive() { return !!activeId; },
+    layerId() { return activeId; },   // queue 921 S0: which layer this is aimed at, for FM.cancelGesturesOn
     open(layerId) {
       if (activeId) this.stop();
       // No viewport reset (queue 770): the overlay is placed and mapped zoom-aware now, so the zoom he set to work on a small path stays.

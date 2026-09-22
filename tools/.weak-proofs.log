@@ -1,3 +1,5 @@
 2026-09-20 00:00	WEAK	dragging the TIMELINE’s divider carries the open ⚙ options pop-up with it (queue 866)	FM.setSideBar is not a function (the seam was new in v16.18, so the reverted side lacked it)
 2026-09-21 13:41	RESOLVED	dragging the TIMELINE’s divider carries the open ⚙ options pop-up with it (queue 866)	mutation 21 Sep: fitBarsTogether removed from bandMoved, setSideBar kept -> fails as 'the pop-up stayed at y=120 for the whole drag'
 2026-09-22 20:54	WEAK	915.3 a project duplicate that could not be written says so and leaves no empty copy	with no room for the copy's document, duplicate() returned undefined — the bulk bar counts anything but false as done and toasts Duplicated 1
+2026-09-23 03:24	WEAK	921 S0 sanitizers keep a valid uid, drop an invalid one, uid-less output byte-identical	FM.storage._sanitizeLayers / _keepUid is not exposed — the suite cannot test the real rule
+2026-09-23 03:24	WEAK	921 S0 nothing leaves the device, and solo undo still restores byte-for-byte	11 of the 11 collab seams are missing or no longer guarded: history.commit → beforeSnap · history.commit → afterCommit · history.undo delegates · history

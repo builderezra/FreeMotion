@@ -255,6 +255,13 @@ window.FM = window.FM || {};
      drag silently became "the second finger" reads as the bug it was written for, and this is what tells
      the two apart in the failure message. */
   FM._vpPointerCount = () => vpPtrs.size;
+  /* …and the way to PUT THEM DOWN, which the timeline has had as _abortGestures for the same reason:
+     "one leak poisons every gesture test after it". A test that presses without lifting (queue 538's
+     canvas tap does it deliberately — what it measures happens on the press) leaves a finger here for
+     the rest of the run, and from then on the first finger of any later two-finger test is read as that
+     stale pinch's SECOND finger while its own second is refused as a third. The pinch then silently
+     never starts, and the test reports the feature as broken. Counting them was never enough. */
+  FM._resetVpPointers = function () { vpPtrs.clear(); vpPinch = null; drag = null; };
   let vpPinch = null;
   function finishDrag() {   // commit an in-flight drag (second finger landed / pointer lost)
     if (!drag) return;
@@ -721,14 +728,23 @@ window.FM = window.FM || {};
   }
 
   // ---- selection box ----
-  function update() {
-    if (!box) return;
-    const layer = FM.selectedLayer(FM.scene);
-    const t = FM.time;
-    // grab cursor = "you're holding the player" (nothing selected → viewport pan; camera → scene pan)
-    const cur = (!layer || layer.type === 'camera') ? 'grab' : 'default';
-    if (canvas && canvas.style.cursor !== cur) canvas.style.cursor = cur;
-    if (!layer || layer.type === 'camera' || !FM.isLayerVisibleAt(layer, t)) { box.style.display = 'none'; if (anchorDot) anchorDot.style.display = 'none'; return; }   // camera pans globally — no box
+  /* ═══ WHERE THE SELECTION BOX GOES — THE GEOMETRY, WITHOUT THE DOM (queue 921 S0) ═════════════════
+   * Lifted out of update() below with no change to a single expression. It exists because a second
+   * caller is coming and must not be a second COPY: live collaboration draws an outline around the
+   * layers other people have selected, and an outline computed a second way is an outline that is
+   * subtly wrong on exactly the layers this one took three queue items to get right — parented (#832),
+   * grouped (#630), skewed (#9/#12) and text with an alignment (#686).
+   * Everything is in WRAP-LOCAL pixels (`#canvas-wrap`'s own layout space, i.e. before the viewport's
+   * CSS zoom — see localScale), which is where #select-box and every other overlay child is placed:
+   *   cx, cy      the pivot — the point the box rotates about, and where `transform-origin` lands
+   *   w, h        the box's size
+   *   ax, ay      the anchor as a fraction of w/h, so the top-left is cx − w·ax, cy − h·ay
+   *   rot         degrees; skewX / skewY degrees with scaleX / scaleY, which the shear needs
+   *   shift       the text-alignment translate, applied LAST in the CSS chain (see below)
+   *   anchorX/Y   where the pivot DOT goes, and hasPivot says whether there is one to show
+   * Returns null when there is nothing to outline (no layer, a camera, or not visible at t). */
+  function boxFor(layer, t) {
+    if (!layer || layer.type === 'camera' || !FM.isLayerVisibleAt(layer, t)) return null;   // camera pans globally — no box
     const tr = layer.transform;
     let sc = FM.evalProp(tr.scale, t);
     let cx = FM.evalProp(tr.x, t), cy = FM.evalProp(tr.y, t);
@@ -764,23 +780,41 @@ window.FM = window.FM || {};
       const gb = FM.groupBounds(layer, FM.scene, t);
       if (gb) { bw = gb.w * ds; bh = gb.h * ds; bcx = gb.x; bcy = gb.y; ax = 0.5; ay = 0.5; }
     }
+    return {
+      wrapLocal: true,
+      cx: bcx * ds, cy: bcy * ds, w: bw, h: bh, ax: ax, ay: ay,
+      rot: rot, skewX: skX, skewY: skY, scaleX: scX, scaleY: scY,
+      shift: alignShift(layer, bw),
+      anchorX: apx * ds, anchorY: apy * ds, hasPivot: !!gpiv,
+    };
+  }
+
+  function update() {
+    if (!box) return;
+    const layer = FM.selectedLayer(FM.scene);
+    const t = FM.time;
+    // grab cursor = "you're holding the player" (nothing selected → viewport pan; camera → scene pan)
+    const cur = (!layer || layer.type === 'camera') ? 'grab' : 'default';
+    if (canvas && canvas.style.cursor !== cur) canvas.style.cursor = cur;
+    const g = boxFor(layer, t);
+    if (!g) { box.style.display = 'none'; if (anchorDot) anchorDot.style.display = 'none'; return; }
     box.style.display = 'block';
     // The wrap handles are text-only — on a shape or a video there is no column for them to set.
     box.classList.toggle('sb-has-wrap', layer.type === 'text');
-    box.style.width = bw + 'px';
-    box.style.height = bh + 'px';
+    box.style.width = g.w + 'px';
+    box.style.height = g.h + 'px';
     // transform.x/y is the ANCHOR point; the compositor draws content at -w*anchorX / -h*anchorY from it
     // and rotates around the anchor. Mirror that here so the box + handles stay glued to the layer once
     // the anchor is moved off-centre (was hardcoded to a centred 0.5/0.5 anchor).
-    box.style.left = (bcx * ds - bw * ax) + 'px';
-    box.style.top = (bcy * ds - bh * ay) + 'px';
-    box.style.transformOrigin = (bw * ax) + 'px ' + (bh * ay) + 'px';
+    box.style.left = (g.cx - g.w * g.ax) + 'px';
+    box.style.top = (g.cy - g.h * g.ay) + 'px';
+    box.style.transformOrigin = (g.w * g.ax) + 'px ' + (g.h * g.ay) + 'px';
     // rotate, then a shear K' = S·K·S⁻¹ applied to the already-scaled box reproduces the compositor's
     // R·S·K exactly — and because K' has a unit diagonal, the handles shear but don't blow up in size.
-    let tf = 'rotate(' + rot + 'deg)';
-    if (skX || skY) {
-      const tanX = Math.tan(skX * Math.PI / 180), tanY = Math.tan(skY * Math.PI / 180);
-      const sX = scX || 1e-6, sY = scY || 1e-6;
+    let tf = 'rotate(' + g.rot + 'deg)';
+    if (g.skewX || g.skewY) {
+      const tanX = Math.tan(g.skewX * Math.PI / 180), tanY = Math.tan(g.skewY * Math.PI / 180);
+      const sX = g.scaleX || 1e-6, sY = g.scaleY || 1e-6;
       tf += ' matrix(1,' + (sY * tanY / sX) + ',' + (sX * tanX / sY) + ',1,0,0)';
     }
     // LAST in the chain on purpose. CSS applies a transform list right-to-left, so a trailing
@@ -788,8 +822,7 @@ window.FM = window.FM || {};
     // it — which is exactly the compositor's order (it translates after R·S·K). Putting the offset on
     // box.style.left instead would slide the box along the SCREEN axis, so it would only look right
     // while the layer was unrotated.
-    const shPx = alignShift(layer, bw);
-    if (shPx) tf += ' translate(' + shPx + 'px,0)';
+    if (g.shift) tf += ' translate(' + g.shift + 'px,0)';
     box.style.transform = tf;
     /* THE SECTION THAT OWNS THE CANVAS TAKES THE BOX DOWN (queue 205). Move & Transform shows the
      * anchor instead — the thing everything rotates and scales around, and previously invisible
@@ -813,9 +846,9 @@ window.FM = window.FM || {};
        * so `groupPivot` returns null and a dot at (x,y) would be a confident lie about a pivot that
        * does not exist. (queue 630, clause 2) */
       const showA = (FM._mtMode === 'anchor' || owns === 'transform') &&
-                    (layer.type !== 'group' || !!gpiv);
+                    (layer.type !== 'group' || g.hasPivot);
       anchorDot.style.display = showA ? 'block' : 'none';
-      if (showA) { anchorDot.style.left = (apx * ds) + 'px'; anchorDot.style.top = (apy * ds) + 'px'; }
+      if (showA) { anchorDot.style.left = g.anchorX + 'px'; anchorDot.style.top = g.anchorY + 'px'; }
     }
   }
 
@@ -830,6 +863,30 @@ window.FM = window.FM || {};
 
   FM.canvasEdit = {
     _parentXform: parentXform,   // queue 832 suite seam: the walk the outline, the handles and the hit test all use
+    boxFor: boxFor,              // queue 921 S0: the selection box's geometry, without the DOM — see boxFor
+    /* ═══ END A CANVAS DRAG THAT IS NO LONGER ABOUT ANYTHING (queue 921 S0, spec §8.7) ═══════════════
+     * When somebody else deletes the layer under your finger, the drag has to stop where it is: left
+     * running, its next pointermove writes a transform onto a layer that has gone, and pointerup
+     * commits it. Dropped rather than restored, because this drag writes through setTransform as it
+     * goes — the undo step for it is the ordinary one, and the layer it belonged to no longer exists.
+     * `pred` takes the dragged layer's id (null for a viewport pan). Returns whether one was ended. */
+    /* ⚠️ THE PINCH IS A DRAG TOO, AND ON THE PHONE IT IS THE COMMON ONE (review fix). Two fingers on
+       the canvas with a layer selected scale and twist THAT LAYER through vpPinch, not `drag` — and
+       both entry points run finishDrag() before startPinch(), so `drag` is null for the whole gesture
+       and an `if (!drag) return false` here missed every one of them. Left running it keeps writing
+       shiftTransform to a layer that has gone, and the second finger lifting commits it to history,
+       which is a diff. Nulled rather than restored, for the same reason a drag is: it writes through
+       shiftTransform as it goes. vpPtrs is left alone — the guards at onMove/onUp both test vpPinch,
+       and the fingers really are still down. */
+    cancelDrag: function (pred) {
+      const held = [];
+      if (drag) held.push({ id: (drag.layer && drag.layer.id) || null, stop: function () { drag = null; showGuides(null, null); } });
+      if (vpPinch && vpPinch.layer) held.push({ id: vpPinch.layer.id, stop: function () { vpPinch = null; } });
+      const mine = held.filter(function (h) { return typeof pred !== 'function' || pred(h.id); });
+      if (!mine.length) return false;
+      mine.forEach(function (h) { h.stop(); });
+      return true;
+    },
     init() {
       canvas = document.getElementById('preview');
       wrap = document.getElementById('canvas-wrap');

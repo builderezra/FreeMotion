@@ -414,6 +414,20 @@ window.FM = window.FM || {};
   window.addEventListener('pointerup', endDrag);
   window.addEventListener('pointercancel', endDrag);   // an OS-cancelled touch must not leave the NEXT touch silently rewriting the curve
 
+  /* ═══ THE TENTH TOOL §8.7 ASKS FOR (queue 921 S0, review fix) ═════════════════════════════════════
+   * FM.cancelGesturesOn lets go of every tool that has a grip on one layer when somebody else takes it
+   * away — and the spec's list ends "…touchup, tracker or graph-editor". The graph editor was the one
+   * it could not reach: both drags live in module-private variables and nothing here was exported that
+   * clears them, so a held easing handle kept writing kf.bez through the window pointermove above, and
+   * the release ran history.commit() — which is a diff — for a layer he had just been denied or that
+   * had just been deleted.
+   * stop() deliberately does NOT commit: the gesture is being taken away, not finished. */
+  FM.graphEditor = {
+    isActive: function () { return dragHandle !== null || ezDrag >= 0; },
+    layerId: function () { return (cur && cur.layer && cur.layer.id) || null; },
+    stop: function () { dragHandle = null; ezDrag = -1; redraw(); },
+  };
+
   // Build the editor as an INLINE element (no full-screen overlay) so it sits in the same Move &
   // Transform bottom-sheet, exactly like Alight Motion. The inspector renders this as a sub-view and
   // owns the "‹ Position / Scale" back button.

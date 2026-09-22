@@ -939,6 +939,10 @@ window.FM = window.FM || {};
   };
 
   FM.drawTools = {
+    // queue 921 S0: which drawing this session is building (null for a brand-new one), and the way out —
+    // FM.cancelGesturesOn needs both when the layer being drawn into is deleted by someone else.
+    layerId: function () { return sessionLayerId; },
+    stop: function () { stop(); },
     init: function () {
       if (overlay) return;
       var w = wrap(); if (!w) return;
