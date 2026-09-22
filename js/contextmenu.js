@@ -137,6 +137,8 @@ window.FM = window.FM || {};
        * the clamp actually put it on — a menu flipped to the left of your finger must hinge from the
        * right, or it swings away from the thing you tapped. */
       menu.style.transformOrigin = (flipX ? '100%' : '0%') + ' ' + (flipY ? '100%' : '0%');
+      // #912: the PC pop family grows DOWN out of the click, or UP when the clamp lifted the menu above it
+      menu.classList.toggle('ctx-up', flipY);
       void menu.offsetWidth;               // restart the animation when the menu is re-opened in place
       menu.classList.add('ctx-hinge');
     },

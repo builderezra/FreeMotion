@@ -162,7 +162,7 @@ window.FM = window.FM || {};
     t.appendChild(art);
     t.appendChild(el('span', 'bs-name', label));
     t.appendChild(el('span', 'bs-dot'));
-    t.addEventListener('click', () => { onChange(!on); commitH(); });
+    t.addEventListener('click', () => { if (!on) pendingReveal = { sub: label }; onChange(!on); commitH(); });   // #912: its rows drop in under the grid
     return t;
   }
 
@@ -3128,6 +3128,40 @@ window.FM = window.FM || {};
   // way their arrows point) has to be in this signature, or the row goes stale mid-scrub.
   let quickSideSig = null;
   let lastNavSig = null;   // layer+view the panel is currently scrolled for (see refresh)
+  /* #912 clause 4 — "Any static menu that's doesnt have any animation when u open it up give it one."
+     refresh() rebuilds the whole panel on EVERY edit (a slider drag is dozens a second), so an entrance
+     cannot live on a class the builders always add — it would replay under his finger. Both of these
+     say what CHANGED instead, and each is spent by exactly one rebuild:
+     `lastAnim` is where the panel was (layer, view, depth), so moving between levels can be told apart
+     from redrawing the same one; `pendingReveal` is set by the one control that just opened something
+     inline (a blend group, a tile's rows, a tab) and names what to bring in. */
+  let lastAnim = null, pendingReveal = null;
+  /* The drill-in is the options rails' own motion (sb-panel-in, styles.css) — the new level is revealed
+     from the right, and ‹ back reveals the level you return to from the left, the way the arrow points.
+     Depth, not view, decides the direction: grid 0, a category 1, an easing curve inside it 2. Only a
+     move on the SAME layer counts; picking another layer is not a drill and already has its own motion
+     (the phone sheet slides, the PC column swaps). */
+  function animateNav(root, layer) {
+    const depth = view === 'home' ? 0 : (root.querySelector('.es-inline') ? 2 : 1);
+    const sig = view + '/' + depth;
+    if (lastAnim && lastAnim.layer === layer.id && lastAnim.sig !== sig) {
+      const target = root.querySelector(depth === 0 ? ':scope > .cat-wrap' : ':scope > .cat-body');
+      if (target) target.classList.add(depth < lastAnim.depth ? 'cat-in-back' : 'cat-in');
+    }
+    lastAnim = { layer: layer.id, sig: sig, depth: depth };
+    const rv = pendingReveal; pendingReveal = null;
+    if (!rv) return;
+    if (rv.sel) {   // one element that just opened (the accordion keeps at most one of each)
+      const el0 = root.querySelector(rv.sel);
+      if (el0) el0.classList.add('insp-drop-in');
+    } else if (rv.sub) {   // a tile switched on: its heading and every row under it, up to the next heading
+      const head = [].slice.call(root.querySelectorAll('.bs-sub')).filter(h => h.textContent === rv.sub)[0];
+      for (let n = head; n && (n === head || !n.classList.contains('bs-sub')); n = n.nextElementSibling) n.classList.add('insp-drop-in');
+    } else if (rv.after) {   // a tab: everything below the tab row, from the side the new tab sits on
+      const bar = root.querySelector(rv.after);
+      for (let n = bar && bar.nextElementSibling; n; n = n.nextElementSibling) n.classList.add(rv.left ? 'cat-in-back' : 'cat-in');
+    }
+  }
   function homeRowSig() {
     const ids = FM.selectionIds ? FM.selectionIds() : [];
     if (ids.length >= 2) {
@@ -5621,7 +5655,7 @@ window.FM = window.FM || {};
         } else {
         head.innerHTML = '<span class="blend-arrow">' + (open ? '▾' : '▸') + '</span><span class="blend-cat-name">' + name + '</span>' +
           (curIn ? '<span class="blend-cur">' + curIn[1] + '</span><span class="blend-check">✓</span>' : '');
-        head.addEventListener('click', () => { const was = !!FM._blendOpen[name]; FM._blendOpen = {}; if (!was) FM._blendOpen[name] = true; FM.inspector.refresh(); });   // accordion: only ONE dropdown open at a time (AM)
+        head.addEventListener('click', () => { const was = !!FM._blendOpen[name]; FM._blendOpen = {}; if (!was) { FM._blendOpen[name] = true; pendingReveal = { sel: '.blend-list' }; } FM.inspector.refresh(); });   // accordion: only ONE dropdown open at a time (AM)
         }
         row.appendChild(head);
         if (open) {
@@ -5940,7 +5974,8 @@ window.FM = window.FM || {};
       // the one at the top of the Add Effect browser. It leads the panel so the answer to "where did
       // Audio Effects go" is the first thing on screen.
       const tab = fxTabFor(layer);
-      body.appendChild(fxModeToggle(layer, tab, k => { clearFilterPreview(); fxTab = k; FM._fxEasing = null; FM.inspector.refresh(); }));   // queue 729
+      const TABS = ['visual', 'filters', 'audio'];
+      body.appendChild(fxModeToggle(layer, tab, k => { clearFilterPreview(); pendingReveal = { after: '.fxmode', left: TABS.indexOf(k) < TABS.indexOf(tab) }; fxTab = k; FM._fxEasing = null; FM.inspector.refresh(); }));   // queue 729; #912 reveal
       // An unknown audio answer rendered as available; settle it and demote the toggle if it's a no.
       probeAudioSide(layer, id => { const cur = FM.selectedLayer(FM.scene); if (cur && cur.id === id && view === 'effects') FM.inspector.refresh(); });
       if (tab === 'filters') {
@@ -6508,6 +6543,7 @@ window.FM = window.FM || {};
         // Clearing lastLayerId means re-selecting a layer (even the SAME one) reopens at the category
         // GRID, not the sub-menu you last had open — deselecting is a clean reset (Ezra).
         lastLayerId = null;
+        lastAnim = null; pendingReveal = null;   // #912: nothing to drill from, and nothing left to reveal
         if (FM.pointEdit && FM.pointEdit.isActive() && FM.pointEdit.isEmbedded()) FM.pointEdit.stop();   // deselect ends Edit Points
         if (FM.fillDrag && FM.fillDrag.isActive()) FM.fillDrag.stop();                                   // …and hands the canvas back from the fill drag
         if (title) title.textContent = 'Add';
@@ -6665,6 +6701,7 @@ window.FM = window.FM || {};
         root.appendChild(bodyEl);
       }
       if (panelEl && root.querySelector('.es-inline')) panelEl.classList.add('insp-ease');
+      animateNav(root, layer);
     },
   };
 })(window.FM);

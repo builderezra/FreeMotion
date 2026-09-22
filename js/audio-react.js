@@ -485,6 +485,7 @@ window.FM = window.FM || {};
     window.addEventListener('keydown', root._arKeyHandler, true);
 
     const sheet = document.createElement('div');
+    sheet.className = 'ar-card';   // a hook for its entrance (#912) — every look it has is still the inline style below
     sheet.style.cssText = 'width:100%;max-width:460px;max-height:92vh;overflow:auto;background:var(--panel);' +
       'border:1px solid var(--line);border-radius:' + (wide ? '14px' : '16px 16px 0 0') +
       ';padding:16px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -6px 30px rgba(0,0,0,.5);' +

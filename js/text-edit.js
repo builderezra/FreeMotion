@@ -274,8 +274,12 @@ window.FM = window.FM || {};
      open or when the popover is one of the small ones, which must never be capped or lifted for. */
   function popLift() {
     if (!pop || (popKind !== 'extras' && popKind !== 'font')) return 0;
-    const pr = pop.getBoundingClientRect();
-    return pr.height > 0 ? Math.round(pr.height + 6) : 0;
+    /* offsetHeight, NOT getBoundingClientRect (#912): the pop now hinges open, and this is re-read on
+       every viewport change — a keyboard rising during the 320ms entrance would measure the rotated start
+       frame, a fraction of the sheet, and lift the canvas for a sheet a fifth of its real height. Layout
+       ignores transforms; at rest the two agree. */
+    const ph = pop.offsetHeight;
+    return ph > 0 ? Math.round(ph + 6) : 0;
   }
   function openPop(kind, build, btn) {
     if (popKind === kind) { closePop(); return; }
@@ -294,6 +298,19 @@ window.FM = window.FM || {};
     if (btn) btn.classList.add('on');
     positionPop();
     reflowForPop();   // the sheet is chrome now — the canvas has to move out from under it (queue 602)
+    /* IT OPENS OUT OF THE BUTTON THAT WAS TAPPED (#912 clause 4 — "any static menu … give it one").
+       Here and NOT in rebuildPop, which swaps in a fresh node every time a control inside changes: an
+       entrance on the class alone would replay on every colour pick. The hinge's x is the button's
+       centre, so the sheet swings down from under the thing you pressed; `te-pop-up` is the PC branch
+       that anchors the card by its bottom and so has to grow upward.
+       AFTER the reflow, which re-runs positionPop and can move the pop, and BEFORE the class, because
+       the class's start frame is a scaled/rotated box whose rect is not where the pop will rest. */
+    if (btn) {
+      const br = btn.getBoundingClientRect(), pl = pop.getBoundingClientRect().left;
+      if (br.width > 0) pop.style.setProperty('--te-pop-ox', Math.round(br.left + br.width / 2 - pl) + 'px');
+    }
+    pop.classList.toggle('te-pop-up', pop.style.top === 'auto');
+    pop.classList.add('te-pop-in');
   }
   // Rebuild the open popover in place (a control inside it changed and its sub-rows need re-rendering).
   function rebuildPop() {

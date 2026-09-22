@@ -19058,6 +19058,7 @@
       const card = appSet.closest('.export-card');
       const laidOut = !!(card && card.getBoundingClientRect().width > 0);
       if (laidOut) {
+        await entranceDone(cvDlg);   // #912: the card swings open now — a size read mid-swing is the foreshortened box (29px of a 32.5px button)
         let ha = hit('cv-appset');
         for (let i = 0; i < 10 && !ha.ok; i++) { await sleep(30); ha = hit('cv-appset'); }
         if (!ha.ok) throw new Error('#cv-appset is not reachable on a phone (' + ha.why + ')');
@@ -50790,6 +50791,277 @@
       const high = at(40, 100);
       if (originY(high.origin) !== 0) throw new Error('a menu with room below it should hinge from its TOP edge, got origin ' + high.origin);
     } finally { try { FM.contextMenu.hide(); } catch (e) {} }
+    });
+  });
+
+  /* ═══ #912 CLAUSE 4 — "Any static menu that's doesnt have any animation when u open it up give it one." ═══
+   * An audit opened every menu at 380 and 1280 and read getAnimations() the instant it appeared; these are a
+   * representative ten of the ones it found static. Each opens the REAL thing through its real opener and asks
+   * the one question the clause is about: is the element itself animating the moment it is on screen?
+   * `entrance()` counts only finite animations whose target IS that element — the inspector's cards glow
+   * forever and the sfx card wears an endless glint, and neither may pass for an entrance.
+   * What these do NOT pin is the choice of motion; that is a picture he judges, not a number. */
+  function entrance(el) {
+    if (!el || !el.getAnimations) return [];
+    return el.getAnimations().filter(function (a) {
+      const t = a.effect && a.effect.getComputedTiming && a.effect.getComputedTiming();
+      return !!t && t.iterations !== Infinity && t.duration > 0 && a.effect.target === el;
+    });
+  }
+  const animNames = list => list.map(a => a.animationName || a.transitionProperty || '?').join(', ') || 'none';
+  /* For a test that MEASURES a surface which now has an entrance: wait for it to land first. getBoundingClientRect
+     reports the transformed box, so a size or a hit-test taken mid-swing reads the start frame (a hinged card is
+     foreshortened, a popped one is at 86%) — a number the user never rests on. Hoisted, so any test can call it. */
+  async function entranceDone(el) {
+    if (!el || !el.getAnimations) return;
+    const list = el.getAnimations({ subtree: true }).filter(function (a) {
+      const t = a.effect && a.effect.getComputedTiming && a.effect.getComputedTiming();
+      return !!t && t.iterations !== Infinity;
+    });
+    await Promise.race([Promise.all(list.map(a => a.finished.catch(function () {}))), sleep(1500)]);
+  }
+  async function editorWithShape(fn) {
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (homeWasOpen) FM.home.close();
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      FM.addShapeLayer('rect');
+      const L = FM.scene.layers.filter(l => l.type === 'shape')[0];
+      if (!L) throw new Error('could not make a shape layer to test with');
+      FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(250);
+      return await fn(L);
+    } finally {
+      try { FM.contextMenu.hide(); } catch (e) {}
+      FM.scene.layers.length = 0;
+      layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  }
+
+  /* The one that was a BUG rather than a gap: the slide was written, and never played — the panel is built
+     fresh and got `.open` before its first style pass, so there was nothing to transition from. */
+  test('912 the Settings panel slides in when it opens (it was written and never played)', { item: '912' }, async function () {
+    try {
+      FM.settings.open();
+      const panel = document.querySelector('.set-panel');
+      if (!panel) throw new Error('FM.settings.open() built no .set-panel');
+      // the class goes on in a rAF — ask one frame later, well inside the 240ms slide
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const a = entrance(panel);
+      if (!a.length) throw new Error('the Settings panel is on screen with no animation running — it appears in one frame, although styles.css gives it a .24s slide (the class landed before the panel had a closed state to slide FROM)');
+    } finally {
+      FM.settings.close();
+      for (let i = 0; i < 40 && document.querySelector('.set-scrim'); i++) await sleep(25);
+    }
+  });
+
+  test('912 the New project dialog opens with an animation, on the phone and on PC', { item: '912' }, async function () {
+    const wasOpen = FM.home.isOpen();
+    const dlg = document.getElementById('hm-dialog');
+    if (!dlg) throw new Error('#hm-dialog is not in the document');
+    const once = async function (want) {
+      const tabBtn = document.querySelector('.hm-tab[data-tab="projects"]');
+      if (tabBtn) tabBtn.click();
+      await sleep(60);
+      document.getElementById('hm-new').click();
+      const card = dlg.querySelector('.hm-dlg-card');
+      if (dlg.classList.contains('hidden')) throw new Error('tapping + on the Projects tab did not open the New project dialog');
+      const a = entrance(card);
+      dlg.classList.add('hidden');
+      if (!a.length) throw new Error('the New project card appears in one frame with no animation (' + want + ')');
+      if (!a.some(x => want.test(x.animationName))) throw new Error('the New project card animates with ' + animNames(a) + ', not the ' + want + ' its neighbours use');
+    };
+    try {
+      if (!wasOpen) { FM.home.open(); await sleep(600); }
+      await atPhoneWidth(() => once(/fm-hinge-panel/));
+      await atWideWidth(() => once(/pop-grow/));
+    } finally {
+      dlg.classList.add('hidden');
+      if (!wasOpen) FM.home.close();
+    }
+  });
+
+  /* PC only: the phone has hinged since queue 612, and the rule that did it sat inside a max-width block. */
+  test('912 the context menu pops on PC, down from the click or up when it was lifted above it', { item: '912' }, async function () {
+    const items = [{ label: 'Copy', action() {} }, { label: 'Paste', action() {} }, { label: 'Duplicate', action() {} }];
+    try {
+      await atWideWidth(async function () {
+        FM.contextMenu.hide();
+        FM.contextMenu.show(60, 60, items);
+        const m = document.getElementById('ctx-menu');
+        const down = entrance(m);
+        if (!down.length) throw new Error('the context menu appears on PC in one frame, with no animation');
+        if (!down.some(a => a.animationName === 'pop-grow-down')) throw new Error('a menu opened below the pointer should grow DOWN out of it (pop-grow-down), got ' + animNames(down));
+        FM.contextMenu.hide();
+        FM.contextMenu.show(60, window.innerHeight - 8, items);   // the clamp has to lift this one above the pointer
+        const up = entrance(m);
+        if (!m.classList.contains('ctx-up')) throw new Error('a menu the clamp pushed up the screen was not marked ctx-up');
+        if (!up.some(a => a.animationName === 'pop-grow')) throw new Error('a menu lifted above the pointer should grow UP (pop-grow), got ' + animNames(up));
+      });
+    } finally { FM.contextMenu.hide(); }
+  });
+
+  test('912 Canvas settings swings open on the phone', { item: '912' }, async function () {
+    await editorWithShape(async function () {
+      await atPhoneWidth(async function () {
+        FM.selectLayer(null); await sleep(120);
+        const dlg = document.getElementById('canvas-dialog');
+        try {
+          if (!FM.openCanvasDialog) throw new Error('FM.openCanvasDialog is missing');
+          FM.openCanvasDialog();
+          if (dlg.classList.contains('hidden')) throw new Error('Canvas settings did not open');
+          const a = entrance(dlg.querySelector('.export-card'));
+          if (!a.length) throw new Error('the Canvas settings card appears on the phone in one frame, with no animation');
+          if (!a.some(x => x.animationName === 'fm-hinge-panel')) throw new Error('the phone card should swing on the hinge family, got ' + animNames(a));
+        } finally {
+          const c = document.getElementById('cv-cancel'); if (c && !dlg.classList.contains('hidden')) c.click();
+          dlg.classList.add('hidden');
+        }
+      });
+    });
+  });
+
+  test('912 the Export dialog opens with an animation on the phone', { item: '912' }, async function () {
+    await editorWithShape(async function () {
+      await atPhoneWidth(async function () {
+        FM.selectLayer(null); await sleep(120);
+        const dlg = document.getElementById('export-dialog');
+        try {
+          const b = document.getElementById('m-export');
+          if (!b) throw new Error('no #m-export on the phone top bar');
+          b.click();
+          await sleep(0);
+          if (dlg.classList.contains('hidden')) throw new Error('tapping Export did not open the export dialog (a notes reminder may have intercepted it)');
+          const a = entrance(dlg.querySelector('.export-card'));
+          if (!a.length) throw new Error('the Export card appears on the phone in one frame, with no animation');
+        } finally {
+          const c = document.getElementById('exp-cancel'); if (c && !dlg.classList.contains('hidden')) c.click();
+          dlg.classList.add('hidden');
+        }
+      });
+    });
+  });
+
+  test('912 the effects browser opens with an animation on PC', { item: '912' }, async function () {
+    await editorWithShape(async function (L) {
+      const realMount = FM.fxThumbs && FM.fxThumbs.mountFilter, realMountFx = FM.fxThumbs && FM.fxThumbs.mount;
+      if (FM.fxThumbs) { FM.fxThumbs.mountFilter = function () {}; FM.fxThumbs.mount = function () {}; }   // LOOP rule 17: no thumbnail queue left behind
+      try {
+        await atWideWidth(async function () {
+          FM.fxBrowser.open(L);
+          const root = document.getElementById('fx-browser');
+          if (!root || root.classList.contains('hidden')) throw new Error('the effects browser did not open');
+          const a = entrance(root);
+          if (!a.length) throw new Error('the effects browser appears on PC in one frame, with no animation — the hinge it has on the phone was gated to phone widths');
+          if (!a.some(x => x.animationName === 'sb-panel-in')) throw new Error('over the inspector column it should move like the inspector\'s own drill-in (sb-panel-in), got ' + animNames(a));
+        });
+      } finally {
+        if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+        if (FM.fxThumbs) { if (realMount) FM.fxThumbs.mountFilter = realMount; if (realMountFx) FM.fxThumbs.mount = realMountFx; }
+        if (FM.fxThumbs && FM.fxThumbs.stopAll) FM.fxThumbs.stopAll();
+        FM._fxPreview = null;
+      }
+    });
+  });
+
+  /* ⚠️ THE HALF THAT MATTERS AS MUCH AS THE ENTRANCE: refresh() rebuilds this panel on every slider drag, so
+     an entrance that replayed on a rebuild would flicker under his finger. Both are asserted. */
+  test('912 an inspector category drills in, back drills out, and a plain redraw does not replay either', { item: '912' }, async function () {
+    await editorWithShape(async function () {
+      const card = document.querySelector('#inspector .cat-card');
+      if (!card) throw new Error('no category cards in the inspector for a selected shape');
+      card.click();
+      const body = document.querySelector('#inspector > .cat-body');
+      if (!body) throw new Error('opening a category built no .cat-body');
+      const inA = entrance(body);
+      if (!inA.some(a => a.animationName === 'sb-panel-in')) throw new Error('the category opened with no drill-in animation (' + animNames(inA) + ')');
+      FM.inspector.refresh();
+      const again = entrance(document.querySelector('#inspector > .cat-body'));
+      if (again.length) throw new Error('a plain redraw of the SAME category replayed its entrance (' + animNames(again) + ') — every slider drag would flicker it');
+      const back = document.querySelector('#inspector .cat-back');
+      if (!back) throw new Error('the category has no ‹ back');
+      back.click();
+      const grid = document.querySelector('#inspector > .cat-wrap');
+      const outA = entrance(grid);
+      if (!outA.some(a => a.animationName === 'sb-panel-inL')) throw new Error('‹ back returned to the grid with no animation (' + animNames(outA) + ')');
+    });
+  });
+
+  test('912 a toast rises in instead of appearing in one frame', { item: '912' }, async function () {
+    const t = document.getElementById('toast');
+    try {
+      FM.hideToast();
+      getComputedStyle(t).display;   // let it really be hidden first — a toast still on screen from an earlier test would just be relabelled
+      FM.toast('912 probe', 4000);
+      const a = entrance(t);
+      if (!a.length) throw new Error('the toast appears in one frame with no animation');
+      /* It is centred by its transform, so the keyframe must carry translateX(-50%) or the toast lurches
+         half its width sideways for 180ms. Read at the START frame, where a keyframe that forgot it shows. */
+      a.forEach(x => { x.pause(); x.currentTime = 0; });
+      const m = new DOMMatrix(getComputedStyle(t).transform);
+      const want = -t.offsetWidth / 2;
+      a.forEach(x => x.finish());
+      if (Math.abs(m.m41 - want) > 1) throw new Error('the toast\'s entrance starts at x offset ' + m.m41.toFixed(1) + ' instead of its centring ' + want.toFixed(1) + ' — it would jump sideways as it rises');
+      /* …and a toast RELABELLED while it is up does not rise again. 'Preparing frames… 45%' and 'Tracking… 12%'
+         rewrite it many times a second, and a replay on each would hold it permanently mid-fade. */
+      FM.toast('912 probe, updated', 4000);
+      if (entrance(t).length) throw new Error('relabelling a toast that is already showing replayed its entrance — a progress toast would never finish arriving');
+      /* …and once it has landed it declares no animation at all, as it did before. The home push's sweep reads
+         animation-name to find body-level chrome that TRAVELS, and a toast sitting still above the push is the
+         one thing that sweep must let through. */
+      for (let i = 0; i < 20 && getComputedStyle(t).animationName !== 'none'; i++) await sleep(25);
+      if (getComputedStyle(t).animationName !== 'none') throw new Error('a toast that has arrived still declares animation "' + getComputedStyle(t).animationName + '" — at rest it must look exactly as it did');
+    } finally { FM.hideToast(); }
+  });
+
+  test('912 a text pop-over swings out of the button that opened it', { item: '912' }, async function () {
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (homeWasOpen) FM.home.close();
+    const layers0 = FM.scene.layers.slice();
+    try {
+      FM.scene.layers.length = 0;
+      FM.addTextLayer();
+      await sleep(400);
+      if (!FM.textEdit.isActive()) { const T = FM.scene.layers.filter(l => l.type === 'text')[0]; if (T) FM.textEdit.start(T.id); await sleep(300); }
+      const btn = document.querySelector('.te-font');
+      if (!btn) throw new Error('the text editor has no font button');
+      btn.click();
+      const pop = document.querySelector('.te-pop');
+      if (!pop) throw new Error('the font button opened no pop-over');
+      const a = entrance(pop);
+      if (!a.length) throw new Error('the font pop-over appears in one frame with no animation');
+      /* and it swings from the BUTTON: the hinge's x is the button's centre, relative to the pop */
+      a.forEach(x => x.finish());   // measured at rest — mid-entrance the box is scaled/rotated and its rect is not where it lands
+      const br = btn.getBoundingClientRect(), ox = parseFloat(pop.style.getPropertyValue('--te-pop-ox'));
+      const want = br.left + br.width / 2 - pop.getBoundingClientRect().left;
+      if (!(Math.abs(ox - want) <= 2)) throw new Error('the pop-over hinges from x ' + ox + ' but the font button\'s centre is at ' + want.toFixed(0) + ' — it would swing out of the wrong place');
+      btn.click();
+    } finally {
+      try { if (FM.textEdit && FM.textEdit.stop) FM.textEdit.stop(); } catch (e) {}
+      FM.scene.layers.length = 0;
+      layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
+  test('912 a canvas tool pill rises in, and rests exactly where it rested before', { item: '912' }, async function () {
+    await editorWithShape(async function () {
+      try {
+        FM.startDraw('freehand');
+        const bar = document.getElementById('draw-bar');
+        if (!bar || bar.classList.contains('hidden')) throw new Error('startDraw showed no #draw-bar');
+        const a = entrance(bar);
+        if (!a.length) throw new Error('the drawing pill appears in one frame with no animation');
+        a.forEach(x => x.finish());
+        /* `backwards`, not `both`: once it lands nothing of the animation may remain — the bar must be back
+           on its own translateX(-50%) and nothing else. */
+        const m = new DOMMatrix(getComputedStyle(bar).transform);
+        if (Math.abs(m.m41 + bar.offsetWidth / 2) > 1 || Math.abs(m.m42) > 0.5) throw new Error('after its entrance the pill rests at transform ' + getComputedStyle(bar).transform + ' — it should be only its centring translateX(-50%)');
+      } finally { try { FM.drawTool._stop(); } catch (e) {} }
     });
   });
 

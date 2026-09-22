@@ -111,7 +111,11 @@ window.FM = window.FM || {};
     if (popCleanup) { popCleanup(); popCleanup = null; }
     const card = overlay && overlay.querySelector('.shortcuts-card');
     const btn = document.getElementById('btn-help');
-    if (card && btn && FM.popFrom) popCleanup = FM.popFrom(card, btn);
+    /* NOT FROM HOME (#912). Home → Settings → Keyboard shortcuts opens this too, and the editor's ? is
+       under the home screen there — still laid out, so popFrom measured it and lifted a lone ? and a
+       comic tail over Home, pointing at nothing. From Home the card pops centred instead (styles.css). */
+    const onHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (card && btn && FM.popFrom && !onHome) popCleanup = FM.popFrom(card, btn);
   }
   function popShut() { if (popCleanup) { popCleanup(); popCleanup = null; } }
 
