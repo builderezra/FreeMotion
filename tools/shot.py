@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Screenshot the app in a throwaway headless Chrome, after running your own JS in it.
 
+TWO WAYS TO CALL IT. The original (v16.07) form still works exactly as before — positional out, --setup,
+and it CLOSES Home first so the shot is the editor:
+    python3 tools/shot.py out.png --width 380 --height 820 --setup 'FM.selectLayer(FM.scene.layers[0].id)'
+The #912 form stays on Home unless your JS leaves it, and prints what the JS returns:
+
     python3 tools/shot.py --out /path/a.png                      # home screen, 380x800, light home
     python3 tools/shot.py --home dark --out b.png                # the dark home look
     python3 tools/shot.py --js "document.querySelector('[aria-label=Settings]').click()" --wait 900 --out c.png
@@ -10,6 +15,9 @@
 Why it exists (22 Sep, #912): several agents had to LOOK at menus in light and dark at phone width at the
 same time, and the built-in browser pane is one shared tab — two drivers in it corrupt each other's state.
 Each call here gets its own Chrome, its own profile and its own port, so they cannot collide.
+⚠️ 22 Sep: the #912 rewrite REPLACED the v16.07 tool without noticing it existed, and dropped its phone
+emulation (touch + hover:none — the app asks about the POINTER, not the width; see queue 797). Both are
+back: any width under 768 is shot as a touch phone, and the call refuses if (hover: none) does not match.
 
 --js runs AFTER the app has loaded (and, with --home, after the home look is applied). Its value — if it
 returns one, or a Promise — is printed as JSON, so one call can both act and measure. Throws are printed,
@@ -33,8 +41,13 @@ def main():
     ap.add_argument('--js-file', default=None)
     ap.add_argument('--wait', type=int, default=600, help='ms to wait after --js before the shot')
     ap.add_argument('--frames', default=None, help='comma list of ms offsets after --js: one PNG each')
-    ap.add_argument('--out', required=True)
+    ap.add_argument('out_pos', nargs='?', default=None, help='(v16.07 form) the PNG to write')
+    ap.add_argument('--out', default=None)
+    ap.add_argument('--setup', default=None, help='(v16.07 form) JS run AFTER Home is closed')
     a = ap.parse_args()
+    a.out = a.out or a.out_pos
+    if not a.out:
+        ap.error('give the PNG path (positional, or --out)')
 
     profile = tempfile.mkdtemp(prefix='fm-shot-')
     dport = _cdp.free_port()
@@ -54,7 +67,24 @@ def main():
             except Exception:
                 pass
             time.sleep(0.25)
+        if a.width < 768:
+            # the PHONE is a finger, not a narrow mouse: issued after the navigation (sent before it, the load
+            # drops it — measured 7 Sep), and the media override only holds once touch emulation is on
+            cdp.send('Emulation.setTouchEmulationEnabled', enabled=True, maxTouchPoints=5)
+            cdp.send('Emulation.setEmulatedMedia', features=[{'name': 'hover', 'value': 'none'},
+                                                            {'name': 'any-hover', 'value': 'none'},
+                                                            {'name': 'pointer', 'value': 'coarse'},
+                                                            {'name': 'any-pointer', 'value': 'coarse'}])
+            if not cdp.eval("matchMedia('(hover: none)').matches"):
+                raise RuntimeError('the shot is not a phone: (hover: none) does not match, so touch-only rules are off')
         time.sleep(1.2)   # the intro and the home cards' rise
+        if a.setup is not None:
+            cdp.eval("(function(){ try { if (window.FM && FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {} })()")
+            time.sleep(0.6)
+            try:
+                cdp.eval('(function(){ %s })()' % a.setup)
+            except Exception as e:
+                print(json.dumps({'setup_error': str(e)[:1200]}))
         if a.home:
             cdp.eval("(FM.settings && FM.settings.set) ? FM.settings.set('homeLight', %s) : 0; "
                      "document.documentElement.setAttribute('data-home', '%s'); 1"
