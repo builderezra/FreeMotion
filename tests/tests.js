@@ -67251,6 +67251,44 @@
   });
 
 
+  /* ── queue 904 [C] starpoly3d: 80% of Spike Length was off-frame or broken ────────────────────────────────
+   * Tips sat at radius (1+spike)/√3 with the camera at 3.2 radii, so past ~1.2 the star outgrew its layer and past ~4.5
+   * the tips crossed the camera and projected to infinity. Past a tip radius of 1.25 the whole star now shrinks to keep
+   * the tips there, so every stop of the slider draws a whole star inside the frame, and the top of it still changes
+   * the shape. The 1.1 default sits under 1.25, so a saved star is untouched. Before the fix, spike 3 already drew to
+   * the canvas edge from a 60px layer in a 200px canvas. */
+  test('904 [C] Spiked Star stays a whole star in frame across the Spike Length slider, and the slider still changes it', { item: '904', budgetMs: 20000 }, function () {
+    var T = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX;
+    if (!T || typeof T.starpoly3d !== 'function') throw new Error('the Spiked Star kernel is not reachable');
+    var W = 200, H = 200, bb = { x: 70, y: 70, w: 60, h: 60 };
+    var A = document.createElement('canvas'); A.width = W; A.height = H;
+    var a = A.getContext('2d'); a.fillStyle = '#e8a33d'; a.fillRect(bb.x, bb.y, bb.w, bb.h);
+    function run(spike) {
+      var c = document.createElement('canvas'); c.width = W; c.height = H;
+      var g = c.getContext('2d', { willReadFrequently: true });
+      T.starpoly3d(A, g, W, H, bb, { spike: spike }, 0, 0);
+      return g.getImageData(0, 0, W, H).data;
+    }
+    function ink(d) { var n = 0; for (var i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; }
+    function onEdge(d) {
+      for (var i = 0; i < W; i++) {
+        if (d[(0 * W + i) * 4 + 3] || d[((H - 1) * W + i) * 4 + 3] || d[(i * W) * 4 + 3] || d[(i * W + W - 1) * 4 + 3]) return true;
+      }
+      return false;
+    }
+    var bad = [], shots = {};
+    [0.5, 1.1, 3, 6, 10, 15].forEach(function (s) {
+      var d = shots[s] = run(s), n = ink(d);
+      if (n < 400) bad.push('spike ' + s + ' drew almost nothing (' + n + ' px)');
+      if (onEdge(d)) bad.push('spike ' + s + ' runs off the frame');
+    });
+    function mad(P, Q) { var t = 0; for (var i = 0; i < P.length; i++) t += Math.abs(P[i] - Q[i]); return t / P.length; }
+    if (mad(shots[6], shots[15]) < 1) bad.push('spike 6 and 15 look the same — the top of the slider is dead travel');
+    if (ink(shots[0.5]) >= ink(shots[1.1])) bad.push('below the default, longer spikes should cover more of the frame');
+    if (bad.length) throw new Error(bad.join(' · ') + ' (queue 904)');
+  });
+
+
   /* ── queue 904 [B] glowscan: the scan only ever swept DOWN ───────────────────────────────────────────────
    * (Its other half, a strength control, shipped earlier as "Strength".) A scan across a wide title, or upward, was out
    * of reach. Sweeps: Down / Up / Right / Left. Down is the old loop untouched, so a saved scan is byte-identical.

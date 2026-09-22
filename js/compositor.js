@@ -10073,13 +10073,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const faces = [[0, 2, 4], [2, 1, 4], [1, 3, 4], [3, 0, 4], [2, 0, 5], [1, 2, 5], [3, 1, 5], [0, 3, 5]];
     const V = [], T = [];
     const uv = p => [(p[0] + 1) / 2, (p[1] + 1) / 2];   // planar projection wrap
+    /* Spike tips sit at radius (1+spike)/√3 and the camera at z = 3.2 (renderMesh's F), so past spike ~1.2
+     * the star outgrew the frame and past ~4.5 its tips crossed the camera and projected to infinity or
+     * behind it — 80% of the slider (queue 904, starpoly3d). Past TIP the whole star shrinks so the tips
+     * stay at TIP: Spike Length now changes how spiky it is, not how big. Below TIP (the 1.1 default
+     * included) sc is 1 and the mesh is untouched. */
+    const TIP = 1.25, rt = spike ? (1 + spike) / Math.sqrt(3) : 1, sc = rt > TIP ? TIP / rt : 1;
     for (let fi = 0; fi < faces.length; fi++) {
       const f = faces[fi], A = base[f[0]], B = base[f[1]], C = base[f[2]], s = V.length;
       V.push([A[0], A[1], A[2], uv(A)[0], uv(A)[1]], [B[0], B[1], B[2], uv(B)[0], uv(B)[1]], [C[0], C[1], C[2], uv(C)[0], uv(C)[1]]);
       if (!spike) { T.push([s, s + 1, s + 2]); continue; }
       const k = (1 + spike) / 3;
       const gx = (A[0] + B[0] + C[0]) * k, gy = (A[1] + B[1] + C[1]) * k, gz = (A[2] + B[2] + C[2]) * k;
-      V.push([gx, gy, gz, (uv(A)[0] + uv(B)[0] + uv(C)[0]) / 3, (uv(A)[1] + uv(B)[1] + uv(C)[1]) / 3]);
+      if (sc !== 1) for (let q = s; q < s + 3; q++) { V[q][0] *= sc; V[q][1] *= sc; V[q][2] *= sc; }
+      V.push([gx * sc, gy * sc, gz * sc, (uv(A)[0] + uv(B)[0] + uv(C)[0]) / 3, (uv(A)[1] + uv(B)[1] + uv(C)[1]) / 3]);
       T.push([s, s + 1, s + 3], [s + 1, s + 2, s + 3], [s + 2, s, s + 3]);
     }
     return { v: V, t: T };
