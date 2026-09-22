@@ -14,7 +14,8 @@ def titles_for(h):
         diff = subprocess.run(['git', 'diff', 'HEAD', '-U0', '--', 'tests/tests.js'], capture_output=True, text=True).stdout
         post = open('tests/tests.js', encoding='utf-8').read().split('\n')
     else:
-        diff = subprocess.run(['git', 'show', '--format=', '-U0', h, '--', 'tests/tests.js'],
+        # first-parent diff, so a MERGE is read too (a plain `git show` of a merge prints no hunks) — see _srcfiles.py
+        diff = subprocess.run(['git', 'diff', '-U0', h + '^1', h, '--', 'tests/tests.js'],
                               capture_output=True, text=True).stdout
         post = subprocess.run(['git', 'show', h + ':tests/tests.js'], capture_output=True, text=True).stdout.split('\n')
     head = re.compile(r"""^\s*test\(\s*(['"])""")

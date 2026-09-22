@@ -16,8 +16,12 @@ if h == '--worktree':
     files = [l[3:].split(' -> ')[-1].strip() for l in run('git', 'status', '--porcelain').splitlines()]
     def diff(f): return run('git', 'diff', 'HEAD', '--', f)
 else:
-    files = run('git', 'diff-tree', '--no-commit-id', '--name-only', '-r', h).split()
-    def diff(f): return run('git', 'show', '--format=', h, '--', f)
+    # Against the FIRST PARENT, not `git show` / plain diff-tree: for a MERGE those print nothing (a combined diff
+    # lists only files that differ from every parent), so a merged branch read as "no app source changed" and was
+    # never proved (22 Sep, #912 — two merges of real CSS/JS came back "TESTS/DOCS ONLY"). For an ordinary
+    # commit h^1..h is exactly what `show` printed, so nothing else moves.
+    files = run('git', 'diff', '--name-only', h + '^1', h).split()
+    def diff(f): return run('git', 'diff', h + '^1', h, '--', f)
 for f in sorted(set(files)):
     if not SRC.match(f): continue
     if f == 'index.html':
