@@ -56313,6 +56313,22 @@
     if (!(md[1] > md[0] && md[1] > md[2])) throw new Error('Mids does not push the middle tone hardest: ' + md);
   });
 
+  /* ═══ 904: Wave can run at an angle. 0 = the old separable wave exactly (tables and all); 90 swaps the two axes; the prepped path
+     agrees with the direct kernel when turned. */
+  test('904: Wave runs at any angle', { item: '904' }, function () {
+    const X = FM._FX_TABLES && FM._FX_TABLES.WARP_FX, f = X && X.wave;
+    if (!f || !f.prep) throw new Error('WARP_FX.wave is not reachable');
+    const W = 160, H = 160, P = (o) => Object.assign({ amount: 20, wavelength: 20, phase: 0, vertical: 0 }, o);
+    const at = (x, y, p, pre) => f(x, y, W, H, 80, 80, 113, p, 0, 1, pre);
+    for (let y = 0; y < H; y += 9) for (let x = 0; x < W; x += 9) { const a = at(x, y, P({})), b = at(x, y, P({ angle: 0 })), c = at(x, y, P({ angle: 0 }), f.prep(W, H, 80, 80, 113, P({ angle: 0 }), 0, 1)); if (a[0] !== b[0] || a[1] !== b[1] || a[0] !== c[0] || a[1] !== c[1]) throw new Error('Angle 0 is not the old wave at ' + x + ',' + y); }
+    // with Cross wave 0, the old wave only shifts x (as a function of y). At 90° it must only shift y.
+    const d0 = at(40, 33, P({})), d90 = at(40, 33, P({ angle: 90 }));
+    if (!(Math.abs(d0[0] - 40) > 3 && Math.abs(d0[1] - 33) < 1e-9)) throw new Error('control: the old wave is not a pure sideways shift: ' + d0);
+    if (!(Math.abs(d90[1] - 33) > 3 && Math.abs(d90[0] - 40) < 1e-6)) throw new Error('Wave at 90° still shifts sideways: ' + d90 + ' (queue 904)');
+    const pre = f.prep(W, H, 80, 80, 113, P({ angle: 30, vertical: 40 }), 0, 1);
+    for (let y = 3; y < H; y += 17) for (let x = 5; x < W; x += 17) { const a = at(x, y, P({ angle: 30, vertical: 40 }), pre), b = at(x, y, P({ angle: 30, vertical: 40 })); if (Math.abs(a[0] - b[0]) > 1e-9 || Math.abs(a[1] - b[1]) > 1e-9) throw new Error('a turned wave maps differently through its prep than directly at ' + x + ',' + y); }
+  });
+
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
      Ezra asked the question this answers: *"How confident are you that every effect is actually good?"*
      Three separate times now a kernel has drawn a different picture on the reduced preview plate than

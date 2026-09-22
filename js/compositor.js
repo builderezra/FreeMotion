@@ -182,6 +182,7 @@ window.FM = window.FM || {};
       { key: 'wavelength', label: 'Wavelength', min: 8, max: 300, step: 1, def: 38, unit: 'px' },
       { key: 'phase', label: 'Phase', min: -360, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'vertical', label: 'Cross wave', min: 0, max: 100, step: 1, def: 40, unit: '%' },
+      { key: 'angle', label: 'Angle', min: -90, max: 90, step: 1, def: 0, unit: '°' },   // queue 904: welded to the horizontal/vertical axes
     ] },
     { type: 'ripple', label: 'Circular Ripple', params: [
       { key: 'amount', label: 'Height', min: 0, max: 480, step: 1, def: 22, unit: 'px' },
@@ -8536,7 +8537,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        * both sines are per-ROW and per-COLUMN values, not per-pixel ones — and the five evalProp calls
        * below are per-pixel today as well. `prep` computes exactly the same `Math.sin` of exactly the
        * same argument once per row/column, so the result is BYTE-IDENTICAL, not within a bound. */
-      if (pre) return [x + pre.SX[y], y + pre.SY[x]];
+      if (pre && !pre.rot) return [x + pre.SX[y], y + pre.SY[x]];
       const k = ps || 1;
       const amp = (FM.evalProp(p.amount, t) || 0) * k;
       // Legacy exactness: wavelength 38 reproduces `y / 38`, and the second axis kept its 46/38
@@ -8545,6 +8546,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const wl2 = wl === 38 * k ? 46 * k : wl * (46 / 38);
       const ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
       const cross = (p.vertical == null ? 40 : FM.evalProp(p.vertical, t)) / 100;
+      /* ANGLE (queue 904): the same two sines, in axes turned by the angle — the wave runs along the turned x, the cross wave along the
+         turned y — so a flag or banner can wave on a diagonal. 0 is the line below, untouched; a turned wave is not separable, so its
+         prep hands back `rot` and this computes per pixel. */
+      const ang = p.angle == null ? 0 : (FM.evalProp(p.angle, t) || 0);
+      if (ang !== 0) { const ca = Math.cos(ang * Math.PI / 180), sa = Math.sin(ang * Math.PI / 180), xr = x * ca + y * sa, yr = -x * sa + y * ca;
+        const a1 = amp * Math.sin(yr / wl + ph), a2 = amp * cross * Math.sin(xr / wl2 + ph);
+        return [x + a1 * ca - a2 * sa, y + a1 * sa + a2 * ca]; }
       return [x + amp * Math.sin(y / wl + ph), y + amp * cross * Math.sin(x / wl2 + ph)];
     },
     /* PREPPED (shape 1 — hoist only, exact). Centre, amplitude, wavelength and phase were per-pixel. */
@@ -9092,8 +9100,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      recomputes them, and `prep` now returns the scalars ALONGSIDE the tables; the CPU path still reads
      the tables and is untouched, byte for byte. */
   WARP_FX.wave.glsl = [
-    'return vec2(xy.x + u_amp * sin(xy.y / u_wl + u_ph),',
-    '            xy.y + u_amp * u_cross * sin(xy.x / u_wl2 + u_ph));'
+    '// queue 904 ANGLE: u_ca / u_sa are cos / sin of it — exactly 1 and 0 at 0°, where this is the old expression term for term.',
+    'vec2 wr = vec2(xy.x * u_ca + xy.y * u_sa, -xy.x * u_sa + xy.y * u_ca);',
+    'float wa1 = u_amp * sin(wr.y / u_wl + u_ph), wa2 = u_amp * u_cross * sin(wr.x / u_wl2 + u_ph);',
+    'return vec2(xy.x + wa1 * u_ca - wa2 * u_sa, xy.y + wa1 * u_sa + wa2 * u_ca);'
   ].join('\n');
 
   /* KALEIDOSCOPE — fold the destination angle into one wedge, then bounce the source back inside the
@@ -9399,7 +9409,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     /* THE SCALARS RIDE ALONG FOR THE SHADER, and the CPU path never looks at them. gl-warp.js uploads
        only the numbers, so the two arrays above are simply ignored there — see WARP_FX.wave.glsl for
        why a lookup table is the right answer on a CPU and the wrong one on a GPU. */
-    return { SX: SX, SY: SY, amp: amp, wl: wl, wl2: wl2, ph: ph, cross: cross };
+    const ang = p.angle == null ? 0 : (FM.evalProp(p.angle, t) || 0);   // queue 904: a turned wave is not separable — the tables do not apply
+    return { SX: SX, SY: SY, amp: amp, wl: wl, wl2: wl2, ph: ph, cross: cross, rot: ang !== 0 ? 1 : 0, ca: Math.cos(ang * Math.PI / 180), sa: Math.sin(ang * Math.PI / 180) };
   };
 
   /* The turbulence basis, shared by the lattice builder and the reference path in the kernel so the
