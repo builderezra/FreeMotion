@@ -3533,6 +3533,15 @@ body.white-chrome #time-readout:active {
   padding: 10px 18px; font-size: 12.5px; box-shadow: 0 10px 30px rgba(0,0,0,.6);
   font-variant-numeric: tabular-nums;
 }
+/* …AND ON THE HOME SCREEN EVERY TOAST WAS INVISIBLE (#912). #home-screen is 200, so at 60 the toast was
+   painted under it in BOTH looks: measured, elementFromPoint at the toast's centre returned .hm-scroll.
+   Pin/Unpin, "Duplicating…", Template saved, every import error and the backup result — including its
+   "clips too big to include" warning, the one that must not be missed — all went nowhere.
+   205 is the gap the stack already leaves: above #home-screen 200, still under every modal that can open
+   over it (#hm-dialog 210, .hm-selbar 215, .set-scrim 220, #shortcuts-overlay 230, #ctx-menu 300), so the
+   rule above about never covering a modal's buttons still holds. body.fm-pushing's 213 is further down this
+   file and wins during the push, as it must. */
+body.home-open #toast { z-index: 205; }
 
 /* A toast that DOES something when you tap it (the "playback is struggling" offer). It has to read
    as tappable without a button inside it — on a phone the whole pill is the target, and 44px is the
@@ -5719,7 +5728,9 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 .set-head { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 18px 18px 10px; padding-top: max(18px, env(safe-area-inset-top)); }
 .set-title { font-size: 22px; font-weight: 800; letter-spacing: .2px; }
 .set-close { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font-size: 13px; cursor: pointer; }
-.set-body { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 14px calc(24px + env(safe-area-inset-bottom)); }
+/* overflow-x: hidden (#912) — a row that ever runs wider than its card must not turn the whole panel
+   into a sideways scroller. That grey strip along the bottom of every phone Settings shot was one. */
+.set-body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding: 4px 14px calc(24px + env(safe-area-inset-bottom)); }
 .set-group { background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; padding: 4px 14px; margin-bottom: 14px; }
 .set-row { display: flex; align-items: center; gap: 14px; padding: 13px 0; }
 .set-row + .set-row { border-top: 1px solid var(--line); }
@@ -5733,6 +5744,14 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 .set-seg { flex: none; display: flex; background: var(--panel-3); border-radius: 999px; padding: 3px; }
 .set-segbtn { border: none; background: none; color: var(--text-dim); font-size: 13px; font-weight: 700; padding: 7px 18px; border-radius: 999px; cursor: pointer; }
 .set-segbtn.on { background: var(--accent); color: #0b0e14; }
+/* A SEGMENTED ROW FOLDS RATHER THAN RUNNING OFF ITS CARD (#912). MEASURED at 380: Auto/Smooth/Sharp
+   ended at x=335 with its card's content ending at 304 and the card itself at 319 — the row could not
+   wrap, so 'Sharp' hung 16px off the card's edge. Now the label keeps its line and the control
+   drops under it, still right-aligned with every other control in the panel. The label's basis is its
+   min-content, so a row that fits (Project sorting, and this one on a wide screen) stays on one line. */
+.set-row:has(> .set-seg) { flex-wrap: wrap; row-gap: 10px; }
+.set-row:has(> .set-seg) > .set-label { flex: 1 1 min-content; }
+.set-seg { margin-left: auto; }
 .set-select { flex: none; background: var(--panel-3); color: var(--text); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; font-size: 13px; }
 /* Default shape colour (queue 142). The swatch has to be able to show "random", which no colour
    input can: the WRAPPER carries the spectrum and the input goes transparent on top of it, so the

@@ -107,8 +107,13 @@ window.FM = window.FM || {};
      `popCleanup` is not optional: popFrom sets `position: fixed` on the card and lifts the button
      above the scrim, and both have to come off on close or the next open measures the old placement. */
   let popCleanup = null;
+  /* …BUT NOT FROM THE HOME SCREEN (#912). Settings › Keyboard shortcuts opens this sheet over Home, where
+     the editor's ? is not on screen — yet it still has a box, so popFrom anchored to it, lifted it above
+     the scrim (measured z-index 3101), and a stray ? floated over Home at 1280 with the card's tail
+     pointing at it. From Home the card centres, the same as it always has on a phone. */
   function popOpen() {
     if (popCleanup) { popCleanup(); popCleanup = null; }
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) return;
     const card = overlay && overlay.querySelector('.shortcuts-card');
     const btn = document.getElementById('btn-help');
     if (card && btn && FM.popFrom) popCleanup = FM.popFrom(card, btn);
