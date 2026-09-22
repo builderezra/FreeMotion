@@ -56296,6 +56296,23 @@
     if (FM.fxRegistry.makeInstance('palettemap').params.mode !== 1) throw new Error('a new Palette Map does not start with Your colours');
   });
 
+  /* ═══ 904: Colour Balance can target shadows, mids or highlights. All = the old flat offset exactly. */
+  test('904: Colour Balance pushes just the shadows, mids or highlights', { item: '904' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.colorbalance) throw new Error('PIXEL_FX.colorbalance is not reachable');
+    const W = 3, H = 1, tones = [30, 128, 225];
+    const img = () => { const d = new Uint8ClampedArray(12); tones.forEach((v, i) => { d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; d[i * 4 + 3] = 255; }); return d; };
+    const run = (p) => { const d = img(); K.colorbalance(d, W, H, Object.assign({ red: 0, green: 0, blue: 60 }, p), 0, 1); return [0, 1, 2].map(i => d[i * 4 + 2] - tones[i]); };
+    const same = (a, b) => a.join() === b.join();
+    const all = run({});
+    if (!same(all, run({ range: 0 }))) throw new Error('All is not the old Colour Balance');
+    if (!(all[0] > 40 && all[1] > 40 && all[2] > 25)) throw new Error('control: the flat push does not lift blue at every tone: ' + all);
+    const sh = run({ range: 1 }), hi = run({ range: 3 }), md = run({ range: 2 });
+    if (!(sh[0] > sh[2] * 3)) throw new Error('Shadows pushes the bright pixel as hard as the dark one: ' + sh + ' (queue 904)');
+    if (!(hi[2] > hi[0] * 3)) throw new Error('Highlights pushes the dark pixel as hard as the bright one: ' + hi);
+    if (!(md[1] > md[0] && md[1] > md[2])) throw new Error('Mids does not push the middle tone hardest: ' + md);
+  });
+
   /* ═══ 859: EVERY PIXEL EFFECT, SWEPT FOR PREVIEW/EXPORT PARITY IN ONE TEST.
      Ezra asked the question this answers: *"How confident are you that every effect is actually good?"*
      Three separate times now a kernel has drawn a different picture on the reduced preview plate than
