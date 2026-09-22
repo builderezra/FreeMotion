@@ -17,11 +17,16 @@ window.FM = window.FM || {};
 
   // The decoded audio for a layer (video OR audio-only clip). Cached on the media rec, same slot
   // getWaveform uses. Returns null for a clip with no decodable audio track (silent screen recording).
+  /* Both callers here (Save audio as WAV, Remove vocals) use the decode ONCE. They used to park it on
+   * m.audioBuffer — full-fidelity float PCM, ~90MB for four minutes of stereo — for the rest of the
+   * session, one per clip ever touched, and nothing frees that slot (queue 834 clause 17). A buffer that is
+   * ALREADY cached (export, reverse playback and audio-react put it there because they reuse it) is still
+   * reused; a fresh decode is returned without being kept. */
   async function layerAudioBuffer(layer) {
     const m = layer && FM.media && FM.media.get(layer.id);
     if (!m || !m.file || !FM.decodeAudio) return null;
-    if (m.audioBuffer === undefined) m.audioBuffer = await FM.decodeAudio(m.file);
-    return m.audioBuffer || null;
+    if (m.audioBuffer !== undefined) return m.audioBuffer || null;
+    return (await FM.decodeAudio(m.file)) || null;
   }
 
   /* AudioBuffer → 16-bit PCM WAV Blob (interleaved). Playable everywhere, no encoder library. */

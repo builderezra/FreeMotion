@@ -43553,6 +43553,41 @@
     }
   });
 
+  /* queue 834 clause 17: Remove vocals (and Save audio as WAV) left the whole decoded song — float PCM, ~90MB for
+     four minutes of stereo — parked on the media record for the rest of the session, one per clip ever touched.
+     Held both ways: a one-off decode is NOT kept, and a buffer something else already cached IS reused (export,
+     reverse playback and audio-react rely on that slot). */
+  test('834: removing vocals does not keep the whole decoded song in memory, and reuses one that is already there', { item: '834' }, async function () {
+    var layers0 = FM.scene.layers.slice();
+    var realDecode = FM.decodeAudio, realLoad = FM.loadVideoFile, realToast = FM.toast;
+    try {
+      FM.toast = function () {};
+      var L = FM.makeLayer('video', { name: 'Song' });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.media.set(L.id, { kind: 'video', el: document.createElement('video'), width: 8, height: 8, duration: 4, file: new File([new Uint8Array(8)], 's.wav', { type: 'audio/wav' }) });
+      var decodes = 0;
+      FM.decodeAudio = async function () {
+        decodes++;
+        var ac = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(2, 4410, 44100);
+        return ac.createBuffer(2, 4410, 44100);
+      };
+      FM.loadVideoFile = async function () { return null; };
+      await FM.toggleKaraoke(L);
+      var m = FM.media.get(L.id);
+      if (decodes !== 1) throw new Error('expected one decode, saw ' + decodes);
+      if (m.audioBuffer !== undefined) throw new Error('the decoded song was left on the media record — it stays in memory for the rest of the session');
+      var ac2 = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(2, 4410, 44100);
+      m.audioBuffer = ac2.createBuffer(2, 4410, 44100);   // as export / reverse playback would have cached it
+      await FM.toggleKaraoke(L);
+      if (decodes !== 1) throw new Error('a buffer that was already decoded was decoded again (' + decodes + ' decodes)');
+    } finally {
+      FM.decodeAudio = realDecode; FM.loadVideoFile = realLoad; FM.toast = realToast;
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.selectLayer(null);
+    }
+  });
+
   /* Saving an effect as a preset rebuilt each animated parameter as just its keyframe list — dropping
      the sibling field that tells evalProp to keep repeating past the last key. So a looping animation
      came back from a preset frozen on its final value. The layer-level loop writes that field onto

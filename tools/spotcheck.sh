@@ -93,7 +93,15 @@ while IFS= read -r t; do
 done <<< "$TITLES"
 
 echo "→ reverting the commit's SOURCE to its parent (tests kept): $(echo "$SRC" | tr '\n' ' ')"
-( cd "$WT" && git checkout -q "$H^" -- $SRC ) || { echo "spotcheck: revert failed"; exit 2; }
+# A file the commit ADDED has no parent version to check out — "pathspec did not match" killed the whole check
+# (v16.23, which added js/ai-chat.js). Reverting an addition means removing the file, so do that instead.
+for f in $SRC; do
+  if ( cd "$WT" && git cat-file -e "$H^:$f" 2>/dev/null ); then
+    ( cd "$WT" && git checkout -q "$H^" -- "$f" ) || { echo "spotcheck: revert failed on $f"; exit 2; }
+  else
+    ( cd "$WT" && rm -f -- "$f" ) && echo "   (added by the commit, so removed: $f)"
+  fi
+done
 echo "→ same tests without the fix (must FAIL)…"
 i=0
 while IFS= read -r t; do
