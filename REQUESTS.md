@@ -32687,3 +32687,14 @@ re-opened #480, which I had marked done and had not fixed.
       17. [ ] "Make sure you've got backups before you start doing this." — a git tag / rollback point before the first line, and his on-device projects untouched (they are in IndexedDB; a joined session must never overwrite one of his projects).
       18. [ ] He is NOT supervising much — decide under LOOP rule 16, write each decision down here, show him pictures when it is ready.
       ⚠️ **Conflicts with a standing rule, surfaced rather than hidden:** ~/.claude/CLAUDE.md says his apps are local-only, "nothing leaves the device". This feature exists to send a project to a friend, so it deliberately does — only while he has started a session, only to people he invited, peer-to-peer and encrypted (WebRTC is DTLS-encrypted by design). Off by default; nothing is sent otherwise.
+
+      📐 **22 Sep — DESIGNED: `COLLAB-DESIGN.md`** (committed). Four readers mapped the code (scene/history, storage/media, UI, platform), three independent designs (host-authoritative · CRDT · snapshot-diff) were scored by two judges (correctness · phone reality), and one spec was written from the winner with every judge finding fixed. Build is 9 stages (S0 safety net → S1 pure core → S2 engine + loopback tests → S3 first real connection, codes only → S4 media → S5 presence visuals → S6 links/relay/reconnect → S7 roles/comments/settings → S8 hardening), each shippable alone, all behind **Settings → Labs** so solo editing is untouched until he switches it on.
+      **Decided for him under rule 16 (he said "I'm not going to be supervising it much" and "just go") — each changeable with one word:**
+         · Relay: a free public "phone book" (PeerJS + public MQTT) helps devices find each other — it sees addresses and timing, never the project; **"Codes only"** mode needs no third party at all. No TURN server (10–20% of cross-network connections will fail without one; a bring-your-own relay key is a later upgrade).
+         · Limit **8 people** (12 when a PC hosts, 6 when a phone hosts). Unlimited needs a real server.
+         · The owner is asked before anyone joins (links); rejoining members skip the ask.
+         · Guests keep a normal copy when the session ends. Undo only undoes your own changes.
+         · Roles: Editor · Commenter · Viewer. Everyone can export on their own device (owner toggle).
+         · It stays under Labs until he has tried Mac ↔ iPhone himself (~5 minutes, only he can).
+         · On-screen placement and look: drawn as options and sent as pictures before S5 ships.
+      Backups: git tag `backup-before-collab-921` made before any collab code; the spec's S0 adds a save point before every session and "Earlier versions…".
