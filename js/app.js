@@ -1199,6 +1199,20 @@ window.FM = window.FM || {};
         else if (k === 'Escape' || k === 'Esc') { e.preventDefault(); FM.hideToast(); }
       };
     }
+    /* IT RISES IN (#912 clause 4), but only when it was NOT already up. A toast relabelled while showing
+       ('Preparing frames… 45%', 'Tracking… 12%' — many times a second) must not replay, or it would sit
+       permanently mid-fade. The class comes off again once it has landed, so a resting toast declares no
+       animation at all — exactly as it did before (the push's "does anything lifted travel?" sweep reads
+       animation-name, and a toast that has arrived must not look like one that is moving). */
+    if (t.classList.contains('hidden')) {
+      if (!t._fmToastIn) {
+        t._fmToastIn = true;
+        const landed = function (e) { if (e.target === t) t.classList.remove('toast-in'); };
+        t.addEventListener('animationend', landed);
+        t.addEventListener('animationcancel', landed);
+      }
+      t.classList.add('toast-in');
+    }
     t.classList.remove('hidden');
     const my = ++toastSeq;
     if (ms === undefined) ms = 2200;
@@ -1267,7 +1281,7 @@ window.FM = window.FM || {};
 
   FM.hideToast = function () {
     const t = document.getElementById('toast');
-    if (t) { t.classList.add('hidden'); t.onclick = null; t.onkeydown = null; t.classList.remove('toast-tap'); }
+    if (t) { t.classList.add('hidden'); t.onclick = null; t.onkeydown = null; t.classList.remove('toast-tap', 'toast-in'); }
   };
 
   // Benchmarks = timeline markers. Tap the timecode to drop one at the playhead (tap again to remove it).

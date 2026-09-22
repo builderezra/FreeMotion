@@ -775,6 +775,13 @@ window.FM = window.FM || {};
       // script driving both) left this callback holding a dead reference — "Cannot read properties
       // of null (reading 'classList')". Harmless to skip: if it's already closed there is nothing to
       // animate open. Surfaced by the new PC settings cog making open/close reachable back-to-back.
+      /* ⚠️ THE SLIDE NEVER PLAYED (#912 clause 4). The nodes above are brand new, and a rAF callback
+         runs BEFORE the frame's first style pass — so by the time the browser first resolved the panel's
+         style it already had `.open`, never saw translateX(-100%), and had nothing to transition from.
+         Measured: panel at matrix(1,0,0,1,0,0) on the first frame, getAnimations() empty, no
+         transitionrun, on phone and PC alike. Reading a layout value here resolves the closed state
+         first, which is all the transition needed. */
+      void panel.offsetWidth;
       requestAnimationFrame(() => { if (scrim) scrim.classList.add('open'); });
       escBound = e => { if (e.key === 'Escape') { e.preventDefault(); FM.settings.close(); } };
       document.addEventListener('keydown', escBound);

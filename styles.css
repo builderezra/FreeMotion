@@ -9140,7 +9140,9 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
 
   /* THE FULL SHEET (effects). Shallower, because a full-height panel rotated as hard as a small menu
      sweeps most of the screen and reads as a page turning rather than a panel arriving. */
-  #fx-browser.fxb-sheet { animation: fm-hinge-panel 360ms cubic-bezier(.18, .85, .28, 1.02) both; transform-origin: 50% 100%; }
+  /* #afx-browser too (#912): queue 300 made the audio browser the same thing as this one, and it was the
+     one twin that still appeared in a single frame at the same width. */
+  #fx-browser.fxb-sheet, #afx-browser.fxb-sheet { animation: fm-hinge-panel 360ms cubic-bezier(.18, .85, .28, 1.02) both; transform-origin: 50% 100%; }
   @keyframes fm-hinge-panel {
     from { opacity: 0; transform: perspective(1600px) rotateX(-42deg) translateY(14px); }
     55%  { opacity: 1; }
@@ -9150,8 +9152,147 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
 /* The app already honours this for every other motion it has; a hinge is a bigger movement than most,
    so it is the last thing that should ignore it. */
 @media (prefers-reduced-motion: reduce) {
-  #ctx-menu.ctx-hinge, #add-sheet.open, #fx-browser.fxb-sheet { animation: none; }
+  #ctx-menu.ctx-hinge, #add-sheet.open, #fx-browser.fxb-sheet, #afx-browser.fxb-sheet { animation: none; }
   #add-sheet.open { transition: transform .22s ease; }   /* no keyframe here, so the plain slide is the one motion (queue 706) */
+}
+
+/* ═══ EVERY MENU THAT STILL APPEARED IN ONE FRAME NOW OPENS (#912 clause 4) ═══════════════════════
+   Ezra: *"Any static menu that's doesnt have any animation when u open it up give it one."*
+   An audit opened every menu at 380 and 1280 and read document.getAnimations() on it the instant it
+   appeared; this block is its "static" list. NOTHING HERE IS A NEW MOTION. Each surface borrows the
+   entrance its neighbours already use, so the app still has the five languages it had:
+     phone sheets/cards — the hinge family above (queue 612), swinging from the edge they come from:
+       top-bar dialogs (?, 📒, ⚙, ⬆️) hang from their TOP edge, things raised from the bottom (+, the add
+       sheet's tools) swing up off their BOTTOM edge;
+     PC cards — the pop family (queue 548), centred when there is no button on screen to grow out of;
+     a new level inside a panel — the options rails' sb-panel-in (the drill-in);
+     something opening inline, under its own header — fxb-fav-in, the favourites drawer's drop;
+     small centred pills and the toast — ld-in, the loading pill's rise;
+     Home — its own hm-rise / hm-bloom.
+   ⚠️ `backwards`, NOT `both`, everywhere below — the queue-853 lesson at the top of this file. `both`
+   keeps the last keyframe applied for as long as the rule matches, which pins a transform (a stacking
+   context, and a containing block for anything fixed inside) and an opacity on the element forever.
+   `backwards` holds only the start frame, then hands the element back exactly as it rests today.
+   ⚠️ Every close stays instant, as it was: display:none or remove() cancels a running animation, so a
+   menu shut mid-swing is simply gone — nothing can be left half-turned — and the next open starts over.
+   ⚠️ Nothing here is gated on the element being "new": a menu that toggles .hidden or is rebuilt gets
+   its entrance from the display change itself. The few that are rebuilt IN PLACE on every edit (the
+   inspector's views, the text pop-overs) take a one-shot class from their JS instead — see there. */
+
+/* The loading pill's rise, carrying the centring every pill and the toast rest on (left:50% plus
+   translateX(-50%)). A keyframe that did not carry it would throw the centring away on its first frame
+   and the pill would lurch half its width sideways — the trap hm-rise-fab exists for on Home. */
+@keyframes ld-in-x { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translateX(-50%); } }
+/* The toast only while `toast-in` is on — js/app.js adds it when a hidden toast is shown and takes it off
+   when it lands, so a toast relabelled mid-display does not rise again. */
+#toast.toast-in,
+#draw-bar, #pe-bar, #crop-bar, #mask-bar, #mpath-bar, #touchup-bar, #trk-bar { animation: ld-in-x 180ms cubic-bezier(0, 0, .2, 1) backwards; }
+
+/* HOME. The search field and its hint rise like a tab change restages the cards (hm-rise at the restage
+   speed), the hint a beat behind. The new-project scrim blooms at the settings scrim's .24s. */
+#hm-searchbar .hm-search-wrap { animation: hm-rise .22s cubic-bezier(.22, .9, .32, 1) backwards; }
+#hm-searchbar .hm-search-hint { animation: hm-rise .22s cubic-bezier(.22, .9, .32, 1) 40ms backwards; }
+#hm-dialog { animation: hm-bloom .24s ease backwards; }
+
+/* INSIDE THE INSPECTOR — both layouts. The classes are added by js/inspector.js ONLY on the rebuild
+   that moved somewhere (refresh() runs on every slider drag and must not replay these). */
+#inspector .cat-in      { animation: sb-panel-in  190ms cubic-bezier(.16, 1, .3, 1) backwards; }
+#inspector .cat-in-back { animation: sb-panel-inL 190ms cubic-bezier(.16, 1, .3, 1) backwards; }
+.insp-drop-in { animation: fxb-fav-in .2s cubic-bezier(0, 0, .2, 1) backwards; }
+/* '+ Add behavior' toggles display rather than rebuilding, so the display change replays it for free. */
+.be-picker { animation: fxb-fav-in .2s cubic-bezier(0, 0, .2, 1) backwards; }
+
+/* THE BROWSERS' SUB-VIEWS: a category, an effect's presets. Their sibling, the favourites view, already
+   enters with fxb-fav-in (and has its own pull and reduced-motion variants) — so it is excluded rather
+   than overridden. */
+.fxb-catview:not(.fxb-favview) { animation: fxb-fav-in .2s cubic-bezier(0, 0, .2, 1) backwards; }
+/* The template fill screen, both layouts: the drawer drop, NOT the hinge. Its preview is sized from
+   getBoundingClientRect() on the first frame (js/template-fill.js paint), and a rotated sheet measures
+   short, so the hinge would have drawn the picture too small until the next scrub. A translate keeps
+   the box its true size. */
+#tpl-fill > * { animation: fxb-fav-in .2s cubic-bezier(0, 0, .2, 1) backwards; }
+#tpl-fill { animation: fxb-fav-fade 200ms linear backwards; }
+
+@media (max-width: 700px) {
+  /* The notepad keeps the one motion that is its own — it FLIPS open over its top edge, the animation
+     he asked for on PC ("a unique animation that fit it"). The keyframe is the PC block's: a keyframe
+     inside a media block only exists while that block matches, so the phone needs its own copy. */
+  @keyframes pop-flip {
+    from { opacity: 0; transform: translate(var(--pop-dx, 0px), var(--pop-dy, 0px)) rotateX(-82deg); }
+    60%  { opacity: 1; }
+    to   { opacity: 1; transform: translate(var(--pop-dx, 0px), var(--pop-dy, 0px)) rotateX(0deg); }
+  }
+  .np-scrim { perspective: 1400px; }
+  .np-card { animation: pop-flip 340ms cubic-bezier(.18, .85, .28, 1.02) backwards; transform-origin: 50% 0%; }
+
+  /* Cards opened from the TOP bar hang from their top edge. */
+  #canvas-dialog .export-card, #export-dialog .export-card, #export-overlay .export-card, #export-ready .export-card,
+  .shortcuts-card {
+    animation: fm-hinge-panel 360ms cubic-bezier(.18, .85, .28, 1.02) backwards; transform-origin: 50% 0%;
+  }
+  /* Cards raised from the bottom (Home's +, the add sheet's Sound effects / Record voice, Paste look
+     from the layer menu) and the full elements browser swing up off their bottom edge, like the
+     effects sheet does. */
+  .hm-dlg-card, .sfx-card, .vr-card, .ps-card, #el-browser {
+    animation: fm-hinge-panel 360ms cubic-bezier(.18, .85, .28, 1.02) backwards; transform-origin: 50% 100%;
+  }
+  /* Bottom sheets and bars get the add sheet's own swing. */
+  #hm-selbar, #ar-sheet .ar-card { animation: fm-hinge-up 360ms cubic-bezier(.18, .85, .28, 1.02) backwards; transform-origin: 50% 100%; }
+  /* Their scrims fade in with the favourites view's fade, so the dim does not arrive a frame early. */
+  #canvas-dialog, #export-dialog, #export-overlay, #export-ready, #shortcuts-overlay,
+  .sfx-scrim, #vr-overlay, .ps-overlay, #ar-sheet { animation: fxb-fav-fade 200ms linear backwards; }
+
+  /* Text pop-overs hang under the text bar and swing out of the button that was tapped
+     (--te-pop-ox is its centre, set in js/text-edit.js) — the copy/paste menu's corner hinge. */
+  .te-pop.te-pop-in { animation: fm-hinge-corner 320ms cubic-bezier(.18, .85, .28, 1.02) backwards; transform-origin: var(--te-pop-ox, 50%) 0%; }
+}
+
+@media (min-width: 701px) {
+  /* The ⋯ / right-click menu grows out of the click, DOWN — or UP when the clamp lifted it above the
+     pointer (contextmenu.js sets ctx-up, and the corner origin it already set for the phone hinge). */
+  #ctx-menu.ctx-hinge { animation: pop-grow-down 190ms cubic-bezier(.2, .9, .3, 1.08) backwards; }
+  #ctx-menu.ctx-hinge.ctx-up { animation-name: pop-grow; }
+
+  /* Cards with no button on screen to grow out of pop CENTRED — the pop family with its offsets at 0.
+     The shortcuts card only when popFrom declined it (opened from Home, where the editor's ? is buried);
+     from the editor it is a .pop-card and keeps its tail. */
+  .hm-dlg-card { animation: pop-grow 190ms cubic-bezier(.2, .9, .3, 1.08) backwards; transform-origin: 50% 100%; }
+  .shortcuts-card:not(.pop-card), #export-overlay .export-card, #export-ready .export-card,
+  .sfx-card, .vr-card, .ps-card, #ar-sheet .ar-card {
+    animation: pop-grow 190ms cubic-bezier(.2, .9, .3, 1.08) backwards; transform-origin: 50% 50%;
+  }
+  /* The pre-export notes reminder is a notepad card with no button under it: it flips open centred, with
+     the notepad's own motion (the scrim's perspective is already set in the pop block above). */
+  .np-card:not(.pop-card) { animation: pop-flip 340ms cubic-bezier(.18, .85, .28, 1.02) backwards; transform-origin: 50% 0%; }
+  /* The select bar is Home's, so it rises like Home's content does. */
+  #hm-selbar { animation: hm-rise .22s cubic-bezier(.22, .9, .32, 1) backwards; }
+
+  /* The effects browsers sit OVER the inspector column here, so opening one reads as going a level
+     deeper in that column — it moves exactly like the inspector's own drill-in. */
+  #fx-browser.fxb-sheet, #afx-browser.fxb-sheet { animation: sb-panel-in 190ms cubic-bezier(.16, 1, .3, 1) backwards; }
+  /* The elements browser is a centred card over a scrim: the scrim fades, the card drops in. */
+  #el-browser { animation: fxb-fav-fade 200ms linear backwards; }
+  #el-browser > .fxb-top, #el-browser > .fxb-scroll, #el-browser > .fxb-catview-scroll,
+  #el-browser > .fxb-search-input { animation: fxb-fav-in .2s cubic-bezier(0, 0, .2, 1) backwards; }
+
+  .te-pop.te-pop-in { animation: pop-grow-down 190ms cubic-bezier(.2, .9, .3, 1.08) backwards; transform-origin: var(--te-pop-ox, 50%) 0%; }
+  .te-pop.te-pop-in.te-pop-up { animation-name: pop-grow; transform-origin: var(--te-pop-ox, 50%) 100%; }
+}
+
+/* Same off-switch as every other motion in this file. Listed in full rather than as a blanket
+   `* { animation: none }`, which would also stop the spinners and progress signals that must keep
+   moving (see #loading-dot). */
+@media (prefers-reduced-motion: reduce) {
+  #toast.toast-in, #draw-bar, #pe-bar, #crop-bar, #mask-bar, #mpath-bar, #touchup-bar, #trk-bar,
+  #hm-searchbar .hm-search-wrap, #hm-searchbar .hm-search-hint, #hm-dialog, .hm-dlg-card, #hm-selbar,
+  #inspector .cat-in, #inspector .cat-in-back, .insp-drop-in, .be-picker,
+  .fxb-catview:not(.fxb-favview), #tpl-fill, #tpl-fill > *,
+  .np-card, .np-card:not(.pop-card), #canvas-dialog, #export-dialog, #export-overlay, #export-ready, #shortcuts-overlay,
+  #canvas-dialog .export-card, #export-dialog .export-card, #export-overlay .export-card, #export-ready .export-card,
+  .shortcuts-card, .shortcuts-card:not(.pop-card), .sfx-scrim, .sfx-card, #vr-overlay, .vr-card, .ps-overlay, .ps-card,
+  #ar-sheet, #ar-sheet .ar-card, #el-browser, .te-pop.te-pop-in, .te-pop.te-pop-in.te-pop-up,
+  #el-browser > .fxb-top, #el-browser > .fxb-scroll, #el-browser > .fxb-catview-scroll, #el-browser > .fxb-search-input,
+  #ctx-menu.ctx-hinge, #ctx-menu.ctx-hinge.ctx-up, #fx-browser.fxb-sheet, #afx-browser.fxb-sheet { animation: none; }
 }
 
 /* ===== A PROJECT CARD COMES FORWARD UNDER THE CURSOR (queue 650, v14.32) =========================
