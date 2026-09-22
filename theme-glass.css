@@ -76,6 +76,7 @@ html[data-theme="glass"] body { background: transparent; }
 html[data-theme="glass"] .set-panel,
 html[data-theme="glass"] #add-sheet,
 html[data-theme="glass"] .hm-dlg-card,
+html[data-theme="glass"] .fm-ask-card,
 html[data-theme="glass"] .export-card,
 html[data-theme="glass"] .ctx-menu,
 html[data-theme="glass"] .shortcuts-card {
@@ -448,6 +449,7 @@ html[data-theme="glass"] #add-fab {
 /* Accent-filled controls pick up the same crown highlight, so they read as one family. */
 html[data-theme="glass"] .btn-accent,
 html[data-theme="glass"] .hm-dlg-actions button.accent,
+html[data-theme="glass"] .fm-ask-actions button.accent,
 html[data-theme="glass"] .set-segbtn.on,
 html[data-theme="glass"] .set-switch.on {
   background: linear-gradient(180deg, #7ad6f2, var(--accent));
@@ -504,6 +506,7 @@ html[data-theme="glass"] .shortcuts-card .btn { background: #0c1c25; border-top-
   html[data-theme="glass"] .set-panel,
   html[data-theme="glass"] #add-sheet,
   html[data-theme="glass"] .hm-dlg-card,
+  html[data-theme="glass"] .fm-ask-card,
   html[data-theme="glass"] .export-card,
   html[data-theme="glass"] .ctx-menu,
   html[data-theme="glass"] .shortcuts-card { background: #0c1c25; }
@@ -1002,20 +1005,21 @@ html.splash-on-light, html.splash-on-light body { background: #111; animation: s
    going out; a dialog on a light page wants a veil, not a blackout. Kept tinted rather than grey so
    the home's own hue carries through it.
    ══════════════════════════════════════════════════════════════════════════════════════════════ */
-html[data-home="light"] #hm-dialog { background: rgba(20, 38, 56, .34); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
-html[data-home="light"] .hm-dlg-card {
+html[data-home="light"] #hm-dialog, #fm-ask.fm-ask-light { background: rgba(20, 38, 56, .34); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+html[data-home="light"] .hm-dlg-card, #fm-ask.fm-ask-light .fm-ask-card {
   background-color: rgba(255, 255, 255, .94);
   border-color: rgba(16, 30, 52, .12);
   box-shadow: 0 1px 2px rgba(16, 30, 52, .06), 0 26px 60px -26px rgba(16, 30, 52, .6);
   backdrop-filter: blur(14px) saturate(1.15); -webkit-backdrop-filter: blur(14px) saturate(1.15);
   color: #10151f;   /* the queue-649 declaration, carried over to the light surface rather than dropped */
 }
-html[data-home="light"] .hm-dlg-title { color: #0d1420; }
+html[data-home="light"] .hm-dlg-title, #fm-ask.fm-ask-light .fm-ask-title { color: #0d1420; }
 html[data-home="light"] .hm-fld-label { color: #5f6b7d; }
 html[data-home="light"] .hm-fld > span:first-child { color: #48546b; }
 html[data-home="light"] .hm-num-pair { color: #5f6b7d; }
 /* Fields and tiles: the card's own paper, one step down, so the card still reads as the surface. */
 html[data-home="light"] #hm-new-name,
+#fm-ask.fm-ask-light .fm-ask-input,
 html[data-home="light"] .hm-fld select,
 html[data-home="light"] #hm-new-bg,
 html[data-home="light"] .hm-aspect {
@@ -1031,13 +1035,16 @@ html[data-home="light"] .hm-aspect.active { border-color: rgba(23, 128, 180, .75
 html[data-home="light"] .hm-aspect.active .ac-frame,
 html[data-home="light"] .hm-aspect.active span { color: #0f6f9e; }
 html[data-home="light"] #hm-new-name:focus,
+#fm-ask.fm-ask-light .fm-ask-input:focus,
 html[data-home="light"] .hm-bg-sw.active { border-color: rgba(23, 128, 180, .8); }
 html[data-home="light"] .hm-bg-sw.active { box-shadow: 0 0 0 2px rgba(23, 128, 180, .8) inset; }
 html[data-home="light"] .hm-bg-sw { border-color: rgba(16, 30, 52, .18); }
 /* Cancel is quiet paper; Create keeps the app's blue as a FILL, with white ink — on white the pale
    cyan fill with near-black ink is the third instance of the same white-on-white class. */
-html[data-home="light"] .hm-dlg-actions button { background-color: rgba(16, 30, 52, .05); border-color: rgba(16, 30, 52, .14); color: #10151f; }
-html[data-home="light"] .hm-dlg-actions button.accent { background-color: #1780b4; border-color: #1780b4; color: #ffffff; }
+html[data-home="light"] .hm-dlg-actions button,
+#fm-ask.fm-ask-light .fm-ask-actions button { background-color: rgba(16, 30, 52, .05); border-color: rgba(16, 30, 52, .14); color: #10151f; }
+html[data-home="light"] .hm-dlg-actions button.accent,
+#fm-ask.fm-ask-light .fm-ask-actions button.accent { background-color: #1780b4; border-color: #1780b4; color: #ffffff; }
 /* TWO SURVIVORS THE FIRST PASS OF THIS BLOCK LEFT BEHIND, both found by photographing the dialog and
    then measuring it rather than by looking — worth recording because they are two DIFFERENT failures.
    · `.cv-size` ("1080 × 1920 · 30 fps") is `var(--text)`, the dark theme's near-white, and it is
@@ -1050,9 +1057,21 @@ html[data-home="light"] .hm-dlg-actions button.accent { background-color: #1780b
      glass sheen; this is the same seam from the other side, and the lesson is the same one: on this
      theme a fill is TWO properties, and setting one of them is a no-op you cannot see. */
 html[data-home="light"] .cv-size { color: #10151f; }
-html[data-home="light"] .hm-dlg-actions button.accent {
+html[data-home="light"] .hm-dlg-actions button.accent,
+#fm-ask.fm-ask-light .fm-ask-actions button.accent {
   background-image: linear-gradient(180deg, #2a97cb, #1780b4);
 }
+/* FM.ask ON THE LIGHT HOME (queue 919). Everything above covers it by name; these are the two things
+   #hm-dialog has no counterpart for. The message is the hint ink (#5a6478, the Settings hints' — 5.9:1 on
+   the white card), and a destructive answer is .ctx-light's red, the one the select bar's Delete wears
+   here: #ff8a8a is picked to glow on near-black and reads as disabled on paper.
+   ⚠️ `.fm-ask-light` is set by js/ask.js only while the light Home is ON SCREEN — never by data-home
+   alone, which stays "light" inside the editor (the #864 trap). */
+#fm-ask.fm-ask-light .fm-ask-msg { color: #5a6478; }
+#fm-ask.fm-ask-light .fm-ask-actions button.danger {
+  background-color: rgba(198, 39, 64, .08); border-color: rgba(198, 39, 64, .40); color: #c62740;
+}
+#fm-ask.fm-ask-light .fm-ask-actions button:focus-visible { outline-color: rgba(23, 128, 180, .8); }
 
 /* ══════════════════════════════════════════════════════════════════════════════════════════════
    #912 CLAUSE 5 — EVERYTHING HOME OPENS STAYS LIGHT ON THE LIGHT HOME.

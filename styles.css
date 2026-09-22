@@ -5108,10 +5108,10 @@ body.hm-selecting .hm-pin { display: none; }
    so the ring's outer edge is still 12px above the bottom of the viewport. */
 #hm-new::before { content: ''; position: absolute; inset: -12px; border-radius: 50%; }
 /* v6.09: the + glyph is the button again. */
-#hm-dialog { position: fixed; inset: 0; z-index: 210; background: rgba(4, 6, 10, .7); display: flex; align-items: center; justify-content: center; padding: 20px; }
-#hm-dialog.hidden { display: none; }
+#hm-dialog, #fm-ask { position: fixed; inset: 0; z-index: 210; background: rgba(4, 6, 10, .7); display: flex; align-items: center; justify-content: center; padding: 20px; }
+#hm-dialog.hidden, #fm-ask.hidden { display: none; }
 /* the card is a column so the options scroll while the title + Create row stay put on a phone */
-.hm-dlg-card { display: flex; flex-direction: column; width: min(380px, 92vw); max-height: min(88vh, 88dvh); background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
+.hm-dlg-card, .fm-ask-card { display: flex; flex-direction: column; width: min(380px, 92vw); max-height: min(88vh, 88dvh); background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
 /* ⚠️ `color` ON THE CARD, NOT JUST THE TITLE (queue 649) — and the difference is the whole point.
    Ezra: *"text un readable"*, circling the New-project sheet's own heading, which was near-BLACK on a
    dark panel while every label under it read fine.
@@ -5124,13 +5124,13 @@ body.hm-selecting .hm-pin { display: none; }
    So the fix goes on the CARD as well as the title. Declaring the dark panel's ink once stops every
    FUTURE child inheriting the light page's — fixing the class rather than the instance, which is the
    only version of this fix that does not come back a third time. */
-.hm-dlg-card { color: var(--text); }
-.hm-dlg-title { flex: none; font-weight: 800; font-size: 16px; margin-bottom: 12px; color: var(--text); }
+.hm-dlg-card, .fm-ask-card { color: var(--text); }
+.hm-dlg-title, .fm-ask-title { flex: none; font-weight: 800; font-size: 16px; margin-bottom: 12px; color: var(--text); }
 .hm-dlg-scroll { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; margin: 0 -4px; padding: 0 4px 4px; }
 .hm-fld-label { font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--text-dim); margin: 14px 0 7px; }
 .hm-dlg-scroll > .hm-fld-label:first-child { margin-top: 0; }
-#hm-new-name { width: 100%; box-sizing: border-box; padding: 11px 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: var(--text); font-size: 16px; }
-#hm-new-name:focus { outline: none; border-color: var(--accent); }
+#hm-new-name, .fm-ask-input { width: 100%; box-sizing: border-box; padding: 11px 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: var(--text); font-size: 16px; }
+#hm-new-name:focus, .fm-ask-input:focus { outline: none; border-color: var(--accent); }
 .hm-aspects { display: flex; gap: 8px; margin: 0 0 8px; }
 .hm-aspect { flex: 1; display: flex; flex-direction: column; gap: 3px; align-items: center; justify-content: flex-end; padding: 9px 4px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: var(--text); font-weight: 700; font-size: 13px; cursor: pointer; }
 .hm-aspect span { font-size: 10px; color: var(--text-dim); font-weight: 500; }
@@ -5147,9 +5147,35 @@ body.hm-selecting .hm-pin { display: none; }
 .hm-bg-sw.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
 .hm-bg-none { background: repeating-conic-gradient(#8b93a5 0% 25%, #464d5c 0% 50%) 50% / 10px 10px; }
 #hm-new-bg { width: 38px; height: 34px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); cursor: pointer; }
-.hm-dlg-actions { flex: none; display: flex; gap: 8px; justify-content: flex-end; padding-top: 12px; }
-.hm-dlg-actions button { padding: 9px 16px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font-weight: 600; cursor: pointer; }
-.hm-dlg-actions button.accent { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
+.hm-dlg-actions, .fm-ask-actions { flex: none; display: flex; gap: 8px; justify-content: flex-end; padding-top: 12px; }
+.hm-dlg-actions button, .fm-ask-actions button { padding: 9px 16px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font-weight: 600; cursor: pointer; }
+.hm-dlg-actions button.accent, .fm-ask-actions button.accent { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
+/* ---- FM.ask — the app's own prompt() / confirm() (queue 919, js/ask.js) ----------------------------
+   Ezra's yes to replacing the phone's grey boxes: "Yes, make our own (Recommended)". The card, the field,
+   the buttons and the scrim are #hm-dialog's (the selector lists above), so what follows is only what a
+   one-question card needs on top of them.
+   · ABOVE EVERYTHING IT CAN BE ASKED FROM: Settings (.set-scrim 220) and the 3000-level pop-up cards, still
+     under the splash (10000) and the touch ripple (9999), which must draw over it in a screen recording.
+   · BIG ANSWERS. #hm-dialog's 36px buttons sit under a long form you scroll; here the two buttons ARE the
+     dialog, so they share the row at a 44px thumb height — the smallest thing a thumb reliably hits. */
+#fm-ask { z-index: 3200; }
+.fm-ask-title { margin-bottom: 8px; overflow-wrap: anywhere; }
+/* pre-line: Settings' Clear asks in two paragraphs ("\n\nForget them?"), and confirm() showed the break */
+.fm-ask-msg { font-size: 14px; line-height: 1.45; color: var(--text-dim); white-space: pre-line; overflow-wrap: anywhere; margin-bottom: 14px; }
+.fm-ask-input { margin-bottom: 4px; }
+.fm-ask-actions { padding-top: 14px; gap: 10px; }
+.fm-ask-actions button { flex: 1; min-height: 44px; font-size: 15px; font-weight: 700; }
+.fm-ask-actions button:focus { outline: none; }
+.fm-ask-actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* A destructive answer is the select bar's Delete, not the accent — it must not look like the safe choice. */
+.fm-ask-actions button.danger { background: rgba(224, 49, 49, .16); border-color: rgba(224, 49, 49, .55); color: #ff8a8a; }
+/* THE PHONE KEYBOARD. A question with a field raises it (the focus happens inside the tap, as prompt()'s
+   did), and it takes the bottom ~45% of the screen: a card centred in the full height would put the field
+   and its buttons behind it. So a card with a field sits in the top part on a phone — where iOS itself
+   draws an alert while the keyboard is up. A plain confirm has no keyboard and stays centred. */
+@media (max-width: 700px) {
+  #fm-ask.fm-ask-has-input { align-items: flex-start; padding-top: max(14vh, calc(env(safe-area-inset-top, 0px) + 20px)); }
+}
 #topbar .brand { cursor: pointer; }   /* desktop: brand click goes Home */
 
 /* ---- Grouping / multi-select (v2.26) ---- */
@@ -9192,7 +9218,7 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
    speed), the hint a beat behind. The new-project scrim blooms at the settings scrim's .24s. */
 #hm-searchbar .hm-search-wrap { animation: hm-rise .22s cubic-bezier(.22, .9, .32, 1) backwards; }
 #hm-searchbar .hm-search-hint { animation: hm-rise .22s cubic-bezier(.22, .9, .32, 1) 40ms backwards; }
-#hm-dialog { animation: hm-bloom .24s ease backwards; }
+#hm-dialog, #fm-ask { animation: hm-bloom .24s ease backwards; }
 
 /* INSIDE THE INSPECTOR — both layouts. The classes are added by js/inspector.js ONLY on the rebuild
    that moved somewhere (refresh() runs on every slider drag and must not replay these). */
@@ -9233,7 +9259,7 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
   /* Cards raised from the bottom (Home's +, the add sheet's Sound effects / Record voice, Paste look
      from the layer menu) and the full elements browser swing up off their bottom edge, like the
      effects sheet does. */
-  .hm-dlg-card, .sfx-card, .vr-card, .ps-card, #el-browser {
+  .hm-dlg-card, .fm-ask-card, .sfx-card, .vr-card, .ps-card, #el-browser {
     animation: fm-hinge-panel 360ms cubic-bezier(.18, .85, .28, 1.02) backwards; transform-origin: 50% 100%;
   }
   /* Bottom sheets and bars get the add sheet's own swing. */
@@ -9256,7 +9282,7 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
   /* Cards with no button on screen to grow out of pop CENTRED — the pop family with its offsets at 0.
      The shortcuts card only when popFrom declined it (opened from Home, where the editor's ? is buried);
      from the editor it is a .pop-card and keeps its tail. */
-  .hm-dlg-card { animation: pop-grow 190ms cubic-bezier(.2, .9, .3, 1.08) backwards; transform-origin: 50% 100%; }
+  .hm-dlg-card, .fm-ask-card { animation: pop-grow 190ms cubic-bezier(.2, .9, .3, 1.08) backwards; transform-origin: 50% 100%; }
   .shortcuts-card:not(.pop-card), #export-overlay .export-card, #export-ready .export-card,
   .sfx-card, .vr-card, .ps-card, #ar-sheet .ar-card {
     animation: pop-grow 190ms cubic-bezier(.2, .9, .3, 1.08) backwards; transform-origin: 50% 50%;
@@ -9284,7 +9310,7 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
    moving (see #loading-dot). */
 @media (prefers-reduced-motion: reduce) {
   #toast.toast-in, #draw-bar, #pe-bar, #crop-bar, #mask-bar, #mpath-bar, #touchup-bar, #trk-bar,
-  #hm-searchbar .hm-search-wrap, #hm-searchbar .hm-search-hint, #hm-dialog, .hm-dlg-card, #hm-selbar,
+  #hm-searchbar .hm-search-wrap, #hm-searchbar .hm-search-hint, #hm-dialog, .hm-dlg-card, #fm-ask, .fm-ask-card, #hm-selbar,
   #inspector .cat-in, #inspector .cat-in-back, .insp-drop-in, .be-picker,
   .fxb-catview:not(.fxb-favview), #tpl-fill, #tpl-fill > *,
   .np-card, .np-card:not(.pop-card), #canvas-dialog, #export-dialog, #export-overlay, #export-ready, #shortcuts-overlay,

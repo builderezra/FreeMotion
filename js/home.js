@@ -1286,7 +1286,7 @@ window.FM = window.FM || {};
       FM.contextMenu.show(Math.min(r.left, window.innerWidth - 210), r.bottom + 4, [
         { label: 'Open', action: () => openProject(p.id) },
         pinMenuItem('projects', p.id),
-        { label: 'Rename…', action: () => { const n = prompt('Project name:', p.name); if (n && n.trim()) { FM.projects.rename(p.id, n.trim()); render(); } } },
+        { label: 'Rename…', action: async () => { const n = await FM.ask({ title: 'Rename project', input: { value: p.name || '' }, ok: 'Rename' }); if (n && n.trim()) { FM.projects.rename(p.id, n.trim()); render(); } } },
         // queue 915 clause 3: duplicate() now says when there is no whole copy — the template/element twins' wording
         { label: 'Duplicate', action: async () => { if (FM.toast) FM.toast('Duplicating…', 1200); const ok = await FM.projects.duplicate(p.id); render(); if (!ok && FM.toast) FM.toast('Could not duplicate — storage is full'); } },
         // Sits directly under Duplicate: both make a NEW thing out of this project, so they read as a
@@ -1302,7 +1302,7 @@ window.FM = window.FM || {};
           const src = p.fromTemplate && (FM.templates.list() || []).find(t => t.id === p.fromTemplate);
           if (!src) return [];
           return [{ label: 'Update template “' + src.name + '”', action: async () => {
-            if (!confirm('Replace the “' + src.name + '” template with this project as it is now?')) return;
+            if (!await FM.ask({ title: 'Update template', message: 'Replace the “' + src.name + '” template with this project as it is now?', ok: 'Update' })) return;
             if (FM.toast) FM.toast('Updating template…', 1200);
             const ok = await FM.templates.updateFrom(src.id, p.id);
             if (FM.toast) FM.toast(ok ? 'Updated “' + src.name + '”' : 'Could not update the template');
@@ -1310,14 +1310,14 @@ window.FM = window.FM || {};
           } }];
         })(),
         { label: 'Save as template…', action: async () => {
-          const n = prompt('Template name:', p.name || 'My template'); if (!n || !n.trim()) return;
+          const n = await FM.ask({ title: 'Save as template', message: 'Template name', input: { value: p.name || 'My template' }, ok: 'Save' }); if (!n || !n.trim()) return;
           const ok = await FM.templates.save(n.trim(), p.id);
           if (FM.toast) FM.toast(ok ? 'Template saved' : 'Could not save template');
         } },
         // The other half of "build a new element": the same shelf as Save as template, because from
         // here they are the same gesture — turn this project into a reusable thing.
         { label: 'Save as element…', action: async () => {
-          const n = prompt('Element name:', p.name || 'My element'); if (!n || !n.trim()) return;
+          const n = await FM.ask({ title: 'Save as element', message: 'Element name', input: { value: p.name || 'My element' }, ok: 'Save' }); if (!n || !n.trim()) return;
           const ok = await FM.elements.saveFromProject(p.id, n.trim());
           if (FM.toast) FM.toast(ok ? 'Element saved' : 'Could not save element');
           render();
@@ -1346,7 +1346,7 @@ window.FM = window.FM || {};
         } },
         { sep: true },
         { label: 'Delete…', danger: true, action: async () => {
-          if (!confirm('Delete "' + (p.name || 'Untitled') + '"? This cannot be undone.')) return;
+          if (!await FM.ask({ title: 'Delete project', message: 'Delete "' + (p.name || 'Untitled') + '"? This cannot be undone.', ok: 'Delete', danger: true })) return;
           await FM.projects.remove(p.id); render();
         } },
       ]);
@@ -1561,7 +1561,7 @@ window.FM = window.FM || {};
     del.disabled = !n;
     del.addEventListener('click', async () => {
       if (!n) return; let ids = [...selected];
-      if (!confirm('Delete ' + ids.length + ' ' + K.noun + (ids.length === 1 ? '' : 's') + '? This cannot be undone.')) return;
+      if (!await FM.ask({ title: 'Delete ' + ids.length + ' ' + K.noun + (ids.length === 1 ? '' : 's'), message: 'Delete ' + ids.length + ' ' + K.noun + (ids.length === 1 ? '' : 's') + '? This cannot be undone.', ok: 'Delete', danger: true })) return;
       if (FM.toast) FM.toast('Deleting ' + ids.length + '…');
       if (K.noun === 'project') {
         // delete the CURRENTLY-OPEN project LAST: remove() does a full project-switch (media decode +
@@ -1726,7 +1726,7 @@ window.FM = window.FM || {};
         } },
         pinMenuItem('templates', t.id),
         { sep: true },
-        { label: 'Delete template…', danger: true, action: async () => { if (!confirm('Delete template "' + t.name + '"?')) return; await FM.templates.remove(t.id); render(); } },
+        { label: 'Delete template…', danger: true, action: async () => { if (!await FM.ask({ title: 'Delete template', message: 'Delete template "' + t.name + '"?', ok: 'Delete', danger: true })) return; await FM.templates.remove(t.id); render(); } },
       ]);
     });
     more.setAttribute('aria-label', 'Template actions');
@@ -1816,7 +1816,7 @@ window.FM = window.FM || {};
         { label: 'Duplicate element', action: async () => { if (FM.toast) FM.toast('Duplicating…', 1200); const ok = await FM.elements.duplicate(e.id); render(); if (!ok && FM.toast) FM.toast('Could not duplicate — storage is full'); } },
         pinMenuItem('elements', e.id),
         { sep: true },
-        { label: 'Delete element…', danger: true, action: async () => { if (!confirm('Delete element "' + e.name + '"?')) return; await FM.elements.remove(e.id); render(); } },
+        { label: 'Delete element…', danger: true, action: async () => { if (!await FM.ask({ title: 'Delete element', message: 'Delete element "' + e.name + '"?', ok: 'Delete', danger: true })) return; await FM.elements.remove(e.id); render(); } },
       ]);
     });
     more.setAttribute('aria-label', 'Element actions');
@@ -1962,13 +1962,13 @@ window.FM = window.FM || {};
            failure #505 is about. The instruction is now true; whether it should happen by itself is a
            separate question and his to answer. */
         p.ofTemplate ? null : looseT ? { label: 'Save as template…', action: async () => {   // queue 915 clause 8
-          const n = prompt('Template name:', p.name || 'My template');
+          const n = await FM.ask({ title: 'Save as template', message: 'Template name', input: { value: p.name || 'My template' }, ok: 'Save' });
           if (!n || !n.trim()) return;
           const ok = await FM.templates.save(n.trim(), p.id);
           if (FM.toast) FM.toast(ok ? 'Template saved' : 'Could not save template');
           render();
         } } : { label: 'Save as element…', action: async () => {
-          const n = prompt('Element name:', p.name || 'My element');
+          const n = await FM.ask({ title: 'Save as element', message: 'Element name', input: { value: p.name || 'My element' }, ok: 'Save' });
           if (!n || !n.trim()) return;
           const ok = await FM.elements.saveFromProject(p.id, n.trim());
           if (FM.toast) FM.toast(ok ? 'Element saved' : 'Could not save element');
@@ -1976,7 +1976,7 @@ window.FM = window.FM || {};
         } },
         { sep: true },
         { label: 'Delete draft…', danger: true, action: async () => {
-          if (!confirm('Delete the draft “' + (p.name || 'Untitled') + '”? ' + (p.ofTemplate ? 'Anything in it that you have not saved back to its template will be lost.' : p.ofElement ? 'Anything in it that you have not saved back to its element will be lost.' : looseT ? 'It was never saved as a template, so everything in it will be lost.' : 'It was never saved as an element, so everything in it will be lost.'))) return;   // queue 771: the right noun
+          if (!await FM.ask({ title: 'Delete draft', message: 'Delete the draft “' + (p.name || 'Untitled') + '”? ' + (p.ofTemplate ? 'Anything in it that you have not saved back to its template will be lost.' : p.ofElement ? 'Anything in it that you have not saved back to its element will be lost.' : looseT ? 'It was never saved as a template, so everything in it will be lost.' : 'It was never saved as an element, so everything in it will be lost.'), ok: 'Delete', danger: true })) return;   // queue 771: the right noun
           /* DO IT FOR HIM (queue 617 clause 4). This used to call `discardDraft`, which refuses on the
              draft you have open, and then TOLD HIM to go and open another one first — so the last
              draft in the list could never be deleted. His words: "as long as there's one left I can't
@@ -2046,7 +2046,7 @@ window.FM = window.FM || {};
   function newFromTab() {
     if (tab === 'templates') {
       pickProject('Save which project as a template?', async (p) => {
-        const name = prompt('Template name:', p.name || 'Template'); if (!name || !name.trim()) return;
+        const name = await FM.ask({ title: 'Save as template', message: 'Template name', input: { value: p.name || 'Template' }, ok: 'Save' }); if (!name || !name.trim()) return;
         const ok = await FM.templates.save(name.trim(), p.id);
         if (FM.toast) FM.toast(ok ? 'Saved template “' + name.trim() + '”' : 'Could not save that template');
         render();
@@ -2062,7 +2062,7 @@ window.FM = window.FM || {};
       FM.contextMenu.show(Math.max(8, Math.min(nr.left - 150, window.innerWidth - 240)), Math.max(8, nr.top - 96), [
         { label: 'New element', disabled: true }, { sep: true },
         { label: 'Build a new one…', action: async () => {
-          const name = prompt('Element name:', 'My element'); if (!name || !name.trim()) return;
+          const name = await FM.ask({ title: 'New element', message: 'Element name', input: { value: 'My element' }, ok: 'Create' }); if (!name || !name.trim()) return;
           const pid = await FM.projects.create({ name: name.trim(), width: 1080, height: 1080, elementDraft: true });   // a workspace, not a project — see storage.js (queue 340)
           if (!pid) { if (FM.toast) FM.toast('Could not create that'); return; }
           FM.scene.project.background = null;   // transparent: an element drops onto whatever is under it
@@ -2072,7 +2072,7 @@ window.FM = window.FM || {};
         } },
         { label: 'From an existing project…', action: () => {
           pickProject('Save which project as an element?', async (p) => {
-            const name = prompt('Element name:', p.name || 'Element'); if (!name || !name.trim()) return;
+            const name = await FM.ask({ title: 'Save as element', message: 'Element name', input: { value: p.name || 'Element' }, ok: 'Save' }); if (!name || !name.trim()) return;
             const ok = await FM.elements.saveFromProject(p.id, name.trim());
             if (FM.toast) FM.toast(ok ? 'Saved element “' + name.trim() + '”' : 'Could not save that element');
             render();

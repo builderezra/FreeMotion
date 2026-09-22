@@ -4869,7 +4869,7 @@
       if (sub(eCard) === sub(oCard)) throw new Error('both kinds of draft carry the identical label, so the tab still cannot be told apart');
 
       // ---- it actually deletes
-      window.confirm = () => true;
+      window.confirm = () => true; FM.__askReal = FM.__askReal || FM.ask; FM.ask = function (o) { o = o || {}; return Promise.resolve(o.input ? null : (window.confirm(o.message || o.title) ? true : null)); };   // queue 919: Home's confirm() is FM.ask now — route it through this test's stub
       const draftsBefore = FM.projects.list().filter(p => p.elementDraft).length;
       oCard.querySelector('.hm-card-more').click(); await sleep(250);
       const items = [].slice.call(document.querySelectorAll('.ctx-item, .cm-item, [role="menuitem"]'));
@@ -4895,7 +4895,7 @@
         if (!toasts.length) throw new Error('a refused delete said nothing at all — that is a tap that appears to do nothing');
       } finally { FM.projects.discardDraft = realDiscard; }
     } finally {
-      window.confirm = realConfirm; FM.toast = realToast;
+      window.confirm = realConfirm; FM.toast = realToast; if (FM.__askReal) { FM.ask = FM.__askReal; FM.__askReal = null; }   // queue 919
       if (FM.contextMenu && FM.contextMenu.hide) { try { FM.contextMenu.hide(); } catch (e) {} }
       for (const id of made) { try { await FM.projects.remove(id); } catch (e) {} }
       if (elemIdx) { try { localStorage.setItem('fm.elements', JSON.stringify(elemIdx.filter(e => e.id !== '__qa525elem'))); } catch (e) {} }
@@ -19101,7 +19101,7 @@
       FM.scene.project.duration = 9;
       FM.storage.exportFile = () => { spy.save++; };
       FM.storage.importFile = () => { spy.open++; };
-      window.confirm = (m) => { spy.confirms.push(m); return true; };
+      window.confirm = (m) => { spy.confirms.push(m); return true; }; FM.__askReal = FM.__askReal || FM.ask; FM.ask = function (o) { o = o || {}; return Promise.resolve(o.input ? null : (window.confirm(o.message || o.title) ? true : null)); };   // queue 919: Home's confirm() is FM.ask now — route it through this test's stub
       FM.selectLayer(null); FM.refreshAll(); await sleep(60);
 
       // ---- 1. the ones that had NO other door on PC ---------------------------------------------
@@ -19256,7 +19256,7 @@
       if (FM.scene.layers.length !== n0 + 1) throw new Error('the clip Split button did not split (' + n0 + ' → ' + FM.scene.layers.length + ')');
     } finally {
       FM.storage.exportFile = realExport; FM.storage.importFile = realImport;
-      window.confirm = realConfirm;
+      window.confirm = realConfirm; if (FM.__askReal) { FM.ask = FM.__askReal; FM.__askReal = null; }   // queue 919
       if (FM.settings.isOpen()) FM.settings.close();
       if (FM.shortcuts && FM.shortcuts.hide) FM.shortcuts.hide();
       const d = document.getElementById('canvas-dialog'); if (d) { d.classList.add('hidden'); d.style.removeProperty('display'); }   // class, not an inline style nothing clears (queue 497)
@@ -20600,7 +20600,7 @@
     } finally { if (saved == null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, saved); }
   });
 
-  test('media history: the Settings row forgets the songs and keeps the panel open', { item: 'media-history' }, function () {
+  test('media history: the Settings row forgets the songs and keeps the panel open', { item: 'media-history' }, async function () {
     var KEY = 'fm.medialib', saved = localStorage.getItem(KEY);
     var realConfirm = window.confirm, wasOpen = FM.settings.isOpen();
     try {
@@ -20608,7 +20608,7 @@
         { mid: 'ta1', key: 'k1', name: 'Song.mp3', kind: 'video', audio: true, w: 0, h: 0, dur: 90, added: 2 },
         { mid: 'tv1', key: 'k2', name: 'Clip.mp4', kind: 'video', audio: false, w: 640, h: 480, dur: 4, added: 1 }
       ]));
-      window.confirm = function () { return true; };
+      window.confirm = function () { return true; }; FM.__askReal = FM.__askReal || FM.ask; FM.ask = function (o) { o = o || {}; return Promise.resolve(o.input ? null : (window.confirm(o.message || o.title) ? true : null)); };   // queue 919: Home's confirm() is FM.ask now — route it through this test's stub
       FM.settings.open();
       var rows = Array.prototype.slice.call(document.querySelectorAll('.set-panel .set-row'));
       var row = rows.filter(function (r) { var l = r.querySelector('.set-label'); return l && l.textContent === 'Songs'; })[0];
@@ -20617,6 +20617,7 @@
       if (!btn) throw new Error('the Songs row has no Clear button');
       if (btn.disabled) throw new Error('Clear was disabled with 1 song remembered');
       btn.click();
+      await new Promise(function (r) { setTimeout(r, 0); });   // queue 919: Clear now awaits FM.ask
       var n = FM.mediaLib.counts();
       if (n.audio !== 0) throw new Error('pressing Clear did not forget the song');
       if (n.visual !== 1) throw new Error('pressing Clear on Songs also forgot the video');
@@ -20625,7 +20626,7 @@
       var hint = row.querySelector('.set-hint');
       if (!hint || hint.textContent.indexOf('No songs') !== 0) throw new Error('the hint did not update: ' + (hint && hint.textContent));
     } finally {
-      window.confirm = realConfirm;
+      window.confirm = realConfirm; if (FM.__askReal) { FM.ask = FM.__askReal; FM.__askReal = null; }   // queue 919
       if (!wasOpen) FM.settings.close();
       if (saved == null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, saved);
     }
@@ -57861,6 +57862,43 @@
      "26vh" would not.
      ⚠️ AND IT HAS A CONTROL, because an element that has been deleted or renamed would pass every
      assertion below by being absent — which is exactly how a guard rots into decoration. */
+  /* ── queue 920: the faded bar at the top is iOS's own, and the page must not invite it ──────────────────────
+   * Since iOS 26 an installed web app that runs UNDER the status bar (black-translucent + viewport-fit=cover) gets the
+   * system Liquid Glass fade over its top ~45pt — his "faded white bar … black bar, like it fades onto the screen".
+   * `default` puts the page below an opaque status bar, and iOS paints that bar in theme-color, so theme-color must be
+   * the colour of the screen on show or the fix trades a fade for a solid strip. Held: the meta is `default`; the
+   * theme-color is light on the light Home, dark on the dark Home, the editor's top colour in a project — and it
+   * follows a switch between them with nobody calling anything. */
+  test('920: the status bar sits above the page (no iOS fade), and its colour follows the screen', { item: '920', budgetMs: 20000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const sb = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+    if (!sb || sb.getAttribute('content') !== 'default') throw new Error('status-bar-style is ' + (sb && sb.getAttribute('content')) + ' — under black-translucent iOS 26+ draws its fade over the top buttons');
+    const tc = () => (document.querySelector('meta[name="theme-color"]') || {}).content;
+    const homeOn = () => { const h = document.getElementById('home-screen'); return !!h && !h.classList.contains('hidden'); };
+    const wasHome = homeOn(), dh = document.documentElement.getAttribute('data-home');
+    const lum = hex => { const n = parseInt(String(hex).slice(1), 16); return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255); };
+    try {
+      document.documentElement.setAttribute('data-home', 'light');
+      if (!homeOn()) FM.home.open();
+      await sleep(300);
+      const light = tc();
+      if (!(lum(light) > 230)) throw new Error('on the light Home the status bar colour is ' + light + ' — a dark strip over a white screen');
+      document.documentElement.setAttribute('data-home', 'dark');
+      await sleep(50);
+      const dark = tc();
+      if (!(lum(dark) < 40)) throw new Error('on the dark Home the status bar colour is ' + dark);
+      FM.home.close();
+      await sleep(400);
+      const ed = tc();
+      if (!(lum(ed) < 40)) throw new Error('in a project the status bar colour is ' + ed + ' — not the editor\'s dark top');
+      if (ed === dark && ed === light) throw new Error('the colour never changed');
+    } finally {
+      document.documentElement.setAttribute('data-home', dh || 'light');
+      if (wasHome && !homeOn()) FM.home.open();
+      if (!wasHome && homeOn()) FM.home.close();
+    }
+  });
+
   test('903: the home screen paints no heavy colour wash behind its own top controls', { item: '903' }, async function () {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const html = document.documentElement, was = html.getAttribute('data-home');
@@ -61994,7 +62032,7 @@
       if (!bar) throw new Error('no selection bar after ticking drafts');
       /* THE HALF THAT COULD FAIL SILENTLY. K.store on the Elements tab is FM.elements, which has never
          heard of a draft's id — deleting through it would be a no-op with a cheerful toast. */
-      window.confirm = function () { return true; };
+      window.confirm = function () { return true; }; FM.__askReal = FM.__askReal || FM.ask; FM.ask = function (o) { o = o || {}; return Promise.resolve(o.input ? null : (window.confirm(o.message || o.title) ? true : null)); };   // queue 919: Home's confirm() is FM.ask now — route it through this test's stub
       const del = [].slice.call(bar.querySelectorAll('button')).filter(function (b) { return /^Delete$/.test(b.textContent.trim()); })[0];
       if (!del) throw new Error('no Delete button on the selection bar');
       del.click();
@@ -62003,7 +62041,7 @@
       if (left.length) throw new Error(left.length + ' of ' + made.length + ' drafts survived a bulk Delete — a draft is a project wearing an Elements-tab card, so it must be routed to discardDraftAnyway rather than that tab\u2019s store');
       made.length = 0;
     } finally {
-      window.confirm = realConfirm;
+      window.confirm = realConfirm; if (FM.__askReal) { FM.ask = FM.__askReal; FM.__askReal = null; }   // queue 919
       for (const id of made) { try { await FM.projects.discardDraftAnyway(id); } catch (e) {} }
       try { const sb = document.getElementById('hm-select-btn'); if (sb && sb.textContent.trim() === 'Done') sb.click(); } catch (e) {}
     }
@@ -66004,6 +66042,80 @@
     }
   });
 
+  /* ── queue 919: Home's pop-ups are the app's own, not the phone's grey boxes ─────────────────────────────
+   * His yes to the #912 ask: "Rename, Delete, Save as template and similar pop-ups on Home are the phone's built-in grey
+   * boxes. They can't follow light/dark or animate. Replace them with FreeMotion's own pop-ups?" → "Yes, make our own".
+   * Held: FM.ask answers like prompt()/confirm() did (typed text / true / null, Escape and Cancel = null, Enter = OK);
+   * his text is printed as text; it is light over the light Home and dark in the editor; it animates open; no native
+   * prompt()/confirm() is left in home.js or settings.js; and a Rename through the real project ⋯ menu renames. */
+  test('919 FM.ask answers like prompt/confirm, prints names as text, and animates open', { item: '919', budgetMs: 20000 }, async function () {
+    if (typeof FM.ask !== 'function') throw new Error('there is no FM.ask — Home still uses the phone\'s grey boxes');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const key = k => window.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+    const scrim = () => document.getElementById('fm-ask');
+    let p = FM.ask({ title: '<img src=x onerror="window.__fmAskXss=1">', message: 'Project name', input: { value: 'Beach' }, ok: 'Rename' });
+    await sleep(30);
+    const card = scrim() && scrim().querySelector('.fm-ask-card');
+    if (!card || scrim().classList.contains('hidden')) throw new Error('FM.ask put nothing on screen');
+    if (card.querySelector('img') || window.__fmAskXss) throw new Error('a name was parsed as HTML — his text must print as text');
+    if (!/<img/.test(card.querySelector('.fm-ask-title').textContent)) throw new Error('the title text was not shown as typed');
+    const anims = card.getAnimations ? card.getAnimations() : [];
+    const scrimAnims = scrim().getAnimations ? scrim().getAnimations() : [];
+    if (!anims.length && !scrimAnims.length && !matchMedia('(prefers-reduced-motion: reduce)').matches) throw new Error('the pop-up appeared in one frame — no opening animation');
+    const inp = card.querySelector('.fm-ask-input');
+    if (document.activeElement !== inp) throw new Error('the name field was not focused, so the phone keyboard would not come up');
+    inp.value = 'Sunset';
+    key('Enter');
+    const got = await p;
+    if (got !== 'Sunset') throw new Error('Enter should answer with the typed name, got ' + JSON.stringify(got));
+    if (!scrim().classList.contains('hidden')) throw new Error('the pop-up stayed up after answering');
+    p = FM.ask({ title: 'Delete project', message: 'Delete "X"? This cannot be undone.', ok: 'Delete', danger: true });
+    await sleep(20);
+    if (!scrim().querySelector('.fm-ask-ok').classList.contains('danger')) throw new Error('a Delete answer is not marked as dangerous');
+    key('Escape');
+    if ((await p) !== null) throw new Error('Escape should cancel (null)');
+    p = FM.ask({ title: 'Delete', message: 'Sure?', ok: 'Delete', danger: true });
+    await sleep(20);
+    scrim().querySelector('.fm-ask-ok').click();
+    if ((await p) !== true) throw new Error('OK on a question with no field should answer true');
+    p = FM.ask({ title: 'Delete', message: 'Sure?', ok: 'Delete' });
+    await sleep(20);
+    scrim().querySelector('.fm-ask-cancel').click();
+    if ((await p) !== null) throw new Error('Cancel should answer null');
+  });
+
+  test('919 the pop-up is light over the light Home and dark in the editor, and no grey box is left on Home', { item: '919', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const src = await Promise.all(['js/home.js', 'js/settings.js'].map(f => fetch('../' + f + '?t=' + Date.now()).then(r => r.text())));
+    const left = [];
+    src.forEach((t, i) => t.split('\n').forEach((l, n) => { const code = l.replace(/\/\/.*$/, ''); if (/(^|[^.\w])(prompt|confirm)\(/.test(code)) left.push(['home.js', 'settings.js'][i] + ':' + (n + 1)); }));
+    if (left.length) throw new Error('native prompt()/confirm() still on Home: ' + left.join(', '));
+    const lum = el => { const m = getComputedStyle(el).backgroundColor.match(/[\d.]+/g) || [0, 0, 0]; return 0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]; };
+    const wasHome = FM.home && FM.home.isOpen && FM.home.isOpen();
+    const dh = document.documentElement.getAttribute('data-home');
+    try {
+      document.documentElement.setAttribute('data-home', 'light');
+      if (FM.home && FM.home.open && !FM.home.isOpen()) FM.home.open();
+      await sleep(250);
+      let p = FM.ask({ title: 'Rename project', input: { value: 'A' }, ok: 'Rename' });
+      await sleep(400);
+      const light = lum(document.querySelector('#fm-ask .fm-ask-card'));
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); await p;
+      if (FM.home && FM.home.close) FM.home.close();
+      await sleep(250);
+      p = FM.ask({ title: 'Rename project', input: { value: 'A' }, ok: 'Rename' });
+      await sleep(400);
+      const dark = lum(document.querySelector('#fm-ask .fm-ask-card'));
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); await p;
+      if (!(light > 200)) throw new Error('over the light Home the pop-up card is not light (luma ' + light.toFixed(0) + ')');
+      if (!(dark < 90)) throw new Error('in the editor the pop-up card is not dark (luma ' + dark.toFixed(0) + ')');
+    } finally {
+      document.documentElement.setAttribute('data-home', dh || 'light');
+      if (wasHome && FM.home && FM.home.open && !FM.home.isOpen()) FM.home.open();
+      if (!wasHome && FM.home && FM.home.close && FM.home.isOpen()) FM.home.close();
+    }
+  });
+
   test('791: Delete draft… names the right noun for all three draft kinds — a plain draft has no element to save back to', { item: '791', budgetMs: 30000 }, async function () {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     if (!FM.projects || !FM.projects.create || !FM.home) throw new Error('projects/home are not reachable');
@@ -66024,7 +66136,7 @@
       const ask = async (name) => {
         const card = [].slice.call(document.querySelectorAll('.hm-card-draft')).filter(c => c.textContent.indexOf(name) >= 0)[0];
         if (!card) throw new Error('the seeded draft "' + name + '" is not on screen');
-        let msg = null; window.confirm = (m) => { msg = String(m); return false; };   // read the prompt, never delete
+        let msg = null; window.confirm = (m) => { msg = String(m); return false; }; FM.__askReal = FM.__askReal || FM.ask; FM.ask = function (o) { o = o || {}; return Promise.resolve(o.input ? null : (window.confirm(o.message || o.title) ? true : null)); };   /* queue 919 */ // read the prompt, never delete —: Home's confirm() is FM.ask now — route it through this test's stub
         card.querySelector('.hm-card-more').click(); await sleep(250);
         const del = [].slice.call(document.querySelectorAll('.ctx-item, .cm-item, [role="menuitem"]')).filter(i => /Delete draft/i.test(i.textContent))[0];
         if (!del) throw new Error('the ⋯ menu of "' + name + '" has no Delete entry');
@@ -66039,7 +66151,7 @@
       if (!/its element/.test(mEdit)) throw new Error('control: a draft that IS editing an element no longer says "its element": "' + mEdit + '"');
       if (mine().length !== 2) throw new Error('confirm() returned false and yet a seeded draft is gone (' + mine().length + ' of 2 left)');
     } finally {
-      window.confirm = realConfirm;
+      window.confirm = realConfirm; if (FM.__askReal) { FM.ask = FM.__askReal; FM.__askReal = null; }   // queue 919
       if (FM.contextMenu && FM.contextMenu.hide) { try { FM.contextMenu.hide(); } catch (e) {} }
       for (const id of made) { try { await FM.projects.remove(id); } catch (e) {} }
       if (openBefore && FM.projects.currentId && FM.projects.currentId() !== openBefore) { try { await FM.projects.open(openBefore); } catch (e) {} }

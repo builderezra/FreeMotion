@@ -40,6 +40,8 @@ def main():
     ap.add_argument('--js', default=None)
     ap.add_argument('--js-file', default=None)
     ap.add_argument('--wait', type=int, default=600, help='ms to wait after --js before the shot')
+    ap.add_argument('--safe-top', type=int, default=0, help='emulate an iPhone notch: env(safe-area-inset-top) in px (47 = iPhone 14/15)')
+    ap.add_argument('--safe-bottom', type=int, default=0)
     ap.add_argument('--frames', default=None, help='comma list of ms offsets after --js: one PNG each')
     ap.add_argument('out_pos', nargs='?', default=None, help='(v16.07 form) the PNG to write')
     ap.add_argument('--out', default=None)
@@ -58,6 +60,10 @@ def main():
         cdp.send('Emulation.setDeviceMetricsOverride', width=a.width, height=a.height,
                  deviceScaleFactor=2 if a.width < 768 else 1, mobile=a.width < 768)
         cdp.send('Page.enable')
+        if a.safe_top or a.safe_bottom:
+            # #920: the top-of-screen strip lives in the iPhone's safe area, which a desktop browser does not have — so every
+            # earlier attempt measured env(safe-area-inset-top) = 0 and could not see it. Chrome ≥136 can fake the insets.
+            cdp.send('Emulation.setSafeAreaInsetsOverride', insets={'top': a.safe_top, 'bottom': a.safe_bottom, 'left': 0, 'right': 0})
         cdp.send('Page.navigate', url=f'http://localhost:{a.port}{a.path}')
         deadline = time.time() + 30
         while time.time() < deadline:

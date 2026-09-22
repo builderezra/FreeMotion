@@ -224,11 +224,13 @@ window.FM = window.FM || {};
       hint.textContent = describe(n);
       b.disabled = !n;
     };
-    b.addEventListener('click', () => {
+    b.addEventListener('click', async () => {
       const n = count();
       // No FM.toast here on purpose: #toast sits at z-index 60 and .set-scrim at 220, so a toast
       // raised from this panel would be painted behind it and never seen.
-      if (!n || !confirm(describe(n) + '\n\nForget them? Projects already using a file keep it — this only clears the list.')) return;
+      // FM.ask (js/ask.js, queue 919), not the browser's confirm(): Settings opens from Home, and the
+      // grey box ignored the light look. It sits above this panel and eats its Escape while it is up.
+      if (!n || !await FM.ask({ title: 'Clear ' + label.toLowerCase(), message: describe(n) + '\n\nForget them? Projects already using a file keep it — this only clears the list.', ok: 'Clear', danger: true })) return;
       doClear();
       sync();
     });

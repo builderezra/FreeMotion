@@ -39,8 +39,8 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=707">
-<link rel="stylesheet" href="theme-glass.css?v=54">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
+<link rel="stylesheet" href="styles.css?v=708">
+<link rel="stylesheet" href="theme-glass.css?v=55">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
      v6.79 changed this to #000 and v6.80 to the app ground, both chasing a bar that turned out to be
@@ -50,7 +50,13 @@
 <meta name="theme-color" content="#12151b">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- `default`, NOT black-translucent (queue 920). Since iOS 26 an installed web app that runs UNDER the status bar
+     gets the system's Liquid Glass scroll-edge fade in the top inset — a white-or-black gradient reaching past the
+     status bar over the top buttons: his "faded white bar … black bar, like it fades onto the screen". `default`
+     makes the status bar opaque and starts the page below it, so iOS has nothing to fade. Its colour is the
+     theme-color meta, which js/statusbar.js keeps equal to the screen on show. iOS reads this ONCE, when the app
+     is added to the Home Screen — it takes effect only after he removes and re-adds the app (back up first). -->
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="FreeMotion">
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
 <link rel="icon" type="image/png" href="icon-192.png?v=2">
@@ -254,7 +260,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v16.77</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v16.78</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1008,7 +1014,8 @@
 
   <script src="vendor/mp4-muxer.js?v=9"></script>
   <script src="js/perf-probe.js?v=12"></script>
-  <script src="js/settings.js?v=37"></script>
+  <script src="js/settings.js?v=38"></script>
+  <script src="js/statusbar.js?v=1"></script>
   <script src="js/screen.js?v=1"></script>
   <script src="js/scene.js?v=114"></script>
   <script src="js/eases.js?v=3"></script>
@@ -1052,13 +1059,14 @@
   <script src="js/export-resume.js?v=7"></script>
   <script src="js/medialib.js?v=6"></script>
   <script src="js/template-fill.js?v=3"></script>
-  <script src="js/home.js?v=176"></script>
+  <script src="js/home.js?v=177"></script>
   <script src="js/graph-editor.js?v=17"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
   <script src="js/exporter.js?v=120"></script>
   <script src="js/sample.js?v=10"></script>
   <script src="js/contextmenu.js?v=45"></script>
+  <script src="js/ask.js?v=1"></script>
   <script src="js/shortcuts.js?v=82"></script>
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=54"></script>
