@@ -122,10 +122,10 @@ All are plain classic scripts that attach to `window.FM`. There is no module sys
 
 | File | Namespace | Contents (≈ lines) |
 |---|---|---|
-| `js/collab-core.js` | `FM.collab` | Constants (§21), `PROTO=1`, `SCHEMA_REV`, `SCHEMA_FP`, and flags (`active`, `role`). Hook entry points (all no-ops while inactive, listed in §23). Stashes `#j=` into `fm.pendingJoin` at load. Loads `tests/collab-agent.js` under the test gate (§25.3). `fm.profile` helpers. (≈250) |
+| `js/collab-core.js` | `FM.collab` | Constants (§21), `PROTO=1`, `SCHEMA_REV`, `SCHEMA_FP` and its fixture, and flags (`active`, `role`). Hook entry points (all no-ops while inactive, listed in §23). Stashes `#j=` into `fm.pendingJoin` at load. Loads `tests/collab-agent.js` under the test gate (§25.3). `fm.profile` helpers. (≈250) — **S1 ships only the constants and the fingerprint; the file must be INERT.** The `#j=` stash needs a join flow (S3) and the agent loader needs the agent to exist (S2); shipping either now would mean a localStorage write and a 404 `<script>` on every load for a feature nobody can reach. |
 | `js/collab-path.js` | `FM.collab.path` | Path grammar, escaping and validation. `canon()` (sorted-key JSON with JSON semantics). `cyrb53()`. `eq()` (leaf equality). Keyed-array rules. `stampIds()`. (≈300) |
-| `js/collab-diff.js` | `FM.collab.diff` | `diffDoc(base, live, opts)` returns `{ops, recs}`. `apply(target, op)` in place. LIS reorder. Inverse builders. (≈650) |
-| `js/collab-host.js` | `FM.collab.Host` | Sequencer pipeline (§7), member table, role filter, leases, CAS, invariants on clones, ring, `lastBy`. Pure: it takes a DocAdapter. (≈650) |
+| `js/collab-diff.js` | `FM.collab.diff` | `diffDoc(base, live, opts)` returns `{ops, recs, orders}`. `apply(target, op)` in place. `applyOrder` / `orderStatementsFor` (§8.3a). LIS reorder. Inverse builders (`invert` per op, `invertStep` per step — §10.2). (≈650) |
+| `js/collab-host.js` | `FM.collab.Host` | Sequencer pipeline (§7), member table, role filter, leases, CAS, invariants on clones, ring, `lastBy`. Pure: it takes a DocAdapter. (≈650) — **`invariants {layer, project, layers}` is REQUIRED and a missing hook throws at construction**, because a host that runs without them sequences documents no sanitizer ever saw, converges perfectly, and proves nothing. S1's `project` hook is the suite's clamp: `clampProjectDims` is private to storage.js and S1 may not move that file's `?v=`; S2's bridge exposes the real one. |
 | `js/collab-session.js` | `FM.collab.Session` | Per-device engine: tick scheduler, commit hook, receive rules (§8), undo (§10), hash and resync (§11.4), offline outbox, persistence, link state machines (§12). Pure: it takes a DocAdapter plus a Link. (≈950) |
 | `js/collab-bridge.js` | `FM.collab.bridge` | The FM.scene DocAdapter: `normalizeDerived`, `interacting()`, busy and frozen detection, `afterApply` (§8.6), refresh scheduling, interaction tracking listeners (installed only while active). (≈450) |
 | `js/collab-link.js` | `FM.collab.link` | Link interface. `LoopLink` (in-page) and `PostLink` (postMessage, used only by tests). `RtcLink` (RTCPeerConnection, 3 channels, framing, backpressure). Minimal-SDP codec. (≈600) |
@@ -218,6 +218,10 @@ The rule is evaluated identically on every device.
 2. Otherwise, if every element is an object with a unique string `id`, the array is keyed by `id` (future-proofing).
 3. Otherwise the array is **atomic** and is set as a whole. This covers keyframe lists `kf`, `subs`, `points`, mask `path`, `captions` (including cue effects), `markers`, `crop` sub-arrays, `bez`, and everything else.
 
+**⚠️ Rule 3's names are checked BEFORE rule 2 (S1 correction).** As written, rules 2 and 3 contradict each other: none of `kf`, `subs`, `points`, `path`, `captions`, `markers`, `bez`, `crop` carries an `id` today, so they agree today — but the day anyone adds one (a caption-cue id for the ruler marks, say) rule 2 would silently promote that array to element addressing and the atomic guarantee this section leans on would be gone from a list this section calls atomic. `FM.collab.path.ATOMIC` holds the names and is consulted first. Naming an array atomic costs a whole-value set; naming it keyed costs data.
+
+**A declared key field that is missing or duplicated on any element makes the array atomic for that diff** rather than producing two ops addressing the same place. `stampIds` repairs the document on the next tick and it becomes keyed again.
+
 An atomic value is always safe: it can lose a concurrent edit to a sibling element, but it never drops data.
 
 ### 5.4 Stamping uids: `FM.collab.path.stampIds(scene)`
@@ -304,6 +308,7 @@ It returns `'ok' | 'noop' | 'gone' | 'bad'`. `target` is either `base` (plain JS
 ### 7.1 Per incoming guest `tx`, in this exact order
 
 1. **Validate the message.** Size ≤ 4 MB, ops ≤ 5000, every path valid (§5.2), numbers finite, strings within caps (§21). Any failure rejects the whole tx: `ack{cid, seq:null, rej:[['*', 'bad']]}`, plus a diagnostics entry.
+   - **No bare-root writes (S1):** an `s` or `d` whose path is just `P` or `L` is refused. `s{p:['L'], v:[…]}` is the one op that could put two layers with the same id into base, after which every id-keyed walk in the app is ambiguous. Nothing the diff emits is ever a bare root, so refusing them costs nothing. With that closed, and because `li` **upserts** by id, a repeated layer id is unreachable through this pipeline.
 2. **Rate limit.** Token bucket of 30 tx/s with a burst of 60. Over the limit, drop the tx and flag the member in the roster.
 3. **Dedupe.**
    - If `cid ≤ lastCid[mid]` and an ack is cached (the last 64 per member), resend that ack.
@@ -326,12 +331,13 @@ It returns `'ok' | 'noop' | 'gone' | 'bad'`. `target` is either `base` (plain JS
    - Apply `fix` to base.
 9. **Apply resolved ops plus fix to host live** under the receive rules (§8). The host's held paths are deferred; frozen or busy queues the live application; **base has already advanced**.
 10. `seq++`.
-    - Append `b{seq, by:mid, ops, fix}` to the ring (last 2000 batches or 8 MB).
+    - Append `b{seq, by:mid, ops, fix, ord?}` to the ring (last 2000 batches or 8 MB). `ord` is the order statement (§8.3a), present only when the batch reordered something.
     - Update `lastCid[mid]` and `lastBy`.
     - For each accepted op, record `lastW[pathKey] = {seq, by}` (diagnostics only).
 11. **Send.**
     - To the sender: `ack{cid, seq, ops, fix, rej, lost}`, where `fix` also contains the current host value for every rejected or lost path.
-    - To every other member: `b{seq, by, ops, fix}`.
+      **It names the deepest ancestor that still exists (S1).** If the refusal was `'gone'` because the *effect* the path runs through was deleted, then `d` on `…/#u:x/params/amount` is a lie about where the change is — and on a device that still holds that effect it would delete a real parameter. The truthful statement is `ar` on the element (or `lr` on the layer).
+    - To every other member: `b{seq, by, ops, fix, ord?}`.
 12. `FM.storage.autosave()`. **Required:** autosave is otherwise called only from commit, undo and redo (`history.js:158-162`).
 
 ### 7.2 The host's own local ops
@@ -348,7 +354,8 @@ On arm, the host normalizes, pre-sanitizes on a clone, and applies any differenc
 
 ### 8.1 Guests: pending
 
-- Every op a guest sends is applied to its own base immediately and recorded as `pending[pathKey] = cid`.
+- Every op a guest sends is applied to its own base immediately, and **an `s` or a `d`** is recorded as `pending[pathKey] = cid`.
+  **⚠️ Only `s` and `d` (S1 correction, found by the convergence fuzz at round 214 of 300).** A `mv`/`li`/`lr` has no path of its own — its key is the layer, `L/<id>` — so recording it marks that layer's whole subtree as pending, and the skip rule below then throws away every remote content op underneath it, in base as well as live, with nothing to bring them back: while my drag of a clip is in flight, your rename of it, your mask edit and your slider all vanish. A structural op claims a **position**, which §8.3a and the ack echo settle; only `s` and `d` claim a **value**, which is what "the last person to let go wins" is about.
 - `ctl` is ordered, and the host processes txs sequentially. So when a remote `b` touching a pending path arrives before our `ack`, **the host sequenced theirs before ours**, and our value will win.
 - Therefore **a remote non-structural op whose path overlaps a pending path is skipped in both base and live.**
 - "Overlaps" means one path is a segment-prefix of the other, in either direction. The judge's descendant case is covered.
@@ -373,6 +380,23 @@ When `lr`, `ar`, or an `s` that replaces an **ancestor container** of a pending 
 - show the toast "Sam deleted 'Title'".
 
 `li`, `mv`, `ai` and `am` never conflict with pending content edits; they only move things.
+
+### 8.3a Order is stated, not merged (S1 correction)
+
+**Two relative moves made at the same moment do not commute, so ops alone do not converge.** Measured, from `A,B,C`:
+
+| | |
+|---|---|
+| I drag A below C | `mv{A, a:C}` → my list `B,C,A` |
+| you drag C above B | `mv{C, a:A}` → host `A,C,B` (sequenced first) |
+| I apply yours to mine | `B,A,C` — host applies mine → `C,A,B` |
+| my ack re-applies mine | `B,C,A` — host stays `C,A,B` |
+
+Both devices are then certain and they disagree, neither produces another op, and the only thing that would ever notice is the 10-second divergence hash (§11.4) — i.e. his layer stack sits visibly wrong until a background timer happens to look.
+
+So: **a batch that contains any order op also states the resulting key order, and the receiver adopts it.** `b` and `ack` carry `ord: [{p, f, k:[keys…]}]`, one entry per array the batch reordered (`p:null` is the layer list). The receiver applies the batch's ops, then rewrites only the slots holding a key the statement mentions — anything it has and the host does not (a layer it just made and has not sent) keeps its slot. The host is authoritative about order anyway; this says so instead of hoping relative moves commute. It costs an id list only on batches that actually reorder, never on a slider tick, and the sender's own pending move is re-applied by its ack immediately afterwards, so the last person to let go still wins.
+
+**S2:** the bridge must defer an adoption while the layer list is HELD (§8.2), or the stack jumps under a finger that is mid-drag.
 
 ### 8.4 Flush before apply
 
@@ -485,6 +509,7 @@ if soft: toast "Part of this was changed by <who> since, so it was left alone"
 
 - `<who>` comes from `lastBy.get(path)` (an LRU of 10 000 entries updated on every remote apply), falling back to "someone else".
 - A step that contains structural recs is all-or-nothing, so an ungroup is never half-undone.
+- **⚠️ A reorder is undone by restating the order, not by inverting each `mv` (S1 correction).** The per-op inverse of a move is not the inverse of the step: from `A,B,C,D` → `C,A,D,B` the diff emits `mv{C,a:null}` then `mv{D,a:A}`, and replaying those two inverses in reverse order (each op's recorded base predecessor) gives `D,A,B,C`. The reason is that a reorder walk places each layer relative to a list that is half old and half new, so "the layer that used to be above me" is not where it came from. `FM.collab.diff.invertStep(res)` therefore inverts content and membership per op, in reverse, and then **restates** each disturbed array's recorded base order absolutely. That is n ops rather than the LIS-minimal count, which is the right trade for an undo: it is unconditional, it cannot be wrong, and `apply()` reports the ones that change nothing as `'noop'` so the host never sequences them.
 - Undoing a delete brings the full layer back. Its media survives because `lr` keeps records and `reachable()` covers ids referenced by the undo and redo stacks.
 
 ### 10.3 Redo
@@ -778,7 +803,10 @@ K = K_auth (link) | K_auth from C (code) | member tok (tok) | mk (conn)
   - guest sees "Ezra's FreeMotion needs an update before you can join — ask Ezra to tap the version number";
   - host sees the banner "Sam has a newer FreeMotion. [Update now — the session reconnects in a few seconds]".
 - Guest older: "Update to join" [Update] (the pending join is already stashed).
-- **`SCHEMA_FP` test:** `cyrb53(canon(_sanitizeLayers(KITCHEN_SINK)) + canon(fxRegistry param defs) + canon(normalizeDerived(FIXTURE2)))` must equal the `SCHEMA_FP` constant. The failure message reads: "The sync schema changed — bump FM.collab.SCHEMA_REV and set SCHEMA_FP to <new>."
+- **`SCHEMA_FP` test:** `FM.collab.schemaFingerprint()` must equal the `SCHEMA_FP` constant. The failure message reads: "The sync schema changed — bump FM.collab.SCHEMA_REV and set SCHEMA_FP to <new>."
+  **As built (S1), two departures from the line above and both are deliberate:**
+  - the terms are `canon(_sanitizeLayers(FIXTURE)) + canon(fxRegistry param defs) + canon(OP_GRAMMAR) + SCHEMA_REV`. `normalizeDerived` is the bridge's and does not exist until S2, which bumps `SCHEMA_REV` and re-pins the constant — that is what the bump is for, and joining across the two stages is refused by `PROTO`/`SCHEMA_REV` anyway. The **op grammar** is included, which the line omitted: a changed op shape is exactly the incompatibility this gate exists to refuse, and it costs one `canon()` of a frozen literal.
+  - the fixture lives in `collab-core.js` beside the constant, not in the suite. Two sources of truth for one number means anyone editing the fixture to cover a new shape would "fix" the constant to match and the gate would quietly stop guarding anything. The suite only compares.
 
 ### 14.8 Service-worker update during a session
 
@@ -1113,8 +1141,9 @@ A `ctl` message over 16 KB is sent as `{t:'fr', k:<msgId>, i, n, s:<≤16 KB sub
 | `snap` | H→G (ctl header; bytes on bulk as kind `'snap'`) | `xid, bytes, gz:0\|1, epoch, seq, h`. The body is `canon({project, layers})`, gzipped with `CompressionStream` when present. |
 | `tail` | H→G | `from, batches:[b…]` |
 | `tx` | G→H | `cid, bs, q?:1, ops:[…], media?:[[newLid, srcLid]]` |
-| `ack` | H→sender | `cid, seq\|null, ops, fix, rej:[[opIndex\|'*', why]], lost:[[opIndex, why]]` |
-| `b` | H→others | `seq, by, ops, fix, media?` |
+| `ack` | H→sender | `cid, seq\|null, ops, fix, rej:[[opIndex\|'*', why]], lost:[[opIndex, why]], ord?` |
+| `b` | H→others | `seq, by, ops, fix, ord?, media?` |
+| `ord` (on `b`/`ack`) | H→all | `[{p:<array path or null>, f:'id'\|'uid', k:[keys…]}]` — §8.3a, present only when the batch reordered something |
 | `hash` / `resync` | H→G / G→H | `seq, h` |
 | `roster` | H→all | `people:[{mid, name, color, role, dev, st:'here'\|'away'\|'off'\|'joining', media:0..1, ls}]` |
 | `role` | H→G | `role` |
@@ -1349,9 +1378,11 @@ Each targets one rule:
   - lease reject; CAS (b match, current == v, clash); `li` anchor fallback; `lr` force
   - sanitize-on-clone yields fix **and live array identities are unchanged**
   - cycle repair and group-order fix
-  - **convergence fuzz:** host plus 3 PlainAdapter guests, 300 seeded rounds, with latency, pres reorder and drop, disconnect and rejoin, epoch bump, outbox. Invariants: equal hashes at quiescence; no deleted layer resurrected except by an explicit undo; no cycles; groups contiguous; keyframes sorted.
+  - **convergence fuzz:** host plus 3 PlainAdapter guests, 300 seeded rounds, with latency, pres reorder and drop, disconnect and rejoin, epoch bump, outbox. Invariants: equal hashes at quiescence; no deleted layer resurrected except by an explicit undo; no cycles; **no repeated layer id**; keyframes sorted.
+    *(The guest is a test-local engine: §8.1, §8.3 and §13.2 over two plain trees. There is no `Session` until S2, and a PlainAdapter guest has no DOM, so the held/deferred half of §8.2 has nothing to defer and is tested in S2 against the real app.)*
+    *("groups contiguous" was dropped: S0 measured that group contiguity is **not** an invariant of this app — three ordinary actions produce a scattered group, the compositor knows it, and `FM.normalizeGroupOrder` was redefined as a repeated-id repair. See its comment in `js/scene.js`.)*
   - hostile inputs (`__proto__`, `_canvas`, 10 MB string, https `fillImage`, 6000 ops, HTML name)
-  - `_sanitizeLayers` idempotence on kitchen sink plus all fixtures
+  - `_sanitizeLayers` idempotence on the kitchen sink, on a layer holding every registered effect, and on the project open in the runner (`tests/_fixtures` holds **media** only — there is no scene fixture on disk, so fetching from there would have checked nothing while looking thorough)
   - `SCHEMA_FP` gate
   - effect-JSON comparison audit (§5.4)
 - **Visible:** nothing.

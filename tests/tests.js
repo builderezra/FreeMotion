@@ -27554,6 +27554,1842 @@
     });
   });
 
+  /* ═══════════════════════════════════════════════════════════════════════════════════════════════
+     QUEUE 921 STAGE S1 — THE PURE COLLABORATION CORE (spec §26 S1)
+
+     Nothing below touches the app. js/collab-path.js, js/collab-diff.js and js/collab-host.js are
+     libraries: plain JSON in, plain JSON out, no DOM, no FM.scene. That is deliberate and it is what
+     makes the last test in this block possible at all — a host plus three guests, 300 seeded rounds
+     of concurrent editing with latency, dropped presence, disconnects, rejoins and an epoch bump,
+     run in a few seconds in one frame with no browser in the way.
+
+     Every test here fails against HEAD for the honest reason that the modules do not exist there, and
+     every one carries a positive control: an assertion that would go red if the thing it is checking
+     had simply stopped happening. (A negative test with no control is four green runs that mean the
+     gesture never started — memory note, and it has bitten this repo.)
+     ══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+  /* Seeded PRNG (mulberry32). Every fuzz in this block is reproducible from its seed — a convergence
+     failure you cannot re-run is a rumour. */
+  function rng921(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /* ⚠️ THROWS, never returns. A test that skips itself when its seam is missing reads as green against
+     the very absence it exists to detect — and prove.sh reverts the source, so the guard would fire on
+     exactly the run that is supposed to go red. */
+  function need921(what) {
+    const C = FM.collab;
+    if (!C || !C.path || !C.diff || !C.Host) {
+      throw new Error('FM.collab.path / .diff / .Host is missing — the stage-S1 core (js/collab-path.js, ' +
+        'js/collab-diff.js, js/collab-host.js) is not loaded, so ' + what + ' cannot be measured at all');
+    }
+    return C;
+  }
+  function jclone921(v) { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); }
+
+  /* The kitchen-sink generator (§25.1): one scene carrying every shape the document can hold, built
+     from the REAL registry rather than from a hand-written idea of what an effect looks like.
+     Deterministic in `seed`; `fxFrom` rotates the effect catalogue so that across 200 scenes every
+     registered type is exercised without any one scene carrying 199 of them. */
+  function kitchen921(seed) {
+    const R = rng921(seed);
+    const reg = (FM.fxRegistry && FM.fxRegistry.all) ? FM.fxRegistry.all().map(function (e) { return e.type; }) : [];
+    let n = 0;
+    const nid = function (p) { return p + '_' + seed.toString(36) + (++n).toString(36); };
+    const num = function (lo, hi) { return Math.round((lo + R() * (hi - lo)) * 1000) / 1000; };
+    const pick = function (a) { return a[Math.floor(R() * a.length) % a.length]; };
+    let uidc = 0;
+    const nuid = function () { return 'u' + seed.toString(36) + (++uidc).toString(36) + 'z'; };
+
+    function fxFrom(start, count) {
+      const out = [];
+      for (let i = 0; i < count && reg.length; i++) {
+        const inst = FM.fxRegistry.makeInstance(reg[(start + i) % reg.length]);
+        if (!inst) continue;
+        inst.uid = nuid();
+        const keys = Object.keys(inst.params || {});
+        for (let k = 0; k < keys.length; k++) {
+          if (typeof inst.params[keys[k]] === 'number' && R() < 0.2) {
+            const v0 = inst.params[keys[k]];
+            inst.params[keys[k]] = { kf: [{ t: 0, v: v0, e: 'linear' }, { t: num(0.5, 3), v: v0 + 1, e: 'easeIn' }], loopMode: pick(['none', 'loop', 'pingpong']) };
+            break;
+          }
+        }
+        out.push(inst);
+      }
+      return out;
+    }
+    function baseLayer(type, over) {
+      return Object.assign({
+        id: nid('l'), type: type, name: type + ' ' + n, start: num(0, 3), duration: num(0.5, 6),
+        visible: true, locked: false, labelColor: '#3366cc', clipColor: '#993366',
+        transform: { x: num(-200, 200), y: num(-200, 200), scale: num(0.2, 3), rotation: num(-180, 180), opacity: num(0, 1), skewX: num(-20, 20), skewY: 0 },
+        effects: fxFrom(seed * 3 + n, 2 + Math.floor(R() * 3)),
+        audioFx: [{ type: 'reverb', enabled: true, params: {}, uid: nuid() }],
+        behaviors: [{ type: 'wiggle', prop: 'x', enabled: true, params: {}, uid: nuid() }]
+      }, over || {});
+    }
+
+    const layers = [];
+    const g1 = baseLayer('group', { effects: [], audioFx: [], behaviors: [], collapsed: false });
+    const g2 = baseLayer('group', { effects: [], audioFx: [], behaviors: [], parent: g1.id });
+    const g3 = baseLayer('group', { effects: [], audioFx: [], behaviors: [], parent: g2.id });
+    layers.push(g1, g2, g3);
+    const shape = baseLayer('shape', {
+      parent: g3.id, shape: 'rect', fill: '#44aa88',
+      masks: [{ id: nid('m'), mode: 'add', path: [[0, 0], [num(5, 50), 0], [num(5, 50), num(5, 50)]], feather: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 8, e: 'linear' }] } }],
+      crop: { x: 0, y: 0, w: num(0.5, 1), h: num(0.5, 1) }
+    });
+    layers.push(shape);
+    const text = baseLayer('text', {
+      parent: shape.id,                                  // a TRANSFORM parent: its parent is not a group
+      text: 'Hello ' + seed, fontSize: num(10, 90),
+      captions: [
+        { start: 0, end: num(0.5, 2), text: 'one', effects: fxFrom(seed + 5, 1) },
+        { start: num(2, 3), end: num(3.5, 5), text: 'two' }
+      ],
+      speed: { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 2, v: num(0.2, 4), e: 'easeOut' }], loopMode: 'none' }
+    });
+    layers.push(text);
+    const img = baseLayer('image', {
+      fillImage: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+      subs: [{ t: 0, v: 1 }, { t: 1, v: 2 }], bez: [[0, 0], [1, 1]]
+    });
+    layers.push(img);
+    const extra = 1 + Math.floor(R() * 3);
+    for (let i = 0; i < extra; i++) layers.push(baseLayer(pick(['shape', 'text', 'image'])));
+
+    return {
+      project: {
+        width: 2 * Math.round(num(160, 960) / 2), height: 2 * Math.round(num(160, 960) / 2),
+        fps: pick([24, 25, 30, 60]), duration: num(2, 20), background: '#101014',
+        markers: [{ t: num(0, 2), label: 'Benchmark' }, { t: num(2, 4), label: 'Thumbnail', thumb: true }],
+        notes: [{ id: nid('n'), text: 'note ' + seed, remind: R() < 0.5 }],
+        comments: [{
+          id: nid('c'), by: { mid: 'g1', name: 'Sam', color: '#ff8800' }, at: 1700000000000 + seed,
+          text: 'a comment', replies: [{ id: nid('r'), by: { mid: 'o', name: 'Ezra', color: '#3366cc' }, at: 1700000000001 + seed, text: 'a reply' }]
+        }]
+      },
+      layers: layers
+    };
+  }
+
+  /* A seeded walk of ordinary editing: what a person does to a project, expressed as mutations of the
+     plain tree. Used both for the diff property test and for the convergence fuzz. */
+  function mutate921(doc, seed, rounds) {
+    const R = rng921(seed);
+    const pickL = function () { return doc.layers.length ? doc.layers[Math.floor(R() * doc.layers.length)] : null; };
+    const num = function (lo, hi) { return Math.round((lo + R() * (hi - lo)) * 1000) / 1000; };
+    const kinds = ['prop', 'prop', 'prop', 'name', 'reorder', 'param', 'fxadd', 'fxdel', 'fxmove',
+                   'layeradd', 'layerdel', 'project', 'atomic', 'caption', 'comment', 'parent', 'visible',
+                   'delkey', 'delkey'];
+    const done = [];
+    for (let r = 0; r < (rounds || 1); r++) {
+      const k = kinds[Math.floor(R() * kinds.length)];
+      const L = pickL();
+      if (k === 'prop' && L) { L.transform.x = num(-300, 300); done.push('prop'); }
+      else if (k === 'name' && L) { L.name = 'edit ' + Math.floor(R() * 1000); done.push('name'); }
+      else if (k === 'visible' && L) { L.visible = !L.visible; done.push('visible'); }
+      /* Removing a key is the only thing that produces a `d` op, and the app does it (clearing a clip
+         colour, dropping a mask). Without it the diff grammar is a third untested. */
+      else if (k === 'delkey' && L) {
+        if ('labelColor' in L) { delete L.labelColor; done.push('delkey'); }
+        else if ('clipColor' in L) { delete L.clipColor; done.push('delkey'); }
+        else if ('crop' in L) { delete L.crop; done.push('delkey'); }
+      }
+      else if (k === 'reorder' && doc.layers.length > 1) {
+        const i = Math.floor(R() * doc.layers.length), j = Math.floor(R() * doc.layers.length);
+        const el = doc.layers.splice(i, 1)[0]; doc.layers.splice(j, 0, el); done.push('reorder');
+      } else if (k === 'param' && L && (L.effects || []).length) {
+        const fx = L.effects[Math.floor(R() * L.effects.length)];
+        const ks = Object.keys(fx.params || {}).filter(function (x) { return typeof fx.params[x] === 'number'; });
+        if (ks.length) { fx.params[ks[Math.floor(R() * ks.length)]] = num(0, 40); done.push('param'); }
+      } else if (k === 'fxadd' && L && FM.fxRegistry) {
+        const all = FM.fxRegistry.all();
+        const inst = FM.fxRegistry.makeInstance(all[Math.floor(R() * all.length)].type);
+        if (inst) { inst.uid = 'm' + Math.floor(R() * 1e9).toString(36) + 'q'; (L.effects = L.effects || []).splice(Math.floor(R() * (L.effects.length + 1)), 0, inst); done.push('fxadd'); }
+      } else if (k === 'fxdel' && L && (L.effects || []).length) { L.effects.splice(Math.floor(R() * L.effects.length), 1); done.push('fxdel'); }
+      else if (k === 'fxmove' && L && (L.effects || []).length > 1) {
+        const i = Math.floor(R() * L.effects.length), j = Math.floor(R() * L.effects.length);
+        const el = L.effects.splice(i, 1)[0]; L.effects.splice(j, 0, el); done.push('fxmove');
+      } else if (k === 'layeradd') {
+        const add = kitchen921(seed * 7 + r + 1).layers[3];
+        add.id = 'add_' + seed.toString(36) + '_' + r.toString(36);
+        add.parent = null;
+        doc.layers.splice(Math.floor(R() * (doc.layers.length + 1)), 0, add); done.push('layeradd');
+      } else if (k === 'layerdel' && doc.layers.length > 2) {
+        const gone = doc.layers.splice(Math.floor(R() * doc.layers.length), 1)[0];
+        doc.layers.forEach(function (l) { if (l.parent === gone.id) l.parent = null; });
+        done.push('layerdel');
+      } else if (k === 'project') {
+        const which = R();
+        if (which < 0.34) doc.project.duration = num(2, 30);
+        else if (which < 0.67) doc.project.background = '#' + ('00000' + Math.floor(R() * 0xffffff).toString(16)).slice(-6);
+        else doc.project.markers.push({ t: num(0, 5), label: 'M' + r });
+        done.push('project');
+      } else if (k === 'atomic' && L && L.masks && L.masks.length) {
+        L.masks[0].path = [[0, 0], [num(5, 60), 0], [num(5, 60), num(5, 60)], [0, num(5, 60)]]; done.push('atomic');
+      } else if (k === 'caption' && L && L.captions) {
+        L.captions.push({ start: num(5, 6), end: num(6, 7), text: 'cue ' + r }); done.push('caption');
+      } else if (k === 'comment') {
+        doc.project.comments.push({ id: 'c_' + seed.toString(36) + r.toString(36), by: { mid: 'g1', name: 'Sam', color: '#ff8800' }, at: 1700000000000 + r, text: 'c' + r, replies: [] });
+        done.push('comment');
+      } else if (k === 'parent' && doc.layers.length > 2) {
+        const a = pickL(), b = pickL();
+        if (a && b && a !== b) { a.parent = b.id; done.push('parent'); }
+      }
+    }
+    return done;
+  }
+
+  /* The invariant hooks the host runs on CLONES (§7.1 step 8). The layer and layer-list ones are the
+     app's real functions; the project clamp is the suite's, because storage.js keeps clampProjectDims
+     private and S1 is not allowed to add a seam to it (that file's ?v= must not move in this stage).
+     S2's bridge exposes the real one — see the note in the Host's own header. */
+  function invariants921() {
+    return {
+      layer: function (c) { FM.storage._sanitizeLayers([c]); },
+      project: function (p) {
+        const ev = function (x) { return Math.max(16, Math.min(7680, Math.round((+x || 0) / 2) * 2)); };
+        if (p.width != null) p.width = ev(p.width) || 1080;
+        if (p.height != null) p.height = ev(p.height) || 1920;
+        p.fps = Math.max(1, Math.min(120, Math.round(+p.fps) || 30));
+        p.duration = Math.max(0, Math.min(3600, +p.duration || 0));
+      },
+      layers: function (arr) { FM.repairParentCycles(arr); return FM.normalizeGroupOrder(arr); }
+    };
+  }
+
+  test('921 S1 paths: escape round trip, and __proto__ / _x / a numeric segment are refused', { item: '921' }, function () {
+    const C = need921('the path grammar');
+    const P = C.path;
+
+    /* ── escaping. Nothing the app writes today contains a / or a ~, so this is defensive — which is
+       exactly why it needs a test: an unexercised escape is where the ~1-before-~0 ordering bug hides. */
+    ['a/b', 'a~b', '~1', '~0', '/', '~', 'a~1b/c', ''].forEach(function (s) {
+      if (P.unesc(P.esc(s)) !== s) throw new Error('escape round trip lost ' + JSON.stringify(s) + ' -> ' + JSON.stringify(P.esc(s)) + ' -> ' + JSON.stringify(P.unesc(P.esc(s))) + ' (the classic cause is unescaping ~0 before ~1, which turns a literal ~1 into a separator)');
+    });
+    if (P.esc('a/b') !== 'a~1b' || P.esc('a~b') !== 'a~0b') throw new Error('the escape is not JSON-Pointer\'s: ' + P.esc('a/b') + ' / ' + P.esc('a~b'));
+
+    /* ── the wire form, and the POSITIVE CONTROL: a real path survives it unchanged. Without this the
+       rejections below would pass just as happily against a fromWire() that returned null always. */
+    const good = ['L', 'layer_1k2m3_ab12x', 'effects', '#u:k3f9a2qz', 'params', 'amount'];
+    const wire = P.toWire(good);
+    if (wire !== 'L/layer_1k2m3_ab12x/effects/#u:k3f9a2qz/params/amount') throw new Error('the wire form is ' + wire + ', not the one §5.2 documents');
+    const back = P.fromWire(wire);
+    if (!back || back.join('|') !== good.join('|')) throw new Error('a valid path did not survive the wire round trip: ' + JSON.stringify(back));
+    if (!P.fromWire('P/width') || !P.fromWire('P/comments/#i:c_1/replies/#i:r_1/text') || !P.fromWire('L')) throw new Error('an ordinary path was refused, so the refusals below prove nothing');
+
+    /* ── refusals */
+    const bad = {
+      'L/lay/__proto__': 'the prototype key, which is the whole point of a path grammar',
+      'L/lay/constructor': 'constructor passes the key regex and still reaches Object.prototype',
+      'L/lay/prototype': 'same family as constructor',
+      'L/lay/_wrapCache': 'a runtime cache key — never part of the synced document (scene.js jsonReplacer)',
+      'L/lay/effects/0': 'a NUMERIC index: §5.2 says an array is either keyed or atomic, never indexed',
+      'L/lay/effects/#u:has a space': 'a key value outside [\\w.-]',
+      'L/lay/effects/#x:abc': 'an unknown keyed-segment kind',
+      'X/width': 'an unknown root',
+      '': 'the empty path'
+    };
+    Object.keys(bad).forEach(function (w) {
+      if (P.fromWire(w) !== null) throw new Error('fromWire accepted ' + JSON.stringify(w) + ' — ' + bad[w]);
+    });
+    if (P.valid(['P', '__proto__'])) throw new Error('valid() accepted a __proto__ segment in array form, so a locally-built op could still carry one');
+
+    /* ── and it is not merely refused by the parser: an op carrying one cannot write. */
+    const doc = { project: { width: 100 }, layers: [] };
+    const res = C.diff.apply(doc, { o: 's', p: ['P', '__proto__'], v: { polluted: 1 } });
+    if (res !== 'bad') throw new Error('apply() returned ' + res + ' for a __proto__ path — it must be bad');
+    if ({}.polluted !== undefined || Object.prototype.polluted !== undefined) throw new Error('Object.prototype was polluted by an op');
+    const res2 = C.diff.apply(doc, { o: 's', p: ['P', 'title'], v: 'ok' });
+    if (res2 !== 'ok' || doc.project.title !== 'ok') throw new Error('CONTROL: an ordinary set through the same code path did not write (' + res2 + ') — the refusal above would then mean nothing');
+
+    /* ── overlap, both directions, plus a non-overlapping control (§8.1) */
+    const a = ['L', 'x', 'transform'], b = ['L', 'x', 'transform', 'scale'], c = ['L', 'x', 'name'];
+    if (!P.overlaps(a, b) || !P.overlaps(b, a)) throw new Error('a parent and its descendant must overlap in both directions — the judge\'s descendant case');
+    if (P.overlaps(a, c)) throw new Error('CONTROL: two sibling paths must NOT overlap, or every remote op would be skipped as pending');
+  });
+
+  test('921 S1 a key no path can name is dropped by canon and clone too, not just by the diff', { item: '921' }, function () {
+    const C = need921('the key walk');
+    const P = C.path;
+
+    /* ⚠️ THE THREE WALKS MUST AGREE — collab-path.js says so directly above syncable(), and they did
+       not. canon() decides what is HASHED, clone() decides what survives a whole-value op, and the
+       diff walks `syncable && isKeySeg`. While syncable() was only the `_`/FORBIDDEN pair the first
+       two were a strict SUPERSET of the third, so a key outside KEY_RE could ride into base inside an
+       `s` and then never be written, removed or repaired — not even by the host's own sanitiser,
+       whose repair diff skips it as well — while every §11.4 hash counted it. That is the exact
+       "disagree forever, resync forever, and the report names a path nobody can write" the comment
+       there warns about (queue 921). */
+    const unnameable = ['font-size', '2x', 'a.b', 'my key', 'été', new Array(72).join('k'), '_cache', 'constructor', 'prototype'];
+    unnameable.forEach(function (k) {
+      if (P.isKeySeg(k)) throw new Error('the fixture is wrong: ' + JSON.stringify(k) + ' IS a valid key segment');
+      if (P.syncable(k)) throw new Error('syncable() keeps ' + JSON.stringify(k) + ', but no path can name it: canon() would hash a key the diff can never send, and clone() would carry it into a document nothing can repair');
+    });
+    /* CONTROL: the rule distinguishes — it is not "drop everything". */
+    ['legit', 'ok$name', 'radius', 'x', 'audioFx'].forEach(function (k) {
+      if (!P.isKeySeg(k) || !P.syncable(k)) throw new Error('CONTROL: the ordinary key ' + JSON.stringify(k) + ' was dropped, so the assertions above measure nothing');
+    });
+
+    /* …and it holds end to end, through the host, which is where it mattered. */
+    const host = C.Host({ base: { project: { duration: 5 }, layers: [{ id: 'l1', type: 'shape', start: 0, duration: 2, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 } }] }, invariants: invariants921(), epoch: 'e1' });
+    host.join('g1', { role: 'editor' });
+    const r = host.receive('g1', { cid: 1, bs: 0, ops: [{ o: 's', p: ['L', 'l1', 'transform'], v: { x: 1, y: 2, scale: 1, rotation: 0, opacity: 1, 'font-size': 9, legit: 7 } }] });
+    if (r.ack.rej.length) throw new Error('the fixture op was refused, so this measures nothing: ' + JSON.stringify(r.ack.rej));
+    const t = host.base.layers[0].transform;
+    if ('font-size' in t) throw new Error('a key outside the path grammar reached base and stayed (' + JSON.stringify(t) + ') — P.valid() cannot name it, so no `d` can ever remove it and no sanitiser repair can be expressed, while H.hash() counts it forever');
+    if (P.canon(host.base).indexOf('font-size') >= 0) throw new Error('canon() still hashes the unnameable key');
+    if (t.legit !== 7) throw new Error('CONTROL: the ordinary key in the SAME value was dropped too (' + JSON.stringify(t) + '), so the assertion above is not measuring the key rule');
+    /* …and the diff agrees about both, which is the property that was broken. */
+    const live = jclone921(host.base);
+    live.layers[0].transform.legit = 8;
+    live.layers[0].transform['font-size'] = 10;
+    const ops = C.diff.diffDoc(host.base, live).ops;
+    if (ops.length !== 1 || ops[0].p[ops[0].p.length - 1] !== 'legit') throw new Error('the diff walk and the key walk disagree: ' + JSON.stringify(ops));
+  });
+
+  test('921 S1 canon and eq speak JSON, not JavaScript: NaN, -0, undefined, key order', { item: '921' }, function () {
+    const C = need921('the equality rule');
+    const P = C.path;
+
+    if (P.canon({ b: 1, a: 2 }) !== P.canon({ a: 2, b: 1 })) throw new Error('key order changed the canonical form, so two devices that built the same document in a different order would hash differently forever');
+    if (P.canon({ b: 1, a: 2 }) !== '{"a":2,"b":1}') throw new Error('canon is not sorted-key JSON: ' + P.canon({ b: 1, a: 2 }));
+
+    const same = [
+      [NaN, null, 'NaN travels as null'],
+      [Infinity, null, '+Infinity travels as null'],
+      [-Infinity, null, '-Infinity travels as null'],
+      [-0, 0, 'JSON has no negative zero'],
+      [{ a: undefined }, {}, 'an undefined value is an absent key'],
+      [[undefined], [null], 'undefined inside an array is null'],
+      [{ a: 1, _cache: 2 }, { a: 1 }, 'an _ key is not part of the document'],
+      [{ a: 1, constructor: 2 }, { a: 1 }, 'a key that cannot appear in a path cannot appear in the hash either'],
+      [{ a: [1, { x: NaN }] }, { a: [1, { x: null }] }, 'and all of it applies at depth']
+    ];
+    same.forEach(function (t) { if (!P.eq(t[0], t[1])) throw new Error('eq said ' + JSON.stringify(t[0]) + ' !== ' + JSON.stringify(t[1]) + ' — ' + t[2]); });
+
+    const diff = [[{ a: 1 }, { a: 2 }], [0, '0'], [null, 'null'], [[1, 2], [2, 1]], [{ a: 1 }, { a: 1, b: 1 }], [1, true]];
+    diff.forEach(function (t) { if (P.eq(t[0], t[1])) throw new Error('CONTROL: eq said ' + JSON.stringify(t[0]) + ' === ' + JSON.stringify(t[1]) + ' — a comparison that says yes to everything would make every diff empty and every session silent'); });
+
+    /* cyrb53: deterministic, and it moves when the input does. */
+    if (P.cyrb53('freemotion') !== P.cyrb53('freemotion')) throw new Error('cyrb53 is not deterministic');
+    if (P.cyrb53('freemotion') === P.cyrb53('freemotioo')) throw new Error('CONTROL: cyrb53 collided on a one-character change — the divergence detector would never fire');
+    if (!(P.cyrb53('x') >= 0 && P.cyrb53('x') <= Number.MAX_SAFE_INTEGER)) throw new Error('cyrb53 must be a safe integer, it is ' + P.cyrb53('x'));
+
+    /* clone() drops exactly what canon() drops, or base and live disagree on a key neither can send. */
+    const src = { a: 1, _c: 2, n: NaN };
+    src.constructor = 3;
+    const cl = P.clone(src);
+    if (!P.eq(cl, src)) throw new Error('clone and canon disagree: ' + JSON.stringify(cl) + ' vs ' + P.canon(src));
+    if ('_c' in cl || 'n' in cl === false) throw new Error('clone kept an _ key or lost a real one: ' + JSON.stringify(cl));
+    if (cl.n !== null) throw new Error('clone must turn a non-finite number into null, as JSON does; it is ' + cl.n);
+  });
+
+  test('921 S1 clone() is a copy all the way down: past the depth ceiling it cannot alias the original', { item: '921' }, function () {
+    const C = need921('the clone guarantee');
+    const P = C.path;
+    const deep = function (n) { const root = {}; let cur = root; for (let i = 0; i < n; i++) { cur.d = { mark: i }; cur = cur.d; } return root; };
+    const down = function (o, n) { let cur = o; for (let i = 0; i < n && cur && typeof cur === 'object'; i++) cur = cur.d; return cur; };
+
+    const orig = deep(80);
+    const copy = P.clone(orig);
+    /* ⚠️ THE HOST'S ENTIRE SANITISE-ON-A-CLONE GUARANTEE RESTS ON THIS ONE FUNCTION (collab-host.js:
+       "run the invariants on CLONES … never sanitize live objects"). Past depth 64 clone() returned
+       the input ITSELF, so the clone and the original shared a sub-object: an invariant reaching that
+       deep would have edited `base` directly, with no fix op recording that it happened, and
+       H.snapshot() would have handed a joining guest aliased live state (queue 921). */
+    for (let n = 0; n <= 75; n++) {
+      const a = down(orig, n), b = down(copy, n);
+      if (a && typeof a === 'object' && a === b) throw new Error('clone() returned the ORIGINAL object at depth ' + n + ', so it is not a clone and every "we sanitise on a clone" claim in the host is false below that depth');
+    }
+    const tip = down(copy, 66);
+    if (tip && typeof tip === 'object') tip.MUTATED = 1;
+    if (JSON.stringify(orig).indexOf('MUTATED') >= 0) throw new Error('writing into the clone changed the original document');
+
+    /* clone() and canon() must describe the SAME document, or the hash of a clone is not the hash of
+       the thing it was cloned from. */
+    if (P.canon(copy) !== P.canon(orig)) throw new Error('canon(clone(x)) !== canon(x) at depth 80: the two ceilings disagree about what is there');
+
+    /* CONTROL: at an ordinary depth this is a real deep copy and not the truncation answering. */
+    const shallow = { a: { b: { c: [1, 2, { d: 'x' }] } } };
+    const sc = P.clone(shallow);
+    if (sc.a === shallow.a || sc.a.b.c === shallow.a.b.c) throw new Error('CONTROL: clone() aliased a SHALLOW document too, so the loop above proves nothing about the ceiling');
+    sc.a.b.c[2].d = 'changed';
+    if (shallow.a.b.c[2].d !== 'x') throw new Error('CONTROL: a shallow clone is not independent either');
+    if (P.canon(sc) === P.canon(shallow)) throw new Error('CONTROL: canon() cannot see the change that was just made, so the equality above is vacuous');
+  });
+
+  test('921 S1 diff then apply reproduces the target exactly, and the step inverse gets back, over 200 seeded kitchen-sink scenes', { item: '921', budgetMs: 180000 }, function () {
+    const C = need921('the diff engine');
+    const P = C.path, D = C.diff;
+    const seen = { s: 0, d: 0, li: 0, lr: 0, mv: 0, ai: 0, ar: 0, am: 0 };
+    let empties = 0;
+
+    for (let seed = 1; seed <= 200; seed++) {
+      const A = kitchen921(seed);
+      const B = jclone921(A);
+      mutate921(B, seed + 9000, 3 + (seed % 5));
+      P.stampIds(A); P.stampIds(B);                       // §5.4: before every diff, on every device
+
+      const base = jclone921(A);
+      const res = D.diffDoc(base, B);
+      if (!res.ops.length) { empties++; continue; }
+      res.ops.forEach(function (op) { seen[op.o] = (seen[op.o] || 0) + 1; });
+
+      for (let i = 0; i < res.ops.length; i++) {
+        const r = D.apply(base, res.ops[i]);
+        if (r === 'bad' || r === 'gone') throw new Error('seed ' + seed + ': op ' + i + ' (' + res.ops[i].o + ' ' + P.toWire(res.ops[i].p || ['L', res.ops[i].id]) + ') came back ' + r + ' — the diff emitted an op its own apply cannot run');
+      }
+      if (P.canon(base) !== P.canon(B)) {
+        const bad = firstDiffPath921(base, B);
+        throw new Error('seed ' + seed + ': applying the diff did not reproduce the target. First difference at ' + bad + ' (ops: ' + res.ops.length + ')');
+      }
+
+      /* …and back. The step inverse is not the per-op inverse — see the comment on invertStep; a
+         reorder replayed op-by-op in reverse lands somewhere else entirely (measured: A,B,C,D ->
+         C,A,D,B inverts to D,A,B,C). */
+      const inv = D.invertStep(res);
+      for (let i = 0; i < inv.length; i++) {
+        const r = D.apply(base, inv[i]);
+        if (r === 'bad') throw new Error('seed ' + seed + ': inverse op ' + i + ' (' + inv[i].o + ') is malformed');
+      }
+      if (P.canon(base) !== P.canon(A)) {
+        throw new Error('seed ' + seed + ': the step inverse did not get back to the starting document. First difference at ' + firstDiffPath921(base, A));
+      }
+    }
+
+    /* POSITIVE CONTROLS. Without these the whole loop passes against a diffDoc that returns nothing:
+       an empty op list applies cleanly and inverts cleanly, and "reproduces the target" would be a
+       statement about two documents nobody changed. */
+    if (empties > 20) throw new Error('CONTROL: ' + empties + ' of 200 seeded scene pairs produced NO ops — the mutator is not editing anything, so this test is measuring an empty list');
+    const missing = Object.keys(seen).filter(function (k) { return !seen[k]; });
+    if (missing.length) throw new Error('CONTROL: the fuzz never emitted ' + missing.join(', ') + ' — those op kinds are untested by a run that claims to cover the grammar');
+  });
+
+  /* The first path at which two documents differ, for a failure message that says WHERE. */
+  function firstDiffPath921(a, b) {
+    const P = FM.collab.path;
+    const walk = function (p, x, y) {
+      if (P.canon(x) === P.canon(y)) return null;
+      if (!x || !y || typeof x !== 'object' || typeof y !== 'object') return p.join('/') + ' (' + P.canon(x) + ' vs ' + P.canon(y) + ')';
+      if (Array.isArray(x) !== Array.isArray(y)) return p.join('/') + ' (array vs object)';
+      if (Array.isArray(x)) {
+        if (x.length !== y.length) return p.join('/') + ' (length ' + x.length + ' vs ' + y.length + ')';
+        for (let i = 0; i < x.length; i++) { const r = walk(p.concat(String(i)), x[i], y[i]); if (r) return r; }
+        return p.join('/') + ' (arrays differ)';
+      }
+      const ks = Object.keys(x).concat(Object.keys(y));
+      for (let i = 0; i < ks.length; i++) { const r = walk(p.concat(ks[i]), x[ks[i]], y[ks[i]]); if (r) return r; }
+      return p.join('/');
+    };
+    return walk([], a, b) || '(nowhere — they match)';
+  }
+
+  test('921 S1 the diff stops at the path grammar ceiling instead of emitting an op no peer can apply', { item: '921' }, function () {
+    const C = need921('the diff depth guard');
+    const P = C.path, D = C.diff;
+    const chain = function (n, leaf) { const root = {}; let cur = root; for (let i = 0; i < n; i++) { cur.d = {}; cur = cur.d; } cur.v = leaf; return root; };
+    const mk = function (leaf) {
+      return {
+        project: { width: 320, height: 240, fps: 30, duration: 5 },
+        layers: [{ id: 'l1', type: 'shape', shape: 'rect', start: 0, duration: 2, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, nest: chain(40, leaf), effects: [], masks: [], audioFx: [], behaviors: [] }]
+      };
+    };
+    const base = mk(1), live = mk(2);
+    live.layers[0].transform.x = 12;                          // an ordinary edit riding in the same tick
+
+    /* ⚠️ EVERY OTHER WALK IN THE SYSTEM HAS A CEILING AND THIS ONE HAD NONE: §5.2 caps a path at
+       P.MAX_SEGS, badValue at 32, canon/clone at 64, stampIds at 24. So a document nested deeper than
+       the grammar can NAME — an imported project, a hand-edited file — made the diff emit an op its
+       own apply() calls 'bad', §7.1 step 1 threw away the WHOLE tx over it, and the slider the person
+       was actually dragging went with it, with an ack naming nothing they could act on (queue 921). */
+    const res = D.diffDoc(base, live);
+    if (!res.ops.length) throw new Error('the fixture produced no ops at all, so nothing here is measured');
+    res.ops.forEach(function (op) {
+      if (op.p && op.p.length > P.MAX_SEGS) throw new Error('the diff emitted a ' + op.p.length + '-segment path against a cap of ' + P.MAX_SEGS + ': ' + JSON.stringify(op.p).slice(0, 120));
+      const why = C.Host.validOp(op);
+      if (why) throw new Error('the diff emitted an op its own host refuses (' + why + '): ' + JSON.stringify(op).slice(0, 160));
+    });
+    /* §6.2's contract holds regardless: applying the list to base reproduces live EXACTLY. */
+    const t = jclone921(base);
+    res.ops.forEach(function (op) {
+      const r = D.apply(t, op);
+      if (r !== 'ok' && r !== 'noop') throw new Error('apply() answered ' + r + ' for the diff\'s own op ' + JSON.stringify(op).slice(0, 160));
+    });
+    if (P.canon(t) !== P.canon(live)) throw new Error('applying the diff did not reproduce the target on an over-deep document');
+
+    /* …and the host takes it, with the unrelated edit landing rather than dying beside it. */
+    const host = C.Host({ base: jclone921(base), invariants: invariants921(), epoch: 'e1' });
+    host.join('g1', { role: 'editor' });
+    const ack = host.receive('g1', { cid: 1, bs: 0, ops: res.ops }).ack;
+    if (ack.rej.length) throw new Error('the host refused the diff of an over-deep document (' + JSON.stringify(ack.rej) + '), so one value nobody can name blocks every batch it rides in');
+    if (host.base.layers[0].transform.x !== 12) throw new Error('the ordinary edit in the same tx did not land');
+
+    /* CONTROL: the ceiling is not firing on everything — an ordinary edit still diffs to its LEAF and
+       not to a whole-node set, which is the difference between a tick and a re-send of the document. */
+    const sb = mk(1), sl = mk(1);
+    sl.layers[0].transform.x = 7;
+    const shallow = D.diffDoc(sb, sl).ops;
+    if (shallow.length !== 1 || P.toWire(shallow[0].p) !== 'L/l1/transform/x') throw new Error('CONTROL: an ordinary edit no longer diffs to its leaf: ' + JSON.stringify(shallow));
+  });
+
+  test('921 S1 the LIS reorder emits the minimal number of moves, and the exact order', { item: '921' }, function () {
+    const C = need921('the reorder minimiser');
+    const P = C.path, D = C.diff;
+
+    const mk = function (ids) { return { project: {}, layers: ids.map(function (i) { return { id: i, name: i }; }) }; };
+    const order = function (doc) { return doc.layers.map(function (l) { return l.id; }).join(''); };
+
+    /* Hand cases with a known answer. The count matters as much as the result: every mv a peer
+       receives costs it a timeline rebuild, so "correct but moves everything" is a real defect. */
+    const cases = [
+      { from: 'ABCD', to: 'ABCD', mv: 0 },
+      { from: 'ABCD', to: 'BACD', mv: 1 },
+      { from: 'ABCD', to: 'DCBA', mv: 3 },
+      { from: 'ABCD', to: 'CADB', mv: 2 },
+      { from: 'ABCDE', to: 'EABCD', mv: 1 },
+      { from: 'ABCDE', to: 'BCDEA', mv: 1 }
+    ];
+    cases.forEach(function (t) {
+      const base = mk(t.from.split('')), live = mk(t.to.split(''));
+      const res = D.diffDoc(base, live);
+      const mvs = res.ops.filter(function (o) { return o.o === 'mv'; });
+      if (mvs.length !== t.mv) throw new Error(t.from + ' -> ' + t.to + ' needed ' + t.mv + ' moves, the diff emitted ' + mvs.length + ' (' + JSON.stringify(mvs) + ') — n minus the longest increasing subsequence IS the minimum');
+      res.ops.forEach(function (o) { D.apply(base, o); });
+      if (order(base) !== t.to) throw new Error(t.from + ' -> ' + t.to + ' produced ' + order(base));
+    });
+
+    /* lisIndices itself, on the sequence its own algorithm is named for. */
+    const lis = D.lisIndices([2, 0, 3, 1, 4]);
+    if (lis.length !== 3) throw new Error('the LIS of 2,0,3,1,4 has length 3, lisIndices found ' + lis.length + ' (' + lis + ')');
+    for (let i = 1; i < lis.length; i++) if (lis[i] <= lis[i - 1]) throw new Error('lisIndices returned indices out of order: ' + lis);
+    if (D.lisIndices([]).length !== 0) throw new Error('the LIS of nothing is nothing');
+
+    /* CONTROL: a reorder really is being measured — if the diff emitted mv for everything that moved
+       rather than everything that must, DCBA would cost 4 and this line would not fire. */
+    const b2 = mk('ABCDEFGH'.split('')), l2 = mk('HABCDEFG'.split(''));
+    const r2 = FM.collab.diff.diffDoc(b2, l2);
+    if (r2.ops.filter(function (o) { return o.o === 'mv'; }).length !== 1) throw new Error('CONTROL: moving one layer from the bottom to the top must cost exactly one mv, it cost ' + r2.ops.filter(function (o) { return o.o === 'mv'; }).length);
+  });
+
+  test('921 S1 an anchor is resolved against the base the op actually lands on: a two-layer paste and an undo of a delete keep their order', { item: '921' }, function () {
+    const C = need921('anchor resolution');
+    const P = C.path, D = C.diff;
+    const L = function (id) { return { id: id, type: 'shape', shape: 'rect', start: 0, duration: 2, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [], masks: [], audioFx: [], behaviors: [] }; };
+    const ids = function (doc) { return (doc.layers || []).map(function (l) { return l && l.id; }).join(','); };
+
+    /* ⚠️ THE HOST USED TO RESOLVE EVERY ANCHOR IN A TX BEFORE APPLYING ANY OF THEM, against the
+       PRE-TX base. An anchor names a sibling, and in a paste of two layers the second one's anchor IS
+       the first — which does not exist in base until the first op has been applied — so it collapsed
+       to null and the pair landed reversed. Nothing self-heals it either: §8.3a makes the broadcast
+       `ord` authoritative, the sender adopts it from its own ack, and the next diff then sees no
+       difference at all (queue 921). */
+    const doc = { project: { duration: 5 }, layers: [L('a')] };
+    const live = { project: { duration: 5 }, layers: [L('a'), L('x'), L('y')] };
+    const paste = D.diffDoc(doc, live);
+    const host = C.Host({ base: jclone921(doc), invariants: invariants921(), epoch: 'e1' });
+    const out = host.local(paste.ops);
+    if (out.rej.length) throw new Error('the paste was refused, so this measures nothing: ' + JSON.stringify(out.rej));
+    if (ids(host.base) !== 'a,x,y') throw new Error('a two-layer paste landed as ' + ids(host.base) + ' instead of a,x,y — and the broadcast ord says the same, so every device agrees on the wrong order forever');
+    if (out.b && out.b.ord && out.b.ord[0] && out.b.ord[0].k.join(',') !== 'a,x,y') throw new Error('the order statement broadcast to everyone disagrees with base: ' + JSON.stringify(out.b.ord));
+    /* CONTROL: the same ops applied DIRECTLY give the same answer — so the diff was right and it was
+       the host's resolve pass that was wrong. */
+    const direct = jclone921(doc);
+    paste.ops.forEach(function (op) { D.apply(direct, op); });
+    if (ids(direct) !== ids(host.base)) throw new Error('CONTROL: the host and a direct apply disagree (' + ids(host.base) + ' vs ' + ids(direct) + ')');
+
+    /* ── the same shape through a guest, and it is what every undo of a layer delete looks like:
+       invertStep re-inserts the layer and then moves its old neighbours after it. */
+    const before = { project: { duration: 5 }, layers: [L('a'), L('b'), L('c')] };
+    const after = { project: { duration: 5 }, layers: [L('b'), L('c')] };
+    const step = D.diffDoc(before, after);
+    const undo = D.invertStep(step);
+    const h2 = C.Host({ base: jclone921(after), invariants: invariants921(), epoch: 'e1' });
+    h2.join('g1', { role: 'editor' });
+    const r = h2.receive('g1', { cid: 1, bs: 0, ops: undo });
+    if (r.ack.rej.length) throw new Error('the undo was refused: ' + JSON.stringify(r.ack.rej));
+    if (ids(h2.base) !== 'a,b,c') throw new Error('undoing the delete of the TOP layer put the document back as ' + ids(h2.base) + ' instead of a,b,c — §10.2 calls invertStep unconditional and says it cannot be wrong, and it is not: the pre-resolution is');
+    const control = jclone921(after);
+    undo.forEach(function (op) { D.apply(control, op); });
+    if (ids(control) !== 'a,b,c') throw new Error('CONTROL: invertStep itself is wrong (' + ids(control) + '), so the assertion above is blaming the wrong thing');
+
+    /* ── and a keyed array, where the same pass reversed two effects added in one tick. */
+    const fxBase = { project: { duration: 5 }, layers: [L('a')] };
+    const fxLive = jclone921(fxBase);
+    fxLive.layers[0].effects = [
+      { uid: 'e1aa', type: 'blur', enabled: true, params: { radius: 1 } },
+      { uid: 'e2aa', type: 'blur', enabled: true, params: { radius: 2 } },
+      { uid: 'e3aa', type: 'blur', enabled: true, params: { radius: 3 } }
+    ];
+    const fxOps = D.diffDoc(fxBase, fxLive).ops;
+    const h3 = C.Host({ base: jclone921(fxBase), invariants: invariants921(), epoch: 'e1' });
+    h3.local(fxOps);
+    const got = h3.base.layers[0].effects.map(function (e) { return e.uid; }).join(',');
+    if (got !== 'e1aa,e2aa,e3aa') throw new Error('three effects added in one tick landed as ' + got);
+  });
+
+  test('921 S1 keyed arrays: two peers adding an effect at once both survive, and a removal beats a child write', { item: '921' }, function () {
+    const C = need921('the keyed-array rules');
+    const P = C.path, D = C.diff;
+
+    const mkDoc = function () {
+      return {
+        project: {}, layers: [{
+          id: 'l1', type: 'shape', effects: [
+            { type: 'blur', enabled: true, params: { radius: 4 }, uid: 'aaaa1111' },
+            { type: 'glow', enabled: true, params: { amount: 2 }, uid: 'bbbb2222' }
+          ]
+        }]
+      };
+    };
+    const host = C.Host({ base: mkDoc(), invariants: invariants921(), epoch: 'e1', now: function () { return 1000; } });
+    host.join('g1', { role: 'editor', name: 'Sam' });
+    host.join('g2', { role: 'editor', name: 'Kim' });
+
+    /* Both guests add an effect after the SAME anchor, at the same moment. Neither may lose. */
+    const fxA = { o: 'ai', p: ['L', 'l1', 'effects'], k: '#u:cccc3333', a: '#u:aaaa1111', v: { type: 'sharpen', enabled: true, params: {}, uid: 'cccc3333' } };
+    const fxB = { o: 'ai', p: ['L', 'l1', 'effects'], k: '#u:dddd4444', a: '#u:aaaa1111', v: { type: 'vignette', enabled: true, params: {}, uid: 'dddd4444' } };
+    host.receive('g1', { cid: 1, bs: 0, ops: [fxA] });
+    host.receive('g2', { cid: 1, bs: 0, ops: [fxB] });
+    const uids = host.base.layers[0].effects.map(function (e) { return e.uid; });
+    if (uids.indexOf('cccc3333') < 0 || uids.indexOf('dddd4444') < 0) throw new Error('a concurrent insert was lost: ' + uids.join(',') + ' — two people adding an effect at the same moment is the ordinary case, not a race to be resolved');
+    if (uids.length !== 4) throw new Error('expected 4 effects, got ' + uids.length + ' (' + uids.join(',') + ')');
+    if (uids[0] !== 'aaaa1111') throw new Error('the anchor moved: ' + uids.join(','));
+
+    /* A removal beats a write to something inside what was removed: the layer's effect is gone, so a
+       slider that was still travelling cannot bring a ghost of it back. */
+    const r1 = host.receive('g1', { cid: 2, bs: 0, ops: [{ o: 'ar', p: ['L', 'l1', 'effects', '#u:bbbb2222'] }] });
+    if (!r1.b) throw new Error('the removal was not sequenced');
+    const r2 = host.receive('g2', { cid: 2, bs: 0, ops: [{ o: 's', p: ['L', 'l1', 'effects', '#u:bbbb2222', 'params', 'amount'], v: 9 }] });
+    const gone = (r2.ack.rej || []).filter(function (e) { return e[1] === 'gone'; });
+    if (!gone.length) throw new Error('a write into a removed effect was not refused with gone: ' + JSON.stringify(r2.ack.rej));
+    if (host.base.layers[0].effects.filter(function (e) { return e.uid === 'bbbb2222'; }).length) throw new Error('the removed effect came back');
+    const fix = (r2.ack.fix || []).filter(function (f) { return P.toWire(f.p || []).indexOf('bbbb2222') >= 0; });
+    if (!fix.length || fix[0].o !== 'ar') throw new Error('the refused sender was not told the host\'s current state for that path, so its own copy would keep the ghost: ' + JSON.stringify(r2.ack.fix));
+
+    /* CONTROL: the same write into an effect that is STILL THERE is accepted — otherwise the refusal
+       above would just be "the host refuses everything". */
+    const r3 = host.receive('g2', { cid: 3, bs: 0, ops: [{ o: 's', p: ['L', 'l1', 'effects', '#u:aaaa1111', 'params', 'radius'], v: 9 }] });
+    if ((r3.ack.rej || []).length) throw new Error('CONTROL: an ordinary write was refused ' + JSON.stringify(r3.ack.rej));
+    if (host.base.layers[0].effects[0].params.radius !== 9) throw new Error('CONTROL: an ordinary write did not land');
+
+    /* …and the diff produces exactly this shape for a concurrent-looking edit. */
+    const b = mkDoc(), l = mkDoc();
+    l.layers[0].effects.splice(1, 0, { type: 'sharpen', enabled: true, params: {}, uid: 'eeee5555' });
+    const res = D.diffDoc(b, l);
+    if (res.ops.length !== 1 || res.ops[0].o !== 'ai' || res.ops[0].a !== '#u:aaaa1111') throw new Error('inserting one effect should be one ai after its neighbour, it was ' + JSON.stringify(res.ops));
+  });
+
+  test('921 S1 stampIds fills a missing uid, re-stamps a duplicate on the later copy, and never touches an id-keyed array', { item: '921' }, function () {
+    const C = need921('uid stamping');
+    const P = C.path;
+
+    const doc = {
+      project: { notes: [{ id: 'n1', text: 'a' }, { id: 'n2', text: 'b' }], comments: [] },
+      layers: [{
+        id: 'l1', type: 'shape',
+        effects: [
+          { type: 'blur', params: {}, uid: 'keepme12' },
+          { type: 'glow', params: {} },                                   // missing
+          { type: 'sharpen', params: {}, uid: 'keepme12' },               // a duplicate — a pasted preset
+          { type: 'vignette', params: {}, uid: 'BAD UID' },               // not a uid the sanitiser would keep
+          { type: FM.FX_CONTAINER, params: {}, uid: 'cont1234', effects: [{ type: 'blur', params: {} }] }
+        ],
+        audioFx: [{ type: 'reverb', params: {} }],
+        behaviors: [{ type: 'wiggle', prop: 'x', params: {} }],
+        masks: [{ id: 'm1', mode: 'add', path: [] }]
+      }]
+    };
+    const n = P.stampIds(doc);
+    const fx = doc.layers[0].effects;
+    if (fx[0].uid !== 'keepme12') throw new Error('the FIRST holder of a duplicated uid must keep it — every other device already addresses it by that name. It became ' + fx[0].uid);
+    if (fx[2].uid === 'keepme12') throw new Error('the duplicate was not re-stamped, so two effects answer to one path and every write to it is ambiguous');
+    const uids = fx.map(function (e) { return e.uid; });
+    uids.forEach(function (u, i) {
+      if (!P.UID_RE.test(u)) throw new Error('effects[' + i + '] has uid ' + JSON.stringify(u) + ', which storage.js\'s keepUid would throw away on the next load — the array would then go keyed on one device and atomic on another');
+      if (uids.indexOf(u) !== i) throw new Error('uid ' + u + ' appears twice after stamping');
+    });
+    if (!P.UID_RE.test(fx[4].effects[0].uid)) throw new Error('a filter CONTAINER child was not stamped — nested effects are keyed the same way (§5.3 rule 1 applies at any depth)');
+    if (!P.UID_RE.test(doc.layers[0].audioFx[0].uid) || !P.UID_RE.test(doc.layers[0].behaviors[0].uid)) throw new Error('audioFx / behaviors were not stamped');
+    if ('uid' in doc.layers[0].masks[0]) throw new Error('an id-keyed array was given a uid — masks are addressed by the app\'s own id and must not gain a second name');
+    if ('uid' in doc.project.notes[0]) throw new Error('notes are id-keyed and must not be stamped');
+    if (n < 5) throw new Error('only ' + n + ' elements were stamped; the fixture needs at least 5 (glow, the duplicate, the bad uid, the container child, audioFx, behaviors)');
+
+    /* Idempotent: a second pass changes nothing, or every tick would send a fresh set of uids. */
+    const after = P.canon(doc);
+    const n2 = P.stampIds(doc);
+    if (n2 !== 0 || P.canon(doc) !== after) throw new Error('a second stampIds changed ' + n2 + ' elements — stamping runs before EVERY diff, so a non-idempotent one is an endless stream of ops');
+
+    /* CONTROL: a document that already has valid uids everywhere is left completely alone — the
+       solo-project bargain from S0 (no project ever gains a uid it did not ask for). */
+    const clean = { project: {}, layers: [{ id: 'l1', effects: [{ type: 'blur', params: {}, uid: 'abcd1234' }] }] };
+    const before = P.canon(clean);
+    if (P.stampIds(clean) !== 0 || P.canon(clean) !== before) throw new Error('CONTROL: stampIds rewrote a document that needed nothing');
+  });
+
+  test('921 S1 the host role filter, exhaustively: role x op x path', { item: '921' }, function () {
+    const C = need921('the role filter');
+    const H = C.Host;
+    const base = {
+      project: {
+        comments: [
+          { id: 'c1', by: { mid: 'g1', name: 'Sam' }, at: 1, text: 'mine', replies: [{ id: 'r1', by: { mid: 'g1' }, at: 2, text: 'my reply' }, { id: 'r2', by: { mid: 'g2' }, at: 3, text: 'their reply' }] },
+          { id: 'c2', by: { mid: 'g2', name: 'Kim' }, at: 4, text: 'theirs', replies: [] }
+        ],
+        notes: [{ id: 'n1', text: 'a note' }]
+      },
+      layers: [{ id: 'l1', type: 'shape', transform: { x: 0 } }]
+    };
+
+    /* `me` is g1. Every row is [what it is, the op, owner, editor, commenter, viewer]. */
+    const rows = [
+      ['set a transform', { o: 's', p: ['L', 'l1', 'transform', 'x'], v: 5 }, 1, 1, 0, 0],
+      ['delete a layer key', { o: 'd', p: ['L', 'l1', 'name'] }, 1, 1, 0, 0],
+      ['insert a layer', { o: 'li', id: 'l2', a: null, v: { id: 'l2' } }, 1, 1, 0, 0],
+      ['remove a layer', { o: 'lr', id: 'l1' }, 1, 1, 0, 0],
+      ['move a layer', { o: 'mv', id: 'l1', a: null }, 1, 1, 0, 0],
+      ['set a project field', { o: 's', p: ['P', 'duration'], v: 9 }, 1, 1, 0, 0],
+      ['write a note', { o: 's', p: ['P', 'notes', '#i:n1', 'text'], v: 'x' }, 1, 1, 0, 0],
+      ['add a note', { o: 'ai', p: ['P', 'notes'], k: '#i:n2', a: null, v: { id: 'n2' } }, 1, 1, 0, 0],
+      ['add a comment', { o: 'ai', p: ['P', 'comments'], k: '#i:c9', a: null, v: { id: 'c9', text: 'hi' } }, 1, 1, 1, 0],
+      ['reply to a comment', { o: 'ai', p: ['P', 'comments', '#i:c1', 'replies'], k: '#i:r9', a: null, v: { id: 'r9', text: 'hi' } }, 1, 1, 1, 0],
+      ['edit my own comment', { o: 's', p: ['P', 'comments', '#i:c1', 'text'], v: 'x' }, 1, 1, 1, 0],
+      ['resolve my own comment', { o: 's', p: ['P', 'comments', '#i:c1', 'resolved'], v: true }, 1, 1, 1, 0],
+      ['delete my own comment', { o: 'ar', p: ['P', 'comments', '#i:c1'] }, 1, 1, 1, 0],
+      ['edit SOMEONE ELSE\'S comment', { o: 's', p: ['P', 'comments', '#i:c2', 'text'], v: 'x' }, 1, 1, 0, 0],
+      ['resolve SOMEONE ELSE\'S comment', { o: 's', p: ['P', 'comments', '#i:c2', 'resolved'], v: true }, 1, 1, 0, 0],
+      ['delete SOMEONE ELSE\'S comment', { o: 'ar', p: ['P', 'comments', '#i:c2'] }, 1, 1, 0, 0],
+      ['edit my own reply', { o: 's', p: ['P', 'comments', '#i:c1', 'replies', '#i:r1', 'text'], v: 'x' }, 1, 1, 1, 0],
+      ['edit SOMEONE ELSE\'S reply', { o: 's', p: ['P', 'comments', '#i:c1', 'replies', '#i:r2', 'text'], v: 'x' }, 1, 1, 0, 0],
+      ['delete my own reply', { o: 'ar', p: ['P', 'comments', '#i:c1', 'replies', '#i:r1'] }, 1, 1, 1, 0],
+      ['delete SOMEONE ELSE\'S reply', { o: 'ar', p: ['P', 'comments', '#i:c1', 'replies', '#i:r2'] }, 1, 1, 0, 0],
+      ['rewrite the whole comment list', { o: 's', p: ['P', 'comments'], v: [] }, 1, 1, 0, 0],
+      ['rewrite a comment wholesale', { o: 's', p: ['P', 'comments', '#i:c1'], v: { id: 'c1' } }, 1, 1, 0, 0],
+      ['move a comment', { o: 'am', p: ['P', 'comments', '#i:c1'], a: null }, 1, 1, 0, 0]
+    ];
+    const roles = ['owner', 'editor', 'commenter', 'viewer'];
+    const fails = [];
+    rows.forEach(function (row) {
+      roles.forEach(function (role, ri) {
+        const want = !!row[2 + ri];
+        const got = !!H.allowed(role, row[1], base, 'g1');
+        if (got !== want) fails.push(role + ' ' + (want ? 'must be able to' : 'must NOT be able to') + ' ' + row[0] + ' (got ' + got + ')');
+      });
+    });
+    if (fails.length) throw new Error(fails.length + ' role rules are wrong: ' + fails.slice(0, 6).join(' ;; '));
+
+    /* CONTROL: the table is not all-true or all-false — it distinguishes. */
+    const yes = rows.filter(function (r) { return r[4]; }).length, no = rows.length - yes;
+    if (!yes || !no) throw new Error('CONTROL: the commenter column is uniform (' + yes + ' allowed, ' + no + ' refused), so this table cannot be measuring a filter');
+    if (H.allowed('viewer', rows[0][1], base, 'g1')) throw new Error('CONTROL: a viewer got through');
+
+    /* …and it is the HOST that enforces it, not the caller. */
+    const host = C.Host({ base: JSON.parse(JSON.stringify(base)), invariants: invariants921(), epoch: 'e1' });
+    host.join('g1', { role: 'viewer', name: 'Sam' });
+    const r = host.receive('g1', { cid: 1, bs: 0, ops: [{ o: 's', p: ['L', 'l1', 'transform', 'x'], v: 99 }] });
+    if (!r.ack.rej.length || r.ack.rej[0][1] !== 'role') throw new Error('a viewer\'s document op was not rejected with role: ' + JSON.stringify(r.ack.rej));
+    if (host.base.layers[0].transform.x === 99) throw new Error('a viewer\'s op reached base');
+    if (r.b) throw new Error('a rejected op was broadcast to everyone else');
+    host.setRole('g1', 'editor');
+    const r2 = host.receive('g1', { cid: 2, bs: 0, ops: [{ o: 's', p: ['L', 'l1', 'transform', 'x'], v: 99 }] });
+    if (r2.ack.rej.length || host.base.layers[0].transform.x !== 99) throw new Error('CONTROL: the same op from an editor was still refused — the filter is not reading the role at all');
+
+    /* Identity on a comment is written by the host, not by the sender (§16.2 last bullet). */
+    host.setRole('g1', 'commenter');
+    host.receive('g1', { cid: 3, bs: 0, ops: [{ o: 'ai', p: ['P', 'comments'], k: '#i:c9', a: null, v: { id: 'c9', text: 'hi', by: { mid: 'o', name: 'Ezra' }, at: 1 } }] });
+    const made = host.base.project.comments.filter(function (c) { return c.id === 'c9'; })[0];
+    if (!made) throw new Error('the commenter\'s comment was not added');
+    if (!made.by || made.by.mid !== 'g1') throw new Error('the sender spoofed the author and the host believed it: ' + JSON.stringify(made.by));
+  });
+
+  test('921 S1 a comment is validated against §17.1 before it lands: a nested reply cannot forge identity, and both caps hold on the op that CREATES one', { item: '921' }, function () {
+    const C = need921('the comment filter');
+    const P = C.path;
+    const mk = function () { return { project: { duration: 5, comments: [] }, layers: [{ id: 'l1', type: 'shape', start: 0, duration: 2, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 } }] }; };
+    const host = C.Host({ base: mk(), invariants: invariants921(), epoch: 'e1', ownerInfo: { name: 'Ezra', color: '#3366cc' } });
+    host.join('mallory', { role: 'commenter', name: 'Mallory', color: '#ff0000' });
+
+    /* ⚠️ §16.2 SAYS THE ELEMENT "IS VALIDATED AGAINST §17.1" AND THAT IDENTITY "CANNOT BE SPOOFED".
+       Only the inserted element was stamped, so a commenter — the lowest writable role — could post a
+       comment carrying a REPLY whose `by` named the owner. The host then agreed with it (ownsComment
+       reads base), so those words were Ezra's on every device, and not even the person who planted
+       them could take them back. Nothing downstream would ever have caught it: storage.js's sanitisers
+       are layer-shaped and never look at project.comments (queue 921). */
+    const r = host.receive('mallory', { cid: 1, bs: 0, ops: [{
+      o: 'ai', p: ['P', 'comments'], k: '#i:c_evil', a: null,
+      v: {
+        id: 'c_evil', text: 'ship it', evilKey: 'arbitrary', lid: 'no such layer!!', at: 1,
+        replies: [{ id: 'r_1', by: { mid: 'o', name: 'Ezra', color: '#00ff00' }, at: 1, text: 'Approved by me. — Ezra' }]
+      }
+    }] });
+    if (r.ack.rej.length) throw new Error('the fixture comment was refused, so this measures nothing: ' + JSON.stringify(r.ack.rej));
+    const made = host.base.project.comments[0];
+    if (!made) throw new Error('the commenter\'s comment was not added at all');
+    if (made.by.mid !== 'mallory') throw new Error('the top-level author was spoofed: ' + JSON.stringify(made.by));
+    if (!made.replies || !made.replies.length) throw new Error('the reply vanished entirely, so the identity assertion below would measure nothing');
+    if (made.replies[0].by.mid !== 'mallory' || made.replies[0].by.name !== 'Mallory') throw new Error('a NESTED reply kept the identity its sender claimed (' + JSON.stringify(made.replies[0].by) + ') — the §17.1 card renders by.name, so every device shows those words under the owner\'s name and the host itself agrees he wrote them');
+    if ('evilKey' in made) throw new Error('§17.1 is a shape and a key outside it was stored: ' + Object.keys(made).join(','));
+    if ('lid' in made) throw new Error('a layer pin naming nothing addressable was stored: ' + JSON.stringify(made.lid));
+    /* CONTROL: the whitelist did not eat the comment itself. */
+    if (made.text !== 'ship it' || made.id !== 'c_evil') throw new Error('CONTROL: the legitimate fields did not survive: ' + JSON.stringify(made));
+
+    /* ── §21's 2000-character cap, on the op that CREATES a comment and not only on an edit of one. */
+    const big = new Array(C.LIMITS.COMMENT + 3).join('x');
+    const over = host.receive('mallory', { cid: 2, bs: 0, ops: [{ o: 'ai', p: ['P', 'comments'], k: '#i:c_big', a: null, v: { id: 'c_big', text: big, replies: [] } }] });
+    if (!over.ack.rej.length || over.ack.rej[0][1] !== 'limit') throw new Error('a ' + big.length + '-character comment went in through `ai` against a cap of ' + C.LIMITS.COMMENT + ' (the identical body as an `s` is refused): ' + JSON.stringify(over.ack.rej));
+    const nested = host.receive('mallory', { cid: 3, bs: 0, ops: [{ o: 'ai', p: ['P', 'comments'], k: '#i:c_nb', a: null, v: { id: 'c_nb', text: 'hi', replies: [{ id: 'r9', text: big }] } }] });
+    if (!nested.ack.rej.length || nested.ack.rej[0][1] !== 'limit') throw new Error('the same body inside a nested REPLY got in: ' + JSON.stringify(nested.ack.rej));
+    /* CONTROL: a comment AT the cap still lands, so the two refusals are the cap talking. */
+    const okc = host.receive('mallory', { cid: 4, bs: 0, ops: [{ o: 'ai', p: ['P', 'comments'], k: '#i:c_ok', a: null, v: { id: 'c_ok', text: big.slice(0, C.LIMITS.COMMENT), replies: [] } }] });
+    if (okc.ack.rej.length) throw new Error('CONTROL: a comment exactly at the cap was refused too: ' + JSON.stringify(okc.ack.rej));
+
+    /* ── replies get a ceiling of their own. §21 gave them none, and they ride inside ONE `ai` value,
+       so no per-op rate limit or op count ever sees them. */
+    const many = [];
+    for (let i = 0; i < C.LIMITS.REPLIES + 50; i++) many.push({ id: 'r' + i, text: 'r' + i });
+    host.receive('mallory', { cid: 5, bs: 0, ops: [{ o: 'ai', p: ['P', 'comments'], k: '#i:c_many', a: null, v: { id: 'c_many', text: 'hi', replies: many } }] });
+    const cm = host.base.project.comments.filter(function (c) { return c.id === 'c_many'; })[0];
+    if (!cm) throw new Error('the many-replies comment was not stored');
+    if (cm.replies.length > C.LIMITS.REPLIES) throw new Error('one comment stored ' + cm.replies.length + ' replies against a ceiling of ' + C.LIMITS.REPLIES);
+    if (!cm.replies.length) throw new Error('CONTROL: every reply was thrown away, so the ceiling is not what trimmed them');
+
+    /* ── §21's 500-comment ceiling, counted against what THIS tx has already added. It was read from
+       the pre-tx base, and applyAndFix runs afterwards, so one message of 520 stored 520. */
+    const flood = C.Host({ base: mk(), invariants: invariants921(), epoch: 'e1' });
+    flood.join('m', { role: 'commenter', name: 'M' });
+    const ops = [];
+    for (let i = 0; i < C.LIMITS.COMMENTS + 20; i++) ops.push({ o: 'ai', p: ['P', 'comments'], k: '#i:c' + i, a: null, v: { id: 'c' + i, text: 'c' + i, replies: [] } });
+    flood.receive('m', { cid: 1, bs: 0, ops: ops });
+    const n = flood.base.project.comments.length;
+    if (n > C.LIMITS.COMMENTS) throw new Error('one message put ' + n + ' comments into a ceiling of ' + C.LIMITS.COMMENTS);
+    if (n !== C.LIMITS.COMMENTS) throw new Error('CONTROL: only ' + n + ' landed, so something other than the ceiling stopped them');
+
+    /* ── and the owner has a name. H.local handed resolveOp a literal null — the "no member record"
+       case — so Ezra's own comments were stamped with an empty name and the default grey while every
+       guest's were correct: the one person whose identity is never in doubt was the only anonymous one. */
+    const own = host.local([{ o: 'ai', p: ['P', 'comments'], k: '#i:c_mine', a: null, v: { id: 'c_mine', text: 'mine', replies: [] } }]);
+    if (!own.b) throw new Error('the owner\'s own comment was not sequenced: ' + JSON.stringify(own.rej));
+    const mine = host.base.project.comments.filter(function (c) { return c.id === 'c_mine'; })[0];
+    if (!mine) throw new Error('the owner\'s comment did not reach base');
+    if (mine.by.mid !== host.ownerMid) throw new Error('the owner\'s comment is not attributed to the owner: ' + JSON.stringify(mine.by));
+    if (mine.by.name !== 'Ezra' || mine.by.color !== '#3366cc') throw new Error('the owner\'s own comment lost his name and colour (' + JSON.stringify(mine.by) + ') — §17.1\'s card renders by.name and by.color, so his comments show as an unnamed grey author on every device including his own');
+  });
+
+  test('921 S1 lease refusal, CAS, the li anchor fallback and a forced delete', { item: '921' }, function () {
+    const C = need921('the host guards');
+    const P = C.path;
+    const mk = function () {
+      return {
+        project: { duration: 5 },
+        layers: [{ id: 'l1', type: 'shape', name: 'Logo', transform: { x: 1 } }, { id: 'l2', type: 'shape', transform: { x: 2 } }]
+      };
+    };
+
+    /* ── leases (§17.2) ── */
+    let host = C.Host({ base: mk(), invariants: invariants921(), epoch: 'e1' });
+    host.join('g1', { role: 'editor', name: 'Sam' });
+    host.join('g2', { role: 'editor', name: 'Kim' });
+    if (!host.grantLease('l1', 'g1')) throw new Error('the first request for a free lease must be granted');
+    if (host.grantLease('l1', 'g2')) throw new Error('a second member got the same lease — first come, first served');
+    const lr = host.receive('g2', { cid: 1, bs: 0, ops: [{ o: 's', p: ['L', 'l1', 'transform', 'x'], v: 50 }] });
+    if (!lr.ack.rej.length || lr.ack.rej[0][1] !== 'lease') throw new Error('a write to a leased layer was not refused with lease: ' + JSON.stringify(lr.ack.rej));
+    const ok = host.receive('g2', { cid: 2, bs: 0, ops: [{ o: 's', p: ['L', 'l2', 'transform', 'x'], v: 50 }] });
+    if (ok.ack.rej.length) throw new Error('CONTROL: a write to an UNLEASED layer was refused too, so the lease is not what refused the first one');
+    const del = host.receive('g2', { cid: 3, bs: 0, ops: [{ o: 'lr', id: 'l1' }] });
+    if (!del.ack.rej.length || del.ack.rej[0][1] !== 'lease') throw new Error('deleting a leased layer must be refused first (§17.3): ' + JSON.stringify(del.ack.rej));
+    const backFix = del.ack.fix.filter(function (f) { return f.o === 'li' && f.id === 'l1'; });
+    if (!backFix.length) throw new Error('the refused deleter was not sent the layer back, so its own copy is missing a layer everyone else can see');
+    const forced = host.receive('g2', { cid: 4, bs: 0, ops: [{ o: 'lr', id: 'l1', f: 1 }] });
+    if (forced.ack.rej.length) throw new Error('Delete anyway (f:1) must get past the lease: ' + JSON.stringify(forced.ack.rej));
+    if (host.leases.l1) throw new Error('a forced delete must revoke the lease it walked through');
+    if (host.base.layers.filter(function (l) { return l.id === 'l1'; }).length) throw new Error('the forced delete did not remove the layer');
+
+    /* ── CAS on an offline batch (§7.1 step 6, §13.3) ── */
+    host = C.Host({ base: mk(), invariants: invariants921(), epoch: 'e1' });
+    host.join('g1', { role: 'editor' });
+    host.receive('g1', {
+      cid: 1, bs: 0, q: 1, ops: [
+        { o: 's', p: ['L', 'l1', 'transform', 'x'], v: 10, b: 1 },        // b matches base → accepted
+        { o: 's', p: ['L', 'l2', 'transform', 'x'], v: 2, b: 999 },       // b is stale BUT the value is already what we want → noop, success
+        { o: 's', p: ['P', 'duration'], v: 9, b: 999 }                    // b is stale and the value differs → clash
+      ]
+    });
+    if (host.base.layers[0].transform.x !== 10) throw new Error('a CAS op whose b matched was not applied');
+    if (host.base.project.duration !== 5) throw new Error('a CLASHING CAS op was applied anyway — an offline edit just overwrote a newer one');
+    const acks = host.members.g1.acks;
+    const last = acks[acks.length - 1];
+    if (last.lost.length !== 1 || last.lost[0][1] !== 'clash') throw new Error('the clash was not reported back, so nothing can offer to save his version: ' + JSON.stringify(last.lost));
+    if (last.rej.length) throw new Error('a clash must be a lost, not a rej: ' + JSON.stringify(last.rej));
+    /* CONTROL: the same three ops WITHOUT q:1 all land — the clash is CAS talking, not validation. */
+    const host2 = C.Host({ base: mk(), invariants: invariants921(), epoch: 'e1' });
+    host2.join('g1', { role: 'editor' });
+    host2.receive('g1', { cid: 1, bs: 0, ops: [{ o: 's', p: ['P', 'duration'], v: 9, b: 999 }] });
+    if (host2.base.project.duration !== 9) throw new Error('CONTROL: without q:1 the same op must apply; CAS is only for a reconnect');
+
+    /* ── the li anchor fallback (§6.4, §7.1 step 7) ── */
+    const host3 = C.Host({ base: mk(), invariants: invariants921(), epoch: 'e1' });
+    host3.join('g1', { role: 'editor' });
+    const ins = host3.receive('g1', { cid: 1, bs: 0, ops: [{ o: 'li', id: 'l9', a: 'ghost_layer', v: { id: 'l9', type: 'shape' } }] });
+    if (!ins.b) throw new Error('an insert after a layer nobody has must still happen — dropping it loses somebody\'s work');
+    if (ins.b.ops[0].a !== null) throw new Error('the host must broadcast the anchor it ACTUALLY used, not the one it was given: ' + JSON.stringify(ins.b.ops[0]));
+    if (host3.base.layers[0].id !== 'l9') throw new Error('the fallback anchor is the top of the stack; the layer landed at ' + host3.base.layers.map(function (l) { return l.id; }).join(','));
+    /* CONTROL: a REAL anchor is honoured — the fallback is a fallback, not the only behaviour. */
+    const ins2 = host3.receive('g1', { cid: 2, bs: 0, ops: [{ o: 'li', id: 'l8', a: 'l1', v: { id: 'l8', type: 'shape' } }] });
+    if (ins2.b.ops[0].a !== 'l1' || host3.base.layers.map(function (l) { return l.id; }).join(',') !== 'l9,l1,l8,l2') throw new Error('CONTROL: a valid anchor was not used: ' + host3.base.layers.map(function (l) { return l.id; }).join(','));
+  });
+
+  test('921 S1 a queued li or ai over an element that is back is a CLASH, not a silent overwrite', { item: '921' }, function () {
+    const C = need921('CAS on the upserts');
+    const P = C.path;
+    const mkLayer = function (text, radius) {
+      return { id: 'A', type: 'text', name: 'Title', text: text, start: 0, duration: 2, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'blur', enabled: true, params: { radius: radius }, uid: 'aaaa1111' }], masks: [], audioFx: [], behaviors: [] };
+    };
+    const mk = function () { return { project: { duration: 5 }, layers: [mkLayer('EDITED BY SAM', 99)] }; };
+
+    /* ⚠️ §13.3's "a new key never clashes" is TRUE, and the host answered it by OP KIND. `li` and `ai`
+       are upserts (collab-diff.js), so "new key" is a question about base — and a queued insert for an
+       id that is back (an undo of a delete, or an outbox re-send) simply won, with rej:[] and lost:[]
+       and nothing to show the person whose work it overwrote. patchObject also deletes the keys the
+       stale copy does not carry, so it reverted the WHOLE element to the offline author's snapshot
+       rather than the fields it named (queue 921). */
+    const host = C.Host({ base: mk(), invariants: invariants921(), epoch: 'e1' });
+    host.join('g1', { role: 'editor' });
+    const stale = mkLayer('old text', 3);
+    const r = host.receive('g1', { cid: 1, bs: 0, q: 1, ops: [{ o: 'li', id: 'A', a: null, v: jclone921(stale), b: jclone921(stale) }] });
+    if (host.base.layers[0].text !== 'EDITED BY SAM') throw new Error('a queued li overwrote a newer edit: base now reads ' + JSON.stringify(host.base.layers[0].text));
+    if (!r.ack.lost.length || r.ack.lost[0][1] !== 'clash') throw new Error('nothing was reported back (lost=' + JSON.stringify(r.ack.lost) + ', rej=' + JSON.stringify(r.ack.rej) + '), so the person whose edit was about to be lost is never told and nothing can offer to save either version');
+
+    /* CONTROL 1: a genuinely NEW id still never clashes — §13.3 as written. */
+    const fresh = mkLayer('brand new', 1); fresh.id = 'NEW';
+    const c1 = host.receive('g1', { cid: 2, bs: 0, q: 1, ops: [{ o: 'li', id: 'NEW', a: null, v: fresh, b: { $u: 1 } }] });
+    if (c1.ack.lost.length || c1.ack.rej.length) throw new Error('CONTROL: a queued insert of a brand-new layer was treated as a clash: ' + JSON.stringify(c1.ack.lost) + JSON.stringify(c1.ack.rej));
+    if (!host.base.layers.filter(function (l) { return l.id === 'NEW'; }).length) throw new Error('CONTROL: the new layer did not land');
+
+    /* CONTROL 2: an `li` whose `b` MATCHES what the host holds is accepted and lands — so CAS is
+       reading the base value, not refusing every upsert. */
+    const h2 = C.Host({ base: mk(), invariants: invariants921(), epoch: 'e1' });
+    h2.join('g1', { role: 'editor' });
+    const seen = jclone921(h2.base.layers[0]);
+    const want = jclone921(seen); want.text = 'agreed rename';
+    const c2 = h2.receive('g1', { cid: 1, bs: 0, q: 1, ops: [{ o: 'li', id: 'A', a: null, v: want, b: seen }] });
+    if (c2.ack.lost.length || h2.base.layers[0].text !== 'agreed rename') throw new Error('CONTROL: a queued li on an unchanged base was refused (' + JSON.stringify(c2.ack.lost) + '), so the clash above is just "refuse every li"');
+
+    /* ── the same shape one level down, on a uid-keyed array. */
+    const h3 = C.Host({ base: mk(), invariants: invariants921(), epoch: 'e1' });
+    h3.join('g1', { role: 'editor' });
+    const staleFx = { uid: 'aaaa1111', type: 'blur', enabled: true, params: { radius: 3 } };
+    const a1 = h3.receive('g1', { cid: 1, bs: 0, q: 1, ops: [{ o: 'ai', p: ['L', 'A', 'effects'], k: '#u:aaaa1111', a: null, v: jclone921(staleFx), b: jclone921(staleFx) }] });
+    if (h3.base.layers[0].effects[0].params.radius !== 99) throw new Error('a queued ai reset a slider somebody else had moved: radius is ' + h3.base.layers[0].effects[0].params.radius);
+    if (!a1.ack.lost.length || a1.ack.lost[0][1] !== 'clash') throw new Error('the ai overwrite was not reported: ' + JSON.stringify(a1.ack.lost));
+    /* CONTROL: a NEW uid in the same array is inserted without a murmur. */
+    const a2 = h3.receive('g1', { cid: 2, bs: 0, q: 1, ops: [{ o: 'ai', p: ['L', 'A', 'effects'], k: '#u:bbbb2222', a: null, v: { uid: 'bbbb2222', type: 'blur', enabled: true, params: { radius: 5 } }, b: { $u: 1 } }] });
+    if (a2.ack.lost.length || a2.ack.rej.length) throw new Error('CONTROL: adding a brand-new effect offline was treated as a clash: ' + JSON.stringify(a2.ack.lost) + JSON.stringify(a2.ack.rej));
+    if (h3.base.layers[0].effects.length !== 2) throw new Error('CONTROL: the new effect did not land');
+
+    /* CONTROL: without q:1 the same stale li still applies — CAS is only for a reconnect (§13.3). */
+    const h4 = C.Host({ base: mk(), invariants: invariants921(), epoch: 'e1' });
+    h4.join('g1', { role: 'editor' });
+    h4.receive('g1', { cid: 1, bs: 0, ops: [{ o: 'li', id: 'A', a: null, v: jclone921(stale) }] });
+    if (h4.base.layers[0].text !== 'old text') throw new Error('CONTROL: a LIVE li was refused as well, so the clash above is not CAS talking');
+  });
+
+  test('921 S1 the host sanitises on a CLONE: the fix goes out and every live array keeps its identity', { item: '921' }, function () {
+    const C = need921('sanitize-on-clone');
+    const P = C.path;
+    const doc = {
+      project: { width: 320, height: 240, fps: 30, duration: 5, background: '#000000' },
+      layers: [{
+        id: 'l1', type: 'shape', shape: 'rect', start: 0, duration: 2,
+        transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+        masks: [{ id: 'm1', mode: 'add', path: [[0, 0], [10, 0], [10, 10]] }],
+        effects: [{ type: 'blur', enabled: true, params: { radius: 4 }, uid: 'aaaa1111' }],
+        audioFx: [], behaviors: []
+      }]
+    };
+    const host = C.Host({ base: doc, invariants: invariants921(), epoch: 'e1' });
+    host.join('g1', { role: 'editor' });
+
+    /* The references the app holds INTO the document. mask-tool.js aliases layer.masks[i].path, the
+       inspector closes over the effect object, kfDrag holds a kf list. If a sanitiser ran on the live
+       tree it would REASSIGN these (storage.js:633, 699, 777, ~966, 1079) and every one of them would
+       be editing an object nobody is looking at. */
+    const layerRef = host.base.layers[0];
+    const effectsRef = layerRef.effects, maskPathRef = layerRef.masks[0].path, fxRef = layerRef.effects[0];
+
+    /* An out-of-range duration: something the sanitiser has an opinion about. */
+    const r = host.receive('g1', { cid: 1, bs: 0, ops: [{ o: 's', p: ['L', 'l1', 'duration'], v: 99999 }] });
+    if (!r.b) throw new Error('nothing was sequenced');
+    if (!r.b.fix.length) throw new Error('the host accepted a duration of 99999 with no fix — the sanitiser clamps it to 3600, so without a fix op every guest would hold a different number from the host forever: ' + JSON.stringify(r.b));
+    if (host.base.layers[0].duration !== 3600) throw new Error('base was not repaired, it is ' + host.base.layers[0].duration);
+
+    if (host.base.layers[0] !== layerRef) throw new Error('the LAYER object was replaced — every closure in the inspector now edits a detached copy');
+    if (host.base.layers[0].effects !== effectsRef) throw new Error('the effects ARRAY was replaced — this is exactly what storage.js\'s sanitizeEffects does, and why it must only ever run on a clone');
+    if (host.base.layers[0].effects[0] !== fxRef) throw new Error('the effect OBJECT was replaced');
+    if (host.base.layers[0].masks[0].path !== maskPathRef) throw new Error('the mask PATH array was replaced — mask-tool.js:73,104 aliases it, so the pen tool would be drawing into nothing');
+
+    /* CONTROL, and it is the load-bearing half: running the real sanitiser DIRECTLY on the live layer
+       does break these identities. Without this line, "the identity survived" could just mean the
+       sanitiser never does anything to this fixture. */
+    const copy = JSON.parse(JSON.stringify(doc.layers[0]));
+    const liveArr = copy.effects, livePath = copy.masks[0].path;
+    FM.storage._sanitizeLayers([copy]);
+    if (copy.effects === liveArr && copy.masks[0].path === livePath) {
+      throw new Error('CONTROL: the real sanitiser did not replace either the effects array or the mask path on this fixture, so the identity assertions above prove nothing. Rewrite the fixture with something it reassigns.');
+    }
+  });
+
+  test('921 S1 the host repairs a parent cycle and a repeated id, on a clone, as ordinary ops', { item: '921' }, function () {
+    const C = need921('the structural invariants');
+    const P = C.path;
+    /* A FACTORY, not one object: Host takes `base` BY REFERENCE and mutates it in place (it is
+       FM.scene in the app), so three hosts sharing one literal would each inherit the previous one's
+       repairs — and the second assertion would then be measuring the first test's leftovers. */
+    const mkDoc = function () {
+      return {
+        project: { width: 320, height: 240, fps: 30, duration: 5 },
+        layers: [
+          { id: 'g1', type: 'group', start: 0, duration: 2, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 } },
+          { id: 'g2', type: 'group', start: 0, duration: 2, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, parent: 'g1' }
+        ]
+      };
+    };
+    const host = C.Host({ base: mkDoc(), invariants: invariants921(), epoch: 'e1' });
+    host.join('g1m', { role: 'editor' });
+
+    /* Close the loop: g1.parent = g2, while g2.parent is already g1. A document like that is not merely
+       wrong, it is UNOPENABLE — the parent walk in FM.storage.load() recurses until the stack blows
+       (see FM.repairParentCycles' own comment). It must never reach a guest. */
+    const r = host.receive('g1m', { cid: 1, bs: 0, ops: [{ o: 's', p: ['L', 'g1', 'parent'], v: 'g2' }] });
+    if (!r.b) throw new Error('nothing was sequenced');
+    if (FM.repairParentCycles(JSON.parse(JSON.stringify(host.base.layers)))) throw new Error('the host\'s base still contains a parent cycle after sequencing the op that made one');
+    const fixedParent = r.b.fix.filter(function (f) { return f.p && f.p[2] === 'parent'; });
+    if (!fixedParent.length) throw new Error('the repair was not broadcast as a fix op, so the host quietly holds a different document from everyone else: ' + JSON.stringify(r.b.fix));
+
+    /* CONTROL: an ordinary, acyclic parent write goes through with NO fix — the repair fires on a
+       cycle, not on every parent write. */
+    const host2 = C.Host({ base: mkDoc(), invariants: invariants921(), epoch: 'e1' });
+    host2.join('g1m', { role: 'editor' });
+    const r2 = host2.receive('g1m', { cid: 1, bs: 0, ops: [{ o: 's', p: ['L', 'g2', 'parent'], v: null }] });
+    if (r2.b.fix.filter(function (f) { return f.p && f.p[2] === 'parent'; }).length) throw new Error('CONTROL: an acyclic parent write produced a parent fix — the repair is firing on everything');
+
+    /* A repeated layer id cannot be reached through the pipeline at all, which is the stronger
+       statement: `li` UPSERTS by id, and a bare-root write (the one op that could replace the whole
+       list) is refused by validation. */
+    const host3 = C.Host({ base: mkDoc(), invariants: invariants921(), epoch: 'e1' });
+    host3.join('g1m', { role: 'editor' });
+    host3.receive('g1m', { cid: 1, bs: 0, ops: [{ o: 'li', id: 'g2', a: null, v: { id: 'g2', type: 'group' } }] });
+    const ids = host3.base.layers.map(function (l) { return l.id; });
+    if (ids.length !== new Set(ids).size) throw new Error('li created a SECOND layer with an existing id: ' + ids.join(',') + ' — every id-keyed walk in the app is ambiguous after that');
+    const rootWrite = host3.receive('g1m', { cid: 2, bs: 0, ops: [{ o: 's', p: ['L'], v: [{ id: 'g1' }, { id: 'g1' }] }] });
+    if (rootWrite.ack.seq !== null) throw new Error('a bare-root write was accepted: it is the one op that could put two layers with the same id into base');
+    if (host3.base.layers.length < 2) throw new Error('the refused root write still changed base');
+    if (FM.normalizeGroupOrder(host3.base.layers)) throw new Error('base ended with a repeated id after all');
+  });
+
+  test('921 S1 a whole-layer write is structural too, so the parent-cycle repair does not depend on how the op was spelled', { item: '921' }, function () {
+    const C = need921('the structural gate');
+    const G = function (id) { return { id: id, type: 'group', start: 0, duration: 2, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 } }; };
+    const mk = function () { return { project: { width: 320, height: 240, fps: 30, duration: 5 }, layers: [G('a'), G('b')] }; };
+    const whole = function (id, parent) { const v = G(id); v.parent = parent; return { o: 's', p: ['L', id], v: v }; };
+
+    /* ⚠️ `structural` — the flag that decides whether the whole-list invariants run at all — was set by
+       li/lr/mv, or by a path whose LAST segment is literally `parent`. A write AT a layer satisfies
+       neither and can still set `parent`, so the pipeline's answer to a parent cycle depended on the
+       op's SPELLING rather than on what it did. And a cycle is not merely wrong: FM.repairParentCycles
+       exists because every parent walk then recurses until the stack blows and Home never opens
+       again (queue 921). */
+    const host = C.Host({ base: mk(), invariants: invariants921(), epoch: 'e1' });
+    host.join('g1', { role: 'editor' });
+    const r = host.receive('g1', { cid: 1, bs: 0, ops: [whole('a', 'b'), whole('b', 'a')] });
+    if (r.ack.rej.length) throw new Error('the fixture ops were refused, so this measures nothing: ' + JSON.stringify(r.ack.rej));
+    if (host.base.layers[0].parent === 'b' && host.base.layers[1].parent === 'a') throw new Error('base was left holding a two-layer parent cycle, sequenced and broadcast to everyone: ' + JSON.stringify(host.base.layers.map(function (l) { return [l.id, l.parent]; })));
+    if (FM.repairParentCycles(jclone921(host.base.layers))) throw new Error('the host\'s base still contains a parent cycle after two whole-layer writes closed one — the invariants never looked, because the gate was reading the last path segment instead of the effect');
+    if (!r.b || !r.b.fix.filter(function (f) { return f.p && f.p[2] === 'parent'; }).length) throw new Error('the repair was not broadcast as a fix op, so the host quietly holds a different document from everyone else: ' + JSON.stringify(r.b && r.b.fix));
+
+    /* CONTROL: an ACYCLIC whole-layer write produces no parent fix and lands untouched — the repair
+       fires on a cycle, not on every write at a layer. */
+    const host2 = C.Host({ base: mk(), invariants: invariants921(), epoch: 'e1' });
+    host2.join('g1', { role: 'editor' });
+    const r2 = host2.receive('g1', { cid: 1, bs: 0, ops: [whole('b', 'a')] });
+    if (r2.ack.rej.length) throw new Error('CONTROL: the acyclic write was refused: ' + JSON.stringify(r2.ack.rej));
+    if (r2.b && r2.b.fix.filter(function (f) { return f.p && f.p[2] === 'parent'; }).length) throw new Error('CONTROL: an acyclic whole-layer write produced a parent fix, so the repair is firing on everything');
+    if (host2.base.layers[1].parent !== 'a') throw new Error('CONTROL: the acyclic parent write did not land at all, so nothing above is about parents');
+  });
+
+  test('921 S1 hostile input: prototype keys, a 10 MB string, an https fillImage, 6000 ops and HTML in a name', { item: '921', budgetMs: 60000 }, function () {
+    const C = need921('the validator');
+    const P = C.path;
+    const mkDoc = function () {
+      return {
+        project: { width: 320, height: 240, fps: 30, duration: 5, comments: [] },
+        layers: [{ id: 'l1', type: 'shape', shape: 'rect', start: 0, duration: 2, name: 'ok', transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [], audioFx: [], behaviors: [] }]
+      };
+    };
+    const host = C.Host({ base: mkDoc(), invariants: invariants921(), epoch: 'e1' });
+    host.join('bad', { role: 'editor', name: 'Mallory' });
+
+    const refuse = function (label, ops, q) {
+      const before = P.canon(host.base);
+      const r = host.receive('bad', { cid: host.members.bad.lastCid + 1, bs: 0, q: q, ops: ops });
+      if (r.ack && r.ack.seq !== null && !(r.ack.rej || []).length) throw new Error(label + ' was ACCEPTED: ' + JSON.stringify(r.ack).slice(0, 200));
+      if (P.canon(host.base) !== before) throw new Error(label + ' changed the document');
+      return r;
+    };
+
+    refuse('a __proto__ path', [{ o: 's', p: ['L', 'l1', '__proto__'], v: { polluted: 1 } }]);
+    refuse('a __proto__ VALUE key', [{ o: 's', p: ['L', 'l1', 'transform'], v: JSON.parse('{"__proto__":{"polluted":1}}') }]);
+    refuse('a constructor path', [{ o: 's', p: ['P', 'constructor'], v: 1 }]);
+    refuse('an _ path (a runtime cache)', [{ o: 's', p: ['L', 'l1', '_canvas'], v: 'x' }]);
+    refuse('a numeric index path', [{ o: 's', p: ['L', 'l1', 'effects', '0'], v: {} }]);
+    refuse('a bare-root write', [{ o: 's', p: ['L'], v: [] }]);
+    refuse('a non-finite number', [{ o: 's', p: ['L', 'l1', 'start'], v: Number.POSITIVE_INFINITY }]);
+    refuse('an unknown op kind', [{ o: 'nuke', p: ['P', 'width'] }]);
+    if ({}.polluted !== undefined || Object.prototype.polluted !== undefined) throw new Error('Object.prototype was polluted by a hostile op');
+
+    const huge = new Array(10 * 1024 * 1024 + 1).join('x');
+    if (huge.length <= C.LIMITS.STRING_LEAF) throw new Error('the oversize fixture is not oversize');
+    refuse('a 10 MB string leaf', [{ o: 's', p: ['L', 'l1', 'name'], v: huge }]);
+
+    const many = [];
+    for (let i = 0; i < 6000; i++) many.push({ o: 's', p: ['L', 'l1', 'start'], v: i / 1000 });
+    refuse('6000 ops in one tx', many);
+
+    /* An https fillImage is a zero-click tracking beacon the moment it reaches img.src. The VALIDATOR
+       does not know about it — the sanitiser does, on a clone, and its repair is broadcast as a fix. */
+    const r = host.receive('bad', { cid: host.members.bad.lastCid + 1, bs: 0, ops: [{ o: 's', p: ['L', 'l1', 'fillImage'], v: 'https://evil.example/pixel.png' }] });
+    if (host.base.layers[0].fillImage === 'https://evil.example/pixel.png') throw new Error('an external fillImage URL survived into the host document — that is an SSRF / tracking beacon on every device in the session');
+    if (r.b && !r.b.fix.length) throw new Error('the strip was not broadcast, so the sender keeps the beacon');
+
+    /* HTML in a name is DATA, not a refusal: people do call a layer <b>. It must travel unchanged, and
+       it must be the UI's job (textContent everywhere, §14.9) to render it as text. */
+    const evil = '<img src=x onerror=alert(1)>';
+    const okr = host.receive('bad', { cid: host.members.bad.lastCid + 1, bs: 0, ops: [{ o: 's', p: ['L', 'l1', 'name'], v: evil }] });
+    if ((okr.ack.rej || []).length) throw new Error('HTML in a layer name was refused; it is legitimate text: ' + JSON.stringify(okr.ack.rej));
+    if (host.base.layers[0].name !== evil) throw new Error('HTML in a name was altered: ' + host.base.layers[0].name);
+
+    /* CONTROL: the host is still working. Every refusal above would pass against a host that answered
+       no to everything, including this one — so this one has to be a yes. */
+    const good = host.receive('bad', { cid: host.members.bad.lastCid + 1, bs: 0, ops: [{ o: 's', p: ['L', 'l1', 'start'], v: 1.5 }] });
+    if ((good.ack.rej || []).length || host.base.layers[0].start !== 1.5) throw new Error('CONTROL: an ordinary op was refused too (' + JSON.stringify(good.ack.rej) + '), so none of the refusals above mean anything');
+
+    /* The rate limiter: a burst is allowed, a storm is not, and it recovers. */
+    let clock = 0;
+    const rl = C.Host({ base: mkDoc(), invariants: invariants921(), epoch: 'e1', now: function () { return clock; } });
+    rl.join('spam', { role: 'editor' });
+    let dropped = 0;
+    for (let i = 0; i < 200; i++) { const rr = rl.receive('spam', { cid: i + 1, bs: 0, ops: [{ o: 's', p: ['L', 'l1', 'start'], v: i / 100 }] }); if (rr.dropped === 'rate') dropped++; }
+    if (!dropped) throw new Error('200 txs in the same millisecond were all accepted — the token bucket is not limiting anything');
+    if (dropped >= 200 - C.LIMITS.TX_BURST + 1) throw new Error('the burst allowance was not honoured: ' + dropped + ' of 200 dropped, but ' + C.LIMITS.TX_BURST + ' should get through');
+    clock = 10000;
+    const after = rl.receive('spam', { cid: 999, bs: 0, ops: [{ o: 's', p: ['L', 'l1', 'start'], v: 2 }] });
+    if (after.dropped === 'rate') throw new Error('CONTROL: the bucket never refills, so one burst mutes a person for the rest of the session');
+  });
+
+  test('921 S1 an op may not rewrite or delete the key that addresses it: no duplicate ids, no unaddressable orphans', { item: '921' }, function () {
+    const C = need921('the keyed-write locks');
+    const P = C.path, D = C.diff, H = C.Host;
+    const mk = function () {
+      return {
+        project: { duration: 5 },
+        layers: [
+          { id: 'A', type: 'shape', shape: 'rect', start: 0, duration: 2, name: 'one', transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'blur', enabled: true, params: { radius: 3 }, uid: 'aaaa1111' }], masks: [], audioFx: [], behaviors: [] },
+          { id: 'B', type: 'shape', shape: 'rect', start: 0, duration: 2, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [], masks: [], audioFx: [], behaviors: [] }
+        ]
+      };
+    };
+
+    /* ⚠️ validOp's bare-root rule stopped ONE SEGMENT SHORT. `s{p:['L',<id>]}` is a keyed write, and
+       `v:{id:'B'}` renamed a layer onto an id another layer already had — the state collab-host.js
+       calls unreachable, and the one orderFix then refuses to repair. `v:{name:'x'}` was worse:
+       patchObject deletes what `v` omits, so the layer lost its `id` and became a corpse — locate()
+       answers 'gone' for every path through it, the diff's layer walk skips anything without an id so
+       no tick can ever remove it, invariantFix's layerById misses it so no sanitiser sees it again —
+       while canon() still counts it and every device converges on it (queue 921). */
+    const refused = [
+      ['a primitive at a layer', { o: 's', p: ['L', 'A'], v: 42 }],
+      ['an array at a layer', { o: 's', p: ['L', 'A'], v: [] }],
+      ['a string at a keyed element', { o: 's', p: ['L', 'A', 'effects', '#u:aaaa1111'], v: 'oops' }],
+      ['rewriting a layer id', { o: 's', p: ['L', 'A', 'id'], v: 'B' }],
+      ['deleting a layer id', { o: 'd', p: ['L', 'A', 'id'] }],
+      ['deleting an effect uid', { o: 'd', p: ['L', 'A', 'effects', '#u:aaaa1111', 'uid'] }],
+      ['rewriting an effect uid', { o: 's', p: ['L', 'A', 'effects', '#u:aaaa1111', 'uid'], v: 'bbbb2222' }]
+    ];
+    refused.forEach(function (row) { if (!H.validOp(row[1])) throw new Error(row[0] + ' passed validOp: ' + JSON.stringify(row[1]).slice(0, 140)); });
+    /* CONTROL: every shape the diff and the host's own step-11 echo DO produce is still valid — the
+       same argument the bare-root rule makes, which is what keeps the refusals above free. */
+    [['an ordinary leaf set', { o: 's', p: ['L', 'A', 'name'], v: 'two' }],
+     ['step 11\'s current-state echo of a keyed element', { o: 's', p: ['L', 'A', 'effects', '#u:aaaa1111'], v: { uid: 'aaaa1111', type: 'blur' } }],
+     ['a whole-layer set that carries its own id', { o: 's', p: ['L', 'A'], v: { id: 'A', type: 'shape' } }],
+     ['a nested key that merely SPELLS id', { o: 's', p: ['L', 'A', 'transform', 'id'], v: 3 }]
+    ].forEach(function (row) { const why = H.validOp(row[1]); if (why) throw new Error('CONTROL: ' + row[0] + ' was refused with "' + why + '", so the refusals above are just "refuse everything"'); });
+
+    /* ── apply() holds the same line, because a `fix` op never passes through validOp. */
+    const t = jclone921(mk());
+    if (D.apply(t, { o: 's', p: ['L', 'A'], v: 42 }) !== 'bad') throw new Error('apply() wrote a bare number into the layer list: ' + JSON.stringify(t.layers).slice(0, 80));
+    if (D.apply(t, { o: 'd', p: ['L', 'A', 'id'] }) !== 'bad') throw new Error('apply() deleted the id the path had just used to find the layer');
+    if (D.apply(t, { o: 's', p: ['L', 'A'], v: { name: 'patched' } }) !== 'ok') throw new Error('a legitimate whole-layer patch was refused');
+    if (t.layers[0].id !== 'A') throw new Error('patchObject deleted the layer id because `v` did not carry it: ' + JSON.stringify(t.layers[0]) + ' — applyLi and applyAi both re-assert the key after patching, and applySet was the one that did not');
+    if (t.layers[0].name !== 'patched') throw new Error('CONTROL: the patch itself did not land, so the id assertion is vacuous');
+
+    /* ── end to end, through the host, for the two states its own comments call unreachable. */
+    const host = C.Host({ base: mk(), invariants: invariants921(), epoch: 'e1' });
+    host.join('g1', { role: 'editor' });
+    host.receive('g1', { cid: 1, bs: 0, ops: [{ o: 's', p: ['L', 'A'], v: { id: 'B', type: 'shape' } }] });
+    const ids = host.base.layers.map(function (l) { return l && l.id; });
+    if (ids.length !== new Set(ids).size) throw new Error('two layers now share an id (' + ids.join(',') + ') — orderFix cannot say that in ops, so it sets H.warn and hands the document to the divergence detector for good');
+    host.receive('g1', { cid: 2, bs: 0, ops: [{ o: 's', p: ['L', 'A'], v: { type: 'shape', name: 'orphan?' } }] });
+    if (!host.base.layers.filter(function (l) { return l && l.id === 'A'; }).length) throw new Error('layer A lost its id and nothing can address it any more: ' + JSON.stringify(host.base.layers.map(function (l) { return l && l.id; })));
+    const gone = host.receive('g1', { cid: 3, bs: 0, ops: [{ o: 'lr', id: 'A' }] });
+    if (gone.ack.rej.length) throw new Error('the layer could no longer be deleted (' + JSON.stringify(gone.ack.rej) + '), which is what "unremovable corpse" means in practice');
+
+    /* ── and on a uid-keyed array the same trick flips the whole list to ATOMIC on every device. */
+    const host2 = C.Host({ base: mk(), invariants: invariants921(), epoch: 'e1' });
+    host2.join('g1', { role: 'editor' });
+    const r2 = host2.receive('g1', { cid: 1, bs: 0, ops: [{ o: 's', p: ['L', 'A', 'effects', '#u:aaaa1111'], v: { type: 'blur', enabled: true, params: { radius: 9 } } }] });
+    if (r2.ack.rej.length) throw new Error('the keyed-element rewrite was refused outright; it is a legitimate op when its value is an object: ' + JSON.stringify(r2.ack.rej));
+    const fx = host2.base.layers[0].effects;
+    if (P.arrayMode('effects', fx) !== 'uid') throw new Error('the effects array lost its uid and is now ATOMIC (' + JSON.stringify(fx).slice(0, 140) + ') — every later slider tick would ship the whole array and clobber concurrent edits to its siblings');
+    if (fx[0].params.radius !== 9) throw new Error('CONTROL: the write itself did not land, so the uid survived only because nothing happened');
+  });
+
+  test('921 S1 the diagnostics ring is bounded, and an ack names the batch that carries its ops or null', { item: '921' }, function () {
+    const C = need921('the host bookkeeping');
+    const mk = function () { return { project: { duration: 5 }, layers: [{ id: 'l1', type: 'shape', start: 0, duration: 2, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 } }] }; };
+
+    /* ⚠️ §7.1 VALIDATES BEFORE IT RATE-LIMITS, so a malformed tx never reaches the token bucket: 5000
+       of them from a VIEWER — a role that cannot write a single op — left 5000 diagnostics rows and
+       the bucket still showing a full burst. `ring`, `lastBy`, `lastW` and `m.acks` are all capped;
+       `diag` was the one structure a remote member controls the fill rate of, and on a phone host that
+       is the session's memory (queue 921). */
+    let clock = 0;
+    const flood = C.Host({ base: mk(), invariants: invariants921(), epoch: 'e1', now: function () { return clock; } });
+    flood.join('v', { role: 'viewer' });
+    for (let i = 0; i < 5000; i++) flood.receive('v', (i % 2) ? { cid: i + 1, ops: 'not-an-array' } : { cid: -1, ops: [] });
+    if (!flood.diag.length) throw new Error('CONTROL: nothing was recorded at all, so a bound on it would mean nothing');
+    if (flood.diag.length > C.LIMITS.DIAG) throw new Error('5000 malformed messages left ' + flood.diag.length + ' diagnostics entries against a cap of ' + C.LIMITS.DIAG);
+
+    /* …and a run of IDENTICAL refusals collapses into a count rather than one row each, so the cap
+       summarises the flood instead of silently throwing away what it is drowning out. */
+    const same = C.Host({ base: mk(), invariants: invariants921(), epoch: 'e1', now: function () { return clock; } });
+    same.join('v', { role: 'viewer' });
+    for (let i = 0; i < 5000; i++) same.receive('v', { cid: i + 1, ops: 'not-an-array' });
+    const rows = same.diag.filter(function (e) { return e.what === 'bad-tx'; });
+    if (rows.length !== 1 || (rows[0].n || 1) !== 5000) throw new Error('5000 identical refusals were recorded as ' + rows.length + ' rows (n=' + (rows[0] && rows[0].n) + ')');
+
+    /* ── ack.seq. §14.6 types it `seq|null` and step 1 of the same function already answers null for a
+       malformed tx; the other exit reported H.seq, so a tx whose ops were all §5.5 no-ops — the common
+       case the whole design leans on — came back naming a batch somebody ELSE's tx produced. */
+    const host = C.Host({ base: mk(), invariants: invariants921(), epoch: 'e1' });
+    host.join('g1', { role: 'editor' });
+    host.join('g2', { role: 'editor' });
+    const real = host.receive('g2', { cid: 1, bs: 0, ops: [{ o: 's', p: ['L', 'l1', 'transform', 'x'], v: 5 }] });
+    if (!real.b) throw new Error('the fixture tx was not sequenced, so nothing below has a batch to compare against');
+    if (real.ack.seq !== real.b.seq) throw new Error('CONTROL: an ack for a tx that WAS sequenced must carry its own batch number (' + real.ack.seq + ' vs ' + real.b.seq + ')');
+    const noop = host.receive('g1', { cid: 1, bs: 0, ops: [{ o: 's', p: ['L', 'l1', 'transform', 'x'], v: 5 }] });
+    if (noop.b) throw new Error('the no-op fixture produced a batch, so it measures nothing');
+    if (noop.ack.seq !== null) throw new Error('an ack for a tx that sequenced nothing named batch ' + noop.ack.seq + ', which belongs to ' + host.ring[host.ring.length - 1].by + ' — an S2 receive rule reading it as "the batch that carries my ops" attributes a stranger\'s work to itself');
+    if (noop.ack.at !== host.seq) throw new Error('`at` must still say where the host is, under a name that means that: ' + noop.ack.at + ' vs ' + host.seq);
+    const gone = host.receive('g1', { cid: 2, bs: 0, ops: [{ o: 's', p: ['L', 'ghost', 'transform', 'x'], v: 5 }] });
+    if (!gone.ack.rej.length) throw new Error('the all-gone fixture was not refused: ' + JSON.stringify(gone.ack.rej));
+    if (gone.ack.seq !== null) throw new Error('an ack for an all-refused tx named batch ' + gone.ack.seq);
+  });
+
+  test('921 S1 the sanitiser is a fixed point on the kitchen sink, on every registered effect and on the open project', { item: '921', budgetMs: 120000 }, function () {
+    need921('the idempotence gate');
+    if (!FM.storage || !FM.storage._sanitizeLayers) throw new Error('FM.storage._sanitizeLayers is not exposed');
+    const P = FM.collab.path;
+
+    /* WHY THIS IS A COLLAB TEST. The host pre-sanitises the document when a share is armed (§7.3) so
+       that every guest's own defensive pass is a no-op and the hashes match on the first comparison.
+       If a second pass ever changes ANYTHING, joining a session shows a difference on the very first
+       hash, the guest asks for a resync, gets the same document back, and does it again — a loop with
+       no visible cause. The property the whole design leans on is idempotence, so it gets a test. */
+    const checked = [];
+    const fails = [];
+    const once = function (label, layers) {
+      const a = JSON.parse(JSON.stringify(layers));
+      FM.storage._sanitizeLayers(a);
+      const s1 = P.canon(a);
+      const b = JSON.parse(JSON.stringify(a));
+      FM.storage._sanitizeLayers(b);
+      if (P.canon(b) !== s1) fails.push(label + ' changed on the SECOND pass');
+      checked.push(label);
+    };
+    for (let seed = 1; seed <= 25; seed++) once('kitchen sink seed ' + seed, kitchen921(seed).layers);
+
+    /* …and the shapes the app itself produces, which is what a fixture file would have been: one
+       layer carrying EVERY registered effect, and whatever project is open in the runner right now.
+       (tests/_fixtures holds MEDIA only — there is no scene fixture on disk, so fetching from there
+       would have checked nothing while looking thorough.) */
+    const reg = FM.fxRegistry.all();
+    const everyFx = { id: 'fp_all', type: 'shape', shape: 'rect', start: 0, duration: 2, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [], audioFx: [], behaviors: [] };
+    reg.forEach(function (e, i) { const inst = FM.fxRegistry.makeInstance(e.type); if (inst) { inst.uid = 'f' + i.toString(36) + 'zz'; everyFx.effects.push(inst); } });
+    once('a layer holding all ' + everyFx.effects.length + ' registered effects', [everyFx]);
+    if (FM.scene && Array.isArray(FM.scene.layers) && FM.scene.layers.length) once('the project open in the runner', FM.scene.layers);
+
+    if (fails.length) throw new Error(fails.length + ' documents are not a fixed point of the sanitiser: ' + fails.slice(0, 4).join(' ;; ') + ' — arming a share would then never stop resyncing');
+    if (checked.length < 25) throw new Error('CONTROL: only ' + checked.length + ' documents were checked; the generator produced nothing to measure');
+
+    /* CONTROL: the sanitiser is actually DOING something to these documents — a no-op sanitiser is
+       trivially idempotent and would sail through the loop above. */
+    const raw = kitchen921(3).layers;
+    raw[0].duration = 1e9; raw[0].start = 'nonsense';
+    const w = JSON.parse(JSON.stringify(raw));
+    FM.storage._sanitizeLayers(w);
+    if (P.canon(w) === P.canon(raw)) throw new Error('CONTROL: the sanitiser left a deliberately broken layer untouched, so idempotence here means nothing');
+  });
+
+  test('921 S1 the schema fingerprint gate', { item: '921' }, function () {
+    const C = need921('the schema fingerprint');
+    const got = C.schemaFingerprint();
+    if (got === null) throw new Error('schemaFingerprint() could not be computed — FM.storage._sanitizeLayers or FM.fxRegistry is missing');
+    if (got !== C.SCHEMA_FP) {
+      throw new Error('The sync schema changed — bump FM.collab.SCHEMA_REV and set SCHEMA_FP to ' + got + ' (it is ' + C.SCHEMA_FP + '). ' +
+        'Something in the sanitiser, in an effect\'s parameter definitions, or in the op grammar moved. Two builds that disagree about those ' +
+        'normalise the same project to two different documents, so every hash after the first disagrees and nobody can see why.');
+    }
+
+    /* CONTROL: the fingerprint MOVES when the rules move.
+       ⚠️ AND EVERY CONTROL HERE HAS TO CALL schemaFingerprint() ITSELF (queue 921). The two that used
+       to live here built their own hashes out of cyrb53 and the fixture and compared those — which
+       measures nothing about the subject. Measured: replacing C.schemaFingerprint with
+       `function () { return C.SCHEMA_FP; }` — a function that reads neither the sanitiser, nor the
+       effect parameter definitions, nor OP_GRAMMAR, nor SCHEMA_REV — passed this whole test, green,
+       INCLUDING both lines labelled CONTROL. The test's own comment said that must never happen. So:
+       perturb each of the four things the gate exists to notice, and assert the function's own answer
+       moves. The last block then proves the controls are live by feeding them that same stub. */
+    const P = C.path;
+    const moves = function (what, perturb, restore) {
+      try {
+        perturb();
+        const now = C.schemaFingerprint();
+        if (now === got) return 'CONTROL: ' + what + ' did not move the fingerprint, so it is not really in it — and two builds that disagree about it would be allowed to join each other, which is the one thing this constant is for';
+      } finally { restore(); }
+      if (C.schemaFingerprint() !== got) return 'CONTROL: ' + what + ' was not restored — the fingerprint is now ' + C.schemaFingerprint();
+      return null;
+    };
+    const rev = C.SCHEMA_REV;
+    let why = moves('a SCHEMA_REV bump', function () { C.SCHEMA_REV = rev + 1; }, function () { C.SCHEMA_REV = rev; });
+    if (why) throw new Error(why);
+
+    const realGrammar = C.OP_GRAMMAR;
+    why = moves('a change to the op grammar', function () {
+      const g = {}; Object.keys(realGrammar).forEach(function (k) { g[k] = realGrammar[k]; }); g.s = ['p', 'v', 'z'];
+      C.OP_GRAMMAR = g;
+    }, function () { C.OP_GRAMMAR = realGrammar; });
+    if (why) throw new Error(why);
+
+    const realSan = FM.storage._sanitizeLayers;
+    why = moves('a sanitiser that answers differently', function () {
+      FM.storage._sanitizeLayers = function (arr) { realSan(arr); if (arr && arr[0]) arr[0].duration = 1.25; };
+    }, function () { FM.storage._sanitizeLayers = realSan; });
+    if (why) throw new Error(why);
+
+    const realAll = FM.fxRegistry.all;
+    const withParams = (realAll.call(FM.fxRegistry) || []).filter(function (e) { return (e.params || []).length; });
+    if (!withParams.length) throw new Error('CONTROL: no registered effect has a parameter, so the registry term cannot be measured');
+    why = moves('dropping one effect parameter definition', function () {
+      FM.fxRegistry.all = function () {
+        const list = (realAll.call(FM.fxRegistry) || []).slice();
+        for (let i = 0; i < list.length; i++) {
+          if ((list[i].params || []).length) { list[i] = { type: list[i].type, params: list[i].params.slice(1) }; break; }
+        }
+        return list;
+      };
+    }, function () { FM.fxRegistry.all = realAll; });
+    if (why) throw new Error(why);
+
+    /* …and the controls are themselves live: a schemaFingerprint() that ignores its inputs must FAIL
+       the first of them rather than sail through it. This is the positive control for the negatives. */
+    const realFp = C.schemaFingerprint;
+    let stubCaught = false;
+    try {
+      C.schemaFingerprint = function () { return C.SCHEMA_FP; };
+      stubCaught = !!moves('a SCHEMA_REV bump', function () { C.SCHEMA_REV = rev + 1; }, function () { C.SCHEMA_REV = rev; });
+    } finally { C.schemaFingerprint = realFp; }
+    if (!stubCaught) throw new Error('CONTROL OF THE CONTROLS: a constant-returning schemaFingerprint() was NOT caught, so none of the four checks above is reading the subject');
+    if (C.schemaFingerprint() !== got) throw new Error('the stub was not restored: the fingerprint is now ' + C.schemaFingerprint());
+
+    const fx = C.SCHEMA_FIXTURE();
+    fx[0].effects[0].params.radius = 999;
+    if (P.cyrb53(P.canon(fx)) === P.cyrb53(P.canon(C.SCHEMA_FIXTURE()))) throw new Error('CONTROL: changing the fixture did not change its hash');
+    if (!(C.PROTO >= 1) || !(C.SCHEMA_REV >= 1)) throw new Error('PROTO and SCHEMA_REV must be at least 1');
+  });
+
+  test('921 S1 an extra uid changes no effect comparison, no picture and no sanitiser answer', { item: '921', budgetMs: 60000 }, function () {
+    const C = need921('the uid audit');
+    const P = C.path;
+
+    /* §5.4 asked for an audit of every place that compares effect objects by JSON.stringify or
+       enumerates their keys, and a test that an extra uid changes none of the results. The sites, as
+       measured by grepping js/ for JSON.stringify over an fx or a layer:
+       · inspector.js:2452/2466  a CACHE KEY for the does-this-effect-do-anything hint;
+       · fx-thumbs.js:1267       the layer-preview signature (sceneRev);
+       · inspector.js:1284/2189  Duplicate, which copies an effect through JSON;
+       · fx-presets.js:215/291   preset storage, also through JSON.
+       In every one of them the string is a KEY or a COPY, never a decision — so the failure an extra
+       uid could cause is a cache MISS (one recomputation), never a wrong answer. This test pins the
+       part that would actually hurt: the answers and the picture do not move. */
+    const withUid = kitchen921(11);
+    const without = JSON.parse(JSON.stringify(withUid));
+    const strip = function (node, depth) {
+      if (!node || typeof node !== 'object' || (depth || 0) > 24) return;
+      if (Array.isArray(node)) { node.forEach(function (x) { strip(x, (depth || 0) + 1); }); return; }
+      delete node.uid;
+      Object.keys(node).forEach(function (k) { strip(node[k], (depth || 0) + 1); });
+    };
+    strip(without, 0);
+    if (P.canon(withUid) === P.canon(without)) throw new Error('CONTROL: the two fixtures are identical, so this test compares a document with itself');
+
+    /* 1. the picture. This is the one that matters: a uid must be invisible to the renderer. */
+    const shot = function (doc) {
+      const c = document.createElement('canvas');
+      c.width = 160; c.height = 120;
+      const ctx = c.getContext('2d');
+      FM.renderScene(ctx, { project: Object.assign({}, doc.project, { width: 160, height: 120 }), layers: doc.layers }, 0.5);
+      return c.toDataURL();
+    };
+    const a = shot(withUid), b = shot(without);
+    if (a !== b) throw new Error('an effect carrying a uid renders differently from the same effect without one — a uid is supposed to be inert data, and this says the renderer is reading it');
+
+    /* 2. the sanitiser's answer for everything EXCEPT the uid itself. */
+    const sa = JSON.parse(JSON.stringify(withUid.layers)), sb = JSON.parse(JSON.stringify(without.layers));
+    FM.storage._sanitizeLayers(sa); FM.storage._sanitizeLayers(sb);
+    strip(sa, 0);
+    if (P.canon(sa) !== P.canon(sb)) throw new Error('the sanitiser produced a different result for a document that differs only by uids — S0\'s byte-identity bargain is broken');
+
+    /* 3. FM.jsonReplacer keeps it (it strips _ keys only), so a uid survives an autosave round trip
+       and the keyed array does not silently go atomic after a reload. */
+    const round = JSON.parse(JSON.stringify(withUid.layers[3], FM.jsonReplacer));
+    const anyUid = JSON.stringify(round).indexOf('"uid"') >= 0;
+    if (!anyUid) throw new Error('jsonReplacer stripped uid, so every autosave would throw the keys away and the array would be keyed on one device and atomic on the next');
+
+    /* 4. duplicating an effect the way the inspector does produces a DUPLICATE uid, which is exactly
+       the case stampIds re-stamps — so the two halves agree. */
+    const L = { id: 'l1', effects: [{ type: 'blur', params: {}, uid: 'abcd1234' }] };
+    L.effects.push(JSON.parse(JSON.stringify(L.effects[0], FM.jsonReplacer)));
+    if (L.effects[1].uid !== 'abcd1234') throw new Error('the Duplicate path did not copy the uid, so this case cannot arise — rewrite the fixture');
+    P.stampIds({ project: {}, layers: [L] });
+    if (L.effects[0].uid !== 'abcd1234' || L.effects[1].uid === 'abcd1234') throw new Error('the duplicate produced by Duplicate was not re-stamped: ' + JSON.stringify(L.effects.map(function (e) { return e.uid; })));
+  });
+
+  test('921 S1 the collab core is inert: no session, no hooks, no globals beyond FM.collab', { item: '921' }, function () {
+    const C = need921('inertness');
+    if (C.active !== false) throw new Error('FM.collab.active is ' + C.active + ' on a page nobody shared — every S0 hook in history.js, storage.js and app.js reads that flag');
+    /* The S0 hooks call these when active is true. They do not exist yet, and that is the proof that
+       nothing in S1 can run: if one of them appeared while `active` stayed false it would be dead
+       code, and if `active` ever went true without them the app would throw on the next commit. */
+    ['beforeSnap', 'afterCommit', 'undoActive', 'undo', 'redo', 'canUndo', 'canRedo', 'onReset', 'beforeFlush', 'reachable', 'isGuest', 'deferReload', 'presence'].forEach(function (k) {
+      if (C[k] !== undefined) throw new Error('FM.collab.' + k + ' exists in stage S1 — it belongs to the session (S2), and shipping it now means a hook that half-works');
+    });
+    const allowed = ['PROTO', 'SCHEMA_REV', 'SCHEMA_FP', 'SCHEMA_FIXTURE', 'schemaFingerprint', 'active', 'role', 'LIMITS', 'OP_GRAMMAR', 'path', 'diff', 'Host'];
+    const extra = Object.keys(C).filter(function (k) { return allowed.indexOf(k) < 0; });
+    if (extra.length) throw new Error('FM.collab gained ' + extra.join(', ') + ' — stage S1 is constants plus three pure libraries and nothing else');
+    ['collab', 'CollabHost', 'collabHost', 'qrcode', 'jsQR'].forEach(function (g) {
+      if (window[g] !== undefined) throw new Error('window.' + g + ' exists — the collab modules must attach to FM.collab only');
+    });
+    if (document.getElementById('collab-people') || document.getElementById('hm-join-btn')) throw new Error('collab DOM exists with Labs off');
+    /* CONTROL: the namespace really is there, so the emptiness above is emptiness and not absence. */
+    if (typeof C.Host !== 'function' || typeof C.path.canon !== 'function' || typeof C.diff.diffDoc !== 'function') throw new Error('CONTROL: the modules are not loaded at all');
+  });
+
+  /* A guest reduced to the two trees and the receive rules — §8.1 (pending), §8.3 (structural wins),
+   * §8.5 (our own ack) and §13.2 (reconnect). Nothing else: a PlainAdapter guest has no DOM, so it
+   * cannot be interacting, so the held/deferred half of §8.2 has nothing to defer. That half lands
+   * with the bridge in S2 and is tested there against the real app.
+   * `base` is host-confirmed plus our own outstanding ops; `live` is what the person sees. */
+  function guest921(mid, doc, host) {
+    const C = FM.collab, P = C.path, D = C.diff;
+    const g = {
+      mid: mid, live: doc, base: jclone921(doc),
+      cid: 0, pending: Object.create(null), outbox: [],
+      online: true, bs: 0, epoch: host.epoch,
+      sent: 0, skipped: 0, structWins: 0, snaps: 0, tails: 0, presSeen: 0, adopted: 0
+    };
+
+    function pathOf(op) { return op.p || ['L', op.id]; }
+    function strictAncestorOfPending(p) {
+      const keys = Object.keys(g.pending);
+      for (let i = 0; i < keys.length; i++) {
+        const q = P.fromWire(keys[i]);
+        if (q && q.length > p.length && P.overlaps(p, q)) return true;
+      }
+      return false;
+    }
+    function overlapsPending(p) {
+      const keys = Object.keys(g.pending);
+      for (let i = 0; i < keys.length; i++) { const q = P.fromWire(keys[i]); if (q && P.overlaps(p, q)) return true; }
+      return false;
+    }
+    function dropPendingUnder(p) {
+      Object.keys(g.pending).forEach(function (k) { const q = P.fromWire(k); if (q && P.overlaps(p, q)) delete g.pending[k]; });
+    }
+    /* struct → applies to base AND live and clears what was pending underneath (§8.3);
+       move  → li/mv/ai/am never conflict with a content edit, they only move things;
+       leaf  → skipped in BOTH base and live when it overlaps a pending path (§8.1), because ctl is
+               ordered: if their batch got here before our ack, the host sequenced theirs first and
+               ours is still coming. */
+    function classify(op) {
+      if (op.o === 'lr' || op.o === 'ar') return 'struct';
+      if (op.o === 'li' || op.o === 'mv' || op.o === 'ai' || op.o === 'am') return 'move';
+      return strictAncestorOfPending(pathOf(op)) ? 'struct' : 'leaf';
+    }
+
+    g.applyRemote = function (ops, ownAck, ackCid) {
+      ops.forEach(function (op) {
+        const p = pathOf(op);
+        if (ownAck) {
+          D.apply(g.base, op);
+          if (!laterPending(p, ackCid)) D.apply(g.live, op);
+          return;
+        }
+        const kind = classify(op);
+        if (kind === 'leaf' && overlapsPending(p)) { g.skipped++; return; }
+        D.apply(g.base, op);
+        D.apply(g.live, op);
+        if (kind === 'struct') { dropPendingUnder(p); g.structWins++; }
+      });
+    };
+    function laterPending(p, cid) {
+      const keys = Object.keys(g.pending);
+      for (let i = 0; i < keys.length; i++) {
+        if (g.pending[keys[i]] <= cid) continue;
+        const q = P.fromWire(keys[i]);
+        if (q && P.overlaps(p, q)) return true;
+      }
+      return false;
+    }
+
+    /* One local step: normalise, diff against base, apply to base, remember what is outstanding, and
+       hand back the tx (or park it in the outbox while offline). Every op carries `b`/`bh` so the tx
+       can be replayed with q:1 after a reconnect without needing the host to have remembered us. */
+    g.step = function () {
+      P.stampIds(g.live);
+      const res = D.diffDoc(g.base, g.live);
+      if (!res.ops.length) return null;
+      const ops = res.ops.map(function (op, i) {
+        const rec = res.recs[i] || {};
+        const q = jclone921(op);
+        if (op.o === 'lr' || op.o === 'ar') q.bh = rec.bh;
+        else if (op.o === 's' || op.o === 'd') q.b = (rec.b === undefined) ? { $u: 1 } : rec.b;
+        return q;
+      });
+      ops.forEach(function (op) { D.apply(g.base, op); });
+      const cid = ++g.cid;
+      /* ⚠️ ONLY `s` AND `d` GO INTO PENDING, and §8.1 has been corrected to say so. It reads "every op
+         a guest sends is recorded as pending[pathKey]", and a `mv`/`li`/`lr` has no path of its own —
+         its key is the LAYER, `L/<id>`. Recording that marks the layer's whole subtree as pending, and
+         §8.1 then skips every remote content op under it: while my drag of a clip is in flight, your
+         rename of it, your mask edit and your slider all arrive and are silently thrown away, in base
+         as well as live, and nothing ever brings them back. The fuzz found it at round 214 of 300.
+         A structural op claims a POSITION, and position is settled by the host's order statement and
+         by the ack echo; only s and d claim a VALUE, which is what "last to let go wins" is about. */
+      ops.forEach(function (op) { if (op.o === 's' || op.o === 'd') g.pending[P.key(op.p)] = cid; });
+      g.sent++;
+      const tx = { t: 'tx', cid: cid, bs: g.bs, ops: ops };
+      if (!g.online) { g.outbox.push(tx); return null; }
+      return tx;
+    };
+
+    /* The host is authoritative about ORDER, and says so: a batch that reordered anything carries the
+       resulting key list and we adopt it outright. Two relative moves made at the same moment do not
+       commute (see the note on diff.applyOrder), so without this the stacks quietly disagree forever. */
+    g.adopt = function (ord) {
+      if (!ord || !ord.length) return;
+      ord.forEach(function (st) { D.applyOrder(g.base, st); if (D.applyOrder(g.live, st) === 'ok') g.adopted++; });
+    };
+    g.onB = function (b) {
+      if (b.seq <= g.bs) return;
+      g.bs = b.seq;
+      g.applyRemote((b.ops || []).concat(b.fix || []), false, 0);
+      g.adopt(b.ord);
+    };
+    g.onAck = function (ack) {
+      Object.keys(g.pending).forEach(function (k) { if (g.pending[k] === ack.cid) delete g.pending[k]; });
+      g.applyRemote((ack.ops || []).concat(ack.fix || []), true, ack.cid);
+      g.adopt(ack.ord);
+      if (ack.seq) g.bs = Math.max(g.bs, ack.seq);
+    };
+
+    /* §13.2. Tail when the epoch matches and the ring still reaches back; otherwise a snapshot, with
+       our own outstanding ops re-applied on top and live repaired around them. */
+    g.reconnect = function () {
+      const t = (g.epoch === host.epoch) ? host.tail(g.bs) : null;
+      if (t) {
+        g.tails++;
+        t.batches.forEach(g.onB);
+        /* ⚠️ AND THEN PENDING IS CLEARED, which the first version of this harness did not do and the
+           fuzz caught within 300 rounds. A tx sent just before the line dropped gets its ack delivered
+           to nobody — so its path stays marked pending, and §8.1 then skips EVERY remote value for
+           that path for the rest of the session. The guest sits on one stale number forever and
+           nothing ever notices. Anything of ours the host did accept is in the tail we just applied;
+           anything it did not is in the outbox and is re-sent below with q:1. */
+        g.pending = Object.create(null);
+      } else {
+        g.snaps++;
+        const snap = host.snapshot();
+        const mine = [];
+        g.outbox.forEach(function (tx) { tx.ops.forEach(function (op) { mine.push(op); }); });
+        g.epoch = snap.epoch; g.bs = snap.seq;
+        g.base = jclone921(snap.D);
+        mine.forEach(function (op) { D.apply(g.base, op); });
+        const res = D.diffDoc(g.live, g.base);
+        res.ops.forEach(function (op) {
+          const p = pathOf(op);
+          for (let i = 0; i < mine.length; i++) if (P.overlaps(pathOf(mine[i]), p)) return;
+          D.apply(g.live, op);
+        });
+        g.pending = Object.create(null);
+      }
+      g.online = true;
+      const out = g.outbox.map(function (tx) { return { t: 'tx', cid: tx.cid, bs: g.bs, q: 1, ops: tx.ops }; });
+      g.outbox = [];
+      out.forEach(function (tx) { tx.ops.forEach(function (op) { if (op.o === 's' || op.o === 'd') g.pending[P.key(op.p)] = tx.cid; }); });
+      return out;
+    };
+    return g;
+  }
+
+  test('921 S1 convergence fuzz: a host and three guests, 300 seeded rounds with latency, dropped presence, a disconnect, a rejoin and an epoch bump', { item: '921', budgetMs: 300000 }, function () {
+    const C = need921('convergence');
+    const P = C.path, D = C.diff;
+    const R = rng921(20260923);
+    let clock = 0;
+
+    /* The document every device starts from, pre-sanitised — which is what §7.3 does when a share is
+       armed, and the reason a guest's own defensive pass finds nothing to change. */
+    const start = kitchen921(77);
+    FM.storage._sanitizeLayers(start.layers);
+    P.stampIds(start);
+
+    const ownerDoc = jclone921(start);
+    const seqLog = [];                       // every sequenced op, for the resurrection invariant
+    const host = C.Host({
+      base: jclone921(start), invariants: invariants921(), epoch: 'e1',
+      now: function () { return clock; },
+      live: function (ops, by, batch) {
+        ops.forEach(function (op) { D.apply(ownerDoc, op); });
+        if (batch && batch.ord) batch.ord.forEach(function (st) { D.applyOrder(ownerDoc, st); });
+        seqLog.push.apply(seqLog, ops);
+      }
+    });
+    const guests = ['g1', 'g2', 'g3'].map(function (mid) {
+      host.join(mid, { role: 'editor', name: mid, color: '#ff8800' });
+      return guest921(mid, jclone921(start), host);
+    });
+    const byMid = {}; guests.forEach(function (g) { byMid[g.mid] = g; });
+
+    /* The wire. ctl is ordered and reliable per peer (§20), so latency varies but order does not;
+       pres is neither, and gets reordered and dropped on purpose. */
+    const ctl = []; let wseq = 0; const lastAt = {};
+    function send(to, msg) {
+      const at = Math.max(clock + 1 + Math.floor(R() * 400), (lastAt[to] || 0) + 1);
+      lastAt[to] = at;
+      ctl.push({ at: at, seq: wseq++, to: to, msg: msg });
+    }
+    let presSent = 0, presDropped = 0, presReordered = 0;
+    const pres = [];
+    function sendPres(to) {
+      presSent++;
+      if (R() < 0.25) { presDropped++; return; }                 // maxRetransmits:0 — it just goes
+      pres.push({ to: to, n: presSent, at: clock + Math.floor(R() * 900) });
+    }
+    function deliverPres() {
+      const due = pres.filter(function (m) { return m.at <= clock; });
+      for (let i = due.length - 1; i > 0; i--) {                  // ordered:false — shuffle what is due
+        const j = Math.floor(R() * (i + 1));
+        if (j !== i) { const t = due[i]; due[i] = due[j]; due[j] = t; presReordered++; }
+      }
+      due.forEach(function (m) {
+        const g = byMid[m.to]; if (!g) return;
+        if (m.n < g.presSeen) presReordered++;
+        g.presSeen = m.n;
+        pres.splice(pres.indexOf(m), 1);
+      });
+    }
+    function deliverCtl() {
+      const due = ctl.filter(function (m) { return m.at <= clock; }).sort(function (a, b) { return a.at - b.at || a.seq - b.seq; });
+      due.forEach(function (m) {
+        ctl.splice(ctl.indexOf(m), 1);
+        if (m.to === 'h') { hostTake(m.from, m.msg); return; }
+        const g = byMid[m.to];
+        if (!g || !g.online) return;                              // a message to a disconnected peer is gone
+        if (m.msg.t === 'ack') g.onAck(m.msg); else if (m.msg.t === 'b') g.onB(m.msg);
+      });
+    }
+    function toHost(from, tx) {
+      const at = Math.max(clock + 1 + Math.floor(R() * 400), (lastAt['h:' + from] || 0) + 1);
+      lastAt['h:' + from] = at;
+      ctl.push({ at: at, seq: wseq++, to: 'h', from: from, msg: tx });
+    }
+    let batches = 0, rateRetries = 0;
+    function hostTake(mid, tx) {
+      const r = host.receive(mid, tx);
+      if (r.dropped === 'rate') { rateRetries++; toHost(mid, tx); return; }   // §13.5: retried, never lost
+      if (r.ack) send(mid, r.ack);
+      if (r.b) { batches++; guests.forEach(function (g) { if (g.mid !== mid) send(g.mid, r.b); }); }
+    }
+    function ownerStep() {
+      P.stampIds(ownerDoc);
+      const res = D.diffDoc(host.base, ownerDoc);
+      if (!res.ops.length) return;
+      const r = host.local(res.ops);
+      if (r.b) { batches++; guests.forEach(function (g) { send(g.mid, r.b); }); }
+    }
+
+    let disconnects = 0, rejoins = 0, mutations = 0;
+    let bumped = false;
+    for (let round = 0; round < 300; round++) {
+      clock += 250;
+
+      /* 1. somebody edits. More than one peer per round, often, which is the point. */
+      const actors = 1 + Math.floor(R() * 3);
+      for (let a = 0; a < actors; a++) {
+        const who = Math.floor(R() * 4);
+        if (who === 3) { mutate921(ownerDoc, round * 31 + a * 7 + 1, 1 + Math.floor(R() * 2)); mutations++; ownerStep(); }
+        else {
+          const g = guests[who];
+          mutate921(g.live, round * 37 + a * 11 + 3, 1 + Math.floor(R() * 2)); mutations++;
+          const tx = g.step();
+          if (tx) toHost(g.mid, tx);
+        }
+      }
+
+      /* 2. presence noise on the unreliable channel. The core must never read it. */
+      guests.forEach(function (g) { if (R() < 0.6) sendPres(g.mid); });
+
+      /* 3. a lease, held for a while, so somebody's op really is refused mid-flight. */
+      if (round % 40 === 7) {
+        const L = host.base.layers[Math.floor(R() * host.base.layers.length)];
+        if (L) host.grantLease(L.id, 'g2');
+      }
+      if (round % 40 === 23) Object.keys(host.leases).forEach(function (k) { host.releaseLease(k); });
+
+      /* 4. a disconnect, edits made offline, then a rejoin: once through the TAIL (the ring still
+         reaches back) and, after the epoch bump, through a SNAPSHOT. */
+      if (round === 60 || round === 150 || round === 230) {
+        const g = guests[round % 3];
+        if (g.online) { g.online = false; disconnects++; }
+      }
+      if (round === 80 || round === 175 || round === 250) {
+        guests.forEach(function (g) {
+          if (g.online) return;
+          rejoins++;
+          g.reconnect().forEach(function (tx) { toHost(g.mid, tx); });
+        });
+      }
+      if (round === 200 && !bumped) {
+        bumped = true;
+        host.bumpEpoch('e2');
+        guests.forEach(function (g) { g.online = false; });
+        ctl.length = 0;
+      }
+      if (round === 205) {
+        guests.forEach(function (g) { if (!g.online) { rejoins++; g.reconnect().forEach(function (tx) { toHost(g.mid, tx); }); } });
+      }
+
+      deliverCtl();
+      deliverPres();
+    }
+
+    /* Quiescence: let the wire empty, bring everyone back, drop every lease, and let each device
+       settle. Convergence is a statement about the resting state, not about the middle of a storm. */
+    Object.keys(host.leases).forEach(function (k) { host.releaseLease(k); });
+    guests.forEach(function (g) { if (!g.online) { rejoins++; g.reconnect().forEach(function (tx) { toHost(g.mid, tx); }); } });
+    for (let i = 0; i < 60; i++) {
+      clock += 2000;
+      deliverCtl();
+      ownerStep();
+      guests.forEach(function (g) { const tx = g.step(); if (tx) toHost(g.mid, tx); });
+      deliverCtl();
+      if (!ctl.length) {
+        let quiet = true;
+        if (D.diffDoc(host.base, ownerDoc).ops.length) quiet = false;
+        guests.forEach(function (g) { if (D.diffDoc(g.base, g.live).ops.length) quiet = false; });
+        if (quiet) break;
+      }
+    }
+
+    /* ── the invariants ─────────────────────────────────────────────────────────────────────── */
+    const H = P.canon({ project: host.base.project, layers: host.base.layers });
+    const hHash = host.hash();
+    const trouble = [];
+    if (P.canon({ project: ownerDoc.project, layers: ownerDoc.layers }) !== H) {
+      trouble.push('the owner\'s live tree differs from the host\'s base at ' + firstDiffPath921(ownerDoc, host.base));
+    }
+    guests.forEach(function (g) {
+      if (P.canon({ project: g.base.project, layers: g.base.layers }) !== H) trouble.push(g.mid + '\'s base differs from the host at ' + firstDiffPath921(g.base, host.base));
+      if (P.canon({ project: g.live.project, layers: g.live.layers }) !== H) trouble.push(g.mid + '\'s live tree differs from the host at ' + firstDiffPath921(g.live, host.base));
+      if (P.cyrb53(P.canon({ project: g.base.project, layers: g.base.layers })) !== hHash) trouble.push(g.mid + '\'s hash differs');
+    });
+    guests.forEach(function (g) {
+      const left = Object.keys(g.pending);
+      if (left.length) trouble.push(g.mid + ' is still holding ' + left.length + ' pending path(s) at rest, starting ' + left[0] + ' — every remote value for those is being skipped');
+    });
+    if (trouble.length) throw new Error('THE SESSION DID NOT CONVERGE after 300 seeded rounds (seed 20260923): ' + trouble.slice(0, 4).join(' ;; '));
+
+    /* no layer that was deleted came back (except as a fresh insert after the deletion) */
+    const lastEvent = {};
+    seqLog.forEach(function (op) {
+      if (op.o === 'li') lastEvent[op.id] = 'in';
+      else if (op.o === 'lr') lastEvent[op.id] = 'out';
+    });
+    const finalIds = host.base.layers.map(function (l) { return l.id; });
+    finalIds.forEach(function (id) {
+      if (lastEvent[id] === 'out') throw new Error('layer ' + id + ' is in the final document although the last thing that happened to it was a delete — a removal was undone by a stale upsert');
+    });
+    Object.keys(lastEvent).forEach(function (id) {
+      if (lastEvent[id] === 'in' && finalIds.indexOf(id) < 0) throw new Error('layer ' + id + ' was inserted and never deleted, and is not in the final document');
+    });
+
+    /* no cycles, no repeated ids, keyframes sorted */
+    if (FM.repairParentCycles(jclone921(host.base.layers))) throw new Error('the converged document contains a parent cycle — a document like that cannot be opened at all');
+    if (FM.normalizeGroupOrder(host.base.layers)) throw new Error('the converged document contains a repeated layer id');
+    const unsorted = [];
+    (function walk(node, where, depth) {
+      if (!node || typeof node !== 'object' || depth > 24) return;
+      if (Array.isArray(node)) { node.forEach(function (x, i) { walk(x, where + '[' + i + ']', depth + 1); }); return; }
+      if (Array.isArray(node.kf)) {
+        for (let i = 1; i < node.kf.length; i++) if (!(node.kf[i].t >= node.kf[i - 1].t)) unsorted.push(where);
+      }
+      Object.keys(node).forEach(function (k) { walk(node[k], where + '.' + k, depth + 1); });
+    })(host.base.layers, 'layers', 0);
+    if (unsorted.length) throw new Error('keyframes are out of order at ' + unsorted.slice(0, 3).join(', ') + ' — FM.evalProp walks them in order and returns the first value at every time, so the animation silently flattens');
+
+    /* ── POSITIVE CONTROLS. Every assertion above passes trivially against a fuzz that did nothing:
+       three identical copies of the starting document converge beautifully. */
+    if (batches < 200) throw new Error('CONTROL: only ' + batches + ' batches were sequenced in 300 rounds — nothing was actually being edited concurrently');
+    if (mutations < 300) throw new Error('CONTROL: only ' + mutations + ' mutations were made');
+    const skipped = guests.reduce(function (a, g) { return a + g.skipped; }, 0);
+    const wins = guests.reduce(function (a, g) { return a + g.structWins; }, 0);
+    if (!skipped) throw new Error('CONTROL: not one remote op was ever skipped for overlapping a pending path — the §8.1 rule this fuzz exists to exercise never fired, so a broken one would look identical');
+    if (!wins) throw new Error('CONTROL: structural-wins (§8.3) never fired');
+    const adopted = guests.reduce(function (a, g) { return a + g.adopted; }, 0);
+    if (!adopted) throw new Error('CONTROL: no guest ever had to adopt the host\'s order — the concurrent-reorder case this fuzz found is not being exercised, so the fix for it is untested');
+    if (disconnects < 3 || rejoins < 3) throw new Error('CONTROL: ' + disconnects + ' disconnects and ' + rejoins + ' rejoins');
+    const tails = guests.reduce(function (a, g) { return a + g.tails; }, 0);
+    const snaps = guests.reduce(function (a, g) { return a + g.snaps; }, 0);
+    if (!tails) throw new Error('CONTROL: no guest ever caught up through a TAIL, so §13.2\'s cheap path is untested');
+    if (!snaps) throw new Error('CONTROL: no guest ever caught up through a SNAPSHOT, so the epoch bump did nothing');
+    if (host.epoch !== 'e2' || host.seq === 0) throw new Error('CONTROL: the epoch bump did not happen or nothing was sequenced after it (' + host.epoch + ', seq ' + host.seq + ')');
+    if (!presDropped || !presReordered) throw new Error('CONTROL: presence was delivered perfectly (' + presDropped + ' dropped, ' + presReordered + ' reordered) — an unreliable channel that never misbehaves proves nothing about a core that must ignore it');
+    if (presSent < 100) throw new Error('CONTROL: only ' + presSent + ' presence messages were sent');
+    /* A retry is correct (§13.5) but a STORM of them means the fuzz is fighting the token bucket
+       rather than exercising the sequencer, and every count above would then be measuring the wrong
+       thing. Naming a ceiling makes that visible instead of silent. */
+    if (rateRetries > 60) throw new Error('CONTROL: ' + rateRetries + ' txs were rate-limited and retried — the fuzz is running the token bucket dry, so slow the rounds down before trusting anything else here');
+    if (host.base.layers.length < 2) throw new Error('CONTROL: the fuzz deleted its way down to ' + host.base.layers.length + ' layers, so most of it was running on an empty document');
+  });
+
   /* The one thing that separates this from sanitizeAudioFx, and the reason it is not a copy of it.
    * An ABSENT param key is meaningful — the renderer falls back to the effect's `legacy` value, which
    * for a param added to an existing effect is what that effect used to hardcode, NOT the schema
@@ -60532,7 +62368,13 @@
       'exp-solo-clip': 'an older name for #exp-solo-btn; the check accepts either so the rename cannot silently break it',
       'group-crumb':   'the floating "Editing group" pill was deleted; a test checks it stays deleted',
       'tc-bar':        'the timecode row Ezra asked to get his height back; a test checks it is gone',
-      'vb-onion':      'onion-skin moved out of the view bar rather than being copied into it'
+      'vb-onion':      'onion-skin moved out of the view bar rather than being copied into it',
+      /* queue 921: these two are the SHARE UI, and they land in S3 behind the Labs switch. Until then
+         `921 S1 the collab core is inert` asserts they do NOT exist — the whole bargain of the staged
+         build is that a solo user cannot tell collaboration shipped. Delete these two lines when S3
+         adds the markup; the inertness test will name them itself if it is ever left behind. */
+      'collab-people': 'queue 921 — the people chip arrives in S3; a test checks it is absent until then',
+      'hm-join-btn':   'queue 921 — Home\'s Join button, same stage, same reason'
     };
     const [tests, html] = await Promise.all([
       fetch('tests/tests.js', { cache: 'no-store' }).then(r => r.text()),
