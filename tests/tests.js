@@ -891,6 +891,37 @@
     }
   });
 
+  /* ═══ #921 STAGE S2 (spec §12.3) ═════════════════════════════════════════════════════════════════
+   * detachLinked copies the document ON DISK and then DELETES the project that still held the newer
+   * content in memory. Its sibling `duplicate()` opens with a flushSync for exactly this reason; this
+   * one did not, so everything edited inside the 600 ms autosave debounce was gone — and gone into a
+   * project that no longer exists. The path runs when the OWNER stops sharing, i.e. when he is not
+   * looking at the screen. */
+  test('921 S2 detaching a linked copy copies the last edits, not the last autosave', { item: '921', budgetMs: 60000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const pid = await FM.projects.create({ name: 'FX921 detach stale', width: 320, height: 240 });
+      made.push(pid);
+      FM.storage.flushSync();                       // disk and screen agree — so the gap below is exactly one layer
+      const L = FM.makeLayer('shape', { name: 'FX921 unsaved edit', start: 0, duration: 2 });
+      FM.scene.layers.push(L);                      // …and now the screen is ahead of the disk, as it is for up to 600 ms after every edit
+      const onDisk = JSON.parse(localStorage.getItem('fm.proj.' + pid) || '{"layers":[]}');
+      if ((onDisk.layers || []).some(function (l) { return l.name === 'FX921 unsaved edit'; })) throw new Error('CONTROL: the edit was already on disk, so there is no stale doc for detachLinked to copy');
+
+      const nid = await FM.projects.detachLinked(pid);
+      if (!nid) throw new Error('detachLinked made no project');
+      made.push(nid);
+      if (FM.projects.list().some(function (p) { return p.id === pid; })) throw new Error('CONTROL: the linked copy was not removed, so nothing was lost either way');
+      const names = (FM.scene.layers || []).map(function (l) { return l.name; });
+      if (names.indexOf('FX921 unsaved edit') < 0) throw new Error('the detached copy holds ' + JSON.stringify(names) + ': it was built from the last debounced autosave, and the project that still held the newer work was then deleted — silently, and with nothing left to recover it from');
+    } finally {
+      await q915aCleanup(made, orig, wasOpen, [], [], []);
+    }
+  });
+
   /* ── queue 915 clause 5, PHASE A: THE POINTER READER ───────────────────────────────────────────────
    * The one-copy build (branch fm-store) stores a clip reused from Add → Media as a POINTER,
    * `{ ref: 'lib:<mid>', kind, rev }`, at one shared copy under `lib:<mid>`. Its review found that every
@@ -1160,6 +1191,7 @@
     const shared = 'l_921shared' + ts, mine = 'l_921mine' + ts;
     const linkedKey = 'fm.proj.p_921linked' + ts;
     const otherCkpt = 'collab:ckpt:p_921other' + ts + ':1';
+    const otherBase = 'collab:base:p_921other' + ts;
     const made = [];
     let pid = null;
     try {
@@ -1181,6 +1213,9 @@
       await q915aPut(mine, { file: f, kind: 'image' });
       await q915aPut('collab:ckpt:' + pid + ':1', JSON.stringify({ project: {}, layers: [{ id: mine }] }));
       await q915aPut(otherCkpt, JSON.stringify({ project: {}, layers: [{ id: 'l_921elsewhere' + ts }] }));
+      /* …and the guest base §12.4 says goes with the copy it belongs to (queue 921 S2). */
+      await q915aPut('collab:base:' + pid, { v: 1, gpid: pid, D: { project: {}, layers: [] } });
+      await q915aPut(otherBase, { v: 1, gpid: 'p_921other' + ts, D: { project: {}, layers: [] } });
 
       await FM.projects.remove(pid);
 
@@ -1189,11 +1224,13 @@
       if (!raw[shared]) throw new Error('deleting one project deleted a media record that ANOTHER document still points at — a guest\'s linked copy shares the host\'s layer ids, so his friend\'s project (or his own) comes back with blank clips, permanently');
       if (raw['collab:ckpt:' + pid + ':1']) throw new Error('the deleted project\'s own checkpoints were left behind — they are the largest thing collab writes and nothing else would ever collect them');
       if (!raw[otherCkpt]) throw new Error('deleting one project deleted ANOTHER project\'s checkpoint');
+      if (raw['collab:base:' + pid]) throw new Error('the deleted project\'s own persisted guest base survived it — §12.4 collects that record when the copy is detached or removed, and the seam written for it (collab.bridge.dropBase) has no caller anywhere, so every join-then-leave left a whole document in IndexedDB that no rule can ever name again: pruneOrphans is taught to skip everything under collab:');
+      if (!raw[otherBase]) throw new Error('deleting one project deleted ANOTHER project\'s persisted base');
       if (localStorage.getItem('fm.collab.host.' + pid) !== null) throw new Error('the room record for the deleted project survived it — its link would still be handed out');
     } finally {
       try { localStorage.removeItem(linkedKey); } catch (e) {}
       try { localStorage.removeItem('fm.collab.host.' + pid); } catch (e) {}
-      for (const k of [shared, mine, otherCkpt, 'collab:ckpt:' + pid + ':1']) { try { await q915aDel(k); } catch (e) {} }
+      for (const k of [shared, mine, otherCkpt, otherBase, 'collab:ckpt:' + pid + ':1', 'collab:base:' + pid]) { try { await q915aDel(k); } catch (e) {} }
       await q915aCleanup(made, orig, wasOpen, [], [], []);
     }
   });
@@ -28908,6 +28945,23 @@
     }, function () { FM.fxRegistry.all = realAll; });
     if (why) throw new Error(why);
 
+    /* THE DERIVED-WRITER TERM (queue 921 S2). S1 left it out because the bridge did not exist yet and
+       said in its own comment that S2 would add it and re-pin the constant. Two devices that disagree
+       about what autoFitDuration computes disagree about D forever, each "correcting" the other, and
+       the divergence detector resyncs in a loop that nobody can see the cause of. */
+    const realFit = FM.autoFitDuration;
+    why = moves('a derived writer that computes differently', function () {
+      FM.autoFitDuration = function () { realFit(); FM.scene.project.duration = (FM.scene.project.duration || 0) + 0.5; };
+    }, function () { FM.autoFitDuration = realFit; });
+    if (why) throw new Error(why);
+    /* …and measuring it must leave FM.scene exactly where it found it — derivedFingerprint() swaps a
+       fixture in to run writers that take no argument, and a swap that leaked would replace his open
+       project with a two-layer test document. */
+    const sceneBefore = FM.scene, timeBefore = FM.time;
+    C.schemaFingerprint();
+    if (FM.scene !== sceneBefore) throw new Error('measuring the fingerprint left FM.scene pointing at the fixture — the open project would be gone');
+    if (FM.time !== timeBefore) throw new Error('measuring the fingerprint moved the playhead (' + timeBefore + ' → ' + FM.time + ')');
+
     /* …and the controls are themselves live: a schemaFingerprint() that ignores its inputs must FAIL
        the first of them rather than sail through it. This is the positive control for the negatives. */
     const realFp = C.schemaFingerprint;
@@ -28982,24 +29036,39 @@
     if (L.effects[0].uid !== 'abcd1234' || L.effects[1].uid === 'abcd1234') throw new Error('the duplicate produced by Duplicate was not re-stamped: ' + JSON.stringify(L.effects.map(function (e) { return e.uid; })));
   });
 
-  test('921 S1 the collab core is inert: no session, no hooks, no globals beyond FM.collab', { item: '921' }, function () {
+  test('921 S2 the collab core is inert until a session is attached: no session, no listeners, no UI, no globals', { item: '921' }, function () {
     const C = need921('inertness');
-    if (C.active !== false) throw new Error('FM.collab.active is ' + C.active + ' on a page nobody shared — every S0 hook in history.js, storage.js and app.js reads that flag');
-    /* The S0 hooks call these when active is true. They do not exist yet, and that is the proof that
-       nothing in S1 can run: if one of them appeared while `active` stayed false it would be dead
-       code, and if `active` ever went true without them the app would throw on the next commit. */
-    ['beforeSnap', 'afterCommit', 'undoActive', 'undo', 'redo', 'canUndo', 'canRedo', 'onReset', 'beforeFlush', 'reachable', 'isGuest', 'deferReload', 'presence'].forEach(function (k) {
-      if (C[k] !== undefined) throw new Error('FM.collab.' + k + ' exists in stage S1 — it belongs to the session (S2), and shipping it now means a hook that half-works');
+    if (C.active !== false) throw new Error('FM.collab.active is ' + C.active + ' on a page nobody shared — every S0 hook in history.js, storage.js and app.js reads that flag, and a test that left a session attached would make every later commit in this suite run the collab pipeline');
+    if (C.session) throw new Error('a session is attached on a page nobody shared (role ' + C.role + ')');
+    /* S2 gives the S0 hooks something to reach. Every one must EXIST — a half-present hook is how
+       `history.commit()` throws for a feature the person is not even using — and every one must answer
+       instantly and harmlessly with no session. */
+    ['beforeSnap', 'afterCommit', 'undoActive', 'undo', 'redo', 'canUndo', 'canRedo', 'onReset', 'beforeFlush', 'reachable', 'isGuest', 'deferReload'].forEach(function (k) {
+      if (typeof C[k] !== 'function') throw new Error('FM.collab.' + k + ' is missing — the S0 call sites read it on every commit, undo, flush and media sweep');
     });
-    const allowed = ['PROTO', 'SCHEMA_REV', 'SCHEMA_FP', 'SCHEMA_FIXTURE', 'schemaFingerprint', 'active', 'role', 'LIMITS', 'OP_GRAMMAR', 'path', 'diff', 'Host'];
+    C.beforeSnap(); C.afterCommit(); C.beforeFlush(); C.onReset();
+    if (C.undoActive() !== false || C.canUndo() !== false || C.canRedo() !== false) throw new Error('the undo delegation is on with no session — FM.history.undo() would hand a solo undo to nothing');
+    if (C.reachable('anything') !== false) throw new Error('reachable() claims an id with no session, which would pin media forever');
+    if (C.isGuest() !== false) throw new Error('isGuest() is true with no session');
+    /* Presence is S5. It must not appear early: app.js:109 calls it on EVERY render. */
+    if (C.presence !== undefined) throw new Error('FM.collab.presence exists — it belongs to stage S5, and app.js calls it inside render()');
+    const allowed = ['PROTO', 'SCHEMA_REV', 'SCHEMA_FP', 'SCHEMA_FIXTURE', 'schemaFingerprint', 'DERIVED_FIXTURE', 'derivedFingerprint', 'active', 'role', 'LIMITS', 'OP_GRAMMAR',
+      'path', 'diff', 'Host', 'Session', 'bridge', 'link', 'DENY', '_viewOfProject',
+      'session', 'attach', 'detach', 'share', 'join', 'leave', 'end', 'reopen', 'sameDeviceCopy', 'testMode',
+      'beforeSnap', 'afterCommit', 'beforeFlush', 'undoActive', 'undo', 'redo', 'canUndo', 'canRedo',
+      'onReset', 'reachable', 'isGuest', 'deferReload', '_pendingReload', '_undoHandover', '_reload', '_agentTag', 'lastError'];
     const extra = Object.keys(C).filter(function (k) { return allowed.indexOf(k) < 0; });
-    if (extra.length) throw new Error('FM.collab gained ' + extra.join(', ') + ' — stage S1 is constants plus three pure libraries and nothing else');
+    if (extra.length) throw new Error('FM.collab gained ' + extra.join(', ') + ' — stage S2 is the engine and its hooks, and anything beyond that list belongs to a later stage (UI is S3, media S4, presence S5)');
     ['collab', 'CollabHost', 'collabHost', 'qrcode', 'jsQR'].forEach(function (g) {
       if (window[g] !== undefined) throw new Error('window.' + g + ' exists — the collab modules must attach to FM.collab only');
     });
-    if (document.getElementById('collab-people') || document.getElementById('hm-join-btn')) throw new Error('collab DOM exists with Labs off');
+    if (document.getElementById('collab-people') || document.getElementById('hm-join-btn') || document.getElementById('btn-share')) throw new Error('collab DOM exists — S2 ships no UI at all');
+    /* ⚠️ THE LISTENERS ARE THE POINT OF §23, and they are the one thing here a solo user could feel.
+       The bridge installs capture listeners on document for pointer and key events; with no session
+       there must be none, and `installed()` is how that is stated. */
+    if (C.bridge.installed()) throw new Error('the bridge\'s document-wide pointer and key capture listeners are installed with no session running — §23 promises a solo user no listeners at all');
     /* CONTROL: the namespace really is there, so the emptiness above is emptiness and not absence. */
-    if (typeof C.Host !== 'function' || typeof C.path.canon !== 'function' || typeof C.diff.diffDoc !== 'function') throw new Error('CONTROL: the modules are not loaded at all');
+    if (typeof C.Host !== 'function' || typeof C.Session !== 'function' || typeof C.path.canon !== 'function' || typeof C.diff.diffDoc !== 'function' || typeof C.link.LoopLink !== 'function') throw new Error('CONTROL: the modules are not loaded at all');
   });
 
   /* A guest reduced to the two trees and the receive rules — §8.1 (pending), §8.3 (structural wins),
@@ -29388,6 +29457,1443 @@
        thing. Naming a ceiling makes that visible instead of silent. */
     if (rateRetries > 60) throw new Error('CONTROL: ' + rateRetries + ' txs were rate-limited and retried — the fuzz is running the token bucket dry, so slow the rounds down before trusting anything else here');
     if (host.base.layers.length < 2) throw new Error('CONTROL: the fuzz deleted its way down to ' + host.base.layers.length + ' layers, so most of it was running on an empty document');
+  });
+
+  /* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   * #921 STAGE S2 — TIER 2: the real app plus virtual peers, over the in-page loopback link (§25.2).
+   *
+   * The real FM is the HOST. Its peers are PlainAdapter guests — two plain trees and the same engine,
+   * with no DOM — joined by `FM.collab.link.LoopLink` in manual mode, so a test can hold every message
+   * in flight and step the conversation one hop at a time. That is what makes "the slider did not jump
+   * under the finger" an assertion rather than a race.
+   *
+   * ⚠️ EVERY ONE OF THESE MUST TEAR THE SESSION DOWN. A session left attached makes every later test's
+   * `history.commit()` run the collab hooks, which is a whole-suite failure that looks like a bug in
+   * whatever test happens to run next. `withCollab921` is the only way in.
+   * ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+  /* A guest with no DOM: two plain trees and the DocAdapter contract, nothing else. */
+  function plainAdapter921(doc, inv) {
+    const A = {
+      doc: function () { return doc; },
+      view: function () { return { project: doc.project, layers: doc.layers }; },
+      selected: function () { return null; },
+      selectedIds: function () { return []; },
+      normalizeDerived: function () {},
+      interacting: function () { return !!A._busyHands; },
+      busy: function () { return false; },
+      frozen: function () { return false; },
+      afterApply: function () { A.applied = (A.applied || 0) + 1; },
+      /* §13.1's two link-state callbacks. They are here so a test can ask whether the session actually
+         TOLD anybody the wire went — the banner S3 will show hangs off exactly this (queue 921). */
+      offlineN: 0, onlineN: 0,
+      onOffline: function () { A.offlineN++; },
+      onOnline: function () { A.onlineN++; },
+      invariants: function () { return inv; }
+    };
+    return A;
+  }
+
+  /* Arm a session on the REAL app over a scene of `layers`, run `fn(ctx)`, and take it down whatever
+     happens. `ctx.ids` are the layer ids AFTER applyScene, which re-ids everything it is handed. */
+  async function withCollab921(layers, fn) {
+    const C = need921('the session engine');
+    if (!C.Session || !C.bridge || !C.link) {
+      throw new Error('FM.collab.Session / .bridge / .link is missing — the stage-S2 engine (js/collab-session.js, js/collab-bridge.js, js/collab-link.js) is not loaded, so none of the receive rules can be measured');
+    }
+    const wasExporting = FM._exporting;
+    /* PUT THE APP BACK (queue 921). applyScene() replaces the OPEN project's scene — its 320x240 canvas and the
+       fixture layers — and this helper used to leave it that way. Every later test that assumes an ordinary project
+       then ran against a 320x240 canvas holding layer 'A': measured, the effects-sheet preview and the Presets tiles
+       failed in suite order and passed alone, which reads as "the feature is broken" and is not. The scene is kept by
+       REFERENCE and pushed back (editorWithShape's pattern) rather than re-applied, because applyScene re-ids every
+       layer and would rewrite his project's media keys. */
+    /* THE FIXTURE GETS ITS OWN PROJECT (queue 921). applyScene() replaces the OPEN project's scene, and the app's
+       autosave then writes that fixture to disk — so restoring the scene in memory was not enough: q915aCleanup
+       reopened the project and read the fixture back, and every later test ran against a 320x240 scene holding
+       'A','B'. Measured by bisect: the effects-sheet preview and the Presets tiles failed in suite order and passed
+       alone. A throwaway project cannot touch his own, and it is deleted in the finally. */
+    const wasHome921 = FM.home.isOpen(), orig921 = FM.projects.currentId(), made921 = [];
+    if (wasHome921) FM.home.close();
+    made921.push(await FM.projects.create({ name: 'FX921 fixture', width: 320, height: 240 }));
+    await FM.storage.applyScene(scene(layers));
+    FM.history.reset();
+    FM.selectLayer(null);
+    C.bridge._quiet();
+    const ctx = { C: C, P: C.path, D: C.diff, ids: FM.scene.layers.map(function (l) { return l.id; }), guests: [], pid: made921[0] };   // pid: the throwaway project the fixture lives in (queue 921)
+    try {
+      ctx.S = C.share({ autoTick: false, ownerInfo: { name: 'Ezra', color: '#ff8800' } });
+      /* Every message the host sends, in order — the honest way to count "one commit, one tx". */
+      ctx.sentTo = function (loop) {
+        const out = [];
+        const orig = loop.a.send;
+        loop.a.send = function (ch, msg) { out.push({ ch: ch, t: msg && msg.t, msg: msg }); return orig.call(loop.a, ch, msg); };
+        return out;
+      };
+      ctx.addGuest = function (opts) {
+        const o = opts || {};
+        const gdoc = jclone921({ project: ctx.S.base.project, layers: ctx.S.base.layers });
+        const A = plainAdapter921(gdoc, C.bridge.invariants());
+        const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g' + ctx.guests.length, mode: 'manual' });
+        const mid = ctx.S.addPeer(loop.a, { role: o.role || 'editor', name: o.name || 'Sam', color: '#44aaff' });
+        const G = C.Session({ adapter: A, role: o.role || 'editor', mid: mid, base: jclone921(gdoc), epoch: ctx.S.epoch });
+        G.setLink(loop.b);
+        G.bs = ctx.S.host.seq;
+        const g = { G: G, A: A, doc: gdoc, loop: loop, mid: mid };
+        ctx.guests.push(g);
+        return g;
+      };
+      return await fn(ctx);
+    } finally {
+      try { C.end(); } catch (e) {}
+      try { C.detach(); } catch (e) {}
+      C._undoHandover(false);
+      C.bridge._quiet();
+      FM._exporting = wasExporting;
+      FM.selectLayer(null);
+      await q915aCleanup(made921, orig921, wasHome921, [], [], []);
+    }
+  }
+
+  /* A real pointer, because §8.8's first clause is a capture listener counting pointerId — and a test
+     that set a flag instead would prove the flag, not the listener. body is in the document, which the
+     suite's synthetic-event rule requires. */
+  function press921() { document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1 })); }
+  function lift921() { document.body.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1 })); }
+  /* Built through the REAL factory, not a hand-written literal: `FM.animatedProps` walks
+     `layer.transform` and a literal without one takes the timeline rebuild down inside applyScene,
+     which reads as "the collab engine is broken" and is nothing of the kind. */
+  function layer921(name, over) {
+    return Object.assign(FM.makeLayer('shape', { name: name, start: 0, duration: 3 }), over || {});
+  }
+
+  test('921 S2 LoopLink.heal reopens only the side it heals, so a still-cut endpoint never reports itself connected', { item: '921' }, function () {
+    const C = need921('the loopback transport');
+    const loop = C.link.LoopLink({ aTag: 'a', bTag: 'b', mode: 'manual' });
+    /* A two-way cut is what a reconnect test writes without thinking about it, and the one-character
+       version of the same mistake — partition('a') healed as heal('b') — needs no second partition at
+       all. `partition` marks ONE tag and closes BOTH endpoints, and that asymmetry is the whole bug. */
+    loop.partition('a');
+    loop.partition('b');
+    let reopened = 0, got = 0;
+    loop.b.onopen = function () { reopened++; };
+    loop.b.onmessage = function () { got++; };
+    loop.heal('a');
+    if (!loop.a.open) throw new Error('healing "a" did not reopen a');
+    if (loop.b.open || reopened) throw new Error('healing "a" also reopened b (open=' + loop.b.open + ', onopen fired ' + reopened + ' time(s)) — b is still cut, so pump() goes on silently discarding everything addressed to it while the session on that end fires onopen, says hello and starts sending. A transport that drops in silence while both ends report connected is the exact failure partition() exists to make visible, in the helper every tier-2 rule is proved against');
+    loop.a.send('ctl', { t: 'hello' });
+    loop.pump();
+    if (got) throw new Error('CONTROL: the wire to b is not actually cut, so the assertion above is about nothing');
+    /* …and healing b really does restore it, so the guard is not simply a heal that never works. */
+    loop.heal('b');
+    if (!loop.b.open || reopened !== 1) throw new Error('CONTROL: healing "b" did not reopen b (open=' + loop.b.open + ', onopen fired ' + reopened + ')');
+    loop.a.send('ctl', { t: 'hello' });
+    loop.pump();
+    if (!got) throw new Error('CONTROL: a fully healed link still delivers nothing');
+  });
+
+  test('921 S2 one commit is exactly one tx, and a muted batch of five edits is still one', { item: '921', budgetMs: 60000 }, async function () {
+    await withCollab921([layer921('A'), layer921('B')], async function (c) {
+      const g = c.addGuest();
+      const sent = c.sentTo(g.loop);
+      const L = FM.scene.layers[0];
+
+      L.name = 'A2';
+      FM.history.commit();
+      const one = sent.filter(function (m) { return m.t === 'b'; });
+      if (one.length !== 1) throw new Error('one commit produced ' + one.length + ' batches, not 1 — the tick and the commit hook are both diffing, so every edit goes out twice');
+
+      /* A muted batch is what `duplicateSelection`, `paste` and `split` do: many writes, ONE commit at
+         the end. §9 says it reaches the diff once, at that final commit — and §8.9's busy barrier is
+         what makes the in-between states unsendable rather than merely unlikely. */
+      sent.length = 0;
+      FM.history.mute();
+      for (let i = 0; i < 5; i++) { L.name = 'M' + i; FM.history.commit(); c.S.tick('hot'); }
+      FM.history.unmute();
+      FM.history.commit();
+      const two = sent.filter(function (m) { return m.t === 'b'; });
+      if (two.length !== 1) throw new Error('a muted batch of five edits produced ' + two.length + ' batches, not 1');
+      g.loop.settle();
+      if (g.doc.layers[0].name !== 'M4') throw new Error('the guest ended on ' + g.doc.layers[0].name + ', not the final value M4');
+
+      /* CONTROL: the counter really does count. Two separate commits must be two batches, or the
+         assertions above would pass just as well against a link that sent nothing at all. */
+      sent.length = 0;
+      L.name = 'C1'; FM.history.commit();
+      FM.scene.layers[1].name = 'C2'; FM.history.commit();
+      if (sent.filter(function (m) { return m.t === 'b'; }).length !== 2) throw new Error('CONTROL: two commits did not produce two batches, so the count above measures nothing');
+    });
+  });
+
+  test('921 S2 the derived writes never leak: a rebuild, a render and a second normalise send nothing', { item: '921', budgetMs: 60000 }, async function () {
+    await withCollab921([layer921('A', { duration: 4 }), layer921('B', { start: 1, duration: 2 })], async function (c) {
+      const g = c.addGuest();
+      const sent = c.sentTo(g.loop);
+
+      FM.scene.layers[0].name = 'A2';
+      FM.history.commit();
+      g.loop.settle();
+      sent.length = 0;
+
+      /* §11.1: autoFitDuration, inheritLoopModes and _fillFxParams are deterministic functions of D,
+         so they produce the SAME value on every device and §5.5 turns them into nothing on the wire.
+         If any of them were non-deterministic — a timestamp, a random uid on an id-keyed array — this
+         is where it would show: as an endless pump of ops nobody asked for. */
+      for (let i = 0; i < 5; i++) {
+        c.C.bridge.normalizeDerived();
+        if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+        if (FM.requestRender) FM.requestRender();
+        c.S.tick('full');
+      }
+      const leaked = sent.filter(function (m) { return m.t === 'b'; });
+      if (leaked.length) throw new Error('five normalise/rebuild/render rounds sent ' + leaked.length + ' batches — a derived write is leaking, which means every device pumps ops at every other one forever: ' + JSON.stringify(leaked[0].msg.ops).slice(0, 300));
+
+      /* …and a change to a value autoFitDuration DERIVES still converges, without a special case. */
+      FM.scene.layers[0].duration = 9;
+      FM.history.commit();
+      g.loop.settle();
+      if (g.doc.project.duration !== 9) throw new Error('the guest\'s project.duration is ' + g.doc.project.duration + ', not the 9 autoFitDuration derived on the host');
+
+      /* CONTROL: a real change does produce a batch, so "nothing was sent" above is not "the link is
+         broken". */
+      sent.length = 0;
+      FM.scene.layers[1].name = 'B2';
+      FM.history.commit();
+      if (!sent.filter(function (m) { return m.t === 'b'; }).length) throw new Error('CONTROL: a genuine edit sent nothing either, so the silence above proves nothing');
+    });
+  });
+
+  test('921 S2 a remote change is applied IN PLACE: every object and array the UI is holding survives it', { item: '921', budgetMs: 60000 }, async function () {
+    await withCollab921([layer921('A', { effects: [{ type: 'blur', enabled: true, params: { radius: 3 } }], masks: [{ id: 'm1', mode: 'add', path: [[0, 0], [8, 0], [8, 8]] }] })], async function (c) {
+      const g = c.addGuest();
+      FM.selectLayer(c.ids[0]);
+      if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh();
+
+      const layerObj = FM.scene.layers[0];
+      const fxArr = layerObj.effects;
+      const fxObj = layerObj.effects[0];
+      const paramsObj = fxObj.params;
+      const maskPath = layerObj.masks[0].path;
+      const uid = fxObj.uid;
+      if (!uid) throw new Error('stampIds did not give the effect a uid, so there is no keyed path to test with');
+
+      /* The guest changes one parameter, a mask point list, and the layer name in one tx. */
+      g.doc.layers[0].effects[0].params.radius = 11;
+      g.doc.layers[0].masks[0].path = [[0, 0], [9, 0], [9, 9]];
+      g.doc.layers[0].name = 'renamed';
+      g.G.tick('full');
+      g.loop.settle();
+
+      if (FM.scene.layers[0] !== layerObj) throw new Error('the LAYER object was replaced — every tool holding it (mask-tool, kfDrag, the inspector closure) is now editing a detached copy');
+      if (layerObj.effects !== fxArr) throw new Error('the effects ARRAY was replaced');
+      if (layerObj.effects[0] !== fxObj) throw new Error('the effect object was replaced');
+      if (fxObj.params !== paramsObj) throw new Error('the params object was replaced');
+      if (layerObj.masks[0].path !== maskPath) throw new Error('the mask path ARRAY was replaced — mask-tool.js aliases it (:73,:104), so the overlay would keep drawing the old shape and write it back');
+      if (fxObj.params.radius !== 11) throw new Error('the value did not actually change (' + fxObj.params.radius + '), so the identity checks above are about an op that did nothing');
+      if (maskPath[1][0] !== 9) throw new Error('the mask path was not filled in place');
+      if (layerObj.name !== 'renamed') throw new Error('the name did not change');
+
+      /* CONTROL: a WHOLE-LAYER write is the op most likely to reassign, and it must not either. */
+      const whole = jclone921(g.doc.layers[0]);
+      whole.name = 'whole';
+      c.S.host.receive(g.mid, { t: 'tx', cid: 999, ops: [{ o: 's', p: ['L', c.ids[0]], v: whole }] });
+      c.S.onMessage('ctl', { t: 'tx', cid: 1000, ops: [{ o: 's', p: ['L', c.ids[0], 'name'], v: 'whole2' }] }, g.mid);
+      if (FM.scene.layers[0] !== layerObj || layerObj.effects !== fxArr) throw new Error('CONTROL: a whole-layer write detached the objects the UI holds');
+    });
+  });
+
+  test('921 S2 a slider under a finger never jumps, and the last person to let go wins — in both orders', { item: '921', budgetMs: 60000 }, async function () {
+    await withCollab921([layer921('A', { opacity: 1 })], async function (c) {
+      const g = c.addGuest();
+      const id = c.ids[0];
+      const L = FM.scene.layers[0];
+
+      /* ── Ezra drags, Sam writes the same path mid-drag, Ezra lets go last ─────────────────────── */
+      press921();
+      L.opacity = 0.5;
+      c.S.tick('hot');
+      if (!c.S._held().length) throw new Error('nothing was HELD while a pointer was down, so §8.2 never engaged');
+
+      g.doc.layers[0].opacity = 0.9;
+      g.G.tick('full');
+      g.loop.settle();
+      if (L.opacity !== 0.5) throw new Error('the live value jumped to ' + L.opacity + ' under a finger that is still down — this is the bug §8.2 exists to prevent');
+      if (!c.S._deferred().length) throw new Error('the remote value was not DEFERRED, so it either was not applied at all or it went straight to live');
+      if (c.S.base.layers[0].opacity !== 0.9) throw new Error('base did not take the remote value (' + c.S.base.layers[0].opacity + ') — a deferred op must still reach base or the two trees drift');
+
+      lift921();
+      FM.history.commit();
+      g.loop.settle();
+      if (c.S.base.layers[0].opacity !== 0.5) throw new Error('after the last person let go the host holds ' + c.S.base.layers[0].opacity + ', not the 0.5 they released at');
+      if (g.doc.layers[0].opacity !== 0.5) throw new Error('the guest holds ' + g.doc.layers[0].opacity + ' — the re-assert at release never reached it');
+
+      /* ── the other order: Ezra lets go FIRST, Sam writes after, Sam wins ──────────────────────── */
+      press921();
+      L.opacity = 0.2;
+      c.S.tick('hot');
+      lift921();
+      FM.history.commit();
+      g.loop.settle();
+      g.doc.layers[0].opacity = 0.7;
+      g.G.tick('full');
+      g.loop.settle();
+      c.C.bridge._quiet();
+      c.S.tick('hot');
+      if (L.opacity !== 0.7) throw new Error('the person who let go LAST holds 0.7 and this device shows ' + L.opacity + ' — "the last person to let go wins" fails in the second order');
+
+      /* CONTROL: a remote op on a DIFFERENT path lands live immediately, mid-drag. Without this the
+         test above would pass just as well against a device that ignored everything it was sent. */
+      press921();
+      L.opacity = 0.33;
+      c.S.tick('hot');
+      g.doc.layers[0].name = 'sam-was-here';
+      g.G.tick('full');
+      g.loop.settle();
+      if (FM.scene.layers[0].name !== 'sam-was-here') throw new Error('CONTROL: a remote change on an untouched path was blocked too — the whole document freezes while anyone holds anything');
+      lift921();
+      FM.history.commit();
+      void id;
+    });
+  });
+
+  test('921 S2 a gesture that was rolled back adopts the value it was protected from', { item: '921', budgetMs: 60000 }, async function () {
+    await withCollab921([layer921('A', { start: 0, duration: 3 })], async function (c) {
+      const g = c.addGuest();
+      const L = FM.scene.layers[0];
+
+      press921();
+      L.start = 2;                       // the drag so far
+      c.S.tick('hot');
+      g.doc.layers[0].start = 5;         // Sam moves the same clip
+      g.G.tick('full');
+      g.loop.settle();
+      if (L.start !== 2) throw new Error('the clip jumped to ' + L.start + ' mid-drag');
+
+      /* A cancelled drag: `restoreGestures` (timeline.js:541) puts the clip back exactly where it was,
+         so the live value is the one recorded before the gesture. Nothing was decided, so the value the
+         person was protected from is the value they should now see — and nothing is sent. */
+      L.start = 0;
+      lift921();
+      const sent = c.sentTo(g.loop);
+      FM.history.commit();
+      g.loop.settle();
+      if (L.start !== 5) throw new Error('a cancelled drag left the clip at ' + L.start + ' — the deferred remote value was not adopted, so Sam\'s move is lost on this device and nothing will ever bring it back');
+      if (c.S.stats.adopted !== 1) throw new Error('adopted count is ' + c.S.stats.adopted + ', so the value arrived some other way');
+      /* SILENT ABOUT THE PATH IT ADOPTED. Not "silent altogether": moving a clip moves the end of the
+         timeline, and `autoFitDuration` recomputing P/duration is a derived write that has to travel
+         (this PlainAdapter guest does not run the app's derived writers, so the host is the only one
+         that can). What must never travel is the adopted value itself — a device that echoed it back
+         would make two cancelled drags ping-pong forever. */
+      const startPath = c.P.key(['L', c.ids[0], 'start']);
+      const echoed = sent.filter(function (m) { return m.t === 'b'; })
+        .reduce(function (a, m) { return a.concat(m.msg.ops || [], m.msg.fix || []); }, [])
+        .filter(function (op) { return op.p && c.P.key(op.p) === startPath; });
+      if (echoed.length) throw new Error('adopting a deferred value echoed ' + echoed.length + ' op(s) back on the very path it adopted: ' + JSON.stringify(echoed));
+      if (g.doc.layers[0].start !== 5) throw new Error('the guest\'s own value came back changed (' + g.doc.layers[0].start + ')');
+    });
+  });
+
+  test('921 S2 a remote change DEEPER than the held path is adopted at release, not dropped and then reverted for everyone', { item: '921', budgetMs: 60000 }, async function () {
+    await withCollab921([layer921('A'), layer921('B')], async function (c) {
+      const g = c.addGuest();
+
+      /* A reorder holds the LAYER — pathOf() of an li/lr/mv is ['L',<id>], never the path of the thing
+         that changed — so every remote op on that layer is DEEPER than the held key. `held` is keyed by
+         the local op's path and `deferred` by the incoming one, while the test that pairs them
+         (P.overlaps) is a prefix match in either direction: the two keys are equal only when the paths
+         are identical, which is the one case the suite covered. */
+      press921();
+      FM.scene.layers.unshift(FM.scene.layers.pop());
+      c.S.tick('hot');
+      const layerHeld = c.S._held().filter(function (k) { const q = c.P.fromWire(k); return q && q[0] === 'L' && q.length === 2; });
+      if (layerHeld.length !== 1) throw new Error('a reorder held ' + JSON.stringify(c.S._held()) + ' — this test needs exactly one held whole-layer path');
+      const moved = c.P.fromWire(layerHeld[0])[1];
+
+      g.doc.layers.filter(function (l) { return l.id === moved; })[0].name = 'sam-renamed';
+      g.G.tick('full');
+      g.loop.settle();
+
+      const based = c.S.base.layers.filter(function (l) { return l.id === moved; })[0];
+      if (based.name !== 'sam-renamed') throw new Error('base never took the rename (' + based.name + '), so there is nothing deferred for the release to lose');
+      const dk = c.S._deferred();
+      if (dk.length !== 1) throw new Error('the rename was not deferred (' + JSON.stringify(dk) + '), so §8.2 never engaged');
+      if (dk[0] === layerHeld[0]) throw new Error('CONTROL: the deferred key equals the held key, so this test is exercising the exactly-equal case that already worked');
+
+      lift921();
+      c.C.bridge._quiet();
+      FM.history.commit();
+      g.loop.settle();
+
+      const live = FM.scene.layers.filter(function (l) { return l.id === moved; })[0];
+      if (live.name !== 'sam-renamed') throw new Error('live still says ' + JSON.stringify(live.name) + ': release() looked the deferral up by the HELD key, found nothing, and cleared the map — base has Sam\'s value and live does not, which is a split nothing can close');
+      const theirs = g.doc.layers.filter(function (l) { return l.id === moved; })[0];
+      if (theirs.name !== 'sam-renamed') throw new Error('Sam\'s own rename came back as ' + JSON.stringify(theirs.name) + ' — the very next diff sent live\'s value, so this device reverted his edit on every device in the room, silently and permanently');
+    });
+  });
+
+  test('921 S2 a held reorder parks the LAYER order only — every other order statement in the batch still reaches live', { item: '921', budgetMs: 60000 }, async function () {
+    await withCollab921([layer921('A'), layer921('B')], async function (c) {
+      const g = c.addGuest();
+      const idA = c.ids[0];
+      /* A keyed array on the guest's live tree and on its base alike, so the statement below has
+         something real to reorder on both. Effects are keyed by uid — the shape §8.3a's statement
+         names — and these two pass P.UID_RE, so stampIds leaves them alone. */
+      const fx = function () { return [{ type: 'blur', enabled: true, params: { radius: 1 }, uid: 'q921aaaa' }, { type: 'blur', enabled: true, params: { radius: 2 }, uid: 'q921bbbb' }]; };
+      g.doc.layers.filter(function (l) { return l.id === idA; })[0].effects = fx();
+      g.G.base.layers.filter(function (l) { return l.id === idA; })[0].effects = fx();
+
+      g.A._busyHands = true;                       // a finger on the layer STACK: heldStructural
+      g.doc.layers.reverse();
+      g.G.tick('hot');
+      if (!g.G._held().length) throw new Error('the guest reorder was not held, so nothing would be deferred at all');
+
+      /* One batch, two statements — what orderStatementsFor emits for a batch that both moved a layer
+         and touched a keyed array. Only the layer list could jump under that finger. */
+      g.G.onMessage('ctl', {
+        t: 'b', seq: g.G.bs + 1, by: 'o', ops: [],
+        ord: [
+          { p: null, f: 'id', k: g.G.base.layers.map(function (l) { return l.id; }) },
+          { p: ['L', idA, 'effects'], f: 'uid', k: ['q921bbbb', 'q921aaaa'] }
+        ]
+      }, null);
+
+      const liveFx = g.doc.layers.filter(function (l) { return l.id === idA; })[0].effects.map(function (e) { return e.uid; }).join();
+      const baseFx = g.G.base.layers.filter(function (l) { return l.id === idA; })[0].effects.map(function (e) { return e.uid; }).join();
+      g.A._busyHands = false;
+      if (baseFx !== 'q921bbbb,q921aaaa') throw new Error('base did not take the effects order (' + baseFx + '), so the comparison below is about nothing');
+      if (liveFx !== baseFx) throw new Error('live holds the effects as ' + liveFx + ' and base as ' + baseFx + ' — every statement after the first reached base ONLY, so live keeps a stale order for good and the next diff drags base back to it, undoing the other person\'s reorder on every device. A second batch also overwrote the single parked slot before the first was released');
+    });
+  });
+
+  test('921 S2 a remote delete during a gesture wins: the gesture is cancelled and the selection is cleared', { item: '921', budgetMs: 60000 }, async function () {
+    await withCollab921([layer921('A'), layer921('B')], async function (c) {
+      const g = c.addGuest();
+      const id = c.ids[0];
+      FM.selectLayer(id);
+      let cancelled = null;
+      const origCancel = FM.cancelGesturesOn;
+      FM.cancelGesturesOn = function (lid) { cancelled = lid; return origCancel.call(FM, lid); };
+      try {
+        press921();
+        FM.scene.layers[0].name = 'mid-drag';
+        c.S.tick('hot');
+        if (!c.S._held().length) throw new Error('the local change was not held, so the delete below is not arriving DURING a gesture');
+
+        g.doc.layers.splice(0, 1);
+        g.G.tick('full');
+        g.loop.settle();
+
+        if (FM.scene.layers.some(function (l) { return l.id === id; })) throw new Error('a structural op lost to a held path — §8.3 says a delete always wins, and a layer that is gone everywhere else but still here is a document two people can never agree on again');
+        if (cancelled !== id) throw new Error('FM.cancelGesturesOn was called with ' + cancelled + ', not the deleted layer — a drag on a layer that no longer exists keeps writing to a corpse');
+        if (FM.scene.selectedId) throw new Error('the selection survived the deletion of the layer it names (' + FM.scene.selectedId + ') — the queue-629 rule');
+        if (c.S._held().length) throw new Error('the held entries under the deleted layer were not dropped');
+        if (c.S.stats.structWins !== 1) throw new Error('structWins is ' + c.S.stats.structWins);
+      } finally { FM.cancelGesturesOn = origCancel; lift921(); }
+    });
+  });
+
+  test('921 S2 an export freezes the live apply while the host base keeps advancing, then drains', { item: '921', budgetMs: 60000 }, async function () {
+    await withCollab921([layer921('A'), layer921('B')], async function (c) {
+      const g = c.addGuest();
+
+      FM._exporting = true;                               // exporter.js sets exactly this (§8.9)
+      g.doc.layers[0].name = 'during-export';
+      g.G.tick('full');
+      g.loop.settle();
+
+      if (c.S.base.layers[0].name !== 'during-export') throw new Error('the HOST BASE did not advance during an export — §8.9 says the host keeps sequencing and queues only the live application, or every guest stalls for the length of a render');
+      if (FM.scene.layers[0].name === 'during-export') throw new Error('the live scene changed under a running export — exporter.js reads live FM.scene (:907/:1387/:1451), so the frame it is drawing would change halfway through');
+      if (!c.S._queued()) throw new Error('nothing was queued, so the two assertions above are about a message that never arrived');
+
+      /* A local change during an export must not be sent either: the exporter mutates live state. */
+      const sent = c.sentTo(g.loop);
+      FM.scene.layers[1].name = 'local-during-export';
+      FM.history.commit();
+      if (sent.filter(function (m) { return m.t === 'b'; }).length) throw new Error('a local edit was sent during an export');
+
+      FM._exporting = false;
+      c.S.tick('full');
+      g.loop.settle();
+      if (FM.scene.layers[0].name !== 'during-export') throw new Error('the queue did not drain into live when the export finished (' + FM.scene.layers[0].name + ')');
+      if (c.S.base.layers[1].name !== 'local-during-export') throw new Error('the local edit made during the export was never sent after it');
+      if (g.doc.layers[1].name !== 'local-during-export') throw new Error('the guest never received the edit made during the export');
+    });
+  });
+
+  test('921 S2 the busy barrier: a half-built paste is never sent, and it arrives as one tx when the job ends', { item: '921', budgetMs: 60000 }, async function () {
+    await withCollab921([layer921('A'), layer921('B')], async function (c) {
+      const g = c.addGuest();
+      const sent = c.sentTo(g.loop);
+
+      /* `pasteClipboard` writes at :3707, :3753 and :3768 — three states, only the last coherent. The
+         job bracket is what makes the two in between unsendable rather than merely unlikely. */
+      const job = FM.jobBegin('test-paste');
+      const half = layer921('half', { id: 'half_1', name: 'Pasted' });
+      FM.scene.layers.push(half);
+      c.S.tick('hot');
+      c.S.tick('full');
+      if (sent.filter(function (m) { return m.t === 'b'; }).length) throw new Error('a half-built paste was sent while a job was open');
+
+      /* …and a remote op that arrives mid-job still reaches base, so the paste slot is computed from a
+         document that is up to date rather than from one frozen at the start of the job. */
+      g.doc.layers.splice(1, 1);
+      g.G.tick('full');
+      g.loop.settle();
+      if (c.S.base.layers.length !== 1) throw new Error('the host base did not take the remote delete during a job (' + c.S.base.layers.length + ' layers)');
+
+      FM.jobEnd(job);
+      FM.history.commit();
+      g.loop.settle();
+      const batches = sent.filter(function (m) { return m.t === 'b'; });
+      if (!batches.length) throw new Error('nothing was sent after the job ended');
+      if (FM.scene.layers.some(function (l) { return l.id === c.ids[1]; })) throw new Error('the remote delete never reached live after the barrier lifted');
+      if (!g.doc.layers.some(function (l) { return l.id === 'half_1'; })) throw new Error('the pasted layer never reached the guest');
+      if (FM.jobDepth() !== 0) throw new Error('the job bracket leaked (depth ' + FM.jobDepth() + ')');
+    });
+  });
+
+  test('921 S2 the settle release stands down behind the export/job barrier, and lands the moment it lifts', { item: '921', budgetMs: 60000 }, async function () {
+    await withCollab921([layer921('A', { start: 0, duration: 3 })], async function (c) {
+      const g = c.addGuest();
+      const L = FM.scene.layers[0];
+      const wasExporting = FM._exporting;
+      try {
+        press921();
+        L.start = 2;
+        c.S.tick('hot');
+        g.doc.layers[0].start = 5;
+        g.G.tick('full');
+        g.loop.settle();
+        if (L.start !== 2) throw new Error('the clip jumped to ' + L.start + ' mid-drag, so nothing is deferred for the release to write');
+        L.start = 0;                       // a cancelled drag: at release the deferred value is adopted
+        lift921();
+        c.C.bridge._quiet();
+
+        /* S.tick is drainQueue → settle → pushLocal. The two neighbours both stand down here; the
+           settle between them did not, so it wrote the deferred op, everything in `forced` and the
+           parked order straight into FM.scene — and then rebuilt the timeline and could restart audio. */
+        FM._exporting = true;              // exporter.js sets exactly this (§8.9)
+        c.S.tick('hot');
+        if (L.start !== 0) throw new Error('the settle wrote a remote op into FM.scene while an export was reading it (start is now ' + L.start + ') — a frame rendered from a document that changed under it, which is the hazard §8.9\'s barrier exists for');
+        if (!c.S._deferred().length) throw new Error('the deferral was consumed under the barrier instead of being left where it was');
+
+        FM._exporting = false;
+        c.S.tick('hot');
+        if (L.start !== 5) throw new Error('CONTROL: the first tick after the barrier lifted did not release (start ' + L.start + ') — a guard that never lets go would be a worse bug than the one it fixes');
+      } finally { FM._exporting = wasExporting; lift921(); }
+    });
+  });
+
+  test('921 S2 a tick that lands mid project switch sends nothing, instead of deleting every layer for everyone', { item: '921', budgetMs: 60000 }, async function () {
+    await withCollab921([layer921('A'), layer921('B')], async function (c) {
+      const g = c.addGuest();
+      const sent = c.sentTo(g.loop);
+      const realCur = FM.projects.currentId;
+      const keep = FM.scene.layers;
+      let n = 0;
+      try {
+        /* Exactly what projects.open() does, in the order it does it: the live scene is emptied and
+           storage.load() is then AWAITED — IndexedDB plus a media hydrate. Nothing on that path is
+           jobWrapped and nothing mutes history, so §8.9's barrier is wide open and the 100 ms ticker
+           fires straight through it. */
+        FM.projects.currentId = function () { return 'p_921_not_this_one'; };
+        FM.scene.layers = [];
+        n = c.S.tick('hot');
+      } finally {
+        FM.scene.layers = keep;
+        FM.projects.currentId = realCur;
+      }
+      if (n !== 0) throw new Error('the tick emitted ' + n + ' op(s) while the open project was no longer the one this session was armed on');
+      const lr = sent.filter(function (m) { return m.t === 'b'; })
+        .reduce(function (a, m) { return a.concat(m.msg.ops || []); }, [])
+        .filter(function (op) { return op.o === 'lr'; });
+      if (lr.length) throw new Error('a tick landing mid-switch broadcast ' + lr.length + ' removal(s): every layer deleted for everyone in the room, and — because applyIncoming autosaves — the owner\'s own project written back empty');
+
+      /* CONTROL: with the armed project open again the very same tick DOES send, so the guard above is
+         not simply a tick that stopped working. */
+      FM.scene.layers[0].name = 'still-here';
+      if (c.S.tick('hot') <= 0) throw new Error('CONTROL: the tick emitted nothing once the project matched again');
+    });
+  });
+
+  test('921 S2 switching project stands the session down BEFORE the scene is torn, not after the load', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921('the session engine');
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    const realLoad = FM.storage.load;
+    let activeAtLoad = null, layersAtLoad = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      made.push(await FM.projects.create({ name: 'FX921 switch target', width: 320, height: 240 }));
+      await FM.projects.open(orig);
+      await withCollab921([layer921('A'), layer921('B')], async function (c) {
+        void c;
+        FM.storage.load = function () {
+          /* By the time this runs, projects.open() has already emptied FM.scene and is about to await
+             IndexedDB. A session still attached here has hundreds of milliseconds in which every tick
+             diffs its armed base against an empty document. */
+          activeAtLoad = C.active;
+          layersAtLoad = (FM.scene.layers || []).length;
+          return realLoad.apply(FM.storage, arguments);
+        };
+        await FM.projects.open(made[0]);
+      });
+      if (activeAtLoad === null) throw new Error('CONTROL: storage.load() was never reached, so the switch under test never happened');
+      if (layersAtLoad !== 0) throw new Error('CONTROL: the scene still held ' + layersAtLoad + ' layer(s) when load() began, so this is not the window the test is about');
+      if (activeAtLoad) throw new Error('the session was still attached when projects.open() began awaiting storage.load() — history.reset(), which is the only thing that reaches FM.collab, runs at the END of the switch, and by then the room has already been emptied and the other project uploaded into it');
+    } finally {
+      FM.storage.load = realLoad;
+      try { C.end(); } catch (e) {} try { C.detach(); } catch (e) {}
+      C._undoHandover(false);
+      await q915aCleanup(made, orig, wasOpen, [], [], []);
+    }
+  });
+
+  /* ⚠️ THE BOOT'S OWN RESET USED TO KILL THE RELOAD RECOVERY (queue 921 S2).
+     `js/app.js` ends its boot with `storage.load().then(restored => { if (restored) history.reset(); })`
+     — an ASYNC tail that lands after IndexedDB and the media hydrate, i.e. hundreds of milliseconds
+     after the editor is already on screen and tappable. `history.reset()` reaches `collab.onReset()`,
+     which stood ANY session down unconditionally. So a session armed in that window — §12.4's reload
+     recovery, which by its nature runs at boot, or a tap on Share while `load()` is still in flight —
+     was stopped with `paused` and its link closed, sending `bye` to the room. Measured in tier 3, one
+     run in three: the guest sent `hello` and 10 ms later `bye`, and the offline edit it had recovered
+     never reached the host — no toast, no report, no error anywhere. That is the exact loss §12.4
+     exists to prevent, caused by a reset belonging to the very document the session is attached to. */
+  test('921 S2 a history.reset() for the document the session is ALREADY on leaves it attached — only a document change stands it down', { item: '921', budgetMs: 60000 }, async function () {
+    const C = need921('the session engine');
+    await withCollab921([layer921('A'), layer921('B')], async function (c) {
+      if (!C.active || C.session !== c.S) throw new Error('CONTROL: no session is attached, so nothing below could be stood down and every assertion here would pass on an empty stage');
+      if (!c.S.pid || c.S.pid !== FM.projects.currentId()) throw new Error('CONTROL: the session is bound to ' + c.S.pid + ' but the open project is ' + FM.projects.currentId() + ' — the guard under test reads exactly that comparison, so this is not the case it is about');
+
+      /* The boot's tail, verbatim: nothing was replaced, the document it just finished loading is the
+         one this session is on. */
+      const g = c.addGuest(), sent = c.sentTo(g.loop);
+      FM.history.reset();
+      const byes = sent.filter(function (m) { return m.t === 'bye'; });
+      if (byes.length) throw new Error('the boot\'s own history.reset() STOPPED the session — it told the room `bye` (' + JSON.stringify(byes[0].msg) + '), and stop() closes the link too, so a guest that had just recovered its offline outbox threw it away AND asked the host to forget it');
+      if (!c.S.active) throw new Error('the boot\'s own history.reset() stopped the session');
+      if (!C.active || C.session !== c.S) throw new Error('the boot\'s own history.reset() detached the session (active=' + C.active + ') — §12.4\'s reload recovery runs at boot, so this window is not an edge case for it, it is the only window it has');
+      if (!C.undoActive()) throw new Error('the reset handed the undo back while the session was still running, so the next undo would revert a peer\'s work with a local snapshot');
+
+      /* …and the other direction: the guard must not weaken the stand-down it was built around. The
+         open project moving on is what "the document was replaced" means on every path that reaches
+         here (import and both template routes each create or open a project first). */
+      const realCur = FM.projects.currentId;
+      try {
+        FM.projects.currentId = function () { return 'p_921_not_the_session_project'; };
+        FM.history.reset();
+      } finally { FM.projects.currentId = realCur; }
+      if (C.active || C.session) throw new Error('a history.reset() taken with a DIFFERENT project open left the session attached — it would then diff its armed base against a document it has never seen and upload one project into another room\'s document');
+    });
+
+    /* …and the caller that KNOWS, because it is the one the id has not caught up with yet:
+       `projects.open()` stands the session down while the project it is LEAVING is still the current
+       one, which is the whole reason it does it there rather than at the reset at the end. Without
+       `force` the guard above would answer "still mine" and skip it. */
+    await withCollab921([layer921('A')], async function (c) {
+      if (c.S.pid !== FM.projects.currentId()) throw new Error('CONTROL: the session is not bound to the open project, so `force` is not what this assertion is measuring');
+      const g = c.addGuest(), sent = c.sentTo(g.loop);
+      C.onReset({ force: true });
+      if (C.active || C.session) throw new Error('onReset({force:true}) left the session attached — projects.open() calls it BEFORE it empties the scene and awaits load(), and a tick landing in that window diffs a full base against an empty document and deletes every layer for everyone');
+      const bye = sent.filter(function (m) { return m.t === 'bye'; })[0];
+      if (!bye) throw new Error('a forced stand-down never told the room anything — the peers go on holding a session that has gone');
+      if (bye.msg.why !== 'paused') throw new Error('a forced stand-down ended the session as "' + bye.msg.why + '" rather than §12.1\'s `paused`');
+    });
+  });
+
+  test('921 S2 the host autosaves after a remote batch', { item: '921', budgetMs: 60000 }, async function () {
+    await withCollab921([layer921('A')], async function (c) {
+      const g = c.addGuest();
+      let saves = 0;
+      const orig = FM.storage.autosave;
+      FM.storage.autosave = function () { saves++; return orig.apply(FM.storage, arguments); };
+      try {
+        /* §7.1 step 12 calls this out as REQUIRED, because autosave is otherwise reached only from
+           commit, undo and redo (history.js:158-162) — none of which a remote batch runs. Without it a
+           tab killed after an hour of somebody else's edits comes back to the document as it was an
+           hour ago, and nothing anywhere would have said so. */
+        g.doc.layers[0].name = 'from-sam';
+        g.G.tick('full');
+        g.loop.settle();
+        if (!saves) throw new Error('a remote batch did not autosave — the host\'s disk copy is now behind its screen, silently');
+        const after = saves;
+        c.S.tick('hot');
+        if (saves !== after) throw new Error('CONTROL: a tick with nothing to do also autosaved (' + saves + ' vs ' + after + '), so the count above measures the tick, not the batch');
+      } finally { FM.storage.autosave = orig; }
+    });
+  });
+
+  test('921 S2 undo is per person: a changed path is left alone, a delete comes back with its media, a structural step is all-or-nothing, and a pre-session step still undoes', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921('per-person undo');
+    /* its own throwaway project, for the reason in withCollab921 (queue 921) */
+    const uWasHome = FM.home.isOpen(), uOrig = FM.projects.currentId(), uMade = [];
+    if (uWasHome) FM.home.close();
+    uMade.push(await FM.projects.create({ name: 'FX921 undo fixture', width: 320, height: 240 }));
+    await FM.storage.applyScene(scene([layer921('A'), layer921('B'), layer921('C')]));
+    FM.history.reset();
+    FM.selectLayer(null);
+    C.bridge._quiet();
+    const ids = FM.scene.layers.map(function (l) { return l.id; });
+    /* A step made BEFORE the session starts, so §10.4 has something real to undo into. */
+    FM.scene.layers[2].name = 'C-before-sharing';
+    FM.history.commit();
+    let S = null;
+    try {
+      S = C.share({ autoTick: false, ownerInfo: { name: 'Ezra', color: '#ff8800' } });
+      const gdoc = jclone921({ project: S.base.project, layers: S.base.layers });
+      const A = plainAdapter921(gdoc, C.bridge.invariants());
+      const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'manual' });
+      const mid = S.addPeer(loop.a, { role: 'editor', name: 'Sam', color: '#44aaff' });
+      const G = C.Session({ adapter: A, role: 'editor', mid: mid, base: jclone921(gdoc), epoch: S.epoch });
+      G.setLink(loop.b); G.bs = S.host.seq;
+
+      /* ── (a) a path somebody else changed since is left alone, and said so ────────────────────── */
+      FM.scene.layers[0].name = 'A-mine';
+      FM.history.commit(); loop.settle();
+      gdoc.layers[0].name = 'A-sams';
+      G.tick('full'); loop.settle();
+      let toasted = '';
+      const origToast = FM.toast;
+      FM.toast = function (m) { toasted = String(m); };
+      try { FM.history.undo(); } finally { FM.toast = origToast; }
+      loop.settle();
+      if (FM.scene.layers[0].name !== 'A-sams') throw new Error('undo reverted a value Sam had changed since (now "' + FM.scene.layers[0].name + '") — his rule for this feature is that undo only undoes your own changes');
+      if (!/changed/i.test(toasted)) throw new Error('nothing was said about the part that was skipped (toast was "' + toasted + '")');
+
+      /* ── (b) a delete comes back, and its media was never released while it could ─────────────── */
+      FM.selectLayer(ids[1]);
+      FM.deleteLayer(ids[1]);
+      FM.history.commit(); loop.settle();
+      if (FM.scene.layers.some(function (l) { return l.id === ids[1]; })) throw new Error('the delete did not happen');
+      if (!C.reachable(ids[1])) throw new Error('FM.collab.reachable says the deleted layer is unreachable while an undo can still bring it back — storage.js:1767 would release its media and the undo would restore a blank layer');
+      FM.history.undo(); loop.settle();
+      const back = FM.scene.layers.filter(function (l) { return l.id === ids[1]; })[0];
+      if (!back) throw new Error('undoing a delete did not bring the layer back');
+      if (back.name !== 'B') throw new Error('the layer came back as "' + back.name + '"');
+      if (!gdoc.layers.some(function (l) { return l.id === ids[1]; })) throw new Error('the restored layer never reached the guest — an undo travels as ordinary ops, it is not special');
+
+      /* ── (c) all-or-nothing: a structural step whose layer somebody else deleted refuses ──────── */
+      const twoA = layer921('two-a', { id: 'two_a' }), twoB = layer921('two-b', { id: 'two_b' });
+      FM.scene.layers.push(twoA, twoB);
+      FM.history.commit(); loop.settle();
+      const iA = gdoc.layers.map(function (l) { return l.id; }).indexOf('two_a');
+      gdoc.layers.splice(iA, 1);
+      G.tick('full'); loop.settle();
+      let toast2 = '';
+      const origToast2 = FM.toast;
+      FM.toast = function (m) { toast2 = String(m); };
+      try { FM.history.undo(); } finally { FM.toast = origToast2; }
+      loop.settle();
+      if (!FM.scene.layers.some(function (l) { return l.id === 'two_b'; })) throw new Error('half the step was undone: two_b went away although two_a could not be. A step that contains structural recs is all-or-nothing (§10.2), or an ungroup undoes halfway');
+      if (!/can.t undo/i.test(toast2)) throw new Error('the refusal was silent (toast "' + toast2 + '")');
+
+      /* ── (d) §10.4: undoing PAST the start of the session ─────────────────────────────────────── */
+      while (S.canUndo() && FM.scene.layers[2].name === 'C-before-sharing') { FM.history.undo(); loop.settle(); }
+      if (FM.scene.layers[2].name !== 'C') throw new Error('undoing past the session start never reached the pre-session step (name is "' + FM.scene.layers[2].name + '") — the owner\'s history before he shared is exactly the snapshot stack (§10.4)');
+      if (!gdoc.layers.some(function (l) { return l.name === 'C'; })) throw new Error('the pre-session undo never reached the guest');
+    } finally {
+      try { C.end(); } catch (e) {}
+      try { C.detach(); } catch (e) {}
+      C._undoHandover(false);
+      C.bridge._quiet();
+      FM.selectLayer(null);
+      await q915aCleanup(uMade, uOrig, uWasHome, [], [], []);
+    }
+  });
+
+  test('921 S2 a viewer cannot write: the refusal comes back with the host value and the local change is reverted (an editor sticks)', { item: '921', budgetMs: 60000 }, async function () {
+    await withCollab921([layer921('A')], async function (c) {
+      const viewer = c.addGuest({ role: 'viewer', name: 'Vee' });
+      viewer.doc.layers[0].name = 'viewer-tried';
+      viewer.G.tick('full');
+      viewer.loop.settle();
+      if (c.S.base.layers[0].name === 'viewer-tried') throw new Error('a VIEWER wrote to the document');
+      if (viewer.doc.layers[0].name !== 'A') throw new Error('the viewer\'s own copy still shows "' + viewer.doc.layers[0].name + '" — §7.1 step 11 sends the host\'s current value back for every refused path, so a refused edit does not sit on screen as if it worked');
+
+      /* …and a refusal that lands MID-GESTURE does not loop. The ack carries the host's value, but a
+         held path does not take it — so without §8.2's `forced` exception the re-assert at release
+         sends the refused value again, the host refuses it again, and a viewer resting a finger on a
+         slider produces a tx every hundred milliseconds for as long as they hold it. */
+      viewer.A._busyHands = true;
+      viewer.doc.layers[0].name = 'viewer-mid-drag';
+      viewer.G.tick('hot');
+      viewer.loop.settle();
+      viewer.A._busyHands = false;
+      const before = viewer.G.stats.tx;
+      viewer.G.beforeSnap();
+      viewer.loop.settle();
+      viewer.G.tick('full');
+      viewer.loop.settle();
+      if (viewer.doc.layers[0].name !== 'A') throw new Error('the refused value is still on the viewer\'s screen after the gesture ended ("' + viewer.doc.layers[0].name + '")');
+      if (!viewer.G.stats.forcedN) throw new Error('the refusal was not put through §8.2\'s forced list, so it only happened to work');
+      if (viewer.G.stats.tx > before + 1) throw new Error('a refused edit under a finger produced ' + (viewer.G.stats.tx - before) + ' more txs — it is re-asserting into a refusal forever');
+
+      /* CONTROL: the same edit from an EDITOR sticks, so the revert above is the role filter and not a
+         link that drops everything. */
+      const ed = c.addGuest({ role: 'editor', name: 'Ed' });
+      ed.doc.layers[0].name = 'editor-did';
+      ed.G.tick('full');
+      ed.loop.settle();
+      if (c.S.base.layers[0].name !== 'editor-did') throw new Error('CONTROL: an editor was refused too');
+      if (FM.scene.layers[0].name !== 'editor-did') throw new Error('CONTROL: the editor\'s change never reached the host\'s screen');
+    });
+  });
+
+  test('921 S2 a hash mismatch resyncs, writes a report, and escalates after three', { item: '921', budgetMs: 60000 }, async function () {
+    await withCollab921([layer921('A'), layer921('B')], async function (c) {
+      const g = c.addGuest();
+      const G = g.G;
+
+      /* A guest whose base has silently drifted is the one failure this whole design cannot prevent —
+         a dropped op, a bug in apply(), a build skew. §11.4 is the net under it: the host states a hash
+         when it has been quiet, and a guest that disagrees asks for a snapshot. */
+      for (let i = 1; i <= 3; i++) {
+        G.base.layers[0].name = 'drifted-' + i;              // divergence, by hand
+        G.onMessage('ctl', { t: 'hash', seq: G.bs, h: c.S.host.hash() }, null);
+        g.loop.settle();
+        if (G.baseHash() !== c.S.host.hash()) throw new Error('round ' + i + ': the guest did not converge after a resync (base hash still differs)');
+        if (G.reports.length !== i) throw new Error('round ' + i + ': ' + G.reports.length + ' reports were written, not ' + i + ' — a resync that leaves no report is a repair nobody can investigate');
+        if (!G.reports[i - 1].paths) throw new Error('the report names no paths');
+      }
+      if (!G.hashPausedUntil || G.hashPausedUntil <= Date.now()) throw new Error('three resyncs in ten minutes did not pause hashing — §11.4\'s escalation, without which a genuinely broken pair resyncs forever');
+
+      /* CONTROL: a MATCHING hash asks for nothing. Without this the test would pass against a guest
+         that resynced on every single hash message. */
+      const before = G.stats.resyncs;
+      G.onMessage('ctl', { t: 'hash', seq: G.bs, h: G.baseHash() }, null);
+      g.loop.settle();
+      if (G.stats.resyncs !== before) throw new Error('CONTROL: a matching hash triggered a resync too (' + before + ' → ' + G.stats.resyncs + ')');
+    });
+  });
+
+  test('921 S2 a gap in the batch sequence is noticed when it lands, not ten seconds later by the hash', { item: '921', budgetMs: 60000 }, async function () {
+    await withCollab921([layer921('A')], async function (c) {
+      const g = c.addGuest();
+      FM.scene.layers[0].name = 'one';
+      c.S.tick('hot');
+      g.loop.settle();
+      const at = g.G.bs;
+      if (!at) throw new Error('the guest has applied no batch yet (bs ' + at + '), so there is no sequence for the next one to be ahead of');
+
+      const sent = [];
+      const orig = g.loop.b.send;
+      g.loop.b.send = function (ch, msg) { sent.push(msg); return orig.call(g.loop.b, ch, msg); };
+      try {
+        g.G.onMessage('ctl', { t: 'b', seq: at + 3, by: 'o', ops: [] }, null);
+        const rs = sent.filter(function (m) { return m && m.t === 'resync'; });
+        if (!rs.length) throw new Error('a batch three ahead of the last one applied was taken without a word — S.bs is assigned blind, so two batches of the owner\'s work are simply missing and the only thing that could ever notice is §11.4\'s hash: 2 s of quiet, at most once per 10 s, and skipped outright while this device has anything outstanding (i.e. whenever somebody is editing), and never at all when the dropped batch was the host\'s last one');
+        if (rs[0].seq !== at) throw new Error('the resync asked from ' + rs[0].seq + ', not the last seq actually applied (' + at + ')');
+
+        sent.length = 0;
+        g.G.onMessage('ctl', { t: 'b', seq: at + 4, by: 'o', ops: [] }, null);
+        if (sent.filter(function (m) { return m && m.t === 'resync'; }).length) throw new Error('CONTROL: the very next batch IN sequence asked for a resync too, so the check fires on everything and means nothing');
+      } finally { g.loop.b.send = orig; }
+    });
+  });
+
+  test('921 S2 a batch broadcast during the join handshake is kept and replayed, not read and dropped', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921('the join flow');
+    const ts = Date.now().toString(36);
+    const hostDoc = {
+      project: { width: 320, height: 240, fps: 30, duration: 5, name: 'FX921 join window' },
+      layers: [{ id: 'l_921jw' + ts, type: 'shape', shape: 'rect', name: 'before', start: 0, duration: 2, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 } }]
+    };
+    const inv = C.bridge.invariants();
+    const host = C.Host({ base: jclone921(hostDoc), invariants: inv, epoch: 'e921jw' });
+    const HS = C.Session({ adapter: plainAdapter921(hostDoc, inv), role: 'owner', mid: 'o', host: host });
+    const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'manual' });
+    HS.addPeer(loop.a, { role: 'editor', name: 'Sam' });
+
+    const gdoc = { project: {}, layers: [] };
+    const gA = plainAdapter921(gdoc, inv);
+    const realCreate = FM.projects.createLinked, realOpen = FM.projects.open;
+    let releaseOpen = null;
+    try {
+      /* §12.2's two storage steps stand in for themselves — createLinked writes D, open() loads it
+         back — because what is under test is the WINDOW between the snapshot and S.setLink(), and
+         open() is what makes that window hundreds of milliseconds long on a real device. */
+      FM.projects.createLinked = function (meta, D) { gdoc.project = jclone921(D.project); gdoc.layers = jclone921(D.layers); return 'p_921jw' + ts; };
+      FM.projects.open = function () { return new Promise(function (res) { releaseOpen = res; }); };
+
+      const p = C.join({ link: loop.b, adapter: gA, role: 'editor', autoTick: false });
+      loop.pump(4);                                   // hello → welcome + snapshot → the join handler
+      for (let i = 0; i < 40 && !releaseOpen; i++) await sleep(10);
+      if (!releaseOpen) throw new Error('the join never reached projects.open(), so the window under test was never entered');
+      if (C.session) throw new Error('CONTROL: a session was attached before projects.open() resolved, so there is no window to broadcast into');
+
+      /* The owner keeps working while the guest is still opening its copy. The host put the joiner in
+         its broadcast set the moment the hello arrived, so this batch is addressed to it. */
+      hostDoc.layers[0].name = 'during the handshake';
+      HS.tick('full');
+      loop.pump(4);
+
+      releaseOpen(true);
+      const joined = await p;
+      const based = (joined.session.base.layers[0] || {}).name, live = (gdoc.layers[0] || {}).name;
+      if (based !== 'during the handshake') throw new Error('the guest\'s base says ' + JSON.stringify(based) + ' — the join handler knows welcome, refused and snap, and everything else fell off the end of it');
+      if (live !== 'during the handshake') throw new Error('the guest\'s document says ' + JSON.stringify(live) + ' — it is editing a document that is missing the owner\'s work');
+      if (joined.session.bs !== host.seq) throw new Error('the guest thinks it is at seq ' + joined.session.bs + ' while the host is at ' + host.seq + ' — the loss left no trace at all');
+    } finally {
+      FM.projects.createLinked = realCreate;
+      FM.projects.open = realOpen;
+      try { C.end(); } catch (e) {} try { C.detach(); } catch (e) {}
+      C._undoHandover(false);
+      try { HS.stop('ended'); } catch (e) {}
+    }
+  });
+
+  test('921 S2 being told the wire is cut really marks the outbox, so work done away comes back as a CAS and not an overwrite', { item: '921', budgetMs: 60000 }, async function () {
+    await withCollab921([layer921('A')], async function (c) {
+      const g = c.addGuest();
+      const sent = [];
+      const orig = g.loop.b.send;
+      g.loop.b.send = function (ch, msg) { sent.push(msg); return orig.call(g.loop.b, ch, msg); };
+      try {
+        g.doc.layers[0].name = 'in flight when the wire went';
+        g.G.tick('full');
+        const before = g.G._outstanding();
+        if (before.length !== 1 || !before[0].sent) throw new Error('the guest tx was not in flight (' + JSON.stringify(before) + '), so "the wire is cut under it" is not what happens next');
+
+        g.G.setOnline(false);
+        if (g.A.offlineN !== 1) throw new Error('setOnline(false) never told the adapter (' + g.A.offlineN + ') — markOffline()\'s whole body is unreachable from this caller, so §13.1\'s offline banner can never show either');
+        const after = g.G._outstanding();
+        if (after.length !== 1 || after[0].sent) throw new Error('the tx that was in flight when the link went is still marked sent (' + JSON.stringify(after) + '), so it is never re-sent at all');
+
+        sent.length = 0;
+        g.G.setOnline(true);
+        g.doc.layers[0].name = 'and one more while the reply is still in flight';
+        g.G.tick('full');
+        const txs = sent.filter(function (m) { return m && m.t === 'tx'; });
+        const re = txs.filter(function (m) { return m.cid === before[0].cid; })[0];
+        if (!re) throw new Error('the offline tx was never re-sent (sent cids ' + JSON.stringify(txs.map(function (m) { return m.cid; })) + ')');
+        if (re.q !== 1) throw new Error('the offline tx went back out as q:' + re.q + ' — the host runs its compare-and-set only on q:1, so it is applied unconditionally and whatever was written while this device was away is silently overwritten, with rej:[], lost:[], no clash count and no toast');
+      } finally { g.loop.b.send = orig; }
+    });
+  });
+
+  test('921 S2 a persisted guest base answers for the WRITE, not for having asked for one', { item: '921', budgetMs: 45000 }, async function () {
+    const C = need921('the guest base');
+    const realPut = FM.storage.collabPut;
+    let key = null;
+    try {
+      FM.storage.collabPut = async function (k) { key = k; return false; };        // a device with no room left
+      const r = C.bridge.persistBase({ epoch: 'e1', seq: 3, cid: 2, D: { project: {}, layers: [] } });
+      if (!r || typeof r.then !== 'function') throw new Error('persistBase answered ' + JSON.stringify(r) + ' before the write had happened — collabPut is async and turns a quota failure into a resolved false, so with the promise dropped nothing anywhere can tell that this guest has no recovery point');
+      if (await r !== false) throw new Error('persistBase reported success for a write that failed');
+      if (!key || key.indexOf('collab:base:') !== 0) throw new Error('CONTROL: persistBase asked for ' + JSON.stringify(key) + ', so the stub is not standing in for the write under test');
+    } finally { FM.storage.collabPut = realPut; }
+
+    /* …and the session passes that answer on, instead of reporting true over the top of it. */
+    const doc = { project: { duration: 5 }, layers: [] };
+    const A = plainAdapter921(doc, C.bridge.invariants());
+    let asked = 0;
+    A.persistBase = function () { asked++; return Promise.resolve(false); };
+    const G = C.Session({ adapter: A, role: 'editor', mid: 'g', base: jclone921(doc), epoch: 'e1' });
+    try {
+      const ok = await G.persist();
+      if (!asked) throw new Error('CONTROL: S.persist() never called the adapter at all');
+      if (ok !== false) throw new Error('S.persist() said ' + JSON.stringify(ok) + ' for a write that did not happen — §12.4\'s reload recovery then reads a record that is not there, computes no outbox, and the offline work is overwritten by the next snapshot with nothing saying so');
+    } finally { try { G.stop('ended'); } catch (e) {} }
+  });
+
+  test('921 S2 a second Share stands the first session down instead of leaving an orphan ticking', { item: '921', budgetMs: 60000 }, async function () {
+    await withCollab921([layer921('A')], async function (c) {
+      const first = c.S;
+      const second = c.C.share({ autoTick: false, ownerInfo: { name: 'Ezra', color: '#ff8800' } });
+      if (second === first) throw new Error('CONTROL: share() handed back the same session, so there is no second one to orphan');
+      if (c.C.session !== second) throw new Error('the newest session is not the attached one');
+      if (first.active) throw new Error('the first session is still active after a second Share — share() opens no project, so nothing on that path reaches history.reset() and nothing stands it down; its interval handle was overwritten without being cleared, so detach() can only ever stop the newest one and the orphan keeps diffing its own base against whatever project is open, for the life of the page');
+      FM.scene.layers[0].name = 'after the second share';
+      if (first.tick('hot') !== 0) throw new Error('the orphaned session still emits ops into its old room');
+    });
+  });
+
+  test('921 S2 leaving an OWNER session ends it — it never duplicates or deletes his own project', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921('the leave flow');
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      /* On a throwaway project: if this ever regresses, what gets duplicated with new ids and then
+         deleted must not be his real one. */
+      made.push(await FM.projects.create({ name: 'FX921 owner leave', width: 320, height: 240 }));
+      const pid = made[0];
+      await withCollab921([layer921('A'), layer921('B')], async function (c) {
+        const ids = FM.scene.layers.map(function (l) { return l.id; });
+        const r = await c.C.leave();
+        if (c.C.active) throw new Error('leave() left the session attached');
+        if (r !== null) throw new Error('leave() on an owner answered ' + JSON.stringify(r) + ' — the only meaning that value has is "his copy became his", which is a guest\'s question');
+        if (FM.projects.currentId() !== c.pid) throw new Error('leaving his OWN session moved him to ' + FM.projects.currentId() + ': an owner Session never carries gpid, so `s.gpid || currentId()` aimed detachLinked at his real project — duplicated with a new project id and new layer ids, media re-keyed, undo reset, and the original removed');
+        if (JSON.stringify(FM.scene.layers.map(function (l) { return l.id; })) !== JSON.stringify(ids)) throw new Error('every layer id changed, so his project was re-ided out from under him');
+        if (!FM.projects.list().some(function (p) { return p.id === c.pid; })) throw new Error('his project is not on Home at all any more');
+      });
+    } finally {
+      try { C.end(); } catch (e) {} try { C.detach(); } catch (e) {}
+      C._undoHandover(false);
+      FM.projects.list().forEach(function (p) { if (/^FX921 owner leave/.test(p.name || '') && made.indexOf(p.id) < 0) made.push(p.id); });
+      await q915aCleanup(made, orig, wasOpen, [], [], []);
+    }
+  });
+
+  test('921 S2 a service-worker takeover mid-session is held until the session lets go', { item: '921', budgetMs: 60000 }, async function () {
+    const C = need921('the deferred reload');
+    /* index.html's controllerchange handler is the caller; this is its contract. Fetching the source
+       is how the suite proves the CALL SITE exists — the behaviour cannot be driven, because a real
+       service-worker takeover cannot be synthesised and `location.reload` is not writable. */
+    const res = await fetch('../index.html?boot=' + Date.now());
+    const src = await res.text();
+    if (!/FM\.collab\.active\)\s*\{\s*FM\.collab\.deferReload\(\);\s*return;/.test(src)) {
+      throw new Error('index.html\'s controllerchange handler no longer defers to collab — a new build landing mid-edit would reload the page, drop the connection and lose anything not yet sent, which reads exactly like "it lost my work"');
+    }
+    await withCollab921([layer921('A')], async function (c) {
+      let reloads = 0;
+      const orig = C._reload;
+      C._reload = function () { reloads++; };
+      try {
+        C.deferReload();
+        if (!C._pendingReload()) throw new Error('deferReload did not record the deferral');
+        if (reloads) throw new Error('the page reloaded while a session was live');
+        c.C.end();
+        C.detach();
+        if (reloads !== 1) throw new Error('the held reload never happened when the session ended (' + reloads + ') — a deferral that is never honoured leaves him on an old build forever');
+      } finally { C._reload = orig; }
+    });
+  });
+
+  /* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   * #921 STAGE S2 — TIER 3: two or three REAL app instances (§25.3).
+   *
+   * Each instance is a full FreeMotion in an iframe on its own `*.localhost` sub-origin, which gives it
+   * its own localStorage, its own IndexedDB and its own Web Locks with NOT ONE LINE of storage code
+   * changed. The Stage-0 probe measured this (`tests/_collab-probe.html`, verdict "SEPARATE ORIGIN"),
+   * which is why the `fmns=<tag>` shim it also considered was never needed.
+   *
+   * The test frame is on a fourth origin and cannot touch their documents, so it drives them by RPC
+   * through the fixed action table in `tests/collab-agent.js`, and routes their traffic as a
+   * SWITCHBOARD: `{fmLink:1, from, to, ch, data}` in, the same envelope out to the named frame. Cutting
+   * one tag out of the routing is what "partition" means here, and it is a real cut — nothing crosses.
+   *
+   * Cost: booting an instance is a whole app (70-odd scripts, a 1.1 MB compositor). The trio is booted
+   * ONCE and reused, which is why these tests share it through `window.__collabTrio`.
+   * ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+  let _rig921 = null;
+  function rig921() {
+    if (_rig921) return _rig921;
+    const iframes = Object.create(null), up = Object.create(null), down = Object.create(null);
+    const waiting = Object.create(null);
+    let rpcId = 0;
+    function win(tag) { const f = iframes[tag]; return f && f.contentWindow; }
+
+    window.addEventListener('message', function (e) {
+      const d = e && e.data;
+      if (!d) return;
+      if (d.fmLink === 1) {
+        if (down[d.to] || down[d.from]) return;       // a partition is a real cut: nothing crosses
+        const w = win(d.to);
+        if (!w) return;
+        try { w.postMessage(d, '*'); } catch (err) {}
+        return;
+      }
+      if (d.fmAgent === 'up') { up[d.tag] = (up[d.tag] || 0) + 1; return; }
+      if (typeof d.fmRpc === 'number' && waiting[d.fmRpc]) {
+        const cb = waiting[d.fmRpc]; delete waiting[d.fmRpc];
+        if (d.ok) cb.res(d.val); else cb.rej(new Error(d.err));
+      }
+    });
+
+    function rpc(tag, act, args) {
+      return new Promise(function (res, rej) {
+        const w = win(tag);
+        if (!w) { rej(new Error('no frame ' + tag)); return; }
+        const id = ++rpcId;
+        waiting[id] = { res: res, rej: rej };
+        setTimeout(function () { if (waiting[id]) { delete waiting[id]; rej(new Error('rpc timeout: ' + tag + ' ' + act)); } }, 90000);
+        w.postMessage({ fmRpc: id, act: act, args: args || {} }, '*');
+      });
+    }
+    function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+    async function waitUp(tag, atLeast) {
+      for (let i = 0; i < 400; i++) { if ((up[tag] || 0) >= atLeast) return true; await sleep(100); }
+      throw new Error('the agent in frame "' + tag + '" never announced itself — either tests/collab-agent.js is not being loaded (the gate in js/collab-core.js needs localhost AND fmtest=collab) or the instance did not boot');
+    }
+    async function boot(tag, host, w, h) {
+      const f = document.createElement('iframe');
+      f.style.cssText = 'position:fixed;left:-5000px;top:0;border:0;width:' + w + 'px;height:' + h + 'px';
+      f.src = 'http://' + host + ':' + location.port + '/index.html?fmtest=collab&fmwipe=1&tag=' + tag;
+      document.body.appendChild(f);
+      iframes[tag] = f;
+      await waitUp(tag, 1);
+      return await rpc(tag, 'ready');
+    }
+    async function reboot(tag) {
+      const was = up[tag] || 0;
+      await rpc(tag, 'reload');
+      await waitUp(tag, was + 1);
+      return await rpc(tag, 'ready');
+    }
+    _rig921 = {
+      rpc: rpc, boot: boot, reboot: reboot, sleep: sleep,
+      partition: function (tag) { down[tag] = true; },
+      heal: function (tag) { delete down[tag]; },
+      /* Let every message in flight land, then let the acks and broadcasts they produce land too.
+         Nothing here is synchronous — these are real frames on real origins. */
+      settle: async function (ms) { await sleep(ms || 350); },
+      /* ⚠️ A FIXED WAIT IS A COIN TOSS, and this one landed tails once in a full-suite run while
+         passing on its own: a reconnect is hello → welcome → snapshot → replay → ack, five hops
+         between three real origins, and how long that takes depends on what else the machine is
+         doing. Wait for the CONDITION instead, and fail with what it actually was (queue 921 S2). */
+      /* ⚠️ TAKE THE TRIO DOWN AFTER THE LAST TEST IN THE GROUP. Three whole FreeMotions left rendering
+         off-screen for the remaining ~800 tests is real CPU and real memory on a machine the memory
+         note "Mac memory and audio stalls" says already stalls the suite at load ≥ 12 — and the
+         symptom would be a timeout somewhere else entirely. Self-healing: a tier-3 test added after
+         the teardown simply re-boots the trio. */
+      teardown: function () {
+        Object.keys(iframes).forEach(function (tag) {
+          const f = iframes[tag];
+          if (f && f.parentNode) f.parentNode.removeChild(f);
+          delete iframes[tag];
+          delete up[tag];
+        });
+        window.__collabTrio = null;
+      },
+      /* 30s. It was raised to 45 while a tier-3 timeout was being chased; the timeout turned out to be a PRODUCT bug
+         (the boot's own history.reset() stood a just-attached session down — js/collab-core.js onReset), not slowness,
+         and a long wait on a condition that will never come true only delays the red. 30s is twice the old 15 because
+         these conditions do span two whole app instances and a cold boot, and no more (queue 921). */
+      until: async function (what, pred, ms) {
+        const deadline = Date.now() + (ms || 30000);
+        let last = null;
+        while (Date.now() < deadline) {
+          last = await pred();
+          if (last) return last;
+          await sleep(200);
+        }
+        throw new Error('timed out waiting for ' + what + ' (last answer: ' + JSON.stringify(last) + ')');
+      }
+    };
+    return _rig921;
+  }
+
+  /* One trio for the whole group: h is the PC host (1280), a is the PHONE guest (380 — §25.3 puts a
+     real phone layout in the rig on purpose), b is a second desktop guest. */
+  async function trio921() {
+    if (window.__collabTrio) return window.__collabTrio;
+    const R = rig921();
+    const t = { R: R };
+    t.h = await R.boot('h', 'h.localhost', 1280, 800);
+    t.a = await R.boot('a', 'a.localhost', 380, 800);
+    t.b = await R.boot('b', 'b.localhost', 900, 760);
+    window.__collabTrio = t;
+    return t;
+  }
+
+  /* Every tier-3 test starts from the same place and leaves nothing running. */
+  async function t3reset921(tags) {
+    const R = rig921();
+    (tags || ['h', 'a', 'b']).forEach(function (tag) { R.heal(tag); });
+    for (const tag of (tags || ['h', 'a', 'b'])) {
+      try { await R.rpc(tag, 'end'); } catch (e) {}
+    }
+  }
+
+  test('921 S2 tier 3: a guest joins and gets the document, and not one byte of its own projects moves — on a 380px phone frame', { item: '921', budgetMs: 300000 }, async function () {
+    need921('the tier-3 rig');
+    const t = await trio921(), R = t.R;
+    await t3reset921(['h', 'a']);
+    try {
+      if (t.a.w > 700 || !t.a.phone) throw new Error('the guest frame is ' + t.a.w + 'px and FM.mobile.isPhone() says ' + t.a.phone + ' — §25.3 puts a real phone layout in this rig on purpose, and a guest tested only at desktop width is a guest tested on a layout he does not use');
+
+      const hostIds = await R.rpc('h', 'setScene', { names: ['Alpha', 'Beta', 'Gamma'] });
+      await R.rpc('h', 'share');
+
+      /* The guest has a project of its own, on disk, before anything collaborative happens. */
+      await R.rpc('a', 'setScene', { names: ['Mine one', 'Mine two'], name: 'His own project' });
+      await R.rpc('a', 'flush');
+      /* …and a real IndexedDB record of his, because the comparison below is about his data and a
+         scene of shape layers writes no media at all (queue 921). */
+      const seeded = await R.rpc('a', 'seedMedia');
+      if (!seeded) throw new Error('the guest could not be given an IndexedDB record of its own, so the "not one byte" comparison below has no subject');
+      const before = await R.rpc('a', 'projects');
+      const idbBefore = await R.rpc('a', 'idbDump');
+      const ownPid = before.cur;
+      if (!Object.keys(before.docs).length) throw new Error('the guest had no project documents on disk before joining, so "byte-identical" below would be comparing nothing');
+
+      const joined = await R.rpc('a', 'join', { host: 'h' });
+      await R.settle();
+      const gs = await R.rpc('a', 'state'), hs = await R.rpc('h', 'state');
+
+      if (JSON.stringify(gs.layers) !== JSON.stringify(hostIds)) throw new Error('the guest holds ' + JSON.stringify(gs.layers) + ', not the host\'s layer ids ' + JSON.stringify(hostIds) + ' — the ids must be the HOST\'S or no op either device sends can address anything on the other');
+      if (gs.hash !== hs.hash) throw new Error('the guest\'s document hash differs from the host\'s right after the snapshot');
+      if (gs.pid !== joined.gpid || gs.pid === ownPid) throw new Error('joining opened ' + gs.pid + ' — a guest gets a NEW project of its own (§12.2), it never opens somebody else\'s');
+
+      /* ═══ §24: HIS DATA IS NOT TOUCHED ══════════════════════════════════════════════════════════
+       * 📐 DECIDED, and §24 has been updated to say so. The spec asks for every other `fm.proj.*` string
+       * to be byte-identical before and after. Measured: the project that was OPEN gets its `rev`
+       * bumped, because `projects.open()` flushes the outgoing document before switching (storage.js
+       * writeScene, `rev: dr + 1`) — that is the autosave doing its job and has nothing to do with
+       * collaboration. So: every OTHER document byte-identical, and the open one's CONTENT (project and
+       * layers, the parts that are his work) byte-identical, with `rev` allowed to move. Reading `rev`
+       * as a violation would make the assertion fail for the wrong reason forever; ignoring the whole
+       * document would make it prove nothing. */
+      const after = await R.rpc('a', 'projects');
+      const openKey = 'fm.proj.' + ownPid;
+      Object.keys(before.docs).forEach(function (k) {
+        if (after.docs[k] === undefined) throw new Error('joining DELETED one of his own projects: ' + k);
+        if (k !== openKey) {
+          if (after.docs[k] !== before.docs[k]) throw new Error('joining rewrote one of his own projects (' + k + ')');
+          return;
+        }
+        const b = JSON.parse(before.docs[k]), a2 = JSON.parse(after.docs[k]);
+        const strip = function (d) { return JSON.stringify({ project: d.project, layers: d.layers }); };
+        if (strip(b) !== strip(a2)) throw new Error('joining changed the content of the project that was open — only its autosave `rev` may move');
+      });
+      const idbAfter = await R.rpc('a', 'idbDump');
+      const bm = idbBefore.media || [], am = idbAfter.media || [];
+      /* ⚠️ THE CONTROL THE localStorage HALF ABOVE HAS AND THIS HALF DID NOT (queue 921). Without a
+         record of his in `bm`, `gone` is [] whatever a join does and the throw below is unreachable. */
+      if (bm.indexOf(seeded) < 0) throw new Error('the guest\'s own IndexedDB record is not in the "before" dump (' + bm.length + ' key(s)), so "byte-identical" here would be comparing nothing');
+      const gone = bm.filter(function (k) { return am.indexOf(k) < 0; });
+      if (gone.length) throw new Error('joining removed IndexedDB records the guest already had: ' + gone.join(', '));
+      /* …and the other direction, which was missing entirely: a before-minus-after filter cannot see
+         anything a join ADDS, including the `collab:base:<gpid>` record §12.4 writes. The linked copy's
+         own collab records and its card thumbnail are the only legitimate additions. */
+      const added = am.filter(function (k) { return bm.indexOf(k) < 0 && k.indexOf('collab:') !== 0 && k.indexOf('thumb:') !== 0; });
+      if (added.length) throw new Error('joining wrote IndexedDB records that are neither his nor the linked copy\'s own: ' + added.join(', '));
+
+      /* …and the phone frame is a working editor, not a blank one. */
+      const tl = await R.rpc('a', 'dom', { sel: '#timeline-panel' });
+      if (!tl || tl.w <= 0 || tl.h <= 0) throw new Error('the 380px guest has no timeline panel with a box (' + JSON.stringify(tl) + ')');
+      if (tl.w > 400) throw new Error('the guest timeline is ' + tl.w + 'px wide inside a 380px frame — the phone layout is not the one being measured');
+      const tracks = await R.rpc('a', 'dom', { sel: '#tl-tracks' });
+      if (!tracks || tracks.h <= 0) throw new Error('the 380px guest drew no clip rows for the document it just received (' + JSON.stringify(tracks) + ')');
+      await R.rpc('a', 'setProp', { id: hostIds[1], key: 'name', value: 'from the phone' });
+      await R.settle();
+      const hs2 = await R.rpc('h', 'state');
+      if (hs2.names[1] !== 'from the phone') throw new Error('an edit from the 380px guest never reached the host (host sees ' + JSON.stringify(hs2.names) + ')');
+    } finally { await t3reset921(['h', 'a']); }
+  });
+
+  test('921 S2 tier 3: three real instances converge, a delete lands on a layer someone else has selected, and undo is per person', { item: '921', budgetMs: 300000 }, async function () {
+    need921('the tier-3 rig');
+    const t = await trio921(), R = t.R;
+    await t3reset921();
+    try {
+      const ids = await R.rpc('h', 'setScene', { names: ['Alpha', 'Beta', 'Gamma'] });
+      await R.rpc('h', 'share');
+      await R.rpc('a', 'join', { host: 'h', onConflict: 'replace' });
+      await R.rpc('b', 'join', { host: 'h', onConflict: 'replace' });
+      await R.settle();
+
+      /* ── three people, three layers, at the same moment ───────────────────────────────────────── */
+      await Promise.all([
+        R.rpc('h', 'setProp', { id: ids[0], key: 'name', value: 'by-host' }),
+        R.rpc('a', 'setProp', { id: ids[1], key: 'name', value: 'by-a' }),
+        R.rpc('b', 'setProp', { id: ids[2], key: 'name', value: 'by-b' })
+      ]);
+      await R.settle(700);
+      let sh = await R.rpc('h', 'state'), sa = await R.rpc('a', 'state'), sb = await R.rpc('b', 'state');
+      if (sh.hash !== sa.hash || sh.hash !== sb.hash) throw new Error('three instances did not converge: ' + JSON.stringify([sh.names, sa.names, sb.names]));
+      if (JSON.stringify(sh.names) !== '["by-host","by-a","by-b"]') throw new Error('someone\'s edit was lost: ' + JSON.stringify(sh.names));
+
+      /* ── the same path, from all three at once: one value wins and everybody has it ───────────── */
+      await Promise.all([
+        R.rpc('h', 'setProp', { id: ids[0], key: 'name', value: 'race-host' }),
+        R.rpc('a', 'setProp', { id: ids[0], key: 'name', value: 'race-a' }),
+        R.rpc('b', 'setProp', { id: ids[0], key: 'name', value: 'race-b' })
+      ]);
+      await R.settle(900);
+      sh = await R.rpc('h', 'state'); sa = await R.rpc('a', 'state'); sb = await R.rpc('b', 'state');
+      if (sh.hash !== sa.hash || sh.hash !== sb.hash) throw new Error('a three-way race on ONE path left the instances disagreeing: ' + JSON.stringify([sh.names[0], sa.names[0], sb.names[0]]));
+
+      /* ── a delete arrives on the layer b has selected (§8.6 step 1, the queue-629 rule) ───────── */
+      await R.rpc('b', 'select', { id: ids[2] });
+      await R.rpc('a', 'deleteLayer', { id: ids[2] });
+      await R.settle(700);
+      sb = await R.rpc('b', 'state'); sh = await R.rpc('h', 'state');
+      if (sb.layers.indexOf(ids[2]) >= 0) throw new Error('the deleted layer is still on b');
+      if (sb.selected) throw new Error('b is still "on" a layer that no longer exists (' + sb.selected + ') — the inspector stays open on it and the next slider drag writes to a corpse');
+      if (sh.layers.indexOf(ids[2]) >= 0) throw new Error('the delete never reached the host');
+
+      /* ── undo is per person ───────────────────────────────────────────────────────────────────── */
+      await R.rpc('a', 'setProp', { id: ids[0], key: 'name', value: 'a-will-undo' });
+      await R.settle();
+      await R.rpc('b', 'setProp', { id: ids[1], key: 'name', value: 'b-keeps-this' });
+      await R.settle(600);
+      await R.rpc('a', 'undo');
+      await R.settle(700);
+      sh = await R.rpc('h', 'state'); sa = await R.rpc('a', 'state'); sb = await R.rpc('b', 'state');
+      if (sh.names[0] === 'a-will-undo') throw new Error("a's undo did not reach the others");
+      if (sh.names[1] !== 'b-keeps-this') throw new Error("a's undo reverted b's work (layer 1 is now \"" + sh.names[1] + '") — his rule for this feature is that undo only undoes your own changes');
+      if (sh.hash !== sa.hash || sh.hash !== sb.hash) throw new Error('an undo left the three instances disagreeing');
+    } finally { await t3reset921(); }
+  });
+
+  test('921 S2 tier 3: the host reloads — a new epoch, a snapshot, and the guest\'s work made while it was gone is resent', { item: '921', budgetMs: 300000 }, async function () {
+    need921('the tier-3 rig');
+    const t = await trio921(), R = t.R;
+    await t3reset921(['h', 'a']);
+    try {
+      const ids = await R.rpc('h', 'setScene', { names: ['Alpha', 'Beta', 'Gamma'] });
+      const armed = await R.rpc('h', 'share');
+      await R.rpc('a', 'join', { host: 'h', onConflict: 'replace' });
+      await R.settle();
+      await R.rpc('a', 'setProp', { id: ids[0], key: 'name', value: 'before-the-reload' });
+      await R.settle(600);
+      await R.rpc('h', 'flush');
+
+      /* The host goes away — a reload, a crash, a phone locking. §13.1: the guest keeps editing. */
+      R.partition('h');
+      await R.rpc('a', 'offline', { down: true });
+      await R.rpc('a', 'setProp', { id: ids[1], key: 'name', value: 'while-the-host-was-gone' });
+      const offline = await R.rpc('a', 'state');
+      if (!offline.outstanding) throw new Error('an edit made while offline did not go into the outbox (' + offline.outstanding + ' outstanding) — it is only in this tab, and the next reload loses it');
+
+      await R.reboot('h');
+      const armed2 = await R.rpc('h', 'share');
+      if (armed2.epoch === armed.epoch) throw new Error('the host came back with the same epoch (' + armed2.epoch + ') — seq restarts at 0 after a reload, so a guest that trusted the old epoch would apply batch 1 twice and skip nothing');
+      const hs0 = await R.rpc('h', 'state');
+      if (hs0.names[0] !== 'before-the-reload') throw new Error('the host came back without the guest\'s earlier edit (' + JSON.stringify(hs0.names) + ') — §7.1 step 12\'s autosave is what puts it on disk');
+
+      R.heal('h');
+      await R.rpc('a', 'offline', { down: false });
+      const sa = await R.until('the guest to finish resending what it owed', async function () {
+        const st = await R.rpc('a', 'state');
+        return st.outstanding === 0 ? st : false;
+      });
+      await R.settle(400);
+      const hs = await R.rpc('h', 'state');
+      if (hs.names[1] !== 'while-the-host-was-gone') throw new Error('the work done while the host was away was never resent (host sees ' + JSON.stringify(hs.names) + ')');
+      if (sa.outstanding) throw new Error('the guest still has ' + sa.outstanding + ' unacknowledged txs after reconnecting');
+      if (hs.hash !== sa.hash) throw new Error('host and guest disagree after the reconnect');
+      if (!sa.stats.snaps) throw new Error('the guest caught up without a SNAPSHOT — after an epoch change the ring cannot cover it, so a tail here would silently skip everything the host did before the reload');
+    } finally { await t3reset921(['h', 'a']); }
+  });
+
+  test('921 S2 tier 3: a partition counts the clashes, Save my version makes a real project, and a guest reload mid-offline is idempotent', { item: '921', budgetMs: 300000 }, async function () {
+    need921('the tier-3 rig');
+    const t = await trio921(), R = t.R;
+    await t3reset921();
+    try {
+      const ids = await R.rpc('h', 'setScene', { names: ['Alpha', 'Beta', 'Gamma'] });
+      await R.rpc('h', 'share');
+      await R.rpc('a', 'join', { host: 'h', onConflict: 'replace' });
+      await R.rpc('b', 'join', { host: 'h', onConflict: 'replace' });
+      await R.settle();
+
+      /* ── a is cut off and edits; b edits the same layer while a is away ───────────────────────── */
+      R.partition('a');
+      await R.rpc('a', 'offline', { down: true });
+      await R.rpc('a', 'setProp', { id: ids[0], key: 'name', value: 'a-was-offline' });
+      await R.rpc('b', 'setProp', { id: ids[0], key: 'name', value: 'b-was-here' });
+      await R.settle(600);
+
+      R.heal('a');
+      await R.rpc('a', 'offline', { down: false });
+      const sa = await R.until('the reconnecting guest to be told its offline change clashed', async function () {
+        const st = await R.rpc('a', 'state');
+        return (st.outstanding === 0 && st.clashes) ? st : false;
+      });
+      await R.settle(400);
+      const sh = await R.rpc('h', 'state');
+      if (sh.names[0] !== 'b-was-here') throw new Error('the offline edit silently overwrote newer work (host now shows "' + sh.names[0] + '") — §13.3\'s CAS exists so that a change written against a value nobody holds any more is REFUSED, not applied');
+      if (!sa.clashes) throw new Error('the clash was not counted, so nothing would ever have told him his offline change did not land');
+      if (sa.hash !== sh.hash) throw new Error('a and the host disagree after the reconnect');
+
+      const savedPid = await R.rpc('a', 'saveMyVersion');
+      const projects = await R.rpc('a', 'projects');
+      if (!savedPid || !projects.docs['fm.proj.' + savedPid]) throw new Error('"Save my version as a copy" did not produce a project — the toast offers it, so it has to be real');
+
+      /* ── a reload in the middle of being offline ──────────────────────────────────────────────── */
+      await R.rpc('a', 'persist');
+      const st1 = await R.rpc('a', 'state');
+      R.partition('a');
+      await R.rpc('a', 'offline', { down: true });
+      await R.rpc('a', 'setProp', { id: ids[2], key: 'name', value: 'survived-a-reload' });
+      await R.rpc('a', 'flush');
+      await R.reboot('a');
+      R.heal('a');
+      const re = await R.rpc('a', 'rejoin', { host: 'h', mid: st1.mid });
+      if (!re) throw new Error('the guest could not come back after a reload — there was no persisted base to work out what it still owed (§12.4)');
+      if (!re.owed) throw new Error('the reload recovery found nothing to send, so the edit made while offline is gone: diffDoc(persistedBase, live) is the only record of it');
+      await R.until('the recovered outbox to reach the host', async function () {
+        return (await R.rpc('a', 'state')).outstanding === 0;
+      });
+      await R.settle(400);
+      const sh2 = await R.rpc('h', 'state');
+      if (sh2.names[2] !== 'survived-a-reload') throw new Error('the offline edit did not survive the reload (host sees ' + JSON.stringify(sh2.names) + ')');
+
+      /* ── and doing it again, with a base that is now STALE, changes nothing ───────────────────── */
+      const clashesBefore = (await R.rpc('a', 'state')).clashes;
+      await R.reboot('a');
+      const re2 = await R.rpc('a', 'rejoin', { host: 'h', mid: st1.mid });
+      const sa3 = await R.until('the replayed outbox to be answered', async function () {
+        const st = await R.rpc('a', 'state');
+        return st.outstanding === 0 ? st : false;
+      });
+      await R.settle(400);
+      const sh3 = await R.rpc('h', 'state');
+      if (sh3.names[2] !== 'survived-a-reload') throw new Error('replaying an already-delivered op changed the document (' + JSON.stringify(sh3.names) + ') — §13.3 calls the CAS idempotent and the whole reload recovery leans on that');
+      if (sa3.clashes > clashesBefore) throw new Error('replaying ops the host already has was counted as a clash (' + clashesBefore + ' → ' + sa3.clashes + '), so he would be told his work was lost when it was not');
+      if (sh3.hash !== sa3.hash) throw new Error('the second reload left the two disagreeing');
+      void re2;
+    } finally { await t3reset921(); }
+  });
+
+  test('921 S2 tier 3: the same-device refusal, Replace and Keep-first, and leave-keep detaching with ids that cannot collide', { item: '921', budgetMs: 300000 }, async function () {
+    need921('the tier-3 rig');
+    const t = await trio921(), R = t.R;
+    await t3reset921(['h', 'b']);
+    try {
+      const ids = await R.rpc('h', 'setScene', { names: ['Alpha', 'Beta', 'Gamma'] });
+      await R.rpc('h', 'share');
+      await R.rpc('b', 'setScene', { names: ['Bs own'], name: 'B own work' });
+      const first = await R.rpc('b', 'join', { host: 'h', onConflict: 'replace' });
+      await R.settle();
+
+      /* ── leave, keeping it: his copy becomes HIS, with ids that can never collide again ───────── */
+      const keptPid = await R.rpc('b', 'leave', { keep: true });
+      await R.settle(400);
+      const sk = await R.rpc('b', 'state');
+      if (!keptPid || sk.pid !== keptPid) throw new Error('leave-keep did not leave him on his own copy (' + keptPid + ' vs ' + sk.pid + ')');
+      if (sk.active) throw new Error('the session is still running after leaving');
+      const shared = ids.slice();
+      if (sk.layers.some(function (id) { return shared.indexOf(id) >= 0; })) throw new Error('the kept copy still carries the HOST\'S layer ids (' + JSON.stringify(sk.layers) + ') — two projects on one device holding the same layer ids is how media gets released out from under a project that is still using it, and it is what makes a later rejoin impossible');
+      if (sk.layers.length !== shared.length) throw new Error('the kept copy lost layers (' + sk.layers.length + ' vs ' + shared.length + ')');
+
+      /* …so rejoining is possible, which is the whole reason the ids were changed. */
+      const second = await R.rpc('b', 'join', { host: 'h' });
+      if (!second.gpid || second.gpid === first.gpid) throw new Error('the rejoin did not produce a fresh linked copy');
+      await R.settle();
+
+      /* ── now there IS a copy of this document on the device: joining again must refuse ─────────── */
+      await R.rpc('b', 'end');
+      let refused = null;
+      try { await R.rpc('b', 'join', { host: 'h' }); } catch (e) { refused = String(e.message || e); }
+      if (!refused || !/same-device/.test(refused)) throw new Error('joining a document this device already holds was allowed (' + refused + ') — §12.2 check 3, and the reason it exists is that two projects sharing layer ids make the media sweep free records another project is still using');
+
+      /* ── "Replace it with the live one" ───────────────────────────────────────────────────────── */
+      const beforeReplace = Object.keys((await R.rpc('b', 'projects')).docs).length;
+      const replaced = await R.rpc('b', 'join', { host: 'h', onConflict: 'replace' });
+      await R.settle(400);
+      const afterReplace = Object.keys((await R.rpc('b', 'projects')).docs).length;
+      if (!replaced.gpid) throw new Error('Replace did not join');
+      if (afterReplace !== beforeReplace) throw new Error('Replace left ' + afterReplace + ' projects where there were ' + beforeReplace + ' — it is meant to take the old copy out, not stack another one beside it');
+
+      /* ── "Keep it as my own copy first" ───────────────────────────────────────────────────────── */
+      await R.rpc('b', 'end');
+      const beforeKeep = Object.keys((await R.rpc('b', 'projects')).docs).length;
+      const kept = await R.rpc('b', 'join', { host: 'h', onConflict: 'keepFirst' });
+      await R.settle(400);
+      const afterKeep = await R.rpc('b', 'projects');
+      if (!kept.gpid) throw new Error('Keep-first did not join');
+      if (Object.keys(afterKeep.docs).length !== beforeKeep + 1) throw new Error('Keep-first ended with ' + Object.keys(afterKeep.docs).length + ' projects, not ' + (beforeKeep + 1) + ' — the old copy is meant to survive as his own work AND the live one to be joined');
+      const sb = await R.rpc('b', 'state');
+      if (sb.pid !== kept.gpid) throw new Error('Keep-first did not open the live copy');
+      if (JSON.stringify(sb.layers) !== JSON.stringify(ids)) throw new Error('the live copy does not carry the host\'s ids after Keep-first');
+    } finally { await t3reset921(['h', 'b']); rig921().teardown(); }
   });
 
   /* The one thing that separates this from sanitizeAudioFx, and the reason it is not a copy of it.
@@ -43365,6 +44871,9 @@
       await sleep(220);
     }
   });
+
+
+
 
   test('the sheet previews the picked effects over the whole comp, and puts it all back (queue 277 + 390)', { item: 'fx-sheet' }, async function () {
     /* Clauses 5 and 7: "when you tap on an effect it doesn't just add it selects it and it will show the
@@ -62374,7 +63883,8 @@
          build is that a solo user cannot tell collaboration shipped. Delete these two lines when S3
          adds the markup; the inertness test will name them itself if it is ever left behind. */
       'collab-people': 'queue 921 — the people chip arrives in S3; a test checks it is absent until then',
-      'hm-join-btn':   'queue 921 — Home\'s Join button, same stage, same reason'
+      'hm-join-btn':   'queue 921 — Home\'s Join button, same stage, same reason',
+      'btn-share':     'queue 921 — the topbar Share button, same stage, same reason (S2 ships the engine and no UI at all)'
     };
     const [tests, html] = await Promise.all([
       fetch('tests/tests.js', { cache: 'no-store' }).then(r => r.text()),

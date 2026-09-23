@@ -1186,6 +1186,32 @@ window.FM = window.FM || {};
   FM.storage._sanitizeEffects = sanitizeEffects;
   FM.storage._sanitizeLayers = sanitizeImportedLayers;   // read by the suite, and by history.restore
   FM.storage._reIdLayers = reIdLayers;
+  /* queue 921 S2: the host runs the project clamp on a CLONE as one of its three invariants (§7.1 step
+     8), and until now it could not reach this one — so S1's suite carried a hand-written copy of the
+     arithmetic above, which is two sources of truth for one rule and exactly the shape the whitelist-
+     drift memory note is about. The bridge uses this; the suite now compares against it. */
+  FM.storage._clampProjectDims = clampProjectDims;
+  /* ═══ THE `collab:` CORNER OF INDEXEDDB (queue 921 S2, spec §12.4) ═════════════════════════════
+   * Checkpoints, a guest's persisted base and (in S4) media parts all live in the media store under
+   * `collab:` keys — which `pruneOrphans` was already taught to skip in S0. Three one-line wrappers,
+   * rather than a second `openDB()` inside the collab modules: the database name, the store name and
+   * the quota handling are this file's business, and a second copy of them is a second thing to keep
+   * in step with a schema bump.
+   * ⚠️ The key prefix is enforced here, not trusted. Anything outside `collab:` would be a media
+   * record, and a collab module writing one would be invisible to every rule that owns them. */
+  function collabKey(k) {
+    if (typeof k !== 'string' || k.indexOf('collab:') !== 0) throw new Error('collab storage keys must start with "collab:" — got ' + k);
+    return k;
+  }
+  FM.storage.collabPut = async function (key, val) {
+    try { const db = await openDB(); const ok = await idbPut(db, collabKey(key), val); db.close(); return ok; } catch (e) { return false; }
+  };
+  FM.storage.collabGet = async function (key) {
+    try { const db = await openDB(); const v = await idbGet(db, collabKey(key)); db.close(); return v === undefined ? null : v; } catch (e) { return null; }
+  };
+  FM.storage.collabDel = async function (key) {
+    try { const db = await openDB(); await idbDel(db, collabKey(key)); db.close(); return true; } catch (e) { return false; }
+  };
   FM.storage.applyScene = async function (obj) {
     if (!obj || !obj.project || !Array.isArray(obj.layers)) return false;
     if (obj.layers.length > 2000) return false;   // absurd layer count = malicious/corrupt — refuse rather than hang the render
@@ -1881,6 +1907,20 @@ window.FM = window.FM || {};
       if (FM.pause) FM.pause(); else FM.playing = false;   // stop WebAudio + <video> sound, not just the flag (#r4)
       if (FM.groupContext && FM.exitGroup) FM.exitGroup(true);   // the group view belongs to the outgoing project
       FM.storage.flushSync(); this.touchCurrent(true);   // queue 915: a no-op picture while its media are released (makeThumb)
+      /* ⚠️ THE SESSION STANDS DOWN HERE, NOT AT history.reset() BELOW (queue 921, spec §12.1 `paused`).
+         Everything from the next line to `load()` finishing is a document that belongs to NEITHER
+         project: the scene is emptied, then `load()` is awaited for as long as IndexedDB and a media
+         hydrate take. reset() is the only thing that reached FM.collab, and it runs at the END of all
+         that — while the 100 ms ticker fires right through it. A tick landing in that window diffs a
+         full base against an empty live and emits one `lr` per layer, which the host accepts and
+         broadcasts: every layer deleted for everyone, the owner's real project autosaved over, and
+         then the OTHER project uploaded into the room as the load completes. flushSync above has
+         already sent the outgoing project's last edits, so this is the right moment and not a byte
+         earlier. (pushLocal carries the matching structural check, so this ordering is not the only
+         thing holding the door shut.) */
+      /* `force`, because THIS is the caller that knows: the id being left is still the current one, so
+         onReset's "is the open project still mine?" guard would answer yes and skip (queue 921 S2). */
+      if (FM.collab && FM.collab.onReset) FM.collab.onReset({ force: true });
       FM.releaseProjectMedia(FM.scene.layers);
       _released.clear();   // a different scene from here on — the ids above no longer describe it
       try { localStorage.setItem(CUR_KEY, id); } catch (e) {}
@@ -2004,6 +2044,80 @@ window.FM = window.FM || {};
       this.saveIndex(this.list().filter(p => p.id !== nid));
       return done(false);
     },
+    /* ═══ THE GUEST'S COPY OF A SHARED PROJECT (queue 921 S2, spec §12.2) ══════════════════════════
+     * A guest does not "open the owner's project" — there is no such thing on this device. It gets a
+     * NEW project of its own, holding the host's document, with the host's LAYER IDS kept so the ops
+     * line up. The link lives on the index entry under `collab`, which is where the secrets go for the
+     * same reason the AI key does: localStorage, on this device, never in the document.
+     *
+     * ⚠️ THE SANITISE HAPPENS HERE, not at the call site. §12.2 lists it as step 2 of the join flow and
+     * `createLinked` as step 3, which makes "we sanitised it" something a future caller has to
+     * remember — and this repo's rule is that anything important enough to forget is structural. The
+     * host has already normalised at arm (§7.3), so on a well-behaved room this changes nothing; the
+     * point is the room that is not well behaved. Everything a peer sends is untrusted (§14.9).
+     *
+     * Returns the new project id, or null if the write failed (a full device). */
+    createLinked(meta, D) {
+      if (!D || !D.project || !Array.isArray(D.layers)) return null;
+      const m = meta || {};
+      const project = JSON.parse(JSON.stringify(D.project));
+      const layers = JSON.parse(JSON.stringify(D.layers));
+      sanitizeImportedLayers(layers);
+      if (FM.repairParentCycles) FM.repairParentCycles(layers);
+      clampProjectDims(project);
+      const gpid = newId('p');
+      if (!writeJSON('fm.proj.' + gpid, { rev: 1, project: project, layers: layers, selectedId: null, selectedIds: [] })) return null;
+      const idx = this.list();
+      const rec = {
+        id: gpid, name: project.name || m.name || 'Shared project',
+        created: Date.now(), modified: Date.now(),
+        width: project.width, height: project.height, fps: project.fps, duration: project.duration,
+        layers: layers.length, thumb: null,
+        collab: {
+          v: 1, sid: m.sid || null, sk: m.sk || null,
+          hostName: m.hostName || '', hostColor: m.hostColor || '#888888',
+          mid: m.mid || null, tok: m.tok || null, role: m.role || 'editor',
+          joined: Date.now(), epoch: m.epoch || null, seq: m.seq || 0, cid: 0
+        }
+      };
+      idx.unshift(rec);
+      if (!this.saveIndex(idx)) { try { localStorage.removeItem('fm.proj.' + gpid); } catch (e) {} return null; }
+      return gpid;
+    },
+    /* §12.3: the linked copy stops being linked and becomes HIS. New project id, NEW LAYER IDS (that is
+     * the whole point — the ids were the host's, and two projects on one device holding the same layer
+     * ids is what the same-device refusal in §12.2 exists to catch), media copied under them.
+     *
+     * ⚠️ IT GOES THROUGH duplicateFrom, which is queue 915.3's rollback: a half-copy on a full device
+     * is taken back out rather than indexed. Detach must never be able to leave him with two broken
+     * projects where he had one working one — this is the path that runs when the owner stops sharing,
+     * i.e. when he is NOT looking at the screen.
+     * The linked copy is removed only AFTER the new one is whole. Returns the new pid, or null. */
+    async detachLinked(gpid) {
+      /* ⚠️ THE SAME FIRST LINE `duplicate()` CARRIES, AND FOR THE SAME REASON (queue 921): this copies
+         the doc ON DISK and then DELETES the project that still held the newer content in memory, so
+         without the flush everything edited since the last 600 ms autosave is gone — silently, and
+         into a project that no longer exists. The window is not capped at 600 ms either: every edit
+         restarts that timer, so during continuous work the doc stays stale indefinitely, and "the
+         owner stopped sharing" arrives when he is not looking at the screen. Inside the function
+         rather than at the call sites, for the reason `createLinked`'s own note gives. */
+      if (gpid === curId() && FM.storage && FM.storage.flushSync) FM.storage.flushSync();
+      const doc = readJSON('fm.proj.' + gpid, null);
+      if (!doc) return null;
+      const src = this.list().find(p => p.id === gpid) || {};
+      const nid = await this.duplicateFrom(doc, { name: src.name || (doc.project && doc.project.name) || 'Shared project', srcIds: [gpid] });
+      if (!nid) return null;
+      /* The copy inherited the source card's fields — including `collab`, which would make a project
+         that is nobody's copy of anything look linked, and would hand its sid and key to a brand-new
+         project the host has never heard of. */
+      const idx = this.list();
+      const e = idx.find(p => p.id === nid);
+      if (e) { delete e.collab; this.saveIndex(idx); }
+      const wasOpen = curId() === gpid;
+      await this.remove(gpid);
+      if (wasOpen && curId() !== nid) await this.open(nid);
+      return nid;
+    },
     rename(id, name) {
       const idx = this.list(); const e = idx.find(p => p.id === id); if (!e) return;
       e.name = name; e.modified = Date.now(); this.saveIndex(idx);   // renaming is a real change → bumps list order
@@ -2099,6 +2213,13 @@ window.FM = window.FM || {};
         if (doc && Array.isArray(doc.layers)) for (const l of doc.layers) { if (!libKeys.has(l.id) && !elsewhere.has(l.id)) await idbDel(db, l.id); }
         // this project's own collab records go with it (spec §12.4): the checkpoints…
         for (const k of allKeys) { if (typeof k === 'string' && k.indexOf(ckptPrefix) === 0) await idbDel(db, k); }
+        /* …and a guest's persisted base, which §12.4's own table collects on "copy detached or
+           removed" and which nothing ever did. `collab.bridge.dropBase` was written for exactly this
+           and has no caller anywhere, so every join-then-leave left a whole document behind in the
+           media store with no rule that could name it again — `pruneOrphans` is taught to skip
+           everything under `collab:`. Deleting it HERE rather than at the two call sites means a
+           future caller that removes a project cannot forget (queue 921). */
+        await idbDel(db, 'collab:base:' + id);
         await delThumb(db, id);
         db.close();
       } catch (e) {}

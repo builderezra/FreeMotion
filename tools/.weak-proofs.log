@@ -3,3 +3,52 @@
 2026-09-22 20:54	WEAK	915.3 a project duplicate that could not be written says so and leaves no empty copy	with no room for the copy's document, duplicate() returned undefined — the bulk bar counts anything but false as done and toasts Duplicated 1
 2026-09-23 03:24	WEAK	921 S0 sanitizers keep a valid uid, drop an invalid one, uid-less output byte-identical	FM.storage._sanitizeLayers / _keepUid is not exposed — the suite cannot test the real rule
 2026-09-23 03:24	WEAK	921 S0 nothing leaves the device, and solo undo still restores byte-for-byte	11 of the 11 collab seams are missing or no longer guarded: history.commit → beforeSnap · history.commit → afterCommit · history.undo delegates · history
+2026-09-23 10:08	WEAK	921 S2 detaching a linked copy copies the last edits, not the last autosave	FM.projects.detachLinked is not a function
+2026-09-23 10:08	WEAK	921 S2 LoopLink.heal reopens only the side it heals, so a still-cut endpoint never reports itself connected	Cannot read properties of undefined (reading 'LoopLink')
+2026-09-23 10:08	WEAK	921 S2 switching project stands the session down BEFORE the scene is torn, not after the load	C._undoHandover is not a function
+2026-09-23 10:08	WEAK	921 S2 undo is per person: a changed path is left alone, a delete comes back with its media, a structural step is all-or-nothing, and a pre-session step still undoes	Cannot read properties of undefined (reading '_quiet')
+2026-09-23 10:08	WEAK	921 S2 a batch broadcast during the join handshake is kept and replayed, not read and dropped	Cannot read properties of undefined (reading 'invariants')
+2026-09-23 10:08	WEAK	921 S2 a persisted guest base answers for the WRITE, not for having asked for one	Cannot read properties of undefined (reading 'persistBase')
+2026-09-23 10:08	WEAK	921 S2 leaving an OWNER session ends it — it never duplicates or deletes his own project	C._undoHandover is not a function
+2026-09-23 10:19	WEAK	921 S2 detaching a linked copy copies the last edits, not the last autosave	FM.projects.detachLinked is not a function
+2026-09-23 10:19	WEAK	921 S2 LoopLink.heal reopens only the side it heals, so a still-cut endpoint never reports itself connected	Cannot read properties of undefined (reading 'LoopLink')
+2026-09-23 10:19	WEAK	921 S2 switching project stands the session down BEFORE the scene is torn, not after the load	C._undoHandover is not a function
+2026-09-23 10:19	WEAK	921 S2 undo is per person: a changed path is left alone, a delete comes back with its media, a structural step is all-or-nothing, and a pre-session step still undoes	Cannot read properties of undefined (reading '_quiet')
+2026-09-23 10:19	WEAK	921 S2 a batch broadcast during the join handshake is kept and replayed, not read and dropped	Cannot read properties of undefined (reading 'invariants')
+2026-09-23 10:19	WEAK	921 S2 a persisted guest base answers for the WRITE, not for having asked for one	Cannot read properties of undefined (reading 'persistBase')
+2026-09-23 10:19	WEAK	921 S2 leaving an OWNER session ends it — it never duplicates or deletes his own project	C._undoHandover is not a function
+2026-09-23 10:24	WEAK	921 S2 detaching a linked copy copies the last edits, not the last autosave	FM.projects.detachLinked is not a function
+2026-09-23 10:24	WEAK	921 S2 LoopLink.heal reopens only the side it heals, so a still-cut endpoint never reports itself connected	Cannot read properties of undefined (reading 'LoopLink')
+2026-09-23 10:24	WEAK	921 S2 switching project stands the session down BEFORE the scene is torn, not after the load	C._undoHandover is not a function
+2026-09-23 10:24	WEAK	921 S2 undo is per person: a changed path is left alone, a delete comes back with its media, a structural step is all-or-nothing, and a pre-session step still undoes	Cannot read properties of undefined (reading '_quiet')
+2026-09-23 10:24	WEAK	921 S2 a batch broadcast during the join handshake is kept and replayed, not read and dropped	Cannot read properties of undefined (reading 'invariants')
+2026-09-23 10:24	WEAK	921 S2 a persisted guest base answers for the WRITE, not for having asked for one	Cannot read properties of undefined (reading 'persistBase')
+2026-09-23 10:24	WEAK	921 S2 leaving an OWNER session ends it — it never duplicates or deletes his own project	C._undoHandover is not a function
+2026-09-23 13:17	WEAK	921 S2 detaching a linked copy copies the last edits, not the last autosave	FM.projects.detachLinked is not a function
+2026-09-23 13:17	WEAK	921 S2 LoopLink.heal reopens only the side it heals, so a still-cut endpoint never reports itself connected	Cannot read properties of undefined (reading 'LoopLink')
+2026-09-23 13:17	WEAK	921 S2 switching project stands the session down BEFORE the scene is torn, not after the load	C._undoHandover is not a function
+2026-09-23 13:17	WEAK	921 S2 undo is per person: a changed path is left alone, a delete comes back with its media, a structural step is all-or-nothing, and a pre-session step still undoes	Cannot read properties of undefined (reading '_quiet')
+2026-09-23 13:17	WEAK	921 S2 a batch broadcast during the join handshake is kept and replayed, not read and dropped	Cannot read properties of undefined (reading 'invariants')
+2026-09-23 13:17	WEAK	921 S2 a persisted guest base answers for the WRITE, not for having asked for one	Cannot read properties of undefined (reading 'persistBase')
+2026-09-23 13:17	WEAK	921 S2 leaving an OWNER session ends it — it never duplicates or deletes his own project	C._undoHandover is not a function
+2026-09-23 13:31	WEAK	921 S2 detaching a linked copy copies the last edits, not the last autosave	FM.projects.detachLinked is not a function
+2026-09-23 13:31	WEAK	921 S2 LoopLink.heal reopens only the side it heals, so a still-cut endpoint never reports itself connected	Cannot read properties of undefined (reading 'LoopLink')
+2026-09-23 13:31	WEAK	921 S2 switching project stands the session down BEFORE the scene is torn, not after the load	C._undoHandover is not a function
+2026-09-23 13:31	WEAK	921 S2 undo is per person: a changed path is left alone, a delete comes back with its media, a structural step is all-or-nothing, and a pre-session step still undoes	Cannot read properties of undefined (reading '_quiet')
+2026-09-23 13:31	WEAK	921 S2 a batch broadcast during the join handshake is kept and replayed, not read and dropped	Cannot read properties of undefined (reading 'invariants')
+2026-09-23 13:31	WEAK	921 S2 a persisted guest base answers for the WRITE, not for having asked for one	Cannot read properties of undefined (reading 'persistBase')
+2026-09-23 13:31	WEAK	921 S2 leaving an OWNER session ends it — it never duplicates or deletes his own project	C._undoHandover is not a function
+2026-09-23 15:03	WEAK	921 S2 detaching a linked copy copies the last edits, not the last autosave	FM.projects.detachLinked is not a function
+2026-09-23 15:03	WEAK	921 S2 LoopLink.heal reopens only the side it heals, so a still-cut endpoint never reports itself connected	Cannot read properties of undefined (reading 'LoopLink')
+2026-09-23 15:03	WEAK	921 S2 switching project stands the session down BEFORE the scene is torn, not after the load	C._undoHandover is not a function
+2026-09-23 15:03	WEAK	921 S2 undo is per person: a changed path is left alone, a delete comes back with its media, a structural step is all-or-nothing, and a pre-session step still undoes	Cannot read properties of undefined (reading '_quiet')
+2026-09-23 15:03	WEAK	921 S2 a batch broadcast during the join handshake is kept and replayed, not read and dropped	Cannot read properties of undefined (reading 'invariants')
+2026-09-23 15:03	WEAK	921 S2 a persisted guest base answers for the WRITE, not for having asked for one	Cannot read properties of undefined (reading 'persistBase')
+2026-09-23 15:03	WEAK	921 S2 leaving an OWNER session ends it — it never duplicates or deletes his own project	C._undoHandover is not a function
+2026-09-23 15:26	WEAK	921 S2 detaching a linked copy copies the last edits, not the last autosave	FM.projects.detachLinked is not a function
+2026-09-23 15:26	WEAK	921 S2 LoopLink.heal reopens only the side it heals, so a still-cut endpoint never reports itself connected	Cannot read properties of undefined (reading 'LoopLink')
+2026-09-23 15:26	WEAK	921 S2 switching project stands the session down BEFORE the scene is torn, not after the load	C._undoHandover is not a function
+2026-09-23 15:26	WEAK	921 S2 undo is per person: a changed path is left alone, a delete comes back with its media, a structural step is all-or-nothing, and a pre-session step still undoes	Cannot read properties of undefined (reading '_quiet')
+2026-09-23 15:26	WEAK	921 S2 a batch broadcast during the join handshake is kept and replayed, not read and dropped	Cannot read properties of undefined (reading 'invariants')
+2026-09-23 15:26	WEAK	921 S2 a persisted guest base answers for the WRITE, not for having asked for one	Cannot read properties of undefined (reading 'persistBase')
+2026-09-23 15:26	WEAK	921 S2 leaving an OWNER session ends it — it never duplicates or deletes his own project	C._undoHandover is not a function

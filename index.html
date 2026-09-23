@@ -260,7 +260,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v16.81</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v16.82</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1021,7 +1021,7 @@
   <script src="js/settings.js?v=39"></script>
   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
        rest of the collab modules are pure libraries and sit at the end of the list. -->
-  <script src="js/collab-core.js?v=2"></script>
+  <script src="js/collab-core.js?v=3"></script>
   <script src="js/statusbar.js?v=1"></script>
   <script src="js/screen.js?v=1"></script>
   <script src="js/scene.js?v=116"></script>
@@ -1062,7 +1062,7 @@
   <script src="js/audio-fx-live.js?v=7"></script>
   <script src="js/audio-fx-browser.js?v=11"></script>
   <script src="js/history.js?v=33"></script>
-  <script src="js/storage.js?v=47"></script>
+  <script src="js/storage.js?v=48"></script>
   <script src="js/export-resume.js?v=7"></script>
   <script src="js/medialib.js?v=6"></script>
   <script src="js/template-fill.js?v=3"></script>
@@ -1100,8 +1100,18 @@
   <script src="js/collab-path.js?v=2"></script>
   <script src="js/collab-diff.js?v=2"></script>
   <script src="js/collab-host.js?v=2"></script>
+  <!-- queue 921 stage S2 — the engine. `link` is the transport interface plus its two offline
+       implementations (in-page and postMessage; there is no network of any kind in S2), `session` is
+       the per-device engine and `bridge` is the only file that knows both the engine and FM.scene.
+       All three are inert until something hands a session a link, which in S2 only the test rig does. -->
+  <script src="js/collab-link.js?v=2"></script>
+  <script src="js/collab-session.js?v=2"></script>
+  <script src="js/collab-bridge.js?v=2"></script>
   <script>
-    if ('serviceWorker' in navigator) {
+    if ('serviceWorker' in navigator && !/(^|[?&])fmtest=collab(&|$)/.test(location.search)) {
+      /* queue 921 S2 (§25.3): a Tier-3 instance must never be served a cached shell — three app frames
+         on three origins, each with its own worker, is three chances to be testing yesterday's build.
+         The flag is the same one that loads the test agent, and needs loopback to do anything at all. */
       window.addEventListener('load', function () {
         var hadController = !!navigator.serviceWorker.controller;   // was an app already installed?
         navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(function (reg) {

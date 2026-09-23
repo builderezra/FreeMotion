@@ -368,6 +368,7 @@ On arm, the host normalizes, pre-sanitizes on a clone, and applies any differenc
   - **Rolled back** (the live value equals the step's recorded `b`, as after `restoreGestures` at `timeline.js:541` or a pinch cancel): adopt the deferred value into live. Nothing is sent.
   - **Otherwise: re-assert.** Emit `s{p, v: live value}` even if it equals base. The host then sequences it last, so everyone converges on the value of whoever let go last.
 - **Rejected paths** (lease or role) are put into `forced` and applied to live at release regardless, with a toast.
+  **This is not cosmetic, and S2 measured why.** The ack already carries the host's value for every refused path (§7.1 step 11) — but a HELD path does not take it, because that is what held *means*. So without the `forced` exception the live value still differs from base at release, the re-assert fires, the host refuses it again, and **a viewer who merely rests a finger on a slider produces a tx every hundred milliseconds for as long as they hold it.** Dropping the held entry along with it is the half that stops the loop.
 - Then `held`, `deferred` and `forced` are cleared.
 
 ### 8.3 Structural ops always win
@@ -462,11 +463,16 @@ The listeners are installed at session start and removed at the end.
 
 | Trigger | Scope | Notes |
 |---|---|---|
-| `history.commit()`, via `beforeSnap` | full | Runs `normalizeDerived()`, then `stampIds`, then diff, then release rules (§8.2), then **closes the undo step** in `afterCommit`. Muted batches reach it once, at their final commit. |
+| `history.commit()`, via `beforeSnap` | full | Drains the frozen/busy queue, runs the release rules (§8.2), then `normalizeDerived()`, then `stampIds`, then the diff, then **closes the undo step** in `afterCommit`. Muted batches reach it once, at their final commit. |
 | Active tick while `interacting()` | hot set: `P`, the order list, selected layers, the leased layer, layers changed last tick | Every 100 ms on PC, 125 ms on phone. Atomic values over 8 KB are sent at most at 2 Hz while interacting. |
 | Idle sweep | full | Every `max(1000 ms, 20 × last full-diff ms)`. The safety net for async writers and anything unlisted. |
 | Before a remote apply | hot | §8.4. |
 | `visibilitychange` → hidden, and `beforeFlush` | full | Then persist (§12.4). |
+
+**⚠️ THE ORDER ABOVE IS TWO CORRECTIONS ON WHAT THIS LINE ORIGINALLY SAID, both measured in S2.**
+
+- **Release runs BEFORE the diff, not after.** The original order ("diff, then release rules") cannot work for the rollback half of §8.2: a gesture that was cancelled has live back at the value recorded before it started, while base already holds the remote value — so a diff taken first emits `s{p, v: b}`, which **undoes the other person's change and sends it**. Releasing first makes the rollback silent (base already agrees) and the re-assert half then falls out of the very next diff for free, because a held path whose live value differs from base is exactly what the diff emits.
+- **The frozen/busy queue is drained here too.** §8.9 says "when both clear, drain the queue in order, then run a full diff", and the only thing that noticed they had cleared was the 100 ms tick — so a commit that happened in between (the very next thing a paste or a split does) snapshotted a document missing everything queued during the job. A commit is by definition the moment the app is coherent again.
 
 **Never diff inside `render()`.** The compositor's synchronous blendMode swap (`compositor.js:14202`) must stay invisible to the diff.
 
@@ -645,6 +651,8 @@ The editor opens immediately; media streams in afterwards.
 - write `fm.proj.<gpid> = {rev:1, project, layers, selectedId:null, selectedIds:[]}`;
 - unshift the index entry `{…standard fields, collab:{v:1, sid, sk, hostName, hostColor, mid, tok, role, joined, epoch, seq, cid}}`.
 
+**As built (S2): the sanitise of step 2 happens INSIDE `createLinked`, not at the call site.** Listing it as a separate step makes "we sanitised it" something every future caller has to remember, and this repo's rule is that anything important enough to forget is structural. The host has already normalised at arm (§7.3), so on a well-behaved room it changes nothing — the point is the room that is not well behaved, and everything a peer sends is untrusted (§14.9). `detachLinked` likewise goes through `projects.duplicateFrom`, so queue 915.3's rollback (a half-copy on a full device is taken back out rather than indexed) covers it; it also **deletes `collab` off the new card**, because a copy that is nobody's copy of anything must not look linked or carry the room's sid and key.
+
 Secrets live in localStorage, like the AI key. The layer ids are the host's, so ops line up.
 
 ### 12.3 Leave, end and detach
@@ -671,6 +679,14 @@ Secrets live in localStorage, like the AI key. The layer ids are the host's, so 
 - `pruneOrphans` skips everything under `collab:` (§4.2).
 - `FM.collab.gc()` runs once after boot **whether or not Labs is on**, and applies the rules in the last column.
 - **Guest reload recovery:** `outbox = diffDoc(persistedBase, live)`, with `b` taken from the persisted base. A stale base is safe because CAS is idempotent (§13.3).
+
+**As built (S2), three departures, all measured:**
+
+- **`collab:base:<gpid>` carries `cid` as well as `epoch` and `seq`, and `FM.collab.reopen()` restores it.** The host dedupes by "cid ≤ the last one I saw from you" (§7.1 step 3), so a guest that came back from a reload counting from zero had every recovered op silently **dropped as a duplicate** — and the acks looked right, because a cached one is resent. It is also what makes the replay idempotent in the other direction: an op that *was* delivered comes back under the same cid the host already answered, which is a cached ack rather than a second application.
+- **`Session.persist()` refuses while anything is outstanding**, not just the 2-second scheduler. `base` is the confirmed document **plus this device's own unsent ops**, so persisting it mid-flight records work as if the host had taken it — and the recovery, which is `diffDoc(persistedBase, live)`, then finds no difference and the offline edit is gone with no trace anywhere. The scheduler already checked; a direct caller (a reload, a `visibilitychange`, a test) did not.
+- **`FM.collab.gc()` is NOT in S2.** Of the three key families in the table, `ckpt` is written by arming (S3), `part` by media (S4), and `base` by S2 — so a collector shipped now would run at every boot, on every device, to collect two kinds of key that cannot exist yet. §23's bargain with a solo user is that `collab-core.js` does nothing at load; a boot-time IndexedDB sweep is the one thing in this table that would break it. It ships with the stage that creates the keys it collects.
+
+**The `collab:` corner of IndexedDB reaches storage.js through three seams** — `FM.storage.collabPut/collabGet/collabDel` — rather than a second `openDB()` inside the collab modules. The database name, the store name and the quota handling are `storage.js`'s business, and the key prefix is *enforced* by those seams rather than trusted: anything outside `collab:` would be a media record, and a collab module writing one would be invisible to every rule that owns them.
 
 ---
 
@@ -804,8 +820,9 @@ K = K_auth (link) | K_auth from C (code) | member tok (tok) | mk (conn)
   - host sees the banner "Sam has a newer FreeMotion. [Update now — the session reconnects in a few seconds]".
 - Guest older: "Update to join" [Update] (the pending join is already stashed).
 - **`SCHEMA_FP` test:** `FM.collab.schemaFingerprint()` must equal the `SCHEMA_FP` constant. The failure message reads: "The sync schema changed — bump FM.collab.SCHEMA_REV and set SCHEMA_FP to <new>."
-  **As built (S1), two departures from the line above and both are deliberate:**
-  - the terms are `canon(_sanitizeLayers(FIXTURE)) + canon(fxRegistry param defs) + canon(OP_GRAMMAR) + SCHEMA_REV`. `normalizeDerived` is the bridge's and does not exist until S2, which bumps `SCHEMA_REV` and re-pins the constant — that is what the bump is for, and joining across the two stages is refused by `PROTO`/`SCHEMA_REV` anyway. The **op grammar** is included, which the line omitted: a changed op shape is exactly the incompatibility this gate exists to refuse, and it costs one `canon()` of a frozen literal.
+  **As built (S1, completed in S2), two departures from the line above and both are deliberate:**
+  - the terms are `canon(_sanitizeLayers(FIXTURE)) + canon(fxRegistry param defs) + canon(OP_GRAMMAR) + derivedFingerprint() + SCHEMA_REV`. The **op grammar** is included, which the line omitted: a changed op shape is exactly the incompatibility this gate exists to refuse, and it costs one `canon()` of a frozen literal.
+    **S2 added the derived term and bumped `SCHEMA_REV` to 2**, as S1 said it would. It is measured by RUNNING the three writers of §11.1 against `C.DERIVED_FIXTURE()`, never by hashing their source: source text moves when a comment changes, and this gate *refuses a join*, so a false positive means two of his own devices cannot talk after a build that changed nothing — the exact thing the "compatibility is by PROTO + SCHEMA_REV, never by app version" rule exists to avoid. Running them means briefly swapping `FM.scene` for the fixture, because `autoFitDuration` and `inheritLoopModes` take no argument and read `FM.scene` directly. The swap is synchronous (nothing can interleave), restores in a `finally` including `FM.time`, and has its own control in the suite. Parameterising those two functions instead would be a refactor of `app.js` and `timeline.js` that S2 has no other reason to make, on the two functions the whole timeline depends on. The fixture carries **fixed uids**, because `stampIds` mints random ones and a fingerprint that changed on every measurement would be worse than none.
   - the fixture lives in `collab-core.js` beside the constant, not in the suite. Two sources of truth for one number means anyone editing the fixture to cover a new shape would "fix" the constant to match and the gate would quietly stop guarding anything. The suite only compares.
 
 ### 14.8 Service-worker update during a session
@@ -1250,6 +1267,7 @@ A `ctl` message over 16 KB is sent as `{t:'fr', k:<msgId>, i, n, s:<≤16 KB sub
 - **Guests' data:**
   - collab writes only into its own new `p_` project and `collab:` keys;
   - a Tier-3 test asserts that every other `fm.proj.*` string and the full IndexedDB key/size/rev map are **byte-identical** before and after join, edit, leave-keep and leave-delete.
+    **As built (S2), one exception, and it is the autosave rather than collab:** the project that was OPEN when he joined gets its `rev` bumped, because `projects.open()` flushes the outgoing document before switching (`storage.js` `writeScene`, `rev: dr + 1`). So the test asserts every OTHER document byte-identical, and for the open one the **content** — `project` and `layers`, the parts that are his work — byte-identical, with `rev` allowed to move. Reading `rev` as a violation would fail the assertion forever for a reason that has nothing to do with sharing; skipping the document entirely would prove nothing.
 - **Hardening:** `projects.remove` never deletes a record another doc references (S0).
 
 ---
@@ -1290,6 +1308,8 @@ The real `FM` is host (then guest) against PlainAdapter peers. It is driven by r
 - the same flag skips service-worker registration;
 - **RPC:** parent to frame `{fmRpc:id, act, args}`, frame to parent `{fmRpc:id, ok, val|err}`;
 - **fixed action table:** `state, hash, doc, projects, idbDump, select, setProp, commit, undo, redo, dragCanvas, dragClip, slider, typeText, addLayer, addMedia(kind), deleteLayer, group, ungroup, split, paste, exportBegin/End, dom(sel), settings, share, join, leave, role, kick, reload, wait`.
+  **As built (S2)** the table is the subset S2 can reach plus six actions the S2 tests need and the list did not name: `ready` (the boot handshake), `setScene`/`flush` (a known document on disk to start a group from), `persist`/`rejoin` (§12.4's reload recovery, which cannot be driven any other way), `offline` (the device's half of a partition — the switchboard cuts the wire, this tells the instance the wire is cut, and keeping them separate is what lets a test assert each half), `saveMyVersion` (§13.4's offer, which has to be real), `jobBegin`/`jobEnd` and `end`/`wipe`. Everything involving media, gestures or grouping waits for the stage that ships it. There is deliberately **no `eval`**: an agent that could run anything is an agent whose result proves whatever it was told to prove.
+- **`?fmwipe=1`** clears that origin's localStorage synchronously at `collab-core.js` parse time, before `storage.load()` runs. Without it the second run of the suite inherits the linked copies the first one made and the same-device refusal (§12.2 check 3) fires on state the test did not put there. It is stripped from the URL by the agent's `reload`, which is a *recovery*, not a reset.
 
 **Switchboard (test frame):**
 - routes `{fmLink:1, from, to, ch, data}` between frames;
@@ -1416,6 +1436,15 @@ Each targets one rule:
   - leave-keep detaches with new ids, and a later rejoin does not collide
   - the 380 px guest frame works
 - **Visible:** nothing (no Labs row yet).
+
+**As built.** Everything above shipped. Four things are worth naming because they are not in the file list:
+
+- **`FM.collab.share()`, `join()`, `leave()`, `reopen()` and `end()` are product code, in `collab-session.js`, not test code.** S3's Share panel and Join sheet call exactly these; what S3 adds around them is the Labs check, the profile prompt, the storage-room dialog, the knock and the signalling. The alternative — a join flow in the test rig and a second one in the UI — means the same-device refusal is proved against a mock and the real one is never tested.
+- **New storage seams:** `FM.storage._clampProjectDims` (the host's project invariant; S1's suite carried a hand-written copy of the arithmetic, which is two sources of truth for one rule) and `FM.storage.collabPut/collabGet/collabDel` (§12.4).
+- **`FM.collab._reload()`** is one level of indirection over `location.reload()`, purely so the §14.8 deferral is testable: a suite that cannot stand in for the reload can only assert that a flag was set, which is the half of the rule that does not matter.
+- **`bridge.interacting()` asks nine tools three different questions.** Six answer `isActive()`; `FM.drawTool` is a plain state object with `.active`, `touchupTool` answers `isOpen()`, and the tracker answers `isPicking()`. A loop over `isActive` alone reads as thorough and silently covers two thirds of §8.8's list.
+
+**Not in S2, and why:** `FM.collab.gc()` (see §12.4 — it would collect two kinds of key that cannot exist yet, at every boot, breaking §23's "nothing runs at load"); the `#j=` stash (S3, it needs a join flow before storing an invite means anything); and the `dragCanvas`/`dragClip`/`slider`/`group`/`split`/`addMedia` agent actions (the stages that ship what they drive).
 
 ### S3 · First real connection (no third party) and minimal UI
 
