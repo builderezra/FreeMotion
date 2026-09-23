@@ -29109,9 +29109,20 @@
       /* S3 (queue 921): the codes-only half of the signalling, and the UI. Both are libraries at load —
          `signal` defines functions and `ui` defines an object that builds nothing at all until
          Settings → Labs is switched on, which is what the DOM assertions below measure. */
-      'signal', 'ui'];
+      'signal', 'ui',
+      /* S4 (queue 921): media. A library like the rest — it defines functions and a `ui` of its own and
+         holds NO controller until a session installs one, which the two assertions below measure. */
+      'media'];
     const extra = Object.keys(C).filter(function (k) { return allowed.indexOf(k) < 0; });
-    if (extra.length) throw new Error('FM.collab gained ' + extra.join(', ') + ' — stage S3 is the engine, its hooks, the connection codes and the UI, and anything beyond that list belongs to a later stage (media S4, presence S5, the relay and the invite link S6)');
+    if (extra.length) throw new Error('FM.collab gained ' + extra.join(', ') + ' — stage S4 is the engine, its hooks, the connection codes, the UI and media, and anything beyond that list belongs to a later stage (presence S5, the relay and the invite link S6)');
+    /* Media is the stage most able to break §23's bargain, because everything it does is IndexedDB: a
+       boot-time sweep, a manifest built at load, a progress card that exists before there is anything
+       to report. None of it may happen until a session installs a controller. */
+    if (C.media) {
+      if (C.media._ctl(C.session) !== null) throw new Error('FM.collab.media holds a controller with no session attached');
+      if (document.getElementById('collab-media')) throw new Error('the media progress card is in the page with no session running');
+      if (C.media.state(null) !== null) throw new Error('FM.collab.media.state() invents an answer with no session, so "nothing is transferring" and "nothing is running" would read the same');
+    }
     ['collab', 'CollabHost', 'collabHost', 'qrcode', 'jsQR'].forEach(function (g) {
       if (window[g] !== undefined) throw new Error('window.' + g + ' exists — the collab modules must attach to FM.collab only');
     });
@@ -31073,7 +31084,19 @@
       poll = setInterval(function () { const b = pair.h.bufferedAmount('bulk'); if (b > peak) peak = b; }, 4);
       const there = nextOn921(pair.g, 'bulk', 150000, '20 MB on the bulk channel');
       pair.h.send('bulk', payload.buffer);
-      const got = await there;
+      /* WHEN THIS TIMES OUT, SAY WHERE IT STOPPED (queue 921). It failed once inside a full ship run with "nothing
+         arrived" and passed alone and in order (564/564) — the message could not tell a stalled connection from a
+         stalled channel from a sender that never drained. The state goes into the failure. */
+      const got = await there.catch(function (e) {
+        let st = {};
+        try {
+          const dc = pair.h.channel('bulk'), gd = pair.g.channel('bulk');
+          st = { hostDc: dc && dc.readyState, guestDc: gd && gd.readyState, buffered: pair.h.bufferedAmount('bulk'), peak: peak,
+                 hostPc: pair.h.pc && pair.h.pc.connectionState, guestPc: pair.g.pc && pair.g.pc.connectionState,
+                 ice: pair.h.pc && pair.h.pc.iceConnectionState };
+        } catch (x) { st = { probe: String(x) }; }
+        throw new Error(e.message + ' — state at the timeout: ' + JSON.stringify(st));
+      });
       clearInterval(poll); poll = null;
       if (!got || got.byteLength !== N) throw new Error('got ' + (got && got.byteLength) + ' bytes back, not ' + N);
       const back = new Uint8Array(got);
@@ -32095,6 +32118,1415 @@
       try { C.ui.syncLabs(); } catch (e) {}
       try { if (wasProfile === null) localStorage.removeItem('fm.profile'); else localStorage.setItem('fm.profile', wasProfile); } catch (e) {}
     }
+  });
+
+
+  /* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   * #921 STAGE S4 — MEDIA (§15, §22, §26 S4).
+   *
+   * Media is the one part of collaboration that cannot be proved against plain objects: it is FILES,
+   * IndexedDB and a decoded picture, and every one of those belongs to a real app instance. So these
+   * run against the REAL app — as the receiver (a guest with a peer feeding it) and as the sender (the
+   * host with a peer asking) — with a TEST PEER that speaks the §15 wire by hand.
+   *
+   * ⚠️ WHY A TEST PEER RATHER THAN A SECOND REAL APP for most of these. `FM.media`, `FM.storage` and
+   * `FM.scene` are GLOBALS: two sessions in one page share one media registry and one IndexedDB, so a
+   * "host" and a "guest" in the same frame would be reading and writing each other's records and every
+   * assertion below would pass for the wrong reason. The peer is a few dozen lines that send `mf`,
+   * answer `want` from a real File and count bytes — which is exactly enough to put the real module
+   * through the whole of §15 — and the two rules that genuinely need two devices (a guest's clip
+   * reaching a third peer, and his own projects being untouched) are tier 3, below.
+   * ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+  function need921S4(what) {
+    const C = need921(what);
+    if (!C.media || typeof C.media.install !== 'function') {
+      throw new Error('FM.collab.media is missing — js/collab-media.js (stage S4) is not loaded, so ' + what + ' cannot be measured at all');
+    }
+    return C;
+  }
+
+  /* Real files. The PNG and the WAV are generated rather than shipped, because they have to be FILES
+     the app's own loaders accept and two more binaries in the repo is two more things to keep.
+     `splash.mp4` is the real 649 KB clip in the repo root, fetched from this same origin. */
+  function q921png(rgb, name) {
+    const c = offscreen(64, 64);
+    const g = c.getContext('2d');
+    g.fillStyle = 'rgb(' + rgb.join(',') + ')';
+    g.fillRect(0, 0, 64, 64);
+    return new Promise(function (res) {
+      c.toBlob(function (b) { res(new File([b], name || 'square.png', { type: 'image/png', lastModified: 1600000002000 })); }, 'image/png');
+    });
+  }
+  function q921wav(seconds, hz, name) {
+    const rate = 8000, n = Math.floor(rate * (seconds || 0.25));
+    const buf = new ArrayBuffer(44 + n * 2), dv = new DataView(buf);
+    const put = function (o, s) { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+    put(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); put(8, 'WAVEfmt ');
+    dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+    dv.setUint32(24, rate, true); dv.setUint32(28, rate * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+    put(36, 'data'); dv.setUint32(40, n * 2, true);
+    for (let i = 0; i < n; i++) dv.setInt16(44 + i * 2, Math.round(Math.sin(2 * Math.PI * (hz || 440) * i / rate) * 24000), true);
+    return new File([buf], name || 'tone.wav', { type: 'audio/wav', lastModified: 1600000001000 });
+  }
+  /* A real image, big enough to span more than one 4 MiB part, so §15.7's resume has a boundary to
+     resume AT. Noise rather than a flat colour: a solid PNG of any size compresses to a few hundred
+     bytes, which is the opposite of what this fixture is for. */
+  let _big921 = null;
+  async function q921bigPng() {
+    if (_big921) return _big921;
+    const S = 1800;
+    const c = offscreen(S, S);
+    const g = c.getContext('2d');
+    const img = g.createImageData(S, S);
+    const d = img.data;
+    let x = 123456789;
+    for (let i = 0; i < d.length; i += 4) {
+      x ^= x << 13; x ^= x >>> 17; x ^= x << 5; x |= 0;
+      d[i] = x & 255; d[i + 1] = (x >> 8) & 255; d[i + 2] = (x >> 16) & 255; d[i + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    const blob = await new Promise(function (res) { c.toBlob(res, 'image/png'); });
+    _big921 = new File([blob], 'big.png', { type: 'image/png', lastModified: 1600000004000 });
+    return _big921;
+  }
+  /* The same noise as `q921bigPng`, at a size a test picks — several 64 KiB chunks so two transfers
+     genuinely overlap, without the seconds a 1800 px one costs. Cached by side+seed. */
+  const _noise921 = Object.create(null);
+  async function q921noisePng(side, seed, name) {
+    const key = side + ':' + seed;
+    if (_noise921[key]) return _noise921[key];
+    const c = offscreen(side, side);
+    const g = c.getContext('2d');
+    const img = g.createImageData(side, side);
+    const d = img.data;
+    let x = (seed * 2654435761) | 0 || 123456789;
+    for (let i = 0; i < d.length; i += 4) {
+      x ^= x << 13; x ^= x >>> 17; x ^= x << 5; x |= 0;
+      d[i] = x & 255; d[i + 1] = (x >> 8) & 255; d[i + 2] = (x >> 16) & 255; d[i + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    const blob = await new Promise(function (res) { c.toBlob(res, 'image/png'); });
+    _noise921[key] = new File([blob], name || ('noise' + key + '.png'), { type: 'image/png', lastModified: 1600000005000 + seed });
+    return _noise921[key];
+  }
+  let _splash921 = null;
+  async function q921splash() {
+    if (_splash921) return _splash921;
+    const r = await fetch('/splash.mp4');
+    if (!r.ok) throw new Error('splash.mp4 could not be fetched from the test origin (' + r.status + ') — §26 S4 asks for the REAL 649 KB file, and a generated stand-in would not prove the same thing');
+    const b = await r.blob();
+    _splash921 = new File([b], 'splash.mp4', { type: 'video/mp4', lastModified: 1600000000000 });
+    return _splash921;
+  }
+
+  function mediaLayer921(name, type, over) {
+    return Object.assign(FM.makeLayer(type || 'image', { name: name, start: 0, duration: 3 }), over || {});
+  }
+  /* Put a real file on a layer the way an import does: the registry AND the record on disk. */
+  async function q921give(id, file, kind, rev) {
+    const rec = (kind === 'image') ? await FM.loadImageFile(file) : await FM.loadVideoFile(file);
+    rec.rev = rev || 0;
+    rec.file = rec.file || file;
+    FM.media.set(id, rec);
+    await FM.storage.writeMedia(id, { file: file, kind: kind, rev: rev || 0 });
+    return rec;
+  }
+
+  /* ── THE TEST PEER ────────────────────────────────────────────────────────────────────────────
+   * One endpoint of a LoopLink, speaking §15: it advertises files, answers `want` with real bytes in
+   * real frames, and records everything it is told. It also RECEIVES, so the host-side tests can
+   * assert exactly how many bytes crossed. */
+  function mediaPeer921(ep, opts) {
+    const C = FM.collab, M = C.media;
+    const o = opts || {};
+    const peer = {
+      ep: ep, files: Object.create(null), fids: [],
+      wants: [], oks: [], haves: [], mfs: [], anns: [],
+      servedBytes: 0, gotBytes: 0, got: Object.create(null), serves: 0,
+      cutAt: o.cutAt || 0, cut: false, paused: false,
+      /* §14.9's "it is a peer, not a promise": a sender is free to start somewhere other than where it
+         was asked to. Null means honour the `want`. */
+      forceFrom: (o.forceFrom == null ? null : o.forceFrom)
+    };
+    peer.add = function (file, kind, layers) {
+      const fp = M._fp(file), fid = M._fid(fp);
+      peer.files[fid] = {
+        file: file,
+        entry: { fid: fid, fp: fp, size: file.size, mime: file.type || '', kind: kind, name: file.name, lm: file.lastModified || 0, layers: layers || [] }
+      };
+      if (peer.fids.indexOf(fid) < 0) peer.fids.push(fid);
+      return fid;
+    };
+    peer.addFont = function (file, family, css, name) {
+      const fid = 'font:' + (name || 'tf1');
+      peer.files[fid] = { file: file, entry: { fid: fid, fp: fid, size: file.size, mime: file.type || '', kind: 'font', name: name || 'Test face', lm: 0, family: family, css: css, layers: [] } };
+      if (peer.fids.indexOf(fid) < 0) peer.fids.push(fid);
+      return fid;
+    };
+    peer.announce = function (t) {
+      const files = [], fonts = [];
+      peer.fids.forEach(function (f) { const e = peer.files[f].entry; (e.kind === 'font' ? fonts : files).push(JSON.parse(JSON.stringify(e))); });
+      ep.send('ctl', { t: t || 'mf', files: files, fonts: fonts });
+    };
+    async function serve(w) {
+      const f = peer.files[w.fid];
+      if (!f) return;
+      peer.serves++;
+      const xid = 1000 + peer.serves;
+      const from = (peer.forceFrom == null) ? Math.max(0, +w.from || 0) : peer.forceFrom;
+      const head = new TextEncoder().encode(JSON.stringify({ fid: w.fid, from: from, size: f.file.size, kind: f.entry.kind === 'font' ? 'font' : 'media' }));
+      ep.send('bulk', M._frame(1, xid, 0, head));
+      /* Held AFTER the T_START and before any payload: that is the window in which a SECOND peer's
+         start arrives while this transfer is live, which is the only way to measure frame routing. */
+      while (peer.paused) { await new Promise(function (r) { setTimeout(r, 20); }); if (!ep.open) return; }
+      let off = from, seq = 1;
+      while (off < f.file.size) {
+        while (peer.paused) { await new Promise(function (r) { setTimeout(r, 20); }); if (!ep.open) return; }
+        if (peer.cutAt && peer.servedBytes >= peer.cutAt && !peer.cut) { peer.cut = true; return; }
+        const end = Math.min(off + 64 * 1024, f.file.size);
+        const bytes = new Uint8Array(await f.file.slice(off, end).arrayBuffer());
+        if (!ep.open) return;
+        ep.send('bulk', M._frame(2, xid, seq++, bytes));
+        peer.servedBytes += bytes.length;
+        off = end;
+      }
+    }
+    ep.onmessage = function (ch, msg) {
+      if (ch === 'ctl') {
+        if (!msg || typeof msg !== 'object') return;
+        if (msg.t === 'want') { peer.wants.push({ fid: msg.fid, from: msg.from }); serve(msg); return; }
+        if (msg.t === 'ok') { peer.oks.push(msg); return; }
+        if (msg.t === 'have') { peer.haves.push(msg.fid); return; }
+        if (msg.t === 'mf') { peer.mfs.push(msg); return; }
+        if (msg.t === 'ann') { peer.anns.push(msg); return; }
+        return;
+      }
+      if (ch !== 'bulk') return;
+      const f = M._unframe(msg);
+      if (!f) return;
+      if (f.type === 1) {
+        let h = null;
+        try { h = JSON.parse(new TextDecoder().decode(f.body)); } catch (e) { return; }
+        peer.got[f.xid] = { fid: h.fid, size: h.size, from: h.from, bytes: [], n: h.from };
+        return;
+      }
+      const g = peer.got[f.xid];
+      if (!g) return;
+      g.bytes.push(f.body.slice());
+      g.n += f.body.length;
+      peer.gotBytes += f.body.length;
+      if (g.n >= g.size) ep.send('ctl', { t: 'have', fid: g.fid });
+    };
+    /* Everything the peer received for one fid, as one Blob — so a test can compare BYTES rather than
+       a length. */
+    peer.blobFor = function (fid) {
+      const parts = [];
+      Object.keys(peer.got).forEach(function (x) { if (peer.got[x].fid === fid) peer.got[x].bytes.forEach(function (b) { parts.push(b); }); });
+      return new Blob(parts);
+    };
+    return peer;
+  }
+
+  /* Poll a condition while ticking the session, because a transfer is genuinely asynchronous: file
+     slices, IndexedDB writes and a decode. Fails with what the condition actually was. */
+  async function until921(what, pred, ms) {
+    const deadline = Date.now() + (ms || 30000);
+    let last = null;
+    while (Date.now() < deadline) {
+      if (FM.collab.session) { try { FM.collab.session.tick('full'); } catch (e) {} }
+      last = await pred();
+      if (last) return last;
+      await settle921(50);
+    }
+    throw new Error('timed out waiting for ' + what + ' (last answer: ' + JSON.stringify(last) + ')');
+  }
+
+  /* ── THE REAL APP AS THE RECEIVER ─────────────────────────────────────────────────────────────
+   * A throwaway project holding the shared document, a guest Session over the real bridge, and a peer
+   * on the other end of the wire. Everything is torn down in the finally, including every `collab:`
+   * key this room wrote — the sid is unique per run, so the sweep can never reach one of his. */
+  let _s4room = 0;
+  async function withCollabGuest921(layers, fn) {
+    const C = need921S4('the media engine');
+    const sid = 's4room' + (++_s4room) + 'x' + Date.now().toString(36);
+    const wasExporting = FM._exporting;
+    const wasHome921 = FM.home.isOpen(), orig921 = FM.projects.currentId(), made921 = [];
+    if (wasHome921) FM.home.close();
+    made921.push(await FM.projects.create({ name: 'FX921S4 guest', width: 320, height: 240 }));
+    await FM.storage.applyScene(scene(layers));
+    FM.history.reset();
+    FM.selectLayer(null);
+    C.bridge._quiet();
+    const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'async' });
+    const ctx = {
+      C: C, sid: sid, pid: made921[0], loop: loop,
+      ids: FM.scene.layers.map(function (l) { return l.id; })
+    };
+    try {
+      const base = jclone921({ project: C._viewOfProject(FM.scene.project), layers: FM.scene.layers });
+      const G = C.Session({ adapter: C.bridge, role: 'editor', mid: 'g', base: base, epoch: 'e1' });
+      G.pid = made921[0]; G.gpid = made921[0]; G.sid = sid;
+      C.media.install(G, { sid: sid });
+      G.setLink(loop.b);
+      C.attach(G, { autoTick: false });
+      ctx.G = G;
+      ctx.peer = mediaPeer921(loop.a);
+      ctx.ctl = C.media._ctl(G);
+      return await fn(ctx);
+    } finally {
+      try { C.end(); } catch (e) {}
+      try { C.detach(); } catch (e) {}
+      C._undoHandover(false);
+      C.bridge._quiet();
+      FM._exporting = wasExporting;
+      /* ⚠️ A FILMSTRIP BUILD IS A GLOBAL QUEUE (`_stripQueue`, js/frames.js): one strip at a time
+         across every clip in the app. An arrived clip triggers one, and tearing its <video> record out
+         from under it — which `projects.remove` does — leaves that queue waiting on a seek that can
+         never fire, so EVERY filmstrip for the rest of the suite is blocked. Measured: `timeline:
+         Replace media repaints the clip bar` failed with "no filmstrip was painted at all" in the
+         `media` slice and passed alone, and passed in that slice against HEAD. Wait for the build the
+         test started, rather than leave the next test to discover it. */
+      for (let i = 0; i < 200; i++) {
+        const all = FM.media.all();
+        if (!Object.keys(all).some(function (k) { return all[k] && (all[k]._stripBuilding || all[k]._stripPending); })) break;
+        await settle921(50);
+      }
+      C.media._freeOverride = null; C.media._answer = null;
+      C.media.ui.hide();
+      /* A card the test left on screen would sit over every later test's DOM read. `FM.ask` resolves
+         its promise on cancel, so dismissing it is the same thing the person tapping would do. */
+      try { const a = document.getElementById('fm-ask'); if (a && !a.classList.contains('hidden')) { const b = a.querySelector('.fm-ask-cancel'); if (b) b.click(); } } catch (e) {}
+      try {
+        const ks = await FM.storage.collabKeys('collab:part:' + sid + ':');
+        for (const k of ks) await FM.storage.collabDel(k);
+      } catch (e) {}
+      FM.selectLayer(null);
+      await q915aCleanup(made921, orig921, wasHome921, [], [], []);
+    }
+  }
+
+  test('921 S4 the manifest groups one file for every layer that uses it, so a split and a duplicate transfer zero extra bytes', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S4('the media manifest');
+    await withCollab921([mediaLayer921('Pic', 'image'), layer921('Shape')], async function (c) {
+      const png = await q921png([250, 40, 40], 'one.png');
+      const rec = await q921give(c.ids[0], png, 'image', 0);
+
+      /* A split and a duplicate give each copy its OWN <video>/<img> element — but the same FILE
+         object (app.js reloadMediaTo), which is the fact the manifest's grouping rests on. */
+      const dupId = 'L' + Date.now().toString(36);
+      const copy = Object.assign(jclone921(FM.scene.layers[0]), { id: dupId, name: 'Pic copy' });
+      FM.scene.layers.push(copy);
+      const rec2 = await FM.loadImageFile(png);
+      rec2.rev = 0;
+      FM.media.set(dupId, rec2);
+      await FM.storage.writeMedia(dupId, { file: png, kind: 'image', rev: 0 });
+      FM.history.commit();
+      if (FM.media.get(dupId).file !== FM.media.get(c.ids[0]).file) throw new Error('CONTROL: the two layers do not share one File object, so this test is not measuring the grouping it claims to');
+
+      const loop = C.link.LoopLink({ aTag: 'h', bTag: 'p', mode: 'async' });
+      const mid = c.S.addPeer(loop.a, { role: 'editor', name: 'Sam', color: '#44aaff' });
+      const peer = mediaPeer921(loop.b);
+      if (!mid) throw new Error('CONTROL: the peer was not admitted');
+
+      await until921('the host to advertise its media', async function () { return peer.mfs.length ? peer.mfs : null; }, 20000);
+      const all = [];
+      peer.mfs.forEach(function (m) { (m.files || []).forEach(function (e) { all.push(e); }); });
+      const pics = all.filter(function (e) { return e.kind === 'image'; });
+      if (pics.length !== 1) throw new Error('the manifest carries ' + pics.length + ' image entries for two layers that share ONE file — the grouping is what makes a split or a duplicate free, and without it the same bytes cross once per layer (' + JSON.stringify(all.map(function (e) { return [e.fid, e.name, e.layers]; })) + ')');
+      const e = pics[0];
+      const lids = e.layers.map(function (p) { return p[0]; }).sort();
+      if (lids.length !== 2 || lids.indexOf(dupId) < 0 || lids.indexOf(c.ids[0]) < 0) throw new Error('the one entry names ' + JSON.stringify(e.layers) + ', not both layers — a receiver would write the file for one of them and leave the other blank');
+      if (e.fp !== C.media._fp(png) || e.size !== png.size) throw new Error('the entry does not describe the real file (fp ' + e.fp + ', size ' + e.size + ' against ' + png.size + ')');
+
+      /* …and asking for it ONCE serves BOTH layers: that is the zero-extra-bytes claim, measured. */
+      peer.ep.send('ctl', { t: 'want', fid: e.fid, from: 0 });
+      await until921('the file to be served', async function () { return peer.gotBytes >= png.size ? peer.gotBytes : null; }, 20000);
+      const served = peer.gotBytes;
+      if (served !== png.size) throw new Error('the host sent ' + served + ' bytes for a ' + png.size + '-byte file');
+      const blob = peer.blobFor(e.fid);
+      const a = new Uint8Array(await blob.arrayBuffer()), b = new Uint8Array(await png.arrayBuffer());
+      if (a.length !== b.length) throw new Error('the served bytes are ' + a.length + ' long, the file is ' + b.length);
+      for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) throw new Error('the served bytes differ from the file at offset ' + i);
+
+      /* CONTROL: the counter really counts. A SECOND, different file crosses as its own entry and its
+         own bytes — so "one entry, one transfer" above is not simply a peer that never receives. */
+      const png2 = await q921png([40, 250, 40], 'two.png');
+      const L2 = mediaLayer921('Pic2', 'image');
+      FM.scene.layers.push(L2);
+      await q921give(L2.id, png2, 'image', 0);
+      FM.history.commit();
+      await until921('the second file to be advertised', async function () {
+        const seen = [];
+        peer.mfs.forEach(function (m) { (m.files || []).forEach(function (x) { if (seen.indexOf(x.fid) < 0) seen.push(x.fid); }); });
+        return seen.length >= 2 ? seen : null;
+      }, 20000);
+      let e2 = null;
+      peer.mfs.forEach(function (m) { (m.files || []).forEach(function (x) { if (x.fid !== e.fid && x.kind === 'image') e2 = x; }); });
+      if (!e2) throw new Error('CONTROL: a second, different file never appeared in the manifest, so "one entry" above proves nothing');
+      peer.ep.send('ctl', { t: 'want', fid: e2.fid, from: 0 });
+      await until921('the second file to be served', async function () { return peer.gotBytes > served ? peer.gotBytes : null; }, 20000);
+      loop.a.close();
+    });
+  });
+
+  test('921 S4 splash.mp4, a PNG and a WAV all arrive, land in this device’s own records, and the picture renders', { item: '921', budgetMs: 240000 }, async function () {
+    const C = need921S4('the media transfer');
+    const splash = await q921splash();
+    if (splash.size !== 649336) throw new Error('splash.mp4 is ' + splash.size + ' bytes, not the 649336 §26 S4 names — the fixture moved, so check the test still means what it says');
+    await withCollabGuest921([mediaLayer921('Clip', 'video', { duration: 2 }), mediaLayer921('Pic', 'image'), mediaLayer921('Sound', 'video', { duration: 1 })], async function (c) {
+      const png = await q921png([250, 30, 30], 'square.png');
+      const wav = q921wav(0.25, 440, 'tone.wav');
+      /* The control is taken NOW, with the layers in place and no media behind any of them: an empty
+         canvas, measured rather than assumed. */
+      const blank = q921ink(0);
+      const fVid = c.peer.add(splash, 'video', [[c.ids[0], 0]]);
+      const fPng = c.peer.add(png, 'image', [[c.ids[1], 0]]);
+      const fWav = c.peer.add(wav, 'video', [[c.ids[2], 0]]);
+      c.peer.announce('mf');
+
+      const st = await until921('all three files to arrive', async function () {
+        const s = C.media.state(c.G);
+        return (s && s.done >= 3 && !C.media.pending(c.G).n) ? s : null;
+      }, 180000);
+      if (st.failed) throw new Error(st.failed + ' of the three files could not be kept');
+
+      /* On disk, under the LAYER ids of the open document — not a temporary, not a `collab:` key. */
+      for (let i = 0; i < 3; i++) {
+        const r = await FM.storage.readMedia(c.ids[i]);
+        if (!r || !r.file) throw new Error('layer ' + i + ' has no record on this device after the transfer said it was done');
+      }
+      const rv = await FM.storage.readMedia(c.ids[0]);
+      if (rv.file.size !== splash.size) throw new Error('the video arrived as ' + rv.file.size + ' bytes, not ' + splash.size);
+      const got = new Uint8Array(await rv.file.arrayBuffer()), want = new Uint8Array(await splash.arrayBuffer());
+      let diff = -1;
+      for (let i = 0; i < want.length; i++) if (got[i] !== want[i]) { diff = i; break; }
+      if (diff >= 0) throw new Error('the 649 KB video differs from the original at offset ' + diff + ' — a transfer that is the right LENGTH and the wrong bytes is the failure a byte count cannot see');
+      const rp = await FM.storage.readMedia(c.ids[1]);
+      if (rp.file.size !== png.size) throw new Error('the PNG arrived as ' + rp.file.size + ' bytes, not ' + png.size);
+      const rw = await FM.storage.readMedia(c.ids[2]);
+      if (rw.file.size !== wav.size) throw new Error('the WAV arrived as ' + rw.file.size + ' bytes, not ' + wav.size);
+
+      /* …and nothing is left holding the media-busy latch. It is what stops `pruneOrphans` and
+         `releaseUnreachableMedia` while a write is in flight (§15.6); left raised, it disables both
+         for the rest of the session, silently — the boot sweep simply never runs again. */
+      if (FM._mediaBusy) throw new Error('the transfer finished with FM._mediaBusy still at ' + FM._mediaBusy + ' — every later media sweep in this session stands down for ever, and nothing reports it');
+
+      /* …and the parts are gone: a completed file must not leave a second copy of itself behind. */
+      const left = await FM.storage.collabKeys('collab:part:' + c.sid + ':');
+      if (left.length) throw new Error('the transfer finished and left ' + left.length + ' part record(s) behind — a 649 KB file kept twice on a phone is the storage failure §15.4 exists to avoid');
+
+      /* ═══ THE PIXEL CHECK (§26 S4) ═════════════════════════════════════════════════════════════
+       * A byte count says the transfer worked. It does NOT say the app can draw it: a record written
+       * under the wrong key, a File with the wrong MIME, an element never handed to the registry all
+       * pass a byte count and leave a black canvas. So: render the real scene through the real
+       * compositor and count the pixels that are the COLOUR OF THE FILE THAT CROSSED — an ink
+       * percentage alone would be satisfied by any mark at all, including one from another layer.
+       * `blank` was measured before any of this arrived, and it is the control. */
+      FM.scene.layers[0].visible = false; FM.scene.layers[2].visible = false;
+      FM.requestRender();
+      const inkPng = q921ink(0);
+      if (blank.red > 20) throw new Error('CONTROL: the empty scene already had ' + blank.red + ' red pixels on it, so the count below could not tell a drawn PNG from nothing');
+      if (inkPng.red < 400) throw new Error('the PNG arrived (' + rp.file.size + ' bytes on disk, the only red thing in this project) and the canvas holds ' + inkPng.red + ' of its pixels against ' + blank.red + ' before it came — the bytes are there and the picture is not (' + inkPng.pct + '% lit)');
+
+      FM.scene.layers[0].visible = true; FM.scene.layers[1].visible = false;
+      const mv = FM.media.get(c.ids[0]);
+      if (!mv || !mv.el) throw new Error('the video has no decoded element in the registry after arriving, so nothing could ever draw it');
+      await until921('the received video to decode a frame', async function () { return mv.el.readyState >= 2 ? mv.el.readyState : null; }, 60000);
+      try { mv.el.currentTime = 0.2; } catch (e) {}
+      await settle921(400);
+      const inkVid = q921ink(0.2);
+      if (inkVid.lit < blank.lit + inkVid.total * 0.01 || inkVid.colours < 5) throw new Error('splash.mp4 arrived byte-identical and the frame drawn from it is blank (' + inkVid.pct + '% lit against ' + blank.pct + '% empty, ' + inkVid.colours + ' colours) — the transfer is only finished when the picture is on the canvas');
+    });
+  });
+
+  /* Render the real scene through the real compositor and measure it, exactly as the suite's other
+     picture assertions do — never a screenshot and never a claim. */
+  function q921ink(t) {
+    const P0 = FM.scene.project;
+    const cv = offscreen(P0.width, P0.height);
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(ctx, FM.scene, t || 0);
+    const d = ctx.getImageData(0, 0, cv.width, cv.height).data;
+    let lit = 0, n = 0, red = 0;
+    const seen = Object.create(null);
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i] > 24 || d[i + 1] > 24 || d[i + 2] > 24) lit++;
+      if (d[i] > 190 && d[i + 1] < 100 && d[i + 2] < 100) red++;
+      const k = (d[i] >> 4) + ',' + (d[i + 1] >> 4) + ',' + (d[i + 2] >> 4);
+      if (!seen[k]) { seen[k] = 1; n++; }
+    }
+    return { lit: lit, red: red, total: d.length / 4, pct: Math.round(lit / (d.length / 4) * 1000) / 10, colours: n };
+  }
+
+  test('921 S4 a link that dies mid-file resumes from the bytes already kept, and what lands is byte-identical', { item: '921', budgetMs: 300000 }, async function () {
+    const C = need921S4('§15.7 resume');
+    /* ⚠️ NOT splash.mp4 HERE, AND THE REASON IS THE RULE ITSELF. §15.6 persists in 4 MiB parts, and a
+       part is the unit that is KNOWN TO BE WHOLE — so a file smaller than one part has no resume point
+       at all and starts again from zero, which for 649 KB costs nothing and is the right trade. To
+       measure a resume you need a file bigger than a part, so this one is a real ~9 MB image, and the
+       cut lands inside its second part. (Measured and written into COLLAB-DESIGN §15.7.) */
+    const splash = await q921bigPng();
+    if (splash.size < 5 * 1024 * 1024) throw new Error('CONTROL: the fixture is ' + splash.size + ' bytes, under one 4 MiB part — nothing could resume from it, so this test would pass by proving the opposite of what it claims');
+    await withCollabGuest921([mediaLayer921('Clip', 'image', { duration: 2 })], async function (c) {
+      /* Cut the wire after roughly one and a half parts, so there is a completed part to resume from
+         AND a tail that has to be thrown away and re-sent. */
+      c.peer.cutAt = Math.floor(splash.size * 0.55);
+      const fid = c.peer.add(splash, 'image', [[c.ids[0], 0]]);
+      c.peer.announce('mf');
+      await until921('the transfer to be cut mid-file', async function () { return c.peer.cut ? c.peer.servedBytes : null; }, 60000);
+      const firstWant = c.peer.wants[0];
+      if (!firstWant || firstWant.from !== 0) throw new Error('the first want asked from ' + (firstWant && firstWant.from) + ', not 0');
+      if (await FM.storage.readMedia(c.ids[0])) throw new Error('CONTROL: the layer already has a record while the transfer is still cut — the resume below would prove nothing');
+
+      /* The parts that DID land are still on disk: that is the whole of §15.7. */
+      const parts = await FM.storage.collabKeys('collab:part:' + c.sid + ':');
+      if (!parts.length) throw new Error('nothing was persisted before the cut, so there is nothing to resume from — a dropped link would start the whole file again from zero');
+      /* ⚠️ MEASURED NOW, NOT AFTER THE RESUME. A completed file deletes its own parts (§15.6 step 7),
+         so reading them at the end of the test is reading records that no longer exist and every size
+         comes back 0 — which passed alone and failed in a full run, purely on how long the last write
+         took. The number this assertion is about is the one that existed when the want was sent. */
+      let stored = 0;
+      for (let i = 0; i < parts.length; i++) { const rec = await FM.storage.collabGet(parts[i]); stored += (rec && rec.blob) ? rec.blob.size : 0; }
+      if (!stored) throw new Error('CONTROL: the ' + parts.length + ' part record(s) on disk hold no bytes, so the resume offset below would be compared against nothing');
+
+      /* Now the peer comes back and the session asks again. `from` must be the bytes already kept. */
+      c.peer.cut = false; c.peer.cutAt = 0;
+      c.ctl.inb = Object.create(null);
+      delete c.ctl.wanted[fid];
+      c.ctl.dirty = true;
+      await until921('the file to arrive after the resume', async function () {
+        const r = await FM.storage.readMedia(c.ids[0]);
+        return (r && r.file) ? r : null;
+      }, 120000);
+      const second = c.peer.wants[1];
+      if (!second) throw new Error('the resume never sent a second want');
+      if (!(second.from > 0)) throw new Error('the resume asked from ' + second.from + ' — it re-sent the whole file instead of the ' + parts.length + ' part(s) already on disk, which is exactly the cost §15.7 exists to avoid');
+      /* …and from EXACTLY the bytes on disk, not from a multiple of the part size: the two are the
+         same only while every part is full, and asking for the wrong offset produces a file of the
+         right length that decodes to nothing. */
+      if (second.from !== stored) throw new Error('the resume asked from ' + second.from + ' while this device holds ' + stored + ' bytes in ' + parts.length + ' part(s) — the gap between them is bytes nobody will ever send');
+      if (c.ctl.stats.resumed < 1) throw new Error('CONTROL: the module does not count this as a resume');
+
+      const r = await FM.storage.readMedia(c.ids[0]);
+      if (r.file.size !== splash.size) throw new Error('the resumed file is ' + r.file.size + ' bytes, not ' + splash.size);
+      const got = new Uint8Array(await r.file.arrayBuffer()), want = new Uint8Array(await splash.arrayBuffer());
+      for (let i = 0; i < want.length; i++) if (got[i] !== want[i]) throw new Error('the resumed file differs from the original at offset ' + i + ' — a resume that stitches at the wrong offset produces a file of the right size that decodes to nothing');
+    });
+  });
+
+  test('921 S4 the boot sweep never collects a half-arrived file, and neither does the media collector', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S4('§12.4’s part records');
+    const splash = await q921bigPng();          // a part has to EXIST before anything can be said about keeping it
+    await withCollabGuest921([mediaLayer921('Clip', 'image', { duration: 2 })], async function (c) {
+      c.peer.cutAt = Math.floor(splash.size * 0.6);
+      const fid = c.peer.add(splash, 'image', [[c.ids[0], 0]]);
+      c.peer.announce('mf');
+      await until921('a part to be written', async function () {
+        const ks = await FM.storage.collabKeys('collab:part:' + c.sid + ':');
+        return ks.length ? ks : null;
+      }, 60000);
+      const before = await FM.storage.collabKeys('collab:part:' + c.sid + ':');
+
+      /* ⚠️ HIS REAL DATA. `pruneOrphans` is the boot sweep, and a `collab:part:` key is named by no
+         project document — which is precisely what that sweep deletes. Deleting one loses the part of
+         a file already downloaded, which on a phone on mobile data is a real cost, and on a big file
+         it is a download that can never finish. */
+      await FM.projects.pruneOrphans();
+      const after = await FM.storage.collabKeys('collab:part:' + c.sid + ':');
+      const gone = before.filter(function (k) { return after.indexOf(k) < 0; });
+      if (gone.length) throw new Error('the boot sweep deleted ' + gone.length + ' of ' + before.length + ' part record(s) of a file that is still arriving: ' + gone.join(', '));
+
+      /* …and the media module's OWN collector leaves an arriving part alone too — it is the one thing
+         in the app that is allowed to delete these keys. */
+      c.ctl.inb[fid] = c.ctl.inb[fid] || { e: c.peer.files[fid].entry, fid: fid, part: 1, got: 0, upto: 0, buf: [], bufLen: 0 };
+      const n = await C.media.gcParts({ sid: c.sid, force: true });
+      const after2 = await FM.storage.collabKeys('collab:part:' + c.sid + ':');
+      if (after2.length !== before.length) throw new Error('the media collector took ' + (before.length - after2.length) + ' part(s) of a transfer that is in flight (it reported ' + n + ')');
+
+      /* CONTROL: the collector is not simply a function that never deletes anything. With nothing in
+         flight and the force flag on, the same parts go. */
+      delete c.ctl.inb[fid];
+      await C.media.gcParts({ sid: c.sid, force: true });
+      const after3 = await FM.storage.collabKeys('collab:part:' + c.sid + ':');
+      if (after3.length) throw new Error('CONTROL: the collector left ' + after3.length + ' abandoned part(s) behind even when told to force, so the assertion above measures nothing');
+    });
+  });
+
+  test('921 S4 a device with no room says so and writes nothing beyond what fits', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S4('§15.4’s storage card');
+    await withCollabGuest921([mediaLayer921('A', 'image'), mediaLayer921('B', 'image'), mediaLayer921('Cc', 'image')], async function (c) {
+      const a = await q921png([250, 20, 20], 'a.png');
+      const b = await q921png([20, 250, 20], 'b.png');
+      const d = await q921png([20, 20, 250], 'c.png');
+      c.peer.add(a, 'image', [[c.ids[0], 0]]);
+      c.peer.add(b, 'image', [[c.ids[1], 0]]);
+      c.peer.add(d, 'image', [[c.ids[2], 0]]);
+      /* Room for ONE of the three plus the headroom §15.4 keeps for the largest file. `_freeOverride`
+         stands in for `navigator.storage.estimate()`, which no test can make answer "nearly full" on a
+         real machine — everything else on this path is the product's own code. */
+      const biggest = Math.max(a.size, b.size, d.size);
+      C.media._freeOverride = biggest * 2 + 8;
+      C.media._answer = true;                       // he taps [Get what fits]
+      c.peer.announce('mf');
+
+      const st = await until921('the transfer to settle', async function () {
+        const s = C.media.state(c.G);
+        return (s && !C.media.pending(c.G).n && (s.done + s.failed) >= 3) ? s : null;
+      }, 90000);
+      if (!st.failed) throw new Error('every file was taken on a device with room for one — "Get what fits" did not apply a budget at all');
+      if (!st.done) throw new Error('nothing at all was taken on a device with room for one — "Get what fits" must take what fits, or the answer he chose did nothing');
+
+      let have = 0;
+      for (let i = 0; i < 3; i++) { const r = await FM.storage.readMedia(c.ids[i]); if (r && r.file) have++; }
+      if (have !== st.done) throw new Error('the module reports ' + st.done + ' file(s) taken and this device holds ' + have);
+      if (have === 3) throw new Error('all three files were written to a device with room for one — "nothing beyond what fits" is the half of §15.4 that protects his other projects');
+
+      /* …and he is TOLD. A blank clip with no explanation is the failure this card exists to prevent. */
+      const card = document.getElementById('collab-media');
+      if (!card) throw new Error('nothing on screen says any media was skipped — the clips are simply blank and nothing explains why');
+      const said = (card.textContent || '');
+      if (!/skipped|full|could not be saved/i.test(said)) throw new Error('the card says "' + said.slice(0, 120) + '", which does not tell him any media was left out');
+      if (said.indexOf(String(st.failed)) < 0) throw new Error('the card does not say HOW MANY clips were left out (it says "' + said.slice(0, 120) + '")');
+
+      /* CONTROL: [Skip media] really is the other answer, and it takes nothing at all. */
+      C.media._answer = false;
+      const ctl2 = C.media._ctl(c.G);
+      /* Re-armed by hand, so it has to be re-armed WHOLE: `capped` is the budget's own flag (a budget
+         spent to exactly zero is still a budget) and `bad` is the list of files this device has stopped
+         asking for — the three that did not fit are on it, and leaving them there would make the control
+         below measure an empty plan rather than a refusal. */
+      ctl2.asked = false; ctl2.cap = 0; ctl2.capped = false; ctl2.skip = false;
+      ctl2.bad = Object.create(null); ctl2.tries = Object.create(null);
+      ctl2.have = Object.create(null); ctl2.wanted = Object.create(null); ctl2.files = 0; ctl2.filesDone = 0; ctl2.failed = 0;
+      for (let i = 0; i < 3; i++) { try { await FM.storage.removeMedia(c.ids[i]); } catch (e) {} FM.media.remove(c.ids[i]); }
+      const wantsBefore = c.peer.wants.length;
+      ctl2.dirty = true;
+      await until921('the skip answer to be acted on', async function () { return ctl2.skip ? true : null; }, 30000);
+      await settle921(300);
+      if (c.peer.wants.length !== wantsBefore) throw new Error('CONTROL: [Skip media] still asked for ' + (c.peer.wants.length - wantsBefore) + ' file(s), so the card’s two answers are the same answer');
+    });
+  });
+
+  test('921 S4 a guest export waits for the media it still needs, and “Export anyway” goes ahead', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S4('§15.8’s export gate');
+    const splash = await q921splash();
+    await withCollabGuest921([mediaLayer921('Clip', 'video', { duration: 2 })], async function (c) {
+      c.peer.cutAt = 200 * 1024;                       // it starts arriving and stops
+      c.peer.add(splash, 'video', [[c.ids[0], 0]]);
+      c.peer.announce('mf');
+      await until921('the transfer to stall part-way', async function () { return c.peer.cut ? true : null; }, 60000);
+
+      const p = C.media.pending(c.G);
+      if (!p.n) throw new Error('CONTROL: nothing is outstanding, so the gate below has nothing to ask about');
+      if (!(p.pct > 0 && p.pct < 100)) throw new Error('CONTROL: the progress reads ' + p.pct + '% — the question §15.8 asks names a percentage, and 0 or 100 would not be the case it is for');
+
+      /* [Wait] stops the export dialog opening at all. */
+      C.media._answer = false;
+      const waited = await C.media.exportGate();
+      if (waited) throw new Error('[Wait] let the export go ahead anyway');
+
+      /* [Export anyway] lets it through. */
+      C.media._answer = true;
+      const anyway = await C.media.exportGate();
+      if (!anyway) throw new Error('[Export anyway] did not let the export through — the way out §15.8 promises is not there');
+
+      /* CONTROL: with nothing outstanding the gate does not ask at all, so an ordinary export in a
+         live session is not one extra tap. `_answer` is left set to false: if the gate asked, this
+         would come back false. */
+      c.peer.cut = false; c.peer.cutAt = 0;
+      c.ctl.inb = Object.create(null);
+      c.ctl.wanted = Object.create(null);
+      c.ctl.dirty = true;
+      await until921('the file to finish arriving', async function () {
+        const r = await FM.storage.readMedia(c.ids[0]);
+        return (r && r.file && r.file.size === splash.size) ? true : null;
+      }, 120000);
+      C.media._answer = false;
+      const quiet = await C.media.exportGate();
+      if (!quiet) throw new Error('CONTROL: the gate asked even with every clip already here, so an ordinary export in a live session costs a tap it should not');
+
+      /* …and the real dialog goes through it: `showExportDialog` is the one funnel every export uses. */
+      if (typeof FM.showExportDialog !== 'function') throw new Error('CONTROL: FM.showExportDialog is not exposed, so the hook cannot be shown to be on the real path');
+      let asked = 0;
+      const orig = C.media.exportGate;
+      C.media.exportGate = function () { asked++; return Promise.resolve(false); };
+      try {
+        await FM.showExportDialog();
+        if (!asked) throw new Error('showExportDialog did not consult the media gate — §15.8 is written and unreachable');
+        const dlg = document.getElementById('export-dialog');
+        if (!dlg) throw new Error('CONTROL: there is no #export-dialog, so "it did not open" would pass for any reason');
+        if (!dlg.classList.contains('hidden')) throw new Error('the gate said no and the export dialog opened anyway');
+      } finally { C.media.exportGate = orig; }
+    });
+  });
+
+  test('921 S4 replacing a clip keeps the one it replaced, and undoing the replace puts it back', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S4('§15.9’s replace half');
+    await withCollabGuest921([mediaLayer921('Pic', 'image')], async function (c) {
+      const first = await q921png([250, 20, 20], 'first.png');
+      const second = await q921png([20, 20, 250], 'second.png');
+      const fid1 = c.peer.add(first, 'image', [[c.ids[0], 0]]);
+      c.peer.announce('mf');
+      await until921('the first file to arrive', async function () {
+        const r = await FM.storage.readMedia(c.ids[0]);
+        return (r && r.file && r.file.size === first.size) ? r : null;
+      }, 60000);
+
+      /* The other device replaces the clip: `mediaRev` goes up in the document and the manifest names
+         the new file. Everything before the arrival is what §15.9 asks for — the outgoing record is
+         STASHED, not overwritten, because this device's undo can ask for it back. */
+      FM.scene.layers[0].mediaRev = 1;
+      c.peer.fids.length = 0; c.peer.files = Object.create(null);
+      c.peer.add(second, 'image', [[c.ids[0], 1]]);
+      c.peer.announce('mf');
+      await until921('the replacement to arrive', async function () {
+        const r = await FM.storage.readMedia(c.ids[0]);
+        return (r && r.file && r.file.size === second.size && (r.rev || 0) === 1) ? r : null;
+      }, 60000);
+
+      const prev = await FM.storage.takePrevMedia(c.ids[0]);
+      if (!prev || !prev.file) throw new Error('the replaced file was not stashed as prev: — undoing the replace on this device would bring the layer back with nothing in it, and there is no other copy of those bytes here');
+      if (prev.file.size !== first.size) throw new Error('the stash holds ' + prev.file.size + ' bytes, not the ' + first.size + ' of the file that was replaced');
+      if ((prev.rev || 0) !== 0) throw new Error('the stash is recorded at rev ' + prev.rev + ', so restoreReplacedMedia would refuse it');
+
+      /* …and the undo. `restoreReplacedMedia` is the app's own path — the same call history.restore makes
+         — so this asserts the two halves line up rather than re-implementing one of them. */
+      await FM.storage.stashPrevMedia(c.ids[0], prev, 0);
+      FM.scene.layers[0].mediaRev = 0;
+      const back = await FM.restoreReplacedMedia();
+      if (!back) throw new Error('undoing the replace restored nothing');
+      const now = FM.media.get(c.ids[0]);
+      if (!now || !now.file || now.file.size !== first.size) throw new Error('after the undo the layer holds ' + (now && now.file ? now.file.size : 'nothing') + ' bytes, not the original ' + first.size);
+    });
+  });
+
+  test('921 S4 a font crosses with the document and is applied on the far side, byte for byte', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S4('§15.9’s fonts');
+    await withCollabGuest921([mediaLayer921('Words', 'text', { text: 'Hi', fontFamily: 'FMFtest921, sans-serif' })], async function (c) {
+      /* A font file is BYTES to this code; whether a browser will accept them as a face is
+         `FM.fonts.applyEmbedded`'s business and is the app's own import path, tested since #915. What
+         S4 owns is that the right bytes, family and css reach that call — so `applyEmbedded` is
+         watched rather than re-implemented, and the comparison is byte-for-byte. */
+      const bytes = new Uint8Array(3000);
+      for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 31 + 7) & 255;
+      const file = new File([bytes], 'test921.ttf', { type: 'font/ttf', lastModified: 1600000003000 });
+      const fid = c.peer.addFont(file, 'FMFtest921', 'FMFtest921, sans-serif', 'Test face 921');
+
+      let saw = null;
+      const orig = FM.fonts.applyEmbedded;
+      FM.fonts.applyEmbedded = function (o) { saw = o; return Promise.resolve(); };
+      try {
+        c.peer.announce('mf');
+        await until921('the font to be applied', async function () { return saw ? saw : null; }, 60000);
+        const key = Object.keys(saw)[0];
+        const fd = saw[key];
+        if (!fd || !fd.dataURL) throw new Error('applyEmbedded was called with no dataURL: ' + JSON.stringify(saw).slice(0, 200));
+        if (fd.family !== 'FMFtest921') throw new Error('the family arrived as "' + fd.family + '" — a face registered under the wrong family is a face no layer can name');
+        if (fd.css !== 'FMFtest921, sans-serif') throw new Error('the css arrived as "' + fd.css + '", so the text layers that name it would still fall back');
+        const blob = await (await fetch(fd.dataURL)).blob();
+        const got = new Uint8Array(await blob.arrayBuffer());
+        if (got.length !== bytes.length) throw new Error('the font arrived as ' + got.length + ' bytes, not ' + bytes.length);
+        for (let i = 0; i < bytes.length; i++) if (got[i] !== bytes[i]) throw new Error('the font bytes differ at offset ' + i);
+      } finally { FM.fonts.applyEmbedded = orig; }
+
+      /* …and a family name that is not a family name never gets that far. It becomes CSS on the far
+         side, and it came off the wire (§14.9). */
+      const before = c.peer.wants.length;
+      c.peer.fids.length = 0; c.peer.files = Object.create(null);
+      c.peer.addFont(new File([new Uint8Array(64)], 'bad.ttf', { type: 'font/ttf' }), 'Evil"; }  body{display:none', 'x', 'bad');
+      c.peer.announce('mf');
+      await settle921(500);
+      if (C.session) C.session.tick('full');
+      await settle921(500);
+      if (c.peer.wants.length !== before) throw new Error('a font family full of CSS punctuation was accepted and asked for — it ends up in a style attribute and in ctx.font on every device in the room');
+
+      /* CONTROL: the watcher really is watching the product's path — the fid was a `font:` entry, it
+         went through the same want/bulk machinery as a clip, and the parts were cleaned up. */
+      if (!c.peer.wants.filter(function (w) { return w.fid === fid; }).length) throw new Error('CONTROL: no `want` was ever sent for the font, so what reached applyEmbedded did not come off the wire');
+      const left = await FM.storage.collabKeys('collab:part:' + c.sid + ':');
+      if (left.length) throw new Error('the font transfer left ' + left.length + ' part record(s) behind');
+    });
+  });
+
+  test('921 S4 a manifest naming a layer id this device holds in ANOTHER project writes nothing', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S4('the promise that shared media never lands on one of his own projects');
+    /* ⚠️ HIS REAL DATA, and the half the same-device refusal cannot cover. §12.2 check 3 refuses a JOIN
+       whose layer ids are already here — but a manifest arrives afterwards, over a link, from a peer
+       this device does not trust (§14.9), and it names layer ids. If media were written for any id a
+       manifest mentions, one stale or hostile entry naming a layer of HIS would overwrite that clip in
+       a project that has nothing to do with the room. The rule is that a record is only ever written
+       for a layer of the OPEN document. */
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    if (wasHome) FM.home.close();
+    let hisId = null, hisFile = null;
+    try {
+      made.push(await FM.projects.create({ name: 'FX921S4 his own', width: 320, height: 240 }));
+      await FM.storage.applyScene(scene([mediaLayer921('His clip', 'image')]));
+      FM.history.reset();
+      hisId = FM.scene.layers[0].id;
+      hisFile = await q921png([10, 200, 10], 'his.png');
+      await q921give(hisId, hisFile, 'image', 0);
+      FM.storage.flushSync();
+      await FM.storage.save();
+
+      await withCollabGuest921([mediaLayer921('Shared', 'image')], async function (c) {
+        if (c.ids.indexOf(hisId) >= 0) throw new Error('CONTROL: the shared document happens to contain his layer id, so the test is about nothing');
+        const theirs = await q921png([200, 10, 10], 'theirs.png');
+        /* One entry, two layers: one of the open document's and one of HIS, in a project that is not
+           even open. A receiver that writes for every id it is told about takes his clip out. */
+        c.peer.add(theirs, 'image', [[c.ids[0], 0], [hisId, 0]]);
+        c.peer.announce('mf');
+        await until921('the shared clip to arrive', async function () {
+          const r = await FM.storage.readMedia(c.ids[0]);
+          return (r && r.file && r.file.size === theirs.size) ? r : null;
+        }, 60000);
+        await settle921(400);
+        const his = await FM.storage.readMedia(hisId);
+        if (!his || !his.file) throw new Error('his clip is gone from IndexedDB entirely after a manifest named its layer id');
+        if (his.file.size !== hisFile.size) throw new Error('his clip is now ' + his.file.size + ' bytes, not the ' + hisFile.size + ' it was — a manifest from the room overwrote a record in a project that is not even open, which is the one thing a linked copy must never be able to do');
+        const bytes = new Uint8Array(await his.file.arrayBuffer()), want = new Uint8Array(await hisFile.arrayBuffer());
+        for (let i = 0; i < want.length; i++) if (bytes[i] !== want[i]) throw new Error('his clip differs from the file he imported, at offset ' + i);
+      });
+    } finally {
+      await q915aCleanup(made, orig, wasHome, [], [], []);
+    }
+  });
+
+  /* ═══ TIER 3: the two rules that genuinely need two devices ══════════════════════════════════════
+   * Everything above put the real module through §15 against a test peer, which is the right tool for
+   * "does the transfer work". These two are about what happens BETWEEN devices — a clip added on one
+   * reaching a third, and his own data on the joining one — and neither can be asked of a peer that
+   * is a test fixture. They re-boot the trio if the S2 group has already taken it down. */
+
+  /* ⚠️ A TIER-3 INSTANCE IS TICKED BY THE TEST, NOT BY A TIMER. The agent arms every session with
+     `autoTick:false` — deliberately, so a document assertion is about a message and not about a race —
+     and §15's reconcile runs ON THE TICK. So a media wait that only polls is a wait for something
+     nothing will ever do: this ticks every instance in the room, then asks. */
+  async function t3until921(R, tags, what, pred, ms) {
+    const deadline = Date.now() + (ms || 180000);
+    let last = null;
+    while (Date.now() < deadline) {
+      for (const tag of tags) { try { await R.rpc(tag, 'tick', { scope: 'full' }); } catch (e) {} }
+      last = await pred();
+      if (last) return last;
+      await R.sleep(150);
+    }
+    throw new Error('timed out waiting for ' + what + ' (last answer: ' + JSON.stringify(last) + ')');
+  }
+
+  test('921 S4 tier 3: a clip a guest adds reaches the host and every other peer, and draws there', { item: '921', budgetMs: 420000 }, async function () {
+    need921S4('the tier-3 media rig');
+    const t = await trio921(), R = t.R;
+    await t3reset921();
+    try {
+      await R.rpc('h', 'setScene', { names: ['Alpha'], name: 'Media host' });
+      await R.rpc('h', 'share');
+      await R.rpc('a', 'join', { host: 'h' });
+      await R.rpc('b', 'join', { host: 'h' });
+      await R.settle();
+
+      /* The host imports a real clip through the app's own import path. */
+      const hostPic = await R.rpc('h', 'addMedia', { kind: 'image', rgb: [250, 30, 30], name: 'host.png' });
+      await t3until921(R, ['h', 'a', 'b'], 'the host clip to reach both guests', async function () {
+        const a = await R.rpc('a', 'record', { id: hostPic.id });
+        const b = await R.rpc('b', 'record', { id: hostPic.id });
+        return (a.disk && b.disk) ? { a: a.size, b: b.size } : null;
+      }, 180000);
+      const ra = await R.rpc('a', 'record', { id: hostPic.id });
+      if (ra.size !== hostPic.size) throw new Error('the guest holds ' + ra.size + ' bytes of a ' + hostPic.size + '-byte clip');
+      const inkA = await R.rpc('a', 'ink', { t: 0 });
+      if (inkA.lit < inkA.total * 0.05) throw new Error('the 380px guest has the bytes and draws nothing (' + inkA.pct + '% lit) — a clip that arrived and cannot be seen has not arrived');
+
+      /* Now the other direction, which is the one §15.9 is really about: a clip a GUEST adds has to
+         reach the host AND every other peer, and the guest has never heard of the other peer. */
+      const guestPic = await R.rpc('a', 'addMedia', { kind: 'image', rgb: [30, 250, 60], name: 'guest.png' });
+      await t3until921(R, ['h', 'a', 'b'], 'the guest clip to reach the host', async function () {
+        const h = await R.rpc('h', 'record', { id: guestPic.id });
+        return h.disk ? h : null;
+      }, 180000);
+      const rh = await R.rpc('h', 'record', { id: guestPic.id });
+      if (rh.size !== guestPic.size) throw new Error('the host holds ' + rh.size + ' bytes of the guest’s ' + guestPic.size + '-byte clip');
+      await t3until921(R, ['h', 'a', 'b'], 'the guest clip to reach the OTHER guest', async function () {
+        const b = await R.rpc('b', 'record', { id: guestPic.id });
+        return b.disk ? b : null;
+      }, 180000);
+      const rb = await R.rpc('b', 'record', { id: guestPic.id });
+      if (rb.size !== guestPic.size) throw new Error('the third peer holds ' + rb.size + ' bytes of a ' + guestPic.size + '-byte clip — the host has it and never passed it on, so two people in the room see a blank clip the third can see');
+      const inkB = await R.rpc('b', 'ink', { t: 0 });
+      if (inkB.lit < inkB.total * 0.05) throw new Error('the third peer has both clips and draws nothing (' + inkB.pct + '% lit)');
+
+      /* …and the host's own document really carries it, so the next boot is not a blank clip. */
+      const hs = await R.rpc('h', 'state');
+      if (hs.layers.indexOf(guestPic.id) < 0) throw new Error('the host’s document does not even contain the guest’s layer');
+    } finally { await t3reset921(); }
+  });
+
+  test('921 S4 tier 3: the clips arrive into the guest’s own copy and not one byte of its own projects moves', { item: '921', budgetMs: 420000 }, async function () {
+    need921S4('the tier-3 media rig');
+    const t = await trio921(), R = t.R;
+    await t3reset921(['h', 'a']);
+    try {
+      await R.rpc('h', 'setScene', { names: ['Alpha'], name: 'Media host' });
+      const hostPic = await R.rpc('h', 'addMedia', { kind: 'image', rgb: [250, 30, 30], name: 'shared.png' });
+      await R.rpc('h', 'share');
+
+      /* The guest has a project of its own, with a real record of its own, before anything happens. */
+      await R.rpc('a', 'setScene', { names: ['Mine one', 'Mine two'], name: 'His own project' });
+      const ownPic = await R.rpc('a', 'addMedia', { kind: 'image', rgb: [20, 20, 250], name: 'mine.png' });
+      await R.rpc('a', 'flush');
+      const before = await R.rpc('a', 'projects');
+      const idbBefore = await R.rpc('a', 'idbDump');
+      const ownPid = before.cur;
+      const ownRec = await R.rpc('a', 'record', { id: ownPic.id });
+      if (!ownRec.disk) throw new Error('CONTROL: the guest has no record of its own before joining, so "not one byte" below would be comparing nothing');
+
+      const joined = await R.rpc('a', 'join', { host: 'h' });
+      await t3until921(R, ['h', 'a'], 'the shared clip to arrive on the guest', async function () {
+        const r = await R.rpc('a', 'record', { id: hostPic.id });
+        return r.disk ? r : null;
+      }, 180000);
+
+      /* ⚠️ HIS REAL DATA (§24, §12.2 check 3). The clip arrived into the LINKED copy this join made,
+         keyed by the HOST's layer ids — ids the same-device refusal guarantees are not already here.
+         What must not have happened is any of it landing on a project of his. */
+      const gs = await R.rpc('a', 'state');
+      if (gs.pid !== joined.gpid || gs.pid === ownPid) throw new Error('the guest is on ' + gs.pid + ' — the media arrived into somebody else’s project rather than the copy the join made');
+      const after = await R.rpc('a', 'projects');
+      const openKey = 'fm.proj.' + ownPid;
+      Object.keys(before.docs).forEach(function (k) {
+        if (after.docs[k] === undefined) throw new Error('receiving the media DELETED one of his own projects: ' + k);
+        if (k !== openKey) {
+          if (after.docs[k] !== before.docs[k]) throw new Error('receiving the media rewrote one of his own projects (' + k + ')');
+          return;
+        }
+        const b = JSON.parse(before.docs[k]), a2 = JSON.parse(after.docs[k]);
+        const strip = function (d) { return JSON.stringify({ project: d.project, layers: d.layers }); };
+        if (strip(b) !== strip(a2)) throw new Error('receiving the media changed the content of the project that was open — only its autosave `rev` may move');
+      });
+      const still = await R.rpc('a', 'record', { id: ownPic.id });
+      if (!still.disk || still.size !== ownRec.size) throw new Error('his own clip is now ' + JSON.stringify(still) + ', not the ' + ownRec.size + '-byte record it was — a media write under a layer id he already had is exactly how a shared project eats one of his');
+      const idbAfter = await R.rpc('a', 'idbDump');
+      const bm = idbBefore.media || [], am = idbAfter.media || [];
+      const gone = bm.filter(function (k) { return am.indexOf(k) < 0; });
+      if (gone.length) throw new Error('receiving the media removed IndexedDB records the guest already had: ' + gone.join(', '));
+      const added = am.filter(function (k) { return bm.indexOf(k) < 0; });
+      if (!added.length) throw new Error('CONTROL: nothing at all was added to the guest’s IndexedDB, so the comparison above is about nothing');
+      const hostLayers = (await R.rpc('h', 'state')).layers;
+      const strays = added.filter(function (k) {
+        return k.indexOf('collab:') !== 0 && k.indexOf('thumb:') !== 0 && hostLayers.indexOf(k) < 0;
+      });
+      if (strays.length) throw new Error('the transfer wrote records under keys that are neither the host’s layer ids nor its own bookkeeping: ' + strays.join(', '));
+
+      /* …and every part record was cleaned up once the file was whole. */
+      const parts = (await R.rpc('a', 'collabKeys', { prefix: 'collab:part:' })) || [];
+      if (parts.length) throw new Error('the guest is still holding ' + parts.length + ' part record(s) of a file that finished arriving — a second copy of every clip on a phone');
+      const ink = await R.rpc('a', 'ink', { t: 0 });
+      if (ink.lit < ink.total * 0.05) throw new Error('the guest holds the clip and draws nothing (' + ink.pct + '% lit)');
+    } finally { await t3reset921(['h', 'a']); rig921().teardown(); }
+  });
+
+  /* ═══ THE REVIEW FIXES (queue 921 S4) ═════════════════════════════════════════════════════════
+   * Fifteen defects found by reading this stage before it shipped, each one confirmed against the
+   * source by a second reader. Every test below FAILS against the file as it was first written, and
+   * every one of them is about something he would feel: footage destroyed, a clip he imported
+   * overwritten, a download that loops on mobile data, a card he cannot dismiss, a message he can
+   * never be shown. */
+
+  test('921 S4 review: a replace HE makes during a session keeps HIS footage in the stash, not the file that replaced it', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S4('§15.9’s replace watcher');
+    await withCollabGuest921([mediaLayer921('Pic', 'image')], async function (c) {
+      const first = await q921noisePng(120, 101, 'his-first.png');
+      const second = await q921noisePng(160, 102, 'his-second.png');
+      const id = c.ids[0];
+      if (first.size === second.size) throw new Error('CONTROL: the two fixtures are the same size, so telling one stash from the other would be impossible');
+      await q921give(id, first, 'image', 0);
+      /* One reconcile first, so the watcher has SEEN this layer at rev 0 — a first sight is never a
+         change, and without it nothing below happens at all. */
+      await C.media._reconcile(c.G);
+      if (c.ctl.revs[id] !== 0) throw new Error('CONTROL: the watcher has not seen this layer yet (revs=' + JSON.stringify(c.ctl.revs[id]) + '), so the rev change below is its first sight and is ignored by design');
+
+      /* ⚠️ HIS REAL FOOTAGE. This is `FM.replaceMedia`'s own order, verbatim (js/app.js): stash the
+         OUTGOING file first, swap the record, then take the rev up. Everything the app does when he
+         picks "Replace media…" while a session happens to be running. */
+      const outgoing = FM.media.get(id);
+      await FM.storage.stashPrevMedia(id, outgoing, FM.scene.layers[0].mediaRev || 0);
+      const nrec = await FM.loadImageFile(second);
+      FM.replaceMediaWith(id, nrec);
+      FM.scene.layers[0].mediaRev = 1;
+      { const r = FM.media.get(id); if (r) r.rev = 1; }
+      await FM.storage.writeMedia(id, { file: second, kind: 'image', rev: 1 });
+
+      /* …and now the media sweep runs, which in a live room it does within 1.5 s of any replace. */
+      await C.media._reconcile(c.G);
+
+      const prev = await FM.storage.takePrevMedia(id);
+      if (!prev || !prev.file) throw new Error('the prev: stash is empty after the sweep — undo would bring the layer back with nothing in it');
+      if (prev.file.size !== first.size) throw new Error('the stash holds ' + prev.file.size + ' bytes; the file he REPLACED was ' + first.size + ' and the one that replaced it is ' + second.size + '. There is one prev: slot per layer, so his original is now unreferenced and the boot sweep reaps it — and Ctrl+Z, finding the stash at exactly the rev it wants, restores the REPLACEMENT and reports success while the picture does not change');
+
+      /* CONTROL: the watcher is not simply switched off. A REMOTE replace — the rev moves while the
+         record here is still the old one — is stashed exactly as §15.9 asks. */
+      FM.scene.layers[0].mediaRev = 2;
+      await C.media._reconcile(c.G);
+      const prev2 = await FM.storage.takePrevMedia(id);
+      if (!prev2 || !prev2.file || prev2.file.size !== second.size || (prev2.rev || 0) !== 1) throw new Error('CONTROL: a remote replace stashed ' + JSON.stringify(prev2 && { size: prev2.file && prev2.file.size, rev: prev2.rev }) + ' instead of the ' + second.size + '-byte record at rev 1, so the assertion above is measuring a watcher that never stashes anything');
+    });
+  });
+
+  test('921 S4 review: a clip that arrives late never overwrites the one he imported while it was downloading', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S4('§15.6’s write step');
+    await withCollabGuest921([mediaLayer921('Clip', 'image')], async function (c) {
+      const theirs = await q921png([250, 20, 20], 'theirs.png');
+      const his = await q921noisePng(120, 3, 'his-own.png');
+      const id = c.ids[0];
+      if (theirs.size === his.size) throw new Error('CONTROL: the two fixtures are the same size, so an overwrite would be invisible');
+
+      /* §8.9's barrier is what makes this measurable instead of a race: the file lands, is PARKED, and
+         only the apply waits — which is the same gap a 400 MB clip leaves open for minutes on a phone. */
+      FM._exporting = true;
+      c.peer.add(theirs, 'image', [[id, 0]]);
+      c.peer.announce('mf');
+      await until921('the shared clip to finish arriving and park behind the barrier', async function () { return c.ctl.held.length ? c.ctl.held.length : null; }, 90000);
+
+      /* …and while it is parked, he imports his own clip into that layer. Nothing was there to replace,
+         so `FM.replaceMedia`'s stash is skipped and this is the ONLY copy of it anywhere. */
+      await q921give(id, his, 'image', 1);
+      FM.scene.layers[0].mediaRev = 1;
+
+      FM._exporting = false;
+      await until921('the parked file to be applied', async function () { return c.ctl.held.length ? null : true; }, 90000);
+      await settle921(400);
+      const r = await FM.storage.readMedia(id);
+      if (!r || !r.file) throw new Error('the layer has no record at all after the apply');
+      if (r.file.size !== his.size) throw new Error('the layer holds ' + r.file.size + ' bytes at rev ' + (r.rev || 0) + ' — the arriving ' + theirs.size + '-byte file was written straight over the ' + his.size + '-byte clip he imported while it was downloading. writeMedia is an unconditional overwrite on the layer’s own key, and because there was nothing to replace there is no prev: copy to undo it with');
+      const live = FM.media.get(id);
+      if (!live || !live.file || live.file.size !== his.size) throw new Error('the registry holds ' + (live && live.file ? live.file.size + ' bytes' : 'nothing') + ' rather than his ' + his.size + '-byte clip, so the picture on screen is the one he got rid of');
+    });
+  });
+
+  test('921 S4 review: two peers uploading at once do not cross their files — a transfer is named by its peer as well as its xid', { item: '921', budgetMs: 300000 }, async function () {
+    const C = need921S4('§15.5’s frame routing');
+    await withCollab921([mediaLayer921('One', 'image'), mediaLayer921('Two', 'image')], async function (c) {
+      const ctl = C.media._ctl(c.S);
+      if (!ctl) throw new Error('CONTROL: the host session has no media controller, so nothing below is measured');
+      const fileA = await q921noisePng(300, 11, 'fromA.png');
+      const fileB = await q921noisePng(260, 12, 'fromB.png');
+      if (fileA.size === fileB.size) throw new Error('CONTROL: the two fixtures are the same size, so a crossed transfer would still pass the length check');
+
+      const loopA = C.link.LoopLink({ aTag: 'h', bTag: 'pa', mode: 'async' });
+      const loopB = C.link.LoopLink({ aTag: 'h', bTag: 'pb', mode: 'async' });
+      const midA = c.S.addPeer(loopA.a, { role: 'editor', name: 'Ann', color: '#44aaff' });
+      const midB = c.S.addPeer(loopB.a, { role: 'editor', name: 'Bo', color: '#ffaa44' });
+      if (!midA || !midB) throw new Error('CONTROL: both peers were not admitted');
+      const pA = mediaPeer921(loopA.b), pB = mediaPeer921(loopB.b);
+      pA.add(fileA, 'image', [[c.ids[0], 0]]);
+      pB.add(fileB, 'image', [[c.ids[1], 0]]);
+
+      /* ⚠️ THE COLLISION IS STRUCTURAL, not contrived: `nextXid` is per CONTROLLER and starts at 1, so
+         the first upload of every peer in the room carries the same number. The test peer mints its
+         xids the same way, per peer — so A and B both open with the same one. B is announced only once
+         A's transfer is genuinely mid-flight, which is what makes this a measurement and not a race. */
+      pA.paused = true;
+      pA.announce('ann');
+      await until921('A’s transfer to have started', async function () { return pA.serves >= 1 ? pA.serves : null; }, 60000);
+      pB.announce('ann');
+      await until921('B’s transfer to start while A’s is still live', async function () { return pB.serves >= 1 ? pB.serves : null; }, 60000);
+      pA.paused = false;
+
+      /* A timeout here IS the defect, so it is caught rather than allowed to be the whole report —
+         the assertions below say what actually happened to his two clips. */
+      try {
+        await until921('both files to be settled', async function () {
+          const r1 = await FM.storage.readMedia(c.ids[0]);
+          const r2 = await FM.storage.readMedia(c.ids[1]);
+          return (r1 && r1.file && r2 && r2.file) ? [r1, r2] : null;
+        }, 120000);
+      } catch (e) {}
+
+      const r1 = await FM.storage.readMedia(c.ids[0]);
+      const r2 = await FM.storage.readMedia(c.ids[1]);
+      if (!r1 || !r1.file || r1.file.size !== fileA.size) throw new Error('the first layer holds ' + (r1 && r1.file ? r1.file.size + ' bytes' : 'nothing') + ', not A’s ' + fileA.size + '-byte file. Two peers open with the same xid, and a map keyed by the number alone lets the second T_START take over the first one’s transfer — A’s bytes are then appended to B’s parts and persisted there');
+      if (!r2 || !r2.file || r2.file.size !== fileB.size) throw new Error('the second layer holds ' + (r2 && r2.file ? r2.file.size + ' bytes' : 'nothing') + ', not B’s ' + fileB.size + '-byte file');
+      if (Object.keys(ctl.inb).length) throw new Error('a transfer is still holding an in-flight slot after both files landed (' + Object.keys(ctl.inb).join(', ') + ') — at IN_FLIGHT 2 a stranded one halves throughput for the session and keeps the export card asking about a clip that has arrived');
+      loopA.a.close(); loopB.a.close();
+      try { const ks = await FM.storage.collabKeys('collab:part:'); for (const k of ks) if (k.indexOf(ctl.sid) >= 0) await FM.storage.collabDel(k); } catch (e) {}
+    });
+  });
+
+  test('921 S4 review: a file that fails at the last step is asked for again, instead of being dropped for the whole session', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S4('§15.6’s completion');
+    await withCollabGuest921([mediaLayer921('Pic', 'image')], async function (c) {
+      const png = await q921noisePng(140, 21, 'late-fail.png');
+      const id = c.ids[0];
+      const fid = c.peer.add(png, 'image', [[id, 0]]);
+      const pre = 'collab:part:' + c.sid + ':';
+      const origGet = FM.storage.collabGet;
+      let boom = true;
+      /* The exact failure §15.6 already has an exit for: every byte arrived and a part is not there to
+         read back — a record the browser evicted under storage pressure, which on a phone is ordinary.
+         Once, because a permanent one would reach the give-up ceiling before a retry could be seen. */
+      let failedAt = 0;
+      FM.storage.collabGet = function (k) {
+        if (boom && String(k).indexOf(pre) === 0) { boom = false; failedAt = Date.now(); return Promise.resolve(null); }
+        return origGet.apply(FM.storage, arguments);
+      };
+      try {
+        c.peer.announce('mf');
+        /* Watched HERE rather than at `ctl.lastAbort`, because that field is set by `abort` after the
+           guard that this defect never gets past — the failure is invisible from the outside, which is
+           half of what makes it bad. */
+        await until921('the transfer to reach its last step and find the part gone', async function () { return failedAt ? failedAt : null; }, 90000);
+        const asked = c.peer.wants.length;
+        /* The part really is gone — that is what this exit means — so the retry is a fresh ask. */
+        try { const ks = await FM.storage.collabKeys(pre); for (const k of ks) await FM.storage.collabDel(k); } catch (e) {}
+        c.ctl.dirty = true;
+        let landed = null;
+        try {
+          landed = await until921('the file to arrive on the retry', async function () {
+            const r = await FM.storage.readMedia(id);
+            return (r && r.file && r.file.size === png.size) ? r : null;
+          }, 60000);
+        } catch (e) {}
+        if (!landed) throw new Error('every byte of the file arrived, the last step failed, and the clip was never asked for again. `complete` deletes the inb on its FIRST line, so `abort` finds nothing and returns before it can clear `wanted` — and `planWants` re-queues only what is NOT wanted, so this clip never arrives for the life of the session. Nothing says so either: it is in neither the queue, nor the in-flight, nor the held, so `pending()` reads 0 and the export card stays quiet while the timeline paints that clip at 0% for ever');
+        if (c.peer.wants.length <= asked) throw new Error('CONTROL: no second `want` was ever sent, so the file above did not arrive by being asked for again');
+      } finally { FM.storage.collabGet = origGet; }
+    });
+  });
+
+  test('921 S4 review: ending a session collects the abandoned parts the rooms before it left behind', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S4('§12.4’s collector');
+    await withCollabGuest921([mediaLayer921('Pic', 'image')], async function (c) {
+      const gone = 'collab:part:s4dead' + Date.now().toString(36) + ':ffff:0';
+      const mine = 'collab:part:' + c.sid + ':aaaa:0';
+      const week = 8 * 24 * 3600 * 1000;
+      await FM.storage.collabPut(gone, { v: 1, sid: 's4dead', fp: 'x', n: 0, at: Date.now() - week, blob: new Blob([new Uint8Array(16)]) });
+      await FM.storage.collabPut(mine, { v: 1, sid: c.sid, fp: 'y', n: 0, at: Date.now(), blob: new Blob([new Uint8Array(16)]) });
+      if (!(await FM.storage.collabGet(gone))) throw new Error('CONTROL: the abandoned part was never written, so nothing below is about anything');
+
+      C.media._gc = null;
+      C.media.detach(c.G);
+      if (!C.media._gc) throw new Error('ending the session did not call §12.4’s collector. It is the ONLY thing in the app that can delete a `collab:part:` record — `pruneOrphans` skips every `collab:` key by design and defers to a collector that has no caller — so every 4 MiB part of every dropped link and every tab closed mid-download stays on the device for good, in the same IndexedDB quota as his own projects, until an ordinary save starts failing on a phone that looks empty');
+      await C.media._gc;
+      if (await FM.storage.collabGet(gone)) throw new Error('a week-old part of a room that no longer exists survived the session ending');
+      if (!(await FM.storage.collabGet(mine))) throw new Error('the collector took THIS room’s own fresh part — that is somebody’s resume point (§15.7), and a rejoin would have to download the whole file again');
+      try { await FM.storage.collabDel(mine); } catch (e) {}
+    });
+  });
+
+  test('921 S4 review: a sender that restarts from zero cannot have its new part 0 deleted by the drop of the old one', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S4('§15.7’s resume');
+    await withCollabGuest921([mediaLayer921('Pic', 'image')], async function (c) {
+      const png = await q921noisePng(300, 31, 'restart.png');
+      const id = c.ids[0];
+      const fp = C.media._fp(png), fid = C.media._fid(fp);
+      const pre = C.media._partPrefix(c.G, fp);
+      /* Something of this file is already here, so the `want` carries an offset… */
+      await FM.storage.collabPut(pre + '0', { v: 1, sid: c.sid, fp: fp, n: 0, at: Date.now(), blob: png.slice(0, 1000) });
+      /* …and the sender ignores it and starts from the top, which §14.9 says it is free to do. */
+      c.peer.forceFrom = 0;
+      c.peer.add(png, 'image', [[id, 0]]);
+
+      /* The race is IndexedDB scheduling, and on a phone it is ordinary: `dropParts` lists the keys
+         and only THEN issues its deletes, so the listing queues behind whatever readwrite is in the
+         store — a 4 MiB blob write for the other in-flight file — while the restarted transfer keeps
+         receiving at full speed. Rather than hope for that, the two reads this file makes are given
+         the delay the phone gives them. */
+      const origKeys = FM.storage.collabKeys, origGet = FM.storage.collabGet;
+      const later = function (fn, ms) { return new Promise(function (res, rej) { setTimeout(function () { fn().then(res, rej); }, ms); }); };
+      FM.storage.collabKeys = function (p) {
+        const a = arguments;
+        if (String(p).indexOf(pre) !== 0) return origKeys.apply(FM.storage, a);
+        return later(function () { return origKeys.apply(FM.storage, a); }, 150);
+      };
+      FM.storage.collabGet = function (k) {
+        const a = arguments;
+        if (String(k).indexOf(pre) !== 0) return origGet.apply(FM.storage, a);
+        return later(function () { return origGet.apply(FM.storage, a); }, 500);
+      };
+      try {
+        c.peer.announce('mf');
+        await until921('the transfer to settle', async function () {
+          if (c.ctl.lastAbort === 'gap') return 'gap';
+          const r = await FM.storage.readMedia(id);
+          return (r && r.file && r.file.size === png.size) ? 'landed' : null;
+        }, 90000);
+      } catch (e) { /* a timeout is one of the two shapes this defect takes; the assertions below name it */ }
+      finally { FM.storage.collabKeys = origKeys; FM.storage.collabGet = origGet; c.peer.forceFrom = null; }
+
+      if (!c.ctl.stats.resumed) throw new Error('CONTROL: the resume path was never taken (no `want` carried an offset), so the restart branch this test is about never ran');
+      if (c.ctl.lastAbort === 'gap') throw new Error('the transfer lost its own part 0 and took the `gap` exit. The drop of the OLD parts was fired and forgotten while the restarted transfer was already flushing the NEW part 0 to the same key, so the delete removed the part that had just been written — and the whole file, which had arrived, was thrown away and downloaded again with nothing reported');
+      const r = await FM.storage.readMedia(id);
+      if (!r || !r.file || r.file.size !== png.size) throw new Error('the file never landed (' + (r && r.file ? r.file.size + ' bytes' : 'no record') + ') although every byte of it arrived. The drop of the OLD parts was fired and forgotten while the restarted transfer was already flushing the NEW part 0 to the same key, so the delete removed the part that had just been written and `complete` found a hole where the file was');
+      if (c.ctl.tries && c.ctl.tries[fid]) throw new Error('the file had to be downloaded ' + (c.ctl.tries[fid] + 1) + ' times to land once — on a phone on mobile data that is the whole file again, silently');
+    });
+  });
+
+  test('921 S4 review: the progress card’s × dismisses it, and a failure he has not seen still gets through', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S4('§15.4’s progress card');
+    await withCollabGuest921([mediaLayer921('Clip', 'image', { duration: 2 })], async function (c) {
+      const big = await q921noisePng(300, 41, 'card.png');
+      c.peer.cutAt = Math.floor(big.size * 0.4);
+      c.peer.add(big, 'image', [[c.ids[0], 0]]);
+      c.peer.announce('mf');
+      const card = await until921('the progress card to appear', async function () { return document.getElementById('collab-media'); }, 90000);
+      const x = card.querySelector('.cm-close');
+      if (!x) throw new Error('CONTROL: the card has no × at all, so there is nothing to measure');
+      x.click();
+      if (document.getElementById('collab-media')) throw new Error('the × did not even take the card out of the DOM');
+
+      /* …and it STAYS gone. `sync` runs at the tail of every 64 KiB frame and again on every 1.5 s
+         sweep, and it rebuilt the card unconditionally — so the button was dead for the whole
+         download. On a 380 px phone this card lies across the bottom of the preview and takes the
+         taps that land there, so the × is the only way to see the canvas under it. */
+      for (let i = 0; i < 8; i++) {
+        if (C.session) { try { C.session.tick('full'); } catch (e) {} }
+        C.media.ui.sync(c.ctl);
+        await settle921(120);
+      }
+      if (document.getElementById('collab-media')) throw new Error('the card is back within a few frames of being dismissed — the × cannot dismiss it at all');
+
+      /* …but a dismissal of the progress line is not a gag. A clip that could NOT be saved is news. */
+      c.ctl.failed++;
+      C.media.ui.sync(c.ctl);
+      const back = document.getElementById('collab-media');
+      if (!back) throw new Error('a clip that could not be saved was silenced by the earlier dismissal — the blank clips would then have nothing anywhere to explain them');
+      const x2 = back.querySelector('.cm-close');
+      x2.click();
+      C.media.ui.sync(c.ctl);
+      C.media.ui.sync(c.ctl);
+      if (document.getElementById('collab-media')) throw new Error('the × on the failure card does not work either — and that one is rebuilt by the 1.5 s sweep for the rest of the session');
+    });
+  });
+
+  test('921 S4 review: a device that runs out mid-transfer says “This device is full” instead of a bar frozen for ever', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S4('§15.4’s honest failure');
+    await withCollabGuest921([mediaLayer921('A', 'image'), mediaLayer921('B', 'image')], async function (c) {
+      const a = await q921png([250, 20, 20], 'full-a.png');
+      const b = await q921png([20, 250, 20], 'full-b.png');
+      c.peer.add(a, 'image', [[c.ids[0], 0]]);
+      c.peer.add(b, 'image', [[c.ids[1], 0]]);
+      const origPut = FM.storage.collabPut;
+      /* The one answer a nearly full device gives that no machine can be made to give on demand. */
+      FM.storage.collabPut = function () { return Promise.resolve(false); };
+      try {
+        c.peer.announce('mf');
+        await until921('the device to report itself full', async function () { return c.ctl.full ? true : null; }, 90000);
+        /* Three sweeps. Without the guard, `planWants` refills the queue on every one of them, because
+           `outOfRoom` cleared exactly the flag that keeps a fid out of `fresh`. */
+        for (let i = 0; i < 3; i++) {
+          await settle921(1700);
+          if (C.session) { try { C.session.tick('full'); } catch (e) {} }
+        }
+        await settle921(400);
+        const p = C.media.pending(c.G);
+        if (p.n) throw new Error('the device said it was full and ' + p.n + ' file(s) are queued again a few sweeps later. `pump` refuses to move while `skip` is set but `planWants` did not, so the queue refills every 1.5 s, `pend` is never 0, and the one card that says the honest thing is behind `failed && !pend` — it can never be shown. Every export from now on also asks him to wait for clips that will never arrive');
+        const card = document.getElementById('collab-media');
+        if (!card) throw new Error('nothing on screen says anything at all after the device ran out');
+        const said = card.textContent || '';
+        if (!/full/i.test(said)) throw new Error('the card says “' + said.slice(0, 140) + '” — §15.4’s headline failure state is “This device is full”, and what he gets instead is a progress line with a bar that never moves again');
+      } finally { FM.storage.collabPut = origPut; }
+    });
+  });
+
+  test('921 S4 review: a timeline rebuild does not lose the missing-clip markers', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S4('§15.10’s placeholders');
+    await withCollabGuest921([mediaLayer921('Clip', 'image', { duration: 2 })], async function (c) {
+      const big = await q921noisePng(300, 51, 'paint.png');
+      c.peer.cutAt = Math.floor(big.size * 0.35);
+      c.peer.add(big, 'image', [[c.ids[0], 0]]);
+      c.peer.announce('mf');
+      const sel = '#tl-tracks .clip[data-id="' + c.ids[0] + '"]';
+      const before = await until921('the clip to be marked as still arriving', async function () {
+        const el = document.querySelector(sel);
+        return (el && el.classList.contains('cm-missing')) ? el : null;
+      }, 90000);
+
+      /* A pinch, a clip drag, a file landing — every one of them is `rebuild()`, and it replaces every
+         `.clip` element in the timeline. */
+      FM.timeline.rebuild();
+      const after = document.querySelector(sel);
+      if (!after) throw new Error('CONTROL: the clip element is gone after the rebuild');
+      if (after === before) throw new Error('CONTROL: the rebuild was deferred (the same element is still there), so this test did not measure a rebuild at all');
+      if (!after.classList.contains('cm-missing')) throw new Error('the clip lost its “still arriving” outline the moment the timeline rebuilt. The only repaint was behind a flag that a DATA FRAME sets, so on a stalled link, between two files, or before the first byte of the session the clip goes back to looking like an ordinary one — that renders blank. §15.10 names the hook for this and the timeline has offered it since S0');
+      if (!after.querySelector('.cm-prog')) throw new Error('the progress bar inside the clip did not come back after the rebuild either');
+    });
+  });
+
+  test('921 S4 review: a file whose bytes never match its declared size is asked for twice and then left alone', { item: '921', budgetMs: 240000 }, async function () {
+    const C = need921S4('§15.6’s length check');
+    await withCollabGuest921([mediaLayer921('Pic', 'image')], async function (c) {
+      const png = await q921noisePng(300, 61, 'lying.png');
+      const fid = c.peer.add(png, 'image', [[c.ids[0], 0]]);
+      /* A peer whose declared size is simply wrong — §14.9's whole point is that it is a peer, not a
+         promise. It re-sends the same wrong length every time, so nothing about this self-heals. */
+      c.peer.files[fid].entry.size = png.size - 5000;
+      c.peer.announce('mf');
+
+      await until921('the device to ask for the file', async function () { return c.peer.wants.length ? c.peer.wants.length : null; }, 90000);
+      /* Two goes is the ceiling, so four seconds — three sweeps — is long enough for it to be still. */
+      for (let i = 0; i < 3; i++) {
+        await settle921(1500);
+        if (C.session) { try { C.session.tick('full'); } catch (e) {} }
+      }
+      const w1 = c.peer.wants.length, f1 = c.ctl.files;
+      /* Three more. Without a count of the tries, every one of them starts the whole download again —
+         on his phone, on mobile data, for the rest of the session. */
+      for (let i = 0; i < 3; i++) {
+        await settle921(1500);
+        if (C.session) { try { C.session.tick('full'); } catch (e) {} }
+      }
+      await settle921(400);
+      if (c.peer.wants.length !== w1) throw new Error('the file was asked for ' + (c.peer.wants.length - w1) + ' more time(s) in four seconds after failing its length check every time. `complete` drops the parts and clears `wanted` without ever setting `have`, so `planWants` re-queues it on every 1.5 s sweep and the whole file downloads again, for ever, with the card’s file count and skipped count climbing without bound');
+      if (c.ctl.files !== f1) throw new Error('the card’s file count is still climbing (' + f1 + ' → ' + c.ctl.files + '), so what he reads is “2 of 31” with 31 growing');
+      if (w1 > 4) throw new Error('the file was downloaded ' + w1 + ' times before this device gave up; two goes is the ceiling');
+      if (!c.ctl.failed) throw new Error('the device gave up on a clip and said nothing about it — a blank clip with no explanation is the failure the card exists to prevent');
+    });
+  });
+
+  test('921 S4 review: a 90 MB “font” is refused before a byte of it moves', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S4('§15.9’s font cap');
+    await withCollabGuest921([mediaLayer921('Words', 'text', { text: 'Hi', fontFamily: 'FMFbig921, sans-serif' })], async function (c) {
+      const wire = function (fid, family, size) {
+        return { fid: fid, fp: fid, size: size, mime: 'font/ttf', kind: 'font', name: 'A face', lm: 0, layers: [], family: family, css: family + ', sans-serif' };
+      };
+      /* ⚠️ 90 MB is UNDER §15.4's ask-first line, so nothing is asked: it downloads in silence and
+         `applyEmbedded` then reads it whole through readAsDataURL — the blob, a base64 string a third
+         bigger again, and a second File on top. On his phone that is the tab. The cap existed and was
+         applied only where this device decides what to OFFER. */
+      c.peer.ep.send('ctl', { t: 'mf', files: [], fonts: [wire('font:huge921', 'FMFbig921', 90 * 1024 * 1024)] });
+      await settle921(500);
+      if (C.session) { try { C.session.tick('full'); } catch (e) {} }
+      await settle921(500);
+      if (c.ctl.peer['font:huge921']) throw new Error('a peer-declared 90 MB font was taken into the manifest — the only ceiling on the receiving side is FILE_MAX, which is 8 GiB');
+      if (c.peer.wants.filter(function (w) { return w.fid === 'font:huge921'; }).length) throw new Error('this device asked a peer for a 90 MB font');
+
+      /* CONTROL: an ordinary font of the same shape is still taken, so the refusal above is the SIZE. */
+      c.peer.ep.send('ctl', { t: 'mf', files: [], fonts: [wire('font:ok921', 'FMFok921', 3000)] });
+      await until921('an ordinary font to be taken', async function () { return c.ctl.peer['font:ok921'] ? true : null; }, 30000);
+    });
+  });
+
+  test('921 S4 review: a peer cannot register a face under a built-in family name', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S4('§15.9’s font families');
+    await withCollabGuest921([mediaLayer921('Words', 'text', { text: 'Hi', fontFamily: 'Inter, sans-serif' })], async function (c) {
+      const wire = function (fid, family) {
+        return { fid: fid, fp: fid, size: 3000, mime: 'font/ttf', kind: 'font', name: 'A face', lm: 0, layers: [], family: family, css: family + ', sans-serif' };
+      };
+      /* ⚠️ HIS WHOLE APP, not this session. `fontHere` only searches the IMPORTED font list, which
+         never holds a built-in, so 'Inter' reads as missing and is fetched; `applyEmbedded` builds its
+         de-dup set from the same list, registers the face as `Inter`, writes it into the localStorage
+         font index and the IDB blob store, and `rehydrateAll` puts it back on every boot afterwards.
+         Every text layer in every project of his defaults to 'Inter, sans-serif' — preview AND export. */
+      ['Inter', 'Helvetica', 'Georgia', 'Impact'].forEach(function (fam, i) {
+        c.peer.ep.send('ctl', { t: 'mf', files: [], fonts: [wire('font:shadow' + i, fam)] });
+      });
+      await settle921(500);
+      if (C.session) { try { C.session.tick('full'); } catch (e) {} }
+      await settle921(500);
+      const took = ['Inter', 'Helvetica', 'Georgia', 'Impact'].filter(function (fam, i) { return !!c.ctl.peer['font:shadow' + i]; });
+      if (took.length) throw new Error('a peer’s font entry naming the built-in famil' + (took.length === 1 ? 'y ' : 'ies ') + took.join(', ') + ' was accepted. The app’s own import mints every family as FMF plus an id, and nothing else ever enters the font index, so a free-form name buys a peer exactly one thing: the glyphs of his whole app, in every project, in the preview and in the export, put back on every boot long after he has left the room');
+      if (c.peer.wants.filter(function (w) { return /^font:shadow/.test(w.fid); }).length) throw new Error('this device asked a peer for a face to register as a built-in family');
+
+      /* CONTROL: the shape the app’s own import mints is still taken, so the refusal is the NAME. */
+      c.peer.ep.send('ctl', { t: 'mf', files: [], fonts: [wire('font:mint921', 'FMFmint921')] });
+      await until921('a normally-minted family to be taken', async function () { return c.ctl.peer['font:mint921'] ? true : null; }, 30000);
+    });
+  });
+
+  test('921 S4 review: one file, one job per peer — a flood of wants does not open a transfer each', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S4('§15.5’s serving side');
+    await withCollab921([mediaLayer921('Pic', 'image')], async function (c) {
+      const ctl = C.media._ctl(c.S);
+      if (!ctl) throw new Error('CONTROL: the host session has no media controller');
+      const png = await q921noisePng(300, 71, 'flood.png');
+      await q921give(c.ids[0], png, 'image', 0);
+      FM.history.commit();
+      const loop = C.link.LoopLink({ aTag: 'h', bTag: 'p', mode: 'async' });
+      const mid = c.S.addPeer(loop.a, { role: 'editor', name: 'Sam', color: '#44aaff' });
+      if (!mid) throw new Error('CONTROL: the peer was not admitted');
+      const peer = mediaPeer921(loop.b);
+      const mfs = await until921('the host to advertise the clip', async function () { return peer.mfs.length ? peer.mfs : null; }, 30000);
+      let fid = null;
+      mfs.forEach(function (m) { (m.files || []).forEach(function (e) { if (e.kind === 'image') fid = e.fid; }); });
+      if (!fid) throw new Error('CONTROL: the host advertised no image, so there is nothing to ask for');
+
+      /* ⚠️ A MESSAGE COSTS A PEER NOTHING (§14.9). The RECEIVING side is capped at two files at once;
+         nothing capped this one. Forty asks is a rounding error next to what a peer can actually send. */
+      for (let i = 0; i < 40; i++) peer.ep.send('ctl', { t: 'want', fid: fid, from: 0 });
+      await settle921(600);
+      const live = Object.keys(ctl.out).filter(function (x) { return ctl.out[x] && !ctl.out[x].stop; });
+      if (live.length > C.media.LIMITS.IN_FLIGHT) throw new Error(live.length + ' outgoing transfers of the same file are running at once for one peer. Each is its own read-and-send loop with its own 25 ms timer and its own File.slice(), on the device that is also rendering — and they all pass the buffered-amount brake together, because each one passes it while the others are still awaiting their read');
+      await until921('the file to be served once', async function () { return peer.gotBytes >= png.size ? peer.gotBytes : null; }, 60000);
+      await settle921(800);
+      if (peer.gotBytes > png.size * 3) throw new Error('the host sent ' + peer.gotBytes + ' bytes for a ' + png.size + '-byte file in answer to forty copies of one message');
+      loop.a.close();
+    });
+  });
+
+  test('921 S4 review: only the peer a file is sourced from can say it no longer has it', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S4('§15.1’s manifest merge');
+    await withCollab921([mediaLayer921('Pic', 'image')], async function (c) {
+      const ctl = C.media._ctl(c.S);
+      if (!ctl) throw new Error('CONTROL: the host session has no media controller');
+      const png = await q921noisePng(120, 81, 'sourced.png');
+      const fp = C.media._fp(png), fid = C.media._fid(fp);
+      const loopA = C.link.LoopLink({ aTag: 'h', bTag: 'pa', mode: 'async' });
+      const loopB = C.link.LoopLink({ aTag: 'h', bTag: 'pb', mode: 'async' });
+      const midA = c.S.addPeer(loopA.a, { role: 'editor', name: 'Ann', color: '#44aaff' });
+      const midB = c.S.addPeer(loopB.a, { role: 'editor', name: 'Bo', color: '#ffaa44' });
+      const pA = mediaPeer921(loopA.b), pB = mediaPeer921(loopB.b);
+      pA.add(png, 'image', [[c.ids[0], 0]]);
+      pA.announce('ann');
+      await until921('the entry to be sourced from A', async function () {
+        const e = ctl.peer[fid];
+        return (e && e.from === midA && !e.miss) ? e : null;
+      }, 30000);
+
+      /* ⚠️ A STRANGER'S WORD ABOUT SOMEBODY ELSE'S FILE (§14.9). `miss` makes `planWants` skip the
+         entry for the rest of the session — including the ZERO-BYTE local-copy path, so a clip whose
+         bytes are already on this device would never be written — and nothing ever clears it, because
+         `advertise` de-dupes by a stamp and the honest holder never re-sends. `from` is where the next
+         `want` is addressed, so it re-sources the file to a peer that never offered it. */
+      pB.ep.send('ctl', { t: 'ann', files: [{ fid: fid, fp: fp, size: png.size, mime: 'image/png', kind: 'image', name: 'sourced.png', lm: 0, layers: [], miss: 1 }], fonts: [] });
+      await settle921(500);
+      if (C.session) { try { C.session.tick('full'); } catch (e) {} }
+      await settle921(500);
+      const e = ctl.peer[fid];
+      if (!e) throw new Error('CONTROL: the entry vanished entirely');
+      if (e.miss) throw new Error('a peer that never offered this file was allowed to say the file is gone. The entry is now skipped for the rest of the session and nothing can clear it');
+      if (e.from !== midA) throw new Error('the file is now sourced from ' + e.from + ' instead of ' + midA + ' — the next `want` goes to a peer that never advertised a byte of it, which is a stall with nothing to report it');
+
+      /* CONTROL: the rule is “only the source”, not “nobody”. A’s own miss is taken. */
+      pA.ep.send('ctl', { t: 'ann', files: [{ fid: fid, fp: fp, size: png.size, mime: 'image/png', kind: 'image', name: 'sourced.png', lm: 0, layers: [], miss: 1 }], fonts: [] });
+      await until921('the holder’s own miss to be taken', async function () { return ctl.peer[fid] && ctl.peer[fid].miss ? true : null; }, 30000);
+      loopA.a.close(); loopB.a.close();
+    });
+  });
+
+  test('921 S4 review: a “miss” answer frees the in-flight slot it was holding', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S4('§15.3’s in-flight slots');
+    await withCollabGuest921([mediaLayer921('Pic', 'image')], async function (c) {
+      const png = await q921noisePng(120, 91, 'vanished.png');
+      const fid = c.peer.add(png, 'image', [[c.ids[0], 0]]);
+      c.peer.announce('mf');
+      /* The far end is asked, and between the ask and the answer it replaces that clip or deletes the
+         layer — so `scanLocal` no longer produces the file and `serve` answers with a miss manifest
+         instead of bytes. Here: the file is taken off the peer before the `want` reaches it. */
+      c.peer.files = Object.create(null);
+      c.peer.fids.length = 0;
+      await until921('the want to be in flight', async function () { return c.ctl.inb[fid] ? true : null; }, 60000);
+      c.peer.ep.send('ctl', { t: 'mf', files: [{ fid: fid, fp: fid, size: 0, kind: 'video', name: '', lm: 0, layers: [], miss: 1 }], fonts: [] });
+
+      await until921('the slot to be released', async function () {
+        if (C.media.pending(c.G).n) return null;
+        return true;
+      }, 30000).catch(function () { return null; });
+      const p = C.media.pending(c.G);
+      if (p.n) throw new Error('the far end answered “I do not have it” and ' + p.n + ' transfer is still counted as in flight. `planWants` skips a `miss` entry before it ever reaches the in-flight check, so nothing tears the transfer down: that slot is gone for the session (two of them stop media altogether at IN_FLIGHT 2) and §15.8’s card asks him to wait for a clip that can never arrive on every single export from now on');
+      if (c.ctl.inb[fid]) throw new Error('the inb entry for a file the far end does not have is still there');
+      const gate = await C.media.exportGate();
+      if (gate !== true) throw new Error('the export gate still stops to ask about a clip that can never arrive');
+    });
   });
 
   /* The one thing that separates this from sanitizeAudioFx, and the reason it is not a copy of it.

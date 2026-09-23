@@ -485,7 +485,13 @@ window.FM = window.FM || {};
     /* ═══ MESSAGES ══════════════════════════════════════════════════════════════════════════════ */
 
     S.onMessage = function (ch, msg, fromMid) {
-      if (ch !== 'ctl') return;                     // pres is S5; bulk is S4
+      /* §15.5's media bytes (S4). They carry no document and no ops, so they go straight to the media
+         module — including while §8.9 has the document frozen, because the PARTS are inert records
+         under `collab:` and only the APPLY has to wait (see collab-media.js `complete`). Holding the
+         bytes as well would stall a transfer for the length of an export and then need the whole
+         window re-sent. */
+      if (ch === 'bulk') { if (C.media) C.media.onBulk(S, fromMid || (isOwner ? null : 'h'), msg); return; }
+      if (ch !== 'ctl') return;                     // pres is S5
       if (!msg || typeof msg !== 'object') return;
       if (isOwner) return hostMessage(fromMid, msg);
       return guestMessage(msg);
@@ -521,7 +527,9 @@ window.FM = window.FM || {};
           if (peers[mid]) { try { peers[mid].close(); } catch (e) {} }
           delete peers[mid];
           return;
-        default: return;
+        default:
+          if (C.media && C.media.onCtl(S, mid, msg)) return;      // mf / ann / want / ok / have (§15, S4)
+          return;
       }
     }
 
@@ -537,6 +545,10 @@ window.FM = window.FM || {};
     }
 
     function guestMessage(msg) {
+      /* §15's media conversation does not touch the document, so it is answered BEFORE the §8.9 queue
+         rather than parked in it (S4). Queueing `want` for the length of an export would stall the
+         other device's transfer; queueing `mf` would hide files the export dialog has to ask about. */
+      if (C.media && C.media.onCtl(S, 'h', msg)) return;
       /* §8.9: a guest queues WHOLE incoming messages while frozen or busy, so an export or a half-built
          paste never sees a document somebody else is changing underneath it. */
       if ((frozen() || busy()) && msg.t !== 'welcome') { msgQueue.push({ kind: 'msg', msg: msg }); S.stats.queued++; return; }
@@ -911,6 +923,9 @@ window.FM = window.FM || {};
       if (!interacting() && (Object.keys(held).length || deferredOrd)) release();   // settle
       const n = pushLocal(scope || 'hot');
       maybeHash();
+      /* §15's reconcile (S4). It is deliberately the LAST thing the tick does and it is asynchronous
+         inside, so a slow IndexedDB read can never delay the document half of the tick. */
+      if (C.media) { try { C.media.tick(S); } catch (e) { C.lastError = e; } }
       return n;
     };
 
@@ -1086,8 +1101,25 @@ window.FM = window.FM || {};
     S.dropPeer = function (mid) { host.part(mid); delete peers[mid]; };
     S.peerIds = function () { return Object.keys(peers); };
 
+    /* ── the seams §15's media module reaches the wire through (S4) ───────────────────────────────
+     * They exist so `collab-media.js` never has to know whether it is running on the owner or on a
+     * guest: it names a peer and sends. On a guest the name is ignored, because a guest has exactly
+     * one peer — and that asymmetry belongs HERE, beside the endpoints, rather than as an `isOwner`
+     * branch at every call site in the other file. */
+    S.sendMsg = function (mid, msg) { return isOwner ? sendTo(mid, msg) : sendToHost(msg); };
+    S.sendBulk = function (mid, buf) {
+      const ep = isOwner ? peers[mid] : link;
+      if (!ep || !ep.open) return false;
+      return ep.send('bulk', buf);
+    };
+    S.endpoint = function (mid) { return isOwner ? peers[mid] : link; };
+
     S.stop = function (why) {
       S.active = false;
+      /* §12.4: the parts of anything half-arrived are left on disk on purpose — a rejoin to the same
+         room resumes from them (§15.7). What is collected is the abandoned ones, and only once the
+         session that could still have wanted them is over. */
+      if (C.media) { try { C.media.detach(S); } catch (e) {} }
       if (isOwner) broadcast({ t: 'bye', why: why || 'ended' }, null);
       else sendToHost({ t: 'bye', why: why || 'left' });
       if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; }
@@ -1186,6 +1218,10 @@ window.FM = window.FM || {};
     const S = Session({ adapter: A, role: 'owner', mid: 'o', host: host, now: o.now, rand: o.rand });
     S.tidied = tidied;
     S.pid = (FM.projects && FM.projects.currentId) ? FM.projects.currentId() : null;
+    /* §15: the owner serves media AND receives it (a guest adding a clip), so the controller is the
+       same one on both sides. The room id keys the resume parts; before S6 mints one, the project is
+       as unique and as stable. */
+    if (C.media) C.media.install(S, { sid: o.sid || S.pid });
     /* "Tidy-up for sharing" is an ordinary owner step, committed BEFORE the pre-session stack is read
        so that undoing past the session start can undo it too — it is a change to his document and he
        did not ask for it. Safe to commit with no session attached yet: the ops went to base and live
@@ -1284,6 +1320,8 @@ window.FM = window.FM || {};
             S.bs = snap.seq;
             S.gpid = gpid;
             S.pid = gpid;                 // what pushLocal checks the open project against
+            S.sid = o.sid || gpid;
+            if (C.media) C.media.install(S, { sid: S.sid });   // §15: request media once the copy exists
             S.setLink(ep);
             C.attach(S, o);
             /* …and now replay what arrived while this was being built, in order. A batch the snapshot
@@ -1342,6 +1380,11 @@ window.FM = window.FM || {};
       S.pid = gpid;                         // what pushLocal checks the open project against
       S.bs = saved.seq || 0;
       S.cid = saved.cid || 0;                 // see the note on persist(): the host dedupes by cid
+      /* §15.7's resume is what makes a reload cheap: the parts already on disk are keyed by the ROOM
+         and the file's fingerprint, so the very first `want` after coming back asks for `from` rather
+         than for the whole file again. */
+      S.sid = o.sid || saved.sid || gpid;
+      if (C.media) C.media.install(S, { sid: S.sid });
       const owed = S.recoverOutbox(saved);
       S.setLink(ep);
       C.attach(S, o);

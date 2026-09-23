@@ -32,7 +32,18 @@ window.FM = window.FM || {};
 
   const CHANNELS = ['ctl', 'pres', 'bulk'];
 
-  function jcopy(v) { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); }
+  /* ⚠️ BINARY IS COPIED AS BYTES, NOT THROUGH JSON (queue 921 S4). `bulk` carries ArrayBuffers, and
+     `JSON.parse(JSON.stringify(buf))` turns one into `{}` — silently, with no throw anywhere: the
+     receiver gets an object where a file's bytes should be, every frame "arrives", and the transfer
+     completes with nothing in it. The copy still has to happen for the reason the note above gives —
+     a fake link that hands both sides the same buffer would let a receiver mutate the sender's file —
+     so it is a real byte copy, which is what a real transport costs too. */
+  function jcopy(v) {
+    if (v === undefined) return undefined;
+    if (v instanceof ArrayBuffer) return v.slice(0);
+    if (ArrayBuffer.isView(v)) return new Uint8Array(new Uint8Array(v.buffer, v.byteOffset, v.byteLength)).buffer;
+    return JSON.parse(JSON.stringify(v));
+  }
 
   /* ═══ LOOPLINK ════════════════════════════════════════════════════════════════════════════════
    * Two endpoints joined by a `wire`. The wire owns the schedule, so a test can hold every message

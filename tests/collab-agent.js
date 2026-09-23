@@ -225,8 +225,109 @@
     exportBegin: function () { FM._exporting = true; return true; },
     exportEnd: function () { FM._exporting = false; return true; },
     jobBegin: function () { ACTS._job = FM.jobBegin('agent'); return FM.jobDepth(); },
-    jobEnd: function () { FM.jobEnd(ACTS._job); ACTS._job = null; return FM.jobDepth(); }
+    jobEnd: function () { FM.jobEnd(ACTS._job); ACTS._job = null; return FM.jobDepth(); },
+
+    /* ── §15 media (S4) ─────────────────────────────────────────────────────────────────────────
+     * `addMedia` imports a REAL file through the app's own import path — `FM.loadVideoFile` /
+     * `FM.loadImageFile` then `FM.addMediaLayer` — because the thing under test is what the app does
+     * with a file, and a hand-built record would skip the very step (the File object, its name, its
+     * size, its lastModified) the manifest is keyed by. `splash.mp4` is served from this instance's
+     * OWN origin, so nothing leaves the machine. */
+    addMedia: async function (a) {
+      const kind = (a && a.kind) || 'image';
+      let file = null;
+      if (kind === 'video') {
+        const r = await fetch('splash.mp4');
+        file = new File([await r.blob()], (a && a.name) || 'splash.mp4', { type: 'video/mp4', lastModified: 1600000000000 });
+      } else if (kind === 'audio') {
+        file = new File([wav(0.25, (a && a.hz) || 440)], (a && a.name) || 'tone.wav', { type: 'audio/wav', lastModified: 1600000001000 });
+      } else {
+        file = new File([await png((a && a.rgb) || [255, 40, 40])], (a && a.name) || 'square.png', { type: 'image/png', lastModified: 1600000002000 });
+      }
+      const rec = (kind === 'image') ? await FM.loadImageFile(file) : await FM.loadVideoFile(file);
+      FM.addMediaLayer(rec);
+      FM.history.commit();
+      const L = FM.scene.layers[FM.scene.selectedId ? FM.scene.layers.findIndex(function (x) { return x.id === FM.scene.selectedId; }) : FM.scene.layers.length - 1] || FM.scene.layers[FM.scene.layers.length - 1];
+      return { id: L.id, size: file.size, name: file.name, type: L.type };
+    },
+    mediaState: function () {
+      const S = C.session;
+      if (!S || !C.media) return null;
+      const st = C.media.state(S), p = C.media.pending(S);
+      return st ? { files: st.files, done: st.done, failed: st.failed, pct: st.pct, queued: st.queued, inFlight: st.inFlight, mine: st.mine, peer: st.peer, pending: p.n, stats: st.stats } : null;
+    },
+    /* One RPC that ticks until the media is settled, instead of a round trip per tick: three real
+       origins and a 649 KB file is a lot of postMessage otherwise. */
+    mediaWait: async function (a) {
+      const deadline = Date.now() + ((a && a.ms) || 30000);
+      while (Date.now() < deadline) {
+        if (C.session) C.session.tick('full');
+        const p = C.media && C.session ? C.media.pending(C.session) : { n: 0 };
+        const st = C.media && C.session ? C.media.state(C.session) : null;
+        if (!p.n && st && (!a || !a.files || st.done >= a.files)) return st;
+        await sleep(80);
+      }
+      return C.media && C.session ? C.media.state(C.session) : null;
+    },
+    /* What is actually on this device for a layer: the record, not a belief about it. */
+    record: async function (a) {
+      const r = await FM.storage.readMedia(a.id);
+      const m = FM.media.get(a.id);
+      return { disk: !!(r && r.file), size: r && r.file ? r.file.size : 0, name: r && r.file ? r.file.name : null, rev: r ? (r.rev || 0) : null, kind: r ? r.kind : null, live: !!(m && m.file) };
+    },
+    /* §26 S4's pixel check: render the real scene and count the pixels that are not the background.
+       A byte count proves a transfer; this proves a PICTURE. */
+    ink: async function (a) {
+      const t = (a && a.t) || 0;
+      for (let i = 0; i < 120; i++) {
+        let waiting = 0;
+        (FM.scene.layers || []).forEach(function (l) {
+          const m = FM.media.get(l.id);
+          if (m && m.el && m.kind === 'video' && m.el.readyState < 2) waiting++;
+        });
+        if (!waiting) break;
+        await sleep(100);
+      }
+      const P0 = FM.scene.project;
+      const cv = document.createElement('canvas');
+      cv.width = P0.width; cv.height = P0.height;
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, FM.scene, t);
+      const d = ctx.getImageData(0, 0, cv.width, cv.height).data;
+      let lit = 0, seen = Object.create(null), n = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i] > 24 || d[i + 1] > 24 || d[i + 2] > 24) lit++;
+        const k = (d[i] >> 4) + ',' + (d[i + 1] >> 4) + ',' + (d[i + 2] >> 4);
+        if (!seen[k]) { seen[k] = 1; n++; }
+      }
+      return { lit: lit, total: d.length / 4, pct: Math.round(lit / (d.length / 4) * 1000) / 10, colours: n };
+    },
+    collabKeys: async function (a) { return await FM.storage.collabKeys((a && a.prefix) || 'collab:'); },
+    prune: async function () { await FM.projects.pruneOrphans(); return true; },
+    idbKeys: async function (a) { return await FM.storage.listMediaKeys(a && a.prefix); }
   };
+
+  /* A real PNG and a real WAV, built here rather than shipped as fixtures: they have to be FILES the
+     app's own loaders accept, and generating them keeps the repo from carrying two more binaries. */
+  function png(rgb) {
+    const c = document.createElement('canvas');
+    c.width = 64; c.height = 64;
+    const g = c.getContext('2d');
+    g.fillStyle = 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
+    g.fillRect(0, 0, 64, 64);
+    return new Promise(function (res) { c.toBlob(function (b) { res(b); }, 'image/png'); });
+  }
+  function wav(seconds, hz) {
+    const rate = 8000, n = Math.floor(rate * seconds);
+    const buf = new ArrayBuffer(44 + n * 2), dv = new DataView(buf);
+    const put = function (o, s) { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+    put(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); put(8, 'WAVEfmt ');
+    dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+    dv.setUint32(24, rate, true); dv.setUint32(28, rate * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+    put(36, 'data'); dv.setUint32(40, n * 2, true);
+    for (let i = 0; i < n; i++) dv.setInt16(44 + i * 2, Math.round(Math.sin(2 * Math.PI * hz * i / rate) * 24000), true);
+    return new Blob([buf], { type: 'audio/wav' });
+  }
 
   window.addEventListener('message', function (e) {
     const d = e && e.data;

@@ -130,7 +130,7 @@ All are plain classic scripts that attach to `window.FM`. There is no module sys
 | `js/collab-bridge.js` | `FM.collab.bridge` | The FM.scene DocAdapter: `normalizeDerived`, `interacting()`, busy and frozen detection, `afterApply` (§8.6), refresh scheduling, interaction tracking listeners (installed only while active). (≈450) |
 | `js/collab-link.js` | `FM.collab.link` | Link interface. `LoopLink` (in-page) and `PostLink` (postMessage, used only by tests). `RtcLink` (RTCPeerConnection, 3 channels, framing, backpressure). Minimal-SDP codec. (≈600) |
 | `js/collab-signal.js` | `FM.collab.signal` | WebCrypto (HKDF, AES-GCM, HMAC, PBKDF2). Invite link and code codec. Envelope. `PeerJsDriver`, `MqttDriver`, `FakeDriver` (tests). Auth handshake. (≈650) |
-| `js/collab-media.js` | `FM.collab.media` | Manifest, want/have, bulk transfer, IndexedDB parts, resume, sameAs, replace/prev, fonts, storage checks, GC. (≈650) |
+| `js/collab-media.js` | `FM.collab.media` | Manifest, want/have, bulk transfer, IndexedDB parts, resume, sameAs, replace/prev, fonts, storage checks, GC. (≈650) — **as built (S4) ≈760**, plus the `#collab-media` progress card; `sameAs` is the manifest's own grouping rather than a wire field (§15 as-built). |
 | `js/collab-presence.js` | `FM.collab.presence` | `pr`/`PR` messages, canvas overlay, timeline paint, remote playheads, people chip, inspector chip, follow, lease UI. (≈750) |
 | `js/collab-ui.js` | `FM.collab.ui` | Share panel, Join sheet, knock card, banner, profile prompt, iOS landing card, Home hooks, Settings Labs rows. (≈1100) |
 | `js/collab-comments.js` | `FM.collab.comments` | Comments card, composer, ruler marks. (≈400) |
@@ -709,6 +709,7 @@ Secrets live in localStorage, like the AI key. The layer ids are the host's, so 
 
 - **`collab:base:<gpid>` carries `cid` as well as `epoch` and `seq`, and `FM.collab.reopen()` restores it.** The host dedupes by "cid ≤ the last one I saw from you" (§7.1 step 3), so a guest that came back from a reload counting from zero had every recovered op silently **dropped as a duplicate** — and the acks looked right, because a cached one is resent. It is also what makes the replay idempotent in the other direction: an op that *was* delivered comes back under the same cid the host already answered, which is a cached ack rather than a second application.
 - **`Session.persist()` refuses while anything is outstanding**, not just the 2-second scheduler. `base` is the confirmed document **plus this device's own unsent ops**, so persisting it mid-flight records work as if the host had taken it — and the recovery, which is `diffDoc(persistedBase, live)`, then finds no difference and the offline edit is gone with no trace anywhere. The scheduler already checked; a direct caller (a reload, a `visibilitychange`, a test) did not.
+- **As built (S4): `C.media.gcParts()` collects the `part` family, and still nothing sweeps at boot.** §23's bargain is that no collab code runs at load, and an IndexedDB sweep is the one thing in this table that would break it — so the collector runs when a SESSION ENDS, which is the moment an abandoned part is known to be abandoned. A part younger than a week, in a room that still exists, is somebody's resume point and is left alone; a part that is arriving right now is never a candidate. `ckpt` is trimmed by the arm that writes it (S3) and `base` by the guest that owns it (S2), so there is still no `FM.collab.gc()` and nothing needs one.
 - **`FM.collab.gc()` is NOT in S2.** Of the three key families in the table, `ckpt` is written by arming (S3), `part` by media (S4), and `base` by S2 — so a collector shipped now would run at every boot, on every device, to collect two kinds of key that cannot exist yet. §23's bargain with a solo user is that `collab-core.js` does nothing at load; a boot-time IndexedDB sweep is the one thing in this table that would break it. It ships with the stage that creates the keys it collects.
 
 **The `collab:` corner of IndexedDB reaches storage.js through three seams** — `FM.storage.collabPut/collabGet/collabDel` — rather than a second `openDB()` inside the collab modules. The database name, the store name and the quota handling are `storage.js`'s business, and the key prefix is *enforced* by those seams rather than trusted: anything outside `collab:` would be a media record, and a collab module writing one would be invisible to every rule that owns them.
@@ -966,6 +967,82 @@ open link that something could hand to a session.
     - canvas: a checkerboard `.cb-missing` box with "Receiving 42%" at `boxFor(layer)`;
     - timeline: `.clip .cm-prog` progress bar, painted via `onRebuilt`;
     - `miss:1` shows "Ezra's device is missing this clip too".
+
+**As built (S4). Eight departures, every one of them measured.**
+
+- **`fid` is a hash of `fp`, not `'f' + n`.** A counter is state: it has to survive every manifest delta,
+  a host reload and the two directions this module is symmetric in, and two peers counting independently
+  hand the same name to different files. `fp` is already what §15.7 resumes by and what §15.2 dedupes by,
+  so `fid = 'f' + cyrb53(fp)` is a name both ends compute rather than exchange, it is stable across a
+  reload by construction, and it makes the part key (`collab:part:<sid>:<cyrb53(fp)>:<n>`) derivable from
+  the fid alone. Two different files sharing a name, size and millisecond collapse into one entry —
+  which is exactly what §15.2's own "another layer already holds a completed file with the same fp" rule
+  does on purpose.
+- **`media:[[newLid, srcLid]]` on the tx/b is NOT built, and is not needed.** §15.9 asks the bridge to
+  tag a split, duplicate or paste so receivers copy locally. The manifest already carries that fact: two
+  layers that share one File land on ONE entry with both layer ids on it, and §15.2 rule 2 copies the
+  record across without a byte crossing. Adding the field would mean a new key on `tx`, on `b`, in the
+  host sequencer and in the receive rules, to say a second time what the manifest says first. Measured
+  by `921 S4 the manifest groups one file…`: two layers, one entry, one transfer, byte-identical.
+- **A file smaller than one 4 MiB part has no resume point, by design.** A part is the unit that is
+  KNOWN to be whole; a partial one persisted at an arbitrary moment cannot be told from a truncated one.
+  So `splash.mp4` (649 KB) restarts from zero, which costs nothing, and the resume test uses a real ~9 MB
+  image so the cut lands inside a second part.
+- **The resume offset is the SUM of the stored part sizes, never `count × 4 MiB`.** The arithmetic is
+  right only while every part is full; one short part makes the guest ask the sender to skip bytes that
+  were never written, and the file is then the right LENGTH and wrong from that offset on. And if the
+  sender answers from an offset that is neither ours nor zero, the transfer is abandoned rather than
+  completed into a corrupt file (§14.9 — it is a peer, not a promise).
+- **The bytes cross the §8.9 barrier; the APPLY waits behind it.** A completed file is parked until the
+  export or the job finishes, then written. Holding the bytes as well would stall the other device's
+  transfer for the length of a render and need the whole window re-sent; applying mid-export would change
+  the frame under the renderer. It also makes §15.8's "Export anyway" honest: an export that starts
+  without a clip finishes without it, rather than half with it.
+- **§15.10's canvas checkerboard is S5, not S4.** It wants `boxFor` plus an overlay layer over the canvas,
+  which is the surface S5 builds for presence; a second one shipped now would be torn out a stage later.
+  The TIMELINE half ships: a `.clip.cm-missing` outline and a `.cm-prog` bar, painted from the same
+  progress the card reads.
+- **One new surface, not three.** §15.4's storage question and §15.8's export question are two-answer
+  questions and go through `FM.ask` — the card family the app already has for exactly that, responsive at
+  380 px, light/dark aware, Escape-trapping and proved since #919. The one thing the app has no shape for
+  is a NON-question: a quiet line that says how far the download has got and, when it fails, says so.
+  That is `#collab-media`, and it is the only visual S4 adds.
+- **§21's media row lives in `C.media.LIMITS`, not `C.LIMITS`.** "All constants in collab-core.js" is
+  about numbers more than one module reads; every one of these is read by `collab-media.js` and by nothing
+  else, and `C.LIMITS` is frozen at parse time in a file three stages older. Frozen and exported, so the
+  suite measures the real numbers rather than a copy.
+
+**Seams this stage added to the engine** (`collab-session.js`): `S.sendMsg(mid, msg)`, `S.sendBulk(mid,
+buf)` and `S.endpoint(mid)`, so the media module names a peer and sends without knowing whether it is
+running on the owner or on a guest; `bulk` is routed straight to `C.media.onBulk` and the five media `ctl`
+types are answered BEFORE §8.9's freeze queue, because none of them touches the document; and `S.tick`
+ends by calling `C.media.tick(S)`. `LoopLink` now copies an ArrayBuffer as BYTES — `JSON.parse(JSON.
+stringify(buf))` turns one into `{}` silently, so every frame "arrived" and the transfer completed with
+nothing in it.
+
+**Everything on a manifest is a stranger's string (§14.9), and two of them become more than data.** The
+MIME is matched against a media-type shape before it reaches `new Blob`/`new File`, and a FONT FAMILY is
+matched against `^[A-Za-z0-9][A-Za-z0-9 _-]{0,63}$` before it reaches `applyEmbedded` — it is registered
+as a `FontFace` family and written into a font string that ends up in a `style` attribute and in
+`ctx.font` on every device in the room, and the app's own import path takes that name from a file HE
+picked rather than from a peer. An entry that fails either check is dropped whole: a font that does not
+arrive is a smaller loss than one that does. A layer id is never used as a storage key until it has been
+found in the OPEN document, so a manifest cannot make this device read or write a record belonging to a
+project of his (mutation-proved).
+
+**Found by the suite, and it is an APP hazard rather than a collab one: a filmstrip build is a global
+queue.** `js/frames.js` builds one clip strip at a time across the whole app (`_stripQueue`), and a clip
+that arrives triggers one. Tearing that `<video>` record out from under it — which `projects.remove` and
+`releaseProjectMedia` both do — leaves the queue waiting on a seek that can never fire, and every
+filmstrip after it is blocked for the life of the page. It bit the SUITE first (`timeline: Replace media
+repaints the clip bar` failed only when an S4 test had run before it), and the S4 helper now waits the
+build out. It is worth knowing about for S5 and for the real `leave`/`detach` paths: S4 does not change
+it, and nothing in the app reports it.
+
+**The part writes are chained and the part number is claimed synchronously.** `onBulk` is called from the
+link's own dispatch and is not awaited, so a second frame can arrive while the first part is being
+written: two flushes would read the same `inb.part`, write the SAME key twice, and the file would be
+reassembled with a hole — a corruption with no error anywhere, because every write "succeeded".
 
 ---
 
@@ -1318,6 +1395,8 @@ A `ctl` message over 16 KB is sent as `{t:'fr', k:<msgId>, i, n, s:<≤16 KB sub
 | Undo | 120 steps |
 | Checkpoints | at arm, every 10 min if changed, at end; keep 10 |
 | Media | chunk min(64 KiB, mms − 12) or 16 KiB; pause > 4 MiB; resume < 1 MiB; receiver window 8 MiB; parts 4 MiB; ask above 100 MB; guest file warn 200 MB, cap 1 GB |
+
+**As built (S4): the media row lives in `C.media.LIMITS` (frozen, exported), not in `C.LIMITS`** — see §15's as-built note. Every number in it is read by `collab-media.js` and by nothing else, and `C.LIMITS` is frozen at parse time in a file three stages older.
 | Knock timeout | 120 s |
 | Pending join | 24 h |
 | `SCHEMA_REV` / `PROTO` | 1 / 1 |
@@ -1671,6 +1750,27 @@ reads it).
   - fonts transfer and apply
 - `/security-review`.
 - **Visible:** real projects with footage.
+
+**As built.** `js/collab-media.js` (≈760 lines), the export-dialog hook in `app.js`, the three engine
+seams and the bulk routing in `collab-session.js`, the binary copy in `LoopLink`, the `#collab-media`
+card and the timeline bar in `styles.css`, and six new agent actions (`addMedia`, `mediaState`,
+`mediaWait`, `record`, `ink`, `collabKeys`, `prune`). Eleven tests, all of them `921 S4 …`:
+
+- `the manifest groups one file for every layer that uses it, so a split and a duplicate transfer zero extra bytes`
+- `splash.mp4, a PNG and a WAV all arrive, land in this device's own records, and the picture renders` — the real 649 336-byte file, compared byte for byte, and a PIXEL check: the count of the PNG's own colour on a frame rendered through the real compositor, against the same count on the empty scene
+- `a link that dies mid-file resumes from the bytes already kept, and what lands is byte-identical`
+- `the boot sweep never collects a half-arrived file, and neither does the media collector` — mutation-proved: removing `pruneOrphans`' `collab:` skip turns it red
+- `a device with no room says so and writes nothing beyond what fits`
+- `a guest export waits for the media it still needs, and "Export anyway" goes ahead` — including that `showExportDialog` really goes through the gate
+- `replacing a clip keeps the one it replaced, and undoing the replace puts it back`
+- `a font crosses with the document and is applied on the far side, byte for byte`
+- `a manifest naming a layer id this device holds in ANOTHER project writes nothing` — mutation-proved: removing the open-document guard overwrites his clip in a project that is not even open
+- `tier 3: a clip a guest adds reaches the host and every other peer, and draws there`
+- `tier 3: the clips arrive into the guest's own copy and not one byte of its own projects moves`
+
+⚠️ **A TIER-3 INSTANCE IS TICKED BY THE TEST, NOT BY A TIMER.** The agent arms every session with
+`autoTick:false`, and §15's reconcile runs ON THE TICK — so a media wait that only polls waits for
+something nothing will ever do. `t3until921` ticks every instance in the room, then asks.
 
 ### S5 · Presence visuals
 

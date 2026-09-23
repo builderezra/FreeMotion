@@ -4827,6 +4827,16 @@ window.FM = window.FM || {};
       const go = await FM.notepad.confirmExport();
       if (!go) return;
     }
+    /* queue 921 S4 (spec §15.8): in a live session, clips may still be arriving. Exporting now leaves
+       them out of the video, so he is told how far along it is and given the two real answers — Wait,
+       or Export anyway. Inert outside a session: `FM.collab.active` is false and this is one
+       comparison. It sits AFTER the notepad confirm on purpose — a reminder he wrote for himself is a
+       question about whether to export at all, and this is a question about what the export will
+       contain. */
+    if (FM.collab && FM.collab.active && FM.collab.media) {
+      const ok = await FM.collab.media.exportGate();
+      if (!ok) return;
+    }
     return showExportDialogNow();
   }
   function showExportDialogNow() {
