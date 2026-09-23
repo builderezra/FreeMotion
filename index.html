@@ -39,8 +39,8 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=710">
-<link rel="stylesheet" href="theme-glass.css?v=56">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
+<link rel="stylesheet" href="styles.css?v=711">
+<link rel="stylesheet" href="theme-glass.css?v=57">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
      v6.79 changed this to #000 and v6.80 to the app ground, both chasing a bar that turned out to be
@@ -260,7 +260,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v16.83</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v16.84</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1018,10 +1018,10 @@
 
   <script src="vendor/mp4-muxer.js?v=9"></script>
   <script src="js/perf-probe.js?v=12"></script>
-  <script src="js/settings.js?v=39"></script>
+  <script src="js/settings.js?v=40"></script>
   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
        rest of the collab modules are pure libraries and sit at the end of the list. -->
-  <script src="js/collab-core.js?v=3"></script>
+  <script src="js/collab-core.js?v=4"></script>
   <script src="js/statusbar.js?v=1"></script>
   <script src="js/screen.js?v=1"></script>
   <script src="js/scene.js?v=116"></script>
@@ -1062,7 +1062,7 @@
   <script src="js/audio-fx-live.js?v=7"></script>
   <script src="js/audio-fx-browser.js?v=11"></script>
   <script src="js/history.js?v=33"></script>
-  <script src="js/storage.js?v=48"></script>
+  <script src="js/storage.js?v=49"></script>
   <script src="js/export-resume.js?v=7"></script>
   <script src="js/medialib.js?v=6"></script>
   <script src="js/template-fill.js?v=3"></script>
@@ -1078,7 +1078,7 @@
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=54"></script>
   <script src="js/audio-health.js?v=6"></script>
-  <script src="js/app.js?v=443"></script>
+  <script src="js/app.js?v=444"></script>
   <script src="js/audio-tools.js?v=6"></script>
   <script src="js/loading.js?v=3"></script>
   <script src="js/sfx.js?v=14"></script>
@@ -1104,9 +1104,16 @@
        implementations (in-page and postMessage; there is no network of any kind in S2), `session` is
        the per-device engine and `bridge` is the only file that knows both the engine and FM.scene.
        All three are inert until something hands a session a link, which in S2 only the test rig does. -->
-  <script src="js/collab-link.js?v=2"></script>
-  <script src="js/collab-session.js?v=2"></script>
-  <script src="js/collab-bridge.js?v=2"></script>
+  <script src="js/collab-signal.js?v=2"></script>
+  <script src="js/collab-link.js?v=3"></script>
+  <script src="js/collab-session.js?v=3"></script>
+  <script src="js/collab-bridge.js?v=3"></script>
+  <!-- queue 921 stage S3 — the first real connection and the only collaboration UI there is. Both are
+       libraries too: `signal` is the minimal-SDP codec and the auth handshake (no rendezvous driver, no
+       invite link — those are S6), and `ui` builds nothing at all until Settings → Labs → Live
+       collaboration is switched on. With it off, §23's promise holds literally: no collab DOM, no
+       listeners, no timers. -->
+  <script src="js/collab-ui.js?v=2"></script>
   <script>
     if ('serviceWorker' in navigator && !/(^|[?&])fmtest=collab(&|$)/.test(location.search)) {
       /* queue 921 S2 (§25.3): a Tier-3 instance must never be served a cached shell — three app frames

@@ -1212,6 +1212,16 @@ window.FM = window.FM || {};
   FM.storage.collabDel = async function (key) {
     try { const db = await openDB(); await idbDel(db, collabKey(key)); db.close(); return true; } catch (e) { return false; }
   };
+  /* The fourth seam, added with the first writer that has to TRIM (queue 921 S3): §12.4 keeps 10
+     checkpoints per project, and "keep 10" needs to know what is already there. Sorted, so a caller can
+     take the oldest without re-deriving the timestamp out of the key. */
+  FM.storage.collabKeys = async function (prefix) {
+    const p = collabKey(prefix);
+    try {
+      const db = await openDB(); const ks = await idbKeys(db); db.close();
+      return ks.filter(function (k) { return typeof k === 'string' && k.indexOf(p) === 0; }).sort();
+    } catch (e) { return []; }
+  };
   FM.storage.applyScene = async function (obj) {
     if (!obj || !obj.project || !Array.isArray(obj.layers)) return false;
     if (obj.layers.length > 2000) return false;   // absurd layer count = malicious/corrupt — refuse rather than hang the render

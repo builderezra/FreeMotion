@@ -151,6 +151,27 @@ window.FM = window.FM || {};
     syncUndoButtons: function () { if (FM.history && FM.history.syncButtons) FM.history.syncButtons(); },
     toast: function (m) { if (FM.toast) FM.toast(m); },
 
+    /* ── §12.3 / §13.1: THE LINK'S OWN STATE, SAID OUT LOUD ────────────────────────────────
+     * ⚠️ THE SESSION HAS CALLED THESE SINCE S2 AND NOTHING WAS LISTENING (queue 921 S3 review).
+     * `onEnd`, `onOffline` and `onOnline` are three of the DocAdapter's callbacks; the test rig's plain
+     * adapter implements all three, and the adapter the APP runs implemented none — so when the owner
+     * tapped Stop sharing, or the Wi-Fi went, the other device said nothing at all. No toast, no banner,
+     * no card: the guest kept editing a project that was no longer syncing, and its panel still read
+     * "Live". §19.4's banner was written for exactly this moment and could not be reached from anywhere
+     * a transport event could get to. A hook the engine calls and the app ignores is worse than a
+     * missing feature, because every test of the engine passes. */
+    onOffline: function () { syncCollabBanner(); },
+    onOnline: function () { syncCollabBanner(); },
+    onRole: function () { syncCollabBanner(); },
+    onEnd: function (why) {
+      /* “The owner ended this” is NOT an offline state and must not read as one — offline implies it
+         comes back, and S3 has no reconnect. Said once, as a toast, and then held in the banner. */
+      if (FM.toast) FM.toast(why === 'removed'
+        ? 'You were removed from the live project — your copy stays on this device'
+        : 'The owner ended the live session — your copy stays on this device', 4200);
+      syncCollabBanner();
+    },
+
     /* ── §8.6 after applying a batch ──────────────────────────────────────────────────────────── */
     afterApply: function (sum) {
       if (!sum) return;
@@ -278,6 +299,10 @@ window.FM = window.FM || {};
     setTimeout(function () { inspectorPending = false; lastInspectorAt = Date.now(); doInspector(); }, 500 - (t - lastInspectorAt));
   }
   function doInspector() { if (FM.inspector && FM.inspector.refresh) { try { FM.inspector.refresh(); } catch (e) {} } }
+
+  function syncCollabBanner() {
+    if (C.ui && C.ui.syncBanner) { try { C.ui.syncBanner(); } catch (e) {} }
+  }
 
   C.bridge = bridge;
 

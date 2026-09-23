@@ -6675,11 +6675,21 @@ window.FM = window.FM || {};
    *
    * "they only show up when they should, not always there" — delete/bind/group are selection-dependent,
    * so the row grows and shrinks rather than showing three permanently-dimmed buttons. */
+  /* ⚠️ THE TEARDOWN DELETES ANYTHING IT DID NOT BORROW, and #btn-share is exactly that (queue 921 S3).
+     `pcTransportTeardown` puts back the controls `grab` recorded and then REMOVES the three wrappers —
+     so a share button that collab-ui.js inserted into `#t-far` beside Export, after the build had
+     already latched, goes with the wrapper. Measured: narrow a desktop window past 701px with Labs on
+     and the button is gone until something calls install again, which nothing does. Re-syncing here
+     covers both directions with one line: on a teardown it is rebuilt beside Export back in the top
+     bar, and on a build it is re-homed beside Export wherever the far list has just put it. Labs off
+     makes it a no-op — `syncLabs` builds nothing at all when the switch is off. */
+  function pcSyncShare() { if (window.FM && FM.collab && FM.collab.ui) { try { FM.collab.ui.syncLabs(); } catch (e) {} } }
+
   function pcTransportLayout() {
     const t = document.getElementById('transport');
     if (!t) return;
     const pc = !window.matchMedia || window.matchMedia('(min-width: 701px)').matches;
-    if (!pc) { if (t._pcBuilt) pcTransportTeardown(t); return; }   // …and a narrowed window gives them back (queue 405)
+    if (!pc) { if (t._pcBuilt) { pcTransportTeardown(t); pcSyncShare(); } return; }   // …and a narrowed window gives them back (queue 405)
     if (t._pcBuilt) return;                // idempotent: refreshAll calls this a lot
     const right = t.querySelector('.t-right');
     const menu = document.getElementById('btn-layermenu');
@@ -6766,11 +6776,19 @@ window.FM = window.FM || {};
          "next to where the view options button is", and the Studio layout test has asserted since queue
          171 that ⛶ is the outermost control on the right — so it goes immediately before it. Both things
          are true this way; putting it last made the suite red, correctly. */
-      ['btn-help', 'btn-notes', 'btn-settings', 'btn-export', 'btn-opts', 'btn-amfit'].forEach(id => { const b = grab(id); if (b) far.appendChild(b); });
+      /* …and #btn-share immediately before Export (queue 921 S3, spec §4.2). It only EXISTS while
+         Settings → Labs → Live collaboration is on — collab-ui.js builds it and takes it away again —
+         so with the switch off `grab` returns null and this row is byte-identical to what it was, which
+         is what keeps the Studio layout test green. It has to be in this list rather than only beside
+         Export in the top bar: the switch can be turned on after this build has already latched
+         `_pcBuilt`, and also before it, and a button that is only correct in one of those two orders is
+         a button that is in the wrong place half the time. */
+      ['btn-help', 'btn-notes', 'btn-settings', 'btn-share', 'btn-export', 'btn-opts', 'btn-amfit'].forEach(id => { const b = grab(id); if (b) far.appendChild(b); });
     if (far.childNodes.length) t.appendChild(far);
 
     t._pcBuilt = true;
     pcTransportSync();
+    pcSyncShare();
   }
   /* "they only show up when they should, not always there."
    *
@@ -6824,7 +6842,15 @@ window.FM = window.FM || {};
     const homes = t._pcHomes || [];
     for (let i = homes.length - 1; i >= 0; i--) {
       const h = homes[i];
-      if (!h || !h.el || !h.parent) continue;
+      /* ⚠️ A CONTROL THAT IS NO LONGER IN THE PAGE MUST NOT BE PUT BACK (queue 921 S3 review).
+         `homes` holds live JS references, and `insertBefore` will happily re-attach a DETACHED node. So
+         a #btn-share that this row had borrowed, and that collab-ui removed by id when Ezra turned Labs
+         off, came BACK into the top bar the next time a window narrowed past 701px — visible, with its
+         original click listener still on it (removeChild does not drop listeners) and `U.share()`
+         returning early because Labs is off. A live-looking dead button, and a direct breach of §23's
+         "no collaboration DOM at all". `uninstall()` cannot sweep it either: it had already latched
+         `installed = false`. One comparison closes it for every borrowed control, not just this one. */
+      if (!h || !h.el || !h.parent || h.el.isConnected === false) continue;
       try { h.parent.insertBefore(h.el, h.next && h.next.parentNode === h.parent ? h.next : null); } catch (e) {}
     }
     ['t-home', 't-sel', 't-far'].forEach(id => { const w = document.getElementById(id); if (w && !w.childNodes.length) w.remove(); else if (w) w.remove(); });

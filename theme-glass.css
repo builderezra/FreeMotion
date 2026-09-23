@@ -1005,21 +1005,21 @@ html.splash-on-light, html.splash-on-light body { background: #111; animation: s
    going out; a dialog on a light page wants a veil, not a blackout. Kept tinted rather than grey so
    the home's own hue carries through it.
    ══════════════════════════════════════════════════════════════════════════════════════════════ */
-html[data-home="light"] #hm-dialog, #fm-ask.fm-ask-light { background: rgba(20, 38, 56, .34); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
-html[data-home="light"] .hm-dlg-card, #fm-ask.fm-ask-light .fm-ask-card {
+html[data-home="light"] #hm-dialog, #fm-ask.fm-ask-light, .collab-scrim.collab-light { background: rgba(20, 38, 56, .34); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+html[data-home="light"] .hm-dlg-card, #fm-ask.fm-ask-light .fm-ask-card, .collab-scrim.collab-light .fm-ask-card {
   background-color: rgba(255, 255, 255, .94);
   border-color: rgba(16, 30, 52, .12);
   box-shadow: 0 1px 2px rgba(16, 30, 52, .06), 0 26px 60px -26px rgba(16, 30, 52, .6);
   backdrop-filter: blur(14px) saturate(1.15); -webkit-backdrop-filter: blur(14px) saturate(1.15);
   color: #10151f;   /* the queue-649 declaration, carried over to the light surface rather than dropped */
 }
-html[data-home="light"] .hm-dlg-title, #fm-ask.fm-ask-light .fm-ask-title { color: #0d1420; }
+html[data-home="light"] .hm-dlg-title, #fm-ask.fm-ask-light .fm-ask-title, .collab-scrim.collab-light .fm-ask-title { color: #0d1420; }
 html[data-home="light"] .hm-fld-label { color: #5f6b7d; }
 html[data-home="light"] .hm-fld > span:first-child { color: #48546b; }
 html[data-home="light"] .hm-num-pair { color: #5f6b7d; }
 /* Fields and tiles: the card's own paper, one step down, so the card still reads as the surface. */
 html[data-home="light"] #hm-new-name,
-#fm-ask.fm-ask-light .fm-ask-input,
+#fm-ask.fm-ask-light .fm-ask-input, .collab-scrim.collab-light .fm-ask-input,
 html[data-home="light"] .hm-fld select,
 html[data-home="light"] #hm-new-bg,
 html[data-home="light"] .hm-aspect {
@@ -1040,16 +1040,16 @@ html[data-home="light"] .hm-aspect.active span { color: #0f6f9e; }
    went to the paper's navy hairline, and "1080 × 1920" beside Size was painted #10151f on the near-black
    card, i.e. not there at all. */
 html[data-home="light"] #hm-new-name:focus,
-#fm-ask.fm-ask-light .fm-ask-input:focus,
+#fm-ask.fm-ask-light .fm-ask-input:focus, .collab-scrim.collab-light .fm-ask-input:focus,
 html[data-home="light"] #hm-dialog .hm-bg-sw.active { border-color: rgba(23, 128, 180, .8); }
 html[data-home="light"] #hm-dialog .hm-bg-sw.active { box-shadow: 0 0 0 2px rgba(23, 128, 180, .8) inset; }
 html[data-home="light"] #hm-dialog .hm-bg-sw { border-color: rgba(16, 30, 52, .18); }
 /* Cancel is quiet paper; Create keeps the app's blue as a FILL, with white ink — on white the pale
    cyan fill with near-black ink is the third instance of the same white-on-white class. */
 html[data-home="light"] .hm-dlg-actions button,
-#fm-ask.fm-ask-light .fm-ask-actions button { background-color: rgba(16, 30, 52, .05); border-color: rgba(16, 30, 52, .14); color: #10151f; }
+#fm-ask.fm-ask-light .fm-ask-actions button, .collab-scrim.collab-light .fm-ask-actions button { background-color: rgba(16, 30, 52, .05); border-color: rgba(16, 30, 52, .14); color: #10151f; }
 html[data-home="light"] .hm-dlg-actions button.accent,
-#fm-ask.fm-ask-light .fm-ask-actions button.accent { background-color: #1780b4; border-color: #1780b4; color: #ffffff; }
+#fm-ask.fm-ask-light .fm-ask-actions button.accent, .collab-scrim.collab-light .fm-ask-actions button.accent { background-color: #1780b4; border-color: #1780b4; color: #ffffff; }
 /* TWO SURVIVORS THE FIRST PASS OF THIS BLOCK LEFT BEHIND, both found by photographing the dialog and
    then measuring it rather than by looking — worth recording because they are two DIFFERENT failures.
    · `.cv-size` ("1080 × 1920 · 30 fps") is `var(--text)`, the dark theme's near-white, and it is
@@ -1063,7 +1063,7 @@ html[data-home="light"] .hm-dlg-actions button.accent,
      theme a fill is TWO properties, and setting one of them is a no-op you cannot see. */
 html[data-home="light"] #hm-dialog .cv-size { color: #10151f; }
 html[data-home="light"] .hm-dlg-actions button.accent,
-#fm-ask.fm-ask-light .fm-ask-actions button.accent {
+#fm-ask.fm-ask-light .fm-ask-actions button.accent, .collab-scrim.collab-light .fm-ask-actions button.accent {
   background-image: linear-gradient(180deg, #2a97cb, #1780b4);
 }
 /* FM.ask ON THE LIGHT HOME (queue 919). Everything above covers it by name; these are the two things
@@ -1072,11 +1072,11 @@ html[data-home="light"] .hm-dlg-actions button.accent,
    here: #ff8a8a is picked to glow on near-black and reads as disabled on paper.
    ⚠️ `.fm-ask-light` is set by js/ask.js only while the light Home is ON SCREEN — never by data-home
    alone, which stays "light" inside the editor (the #864 trap). */
-#fm-ask.fm-ask-light .fm-ask-msg { color: #5a6478; }
-#fm-ask.fm-ask-light .fm-ask-actions button.danger {
+#fm-ask.fm-ask-light .fm-ask-msg, .collab-scrim.collab-light .fm-ask-msg { color: #5a6478; }
+#fm-ask.fm-ask-light .fm-ask-actions button.danger, .collab-scrim.collab-light .fm-ask-actions button.danger {
   background-color: rgba(198, 39, 64, .08); border-color: rgba(198, 39, 64, .40); color: #c62740;
 }
-#fm-ask.fm-ask-light .fm-ask-actions button:focus-visible { outline-color: rgba(23, 128, 180, .8); }
+#fm-ask.fm-ask-light .fm-ask-actions button:focus-visible, .collab-scrim.collab-light .fm-ask-actions button:focus-visible { outline-color: rgba(23, 128, 180, .8); }
 
 /* ══════════════════════════════════════════════════════════════════════════════════════════════
    #912 CLAUSE 5 — EVERYTHING HOME OPENS STAYS LIGHT ON THE LIGHT HOME.
@@ -1206,3 +1206,61 @@ html[data-home="light"] #hm-dialog .cv-num:focus { border-color: rgba(23, 128, 1
    #122029 — the dark theme's hairline — and the light .hm-top rule never overrode it, so the white bar
    carried a near-black line round its rounded corners. The cards' own light rim instead. */
 html[data-home="light"] .hm-top { border-bottom-color: rgba(16, 30, 52, .10); }
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   COLLAB ON THE LIGHT HOME (queue 921 S3).
+   The block above already carries the collaboration cards by name for everything they share with
+   FM.ask — the scrim, the card, the title, the input, the action row. These are the parts that have no
+   ask.js counterpart, and every one of them was PHOTOGRAPHED before it was written: the Join sheet on
+   the light Home came out with a near-black code block, a near-black Paste chip and a near-black Copy
+   button sitting on white paper, because each declares `var(--panel-2)` / `var(--text)` and those are
+   the DARK theme's values. That is the #864 / #649 family again — a rule that covers most of a family
+   and misses the members declared outside it — and the only reliable cure is to name them.
+   Ink: #10151f for text, #5a6478 for hints (5.9:1 on the card), #1780b4 for the accent fill with white
+   on it, all of them the values the light Home already uses rather than four new ones.
+   ══════════════════════════════════════════════════════════════════════════════════════════════ */
+.collab-scrim.collab-light .collab-sub,
+.collab-scrim.collab-light .cs-state,
+.collab-scrim.collab-light .cs-prole,
+.collab-scrim.collab-light .cs-rowlabel,
+.collab-scrim.collab-light .cs-steplabel,
+.collab-scrim.collab-light .cs-status,
+.collab-scrim.collab-light .cj-status { color: #5a6478; }
+.collab-scrim.collab-light .cs-pname,
+.collab-scrim.collab-light .cj-clash,
+.collab-scrim.collab-light .cs-sas,
+.collab-scrim.collab-light .cs-code { color: #10151f; }
+/* …and the SAS block and the two clash buttons are named HERE, with the family, rather than left to
+   inherit the dark theme's panel on white paper — which is the §864/§649 miss this whole block exists
+   for, and the reason a new control gets added to the list in the same edit that adds the control. */
+.collab-scrim.collab-light .cs-code,
+.collab-scrim.collab-light .cs-sas,
+.collab-scrim.collab-light .cs-role,
+.collab-scrim.collab-light .cs-add,
+.collab-scrim.collab-light .cs-copy,
+.collab-scrim.collab-light .cs-connect,
+.collab-scrim.collab-light .cs-sasacts button,
+.collab-scrim.collab-light .cj-clashbtn,
+.collab-scrim.collab-light .cj-paste,
+.collab-scrim.collab-light .cs-foot button {
+  background-color: rgba(16, 30, 52, .05); border-color: rgba(16, 30, 52, .14); color: #10151f;
+}
+.collab-scrim.collab-light .cs-add { border-style: dashed; }
+.collab-scrim.collab-light .cs-add-sub { color: #5a6478; }
+.collab-scrim.collab-light .cs-back { color: #5a6478; }
+.collab-scrim.collab-light .cs-seg { border-color: rgba(16, 30, 52, .14); }
+.collab-scrim.collab-light .cs-segbtn { color: #5a6478; }
+.collab-scrim.collab-light .cs-segbtn.on,
+.collab-scrim.collab-light .cs-connect.accent,
+.collab-scrim.collab-light .cs-sasacts .cs-sasyes.accent,
+.collab-scrim.collab-light .cj-clashbtn.accent,
+.collab-scrim.collab-light .cs-foot .cs-done.accent {
+  background-color: #1780b4; border-color: #1780b4; color: #ffffff;
+}
+.collab-scrim.collab-light .cs-foot .cs-stop,
+.collab-scrim.collab-light .cs-sasacts .cs-sasno {
+  background-color: rgba(198, 39, 64, .08); border-color: rgba(198, 39, 64, .40); color: #c62740;
+}
+.collab-scrim.collab-light .cs-note { color: #8a5a00; }
+.collab-scrim.collab-light .collab-err { color: #c62740; }
+.collab-scrim.collab-light .collab-swatch.on { border-color: #10151f; }

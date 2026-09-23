@@ -141,6 +141,11 @@ All are plain classic scripts that attach to `window.FM`. There is no module sys
 
 **Styles:** add a `/* ═══ COLLAB (#921) ═══ */` section at the end of `styles.css`, plus glass overrides in `theme-glass.css`. **Do not create `collab.css`.** The buster gate only watches `styles.css` and `theme-glass.css`.
 
+**As built (S3):** `collab-signal.js` ships the codes-only half only (§14.5/§14.6 as-built notes);
+`collab-ui.js` ships the profile prompt, Share panel, Join sheet, knock card and banner and is ~700 lines
+rather than 1100, because the link, QR, settings drill-in, Home badge and comments halves belong to the
+stages that ship what they point at. The two `vendor/` files are not loaded at all yet.
+
 **index.html:**
 - Add `<script src="js/collab-core.js?v=1">` directly after `js/settings.js` (line 1017).
 - Add the other `js/collab-*.js` tags at the end of the script list, before the inline service-worker block.
@@ -180,8 +185,9 @@ Every change is a guarded one-liner or a behaviour-identical extraction (§23).
 | `js/app.js` | canvas dialog apply (≈:7117) | When a session is live: `await FM.ask({title:'Change the canvas for everyone?', …})`. | S7 |
 | `js/app.js` | `showExportDialog` (:4552) | Media-missing and role checks (§15.8). | S4 |
 | `index.html` | `controllerchange` handler (:1098) | First: `if (window.FM && FM.collab && FM.collab.active) { FM.collab.deferReload(); return; }`. | S0 |
-| `index.html` | `#topbar` | Add `<button id="btn-share" class="hidden" aria-label="Share">` (with svg) next to `#btn-export`. | S3 |
-| `js/home.js` | card menu (:1283-1340), `.hm-top` (:2604-2616), `projectCard` (:1254) | Menu items, `#hm-join-btn` and `.hm-live` badge, all behind Labs (§19.6). | S3 |
+| `index.html` | `#topbar` | ~~Add `<button id="btn-share" class="hidden">`~~ **Not done, deliberately: `collab-ui.js` builds the button on install and removes it on uninstall, so with Labs off there is no collab DOM at all rather than hidden collab DOM (see §23).** | S3 |
+| `js/app.js` | `pcTransportLayout` far list | Insert `'btn-share'` before `'btn-export'`. With Labs off the id does not exist, `grab` returns null and the row is byte-identical — which is what keeps the Studio layout test green. | S3 |
+| `js/home.js` | card menu (:1283-1340), `.hm-top` (:2604-2616), `projectCard` (:1254) | Menu items and the `.hm-live` badge (§19.6). **S3 changes this file NOT AT ALL:** `#hm-search-btn` is static markup in index.html, so `collab-ui.js` inserts `#hm-join-btn` beside it on install whatever order things boot in, and a hook here would be a line with no way to fail. The menu items and the badge are link- and presence-shaped and move to S6/S5. | ~~S3~~ S5/S6 |
 | `js/settings.js` | `DEFAULTS` (:14), `build()` | Keys `collabLabs:false`, `collabCursors:true`, `collabSelections:true`, `collabCodesOnly:false`, plus the Labs group rows (§19.8). | S3 |
 | `js/mobile.js` | none | No change. The phone entry is the stage chip. | — |
 | `tests/tests.js` | | All collab tests (`prove.sh` reads only this file). | every stage |
@@ -611,6 +617,16 @@ any ──Stop sharing (FM.ask confirm)──▶ ending ──▶ off
  members:{<mid>:{name, color, role, dev, tok, added, last}}, blocked:[mid]}
 ```
 
+**As built (S3): `ask` DEFAULTS TO FALSE while codes are the only way in, and the record carries no
+`code` or `codesOnly`.** `ask:true` is the right default for the INVITE LINK — a link can be forwarded,
+so an unknown person can arrive and the owner must get a say. S3 has no link: the only way in is a
+connection code he read out and whose answer he pasted back himself, and §14.5 says in as many words
+that pasting the answer "counts as admitting the guest: no knock". Defaulting to `true` here would make
+the app ask him to approve the thing he has just done, every time. The switch is live in the Share panel
+(the "When someone joins with a code" row), so the knock card is reachable the moment he wants it; S6
+ships the link and with it the `true` default for that half. `code` and `codesOnly` are absent because
+the 9-character room code and the relay drivers they belong to are S6.
+
 **ending:**
 - send `bye{why:'ended'}` to everyone;
 - write a final checkpoint;
@@ -658,6 +674,15 @@ Secrets live in localStorage, like the AI key. The layer ids are the host's, so 
 ### 12.3 Leave, end and detach
 
 - **Leave** asks through `FM.ask`: [Keep my own copy (recommended)] or [Delete]. Then `bye{why:'left'}` is sent.
+  - **As built (S3): [Delete] is NOT offered, and the message no longer implies it is.** `FM.ask` builds
+    exactly two buttons, so the dialog cannot express three answers; the S3 build shipped the three-answer
+    *sentence* over the two-answer dialog, pointing at a `C.leave({keep:false})` branch with no caller
+    anywhere in the app. The wording now describes what the two buttons do. The third button arrives with
+    a third-button `FM.ask`, not before it.
+  - **As built (S3): turning Labs off while a guest routes through `C.leave`, not `C.end`.** `C.end` is the
+    owner's door and does not `detachLinked`, so the switch used to strand the linked copy — still marked
+    `collab`, still holding the host's layer ids, with the only UI that could detach it removed in the same
+    call.
 - **`detachLinked(gpid)`:**
   1. Check the storage estimate for `total media + largest file`. If short, offer [Delete] or [Keep linked for now].
   2. `duplicateFrom(doc)`: new pid, `reIdLayers`, media copied under the new ids, rollback on failure.
@@ -797,6 +822,22 @@ The receiver rejects an envelope when:
 - The host pasting the answer **counts as admitting** the guest: no knock, role = link role.
 - The auth handshake uses `mk`.
 
+**As built (S3), measured rather than estimated.** The line above guesses "about 250 characters for about
+150 bytes". In this repo's own headless Chrome a data-channel offer gathers **one** mDNS host candidate,
+with a 4-character ufrag and a 24-character password: **103 bytes → a 165-character code**, and the offer
+(which carries `mk`) is 195. The 250-character figure was the six-candidate case; two devices on one
+Wi-Fi produce one. Three other departures, all in `js/collab-signal.js`:
+- **The candidate address is re-validated on the way out, not pasted through.** A code is the one input
+  in this feature a person types in by hand off another screen, so `buildSdp` interpolates only an
+  address that has come back through the IPv4 / IPv6 / mDNS-UUID decoder. An SDP line is a parser's
+  input and a `\r\n` inside a field would let a code inject whole attributes.
+- **IPv6 is parsed with the browser's own URL parser** rather than by hand: `::`, `::ffff:1.2.3.4` and
+  every zero-compression form are exactly where a hand-written splitter is wrong, and wrong here means a
+  candidate that silently never connects.
+- **PBKDF2 is NOT in this file yet.** §14.1 lists it, and its only job is turning a 9-character ROOM code
+  into a rendezvous key — which needs a rendezvous, i.e. S6. A key-stretching function with no caller is
+  something a later stage would have to re-check rather than write.
+
 ### 14.6 Auth handshake (ctl, before any document data)
 
 ```
@@ -808,8 +849,41 @@ mac_H = HMAC(K, "fm-auth-h|"+sid+"|"+fpG+"|"+fpH+"|"+nH+"|"+nG)
 K = K_auth (link) | K_auth from C (code) | member tok (tok) | mk (conn)
 ```
 
-- `fpG`/`fpH` are the `a=fingerprint:sha-256` values from the local and remote descriptions. A relay that inserts its own certificates makes the two MACs disagree.
+- `fpG`/`fpH` are the `a=fingerprint:sha-256` values from the local and remote descriptions. A relay that inserts its own certificates makes the two MACs disagree **— as long as it does not hold `K`.**
 - `LoopLink` uses `'loop'` for both fingerprints. Tier 4 tests the real binding, including a tampered fingerprint.
+
+> ⚠️ **AND IN MODE `conn` IT DOES HOLD `K`, SO THE BINDING ALONE IS NOT ENOUGH (found in the S3 review).**
+> `K = mk` there, and `mk` is packed **inside the offer code** — the very string one person copies into a
+> chat app and the other pastes back. Anyone who can rewrite that message holds the key *and* the
+> fingerprint it is meant to authenticate: they keep `mk`, substitute their own certificate and
+> candidates, answer the owner with a second certificate of their own, and then compute **both** MACs,
+> because each leg's MAC is over the fingerprints that leg really uses. Both handshakes resolve, both
+> screens say connected, and the whole document flows through them with no warning anywhere. The binding
+> is effective against a relay in the MEDIA path (a TURN server); it is not, on its own, against one in
+> the CODE path. §14.1's room code does not have this problem — there the key never travels — which is
+> where the original sentence came from.
+>
+> **So the handshake also derives a SHORT AUTHENTICATION STRING, and S3 gates admission on it:**
+> `sas = base32(HKDF(K, salt = fpG|fpH, info = "fm-sas", 3 bytes))[0..5]` — five Crockford characters,
+> returned on **both** sides of `S.handshake`. The Share panel shows them as *Step 3 · check these letters
+> match theirs* with [They don't match] / [They match], and the Join sheet shows the joiner's copy to read
+> back. `s.addPeer` does not run until the owner has confirmed. Under a relay the two legs hold different
+> fingerprints, so the two strings differ and the person reading them aloud is the detector. **§14.6's
+> invite link (S6) must not be built on the unqualified sentence above.**
+
+**As built (S3), one addition to the `auth1` line and it is deliberate:** it carries `sid`, `nm` and `cl`
+as well as `nH`, and the guest MACs over the `sid` the host stated.
+On the CODE path there is no rendezvous and no invite link, so **the joining device has no other source
+for the room id** it must write onto its linked copy (§12.2 `createLinked`), or for the host's name to
+put on that card — `welcome` carries neither. They are unauthenticated at that instant, which is exactly
+right for what they are: a display name and a room id. The MAC one line later covers `sid`, so a peer
+that lied about it cannot then agree about the key, and the name is clamped like every other peer string
+(§14.9). The alternative was widening `welcome`, which is the engine's message and is S2's, tested.
+Also: **the handshake OWNS `ctl` while it runs and hands `onmessage` back exactly as it found it**, and a
+refusal CLOSES the endpoint rather than merely rejecting — otherwise a denied peer is still holding an
+open link that something could hand to a session.
+
+
 
 ### 14.7 Version and schema gate
 
@@ -1085,6 +1159,29 @@ Common rules:
 
 **Guest panel** (same card): people list (read-only), "You're an Editor", name and colour, segment [People | Comments], Follow, [Keep my own copy], [Leave].
 
+**As built (S3): three layouts were drawn and rendered in the real app before anything was written, per
+rule 16 and his standing #545 instruction. Every PNG is kept.**
+
+| option | what it is | at 380 / 1280 |
+|---|---|---|
+| **steps** (built) | lean main view — people, one **[Add someone with a code]**, the ask row — and the code exchange is a drill-in step inside the same card | `share-steps-380.png`, `share-steps-1280.png` |
+| one page | people, then the whole code exchange inline below them | `share-onepage-380.png`, `share-onepage-1280.png` |
+| code first | the code block at the top, people underneath | `share-codefirst-380.png`, `share-codefirst-1280.png` |
+
+The measurement that decided it: **the code is 165 characters**, which is six wrapped monospace lines at
+380px and five at 1280px. Wherever it sits at rest it is the biggest thing in the card, and on the phone
+both inline layouts pushed "who is here" off the screen. It is also the one part of this panel he uses
+ONCE per person and then never again, where the people list is what he opens the panel to look at. So
+the resting view is lean (§19.1's own word) and the exchange is a step you go into and come back from.
+
+**What S3 does NOT build of §19.1, and why:** no link, no 9-character room code, no QR, no [Copy link] /
+[Share…] and no "Reset link and code" — all four need the rendezvous (S6). No settings drill-in and no
+"Earlier versions…" (S7 / checkpoints). The "General access" block is therefore one row, *When someone
+joins with a code* [Ask me first | Let them in], which is the code half of §19.1's own segment.
+
+**Guest panel as built:** state, role and [Leave] (which goes through `FM.collab.leave({keep:true})` —
+§12.3's recommended answer). Follow and Comments are S5 / S7.
+
 ### 19.2 Join sheet: `#collab-join`
 
 - Title "Join a live project".
@@ -1099,6 +1196,29 @@ Common rules:
   5. "Downloading the project…"
   6. "Getting media 2/7 · 45%"
 - **Entry points:** `#hm-join-btn` (Home `.hm-top`, before `#hm-search-btn`, 40 px icon), a pending join from a link, and the Settings Labs group.
+
+**As built (S3): two layouts drawn, the leaner one built.**
+
+| option | what it is | at 380 / 1280 |
+|---|---|---|
+| **inline** (built) | title, one sentence, one field with [Paste] beside it, and a single status line that REPLACES itself as the join proceeds | `join-inline-380.png`, `join-inline-1280.png`, plus `join-inline-midflow-380.png` and `final-join-light-380.png` |
+| stacked | the same field, with all five progress lines listed up front as a numbered checklist | `join-stacked-380.png`, `join-stacked-1280.png` |
+
+Listing all five answers "how long will this take" and costs something worse: it presents five things
+that have not happened as a set of instructions, on the one screen where the person is already being
+asked to do something unfamiliar.
+
+**Also as built:** the sheet grows a second block once a code is accepted — **"Read this back to them"**
+with the answer code and a Copy button — because on the code path the guest has to send something back,
+which §19.2's list of progress lines does not mention. The `#j=` link field, [Scan QR] and the pending
+join are S6 / S8; the field accepts `FM1-…` and says so.
+
+⚠️ **A light-Home pass was needed and it was found by PHOTOGRAPHING the sheet, not by reading it.** The
+code block, the Paste chip and the Copy button all declare `var(--panel-2)` / `var(--text)`, which are the
+DARK theme's values, so on the white Home they rendered as near-black slabs on paper — the #864 / #649
+family again, a rule that covers most of a family and misses the members declared outside it. The fix is
+in `theme-glass.css` beside the `#fm-ask.fm-ask-light` rules, which the collaboration cards now share by
+name rather than by copy.
 
 ### 19.3 Knock card: `#collab-knock`
 
@@ -1231,7 +1351,15 @@ A `ctl` message over 16 KB is sent as `{t:'fr', k:<msgId>, i, n, s:<≤16 KB sub
 
 ## 23. Solo editing unchanged (clause 16)
 
-- With Labs off, **no collab DOM exists**: no `#collab-people`, no `#hm-join-btn`, no `.hm-live`, and `#btn-share` stays `.hidden`.
+- With Labs off, **no collab DOM exists**: no `#collab-people`, no `#hm-join-btn`, no `.hm-live`, **and no
+  `#btn-share` at all**.
+  **Corrected in S3, because the original line contradicted itself:** it said "no collab DOM exists… and
+  `#btn-share` stays `.hidden`", and a hidden button is DOM. §4.2 wanted the button written into
+  index.html's markup. `js/collab-ui.js` builds it on install and removes it on uninstall instead, for
+  two reasons: the stronger promise is the one a person can check, and "there is no share button in the
+  page" is checkable in one line where "there is one but it has a class on it" is one CSS regression away
+  from being false; and the S2 inertness test already asserted `!document.getElementById('btn-share')`,
+  so the gate that guards this needed no exemption for the stage that ships the UI.
 - **No listeners, timers, WebSockets or RTCPeerConnections** exist until a session starts. `collab-core.js`'s only work at load is the `#j=` stash and the test-agent gate.
 - **Hook list.** Every hook is `FM.collab && FM.collab.active && …`, or a behaviour-identical extraction:
 
@@ -1463,6 +1591,70 @@ Each targets one rule:
   - profile colour validation
 - `/security-review`.
 - **Visible:** first usable version for Ezra, behind Labs: Mac ↔ iPhone on the same Wi-Fi with codes.
+
+**As built.** Everything in the tier-4 and UI lists above shipped, plus the profile prompt, the knock
+card and the banner. Six things are worth naming because they are decisions rather than code:
+
+- **`js/collab-signal.js` is the CODES-ONLY half and nothing else** (see §14.5's own "as built" note):
+  the minimal-SDP codec, Crockford base32, HKDF/HMAC and the auth handshake. No driver, no invite link,
+  no room code, no PBKDF2, no `fetch`, no `WebSocket`. The §23 guard test counts RTCPeerConnection,
+  WebSocket and every off-origin `fetch` over a scripted solo session — with Labs OFF and again with Labs
+  ON but nothing shared — and asserts zero, with a positive control that constructing an `RtcLink` does
+  move the counter.
+- **`RtcLink` lives at the foot of `collab-link.js` and implements the same interface as `LoopLink`**, so
+  nothing in `collab-session.js` knows it exists. Three NEGOTIATED channels with fixed ids 0/1/2 (in-band
+  negotiation makes the id depend on the DTLS role and costs a round trip per channel); `pres` is the one
+  that is unordered with `maxRetransmits: 0`. Both `ctl` and `bulk` are framed and flow-controlled:
+  **the chunk size is read off `pc.sctp.maxMessageSize`** at send time, never from a constant (Chrome
+  reports 262144, other stacks 65536, and `send()` throws over the limit), and the pump refuses to send
+  while `bufferedAmount` is over 4 MiB. Measured: 20 MB of bulk in 2.5 s with a peak buffer of 4,198,044
+  bytes — the ceiling plus one chunk — and a 300 KB ctl message crossing as 78 frames, byte-identical.
+- **The knock is driven by the guest's own `hello`, which the UI holds and replays.** The engine's
+  `addPeer` binds the endpoint and mints the mid, and its `onHello` answers with the welcome and the
+  snapshot — so there is no seam inside the engine at which to ask. Instead the UI waits for `hello`
+  itself (buffering anything else that arrives, the same rule `C.join` follows on the other side), shows
+  the card with the joiner's real name, and on approval calls `addPeer` and re-dispatches the held
+  message. A refusal sends the `refused` the engine's `C.join` already understands.
+- **Turning the Labs switch OFF ends a live session** rather than hiding it. A connection running behind
+  a hidden UI is worse than no switch.
+- **`#btn-share` is re-homed beside `#btn-export` on every install, and re-synced across every transport
+  rebuild.** Three things had to be true at once and only the first was obvious: `pcTransportLayout`
+  MOVES Export out of `#topbar` into the transport row, once, and latches, and `#topbar` is then not on
+  screen at all on a desktop — so a button placed before that move and never looked at again is a button
+  he cannot see (hence the far-list entry), and a button placed after it lands in the right row anyway
+  (hence the re-homing). The third was found by the suite: **`pcTransportTeardown` deletes anything it
+  did not borrow**, so a share button living in `#t-far` goes with the wrapper when a desktop window is
+  narrowed past 701px, and nothing would ever put it back. `pcTransportLayout` now re-syncs on both
+  paths; with Labs off it is a no-op, so the row he has today is byte-identical.
+- **A 380px width assertion has to measure the LAYOUT box, and this cost a round of false alarms worth
+  writing down.** `.fm-ask-card` swings in with `fm-hinge-panel` — `perspective(1600px) rotateX(-42deg)`
+  — and `getBoundingClientRect()` returns the TRANSFORMED box, so a 364px sheet measures 433px for the
+  first 360 ms of its life and the test reported a card wider than the screen three times running. The
+  suite now settles the entrance and uses `offsetWidth`. (The sizing was tightened at the same time, and
+  that part was real: `width: 100%` plus `margin: 0 8px` on a flex item lays out at viewport + 16, so the
+  card is sized by `flex: 1 1 auto; min-width: 0` instead.)
+- **"Stop sharing" REVOKES, it does not just tear down.** Found and fixed while finishing the stage, and
+  it is the one defect in this card that was not cosmetic. `C.end()` ended the session and left the
+  outstanding `offerLink` untouched, so the RTCPeerConnection behind the last code he read out stayed
+  open and gathering — and because `drawCodeStep` deliberately reuses a live offer (one link per step,
+  not one per draw), the NEXT Share handed out the SAME code, minted against the room he had just thrown
+  away, whose answer would have run `addPeer` on the new session. The confirm card says "The codes you
+  have handed out stop working" in as many words, which made it a false promise rather than a leak. One
+  `dropOffer()` helper now closes the offer and resets the step, and both `Stop sharing` and `uninstall`
+  go through it. Caught by `921 S3 Stop sharing revokes the code that was handed out`, which asserts the
+  peer connection reaches `closed` AND that a second share mints a different code — the second half is
+  the one a fix that nulled the reference without closing the connection would still fail.
+
+- **`js/collab-ui.js` contains no `innerHTML`.** Every name and every code goes in as `textContent` or
+  `.value`, and a colour is matched against the eight-entry palette rather than trusted — the swatch is
+  painted into a `style` attribute, so "any string" would be an injection point.
+
+**Not in S3, and why:** the `#j=` stash and `resumePendingJoin` (they need the invite link, S6); the
+`#collab-people` chip, the Home `.hm-live` badge and the card menu items (all presence- or
+link-shaped — S5/S6); `vendor/qrcode-generator.js` (there is no QR without a code short enough to scan
+comfortably, which is the link's job); `collabCursors` / `collabSelections` / `collabCodesOnly` in
+settings (a preference row that changes nothing is worse than no row — each arrives with the stage that
+reads it).
 
 ### S4 · Media
 

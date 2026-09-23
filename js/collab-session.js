@@ -555,6 +555,17 @@ window.FM = window.FM || {};
         case 'b': return onBatch(msg);
         case 'ack': return onAck(msg);
         case 'hash': return onHash(msg);
+        /* ⚠️ A DEMOTION HAS TO TRAVEL (queue 921 S3 review). `H.setRole` moved a number in the owner's
+           own member table and nothing else: the guest kept the full editing UI, the view-only banner
+           never appeared, and the first they knew of it was a refusal toast one edit at a time. */
+        case 'role': {
+          const r = typeof msg.role === 'string' ? msg.role : '';
+          if (r !== 'editor' && r !== 'commenter' && r !== 'viewer') return;
+          if (r === S.role) return;
+          S.role = r;
+          if (A.onRole) try { A.onRole(r); } catch (e) {}
+          return;
+        }
         case 'bye': S.ended = msg.why || 'ended'; S.active = false; if (A.onEnd) A.onEnd(msg.why); return;
         default: return;
       }
@@ -631,7 +642,9 @@ window.FM = window.FM || {};
       const role = (ack.rej || []).filter(function (r) { return r[1] === 'role'; }).length;
       const lease = (ack.rej || []).filter(function (r) { return r[1] === 'lease'; }).length;
       S.clashes = (S.clashes || 0) + lost + gone;
-      if (role || lease) toast(role ? 'You can only comment in this project' : 'Someone else is editing that layer');
+      /* The WORDING follows S.role, not the reason code: a viewer told "you can only comment" is being
+         given the wrong permission to ask for (queue 921 S3 review). */
+      if (role || lease) toast(role ? (S.role === 'viewer' ? 'View only — ask for edit access' : 'You can only comment in this project') : 'Someone else is editing that layer');
       if (lost || gone) {
         S.lastClash = { lost: lost, gone: gone, at: now() };
         toast(lost + gone + ' of your offline changes clashed with newer edits and were not applied');
@@ -1046,12 +1059,29 @@ window.FM = window.FM || {};
     /* The owner side: one endpoint per member. The mid is minted HERE and never taken from the peer —
        a guest that could name its own mid could name the owner's and inherit his permissions. */
     S.addPeer = function (ep, info) {
+      /* ⚠️ A CLOSED ENDPOINT IS NOT A MEMBER (queue 921 S3 review). The owner's knock card waited two
+         minutes while the joining device gave up after thirty seconds and closed its link — so "Let in"
+         could land on a connection that was already gone. `join` then added the member, the welcome and
+         the whole snapshot were pushed into a closed channel, and because `onclose` had already fired
+         before anything bound it the row NEVER went away: a person in his people list who was never
+         there. Answer with null instead so the caller can say so; the deadlines were made one number at
+         the same time (C.LIMITS.JOIN_WAIT), and this is the lock on that door. */
+      if (ep && ep.open === false) return null;
       const mid = 'm' + (++nextMid);
       peers[mid] = ep;
       host.join(mid, info || { role: 'editor' });
       ep.onmessage = function (ch, msg) { S.onMessage(ch, msg, mid); };
       ep.onclose = function () { };
       return mid;
+    };
+    /* The owner's half of a role change: the table AND the person. One call, so a panel cannot do the
+       first and forget the second — which is exactly what shipped (queue 921 S3 review). */
+    S.setPeerRole = function (mid, role) {
+      if (!isOwner || !host.members[mid]) return false;
+      host.setRole(mid, role);
+      const now_ = host.members[mid].role;
+      sendTo(mid, { t: 'role', role: now_ });
+      return now_ === role;
     };
     S.dropPeer = function (mid) { host.part(mid); delete peers[mid]; };
     S.peerIds = function () { return Object.keys(peers); };
@@ -1202,7 +1232,10 @@ window.FM = window.FM || {};
     return new Promise(function (resolve, reject) {
       let welcome = null, settled = false;
       const early = [];
-      const timer = setTimeout(function () { if (!settled) { settled = true; reject({ why: 'timeout' }); } }, o.timeoutMs || 30000);
+      /* §19.3's knock card is what this is waiting on, so the deadline comes from the knock rather than
+         from a second number that could drift away from it (queue 921 S3 review). */
+      const timer = setTimeout(function () { if (!settled) { settled = true; reject({ why: 'timeout' }); } },
+        o.timeoutMs || (C.LIMITS && C.LIMITS.JOIN_WAIT) || 140000);
       ep.onmessage = function (ch, msg) {
         if (ch !== 'ctl' || !msg) return;
         if (msg.t === 'welcome') { welcome = msg; return; }

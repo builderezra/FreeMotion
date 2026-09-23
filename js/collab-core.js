@@ -54,6 +54,12 @@ window.FM = window.FM || {};
     UNDO_STEPS: 120,
     CKPT_EVERY: 600000, CKPT_KEEP: 10,
     KNOCK_TIMEOUT: 120000, PENDING_JOIN: 24 * 3600 * 1000,
+    /* ⚠️ ONE NUMBER, NOT TWO (queue 921 S3 review). The joining device's wait and the owner's knock
+       card were separate constants — 30 s against 120 s — so an owner who took 40 seconds to pick up his
+       phone answered a guest that had already given up and closed its connection: `addPeer` then ran
+       against a dead link and left a member in his people list who was never there. The joiner's wait is
+       DERIVED from the knock it is waiting on, plus the room a handshake and a snapshot need. */
+    JOIN_WAIT: 120000 + 20000,
     ACK_CACHE: 64                          // §7.1 step 3: the acks kept per member for a resend
   });
 
@@ -177,10 +183,22 @@ window.FM = window.FM || {};
   C.session = null;
 
   let undoHandover = false;     // §10.5: outlives the session, until the project is switched
+  /* ⚠️ …AND SO MUST THE SESSION IT IS DELEGATED TO (queue 921 S3 review). `undoHandover` outliving the
+     session is §10.5 working as designed — a solo undo right after a session must not revert a guest's
+     work with a pre-session snapshot. But `detach()` nulled `C.session` and left the flag set, so
+     `C.undo()` looked up a session that was gone and returned false FOREVER: from Stop sharing (or
+     Labs off) until the project was switched, Ctrl-Z and both buttons silently did nothing, and the
+     tidy-up that arming had committed to HIS document could no longer be undone at all. The flag is
+     right; what was missing is somewhere for it to point. The stopped session still holds the undo
+     stacks and still applies locally (`stop()` only closes links), so it is kept HERE and released by
+     the same `onReset` that releases the flag — one lifetime, not two. */
+  let handoverSession = null;
   let ticker = null;
   let pendingReload = false;
 
   function S() { return C.session; }
+  /* The session UNDO may reach: the live one, or the last one while the hand-over is still on. */
+  function US() { return C.session || (undoHandover ? handoverSession : null); }
 
   C.attach = function (session, opts) {
     const o = opts || {};
@@ -198,6 +216,7 @@ window.FM = window.FM || {};
     C.active = true;
     C.role = session.role || 'editor';
     undoHandover = true;
+    handoverSession = session;
     if (C.bridge && session.adapter === C.bridge) C.bridge.install();   // a PlainAdapter session has no DOM to listen to
     if (o.autoTick !== false) {
       const ms = (FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone()) ? C.LIMITS.TICK_PHONE : C.LIMITS.TICK_PC;
@@ -228,10 +247,10 @@ window.FM = window.FM || {};
   /* §10.5: undo stays delegated after a session ends, until the project is switched or the page
      reloads — otherwise a solo undo right afterwards would revert a guest's work with a snapshot. */
   C.undoActive = function () { return undoHandover; };
-  C.undo = function () { const s = S(); return s ? s.undo() : false; };
-  C.redo = function () { const s = S(); return s ? s.redo() : false; };
-  C.canUndo = function () { const s = S(); return s ? s.canUndo() : false; };
-  C.canRedo = function () { const s = S(); return s ? s.canRedo() : false; };
+  C.undo = function () { const s = US(); return s ? s.undo() : false; };
+  C.redo = function () { const s = US(); return s ? s.redo() : false; };
+  C.canUndo = function () { const s = US(); return s ? s.canUndo() : false; };
+  C.canRedo = function () { const s = US(); return s ? s.canRedo() : false; };
 
   /* history.reset() runs on every project open, import and boot: the session stands down (§12.1
      `paused`) and the borrowed undo goes back. NOT gated on `active` — the hand-back is exactly the
@@ -255,9 +274,10 @@ window.FM = window.FM || {};
      leaving is still the current one, which is the whole point of doing it there (see storage.js). */
   C.onReset = function (opts) {
     const s = S();
-    if (!s) { undoHandover = false; return; }
+    if (!s) { undoHandover = false; handoverSession = null; return; }
     if (!(opts && opts.force) && s.pid && FM.projects && FM.projects.currentId && FM.projects.currentId() === s.pid) return;
     undoHandover = false;
+    handoverSession = null;
     try { s.stop('paused'); } catch (e) {}
     C.detach();
   };
@@ -272,7 +292,7 @@ window.FM = window.FM || {};
      is not writable. (queue 921 S2) */
   C._reload = function () { location.reload(); };
   C._pendingReload = function () { return pendingReload; };
-  C._undoHandover = function (v) { if (v !== undefined) undoHandover = !!v; return undoHandover; };
+  C._undoHandover = function (v) { if (v !== undefined) { undoHandover = !!v; if (!undoHandover) handoverSession = null; } return undoHandover; };
 
   /* ═══ THE TEST-AGENT GATE (§25.3) ═════════════════════════════════════════════════════════════
    * Two conditions, both required, and the app cannot be pushed into this state from outside: the

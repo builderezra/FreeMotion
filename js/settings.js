@@ -48,6 +48,13 @@ window.FM = window.FM || {};
     layout: 'studio',
                              // the timeline. Desktop only: the CSS is gated behind (min-width: 701px), so a
                              // phone keeps its sheet layout whatever this says.
+    /* ⚠️ OFF, AND OFF IS A PROMISE (queue 921 S3, spec §19.8 / §23). With this false there is no
+       collaboration DOM in the page at all — no share button, no Join button, no card — and nothing in
+       js/collab-*.js runs beyond defining its namespace. It is the switch the whole feature hangs off,
+       so it starts where a solo user cannot feel it. The three sibling keys §4.2 lists —
+       collabCursors, collabSelections, collabCodesOnly — arrive with the stages that READ them (S5
+       presence, S6 the relay); a preference row that changes nothing is worse than no row. */
+    collabLabs: false,
   };
   const DURATIONS = [0.5, 1, 2, 3, 5, 10, 15];
 
@@ -108,6 +115,11 @@ window.FM = window.FM || {};
        about the app that was no longer true. Verified before removing it: with the Classic rules gone,
        #app and all four regions measure identically with and without the class. */
     touchRipples(state.showTouches);
+    /* queue 921 S3: the Labs switch owns every piece of collaboration DOM there is, so it is applied
+       here — the one place that runs at boot AND on every change — rather than from the row that flips
+       it. `syncLabs` builds nothing when the switch is off, and ENDS a live session if it goes off
+       while one is running (a connection behind a hidden UI is worse than no switch). */
+    if (FM.collab && FM.collab.ui) { try { FM.collab.ui.syncLabs(); } catch (e) {} }
     listeners.forEach(fn => { try { fn(state); } catch (e) {} });
   }
 
@@ -762,6 +774,29 @@ window.FM = window.FM || {};
       bcBtns.append(bcCopy);
       bcWrap.append(bcHead, bcBtns, bcOut);
       body.appendChild(group(bcWrap));
+    }
+
+    /* ═══ LABS (queue 921 S3, §19.8) ═════════════════════════════════════════════════════════════════════════
+     * Last but for the version line, because it is the one group whose rows can change what the app IS
+     * rather than how it looks. The two sub-rows are built either way and hidden by a class rather than
+     * built only when the switch is on: rebuilding this panel from inside one of its own rows means
+     * closing and reopening it, and open() rebinds Escape without unbinding while a close in the same
+     * frame as an open is the exact null-scrim crash the guard on open() below records. */
+    if (FM.collab && FM.collab.ui) {
+      const ui = FM.collab.ui;
+      const me = ui.getProfile();
+      const kids = el('div', 'set-labs' + (state.collabLabs ? '' : ' hidden'));
+      kids.appendChild(actionRow('Your name and colour',
+        me ? me.name : 'Not set yet — you are asked the first time you share or join',
+        'Change…', () => ui.profile({ force: true })));
+      kids.appendChild(actionRow('Join a live project', 'Paste a code somebody read you.', 'Join…', () => ui.join()));
+      body.appendChild(group(
+        switchRow('Live collaboration (preview)',
+          'Edit one project on two devices at once. Nothing goes through a server — the two devices talk to each other directly, and you connect them by reading a code across.',
+          () => !!state.collabLabs,
+          () => { state.collabLabs = !state.collabLabs; save(); apply(); kids.classList.toggle('hidden', !state.collabLabs); }),
+        kids
+      ));
     }
 
     const foot = el('div', 'set-foot');

@@ -29105,13 +29105,22 @@
       'path', 'diff', 'Host', 'Session', 'bridge', 'link', 'DENY', '_viewOfProject',
       'session', 'attach', 'detach', 'share', 'join', 'leave', 'end', 'reopen', 'sameDeviceCopy', 'testMode',
       'beforeSnap', 'afterCommit', 'beforeFlush', 'undoActive', 'undo', 'redo', 'canUndo', 'canRedo',
-      'onReset', 'reachable', 'isGuest', 'deferReload', '_pendingReload', '_undoHandover', '_reload', '_agentTag', 'lastError'];
+      'onReset', 'reachable', 'isGuest', 'deferReload', '_pendingReload', '_undoHandover', '_reload', '_agentTag', 'lastError',
+      /* S3 (queue 921): the codes-only half of the signalling, and the UI. Both are libraries at load —
+         `signal` defines functions and `ui` defines an object that builds nothing at all until
+         Settings → Labs is switched on, which is what the DOM assertions below measure. */
+      'signal', 'ui'];
     const extra = Object.keys(C).filter(function (k) { return allowed.indexOf(k) < 0; });
-    if (extra.length) throw new Error('FM.collab gained ' + extra.join(', ') + ' — stage S2 is the engine and its hooks, and anything beyond that list belongs to a later stage (UI is S3, media S4, presence S5)');
+    if (extra.length) throw new Error('FM.collab gained ' + extra.join(', ') + ' — stage S3 is the engine, its hooks, the connection codes and the UI, and anything beyond that list belongs to a later stage (media S4, presence S5, the relay and the invite link S6)');
     ['collab', 'CollabHost', 'collabHost', 'qrcode', 'jsQR'].forEach(function (g) {
       if (window[g] !== undefined) throw new Error('window.' + g + ' exists — the collab modules must attach to FM.collab only');
     });
-    if (document.getElementById('collab-people') || document.getElementById('hm-join-btn') || document.getElementById('btn-share')) throw new Error('collab DOM exists — S2 ships no UI at all');
+    /* ⚠️ AND IT STAYS TRUE THROUGH S3, WHICH IS WHY THE SHARE BUTTON IS NOT IN index.html. §4.2 asked
+       for `<button id="btn-share" class="hidden">` in the markup and §23 promised in the same breath
+       that "no collab DOM exists"; both cannot hold. collab-ui.js builds the button on install and
+       removes it on uninstall, so this line needs no exemption for the stage that ships the UI —
+       see the decision note at the top of js/collab-ui.js. (queue 921 S3) */
+    if (document.getElementById('collab-people') || document.getElementById('hm-join-btn') || document.getElementById('btn-share')) throw new Error('collab DOM exists on a page whose Labs switch is off — §23 promises a solo user no collaboration DOM at all, not hidden collaboration DOM');
     /* ⚠️ THE LISTENERS ARE THE POINT OF §23, and they are the one thing here a solo user could feel.
        The bridge installs capture listeners on document for pointer and key events; with no session
        there must be none, and `installed()` is how that is stated. */
@@ -30943,6 +30952,1149 @@
       if (sb.pid !== kept.gpid) throw new Error('Keep-first did not open the live copy');
       if (JSON.stringify(sb.layers) !== JSON.stringify(ids)) throw new Error('the live copy does not carry the host\'s ids after Keep-first');
     } finally { await t3reset921(['h', 'b']); rig921().teardown(); }
+  });
+
+  /* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   * #921 STAGE S3 — THE FIRST REAL CONNECTION, AND THE ONLY UI THERE IS (§26 S3).
+   *
+   * Tier 4 is §25.4: two real RTCPeerConnections in this one page with `iceServers: []`, so nothing
+   * leaves the machine. Measured in this repo's own headless Chrome, both sides gather a single mDNS
+   * host candidate and resolve each other locally, and the pair comes up in well under a second.
+   *
+   * ⚠️ EVERY TIER-4 PAIR IS JOINED THROUGH THE CODE CODEC, never by handing one description to the
+   * other. That is not extra work — it is the only path S3 ships — and it means "a real offer through
+   * the codec rebuilds an SDP that connects" is proved by every test in this section rather than by one.
+   * ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+  function need921S3(what) {
+    const C = need921(what);
+    if (!C.signal || !C.link || typeof C.link.RtcLink !== 'function' || !C.ui) {
+      throw new Error('FM.collab.signal / .link.RtcLink / .ui is missing — the stage-S3 files ' +
+        '(js/collab-signal.js, the RtcLink at the foot of js/collab-link.js, js/collab-ui.js) are not loaded, so ' +
+        what + ' cannot be measured at all');
+    }
+    return C;
+  }
+
+  async function rtcPair921(opts) {
+    const C = need921S3('a real WebRTC link');
+    const o = opts || {};
+    const h = C.link.RtcLink({ self: 'h', peer: 'g' });
+    const g = C.link.RtcLink({ self: 'g', peer: 'h' });
+    const pair = { h: h, g: g, close: function () { try { h.close(); } catch (e) {} try { g.close(); } catch (e) {} } };
+    try {
+      pair.offer = await h.createOffer();
+      pair.answer = await g.acceptOffer(o.mangleOffer ? o.mangleOffer(pair.offer) : pair.offer);
+      await h.acceptAnswer(o.mangleAnswer ? o.mangleAnswer(pair.answer) : pair.answer);
+      await Promise.race([
+        Promise.all([h.opened, g.opened]),
+        new Promise(function (_, rj) { setTimeout(function () { rj(new Error('the two data channels never opened (ice ' + h.pc.iceConnectionState + '/' + g.pc.iceConnectionState + ')')); }, 20000); })
+      ]);
+      return pair;
+    } catch (e) { pair.close(); throw e; }
+  }
+
+  /* One message off a link, or a named failure. Never a bare timeout: "it hung" is the least useful
+     thing a transport test can say. */
+  function nextOn921(ep, ch, ms, what) {
+    return new Promise(function (res, rej) {
+      const t = setTimeout(function () { ep.onmessage = null; rej(new Error('nothing arrived on ' + ch + ' within ' + (ms || 15000) + 'ms — ' + what)); }, ms || 15000);
+      ep.onmessage = function (c, m) { if (c !== ch) return; clearTimeout(t); ep.onmessage = null; res(m); };
+    });
+  }
+
+  test('921 S3 the three channels open with the negotiated ids 0/1/2, presence is the lossy one, and a ctl round trip lands', { item: '921', budgetMs: 90000 }, async function () {
+    const pair = await rtcPair921();
+    try {
+      const want = { ctl: 0, pres: 1, bulk: 2 };
+      ['ctl', 'pres', 'bulk'].forEach(function (n) {
+        [['host', pair.h], ['guest', pair.g]].forEach(function (side) {
+          const dc = side[1].channel(n);
+          if (!dc) throw new Error('the ' + side[0] + ' has no ' + n + ' channel at all');
+          if (dc.id !== want[n]) throw new Error('the ' + side[0] + '\'s ' + n + ' channel has stream id ' + dc.id + ', not ' + want[n] +
+            ' — the ids are NEGOTIATED, and two sides that disagree about which channel is which would deliver presence into the document pipe');
+          if (dc.negotiated !== true) throw new Error(side[0] + '\'s ' + n + ' channel was negotiated in band, which costs a round trip per channel and makes the id depend on the DTLS role');
+        });
+      });
+      /* §26 S3 / the channel table: presence is a position about to be replaced, so it must be the one
+         channel that neither waits nor retries. A `pres` that inherited ctl's ordering would put a lost
+         cursor packet in front of every op behind it. */
+      const pres = pair.h.channel('pres');
+      if (pres.ordered !== false || pres.maxRetransmits !== 0) throw new Error('the pres channel is ordered=' + pres.ordered + ' maxRetransmits=' + pres.maxRetransmits + ' — it has to be unordered with no retransmits');
+      if (pair.h.channel('ctl').ordered !== true) throw new Error('the ctl channel is unordered — the receive rules in §8 are built on ctl being ordered');
+      /* CONTROL: the pipe really carries something, in both directions, so the shape assertions above
+         are about a working link rather than three objects nobody used. */
+      const there = nextOn921(pair.g, 'ctl', 15000, 'a ctl message from the host');
+      pair.h.send('ctl', { t: 'hello', n: 1 });
+      const got = await there;
+      if (!got || got.t !== 'hello' || got.n !== 1) throw new Error('the ctl message arrived as ' + JSON.stringify(got));
+      const back = nextOn921(pair.h, 'ctl', 15000, 'a ctl message from the guest');
+      pair.g.send('ctl', { t: 'welcome', n: 2 });
+      const got2 = await back;
+      if (!got2 || got2.t !== 'welcome') throw new Error('nothing came back the other way: ' + JSON.stringify(got2));
+    } finally { pair.close(); }
+  });
+
+  test('921 S3 a 300 KB control message is cut into frames no bigger than the SCTP limit and arrives byte-identical', { item: '921', budgetMs: 120000 }, async function () {
+    const pair = await rtcPair921();
+    try {
+      const max = (pair.g.pc.sctp && pair.g.pc.sctp.maxMessageSize) || 65536;
+      let frames = 0, biggest = 0;
+      pair.g.channel('ctl').addEventListener('message', function (e) {
+        frames++;
+        const n = typeof e.data === 'string' ? e.data.length : (e.data.byteLength || 0);
+        if (n > biggest) biggest = n;
+      });
+      /* A real shape: one op carrying a long text leaf, which is exactly what §21's STRING_LEAF cap
+         allows and what a caption or a paragraph of text produces. */
+      const msg = { t: 'tx', cid: 7, ops: [{ o: 's', p: ['L', 'a', 'text'], v: new Array(150001).join('ab') }] };
+      const size = JSON.stringify(msg).length;
+      if (size < 300000) throw new Error('the fixture is only ' + size + ' bytes, which is not the 300 KB case');
+      const there = nextOn921(pair.g, 'ctl', 30000, 'the 300 KB control message');
+      pair.h.send('ctl', msg);
+      const got = await there;
+      if (JSON.stringify(got) !== JSON.stringify(msg)) throw new Error('the 300 KB message came back different (' + JSON.stringify(got).length + ' bytes, not ' + size + ')');
+      if (frames < 2) throw new Error('it arrived in ' + frames + ' frame(s) — nothing was fragmented, so this test proved the easy case');
+      if (biggest > max) throw new Error('the biggest frame on the wire was ' + biggest + ' bytes against an SCTP maxMessageSize of ' + max +
+        ' — send() throws over that limit, and it would throw on the one edit big enough to matter');
+      if (biggest > pair.h.chunkSize()) throw new Error('a frame of ' + biggest + ' exceeded the link\'s own chunkSize() of ' + pair.h.chunkSize());
+    } finally { pair.close(); }
+  });
+
+  test('921 S3 20 MB on the bulk channel never buffers more than 4 MiB plus one chunk, and arrives whole', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S3('backpressure');
+    const pair = await rtcPair921();
+    let poll = null;
+    try {
+      const N = 20 * 1024 * 1024;
+      const payload = new Uint8Array(N);
+      for (let i = 0; i < N; i += 4096) payload[i] = (i / 4096) & 255;
+      let peak = 0;
+      poll = setInterval(function () { const b = pair.h.bufferedAmount('bulk'); if (b > peak) peak = b; }, 4);
+      const there = nextOn921(pair.g, 'bulk', 150000, '20 MB on the bulk channel');
+      pair.h.send('bulk', payload.buffer);
+      const got = await there;
+      clearInterval(poll); poll = null;
+      if (!got || got.byteLength !== N) throw new Error('got ' + (got && got.byteLength) + ' bytes back, not ' + N);
+      const back = new Uint8Array(got);
+      for (let i = 0; i < N; i += 4096) {
+        if (back[i] !== ((i / 4096) & 255)) throw new Error('the reassembled bytes differ at offset ' + i + ' (' + back[i] + ' not ' + ((i / 4096) & 255) + ') — the frames were stitched in the wrong order or at the wrong offsets');
+      }
+      const ceiling = C.link.BULK_HIGH + pair.h.chunkSize();
+      if (peak > ceiling) throw new Error('bufferedAmount peaked at ' + peak + ' against a ceiling of ' + ceiling +
+        ' (4 MiB plus one chunk) — an unthrottled send buffers the whole payload in the tab\'s heap, which on a phone is the tab');
+      /* CONTROL: it really did have to wait. A peak under one chunk would mean the receiver drained as
+         fast as we filled and the ceiling was never approached, so the assertion above proved nothing. */
+      if (peak < pair.h.chunkSize()) throw new Error('bufferedAmount never rose above ' + peak + ' bytes, so nothing was ever queued and the ceiling was not exercised');
+    } finally { if (poll) clearInterval(poll); pair.close(); }
+  });
+
+  test('921 S3 the chunk size is read off the peer connection, never a constant', { item: '921', budgetMs: 90000 }, async function () {
+    const pair = await rtcPair921();
+    try {
+      const max = pair.h.pc.sctp && pair.h.pc.sctp.maxMessageSize;
+      if (!max) throw new Error('pc.sctp.maxMessageSize is not readable on a connected link, so the link has nothing to size its frames from');
+      const live = pair.h.chunkSize();
+      if (live > max - 256) throw new Error('chunkSize() is ' + live + ' against a maxMessageSize of ' + max + ' — there is no room left for the frame header');
+      /* THE HALF THAT MATTERS: it FOLLOWS the connection rather than happening to be under it today.
+         Chrome reports 262144 and a 16 KiB constant would satisfy the line above for ever; other stacks
+         report 65536, and one that reported 4096 would take the link down on the first op. */
+      Object.defineProperty(pair.h.pc, 'sctp', { value: { maxMessageSize: 4096 }, configurable: true });
+      const small = pair.h.chunkSize();
+      if (small !== 4096 - 256) throw new Error('with the connection reporting a 4096-byte limit the link still cuts at ' + small + ' — the size is a constant, not an answer from the transport');
+      Object.defineProperty(pair.h.pc, 'sctp', { value: { maxMessageSize: 262144 }, configurable: true });
+      if (pair.h.chunkSize() !== live) throw new Error('chunkSize() did not come back to ' + live + ' when the limit did');
+    } finally { pair.close(); }
+  });
+
+  test('921 S3 the connection code round trips a real description, and refuses a truncated or mistyped one', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S3('the minimal-SDP codec');
+    const S = C.signal;
+    const pair = await rtcPair921();
+    try {
+      /* The pair above is ALREADY proof that a rebuilt description connects — it is the only way
+         rtcPair921 joins two links. What is left is that the code carries the five facts unchanged. */
+      if (pair.offer.indexOf('FM1-') !== 0) throw new Error('the offer code is not an FM1 code: ' + String(pair.offer).slice(0, 24));
+      const local = pair.h.pc.localDescription.sdp;
+      const mine = S.parseDesc(local, 'offer');
+      const back = S.decode(pair.offer);
+      if (!back || back.type !== 'offer') throw new Error('the offer code did not decode back to an offer');
+      const rebuilt = S.parseDesc(back.sdp, 'offer');
+      ['ufrag', 'pwd', 'fp', 'setup'].forEach(function (k) {
+        if (rebuilt[k] !== mine[k]) throw new Error('the code lost ' + k + ': ' + rebuilt[k] + ' is not ' + mine[k]);
+      });
+      if (rebuilt.cands.length !== mine.cands.length) throw new Error('the code carried ' + rebuilt.cands.length + ' candidates, not ' + mine.cands.length);
+      for (let i = 0; i < mine.cands.length; i++) {
+        if (rebuilt.cands[i].ip !== mine.cands[i].ip || rebuilt.cands[i].port !== mine.cands[i].port || rebuilt.cands[i].t !== mine.cands[i].t) {
+          throw new Error('candidate ' + i + ' came back as ' + JSON.stringify(rebuilt.cands[i]) + ', not ' + JSON.stringify(mine.cands[i]));
+        }
+      }
+      if (!back.mk || back.mk.length !== 16) throw new Error('the offer code did not carry the 16-byte one-time key the auth handshake runs on');
+      if (S.decode(pair.answer).mk) throw new Error('the ANSWER code carries a key — it must not; the answer is already bound to the offer\'s');
+      /* ⚠️ THE ONE INPUT A PERSON TYPES BY HAND. Every one of these is a real thing to do with a code. */
+      if (S.decode(pair.offer.slice(0, 40)) !== null) throw new Error('a truncated code decoded to something — a half description fails ten seconds later inside ICE with nothing to show for it');
+      if (S.decode('FM1-' + 'U'.repeat(20)) !== null) throw new Error('U is not in the Crockford alphabet and a code containing it decoded anyway');
+      if (S.decode('hello there') !== null) throw new Error('a sentence decoded as a code');
+      if (S.decode('') !== null) throw new Error('an empty string decoded as a code');
+      /* …and the folding that makes a code readable ALOUD: I and L are 1, O is 0. */
+      const spoken = pair.offer.replace(/1/g, 'I').replace(/0/g, 'O').toLowerCase().replace(/-/g, ' ');
+      const folded = S.decode(spoken.replace(/^fmi/, 'FM1'));
+      if (!folded || folded.sdp !== back.sdp) throw new Error('reading the code aloud (I for 1, O for 0, spaces for dashes, lower case) did not give the same description back');
+    } finally { pair.close(); }
+  });
+
+  test('921 S3 auth binds the key AND both fingerprints: the right key passes, a wrong key is denied, a tampered fingerprint is denied', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S3('the auth handshake');
+    const S = C.signal;
+    const KEY = new Uint8Array(16); for (let i = 0; i < 16; i++) KEY[i] = i * 7;
+    const OTHER = new Uint8Array(16); for (let i = 0; i < 16; i++) OTHER[i] = 200 - i;
+
+    async function run(keyG, fpHasSeenByGuest) {
+      const L = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'async' });
+      const hp = S.handshake(L.a, { side: 'host', key: KEY, sid: 'room-1', info: { nm: 'Ezra', cl: '#a3e635' }, fpLocal: 'AA:11', fpRemote: 'BB:22', timeoutMs: 8000 });
+      const gp = S.handshake(L.b, { side: 'guest', key: keyG, mode: 'conn', fpLocal: 'BB:22', fpRemote: fpHasSeenByGuest, timeoutMs: 8000 });
+      try {
+        const r = await Promise.all([hp, gp]);
+        return { ok: true, host: r[0], guest: r[1], link: L };
+      } catch (e) { await hp.catch(function () {}); await gp.catch(function () {}); return { ok: false, why: e && e.why, link: L }; }
+    }
+
+    const good = await run(KEY, 'AA:11');
+    if (!good.ok) throw new Error('the honest handshake was refused with "' + good.why + '" — CONTROL: if this cannot pass, the two refusals below prove nothing');
+    if (good.host.mode !== 'conn') throw new Error('the host read the mode as ' + good.host.mode + ', not conn');
+    /* §14.6 as built in S3: auth1 is the guest's only source for the room id it writes onto its linked
+       copy, and for the host's name to put on that card. */
+    if (!good.guest.host || good.guest.host.sid !== 'room-1' || good.guest.host.nm !== 'Ezra') {
+      throw new Error('the guest did not learn the room from auth1: ' + JSON.stringify(good.guest.host));
+    }
+    if (!good.link.a.open || !good.link.b.open) throw new Error('an accepted handshake closed the link');
+
+    const wrong = await run(OTHER, 'AA:11');
+    if (wrong.ok) throw new Error('a peer that does not know the code\'s key was let in');
+    if (wrong.why !== 'auth') throw new Error('a wrong key failed as "' + wrong.why + '" rather than as auth');
+    if (wrong.link.a.open || wrong.link.b.open) throw new Error('a denied peer is still holding an open link — the refusal has to close it, or the session can still be handed the endpoint');
+
+    /* A relay that terminated DTLS and made its own certificates: the guest sees a fingerprint that is
+       not the host's, so the two MACs are computed over different strings and neither side accepts. The
+       key itself is RIGHT here, which is exactly what makes this the interesting case. */
+    const tampered = await run(KEY, 'FF:99');
+    if (tampered.ok) throw new Error('the handshake passed although the two sides disagree about the host\'s DTLS fingerprint — the MAC is not bound to the certificates, so a relay in the middle would be invisible');
+    if (tampered.why !== 'auth') throw new Error('a tampered fingerprint failed as "' + tampered.why + '" rather than as auth');
+  });
+
+  /* ═══ THE UI (§19, §23) ═══════════════════════════════════════════════════════════════════════
+   * ⚠️ EVERY ONE OF THESE PUTS THE SWITCH AND THE PROFILE BACK. The suite runs inside the real app
+   * frame against the real localStorage, so a test that left `collabLabs` on would leave a share button
+   * in HIS editor, and one that left `fm.profile` behind would put a name he never typed on his next
+   * session. That is the fixture leak S2's own notes record; `withLabs921` is the only way in. */
+  async function withLabs921(fn) {
+    const C = need921S3('the collaboration UI');
+    const wasLabs = FM.settings.get('collabLabs');
+    let wasProfile = null;
+    try { wasProfile = localStorage.getItem('fm.profile'); } catch (e) {}
+    const roomsBefore = [];
+    try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('fm.collab.host.') === 0) roomsBefore.push(k); } } catch (e) {}
+    FM.settings.set('collabLabs', true);
+    C.ui.syncLabs();
+    /* ⚠️ AND A PROFILE, OR EVERY UI TEST HANGS. `share()` and `join()` both open the §18.1 prompt first
+       when there is none, and the promise they return is only answered by somebody tapping Continue —
+       so a test that awaits either one waits for a person. Found by exactly that: an 180-second timeout
+       with no last step, on a card that was sitting on screen waiting to be filled in. */
+    C.ui.setProfile('Test Person', C.ui.PALETTE[0]);
+    try {
+      return await fn(C.ui);
+    } finally {
+      try { C.ui.close(); } catch (e) {}
+      FM.settings.set('collabLabs', !!wasLabs);
+      try { C.ui.syncLabs(); } catch (e) {}
+      try {
+        if (wasProfile === null) localStorage.removeItem('fm.profile'); else localStorage.setItem('fm.profile', wasProfile);
+        const now = [];
+        for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('fm.collab.host.') === 0) now.push(k); }
+        now.forEach(function (k) { if (roomsBefore.indexOf(k) < 0) localStorage.removeItem(k); });
+      } catch (e) {}
+    }
+  }
+
+  test('921 S3 a name full of HTML is printed, never parsed — in the people list and in the knock card', { item: '921', budgetMs: 120000 }, async function () {
+    /* Under 32 characters ON PURPOSE: §14.9 clamps a peer name to FM.collab.LIMITS.NAME, so a longer
+       fixture would come back truncated and this test would be measuring the clamp instead of the
+       escaping. Still a complete tag with an event handler in it, which is the thing that must not run. */
+    const HOSTILE = '<img src=x onerror=go()>';
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        ctx.S.host.join('mx', { role: 'editor', name: HOSTILE, color: '#ff9f43' });
+        await ui.share();
+        const card = document.getElementById('collab-share');
+        if (!card) throw new Error('the Share panel did not open');
+        const names = Array.prototype.map.call(card.querySelectorAll('.cs-pname'), function (n) { return n.textContent; });
+        if (names.indexOf(HOSTILE) < 0) throw new Error('the peer name is not in the list as text: ' + JSON.stringify(names));
+        if (card.querySelector('img') || card.querySelector('b')) throw new Error('the peer name was PARSED — an <img onerror> from another device is running script in his editor');
+        /* CONTROL: an ordinary name still reads as itself, so "no elements" is not just an empty card. */
+        if (names.length < 2) throw new Error('CONTROL: only ' + names.length + ' row(s) in the people list, so the assertion above measured an almost-empty card');
+        ui.close();
+      });
+      /* The knock card takes a name off the wire before any member exists, so it is the one surface
+         that prints a stranger's string with nothing in front of it. */
+      const answer = ui.knock({ name: HOSTILE, role: 'editor', dev: '<script>x</script>' });
+      const knock = document.getElementById('collab-knock');
+      if (!knock) throw new Error('the knock card did not appear');
+      if (knock.querySelector('img') || knock.querySelector('script') || knock.querySelector('b')) throw new Error('the knock card parsed the joiner\'s name');
+      if (knock.textContent.indexOf(HOSTILE) < 0) throw new Error('the knock card does not show the name it was given: ' + knock.textContent);
+      knock.querySelector('.ck-no').click();
+      if (await answer !== false) throw new Error('"Don’t allow" did not answer no');
+      if (document.getElementById('collab-knock')) throw new Error('the knock card stayed up after it was answered');
+    });
+  });
+
+  test('921 S3 the Share panel and the Join sheet fit a 380px phone with no sideways scroll, and on a desktop the Share panel comes out of the share button', { item: '921', budgetMs: 180000 }, async function () {
+    /* ⚠️ WAIT FOR THE ENTRANCE, AND MEASURE THE LAYOUT BOX RATHER THAN THE PAINTED ONE.
+       `.fm-ask-card` swings in with `fm-hinge-panel` — `perspective(1600px) rotateX(-42deg)` — and
+       getBoundingClientRect() returns the TRANSFORMED box, so a 364px sheet measures 433px for the
+       first 360ms of its life. That is how this test first "found" a card wider than the screen, three
+       runs in a row: it was measuring a perspective projection. `offsetWidth` is the layout width and
+       ignores transforms, and the settle is here so the rest of the geometry is the resting geometry. */
+    function settled() { return new Promise(function (r) { setTimeout(r, 420); }); }
+    function fits(card, where) {
+      if (card.scrollWidth > card.clientWidth + 1) throw new Error(where + ' scrolls sideways: ' + card.scrollWidth + ' of content in a ' + card.clientWidth + 'px box');
+      const box = card.getBoundingClientRect();
+      const out = Array.prototype.filter.call(card.querySelectorAll('*'), function (n) {
+        const r = n.getBoundingClientRect();
+        return r.width > 0 && (r.right > box.right + 1 || r.left < box.left - 1);
+      });
+      if (out.length) throw new Error(where + ': ' + out.length + ' element(s) stick out of the card, first is ' + out[0].className + ' at ' + Math.round(out[0].getBoundingClientRect().right) + ' against a card edge of ' + Math.round(box.right));
+      if (document.documentElement.scrollWidth > document.documentElement.clientWidth + 1) throw new Error(where + ' made the page itself scroll sideways');
+    }
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        ctx.S.host.join('mx', { role: 'editor', name: 'Someone with a long name', color: '#ff9f43' });
+        await atPhoneWidth(async function () {
+          await ui.share();
+          const sheet = document.getElementById('collab-share');
+          await settled();
+          fits(sheet, 'the Share panel at 380px');
+          /* …and it is the BOTTOM SHEET §19.1 asks for rather than a block of text at the end of the
+             page. Without the collab rules in styles.css the scrim is a static div and the card floats
+             wherever it lands, which overflows nothing and so slips past `fits` entirely. */
+          const scrim = sheet.parentNode;
+          if (getComputedStyle(scrim).position !== 'fixed') throw new Error('the card\'s scrim is ' + getComputedStyle(scrim).position + ', not fixed — the sheet is not covering the screen at all');
+          if (getComputedStyle(scrim).alignItems !== 'flex-end') throw new Error('the phone card is not hinged to the bottom of the screen (align-items: ' + getComputedStyle(scrim).alignItems + ')');
+          const sw = sheet.offsetWidth;
+          if (sw > window.innerWidth) throw new Error('the phone sheet lays out at ' + sw + 'px in a ' + window.innerWidth + 'px viewport (scrim ' + scrim.offsetWidth + 'px, padding ' + getComputedStyle(sheet).paddingLeft + ', box-sizing ' + getComputedStyle(sheet).boxSizing + ') — it is WIDER THAN THE SCREEN, which no overflow check inside the card can see');
+          if (sw < window.innerWidth - 60) throw new Error('the phone sheet is only ' + sw + 'px in a ' + window.innerWidth + 'px viewport — §19.1 asks for a sheet at left:8 right:8, not a floating card');
+          /* …and the step that holds the code, which is the widest unbreakable thing in the feature:
+             165 monospace characters that MUST wrap rather than push the card open. */
+          document.querySelector('.cs-add').click();
+          await settled();
+          const code = document.getElementById('collab-share');
+          fits(code, 'the Share panel\'s code step at 380px');
+          if (code.offsetWidth > window.innerWidth) throw new Error('the code step lays out at ' + code.offsetWidth + 'px in a ' + window.innerWidth + 'px viewport');
+          ui.close();
+          await ui.join();
+          const j = document.getElementById('collab-join');
+          if (!j) throw new Error('the Join sheet did not open');
+          await settled();
+          fits(j, 'the Join sheet at 380px');
+          if (j.offsetWidth > window.innerWidth) throw new Error('the Join sheet lays out at ' + j.offsetWidth + 'px in a ' + window.innerWidth + 'px viewport');
+          ui.close();
+        }, 380);
+        /* And the desktop half of §19.1: the card is placed against #btn-share rather than dropped in
+           the middle of the screen, which is the `FM.popFrom` family every other desktop menu uses. */
+        /* ⚠️ TEAR THE PC TRANSPORT ROW DOWN FIRST, so the next call really REBUILDS it. `pcTransportLayout`
+           latches `_pcBuilt` and returns early otherwise, and the far-list entry that carries #btn-share
+           runs only on a build. Narrowing past 701px is what tears it down — the same thing resizing a
+           desktop window does (queue 405). */
+        await atPhoneWidth(async function () { if (FM.pcTransportLayout) FM.pcTransportLayout(); }, 380);
+        await atWideWidth(async function () {
+          if (FM.pcTransportLayout) FM.pcTransportLayout();
+          const b0 = document.getElementById('btn-share'), e0 = document.getElementById('btn-export');
+          /* ⚠️ THIS IS THE ASSERTION THAT FOUND THE TEARDOWN BUG. `pcTransportTeardown` puts back the
+             controls it borrowed and then removes the wrappers, so a share button sitting in `#t-far`
+             that it never borrowed is deleted with the wrapper — measured, and it is what a desktop
+             window narrowed past 701px does. */
+          if (!b0) throw new Error('#btn-share vanished across a transport teardown and rebuild — narrowing a desktop window past 701px takes the wrapper it lives in with it');
+          if (!e0) throw new Error('#btn-export vanished across a transport rebuild');
+          /* The point of the app.js change: Export is MOVED out of #topbar into the transport row and
+             #topbar is then off screen on a desktop, so a share button left behind in #topbar is a
+             button he cannot see. It rides the same list. */
+          if (b0.parentNode !== e0.parentNode) throw new Error('after a transport rebuild #btn-share is in ' + (b0.parentNode && (b0.parentNode.id || b0.parentNode.className)) + ' while #btn-export is in ' + (e0.parentNode && (e0.parentNode.id || e0.parentNode.className)) + ' \u2014 on a desktop that first one is not on screen');
+          if (b0.nextSibling !== e0) throw new Error('#btn-share is no longer immediately before #btn-export after a rebuild');
+          ui.install();                       // an ENSURE: it re-homes the button beside Export wherever Export now lives
+          const b = document.getElementById('btn-share');
+          if (!b) throw new Error('there is no #btn-share with Labs on');
+          const br = b.getBoundingClientRect();
+          if (!(br.width > 0 && br.height > 0)) throw new Error('#btn-share is in the page but has no box (parent ' + (b.parentNode && b.parentNode.id) + ') — on this layout he cannot see or press it');
+          await ui.share();
+          const card = document.getElementById('collab-share');
+          if (!card.classList.contains('pop-card')) throw new Error('the Share panel is not placed by FM.popFrom at a desktop width — it opens in the middle of the screen with no tie to the button that opened it');
+          if (!document.querySelector('.pop-tail')) throw new Error('the popFrom tail that points back at #btn-share is missing');
+          await settled();
+          const cr = card.getBoundingClientRect();
+          if (Math.abs((cr.left + cr.right) / 2 - (br.left + br.right) / 2) > 340) throw new Error('the card is centred ' + Math.round(Math.abs((cr.left + cr.right) / 2 - (br.left + br.right) / 2)) + 'px from the button it is meant to come out of');
+          if (card.offsetWidth !== 380) throw new Error('the desktop card lays out at ' + card.offsetWidth + 'px, not the 380 §19.1 asks for');
+          fits(card, 'the Share panel at 1280px');
+          ui.close();
+          /* ⚠️ AND THE LIGHT-HOME LOOK, WHICH WAS FOUND BY PHOTOGRAPHING THE CARD RATHER THAN READING
+             IT. `.cs-code`, the Paste chip and the Copy button all declare the DARK theme's
+             `var(--panel-2)` / `var(--text)`, so on the white Home they rendered as near-black slabs on
+             paper — the #864 / #649 family, a rule that covers most of a family and misses the members
+             declared outside it. Measured here rather than eyeballed, and without needing Home on
+             screen: the class ask.js sets at open time is the whole switch. */
+          const probe = document.createElement('div');
+          probe.className = 'collab-scrim collab-light';
+          const pcard = document.createElement('div');
+          pcard.className = 'collab-card fm-ask-card';
+          const pcode = document.createElement('div');
+          pcode.className = 'cs-code';
+          pcode.textContent = 'FM1-TEST';
+          pcard.appendChild(pcode); probe.appendChild(pcard); document.body.appendChild(probe);
+          const ink = getComputedStyle(pcode).color;
+          const paper = getComputedStyle(pcode).backgroundColor;
+          document.body.removeChild(probe);
+          if (ink !== 'rgb(16, 21, 31)') throw new Error('on the light Home the code block\'s ink is ' + ink + ' \u2014 it has to be the paper ink #10151f, or a white card carries the dark theme\'s near-white text');
+          if (!/^rgba?\(16, 30, 52/.test(paper)) throw new Error('on the light Home the code block\'s fill is ' + paper + ' \u2014 it is still the dark theme\'s panel, i.e. a near-black slab on white paper');
+        }, 1280);
+      });
+    });
+  });
+
+  test('921 S3 with the Labs switch off there is no collab DOM, and nothing in a solo session ever constructs a connection', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S3('the Labs gate');
+    const was = FM.settings.get('collabLabs');
+    const RTC = window.RTCPeerConnection, WS = window.WebSocket, F = window.fetch;
+    let rtc = 0, ws = 0;
+    let offsite = [];
+    function count() {
+      window.RTCPeerConnection = function (a) { rtc++; return new RTC(a); };
+      window.RTCPeerConnection.prototype = RTC.prototype;
+      window.WebSocket = function (a, b) { ws++; return new WS(a, b); };
+      window.WebSocket.prototype = WS.prototype;
+      /* OFF-ORIGIN only. The app fetches its own assets all day and that is not "leaving the device" in
+         any sense §23 cares about; a request to somebody else's host is exactly what it does care about,
+         and it is what a rendezvous driver (S6) would add. */
+      window.fetch = function (u) {
+        const s = String((u && u.url) || u || '');
+        if (/^https?:/i.test(s) && s.indexOf(location.origin) !== 0) offsite.push(s.slice(0, 120));
+        return F.apply(window, arguments);
+      };
+    }
+    /* A scripted solo session: an edit, the settings panel, Home. Every one of these runs a hook that
+       §23 promises answers instantly with no session. */
+    async function solo() {
+      FM.history.commit();
+      FM.settings.open(); FM.settings.close();
+      FM.collab.gc && FM.collab.gc();
+      await new Promise(function (r) { setTimeout(r, 120); });
+    }
+    try {
+      /* THE SWITCH IS A REAL SETTING WITH A REAL DEFAULT. `set()` on a key that is not in DEFAULTS still
+         "works" — `state` is a plain object — so without this the whole Labs gate could be missing from
+         settings.js and every assertion below would still pass. */
+      if (!('collabLabs' in FM.settings.get())) throw new Error('collabLabs is not one of the settings \u2014 the Labs switch has no stored preference behind it, so it cannot survive a reload');
+      FM.settings.set('collabLabs', false);
+      ['btn-share', 'hm-join-btn', 'collab-banner', 'collab-knock', 'collab-share', 'collab-join', 'collab-profile'].forEach(function (id) {
+        if (document.getElementById(id)) throw new Error('#' + id + ' is in the page with Labs off — §23 promises a solo user no collaboration DOM at all, not hidden collaboration DOM');
+      });
+      if (document.querySelector('.collab-scrim')) throw new Error('a collab scrim is in the page with Labs off');
+      if (C.ui.isInstalled()) throw new Error('the UI reports itself installed with Labs off');
+      count();
+      await solo();
+      if (rtc || ws || offsite.length) throw new Error('a solo session with Labs off constructed ' + rtc + ' RTCPeerConnection, ' + ws + ' WebSocket and called out to ' + JSON.stringify(offsite));
+      /* …and with the switch ON but nothing shared. This is the half §23(b) names, and the half a
+         rendezvous driver would break the moment one is added (S6). */
+      /* …and SETTING IT IS ALL IT TAKES: `apply()` owns the sync, which is the one place that runs at
+         boot AND on every change. `syncLabs()` is deliberately NOT called here \u2014 if it had to be, the
+         switch would only work when something remembered to call it. */
+      FM.settings.set('collabLabs', true);
+      if (!document.getElementById('btn-share')) throw new Error('CONTROL: turning the setting on did not add the share button, so either the emptiness above is absence rather than a working gate, or settings.apply() does not sync the Labs UI and the switch does nothing on its own');
+      rtc = 0; ws = 0; offsite = [];
+      await solo();
+      if (rtc || ws || offsite.length) throw new Error('Labs on but nothing shared still constructed ' + rtc + ' RTCPeerConnection, ' + ws + ' WebSocket and called out to ' + JSON.stringify(offsite) + ' — S3 ships no rendezvous driver and must reach nothing at all until he taps Share');
+      /* CONTROL for the counter itself: opening a link really is counted, so the two zeroes above are
+         measurements and not a wrapper that was never called. */
+      const probe = C.link.RtcLink({ self: 'a', peer: 'b' });
+      if (rtc !== 1) throw new Error('CONTROL: constructing an RtcLink did not move the counter (' + rtc + '), so the zeroes above prove nothing');
+      probe.close();
+    } finally {
+      window.RTCPeerConnection = RTC; window.WebSocket = WS; window.fetch = F;
+      FM.settings.set('collabLabs', !!was);
+      try { C.ui.syncLabs(); } catch (e) {}
+    }
+  });
+
+  test('921 S3 arming writes a checkpoint of the project as it was, and keeps only the last ten', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S3('the arming checkpoint');
+    /* §24 lists this as one of the four promises made about HIS data: arming runs a tidy-up over his
+       document and commits it, and from that moment other people can change it, so the last picture of
+       the project as it was before he shared it has to be taken FIRST. §12.1 step 2 puts it before the
+       tidy-up of step 4 for exactly that reason. */
+    const pid = 'ckpt-test-' + Date.now();
+    const prefix = 'collab:ckpt:' + pid + ':';
+    if (!FM.storage.collabKeys) throw new Error('FM.storage.collabKeys is missing — "keep 10" cannot be done without knowing what is already there, so the checkpoints would grow without limit');
+    try {
+      const ok = await C.ui._checkpoint(pid);
+      if (!ok) throw new Error('the checkpoint was not written');
+      let keys = await FM.storage.collabKeys(prefix);
+      if (keys.length !== 1) throw new Error('after one arm there are ' + keys.length + ' checkpoints');
+      const body = await FM.storage.collabGet(keys[0]);
+      const D = JSON.parse(body);
+      if (!D || !D.project || !Array.isArray(D.layers)) throw new Error('the checkpoint is not a document: ' + String(body).slice(0, 120));
+      if (D.layers.length !== FM.scene.layers.length) throw new Error('the checkpoint holds ' + D.layers.length + ' layers and the open project has ' + FM.scene.layers.length);
+      /* §5.1 / FM.jsonReplacer: nothing beginning with `_` is ever serialised — those are the app's own
+         live handles (media elements, caches), and a checkpoint that carried them would be unloadable. */
+      if (/"_/.test(body)) throw new Error('the checkpoint carries a key beginning with _, which FM.jsonReplacer exists to strip');
+      /* §12.4 CKPT_KEEP: it trims itself, rather than waiting for a collector that would have to sweep
+         IndexedDB at every boot on every device (§23 promises a solo user that nothing runs at load). */
+      for (let i = 0; i < (C.LIMITS.CKPT_KEEP || 10) + 3; i++) {
+        await new Promise(function (r) { setTimeout(r, 2); });   // the key is the millisecond, so they must differ
+        await C.ui._checkpoint(pid);
+      }
+      keys = await FM.storage.collabKeys(prefix);
+      if (keys.length !== (C.LIMITS.CKPT_KEEP || 10)) throw new Error('after ' + ((C.LIMITS.CKPT_KEEP || 10) + 4) + ' arms there are ' + keys.length + ' checkpoints, not the ' + C.LIMITS.CKPT_KEEP + ' §12.4 keeps');
+      /* CONTROL: the ones kept are the NEWEST. A trim that dropped from the wrong end would keep the
+         count right and throw away every recent picture of his project, which is the half that matters. */
+      const sorted = keys.slice().sort();
+      if (sorted[sorted.length - 1] !== keys[keys.length - 1]) throw new Error('the kept checkpoints are not the newest ones');
+      const oldest = +keys[0].slice(prefix.length), newest = +keys[keys.length - 1].slice(prefix.length);
+      if (!(newest > oldest)) throw new Error('the checkpoint keys do not carry increasing timestamps');
+    } finally {
+      const left = await FM.storage.collabKeys(prefix);
+      for (let i = 0; i < left.length; i++) await FM.storage.collabDel(left[i]);
+    }
+  });
+
+  test('921 S3 the profile refuses an empty name and a colour that is not one of the eight, and cleans the one it stores', { item: '921', budgetMs: 60000 }, async function () {
+    const C = need921S3('the profile');
+    let wasProfile = null;
+    try { wasProfile = localStorage.getItem('fm.profile'); } catch (e) {}
+    try {
+      const U = C.ui;
+      if (U.PALETTE.length !== 8) throw new Error('§18.1 asks for eight swatches and there are ' + U.PALETTE.length);
+      U.PALETTE.forEach(function (c) { if (!/^#[0-9a-f]{6}$/.test(c)) throw new Error('the palette holds ' + c + ', which §14.9 would refuse off the wire'); });
+      if (U.setProfile('', U.PALETTE[0]) !== null) throw new Error('a nameless profile was stored');
+      if (U.setProfile('   ', U.PALETTE[0]) !== null) throw new Error('a profile named with spaces was stored');
+      /* ⚠️ THE COLOUR IS PAINTED INTO A style ATTRIBUTE, so "any string" is an injection point and an
+         off-palette colour is also one that can vanish against the canvas or collide with a clip. */
+      if (U.setProfile('Sam', '#123456') !== null) throw new Error('a colour outside the palette was stored');
+      if (U.setProfile('Sam', 'red') !== null) throw new Error('a named CSS colour was stored');
+      if (U.setProfile('Sam', 'url(javascript:alert(1))') !== null) throw new Error('a url() was stored as a colour');
+      const p = U.setProfile('  Sa\u0007m  ', U.PALETTE[2].toUpperCase());
+      if (!p) throw new Error('CONTROL: a perfectly good profile was refused, so every refusal above may be a blanket one');
+      if (p.name !== 'Sam') throw new Error('the stored name is ' + JSON.stringify(p.name) + ' — the control character and the padding should be gone');
+      if (p.color !== U.PALETTE[2]) throw new Error('an upper-case palette colour did not fold to the palette entry: ' + p.color);
+      if (!p.mk || p.mk.length < 20) throw new Error('§18.1 gives the profile a 16-byte key and this one is ' + JSON.stringify(p.mk));
+      const long = U.setProfile(new Array(60).join('z'), U.PALETTE[0]);
+      if (long.name.length !== (C.LIMITS.NAME || 32)) throw new Error('a 59-character name stored as ' + long.name.length + ' characters, not ' + C.LIMITS.NAME);
+      if (U.setProfile('Ezra', U.PALETTE[1]).mk !== p.mk) throw new Error('changing the name minted a new identity key — the person is the same person');
+      /* A hand-edited store must read as "no profile", not as a profile with a hostile colour. */
+      localStorage.setItem('fm.profile', JSON.stringify({ name: 'Sam', color: 'expression(alert(1))' }));
+      if (U.getProfile() !== null) throw new Error('a stored profile with an off-palette colour was read back and would be painted');
+      localStorage.setItem('fm.profile', 'not json at all');
+      if (U.getProfile() !== null) throw new Error('an unparseable profile threw or returned something');
+    } finally {
+      try { if (wasProfile === null) localStorage.removeItem('fm.profile'); else localStorage.setItem('fm.profile', wasProfile); } catch (e) {}
+    }
+  });
+
+
+  test('921 S3 Stop sharing revokes the code that was handed out — the offer is closed, and the next share mints a different one', { item: '921', budgetMs: 180000 }, async function () {
+    /* §19.1's Stop-sharing confirm says, in his own reading language, "The codes you have handed out
+       stop working." That is the only sentence in this feature that is a SECURITY claim rather than a
+       description, and nothing was holding it up: `C.end()` tore the session down and left `offerLink`
+       untouched, so the RTCPeerConnection behind the last code stayed open and gathering. Because
+       `drawCodeStep` deliberately reuses a live offer (one link per step, not one per draw), the next
+       Share then showed the SAME code — against the room he had just thrown away — and its answer
+       would have run `addPeer` on the new session. Measured before the fix: identical codes, and a peer
+       connection still in 'have-local-offer' after Stop sharing. */
+    function settled(ms) { return new Promise(function (r) { setTimeout(r, ms || 60); }); }
+    async function codeOnScreen(what) {
+      /* The code is minted by real ICE gathering, so it arrives a beat after the step is drawn. */
+      for (let i = 0; i < 300; i++) {
+        const box = document.getElementById('collab-offer-code');
+        if (box && /^FM1-/.test(box.textContent)) return box.textContent;
+        await settled(100);
+      }
+      throw new Error('no connection code ever appeared ' + what + ' — the step shows ' +
+        JSON.stringify((document.getElementById('collab-offer-code') || {}).textContent || null));
+    }
+    async function stopSharing() {
+      document.querySelector('.cs-stop').click();
+      for (let i = 0; i < 60; i++) {
+        const ok = document.querySelector('#fm-ask .fm-ask-ok');
+        if (ok && !document.getElementById('fm-ask').classList.contains('hidden')) { ok.click(); return; }
+        await settled(40);
+      }
+      throw new Error('the Stop sharing confirm never opened, so nothing was stopped');
+    }
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        /* The second share ARMS for real, which writes a §12.1 checkpoint under the throwaway
+           project's id; withCollab921 deletes the project but not that IndexedDB key. */
+        try {
+        await ui.share();
+        document.querySelector('.cs-add').click();
+        const first = await codeOnScreen('on the first share');
+        const link = ui._offer();
+        if (!link || link._code !== first) throw new Error('the module is not holding the offer whose code is on screen, so this test cannot see whether it is revoked');
+        const pc = link.pc;
+        if (!pc || pc.signalingState !== 'have-local-offer') throw new Error('CONTROL: the offer is not a live peer connection waiting for an answer (signalingState ' + (pc && pc.signalingState) + '), so "it was closed" below would prove nothing');
+
+        await stopSharing();
+        await settled(120);
+
+        /* (a) the connection really is torn down, not just forgotten… */
+        if (pc.signalingState !== 'closed') throw new Error('after Stop sharing the peer connection behind the code he read out is still ' + pc.signalingState + ' — it is open and gathering, and the answer to that code would still be accepted');
+        if (ui._offer()) throw new Error('after Stop sharing the module is still holding an offer link');
+
+        /* (b) …and the user-visible half: the next share hands out a DIFFERENT code. This is the
+           assertion a fix that nulled the reference without closing the connection would still pass
+           the first half of, and it is the one he would actually feel. */
+        await ui.share();
+        const addAgain = document.querySelector('.cs-add');
+        if (!addAgain) throw new Error('after Stop sharing, Share did not come back to its main view — it reopened on the code step of the session that is gone');
+        addAgain.click();
+        const second = await codeOnScreen('on the second share');
+        if (second === first) throw new Error('the second share handed out the SAME code as the first (' + first.slice(0, 24) + '…) — "the codes you have handed out stop working" is false, and that code is answered against a room he has thrown away');
+        } finally {
+          /* Guarded: a cleanup that THROWS turns this into a test that goes red for reverting
+             storage.js, which it has nothing to say about — a false attribution is worse than a
+             stray key. */
+          if (FM.storage.collabKeys) {
+            const left = await FM.storage.collabKeys('collab:ckpt:' + ctx.pid + ':');
+            for (let i = 0; i < left.length; i++) await FM.storage.collabDel(left[i]);
+          }
+        }
+      });
+    });
+  });
+
+
+
+  /* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   * #921 S3 — THE REVIEW FINDINGS. Everything below was found by reading the S3 diff against its own
+   * claims, and every one of them was green before it was written: the feature worked, the promises
+   * under it did not. They are here rather than folded into the tests above because each names a
+   * SENTENCE the app or the source makes, and a test that shares a fixture with a feature test tends
+   * to end up measuring the feature instead of the sentence.
+   * ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+  /* A stand-in RtcLink: everything `hostConnect` and `guestJoin` touch, and nothing else. It is a fake
+     on purpose — the paths being measured are the ones that run when the real transport MISBEHAVES
+     (never opens, is closed under us, floods before saying hello), and none of those can be produced on
+     demand by a real peer connection on a healthy localhost. */
+  let fakeCode921 = 0;
+  function fakeLink921(o) {
+    const f = o || {};
+    /* A DIFFERENT code per link, always. One that answered the same string every time would let a
+       "the next share mints a fresh code" assertion pass against a module that reused the dead link. */
+    const code = (f.code || 'K') + (++fakeCode921);
+    let openRes = null, openRej = null;
+    const ep = {
+      kind: 'fake', open: f.open !== false, mk: new Uint8Array(16),
+      fpLocal: 'AA:11', fpRemote: 'BB:22',
+      onmessage: null, onclose: null, onopen: null,
+      sent: [], closed: 0, _code: null,
+      opened: new Promise(function (res, rej) { openRes = res; openRej = rej; }),
+      createOffer: function () { ep._code = 'FM1-' + code; return Promise.resolve(ep._code); },
+      acceptAnswer: function () { return f.badAnswer ? Promise.reject({ why: 'bad-code' }) : Promise.resolve(); },
+      acceptOffer: function () { return Promise.resolve('FM1-ANSWER'); },
+      send: function (ch, msg) { ep.sent.push({ ch: ch, msg: msg }); return true; },
+      close: function () { ep.closed++; ep.open = false; if (typeof ep.onclose === 'function') ep.onclose('closed'); }
+    };
+    ep.opened.catch(function () {});
+    if (f.opens !== false) openRes(ep);           // `opens:false` is the stall this suite cannot otherwise make
+    ep._failOpen = function (e) { openRej(e); };
+    return ep;
+  }
+  /* Swap the factory the UI reads at call time, and put it back whatever happens. */
+  async function withFakeLinks921(C, make, fn) {
+    const realLink = C.link.RtcLink, realShake = C.signal.handshake;
+    const made = [];
+    C.link.RtcLink = function () { const l = make(); made.push(l); return l; };
+    try { return await fn(made); }
+    finally { C.link.RtcLink = realLink; C.signal.handshake = realShake; }
+  }
+  function settle921(ms) { return new Promise(function (r) { setTimeout(r, ms || 60); }); }
+
+  test('921 S3 the key rides in the code, so the fingerprint binding cannot stop a relay — the five letters can, and they differ on the two legs', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S3('the short authentication string');
+    const S = C.signal;
+    if (typeof S.sas !== 'function') throw new Error('FM.collab.signal.sas is missing — there is nothing for the two people to compare, and the file’s own claim ("a relay would have to know a key it has never seen") is false on the only mode S3 ships, because `mk` is packed INTO the offer code');
+    const KEY = new Uint8Array(16); for (let i = 0; i < 16; i++) KEY[i] = i * 11;
+
+    async function leg(fpHost, fpGuest) {
+      const L = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'async' });
+      const hp = S.handshake(L.a, { side: 'host', key: KEY, sid: 'room-1', fpLocal: fpHost, fpRemote: fpGuest, timeoutMs: 8000 });
+      const gp = S.handshake(L.b, { side: 'guest', key: KEY, mode: 'conn', fpLocal: fpGuest, fpRemote: fpHost, timeoutMs: 8000 });
+      const r = await Promise.all([hp, gp]);
+      return { host: r[0], guest: r[1] };
+    }
+
+    /* CONTROL, and it is the honest pairing: one DTLS session, one pair of fingerprints, so the two
+       people must see the SAME five characters or the check is noise rather than a signal. */
+    const good = await leg('AA:11', 'BB:22');
+    if (!good.host.sas || !good.guest.sas) throw new Error('the handshake resolved with no sas on ' + (good.host.sas ? 'the guest' : 'the host') + ' side — the UI has nothing to show, so the gate cannot exist');
+    if (good.host.sas !== good.guest.sas) throw new Error('an honest pairing produced DIFFERENT letters (' + good.host.sas + ' vs ' + good.guest.sas + ') — CONTROL: every ordinary connection would read as an attack, so the difference measured below proves nothing');
+    if (!/^[0-9A-HJKMNP-TV-Z]{5}$/.test(good.host.sas)) throw new Error('the sas is "' + good.host.sas + '" — it has to be five Crockford characters a person can read down a phone line, with no I/L/O to mishear');
+
+    /* THE ATTACK THE OLD CLAIM SAID WAS IMPOSSIBLE. Mallory can rewrite the pasted code, so she keeps
+       `mk` and swaps in her OWN certificates — one per leg. Both handshakes then pass, because she can
+       compute both MACs over the fingerprints each leg really uses. This half of the test is the
+       vulnerability, stated as a measurement rather than as an argument. */
+    const toEzra = await leg('AA:11', 'MM:01');       // Ezra ↔ Mallory
+    const toGuest = await leg('MM:02', 'BB:22');      // Mallory ↔ the guest
+    if (!toEzra.host.sas || !toGuest.guest.sas) throw new Error('a relay leg did not complete at all, so this test measured nothing');
+    if (toEzra.host.sas === toGuest.guest.sas) throw new Error('a relay holding the key produced the SAME five letters on both legs (' + toEzra.host.sas + ') — reading them to each other would not catch it, and since `mk` travels inside the code there is then nothing at all between a rewritten message and the whole project');
+  });
+
+  test('921 S3 the owner cannot admit anybody without confirming the five letters, and a refusal spends the code instead of leaving a dead one on the card', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S3('the SAS gate');
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        await withFakeLinks921(C, function () { return fakeLink921({ code: 'ONE11' }); }, async function (made) {
+          C.signal.handshake = function () { return Promise.resolve({ mode: 'conn', sas: 'H7K2M' }); };
+          await ui.share();
+          document.querySelector('.cs-add').click();
+          await settle921();
+          const first = document.getElementById('collab-offer-code').textContent;
+          if (!/^FM1-/.test(first)) throw new Error('no code on the card: ' + first);
+
+          document.querySelector('.cs-connect').click();
+          await settle921(80);
+          const link = made[0];
+          /* The hello arrives the moment the guest's handshake resolves — i.e. while the gate is up. */
+          if (typeof link.onmessage !== 'function') throw new Error('nothing is listening for the guest’s hello while the owner decides, so a real guest’s hello would be dropped on the floor');
+          link.onmessage('ctl', { t: 'hello', role: 'editor', name: 'Sam', color: '#ff9f43' });
+          await settle921(80);
+
+          const sas = document.querySelector('.cs-sas');
+          if (!sas) throw new Error('the Share card never asked him to compare anything — `mk` travels inside the code he pasted into a chat app, so without this gate a relay that rewrote that message holds the key AND both certificates and is invisible on both screens');
+          if (sas.textContent !== 'H7K2M') throw new Error('the card shows "' + sas.textContent + '" rather than the letters the handshake derived');
+          if (!document.querySelector('.cs-sasno') || !document.querySelector('.cs-sasyes')) throw new Error('the letters are shown but there is nothing to answer with, so nothing is gated');
+          if (ctx.S.peerIds().length !== 0) throw new Error('somebody was admitted BEFORE the letters were confirmed — the gate is decoration');
+
+          /* (a) "they don't match" refuses, and — the half that was broken — SPENDS the code. */
+          document.querySelector('.cs-sasno').click();
+          await settle921(120);
+          if (ctx.S.peerIds().length !== 0) throw new Error('answering "they don’t match" still admitted the peer');
+          if (!link.sent.some(function (m) { return m.msg && m.msg.t === 'refused'; })) throw new Error('the far end was never told it was refused');
+          if (ui._offer()) throw new Error('after a refusal the module is STILL holding the offer, so the same dead code stays on the card and every answer he pastes now fails inside setRemoteDescription and comes back as "that code did not read" — which is untrue, and which he cannot escape without Stop sharing');
+          const note = document.querySelector('.cs-note');
+          if (!note || !note.textContent.trim()) throw new Error('nothing on screen says what happened to the code he had just read out');
+          if (!document.querySelector('.cs-add')) throw new Error('the panel did not come back to its main view after the refusal');
+
+          /* …and the code he is handed next is a NEW one. */
+          document.querySelector('.cs-add').click();
+          await settle921(80);
+          const second = document.getElementById('collab-offer-code').textContent;
+          if (made.length < 2) throw new Error('the second attempt reused the dead link rather than minting a fresh one');
+          if (second === first) throw new Error('the card handed out the SAME code (' + first + ') after refusing it');
+
+          /* (b) CONTROL: confirming really does admit, so the refusals above are a gate and not a wall. */
+          C.signal.handshake = function () { return Promise.resolve({ mode: 'conn', sas: 'ZZ9QP' }); };
+          document.querySelector('.cs-connect').click();
+          await settle921(80);
+          made[1].onmessage('ctl', { t: 'hello', role: 'editor', name: 'Sam', color: '#ff9f43' });
+          await settle921(80);
+          const yes = document.querySelector('.cs-sasyes');
+          if (!yes) throw new Error('CONTROL: the gate did not come up on the second attempt');
+          yes.click();
+          await settle921(150);
+          if (ctx.S.peerIds().length !== 1) throw new Error('CONTROL: confirming the letters did not admit the peer (' + ctx.S.peerIds().length + ' peers), so "nobody was admitted" above is not a measurement of the gate');
+          ui.close();
+        });
+      });
+    });
+  });
+
+  test('921 S3 a peer that authenticated and never says hello cannot make the owner buffer without limit', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S3('the pre-admission buffer');
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        await withFakeLinks921(C, function () { return fakeLink921({ code: 'FLOOD' }); }, async function (made) {
+          C.signal.handshake = function () { return Promise.resolve({ mode: 'conn', sas: 'H7K2M' }); };
+          await ui.share();
+          document.querySelector('.cs-add').click();
+          await settle921();
+          document.querySelector('.cs-connect').click();
+          await settle921(80);
+          const link = made[0];
+          if (typeof link.onmessage !== 'function') throw new Error('the pre-admission handler is not bound, so this test cannot reach it');
+
+          const cap = ui._helloCap ? ui._helloCap() : null;
+          if (!cap || !(cap.msgs > 0) || !(cap.bytes > 0)) throw new Error('there is no ceiling on what is kept before the peer is admitted: a peer that passes the handshake and then simply never says hello can stream `bulk` for the whole 20s window and have every message RETAINED — MAX_REASSEMBLE.bulk allows 64 MB EACH — and the tab dies before the owner is even asked whether to let it in');
+
+          const junk = { t: 'noise', s: new Array(4001).join('x') };
+          let peak = 0;
+          for (let i = 0; i < 400 && link.open; i++) {
+            link.onmessage('ctl', junk);
+            peak = Math.max(peak, (link._buffered || []).length);
+          }
+          if (link.open) throw new Error('400 junk messages (1.6 MB) before hello and the link is still open, holding ' + peak + ' of them');
+          if (peak > cap.msgs) throw new Error('the buffer reached ' + peak + ' messages against a stated ceiling of ' + cap.msgs);
+          if ((link._buffered || []).length) throw new Error('the backlog was kept after the link was dropped');
+
+          /* …and `pres`/`bulk` are not kept AT ALL before admission: nothing above the link reads them
+             in S3, so retaining them buys nothing and costs the whole ceiling. */
+          const l2 = fakeLink921({ code: 'TWO22' });
+          await withFakeLinks921(C, function () { return l2; }, async function () {
+            C.signal.handshake = function () { return Promise.resolve({ mode: 'conn', sas: 'H7K2M' }); };
+            document.querySelector('.cs-add') && document.querySelector('.cs-add').click();
+            await settle921(80);
+            const conn = document.querySelector('.cs-connect');
+            if (conn) { conn.click(); await settle921(80); }
+            if (typeof l2.onmessage === 'function') {
+              l2.onmessage('bulk', new ArrayBuffer(64));
+              l2.onmessage('pres', { t: 'p' });
+              if ((l2._buffered || []).length) throw new Error('pres/bulk from an unadmitted peer are being retained (' + l2._buffered.length + ' held) — nothing in S3 consumes either');
+            }
+          });
+          ui.close();
+        });
+      });
+    });
+  });
+
+  test('921 S3 an emoji that lands on a fragment boundary survives the wire — code units are not characters', { item: '921', budgetMs: 150000 }, async function () {
+    const pair = await rtcPair921();
+    try {
+      /* ⚠️ TWO PAYLOADS, ONE SHIFTED BY ONE CODE UNIT, AND THAT IS THE WHOLE TRICK. The cut lands at a
+         fixed index; whether it falls BETWEEN the two halves of a surrogate pair depends on the parity
+         of that index against where the pairs start. Shifting the payload by one unit flips the parity,
+         so one of these two must straddle a boundary whatever the exact chunk size turns out to be —
+         and the test does not have to know it. Without the fix the straddled one comes back with U+FFFD
+         where the emoji was: `send` takes a USVString and replaces each orphaned half SILENTLY, the
+         unit count is unchanged so reassembly still lines up, and U+FFFD is legal inside a JSON string
+         so JSON.parse succeeds. Nothing throws anywhere. */
+      const EMOJI = '😀';
+      for (const pad of ['', 'a']) {
+        const body = pad + new Array(20001).join(EMOJI);
+        const got = new Promise(function (res, rej) {
+          const t = setTimeout(function () { rej(new Error('the emoji payload never arrived')); }, 30000);
+          pair.g.onmessage = function (ch, m) { if (ch !== 'ctl') return; clearTimeout(t); pair.g.onmessage = null; res(m); };
+        });
+        pair.h.send('ctl', { t: 'x', s: body });
+        const msg = await got;
+        if (msg.s === body) continue;
+        const at = (function () { for (let i = 0; i < body.length; i++) if (msg.s[i] !== body[i]) return i; return -1; })();
+        throw new Error('a ' + body.length + '-code-unit message with emoji came back CHANGED at index ' + at +
+          ' (sent ' + JSON.stringify(body.slice(at - 1, at + 2)) + ', got ' + JSON.stringify(String(msg.s).slice(at - 1, at + 2)) +
+          ') — the fragmenter cut between the two halves of a surrogate pair and the browser replaced each orphan with U+FFFD. A text layer or a caption with one emoji in it arrives corrupted, silently, and §11.4’s hash then drives a resync that corrupts it the same way again');
+      }
+      /* CONTROL: the same size of pure-ASCII payload is unaffected, so the failure above would be about
+         the surrogate handling rather than about long messages in general. */
+      const plain = new Array(40001).join('a');
+      const got2 = new Promise(function (res, rej) {
+        const t = setTimeout(function () { rej(new Error('the ASCII control payload never arrived')); }, 30000);
+        pair.g.onmessage = function (ch, m) { if (ch !== 'ctl') return; clearTimeout(t); pair.g.onmessage = null; res(m); };
+      });
+      pair.h.send('ctl', { t: 'x', s: plain });
+      if ((await got2).s !== plain) throw new Error('CONTROL: a plain 40000-character message did not survive either, so the emoji result above is not about surrogates');
+    } finally { pair.close(); }
+  });
+
+  test('921 S3 the handshake really refuses when a fingerprint is missing, on the host side as well as the guest side', { item: '921', budgetMs: 60000 }, async function () {
+    const C = need921S3('the fingerprint guard');
+    const S = C.signal;
+    const KEY = new Uint8Array(16);
+    /* `?:` binds LOOSER than `||`, so `String(isHost ? o.fpLocal : o.fpRemote || '')` put the default on
+       the guest branch only. A host with no fingerprint became the string "null", which is truthy, so
+       the guard could not fire and the MAC was computed over the literal text "null" in place of a
+       certificate hash. It failed closed by luck; the check written for it never ran. */
+    for (const missing of ['fpLocal', 'fpRemote']) {
+      for (const side of ['host', 'guest']) {
+        const L = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'async' });
+        const o = { side: side, key: KEY, sid: 'r', mode: 'conn', fpLocal: 'AA:11', fpRemote: 'BB:22', timeoutMs: 4000 };
+        o[missing] = null;
+        let why = null;
+        try { await S.handshake(L.a, o); } catch (e) { why = (e && e.why) || 'threw'; }
+        if (why !== 'auth') throw new Error('a ' + side + ' handshake with no ' + missing + ' resolved/failed as ' + JSON.stringify(why) +
+          ' rather than refusing with {why:"auth"} — the guard at the top of S.handshake cannot see a missing fingerprint on that branch, so the MAC binds the text "null" instead of a certificate');
+        if (L.a.sent !== 0) throw new Error('a refused ' + side + ' handshake still put ' + L.a.sent + ' message(s) on the wire before giving up');
+      }
+    }
+    /* CONTROL: with both fingerprints present the same call gets past that guard. */
+    const L = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'async' });
+    S.handshake(L.a, { side: 'host', key: KEY, sid: 'r', fpLocal: 'AA:11', fpRemote: 'BB:22', timeoutMs: 1000 }).catch(function () {});
+    await settle921(80);
+    if (L.a.sent === 0) throw new Error('CONTROL: an ordinary host handshake sent nothing either, so "sent 0" above is not a measurement of the refusal');
+  });
+
+  test('921 S3 there is a Share button on a phone, in the bar a phone actually shows', { item: '921', budgetMs: 120000 }, async function () {
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function () {
+        await atPhoneWidth(async function () {
+          ui.install();
+          await settle921(80);
+          const b = document.getElementById('btn-share');
+          if (!b) throw new Error('with Labs on, at 380px, there is no #btn-share in the page at all');
+          const r = b.getBoundingClientRect();
+          if (!(r.width > 0 && r.height > 0)) throw new Error('#btn-share is in the page at 380px but has no box (parent ' +
+            (b.parentNode && (b.parentNode.id || b.parentNode.className)) + ') — it was inserted beside #btn-export inside <header id="topbar">, which styles.css sets to display:none at every phone width. He turns the switch on, opens a project, and there is nothing to tap: the whole owner half is unreachable, and so is the guest’s Leave button, because this is the only door to the guest panel');
+          const bar = document.getElementById('topbar-m');
+          if (!bar || !bar.contains(b)) throw new Error('#btn-share is visible at 380px but not in #topbar-m (it is in ' +
+            (b.parentNode && (b.parentNode.id || b.parentNode.className)) + ') — the phone’s own bar is the only one on screen');
+          if (r.top > window.innerHeight || r.bottom < 0) throw new Error('#btn-share is off screen vertically at 380px');
+        }, 380);
+        /* CONTROL: the desktop placement is unchanged — beside Export, wherever Export currently lives. */
+        await atWideWidth(async function () {
+          ui.install();
+          const b = document.getElementById('btn-share'), e = document.getElementById('btn-export');
+          if (!b || !e) throw new Error('CONTROL: the desktop pair is missing');
+          if (b.nextSibling !== e) throw new Error('CONTROL: at 1280 #btn-share is no longer immediately before #btn-export, so the phone move broke the desktop one');
+        }, 1280);
+      });
+    });
+  });
+
+  test('921 S3 the app is told when a session ends or the wire goes, and the offline line stops promising a re-send', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S3('the link-state hooks');
+    ['onEnd', 'onOffline', 'onOnline'].forEach(function (k) {
+      if (typeof C.bridge[k] !== 'function') throw new Error('the adapter the APP runs has no ' + k +
+        ' — the session has called it since S2 and the test rig’s own adapter implements it, so every engine test passes while the real device says NOTHING when the owner stops sharing or the Wi-Fi drops: the guest keeps editing a project that is no longer syncing and its panel still reads "Live"');
+    });
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        ctx.S.online = false;
+        C.bridge.onOffline();
+        const off = document.getElementById('collab-banner');
+        if (!off) throw new Error('markOffline reached the adapter and no banner appeared — §19.4’s warning was written for exactly this moment');
+        if (/reconnect/i.test(off.textContent)) throw new Error('the offline banner says "' + off.textContent + '" — there is no reconnect in S3 (C.reopen has no caller in the app), so promising the changes will send is untrue');
+        ctx.S.online = true;
+        C.bridge.onOnline();
+        if (document.getElementById('collab-banner')) throw new Error('the banner stayed up after the link came back');
+        ctx.S.ended = 'ended';
+        C.bridge.onEnd('ended');
+        const end = document.getElementById('collab-banner');
+        if (!end) throw new Error('a `bye` from the owner left nothing on screen at all');
+        if (/offline/i.test(end.textContent)) throw new Error('"the owner ended this" is being shown as an offline state ("' + end.textContent + '") — offline implies it comes back and this does not');
+        ctx.S.ended = null;
+        ui.hideBanner();
+      });
+    });
+  });
+
+  test('921 S3 a guest that has already given up is not admitted as a member nobody can see', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S3('the knock deadline');
+    await withCollab921([layer921('A')], async function (ctx) {
+      const before = ctx.S.peerIds().length;
+      const dead = C.link.LoopLink({ aTag: 'h', bTag: 'gone' });
+      dead.a.close();
+      const mid = ctx.S.addPeer(dead.a, { role: 'editor', name: 'Gone', color: '#ff9f43' });
+      if (mid) throw new Error('a CLOSED endpoint was admitted as member ' + mid +
+        ' — the welcome and the whole snapshot go into a closed channel, the Share panel reads "Live · 1 person here" for somebody who is not there, and because onclose had already fired before anything bound it the row can never clear itself');
+      if (ctx.S.peerIds().length !== before) throw new Error('the peer list grew for a closed endpoint');
+      if (ctx.S.host.members[mid || 'm99']) throw new Error('a member record was created for a closed endpoint');
+      /* CONTROL: an open link is still admitted, so the refusal above is about the state and not a
+         blanket "addPeer stopped working". */
+      const live = C.link.LoopLink({ aTag: 'h', bTag: 'here' });
+      const ok = ctx.S.addPeer(live.a, { role: 'editor', name: 'Here', color: '#ff9f43' });
+      if (!ok) throw new Error('CONTROL: an OPEN endpoint was refused too, so addPeer refuses everything and the assertion above proves nothing');
+      ctx.S.dropPeer(ok);
+    });
+    /* …and the two deadlines that produced the phantom are ONE number now, rather than 30 s against
+       120 s in two files that nothing compared. */
+    if (!(C.LIMITS.JOIN_WAIT > C.LIMITS.KNOCK_TIMEOUT)) throw new Error('the joining device waits ' + C.LIMITS.JOIN_WAIT +
+      'ms while the owner’s knock card sits for ' + C.LIMITS.KNOCK_TIMEOUT + 'ms — so an owner who takes a moment to pick up his phone answers a guest that gave up and closed its connection. The two are one wait and must be one number');
+  });
+
+  test('921 S3 a guest who already holds this project is offered the two answers C.join implements, instead of a dead end', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S3('the same-device recovery');
+    await withLabs921(async function (ui) {
+      const realJoin = C.join;
+      const calls = [];
+      await withFakeLinks921(C, function () { return fakeLink921({ code: 'JOIN1' }); }, async function (made) {
+        C.signal.handshake = function () { return Promise.resolve({ sas: 'Q4T7N', host: { sid: 'r1', nm: 'Ezra', cl: '#a3e635' } }); };
+        C.join = function (o) {
+          calls.push(o);
+          if (calls.length === 1) return Promise.reject({ why: 'same-device', linked: true, name: 'My older copy' });
+          return Promise.resolve({ gpid: 'p-new', session: null });
+        };
+        try {
+          await ui.join();
+          const box = document.querySelector('.cj-code');
+          if (!box) throw new Error('the Join sheet did not open');
+          box.value = 'FM1-ABCDEFG';
+          document.querySelector('.cj-go').click();
+          await settle921(150);
+          const sasEl = document.querySelector('.cj-sas .cs-sas');
+          const sasSeen = !!sasEl && sasEl.textContent === 'Q4T7N';
+
+          const acts = document.querySelectorAll('.cj-clashbtn');
+          if (acts.length !== 2) throw new Error('the same-device refusal is still a dead end: §12.2’s "Replace it" and "Keep it" are both implemented in C.join and the sheet offers neither, so a guest whose phone locked mid-session — whose own linked copy holds the host’s layer ids by construction — can never rejoin, and nothing tells him that deleting the project from Home is the only way back');
+          if (made[0].closed) throw new Error('the link was closed before the choice was offered, so answering it would need a fresh code from the other person');
+
+          Array.prototype.filter.call(acts, function (b) { return /replace/i.test(b.textContent); })[0].click();
+          await settle921(150);
+          if (calls.length !== 2) throw new Error('choosing "Replace my copy" did not retry the join');
+          if (calls[1].onConflict !== 'replace') throw new Error('the retry asked for onConflict "' + calls[1].onConflict + '" rather than "replace"');
+          if (calls[1].link !== made[0]) throw new Error('the retry used a different link, so the host has no member waiting for it');
+          if (document.getElementById('collab-join')) throw new Error('the sheet stayed up after a successful join');
+          /* …and while it was waiting, the joining device showed its own half of the §14.6 check. */
+          if (!sasSeen) throw new Error('the joining device is not shown the five letters it is supposed to read back (' + (sasEl && sasEl.textContent) + ') — the owner is being asked to compare against nothing');
+
+        } finally { C.join = realJoin; ui.close(); }
+      });
+    });
+  });
+
+  test('921 S3 a connection that never opens gives up and says so, and a code with no candidates is refused rather than handed out', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S3('the connect timeout');
+    const S = C.signal;
+    /* A description that parses, packs and decodes perfectly and has nowhere to connect to. */
+    const fpHex = new Array(33).join('AB');
+    const desc = { v: 1, r: 'o', ufrag: 'abcd', pwd: new Array(25).join('p'), fp: (fpHex.match(/.{2}/g) || []).join(':'), setup: 'actpass', cands: [] };
+    const empty = S.toCode(S.packDesc(desc, S.randomBytes(16)));
+    const decoded = S.decode(empty);
+    if (!decoded || decoded.cands !== 0) throw new Error('CONTROL: the fixture is not a zero-candidate offer code (' + (decoded && decoded.cands) + ')');
+    const probe = C.link.RtcLink({ self: 'g', peer: 'h' });
+    let why = null;
+    try { await probe.acceptOffer(empty); } catch (e) { why = (e && e.why) || 'threw'; }
+    probe.close();
+    if (why !== 'no-candidates') throw new Error('a code carrying no ICE candidates at all was accepted (' + JSON.stringify(why) + ') — setRemoteDescription succeeds, ICE has nothing to check against so it never reaches "failed", and both screens sit on "Connecting…" for ever');
+
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function () {
+        ui._connectWait(300);
+        try {
+          await withFakeLinks921(C, function () { return fakeLink921({ code: 'STALL', opens: false }); }, async function () {
+            await ui.share();
+            document.querySelector('.cs-add').click();
+            await settle921(80);
+            const first = document.getElementById('collab-offer-code').textContent;
+            document.querySelector('.cs-connect').click();
+            await settle921(600);
+            if (ui._offer()) throw new Error('a connect that never opened is still holding its offer after the ICE_CONNECT window — `link.opened` is awaited with NO timeout on either side and the only thing that rejects it is iceConnectionState "failed", which never arrives when there is nothing to check');
+            const note = document.querySelector('.cs-note');
+            if (!note || !/fresh code|did not answer/i.test(note.textContent)) throw new Error('nothing told him the attempt had given up (note: ' + (note && note.textContent) + ')');
+            document.querySelector('.cs-add').click();
+            await settle921(80);
+            if (document.getElementById('collab-offer-code').textContent === first) throw new Error('the spent code was handed out again');
+          });
+        } finally { ui._connectWait(null); ui.close(); }
+      });
+    });
+  });
+
+  test('921 S3 a share button removed with Labs off does not come back when the window narrows', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S3('the §23 guard across a transport rebuild');
+    await withLabs921(async function () {
+      /* Put the row through the one order that matters: narrow (teardown) → wide (a BUILD, which is the
+         only thing that records #btn-share in `_pcHomes`) → Labs off → narrow again. */
+      await atPhoneWidth(async function () { if (FM.pcTransportLayout) FM.pcTransportLayout(); }, 380);
+      await atWideWidth(async function () { if (FM.pcTransportLayout) FM.pcTransportLayout(); }, 1280);
+      const t = document.getElementById('transport');
+      const homes = (t && t._pcHomes) || [];
+      if (!homes.some(function (h) { return h && h.el && h.el.id === 'btn-share'; })) {
+        throw new Error('CONTROL: the transport row did not borrow #btn-share, so the teardown below has nothing of ours to put back and this test measures nothing');
+      }
+      FM.settings.set('collabLabs', false);
+      if (document.getElementById('btn-share')) throw new Error('CONTROL: turning Labs off did not remove the button in the first place');
+      await atPhoneWidth(async function () { if (FM.pcTransportLayout) FM.pcTransportLayout(); }, 380);
+      const back = document.getElementById('btn-share');
+      if (back) throw new Error('#btn-share is back in the page with Labs OFF, in ' + (back.parentNode && (back.parentNode.id || back.parentNode.className)) +
+        ' — pcTransportTeardown re-inserts every node it recorded whether or not it is still in the document, and the click listener survives removeChild, so §23’s "no collaboration DOM at all" is broken by a live-looking button that does nothing (U.share returns early with Labs off). uninstall() cannot sweep it either: it had already latched installed=false');
+      if (!C.ui.isInstalled()) { /* the switch is off, which is what we want */ }
+      FM.settings.set('collabLabs', true);
+    });
+  });
+
+  test('921 S3 undo still works after Stop sharing — the hand-over points at the session that ended', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S3('the undo hand-over');
+    await withCollab921([layer921('A')], async function (ctx) {
+      const lid = ctx.ids[0];
+      const find = function () { return FM.scene.layers.filter(function (l) { return l.id === lid; })[0]; };
+      const was = find().name;
+      find().name = 'renamed while sharing';
+      FM.history.commit();
+      if (find().name !== 'renamed while sharing') throw new Error('CONTROL: the edit did not take, so nothing below measures an undo');
+      C.end();
+      if (!C.undoActive()) throw new Error('§10.5’s hand-over was dropped by C.end() — a solo undo could now revert a guest’s work with a pre-session snapshot');
+      if (!C.canUndo()) throw new Error('after Stop sharing the undo button reports nothing to undo, so it is greyed out with a step sitting right there');
+      const ok = FM.history.undo();
+      if (!ok || find().name !== was) throw new Error('undo did nothing after Stop sharing (returned ' + ok + ', name is still "' + find().name +
+        '") — `undoHandover` stays true while `C.session` is nulled, so FM.history.undo() delegates to a session that is gone and returns false FOREVER: Ctrl-Z and both buttons are silently dead until the project is switched, and the tidy-up arming committed to HIS document can never be undone');
+      /* …and it is really the session doing it, not the local stack sneaking back in. */
+      if (!C.undoActive()) throw new Error('the hand-over cleared itself part way through');
+    });
+  });
+
+  test('921 S3 demoting a guest reaches the guest, and the Leave dialog offers only what it has buttons for', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S3('role changes and the Leave dialog');
+    await withCollab921([layer921('A')], async function (ctx) {
+      const g = ctx.addGuest({ role: 'editor', name: 'Sam' });
+      if (g.G.role !== 'editor') throw new Error('CONTROL: the guest did not start as an editor');
+      if (typeof ctx.S.setPeerRole !== 'function') throw new Error('there is no way for the owner to tell a member its role changed — H.setRole moves a number in the owner’s own table and sends nothing');
+      ctx.S.setPeerRole(g.mid, 'viewer');
+      g.loop.pump(2);
+      if (ctx.S.host.members[g.mid].role !== 'viewer') throw new Error('the host’s own table was not updated');
+      if (g.G.role !== 'viewer') throw new Error('the guest still believes it is "' + g.G.role +
+        '" after being demoted — its device is never told, so it keeps the full editing UI, the view-only banner never appears, and it finds out one refused edit at a time from a toast that names the wrong role');
+      /* CONTROL: a promotion travels the same way, so this is a channel and not a one-way flag. */
+      ctx.S.setPeerRole(g.mid, 'editor');
+      g.loop.pump(2);
+      if (g.G.role !== 'editor') throw new Error('CONTROL: a promotion did not reach the guest either');
+    });
+
+    await withLabs921(async function (ui) {
+      const realAsk = FM.ask, realSession = C.session;
+      let asked = null;
+      FM.ask = function (o) { asked = o; return Promise.resolve(false); };
+      try {
+        C.session = { isOwner: false, role: 'editor', online: true, ended: null };
+        await ui.share();
+        const leave = document.querySelector('#collab-share .cs-stop');
+        if (!leave) throw new Error('the guest panel has no Leave button');
+        leave.click();
+        await settle921(40);
+        if (!asked) throw new Error('Leave did not ask anything');
+        const msg = String(asked.message || '');
+        if (/\bor\b[^.]*\bdelete\b/i.test(msg)) throw new Error('the Leave dialog says "' + msg + '" but FM.ask builds exactly two buttons (' +
+          asked.ok + ' / ' + (asked.cancel || 'Cancel') + ') — the delete branch C.leave({keep:false}) exists and has no caller anywhere in the app, so this offers a choice the dialog cannot express');
+      } finally { FM.ask = realAsk; C.session = realSession; ui.close(); }
+    });
+  });
+
+  test('921 S3 turning Labs off as a guest detaches the linked copy instead of stranding it', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S3('the guest’s Labs-off door');
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    if (wasHome) FM.home.close();
+    let gpid = null;
+    const wasLabs = FM.settings.get('collabLabs');
+    let wasProfile = null;
+    try { wasProfile = localStorage.getItem('fm.profile'); } catch (e) {}
+    try {
+      FM.settings.set('collabLabs', true);
+      C.ui.syncLabs();
+      C.ui.setProfile('Test Person', C.ui.PALETTE[0]);
+      const D = { project: { name: 'Shared fixture', width: 320, height: 240, fps: 30, duration: 3 }, layers: [layer921('A')] };
+      gpid = FM.projects.createLinked({ sid: 's-1', sk: 'k-1', hostName: 'Ezra', role: 'editor', epoch: 1, seq: 0 }, D);
+      if (!gpid) throw new Error('CONTROL: the linked fixture project could not be created');
+      const card = function () { return (FM.projects.list().filter(function (p) { return p.id === gpid; })[0]) || null; };
+      if (!card() || !card().collab) throw new Error('CONTROL: the fixture is not marked as a linked copy');
+
+      const G = C.Session({ adapter: C.bridge, role: 'editor', mid: 'g', base: JSON.parse(JSON.stringify(D)), epoch: 1 });
+      G.gpid = gpid; G.pid = gpid;
+      C.attach(G, { autoTick: false });
+      if (!C.active || C.session.isOwner) throw new Error('CONTROL: the fixture session is not a guest session');
+
+      FM.settings.set('collabLabs', false);
+      await settle921(250);
+      if (C.active) throw new Error('turning Labs off left the session running');
+      const after = card();
+      if (after && after.collab) throw new Error('the linked copy is still marked `collab`, holding another device’s layer ids, with no session behind it — syncLabs called C.end(), which is the OWNER’s door: only C.leave detaches, and uninstall() has just taken away the only UI that could ever reach it. Rejoining is refused by the same-device check, and tapping Share on it would arm it as a NEW room while its card still points at the old one');
+    } finally {
+      try { C.end(); } catch (e) {}
+      try { C.detach(); } catch (e) {}
+      C._undoHandover(false);
+      const ids = FM.projects.list().filter(function (p) { return /Shared fixture/.test(p.name || ''); }).map(function (p) { return p.id; });
+      for (let i = 0; i < ids.length; i++) { try { await FM.projects.remove(ids[i]); } catch (e) {} }
+      if (orig && FM.projects.currentId() !== orig) { try { await FM.projects.open(orig); } catch (e) {} }
+      if (wasHome) FM.home.open();
+      FM.settings.set('collabLabs', !!wasLabs);
+      try { C.ui.syncLabs(); } catch (e) {}
+      try { if (wasProfile === null) localStorage.removeItem('fm.profile'); else localStorage.setItem('fm.profile', wasProfile); } catch (e) {}
+    }
   });
 
   /* The one thing that separates this from sanitizeAudioFx, and the reason it is not a copy of it.

@@ -3838,7 +3838,7 @@ body.home-open #toast { z-index: 205; }
 
   /* mobile top bar becomes the AM clip header: name (rename) · duplicate · delete · ⋯ more */
   #clip-name-m, #m-selcount, #m-dup, #m-del, #m-group, #m-maskgroup, #m-more { display: none; }
-  body.m-editing #proj-name-m, body.m-editing #m-settings, body.m-editing #m-export, body.m-editing #m-proj-more, body.m-editing #m-notes { display: none; }
+  body.m-editing #proj-name-m, body.m-editing #m-settings, body.m-editing #m-export, body.m-editing #m-proj-more, body.m-editing #m-notes, body.m-editing #btn-share { display: none; }
   body.m-editing #clip-name-m { display: block; flex: 1; min-width: 0; }
   body.m-editing #m-dup, body.m-editing #m-del, body.m-editing #m-more { display: flex; }
 
@@ -3859,7 +3859,7 @@ body.home-open #toast { z-index: 205; }
      display on these buttons. */
   body.sel-mode #proj-name-m, body.sel-mode #clip-name-m, body.sel-mode #ver-m,
   body.sel-mode #m-proj-more, body.sel-mode #m-settings, body.sel-mode #m-export, body.sel-mode #m-notes,
-  body.sel-mode #m-dup, body.sel-mode #m-more { display: none; }
+  body.sel-mode #m-dup, body.sel-mode #m-more, body.sel-mode #btn-share { display: none; }
   body.sel-mode #m-selcount { display: block; }
   body.sel-mode #m-group, body.sel-mode #m-maskgroup, body.sel-mode #m-del { display: flex; }
   /* Both grouping slots are held open at 1 selected and filled at 2+, so nothing moves under the thumb
@@ -9873,3 +9873,161 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
   }
   .aic-head { padding-top: 4px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   COLLAB (#921) — stage S3. Spec §19.
+   Mobile-first, like everything else here: the phone rules are the base and the desktop ones are
+   inside (min-width: 701px). The cards carry `.fm-ask-card` as well as `.collab-card`, so the glass,
+   the light-Home look and the entrance animation are the ask family's and not a second copy of them.
+   ⚠️ EVERY CODE AND EVERY NAME IS SOMEBODY ELSE'S STRING, so anything that can hold one is told to
+   wrap anywhere. A 169-character FM1 code in a 380px card is the case that decides it, and a card that
+   grows a horizontal scrollbar on his phone is the #917 finding this whole file keeps re-learning.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+.collab-scrim {
+  position: fixed; inset: 0; z-index: 222; background: rgba(4, 6, 10, .7);
+  display: flex; align-items: flex-end; justify-content: center;
+}
+/* ⚠️ `flex` AND `box-sizing`, NOT `width: 100%`. Measured in the suite's own 380px frame: `width: 100%`
+   resolves against the scrim's CONTENT box and then has 16px of padding, 2px of border and 16px of
+   margin added OUTSIDE it, so the card came out 433px wide inside a 380px viewport — wider than the
+   screen, with nothing overflowing INSIDE it, which is exactly the shape of thing a "does anything stick
+   out of the card" check cannot see. Letting flex size it caps it at the container minus the margins
+   whatever the padding does. (queue 921 S3) */
+.collab-card.fm-ask-card {
+  box-sizing: border-box;
+  flex: 1 1 auto; width: auto; min-width: 0; max-width: 520px; margin: 0 8px;
+  border-radius: 16px 16px 0 0; max-height: min(82vh, 82svh);
+  padding: 16px 16px calc(14px + env(safe-area-inset-bottom));
+}
+.collab-sub { font-size: 13px; line-height: 1.45; color: var(--text-dim); margin: -4px 0 12px; }
+.collab-err { font-size: 13px; color: #ff8a8a; margin: 8px 0 0; }
+.collab-err.hidden { display: none; }
+
+/* The profile prompt (§18.1). Eight swatches on one row at 380px: 8 × 30 + 7 × 6 = 282. */
+.collab-swatches { display: flex; gap: 6px; margin: 14px 0 0; flex-wrap: wrap; }
+.collab-swatch {
+  width: 30px; height: 30px; flex: 0 0 auto; border-radius: 50%;
+  border: 2px solid transparent; box-shadow: 0 0 0 1px rgba(0, 0, 0, .35) inset; cursor: pointer; padding: 0;
+}
+.collab-swatch.on { border-color: var(--text); box-shadow: 0 0 0 2px rgba(0, 0, 0, .45) inset; }
+.collab-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* The Share panel (§19.1). */
+.cs-head { flex: none; }
+.cs-head .fm-ask-title { margin-bottom: 4px; overflow-wrap: anywhere; }
+.cs-state { font-size: 12.5px; color: var(--text-dim); margin-bottom: 12px; }
+.cs-body { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; margin: 0 -4px; padding: 0 4px 4px; }
+.cs-people { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.cs-person { display: flex; align-items: center; gap: 10px; padding: 7px 0; min-width: 0; }
+.cs-dot { width: 22px; height: 22px; flex: 0 0 auto; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, .35) inset; }
+.cs-ptext { flex: 1; min-width: 0; }
+.cs-pname { font-size: 14px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-prole { font-size: 11.5px; color: var(--text-dim); }
+.cs-role {
+  flex: 0 0 auto; padding: 6px 9px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--panel-2); color: var(--text); font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.cs-add {
+  display: block; width: 100%; text-align: left; padding: 12px; border-radius: 11px;
+  border: 1px dashed var(--line); background: var(--panel-2); color: var(--text);
+  font-size: 14.5px; font-weight: 700; cursor: pointer;
+}
+.cs-add-sub { display: block; margin-top: 3px; font-size: 11.5px; font-weight: 500; color: var(--text-dim); }
+.cs-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 14px 0 0; }
+.cs-rowlabel { font-size: 13px; color: var(--text-dim); flex: 1 1 140px; min-width: 0; }
+.cs-seg { display: flex; flex: 0 0 auto; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.cs-segbtn { padding: 7px 10px; border: 0; background: transparent; color: var(--text-dim); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.cs-segbtn.on { background: var(--accent); color: #0b0e14; }
+.cs-steplabel { font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--text-dim); margin: 14px 0 7px; }
+.cs-body > .cs-steplabel:first-child { margin-top: 0; }
+.cs-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; line-height: 1.5;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px;
+  color: var(--text); overflow-wrap: anywhere; word-break: break-all; user-select: all;
+}
+.cs-copy, .cs-connect, .cs-back, .cj-paste {
+  margin-top: 8px; padding: 10px 14px; min-height: 42px; border-radius: 9px; border: 1px solid var(--line);
+  background: var(--panel-2); color: var(--text); font-weight: 700; font-size: 14px; cursor: pointer;
+}
+.cs-copy, .cs-connect { display: block; width: 100%; }
+.cs-connect.accent { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
+.cs-back { display: block; width: 100%; background: transparent; border-color: transparent; color: var(--text-dim); font-weight: 600; }
+.cs-copy:disabled { opacity: .5; cursor: default; }
+.cs-status { font-size: 12.5px; color: var(--text-dim); margin-top: 8px; min-height: 17px; overflow-wrap: anywhere; }
+/* The one-shot line under the title that says what happened to a code that is no longer on screen. */
+.cs-note { font-size: 12.5px; line-height: 1.45; color: #ffd08a; margin: -6px 0 12px; overflow-wrap: anywhere; }
+/* §14.6's short authentication string: five characters, big enough to read down a phone line. */
+.cs-sas {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 28px; font-weight: 700;
+  letter-spacing: 6px; text-align: center; padding: 10px 6px; margin: 2px 0 0;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: var(--text);
+  overflow-wrap: anywhere; user-select: all;
+}
+.cs-sasacts { display: flex; gap: 9px; margin-top: 10px; flex-wrap: wrap; }
+.cs-sasacts button {
+  flex: 1 1 130px; min-height: 44px; padding: 9px 12px; border-radius: 9px; border: 1px solid var(--line);
+  background: var(--panel-2); color: var(--text); font-weight: 700; font-size: 14px; cursor: pointer;
+}
+.cs-sasacts .cs-sasno { background: rgba(224, 49, 49, .16); border-color: rgba(224, 49, 49, .55); color: #ff8a8a; }
+.cs-sasacts .cs-sasyes.accent { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
+.cs-foot { flex: none; display: flex; gap: 10px; padding-top: 12px; }
+.cs-foot button { flex: 1; min-height: 44px; padding: 9px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font-weight: 700; font-size: 14.5px; cursor: pointer; }
+.cs-foot .cs-stop { background: rgba(224, 49, 49, .16); border-color: rgba(224, 49, 49, .55); color: #ff8a8a; }
+.cs-foot .cs-done.accent { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
+
+/* The Join sheet (§19.2). */
+.cj-fieldrow { display: flex; gap: 8px; align-items: stretch; }
+.cj-fieldrow .cj-code { flex: 1; min-width: 0; }
+.cj-fieldrow .cj-paste { margin-top: 0; flex: 0 0 auto; }
+.cj-status { font-size: 13px; color: var(--text-dim); margin-top: 10px; min-height: 18px; overflow-wrap: anywhere; }
+.cj-back { margin-top: 12px; }
+.cj-back.hidden { display: none; }
+.cj-sas { margin-top: 12px; }
+.cj-sas.hidden { display: none; }
+/* §12.2's two answers, offered instead of a dead end. */
+.cj-clash { font-size: 13px; line-height: 1.45; color: var(--text); overflow-wrap: anywhere; }
+.cj-clashacts { display: flex; gap: 9px; margin-top: 10px; flex-wrap: wrap; }
+.cj-clashbtn {
+  flex: 1 1 130px; min-height: 44px; padding: 9px 12px; border-radius: 9px; border: 1px solid var(--line);
+  background: var(--panel-2); color: var(--text); font-weight: 700; font-size: 13.5px; cursor: pointer;
+}
+.cj-clashbtn.accent { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
+
+/* The knock card (§19.3). Above the toast (60) and the share card (222), because it is the one thing
+   that has to be answered — and it clears the phone's top bar and its safe area rather than the
+   viewport, or it lands under the notch. */
+.collab-knock {
+  position: fixed; left: 8px; right: 8px; top: calc(52px + env(safe-area-inset-top) + 8px); z-index: 225;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 13px; padding: 13px;
+  color: var(--text); box-shadow: 0 18px 40px rgba(0, 0, 0, .5);
+}
+.ck-text { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.ck-acts { display: flex; gap: 9px; margin-top: 11px; }
+.ck-acts button { flex: 1; min-height: 42px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font-weight: 700; font-size: 14px; cursor: pointer; }
+.ck-acts .ck-yes.accent { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
+
+/* The banner (§19.4). `max-width` leaves the people chip (S5) its corner. */
+.collab-banner {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 12;
+  max-width: calc(100% - 140px); height: 28px; display: flex; align-items: center;
+  padding: 0 12px; border-radius: 14px; font-size: 12.5px; font-weight: 600;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none;
+}
+.collab-banner.warn { background: rgba(224, 49, 49, .18); border-color: rgba(224, 49, 49, .5); color: #ffb3b3; }
+
+/* Settings → Labs (§19.8). */
+.set-labs.hidden { display: none; }
+
+@media (min-width: 701px) {
+  .collab-scrim { align-items: center; padding: 20px; }
+  .collab-card.fm-ask-card {
+    flex: 0 0 auto; width: min(380px, 92vw); max-width: none; margin: 0; border-radius: 16px;
+    max-height: min(88vh, 88dvh); padding: 18px;
+  }
+  .collab-knock { left: auto; right: 12px; top: 12px; width: 320px; }
+}
+
+/* A card that pops out of #btn-share keeps popfrom's placement; it must not also be pinned to the
+   bottom of the screen by the phone rules above. */
+.collab-card.pop-card { position: fixed; }
