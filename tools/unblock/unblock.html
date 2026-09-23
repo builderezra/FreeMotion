@@ -192,86 +192,63 @@
        shipped today and cannot be confirmed from this Mac, the other is holding a queue item. -->
   <section id="new">
     <div class="shead"><h2>New today</h2><span class="count">4 items</span></div>
-    <p class="sdesc">The newest asks. The first one I genuinely cannot answer myself &mdash; it only shows on a
-      real installed app. The last two are about your Mac rather than the app, and neither is urgent.</p>
 
-    <div class="card" data-id="883" data-kind="say">
+    <div class="card" data-id="912f" data-item="912 (filters)" data-kind="say">
       <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#883</span> Is the white bar gone?</h3>
-        <p>You reported a white bar at the top when you&rsquo;re inside a project. Found it: the intro fades the page
-          from dark to white and switches that on with a class &mdash; and nothing ever switched it off, so the page
-          behind everything stayed white all session. Invisible on the home screen because the home paints over it;
-          obvious in a project, where the editor is dark and any strip it doesn&rsquo;t cover shows through.</p>
-        <p><b>Why I need you:</b> that strip only exists on a web view bigger than its page, which is the installed
-          app on a phone. A desktop browser has no such strip, so I can measure the cause but I cannot see your bar.
-          Say <b>gone</b> &mdash; or if it is still there, say so and I will keep looking, because that would mean a
-          second cause.</p>
-        <p class="mono" style="color:var(--faint);font-size:12px">Not ChatGPT, by the way &mdash; it made no changes to this app at all.</p>
+        <h3><span class="mono" style="color:var(--faint)">#912</span> Which new filters do you want to keep?</h3>
+        <p>Ten candidates were built and rendered on two photos (the sheets sent 22 Sep): <b>1</b> Sepia, <b>2</b> Digicam,
+          <b>3</b> Portrait Film, <b>4</b> Moody, <b>5</b> Cyberpunk, <b>6</b> Tungsten, <b>7</b> Airy,
+          <b>8</b> Colour Splash, <b>9</b> Cyanotype, <b>10</b> HDR. They are built and waiting; the unpicked ones get deleted.</p>
       </div>
-      <textarea class="note" rows="2" placeholder="&ldquo;gone&rdquo; &mdash; or what you still see"></textarea>
+      <div class="says"><textarea class="say" rows="2" placeholder="e.g. 1 4 5 9 &mdash; or &ldquo;all&rdquo;"></textarea></div>
     </div>
 
-    <div class="card" data-id="867" data-kind="pick">
+    <div class="card" data-id="920" data-kind="say">
       <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#867</span> Controller &amp; New group tiles</h3>
-        <p>You were right about the colour, and the numbers agree: New group and Custom elements are 38 apart in RGB
-          where this menu&rsquo;s own rule says 60 minimum. At the opacity these tiles are painted at, that is no
-          difference at all. They are also both dashed outlines, which is why they read as the same kind of thing.</p>
-        <p>Three options are drawn at the real PC tile size next to their actual neighbours, and again at phone size.
-          Controller stays red in all three &mdash; &ldquo;Null being red is good&rdquo; is yours and I left it alone.</p>
+        <h3><span class="mono" style="color:var(--faint)">#920</span> Is the faded bar at the top gone?</h3>
+        <p>Since iOS 26 an installed web app that draws under the status bar gets Apple&rsquo;s own fade over the top of the
+          screen &mdash; white over a light screen, black over a dark one. FreeMotion now sits below the status bar instead,
+          which iOS only reads <b>when the app is added to the Home Screen</b>. So: remove FreeMotion from your Home Screen,
+          add it again from Safari, and say whether the fade is gone.</p>
+      </div>
+      <div class="says"><textarea class="say" rows="2" placeholder="gone / still there / something else"></textarea></div>
+    </div>
+
+    <div class="card" data-id="917e" data-item="917 (export rows)" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#917</span> The Export box cuts off its own values on a phone</h3>
+        <p>&ldquo;Same as project &mdash; 1080&times;1920&rdquo; needs 219px and the dropdown is 179px, so it reads
+          &ldquo;Same as project &hellip;&rdquo;.</p>
       </div>
       <div class="opts">
-        <button class="opt" data-v="1"><span class="key">1</span><span>New group joins the coloured family, in green &mdash; every other card here <em>adds a layer</em>, while Custom elements <em>opens a browser</em>, so the quiet grey should be its alone <span class="rec">&mdash; recommended</span></span></button>
-        <button class="opt" data-v="2"><span class="key">2</span><span>Keep it quiet, but make it properly blue instead of grey &mdash; the smaller change</span></button>
-        <button class="opt" data-v="3"><span class="key">3</span><span>Option 1, plus a stronger plate on both tiles &mdash; if &ldquo;washed out&rdquo; is as much the problem as &ldquo;too alike&rdquo;</span></button>
+        <button class="opt" data-v="A"><span class="key">A</span><span>Put the labels above the dropdowns on phones, so each value has the full width <span class="rec">&mdash; recommended</span></span></button>
+        <button class="opt" data-v="B"><span class="key">B</span><span>Shorten the wording instead (e.g. &ldquo;Project &mdash; 1080&times;1920&rdquo;)</span></button>
       </div>
     </div>
 
-    <div class="card" data-id="856" data-kind="pick">
+    <div class="card" data-id="917a" data-item="917 (Add sheet glass)" data-kind="pick">
       <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#856</span> The Assistant&rsquo;s paid keys</h3>
-        <p><b>The talking AI is built and live in v16.23</b> &mdash; open a layer&rsquo;s &ctdot; menu, tap
-          &ldquo;Ask the Assistant&rdquo;, and tell it what to change. That part is done and needs nothing from you.</p>
-        <p>What is left is the last line of what you asked for: <em>&ldquo;later when you pay for the pro version,
-          it&rsquo;ll unlock an API key for you to use like our own inbuilt but hidden API keys&rdquo;</em>.
-          <b>That one cannot be built the way it is described, and you should hear it from me.</b> FreeMotion has no
-          server &mdash; a key shipped inside the app is readable in the source and visible in the network call, so
-          &ldquo;hidden&rdquo; is not possible. Hiding it needs a server of ours sitting between the app and the AI,
-          and that would be the first thing in FreeMotion that stops being local-only.</p>
+        <h3><span class="mono" style="color:var(--faint)">#917</span> The Add sheet is see-through</h3>
+        <p>It is 82% opaque glass, so the timeline and its buttons show faintly through it behind your photos and videos.</p>
       </div>
       <div class="opts">
-        <button class="opt" data-v="A"><span class="key">A</span><span>Stay local-only: everyone brings their own key, and paying unlocks <em>features</em> instead of a key <span class="rec">&mdash; recommended, and the only one that changes nothing about what the app is</span></span></button>
-        <button class="opt" data-v="B"><span class="key">B</span><span>Build a small server of ours that passes the requests through for paying users &mdash; real cost per user, real accounts, and nothing is local-only any more</span></button>
-        <button class="opt" data-v="C"><span class="key">C</span><span>Park the whole paid-key question until after launch</span></button>
+        <button class="opt" data-v="A"><span class="key">A</span><span>Keep the glass &mdash; it matches the rest of the app <span class="rec">&mdash; recommended</span></span></button>
+        <button class="opt" data-v="B"><span class="key">B</span><span>Make it solid so nothing shows through</span></button>
       </div>
     </div>
 
-    <div class="card" data-id="882x" data-item="882 (Xcode)" data-kind="pick">
+    <div class="card" data-id="917c" data-item="917 (colour box)" data-kind="pick">
       <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#882</span> One line for your Mac (optional)</h3>
-        <p>Earlier this month an Xcode licence prompt quietly broke every <code>git</code> and <code>python3</code>
-          command on this Mac, which stopped releases reaching your phone. I worked around it without needing your
-          password, and that workaround is permanent &mdash; <b>nothing is broken right now</b>.</p>
-        <p>The proper fix covers your whole Mac, not just this app, and needs your password, so only you can run it.
-          Paste it into Terminal:</p>
-        <p><span class="path">sudo xcode-select -s /Library/Developer/CommandLineTools</span></p>
+        <h3><span class="mono" style="color:var(--faint)">#917</span> The custom background colour box looks like a second Black swatch</h3>
+        <p>In New project and Canvas settings it is a plain black box beside the Black / White / Green / Transparent swatches,
+          so nothing says it opens a colour picker.</p>
       </div>
       <div class="opts">
-        <button class="opt" data-v="A"><span class="key">A</span><span>I ran it <span class="rec">&mdash; recommended, it takes ten seconds</span></span></button>
-        <button class="opt" data-v="B"><span class="key">B</span><span>Leave the workaround as it is</span></button>
+        <button class="opt" data-v="A"><span class="key">A</span><span>Give it a rainbow ring, like the shape-colour swatch in Settings <span class="rec">&mdash; recommended</span></span></button>
+        <button class="opt" data-v="B"><span class="key">B</span><span>Leave it black</span></button>
       </div>
     </div>
 
-    <div class="card" data-id="882c" data-item="882 (ChatGPT logs)" data-kind="say">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#882</span> The ChatGPT chat logs you offered</h3>
-        <p>They will not contain code &mdash; ChatGPT made no changes to this app. But they may contain <b>things you
-          asked Codex for that never made it onto this list</b>, and the list is only worth anything if nothing you
-          asked for is missing from it.</p>
-        <p>Send them in a chat if you still have them, or just tell me here that there was nothing new in them.</p>
-      </div>
-      <textarea class="note" rows="2" placeholder="&ldquo;nothing new in them&rdquo; &mdash; or what you asked it for"></textarea>
-    </div>
   </section>
 
   <!-- ══ 1. THE REPORTS ══ ordered by how many items each one frees -->
@@ -391,20 +368,6 @@
     <div class="shead"><h2>Letters to send</h2><span class="count">7 items</span></div>
     <p class="sdesc">Nothing visual ships before you have seen it — your standing rule. Where I drew options and
       sent them, the letters below are those same options.</p>
-
-    <div class="card" data-id="810" data-kind="pick">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#810</span> Where should the <em>Audio</em> effects menu sit on PC?</h3>
-        <p>The Effects menu sits in the left inspector column. The Audio one draws the full width of the window
-          over the timeline &mdash; though the code already thinks both are docked in that column. Measured on a
-          1280&times;800 screen: the audio menu is 1280px wide against the visual one&rsquo;s 307px.</p>
-      </div>
-      <div class="opts">
-        <button class="opt" data-v="A"><span class="key">A</span><span>Dock it in the column like the Effects menu <span class="rec">&mdash; recommended</span> (its cards need re-fitting for the narrower box first)</span></button>
-        <button class="opt" data-v="B"><span class="key">B</span><span>Leave it full width over the timeline, and stop telling it that it is docked</span></button>
-      </div>
-    </div>
-
 
     <div class="card" data-id="425" data-kind="pick">
       <div class="ask">
@@ -534,6 +497,57 @@
       <textarea class="note" rows="2" placeholder="A category name, “move …”, or “no”"></textarea>
     </div>
 
+    <div class="card" data-id="867" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#867</span> Controller &amp; New group tiles</h3>
+        <p>You were right about the colour, and the numbers agree: New group and Custom elements are 38 apart in RGB
+          where this menu&rsquo;s own rule says 60 minimum. At the opacity these tiles are painted at, that is no
+          difference at all. They are also both dashed outlines, which is why they read as the same kind of thing.</p>
+        <p>Three options are drawn at the real PC tile size next to their actual neighbours, and again at phone size.
+          Controller stays red in all three &mdash; &ldquo;Null being red is good&rdquo; is yours and I left it alone.</p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="1"><span class="key">1</span><span>New group joins the coloured family, in green &mdash; every other card here <em>adds a layer</em>, while Custom elements <em>opens a browser</em>, so the quiet grey should be its alone <span class="rec">&mdash; recommended</span></span></button>
+        <button class="opt" data-v="2"><span class="key">2</span><span>Keep it quiet, but make it properly blue instead of grey &mdash; the smaller change</span></button>
+        <button class="opt" data-v="3"><span class="key">3</span><span>Option 1, plus a stronger plate on both tiles &mdash; if &ldquo;washed out&rdquo; is as much the problem as &ldquo;too alike&rdquo;</span></button>
+      </div>
+    </div>
+
+    <div class="card" data-id="856" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#856</span> The Assistant&rsquo;s paid keys</h3>
+        <p><b>The talking AI is built and live in v16.23</b> &mdash; open a layer&rsquo;s &ctdot; menu, tap
+          &ldquo;Ask the Assistant&rdquo;, and tell it what to change. That part is done and needs nothing from you.</p>
+        <p>What is left is the last line of what you asked for: <em>&ldquo;later when you pay for the pro version,
+          it&rsquo;ll unlock an API key for you to use like our own inbuilt but hidden API keys&rdquo;</em>.
+          <b>That one cannot be built the way it is described, and you should hear it from me.</b> FreeMotion has no
+          server &mdash; a key shipped inside the app is readable in the source and visible in the network call, so
+          &ldquo;hidden&rdquo; is not possible. Hiding it needs a server of ours sitting between the app and the AI,
+          and that would be the first thing in FreeMotion that stops being local-only.</p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="A"><span class="key">A</span><span>Stay local-only: everyone brings their own key, and paying unlocks <em>features</em> instead of a key <span class="rec">&mdash; recommended, and the only one that changes nothing about what the app is</span></span></button>
+        <button class="opt" data-v="B"><span class="key">B</span><span>Build a small server of ours that passes the requests through for paying users &mdash; real cost per user, real accounts, and nothing is local-only any more</span></button>
+        <button class="opt" data-v="C"><span class="key">C</span><span>Park the whole paid-key question until after launch</span></button>
+      </div>
+    </div>
+
+    <div class="card" data-id="882x" data-item="882 (Xcode)" data-kind="pick">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#882</span> One line for your Mac (optional)</h3>
+        <p>Earlier this month an Xcode licence prompt quietly broke every <code>git</code> and <code>python3</code>
+          command on this Mac, which stopped releases reaching your phone. I worked around it without needing your
+          password, and that workaround is permanent &mdash; <b>nothing is broken right now</b>.</p>
+        <p>The proper fix covers your whole Mac, not just this app, and needs your password, so only you can run it.
+          Paste it into Terminal:</p>
+        <p><span class="path">sudo xcode-select -s /Library/Developer/CommandLineTools</span></p>
+      </div>
+      <div class="opts">
+        <button class="opt" data-v="A"><span class="key">A</span><span>I ran it <span class="rec">&mdash; recommended, it takes ten seconds</span></span></button>
+        <button class="opt" data-v="B"><span class="key">B</span><span>Leave the workaround as it is</span></button>
+      </div>
+    </div>
+
   </section>
 
   <!-- ══ 3. QUICK LOOKS ══ -->
@@ -584,6 +598,33 @@
       </div>
       <textarea class="note" rows="2" placeholder="Where it was and on which device &mdash; or &ldquo;haven&rsquo;t seen it since&rdquo;"></textarea>
     </div>
+    <div class="card" data-id="883" data-kind="say">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#883</span> Is the white bar gone?</h3>
+        <p>You reported a white bar at the top when you&rsquo;re inside a project. Found it: the intro fades the page
+          from dark to white and switches that on with a class &mdash; and nothing ever switched it off, so the page
+          behind everything stayed white all session. Invisible on the home screen because the home paints over it;
+          obvious in a project, where the editor is dark and any strip it doesn&rsquo;t cover shows through.</p>
+        <p><b>Why I need you:</b> that strip only exists on a web view bigger than its page, which is the installed
+          app on a phone. A desktop browser has no such strip, so I can measure the cause but I cannot see your bar.
+          Say <b>gone</b> &mdash; or if it is still there, say so and I will keep looking, because that would mean a
+          second cause.</p>
+        <p class="mono" style="color:var(--faint);font-size:12px">Not ChatGPT, by the way &mdash; it made no changes to this app at all.</p>
+      </div>
+      <textarea class="note" rows="2" placeholder="&ldquo;gone&rdquo; &mdash; or what you still see"></textarea>
+    </div>
+
+    <div class="card" data-id="882c" data-item="882 (ChatGPT logs)" data-kind="say">
+      <div class="ask">
+        <h3><span class="mono" style="color:var(--faint)">#882</span> The ChatGPT chat logs you offered</h3>
+        <p>They will not contain code &mdash; ChatGPT made no changes to this app. But they may contain <b>things you
+          asked Codex for that never made it onto this list</b>, and the list is only worth anything if nothing you
+          asked for is missing from it.</p>
+        <p>Send them in a chat if you still have them, or just tell me here that there was nothing new in them.</p>
+      </div>
+      <textarea class="note" rows="2" placeholder="&ldquo;nothing new in them&rdquo; &mdash; or what you asked it for"></textarea>
+    </div>
+
   </section>
 
     <p class="sdesc" style="margin-top:16px">Three more were decided for you while you were away, under the rule that

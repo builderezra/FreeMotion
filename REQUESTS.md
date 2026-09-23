@@ -29318,6 +29318,7 @@ re-opened #480, which I had marked done and had not fixed.
              call, not mine. The source is current either way; nothing is lost while this waits.
              ❓ASK: the unblock page's link stopped working — did you delete it on purpose? Want it back at a new link?
       **STANDING — stays open on purpose, like #690.** JUMPED: a standing brief, not a task with an end.
+      ↻ **23 Sep — source brought current (v16.83).** Removed #810's card (answered by him asking again, shipped as #922). Added five: the ten filter candidates to pick from (#912), whether the top-of-screen fade is gone after re-adding the app (#920), and three look choices from the #912 audit — the Export box cutting off its own values on a phone, the see-through Add sheet, and the black custom-colour box (#917). Today's five are in "New today"; the previous five moved to their kind's section. Checked in a headless phone: 32 cards, no errors, the tally and every section count derive themselves. **Still NOT published** — the link is dead and republishing is his call.
 
 - [ ] **778 — New chat, 5 Sep: build a system that never stops, never forgets the rules, never assumes a fix worked; then audit the autonomous work for delusion; then bug-hunt, polish effects, add filters.** Logged the moment he said it, verbatim:
       **JUMPED: his words are "THE FIRST THING I WANT YOU TO DO" — an explicit now, which is the one thing that jumps the queue.**
