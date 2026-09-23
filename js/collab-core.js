@@ -7,8 +7,8 @@
  * user with Labs off must not be able to tell this shipped.
  * The one exception is the TEST AGENT GATE at the foot of the file, which needs localhost AND an
  * explicit `fmtest=collab` in the query — two conditions neither of which a phone can satisfy.
- * The `#j=` join stash still waits for S3, because a join flow has to exist before storing an invite
- * means anything.
+ * The `#j=` join stash (S6) is the one other thing that runs at load, and only when the address
+ * carries an invite — see its note at the foot of the file.
  *
  * `active` and `role` are the flags the S0 hooks already read (`history.js:130`, `storage.js:446`,
  * `app.js:109`, index.html's `controllerchange`).
@@ -60,7 +60,26 @@ window.FM = window.FM || {};
        against a dead link and left a member in his people list who was never there. The joiner's wait is
        DERIVED from the knock it is waiting on, plus the room a handshake and a snapshot need. */
     JOIN_WAIT: 120000 + 20000,
-    ACK_CACHE: 64                          // §7.1 step 3: the acks kept per member for a resend
+    ACK_CACHE: 64,                         // §7.1 step 3: the acks kept per member for a resend
+    /* ═══ S6: the relay and the reconnect (§13.5, §14.3, §14.4, §22) ═══
+       §13.5's schedule: every 3 s for two minutes, every 10 s to ten minutes, every 30 s after that.
+       ⚠️ OFFERS_PER_MIN IS PER SENDER, and OFFERS_ALL_PER_MIN caps the room (S6, measured against the
+       spec's own numbers). §14.3 says a host rejects "more than 10 offers per minute", and §13.5 has a
+       reconnecting guest retry every 3 s — twenty offers a minute from ONE honest guest, so read
+       literally the host would refuse the very reconnect the schedule exists for, and two guests coming
+       back after his phone unlocks would lock each other out. So the ten is per peer tag, the room as a
+       whole takes thirty, and an attempt waits ANSWER_WAIT for its answer before the next one starts
+       (≈ 6.7 offers a minute at the fastest cadence — under the ten). */
+    RETRY_FAST: 3000, RETRY_FAST_FOR: 120000, RETRY_MID: 10000, RETRY_MID_UNTIL: 600000, RETRY_SLOW: 30000,
+    ENV_SKEW: 120000, NONCE_TTL: 600000, OFFERS_ALL_PER_MIN: 30,
+    RELAY_UP: 8000,                        // §22: no driver connected within 8 s → "Couldn't reach the free connection service"
+    ANSWER_WAIT: 6000,                     // one offer's wait for its answer before the next attempt
+    PJS_HEARTBEAT: 5000, PJS_ID_TAKEN_FOR: 60000, MQTT_KEEPALIVE: 30,
+    PENDING_ADMIT: 4,                      // relay offers being answered at once, on the host — per door (S6 review)
+    /* S6 review: a 9-character code lives this long after it was last on the owner's screen. Its topic is
+       one fixed function of 45 bits, so a code that never expired could be cracked at leisure; one that
+       lives half an hour cannot, and members come back through the hub, never through the code. */
+    CODE_TTL: 30 * 60000
   });
 
   /* The op grammar (§6.1), as data, so the schema fingerprint below moves when the wire moves.
@@ -239,6 +258,12 @@ window.FM = window.FM || {};
     if (C.bridge) C.bridge.uninstall();
     /* …and every overlay, listener and timer presence made goes with it (§23: no session, no presence). */
     if (C.presence) { try { C.presence.detach(); } catch (e) {} }
+    /* S6: the relay, the wake lock and any reconnect belong to the session they were started for. They
+       live in collab-ui.js (they are what a person sees and what the network sees), and they are taken
+       down HERE rather than at each of the four doors a session leaves by — Stop sharing, Labs off, a
+       project switch, a leave — because a relay that outlived its session would keep answering
+       strangers' offers for a room nobody is in. */
+    if (C.ui && C.ui.onDetach) { try { C.ui.onDetach(s); } catch (e) {} }
     if (FM.history && FM.history.syncButtons) FM.history.syncButtons();
     /* §14.8: a service-worker takeover that arrived mid-session was held, because reloading then drops
        the connection and with it anything not yet sent — which reads as "it lost my work". */
@@ -280,13 +305,18 @@ window.FM = window.FM || {};
      leaving is still the current one, which is the whole point of doing it there (see storage.js). */
   C.onReset = function (opts) {
     const s = S();
-    if (!s) { undoHandover = false; handoverSession = null; return; }
+    if (!s) { undoHandover = false; handoverSession = null; afterReset(); return; }
     if (!(opts && opts.force) && s.pid && FM.projects && FM.projects.currentId && FM.projects.currentId() === s.pid) return;
     undoHandover = false;
     handoverSession = null;
     try { s.stop('paused'); } catch (e) {}
     C.detach();
+    afterReset();
   };
+  /* S6 (§12.1 paused → arming, §12.2 reconnect): the document that is open now may be one this device is
+     sharing, or somebody else's shared copy. collab-ui.js decides — and does nothing at all with Labs
+     off, which is the one question it asks first — on the next turn, once the open has finished. */
+  function afterReset() { if (C.ui && C.ui.afterReset) { try { C.ui.afterReset(); } catch (e) {} } }
 
   /* §4.2: media a deleted layer still needs, because this person's undo can bring it back. */
   C.reachable = function (id) { const s = S(); return s ? s.reachable(id) : false; };
@@ -324,5 +354,42 @@ window.FM = window.FM || {};
       document.head.appendChild(sc);
     } catch (e) {}
   }
+
+  /* ═══ §14.2 THE `#j=` STASH (S6) ══════════════════════════════════════════════════════════════
+   *
+   * An invite link is `…/FreeMotion/#j=<44 characters>`. Two things can throw it away before anybody
+   * reads it, and both run before the app has finished booting: the version tap's `?fresh=` reload
+   * (index.html — `location.replace(base + '?fresh=' + …)`, which drops the fragment by construction)
+   * and a service-worker `controllerchange` reload. So the invite is written to localStorage HERE, at
+   * parse time, and the fragment is taken off the address bar in the same breath — a secret left in the
+   * URL is a secret in the history list, in a bookmark and in a screenshot. `FM.collab.ui` picks it up
+   * after Home has booted (`resumePendingJoin`).
+   *
+   * ⚠️ THE FRAGMENT AND NOTHING ELSE. GitHub Pages never sees a fragment; it sees every query string.
+   * A `?j=` is never read, so an invite can only be one that never left the device it was opened on.
+   * ⚠️ AFTER THE TEST GATE, NOT BEFORE IT: `fmwipe=1` clears localStorage above, and a stash written
+   * first would be wiped by the very reset that lets a tier-3 frame start clean.
+   * ⚠️ AND IT WRITES NOTHING THAT IS NOT AN INVITE: 44 base64url characters or no write at all, so a
+   * hand-typed `#j=anything` cannot plant a value the join flow then has to distrust. */
+  C.stashJoin = function (loc, hist) {
+    const L = loc || location;
+    let hash = '';
+    try { hash = String(L.hash || ''); } catch (e) { return false; }
+    const m = /^#j=([A-Za-z0-9_-]{44})(?:&|$)/.exec(hash);
+    if (!m) return false;
+    try { localStorage.setItem('fm.pendingJoin', JSON.stringify({ j: m[1], at: Date.now() })); } catch (e) { return false; }
+    try { (hist || history).replaceState(null, '', String(L.pathname || '') + String(L.search || '')); } catch (e) {}
+    return true;
+  };
+  C.stashJoin();
+  /* ⚠️ AND AN INVITE PASTED INTO A TAB THAT IS ALREADY OPEN (S6 review). When only the fragment differs the
+     browser does not load the page again — it fires `hashchange` and nothing else — so the stash above never
+     ran: no Join sheet, and the 44-character secret sat in the address bar and the history. One listener,
+     which does nothing at all unless the new fragment is an invite; the rest is the same path a cold start
+     takes (Labs, the profile, the Join sheet), and with Labs off that is the "turn it on" card. */
+  window.addEventListener('hashchange', function () {
+    if (!C.stashJoin()) return;
+    if (C.ui && C.ui.resumePendingJoin) { try { C.ui.resumePendingJoin(); } catch (e) { C.lastError = e; } }
+  });
 
 })(window.FM);

@@ -29119,9 +29119,14 @@
       'media',
       /* S5 (queue 921): presence. Defines functions; builds DOM, binds listeners and starts its timer only
          on a session's attach — measured above, and by `921 S5 with no session there is no presence DOM…`. */
-      'presence'];
+      'presence',
+      /* S6 (queue 921): `stashJoin` is §14.2's `#j=` stash, the one other thing collab-core.js runs at load
+         and only when the address carries an invite; `qr` is the hand-written QR encoder, a library that
+         draws only when the Share panel's [QR] is pressed. The relay itself lives inside `signal` and opens
+         no socket until a session asks — `921 S6 Codes only starts no WebSocket…` counts them. */
+      'stashJoin', 'qr'];
     const extra = Object.keys(C).filter(function (k) { return allowed.indexOf(k) < 0; });
-    if (extra.length) throw new Error('FM.collab gained ' + extra.join(', ') + ' — stage S5 is the engine, its hooks, the connection codes, the UI, media and presence, and anything beyond that list belongs to a later stage (the relay and the invite link S6, comments S7)');
+    if (extra.length) throw new Error('FM.collab gained ' + extra.join(', ') + ' — stage S6 is the engine, its hooks, the connection codes and the relay, the UI, media and presence, and anything beyond that list belongs to a later stage (comments S7)');
     /* Media is the stage most able to break §23's bargain, because everything it does is IndexedDB: a
        boot-time sweep, a manifest built at load, a progress card that exists before there is anything
        to report. None of it may happen until a session installs a controller. */
@@ -30596,13 +30601,24 @@
       throw new Error('the agent in frame "' + tag + '" never announced itself — either tests/collab-agent.js is not being loaded (the gate in js/collab-core.js needs localhost AND fmtest=collab) or the instance did not boot');
     }
     async function boot(tag, host, w, h) {
+      return bootSrc(tag, 'http://' + host + ':' + location.port + '/index.html?fmtest=collab&fmwipe=1&tag=' + tag, w, h);
+    }
+    /* S6: an instance booted from an address the test writes — the only way to put a `#j=` fragment in
+       front of a real boot, which is the thing §14.2's stash has to survive. */
+    async function bootSrc(tag, src, w, h) {
       const f = document.createElement('iframe');
       f.style.cssText = 'position:fixed;left:-5000px;top:0;border:0;width:' + w + 'px;height:' + h + 'px';
-      f.src = 'http://' + host + ':' + location.port + '/index.html?fmtest=collab&fmwipe=1&tag=' + tag;
+      f.src = src;
       document.body.appendChild(f);
       iframes[tag] = f;
       await waitUp(tag, 1);
       return await rpc(tag, 'ready');
+    }
+    function drop(tag) {
+      const f = iframes[tag];
+      if (f && f.parentNode) f.parentNode.removeChild(f);
+      delete iframes[tag];
+      delete up[tag];
     }
     async function reboot(tag) {
       const was = up[tag] || 0;
@@ -30611,7 +30627,7 @@
       return await rpc(tag, 'ready');
     }
     _rig921 = {
-      rpc: rpc, boot: boot, reboot: reboot, sleep: sleep,
+      rpc: rpc, boot: boot, reboot: reboot, sleep: sleep, bootSrc: bootSrc, drop: drop, waitUp: waitUp, upCount: function (tag) { return up[tag] || 0; },
       partition: function (tag) { down[tag] = true; },
       heal: function (tag) { delete down[tag]; },
       /* Let every message in flight land, then let the acks and broadcasts they produce land too.
@@ -34953,6 +34969,1955 @@
       if (!/Sam Lee is adjusting Opacity/.test(document.getElementById('collab-insp').textContent)) throw new Error('CONTROL: a real af key reads ' + JSON.stringify(document.getElementById('collab-insp').textContent));
     });
     C.presence._clock(null);
+  });
+
+  /* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   * #921 STAGE S6 — LINKS, CODES, THE RELAY AND THE AUTOMATIC RECONNECT.
+   *
+   * ⚠️ NONE OF THIS TOUCHES THE INTERNET. The relays are PeerJS's cloud server and two public MQTT
+   * brokers, and every test below runs them against `fakeNet921` — a WebSocket stand-in that IS those
+   * three servers, in this page: a broker that parses the client's MQTT frames itself (its own parser, not
+   * the module's, so the module cannot grade its own homework) and routes PUBLISH to SUBSCRIBE by exact
+   * topic, and a PeerJS server that registers ids, relays OFFER/ANSWER with `src` stamped on, answers an
+   * offer to an id nobody holds with EXPIRE, and can be told an id is taken. It carries `FM_FAKE`, which
+   * is the one thing `relayGate()` lets a loopback page open a socket with — so a test that forgot to
+   * install it gets a refused driver, never a connection to broker.emqx.io from his Mac.
+   * The peer connections are REAL (two RTCPeerConnections in this page, as in S3's tier 4).
+   * ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+  function need921S6(what) {
+    const C = need921S3(what);
+    const S = C.signal;
+    if (!S.Rendezvous || !S.seal || !S.openEnvelope || !S.parseInvite || !S.normRoomCode || !S.codeSecret || !S.mqtt || !S.dial || !S.answer || !C.stashJoin) {
+      throw new Error('the stage-S6 relay is not loaded — js/collab-signal.js has no room code, invite link, sealed envelope, PeerJS/MQTT driver or rendezvous (and js/collab-core.js no #j= stash), so ' + what + ' cannot be measured at all');
+    }
+    return C;
+  }
+
+  async function until921S6(what, pred, ms) {
+    const deadline = Date.now() + (ms || 8000);
+    let last = null;
+    while (Date.now() < deadline) {
+      last = await pred();
+      if (last) return last;
+      await settle921(40);
+    }
+    let said = '';
+    try { said = JSON.stringify(last); } catch (e) { said = String(last); }
+    throw new Error('timed out waiting for ' + what + ' (last answer: ' + String(said).slice(0, 200) + ')');
+  }
+
+  function fakeNet921(opts) {
+    const o = opts || {};
+    const net = {
+      constructed: 0, sockets: [], dead: Object.create(null), frames: [], log: [],
+      idTaken: Object.create(null), expireMs: o.expireMs || 150, latency: o.latency || 1, muted: Object.create(null),
+      mqtt: Object.create(null), pjs: Object.create(null)
+    };
+    function hostOf(u) { const m = /^wss?:\/\/([^\/:?]+)/.exec(u); return m ? m[1] : ''; }
+    function later(fn, ms) { setTimeout(fn, ms == null ? net.latency : ms); }
+    function fire(ws, k, ev) {
+      const f = ws[k];
+      if (typeof f !== 'function') return;
+      try { f.call(ws, ev); } catch (e) { net.log.push('client ' + k + ' threw ' + (e && e.message)); }
+    }
+    function toClient(ws, data) { later(function () { if (ws.readyState === 1) fire(ws, 'onmessage', { data: data }); }); }
+    function forget(ws) {
+      Object.keys(net.mqtt).forEach(function (h) { net.mqtt[h].subs = net.mqtt[h].subs.filter(function (s) { return s.ws !== ws; }); });
+      Object.keys(net.pjs).forEach(function (id) { if (net.pjs[id] === ws) delete net.pjs[id]; });
+    }
+    function hangup(ws, code) {
+      if (ws.readyState === 3) return;
+      ws.readyState = 3;
+      forget(ws);
+      later(function () { fire(ws, 'onclose', { code: code || 1000 }); });
+    }
+    function FakeWS(url, proto) {
+      if (!(this instanceof FakeWS)) throw new TypeError('WebSocket must be constructed with new');
+      net.constructed++;
+      const ws = this;
+      ws.url = String(url); ws.readyState = 0; ws.binaryType = 'blob'; ws.bufferedAmount = 0;
+      ws.protocol = Array.isArray(proto) ? String(proto[0] || '') : String(proto || '');
+      ws.onopen = null; ws.onmessage = null; ws.onclose = null; ws.onerror = null;
+      ws._host = hostOf(ws.url);
+      ws._kind = /\/peerjs(\?|$)/.test(ws.url) ? 'pjs' : 'mqtt';
+      ws._buf = new Uint8Array(0);
+      net.sockets.push(ws);
+      later(function () {
+        if (ws.readyState !== 0) return;
+        if (net.dead[ws._host]) { ws.readyState = 3; fire(ws, 'onerror', {}); fire(ws, 'onclose', { code: 1006 }); return; }
+        ws.readyState = 1;
+        fire(ws, 'onopen', {});
+        if (ws._kind === 'pjs') pjsOpen(ws);
+      });
+    }
+    FakeWS.FM_FAKE = true;
+    FakeWS.CONNECTING = 0; FakeWS.OPEN = 1; FakeWS.CLOSING = 2; FakeWS.CLOSED = 3;
+    FakeWS.prototype.send = function (data) {
+      if (this.readyState !== 1) throw new Error('InvalidStateError: the fake socket is not open');
+      const ws = this;
+      const copy = typeof data === 'string' ? data
+        : new Uint8Array(data instanceof ArrayBuffer ? data.slice(0) : data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
+      later(function () { if (ws.readyState === 1) (ws._kind === 'pjs' ? pjsIn : mqttIn)(ws, copy); });
+    };
+    FakeWS.prototype.close = function () { hangup(this, 1000); };
+
+    /* ── the MQTT broker: its OWN parser ── */
+    function rdStr(b, at) { const n = (b[at] << 8) | b[at + 1]; return { s: new TextDecoder().decode(b.subarray(at + 2, at + 2 + n)), next: at + 2 + n }; }
+    function broker(h) { return net.mqtt[h] || (net.mqtt[h] = { subs: [] }); }
+    function mqttIn(ws, bytes) {
+      if (typeof bytes === 'string') { net.log.push('a TEXT frame reached an MQTT broker'); hangup(ws, 1003); return; }
+      /* A HALF-OPEN socket: still `open` on the client's side, and nothing ever comes back (S6 review). */
+      if (net.muted[ws._host]) { net.frames.push({ host: ws._host, type: 'MUTED', at: Date.now() }); return; }
+      const nb = new Uint8Array(ws._buf.length + bytes.length);
+      nb.set(ws._buf); nb.set(bytes, ws._buf.length);
+      ws._buf = nb;
+      for (;;) {
+        const b = ws._buf;
+        if (b.length < 2) return;
+        let len = 0, mul = 1, i = 1, done = false;
+        while (i < b.length && i < 5) { const c = b[i++]; len += (c & 127) * mul; mul *= 128; if (!(c & 128)) { done = true; break; } }
+        if (!done || b.length < i + len) return;
+        const type = b[0] >> 4, flags = b[0] & 15, body = b.slice(i, i + len);
+        ws._buf = b.slice(i + len);
+        mqttPacket(ws, type, flags, body, len, i - 1);
+      }
+    }
+    function publishFrame(topic, payload) {
+      const tb = new TextEncoder().encode(topic);
+      const rl = 2 + tb.length + payload.length;
+      const lb = [];
+      let n = rl;
+      do { let d = n % 128; n = Math.floor(n / 128); if (n > 0) d |= 128; lb.push(d); } while (n > 0);
+      const out = new Uint8Array(1 + lb.length + rl);
+      out[0] = 0x30; out.set(lb, 1);
+      let at = 1 + lb.length;
+      out[at++] = tb.length >> 8; out[at++] = tb.length & 255;
+      out.set(tb, at); at += tb.length;
+      out.set(payload, at);
+      return out;
+    }
+    function mqttPacket(ws, type, flags, body, len, lenBytes) {
+      const br = broker(ws._host);
+      if (type === 1) {
+        const pn = rdStr(body, 0);
+        const level = body[pn.next], cflags = body[pn.next + 1], ka = (body[pn.next + 2] << 8) | body[pn.next + 3];
+        const cid = rdStr(body, pn.next + 4).s;
+        net.frames.push({ host: ws._host, type: 'CONNECT', flags: flags, proto: pn.s, level: level, cflags: cflags, keepalive: ka, clientId: cid, subprotocol: ws.protocol });
+        toClient(ws, new Uint8Array([0x20, 2, 0, 0]).buffer);
+        return;
+      }
+      if (type === 8) {
+        const pid = (body[0] << 8) | body[1];
+        const topics = [];
+        let at = 2;
+        while (at < body.length) { const t = rdStr(body, at); topics.push({ topic: t.s, qos: body[t.next] }); at = t.next + 1; }
+        net.frames.push({ host: ws._host, type: 'SUBSCRIBE', flags: flags, pid: pid, topics: topics, ws: ws });
+        ws._subs = (ws._subs || []).concat(topics.map(function (x) { return x.topic; }));
+        topics.forEach(function (t) { br.subs.push({ ws: ws, topic: t.topic }); });
+        const ack = [0x90, 2 + topics.length, pid >> 8, pid & 255];
+        topics.forEach(function () { ack.push(0); });
+        toClient(ws, new Uint8Array(ack).buffer);
+        return;
+      }
+      if (type === 3) {
+        const t = rdStr(body, 0);
+        const qos = (flags >> 1) & 3;
+        const payload = body.slice(t.next + (qos ? 2 : 0));
+        const text = new TextDecoder().decode(payload);
+        let n = null;
+        try { n = JSON.parse(text).n || null; } catch (e) {}
+        /* A guest subscribes to its own reply topic (fm1/<topic>/<tag>); the owner never does — which is
+           how a PUBLISH on the room topic is told apart as an OFFER rather than the owner's `here`. */
+        const fromGuest = (ws._subs || []).some(function (x) { return x.split('/').length === 3; });
+        net.frames.push({ host: ws._host, type: 'PUBLISH', flags: flags, topic: t.s, payload: text, n: n, len: len, lenBytes: lenBytes, at: Date.now(), fromGuest: fromGuest });
+        const out = publishFrame(t.s, payload);
+        br.subs.forEach(function (s) { if (s.topic === t.s && s.ws.readyState === 1) toClient(s.ws, out.buffer.slice(0)); });
+        return;
+      }
+      if (type === 12) { net.frames.push({ host: ws._host, type: 'PINGREQ' }); toClient(ws, new Uint8Array([0xD0, 0]).buffer); return; }
+      if (type === 14) { net.frames.push({ host: ws._host, type: 'DISCONNECT' }); hangup(ws, 1000); return; }
+      net.log.push('mqtt: unknown packet type ' + type);
+    }
+
+    /* ── the PeerJS server ── */
+    function qp(u, k) { const m = new RegExp('[?&]' + k + '=([^&]*)').exec(u); return m ? decodeURIComponent(m[1]) : null; }
+    function pjsOpen(ws) {
+      const id = qp(ws.url, 'id'), key = qp(ws.url, 'key');
+      ws._id = id;
+      net.frames.push({ host: ws._host, type: 'PJS-CONNECT', id: id, key: key, token: qp(ws.url, 'token'), at: Date.now() });
+      if (key !== 'peerjs' || !id) { toClient(ws, JSON.stringify({ type: 'ERROR', payload: { msg: 'Invalid key or id' } })); later(function () { hangup(ws, 1008); }); return; }
+      const holder = net.pjs[id];
+      if (net.idTaken[id] > 0 || (holder && holder !== ws && holder.readyState === 1)) {
+        if (net.idTaken[id] > 0) net.idTaken[id]--;
+        net.frames.push({ host: ws._host, type: 'ID-TAKEN', id: id, at: Date.now() });
+        toClient(ws, JSON.stringify({ type: 'ID-TAKEN', payload: { msg: 'ID is taken' } }));
+        later(function () { hangup(ws, 1000); }, 5);
+        return;
+      }
+      net.pjs[id] = ws;
+      toClient(ws, JSON.stringify({ type: 'OPEN' }));
+    }
+    function pjsIn(ws, data) {
+      if (typeof data !== 'string') { net.log.push('a BINARY frame reached the PeerJS server'); return; }
+      let m;
+      try { m = JSON.parse(data); } catch (e) { net.log.push('PeerJS: not JSON'); return; }
+      net.frames.push({ host: ws._host, type: 'PJS-' + m.type, from: ws._id, dst: m.dst, n: (m.payload && m.payload.env && m.payload.env.n) || null, at: Date.now() });
+      if (m.type === 'HEARTBEAT') return;
+      if (['OFFER', 'ANSWER', 'CANDIDATE', 'LEAVE'].indexOf(m.type) < 0) return;
+      const to = net.pjs[m.dst];
+      if (to && to.readyState === 1) { toClient(to, JSON.stringify({ type: m.type, src: ws._id, dst: m.dst, payload: m.payload })); return; }
+      later(function () { if (ws.readyState === 1) toClient(ws, JSON.stringify({ type: 'EXPIRE', src: m.dst, dst: ws._id })); }, net.expireMs);
+    }
+
+    net.kill = function (host) {
+      net.dead[host] = true;
+      net.sockets.forEach(function (ws) {
+        if (ws._host !== host || ws.readyState === 3) return;
+        ws.readyState = 3;
+        forget(ws);
+        later(function () { fire(ws, 'onclose', { code: 1006 }); });
+      });
+    };
+    net.revive = function (host) { delete net.dead[host]; };
+    net.mute = function (host, on) { if (on === false) delete net.muted[host]; else net.muted[host] = true; };
+    net.live = function () { return net.sockets.filter(function (s) { return s.readyState === 1; }); };
+    /* The distinct offers a guest has put on the wire for a room, in the order they first appeared. */
+    net.offers = function (keys) {
+      const seen = [];
+      net.frames.forEach(function (f) {
+        const hit = (f.type === 'PUBLISH' && f.fromGuest && f.topic === 'fm1/' + keys.topic) || (f.type === 'PJS-OFFER' && f.dst === keys.pjs);
+        if (hit && f.n && seen.indexOf(f.n) < 0) seen.push(f.n);
+      });
+      return seen;
+    };
+    net.firstSeen = function (n) {
+      const f = net.frames.filter(function (x) { return x.n === n && x.at; })[0];
+      return f ? f.at : null;
+    };
+    net.install = function () { net._was = window.WebSocket; window.WebSocket = FakeWS; return net; };
+    net.restore = function () {
+      net.sockets.forEach(function (ws) { if (ws.readyState !== 3) { ws.readyState = 3; forget(ws); } });
+      if (net._was) window.WebSocket = net._was;
+    };
+    net.WS = FakeWS;
+    return net;
+  }
+  async function withFakeNet921(fn, opts) {
+    const net = fakeNet921(opts).install();
+    try { return await fn(net); } finally { net.restore(); }
+  }
+
+  /* A joiner that is not this app: a rendezvous, one dial, and the hello — everything a real guest's
+     device does before `C.join` takes over, so the OWNER's side of each rule is measured in the real
+     app while the other side stays scriptable. Resolves once the hello is sent. */
+  async function relayGuest921(C, room, o) {
+    const S = C.signal;
+    const rv = S.Rendezvous({ role: 'guest', rooms: [room] }).start();
+    try {
+      await rv.ready(6000);
+      const res = await S.dial({ rv: rv, room: room, key: o.key, mode: o.mode, rid: o.rid, nm: o.name || 'Sam', cl: o.color || '#ff9f43', wait: o.wait || 6000 });
+      const box = { rv: rv, link: res.link, auth: res.auth, host: res.host, msgs: [] };
+      res.link.onmessage = function (ch, msg) { if (ch === 'ctl') box.msgs.push(msg); };
+      res.link.send('ctl', Object.assign({
+        t: 'hello', role: 'editor', name: o.name || 'Sam', color: o.color || '#ff9f43', have: { epoch: null, seq: 0 },
+        proto: C.PROTO, schema: C.SCHEMA_REV, mk: o.mk || 'mk-sam-00000000000000', dev: 'phone'
+      }, o.hello || {}));
+      box.wait = function (t, ms) {
+        return until921S6('a “' + t + '” from the owner (got ' + box.msgs.map(function (m) { return m.t; }).join(',') + ')',
+          function () { return box.msgs.filter(function (m) { return m.t === t; })[0] || null; }, ms || 10000);
+      };
+      box.close = function () { try { res.link.close(); } catch (e) {} rv.stop(); };
+      return box;
+    } catch (e) {
+      rv.stop();
+      if (e instanceof Error) throw e;
+      const err = new Error('the joiner could not get in: ' + JSON.stringify(e));
+      err.why = e && e.why;
+      err.proven = !!(e && e.proven);
+      throw err;
+    }
+  }
+
+  /* The real app as owner, with its relay up. The room is read back from the host RECORD and the guest's
+     keys are derived from the invite LINK, so every test below walks the path a phone would. */
+  async function relayHost921(ui, ctx) {
+    await ui.share();
+    ui.close();
+    const r = await until921S6('the owner’s relay to come up', function () {
+      const x = ui._relay();
+      return x && x.status === 'up' && x.rooms ? x : null;
+    }, 12000);
+    const rec = JSON.parse(localStorage.getItem('fm.collab.host.' + ctx.pid));
+    const inv = FM.collab.signal.parseInvite(FM.collab.signal.inviteLink(rec));
+    const room = { kind: 'link', keys: await FM.collab.signal.linkKeys(inv) };
+    return { relay: r, rec: rec, room: room };
+  }
+
+  /* An owner that is not this app: the engine's Host and an owner Session over plain objects, answering
+     through its own rendezvous — so the REAL app can be the guest (the Join sheet, the reconnect, C.reopen)
+     against something that behaves exactly like his other device. `opts.onHello(link, hello)` replaces
+     the admission for a test that needs the owner to refuse. */
+  /* S6 review: the members-only room a reconnect goes through. One member (rid, tok) in a fresh hub. */
+  async function member921(S) {
+    const RID = 'r' + S.hex(S.randomBytes(8)), TOK = S.b64url(S.randomBytes(16)), HUB = S.b64url(S.randomBytes(16));
+    const mroom = await S.memberRoom(HUB, RID, TOK);
+    return { RID: RID, TOK: TOK, HUB: HUB, mroom: mroom };
+  }
+
+  function scriptedHost921(C, room, o) {
+    const S = C.signal;
+    const doc = jclone921(o.doc);
+    const inv = C.bridge.invariants();
+    const A = plainAdapter921(doc, inv);
+    const H = C.Host({ base: jclone921(doc), invariants: inv, ownerInfo: { name: 'Ezra', color: '#a3e635' } });
+    const HS = C.Session({ adapter: A, role: 'owner', mid: 'o', host: H });
+    const out = { HS: HS, H: H, admitted: 0, rv: null, links: [], mids: Object.create(null), errors: [] };
+    function admit(link, auth, hello) {
+      const rid = auth.mode === 'tok' ? auth.mid : ('r' + S.hex(S.randomBytes(8)));
+      const tok = auth.mode === 'tok' ? o.tok : S.b64url(S.randomBytes(16));
+      const prev = out.mids[rid];
+      if (prev && HS.peerIds().indexOf(prev) >= 0) HS.dropPeer(prev);
+      const mid = HS.addPeer(link, { role: 'editor', name: (hello && hello.name) || 'Guest', color: '#ff9f43', rid: rid, tok: tok, hub: o.hub, mid: prev || undefined });
+      out.mids[rid] = mid;
+      out.admitted++;
+      out.lastMid = mid;
+      HS.onMessage('ctl', hello, mid);
+    }
+    /* `o.mroom` (member921) puts the owner in the hub as well, answering that one member's reconnects;
+       `o.tokDeny` refuses them instead, and `o.tokDenySigned` signs that refusal with the member's token. */
+    const rooms = [];
+    if (room) rooms.push(room);
+    if (o.mroom) rooms.push({ kind: 'hub', keys: { topic: o.mroom.keys.topic, pjs: o.mroom.keys.pjs }, members: function () { return [o.mroom]; } });
+    out.start = function () {
+      out.rv = S.Rendezvous({
+        role: 'host', rooms: rooms,
+        onEnvelope: function (inner, rm, env) {
+          S.answer({
+            rv: out.rv, room: rm, offer: inner, env: env, sid: o.sid, info: { nm: 'Ezra', cl: '#a3e635' },
+            keyFor: function (mode, mid) {
+              if (mode === 'tok') {
+                if (rm.kind !== 'member' || mid !== o.rid || !o.tok) return { deny: 'auth' };
+                if (o.tokDeny) return { deny: o.tokDeny, key: o.tokDenySigned ? S.fromB64url(o.tok) : undefined };
+                return S.fromB64url(o.tok);
+              }
+              return mode === rm.kind ? rm.keys.auth : { deny: 'auth' };
+            }
+          }).then(function (res) {
+            out.links.push(res.link);
+            function take(ch, msg) {
+              if (ch !== 'ctl' || !msg || msg.t !== 'hello') return;
+              res.link.onmessage = null;
+              if (o.onHello) o.onHello(res.link, msg); else admit(res.link, res.auth, msg);
+            }
+            res.link.onmessage = take;
+            const early = res.link._early; res.link._early = null;
+            (early || []).forEach(function (m) { if (typeof res.link.onmessage === 'function') take(m.ch, m.msg); });
+          }, function (e) { out.errors.push(e && e.why); });
+        }
+      }).start();
+      return out.rv;
+    };
+    out.stop = function () {
+      if (out.rv) out.rv.stop();
+      out.links.forEach(function (l) { l.onclose = null; try { l.close(); } catch (e) {} });
+    };
+    return out;
+  }
+
+  /* The app's own local-only test ('the app makes network calls to exactly one host') scans the files it
+     names, and the collaboration modules are not among them — so S6's relays arrived with nothing holding
+     them to the three servers §14.4 names. This is that hold, for every collab file: a fourth host, or a
+     TURN server (D3: no TURN, ever), anywhere in the code is a red test. */
+  test('921 S6 the collaboration code can reach exactly the relays and STUN servers §14.4 names — no other host and no TURN — and the invite link points at the app itself', { item: '921', budgetMs: 60000 }, async function () {
+    const C = need921S6('the relay hosts');
+    const S = C.signal;
+    const FILES = ['collab-core', 'collab-path', 'collab-diff', 'collab-host', 'collab-signal', 'collab-link', 'collab-session',
+      'collab-bridge', 'collab-media', 'collab-qr', 'collab-ui', 'collab-presence'];
+    const ALLOWED = ['wss://0.peerjs.com/peerjs', 'wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt',
+      'stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478',
+      'https://builderezra.github.io/FreeMotion/', 'http://www.w3.org/2000/svg'];
+    const urlsIn = function (src) {
+      const out = [];
+      src.split('\n').forEach(function (l, i) {
+        const t = l.trim();
+        if (t.startsWith('*') || t.startsWith('//') || t.startsWith('/*')) return;
+        /* A host starts with a letter or digit: `new URL('http://[' + ip + ']/')` is the IPv6 parser, not a call. */
+        const m = l.match(/\b(?:(?:https?|wss?):\/\/|(?:stuns?|turns?):)[A-Za-z0-9][A-Za-z0-9._~:/?#@!$&()*+,;=%-]*/g);
+        if (m) m.forEach(function (u) { out.push({ url: u.replace(/['"`;,)\]]+$/, ''), line: i + 1 }); });
+      });
+      return out;
+    };
+    if (!urlsIn("  const ws = new WebSocket('wss://evil.example/relay');").length) throw new Error('CONTROL: the scanner cannot see a planted wss:// host');
+    if (!urlsIn("  const ice = [{ urls: 'turn:relay.example:3478' }];").length) throw new Error('CONTROL: the scanner cannot see a planted TURN server');
+    if (urlsIn("   * a relay at wss://example/ would be caught").length) throw new Error('CONTROL: the scanner flags comments');
+    let scanned = 0;
+    const bad = [];
+    for (const f of FILES) {
+      let src = '';
+      try { src = await fetch('js/' + f + '.js', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }); } catch (e) {}
+      if (!src) throw new Error('js/' + f + '.js could not be read, so it was not checked');
+      scanned++;
+      urlsIn(src).forEach(function (u) { if (ALLOWED.indexOf(u.url) < 0) bad.push('js/' + f + '.js:' + u.line + '  ' + u.url); });
+      if (/['"`]turns?:/.test(src)) bad.push('js/' + f + '.js mentions a TURN url');
+    }
+    if (bad.length) throw new Error('the collaboration code can reach a host §14.4 does not name: ' + bad.slice(0, 5).join(' | '));
+    if (scanned !== FILES.length) throw new Error('only ' + scanned + ' of ' + FILES.length + ' files were scanned');
+    /* …and what the code USES is what was allowed, not merely what is written down. */
+    const relays = [S.RELAYS.pjs].concat(S.RELAYS.mqtt);
+    if (relays.join() !== ALLOWED.slice(0, 3).join()) throw new Error('the drivers use ' + relays.join() + ' — not the three §14.4 names');
+    if (S.STUN.map(function (x) { return x.urls; }).join() !== ALLOWED.slice(3, 5).join()) throw new Error('the STUN list is ' + JSON.stringify(S.STUN));
+    if (S.inviteLink(S.newRoom()).indexOf(ALLOWED[5] + '#j=') !== 0) throw new Error('an invite link points somewhere other than the app');
+  });
+
+  test('921 S6 the envelope seals and opens; a flipped byte, a wrong key, an old timestamp and a reused nonce are all refused; and what a relay carries holds no fingerprint', { item: '921', budgetMs: 60000 }, async function () {
+    const C = need921S6('the sealed envelope');
+    const S = C.signal;
+    const keys = await S.linkKeys(S.newRoom());
+    /* A REAL offer from a real peer connection, so what is inside the seal is exactly what a relay would carry. */
+    const link = C.link.RtcLink({ self: 'g', peer: 'h' });
+    let code;
+    try { code = await link.createOffer({ key: false }); } finally { link.close(); }
+    const fp = link.fpLocal;
+    const dec = S.decode(code);
+    if (!dec || dec.sdp.indexOf('a=fingerprint:sha-256 ' + fp) < 0) throw new Error('CONTROL: the offer that goes inside the envelope does not rebuild to an SDP carrying this device’s fingerprint, so its absence from the wire below would prove nothing');
+    if (dec.mk) throw new Error('a relay offer carries a pairing key — on the relay the key is the room’s, and a second one riding inside the envelope authenticates nothing');
+    const inner = { t: 'offer', from: 'a1b2c3d4e5f60718', to: null, ts: Date.now(), sdp: code, nm: 'Samantha Quill', cl: '#ff9f43' };
+    const env = await S.seal(keys, inner);
+    const wire = JSON.stringify(env);
+    const hexFp = fp.replace(/:/g, '');
+    [['a=fingerprint', 'the SDP fingerprint line'], [fp, 'the fingerprint'], [hexFp, 'the fingerprint as hex'], [hexFp.toLowerCase(), 'the fingerprint in lower case'],
+      ['FM1-', 'the connection code'], [code.slice(4, 30), 'a run of the connection code'], ['Samantha', 'the joiner’s name'], ['ff9f43', 'the joiner’s colour']].forEach(function (p) {
+      if (wire.indexOf(p[0]) >= 0) throw new Error('what the relay carries contains ' + p[1] + ' in clear: ' + wire.slice(0, 160));
+    });
+    if (Object.keys(env).sort().join() !== 'c,n,v') throw new Error('the envelope has fields beyond {v, n, c}: ' + Object.keys(env).join() + ' — anything else is something a relay can read');
+    const back = await S.openEnvelope(keys, env);
+    if (!back || back.sdp !== code || back.from !== inner.from || back.nm !== inner.nm || back.ts !== inner.ts) throw new Error('the envelope did not open to what was sealed: ' + JSON.stringify(back).slice(0, 200));
+
+    function flip(s, i) { const a = s.split(''); a[i] = a[i] === 'A' ? 'B' : 'A'; return a.join(''); }
+    for (const i of [0, Math.floor(env.c.length / 2), env.c.length - 3]) {
+      if (await S.openEnvelope(keys, { v: 1, n: env.n, c: flip(env.c, i) })) throw new Error('a ciphertext with one character changed (at ' + i + ') still opened — the GCM tag is not being checked');
+    }
+    if (await S.openEnvelope(keys, { v: 1, n: flip(env.n, 3), c: env.c })) throw new Error('a changed nonce still opened');
+    if (await S.openEnvelope(await S.linkKeys(S.newRoom()), env)) throw new Error('another room’s key opened this envelope');
+
+    /* §14.3's receiver rules. */
+    const G = S.guard({ isHost: true });
+    if (G.check(env, back) !== null) throw new Error('CONTROL: the guard refused a fresh envelope, so every refusal below is noise');
+    if (G.check(env, back) !== 'replay') throw new Error('the same envelope a second time was not refused as a replay — a relay could replay an old offer and make the owner answer it again');
+    async function stamped(from, ts) { const e = await S.seal(keys, { t: 'offer', from: from, to: null, ts: ts, sdp: code }); return [e, await S.openEnvelope(keys, e)]; }
+    let p = await stamped('b1b2c3d4e5f60718', Date.now() - 121000);
+    if (G.check(p[0], p[1]) !== 'stale') throw new Error('an envelope stamped 121 s ago was not refused — §14.3 allows 120');
+    p = await stamped('b1b2c3d4e5f60718', Date.now() + 121000);
+    if (G.check(p[0], p[1]) !== 'stale') throw new Error('an envelope stamped 121 s in the future was not refused');
+    p = await stamped('b1b2c3d4e5f60718', Date.now() - 100000);
+    if (G.check(p[0], p[1]) !== null) throw new Error('CONTROL: an envelope 100 s old was refused — the window is 120 s, so the refusals above are not about the window');
+
+    /* The rate: ten a minute PER PEER, so one guest retrying cannot lock the room for another. */
+    const G2 = S.guard({ isHost: true });
+    let refusedAt = -1;
+    for (let i = 0; i < 12; i++) {
+      p = await stamped('c1c2c3d4e5f60718', Date.now());
+      if (G2.check(p[0], p[1]) === 'flood' && refusedAt < 0) refusedAt = i;
+    }
+    if (refusedAt !== 10) throw new Error('the 11th offer in a minute from one peer was ' + (refusedAt < 0 ? 'never refused' : 'refused at number ' + (refusedAt + 1)) + ' — §14.3 allows ten');
+    p = await stamped('d1d2c3d4e5f60718', Date.now());
+    if (G2.check(p[0], p[1]) !== null) throw new Error('a DIFFERENT peer was refused because another flooded — a guest reconnecting every 3 s (§13.5) would lock every other guest out');
+
+    /* Shapes a relay-side attacker without the key cannot produce, but a peer WITH it can: refused. */
+    const bad = [{ t: 'offer', from: 'x', to: null, ts: Date.now(), sdp: code },
+      { t: 'answer', from: inner.from, to: null, ts: Date.now(), sdp: code },
+      { t: 'offer', from: inner.from, to: null, ts: Date.now(), sdp: 'v=0\r\na=candidate:1 1 udp 1 6.6.6.6 1 typ host' },
+      { t: 'constructor', from: inner.from, to: null, ts: Date.now() }];
+    for (const b of bad) {
+      if (await S.openEnvelope(keys, await S.seal(keys, b))) throw new Error('an inner of the wrong shape was accepted: ' + JSON.stringify(b).slice(0, 90));
+    }
+  });
+
+  test('921 S6 an invite is read from the fragment only, and one that opened the app is stashed, taken off the address bar, and survives a ?fresh= reload', { item: '921', budgetMs: 300000 }, async function () {
+    const C = need921S6('the #j= invite');
+    const S = C.signal;
+    const room = S.newRoom();
+    const link = S.inviteLink(room);
+    if (link.indexOf('https://builderezra.github.io/FreeMotion/#j=') !== 0) throw new Error('the invite link is ' + link + ' — §14.1 puts it on the live address, behind a fragment');
+    const j = link.split('#j=')[1];
+    if (!/^[A-Za-z0-9_-]{44}$/.test(j)) throw new Error('the invite payload is ' + j.length + ' characters, not §14.1’s 44');
+    const r = S.parseInvite(link);
+    if (!r || r.sid !== room.sid || r.sk !== room.sk) throw new Error('the link did not read back to its own room');
+    if (S.parseInvite(link.replace('#j=', '?j='))) throw new Error('an invite in the QUERY string was read — GitHub Pages logs every query it serves, so that is an invite the server could have read too');
+    const both = S.parseInvite(S.APP_URL + '?j=' + S.inviteJ(S.newRoom()) + '#j=' + j);
+    if (!both || both.sk !== room.sk) throw new Error('with an invite in both the query and the fragment, the one read was not the fragment’s');
+    if (S.parseInvite('#j=' + j.slice(0, 43))) throw new Error('a truncated invite was read');
+    if (S.parseInvite('#j=' + 'A'.repeat(44))) throw new Error('an invite with the wrong version byte was read');
+
+    /* The stash, on a stand-in location: the fragment is written and wiped from the address; a query is not. */
+    const saved = localStorage.getItem('fm.pendingJoin');
+    try {
+      localStorage.removeItem('fm.pendingJoin');
+      const calls = [];
+      const hist = { replaceState: function (a, b, u) { calls.push(u); } };
+      if (C.stashJoin({ hash: '', pathname: '/FreeMotion/', search: '?j=' + j }, hist)) throw new Error('an invite in the query was stashed');
+      if (localStorage.getItem('fm.pendingJoin') || calls.length) throw new Error('an invite in the query reached storage or the address bar');
+      if (C.stashJoin({ hash: '#j=<b>x</b>', pathname: '/FreeMotion/', search: '' }, hist) || localStorage.getItem('fm.pendingJoin')) throw new Error('a #j= that is not an invite was written to storage — the join flow would then have to distrust its own stash');
+      if (!C.stashJoin({ hash: '#j=' + j, pathname: '/FreeMotion/', search: '?x=1' }, hist)) throw new Error('CONTROL: a real #j= invite was not stashed');
+      const pj = JSON.parse(localStorage.getItem('fm.pendingJoin') || 'null');
+      if (!pj || pj.j !== j || !(Math.abs(Date.now() - pj.at) < 5000)) throw new Error('the stash is ' + JSON.stringify(pj));
+      if (calls[0] !== '/FreeMotion/?x=1') throw new Error('the address was not put back without the fragment (replaceState got ' + JSON.stringify(calls) + ')');
+    } finally {
+      if (saved === null) localStorage.removeItem('fm.pendingJoin'); else localStorage.setItem('fm.pendingJoin', saved);
+    }
+
+    /* THE REAL BOOT, each on its own origin so its storage is its own. */
+    const R = rig921();
+    try {
+      await R.bootSrc('jq', 'http://jq.localhost:' + location.port + '/index.html?fmtest=collab&fmwipe=1&tag=jq&j=' + j, 900, 700);
+      const q = await R.rpc('jq', 'pendingJoin');
+      if (q.pj) throw new Error('an invite in the QUERY was stashed at boot');
+      await R.bootSrc('jf', 'http://jf.localhost:' + location.port + '/index.html?fmtest=collab&fmwipe=1&tag=jf#j=' + j, 900, 700);
+      const a = await R.until('the booted app to have stashed the invite and put up the Labs card', async function () {
+        const x = await R.rpc('jf', 'pendingJoin');
+        return x.pj && x.labsCard ? x : null;
+      }, 20000);
+      if (a.pj.j !== j) throw new Error('the boot stashed ' + JSON.stringify(a.pj));
+      if (a.hash) throw new Error('the invite is still in the address bar after boot (' + a.hash.slice(0, 10) + '…) — a secret left in the URL is in the history list and in every screenshot');
+      const was = R.upCount('jf');
+      await R.rpc('jf', 'freshReload');
+      await R.waitUp('jf', was + 1);
+      await R.rpc('jf', 'ready');
+      const b = await R.rpc('jf', 'pendingJoin');
+      if (!/fresh=/.test(b.search)) throw new Error('CONTROL: the reload did not land on a ?fresh= address (' + b.search + '), so this measured some other navigation');
+      if (b.hash) throw new Error('CONTROL: the ?fresh= address still carried a fragment, so the invite could have come back from the URL rather than the stash');
+      if (!b.pj || b.pj.j !== j) throw new Error('the invite did not survive the ?fresh= reload — the version tap would lose every invite opened on a stale build (' + JSON.stringify(b.pj) + ')');
+    } finally { R.drop('jq'); R.drop('jf'); }
+  });
+
+  test('921 S6 a room code folds I, L, O and dashes the way people read it, and its PBKDF2 key is the same on every device and every build', { item: '921', budgetMs: 60000 }, async function () {
+    const C = need921S6('the room code');
+    const S = C.signal;
+    [['K7F-Q2M-9XD', 'K7FQ2M9XD'], ['k7f q2m 9xd', 'K7FQ2M9XD'], ['K7F.Q2M_9XD', 'K7FQ2M9XD'], ['I1L-OO0-abc', '111000ABC']].forEach(function (p) {
+      const got = S.normRoomCode(p[0]);
+      if (got !== p[1]) throw new Error('"' + p[0] + '" normalised to ' + got + ', not ' + p[1] + ' — I and L are read as 1, O as 0, dashes and spaces dropped (§14.1)');
+    });
+    ['K7FQ2M9X', 'K7FQ2M9XDD', 'K7FQ2M9XU', 'K7F!Q2M9X', ''].forEach(function (b) {
+      if (S.normRoomCode(b) !== null) throw new Error('"' + b + '" was accepted as a room code');
+    });
+    if (S.fmtRoomCode('k7fq2m9xd') !== 'K7F-Q2M-9XD') throw new Error('the code is shown as ' + S.fmtRoomCode('k7fq2m9xd') + ', not K7F-Q2M-9XD');
+    const seen = new Set();
+    for (let i = 0; i < 64; i++) {
+      const c = S.newRoomCode();
+      if (!/^[0-9A-HJKMNP-TV-Z]{9}$/.test(c)) throw new Error('a new room code is ' + c + ' — nine Crockford characters, no I, L, O or U');
+      seen.add(c);
+    }
+    if (seen.size !== 64) throw new Error('64 new codes held only ' + seen.size + ' distinct values');
+
+    /* PINNED, and computed a second way here: if the module ever changes its salt, its rounds or its
+       folding, two of his devices would derive two different rooms from the same nine characters. */
+    const PIN = '2a7e741321c88be8e4be086e46c965395405fe022224c4078bf0f474a298f21d';
+    const k = await crypto.subtle.importKey('raw', new TextEncoder().encode('K7FQ2M9XD'), 'PBKDF2', false, ['deriveBits']);
+    const indep = S.hex(new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: new TextEncoder().encode('freemotion-collab-code-v1'), iterations: 200000 }, k, 256)));
+    if (indep !== PIN) throw new Error('CONTROL: this browser’s own PBKDF2 gives ' + indep + ', not the pinned value, so the comparison below is against the wrong number');
+    const got = S.hex(await S.codeSecret('k7f-q2m-9xd'));
+    if (got !== PIN) throw new Error('the room code’s key is ' + got + ' — it must be PBKDF2-SHA256 over the FOLDED code, salt freemotion-collab-code-v1, 200 000 rounds (§14.1)');
+    const a = await S.codeKeys('i1l-oo0-abc'), b = await S.codeKeys('111000ABC'), c2 = await S.codeKeys('111000ABD');
+    if (a.topic !== b.topic || a.pjs !== b.pjs) throw new Error('two spellings of the same code reach two different rooms');
+    if (a.topic === c2.topic) throw new Error('two different codes reach the same room');
+    if (!/^[0-9a-f]{32}$/.test(a.topic) || !/^fmh[0-9a-f]{24}$/.test(a.pjs)) throw new Error('the derived topic/id are ' + a.topic + ' / ' + a.pjs);
+    /* And the Join field tells the three kinds of thing apart. */
+    const lk = S.classify(S.inviteLink(S.newRoom()));
+    if (!lk || lk.kind !== 'link') throw new Error('a pasted invite link was not recognised as one');
+    const rc = S.classify('k7f-q2m-9xd');
+    if (!rc || rc.kind !== 'code' || rc.code !== 'K7FQ2M9XD') throw new Error('a typed room code was classified ' + JSON.stringify(rc));
+    const cc = S.classify('FM1-ABCDE-FGHJK-MNPQR');
+    if (!cc || cc.kind !== 'conn') throw new Error('a connection code was classified ' + JSON.stringify(cc));
+    if (S.classify('hello there')) throw new Error('free text was classified as something to join');
+  });
+
+  test('921 S6 the MQTT client speaks 3.1.1 to a broker: CONNECT, SUBSCRIBE and PUBLISH byte by byte, and an offer and its answer cross it sealed', { item: '921', budgetMs: 60000 }, async function () {
+    const C = need921S6('the MQTT client');
+    const S = C.signal;
+    const CODE = 'FM1-ABCDE-FGHJK-MNPQR';
+    await withFakeNet921(async function (net) {
+      net.kill('0.peerjs.com');                 // this test is about MQTT alone
+      net.kill('broker.hivemq.com');
+      const keys = await S.linkKeys(S.newRoom());
+      const room = { kind: 'link', keys: keys };
+      const got = [];
+      const host = S.Rendezvous({ role: 'host', rooms: [room], onEnvelope: function (inner, rm, env) { got.push({ inner: inner, env: env }); } }).start();
+      const guest = S.Rendezvous({ role: 'guest', rooms: [room] }).start();
+      try {
+        await host.ready(5000);
+        await guest.ready(5000);
+        await until921S6('both SUBSCRIBEs', function () { return net.frames.filter(function (f) { return f.type === 'SUBSCRIBE'; }).length >= 2; });
+        const conns = net.frames.filter(function (f) { return f.type === 'CONNECT'; });
+        if (conns.length !== 2) throw new Error(conns.length + ' CONNECTs reached the broker for two clients');
+        conns.forEach(function (f) {
+          if (f.proto !== 'MQTT' || f.level !== 4) throw new Error('CONNECT names protocol ' + f.proto + ' level ' + f.level + ' — MQTT 3.1.1 is "MQTT", level 4');
+          if (f.flags !== 0) throw new Error('CONNECT’s fixed-header flags are ' + f.flags + ', not 0');
+          if (f.cflags !== 2) throw new Error('CONNECT’s connect flags are ' + f.cflags + ' — a clean session with no will, user or password is 0x02');
+          if (f.keepalive !== C.LIMITS.MQTT_KEEPALIVE) throw new Error('keep-alive is ' + f.keepalive + ' s');
+          if (!/^fm[0-9a-f]{16}$/.test(f.clientId)) throw new Error('the client id is "' + f.clientId + '" — random, and nothing about the room in it');
+          if (f.subprotocol !== 'mqtt') throw new Error('the WebSocket was opened with subprotocol "' + f.subprotocol + '" — both brokers refuse anything but "mqtt"');
+        });
+        const subs = net.frames.filter(function (f) { return f.type === 'SUBSCRIBE'; });
+        const topicOf = function (f) { return f.topics.map(function (t) { return t.topic + '@' + t.qos; }).sort().join(' '); };
+        const want = { host: 'fm1/' + keys.topic + '@0', guest: ['fm1/' + keys.topic + '/' + guest.tag + '@0', 'fm1/' + keys.topic + '@0'].sort().join(' ') };
+        if (!subs.some(function (f) { return topicOf(f) === want.host; })) throw new Error('the host did not subscribe to exactly its room topic at QoS 0: ' + subs.map(topicOf).join(' | '));
+        if (!subs.some(function (f) { return topicOf(f) === want.guest; })) throw new Error('the guest did not subscribe to its own reply topic and the room’s (for `here`): ' + subs.map(topicOf).join(' | '));
+        if (!subs.every(function (f) { return f.flags === 2 && f.pid > 0; })) throw new Error('a SUBSCRIBE had fixed-header flags ' + subs.map(function (f) { return f.flags; }) + ' — 3.1.1 requires 0x2, and a packet id');
+
+        const env = await guest.send(room, { t: 'offer', from: guest.tag, to: null, ts: Date.now(), sdp: CODE, nm: 'Sam' });
+        await until921S6('the offer to cross the broker', function () { return got.length; });
+        const pub = net.frames.filter(function (f) { return f.type === 'PUBLISH'; })[0];
+        if (pub.topic !== 'fm1/' + keys.topic) throw new Error('the offer was published on ' + pub.topic);
+        if (pub.flags !== 0) throw new Error('PUBLISH flags ' + pub.flags + ' — QoS 0, no retain, no dup is 0: a retained offer would sit on a public broker');
+        if (pub.lenBytes !== 2 || pub.len <= 127) throw new Error('CONTROL: the offer’s packet did not need a two-byte remaining length (' + pub.len + ' bytes), so the broker’s reading of it proves nothing about the variable-length encoding');
+        if (JSON.stringify(JSON.parse(pub.payload)) !== JSON.stringify(env)) throw new Error('the broker carried something other than the sealed envelope: ' + pub.payload.slice(0, 120));
+        if (got.length !== 1 || got[0].inner.sdp !== CODE || got[0].inner.from !== guest.tag) throw new Error('the host did not open the offer it was sent: ' + JSON.stringify(got.map(function (g) { return g.inner; })).slice(0, 200));
+
+        const exp = guest.expect(function (i) { return i.t === 'answer' && i.re === env.n; }, 4000);
+        await host.send(room, { t: 'answer', from: host.tag, to: guest.tag, re: env.n, ts: Date.now(), sdp: CODE });
+        const ans = await exp;
+        if (ans.from !== host.tag) throw new Error('the answer came back from ' + ans.from);
+        const ap = net.frames.filter(function (f) { return f.type === 'PUBLISH' && f.topic === 'fm1/' + keys.topic + '/' + guest.tag; });
+        if (ap.length !== 1) throw new Error('the answer went out on ' + ap.length + ' reply-topic publishes — it belongs on the guest’s own topic, once');
+        if (net.log.length) throw new Error('the broker saw something it could not read: ' + net.log.join('; '));
+      } finally { host.stop(); guest.stop(); }
+      if (net.live().length) throw new Error('stopping both ends left ' + net.live().length + ' socket(s) open');
+    });
+  });
+
+  test('921 S6 the PeerJS client against a fake server: OPEN, an offer relayed with its source, EXPIRE for a host that is not there, and a taken id retried until it frees', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S6('the PeerJS client');
+    const S = C.signal;
+    const CODE = 'FM1-ABCDE-FGHJK-MNPQR';
+    await withFakeNet921(async function (net) {
+      net.kill('broker.emqx.io'); net.kill('broker.hivemq.com');     // PeerJS alone
+      const keys = await S.linkKeys(S.newRoom());
+      const room = { kind: 'link', keys: keys };
+      const expired = [];
+      const guest = S.Rendezvous({ role: 'guest', rooms: [room], onExpire: function (i) { expired.push(i); } }).start();
+      let host = null;
+      try {
+        await guest.ready(5000);
+        const g0 = net.frames.filter(function (f) { return f.type === 'PJS-CONNECT'; })[0];
+        if (!g0 || g0.key !== 'peerjs' || g0.id !== 'fmg' + guest.tag || !/^[0-9a-f]{16}$/.test(g0.token || '')) throw new Error('the guest registered as ' + JSON.stringify(g0));
+        /* EXPIRE: an offer to a host nobody is holding comes back, and the guest is told. */
+        await guest.send(room, { t: 'offer', from: guest.tag, to: null, ts: Date.now(), sdp: CODE });
+        await until921S6('the server’s EXPIRE', function () { return expired.length; });
+        if (expired[0].dst !== keys.pjs) throw new Error('EXPIRE named ' + expired[0].dst + ', not the host id ' + keys.pjs);
+        /* ID-TAKEN: the owner's previous page still holds the id; it is asked for again, with a pause. */
+        net.idTaken[keys.pjs] = 2;
+        const got = [];
+        const t0 = Date.now();
+        host = S.Rendezvous({ role: 'host', rooms: [room], onEnvelope: function (inner, rm, env) { got.push({ inner: inner, env: env }); } }).start();
+        await until921S6('the owner to register once the id frees', function () { return host.state().drivers[0].state === 'up'; }, 20000);
+        const tries = net.frames.filter(function (f) { return f.type === 'PJS-CONNECT' && f.id === keys.pjs; });
+        if (tries.length !== 3) throw new Error('the owner asked for its id ' + tries.length + ' times — two refusals then success is three');
+        if (tries[2].at - tries[0].at < 2500) throw new Error('the retries after ID-TAKEN came ' + (tries[2].at - tries[0].at) + ' ms apart in total — the old socket takes time to free, and hammering the server is not waiting');
+        await until921S6('a HEARTBEAT from the owner', function () { return net.frames.some(function (f) { return f.type === 'PJS-HEARTBEAT' && f.from === keys.pjs; }); }, 8000);
+        /* OFFER relayed with its source, and the ANSWER goes back to that source. */
+        const env = await guest.send(room, { t: 'offer', from: guest.tag, to: null, ts: Date.now(), sdp: CODE });
+        await until921S6('the offer to reach the owner', function () { return got.length; });
+        if (got[0].inner.from !== guest.tag) throw new Error('the owner opened an offer from ' + got[0].inner.from);
+        if (host.route(guest.tag) !== 'fmg' + guest.tag) throw new Error('the owner did not learn the source the server stamped on the offer (' + host.route(guest.tag) + '), so it has nowhere to send the answer');
+        const exp = guest.expect(function (i) { return i.t === 'answer' && i.re === env.n; }, 4000);
+        await host.send(room, { t: 'answer', from: host.tag, to: guest.tag, re: env.n, ts: Date.now(), sdp: CODE });
+        await exp;
+        const ansF = net.frames.filter(function (f) { return f.type === 'PJS-ANSWER'; })[0];
+        if (!ansF || ansF.dst !== 'fmg' + guest.tag || ansF.from !== keys.pjs) throw new Error('the answer went ' + JSON.stringify(ansF));
+      } finally { guest.stop(); if (host) host.stop(); }
+      if (net.live().length) throw new Error('stopping both ends left ' + net.live().length + ' socket(s) open');
+    });
+  });
+
+  test('921 S6 with any one relay dead a real join still works, and an offer the three relays all deliver is acted on once', { item: '921', budgetMs: 240000 }, async function () {
+    const C = need921S6('the parallel relays');
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          const H = await relayHost921(ui, ctx);
+          /* Let people in without a knock, through the panel's own switch, so this measures the relays. */
+          await ui.share();
+          const letIn = Array.prototype.filter.call(document.querySelectorAll('.cs-segbtn'), function (b) { return /Let them in/.test(b.textContent); })[0];
+          if (!letIn) throw new Error('the Share panel has no “Let them in” choice for the link');
+          letIn.click();
+          ui.close();
+          const room = H.room;
+          const rv = H.relay.rv;
+          let acted = 0;
+          const orig = rv.onEnvelope;
+          rv.onEnvelope = function () { acted++; return orig.apply(this, arguments); };
+          const dup0 = rv.stats.dup;
+          const g = await relayGuest921(C, room, { key: room.keys.auth, mode: 'link', name: 'Tri' });
+          await g.wait('snap');
+          if (acted !== 1) throw new Error('one join put ' + acted + ' offers in front of the owner — the same envelope arrives once per relay and must be acted on once');
+          const offerN = net.offers(room.keys)[0];
+          const copies = net.frames.filter(function (f) { return f.n === offerN && ((f.type === 'PUBLISH' && f.topic === 'fm1/' + room.keys.topic) || (f.type === 'PJS-OFFER' && f.dst === room.keys.pjs)); }).length;
+          if (net.offers(room.keys).length !== 1) throw new Error('CONTROL: the guest sent ' + net.offers(room.keys).length + ' offers, so the count below is not of one envelope');
+          if (copies !== 3) throw new Error('CONTROL: the offer went out through ' + copies + ' relays, not three, so "acted on once" is not a de-duplication');
+          if (rv.stats.dup - dup0 < 2) throw new Error('CONTROL: only ' + (rv.stats.dup - dup0) + ' extra copies reached the owner, so the three deliveries were never all there to dedupe');
+          g.close();
+          for (const dead of ['broker.emqx.io', '0.peerjs.com', 'broker.hivemq.com']) {
+            net.kill(dead);
+            const g2 = await relayGuest921(C, room, { key: room.keys.auth, mode: 'link', name: 'No ' + dead.split('.')[1] });
+            await g2.wait('snap');
+            g2.close();
+            net.revive(dead);
+            await until921S6('the owner’s ' + dead + ' driver to reconnect by itself', function () { return rv.state().drivers.every(function (d) { return d.state === 'up'; }); }, 40000);
+          }
+        });
+      });
+    });
+  });
+
+  test('921 S6 the knock lets in, turns away, and declines by itself; a member’s token skips it next time; a removed member is refused by name', { item: '921', budgetMs: 240000 }, async function () {
+    const C = need921S6('the knock and the member token');
+    const S = C.signal;
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          const H = await relayHost921(ui, ctx);
+          if (!H.rec.settings.ask) throw new Error('a new room does not ask first — D5: the link can be forwarded, so the owner gets a say before somebody he has not let in arrives');
+          const room = H.room;
+          const knock = function () { return document.getElementById('collab-knock'); };
+          const MK_A = 'mk-allie-0000000000000';
+
+          /* (a) Let in. The card names them, and shows the five letters their screen shows. */
+          const gA = await relayGuest921(C, room, { key: room.keys.auth, mode: 'link', name: 'Allie', mk: MK_A });
+          const card = await until921S6('the knock card', knock);
+          if (!/Allie/.test(card.textContent)) throw new Error('the knock card reads "' + card.textContent + '"');
+          const sas = card.querySelector('.ck-sas b');
+          if (!sas || sas.textContent !== gA.auth.sas) throw new Error('the knock card shows ' + (sas && sas.textContent) + ' where the joiner’s own leg derived ' + gA.auth.sas + ' — the check only works if the two screens show the same letters');
+          if (ctx.S.peerIds().length) throw new Error('somebody was admitted while the knock was still up');
+          card.querySelector('.ck-yes').click();
+          const wA = await gA.wait('welcome');
+          await gA.wait('snap');
+          if (typeof wA.tok !== 'string' || !/^r[0-9a-f]{16}$/.test(wA.rid || '')) throw new Error('the welcome carries no member token (' + JSON.stringify({ rid: wA.rid, tok: typeof wA.tok }) + ') — without one, every phone lock is a new knock');
+          const rec = JSON.parse(localStorage.getItem('fm.collab.host.' + ctx.pid));
+          if (!rec.members[wA.rid] || rec.members[wA.rid].tok !== wA.tok) throw new Error('the owner did not keep the token it handed out, so it cannot recognise them next time');
+
+          /* (b) Don't allow. */
+          const gB = await relayGuest921(C, room, { key: room.keys.auth, mode: 'link', name: 'Bea', mk: 'mk-bea-000000000000000' });
+          (await until921S6('the second knock', knock)).querySelector('.ck-no').click();
+          const dB = await gB.wait('deny');
+          if (dB.why !== 'declined') throw new Error('turning Bea away sent why=' + dB.why);
+          if (gB.msgs.some(function (m) { return m.t === 'welcome' || m.t === 'snap'; })) throw new Error('somebody turned away was sent the project anyway');
+          gB.close();
+
+          /* (c) Nobody answers: it declines itself, and says so where he will look. */
+          ui._knockWait(400);
+          try {
+            const gC = await relayGuest921(C, room, { key: room.keys.auth, mode: 'link', name: 'Cass', mk: 'mk-cass-00000000000000' });
+            await until921S6('the third knock', knock);
+            const dC = await gC.wait('deny', 6000);
+            if (dC.why !== 'declined') throw new Error('an unanswered knock ended with why=' + dC.why);
+            if (knock()) throw new Error('the knock card stayed on screen after it declined itself');
+            gC.close();
+          } finally { ui._knockWait(null); }
+          await ui.share();
+          const note = document.querySelector('#collab-share .cs-note');
+          if (!note || !/Cass/.test(note.textContent) || !/timed out/.test(note.textContent)) throw new Error('nothing in the Share panel says Cass’s request timed out (§19.3’s “quiet note”): ' + (note && note.textContent));
+          ui.close();
+
+          /* (d) Allie's phone locks and comes back: her token, no knock, her old place — through the room's
+             HUB (S6 review), the members-only topic her welcome named, never the link's. */
+          if (typeof wA.hub !== 'string' || wA.hub !== rec.hub) throw new Error('the welcome does not name the room’s hub (' + JSON.stringify(wA.hub) + ') — her reconnect would have to go through the link, which anybody holding it can read');
+          const mroom = await S.memberRoom(wA.hub, wA.rid, wA.tok);
+          const midA = wA.mid;
+          gA.close();
+          await until921S6('the owner to notice Allie left', function () { return ctx.S.peerIds().indexOf(midA) < 0; });
+          let knocked = false;
+          const watch = setInterval(function () { if (knock()) knocked = true; }, 15);
+          try {
+            let forged = null;
+            try { await relayGuest921(C, mroom, { key: new Uint8Array(16), mode: 'tok', rid: wA.rid, name: 'Allie' }); } catch (e) { forged = e; }
+            if (!forged || forged.why !== 'auth') throw new Error('CONTROL: a made-up token for Allie’s id was ' + (forged ? 'refused as ' + forged.why : 'ACCEPTED') + ' — so the token below is not what lets her in');
+            /* …and her REAL token on the link's topic is refused: a token is good only in its own room. */
+            let onLink = null;
+            try { await relayGuest921(C, room, { key: S.fromB64url(wA.tok), mode: 'tok', rid: wA.rid, name: 'Allie' }); } catch (e) { onLink = e; }
+            if (!onLink || onLink.why !== 'auth') throw new Error('Allie’s token was ' + (onLink ? 'refused as ' + onLink.why : 'ACCEPTED') + ' on the LINK’s topic — a token must only work in the hub, where nobody holding the link can read it');
+            const gA2 = await relayGuest921(C, mroom, { key: S.fromB64url(wA.tok), mode: 'tok', rid: wA.rid, name: 'Allie', mk: MK_A });
+            const wA2 = await gA2.wait('welcome');
+            if (knocked) throw new Error('a member coming back with her token was made to knock again — D5: a known member rejoining skips the ask');
+            if (wA2.mid !== midA) throw new Error('Allie came back as ' + wA2.mid + ' instead of her old ' + midA + ' — her presence, leases and every “changed by” point at somebody who has left');
+            if (wA2.rid !== wA.rid || wA2.tok !== wA.tok) throw new Error('the token changed across a reconnect');
+
+            /* (e) He removes her, through the panel's own Remove. */
+            await ui.share();
+            const roleBtn = document.querySelector('.cs-person[data-mid="' + midA + '"] .cs-role');
+            if (!roleBtn) throw new Error('Allie is not in the Share panel’s people list');
+            roleBtn.click();
+            const rm = Array.prototype.filter.call(document.querySelectorAll('#ctx-menu .ctx-item'), function (x) { return /Remove/.test(x.textContent); })[0];
+            if (!rm) throw new Error('the person menu has no Remove');
+            rm.click();
+            const ok = await until921S6('the Remove confirm', function () { const b = document.querySelector('#fm-ask .fm-ask-ok'); return b && !document.getElementById('fm-ask').classList.contains('hidden') ? b : null; });
+            ok.click();
+            const bye = await gA2.wait('bye');
+            if (bye.why !== 'removed') throw new Error('removing her sent bye ' + bye.why);
+            ui.close();
+            let refused = null;
+            try { await relayGuest921(C, mroom, { key: S.fromB64url(wA.tok), mode: 'tok', rid: wA.rid, name: 'Allie' }); } catch (e) { refused = e; }
+            if (!refused || refused.why !== 'removed') throw new Error('her token after removal was ' + (refused ? 'refused as ' + refused.why : 'ACCEPTED') + ' — it must be refused, and by name, so her device stops retrying and says why');
+            if (!refused.proven) throw new Error('the removal reached her device UNSIGNED — her reconnect cannot tell it from somebody else saying so, and must not give up on it');
+            /* Remove changed the link (S6 review), so she is refused on the NEW one, before any knock. */
+            const rec2 = JSON.parse(localStorage.getItem('fm.collab.host.' + ctx.pid));
+            if (rec2.sid === rec.sid) throw new Error('CONTROL: Remove did not change the link, so the lines below measure the old one');
+            const room2 = { kind: 'link', keys: await S.linkKeys(rec2) };
+            knocked = false;
+            const gA3 = await relayGuest921(C, room2, { key: room2.keys.auth, mode: 'link', name: 'Allie again', mk: MK_A });
+            const dA3 = await gA3.wait('deny');
+            if (dA3.why !== 'removed') throw new Error('coming back through the link on the same device was answered ' + dA3.why);
+            if (knocked) throw new Error('a removed member coming back through the link was put in front of the owner as a knock');
+            gA3.close();
+            /* CONTROL: somebody else on the same link still gets the knock, so "refused" above is about her. */
+            const gD = await relayGuest921(C, room2, { key: room2.keys.auth, mode: 'link', name: 'Dee', mk: 'mk-dee-000000000000000' });
+            (await until921S6('a knock for somebody who was never removed', knock)).querySelector('.ck-no').click();
+            await gD.wait('deny');
+            gD.close();
+          } finally { clearInterval(watch); }
+        });
+      });
+    });
+  });
+
+  /* A linked copy of somebody else's project, on THIS device, the way a join would have left it — the
+     starting point of every reconnect. Returns {gpid, room, D} and opens nothing. */
+  function linkedCopy921(C, o) {
+    const layers = [layer921('Shared A'), layer921('Shared B')];
+    const D = { project: { name: 'Ezra’s film', width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: jclone921(layers) };
+    const gpid = FM.projects.createLinked(Object.assign({ hostName: 'Ezra', hostColor: '#a3e635', mid: 'm1', role: 'editor', epoch: 'e-old', seq: 0, name: 'Tester' }, o.meta), D);
+    if (!gpid) throw new Error('could not make the linked copy the reconnect starts from');
+    return { gpid: gpid, D: D };
+  }
+
+  test('921 S6 a shared copy finds its owner by itself: a here from the owner makes it offer again at once, its token lets it in, and a dropped link comes back with the banner saying so', { item: '921', budgetMs: 240000 }, async function () {
+    const C = need921S6('the automatic reconnect');
+    const S = C.signal;
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+        if (wasHome) FM.home.close();
+        const inv = S.newRoom();
+        const M = await member921(S);
+        const lc = linkedCopy921(C, { meta: { sid: inv.sid, sk: inv.sk, rid: M.RID, tok: M.TOK, hub: M.HUB } });
+        /* The member's reconnect goes through the hub (S6 review): that is where its offers are counted. */
+        const room = M.mroom;
+        const host = scriptedHost921(C, null, { doc: lc.D, sid: inv.sid, rid: M.RID, tok: M.TOK, hub: M.HUB, mroom: M.mroom });
+        try {
+          await FM.projects.open(lc.gpid);
+          const R0 = await until921S6('the reconnect to start on opening the copy', function () { return ui._recon(); });
+          if (R0.mode !== 'reopen' || R0.gpid !== lc.gpid) throw new Error('opening the copy started ' + JSON.stringify({ mode: R0.mode, gpid: R0.gpid }));
+          await until921S6('its first offer on the wire', function () { return net.offers(room.keys).length >= 1; }, 10000);
+          const first = net.offers(room.keys)[0], t1 = net.firstSeen(first);
+          /* CONTROL: with nobody there, the NEXT offer is not due for ANSWER_WAIT + 3 s. */
+          await settle921(1500);
+          if (net.offers(room.keys).length !== 1) throw new Error('CONTROL: a second offer came ' + (Date.now() - t1) + ' ms after the first with no `here` — so the one below would not show that `here` caused it');
+          /* The owner comes back and says so. */
+          host.start();
+          await host.rv.ready(5000);
+          const tHere = Date.now();
+          await host.rv.here();
+          await until921S6('an offer in answer to `here`', function () { return net.offers(room.keys).length >= 2; }, 4000);
+          const second = net.firstSeen(net.offers(room.keys)[1]);
+          if (second - t1 >= C.LIMITS.ANSWER_WAIT) throw new Error('the re-offer came ' + (second - t1) + ' ms after the first — that is the schedule, not the `here`');
+          if (second - tHere > 2500) throw new Error('the re-offer came ' + (second - tHere) + ' ms after `here` — §13.5 says retry IMMEDIATELY on the owner’s announce');
+          /* …and the token gets it in, with no knock, straight into C.reopen. */
+          const s1 = await until921S6('the copy to be live again', function () { const s = C.session; return s && s.gpid === lc.gpid && s.online && host.admitted === 1 ? s : null; }, 20000);
+          if (ui._recon()) throw new Error('the reconnect is still running after it succeeded');
+          const ids = function (b) { return (b.layers || []).map(function (l) { return l.id; }).join(); };
+          await until921S6('the snapshot to land', function () { return ids(s1.base) === ids(host.HS.base) && s1.bs === host.H.seq; }, 8000);
+
+          /* The link drops (his phone locked, the Wi-Fi changed): the banner says it is reconnecting, and it does. */
+          s1.endpoint().close();
+          /* The words are shorter on a phone (the pill is 240 px there) — both forms say reconnecting and name him. */
+          const b = await until921S6('the offline banner', function () { const x = document.getElementById('collab-banner'); return x && /reconnecting/i.test(x.textContent) ? x : null; });
+          if (!/Ezra/.test(b.textContent)) throw new Error('the banner reads "' + b.textContent + '" — it should name who went away (§13.1)');
+          const R1 = ui._recon();
+          if (!R1 || R1.mode !== 'live') throw new Error('the dropped link did not start a live reconnect (' + JSON.stringify(R1 && R1.mode) + ')');
+          await until921S6('the copy to come back by itself', function () { const s = C.session; return s === s1 && s.online && host.admitted === 2; }, 20000);
+          await until921S6('the banner to go', function () { return !document.getElementById('collab-banner'); }, 4000);
+          if (ui._recon()) throw new Error('the live reconnect kept running after it succeeded');
+        } finally {
+          host.stop();
+          try { if (C.session) { C.session.stop('left'); C.detach(); } } catch (e) {}
+          C._undoHandover(false);
+          await q915aCleanup([lc.gpid], orig, wasHome, [], [], []);
+        }
+      });
+    });
+  });
+
+  test('921 S6 an owner who opens another project PAUSES the room — the copy stays linked and comes back by itself; only a real end ends it', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S6('a paused room');
+    const S = C.signal;
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+        if (wasHome) FM.home.close();
+        const inv = S.newRoom();
+        const M = await member921(S);
+        const lc = linkedCopy921(C, { meta: { sid: inv.sid, sk: inv.sk, rid: M.RID, tok: M.TOK, hub: M.HUB } });
+        const host = scriptedHost921(C, null, { doc: lc.D, sid: inv.sid, rid: M.RID, tok: M.TOK, hub: M.HUB, mroom: M.mroom });
+        const card = function () { return (FM.projects.list().filter(function (p) { return p.id === lc.gpid; })[0] || {}).collab || {}; };
+        try {
+          host.start();
+          await host.rv.ready(5000);
+          await FM.projects.open(lc.gpid);
+          const s1 = await until921S6('the copy to be live', function () { const s = C.session; return s && s.gpid === lc.gpid && s.online && host.admitted === 1 ? s : null; }, 20000);
+          /* §12.1: he opened another project — his device says `paused` and lets go. */
+          host.links[host.links.length - 1].send('ctl', { t: 'bye', why: 'paused' });
+          await until921S6('the copy to go offline', function () { return s1.online === false; }, 6000);
+          if (s1.ended) throw new Error('a PAUSED room was read as ended (' + s1.ended + ') — the copy stops for good because the owner looked at another project');
+          if (card().ended) throw new Error('a paused room marked the copy ended on disk — the next time it is opened it is DETACHED into a project of its own');
+          if (!ui._recon()) throw new Error('a paused room started no reconnect, so the copy never comes back when he does');
+          await until921S6('the copy to come back by itself', function () { return C.session === s1 && s1.online && host.admitted === 2; }, 20000);
+          /* CONTROL: a real end ends it — marked, no reconnect — so the difference above is `paused`. */
+          host.links[host.links.length - 1].send('ctl', { t: 'bye', why: 'ended' });
+          await until921S6('the end to land', function () { return s1.ended === 'ended'; }, 6000);
+          await settle921(300);
+          if (card().ended !== 'ended') throw new Error('CONTROL: an ENDED room did not mark the copy (' + JSON.stringify(card().ended) + '), so "not marked" above proves nothing');
+          if (ui._recon()) throw new Error('CONTROL: an ended room started a reconnect');
+        } finally {
+          host.stop();
+          try { if (C.session) { C.session.stop('left'); C.detach(); } } catch (e) {}
+          C._undoHandover(false);
+          await q915aCleanup([lc.gpid], orig, wasHome, [], [], []);
+        }
+      });
+    });
+  });
+
+  test('921 S6 an invite that opened the app fills in the Join sheet and waits for one tap — nothing reaches a relay before it — then the owner lets it in, the editor opens on the copy, and the copy keeps the token and hub that bring it back', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S6('the invite join');
+    const S = C.signal;
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+        const inv = S.newRoom();
+        const room = { kind: 'link', keys: await S.linkKeys(inv) };
+        const D = { project: { name: 'Ezra’s film', width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [layer921('From Ezra')] };
+        const HUB = S.b64url(S.randomBytes(16));
+        const host = scriptedHost921(C, room, { doc: D, sid: inv.sid, hub: HUB });
+        const saved = localStorage.getItem('fm.pendingJoin');
+        let gpid = null;
+        try {
+          host.start();
+          await host.rv.ready(5000);
+          localStorage.setItem('fm.pendingJoin', JSON.stringify({ j: S.inviteJ(inv), at: Date.now() }));
+          ui._iosProbe({ nav: { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/128', maxTouchPoints: 0 }, standalone: false });
+          /* An invite lands on Home — a fresh device opens there, and so does every join from the Join button. */
+          if (!FM.home.isOpen()) FM.home.open();
+          await ui.resumePendingJoin();
+          const sheet = document.getElementById('collab-join');
+          if (!sheet) throw new Error('a stashed invite did not open the Join sheet');
+          if (document.querySelector('.cj-code').value !== S.inviteLink(inv)) throw new Error('the Join sheet is not filled in with the invite');
+          /* S6 review: an address bar is not a tap. Any page can send the browser to a #j= address, so
+             nothing — not the name, not the profile key, not an offer — may leave before he taps Join. */
+          const sock0 = net.constructed;
+          await settle921(1500);
+          if (net.offers(room.keys).length || net.constructed !== sock0 || C.session) throw new Error('the invite started joining by itself (' + net.offers(room.keys).length + ' offer(s), ' + (net.constructed - sock0) + ' socket(s)) — a page that navigates to a #j= address would make this device dial a stranger’s room');
+          if (!/Tap Join/.test(document.querySelector('.cj-status').textContent)) throw new Error('the filled-in sheet does not say what to do: "' + document.querySelector('.cj-status').textContent + '"');
+          document.querySelector('.cj-go').click();
+          const s = await until921S6('the join to finish', function () { const x = C.session; return x && !x.isOwner && x.gpid ? x : null; }, 30000);
+          gpid = s.gpid;
+          if (document.getElementById('collab-join')) throw new Error('the Join sheet stayed up after joining');
+          /* S6 review: …and it lands in the EDITOR, on the copy — not on the old Home with the copy missing. */
+          await until921S6('Home to close onto the joined copy', function () { return !FM.home.isOpen(); }, 6000).catch(function () {
+            throw new Error('the join finished with Home still open — the new copy is not on it and OPEN is on another card; tapping that card would stand the new session down');
+          });
+          if (FM.projects.currentId() !== gpid) throw new Error('the editor is on ' + FM.projects.currentId() + ', not the joined copy ' + gpid);
+          if (localStorage.getItem('fm.pendingJoin')) throw new Error('the invite is still pending after it was used — every launch for a day would try it again');
+          const card = FM.projects.list().filter(function (p) { return p.id === gpid; })[0];
+          const cc = card && card.collab;
+          if (!cc || cc.sid !== inv.sid || cc.sk !== inv.sk) throw new Error('the copy does not remember the room it came from (' + JSON.stringify(cc && { sid: cc.sid, sk: !!cc.sk }) + ') — it could never find it again');
+          if (!/^r[0-9a-f]{16}$/.test(cc.rid || '') || typeof cc.tok !== 'string' || !cc.tok) throw new Error('the copy does not hold the member token the owner granted, so the next phone lock is a new knock');
+          if (cc.hub !== HUB) throw new Error('the copy does not hold the room’s hub (' + JSON.stringify(cc.hub) + ') — its reconnect has nowhere private to go');
+          if (cc.hostName !== 'Ezra') throw new Error('the copy calls its owner "' + cc.hostName + '"');
+          if (net.offers(room.keys).length < 1 || host.admitted !== 1) throw new Error('CONTROL: the join did not go through the relay and the owner (' + net.offers(room.keys).length + ' offers, ' + host.admitted + ' admitted)');
+          const ids = function (b) { return (b.layers || []).map(function (l) { return l.id; }).join(); };
+          await until921S6('the snapshot', function () { return ids(s.base) === ids(host.HS.base) && ids(s.base).length > 0; }, 8000);
+        } finally {
+          ui._iosProbe(null);
+          host.stop();
+          if (saved === null) localStorage.removeItem('fm.pendingJoin'); else localStorage.setItem('fm.pendingJoin', saved);
+          try { if (C.session) { C.session.stop('left'); C.detach(); } } catch (e) {}
+          C._undoHandover(false);
+          ui.close();
+          await q915aCleanup(gpid ? [gpid] : [], orig, wasHome, [], [], []);
+        }
+      });
+    });
+  });
+
+  test('921 S6 the version gate speaks on both screens: a newer joiner is told the owner needs an update and the owner is offered one, an older joiner is told to update, the same version gets in', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S6('the version gate');
+    const S = C.signal;
+    /* The joining device’s half, first: its words and its [Update]. The owner here is scripted to refuse. */
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        const inv = S.newRoom();
+        const room = { kind: 'link', keys: await S.linkKeys(inv) };
+        const D = { project: { name: 'x', width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [layer921('X')] };
+        let why = 'guest-older';
+        const host = scriptedHost921(C, room, { doc: D, sid: inv.sid, onHello: function (link) { link.send('ctl', { t: 'deny', why: why, app: 'v99.99', schema: C.SCHEMA_REV + 1 }); } });
+        try {
+          host.start();
+          await host.rv.ready(5000);
+          await ui.join();
+          document.querySelector('.cj-code').value = S.inviteLink(inv);
+          document.querySelector('.cj-go').click();
+          const st = await until921S6('the Join sheet to say what went wrong', function () { const x = document.querySelector('.cj-status'); return x && /Update to join/.test(x.textContent) ? x : null; }, 30000);
+          if (!/Ezra/.test(st.textContent)) throw new Error('the guest-older line does not name the owner: "' + st.textContent + '"');
+          const up = st.querySelector('.cj-alt');
+          if (!up || !/Update/.test(up.textContent)) throw new Error('“Update to join” came with no [Update] to press (§14.7)');
+          const realUpd = ui.updateNow; let asked = null;
+          ui.updateNow = function (j) { asked = j === undefined ? null : j; };
+          try { up.click(); } finally { ui.updateNow = realUpd; }
+          if (asked !== S.inviteJ(inv)) throw new Error('[Update] did not keep the invite for after the reload (' + asked + ') — the join would be lost with the old build');
+          ui.close();
+          why = 'host-older';
+          await ui.join();
+          document.querySelector('.cj-code').value = S.inviteLink(inv);
+          document.querySelector('.cj-go').click();
+          const st2 = await until921S6('the owner-is-older line', function () { const x = document.querySelector('.cj-status'); return x && /needs an update/.test(x.textContent) ? x : null; }, 30000);
+          if (!/Ezra’s FreeMotion needs an update/.test(st2.textContent) || !/tap the version number/.test(st2.textContent)) throw new Error('the host-older line reads "' + st2.textContent + '" — §14.7: “Ezra’s FreeMotion needs an update before you can join — ask Ezra to tap the version number”');
+          ui.close();
+        } finally { host.stop(); ui.close(); }
+      });
+    });
+    /* C.join itself refuses a welcome from a different rule set — an owner on a build before S6 never gates. */
+    for (const p of [[C.SCHEMA_REV + 1, 'guest-older'], [C.SCHEMA_REV - 1, 'host-older']]) {
+      const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'async' });
+      loop.a.onmessage = function (ch, m) { if (m && m.t === 'hello') loop.a.send('ctl', { t: 'welcome', mid: 'm1', epoch: 'e1', seq: 0, role: 'editor', proto: C.PROTO, schema: p[0] }); };
+      let e = null;
+      try { await C.join({ link: loop.b, name: 'G', color: '#ff9f43', timeoutMs: 4000 }); } catch (x) { e = x; }
+      if (!e || e.why !== p[1]) throw new Error('a welcome with schema ' + p[0] + ' (mine ' + C.SCHEMA_REV + ') ended the join with ' + JSON.stringify(e) + ', not ' + p[1]);
+    }
+    /* The owner's half: the real app turns each away, and offers HIM the update when the joiner is newer. */
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          const H = await relayHost921(ui, ctx);
+          let knocked = false;
+          const watch = setInterval(function () { if (document.getElementById('collab-knock')) knocked = true; }, 15);
+          try {
+            const gN = await relayGuest921(C, H.room, { key: H.room.keys.auth, mode: 'link', name: 'Newer', hello: { schema: C.SCHEMA_REV + 1 } });
+            const dN = await gN.wait('deny');
+            if (dN.why !== 'host-older' || dN.schema !== C.SCHEMA_REV || !/^v\d/.test(dN.app || '')) throw new Error('a newer joiner was answered ' + JSON.stringify(dN));
+            gN.close();
+            const ban = await until921S6('the owner’s “newer FreeMotion” banner', function () { const x = document.getElementById('collab-banner'); return x && /Newer (has a newer FreeMotion|is newer)/.test(x.textContent) ? x : null; });
+            const act = ban.querySelector('.cb-act');
+            if (!act || !/Update now/.test(act.textContent)) throw new Error('the banner offers nothing to press — §14.7: [Update now]');
+            const realUpd = ui.updateNow; let pressed = 0;
+            ui.updateNow = function () { pressed++; };
+            try { act.click(); } finally { ui.updateNow = realUpd; }
+            if (pressed !== 1) throw new Error('[Update now] did not update');
+            const gO = await relayGuest921(C, H.room, { key: H.room.keys.auth, mode: 'link', name: 'Older', hello: { schema: C.SCHEMA_REV - 1 } });
+            const dO = await gO.wait('deny');
+            if (dO.why !== 'guest-older') throw new Error('an older joiner was answered ' + JSON.stringify(dO));
+            gO.close();
+            if (knocked) throw new Error('a joiner the owner cannot work with was put in front of him as a knock first');
+            if (ctx.S.peerIds().length) throw new Error('a refused joiner was admitted');
+          } finally { clearInterval(watch); }
+          /* CONTROL: the same version is let in, so the refusals above are about the version. */
+          const gS = await relayGuest921(C, H.room, { key: H.room.keys.auth, mode: 'link', name: 'Same' });
+          (await until921S6('the knock for a same-version joiner', function () { return document.getElementById('collab-knock'); })).querySelector('.ck-yes').click();
+          await gS.wait('welcome');
+          gS.close();
+        });
+      });
+    });
+  });
+
+  test('921 S6 an invite opened in Safari on an iPhone offers the installed app first, and nowhere else does', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S6('the iOS landing card');
+    const S = C.signal;
+    const IPHONE = { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1', maxTouchPoints: 5 };
+    const IPAD = { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15', maxTouchPoints: 5 };
+    const MAC = { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36', maxTouchPoints: 0 };
+    const ANDROID = { userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Mobile Safari/537.36', maxTouchPoints: 5 };
+    if (!C.ui.isIosBrowser(IPHONE, false)) throw new Error('an iPhone in Safari is not recognised');
+    if (C.ui.isIosBrowser(IPHONE, true)) throw new Error('the installed app (standalone) was treated as Safari — it would be told to open itself');
+    if (!C.ui.isIosBrowser(IPAD, false)) throw new Error('an iPad (which reports itself as a Mac with a touch screen) is not recognised');
+    if (C.ui.isIosBrowser(MAC, false) || C.ui.isIosBrowser(ANDROID, false)) throw new Error('a Mac or an Android phone was given the iOS landing card');
+    await withLabs921(async function (ui) {
+      const saved = localStorage.getItem('fm.pendingJoin');
+      const inv = S.newRoom();
+      const realJoin = C.join;
+      try {
+        localStorage.setItem('fm.pendingJoin', JSON.stringify({ j: S.inviteJ(inv), at: Date.now() }));
+        ui._iosProbe({ nav: IPHONE, standalone: false });
+        await ui.resumePendingJoin();
+        const card = document.getElementById('collab-landing');
+        if (!card) throw new Error('an invite opened in iPhone Safari went straight to joining — the copy would land in Safari’s storage, which his installed FreeMotion can never see');
+        if (!/Joining in Safari keeps this copy separate from your FreeMotion app/.test(card.textContent)) throw new Error('the landing card does not say why (§19.7): "' + card.textContent.slice(0, 120) + '"');
+        if (!/Home Screen/.test(card.textContent) || !/Paste/.test(card.textContent)) throw new Error('the landing card does not say how to open it in the app');
+        const copy = card.querySelector('.cl-copy'), here = card.querySelector('.cl-here');
+        if (!copy || !/Copy invite/.test(copy.textContent)) throw new Error('there is no [Copy invite]');
+        if (!here || !/Join here in Safari instead/.test(here.textContent)) throw new Error('there is no way to join in Safari anyway');
+        if (document.getElementById('collab-join')) throw new Error('the Join sheet opened underneath the landing card');
+        if (!localStorage.getItem('fm.pendingJoin')) throw new Error('showing the landing card spent the invite');
+        /* [Join here in Safari instead] goes on to the ordinary join. */
+        C.join = function () { return new Promise(function () {}); };
+        here.click();
+        await until921S6('the Join sheet after “Join here”', function () { return document.getElementById('collab-join'); });
+        if (document.getElementById('collab-landing')) throw new Error('the landing card stayed up');
+        if (document.querySelector('.cj-code').value !== S.inviteLink(inv)) throw new Error('the Join sheet is not filled in with the invite');
+        ui.close();
+        /* CONTROL: the installed app, and a desktop, go straight to the join. */
+        localStorage.setItem('fm.pendingJoin', JSON.stringify({ j: S.inviteJ(inv), at: Date.now() }));
+        ui._iosProbe({ nav: IPHONE, standalone: true });
+        await ui.resumePendingJoin();
+        if (document.getElementById('collab-landing') || !document.getElementById('collab-join')) throw new Error('the INSTALLED app was shown the landing card, or no Join sheet');
+        ui.close();
+        localStorage.setItem('fm.pendingJoin', JSON.stringify({ j: S.inviteJ(inv), at: Date.now() }));
+        ui._iosProbe({ nav: MAC, standalone: false });
+        await ui.resumePendingJoin();
+        if (document.getElementById('collab-landing') || !document.getElementById('collab-join')) throw new Error('a desktop was shown the landing card, or no Join sheet');
+        ui.close();
+        /* On the light Home (where an invite that opened the app lands), the steps are the paper's ink, not
+           the dark theme's near-white — the #864 family this repo keeps re-learning. */
+        const probe = document.createElement('div');
+        probe.className = 'collab-scrim collab-light';
+        const pc = document.createElement('div');
+        pc.className = 'collab-card fm-ask-card';
+        const ol = document.createElement('ol');
+        ol.className = 'cl-steps';
+        ol.textContent = 'x';
+        pc.appendChild(ol); probe.appendChild(pc); document.body.appendChild(probe);
+        const ink = getComputedStyle(ol).color;
+        document.body.removeChild(probe);
+        if (ink !== 'rgb(16, 21, 31)') throw new Error('on the light Home the landing card’s steps are ' + ink + ' — they must be the paper ink #10151f');
+        /* An invite older than a day is dropped, not acted on (§12.4). */
+        localStorage.setItem('fm.pendingJoin', JSON.stringify({ j: S.inviteJ(inv), at: Date.now() - 25 * 3600 * 1000 }));
+        await ui.resumePendingJoin();
+        if (document.getElementById('collab-join') || localStorage.getItem('fm.pendingJoin')) throw new Error('an invite from yesterday was acted on, or kept');
+      } finally {
+        C.join = realJoin;
+        ui._iosProbe(null);
+        ui.close();
+        if (saved === null) localStorage.removeItem('fm.pendingJoin'); else localStorage.setItem('fm.pendingJoin', saved);
+      }
+    });
+  });
+
+  test('921 S6 Codes only opens no WebSocket at all — sharing, a pasted link and a dropped copy all stay off the network — and turning it off opens them', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S6('Codes only');
+    const S = C.signal;
+    if (!('collabCodesOnly' in FM.settings.get())) throw new Error('collabCodesOnly is not one of the settings, so the switch has nothing behind it and cannot survive a reload');
+    const was = FM.settings.get('collabCodesOnly');
+    /* A privacy switch that resets to OFF on every launch is the #688 whitelist bug with a worse
+       consequence: a reload, as far as settings is concerned, is read-the-blob-back-and-apply. */
+    FM.settings.set('collabCodesOnly', true);
+    FM.settings.init();
+    if (FM.settings.get('collabCodesOnly') !== true) throw new Error('Codes only was on and a reload turned it off — collabCodesOnly is saved and never read back, so the relay comes back on by itself every time the app opens');
+    FM.settings.set('collabCodesOnly', false);
+    FM.settings.init();
+    if (FM.settings.get('collabCodesOnly') !== false) throw new Error('CONTROL: Codes only did not read back as off');
+    await withFakeNet921(async function (net) {
+      /* A second counter on the constructor itself, beside the fake's own: the promise is about ANY socket. */
+      const Fake = window.WebSocket;
+      let built = 0;
+      const Counting = function (u, p) { built++; return new Fake(u, p); };
+      Counting.prototype = Fake.prototype;
+      Counting.FM_FAKE = true;
+      window.WebSocket = Counting;
+      try {
+        await withLabs921(async function (ui) {
+          FM.settings.set('collabCodesOnly', true);
+          if (S.relayGate().why !== 'codes-only') throw new Error('with Codes only on, the relay gate says ' + JSON.stringify(S.relayGate()));
+          if (S.iceServers().length) throw new Error('with Codes only on, the peer connection would still ask ' + JSON.stringify(S.iceServers()) + ' — a STUN server is a third party too');
+          await withCollab921([layer921('A')], async function (ctx) {
+            await ui.share();
+            await settle921(600);
+            if (built || net.constructed) throw new Error('sharing with Codes only on built ' + built + ' WebSocket(s)');
+            const box = document.querySelector('#collab-share .cs-invite');
+            if (!box || !/Codes only is on/.test(box.textContent)) throw new Error('the Share panel does not say the link needs the relay: ' + (box && box.textContent));
+            if (document.querySelector('.cs-copylink') || document.getElementById('collab-room-code')) throw new Error('a link or a short code is offered that cannot work with Codes only on');
+            if (!document.querySelector('.cs-add')) throw new Error('the connection-code way in is missing with Codes only on — it is the only way in');
+            ui.close();
+            /* CONTROL: turning it off really does open the relay, so the zero above is the switch. */
+            FM.settings.set('collabCodesOnly', false);
+            await until921S6('the relay to open once Codes only is off', function () { return built > 0 && ui._relay() && ui._relay().status === 'up'; }, 10000);
+            const open = net.live().length;
+            if (!open) throw new Error('CONTROL: the relay reports up with no socket open');
+            /* …and back ON closes every one of them, not just the next session's. */
+            FM.settings.set('collabCodesOnly', true);
+            await until921S6('every socket to close when Codes only goes back on', function () { return net.live().length === 0; }, 4000);
+            if (ui._relay()) throw new Error('the relay object survived Codes only being switched on');
+          });
+          /* A pasted invite link on the Join sheet. */
+          built = 0;
+          await ui.join();
+          document.querySelector('.cj-code').value = S.inviteLink(S.newRoom());
+          document.querySelector('.cj-go').click();
+          await settle921(400);
+          if (built) throw new Error('joining by link with Codes only on built ' + built + ' WebSocket(s)');
+          if (!/Codes only/.test(document.querySelector('.cj-status').textContent)) throw new Error('the Join sheet did not say why the link cannot connect: "' + document.querySelector('.cj-status').textContent + '"');
+          ui.close();
+          /* A copy with everything it needs to reconnect, OPENED: no reconnect, no socket. */
+          const inv = S.newRoom();
+          const lc = linkedCopy921(C, { meta: { sid: inv.sid, sk: inv.sk, rid: 'r0123456789abcdef', tok: S.b64url(S.randomBytes(16)), hub: S.b64url(S.randomBytes(16)) } });
+          const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+          try {
+            await FM.projects.open(lc.gpid);
+            await settle921(400);
+            if (ui._recon()) throw new Error('opening a shared copy started a reconnect with Codes only on');
+            /* CONTROL: the same copy, Codes only off, does start one — so the silence above is the switch. */
+            FM.settings.set('collabCodesOnly', false);
+            ui.resumeOpen();
+            await until921S6('the reconnect with Codes only off', function () { return ui._recon() && built > 0; }, 6000);
+            FM.settings.set('collabCodesOnly', true);
+            if (ui._recon()) throw new Error('switching Codes only on did not stop the reconnect already running');
+            await until921S6('its sockets to close', function () { return net.live().length === 0; }, 4000);
+            built = 0;
+          } finally { await q915aCleanup([lc.gpid], orig, wasHome, [], [], []); }
+          if (built) throw new Error('something built ' + built + ' WebSocket(s) with Codes only on');
+        });
+      } finally {
+        window.WebSocket = Fake;
+        FM.settings.set('collabCodesOnly', !!was);
+      }
+    });
+  });
+
+  test('921 S6 the Share panel hands out a link, a QR the camera reads back as that link, and a 9-character code; Reset makes new ones and the owner stops listening on the old', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S6('the invite panel');
+    const S = C.signal;
+    if (typeof BarcodeDetector === 'undefined') throw new Error('this browser has no BarcodeDetector, so nothing here can read a QR code back — this test cannot measure the one thing that matters about it');
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          const H = await relayHost921(ui, ctx);
+          const link = S.inviteLink(H.rec);
+          await ui.share();
+          const code = document.getElementById('collab-room-code');
+          if (!code || !/^[0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{3}$/.test(code.textContent)) throw new Error('the short code reads "' + (code && code.textContent) + '" — nine Crockford characters in threes');
+          if (S.normRoomCode(code.textContent) !== H.rec.code) throw new Error('the code on screen is not the room’s code');
+          if (!document.querySelector('.cs-copylink')) throw new Error('there is no [Copy link]');
+          /* S6 review: every third party by name, and what anybody watching can see — not "the free relay". */
+          const priv = (document.querySelector('.cs-privacy') || {}).textContent || '';
+          ['PeerJS', 'EMQX', 'HiveMQ', 'Google', 'Cloudflare', 'anyone watching those relays', 'anyone with the link or code', 'never see your project'].forEach(function (w) {
+            if (priv.indexOf(w) < 0) throw new Error('the privacy line does not say “' + w + '”: "' + priv + '" — it names one relay and understates who sees what');
+          });
+          const relayLine = document.getElementById('collab-relay-status');
+          if (!relayLine || !/live/.test(relayLine.textContent)) throw new Error('the panel does not say the link is live: "' + (relayLine && relayLine.textContent) + '"');
+          document.querySelector('.cs-qrbtn').click();
+          const img = document.querySelector('.cs-qr canvas');
+          if (!img) throw new Error('[QR] drew nothing');
+          const found = await new BarcodeDetector({ formats: ['qr_code'] }).detect(img);
+          if (!found.length) throw new Error('the QR on screen could not be read by a QR reader at all');
+          if (found[0].rawValue !== link) throw new Error('the QR reads "' + found[0].rawValue + '" — not the invite link');
+          document.querySelector('.cs-qrbtn').click();
+          if (document.querySelector('.cs-qr')) throw new Error('[QR] a second time did not put it away');
+          /* Reset: a new link and code, and the old topics are no longer listened on. */
+          const oldTopic = H.relay.rooms[0].keys.topic, oldCodeTopic = H.relay.rooms[1].keys.topic;
+          document.querySelector('.cs-reset').click();
+          (await until921S6('the Reset confirm', function () { const b = document.querySelector('#fm-ask .fm-ask-ok'); return b && !document.getElementById('fm-ask').classList.contains('hidden') ? b : null; })).click();
+          const r2 = await until921S6('the relay to restart on the new room', function () { const x = ui._relay(); return x && x !== H.relay && x.status === 'up' && x.rooms ? x : null; }, 10000);
+          const rec2 = JSON.parse(localStorage.getItem('fm.collab.host.' + ctx.pid));
+          if (rec2.sid === H.rec.sid || rec2.sk === H.rec.sk || rec2.code === H.rec.code) throw new Error('Reset kept part of the old room: ' + JSON.stringify({ sid: rec2.sid === H.rec.sid, sk: rec2.sk === H.rec.sk, code: rec2.code === H.rec.code }));
+          const code2 = document.getElementById('collab-room-code');
+          if (!code2 || S.normRoomCode(code2.textContent) !== rec2.code) throw new Error('the panel still shows the old code after Reset');
+          if (r2.rooms[0].keys.topic === oldTopic || r2.rooms[1].keys.topic === oldCodeTopic) throw new Error('after Reset the owner still listens on an old topic');
+          const stillOld = net.live().filter(function (ws) { return ws._kind === 'mqtt'; }).some(function (ws) {
+            return (net.mqtt[ws._host] ? net.mqtt[ws._host].subs : []).some(function (s) { return s.ws === ws && (s.topic === 'fm1/' + oldTopic || s.topic === 'fm1/' + oldCodeTopic); });
+          });
+          if (stillOld) throw new Error('a broker still has the owner subscribed to the OLD room after Reset — the old link would still reach him');
+          ui.close();
+          /* On a phone: the whole invite fits the sheet, its buttons are thumb-sized, and the code reads on
+             ONE line — the code-first layout was rejected for wrapping it (COLLAB-DESIGN.md §19.1). */
+          await atPhoneWidth(async function () {
+            await ui.share();
+            await settle921(420);
+            const card = document.getElementById('collab-share');
+            const inv = card.querySelector('.cs-invite');
+            const box = card.getBoundingClientRect();
+            const out = Array.prototype.filter.call(inv.querySelectorAll('*'), function (n) { const r = n.getBoundingClientRect(); return r.width > 0 && (r.right > box.right + 1 || r.left < box.left - 1); });
+            if (out.length || inv.scrollWidth > inv.clientWidth + 1) throw new Error('at 380 px the invite block sticks out of the sheet (' + (out[0] && out[0].className) + ')');
+            ['.cs-copylink', '.cs-qrbtn', '.cs-copycode'].forEach(function (sel) {
+              const h = card.querySelector(sel).getBoundingClientRect().height;
+              if (h < 44) throw new Error(sel + ' is ' + Math.round(h) + ' px tall on a phone — under the 44 px a thumb needs');
+            });
+            const rc = card.querySelector('.cs-roomcode');
+            const fs = parseFloat(getComputedStyle(rc).fontSize), lh = rc.getBoundingClientRect().height;
+            if (fs < 20) throw new Error('the short code is ' + fs + ' px — it is read out loud from this screen');
+            if (lh > fs * 2.4) throw new Error('the short code wraps onto a second line at 380 px (' + Math.round(lh) + ' px tall at ' + fs + ' px)');
+            ui.close();
+          }, 380);
+        });
+      });
+    });
+  });
+
+  test('921 S6 six seconds with nothing from the owner closes the guest’s link — which starts the reconnect — while a guest that hears its pongs stays on', { item: '921', budgetMs: 30000 }, async function () {
+    const C = need921S6('liveness');
+    const inv = C.bridge.invariants();
+    let t = 5000000;
+    const now = function () { return t; };
+    const doc = { project: { width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [] };
+    const H = C.Host({ base: jclone921(doc), invariants: inv, now: now });
+    const HS = C.Session({ adapter: plainAdapter921(jclone921(doc), inv), role: 'owner', mid: 'o', host: H, now: now });
+    const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'manual' });
+    const mid = HS.addPeer(loop.a, { role: 'editor', name: 'G', color: '#ff9f43' });
+    const GA = plainAdapter921(jclone921(doc), inv);
+    const G = C.Session({ adapter: GA, role: 'editor', mid: mid, base: jclone921(doc), epoch: H.epoch, now: now });
+    G.setLink(loop.b);
+    const sent = [];
+    const origB = loop.b.send;
+    loop.b.send = function (ch, m) { sent.push(m && m.t); return origB.call(loop.b, ch, m); };
+    /* CONTROL: liveness is OFF by default, so a suite that ticks by hand never trips it. */
+    t += 20000; G.tick('hot'); loop.settle();
+    if (!loop.b.open || G.online === false) throw new Error('CONTROL: a guest with liveness OFF closed its link after 20 quiet seconds — every hand-ticked tier-2 test would go offline between two ticks');
+    G.setLiveness(true);
+    G.tick('hot');
+    if (sent.indexOf('ping') < 0) throw new Error('a live guest sent no ping (§20: every 2 s)');
+    loop.settle();
+    t += 4000; G.tick('hot'); loop.settle();
+    t += 4000; G.tick('hot'); loop.settle();
+    if (!loop.b.open || G.online === false) throw new Error('a guest whose pings are answered went offline after 8 s');
+    /* Now the owner goes quiet: nothing is delivered. */
+    t += 3000; G.tick('hot');
+    if (!loop.b.open) throw new Error('the link closed after 3 s of silence — §21 says six');
+    t += 3500; G.tick('hot');
+    if (loop.b.open) throw new Error('6.5 s with nothing from the owner and the link is still open — the guest would sit on "Live" typing into nothing for the thirty-odd seconds ICE takes to call it failed');
+    if (G.online !== false || GA.offlineN !== 1) throw new Error('the link closed but the session was not marked offline (online ' + G.online + ', onOffline ×' + GA.offlineN + ') — the reconnect hangs off exactly that');
+    /* …and a frame on ANY channel counts as the owner being there: presence every 2 s, no pongs at all. */
+    const loop2 = C.link.LoopLink({ aTag: 'h', bTag: 'g2', mode: 'manual' });
+    const mid2 = HS.addPeer(loop2.a, { role: 'editor', name: 'G2', color: '#ff9f43' });
+    const G2 = C.Session({ adapter: plainAdapter921(jclone921(doc), inv), role: 'editor', mid: mid2, base: jclone921(doc), epoch: H.epoch, now: now });
+    G2.setLink(loop2.b);
+    G2.setLiveness(true);
+    loop2.b.send = function () { return true; };          // its pings reach nobody, so no pong ever comes back
+    for (let i = 0; i < 6; i++) { t += 2000; loop2.a.send('pres', { t: 'pr', n: i }); loop2.settle(); G2.tick('hot'); }
+    if (!loop2.b.open || G2.online === false) throw new Error('a guest hearing the owner’s presence every 2 s still timed out after 12 s — silence is silence on every channel, not only on ctl');
+  });
+
+  test('921 S6 reopening a project he is sharing starts sharing again on the same link, and a phone that hosts holds a wake lock until sharing stops', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S6('the resume and the wake lock');
+    const had = Object.getOwnPropertyDescriptor(navigator, 'wakeLock');
+    const locks = [];
+    Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request: function (kind) {
+      const l = { kind: kind, released: false, ev: [] };
+      l.addEventListener = function (n, f) { if (n === 'release') l.ev.push(f); };
+      l.release = function () { if (l.released) return Promise.resolve(); l.released = true; l.ev.forEach(function (f) { f(); }); return Promise.resolve(); };
+      locks.push(l);
+      return Promise.resolve(l);
+    } } });
+    try {
+      await withFakeNet921(async function (net) {
+        await withLabs921(async function (ui) {
+          await withCollab921([layer921('A')], async function (ctx) {
+            /* The desktop half at a desktop width in BOTH suite passes — the 380 pass would otherwise be a
+               phone here, and a phone is supposed to take the lock. */
+            await atWideWidth(async function () {
+            const H = await relayHost921(ui, ctx);
+            if (locks.length) throw new Error('a desktop took a wake lock — §12.1 asks for one on phones only');
+            /* Away to another project and back. */
+            const other = await FM.projects.create({ name: 'S6 other', width: 320, height: 240 });
+            try {
+              await until921S6('the session to stand down when he switches project', function () { return !C.session && !ui._relay(); }, 8000);
+              if (net.live().length) throw new Error('switching project left ' + net.live().length + ' relay socket(s) open');
+              await FM.projects.open(ctx.pid);
+              const s = await until921S6('sharing to come back by itself', function () { const x = C.session; return x && x.isOwner && x.pid === ctx.pid ? x : null; }, 10000);
+              const r = await until921S6('its relay', function () { const x = ui._relay(); return x && x.status === 'up' && x.rooms ? x : null; }, 12000);
+              if (r.sid !== H.rec.sid || r.rooms[0].keys.topic !== H.relay.rooms[0].keys.topic) throw new Error('the resumed share listens on a different room — the link he sent no longer works');
+              const g = await relayGuest921(C, H.room, { key: H.room.keys.auth, mode: 'link', name: 'After' });
+              (await until921S6('a knock on the resumed share', function () { return document.getElementById('collab-knock'); })).querySelector('.ck-yes').click();
+              await g.wait('snap');
+              g.close();
+              void s;
+            } finally { await FM.projects.remove(other).catch(function () {}); }
+            }, 1100);
+            /* A phone that hosts: a wake lock at arm, again on return to the screen, gone when sharing stops. */
+            C.end();
+            await atPhoneWidth(async function () {
+              await ui.share();
+              await until921S6('the wake lock', function () { return locks.length === 1 && ui._wake() === locks[0]; }, 4000);
+              if (locks[0].kind !== 'screen') throw new Error('the wake lock asked for ' + locks[0].kind);
+              locks[0].release();                              // the OS lets go when the page is hidden…
+              document.dispatchEvent(new Event('visibilitychange'));
+              await until921S6('the lock to be taken again on return', function () { return locks.length === 2 && ui._wake() === locks[1]; }, 4000);
+              document.querySelector('.cs-stop').click();
+              (await until921S6('the Stop confirm', function () { const b = document.querySelector('#fm-ask .fm-ask-ok'); return b && !document.getElementById('fm-ask').classList.contains('hidden') ? b : null; })).click();
+              await until921S6('the lock to be released when sharing stops', function () { return locks[1].released && !ui._wake(); }, 4000);
+            }, 380);
+          });
+        });
+      });
+    } finally {
+      if (had) Object.defineProperty(navigator, 'wakeLock', had); else delete navigator.wakeLock;
+    }
+  });
+
+  /* ═══ #921 S6 REVIEW — one test per confirmed finding (the review of the uncommitted S6 tree) ═══════════ */
+
+  function askOk921() {
+    return until921S6('the confirm', function () { const b = document.querySelector('#fm-ask .fm-ask-ok'); return b && !document.getElementById('fm-ask').classList.contains('hidden') ? b : null; });
+  }
+  function hostRec921(pid) { return JSON.parse(localStorage.getItem('fm.collab.host.' + pid) || 'null'); }
+  function letThemIn921(ui) {
+    const b = Array.prototype.filter.call(document.querySelectorAll('.cs-segbtn'), function (x) { return /Let them in/.test(x.textContent); })[0];
+    if (!b) throw new Error('the Share panel has no “Let them in” choice');
+    b.click();
+  }
+  function toasts921() {
+    const real = FM.toast, got = [];
+    FM.toast = function (m) { got.push(String(m)); return real.apply(this, arguments); };
+    got.restore = function () { FM.toast = real; };
+    return got;
+  }
+
+  test('921 S6 review: Remove changes the link and the code — the old link reaches nobody, even from another browser with “Let them in” on — while a member still in comes back through the hub, whose envelopes the link cannot open', { item: '921', budgetMs: 240000 }, async function () {
+    const C = need921S6('removal');
+    const S = C.signal;
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          const H = await relayHost921(ui, ctx);
+          await ui.share(); letThemIn921(ui); ui.close();
+          const room = H.room;
+          const gA = await relayGuest921(C, room, { key: room.keys.auth, mode: 'link', name: 'Ann', mk: 'mk-ann-000000000000000' });
+          const wA = await gA.wait('welcome'); await gA.wait('snap');
+          const gB = await relayGuest921(C, room, { key: room.keys.auth, mode: 'link', name: 'Bob', mk: 'mk-bob-000000000000000' });
+          const wB = await gB.wait('welcome'); await gB.wait('snap');
+          if (typeof wA.hub !== 'string') throw new Error('the welcome names no hub, so a member can only come back through the link');
+          /* What anybody holding the link can open — the joiners' offers and the owner's answers — carries an
+             SDP and no name or colour: those travel inside the encrypted channel instead. */
+          let opened = 0;
+          for (const f of net.frames.filter(function (x) { return x.type === 'PUBLISH' && x.topic.indexOf('fm1/' + room.keys.topic) === 0; })) {
+            const inner = await S.openEnvelope(room.keys, JSON.parse(f.payload));
+            if (!inner || inner.t === 'here') continue;
+            opened++;
+            if (inner.nm || inner.cl) throw new Error('a' + (inner.t === 'offer' ? 'n offer' : 'n answer') + ' anybody with the link can open carries ' + JSON.stringify({ nm: inner.nm, cl: inner.cl }));
+          }
+          if (opened < 4) throw new Error('CONTROL: only ' + opened + ' offers/answers were on the link’s topic, so “no names” measured too little');
+          const mA = await S.memberRoom(wA.hub, wA.rid, wA.tok);
+          /* Ann's phone locks and comes back: nothing she sends goes on the link's topic, and nothing she
+             sends in the hub opens with the link's key — so a link holder (or somebody removed) reads none of it. */
+          gA.close();
+          await until921S6('the owner to notice Ann left', function () { return ctx.S.peerIds().indexOf(wA.mid) < 0; });
+          const f0 = net.frames.length;
+          const gA2 = await relayGuest921(C, mA, { key: S.fromB64url(wA.tok), mode: 'tok', rid: wA.rid, name: 'Ann', mk: 'mk-ann-000000000000000' });
+          await gA2.wait('welcome');
+          const pubs = net.frames.slice(f0).filter(function (f) { return f.type === 'PUBLISH'; });
+          if (pubs.some(function (f) { return f.fromGuest && f.topic.indexOf('fm1/' + room.keys.topic) === 0; })) throw new Error('a member’s reconnect was published on the LINK’s topic — anybody holding the link reads her name and address from it');
+          const inHub = pubs.filter(function (f) { return f.topic.indexOf('fm1/' + mA.keys.topic) === 0; });
+          if (!inHub.length) throw new Error('CONTROL: nothing crossed the hub, so “the link cannot open it” below measured nothing');
+          for (const f of inHub) {
+            if (await S.openEnvelope(room.keys, JSON.parse(f.payload))) throw new Error('an envelope in the hub opened with the LINK’s key: ' + f.payload.slice(0, 80));
+          }
+          /* He removes Bob. The dialog says what it does — permanent, and the link and code change. */
+          await ui.share();
+          document.querySelector('.cs-person[data-mid="' + wB.mid + '"] .cs-role').click();
+          Array.prototype.filter.call(document.querySelectorAll('#ctx-menu .ctx-item'), function (x) { return /Remove/.test(x.textContent); })[0].click();
+          const ok = await askOk921();
+          const said = document.getElementById('fm-ask').textContent;
+          if (!/can’t rejoin/.test(said) || !/even with a new link/.test(said) || !/link and the short code change/.test(said)) throw new Error('the Remove dialog does not say it is permanent and changes the link and code: "' + said + '"');
+          ok.click();
+          await gB.wait('bye');
+          ui.close();
+          const rec2 = hostRec921(ctx.pid);
+          if (rec2.sid === H.rec.sid || rec2.sk === H.rec.sk || rec2.code === H.rec.code) throw new Error('Remove left the link or the code as it was — Bob still holds both');
+          if (rec2.hub !== H.rec.hub) throw new Error('Remove changed the hub, which cuts every other member loose');
+          /* Bob, in another browser — a new profile key the refused list has never seen — on the OLD link,
+             with "Let them in" on: before, that let him straight back in. Now nobody answers. */
+          let e = null;
+          try { await relayGuest921(C, room, { key: room.keys.auth, mode: 'link', name: 'Bob in Safari', mk: 'mk-bob-safari-00000000', wait: 4000 }); } catch (x) { e = x; }
+          if (!e || e.why !== 'no-answer') throw new Error('the old link after a Remove was ' + (e ? 'answered with ' + e.why : 'LET IN') + ' — the removed person can come back from any other browser');
+          /* Ann is still in: her phone locks again and she comes back as before, through the hub. */
+          gA2.close();
+          await until921S6('the owner to notice Ann left again', function () { return ctx.S.peerIds().indexOf(wA.mid) < 0; });
+          const gA3 = await relayGuest921(C, mA, { key: S.fromB64url(wA.tok), mode: 'tok', rid: wA.rid, name: 'Ann', mk: 'mk-ann-000000000000000' });
+          const w3 = await gA3.wait('welcome');
+          if (w3.mid !== wA.mid) throw new Error('Ann came back as ' + w3.mid + ' after the link changed, not as ' + wA.mid);
+          gA3.close();
+          /* CONTROL: the NEW link lets people in, so the silence on the old one is the rotation. */
+          const room2 = { kind: 'link', keys: await S.linkKeys(rec2) };
+          const gN = await relayGuest921(C, room2, { key: room2.keys.auth, mode: 'link', name: 'New', mk: 'mk-new-000000000000000' });
+          await gN.wait('welcome');
+          gN.close();
+        });
+      });
+    });
+  });
+
+  test('921 S6 review: only a refusal the owner SIGNED ends a shared copy — a link holder answering first, an unsigned “removed” and the owner’s own handshake timeout (“auth”) are all asked again', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S6('signed refusals');
+    const S = C.signal;
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+        if (wasHome) FM.home.close();
+        const before = FM.projects.list().map(function (p) { return p.id; });
+        const inv = S.newRoom();
+        const M = await member921(S);
+        const lc = linkedCopy921(C, { meta: { sid: inv.sid, sk: inv.sk, rid: M.RID, tok: M.TOK, hub: M.HUB } });
+        const linkRoom = { kind: 'link', keys: await S.linkKeys(inv) };
+        const card = function () { return (FM.projects.list().filter(function (p) { return p.id === lc.gpid; })[0] || {}).collab || null; };
+        /* Somebody holding the LINK answers every offer they can read with "removed". */
+        let heard = 0;
+        const attacker = S.Rendezvous({ role: 'host', rooms: [linkRoom], onEnvelope: function (inner, rm, env) {
+          heard++;
+          S.answer({ rv: attacker, room: rm, offer: inner, env: env, sid: inv.sid, info: { nm: 'Mallory' }, keyFor: function () { return { deny: 'removed' }; } }).catch(function () {});
+        } }).start();
+        let host = null;
+        try {
+          await attacker.ready(5000);
+          await FM.projects.open(lc.gpid);
+          const R = await until921S6('the reconnect to start', function () { return ui._recon(); });
+          await until921S6('its first attempt to end', function () { return R.last ? R : null; }, 15000);
+          if (card() && card().ended) throw new Error('a link holder’s refusal ended the copy (' + card().ended + ') — anybody the link was forwarded to can cut every member loose, one phone lock at a time');
+          if (heard) throw new Error('somebody holding only the LINK could read ' + heard + ' of the member’s reconnect offers');
+          /* In the hub, the owner's side says each refusal in turn. */
+          for (const p of [['removed', false], ['auth', false]]) {
+            host = scriptedHost921(C, null, { doc: lc.D, sid: inv.sid, rid: M.RID, tok: M.TOK, hub: M.HUB, mroom: M.mroom, tokDeny: p[0], tokDenySigned: p[1] });
+            host.start();
+            await host.rv.ready(5000);
+            R.last = null;
+            await host.rv.here();
+            await until921S6('the copy to hear “' + p[0] + '”', function () { return R.last === p[0]; }, 12000);
+            await settle921(200);
+            if (card() && card().ended) throw new Error('an UNSIGNED “' + p[0] + '” ended the copy — a handshake timeout on the owner’s side goes out as “auth”, and anybody can say “removed”');
+            if (ui._recon() !== R) throw new Error('an unsigned “' + p[0] + '” stopped the reconnect for good');
+            host.stop(); host = null;
+          }
+          /* CONTROL: the same refusal SIGNED with the member's token ends it — so the difference is the signature. */
+          host = scriptedHost921(C, null, { doc: lc.D, sid: inv.sid, rid: M.RID, tok: M.TOK, hub: M.HUB, mroom: M.mroom, tokDeny: 'removed', tokDenySigned: true });
+          host.start();
+          await host.rv.ready(5000);
+          await host.rv.here();
+          await until921S6('a signed removal to end the copy', function () { return !ui._recon() && (!card() || card().ended === 'removed'); }, 12000);
+        } finally {
+          attacker.stop();
+          if (host) host.stop();
+          try { if (C.session) { C.session.stop('left'); C.detach(); } } catch (e) {}
+          C._undoHandover(false);
+          const made = FM.projects.list().map(function (p) { return p.id; }).filter(function (id) { return before.indexOf(id) < 0; });
+          await q915aCleanup(made.concat([lc.gpid]), orig, wasHome, [], [], []);
+        }
+      });
+    });
+  });
+
+  test('921 S6 review: four knocks waiting on the short code do not stop a member coming back, and a queued knock whose joiner leaves goes with them', { item: '921', budgetMs: 240000 }, async function () {
+    const C = need921S6('the admission budget');
+    const S = C.signal;
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          const H = await relayHost921(ui, ctx);
+          const knock = function () { return document.getElementById('collab-knock'); };
+          const gA = await relayGuest921(C, H.room, { key: H.room.keys.auth, mode: 'link', name: 'Ann', mk: 'mk-ann-000000000000000' });
+          (await until921S6('Ann’s knock', knock)).querySelector('.ck-yes').click();
+          const wA = await gA.wait('welcome');
+          const mA = await S.memberRoom(wA.hub, wA.rid, wA.tok);
+          const codeRoom = { kind: 'code', keys: await S.codeKeys(H.rec.code) };
+          const coders = [];
+          try {
+            for (let i = 0; i < 4; i++) coders.push(await relayGuest921(C, codeRoom, { key: codeRoom.keys.auth, mode: 'code', name: 'Coder' + i, mk: 'mk-coder' + i + '-0000000000000' }));
+            await until921S6('the first code knock', function () { const k = knock(); return k && /Coder0/.test(k.textContent) ? k : null; });
+            /* Ann's phone locks while all four wait. */
+            gA.close();
+            await until921S6('the owner to notice Ann left', function () { return ctx.S.peerIds().indexOf(wA.mid) < 0; });
+            const gA2 = await relayGuest921(C, mA, { key: S.fromB64url(wA.tok), mode: 'tok', rid: wA.rid, name: 'Ann', mk: 'mk-ann-000000000000000', wait: 5000 });
+            await gA2.wait('welcome');
+            gA2.close();
+            /* The joiner on screen gives up: their knock goes, and the next one comes up at once. */
+            coders[0].close();
+            await until921S6('the next knock to replace the one whose joiner left', function () { const k = knock(); return k && /Coder1/.test(k.textContent) ? k : null; }, 8000);
+          } finally {
+            coders.forEach(function (g) { g.close(); });
+            for (let i = 0; i < 6 && knock(); i++) { const k = knock(); k.querySelector('.ck-no').click(); await settle921(60); }
+          }
+        });
+      });
+    });
+  });
+
+  test('921 S6 review: a knock belongs to its session — opening another project answers it “paused” and takes the card away, and a joiner who gives up takes their knock and leaves a note', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S6('the knock’s lifetime');
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          const H = await relayHost921(ui, ctx);
+          const knock = function () { return document.getElementById('collab-knock'); };
+          const gS = await relayGuest921(C, H.room, { key: H.room.keys.auth, mode: 'link', name: 'Sam', mk: 'mk-sam-000000000000000' });
+          await until921S6('Sam’s knock', knock);
+          const other = await FM.projects.create({ name: 'S6 review other', width: 320, height: 240 });
+          try {
+            const d = await gS.wait('deny', 8000);
+            if (d.why !== 'paused') throw new Error('switching project answered the waiting joiner “' + d.why + '” — it is a pause, and sharing comes back when he does');
+            await until921S6('the knock card to go with its session', function () { return !knock(); }, 4000).catch(function () { throw new Error('the knock card stayed on screen over another project, for a session that is no longer running'); });
+            gS.close();
+            await FM.projects.open(ctx.pid);
+            await until921S6('sharing to come back', function () { const x = C.session; return x && x.isOwner && ui._relay() && ui._relay().status === 'up' ? x : null; }, 12000);
+          } finally { await FM.projects.remove(other).catch(function () {}); }
+          /* Tia knocks and gives up before he answers. */
+          const gT = await relayGuest921(C, H.room, { key: H.room.keys.auth, mode: 'link', name: 'Tia', mk: 'mk-tia-000000000000000' });
+          await until921S6('Tia’s knock', knock);
+          gT.close();
+          await until921S6('the knock to go when Tia leaves', function () { return !knock(); }, 8000).catch(function () { throw new Error('Tia left and her knock stayed up — Let in would admit nobody and say nothing'); });
+          await ui.share();
+          const note = document.querySelector('#collab-share .cs-note');
+          if (!note || !/Tia stopped waiting/.test(note.textContent)) throw new Error('nothing says Tia gave up: ' + (note && note.textContent));
+          ui.close();
+        });
+      });
+    });
+  });
+
+  test('921 S6 review: “Back in sync” waits for the owner’s welcome — a reconnect he turns away (full) never says it', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S6('back in sync');
+    const S = C.signal;
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+        if (wasHome) FM.home.close();
+        const inv = S.newRoom();
+        const M = await member921(S);
+        const lc = linkedCopy921(C, { meta: { sid: inv.sid, sk: inv.sk, rid: M.RID, tok: M.TOK, hub: M.HUB } });
+        const got = toasts921();
+        let hellos = 0;
+        let host = scriptedHost921(C, null, { doc: lc.D, sid: inv.sid, rid: M.RID, tok: M.TOK, hub: M.HUB, mroom: M.mroom,
+          onHello: function (link) { hellos++; link.send('ctl', { t: 'deny', why: 'full' }); setTimeout(function () { try { link.close(); } catch (e) {} }, 250); } });
+        try {
+          host.start();
+          await host.rv.ready(5000);
+          await FM.projects.open(lc.gpid);
+          await until921S6('the owner to turn a hello away', function () { return hellos >= 1; }, 20000);
+          await settle921(1200);
+          if (got.some(function (m) { return /Back in sync/.test(m); })) throw new Error('“Back in sync” was said for a reconnect the owner refused: ' + JSON.stringify(got));
+          /* CONTROL: an owner who lets it in — the toast comes, after the welcome. */
+          host.stop();
+          host = scriptedHost921(C, null, { doc: lc.D, sid: inv.sid, rid: M.RID, tok: M.TOK, hub: M.HUB, mroom: M.mroom });
+          host.start();
+          await host.rv.ready(5000);
+          await host.rv.here();
+          await until921S6('“Back in sync” once he lets it in', function () { return got.some(function (m) { return /Back in sync with Ezra/.test(m); }) && host.admitted >= 1; }, 20000);
+        } finally {
+          got.restore();
+          host.stop();
+          try { if (C.session) { C.session.stop('left'); C.detach(); } } catch (e) {}
+          C._undoHandover(false);
+          await q915aCleanup([lc.gpid], orig, wasHome, [], [], []);
+        }
+      });
+    });
+  });
+
+  test('921 S6 review: a link that dies while the joiner waits at the knock is said at once — not after two minutes, and not as the owner’s fault', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S6('a dropped wait');
+    const S = C.signal;
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        const inv = S.newRoom();
+        const room = { kind: 'link', keys: await S.linkKeys(inv) };
+        const D = { project: { name: 'x', width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [layer921('X')] };
+        let held = null;
+        const host = scriptedHost921(C, room, { doc: D, sid: inv.sid, onHello: function (link) { held = link; } });
+        try {
+          host.start();
+          await host.rv.ready(5000);
+          await ui.join();
+          document.querySelector('.cj-code').value = S.inviteLink(inv);
+          document.querySelector('.cj-go').click();
+          await until921S6('the joiner to be waiting at the knock', function () { const x = document.querySelector('.cj-status'); return held && x && /let you in/.test(x.textContent) ? x : null; }, 20000);
+          const t0 = Date.now();
+          held.close();
+          const st = await until921S6('the sheet to say the link dropped', function () { const x = document.querySelector('.cj-status'); return x && /dropped/.test(x.textContent) ? x : null; }, 10000);
+          if (/didn’t answer/.test(st.textContent)) throw new Error('a dropped link was blamed on the owner: "' + st.textContent + '"');
+          if (Date.now() - t0 > 8000) throw new Error('it took ' + (Date.now() - t0) + ' ms to notice');
+        } finally { host.stop(); ui.close(); }
+      });
+    });
+  });
+
+  test('921 S6 review: [Update] on a join typed as a short code keeps the code, and the join is waiting, filled in, after the reload', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S6('the code across an update');
+    const S = C.signal;
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        const code = S.newRoomCode();
+        const room = { kind: 'code', keys: await S.codeKeys(code) };
+        const D = { project: { name: 'x', width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [layer921('X')] };
+        const host = scriptedHost921(C, room, { doc: D, sid: 'code-room', onHello: function (link) { link.send('ctl', { t: 'deny', why: 'guest-older', app: 'v99.99', schema: C.SCHEMA_REV + 1 }); } });
+        const saved = localStorage.getItem('fm.pendingJoin');
+        /* The real updateNow ends in the version tap's reload: that one click is stopped here, nothing else. */
+        const stopVer = function (e) { if (e.target && e.target.closest && e.target.closest('.ver')) { e.stopImmediatePropagation(); e.preventDefault(); } };
+        window.addEventListener('click', stopVer, true);
+        try {
+          host.start();
+          await host.rv.ready(5000);
+          localStorage.removeItem('fm.pendingJoin');
+          await ui.join();
+          document.querySelector('.cj-code').value = S.fmtRoomCode(code);
+          document.querySelector('.cj-go').click();
+          const st = await until921S6('Update to join', function () { const x = document.querySelector('.cj-status'); return x && /Update to join/.test(x.textContent) ? x : null; }, 30000);
+          st.querySelector('.cj-alt').click();
+          const pj = JSON.parse(localStorage.getItem('fm.pendingJoin') || 'null');
+          if (!pj || pj.c !== code) throw new Error('[Update] kept ' + JSON.stringify(pj) + ' for after the reload — the code he typed is lost with the old build');
+          ui.close();
+          localStorage.setItem('fm.pendingJoin', JSON.stringify(pj));
+          await ui.resumePendingJoin();
+          const f = document.querySelector('#collab-join .cj-code');
+          if (!f || S.normRoomCode(f.value) !== code) throw new Error('after the reload the Join sheet is ' + (f ? 'filled with "' + f.value + '"' : 'not there'));
+        } finally {
+          window.removeEventListener('click', stopVer, true);
+          host.stop(); ui.close();
+          if (saved === null) localStorage.removeItem('fm.pendingJoin'); else localStorage.setItem('fm.pendingJoin', saved);
+        }
+      });
+    });
+  });
+
+  test('921 S6 review: while nobody answers, the Join sheet says “their device”, never “them’s”, and a short code is told to check the code', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S6('the waiting words');
+    const S = C.signal;
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        try {
+          await ui.join();
+          document.querySelector('.cj-code').value = S.fmtRoomCode(S.newRoomCode());
+          document.querySelector('.cj-go').click();
+          const st = await until921S6('the “waiting” line', function () { const x = document.querySelector('.cj-status'); return x && /Waiting for/.test(x.textContent) ? x : null; }, 20000);
+          if (/them’s/.test(st.textContent)) throw new Error('the sheet reads "' + st.textContent + '"');
+          if (!/their device/.test(st.textContent) || !/check the code/.test(st.textContent)) throw new Error('the waiting line for a short code reads "' + st.textContent + '" — it should say “their device” and to check the code');
+        } finally { ui.close(); }
+      });
+    });
+  });
+
+  test('921 S6 review: a reopened shared copy says it is reconnecting, and its Share button shows the guest panel with a working Leave — it never arms a room of its own', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S6('a reopened copy');
+    const S = C.signal;
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+        if (wasHome) FM.home.close();
+        const before = FM.projects.list().map(function (p) { return p.id; });
+        const inv = S.newRoom();
+        const M = await member921(S);
+        const lc = linkedCopy921(C, { meta: { sid: inv.sid, sk: inv.sk, rid: M.RID, tok: M.TOK, hub: M.HUB } });
+        try {
+          await FM.projects.open(lc.gpid);
+          const R = await until921S6('the reconnect', function () { return ui._recon(); });
+          const ban = await until921S6('a banner saying it is reconnecting', function () { const b = document.getElementById('collab-banner'); return b && /reconnecting/i.test(b.textContent) ? b : null; }, 4000)
+            .catch(function () { throw new Error('a reopened shared copy shows no banner while it looks for its owner — it looks like his own project'); });
+          if (!/Ezra/.test(ban.textContent)) throw new Error('the banner does not name the owner: "' + ban.textContent + '"');
+          await ui.share();
+          if (C.session) throw new Error('Share on a shared copy ARMED it — a room of the guest’s own, on the public relays, under the owner’s project');
+          if (localStorage.getItem('fm.collab.host.' + lc.gpid)) throw new Error('Share on a shared copy wrote a host record for it');
+          if (ui._recon() !== R) throw new Error('Share on a shared copy stopped its reconnect');
+          const panel = document.getElementById('collab-share');
+          if (!panel || !/Shared with you/.test(panel.textContent) || !/Reconnecting to Ezra/.test(panel.textContent)) throw new Error('the Share button did not open the guest panel: ' + (panel && panel.textContent.slice(0, 120)));
+          panel.querySelector('.cs-stop').click();
+          (await askOk921()).click();
+          await until921S6('Leave to make it his own', function () {
+            const cur = FM.projects.list().filter(function (p) { return p.id === FM.projects.currentId(); })[0];
+            return !FM.projects.list().some(function (p) { return p.id === lc.gpid; }) && cur && !cur.collab;
+          }, 8000);
+          if (ui._recon()) throw new Error('after Leave the copy still dials its owner');
+        } finally {
+          const made = FM.projects.list().map(function (p) { return p.id; }).filter(function (id) { return before.indexOf(id) < 0; });
+          ui.close();
+          await q915aCleanup(made.concat([lc.gpid]), orig, wasHome, [], [], []);
+        }
+      });
+    });
+  });
+
+  test('921 S6 review: the iPhone landing card says how to reach Join in the app — Labs first, then the ⎇ button', { item: '921', budgetMs: 60000 }, async function () {
+    const C = need921S6('the landing card’s steps');
+    const S = C.signal;
+    await withLabs921(async function (ui) {
+      const saved = localStorage.getItem('fm.pendingJoin');
+      try {
+        localStorage.setItem('fm.pendingJoin', JSON.stringify({ j: S.inviteJ(S.newRoom()), at: Date.now() }));
+        ui._iosProbe({ nav: { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari/604.1', maxTouchPoints: 5 }, standalone: false });
+        await ui.resumePendingJoin();
+        const steps = Array.prototype.map.call(document.querySelectorAll('#collab-landing .cl-steps li'), function (li) { return li.textContent; }).join(' | ');
+        if (!/Settings → Labs/.test(steps) || !/Live collaboration/.test(steps)) throw new Error('the steps never say to turn on Live collaboration — with it off (the default) the app has no Join anywhere: ' + steps);
+        if (!/⎇/.test(steps)) throw new Error('the steps do not say what the Join button looks like: ' + steps);
+      } finally {
+        ui._iosProbe(null); ui.close();
+        if (saved === null) localStorage.removeItem('fm.pendingJoin'); else localStorage.setItem('fm.pendingJoin', saved);
+      }
+    });
+  });
+
+  test('921 S6 review: turning Labs off while sharing drops the room, so turning it on again does not re-share the project by itself', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S6('Labs off');
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          await relayHost921(ui, ctx);
+          if (!hostRec921(ctx.pid)) throw new Error('CONTROL: sharing wrote no host record');
+          FM.settings.set('collabLabs', false); ui.syncLabs();
+          if (C.session) throw new Error('CONTROL: Labs off left the session running');
+          if (hostRec921(ctx.pid)) throw new Error('Labs off ended the session (its guests were told “ended”) and KEPT the room — turning Labs on later re-shares it on the same link and code');
+          FM.settings.set('collabLabs', true); ui.syncLabs();
+          ui.resumeOpen();
+          await settle921(600);
+          if (C.session || ui._relay()) throw new Error('turning Labs back on re-armed the project he had stopped sharing');
+        });
+      });
+    });
+  });
+
+  test('921 S6 review: the Share panel says when every relay has dropped, and an MQTT socket that stops answering is found — by the next ping, and at once on a foreground', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S6('a dropped relay');
+    const S = C.signal;
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          await relayHost921(ui, ctx);
+          await ui.share();
+          const line = function () { return document.getElementById('collab-relay-status'); };
+          if (!/live/.test(line().textContent)) throw new Error('CONTROL: the panel does not say the link is live to begin with');
+          ['0.peerjs.com', 'broker.emqx.io', 'broker.hivemq.com'].forEach(function (h) { net.kill(h); });
+          await until921S6('the panel to say it is reconnecting', function () { const l = line(); return l && /Reconnecting/.test(l.textContent) && l.classList.contains('warn') ? l : null; }, 6000)
+            .catch(function () { throw new Error('every relay dropped and the panel still reads "' + line().textContent + '"'); });
+          ['0.peerjs.com', 'broker.emqx.io', 'broker.hivemq.com'].forEach(function (h) { net.revive(h); });
+          await until921S6('the panel to say live again', function () { return /live/.test(line().textContent) && !line().classList.contains('warn'); }, 20000);
+          ui.close();
+        });
+      });
+      /* The half-open socket, at the driver: a broker that stops answering, with a one-second keep-alive. */
+      net.kill('0.peerjs.com'); net.kill('broker.hivemq.com');
+      const room = { kind: 'link', keys: await S.linkKeys(S.newRoom()) };
+      const rv = S.Rendezvous({ role: 'host', rooms: [room], keepalive: 1 }).start();
+      const mq = function () { return rv.state().drivers.filter(function (d) { return d.name === 'mqtt1'; })[0]; };
+      try {
+        await rv.ready(5000);
+        net.mute('broker.emqx.io');
+        await until921S6('the unanswered ping to take the socket down', function () { return mq().state !== 'up'; }, 5000)
+          .catch(function () { throw new Error('a broker that stopped answering left the driver “up” — PINGRESP is never checked'); });
+        net.mute('broker.emqx.io', false);
+        await until921S6('the driver to reconnect by itself', function () { return mq().state === 'up'; }, 15000);
+      } finally { rv.stop(); }
+      /* …and with the ordinary 30 s keep-alive, a foreground (kick) asks at once instead of waiting for it. */
+      const rv2 = S.Rendezvous({ role: 'host', rooms: [room] }).start();
+      try {
+        await rv2.ready(5000);
+        net.mute('broker.emqx.io');
+        rv2.kick();
+        await until921S6('a foreground to find the dead socket', function () { return rv2.state().drivers.filter(function (d) { return d.name === 'mqtt1'; })[0].state !== 'up'; }, 8000)
+          .catch(function () { throw new Error('a foreground did not find a socket that has stopped answering — kick() skips a driver that says it is up'); });
+      } finally { net.mute('broker.emqx.io', false); rv2.stop(); }
+    });
+  });
+
+  test('921 S6 review: the short code lapses — once it has not been on screen for CODE_TTL the owner stops listening on its topic, and the panel shows a new one', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S6('the code’s lifetime');
+    const S = C.signal;
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          ui._codeTtl(1500);
+          try {
+            const H = await relayHost921(ui, ctx);
+            const oldTopic = 'fm1/' + (await S.codeKeys(H.rec.code)).topic;
+            if (!H.relay.rooms.some(function (r) { return r.kind === 'code'; })) throw new Error('CONTROL: the owner was not listening on the code he had just been shown');
+            const r2 = await until921S6('the owner to stop listening on the lapsed code', function () { const x = ui._relay(); return x && x !== H.relay && x.status === 'up' && x.rooms && !x.rooms.some(function (r) { return r.kind === 'code'; }) ? x : null; }, 10000)
+              .catch(function () { throw new Error('the code lapsed and the owner still listens on it — its topic is the same fixed function of 45 bits everywhere, so a code that never lapses can be cracked at leisure'); });
+            const f0 = net.frames.length;
+            r2.hereAt = 0; r2.rv.here();
+            await settle921(300);
+            if (net.frames.slice(f0).some(function (f) { return f.type === 'PUBLISH' && f.topic === oldTopic; })) throw new Error('the owner still announces himself on the lapsed code’s topic');
+            await ui.share();
+            const shown = S.normRoomCode(document.getElementById('collab-room-code').textContent);
+            if (shown === H.rec.code) throw new Error('the panel shows the lapsed code again, instead of a new one');
+            await until921S6('the owner to listen on the new code', function () { const x = ui._relay(); return x && x.code === shown && x.rooms && x.rooms.some(function (r) { return r.kind === 'code'; }) ? x : null; }, 10000);
+            ui.close();
+          } finally { ui._codeTtl(null); }
+        });
+      });
+    });
+  });
+
+  test('921 S6 review: the room-wide offer cap is per door — thirty offers a minute through the link or the code cannot lock a member’s reconnect out', { item: '921', budgetMs: 30000 }, async function () {
+    const S = need921S6('the offer cap').signal;
+    const keys = await S.linkKeys(S.newRoom());
+    const G = S.guard({ isHost: true });
+    async function one(i, kind) {
+      const from = ('0' + i.toString(16)).slice(-2) + 'a1b2c3d4e5f607';
+      const e = await S.seal(keys, { t: 'offer', from: from, to: null, ts: Date.now(), sdp: 'FM1-ABCDE' });
+      return G.check(e, await S.openEnvelope(keys, e), kind);
+    }
+    for (let i = 0; i < 30; i++) { const r = await one(i, i % 2 ? 'link' : 'code'); if (r) throw new Error('CONTROL: join offer ' + (i + 1) + ' of 30 was refused as ' + r); }
+    if (await one(40, 'link') !== 'flood') throw new Error('CONTROL: a 31st join offer in a minute was not refused, so the cap below was never full');
+    const m = await one(50, 'member');
+    if (m !== null) throw new Error('a member’s reconnect was refused (' + m + ') because strangers had used up the room’s thirty — anybody holding the code could keep every member out');
+  });
+
+  test('921 S6 review: Settings → Labs names every third party the relay uses, like the Share panel does', { item: '921', budgetMs: 30000 }, async function () {
+    need921S6('the Labs wording');
+    const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (wasHome) FM.home.close();
+    try {
+      FM.settings.open();
+      await settle921(60);
+      const txt = (document.querySelector('.set-panel') || {}).textContent || '';
+      ['PeerJS', 'EMQX', 'HiveMQ', 'Google', 'Cloudflare', 'never your project'].forEach(function (w) {
+        if (txt.indexOf(w) < 0) throw new Error('Settings → Labs does not say “' + w + '” about the relay');
+      });
+    } finally {
+      if (FM.settings.isOpen()) FM.settings.close();
+      if (wasHome) FM.home.open();
+    }
+  });
+
+  test('921 S6 review: an invite pasted into the address bar of a tab that is already open is picked up, and taken off the address bar', { item: '921', budgetMs: 60000 }, async function () {
+    const C = need921S6('an invite in an open tab');
+    const S = C.signal;
+    await withLabs921(async function (ui) {
+      const saved = localStorage.getItem('fm.pendingJoin');
+      const inv = S.newRoom();
+      try {
+        localStorage.removeItem('fm.pendingJoin');
+        ui._iosProbe({ nav: { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/128', maxTouchPoints: 0 }, standalone: false });
+        location.hash = '#j=' + S.inviteJ(inv);
+        await until921S6('the Join sheet for the pasted invite', function () { return document.getElementById('collab-join'); }, 4000)
+          .catch(function () { throw new Error('an invite pasted into an open tab did nothing — the browser only fires hashchange, and nothing listened'); });
+        if (document.querySelector('.cj-code').value !== S.inviteLink(inv)) throw new Error('the Join sheet is not filled in with the pasted invite');
+        if (location.hash) throw new Error('the 44-character secret is still in the address bar');
+      } finally {
+        ui._iosProbe(null); ui.close();
+        if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+        if (saved === null) localStorage.removeItem('fm.pendingJoin'); else localStorage.setItem('fm.pendingJoin', saved);
+      }
+    });
+  });
+
+  test('921 S6 review: a member who is offline is in the people list with a Remove, and removing them refuses their token, signed', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S6('an offline member');
+    const S = C.signal;
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          const H = await relayHost921(ui, ctx);
+          const gA = await relayGuest921(C, H.room, { key: H.room.keys.auth, mode: 'link', name: 'Allie', mk: 'mk-allie-0000000000000' });
+          (await until921S6('Allie’s knock', function () { return document.getElementById('collab-knock'); })).querySelector('.ck-yes').click();
+          const wA = await gA.wait('welcome');
+          gA.close();
+          await until921S6('the owner to notice Allie left', function () { return ctx.S.peerIds().indexOf(wA.mid) < 0; });
+          await ui.share();
+          const row = document.querySelector('.cs-person[data-rid="' + wA.rid + '"]');
+          if (!row) throw new Error('Allie is offline and not in the people list — a lost phone with her token gets back in with no knock, and there is no Remove to stop it');
+          if (!/offline/.test(row.textContent)) throw new Error('the row does not say she is offline: "' + row.textContent + '"');
+          row.querySelector('.cs-role').click();
+          Array.prototype.filter.call(document.querySelectorAll('#ctx-menu .ctx-item'), function (x) { return /Remove/.test(x.textContent); })[0].click();
+          (await askOk921()).click();
+          await until921S6('the row to go', function () { return !document.querySelector('.cs-person[data-rid="' + wA.rid + '"]'); }, 4000);
+          ui.close();
+          const mA = await S.memberRoom(wA.hub, wA.rid, wA.tok);
+          let e = null;
+          try { await relayGuest921(C, mA, { key: S.fromB64url(wA.tok), mode: 'tok', rid: wA.rid, name: 'Allie' }); } catch (x) { e = x; }
+          if (!e || e.why !== 'removed' || !e.proven) throw new Error('her token after an offline Remove was ' + (e ? 'refused as ' + e.why + (e.proven ? '' : ', UNSIGNED') : 'ACCEPTED'));
+        });
+      });
+    });
   });
 
   /* The one thing that separates this from sanitizeAudioFx, and the reason it is not a copy of it.

@@ -1264,3 +1264,19 @@ html[data-home="light"] .hm-top { border-bottom-color: rgba(16, 30, 52, .10); }
 .collab-scrim.collab-light .cs-note { color: #8a5a00; }
 .collab-scrim.collab-light .collab-err { color: #c62740; }
 .collab-scrim.collab-light .collab-swatch.on { border-color: #10151f; }
+/* queue 921 S6: the invite panel, the landing card and the relay-path Join lines, named here in the same
+   edit that adds them — the rule this block has written down twice already. */
+.collab-scrim.collab-light .cs-invite { background-color: rgba(16, 30, 52, .035); border-color: rgba(16, 30, 52, .12); }
+.collab-scrim.collab-light .cs-linkrow button,
+.collab-scrim.collab-light .cs-roomcode,
+.collab-scrim.collab-light .cs-copycode,
+.collab-scrim.collab-light .cj-alt { background-color: #ffffff; border-color: rgba(16, 30, 52, .14); color: #10151f; }
+.collab-scrim.collab-light .cs-linkrow .cs-copylink.accent,
+.collab-scrim.collab-light .cj-alt.accent { background-color: #1780b4; border-color: #1780b4; color: #ffffff; }
+.collab-scrim.collab-light .cs-relay,
+.collab-scrim.collab-light .cs-reset,
+.collab-scrim.collab-light .cs-rowhint,
+.collab-scrim.collab-light .cs-privacy { color: #5a6478; }
+.collab-scrim.collab-light .cs-relay.warn { color: #c62740; }
+.collab-scrim.collab-light .cl-steps,
+.collab-scrim.collab-light .cj-softsas b { color: #10151f; }

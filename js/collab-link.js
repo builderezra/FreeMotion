@@ -489,9 +489,13 @@ window.FM = window.FM || {};
       return code;
     }
 
-    /* The host's half: mint the one-time key that authenticates this pairing, and hand back the code. */
-    ep.createOffer = function () {
-      ep.mk = S.randomBytes(16);
+    /* The host's half: mint the one-time key that authenticates this pairing, and hand back the code.
+       S6: on the RELAY it is the guest that offers, and the key it will prove is the room's (or its
+       member token) — something both ends already hold. `{key:false}` makes an offer with no `mk` in it,
+       because a key minted here and carried inside the sealed envelope would authenticate nothing the
+       envelope's own key does not, and would be one more secret on the wire. */
+    ep.createOffer = function (opts) {
+      ep.mk = (opts && opts.key === false) ? null : S.randomBytes(16);
       return pc.createOffer()
         .then(function (d) { return pc.setLocalDescription(d); })
         .then(gathered)

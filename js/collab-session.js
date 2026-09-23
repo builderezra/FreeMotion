@@ -111,6 +111,13 @@ window.FM = window.FM || {};
     const peers = Object.create(null);            // owner: mid -> endpoint
     let link = null;                              // guest: the host endpoint
     let nextMid = 0;
+    /* S6: what the owner granted each member when it was let in — the id its token is filed under and
+       the token itself — so its `welcome` can carry them (§20 `you:{mid, role, color, tok?}`). */
+    const grants = Object.create(null);
+    /* S6 (§20 ping/pong, §21 liveness): off unless the link is a real one. A LoopLink or a PostLink in the
+       suite never goes quiet by itself, and a guest ticked by hand in a test would read a long pause
+       between two ticks as the host going silent. The UI turns it on for the links it makes. */
+    let liveness = false, lastHeard = now(), lastPing = 0, pingN = 0;
 
     /* ── hot set (§9) ────────────────────────────────────────────────────────────────────────── */
     let hotLast = Object.create(null);
@@ -485,6 +492,10 @@ window.FM = window.FM || {};
     /* ═══ MESSAGES ══════════════════════════════════════════════════════════════════════════════ */
 
     S.onMessage = function (ch, msg, fromMid) {
+      /* Any byte from the host is proof it is there — `pres` every 2 s, `bulk` during a transfer — so the
+         silence clock resets on every channel, BEFORE §8.9's queue can hold the message back: an export
+         must not read as the host going quiet. */
+      if (!isOwner) lastHeard = now();
       /* §15.5's media bytes (S4). They carry no document and no ops, so they go straight to the media
          module — including while §8.9 has the document frozen, because the PARTS are inert records
          under `collab:` and only the APPLY has to wait (see collab-media.js `complete`). Holding the
@@ -503,6 +514,8 @@ window.FM = window.FM || {};
     function hostMessage(mid, msg) {
       switch (msg.t) {
         case 'hello': return onHello(mid, msg);
+        /* §20: answered from onmessage, never queued — its whole meaning is "I am here right now". */
+        case 'ping': sendTo(mid, { t: 'pong', n: (typeof msg.n === 'number' && isFinite(msg.n)) ? msg.n : 0, hc: now() }); return;
         case 'tx': {
           const r = host.receive(mid, msg);
           if (r.ack) sendTo(mid, r.ack);
@@ -529,6 +542,7 @@ window.FM = window.FM || {};
              (queue 921 S2, found by the leave-then-rejoin test). */
           if (peers[mid]) { try { peers[mid].close(); } catch (e) {} }
           delete peers[mid];
+          delete grants[mid];
           return;
         default:
           if (C.media && C.media.onCtl(S, mid, msg)) return;      // mf / ann / want / ok / have (§15, S4)
@@ -541,7 +555,17 @@ window.FM = window.FM || {};
       const have = msg.have || {};
       /* S5: a member who says hello (joined, or came back) is owed the roster and everybody's state now. */
       if (C.presence) { try { C.presence.onJoin(S, mid); } catch (e) {} }
-      sendTo(mid, { t: 'welcome', mid: mid, epoch: host.epoch, seq: host.seq, role: m.role, proto: C.PROTO, schema: C.SCHEMA_REV });
+      const welcome = { t: 'welcome', mid: mid, epoch: host.epoch, seq: host.seq, role: m.role, proto: C.PROTO, schema: C.SCHEMA_REV };
+      /* S6: the member's own token, to THAT member only. It is what lets the phone come back after a lock
+         without the owner being asked again (D5), so it goes nowhere else — not in the roster, not in a
+         broadcast. */
+      if (grants[mid]) {
+        welcome.rid = grants[mid].rid; welcome.tok = grants[mid].tok;
+        /* S6 review: …and the room's hub, the members-only topic its reconnect goes through. */
+        if (typeof grants[mid].hub === 'string') welcome.hub = grants[mid].hub;
+      }
+      if (host.ownerSelf && typeof host.ownerSelf.name === 'string') welcome.hostName = host.ownerSelf.name.slice(0, LIM.NAME);
+      sendTo(mid, welcome);
       if (have.epoch === host.epoch) {
         const tail = host.tail(have.seq || 0);
         if (tail) { sendTo(mid, tail); return; }
@@ -558,6 +582,7 @@ window.FM = window.FM || {};
          Queued behind an export, a `lease-no` would leave the text editor open on a layer somebody else
          holds for as long as the export runs. */
       if (C.presence && C.presence.onCtl(S, 'h', msg)) return;
+      if (msg.t === 'pong') return;                 // S6: consumed by the silence clock above, never queued
       /* §8.9: a guest queues WHOLE incoming messages while frozen or busy, so an export or a half-built
          paste never sees a document somebody else is changing underneath it. */
       if ((frozen() || busy()) && msg.t !== 'welcome') { msgQueue.push({ kind: 'msg', msg: msg }); S.stats.queued++; return; }
@@ -566,6 +591,8 @@ window.FM = window.FM || {};
           S.mid = msg.mid || S.mid;
           S.epoch = msg.epoch;
           S.role = msg.role || S.role;
+          /* S6 review: the owner has ADMITTED this hello — the one moment "back in sync" is true. */
+          if (A.onWelcome) try { A.onWelcome(msg); } catch (e) {}
           return;
         case 'snap': return onSnap(msg);
         case 'tail': {
@@ -587,7 +614,17 @@ window.FM = window.FM || {};
           if (A.onRole) try { A.onRole(r); } catch (e) {}
           return;
         }
-        case 'bye': S.ended = msg.why || 'ended'; S.active = false; if (A.onEnd) A.onEnd(msg.why); return;
+        /* ⚠️ `paused` IS NOT AN END (S6). The owner sends it when he opens ANOTHER project (§12.1 `paused`),
+           and sharing comes back the moment he reopens this one (resume on reopen). Read as `ended` it
+           marked this copy finished — its reconnect never started, and the next open DETACHED it into a
+           project of its own, so an owner glancing at another project cut every guest loose for good.
+           It is the wire going, said politely: the link is closed here, and the reconnect takes it. */
+        case 'bye':
+          if (msg.why === 'paused') { if (link) { try { link.close('paused'); } catch (e) {} } return; }
+          S.ended = msg.why || 'ended'; S.active = false; if (A.onEnd) A.onEnd(msg.why); return;
+        /* S6: the owner's answer to a RECONNECT's hello can be a refusal (§14.7's version gate, removed,
+           full). The app decides what it means — stop trying, or try again later. */
+        case 'deny': if (A.onDeny) { try { A.onDeny(typeof msg.why === 'string' ? msg.why.slice(0, 16) : 'auth'); } catch (e) {} } return;
         default: return;
       }
     }
@@ -932,6 +969,7 @@ window.FM = window.FM || {};
       if (!interacting() && (Object.keys(held).length || deferredOrd)) release();   // settle
       const n = pushLocal(scope || 'hot');
       maybeHash();
+      liveTick();
       /* §15's reconcile (S4). It is deliberately the LAST thing the tick does and it is asynchronous
          inside, so a slow IndexedDB read can never delay the document half of the tick. */
       if (C.media) { try { C.media.tick(S); } catch (e) { C.lastError = e; } }
@@ -1040,8 +1078,9 @@ window.FM = window.FM || {};
          because `replayOutstanding()` sets `replay` when a tail happens to arrive first. */
       if (!on) { markOffline(); return; }
       S.online = true;
+      lastHeard = now();
       /* Reconnect (§13.2): say where we are and let the host choose tail or snap. */
-      sendToHost({ t: 'hello', role: S.role, have: { epoch: S.epoch, seq: S.bs } });
+      sendToHost(helloMsg());
       if (A.onOnline) try { A.onOnline(); } catch (e) {}
     };
     S.myVersion = function () { return clone({ project: view().project, layers: view().layers }); };
@@ -1071,15 +1110,45 @@ window.FM = window.FM || {};
 
     S.setLink = function (ep) {
       link = ep;
+      lastHeard = now();
       if (!ep) return;
       ep.onmessage = function (ch, msg) { S.onMessage(ch, msg, null); };
-      ep.onclose = function () { markOffline(); };
-      ep.onopen = function () { S.online = true; sendToHost({ t: 'hello', role: S.role, have: { epoch: S.epoch, seq: S.bs } }); };
+      /* ⚠️ ONLY THE CURRENT LINK MAY SAY THE WIRE WENT (S6). A reconnect hands the session a NEW link while
+         the old one may still be closing; its late `onclose` used to reach markOffline() and put a session
+         that had just come back straight offline again, with the replacement link open and ignored. */
+      ep.onclose = function () { if (link === ep) markOffline(); };
+      ep.onopen = function () { S.online = true; sendToHost(helloMsg()); };
     };
     S.hello = function (info) {
       const i = info || {};
-      return sendToHost({ t: 'hello', role: S.role, name: i.name, color: i.color, have: { epoch: S.epoch, seq: S.bs } });
+      return sendToHost(helloMsg({ name: i.name, color: i.color }));
     };
+    /* S6 (§20 `hello`): who this device is, carried on EVERY hello — the first one and each reconnect —
+       so the owner's knock card, the version gate and the member table all read the same fields. */
+    function helloMsg(extra) {
+      const me = S.me || {};
+      const m = { t: 'hello', role: S.role, have: { epoch: S.epoch, seq: S.bs }, proto: C.PROTO, schema: C.SCHEMA_REV };
+      if (typeof me.name === 'string') m.name = me.name;
+      if (typeof me.color === 'string') m.color = me.color;
+      if (typeof me.mk === 'string') m.mk = me.mk;
+      if (me.dev === 'phone' || me.dev === 'pc') m.dev = me.dev;
+      if (typeof me.app === 'string') m.app = me.app;
+      const x = extra || {};
+      Object.keys(x).forEach(function (k) { if (x[k] !== undefined) m[k] = x[k]; });
+      return m;
+    }
+    S._helloMsg = helloMsg;
+    /* §21 liveness, guest side: a ping every 2 s, and six seconds with nothing at all from the host
+       closes the link — which is what starts the reconnect. Without it a host whose phone locked leaves
+       the data channel open-but-dead for the thirty-odd seconds ICE takes to call it failed, and the
+       guest sits on "Live" typing into nothing. */
+    S.setLiveness = function (on) { liveness = !!on; lastHeard = now(); lastPing = 0; return liveness; };
+    function liveTick() {
+      if (!liveness || isOwner || !S.online || !link || !link.open) return;
+      const t = now();
+      if (t - lastHeard > LIM.OFFLINE_AFTER) { try { link.close('silence'); } catch (e) {} return; }
+      if (t - lastPing >= LIM.PING) { lastPing = t; sendToHost({ t: 'ping', n: ++pingN }); }
+    }
     /* The owner side: one endpoint per member. The mid is minted HERE and never taken from the peer —
        a guest that could name its own mid could name the owner's and inherit his permissions. */
     S.addPeer = function (ep, info) {
@@ -1091,9 +1160,16 @@ window.FM = window.FM || {};
          there. Answer with null instead so the caller can say so; the deadlines were made one number at
          the same time (C.LIMITS.JOIN_WAIT), and this is the lock on that door. */
       if (ep && ep.open === false) return null;
-      const mid = 'm' + (++nextMid);
+      const i = info || { role: 'editor' };
+      /* S6: a MEMBER coming back (token-verified by the owner's UI, never claimed by the peer) keeps the
+         mid it had, so its presence, its leases and every "changed by" the host remembers still point at
+         the same person. Only an id the host itself minted this session, and only when free. */
+      const again = (typeof i.mid === 'string' && /^m\d{1,6}$/.test(i.mid) && !peers[i.mid] && +i.mid.slice(1) <= nextMid) ? i.mid : null;
+      const mid = again || ('m' + (++nextMid));
       peers[mid] = ep;
-      host.join(mid, info || { role: 'editor' });
+      host.join(mid, i);
+      if (typeof i.rid === 'string' && typeof i.tok === 'string') grants[mid] = { rid: i.rid, tok: i.tok, hub: typeof i.hub === 'string' ? i.hub : undefined };
+      else delete grants[mid];
       ep.onmessage = function (ch, msg) { S.onMessage(ch, msg, mid); };
       ep.onclose = function () { };
       return mid;
@@ -1107,7 +1183,7 @@ window.FM = window.FM || {};
       sendTo(mid, { t: 'role', role: now_ });
       return now_ === role;
     };
-    S.dropPeer = function (mid) { host.part(mid); delete peers[mid]; };
+    S.dropPeer = function (mid) { host.part(mid); delete peers[mid]; delete grants[mid]; };
     S.peerIds = function () { return Object.keys(peers); };
 
     /* ── the seams §15's media module reaches the wire through (S4) ───────────────────────────────
@@ -1125,6 +1201,9 @@ window.FM = window.FM || {};
 
     S.stop = function (why) {
       S.active = false;
+      /* S6 review: WHY it stopped, for whoever tidies up after it — a knock still on the owner's screen is
+         answered "paused" when he merely opened another project, and "ended" when he stopped sharing. */
+      S.stopWhy = why || (isOwner ? 'ended' : 'left');
       /* §12.4: the parts of anything half-arrived are left on disk on purpose — a rejoin to the same
          room resumes from them (§15.7). What is collected is the abandoned ones, and only once the
          session that could still have wanted them is over. */
@@ -1178,6 +1257,24 @@ window.FM = window.FM || {};
   C.Session = Session;
   C._viewOfProject = viewOfProject;
   C.DENY = DENY;
+
+  /* ── S6 helpers for the three doors below ─────────────────────────────────────────────────────── */
+  const CTRL_ = /[\u0000-\u001f\u007f-\u009f]/g;
+  function cleanStr(s, n) { return typeof s === 'string' ? s.replace(CTRL_, '').trim().slice(0, n) : ''; }
+  function meOf(o) { return { name: o.name, color: o.color, mk: o.mk, dev: o.dev, app: o.app }; }
+  function joinHello(o) {
+    const m = { t: 'hello', role: o.role || 'editor', name: o.name, color: o.color, have: { epoch: null, seq: 0 }, proto: C.PROTO, schema: C.SCHEMA_REV };
+    if (typeof o.mk === 'string') m.mk = o.mk;
+    if (o.dev === 'phone' || o.dev === 'pc') m.dev = o.dev;
+    if (typeof o.app === 'string') m.app = o.app;
+    return m;
+  }
+  /* The same comparison the owner makes, turned round: an owner who is NEWER means this device is the
+     older one. */
+  function guestGate(w) {
+    const g = C.signal && C.signal.schemaGate ? C.signal.schemaGate(w) : null;
+    return g === 'host-older' ? 'guest-older' : g === 'guest-older' ? 'host-older' : null;
+  }
 
   /* ═══ ARM, JOIN AND LEAVE (§12.1, §12.2, §12.3) ═══════════════════════════════════════════════
    *
@@ -1292,10 +1389,27 @@ window.FM = window.FM || {};
          from a second number that could drift away from it (queue 921 S3 review). */
       const timer = setTimeout(function () { if (!settled) { settled = true; reject({ why: 'timeout' }); } },
         o.timeoutMs || (C.LIMITS && C.LIMITS.JOIN_WAIT) || 140000);
+      /* ⚠️ A LINK THAT DIES WHILE WE WAIT IS SAID AT ONCE (S6 review). Only `onmessage` was listened to, so a
+         phone that locked, or Wi-Fi that dropped, during the up-to-two-minute knock left the sheet on
+         "Waiting…" for the whole JOIN_WAIT — and then it blamed the owner for not answering. */
+      ep.onclose = function () { if (!settled) { settled = true; clearTimeout(timer); reject({ why: 'closed' }); } };
       ep.onmessage = function (ch, msg) {
         if (ch !== 'ctl' || !msg) return;
-        if (msg.t === 'welcome') { welcome = msg; return; }
-        if (msg.t === 'refused') { if (!settled) { settled = true; clearTimeout(timer); reject({ why: msg.why || 'refused' }); } return; }
+        if (msg.t === 'welcome') {
+          /* §14.7 from THIS side too (S6): an owner on a build before S6 never gates a hello, so the
+             joiner is the only one that can notice the two devices run different document rules. */
+          const g = guestGate(msg);
+          if (g) { if (!settled) { settled = true; clearTimeout(timer); reject({ why: g, app: cleanStr(msg.app, 16) }); } return; }
+          welcome = msg;
+          return;
+        }
+        /* `refused` is S3's word for a knock the owner turned down; `deny` is §20's, and what the relay
+           path sends — declined, full, removed, ended, and the two version refusals, each with its own
+           sentence on the joining device (§22). */
+        if (msg.t === 'refused' || msg.t === 'deny') {
+          if (!settled) { settled = true; clearTimeout(timer); reject({ why: cleanStr(msg.why, 16) || 'refused', app: cleanStr(msg.app, 16) }); }
+          return;
+        }
         if (msg.t === 'snap') { finish(msg); return; }
         /* ⚠️ EVERYTHING ELSE IS KEPT, NOT DROPPED (queue 921). The host puts a joiner in its broadcast
            set the moment its `hello` arrives, so every batch it sequences from then on is addressed
@@ -1307,7 +1421,7 @@ window.FM = window.FM || {};
            work. `reopen()` re-says hello after setLink and so heals itself; join never did. */
         early.push({ ch: ch, msg: msg });
       };
-      ep.send('ctl', { t: 'hello', role: o.role || 'editor', name: o.name, color: o.color, have: { epoch: null, seq: 0 } });
+      ep.send('ctl', joinHello(o));
 
       function finish(snap) {
         if (settled) return;
@@ -1324,9 +1438,16 @@ window.FM = window.FM || {};
           });
           return Promise.reject({ why: 'same-device', pid: clash.pid, linked: clash.linked, name: clash.name });
         }).then(function () {
+          /* S6: what this device needs to find the room again on its own — the invite's sid/sk or the
+             room code it joined with, and the member token the owner granted (`welcome.tok`, filed under
+             `welcome.rid`). A connection-code join has neither rendezvous, so it keeps neither. */
           const gpid = FM.projects.createLinked({
-            sid: o.sid, sk: o.sk, hostName: (welcome && welcome.hostName) || o.hostName, hostColor: o.hostColor,
+            sid: o.sid, sk: o.sk, code: o.code || null,
+            hostName: cleanStr((welcome && welcome.hostName) || o.hostName, 32), hostColor: o.hostColor,
             mid: welcome && welcome.mid, role: (welcome && welcome.role) || o.role || 'editor',
+            rid: welcome && typeof welcome.rid === 'string' ? welcome.rid.slice(0, 32) : null,
+            tok: welcome && typeof welcome.tok === 'string' ? welcome.tok.slice(0, 64) : null,
+            hub: welcome && typeof welcome.hub === 'string' ? welcome.hub.slice(0, 32) : null,
             epoch: snap.epoch, seq: snap.seq, name: o.name
           }, snap.D);
           if (!gpid) return Promise.reject({ why: 'no-room' });
@@ -1341,6 +1462,7 @@ window.FM = window.FM || {};
             S.gpid = gpid;
             S.pid = gpid;                 // what pushLocal checks the open project against
             S.sid = o.sid || gpid;
+            S.me = meOf(o);
             if (C.media) C.media.install(S, { sid: S.sid });   // §15: request media once the copy exists
             S.setLink(ep);
             C.attach(S, o);
@@ -1393,7 +1515,17 @@ window.FM = window.FM || {};
     const ep = o.link;
     const A = o.adapter || C.bridge;
     const gpid = o.gpid || (FM.projects && FM.projects.currentId());
-    return Promise.resolve(A.readBase ? A.readBase(gpid) : null).then(function (saved) {
+    return Promise.resolve(A.readBase ? A.readBase(gpid) : null).then(function (stored) {
+      let saved = stored;
+      /* S6: a guest that never had two quiet seconds to persist a base (§12.4) still has a linked copy
+         and a token, and the reconnect must not strand it. With no base there is nothing to diff
+         against, so it asks for a SNAPSHOT (`epoch: null`) and takes the host's document — the one
+         case in which work made since the join and never confirmed is not recoverable, and the only
+         alternative is never reconnecting at all. Only when the caller asks for it. */
+      if ((!saved || !saved.D) && o.fallbackLive) {
+        const v = A.view();
+        saved = { D: clone({ project: v.project, layers: v.layers }), epoch: null, seq: 0, cid: 0 };
+      }
       if (!saved || !saved.D) return null;
       const S = Session({ adapter: A, role: o.role || 'editor', mid: o.mid || 'g', base: clone(saved.D), epoch: saved.epoch, now: o.now, rand: o.rand });
       S.gpid = gpid;
@@ -1406,9 +1538,10 @@ window.FM = window.FM || {};
       S.sid = o.sid || saved.sid || gpid;
       if (C.media) C.media.install(S, { sid: S.sid });
       const owed = S.recoverOutbox(saved);
+      S.me = meOf(o);
       S.setLink(ep);
       C.attach(S, o);
-      ep.send('ctl', { t: 'hello', role: S.role, name: o.name, have: { epoch: S.epoch, seq: S.bs } });
+      ep.send('ctl', S._helloMsg({ name: o.name }));
       return { session: S, owed: owed, gpid: gpid };
     });
   };

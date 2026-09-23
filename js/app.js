@@ -5999,6 +5999,9 @@ window.FM = window.FM || {};
          Only when he has actually landed in the editor — on Home there is no project to be too big,
          and `projects.open()` still covers what he opens from there. */
       FM._warnOversizeAfterLanding(restored);
+      /* queue 921 S6 (§14.2 step 3): an invite link that opened the app was stashed by collab-core.js at
+         parse time; it is picked up here, once Home exists to fall back to. A no-op with no invite. */
+      if (FM.collab && FM.collab.ui && FM.collab.ui.afterBoot) { try { FM.collab.ui.afterBoot(); } catch (e) {} }
       // Seed the Media library from media already sitting in existing projects, THEN sweep — the
       // sweep's keep-set reads the library, so seeding first is what stops it eating those blobs.
       if (FM.mediaLib) { FM.mediaLib.backfill(); FM.mediaLib.repairBackfilled(); FM.mediaLib.repairMisfiledVideos(); }   // heal indexes poisoned before the fix

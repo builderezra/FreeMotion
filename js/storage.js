@@ -2087,12 +2087,28 @@ window.FM = window.FM || {};
           v: 1, sid: m.sid || null, sk: m.sk || null,
           hostName: m.hostName || '', hostColor: m.hostColor || '#888888',
           mid: m.mid || null, tok: m.tok || null, role: m.role || 'editor',
+          /* S6: the id the owner files this device's token under, and the room code when that is how it
+             came in — with sid/sk (a link) they are everything a reconnect needs to find the room again. */
+          rid: m.rid || null, code: m.code || null,
+          /* S6 review: the members-only topic a reconnect goes through — never the link or the code. */
+          hub: m.hub || null,
           joined: Date.now(), epoch: m.epoch || null, seq: m.seq || 0, cid: 0
         }
       };
       idx.unshift(rec);
       if (!this.saveIndex(idx)) { try { localStorage.removeItem('fm.proj.' + gpid); } catch (e) {} return null; }
       return gpid;
+    },
+    /* S6: note something about a linked copy's room on its card — that the owner ended it or removed this
+       device (so the next open detaches it rather than dialling a room that will never answer), or when it
+       last reached the owner. Only the listed keys, only on a card that IS a linked copy: this is the one
+       place outside createLinked that writes the record holding the room's secrets. */
+    patchCollab(id, patch) {
+      const idx = this.list();
+      const e = idx.find(p => p.id === id);
+      if (!e || !e.collab || !patch) return false;
+      ['ended', 'seen'].forEach(k => { if (k in patch) e.collab[k] = patch[k]; });
+      return this.saveIndex(idx);
     },
     /* §12.3: the linked copy stops being linked and becomes HIS. New project id, NEW LAYER IDS (that is
      * the whole point — the ids were the host's, and two projects on one device holding the same layer

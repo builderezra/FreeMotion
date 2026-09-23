@@ -146,6 +146,16 @@ All are plain classic scripts that attach to `window.FM`. There is no module sys
 rather than 1100, because the link, QR, settings drill-in, Home badge and comments halves belong to the
 stages that ship what they point at. The two `vendor/` files are not loaded at all yet.
 
+**As built (S6):** `collab-signal.js` gains the relay (≈+700 lines: room codes, PBKDF2, the invite
+link, the sealed envelope and its receiver rules, the hand-written MQTT 3.1.1 and PeerJS clients, the
+rendezvous, one dial and one answer). **`vendor/qrcode-generator.js` is NOT used:** `js/collab-qr.js`
+(≈230 lines, `FM.collab.qr`, loaded eagerly like every collab script) draws the invite's QR by hand —
+the link is 88 bytes, a version-6 symbol at level M, so one mode, one level and ten versions cover it,
+where the library is 20 KB for forty versions and four modes and would have had to be fetched (vendor/
+does not hold it, and pulling a third-party file into the repo is a download nobody reviewed). The suite
+checks it the only way that means anything: the browser's own `BarcodeDetector` reads the symbol back
+and must get the link byte for byte (versions 1, 5, 6, 8 and 10 were decoded while it was written).
+
 **index.html:**
 - Add `<script src="js/collab-core.js?v=1">` directly after `js/settings.js` (line 1017).
 - Add the other `js/collab-*.js` tags at the end of the script list, before the inline service-worker block.
@@ -627,6 +637,31 @@ the app ask him to approve the thing he has just done, every time. The switch is
 ships the link and with it the `true` default for that half. `code` and `codesOnly` are absent because
 the 9-character room code and the relay drivers they belong to are S6.
 
+**As built (S6):**
+- **`code` is in the record and `ask` defaults to TRUE** — for the link (D5). A room saved by S3 has no
+  `code`; the first read gives it one AND sets `ask:true`, once: S3's stored `false` was S3's default for
+  codes, not a choice he made about links, and there is no way to tell the two apart. The switch is right
+  there in the panel.
+- **`codesOnly` is NOT in the record.** It is the device setting `collabCodesOnly` (§19.8) and nothing
+  else — one switch in one place, read wherever a relay would start.
+- **`members` is keyed by the id the member's token is filed under** (`r` + 16 hex), not by the engine's
+  mid (`m1`, `m2`…, which restart with every session): `{name, color, role, dev, tok, pmk, added, last}`.
+  `pmk` is the profile key the joiner said hello with. `blocked` holds removed members' ids AND `p:<pmk>`,
+  so a removed phone is refused both on its token and when it comes back through the link.
+- **The UI remembers WHICH project the room is for** (`useRoom(pid)`). It used to keep one `hostRoom` for
+  the page's life, so sharing A, switching to B and sharing B with a session that already existed ran B on
+  A's link and member table. Found by the S6 suite run in order.
+- **Resume on reopen (`paused → arming`) is real:** opening a project whose host record still exists
+  (Stop sharing is what deletes it) arms it again on the SAME room — same link, same code — and says so.
+  It is a new epoch even without a reload (guests take a snapshot instead of a tail); keeping the epoch
+  across a project switch would mean keeping the host alive while its document is not open, which is
+  exactly what `paused` stands down.
+- **A guest reads `bye{why:'paused'}` as the wire going, NOT as the end.** Until S6 it set `ended`, which
+  was harmless while nothing reconnected; with S6 it would have marked the copy ended on disk, started no
+  reconnect, and DETACHED the copy on its next open — so an owner glancing at another project would have cut
+  every guest loose for good. The guest now closes the link itself, goes offline, and the reconnect finds the
+  owner when he reopens the project. Only `ended` and `removed` end a copy. Guarded by its own test.
+
 **ending:**
 - send `bye{why:'ended'}` to everyone;
 - write a final checkpoint;
@@ -755,6 +790,28 @@ The rule is in §7.1 step 6. It is stateless, so it survives a host reload.
 - Every 3 s for the first 2 minutes, then every 10 s until 10 minutes, then every 30 s.
 - Retry immediately on `visibilitychange` → visible, on the `online` event, and on a received host `here` announce.
 
+**As built (S6) — `startRecon` in `js/collab-ui.js`.**
+- **An attempt is ONE offer and its wait (`ANSWER_WAIT`, 6 s); the schedule is the pause BETWEEN
+  attempts.** Read literally, "every 3 s" against §14.3's "a host rejects more than 10 offers per minute"
+  means one honest reconnecting guest (20 a minute) is refused by the very host it is trying to reach. So
+  the host's ten is **per peer tag**, the room as a whole takes thirty (`OFFERS_ALL_PER_MIN`), and an
+  attempt plus its pause is ≥ 9 s — under the ten. Both numbers are in `C.LIMITS` with this reasoning.
+- **An immediate retry cancels an offer still waiting for its answer** (it went to a host that was not
+  there) and sends a fresh one at once; an attempt that already has its answer is left to finish.
+- **Three refusals stop it for good, by name:** `removed` and `ended` (the copy is marked, §12.3) and a
+  token the owner no longer knows (`lost`: "This invite no longer works"). Everything else is a room that
+  is not there yet.
+- **A copy that joined by connection code has no reconnect** — it knows no room to find, and a relay
+  topic derived from its token would need the owner to listen on one topic per member. Its banner keeps
+  S3's sentence, which promises nothing. Codes only likewise: no relay, no reconnect.
+- **The guest notices the owner going quiet** (§20 ping/pong, built here): a ping every 2 s, and six
+  seconds with NOTHING from the owner on any channel closes the link, which is what starts the schedule.
+  It is off unless the link is a real one (`setLiveness`), because a hand-ticked test would otherwise
+  read the pause between two ticks as silence.
+- **§12.3's "7 days of failed reconnects → detach" is NOT built.** It needs a failure count that
+  survives launches for a rule whose only effect is a toast a week late; a room that says `ended` or
+  `removed` detaches on the next open already.
+
 ---
 
 ## 14. Signaling and security (`js/collab-signal.js`)
@@ -787,6 +844,15 @@ The stash happens **before** anything can reload the page: the version-tap `?fre
 
 **iOS Safari, not standalone** (`!(navigator.standalone || matchMedia('(display-mode: standalone)').matches)`): show the landing card (§19.7) first.
 
+**As built (S6):** the stash (`FM.collab.stashJoin`) runs at the FOOT of collab-core.js, after the
+test-agent gate — `fmwipe=1` clears localStorage there, and a stash written first would be wiped by the
+very reset that lets a tier-3 frame start clean. It writes only a well-formed 44-character invite, so a
+hand-typed `#j=anything` cannot plant a value the join flow then has to distrust. Step 3 is a guarded
+one-liner in app.js's boot tail (`FM.collab.ui.afterBoot()`), and the order is: the iOS landing card,
+then Labs (a card with [Turn on]), then the profile, then the Join sheet filled in and already joining.
+The invite is spent on use — joined, or put away — or after 24 h. iPadOS reports itself as a Mac, so a
+Mac with a touch screen counts as iOS.
+
 ### 14.3 Envelope (every rendezvous message)
 
 ```
@@ -811,6 +877,42 @@ The receiver rejects an envelope when:
 - ICE servers: `[{urls:'stun:stun.l.google.com:19302'}, {urls:'stun:stun.cloudflare.com:3478'}]`. They become `[]` when Codes only is set and the device is offline.
 - ICE is non-trickle: wait for `iceGatheringState === 'complete'`, capped at 3 s.
 - When Codes only is on, no driver starts at all.
+
+**As built (S6), §14.1–§14.4, each departure measured or reasoned:**
+- **Who offers.** On the relay the GUEST offers (§14.4's table) with `createOffer({key:false})` — no `mk`
+  in it, because the key it proves is the room's (or its member token) and a second key riding inside the
+  sealed envelope authenticates nothing the envelope's key does not.
+- **The code's HKDF salt is the PBKDF2 salt** (`freemotion-collab-code-v1`). §14.1 says only "the same
+  four labels are derived from C"; the one value a joiner holding nine characters can know is a constant.
+  PBKDF2 is 200 000 rounds, measured at 28 ms on his Mac, and cached per code so a reconnect every few
+  seconds does not pay it each time.
+- **The invite link is built on the live address** (`S.APP_URL`), not `location`: a link made on a local
+  copy would otherwise send the phone to 127.0.0.1. The reader accepts any address — only the fragment
+  matters — and never looks at the query.
+- **`re` is added to the envelope's inner:** an answer names the nonce of the offer it answers, so a guest
+  that has moved on to its next attempt can never pair an old answer with a new peer connection.
+- **The nonce cache is also the de-duplication**, and a nonce is remembered only once it has DECRYPTED,
+  so junk on a busy public broker cannot fill the cache and push a real nonce out of it. The same envelope
+  arriving through three relays is acted on once (the suite counts both halves: three copies arrived,
+  one was acted on).
+- **Offers: ten a minute per peer tag, thirty for the room** — see §13.5 for why the literal "ten" would
+  refuse the reconnect it exists for.
+- **`relayGate()` is checked by every driver immediately before it constructs a socket,** and it refuses
+  for Codes only and — on a loopback page — for any WebSocket class that is not a test fake
+  (`FM_FAKE`) unless the page opted in with `?fmrelay=1`. That makes "the suite never touches the
+  network" a lock: a test that forgot the fake broker gets a refused driver, not a connection from his Mac.
+- **ICE servers are `[]` whenever Codes only is set, online or not** (the spec says "Codes only AND
+  offline"). A STUN server is a third party that learns his address; the mode whose promise is "needs no
+  third party" cannot ask one. Also `[]` offline and on loopback. The connection-code path (S3) stays at
+  `[]` too — it is the fully serverless fallback for when relays are blocked.
+- **`here` travels on MQTT only.** PeerJS delivers to one id at a time and the owner does not know his
+  guests' ids; the brokers carry it to every guest listening on the room topic. A driver that comes back
+  up after being down says `here` again (once a second at most).
+- **PeerJS `ID-TAKEN`** (his previous page still holds the room's id for up to a minute after a reload)
+  is retried at 1, 2, 4, 8 s for 60 s while MQTT carries the room; a guest's id is random and is simply
+  redrawn.
+- **A driver retries on its own** (3 s, then 10 s, then 30 s), and `kick()` — on foreground, `online` or a
+  `here` — retries now. A refusal from the gate is not retried: waiting changes neither answer.
 
 ### 14.5 Connection codes (the fully serverless path)
 
@@ -886,6 +988,25 @@ open link that something could hand to a session.
 
 
 
+**As built (S6), the handshake on the relay:**
+- **The host does not know the key until `auth2` says which one** — the room's (mode `link`/`code`) or
+  the member's token (`tok`). `S.handshake` takes `keyFor(mode, mid)` instead of `key`; it answers the
+  key, or `{deny: why}`. The room's key is only ever valid on the room it came in on, so a code cannot
+  authenticate on the link's topic.
+- **A refusal carries its reason** when it is one the other device has a sentence for (`removed`,
+  `full`, `ended`, `busy`); anything else — a wrong MAC, a timeout — is `auth`, which tells a prober
+  nothing.
+- **Who can sit in the middle, stated exactly** (the warning above, answered): a relay OPERATOR never holds
+  the link, so it can neither open an envelope nor forge the MACs over its own certificates. Somebody who
+  HOLDS THE LINK OR THE CODE can: decrypt a joiner's offer, answer first, and relay both legs. That person
+  could also simply join, which is what the knock is for — so the five SAS letters are shown on the knock
+  card ("Their screen shows K7F2M") and on the joiner's waiting line ("If they ask, your screen shows
+  K7F2M"), offered rather than gated, because the link's promise is one tap. The link and the code are
+  bearer secrets and the Share panel says so.
+- **A hello that lands while the host is still deriving the letters is kept, not dropped** (`ep._early`,
+  read by the owner's `awaitHello`): the guest answers `auth3` the moment its own check passes, and the
+  host's `sas` is one more WebCrypto call after it sent `auth3`.
+
 ### 14.7 Version and schema gate
 
 - `hello` carries `proto` and `schema`.
@@ -899,6 +1020,22 @@ open link that something could hand to a session.
   - the terms are `canon(_sanitizeLayers(FIXTURE)) + canon(fxRegistry param defs) + canon(OP_GRAMMAR) + derivedFingerprint() + SCHEMA_REV`. The **op grammar** is included, which the line omitted: a changed op shape is exactly the incompatibility this gate exists to refuse, and it costs one `canon()` of a frozen literal.
     **S2 added the derived term and bumped `SCHEMA_REV` to 2**, as S1 said it would. It is measured by RUNNING the three writers of §11.1 against `C.DERIVED_FIXTURE()`, never by hashing their source: source text moves when a comment changes, and this gate *refuses a join*, so a false positive means two of his own devices cannot talk after a build that changed nothing — the exact thing the "compatibility is by PROTO + SCHEMA_REV, never by app version" rule exists to avoid. Running them means briefly swapping `FM.scene` for the fixture, because `autoFitDuration` and `inheritLoopModes` take no argument and read `FM.scene` directly. The swap is synchronous (nothing can interleave), restores in a `finally` including `FM.time`, and has its own control in the suite. Parameterising those two functions instead would be a refactor of `app.js` and `timeline.js` that S2 has no other reason to make, on the two functions the whole timeline depends on. The fixture carries **fixed uids**, because `stampIds` mints random ones and a fingerprint that changed on every measurement would be worse than none.
   - the fixture lives in `collab-core.js` beside the constant, not in the suite. Two sources of truth for one number means anyone editing the fixture to cover a new shape would "fix" the constant to match and the gate would quietly stop guarding anything. The suite only compares.
+
+**As built (S6):**
+- `hello` carries `proto`, `schema`, `app`, `mk` and `dev` on EVERY hello — the first and each reconnect —
+  through one builder (`helloMsg`), so the knock card, the gate and the member table read the same fields.
+- **A hello with no `proto` is let in.** Every S3–S5 build says hello without one (only the welcome
+  carried it); those builds run PROTO 1 / SCHEMA_REV 2 exactly like this one, and S6 adds nothing to the
+  wire an older build cannot ignore. Refusing them would refuse a compatible device for a field it was
+  never asked to send.
+- **Both sides gate.** The owner refuses with `deny{why, app, schema}` BEFORE any knock (a joiner he cannot
+  work with is never put in front of him); the joiner also checks the WELCOME, because an owner on a build
+  before S6 never gates at all.
+- The owner's banner is "Sam has a newer FreeMotion" with **[Update now]** (the version label's own
+  force-update) and a ×; the joiner reads "Ezra's FreeMotion needs an update before you can join — ask Ezra
+  to tap the version number", or "Update to join — this FreeMotion is older than Ezra's" with **[Update]**,
+  which re-stashes the invite first so the join resumes on the far side of the reload. A reconnect refused
+  on version stops retrying and the banner says which side needs it.
 
 ### 14.8 Service-worker update during a session
 
@@ -914,6 +1051,7 @@ open link that something could hand to a session.
 - Media must decode through `FM.loadVideoFile`/`loadImageFile` or it is dropped. MIME must be `image/*`, `video/*` or `audio/*`.
 - **Nothing outside D, media and fonts is ever serialized.** A test seeds `fm.anthropic.key` with a canary and asserts that the canary appears in no outgoing frame.
 - **Privacy line in the UI:** "The free relay sees your internet address and timing, never your project. Everything else goes straight between devices, encrypted."
+  - **As changed by the S6 review:** that understated it — three relays, two STUN servers (Google, Cloudflare), public brokers anybody can listen on, and every link/code holder able to open a joiner's offer. The line now names all of them: "Free public services help the devices find each other: relays run by PeerJS, EMQX and HiveMQ, and Google and Cloudflare’s address lookup. They see your internet address and when a room is in use, and so can anyone watching those relays; anyone with the link or code can see the address of each device that connects. They never see your project — it goes straight between devices, encrypted." Settings → Labs says the same in short. Question 1 in §29 should be re-read against this wording.
 
 ---
 
@@ -1359,6 +1497,33 @@ the resting view is lean (§19.1's own word) and the exchange is a step you go i
 "Earlier versions…" (S7 / checkpoints). The "General access" block is therefore one row, *When someone
 joins with a code* [Ask me first | Let them in], which is the code half of §19.1's own segment.
 
+**As built (S6): the invite, drawn three ways and rendered in the real app first (rule 16 / #545).**
+
+| option | what it is | at 380 / 1280 |
+|---|---|---|
+| **link first** (built) | [Copy link] as the big button, [Share…] and [QR] beside it; the 9-character code under them at 22 px with its own [Copy]; the relay's status line; "Reset link and code" | `share-linkfirst-380.png`, `share-linkfirst-1280.png`, and with the QR open `share-linkfirst-qr-380.png` / `-1280.png` |
+| code first | the room code on top at meeting-ID size, "Or send the link" below | `share-codefirst-380.png`, `share-codefirst-1280.png` |
+| QR first | the QR open at rest, the link and the code under it | `share-qrfirst-380.png`, `share-qrfirst-1280.png` |
+
+What decided it, measured: at 380 px the code-first code (30 px) **wraps onto two lines** ("8Q2-E0Z-" / "0R2")
+and the link — the thing he will send nine times in ten — becomes the second choice; QR-first is 196 px of
+symbol at rest that pushes the ask row and the connection-code door below the fold on a phone, for the one
+case (both phones on one table) where a tap on [QR] costs nothing. Link first keeps the whole panel on one
+phone screen with nothing cut, and the QR is one tap away.
+
+Also as built: the ask row is labelled **"When someone uses the link"** with "The short code always asks you
+first." under it — §19.1's "link or code" and §14.1's "code joins always knock" cannot both describe one
+switch, and the safer reading keeps the knock on the code (nine characters read aloud are far easier to hand
+on or overhear than a 44-character link). **A connection code (S3) never knocks**: pasting its answer and
+confirming the five letters is the admission (§14.5), and S6's `ask:true` default would otherwise have put a
+third "are you sure" after the two deliberate steps. "Add someone with a code" is now **"Connect with a code
+instead"** — second choice, still one tap, the only way in with Codes only. §14.9's privacy line sits under it
+word for word. With Codes only on, the invite block says so ("Codes only is on — the link and the short code
+need the free relay…") and offers no link or code that could not work. **Reset link and code** mints a new
+sid, key and code, restarts the relay on the new topics (the suite checks the brokers no longer hold the old
+subscriptions), and says what it does to people already in: they stay; if they drop out they need the new link.
+"They join as [Editor ▾]" and the settings drill-in are S7's.
+
 **Guest panel, S5:** adds the people list — read-only, from the host's `roster`, in the same colours the owner
 sees, each row with a [Follow] — and the owner's role menu gains Follow between the roles and Remove (§19.1).
 
@@ -1410,11 +1575,25 @@ name rather than by copy.
 - **Phone:** fixed, `top: calc(52px + env(safe-area-inset-top) + 8px)`, left and right 8 px, `z-index:225`. This avoids the toast at bottom 244 px and the FAB.
 - **PC:** fixed at the top-right of the stage region, `top:12px; right:12px; width:320px`, `z-index:225`.
 
+**As built (S6):** on the relay the card also shows **"Their screen shows K7F2M"** — the five letters this
+leg of the handshake derived, which the joiner sees too ("If they ask, your screen shows K7F2M"). §14.6's
+answer for the link: offered, not a gate. A request nobody answers declines itself after `KNOCK_TIMEOUT` and
+leaves §19.3's quiet note in the Share panel ("Cass asked to join and was not let in — the request timed
+out."), which is now kept until the panel is next drawn rather than cleared by opening it. Rendered:
+`knock-380.png`, `knock-1280.png`.
+
 ### 19.4 Banner: `#collab-banner`
 
 - Top of `#stage`, centred, 28 px pill, 12.5 px text, `max-width: calc(100% - 140px)` so it clears the people chip.
 - **States:** offline ("Ezra is offline — your changes are kept here (3)"), paused, reconnecting, "Following Sam ×", "Update ready — applies when you leave", "View only".
 - Uses the `ld-in-x` entrance.
+
+**As built (S6):** the offline state promises a reconnect ONLY while one is running for this copy —
+"Ezra is offline · reconnecting… your changes are kept (3)" — and keeps S3's sentence otherwise. The owner's
+§14.7 state is the banner's first ACTION ("Sam has a newer FreeMotion [Update now] ×"). **On a phone both are
+shorter** ("Reconnecting to Ezra… (3 kept)", "Sam is newer [Update now] ×"): photographed at 380 px the pill
+is 240 px wide so it clears the people chip, and the long forms were cut mid-word, losing exactly the half
+that says what to do. Rendered: `banner-reconnecting-380/1280.png`, `banner-newer-380/1280.png`.
 
 ### 19.5 Toasts
 
@@ -1437,11 +1616,26 @@ Toasts use `FM.toast(msg, ms, onTap)` (`app.js:1185`) for single actions. Multi-
 - **[Copy invite]**, then "Open FreeMotion from your Home Screen → Join → Paste".
 - Secondary action: "Join here in Safari instead", which proceeds normally.
 
+**As built (S6), `#collab-landing`:** title "Open this in your FreeMotion app", the sentence above, three
+numbered steps (Tap Copy invite · Open FreeMotion from your Home Screen · Tap Join, then Paste), then
+[Join here in Safari instead] and [Copy invite]. It comes BEFORE the Labs question — which app to use is not
+a setting — and it does not spend the invite (Safari may be opened again). "iOS" includes iPadOS, which
+reports itself as a Mac with a touch screen. With Labs off the next card is **"Turn on Live collaboration to
+join"** [Not now] [Turn on], which turns Labs on and carries straight on to the join. Rendered:
+`landing-380.png`, `landing-1280.png`, `labs-ask-380.png`, `labs-ask-1280.png`, and the Join sheet waiting on a
+knock with its letters, `join-waiting-380.png` / `-1280.png`.
+
 ### 19.8 App Settings (`js/settings.js`)
 
 A "Labs" group near the end, built with `toggleRow`, `actionRow` and `segmentRow`:
 - "Live collaboration (preview)" (`collabLabs`).
 - When on: "Your name and colour" · "Show others' pointers" · "Show others' selections" · "Connect with codes only" (`collabCodesOnly`) · "Join a live project…".
+
+**As built (S6):** "Connect with codes only" is a toggle saved with the other booleans (it is in `load()`'s
+whitelist the same day it was added — the #688 bug with a privacy consequence would be worse than a colour),
+and flipping it reaches anything already running: on, and the host's relay, a reconnect and a join in flight
+all stop and every socket closes; off, and a sharing host's relay starts. The Labs switch's own sentence no
+longer says "nothing goes through a server" — it says what the relay sees. Rendered: `settings-labs-380.png`.
 
 ---
 
@@ -1478,6 +1672,12 @@ A `ctl` message over 16 KB is sent as `{t:'fr', k:<msgId>, i, n, s:<≤16 KB sub
 
 **Bulk frame:** a 12-byte header (§15.5) followed by the payload.
 
+**As built (S6):** `welcome` also carries `rid` and `tok` (to THAT member only — never the roster, never a
+broadcast) and `hostName`; `hello` carries `proto, schema, app, mk, dev` every time; `ping`/`pong` exist
+(the guest pings every 2 s, the owner answers from `onmessage`, never queued); `deny` is also sent AFTER the
+handshake — the owner's answer to a reconnect's hello — and a guest session hands it to the app
+(`onDeny`). S3's `refused` stays for the connection-code path.
+
 ---
 
 ## 21. Limits and constants (all in `collab-core.js`)
@@ -1504,6 +1704,7 @@ A `ctl` message over 16 KB is sent as `{t:'fr', k:<msgId>, i, n, s:<≤16 KB sub
 
 **As built (S4): the media row lives in `C.media.LIMITS` (frozen, exported), not in `C.LIMITS`** — see §15's as-built note. Every number in it is read by `collab-media.js` and by nothing else, and `C.LIMITS` is frozen at parse time in a file three stages older.
 | Knock timeout | 120 s |
+| Relay (S6) | driver up within 8 s; an attempt waits 6 s for its answer; offers 10/min per peer, 30/min per room; ≤ 4 offers being answered at once; PeerJS heartbeat 5 s, ID-TAKEN retried 60 s; MQTT keep-alive 30 s; envelope clock skew 120 s, nonce memory 10 min |
 | Pending join | 24 h |
 | `SCHEMA_REV` / `PROTO` | 1 / 1 |
 
@@ -1532,6 +1733,14 @@ A `ctl` message over 16 KB is sent as `{t:'fr', k:<msgId>, i, n, s:<≤16 KB sub
 | Owner stops sharing | `bye ended` | "Ezra stopped sharing — this is now your own copy" |
 | Export with media missing | §15.8 | `FM.ask` [Wait] [Export anyway] |
 
+**As built (S6):** the relay rows are all built — "Couldn't reach the free connection service" with a way to
+"Connect with a code instead"; "Couldn't connect directly. Put both devices on the same Wi-Fi, or turn off
+mobile data."; "This invite no longer works — ask Ezra for a new link."; declined / full / removed; both
+§14.7 lines; and, new, "Ezra's device isn't answering — ask them to open the project in FreeMotion, then try
+again" after §13.5's first two minutes of a first join. A token the owner no longer knows ends a copy's
+reconnect with "This invite no longer works…", and a copy the owner ended or removed detaches on its next
+open with "Ezra stopped sharing — this is now your own copy" / "Ezra removed you — …".
+
 ---
 
 ## 23. Solo editing unchanged (clause 16)
@@ -1546,6 +1755,10 @@ A `ctl` message over 16 KB is sent as `{t:'fr', k:<msgId>, i, n, s:<≤16 KB sub
   from being false; and the S2 inertness test already asserted `!document.getElementById('btn-share')`,
   so the gate that guards this needed no exemption for the stage that ships the UI.
 - **No listeners, timers, WebSockets or RTCPeerConnections** exist until a session starts. `collab-core.js`'s only work at load is the `#j=` stash and the test-agent gate.
+  **As built (S6):** the two document listeners (`visibilitychange`, `online`) exist only while he hosts or a
+  relay join or reconnect is running, and every WebSocket is constructed behind `relayGate()` — which Codes
+  only closes. The one card that may appear with Labs off is the invite's own "Turn on Live collaboration to
+  join", and only when he opened an invite link.
 - **Hook list.** Every hook is `FM.collab && FM.collab.active && …`, or a behaviour-identical extraction:
 
   | File | Hooks |
@@ -1942,6 +2155,106 @@ attaches it, and `detach()` takes every element, listener, timer and class away.
   - Codes-only starts no WebSocket (constructor count)
 - `/security-review`.
 - **Visible:** "tap a link and you're in".
+
+**As built.** `js/collab-signal.js` (the relay), `js/collab-qr.js` (new), `js/collab-ui.js` (the invite
+block, the host's relay and admission, the Join sheet's relay join, the reconnect, resume on reopen, the pending
+invite, the landing and Labs cards, the wake lock, Codes only), `js/collab-session.js` (hello fields, the
+member grant in `welcome`, mid reuse, ping/pong liveness, `deny`, the reopen fallback), `js/collab-core.js`
+(the stash, two UI hooks, the S6 limits), `js/collab-bridge.js` (`onOffline`/`onEnded`/`onDeny` reach the UI),
+`js/storage.js` (`rid`/`code` on a linked copy; `projects.patchCollab`), `js/settings.js` (`collabCodesOnly`),
+`js/collab-link.js` (an offer with no key), one guarded line in `js/app.js`, one script tag in index.html, and
+the S6 block of `styles.css` / `theme-glass.css`. Every decision against the spec's letter is in its section's
+"as built (S6)" note: §4.1, §12.1, §13.5, §14.1–§14.4, §14.2, §14.6, §14.7, §19.1, §19.3, §19.4, §19.7, §19.8,
+§20, §21, §22, §23.
+
+Seventeen tests, all `921 S6 …`, all against in-page fakes of the three servers (`fakeNet921`: a broker that
+parses MQTT with its OWN parser, and a PeerJS server with ids, EXPIRE and ID-TAKEN) and real peer connections
+in one page — the suite needs no network, and `relayGate` makes that a lock rather than a habit:
+- `the collaboration code can reach exactly the relays and STUN servers §14.4 names — no other host and no TURN — and the invite link points at the app itself` (the app's own local-only test never scanned the collab files)
+- `the envelope seals and opens; a flipped byte, a wrong key, an old timestamp and a reused nonce are all refused; and what a relay carries holds no fingerprint`
+- `an invite is read from the fragment only, and one that opened the app is stashed, taken off the address bar, and survives a ?fresh= reload` (a real boot on its own `*.localhost` origin, then the version tap's navigation)
+- `a room code folds I, L, O and dashes the way people read it, and its PBKDF2 key is the same on every device and every build` (pinned, and recomputed with the browser's own PBKDF2)
+- `the MQTT client speaks 3.1.1 to a broker: CONNECT, SUBSCRIBE and PUBLISH byte by byte, and an offer and its answer cross it sealed`
+- `the PeerJS client against a fake server: OPEN, an offer relayed with its source, EXPIRE for a host that is not there, and a taken id retried until it frees`
+- `with any one relay dead a real join still works, and an offer the three relays all deliver is acted on once`
+- `the knock lets in, turns away, and declines by itself; a member’s token skips it next time; a removed member is refused by name` (through the panel's own Remove)
+- `a shared copy finds its owner by itself: a here from the owner makes it offer again at once, its token lets it in, and a dropped link comes back with the banner saying so`
+- `an owner who opens another project PAUSES the room — the copy stays linked and comes back by itself; only a real end ends it`
+- `tap a link and you’re in: a stashed invite opens the Join sheet already joining, the owner lets it in, and the copy keeps the token that brings it back`
+- `the version gate speaks on both screens: …` (the Join sheet's words and [Update], C.join's own gate, the owner's refusal and his [Update now])
+- `an invite opened in Safari on an iPhone offers the installed app first, and nowhere else does`
+- `Codes only opens no WebSocket at all — sharing, a pasted link and a dropped copy all stay off the network — and turning it off opens them`
+- `the Share panel hands out a link, a QR the camera reads back as that link, and a 9-character code; Reset makes new ones and the owner stops listening on the old` (the QR is read by the browser's BarcodeDetector)
+- `six seconds with nothing from the owner closes the guest’s link — which starts the reconnect — while a guest that hears its pongs stays on`
+- `reopening a project he is sharing starts sharing again on the same link, and a phone that hosts holds a wake lock until sharing stops`
+
+**Found by the suite or by reading the diff, fixed before it shipped:** the module-level `hostRoom` outlived
+its project (§12.1 as-built); a hello racing the host's last WebCrypto call was dropped (§14.6 as-built); the
+knock's timed-out note was cleared by the very opening of the panel that was meant to show it; a helper
+named like S4's `until921` silently replaced it for the whole suite (renamed `until921S6`); `bye paused` ended
+copies for good (above); a guest's own Leave closed its link and briefly started a reconnect (a stopping
+session is not a wire that went); a foreground during a knock sent a second offer through a stopped
+rendezvous and printed an error under a join that was going fine; a joiner that authenticated and never
+said hello left its peer connection open on the owner's side; a role he changed was forgotten by the member
+table, so a member came back from a phone lock as the link's default role.
+
+**Proved:** every S6 test fails with the S6 source reverted; each changed JS file, reverted alone, turns at
+least one S6 test red (the per-file map is in the builder's notes); both stylesheets are caught (a thumb-size
+and one-line-code check at 380 px, and the landing card's light-Home ink); and nine behaviour mutations —
+replay not refused, no de-duplication, an invite read from the query, a member's token still knocking, a
+removed token refused as `auth` rather than by name, `here` ignored, silence ignored, the offer rate per room
+instead of per peer, and `paused` read as ended — are each caught by the test that names the rule.
+
+**Not in S6, and why:** §12.3's 7-day auto-detach (§13.5 as-built); a reconnect for a copy that joined by
+connection code (§13.5 as-built); `here` over PeerJS (§14.4 as-built); keeping the epoch across a project
+switch (§12.1 as-built); "They join as", the settings drill-in (S7); [Scan QR] (S8).
+`/security-review` is the integrator's, before ship.
+
+**The S6 review (21 confirmed findings), as fixed.** The structural change first, because four findings were
+one design fault: every member's RECONNECT went through the link's (or the code's) topic, sealed with the room
+key, so anybody holding the link — including somebody removed — could read each reconnect's SDP (the phone's
+address), answer it first and send "removed", which the reconnect believed for good; and the link could not be
+changed after a removal without cutting every other member loose.
+- **The hub.** Each room has a `hub` (16 random bytes, never rotated) that the owner hands ONLY to members, in
+  their `welcome`, beside the token. It names one topic and one PeerJS id; each member seals there with a key
+  derived from its OWN token (`S.memberKeys`), and the owner opens hub envelopes by trying each member's key
+  (`members()` on a host room). A token is good only in its own member room (`keyFor`). The linked copy stores
+  `hub`; the reconnect never uses sid/sk/code again.
+- **Signed refusals.** A refusal before auth3 is a claim, not an answer: the owner signs "removed" with the
+  member's token (kept in `revoked`, twenty at most, only for this), and the guest reports `proven` only when
+  the MAC checks. The reconnect ends a copy ONLY on a proven removed/ended; `auth` (a handshake timeout, a
+  crypto hiccup, a wrong MAC) is retried — it used to detach the copy as "lost". The Join sheet retries an
+  unproven refusal too.
+- **Remove rotates** the link and code (the hub stays), so the removed person's link reaches nobody — even from
+  another browser with "Let them in" on. The profile-key block is kept and documented as a hint. The dialog says
+  it is permanent and that the link and code change. **Reset** no longer tells him members will need the new link.
+- **Offline members** are listed in the Share panel with role and Remove.
+- **No names in envelopes:** offers and answers carry only the SDP; each side's name travels inside the
+  channel (auth1, hello).
+- **The short code lives CODE_TTL (30 min) after it was last on screen.** Its topic is a fixed function of
+  45 bits (the salt must be a constant a joiner can know), so the owner listens on — and announces `here` on —
+  the code's topic only while it is fresh, and a lapsed code is replaced on the next open of the panel.
+- **Budgets per door:** four pending admissions and thirty offers a minute for strangers (link/code), and their
+  own for members — four code knocks cannot lock a member's reconnect out. A knock whose joiner leaves is taken
+  down; a knock is answered "paused"/"ended" when its session stands down; "stopped waiting" is said.
+- **Reconnect:** "Back in sync" waits for the owner's `welcome` (`onWelcome`); a reopened copy shows a
+  "reconnecting" banner, and its Share button shows the guest panel with a Leave that works without a session.
+- **Relay health:** the panel says "Reconnecting…" when every relay has dropped; an MQTT ping unanswered by the
+  next one (or PING_WAIT after a foreground kick) takes the driver down so it reconnects.
+- **Joining:** an invite from the address bar fills the Join sheet and waits for ONE tap (any page can navigate
+  to a `#j=` address); a join lands in the editor, not on the old Home; a link that dies at the knock says so at
+  once; [Update] on a short-code join keeps the code; "their device", never "them’s", and a short code is told to
+  check the code; an invite pasted into an open tab (`hashchange`) is picked up; the iPhone landing card says to
+  turn Live collaboration on first and names the ⎇ button.
+- **Labs off** while sharing drops the room, so turning Labs on later does not re-share it.
+- **Not done, and why:** tokens do not expire on their own (an idle limit would silently cut off a collaborator
+  who simply did not open the project for a while — a call for Ezra; offline Remove covers the lost phone);
+  offers are not moved to a host-only subtopic (a hostile link holder can subscribe to any topic on a public
+  broker, and honest guests already drop other guests' offers); answers are not sealed to the offerer with
+  ECDH (the owner must answer an offer before any authentication can run, so a link holder can always provoke
+  an answer — rotating the link is the control); the `fm1/` prefix stays (an anonymous `#` subscriber sees every
+  topic anyway, and the payload shape identifies the app); a joiner's `mk` still goes in the hello before
+  admission (the owner's removed-device check needs it before the knock, and joining now takes a tap).
 
 ### S7 · Roles, comments, owner control
 

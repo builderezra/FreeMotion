@@ -160,14 +160,21 @@ window.FM = window.FM || {};
      * "Live". §19.4's banner was written for exactly this moment and could not be reached from anywhere
      * a transport event could get to. A hook the engine calls and the app ignores is worse than a
      * missing feature, because every test of the engine passes. */
-    onOffline: function () { syncCollabBanner(); },
+    /* S6: the wire going is also what STARTS the reconnect (§13.5) — the UI owns the relay and the
+       schedule, so it is told first and the banner is drawn from what it decided. */
+    onOffline: function () { if (C.ui && C.ui.onOffline) { try { C.ui.onOffline(); } catch (e) {} } syncCollabBanner(); },
     onOnline: function () { syncCollabBanner(); },
+    onWelcome: function () { if (C.ui && C.ui.onWelcome) { try { C.ui.onWelcome(); } catch (e) {} } syncCollabBanner(); },
+    onDeny: function (why) { if (C.ui && C.ui.onDeny) { try { C.ui.onDeny(why); } catch (e) {} } syncCollabBanner(); },
     onRole: function () { syncCollabBanner(); },
     onEnd: function (why) {
       /* S5 review: presence goes with the session, here and now. `C.detach` is not called on this path
          (the session object stays, for the Ended banner and the guest panel), and presence was left
          ticking behind it — chip, listeners, Follow, and a stale roster closing his text editor. */
       if (FM.collab && FM.collab.presence) { try { FM.collab.presence.detach(); } catch (e) {} }
+      /* S6: an ended or removed copy must never dial the room again — the card is marked, and the next
+         open detaches it into his own project (§12.3). */
+      if (C.ui && C.ui.onEnded) { try { C.ui.onEnded(why); } catch (e) {} }
       /* “The owner ended this” is NOT an offline state and must not read as one — offline implies it
          comes back, and S3 has no reconnect. Said once, as a toast, and then held in the banner. */
       if (FM.toast) FM.toast(why === 'removed'

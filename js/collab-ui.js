@@ -42,7 +42,19 @@ window.FM = window.FM || {};
   let bannerEl = null, bannerTimer = null;
   let knockQueue = [];                       // §19.3: requests queue one at a time
   let pendingKnock = null;
-  let hostRoom = null;                       // { sid, sk, settings, members } for the project being shared
+  let hostRoom = null;                       // { sid, sk, code, settings, members, blocked } for the project being shared
+  let hostRoomPid = null;                    // …and WHICH project that is (see useRoom)
+  /* ── S6 ── */
+  let relay = null;                          // host: the rendezvous answering offers for hostRoom
+  let recon = null;                          // guest: the §13.5 reconnect in progress
+  let joinFlow = null;                       // guest: a link / room-code join in flight on the Join sheet
+  let joinBusy = 0;                          // a join is building a session — resume must not start a second one
+  let wakeLock = null;
+  let ridMid = Object.create(null);          // host: member id (the token's) → the engine mid it has this session
+  let hostOlder = null;                      // host: somebody newer knocked (§14.7) — { name }
+  let versionNote = null;                    // guest: the owner refused a reconnect on version — { why }
+  let resumeT = null;
+  let docWatch = false;                      // visibilitychange + online, only while a relay or a reconnect runs
 
   /* ═══ SMALL DOM HELPERS ═══════════════════════════════════════════════════════════════════════ */
 
@@ -197,13 +209,47 @@ window.FM = window.FM || {};
     try { r = JSON.parse(localStorage.getItem(hostKey(pid)) || 'null'); } catch (e) { r = null; }
     if (!r || r.v !== 1 || !r.sid) return null;
     r.settings = r.settings || {};
-    r.members = r.members || {};
+    /* Members are keyed by the id their token is filed under (`r` + 16 hex). A hand-edited record is
+       read through an own-property check everywhere, never `members[x]` on a string from a peer. */
+    r.members = (r.members && typeof r.members === 'object') ? r.members : {};
+    r.blocked = Array.isArray(r.blocked) ? r.blocked : [];
+    /* S6 review: the tokens of members he removed, kept ONLY so the refusal their device gets can be signed
+       (collab-signal.js `failSigned`) — a removed phone is then told so, and nobody else can say it. */
+    r.revoked = (r.revoked && typeof r.revoked === 'object' && !Array.isArray(r.revoked)) ? r.revoked : {};
+    if (typeof r.codeAt !== 'number') r.codeAt = 0;
+    if (typeof r.hub !== 'string' || !/^[A-Za-z0-9_-]{22}$/.test(r.hub)) {
+      r.hub = C.signal.b64url(C.signal.randomBytes(16));
+      saveRoom(pid, r);
+    }
+    /* 📐 A ROOM FROM BEFORE S6 GETS ITS CODE — AND "ASK ME FIRST" — THE FIRST TIME IT IS READ. S3 saved
+       `ask:false` into every room because the only way in was a code the owner read out himself (see
+       newRoom). S6 adds the invite link, which can be forwarded, and D5 says the owner is asked before an
+       unknown person gets in. A stored `false` from S3 is S3's default, not a choice he made about links,
+       and there is no way to tell the two apart — so the safer answer wins, once, and the switch is right
+       there in the panel. */
+    if (!C.signal.normRoomCode(r.code)) {
+      r.code = C.signal.newRoomCode();
+      r.settings.ask = true;
+      saveRoom(pid, r);
+    }
     return r;
   }
   function saveRoom(pid, r) {
     try { localStorage.setItem(hostKey(pid), JSON.stringify(r)); } catch (e) {}
   }
   function dropRoom(pid) { try { localStorage.removeItem(hostKey(pid)); } catch (e) {} }
+  /* ⚠️ THE ROOM BELONGS TO A PROJECT, AND THE MODULE REMEMBERED IT WITHOUT SAYING WHICH (S6). `hostRoom`
+     outlived the session it was loaded for: share project A, switch to B, share B with a session that
+     already existed, and the panel, the relay and every admission ran on A's room — A's link and code
+     shown for B, and B's joiners let into a room whose record was filed under A. Found by the S6 suite in
+     order (it passed test by test). Every reader now asks for the room OF A PROJECT. */
+  function useRoom(pid, create) {
+    if (hostRoom && hostRoomPid === pid) return hostRoom;
+    hostRoom = loadRoom(pid);
+    if (!hostRoom && create) { hostRoom = newRoom(); saveRoom(pid, hostRoom); }
+    hostRoomPid = hostRoom ? pid : null;
+    return hostRoom;
+  }
 
   /* 📐 `ask` DEFAULTS TO FALSE IN S3, AND §12.1's table now says why. It lists `ask:true`, which is the
      right default for the INVITE LINK — a link can be forwarded, so an unknown person can arrive and the
@@ -212,13 +258,44 @@ window.FM = window.FM || {};
      as admitting the guest: no knock". Defaulting to true here would make the app ask him to approve the
      thing he just did, every time. The switch is live in the Share panel, so the knock card is reachable
      the moment he wants it; S6 ships the link and with it the `true` default for that half. */
+  /* S6: `ask` is TRUE now (§12.1's own table, and D5): the link can be forwarded, so an unknown person
+     can arrive with it and the owner gets a say. A connection code (S3) still admits without a knock —
+     the owner pasting the answer and confirming the five letters IS the admission (§14.5) — and a room
+     code always knocks (§14.1), whatever this says. */
   function newRoom() {
     const r = C.signal.newRoom();
     return {
-      v: 1, sid: r.sid, sk: r.sk, created: r.created,
-      settings: { ask: false, linkRole: 'editor', editorsInvite: false, roExport: true, max: (C.LIMITS && C.LIMITS.PEOPLE_DEFAULT) || 8 },
-      members: {}, blocked: []
+      v: 1, sid: r.sid, sk: r.sk, code: C.signal.newRoomCode(), codeAt: 0, created: r.created,
+      /* S6 review: the members' own way back in (collab-signal.js "the members' room"). Never rotated:
+         Reset and Remove change the link and the code, and members keep coming back through this. */
+      hub: C.signal.b64url(C.signal.randomBytes(16)),
+      settings: { ask: true, linkRole: 'editor', editorsInvite: false, roExport: true, max: (C.LIMITS && C.LIMITS.PEOPLE_DEFAULT) || 8 },
+      members: {}, blocked: [], revoked: {}
     };
+  }
+
+  /* ═══ S6 review · THE SHORT CODE LIVES HALF AN HOUR ═══════════════════════════════════════════════
+   * ⚠️ ITS TOPIC IS A FIXED FUNCTION OF 45 BITS, THE SAME ON EVERY DEVICE. The salt has to be a constant
+   * (a joiner who has only nine characters can know nothing else), so one offline sweep of every code
+   * matches every code topic anybody ever saw on a public broker — and the code never changed, and the
+   * owner announced it on every foreground whether or not he had ever handed it out. So: the code is
+   * listened on only while it is FRESH — shown on his screen within CODE_TTL — and a code that has lapsed
+   * is replaced by a new one the next time he opens the panel. Members never need it (they come back
+   * through the hub), so letting it lapse costs nobody who is already in. */
+  let codeTtl = null;                        // test seam, like `_knockWait`: half an hour is not a thing a suite waits out
+  U._codeTtl = function (ms) { codeTtl = (ms == null ? null : ms); return codeTtl; };
+  function codeTtlMs() { return codeTtl != null ? codeTtl : ((C.LIMITS && C.LIMITS.CODE_TTL) || 1800000); }
+  function codeFresh(r) {
+    const room = r || hostRoom;
+    return !!room && typeof room.codeAt === 'number' && room.codeAt > 0 && Date.now() - room.codeAt < codeTtlMs();
+  }
+  /* The code is on his screen: it stays live for another CODE_TTL — or, if the one he last saw has
+     lapsed, it is replaced first, so a code he reads out is never one an old sweep already knows. */
+  function showCode() {
+    if (!hostRoom || C.signal.codesOnly()) return;
+    if (hostRoom.codeAt && !codeFresh()) hostRoom.code = C.signal.newRoomCode();
+    hostRoom.codeAt = Date.now();
+    saveRoom(hostRoomPid || currentPid(), hostRoom);
   }
 
   /* ═══ 2. THE SHARE PANEL (§19.1) ══════════════════════════════════════════════════════════════ */
@@ -249,7 +326,39 @@ window.FM = window.FM || {};
       const m = members[mid];
       list.appendChild(personRow(m.name || 'Someone', m.color || '#888888', m.role, mid, s));
     });
+    /* ⚠️ AND THE MEMBERS WHO ARE NOT HERE RIGHT NOW (S6 review). The list was the engine's roster, which
+       drops a member the moment its link closes — so a member whose phone was lost or stolen, or who left
+       on bad terms, had no row and so no Remove, while its token would still let that phone straight back
+       in with no knock. Every member this room has let in is listed; the ones not connected say so. */
+    if (hostRoom && hostRoomPid === ((s && s.pid) || currentPid())) {
+      Object.keys(hostRoom.members).forEach(function (rid) {
+        const m = memberByRid(rid);
+        if (!m) return;
+        const mid = ridMid[rid];
+        if (mid && members[mid]) return;             // connected: already listed above
+        list.appendChild(offlineRow(rid, m));
+      });
+    }
     return list;
+  }
+  function offlineRow(rid, m) {
+    const li = personRow(m.name || 'Someone', m.color || '#888888', m.role, null, null, { st: 'off' });
+    li.setAttribute('data-rid', rid);
+    const b = btn('cs-role', labelFor(m.role) + ' ▾', function (e) {
+      const r = b.getBoundingClientRect();
+      const items = ROLES.map(function (p) {
+        /* Not connected, so there is nobody to tell now: the room remembers it, and the welcome that lets
+           them back in carries it. */
+        return { label: p[1], action: function () { const x = memberByRid(rid); if (x) { x.role = p[0]; saveRoom(hostRoomPid || currentPid(), hostRoom); } redrawShare(); } };
+      });
+      items.push({ sep: true });
+      items.push({ label: 'Remove…', danger: true, action: function () { removePerson(null, null, m.name, rid); } });
+      FM.contextMenu.show(r.left, r.bottom + 4, items);
+      e.stopPropagation();
+    });
+    b.setAttribute('aria-label', 'Change what ' + (cleanName(m.name) || 'they') + ' can do');
+    li.appendChild(b);
+    return li;
   }
 
   /* S5: what presence knows about one person — here/away, which layer, what they have open — as one
@@ -317,7 +426,7 @@ window.FM = window.FM || {};
           /* THROUGH THE SESSION, not straight into the host's table (queue 921 S3 review): `H.setRole`
              moves a number here and tells nobody, so a demoted guest kept the full editing UI and found
              out one refused edit at a time. `setPeerRole` does both halves or neither. */
-          return { label: p[1], action: function () { s.setPeerRole(mid, p[0]); redrawShare(); } };
+          return { label: p[1], action: function () { s.setPeerRole(mid, p[0]); noteRole(mid, p[0]); redrawShare(); } };
         });
         items.push({ sep: true });
         /* §19.1: Follow sits in the same menu, between the roles and Remove. */
@@ -338,19 +447,81 @@ window.FM = window.FM || {};
     return 'Editor';
   }
 
-  function removePerson(s, mid, name) {
+  /* `mid` for somebody connected now, `rid` for a member who is not (S6 review: offline members can be
+     removed too). */
+  function removePerson(s, mid, name, ridIn) {
     FM.ask({
       title: 'Remove ' + (cleanName(name) || 'them') + '?',
-      message: 'They lose the live copy straight away. Their own copy of the project stays on their device.',
+      /* ⚠️ SAYS WHAT IT DOES, ALL OF IT (S6 review): it is permanent for that device, and it changes the
+         link and the code — the dialog used to mention neither. */
+      message: 'They lose the live copy straight away and can’t rejoin from that device, even with a new link. The link and the short code change too, so send the new link to anyone still to join. Their own copy of the project stays on their device.',
       ok: 'Remove', danger: true
     }).then(function (yes) {
       if (!yes) return;
-      const ep = s._eps && s._eps[mid];
-      if (ep) { try { ep.send('ctl', { t: 'bye', why: 'removed' }); } catch (e) {} try { ep.close(); } catch (e) {} }
-      s.dropPeer(mid);
+      /* S6: removed means REMOVED — the member's token is struck, and its id and the profile key it said
+         hello with go on the room's refused list, so its automatic reconnect is turned away by name.
+         📐 THE PROFILE KEY IS A HINT, NOT AN IDENTITY (S6 review): it is random per browser storage and
+         the peer reports it itself, so the same person in another browser, a private window or Safari
+         beside the installed app has a new one. What actually keeps them out is below — the link and the
+         code they hold stop working. Members are not affected: they come back through the hub. */
+      const rid = ridIn || ridOfMid(mid);
+      if (rid) revokeRid(rid);
+      if (s && mid) {
+        const ep = s._eps && s._eps[mid];
+        if (ep) { try { ep.send('ctl', { t: 'bye', why: 'removed' }); } catch (e) {} try { ep.close(); } catch (e) {} }
+        s.dropPeer(mid);
+      }
+      rotateRoom();
       redrawShare();
+      if (FM.toast) FM.toast((cleanName(name) || 'They') + ' removed — the link and code have changed, so the old ones no longer work', 3200);
     });
   }
+  /* A new sid, key and code: every copy of the old link and every note of the old code stops working. The
+     hub is NOT changed, so every member who is still in keeps coming back by itself. */
+  function rotateRoom() {
+    if (!hostRoom) return;
+    const r = C.signal.newRoom();
+    hostRoom.sid = r.sid; hostRoom.sk = r.sk; hostRoom.code = C.signal.newRoomCode();
+    /* The panel he removed them from is on screen, so the new code is being shown now. */
+    hostRoom.codeAt = (card && card.id === 'collab-share') ? Date.now() : 0;
+    saveRoom(hostRoomPid || currentPid(), hostRoom);
+    stopHostRelay();
+    startHostRelay();
+  }
+  /* S6: the room's member table remembers the role he chose, so a member who drops out and comes back
+     with its token comes back as what he made it — not as the link's default. */
+  function noteRole(mid, role) {
+    if (!hostRoom) return;
+    Object.keys(ridMid).forEach(function (rid) {
+      const m = ridMid[rid] === mid ? memberByRid(rid) : null;
+      if (m) { m.role = role; saveRoom(currentPid(), hostRoom); }
+    });
+  }
+  function ridOfMid(mid) {
+    let rid = null;
+    Object.keys(ridMid).forEach(function (k) { if (ridMid[k] === mid) rid = k; });
+    return rid;
+  }
+  function revokeRid(rid) {
+    if (!hostRoom) return false;
+    const m = memberByRid(rid);
+    if (!m) return false;
+    hostRoom.blocked = Array.isArray(hostRoom.blocked) ? hostRoom.blocked : [];
+    if (hostRoom.blocked.indexOf(rid) < 0) hostRoom.blocked.push(rid);
+    if (m.pmk && hostRoom.blocked.indexOf('p:' + m.pmk) < 0) hostRoom.blocked.push('p:' + m.pmk);
+    if (hostRoom.blocked.length > 200) hostRoom.blocked.splice(0, hostRoom.blocked.length - 200);
+    /* Its token is kept aside, and only to sign "removed" to its device (keyFor below). Twenty at most. */
+    hostRoom.revoked = hostRoom.revoked || {};
+    if (typeof m.tok === 'string') hostRoom.revoked[rid] = m.tok;
+    const ks = Object.keys(hostRoom.revoked);
+    if (ks.length > 20) ks.slice(0, ks.length - 20).forEach(function (k) { delete hostRoom.revoked[k]; });
+    delete hostRoom.members[rid];
+    delete ridMid[rid];
+    saveRoom(hostRoomPid || currentPid(), hostRoom);
+    if (relay) syncMemberRooms(relay);
+    return true;
+  }
+
 
   let shareStep = 'main';          // 'main' | 'code'
   let offerLink = null;            // the RtcLink waiting for an answer code
@@ -439,29 +610,60 @@ window.FM = window.FM || {};
   U.share = function (opts) {
     const o = opts || {};
     if (!U.labsOn()) return Promise.resolve(null);
-    if (!o.keepStep) { shareStep = 'main'; shareNote = null; }
+    /* S6: a pending note is NOT cleared by opening the panel — the knock that declined itself while the
+       panel was shut (§19.3's "quiet note") has to still be there when he next looks. The note is spent
+       by the draw that shows it, as before. */
+    if (!o.keepStep) shareStep = 'main';
     const s = C.session;
     /* A guest's Share button opens the same card showing the session he is IN, never an arm. */
     if (s && !s.isOwner) return drawGuestPanel(s);
     if (!s) {
+      /* ⚠️ A SHARED COPY WITH NO SESSION IS STILL SOMEBODY ELSE'S (S6 review). A copy reopened after iOS
+         killed the app has no session while its reconnect runs, and this branch ARMED it — a new room of
+         the guest's own, on the public relays, under the owner's project — and then the reconnect, finding
+         a session, closed the link it had just made to the owner. So the copy gets its guest panel:
+         what it is doing, and a Leave that works without a session. */
+      const lc = cardOf(currentPid());
+      if (lc && lc.collab) return Promise.resolve(drawLinkedPanel(lc));
       return U.profile().then(function (p) {
         if (!p) return null;
         const pid = currentPid();
-        hostRoom = loadRoom(pid) || newRoom();
-        saveRoom(pid, hostRoom);
+        useRoom(pid, true);
+        showCode();                          // the panel is about to show it: live from the first second
         return checkpoint(pid).then(function () {
-          C.share({ ownerInfo: { name: p.name, color: p.color } });
-          U.syncBanner();
+          /* S6: the room's own id keys the media resume parts now that there is one (§15's note). */
+          C.share({ ownerInfo: { name: p.name, color: p.color }, sid: hostRoom.sid });
+          afterArm();
           return drawShare();
         });
       });
     }
+    useRoom(s.pid || currentPid(), true);
+    showCode();
+    startHostRelay();                        // an ensure: a Codes-only flip, a lapsed code or a dropped relay comes back here
     return Promise.resolve(drawShare());
   };
 
+  /* §12.1 arming steps 8 and on, in one place for the Share button and for the resume on reopen. */
+  function afterArm() {
+    ridMid = Object.create(null);
+    hostOlder = null;
+    startHostRelay();
+    /* The foreground listener is for the WAKE LOCK as much as for the relay — a phone hosting with Codes
+       only has no relay and still needs its lock back after every glance at another app — so it is
+       installed here, at once, not when the relay's keys have been derived. */
+    watchDoc();
+    takeWake();
+    /* §22: a phone that hosts has to stay awake — iOS drops every connection soon after the screen locks,
+       and a wake lock only holds while the app is on screen. Said once, when he starts. */
+    if (isPhoneNow() && FM.toast) FM.toast('Keep FreeMotion open — the session pauses when your screen locks', 3600);
+    U.syncBanner();
+  }
+
   function drawShare() {
     const s = C.session;
-    if (!hostRoom) hostRoom = loadRoom(currentPid()) || newRoom();
+    useRoom((s && s.pid) || currentPid(), true);
+    if (shareStep !== 'code') { showCode(); startHostRelay(); }   // the code is on screen, so it stays live
     const anchor = shareBtn && shareBtn.getBoundingClientRect().width > 0 ? shareBtn : null;
     const c = openCard('collab-share', { label: 'Share this project', anchor: anchor });
     const head = el('div', 'cs-head');
@@ -485,10 +687,19 @@ window.FM = window.FM || {};
     if (shareStep === 'code') drawCodeStep(body);
     else {
       body.appendChild(memberRows(s));
-      const addBtn = btn('cs-add', 'Add someone with a code', function () { shareStep = 'code'; redrawShare(); });
-      addBtn.appendChild(el('span', 'cs-add-sub', 'No account, no server — you send them a code and they send one back' /* queue 921 S3: NOT "read out": the codes-only code is a ~250-character block you copy into a message. A short code you could read aloud needs the relay (S6), and saying "read" of a 250-char blob is a promise the screen does not keep. */));
+      /* S6 (§19.1 "General access"): the link, the QR and the 9-character code, then who gets asked. The
+         connection-code exchange stays — it is the way in that needs no relay at all — but as the second
+         choice rather than the only one. */
+      const relayOn = !C.signal.codesOnly();
+      body.appendChild(inviteBlock());
+      if (relayOn) body.appendChild(askRow());
+      const addBtn = btn('cs-add', relayOn ? 'Connect with a code instead' : 'Add someone with a code', function () { shareStep = 'code'; redrawShare(); });
+      addBtn.appendChild(el('span', 'cs-add-sub', relayOn
+        ? 'No relay at all — you send them a long code and they send one back'
+        : 'No account, no server — you send them a code and they send one back' /* queue 921 S3: NOT "read out": the codes-only code is a ~250-character block you copy into a message. A short code you could read aloud needs the relay (S6), and saying "read" of a 250-char blob is a promise the screen does not keep. */));
       body.appendChild(addBtn);
-      body.appendChild(askRow());
+      /* §14.9's privacy line, word for word, wherever the relay is in use. */
+      if (relayOn) body.appendChild(el('div', 'cs-privacy', PRIVACY_LINE));
     }
 
     const foot = el('div', 'cs-foot');
@@ -501,7 +712,7 @@ window.FM = window.FM || {};
         C.end();
         dropOffer();                 // …and the code he read out a minute ago really does stop working
         dropRoom(currentPid());
-        hostRoom = null;
+        hostRoom = null; hostRoomPid = null;
         U.syncBanner();
         closeCard();
         if (FM.toast) FM.toast('Sharing stopped', 2200);
@@ -512,9 +723,13 @@ window.FM = window.FM || {};
     return c;
   }
 
+  /* 📐 "THE LINK", NOT "THE LINK OR CODE". §19.1 labels this row "When someone uses the link or code",
+     and §14.1 says in the same spec that "code joins ALWAYS knock". Both cannot be true of one switch; the
+     safer reading keeps the knock on the code (45 bits a person can read out loud is far easier to hand
+     on, or overhear, than a 44-character link) and makes the label say only what the switch controls. */
   function askRow() {
     const row = el('div', 'cs-row');
-    row.appendChild(el('div', 'cs-rowlabel', 'When someone joins with a code'));
+    row.appendChild(el('div', 'cs-rowlabel', 'When someone uses the link'));
     const seg = el('div', 'cs-seg');
     [['ask', 'Ask me first'], ['in', 'Let them in']].forEach(function (p) {
       const on = (p[0] === 'ask') === !!(hostRoom && hostRoom.settings.ask);
@@ -528,8 +743,450 @@ window.FM = window.FM || {};
       seg.appendChild(b);
     });
     row.appendChild(seg);
+    row.appendChild(el('div', 'cs-rowhint', 'The short code always asks you first.'));
     return row;
   }
+
+  /* ═══ S6 · THE INVITE (§19.1 "General access") ═══════════════════════════════════════════════════
+   * The link, a QR of it, and the 9-character code, with Copy beside each. Copy and Share run INSIDE the
+   * tap (§19.1, J2 #3): iOS refuses a clipboard write or a share sheet that comes after an await, which
+   * is why the room — and so the link — exists before this is drawn. */
+  /* ⚠️ EVERY THIRD PARTY, BY NAME (S6 review). It said "the free relay", singular, and "address and
+     timing" — while there are three relays, two address servers (STUN) that learn his address on every
+     connection, public brokers ANYBODY can listen on, and every holder of the link or code can open the
+     envelopes that carry a joining device's address. The line is longer; the promise it makes is true. */
+  const PRIVACY_LINE = 'Free public services help the devices find each other: relays run by PeerJS, EMQX and HiveMQ, and Google and Cloudflare’s address lookup. They see your internet address and when a room is in use, and so can anyone watching those relays; anyone with the link or code can see the address of each device that connects. They never see your project — it goes straight between devices, encrypted.';
+
+  function isPhoneNow() { return !!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone()); }
+
+  function copyPlain(text, said) {
+    const t = String(text || '');
+    if (!t) return;
+    try {
+      navigator.clipboard.writeText(t).then(function () { if (FM.toast) FM.toast(said || 'Copied', 1800); },
+        function () { if (FM.toast) FM.toast('Could not copy — select it and copy it yourself', 2600); });
+    } catch (e) { if (FM.toast) FM.toast('Could not copy — select it and copy it yourself', 2600); }
+  }
+
+  function relayLine() {
+    if (C.signal.codesOnly()) return '';
+    const r = relay;
+    if (!r || !r.rv) return 'Starting the relay…';
+    if (r.status === 'unreachable') return 'Couldn’t reach the free connection service — use Connect with a code below.';
+    /* S6 review: it only ever went UP. Every relay dropping — Wi-Fi to cellular, a broker hanging up —
+       left "the link and the code are live" on screen while no offer could reach him. */
+    if (r.status === 'reconnecting') return 'Reconnecting to the free connection service… the link and the code work again once it’s back.';
+    if (r.status === 'up') {
+      const n = C.session && C.session.peerIds ? C.session.peerIds().length : 0;
+      return n ? 'Connected · the link and the code are live' : 'Waiting for people · the link and the code are live';
+    }
+    return 'Starting the relay…';
+  }
+  function relayWarn() { return !!relay && (relay.status === 'unreachable' || relay.status === 'reconnecting'); }
+  function paintRelayLine() {
+    const n = document.getElementById('collab-relay-status');
+    if (n) { const t = relayLine(); if (n.textContent !== t) n.textContent = t; n.classList.toggle('warn', relayWarn()); }
+  }
+
+  function inviteBlock() {
+    const box = el('div', 'cs-invite');
+    if (C.signal.codesOnly()) {
+      box.classList.add('cs-invite-off');
+      box.appendChild(el('div', 'cs-rowlabel', 'Codes only is on'));
+      box.appendChild(el('div', 'collab-sub', 'The link and the short code need the free relay, which this device is set not to use. People join by swapping connection codes instead.'));
+      return box;
+    }
+    const link = hostRoom ? C.signal.inviteLink(hostRoom) : null;
+    const code = hostRoom ? C.signal.fmtRoomCode(hostRoom.code) : '';
+    box.appendChild(el('div', 'cs-rowlabel', 'Invite with a link or a code'));
+    const row = el('div', 'cs-linkrow');
+    row.appendChild(btn('cs-copylink accent', 'Copy link', function () { copyPlain(link, 'Link copied'); }));
+    if (navigator.share) {
+      row.appendChild(btn('cs-sharelink', 'Share…', function () {
+        try { navigator.share({ title: 'Join “' + projectName() + '” in FreeMotion', url: link }).catch(function () {}); } catch (e) {}
+      }));
+    }
+    const qrBtn = btn('cs-qrbtn', 'QR', function () { toggleQr(box, link, qrBtn); });
+    qrBtn.setAttribute('aria-pressed', 'false');
+    qrBtn.setAttribute('aria-label', 'Show a QR code of the link');
+    row.appendChild(qrBtn);
+    box.appendChild(row);
+    const codeRow = el('div', 'cs-roomrow');
+    const cv = el('div', 'cs-roomcode', code);
+    cv.id = 'collab-room-code';
+    cv.setAttribute('aria-label', 'Short code ' + code.split('').join(' '));
+    codeRow.appendChild(cv);
+    codeRow.appendChild(btn('cs-copycode', 'Copy', function () { copyPlain(code, 'Code copied'); }));
+    box.appendChild(codeRow);
+    /* The relay line's own style (spacing, size, light-Home ink), so the hint needs no CSS of its own. */
+    box.appendChild(el('div', 'cs-relay cs-codehint', 'The short code stops working ' + Math.round(codeTtlMs() / 60000) + ' minutes after you close this.'));
+    const st = el('div', 'cs-relay', relayLine());
+    st.id = 'collab-relay-status';
+    if (relayWarn()) st.classList.add('warn');
+    box.appendChild(st);
+    box.appendChild(btn('cs-reset', 'Reset link and code', resetLink));
+    return box;
+  }
+
+  function toggleQr(box, link, qrBtn) {
+    const had = box.querySelector('.cs-qr');
+    if (had) { had.parentNode.removeChild(had); qrBtn.setAttribute('aria-pressed', 'false'); qrBtn.classList.remove('on'); return; }
+    if (!link || !C.qr) return;
+    const q = C.qr.encode(link);
+    if (!q) return;
+    /* Drawn at the screen's own pixel density so the modules are crisp, and laid out at 4 CSS px a module
+       (~196 px for the link's version 6) — a size a phone camera across a table locks onto at once. */
+    const dpr = Math.max(1, Math.min(3, Math.round(window.devicePixelRatio || 1)));
+    const cv = C.qr.toCanvas(q, 4 * dpr, 4);
+    cv.className = 'cs-qrimg';
+    cv.style.width = cv.style.height = ((q.size + 8) * 4) + 'px';
+    cv.setAttribute('role', 'img');
+    cv.setAttribute('aria-label', 'QR code of the invite link');
+    const wrap = el('div', 'cs-qr');
+    wrap.appendChild(cv);
+    wrap.appendChild(el('div', 'collab-sub', 'Point the other phone’s camera at this.'));
+    const row = box.querySelector('.cs-linkrow');
+    box.insertBefore(wrap, row ? row.nextSibling : null);
+    qrBtn.setAttribute('aria-pressed', 'true');
+    qrBtn.classList.add('on');
+  }
+
+  /* §19.1 "Reset link and code": a new sid, key and code, so every copy of the old link and every note
+     of the old code stops working. People connected right now stay connected — their channels do not go
+     through the relay — and since the S6 review a member who drops out afterwards comes back as before:
+     its reconnect goes through the room's hub, which Reset does not touch. */
+  function resetLink() {
+    FM.ask({
+      title: 'Reset the link and code?', danger: true, ok: 'Reset',
+      message: 'The old link and code stop working. People who have already joined keep their place and reconnect as before; anyone still to join will need the new link.'
+    }).then(function (yes) {
+      if (!yes || !hostRoom) return;
+      const r = C.signal.newRoom();
+      hostRoom.sid = r.sid; hostRoom.sk = r.sk; hostRoom.code = C.signal.newRoomCode();
+      saveRoom(currentPid(), hostRoom);
+      stopHostRelay();
+      startHostRelay();
+      redrawShare();
+      if (FM.toast) FM.toast('New link and code — the old ones no longer work', 2600);
+    });
+  }
+
+  /* ═══ S6 · THE HOST'S RELAY (§12.1 step 8, §14.4) ════════════════════════════════════════════════
+   * One rendezvous listening on BOTH the link's topic and the code's (§14.1: "the host listens on both"),
+   * answering each offer with a real peer connection, then the same admission a connection code gets —
+   * the hello, the version gate, the member table, the knock — before `addPeer` makes a stranger a member. */
+  function startHostRelay() {
+    const s = C.session;
+    if (!s || !s.isOwner || !hostRoom || !U.labsOn() || C.signal.codesOnly()) return null;
+    /* The code's room only while the code is fresh (above); the link's and the hub's always. */
+    const code = codeFresh() ? hostRoom.code : null;
+    if (relay && relay.sid === hostRoom.sid && relay.code === code && relay.hub === hostRoom.hub && !relay.stopped) return relay;
+    stopHostRelay();
+    const r = relay = { pid: currentPid(), sid: hostRoom.sid, code: code, hub: hostRoom.hub, rv: null, status: 'starting',
+      admitting: { join: 0, member: 0 }, stopped: false, hereAt: 0, memberList: [], memberCache: Object.create(null), codeT: null };
+    Promise.all([C.signal.linkKeys(hostRoom), code ? C.signal.codeKeys(code) : null, C.signal.hubKeys(hostRoom.hub)]).then(function (ks) {
+      if (relay !== r || r.stopped) return;
+      r.hubKeys = ks[2];
+      return syncMemberRooms(r).then(function () { return ks; });
+    }).then(function (ks) {
+      if (!ks || relay !== r || r.stopped) return;
+      r.rooms = [{ kind: 'link', keys: ks[0] }];
+      if (ks[1]) r.rooms.push({ kind: 'code', keys: ks[1] });
+      /* The hub has no key of its own: every member seals with the one its token makes (collab-signal.js). */
+      r.rooms.push({ kind: 'hub', keys: ks[2], members: function () { return r.memberList; } });
+      if (code) armCodeLapse(r);
+      r.rv = C.signal.Rendezvous({
+        role: 'host', rooms: r.rooms,
+        onEnvelope: function (inner, room, env) { onOffer(r, inner, room, env); },
+        onState: function (st, d) {
+          if (relay !== r) return;
+          if (st.up) r.status = 'up';
+          else if (r.status === 'up') r.status = 'reconnecting';
+          /* A driver that comes (back) up says `here`, so a guest waiting on that broker retries now
+             rather than at its next scheduled attempt. Once a second at most. */
+          if (d && d.state === 'up') announce(r);
+          paintRelayLine();
+        }
+      });
+      r.rv.start();
+      watchDoc();
+      r.rv.ready((C.LIMITS && C.LIMITS.RELAY_UP) || 8000).then(function () {
+        if (relay !== r) return;
+        r.status = 'up'; announce(r); paintRelayLine();
+      }, function () {
+        if (relay !== r || r.stopped) return;
+        if (!r.rv.anyUp()) r.status = 'unreachable';
+        paintRelayLine();
+      });
+    }, function () { if (relay === r) { r.status = 'unreachable'; paintRelayLine(); } });
+    return r;
+  }
+  function announce(r) {
+    if (!r || !r.rv || r.stopped) return;
+    const t = Date.now();
+    if (t - r.hereAt < 1000) return;
+    r.hereAt = t;
+    r.rv.here();
+  }
+  /* The code lapses CODE_TTL after it was last on screen. If the panel is still showing it, that is
+     "on screen" and it carries on; otherwise the owner stops listening on its topic. */
+  function armCodeLapse(r) {
+    clearTimeout(r.codeT);
+    const left = Math.max(50, (hostRoom ? hostRoom.codeAt : 0) + codeTtlMs() - Date.now() + 20);
+    r.codeT = setTimeout(function () {
+      if (relay !== r || r.stopped) return;
+      if (document.getElementById('collab-room-code')) { showCode(); armCodeLapse(r); return; }
+      startHostRelay();                                    // `code` is no longer fresh, so this restarts without it
+    }, left);
+  }
+  /* The member rooms the hub opens envelopes with: everybody in the room's member table, and — `quiet`,
+     answered only to be told — anybody removed whose token is kept to sign that. Keys are derived once. */
+  function syncMemberRooms(r) {
+    if (!hostRoom || !r.hubKeys) return Promise.resolve([]);
+    const want = [];
+    Object.keys(hostRoom.members).forEach(function (rid) {
+      const m = memberByRid(rid);
+      if (m && typeof m.tok === 'string') want.push({ rid: rid, tok: m.tok, quiet: false });
+    });
+    Object.keys(hostRoom.revoked || {}).forEach(function (rid) {
+      const t = hostRoom.revoked[rid];
+      if (!memberByRid(rid) && typeof t === 'string' && /^r[0-9a-f]{16}$/.test(rid)) want.push({ rid: rid, tok: t, quiet: true });
+    });
+    return Promise.all(want.map(function (w) {
+      const have = r.memberCache[w.rid];
+      if (have && have.tok === w.tok) { have.room.quiet = w.quiet; return have.room; }
+      return C.signal.memberKeys(r.hubKeys, w.rid, w.tok).then(function (keys) {
+        const room = { kind: 'member', rid: w.rid, keys: keys, quiet: w.quiet };
+        r.memberCache[w.rid] = { tok: w.tok, room: room };
+        return room;
+      }, function () { return null; });
+    })).then(function (list) {
+      if (relay === r) r.memberList = list.filter(Boolean);
+      return r.memberList;
+    });
+  }
+  function stopHostRelay() {
+    const r = relay;
+    relay = null;
+    if (!r) return;
+    r.stopped = true;
+    clearTimeout(r.codeT);
+    if (r.rv) { try { r.rv.stop(); } catch (e) {} }
+    unwatchDocIfIdle();
+  }
+  U._relay = function () { return relay; };
+
+  function memberByRid(rid) {
+    if (!hostRoom || typeof rid !== 'string' || !/^r[0-9a-f]{16}$/.test(rid)) return null;
+    return Object.prototype.hasOwnProperty.call(hostRoom.members, rid) ? hostRoom.members[rid] : null;
+  }
+  function blockedHas(k) { return !!hostRoom && Array.isArray(hostRoom.blocked) && hostRoom.blocked.indexOf(k) >= 0; }
+  /* D4: the owner's own limit, capped by what this device can carry — six on a phone, twelve on a PC. */
+  function maxPeople() {
+    const want = +((hostRoom && hostRoom.settings && hostRoom.settings.max) || (C.LIMITS && C.LIMITS.PEOPLE_DEFAULT) || 8);
+    const cap = isPhoneNow() ? ((C.LIMITS && C.LIMITS.PEOPLE_MAX_PHONE) || 6) : ((C.LIMITS && C.LIMITS.PEOPLE_MAX_PC) || 12);
+    return Math.max(2, Math.min(want, cap));
+  }
+
+  /* The key a joiner claims to hold (§14.6): the room's own for the room it came in on — never the OTHER
+     room's, so a code cannot be used to authenticate on the link's topic — or a member's token. A removed
+     member's token is refused BY NAME, so its device can say "removed" rather than "this invite no longer
+     works" and stop trying. */
+  function keyFor(mode, mid, room) {
+    if (!hostRoom || !C.session || !C.session.isOwner) return { deny: 'ended' };
+    if (mode === 'tok') {
+      /* S6 review: a token is good ONLY in its own member room — the one its own key opened — so it cannot
+         be presented on the link's or the code's topic, where anybody holding those can read it. */
+      if (!room || room.kind !== 'member' || room.rid !== mid) return { deny: 'auth' };
+      /* Removed: refused by name AND SIGNED with the token it was given, so its device can believe it
+         (collab-signal.js `failSigned`) — and nobody without that token can forge it. */
+      if (blockedHas(mid)) return { deny: 'removed', key: room.keys.auth };
+      const m = memberByRid(mid);
+      const k = m && typeof m.tok === 'string' ? C.signal.fromB64url(m.tok) : null;
+      return k && k.length === 16 ? k : { deny: 'auth' };
+    }
+    if ((mode === 'link' || mode === 'code') && room && room.kind === mode) return room.keys.auth;
+    return { deny: 'auth' };
+  }
+
+  /* ⚠️ TWO DOORS, TWO BUDGETS (S6 review). One counter of four covered every offer, and a knock holds its
+     slot until he answers it — so four people typing the short code (a code read out at a meeting, or
+     one person with four tabs) held all four for up to eight minutes, and every member whose phone
+     locked meanwhile had its reconnect dropped unanswered. A member's offer arrives in the hub, so its
+     door is known before anything is answered, and it has its own four. */
+  function onOffer(r, inner, room, env) {
+    const s = C.session;
+    if (relay !== r || !s || !s.isOwner || !hostRoom) return;
+    const door = room && room.kind === 'member' ? 'member' : 'join';
+    if ((r.admitting[door] || 0) >= ((C.LIMITS && C.LIMITS.PENDING_ADMIT) || 4)) return;
+    r.admitting[door] = (r.admitting[door] || 0) + 1;
+    const me = U.getProfile() || {};
+    C.signal.answer({ rv: r.rv, room: room, offer: inner, env: env, sid: hostRoom.sid, info: { nm: me.name, cl: me.color }, keyFor: keyFor })
+      .then(function (res) { return admitRelay(res.link, res.auth, room); })
+      .then(function (out) { r.last = out || null; }, function (e) { r.last = (e && e.why) || 'failed'; })
+      .then(function () { r.admitting[door]--; });
+  }
+
+  /* After the handshake: the hello (bounded, like the code path), then §14.7's gate, the removed list,
+     the room's size, and — for somebody the owner has not let in before — the knock. A member coming back
+     with its token goes straight in, and takes its old place (its mid) if it had one this session. */
+  function admitRelay(link, auth, room) {
+    const s = C.session;
+    if (!s || !s.isOwner || !hostRoom) { try { link.close(); } catch (e) {} return Promise.resolve('ended'); }
+    function deny(why, extra) {
+      try { link.send('ctl', Object.assign({ t: 'deny', why: why }, extra || {})); } catch (e) {}
+      setTimeout(function () { try { link.close(); } catch (e) {} }, 250);
+      return why;
+    }
+    return awaitHello(link).then(null, function (e) {
+      /* No hello, or a flood before it: the link is not somebody we are going to admit, and it must not
+         stay open behind the owner's back (awaitHello only lets go of it). */
+      try { link.close(); } catch (x) {}
+      return Promise.reject(e);
+    }).then(function (hello) {
+      const gate = C.signal.schemaGate(hello);
+      if (gate) {
+        if (gate === 'host-older') { hostOlder = { name: cleanName(hello.name) || 'Someone' }; U.syncBanner(); }
+        return deny(gate, { app: C.signal.appVersion(), schema: C.SCHEMA_REV });
+      }
+      if (C.session !== s || !hostRoom) return deny('ended');
+      const member = auth && auth.mode === 'tok' ? memberByRid(auth.mid) : null;
+      const pmk = typeof hello.mk === 'string' ? hello.mk.slice(0, 32) : '';
+      /* A HINT, not an identity (S6 review): the same device's profile key. Another browser has another
+         one — what keeps a removed person out is that Remove changes the link and the code. */
+      if (!member && pmk && blockedHas('p:' + pmk)) return deny('removed');
+      const back = member && ridMid[auth.mid] && s.peerIds().indexOf(ridMid[auth.mid]) >= 0;
+      if (!back && s.peerIds().length + 1 >= maxPeople()) return deny('full');
+      const knock = !member && (room.kind === 'code' || !!hostRoom.settings.ask);
+      const dev = hello.dev === 'phone' ? 'phone' : hello.dev === 'pc' ? 'computer' : '';
+      const who = cleanName(hello.name) || 'Someone';
+      const kp = knock ? U.knock({ name: who, role: hostRoom.settings.linkRole || 'editor', dev: dev, sas: auth && auth.sas, via: room.kind }) : null;
+      /* S6 review: somebody who gives up while they wait takes their knock with them — the card does not
+         sit there for two minutes asking him about a person who has gone. */
+      if (kp) link.onclose = function () { kp.cancel('gone'); };
+      return (kp || Promise.resolve(true)).then(function (yes) {
+        if (kp) link.onclose = null;
+        /* The session this knock was for stood down while he looked at it: say which way (S6 review) —
+           a switch to another project is a pause, and sharing comes back when he does. */
+        if (yes === 'paused' || yes === 'ended') return deny(yes);
+        if (yes === 'gone' || link.open === false) { noteGone(who); return 'gone'; }
+        if (yes !== true) return deny('declined');
+        if (C.session !== s || !hostRoom) return deny('ended');
+        const rid = member ? auth.mid : 'r' + C.signal.hex(C.signal.randomBytes(8));
+        const rec = member || { added: Date.now() };
+        rec.name = cleanName(hello.name) || rec.name || 'Someone';
+        rec.color = cleanColor(hello.color) || rec.color || PALETTE[0];
+        rec.role = member ? (rec.role || 'editor') : (hostRoom.settings.linkRole || 'editor');
+        rec.dev = hello.dev === 'phone' ? 'phone' : 'pc';
+        rec.tok = member ? rec.tok : C.signal.b64url(C.signal.randomBytes(16));
+        if (pmk) rec.pmk = pmk;
+        rec.last = Date.now();
+        hostRoom.members[rid] = rec;
+        saveRoom(currentPid(), hostRoom);
+        /* A member coming back REPLACES its own old link: the phone that locked left a data channel the
+           owner still thinks is open, and two endpoints for one person would double every broadcast. */
+        const old = ridMid[rid];
+        let reuse = null;
+        if (old) {
+          const ep0 = s._eps && s._eps[old];
+          if (ep0) { delete s._eps[old]; ep0.onclose = null; try { ep0.close(); } catch (e) {} }
+          if (s.peerIds().indexOf(old) >= 0) s.dropPeer(old);
+          reuse = old;
+        }
+        const mid = s.addPeer(link, { role: rec.role, name: rec.name, color: rec.color, rid: rid, tok: rec.tok, hub: hostRoom.hub, mid: reuse });
+        if (!mid) { noteGone(rec.name); return 'gone'; }
+        if (relay && !member) syncMemberRooms(relay);         // their reconnect is recognised from now on
+        ridMid[rid] = mid;
+        s._eps = s._eps || Object.create(null);
+        s._eps[mid] = link;
+        link.onclose = function () {
+          if (s._eps && s._eps[mid] === link) { delete s._eps[mid]; try { s.dropPeer(mid); } catch (e) {} }
+          redrawShare();
+          paintRelayLine();
+        };
+        s.onMessage('ctl', hello, mid);
+        (link._buffered || []).forEach(function (m) { try { s.onMessage(m.ch, m.msg, mid); } catch (e) {} });
+        link._buffered = null;
+        redrawShare();
+        paintRelayLine();
+        U.syncBanner();
+        if (FM.toast) FM.toast(rec.name + (member ? ' is back' : ' joined'), 2400);
+        return member ? 'back' : 'in';
+      });
+    });
+  }
+
+  /* "Let in" for somebody who had already gone did nothing and said nothing (S6 review). */
+  function noteGone(name) {
+    shareNote = (cleanName(name) || 'Someone') + ' stopped waiting before they were let in.';
+    if (FM.toast) FM.toast((cleanName(name) || 'Someone') + ' stopped waiting', 2400);
+    redrawShare();
+  }
+
+  /* ═══ S6 · A WAKE LOCK WHILE HOSTING ON A PHONE (§12.1 step 8) ══════════════════════════════════════
+   * The OS releases it whenever the page is hidden, so it is taken again on every return to the screen,
+   * and let go the moment the session ends — a lock that outlived its session would keep his screen on
+   * for nothing. */
+  function wantWake() { return !!(C.session && C.session.isOwner && isPhoneNow() && U.labsOn()); }
+  function takeWake() {
+    if (!wantWake() || wakeLock || !navigator.wakeLock || document.visibilityState !== 'visible') return;
+    let p;
+    try { p = navigator.wakeLock.request('screen'); } catch (e) { return; }
+    wakeLock = { pending: true };
+    p.then(function (l) {
+      if (!wantWake()) { wakeLock = null; try { l.release(); } catch (e) {} return; }
+      wakeLock = l;
+      l.addEventListener('release', function () { if (wakeLock === l) wakeLock = null; });
+    }, function () { wakeLock = null; });
+  }
+  function dropWake() {
+    const l = wakeLock;
+    wakeLock = null;
+    if (l && typeof l.release === 'function') { try { l.release(); } catch (e) {} }
+  }
+  U._wake = function () { return wakeLock; };
+
+  /* ═══ S6 · FOREGROUND AND ONLINE (§13.5, §12.1 "visible → rendezvous re-start + here") ═════════════
+   * Two document listeners, and ONLY while a relay or a reconnect is running (§23: a solo user gets none). */
+  function onVisible() {
+    if (document.visibilityState !== 'visible') return;
+    if (relay && relay.rv) { relay.rv.kick(); relay.hereAt = 0; announce(relay); }
+    takeWake();
+    if (recon) recon.kick('visible');
+    if (joinFlow && joinFlow.kick) joinFlow.kick();
+  }
+  function onOnlineEv() {
+    if (relay && relay.rv) { relay.rv.kick(); relay.hereAt = 0; announce(relay); }
+    if (recon) recon.kick('online');
+    if (joinFlow && joinFlow.kick) joinFlow.kick();
+  }
+  function watchDoc() {
+    if (docWatch) return;
+    docWatch = true;
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('online', onOnlineEv);
+  }
+  function unwatchDocIfIdle() {
+    if (!docWatch || relay || recon || joinFlow || (C.session && C.session.isOwner)) return;
+    docWatch = false;
+    document.removeEventListener('visibilitychange', onVisible);
+    window.removeEventListener('online', onOnlineEv);
+  }
+
+  /* §14.7's [Update now]: the version label's own force-update — flush, drop the worker and the caches,
+     come back on a fresh URL — because it is the one update path already proven on his phone. A join
+     that was in progress is stashed first, so it resumes on the far side of the reload. */
+  /* `pending` is the invite's `j` (a string), or `{c: code}` for a join typed as a short code — which has no
+     `j`, and so used to be dropped here, losing the join the reload was meant to resume (S6 review). */
+  U.updateNow = function (pending) {
+    const p = typeof pending === 'string' ? { j: pending } : (pending && typeof pending === 'object' ? pending : null);
+    if (p && (typeof p.j === 'string' || typeof p.c === 'string')) {
+      try { localStorage.setItem('fm.pendingJoin', JSON.stringify(Object.assign({}, p, { at: Date.now() }))); } catch (e) {}
+    }
+    try { if (FM.storage && FM.storage.flushSync) FM.storage.flushSync(); } catch (e) {}
+    const v = document.querySelector('.ver');
+    if (v) v.click();
+  };
 
   /* §14.5's three steps, in one card: his code out, their code in. */
   function drawCodeStep(body) {
@@ -772,13 +1429,23 @@ window.FM = window.FM || {};
         }
         buf.push({ ch: ch, msg: msg });
       };
+      /* S6: whatever the handshake kept because it arrived while the host was still finishing (see
+         `sentAuth3` in collab-signal.js) goes through the same rules, first, in order. */
+      const early = link._early;
+      link._early = null;
+      if (early) for (let i = 0; i < early.length && typeof link.onmessage === 'function'; i++) link.onmessage(early[i].ch, early[i].msg);
     });
   }
   U._helloCap = function () { return { msgs: HELLO_MAX_MSGS, bytes: HELLO_MAX_BYTES }; };
 
+  /* 📐 A CONNECTION CODE NEVER KNOCKS (S6). §14.5: "the host pasting the answer counts as admitting the
+     guest: no knock" — and since S3 he has also read the five letters and pressed They match. S3 let the
+     `ask` switch add a knock on top because `ask` defaulted to false and so never did; S6 makes `ask`
+     true for the invite LINK (D5), and leaving this wired to it would have put a third "are you sure"
+     after the two deliberate steps he had just taken, on every code join. The switch is the link's and
+     the room code's; the knock for those is in `admitRelay`. */
   function maybeKnock(hello) {
-    if (!hostRoom || !hostRoom.settings.ask) return Promise.resolve(true);
-    return U.knock({ name: cleanName(hello.name), role: (hostRoom.settings.linkRole || 'editor'), dev: hello.dev });
+    return Promise.resolve(true);
   }
 
   function followBtn(f, pz) {
@@ -865,6 +1532,38 @@ window.FM = window.FM || {};
     return c;
   }
 
+  /* A shared copy that has no session right now — reopened, and finding its owner, or with nothing to
+     find it through (S6 review). The same card a guest gets, saying what is true, and a Leave that works
+     without a session: the copy becomes his own, exactly as Leave does in a session. */
+  function drawLinkedPanel(pc) {
+    const pid = pc.id;
+    const who = hostNameFor(pid);
+    const c = openCard('collab-share', { label: 'This shared project' });
+    c.appendChild(el('h2', 'fm-ask-title', 'Shared with you'));
+    const looking = recon && !recon.stopped && recon.gpid === pid;
+    c.appendChild(el('div', 'cs-state', looking ? 'Reconnecting to ' + who + '…'
+      : C.signal.codesOnly() ? 'Not connected — Codes only is on, so this copy can’t find ' + who + ' by itself'
+        : 'Not connected — ' + who + '’s device isn’t reachable right now'));
+    c.appendChild(el('div', 'collab-sub', 'This is ' + who + '’s project. Your changes are kept on this device and sent when you’re back in touch.'));
+    const foot = el('div', 'cs-foot');
+    foot.appendChild(btn('cs-stop', 'Leave', function () {
+      FM.ask({ title: 'Leave this project?', message: 'You stop getting their changes. Your copy stays on this device as a project of your own.', ok: 'Keep my own copy', cancel: 'Cancel' })
+        .then(function (yes) {
+          if (!yes) return;
+          if (recon && recon.gpid === pid) stopRecon();
+          closeCard();
+          if (!FM.projects || !FM.projects.detachLinked) return;
+          joinBusy++;
+          FM.projects.detachLinked(pid).then(function (nid) {
+            if (nid && FM.toast) FM.toast('You left — this is now your own copy', 2600);
+          }, function () {}).then(function () { joinBusy = Math.max(0, joinBusy - 1); U.syncBanner(); });
+        });
+    }));
+    foot.appendChild(btn('cs-done accent', 'Done', function () { closeCard(); }));
+    c.appendChild(foot);
+    return c;
+  }
+
   /* ═══ 3. THE JOIN SHEET (§19.2) ═══════════════════════════════════════════════════════════════ */
 
   const STEPS = ['Reading the code…', 'Connecting…', 'Checking the code…',
@@ -879,21 +1578,31 @@ window.FM = window.FM || {};
     });
   };
 
-  function drawJoin(profile) {
+  function drawJoin(profile, opts) {
+    const jo = opts || {};
     const c = openCard('collab-join', { label: 'Join a live project' });
     /* ⚠️ CLOSING THE SHEET REALLY DOES CANCEL. Without this, tapping the scrim halfway through a join
        leaves an RTCPeerConnection gathering and a handshake waiting on a card nobody can see — and if it
-       then succeeded it would open a project he had just backed out of. */
-    c._onclose = function () { if (joinLink) { try { joinLink.close(); } catch (e) {} joinLink = null; } };
+       then succeeded it would open a project he had just backed out of. S6: the relay join too — its
+       rendezvous, its retry timer and the attempt in flight. */
+    c._onclose = function () {
+      if (joinLink) { try { joinLink.close(); } catch (e) {} joinLink = null; }
+      if (joinFlow && joinFlow.cancel) joinFlow.cancel();
+      /* §12.4: a pending invite is spent "on use" — joined, or looked at and put away. */
+      if (jo.fromPending) clearPendingJoin();
+    };
     c.appendChild(el('h2', 'fm-ask-title', 'Join a live project'));
-    c.appendChild(el('div', 'collab-sub', 'Ask them to tap Share → Add someone with a code, then paste the code they send you.'));
+    c.appendChild(el('div', 'collab-sub', C.signal.codesOnly()
+      ? 'Codes only is on: ask them to tap Share → Add someone with a code, then paste the code they send you.'
+      : 'Paste the invite link they sent, or type the short code they read out. A long code from “Connect with a code” works here too.'));
     const fieldRow = el('div', 'cj-fieldrow');
     const input = el('input', 'fm-ask-input cj-code');
     input.type = 'text';
     input.spellcheck = false;
     input.autocapitalize = 'characters';
-    input.placeholder = 'Paste a code';
-    input.setAttribute('aria-label', 'Paste a code');
+    input.placeholder = C.signal.codesOnly() ? 'Paste a code' : 'Link or code';
+    input.setAttribute('aria-label', C.signal.codesOnly() ? 'Paste a code' : 'Invite link or code');
+    if (jo.prefill) input.value = jo.prefill;
     fieldRow.appendChild(input);
     fieldRow.appendChild(btn('cj-paste', 'Paste', function () {
       /* Inside the tap, like §19.1's Copy — a clipboard read after an await is refused. */
@@ -924,22 +1633,196 @@ window.FM = window.FM || {};
     acts.appendChild(btn('fm-ask-cancel', 'Cancel', function () { closeCard(); }));
     const go = btn('fm-ask-ok accent cj-go', 'Join', function () {
       go.disabled = true;
-      guestJoin(input.value, profile, status, back, backCode, go, sasBox);
+      joinAny(input.value, profile, status, back, backCode, go, sasBox);
     });
     acts.appendChild(go);
     c.appendChild(acts);
-    input.focus();
+    /* ⚠️ AN INVITE IN THE ADDRESS BAR IS NOT A TAP (S6 review). It used to start joining by itself —
+       "tapping the link WAS the request" — but any page can send the browser to a `#j=` address, and then
+       this device told a stranger's room its name, colour and profile key and took their project, with
+       nobody having touched anything in FreeMotion. So the sheet is filled in and waits for ONE tap. */
+    if (jo.prefill && jo.fromPending) {
+      status.textContent = 'Tap Join to connect to this project.';
+      try { go.focus(); } catch (e) {}
+    } else input.focus();
     return c;
   }
 
-  function showSas(box, sas) {
+  /* S6: one field, three kinds of thing (§19.2) — an invite link, the 9-character room code, or S3's long
+     connection code. The first two go through the relay; the third is the serverless exchange. */
+  function joinAny(text, profile, status, back, backCode, go, sasBox) {
+    const k = C.signal.classify(text);
+    if (!k) { status.textContent = 'That does not look like an invite link or a code.'; go.disabled = false; return; }
+    if (k.kind === 'conn') return guestJoin(text, profile, status, back, backCode, go, sasBox);
+    return relayJoin(k, profile, status, go, sasBox);
+  }
+
+  function showSas(box, sas, soft) {
     if (!box) return;
     box.textContent = '';
     if (!sas) { box.classList.add('hidden'); return; }
     box.classList.remove('hidden');
+    if (soft) {
+      /* The relay's version (S6): the owner sees the same five on the knock card, and only needs to ask
+         if something feels wrong — there is no step here, just the letters and what they are for. */
+      const line = el('div', 'collab-sub cj-softsas');
+      line.appendChild(document.createTextNode('If they ask, your screen shows '));
+      line.appendChild(el('b', null, sas));
+      box.appendChild(line);
+      return;
+    }
     box.appendChild(el('div', 'cs-steplabel', 'Read these letters back to them'));
     box.appendChild(el('div', 'cs-sas', sas));
     box.appendChild(el('div', 'collab-sub', 'They must see the same five. If they don\u2019t, somebody is in the middle \u2014 stop.'));
+  }
+
+  /* ═══ S6 · JOINING THROUGH THE RELAY (§12.2 finding → connecting → auth → waiting → syncing) ════════
+   * Keys from the link (HKDF) or the code (PBKDF2, then HKDF); a rendezvous on that room's topic; an
+   * offer every few seconds until the owner's device answers — it may be a phone that is waking up —
+   * and a `here` from it retries at once; then the same `C.join` the code path uses, so the knock, the
+   * snapshot and the same-device choice are all the ones S3 proved. */
+  function relayJoin(target, profile, status, go, sasBox) {
+    if (C.signal.codesOnly()) {
+      status.textContent = 'Codes only is on in Settings → Labs, so invite links and short codes cannot connect. Ask them for a connection code, or turn Codes only off.';
+      go.disabled = false;
+      return null;
+    }
+    if (C.session) { status.textContent = 'You are already in a live session — leave it first.'; go.disabled = false; return null; }
+    if (joinFlow && joinFlow.cancel) joinFlow.cancel();
+    const LIM = C.LIMITS || {};
+    const J = joinFlow = { target: target, stopped: false, rv: null, attempt: null, timer: null, started: Date.now(), tries: 0, step: null, room: null };
+    joinBusy++;
+    let hostLabel = 'them';
+    status.textContent = 'Finding the project…';
+    function stop() {
+      if (J.stopped) return;
+      J.stopped = true;
+      joinBusy = Math.max(0, joinBusy - 1);
+      clearTimeout(J.timer);
+      if (J.attempt) { const a = J.attempt; J.attempt = null; a.cancel(); }
+      if (J.rv) { try { J.rv.stop(); } catch (e) {} }
+      if (joinFlow === J) joinFlow = null;
+      unwatchDocIfIdle();
+    }
+    J.cancel = stop;
+    function fail(e) {
+      if (J.stopped && !(e && e.after)) return;
+      stop();
+      showSas(sasBox, null);
+      status.textContent = '';
+      status.appendChild(document.createTextNode(relayError(Object.assign({ kind: target.kind }, e || {}), hostLabel)));
+      const why = e && e.why;
+      /* §22: two failures come with the one thing that fixes them. */
+      if (why === 'relays') status.appendChild(btn('cj-alt', 'Connect with a code instead', function () { status.textContent = 'Ask them to tap Share → Connect with a code instead, then paste the long code they send you here.'; }));
+      if (why === 'guest-older') status.appendChild(btn('cj-alt accent', 'Update', function () { U.updateNow(target.kind === 'code' ? { c: target.code } : (target.j || null)); }));
+      go.disabled = false;
+    }
+    function attempt() {
+      if (J.stopped || J.joined || J.attempt || !J.rv) return;
+      J.tries++;
+      J.step = 'offer';
+      const a = J.attempt = C.signal.dial({
+        rv: J.rv, room: J.room, key: J.room.keys.auth, mode: target.kind, nm: profile.name, cl: profile.color,
+        onStep: function (st, ans) {
+          if (J.stopped || J.attempt !== a) return;
+          J.step = st;
+          if (ans && ans.nm) hostLabel = cleanName(ans.nm) || hostLabel;
+          if (st === 'connecting') status.textContent = hostLabel !== 'them' ? 'Connecting to ' + hostLabel + '…' : 'Connecting…';
+          if (st === 'auth') status.textContent = 'Checking the invite…';
+        }
+      });
+      a.then(function (res) {
+        if (J.attempt !== a || J.stopped) { try { res.link.close(); } catch (e) {} return; }
+        J.attempt = null;
+        joined(res);
+      }, function (e) {
+        if (J.attempt !== a || J.stopped) return;
+        J.attempt = null;
+        const why = (e && e.why) || '';
+        /* ⚠️ A REFUSAL NOBODY PROVED IS NOT AN ANSWER (S6 review). Anybody holding the link or the code can
+           answer an offer first and say anything before auth3 — and a failed auth3 means exactly that an
+           impostor answered. Both are asked again, like a missing answer; if nothing better ever comes, the
+           last thing said is what the sheet reports. */
+        const unproven = why === 'auth' || (e && e.deny && !e.proven);
+        if (unproven) J.lastDeny = why;
+        const retry = unproven || why === 'no-answer' || why === 'timeout' || why === 'ice' || why === 'closed' || why === 'cancelled';
+        if (!retry) return fail(e);
+        /* The owner's device may simply not be there yet — keep asking for §13.5's first window. */
+        if (Date.now() - J.started > (LIM.RETRY_FAST_FOR || 120000)) return fail({ why: J.lastDeny || (why === 'ice' ? 'ice' : 'no-host') });
+        const theirs = hostLabel !== 'them' ? hostLabel + '’s device' : 'their device';
+        status.textContent = why === 'ice' || why === 'timeout'
+          ? 'Couldn’t connect directly yet — trying again…'
+          : 'Waiting for ' + theirs + ' to answer — keep this open' + (target.kind === 'code' ? ', and check the code is right.' : '…');
+        J.timer = setTimeout(attempt, LIM.RETRY_FAST || 3000);
+      });
+    }
+    /* A `here`, a foreground or an `online`: an offer still waiting for its answer went to nobody. */
+    J.kick = function () {
+      /* Once the owner has answered, the relay's part is over — a foreground while the knock is up must
+         not send a second offer (which would fail on the stopped rendezvous and put an error under a join
+         that is going fine). */
+      if (J.stopped || J.joined || !J.rv) return;
+      J.rv.kick();
+      if (J.attempt) {
+        if (J.step !== 'offer' && J.step !== 'offered') return;
+        const a = J.attempt; J.attempt = null; a.cancel();
+      }
+      clearTimeout(J.timer);
+      attempt();
+    };
+    function joined(res) {
+      J.joined = true;
+      const h = (res.auth && res.auth.host) || {};
+      hostLabel = cleanName(res.host && res.host.nm) || cleanName(h.nm) || hostLabel;
+      status.textContent = 'Waiting for ' + hostLabel + ' to let you in…';
+      showSas(sasBox, res.auth && res.auth.sas, true);
+      joinLink = res.link;                                    // closing the sheet now closes this link (S3's rule)
+      if (J.rv) { try { J.rv.stop(); } catch (e) {} }         // the relay's work is done: nothing more goes through it
+      const me = U.getProfile() || profile;
+      const joinOpts = {
+        link: res.link, role: 'editor', name: me.name, color: me.color, mk: me.mk || undefined,
+        dev: isPhoneNow() ? 'phone' : 'pc', app: C.signal.appVersion(), onConflict: 'refuse',
+        sid: target.sid || (typeof h.sid === 'string' ? h.sid : null), sk: target.sk || null,
+        code: target.kind === 'code' ? target.code : null,
+        hostName: hostLabel, hostColor: cleanColor(res.host && res.host.cl) || cleanColor(h.cl) || null
+      };
+      function done(r) {
+        if (joinLink === res.link) joinLink = null;          // the session owns it now
+        stop();
+        clearPendingJoin();
+        const s = C.session;
+        if (s && !s.isOwner && s.setLiveness) s.setLiveness(true);
+        showSas(sasBox, null);
+        U.syncBanner();
+        closeCard();
+        showEditor();
+        if (FM.toast) FM.toast('You’re in — this copy stays in sync with ' + hostLabel, 3000);
+        return r;
+      }
+      function lateFail(e) { try { res.link.close(); } catch (x) {} fail(Object.assign({ after: true }, e || {})); }
+      C.join(joinOpts).then(done, function (e) {
+        if (e && e.why === 'same-device') { stop(); return sameDeviceChoice(e, status, joinOpts, done, lateFail); }
+        lateFail(e);
+      });
+    }
+    const keysP = target.kind === 'link' ? C.signal.linkKeys(target) : C.signal.codeKeys(target.code);
+    keysP.then(function (keys) {
+      if (J.stopped) return;
+      J.room = { kind: target.kind, keys: keys };
+      J.rv = C.signal.Rendezvous({ role: 'guest', rooms: [J.room], onHere: function () { J.kick(); } });
+      J.rv.start();
+      watchDoc();
+      return J.rv.ready(LIM.RELAY_UP || 8000).then(attempt, function (e) { fail({ why: 'relays', refused: e && e.refused }); });
+    }, function (e) { fail(e && e.why ? e : { why: 'bad-link' }); });
+    return J;
+  }
+
+  /* ⚠️ A JOIN LANDS IN THE EDITOR (S6 review). Every join starts on Home — the Join button lives there,
+     and an invite opens a fresh device onto Home — and `C.join` opens the copy underneath it: the sheet
+     closed onto the OLD Home, the new copy missing and "OPEN" on another card, and tapping that card
+     switched project and stood the new session down. §12.2: "The editor opens immediately". */
+  function showEditor() {
+    try { if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
   }
 
   /* ⚠️ §12.2's TWO ANSWERS, WHICH `C.join` HAS ALWAYS IMPLEMENTED AND NOTHING COULD ASK FOR (queue 921
@@ -983,6 +1866,7 @@ window.FM = window.FM || {};
       showSas(sasBox, null);
       U.syncBanner();
       closeCard();
+      showEditor();
       if (FM.toast) FM.toast('You\u2019re in \u2014 this copy stays in sync', 3000);
     }
     function fail(e) {
@@ -1033,18 +1917,69 @@ window.FM = window.FM || {};
     if (why === 'no-candidates') return 'That code has no way to connect on this network — ask for a fresh one on Wi-Fi.';
     if (why === 'no-room') return 'Not enough room on this device — delete a project and try again.';
     if (why === 'timeout') return 'They did not answer — ask for a fresh code.';
+    if (why === 'closed') return 'The connection dropped while you were waiting — ask for a fresh code and try again.';
     return 'Could not join — ask for a fresh code.';
+  }
+
+  /* §22's sentences for the relay path, one per refusal, each naming the person where it can. The
+     connection-code path keeps `joinError` above: its words are about a code the two people swapped. */
+  function relayError(e, host) {
+    const why = (e && e.why) || '';
+    const who = host && host !== 'them' ? host : '';
+    const whose = who ? who + '’s' : 'Their';
+    if (why === 'relays') return 'Couldn’t reach the free connection service.';
+    if (why === 'no-host') return e.kind === 'code'
+      ? whose + ' device isn’t answering. Check the code — a short code works for ' + Math.round(codeTtlMs() / 60000) + ' minutes — or ask them to open the project in FreeMotion, then try again.'
+      : whose + ' device isn’t answering — ask them to open the project in FreeMotion, then try again.';
+    if (why === 'ice') return 'Couldn’t connect directly. Put both devices on the same Wi-Fi, or turn off mobile data.';
+    if (why === 'auth' || why === 'bad-link' || why === 'bad-code') return 'This invite no longer works — ask ' + (who || 'them') + ' for a new link.';
+    if (why === 'declined' || why === 'denied' || why === 'refused') return (who || 'They') + ' didn’t let you in.';
+    if (why === 'full') return 'This project is full — ask ' + (who || 'them') + ' to make room.';
+    if (why === 'removed') return (who || 'The owner') + ' removed you from this project.';
+    if (why === 'ended') return 'That live session has ended.';
+    if (why === 'paused') return (who || 'They') + ' switched to another project before letting you in — try again once they’re back on it.';
+    if (why === 'closed') return 'The connection dropped while you were waiting — tap Join to try again.';
+    if (why === 'host-older') return whose + ' FreeMotion needs an update before you can join — ask ' + (who || 'them') + ' to tap the version number.';
+    if (why === 'guest-older') return 'Update to join — this FreeMotion is older than ' + (who ? who + '’s' : 'theirs') + '.';
+    if (why === 'same-device') return 'You already have this project on this device.';
+    if (why === 'no-room') return 'Not enough room on this device — delete a project and try again.';
+    if (why === 'timeout') return (who || 'They') + ' didn’t answer — try again.';
+    return 'Could not join — try again.';
   }
 
   /* ═══ 4. THE KNOCK CARD (§19.3) ═══════════════════════════════════════════════════════════════
    * Requests queue one at a time, and one that is never answered declines itself after two minutes —
    * an owner who has put his phone down must not leave someone staring at "waiting" forever. */
+  /* Test seam, the same one `U._connectWait` is: the knock's own two minutes are not a thing a suite waits out. */
+  let knockWait = null;
+  U._knockWait = function (ms) { knockWait = (ms == null ? null : ms); return knockWait; };
+  /* Resolves true (let in), false (not), or — when the knock is called off before he answers (S6 review) —
+     the reason: 'gone' (they gave up), 'paused' or 'ended' (the session it was for stood down). The
+     promise carries `.cancel(why)`. */
   U.knock = function (info) {
-    return new Promise(function (resolve) {
-      knockQueue.push({ info: info || {}, resolve: resolve });
+    let entry = null;
+    const p = new Promise(function (resolve) {
+      entry = { info: info || {}, resolve: resolve, done: false };
+      knockQueue.push(entry);
       pumpKnock();
     });
+    p.cancel = function (why) { cancelKnock(entry, why || 'gone'); };
+    return p;
   };
+  function cancelKnock(k, why) {
+    if (!k || k.done) return;
+    const i = knockQueue.indexOf(k);
+    if (i >= 0) { knockQueue.splice(i, 1); k.done = true; k.resolve(why); return; }
+    if (pendingKnock === k && k.answer) k.answer(why);
+  }
+  /* ⚠️ A KNOCK BELONGS TO THE SESSION IT CAME IN ON (S6 review). The card outlived it: he opened another
+     project, or stopped sharing, and "Sam wants to join" stayed up over whatever came next — and Let in
+     then told Sam the session had ENDED when it had only paused. Every knock, shown or queued, is
+     answered with what really happened. */
+  function cancelKnocks(why) {
+    knockQueue.splice(0).forEach(function (k) { if (!k.done) { k.done = true; k.resolve(why); } });
+    if (pendingKnock && pendingKnock.answer) pendingKnock.answer(why);
+  }
   function pumpKnock() {
     if (pendingKnock || !knockQueue.length) return;
     const k = pendingKnock = knockQueue.shift();
@@ -1053,19 +1988,37 @@ window.FM = window.FM || {};
     host.setAttribute('role', 'alertdialog');
     const who = (cleanName(k.info.name) || 'Someone') + (k.info.dev ? ' (' + cleanName(k.info.dev) + ')' : '');
     host.appendChild(el('div', 'ck-text', who + ' wants to join as ' + labelFor(k.info.role) + '.'));
+    /* S6: on the relay, the five letters this leg of the handshake derived (§14.6). Somebody holding the
+       link could sit between a real joiner and this device; the joiner's screen shows the same five only
+       when nobody does. Offered, not demanded — the link's promise is one tap — and in plain words. */
+    if (typeof k.info.sas === 'string' && /^[0-9A-Z]{5}$/.test(k.info.sas)) {
+      const line = el('div', 'ck-sas');
+      line.appendChild(document.createTextNode('Their screen shows '));
+      line.appendChild(el('b', null, k.info.sas));
+      line.appendChild(document.createTextNode(k.info.via === 'code' ? ' · came in with the short code' : ''));
+      host.appendChild(line);
+    }
     const acts = el('div', 'ck-acts');
     acts.appendChild(btn('ck-no', 'Don’t allow', function () { answer(false); }));
     acts.appendChild(btn('ck-yes accent', 'Let in', function () { answer(true); }));
     host.appendChild(acts);
     document.body.appendChild(host);
-    const t = setTimeout(function () { answer(false); }, (C.LIMITS && C.LIMITS.KNOCK_TIMEOUT) || 120000);
+    const t = setTimeout(function () {
+      /* §19.3: a request nobody answers declines itself, with a quiet note where he will look next. */
+      shareNote = (cleanName(k.info.name) || 'Someone') + ' asked to join and was not let in — the request timed out.';
+      answer(false);
+      redrawShare();
+    }, knockWait != null ? knockWait : ((C.LIMITS && C.LIMITS.KNOCK_TIMEOUT) || 120000));
     function answer(yes) {
+      if (k.done) return;
+      k.done = true;
       clearTimeout(t);
       if (host.parentNode) host.parentNode.removeChild(host);
-      pendingKnock = null;
+      if (pendingKnock === k) pendingKnock = null;
       k.resolve(yes);
       pumpKnock();
     }
+    k.answer = answer;
   }
 
   /* ═══ 5. THE BANNER (§19.4) ═══════════════════════════════════════════════════════════════════ */
@@ -1088,6 +2041,11 @@ window.FM = window.FM || {};
     bannerEl.classList.toggle('warn', !!o.warn);
     /* S5: "Following Sam ×" shares this slot (§18.7), and it is the one state with something to press. */
     bannerEl.classList.toggle('has-x', typeof o.onClose === 'function');
+    /* S6: one state has a thing to DO rather than to close — §14.7's "Update now". */
+    bannerEl.classList.toggle('has-act', typeof o.onAction === 'function');
+    if (typeof o.onAction === 'function') {
+      bannerEl.appendChild(btn('cb-act', o.action || 'OK', function (e) { e.stopPropagation(); o.onAction(); }));
+    }
     if (typeof o.onClose === 'function') {
       const x = btn('cb-x', '\u00d7', function (e) { e.stopPropagation(); o.onClose(); });
       x.setAttribute('aria-label', o.closeLabel || 'Close');
@@ -1126,14 +2084,52 @@ window.FM = window.FM || {};
   /* Says what the session is, from the session, rather than from a flag somebody remembered to set. */
   U.syncBanner = function () {
     const s = C.session;
-    if (!s || !C.active) return U.hideBanner();
+    if (!s || !C.active) {
+      /* ⚠️ A REOPENED COPY SAID NOTHING WHILE IT LOOKED FOR ITS OWNER (S6 review). No session yet, so
+         the banner hid — and the copy looked like a project of his own, which is exactly what made
+         tapping Share arm it. It says what it is and what it is doing. */
+      if (!s && recon && !recon.stopped && recon.mode === 'reopen' && recon.gpid === currentPid()) {
+        const who = hostNameFor(recon.gpid);
+        return U.banner(isPhoneNow() ? 'Reconnecting to ' + who + '…' : 'Shared by ' + who + ' · reconnecting… your changes are kept', { warn: true });
+      }
+      return U.hideBanner();
+    }
     /* ⚠️ "THE OWNER ENDED THIS" IS NOT AN OFFLINE STATE (queue 921 S3 review). Nothing on either device
        said a word when a session stopped or the wire went — the adapter had no `onEnd`/`onOffline` at
        all — so the guest kept editing a project that was no longer syncing while its panel read "Live".
        And the offline line PROMISED A RE-SEND: there is no reconnect in S3 (`C.reopen` has no caller),
        so "will send when you reconnect" was untrue. It says what is true instead. */
-    if (s.ended) return U.banner('This live session has ended — your copy stays on this device', { warn: true });
-    if (s.online === false) return U.banner('Offline — the live link dropped; your changes are kept on this device', { warn: true });
+    if (s.ended) return U.banner(s.ended === 'removed'
+      ? 'You were removed from this project — your copy stays on this device'
+      : 'This live session has ended — your copy stays on this device', { warn: true });
+    /* S6 (§14.7): the owner turned a reconnect away on version — say which side needs the update. */
+    /* 📐 THE PHONE GETS THE SHORT SENTENCE (S6, photographed at 380 px). The pill is `100% − 140 px` wide so
+       it clears the people chip — 240 px on a phone — and the long forms were cut mid-word ("Ezra is
+       offline · reconnecting… y…", "Sam has a ne…" beside its own button), losing exactly the half that
+       says what to do. Same facts, fewer words, on a phone only. */
+    const short = isPhoneNow();
+    if (!s.isOwner && versionNote) {
+      return versionNote.why === 'guest-older'
+        ? U.banner(short ? 'This app is older' : 'Update to reconnect — this FreeMotion is older than ' + hostNameOf(s) + '’s', { warn: true, action: 'Update', onAction: function () { U.updateNow(); } })
+        : U.banner(short ? hostNameOf(s) + ' needs to update' : hostNameOf(s) + '’s FreeMotion needs an update — ask them to tap the version number', { warn: true });
+    }
+    if (s.online === false) {
+      /* S6: NOW there is a reconnect, so the banner may promise one — but only while one is really
+         running for this copy. With Codes only, or a copy that came in by connection code (no room to
+         find), there is none, and S3's sentence stays true. */
+      if (recon && recon.gpid === s.gpid) {
+        const n = owedOps(s);
+        return U.banner(short
+          ? 'Reconnecting to ' + hostNameOf(s) + '…' + (n ? ' (' + n + ' kept)' : '')
+          : hostNameOf(s) + ' is offline · reconnecting… your changes are kept' + (n ? ' (' + n + ')' : ''), { warn: true });
+      }
+      return U.banner('Offline — the live link dropped; your changes are kept on this device', { warn: true });
+    }
+    /* §14.7 on the owner's side: somebody newer knocked and was turned away. */
+    if (s.isOwner && hostOlder) {
+      return U.banner(hostOlder.name + (short ? ' is newer' : ' has a newer FreeMotion'), { warn: true, action: 'Update now', onAction: function () { U.updateNow(); },
+        onClose: function () { hostOlder = null; U.syncBanner(); }, closeLabel: 'Dismiss' });
+    }
     const fl = C.presence && C.presence.followLabel ? C.presence.followLabel() : null;
     const follow = { onClose: function () { C.presence.unfollow(); }, closeLabel: 'Stop following' };
     /* ⚠️ A VIEWER WHO FOLLOWS IS TOLD SO, AND GETS THE × (S5 review). The view-only line returned before
@@ -1146,6 +2142,395 @@ window.FM = window.FM || {};
     if (fl) return U.banner(fl, follow);
     return U.hideBanner();
   };
+
+  function cardOf(pid) {
+    const list = (FM.projects && FM.projects.list && FM.projects.list()) || [];
+    for (let i = 0; i < list.length; i++) if (list[i].id === pid) return list[i];
+    return null;
+  }
+  function hostNameOf(s) { return hostNameFor(s && s.gpid); }
+  function hostNameFor(gpid) {
+    const c = gpid ? cardOf(gpid) : null;
+    return cleanName(c && c.collab && c.collab.hostName) || 'The owner';
+  }
+  function owedOps(s) {
+    let n = 0;
+    try { (s._outstanding ? s._outstanding() : []).forEach(function (e) { n += e.n || 0; }); } catch (e) {}
+    return n;
+  }
+
+  /* ═══ S6 · AUTOMATIC RECONNECT (§13.5, §12.2 "offline ─retry─▶ finding") ═══════════════════════════
+   * A guest whose link went — its own phone locked, the owner's did, the Wi-Fi changed — keeps editing
+   * (the outbox, §13.1) and finds the room again on its own: the rendezvous of the link or the code it
+   * joined with, and its MEMBER TOKEN instead of a knock (D5). Every 3 s for two minutes, every 10 s to
+   * ten, every 30 s after that; at once on a foreground, an `online`, or the owner's `here`.
+   * The same machine runs when a linked copy is OPENED (§12.4 "guest reload recovery"): there is no
+   * session yet, and the connection is handed to `C.reopen` instead of to the session that dropped it.
+   * A copy that joined by connection code has no room to find, so it has no reconnect — the banner then
+   * keeps S3's sentence, which does not promise one. */
+  /* S6 review: a member comes back through the room's HUB, with its own token — never through the link or
+     the code, which anybody holding them could read and answer (collab-signal.js "the members' room"). */
+  function reconTarget(card) {
+    const c = card && card.collab;
+    if (!c || c.ended || typeof c.tok !== 'string' || typeof c.rid !== 'string' || typeof c.hub !== 'string') return null;
+    return { hub: c.hub, rid: c.rid, tok: c.tok };
+  }
+  function stopRecon() {
+    const R = recon;
+    recon = null;
+    if (!R) return;
+    R.stopped = true;
+    R.awaiting = false;
+    clearTimeout(R.timer);
+    if (R.attempt) { const a = R.attempt; R.attempt = null; a.cancel(); }
+    if (R.rv) { try { R.rv.stop(); } catch (e) {} }
+    unwatchDocIfIdle();
+    if (R.mode === 'reopen' && !C.session) U.syncBanner();   // the "reconnecting" line was about this one
+  }
+  U._recon = function () { return recon; };
+
+  function startRecon(gpid, mode) {
+    if (recon && recon.gpid === gpid && !recon.stopped) { recon.kick('again'); return recon; }
+    stopRecon();
+    if (!U.labsOn() || C.signal.codesOnly()) return null;
+    const t = reconTarget(cardOf(gpid));
+    if (!t) return null;
+    const LIM = C.LIMITS || {};
+    const R = recon = { gpid: gpid, mode: mode, started: Date.now(), timer: null, attempt: null, rv: null, room: null, tries: 0, step: null, stopped: false, last: null };
+    function delay() {
+      const e = Date.now() - R.started;
+      return e < (LIM.RETRY_FAST_FOR || 120000) ? (LIM.RETRY_FAST || 3000)
+        : e < (LIM.RETRY_MID_UNTIL || 600000) ? (LIM.RETRY_MID || 10000) : (LIM.RETRY_SLOW || 30000);
+    }
+    R.delay = delay;
+    function schedule() { if (R.stopped) return; clearTimeout(R.timer); R.timer = setTimeout(go, delay()); }
+    function go() {
+      if (R.stopped || R.attempt || !R.rv) return;
+      clearTimeout(R.timer); R.timer = null;
+      R.awaiting = false;
+      const c = (cardOf(gpid) || {}).collab || {};
+      const tok = C.signal.fromB64url(c.tok);
+      if (!tok || tok.length !== 16) { stopRecon(); U.syncBanner(); return; }
+      R.tries++;
+      R.step = 'offer';
+      const me = U.getProfile() || {};
+      const a = R.attempt = C.signal.dial({
+        rv: R.rv, room: R.room, key: tok, mode: 'tok', rid: c.rid, nm: me.name, cl: me.color,
+        onStep: function (st) { if (R.attempt === a) R.step = st; }
+      });
+      a.then(function (res) {
+        if (R.attempt !== a || R.stopped) { try { res.link.close(); } catch (e) {} return; }
+        R.attempt = null;
+        connect(res);
+      }, function (e) {
+        if (R.attempt !== a || R.stopped) return;
+        R.attempt = null;
+        const why = (e && e.why) || '';
+        R.last = why;
+        /* ⚠️ ONLY A REFUSAL THE OWNER SIGNED ENDS THE COPY (S6 review). `auth` used to, as "a token the owner
+           no longer knows" — but the owner's own handshake timeout, a crypto hiccup and a wrong MAC all go
+           out as `auth` too, so a phone that locked mid-handshake was cut loose for good, and anybody who
+           could answer the offer first could say "removed" and be believed. A removal is now signed with
+           the member's own token (collab-signal.js `failSigned`); everything else is asked again. */
+        if ((why === 'removed' || why === 'ended') && e.proven) { stopRecon(); endCopy(gpid, why); return; }
+        schedule();
+      });
+    }
+    /* A foreground, an `online` or a `here`: an offer still waiting for its answer went to nobody, so it is
+       dropped and a fresh one sent now. One that already has its answer is left to finish. */
+    R.kick = function () {
+      if (R.stopped || !R.rv) return;
+      R.rv.kick();
+      if (R.attempt) {
+        if (R.step !== 'offer' && R.step !== 'offered') return;
+        const a = R.attempt; R.attempt = null; a.cancel();
+      }
+      go();
+    };
+    /* ⚠️ "BACK IN SYNC" WAITS FOR THE OWNER'S WELCOME (S6 review). It was said the moment the link was
+       handed over — before the owner had read the hello, so a reconnect he then turned away (full, or
+       an older build) read "Back in sync with Ezra" and then the opposite, every three seconds for as
+       long as the room stayed full. Now the hello goes out, the reconnect waits (`awaiting`), and the
+       session's welcome is what says it (U.onWelcome). A refusal closes the link, which starts it again. */
+    function connect(res) {
+      const s = C.session;
+      if (s && !s.isOwner && s.gpid === gpid && !s.ended) {
+        R.awaiting = true;
+        s.setLink(res.link);
+        s.setLiveness(true);
+        s.setOnline(true);
+        return;
+      }
+      if (C.session || currentPid() !== gpid) { try { res.link.close(); } catch (e) {} stopRecon(); return; }
+      const c = (cardOf(gpid) || {}).collab || {};
+      const me = U.getProfile() || {};
+      joinBusy++;
+      R.awaiting = true;
+      C.reopen({
+        link: res.link, gpid: gpid, role: c.role || 'editor', mid: c.mid || 'g', sid: c.sid || gpid,
+        name: me.name, color: me.color, mk: me.mk || undefined, dev: isPhoneNow() ? 'phone' : 'pc', app: C.signal.appVersion(),
+        fallbackLive: true
+      }).then(function (r) {
+        if (!r) { R.awaiting = false; try { res.link.close(); } catch (e) {} schedule(); return; }
+        if (r.session && r.session.setLiveness) r.session.setLiveness(true);
+      }, function () { R.awaiting = false; try { res.link.close(); } catch (e) {} schedule(); })
+        .then(function () { joinBusy = Math.max(0, joinBusy - 1); });
+    }
+    function back() {
+      if (!R.awaiting || R.stopped) return;
+      R.awaiting = false;
+      try { if (FM.projects.patchCollab) FM.projects.patchCollab(gpid, { seen: Date.now() }); } catch (e) {}
+      versionNote = null;
+      stopRecon();
+      U.syncBanner();
+      if (FM.toast) FM.toast('Back in sync with ' + hostNameOf(C.session), 2200);
+    }
+    R.back = back;
+    C.signal.memberRoom(t.hub, t.rid, t.tok).then(function (room) {
+      if (R.stopped) return;
+      R.room = room;
+      R.rv = C.signal.Rendezvous({ role: 'guest', rooms: [R.room], onHere: function () { R.kick(); } });
+      R.rv.start();
+      watchDoc();
+      go();
+    }, function () { stopRecon(); U.syncBanner(); });
+    U.syncBanner();
+    return R;
+  }
+
+  /* The owner ended the session, removed this device, or no longer knows its token (`lost`): the copy
+     stops being a copy of anything live. In a session, it says so and stays on screen; with no session
+     (a reopen that was turned away) this IS the "next open" §12.3 detaches on. */
+  function endCopy(gpid, why) {
+    try { if (FM.projects.patchCollab) FM.projects.patchCollab(gpid, { ended: why }); } catch (e) {}
+    const s = C.session;
+    if (s && !s.isOwner && s.gpid === gpid) {
+      if (!s.ended) {
+        s.ended = why === 'removed' ? 'removed' : 'ended';
+        s.active = false;
+        if (why === 'lost') {
+          if (C.presence) { try { C.presence.detach(); } catch (e) {} }
+          if (FM.toast) FM.toast('This invite no longer works — ask ' + hostNameOf(s) + ' for a new link. Your copy stays on this device.', 4200);
+        } else if (s.adapter && s.adapter.onEnd) { try { s.adapter.onEnd(s.ended); } catch (e) {} }
+      }
+      U.syncBanner();
+      return null;
+    }
+    return detachEnded(gpid, why);
+  }
+  function detachEnded(gpid, why) {
+    if (joinBusy || !FM.projects || !FM.projects.detachLinked) return null;
+    const card = cardOf(gpid);
+    const name = cleanName(card && card.collab && card.collab.hostName) || 'The owner';
+    joinBusy++;
+    return FM.projects.detachLinked(gpid).then(function (nid) {
+      if (nid && FM.toast) {
+        FM.toast(why === 'removed' ? name + ' removed you — this is now your own copy'
+          : why === 'lost' ? 'That shared project can no longer be reached — this is now your own copy'
+          : name + ' stopped sharing — this is now your own copy', 3800);
+      }
+      return nid;
+    }, function () { return null; }).then(function (r) { joinBusy = Math.max(0, joinBusy - 1); return r; });
+  }
+
+  /* ── what the session tells the UI (collab-bridge.js / collab-core.js) ─────────────────────────── */
+  U.onOffline = function () {
+    const s = C.session;
+    /* `active` false is a session being STOPPED (a leave, a switch) whose own link close lands here on the
+       way out — not a wire that went. */
+    if (!s || s.isOwner || s.ended || s.active === false || !s.gpid || versionNote) return;
+    startRecon(s.gpid, 'live');
+  };
+  U.onEnded = function (why) {
+    const s = C.session;
+    if (s && !s.isOwner && s.gpid) { try { if (FM.projects.patchCollab) FM.projects.patchCollab(s.gpid, { ended: why === 'removed' ? 'removed' : 'ended' }); } catch (e) {} }
+    stopRecon();
+  };
+  /* The owner admitted a reconnect's hello: NOW it is back in sync (S6 review). */
+  U.onWelcome = function () {
+    const s = C.session;
+    if (recon && recon.awaiting && s && !s.isOwner && s.gpid === recon.gpid && recon.back) recon.back();
+  };
+  /* A `deny` AFTER the handshake — the owner's answer to a reconnect's hello (§14.7, §22). */
+  U.onDeny = function (why) {
+    const s = C.session;
+    if (!s || s.isOwner) return;
+    if (why === 'removed' || why === 'ended') { stopRecon(); endCopy(s.gpid, why); return; }
+    if (why === 'guest-older' || why === 'host-older') {
+      versionNote = { why: why };
+      stopRecon();
+      const ep = s.endpoint ? s.endpoint() : null;
+      if (ep) { try { ep.close(); } catch (e) {} }
+      U.syncBanner();
+    }
+    /* full / declined / busy: the owner closes this link in a moment and the reconnect carries on. */
+  };
+  U.onDetach = function (s) {
+    if (!s || s.isOwner) {
+      stopHostRelay(); dropWake(); ridMid = Object.create(null); hostOlder = null;
+      cancelKnocks(s && s.stopWhy === 'paused' ? 'paused' : 'ended');
+    }
+    if (recon && (!s || recon.gpid === s.gpid || recon.mode === 'live')) stopRecon();
+    versionNote = null;
+    unwatchDocIfIdle();
+  };
+
+  /* ═══ S6 · RESUME ON REOPEN (§12.1 "paused ─reopened─▶ arming", §12.4 guest recovery) ═══════════════
+   * Called on the turn after every `history.reset()` — a project open, an import, the boot — and it asks
+   * one question first: is Labs on. With it off nothing below runs (§23). With it on: a project this
+   * device is sharing starts sharing again (Stop sharing is what deletes the host record, so a record
+   * means he never stopped); a copy of somebody else's starts finding its owner; a copy whose owner ended
+   * it or removed this device becomes his own. */
+  U.afterReset = function () {
+    if (!U.labsOn() || resumeT) return;
+    resumeT = setTimeout(function () { resumeT = null; try { U.resumeOpen(); } catch (e) { C.lastError = e; } }, 0);
+  };
+  U.resumeOpen = function () {
+    if (!U.labsOn() || !installed) return null;
+    const pid = currentPid();
+    if (recon && recon.mode === 'reopen' && recon.gpid !== pid) stopRecon();
+    if (!pid || C.session || joinBusy) return null;
+    const card = cardOf(pid);
+    if (card && card.collab) {
+      if (card.collab.ended) return detachEnded(pid, card.collab.ended);
+      return startRecon(pid, 'reopen');
+    }
+    const room = loadRoom(pid);
+    return room ? resumeHost(pid, room) : null;
+  };
+  function resumeHost(pid, room) {
+    const p = U.getProfile();
+    if (!p) return null;
+    hostRoom = room; hostRoomPid = pid;
+    return checkpoint(pid).then(function () {
+      if (C.session || currentPid() !== pid || !U.labsOn()) return null;
+      C.share({ ownerInfo: { name: p.name, color: p.color }, sid: room.sid });
+      afterArm();
+      if (FM.toast) FM.toast('Sharing is on again — people can reconnect', 2600);
+      return C.session;
+    });
+  }
+
+  /* ═══ S6 · THE INVITE THAT OPENED THE APP (§14.2, §19.7) ══════════════════════════════════════════
+   * collab-core.js stashed `#j=` at parse time; this picks it up once Home has booted. In order: the iOS
+   * landing card (an invite opened in Safari on an iPhone is almost always meant for the installed app,
+   * whose storage Safari cannot see), then Labs, then the profile, then the Join sheet — filled in, and
+   * waiting for one tap on Join (S6 review: an address bar is not a tap — see drawJoin). */
+  function readPendingJoin() {
+    try {
+      const p = JSON.parse(localStorage.getItem('fm.pendingJoin') || 'null');
+      if (p && typeof p.at === 'number' && (typeof p.j === 'string' || typeof p.c === 'string')) return p;
+    } catch (e) {}
+    return null;
+  }
+  function clearPendingJoin() { try { localStorage.removeItem('fm.pendingJoin'); } catch (e) {} }
+  U.pendingJoin = readPendingJoin;
+
+  /* iOS, and not the installed app. iPadOS reports itself as a Mac, so a Mac with a touch screen is one. */
+  U.isIosBrowser = function (nav, standalone) {
+    const n = nav || navigator;
+    const ua = String(n.userAgent || '');
+    const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && (n.maxTouchPoints || 0) > 1);
+    if (!ios) return false;
+    const sa = standalone != null ? !!standalone
+      : (!!n.standalone || !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
+    return !sa;
+  };
+  let iosProbe = null;                       // test seam: {nav, standalone}
+  U._iosProbe = function (p) { iosProbe = p || null; return iosProbe; };
+
+  U.afterBoot = function () { return U.resumePendingJoin(); };
+
+  U.resumePendingJoin = function (opts) {
+    const o = opts || {};
+    const pj = readPendingJoin();
+    if (!pj) return null;
+    const lim = (C.LIMITS && C.LIMITS.PENDING_JOIN) || 86400000;
+    const age = Date.now() - pj.at;
+    if (!(age >= -60000 && age < lim)) { clearPendingJoin(); return null; }
+    /* S6 review: a short code comes back here too — [Update] on a join typed as a code stashes it — and it
+       was typed on THIS device, so it never needs the iPhone landing card. */
+    const code = typeof pj.c === 'string' ? C.signal.normRoomCode(pj.c) : null;
+    const target = code ? { kind: 'code', code: code } : C.signal.roomFromJ(pj.j);
+    if (!target) { clearPendingJoin(); return null; }
+    const link = code ? C.signal.fmtRoomCode(code) : C.signal.linkFromJ(pj.j);
+    const ios = iosProbe ? U.isIosBrowser(iosProbe.nav, iosProbe.standalone) : U.isIosBrowser();
+    if (!o.here && ios && !code) return landingCard(link, o);
+    if (!U.labsOn()) return labsCard(o);
+    if (C.session) {
+      clearPendingJoin();
+      if (FM.toast) FM.toast('You are in a live session — leave it before joining another', 3200);
+      return null;
+    }
+    return U.profile().then(function (p) {
+      if (!p) { clearPendingJoin(); return null; }
+      return drawJoin(p, { prefill: link, fromPending: true });
+    });
+  };
+
+  /* §19.7. Safari and the installed app are two storages on an iPhone: a join here makes a copy the app
+     never sees. So the card offers the app first — copy the invite, open the app, paste — and Safari
+     second. It is shown whether or not Labs is on HERE: the question is which app, not which setting. */
+  function landingCard(link, o) {
+    const c = openCard('collab-landing', { label: 'Open this invite in the FreeMotion app' });
+    c.appendChild(el('h2', 'fm-ask-title', 'Open this in your FreeMotion app'));
+    c.appendChild(el('div', 'collab-sub', 'Joining in Safari keeps this copy separate from your FreeMotion app.'));
+    /* ⚠️ STEP 3 USED TO BE "Tap Join, then Paste" (S6 review) — in an installed app with Labs off, which is
+       the default, there is no Join anywhere until Live collaboration is on, and the invite in Safari's
+       storage is invisible to the app. So the steps say how to get to it, and what the button looks like. */
+    const steps = el('ol', 'cl-steps');
+    steps.appendChild(el('li', null, 'Tap Copy invite'));
+    steps.appendChild(el('li', null, 'Open FreeMotion from your Home Screen'));
+    steps.appendChild(el('li', null, 'If Live collaboration is off, turn it on in Settings → Labs'));
+    steps.appendChild(el('li', null, 'On Home, tap ⎇ (Join a live project), then Paste'));
+    c.appendChild(steps);
+    const acts = el('div', 'fm-ask-actions cl-acts');
+    acts.appendChild(btn('fm-ask-cancel cl-here', 'Join here in Safari instead', function () {
+      closeCard();
+      U.resumePendingJoin(Object.assign({}, o || {}, { here: true }));
+    }));
+    acts.appendChild(btn('fm-ask-ok accent cl-copy', 'Copy invite', function () { copyPlain(link, 'Invite copied — now open FreeMotion from your Home Screen'); }));
+    c.appendChild(acts);
+    return c;
+  }
+
+  /* §12.2 check 1: "Turn on Live collaboration to join" [Turn on]. An invite is the one thing that may put
+     a card on screen with Labs off — he tapped a link to get here. */
+  function labsCard(o) {
+    const c = openCard('collab-labs-ask', { label: 'Turn on live collaboration' });
+    let keep = false;
+    c._onclose = function () { if (!keep) clearPendingJoin(); };
+    c.appendChild(el('h2', 'fm-ask-title', 'Turn on Live collaboration to join'));
+    c.appendChild(el('div', 'collab-sub', 'Somebody sent you an invite to a live project. Live collaboration is still a preview, so it is off until you turn it on (Settings → Labs).'));
+    const acts = el('div', 'fm-ask-actions');
+    acts.appendChild(btn('fm-ask-cancel', 'Not now', function () { closeCard(); }));
+    acts.appendChild(btn('fm-ask-ok accent cl-turnon', 'Turn on', function () {
+      keep = true;
+      closeCard();
+      if (FM.settings && FM.settings.set) FM.settings.set('collabLabs', true);
+      U.resumePendingJoin(o);
+    }));
+    c.appendChild(acts);
+    return c;
+  }
+
+  /* Codes only is a DEVICE setting (§19.8), read wherever a relay would start — so flipping it has to
+     reach anything already running: on, and the host's relay, a reconnect and a join in flight all stop
+     (no socket stays open behind the switch); off, and a sharing host's relay starts. */
+  let codesOnlyWas = null;
+  function syncRelayMode() {
+    const co = C.signal.codesOnly();
+    const changed = codesOnlyWas !== null && codesOnlyWas !== co;
+    codesOnlyWas = co;
+    const s = C.session;
+    if (co) {
+      stopHostRelay();
+      stopRecon();
+      if (joinFlow && joinFlow.cancel) joinFlow.cancel();
+    } else if (s && s.isOwner) startHostRelay();
+    else if (s && !s.isOwner && s.online === false && !s.ended && !versionNote) startRecon(s.gpid, 'live');
+    if (changed) { redrawShare(); U.syncBanner(); }
+  }
 
   /* ═══ INSTALL / UNINSTALL (§23) ═══════════════════════════════════════════════════════════════ */
 
@@ -1266,10 +2651,11 @@ window.FM = window.FM || {};
        `if (!installed) return false` meant the one sweep that could have caught it never ran again. */
     const was = installed;
     installed = false;
-    closeCard();
+    /* S6: the two invite cards are the exception — they are shown BECAUSE Labs is off (or before the
+       question arises), and any setting that re-applies must not sweep away the card he is reading. */
+    if (!card || (card.id !== 'collab-labs-ask' && card.id !== 'collab-landing')) closeCard();
     U.hideBanner();
-    knockQueue.length = 0;
-    if (pendingKnock) { const k = pendingKnock; pendingKnock = null; const n = document.getElementById('collab-knock'); if (n && n.parentNode) n.parentNode.removeChild(n); k.resolve(false); }
+    cancelKnocks('ended');
     /* BY ID, NOT BY THE REMEMBERED NODE. `pcTransportTeardown` can delete the button and a later
        install re-create it, so the module's own reference goes stale — and §23's promise is about what
        is IN THE PAGE, not about what this file remembers putting there. (queue 921 S3) */
@@ -1286,6 +2672,13 @@ window.FM = window.FM || {};
     dropOffer();
     shareNote = null;
     if (joinLink) { try { joinLink.close(); } catch (e) {} joinLink = null; }
+    /* S6: nothing the relay started may outlive the switch — no socket, no timer, no listener. */
+    stopHostRelay();
+    stopRecon();
+    if (joinFlow && joinFlow.cancel) joinFlow.cancel();
+    dropWake();
+    if (resumeT) { clearTimeout(resumeT); resumeT = null; }
+    unwatchDocIfIdle();
     return was;
   };
 
@@ -1298,6 +2691,7 @@ window.FM = window.FM || {};
       /* S5: this is also the one call every settings change makes, so the pointer and selection switches
          take effect here, on the next frame, rather than at the next thing somebody else does. */
       if (C.presence && C.presence.refresh) C.presence.refresh();
+      syncRelayMode();
       return r;
     }
     /* ⚠️ `C.end()` IS THE OWNER'S DOOR AND A GUEST WAS BEING PUSHED THROUGH IT (queue 921 S3 review).
@@ -1311,7 +2705,16 @@ window.FM = window.FM || {};
     if (C.active) {
       const s = C.session;
       if (s && !s.isOwner) { try { C.leave({ keep: true }); } catch (e) {} }
-      else { try { C.end(); } catch (e) {} }
+      else {
+        /* ⚠️ AN END IS AN END (S6 review). This told every guest "ended" and kept the room — so turning Labs
+           back on, weeks later, and opening the project re-armed it on the same link and code, on the
+           public relays, with a toast saying people could reconnect. Stop sharing drops the room; so does
+           this. (A room PAUSED by opening another project is kept: its guests were told "paused".) */
+        const pid = s && s.pid;
+        try { C.end(); } catch (e) {}
+        dropOffer();
+        if (pid) { dropRoom(pid); if (hostRoomPid === pid) { hostRoom = null; hostRoomPid = null; } }
+      }
     }
     return U.uninstall();
   };

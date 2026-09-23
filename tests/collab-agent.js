@@ -219,6 +219,19 @@
       return true;
     },
     wipe: function () { try { localStorage.clear(); } catch (e) {} return true; },
+    /* S6 (§14.2): what the boot did with an invite — the stash, and whether the address still shows it. */
+    pendingJoin: function () {
+      let pj = null;
+      try { pj = JSON.parse(localStorage.getItem('fm.pendingJoin') || 'null'); } catch (e) {}
+      return { pj: pj, hash: location.hash, search: location.search, labsCard: !!document.getElementById('collab-labs-ask') };
+    },
+    /* The version label's force-update goes to `base + '?fresh=' + ts`: a NEW query and NO fragment. The
+       same navigation, keeping only the two flags that make this a test instance at all. */
+    freshReload: function () {
+      const base = location.href.split('?')[0].split('#')[0];
+      setTimeout(function () { location.replace(base + '?fresh=' + Date.now() + '&fmtest=collab&tag=' + encodeURIComponent(TAG)); }, 10);
+      return true;
+    },
     wait: function (a) { return sleep((a && a.ms) || 50).then(function () { return true; }); },
     /* Export freeze (§8.9): the flag the exporter itself sets, driven directly so no 4-minute render
        has to happen for a rule about what the flag means to be measurable. */

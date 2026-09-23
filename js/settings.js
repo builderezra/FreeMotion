@@ -60,6 +60,11 @@ window.FM = window.FM || {};
        others are is the point of the feature. Each hides only its own half. */
     collabCursors: true,
     collabSelections: true,
+    /* S6 (§2 D3, §14.4, §19.8): Codes only. On, and nothing on this device ever opens a socket to the
+       free relay or asks a STUN server for its address — joining is by swapping connection codes, the
+       fully serverless path. Off by default because the relay is what makes "tap a link and you're in"
+       and the automatic reconnect work (D3 / Q1: "yes by default, with Codes only always available"). */
+    collabCodesOnly: false,
   };
   const DURATIONS = [0.5, 1, 2, 3, 5, 10, 15];
 
@@ -95,7 +100,9 @@ window.FM = window.FM || {};
          was saved on every flip and reset to off on every launch, so the collaboration feature switched
          itself off each time the app was opened; S3's test only asked whether the key EXISTED. The two
          S5 display switches join it here rather than repeating the mistake. */
-      ['demoMode', 'showTouches', 'systemFonts', 'homeLight', 'collabLabs', 'collabCursors', 'collabSelections'].forEach(k => { if (typeof saved[k] === 'boolean') state[k] = saved[k]; });
+      /* …and `collabCodesOnly` (S6) with them, the same day it was added — a privacy switch that reset to
+         OFF on every launch would be the #688 bug with a worse consequence than a colour. */
+      ['demoMode', 'showTouches', 'systemFonts', 'homeLight', 'collabLabs', 'collabCursors', 'collabSelections', 'collabCodesOnly'].forEach(k => { if (typeof saved[k] === 'boolean') state[k] = saved[k]; });
       const d = +saved.layerDuration;
       if (isFinite(d) && d > 0 && d <= 60) state.layerDuration = d;
       // hand-editable storage, and this string is handed straight to a canvas fillStyle
@@ -798,14 +805,18 @@ window.FM = window.FM || {};
       kids.appendChild(actionRow('Your name and colour',
         me ? me.name : 'Not set yet — you are asked the first time you share or join',
         'Change…', () => ui.profile({ force: true })));
-      kids.appendChild(actionRow('Join a live project', 'Paste a code somebody read you.', 'Join…', () => ui.join()));
+      kids.appendChild(actionRow('Join a live project', 'Paste an invite link, or type the short code somebody read you.', 'Join…', () => ui.join()));
+      /* S6 (§19.8): Codes only. toggleRow → `apply()` → `syncLabs()`, which stops any relay already running
+         the moment it goes on — the switch is a promise about sockets, not about the next session. */
+      kids.appendChild(toggleRow('Connect with codes only', 'No free relay at all: nothing but the two devices. Invite links and short codes stop working — you swap a long code with each person instead.', 'collabCodesOnly'));
       /* S5: the two §19.8 display switches. Local to this device — they change what YOU see, never what
          the others see of you. `apply()` is not needed: presence reads the setting on every draw. */
       kids.appendChild(toggleRow('Show others’ pointers', 'Their mouse pointer and their taps, in their colour.', 'collabCursors'));
       kids.appendChild(toggleRow('Show others’ selections', 'An outline in their colour around the layers they have selected, and a ring on those clips.', 'collabSelections'));
       body.appendChild(group(
         switchRow('Live collaboration (preview)',
-          'Edit one project on two devices at once. Nothing goes through a server — the two devices talk to each other directly, and you connect them by reading a code across.',
+          /* S6 review: every third party by name — see collab-ui.js PRIVACY_LINE. */
+          'Edit one project with people on other devices. Free public services — relays run by PeerJS, EMQX and HiveMQ, and Google and Cloudflare’s address lookup — help the devices find each other. They see internet addresses and when a room is in use, never your project; then the devices talk directly, encrypted. Codes only skips them all.',
           () => !!state.collabLabs,
           () => { state.collabLabs = !state.collabLabs; save(); apply(); kids.classList.toggle('hidden', !state.collabLabs); }),
         kids
