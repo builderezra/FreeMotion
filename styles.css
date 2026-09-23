@@ -5713,12 +5713,29 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
    spill out of a 307px column (measured: cards at x=328 and x=490 inside a 307px box). Docking it
    properly means re-paging that browser for the column, which is a visible change to a menu he uses —
    so it is his call, not a silent one. */
-#fx-browser.fxb-sheet.fxb-in-inspector {
+/* ✅ queue 922 (23 Sep) — HE ASKED AGAIN, so it is no longer his to call: *"audio effects menu still goes
+   too big on pc"*. The audio browser now docks like its visual twin, and the reason it was left undone in
+   queue 810 is fixed rather than dodged: its 150px cards and 4-column grids are re-sized for the column
+   below, exactly the way #fx-browser's are. Measured before: audio [0, 630, 1280, 270] against visual
+   [0, 630, 307, 270] on a 1280px window — it covered the whole timeline. */
+#fx-browser.fxb-sheet.fxb-in-inspector,
+#afx-browser.fxb-sheet.fxb-in-inspector {
   top: var(--fxb-top, 0); left: var(--fxb-left, 0);
   right: var(--fxb-right, 0); bottom: var(--fxb-bottom, 0);
   border-radius: 0; border-top: none; border-left: 1px solid var(--line);
   box-shadow: -12px 0 30px rgba(0, 0, 0, .38);
 }
+/* The column is phone-width, so the audio browser wears the phone's proportions in it — the same move
+   #fx-browser.fxb-in-inspector makes above (queue 922). Its pages are 100% of the pager either way, so
+   only the things measured in PIXELS need saying again. */
+#afx-browser.fxb-in-inspector .fxb-card { flex: 0 0 112px; }
+#afx-browser.fxb-in-inspector .fxb-card .fxb-thumb { height: 70px; }
+#afx-browser.fxb-in-inspector .fxb-card-name { padding: 7px 8px; font-size: 11.5px; }
+#afx-browser.fxb-in-inspector .fxb-card .afxb-glyph { width: 34px; height: 34px; }
+#afx-browser.fxb-in-inspector .fxb-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+#afx-browser.fxb-in-inspector .fxb-top { gap: 6px; padding: 9px 8px; }
+#afx-browser.fxb-in-inspector .fxb-close,
+#afx-browser.fxb-in-inspector .fxb-search-btn { width: 36px; height: 36px; }
 /* He scribbled the "Add Effect" title bar out on the screenshot: the sheet's own top edge and the
    canvas above it already say what this is, so the row keeps only the close and search controls. */
 #fx-browser.fxb-sheet .fxb-title, #afx-browser.fxb-sheet .fxb-title { display: none; }

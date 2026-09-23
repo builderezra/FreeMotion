@@ -19126,6 +19126,55 @@
     }
   });
 
+  /* ── queue 922: the audio effects menu still went full-window on PC ─────────────────────────────────────
+   * His words, 23 Sep: "audio effects menu still goes too big on pc" — "still", because queue 810 measured this on
+   * 6 Sep (audio [0,560,1280,240] against visual [0,560,307,240]) and LEFT it, since docking it needed its cards
+   * re-sized for the column and that is a visible change. Asking twice is the answer. Held: on a wide window the
+   * audio browser lands on the inspector column exactly like its visual twin, and its cards wear the column's size;
+   * on a phone both are still the full-width sheet. */
+  test('922 the audio effects browser docks in the inspector column on PC, like the visual one, and stays a full sheet on a phone', { item: '922', budgetMs: 45000 }, async function () {
+    await editorWithShape(async function (L) {
+      const realOk = FM.fxAudioSideOk;
+      FM.fxAudioSideOk = function () { return true; };   // the shape has no sound; the gate is not what this test is about
+      try {
+        await atWideWidth(async function () {
+          const insp = document.getElementById('inspector-panel');
+          const ir = insp && insp.getBoundingClientRect();
+          if (!ir || ir.width < 200) throw new Error('CONTROL: there is no inspector column at this width, so there is nothing to dock into');
+          FM.fxBrowser.open(L); await sleep(350);
+          const vr = document.getElementById('fx-browser').getBoundingClientRect();
+          FM.fxBrowser.close(); await sleep(200);
+          FM.audioFxBrowser.open(L); await sleep(450);
+          const a = document.getElementById('afx-browser');
+          if (a.classList.contains('hidden')) throw new Error('the audio browser did not open');
+          const ar = a.getBoundingClientRect();
+          if (Math.abs(ar.width - ir.width) > 2 || Math.abs(ar.left - ir.left) > 2) {
+            throw new Error('the audio browser is ' + Math.round(ar.width) + 'px wide at x=' + Math.round(ar.left) + ', against the inspector column\'s ' +
+              Math.round(ir.width) + 'px at x=' + Math.round(ir.left) + ' — it covers ' + Math.round(ar.width - ir.width) + 'px of the timeline');
+          }
+          if (Math.abs(ar.width - vr.width) > 2) throw new Error('the two browsers are different sizes in the same column: audio ' + Math.round(ar.width) + ', visual ' + Math.round(vr.width));
+          /* and its cards wear the column's size — the reason queue 810 left this undone */
+          const card = a.querySelector('.fxb-card');
+          if (!card) throw new Error('CONTROL: the audio browser drew no cards, so their size cannot be checked');
+          const cw = card.getBoundingClientRect().width;
+          if (cw > 130) throw new Error('an audio effect card is ' + Math.round(cw) + 'px wide in a ' + Math.round(ar.width) + 'px column — the full-sheet size (150px), not the column size');
+          FM.audioFxBrowser.close(); await sleep(150);
+        }, 1280);
+        await atPhoneWidth(async function () {
+          FM.audioFxBrowser.open(L); await sleep(450);
+          const a = document.getElementById('afx-browser'), ar = a.getBoundingClientRect();
+          if (a.classList.contains('fxb-in-inspector')) throw new Error('the phone sheet was docked into an inspector column that is not there');
+          if (ar.width < innerWidth - 2) throw new Error('on a phone the audio browser is ' + Math.round(ar.width) + 'px of ' + innerWidth + ' — it must still be the full-width sheet');
+          FM.audioFxBrowser.close(); await sleep(150);
+        }, 380);
+      } finally {
+        FM.fxAudioSideOk = realOk;
+        try { FM.audioFxBrowser.close(); } catch (e) {}
+        try { FM.fxBrowser.close(); } catch (e) {}
+      }
+    });
+  });
+
   test('Effects panel: the same Visual/Filters/Audio toggle, so an added audio effect still has an editor', { item: 'q45-fx-toggle' }, async function () {
     const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId, media: [], time: FM.time };
     try {
