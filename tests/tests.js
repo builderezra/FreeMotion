@@ -29099,8 +29099,12 @@
     if (C.undoActive() !== false || C.canUndo() !== false || C.canRedo() !== false) throw new Error('the undo delegation is on with no session — FM.history.undo() would hand a solo undo to nothing');
     if (C.reachable('anything') !== false) throw new Error('reachable() claims an id with no session, which would pin media forever');
     if (C.isGuest() !== false) throw new Error('isGuest() is true with no session');
-    /* Presence is S5. It must not appear early: app.js:109 calls it on EVERY render. */
-    if (C.presence !== undefined) throw new Error('FM.collab.presence exists — it belongs to stage S5, and app.js calls it inside render()');
+    /* Presence arrived in S5. It is DEFINED at load (app.js:109 calls it inside render() whenever a session
+       is active) but it must hold nothing — no session, no timer, no listener — until a session attaches it. */
+    if (C.presence) {
+      const pst = C.presence._state();
+      if (pst.attached || pst.timer || pst.listeners) throw new Error('FM.collab.presence is attached, ticking or listening with no session (' + JSON.stringify(pst) + ') — §23 promises a solo user no listener and no timer');
+    }
     const allowed = ['PROTO', 'SCHEMA_REV', 'SCHEMA_FP', 'SCHEMA_FIXTURE', 'schemaFingerprint', 'DERIVED_FIXTURE', 'derivedFingerprint', 'active', 'role', 'LIMITS', 'OP_GRAMMAR',
       'path', 'diff', 'Host', 'Session', 'bridge', 'link', 'DENY', '_viewOfProject',
       'session', 'attach', 'detach', 'share', 'join', 'leave', 'end', 'reopen', 'sameDeviceCopy', 'testMode',
@@ -29112,9 +29116,12 @@
       'signal', 'ui',
       /* S4 (queue 921): media. A library like the rest — it defines functions and a `ui` of its own and
          holds NO controller until a session installs one, which the two assertions below measure. */
-      'media'];
+      'media',
+      /* S5 (queue 921): presence. Defines functions; builds DOM, binds listeners and starts its timer only
+         on a session's attach — measured above, and by `921 S5 with no session there is no presence DOM…`. */
+      'presence'];
     const extra = Object.keys(C).filter(function (k) { return allowed.indexOf(k) < 0; });
-    if (extra.length) throw new Error('FM.collab gained ' + extra.join(', ') + ' — stage S4 is the engine, its hooks, the connection codes, the UI and media, and anything beyond that list belongs to a later stage (presence S5, the relay and the invite link S6)');
+    if (extra.length) throw new Error('FM.collab gained ' + extra.join(', ') + ' — stage S5 is the engine, its hooks, the connection codes, the UI, media and presence, and anything beyond that list belongs to a later stage (the relay and the invite link S6, comments S7)');
     /* Media is the stage most able to break §23's bargain, because everything it does is IndexedDB: a
        boot-time sweep, a manifest built at load, a progress card that exists before there is anything
        to report. None of it may happen until a session installs a controller. */
@@ -31072,11 +31079,40 @@
     } finally { pair.close(); }
   });
 
+  /* ── queue 921: the link said it was open while the bulk channel was still connecting ────────────────────────
+   * The three negotiated channels open a few milliseconds apart, and `opened` resolved on `ctl` alone — so about one
+   * pairing in ten, a send on `bulk` straight after "ready" was DROPPED (send returned false, nothing checked it) and the
+   * transfer never started: measured as 8 MB "never arrived" with every channel open and bufferedAmount stuck at 0. One
+   * pairing cannot catch a 1-in-10 race, so this pairs forty times: at the moment `opened` resolves, all three channels
+   * must be open on both sides, and a message sent on `bulk` that instant must arrive. */
+  test('921 S3 when a link says it is open, every channel is open — a bulk send straight after ready arrives, forty pairings in a row', { item: '921', budgetMs: 240000 }, async function () {
+    need921S3('channel readiness');
+    for (let k = 0; k < 40; k++) {
+      const pair = await rtcPair921();
+      try {
+        ['h', 'g'].forEach(function (side) {
+          ['ctl', 'pres', 'bulk'].forEach(function (n) {
+            const dc = pair[side].channel(n);
+            if (!dc || dc.readyState !== 'open') throw new Error('pairing ' + (k + 1) + ': the ' + (side === 'h' ? 'host' : 'guest') + ' said it was open while its ' + n + ' channel was ' + (dc ? dc.readyState : 'missing') + ' — anything sent on it now is lost');
+          });
+        });
+        const there = nextOn921(pair.g, 'bulk', 10000, 'a bulk message sent the moment the link opened (pairing ' + (k + 1) + ')');
+        const ok = pair.h.send('bulk', new Uint8Array([k, 1, 2, 3]).buffer);
+        if (ok === false) throw new Error('pairing ' + (k + 1) + ': send on bulk returned false straight after the link opened — the message was dropped');
+        const got = new Uint8Array(await there);
+        if (got[0] !== k) throw new Error('pairing ' + (k + 1) + ': the wrong message arrived');
+      } finally { pair.close(); }
+    }
+  });
+
   test('921 S3 20 MB on the bulk channel never buffers more than 4 MiB plus one chunk, and arrives whole', { item: '921', budgetMs: 180000 }, async function () {
     const C = need921S3('backpressure');
     const pair = await rtcPair921();
     let poll = null;
     try {
+      /* It failed now and then with "nothing arrived" and was blamed on load, then cut to 8 MB — wrongly: the cause was a
+         real bug (the link said it was open while `bulk` was still connecting, and the send was DROPPED). Fixed in
+         collab-link.js and caught by the forty-pairings test; back to the spec's 20 MB (queue 921). */
       const N = 20 * 1024 * 1024;
       const payload = new Uint8Array(N);
       for (let i = 0; i < N; i += 4096) payload[i] = (i / 4096) & 255;
@@ -31095,7 +31131,8 @@
                  hostPc: pair.h.pc && pair.h.pc.connectionState, guestPc: pair.g.pc && pair.g.pc.connectionState,
                  ice: pair.h.pc && pair.h.pc.iceConnectionState };
         } catch (x) { st = { probe: String(x) }; }
-        throw new Error(e.message + ' — state at the timeout: ' + JSON.stringify(st));
+        /* no double quotes: ship.sh reads failures with FAIL[^"]* and a JSON dump would be cut at its first key */
+        throw new Error(e.message + ' — state at the timeout: ' + Object.keys(st).map(function (k) { return k + '=' + st[k]; }).join(' '));
       });
       clearInterval(poll); poll = null;
       if (!got || got.byteLength !== N) throw new Error('got ' + (got && got.byteLength) + ' bytes back, not ' + N);
@@ -33527,6 +33564,1395 @@
       const gate = await C.media.exportGate();
       if (gate !== true) throw new Error('the export gate still stops to ask about a clip that can never arrive');
     });
+  });
+
+  /* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   * #921 STAGE S5 — PRESENCE (§17.2 leases, §18, §21, §23, §26 S5).
+   *
+   * The real app is the OWNER (or, where the test says so, the GUEST) and the other people are raw
+   * LoopLink endpoints that send exactly the `pr` frames a device would. No PlainAdapter Session on the
+   * far side: presence never touches the document, so the far end needs nothing but a wire — and a raw
+   * endpoint lets a test say precisely what somebody else is doing.
+   * Every tick is by hand (`FM.collab.presence.tick()`, on a fake clock where rates or silences matter)
+   * and every draw is forced with `_draw()` before a DOM read, except in the render-spy test, which
+   * deliberately lets presence's OWN requestAnimationFrame do the drawing.
+   * ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+  function need921S5(what) {
+    const C = need921S3(what);
+    if (!C.presence || typeof C.presence.attach !== 'function' || typeof C.presence.tick !== 'function' || typeof C.presence._draw !== 'function') {
+      throw new Error('FM.collab.presence is missing — the stage-S5 file (js/collab-presence.js) is not loaded, so ' + what + ' cannot be measured at all');
+    }
+    return C;
+  }
+  /* Somebody else, as a wire. `pr(o)` sends one complete presence frame and delivers it; `got` is every
+     message the host sent back to this person, in order. */
+  function rawGuest921(ctx, name, color) {
+    const C = ctx.C;
+    const loop = C.link.LoopLink({ aTag: 'h', bTag: 'r' + ctx.guests.length, mode: 'manual' });
+    const mid = ctx.S.addPeer(loop.a, { role: 'editor', name: name, color: color });
+    if (!mid) throw new Error('CONTROL: the host would not take a raw guest');
+    const got = [];
+    loop.b.onmessage = function (ch, msg) { got.push({ ch: ch, msg: msg }); };
+    let n = 0;
+    const g = {
+      mid: mid, loop: loop, got: got, name: name, color: color,
+      pr: function (o) {
+        loop.b.send('pres', Object.assign({ t: 'pr', n: ++n, st: 'here', sel: [], pri: null, ph: 0, pl: 0, pn: null, tool: null, ls: null, act: null, af: null, c: null, tap: null, md: null }, o || {}));
+        loop.pump();
+      },
+      deliver: function () { loop.pump(); }
+    };
+    ctx.guests.push(g);
+    return g;
+  }
+  /* A fake clock for everything presence times — rates, silences, the pointer idle — so a test can say
+     "seven seconds later" without waiting seven seconds, and a rate gate cannot eat a tick. */
+  function clock921(C) {
+    const k = { t: Date.now() };
+    C.presence._clock(function () { return k.t; });
+    k.step = function (ms) { k.t += ms; return k.t; };
+    return k;
+  }
+  function shown921(e) { return !!e && e.isConnected && e.style.display !== 'none' && getComputedStyle(e).display !== 'none' && getComputedStyle(e).visibility !== 'hidden'; }
+  function frame921() { return new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(r); }); }); }
+  function rgb921(hex) { const h = hex.replace('#', ''); return 'rgb(' + parseInt(h.slice(0, 2), 16) + ', ' + parseInt(h.slice(2, 4), 16) + ', ' + parseInt(h.slice(4, 6), 16) + ')'; }
+  /* Resize the runner's frame to a real phone or PC SIZE — width AND height — and put it back. The
+     chip placement check is about a screen, and the runner frame is 760 px tall. */
+  /* 760, not 800 (queue 921 S5): the runner's iframe is 900x760 by default, and in a FULL suite run it would not grow past
+     760 however it was asked (measured three times: '380×760'), while alone it reached 800. The cause is not yet known and
+     none of these assertions are about the last 40px — they are about overlap and layout — so they measure the frame the
+     suite actually has instead of one it cannot always get. */
+  async function atSize921(w, h, fn) {
+    const fe = window.frameElement;
+    if (!fe) throw new Error('this test needs run.html’s iframe to reach a ' + w + '×' + h + ' screen');
+    const w0 = fe.style.width, h0 = fe.style.height;
+    /* ⚠️ THE RESTORE MUST BE REACHABLE FROM THE SIZE CHECK (queue 921 S5). The check used to sit BEFORE the try, so
+       when it threw, the finally never ran and the frame stayed 380 wide for the rest of the suite — which is why two
+       unrelated tests (the home +, the cog) failed in the same full run and passed alone. And the size is WAITED FOR:
+       the child's innerWidth/innerHeight follow the PARENT's layout, which a loaded run can take longer than a fixed
+       160 ms to do, so the parent is asked for layout and the size is polled for up to two seconds. */
+    try {
+      fe.style.width = w + 'px'; fe.style.height = h + 'px';
+      window.dispatchEvent(new Event('resize'));
+      const deadline = Date.now() + 2000;
+      while (Date.now() < deadline) {
+        void fe.getBoundingClientRect();   // the parent lays out now, not at its next frame
+        if (Math.abs(window.innerWidth - w) <= 2 && Math.abs(window.innerHeight - h) <= 2) break;
+        await settle921(40);
+      }
+      await settle921(120);
+      if (Math.abs(window.innerWidth - w) > 2 || Math.abs(window.innerHeight - h) > 2) throw new Error('the frame did not reach ' + w + '×' + h + ' (it is ' + window.innerWidth + '×' + window.innerHeight + ')');
+      return await fn();
+    }
+    finally {
+      fe.style.width = w0; fe.style.height = h0;
+      window.dispatchEvent(new Event('resize'));
+      await settle921(160);
+    }
+  }
+
+  test('921 S5 a three-layer remote multi-select draws three outlines — one solid, two dashed — and rings the same three clips in that person’s colour, on the PC frame and the 380 frame', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S5('remote selections');
+    async function once(where) {
+      await withCollab921([layer921('A'), layer921('B'), layer921('C'), layer921('D')], async function (c) {
+        clock921(C);
+        const g = rawGuest921(c, 'Sam Lee', '#f472b6');
+        const ids = c.ids;
+        g.pr({ sel: [ids[0], ids[1], ids[2]], pri: ids[1] });
+        C.presence.tick();
+        C.presence._draw();
+        const boxes = Array.prototype.filter.call(document.querySelectorAll('#collab-layer .cb-box[data-mid="' + g.mid + '"]'), shown921);
+        if (boxes.length !== 3) throw new Error(where + ': ' + boxes.length + ' outline(s) for a three-layer selection, not 3');
+        const solid = boxes.filter(function (b) { return getComputedStyle(b).outlineStyle === 'solid'; });
+        const dashed = boxes.filter(function (b) { return getComputedStyle(b).outlineStyle === 'dashed'; });
+        if (solid.length !== 1 || dashed.length !== 2) throw new Error(where + ': ' + solid.length + ' solid and ' + dashed.length + ' dashed — the layer they are editing must be the one solid outline and the rest of the selection dashed');
+        if (solid[0].getAttribute('data-id') !== ids[1]) throw new Error(where + ': the solid outline is on ' + solid[0].getAttribute('data-id') + ', not on the layer they are editing (' + ids[1] + ')');
+        boxes.forEach(function (b) {
+          if (getComputedStyle(b).outlineColor !== rgb921('#f472b6')) throw new Error(where + ': an outline is ' + getComputedStyle(b).outlineColor + ', not Sam’s colour');
+        });
+        /* …and exactly where his own selection box would be: boxFor is the shared geometry. */
+        const g1 = FM.canvasEdit.boxFor(FM.layerById(FM.scene, ids[1]), FM.time);
+        if (Math.abs(parseFloat(solid[0].style.width) - g1.w) > 0.5 || Math.abs(parseFloat(solid[0].style.left) - (g1.cx - g1.w * g1.ax)) > 0.5) {
+          throw new Error(where + ': the outline is ' + solid[0].style.width + ' at ' + solid[0].style.left + ', boxFor says ' + g1.w + ' at ' + (g1.cx - g1.w * g1.ax));
+        }
+        const tag = solid[0].querySelector('.cb-tag');
+        if (!shown921(tag) || tag.querySelector('.cb-ini').textContent !== 'SL') throw new Error(where + ': the solid outline carries no “SL” tag');
+        const rings = Array.prototype.slice.call(document.querySelectorAll('#tl-tracks .clip.peer-sel'));
+        const ringed = rings.map(function (r) { return r.getAttribute('data-id'); }).sort();
+        if (ringed.join() !== [ids[0], ids[1], ids[2]].sort().join()) throw new Error(where + ': the ringed clips are ' + JSON.stringify(ringed) + ', not the three selected');
+        rings.forEach(function (r) {
+          if (r.style.getPropertyValue('--peer').trim() !== '#f472b6') throw new Error(where + ': a ring carries --peer ' + r.style.getPropertyValue('--peer') + ', not Sam’s colour');
+          if (getComputedStyle(r).boxShadow.indexOf(rgb921('#f472b6')) < 0) throw new Error(where + ': the ringed clip does not actually paint the ring (' + getComputedStyle(r).boxShadow + ')');
+        });
+        /* CONTROL: a cleared selection clears both, so the counts above are presence and not leftovers. */
+        g.pr({ sel: [], pri: null });
+        C.presence.tick();
+        C.presence._draw();
+        const left = Array.prototype.filter.call(document.querySelectorAll('#collab-layer .cb-box'), shown921).length + document.querySelectorAll('#tl-tracks .clip.peer-sel').length;
+        if (left) throw new Error(where + ': CONTROL: clearing the remote selection left ' + left + ' outline(s)/ring(s) on screen');
+      });
+    }
+    try {
+      await atWideWidth(function () { return once('PC 1280'); }, 1280);
+      await atPhoneWidth(function () { return once('phone 380'); }, 380);
+    } finally { C.presence._clock(null); }
+  });
+
+  test('921 S5 two seconds of a remote pointer moving never renders the scene — requestRender and renderScene both stay at zero while the pointer really moves', { item: '921', budgetMs: 60000 }, async function () {
+    const C = need921S5('presence’s own redraw');
+    await withCollab921([layer921('A')], async function (c) {
+      const g = rawGuest921(c, 'Mia', '#a3e635');
+      g.pr({ c: { s: 'cv', x: 10, y: 10 } });
+      C.presence.tick();
+      await frame921();
+      /* QUIET FIRST. Setting the fixture up renders several frames in a row, and the app answers a burst
+         like that on its own timers: a DEBOUNCED re-rasterise 120 ms later (app.js refreshPreviewScale →
+         resizeCanvas) and the motion-idle sharpen 700 ms after the last frame (noteMotion → resizeCanvas).
+         Measured, both times: one of those renders landed inside the window and was blamed on the pointer.
+         Let the app finish its own work before counting anybody else's. */
+      await settle921(1500);
+      const rr = FM.requestRender, rs = FM.renderScene;
+      let nRR = 0, nRS = 0;
+      const seen = Object.create(null), who = [];
+      const stack = function () { return String(new Error().stack || '').split('\n').slice(2, 6).map(function (l) { return l.trim(); }).join(' < '); };
+      FM.requestRender = function () { nRR++; who.push('requestRender: ' + stack()); return rr.apply(this, arguments); };
+      FM.renderScene = function () { nRS++; who.push('renderScene: ' + stack()); return rs.apply(this, arguments); };
+      try {
+        const t0 = performance.now();
+        let i = 0;
+        while (performance.now() - t0 < 2000) {
+          i++;
+          g.pr({ c: { s: 'cv', x: 20 + i * 3, y: 15 + i * 2 } });   // 20 a second: under §21's 30/s accept cap
+          C.presence.tick();
+          await settle921(50);
+          const p = document.querySelector('#collab-layer .cb-ptr[data-mid="' + g.mid + '"]');
+          /* WHERE IT IS ON SCREEN, not which style carries it: the glide moved from left/top to a
+             transform in the S5 review, and a reading tied to either would stop measuring the movement. */
+          if (shown921(p)) { const r = p.getBoundingClientRect(); seen[Math.round(r.left) + ',' + Math.round(r.top)] = 1; }
+        }
+      } finally { FM.requestRender = rr; FM.renderScene = rs; }
+      if (nRR || nRS) throw new Error('two seconds of somebody else’s pointer moving called FM.requestRender ' + nRR + ' time(s) and FM.renderScene ' + nRS + ' time(s) — a remote cursor must move a DOM element on presence’s own frame, never re-render the scene (§18.3, judge J2 #6): on a phone with a real project that is the whole frame budget, fifteen times a second, for a pointer. First callers: ' + who.slice(0, 3).join(' ;; '));
+      /* CONTROL 1: the pointer really moved, drawn by presence’s own requestAnimationFrame. */
+      if (Object.keys(seen).length < 10) throw new Error('CONTROL: the remote pointer took only ' + Object.keys(seen).length + ' distinct position(s) in two seconds, so the zero above is about a pointer that was not moving');
+      /* CONTROL 2: the spies catch a render when there is one. */
+      let n2 = 0;
+      FM.renderScene = function () { n2++; return rs.apply(this, arguments); };
+      try { FM.requestRender(); await frame921(); } finally { FM.renderScene = rs; }
+      if (!n2) throw new Error('CONTROL: a real FM.requestRender() did not reach the FM.renderScene spy, so the zero above proves nothing');
+    });
+  });
+
+  test('921 S5 a remote playhead sits at timeToX, and one off screen becomes a chip at the lane edge that takes you there', { item: '921', budgetMs: 60000 }, async function () {
+    const C = need921S5('remote playheads');
+    await withCollab921([layer921('A', { duration: 40 })], async function (c) {
+      clock921(C);
+      FM.setTime(0);
+      const g = rawGuest921(c, 'Sam Lee', '#f472b6');
+      g.pr({ ph: 1.5 });
+      C.presence.tick();
+      C.presence._draw();
+      const head = document.querySelector('#tl-inner .tl-peerhead[data-mid="' + g.mid + '"]');
+      if (!shown921(head)) throw new Error('no remote playhead is drawn for somebody at 1.5 s');
+      const want = FM.timeline.timeToX(1.5);
+      if (Math.abs(parseFloat(head.style.left) - want) > 0.5) throw new Error('the remote playhead is at ' + head.style.left + ', FM.timeline.timeToX(1.5) is ' + want);
+      if (head.getAttribute('data-ini') !== 'SL') throw new Error('the playhead’s ruler flag says ' + JSON.stringify(head.getAttribute('data-ini')) + ', not SL');
+      const chip = function () { return Array.prototype.filter.call(document.querySelectorAll('.tl-peerchip[data-mid="' + g.mid + '"]'), shown921)[0] || null; };
+      if (chip()) throw new Error('an edge chip is showing for a playhead that is on screen');
+      /* …now well past the right edge of what the timeline shows. */
+      g.pr({ ph: 36 });
+      C.presence.tick();
+      C.presence._draw();
+      const tl = document.getElementById('timeline');
+      if (FM.timeline.timeToX(36) < tl.scrollLeft + tl.clientWidth) throw new Error('CONTROL: 36 s is on screen in this frame, so this cannot test the edge');
+      const e = chip();
+      if (!e) throw new Error('somebody whose playhead is off screen to the right has no chip at the lane edge — §18.4 puts their initial there so they are not simply gone');
+      if (!e.classList.contains('right')) throw new Error('the edge chip is on the wrong side (' + e.className + ')');
+      if (e.textContent !== 'SL') throw new Error('the edge chip says ' + JSON.stringify(e.textContent) + ', not SL');
+      if (shown921(head)) throw new Error('the off-screen playhead line is still drawn as well as its chip');
+      e.click();
+      if (Math.abs(FM.time - 36) > 0.05) throw new Error('tapping the edge chip left the playhead at ' + FM.time + ', not at theirs (36)');
+      /* CONTROL: back on screen, the chip goes. */
+      g.pr({ ph: FM.time });
+      C.presence.tick();
+      C.presence._draw();
+      if (chip()) throw new Error('CONTROL: the chip stayed after their playhead came back on screen');
+    });
+    C.presence._clock(null);
+  });
+
+  test('921 S5 the people chip shows three faces and +N, the ones away or silent go grey, and alone it is an invite', { item: '921', budgetMs: 60000 }, async function () {
+    const C = need921S5('the people chip');
+    await withCollab921([layer921('A')], async function (c) {
+      const k = clock921(C);
+      C.presence.tick();
+      C.presence._draw();
+      const chip = document.getElementById('collab-people');
+      if (!chip || !chip.classList.contains('cp-invite')) throw new Error('alone in a live session the chip is not the invite (' + (chip ? chip.className : 'no #collab-people') + ')');
+      if (chip.parentNode !== document.getElementById('stage')) throw new Error('#collab-people is not a child of #stage (§18.5, D18)');
+      const names = [['Sam Lee', '#f472b6'], ['Mia', '#a3e635'], ['Jo Park', '#a78bfa'], ['Kai', '#ff6b6b'], ['Ana', '#6366f1']];
+      const gs = names.map(function (n) { return rawGuest921(c, n[0], n[1]); });
+      gs.forEach(function (g) { g.pr({}); });
+      k.step(100);
+      C.presence.tick();
+      C.presence._draw();
+      const av = function () { return Array.prototype.slice.call(chip.querySelectorAll('.cp-av')); };
+      if (av().length !== 3) throw new Error('five people show ' + av().length + ' faces, not 3');
+      const more = chip.querySelector('.cp-more');
+      if (!more || more.textContent !== '+2') throw new Error('five people show ' + (more ? JSON.stringify(more.textContent) : 'no') + ' overflow pill, not “+2”');
+      if (av().map(function (a) { return a.textContent; }).join() !== 'SL,M,JP') throw new Error('the faces are ' + av().map(function (a) { return a.textContent; }).join() + ', not the first three in, as initials');
+      const bgOf = function (mid) { const a = chip.querySelector('.cp-av[data-mid="' + mid + '"]'); return a ? getComputedStyle(a).backgroundColor : null; };
+      if (bgOf(gs[1].mid) !== rgb921('#a3e635')) throw new Error('CONTROL: Mia, who is here, is ' + bgOf(gs[1].mid) + ' and not her colour');
+      /* Away: her own device says so. */
+      gs[1].pr({ st: 'away' });
+      k.step(100);
+      C.presence.tick();
+      C.presence._draw();
+      if (bgOf(gs[1].mid) === rgb921('#a3e635')) throw new Error('Mia said she is away and her face is still in full colour');
+      /* Silent: nothing from Sam for seven seconds while everybody else keeps talking. */
+      k.step(7000);
+      gs.slice(1).forEach(function (g) { g.pr({ st: g === gs[1] ? 'away' : 'here' }); });
+      C.presence.tick();
+      C.presence._draw();
+      if (bgOf(gs[0].mid) === rgb921('#f472b6')) throw new Error('Sam has been silent for seven seconds (§22: offline after 6) and his face is still in full colour');
+      if (bgOf(gs[2].mid) !== rgb921('#a78bfa')) throw new Error('CONTROL: Jo, who kept talking, went grey too — the grey is not about silence');
+    });
+    C.presence._clock(null);
+  });
+
+  test('921 S5 follow tracks their playhead within 0.4 s, starts and stops with them, and ends on a local tap', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S5('Follow');
+    await withCollab921([layer921('A', { duration: 12 })], async function (c) {
+      const k = clock921(C);
+      FM.setTime(0);
+      const g = rawGuest921(c, 'Sam Lee', '#f472b6');
+      g.pr({ ph: 2 });
+      k.step(100); C.presence.tick();
+      if (Math.abs(FM.time) > 1e-6) throw new Error('CONTROL: without Follow, somebody else’s playhead moved his to ' + FM.time);
+      try {
+        if (!C.presence.follow(g.mid)) throw new Error('follow() refused a person who is in the session');
+        if (Math.abs(FM.time - 2) > 0.4) throw new Error('following Sam (at 2 s) left the playhead at ' + FM.time);
+        const banner = document.getElementById('collab-banner');
+        if (!banner || !/Following Sam/.test(banner.textContent)) throw new Error('the banner does not say “Following Sam” (' + (banner ? JSON.stringify(banner.textContent) : 'no banner') + ')');
+        g.pr({ ph: 5.3 });
+        k.step(100); C.presence.tick();
+        if (Math.abs(FM.time - 5.3) > 0.4) throw new Error('Sam moved to 5.3 s and the follower is at ' + FM.time + ' — more than 0.4 s behind');
+        g.pr({ ph: 6, pl: 1 });
+        k.step(100); C.presence.tick();
+        if (!FM.playing) throw new Error('Sam pressed play and the follower did not start');
+        g.pr({ ph: 6.2, pl: 0 });
+        k.step(100); C.presence.tick();
+        if (FM.playing) throw new Error('Sam stopped and the follower kept playing');
+        if (Math.abs(FM.time - 6.2) > 0.4) throw new Error('after Sam stopped at 6.2 s the follower is at ' + FM.time);
+        /* A tap of his own on the canvas ends it. A real pointer event, on an element that is in the page. */
+        const cv = attached(document.getElementById('canvas-wrap'), '#canvas-wrap');
+        cv.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 7, pointerType: 'mouse', clientX: 5, clientY: 5 }));
+        cv.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: 7, pointerType: 'mouse', clientX: 5, clientY: 5 }));
+        if (C.presence.following()) throw new Error('a tap on the canvas did not end Follow — §18.7 ends it on any local pointerdown on the canvas, timeline or inspector');
+        const b2 = document.getElementById('collab-banner');
+        if (b2 && /Following/.test(b2.textContent)) throw new Error('Follow ended but the banner still says ' + JSON.stringify(b2.textContent));
+        /* CONTROL: after it ends, their playhead no longer moves his. */
+        const here = FM.time;
+        g.pr({ ph: 1 });
+        k.step(100); C.presence.tick();
+        if (Math.abs(FM.time - here) > 1e-6) throw new Error('CONTROL: Follow reported itself ended and Sam still moved the playhead to ' + FM.time);
+      } finally { C.presence.unfollow(); if (FM.playing) FM.pause(); }
+    });
+    C.presence._clock(null);
+  });
+
+  test('921 S5 a text lease: while Sam types in a layer, opening it here is refused with a toast and the lock shows — a third person asking is told no — and it frees when he closes', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S5('text leases');
+    const T = FM.makeLayer('text', { name: 'Title', text: 'Hi', start: 0, duration: 3 });
+    const realToast = FM.toast;
+    const toasts = [];
+    await withCollab921([T, layer921('B')], async function (c) {
+      const k = clock921(C);
+      const tid = c.ids[0];
+      const sam = rawGuest921(c, 'Sam Lee', '#f472b6');
+      const mia = rawGuest921(c, 'Mia', '#a3e635');
+      FM.toast = function (m) { toasts.push(String(m)); };
+      try {
+        sam.pr({ sel: [tid], pri: tid, tool: 'text', ls: tid, act: 'type' });
+        k.step(100); C.presence.tick(); C.presence._draw();
+        if (c.S.host.leases[tid] !== sam.mid) throw new Error('Sam opened the text editor on Title and the host did not grant him the lease (holder: ' + c.S.host.leases[tid] + ')');
+        const lock = document.querySelector('#tl-tracks .clip[data-id="' + tid + '"] .peer-lock');
+        if (!lock) throw new Error('the Title clip shows no lock while Sam holds it');
+        if (lock.style.getPropertyValue('--peer').trim() !== '#f472b6') throw new Error('the lock is not in Sam’s colour');
+        /* He opens the same layer here. */
+        FM.textEdit.start(tid);
+        if (!FM.textEdit.isActive()) throw new Error('CONTROL: the text editor did not open at all, so a refusal below would be about nothing');
+        k.step(100); C.presence.tick();
+        if (FM.textEdit.isActive()) throw new Error('the text editor stayed open on a layer Sam is typing in — one person at a time in the text editor (§17.2, D15)');
+        if (!toasts.some(function (t) { return /Sam Lee is editing this/.test(t); })) throw new Error('the refusal said nothing — toasts: ' + JSON.stringify(toasts));
+        if (c.S.host.leases[tid] !== sam.mid) throw new Error('his attempt took the lease away from Sam');
+        /* A third person asks for it: the host says no, on ctl, naming who has it. */
+        mia.pr({ sel: [tid], pri: tid, tool: 'text', ls: tid });
+        k.step(100); C.presence.tick();
+        mia.deliver();
+        const no = mia.got.filter(function (m) { return m.ch === 'ctl' && m.msg && m.msg.t === 'lease-no'; })[0];
+        if (!no || no.msg.lid !== tid || no.msg.by !== sam.mid) throw new Error('Mia asked for a layer Sam holds and was not sent lease-no{lid, by:Sam} — she got ' + JSON.stringify(mia.got.map(function (m) { return m.msg && m.msg.t; })));
+        /* Sam closes the editor: the lease goes, the lock goes, and he can open it. */
+        sam.pr({ sel: [tid], pri: tid });
+        mia.pr({ sel: [tid], pri: tid });
+        k.step(100); C.presence.tick(); C.presence._draw();
+        if (c.S.host.leases[tid]) throw new Error('Sam closed the editor and the lease is still held by ' + c.S.host.leases[tid]);
+        if (document.querySelector('#tl-tracks .clip[data-id="' + tid + '"] .peer-lock')) throw new Error('the lock stayed on the clip after Sam let go');
+        toasts.length = 0;
+        FM.textEdit.start(tid);
+        k.step(100); C.presence.tick();
+        if (!FM.textEdit.isActive()) throw new Error('CONTROL: with nobody holding Title, the text editor was still refused');
+        if (c.S.host.leases[tid] !== c.S.host.ownerMid) throw new Error('he is typing in Title and the owner does not hold its lease (holder: ' + c.S.host.leases[tid] + ')');
+      } finally {
+        if (FM.textEdit.isActive()) FM.textEdit.stop();
+        FM.toast = realToast;
+      }
+    });
+    C.presence._clock(null);
+  });
+
+  test('921 S5 a viewer cannot take a lease, and nobody can lease a layer that does not exist', { item: '921', budgetMs: 60000 }, async function () {
+    const C = need921S5('the lease guard');
+    await withCollab921([layer921('A'), layer921('B')], async function (c) {
+      const k = clock921(C);
+      const vic = rawGuest921(c, 'Vic', '#6366f1');
+      c.S.setPeerRole(vic.mid, 'viewer');
+      vic.pr({ sel: [c.ids[0]], pri: c.ids[0], tool: 'text', ls: c.ids[0] });
+      k.step(100); C.presence.tick();
+      if (c.S.host.leases[c.ids[0]]) throw new Error('a VIEWER was granted the lease on A — a lease blocks the owner’s own edits on that layer (H.local), so a viewer could lock him out of his project one layer at a time');
+      const ed = rawGuest921(c, 'Ed', '#ff9f43');
+      ed.pr({ tool: 'text', ls: 'l_not_a_layer' });
+      k.step(100); C.presence.tick();
+      if (c.S.host.leases.l_not_a_layer) throw new Error('an editor was granted a lease on a layer id that is not in the document');
+      /* CONTROL: the same editor asking for a real layer gets it, so the refusals are the guard and not a dead grant. */
+      ed.pr({ tool: 'text', ls: c.ids[1] });
+      k.step(100); C.presence.tick();
+      if (c.S.host.leases[c.ids[1]] !== ed.mid) throw new Error('CONTROL: an editor asking for a real layer was not granted it (holder: ' + c.S.host.leases[c.ids[1]] + ')');
+    });
+    C.presence._clock(null);
+  });
+
+  test('921 S5 a text lease seen from a GUEST: the host’s lease-no closes the editor there and says who has it', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S5('the guest half of a lease');
+    const T = FM.makeLayer('text', { name: 'Title', text: 'Hi', start: 0, duration: 3 });
+    const realToast = FM.toast;
+    const toasts = [];
+    await withCollab921([T], async function (c) {
+      /* The fixture armed an OWNER session; stand it down and put a GUEST session on the same document,
+         with a raw host on the other end of the wire. */
+      C.end();
+      const tid = FM.scene.layers[0].id;
+      const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'manual' });
+      const hostGot = [];
+      loop.a.onmessage = function (ch, msg) { hostGot.push({ ch: ch, msg: msg }); };
+      const G = C.Session({ adapter: C.bridge, role: 'editor', mid: 'm7', base: jclone921({ project: C._viewOfProject(FM.scene.project), layers: FM.scene.layers }), epoch: 'e1' });
+      G.pid = FM.projects.currentId();
+      G.setLink(loop.b);
+      C.attach(G, { autoTick: false });
+      const k = clock921(C);
+      FM.toast = function (m) { toasts.push(String(m)); };
+      try {
+        loop.a.send('ctl', { t: 'roster', people: [
+          { mid: 'o', name: 'Ezra', color: '#ff9f43', role: 'owner', st: 'here', ls: null },
+          { mid: 'm7', name: 'Guest', color: '#a3e635', role: 'editor', st: 'here', ls: null }] });
+        loop.pump();
+        FM.textEdit.start(tid);
+        if (!FM.textEdit.isActive()) throw new Error('CONTROL: the text editor did not open on the guest');
+        k.step(100); C.presence.tick();
+        loop.pump();
+        const asked = hostGot.filter(function (m) { return m.ch === 'pres' && m.msg && m.msg.t === 'pr'; }).pop();
+        if (!asked || asked.msg.ls !== tid || asked.msg.tool !== 'text') throw new Error('the guest opened the text editor and its presence did not ask for the lease (' + JSON.stringify(asked && asked.msg) + ')');
+        /* The host says the owner has it. */
+        loop.a.send('ctl', { t: 'lease-no', lid: tid, by: 'o' });
+        loop.pump();
+        if (FM.textEdit.isActive()) throw new Error('lease-no arrived and the guest’s text editor stayed open');
+        if (!toasts.some(function (t) { return /Ezra is editing this/.test(t); })) throw new Error('the guest was not told who has it — toasts: ' + JSON.stringify(toasts));
+        /* CONTROL: a roster that says the owner holds it refuses LOCALLY, before a round trip. */
+        loop.a.send('ctl', { t: 'roster', people: [
+          { mid: 'o', name: 'Ezra', color: '#ff9f43', role: 'owner', st: 'here', ls: tid },
+          { mid: 'm7', name: 'Guest', color: '#a3e635', role: 'editor', st: 'here', ls: null }] });
+        loop.pump();
+        /* …and the guest sees the lock too, from the roster — the only way a guest can know. */
+        C.presence._draw();
+        const glock = document.querySelector('#tl-tracks .clip[data-id="' + tid + '"] .peer-lock');
+        if (!glock || glock.style.getPropertyValue('--peer').trim() !== '#ff9f43') throw new Error('the roster says Ezra holds Title and the guest’s timeline shows ' + (glock ? 'a lock in ' + glock.style.getPropertyValue('--peer') : 'no lock'));
+        k.step(5000);
+        hostGot.length = 0;
+        FM.textEdit.start(tid);
+        k.step(100); C.presence.tick();
+        loop.pump();
+        if (FM.textEdit.isActive()) throw new Error('with the roster saying Ezra holds Title, the guest’s editor was not refused at once');
+        const again = hostGot.filter(function (m) { return m.ch === 'pres' && m.msg && m.msg.ls === tid; });
+        if (again.length) throw new Error('the guest asked the host for a lease its own roster already says is taken');
+      } finally {
+        if (FM.textEdit.isActive()) FM.textEdit.stop();
+        FM.toast = realToast;
+        C.presence._clock(null);
+      }
+    });
+  });
+
+  test('921 S5 the pointer and selection switches hide their own overlays, and only their own', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S5('the two display switches');
+    const was = { c: FM.settings.get('collabCursors'), s: FM.settings.get('collabSelections') };
+    await withLabs921(async function () {
+      await withCollab921([layer921('A'), layer921('B')], async function (c) {
+        clock921(C);
+        const g = rawGuest921(c, 'Mia', '#a3e635');
+        const id = c.ids[0];
+        g.pr({ sel: [id], pri: id, c: { s: 'cv', x: 40, y: 40 } });
+        C.presence.tick();
+        const count = function () {
+          C.presence._draw();
+          return {
+            box: Array.prototype.filter.call(document.querySelectorAll('#collab-layer .cb-box'), shown921).length,
+            ptr: Array.prototype.filter.call(document.querySelectorAll('#collab-layer .cb-ptr'), shown921).length,
+            ring: document.querySelectorAll('#tl-tracks .clip.peer-sel').length
+          };
+        };
+        const on = count();
+        if (on.box !== 1 || on.ptr !== 1 || on.ring !== 1) throw new Error('CONTROL: with both switches on, expected 1 outline, 1 pointer, 1 ring and got ' + JSON.stringify(on));
+        FM.settings.set('collabCursors', false);
+        if (!C.active) throw new Error('flipping a display switch ended the session');
+        const a = count();
+        if (a.ptr) throw new Error('“Show others’ pointers” is off and the pointer is still drawn');
+        if (a.box !== 1 || a.ring !== 1) throw new Error('turning pointers off also hid the selection (' + JSON.stringify(a) + ')');
+        FM.settings.set('collabCursors', true);
+        FM.settings.set('collabSelections', false);
+        const b = count();
+        if (b.box || b.ring) throw new Error('“Show others’ selections” is off and ' + b.box + ' outline(s) / ' + b.ring + ' ring(s) are still drawn');
+        if (b.ptr !== 1) throw new Error('turning selections off also hid the pointer');
+        FM.settings.set('collabSelections', true);
+        const d = count();
+        if (d.box !== 1 || d.ptr !== 1 || d.ring !== 1) throw new Error('CONTROL: both switches back on did not bring everything back: ' + JSON.stringify(d));
+      });
+    });
+    FM.settings.set('collabCursors', was.c !== false);
+    FM.settings.set('collabSelections', was.s !== false);
+    C.presence._clock(null);
+  });
+
+  test('921 S5 the people chip overlaps neither the view bar nor the canvas — 9:16 and 16:9 at 380×760, and at 1280×760', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S5('the people chip placement');
+    const hit = function (a, b) { return a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5; };
+    const fmt = function (r) { return '[' + Math.round(r.left) + ',' + Math.round(r.top) + ' ' + Math.round(r.width) + '×' + Math.round(r.height) + ']'; };
+    await withCollab921([layer921('A')], async function (c) {
+      clock921(C);
+      ['Sam Lee', 'Mia', 'Jo Park', 'Kai'].forEach(function (n, i) { rawGuest921(c, n, C.presence.PALETTE[i]).pr({}); });
+      const vb = document.getElementById('view-bar'), btn = document.getElementById('btn-amfit');
+      const sizes = [[380, 760], [1280, 760]];
+      const ars = [[1080, 1920, '9:16'], [1920, 1080, '16:9']];
+      for (let s = 0; s < sizes.length; s++) {
+        await atSize921(sizes[s][0], sizes[s][1], async function () {
+          for (let a = 0; a < ars.length; a++) {
+            FM.scene.project.width = ars[a][0]; FM.scene.project.height = ars[a][1];
+            if (FM.resizeCanvas) FM.resizeCanvas();
+            FM.setSideBar(vb, btn, true);
+            await settle921(420);
+            C.presence.tick();
+            C.presence._draw();
+            const chip = document.getElementById('collab-people');
+            if (!shown921(chip)) throw new Error(sizes[s].join('×') + ' ' + ars[a][2] + ': CONTROL: the chip is not on screen, so nothing below would be measured');
+            const cr = chip.getBoundingClientRect(), vr = vb.getBoundingClientRect(), pr = document.getElementById('preview').getBoundingClientRect();
+            if (!(vr.width > 0 && vr.height > 0)) throw new Error(sizes[s].join('×') + ': CONTROL: the view bar did not open');
+            if (chip.querySelectorAll('.cp-av').length !== 3) throw new Error('CONTROL: the chip is not at its widest (3 faces and +1)');
+            if (hit(cr, vr)) throw new Error(sizes[s].join('×') + ' ' + ars[a][2] + ': the people chip ' + fmt(cr) + ' overlaps the view bar ' + fmt(vr));
+            if (hit(cr, pr)) throw new Error(sizes[s].join('×') + ' ' + ars[a][2] + ': the people chip ' + fmt(cr) + ' overlaps the canvas ' + fmt(pr));
+            FM.setSideBar(vb, btn, false);
+            await settle921(220);
+          }
+        });
+      }
+    });
+    C.presence._clock(null);
+  });
+
+  test('921 S5 with no session there is no presence DOM, listener or timer, and ending a session takes all three away', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S5('presence’s footprint');
+    const SEL = '#collab-layer, #collab-people, #collab-insp, .cb-box, .cb-ptr, .cb-tap, .tl-peerhead, .tl-peerchip, .clip.peer-sel, .peer-dots, .peer-lock';
+    const none = function (when) {
+      const n = document.querySelectorAll(SEL).length;
+      if (n) throw new Error(when + ': ' + n + ' presence element(s) are in the page (' + document.querySelector(SEL).className + ')');
+      const st = C.presence._state();
+      if (st.attached || st.timer || st.listeners) throw new Error(when + ': presence reports ' + JSON.stringify(st) + ' — §23 promises no listener and no timer without a session');
+    };
+    if (C.active) C.end();
+    none('before any session');
+    await withCollab921([layer921('A')], async function (c) {
+      /* The fixture ticks by hand; a real Share ticks itself — so re-arm the way the app does. */
+      C.end();
+      none('after the hand-ticked fixture session ended');
+      const S = C.share({ ownerInfo: { name: 'Ezra', color: '#ff9f43' } });
+      c.S = S;
+      const st = C.presence._state();
+      if (!st.attached || !st.timer || !st.listeners) throw new Error('CONTROL: a real session did not attach presence (' + JSON.stringify(st) + '), so the absences are not a working gate');
+      const g = rawGuest921(c, 'Sam Lee', '#f472b6');
+      g.pr({ sel: [c.ids[0]], pri: c.ids[0], ph: 1 });
+      await settle921(250);
+      await frame921();
+      if (!document.getElementById('collab-people') || !document.querySelector('.cb-box') || !document.querySelector('.tl-peerhead')) throw new Error('CONTROL: a live session with somebody in it drew no chip / outline / playhead');
+      C.end();
+      none('after Stop sharing');
+    });
+    none('after the fixture tore down');
+  });
+
+  test('921 S5 the inspector says when someone else is on the layer you have open, and what they are adjusting', { item: '921', budgetMs: 60000 }, async function () {
+    const C = need921S5('the inspector line');
+    await withCollab921([layer921('A'), layer921('B')], async function (c) {
+      clock921(C);
+      const g = rawGuest921(c, 'Sam Lee', '#f472b6');
+      FM.selectLayer(c.ids[0]);
+      g.pr({ sel: [c.ids[1]], pri: c.ids[1] });
+      C.presence.tick(); C.presence._draw();
+      if (document.getElementById('collab-insp')) throw new Error('CONTROL: the inspector says somebody is here while Sam is on a different layer');
+      g.pr({ sel: [c.ids[0]], pri: c.ids[0] });
+      C.presence.tick(); C.presence._draw();
+      const line = document.getElementById('collab-insp');
+      if (!line || !/Sam Lee is here too/.test(line.textContent)) throw new Error('Sam has the same layer selected and the inspector line says ' + (line ? JSON.stringify(line.textContent) : 'nothing'));
+      if (line.parentNode !== document.getElementById('inspector-panel')) throw new Error('the line is not in the inspector panel');
+      g.pr({ sel: [c.ids[0]], pri: c.ids[0], act: 'drag', af: 'L/' + c.ids[0] + '/transform/opacity' });
+      C.presence.tick(); C.presence._draw();
+      if (!/Sam Lee is adjusting Opacity/.test(document.getElementById('collab-insp').textContent)) throw new Error('Sam is dragging Opacity on this layer and the line says ' + JSON.stringify(document.getElementById('collab-insp').textContent));
+      FM.selectLayer(null);
+      C.presence._draw();
+      if (document.getElementById('collab-insp')) throw new Error('with nothing selected here the line is still up');
+    });
+    C.presence._clock(null);
+  });
+
+  test('921 S5 the eight person colours read on the dark canvas, are never mistaken for my selection, the keyframes or the playhead, and a clip dot carries a dark edge', { item: '921', budgetMs: 60000 }, async function () {
+    const C = need921S5('the presence palette');
+    const P = C.presence.PALETTE;
+    if (!P || P.length !== 8) throw new Error('the presence palette has ' + (P && P.length) + ' colours, not 8');
+    if (P.join() !== C.ui.PALETTE.join()) throw new Error('presence and the profile prompt use different palettes — a colour somebody picked could be refused by the other');
+    const lin = function (c) { return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+    const rgb = function (h) { h = h.replace('#', ''); return [0, 2, 4].map(function (i) { return parseInt(h.slice(i, i + 2), 16) / 255; }); };
+    const lum = function (h) { const c = rgb(h).map(lin); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+    const contrast = function (a, b) { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    const lab = function (h) {
+      const c = rgb(h).map(lin);
+      const X = (0.4124 * c[0] + 0.3576 * c[1] + 0.1805 * c[2]) / 0.95047, Y = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2], Z = (0.0193 * c[0] + 0.1192 * c[1] + 0.9505 * c[2]) / 1.08883;
+      const f = function (t) { return t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116; };
+      return [116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Z))];
+    };
+    const dE = function (a, b) { const A = lab(a), B = lab(b); return Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]); };
+    /* MEASURED (python, CIE76): lowest against a reserved colour is orange vs the keyframe yellow at 28;
+       lowest pair is lavender vs indigo at 24; lowest canvas contrast is indigo at 4.35. The floors sit
+       under those with room, and far above what reads as “the same colour” (ΔE ≈ 2–10). */
+    const reserved = { 'my selection (accent)': '#5ac7ed', 'my selected clip (white)': '#ffffff', 'a keyframe (--kf)': '#ffce4a', 'green': '#1ed760' };
+    const bad = [];
+    P.forEach(function (p) {
+      const cr = contrast(p, '#0b0d12');
+      if (cr < 3) bad.push(p + ' is ' + cr.toFixed(2) + ':1 on the dark canvas (under 3:1, a line in it disappears)');
+      Object.keys(reserved).forEach(function (k) { const d = dE(p, reserved[k]); if (d < 22) bad.push(p + ' is ΔE ' + d.toFixed(0) + ' from ' + k); });
+    });
+    for (let i = 0; i < P.length; i++) for (let j = i + 1; j < P.length; j++) { const d = dE(P[i], P[j]); if (d < 20) bad.push(P[i] + ' and ' + P[j] + ' are ΔE ' + d.toFixed(0) + ' apart — two people would look like one'); }
+    if (bad.length) throw new Error(bad.join(' ;; '));
+    /* The palette sits NEAR the clip colours by design (ΔE 8–14 in places), so what sits on a clip — the
+       dots and the lock — must carry a dark edge that reads against every CLIP_COLOR. The clip colours
+       are private to scene.js; makeLayer cycles through all eight, so eight layers name them all. */
+    const clips = [];
+    for (let i = 0; i < 8; i++) { const l = FM.makeLayer('shape', { name: 'c' + i }); if (clips.indexOf(l.clipColor) < 0) clips.push(l.clipColor); }
+    if (clips.length < 8) throw new Error('CONTROL: eight layers gave only ' + clips.length + ' clip colours, so this is not every CLIP_COLOR');
+    await withCollab921([layer921('A')], async function (c) {
+      clock921(C);
+      rawGuest921(c, 'Sam Lee', '#ff6b6b').pr({ sel: [c.ids[0]], pri: c.ids[0] });
+      C.presence.tick(); C.presence._draw();
+      const dot = document.querySelector('#tl-tracks .clip .peer-dots i');
+      if (!dot) throw new Error('no clip dot was drawn to measure');
+      const sh = getComputedStyle(dot).boxShadow;
+      const m = /rgb\((\d+), (\d+), (\d+)\)/.exec(sh);
+      if (!m) throw new Error('the clip dot has no edge at all (box-shadow ' + sh + ') — a red dot on a red clip vanishes');
+      const edge = '#' + [m[1], m[2], m[3]].map(function (v) { return ('0' + (+v).toString(16)).slice(-2); }).join('');
+      const low = clips.filter(function (cc) { return contrast(edge, cc) < 3; });
+      if (low.length) throw new Error('the dot’s edge ' + edge + ' is under 3:1 against clip colour(s) ' + low.join(', '));
+    });
+    C.presence._clock(null);
+  });
+
+  test('921 S5 the Labs switch and the two display switches survive a reload', { item: '921', budgetMs: 60000 }, async function () {
+    const C = need921S5('the stored switches');
+    const was = FM.settings.get();
+    try {
+      ['collabCursors', 'collabSelections'].forEach(function (k) {
+        if (!(k in was)) throw new Error(k + ' is not one of the settings, so it has no stored preference behind it');
+        if (was[k] === undefined) throw new Error(k + ' has no default');
+      });
+      FM.settings.set('collabLabs', true);
+      FM.settings.set('collabCursors', false);
+      FM.settings.set('collabSelections', false);
+      /* A reload, as far as settings is concerned: read the stored blob back and re-apply it. */
+      FM.settings.init();
+      const got = { labs: FM.settings.get('collabLabs'), cur: FM.settings.get('collabCursors'), sel: FM.settings.get('collabSelections') };
+      if (got.labs !== true) throw new Error('Labs was on, and after a reload it is ' + got.labs + ' — `collabLabs` is saved on every flip and never read back, so the collaboration feature switches itself off every time the app opens (the #688 whitelist, again)');
+      if (got.cur !== false || got.sel !== false) throw new Error('the display switches did not survive a reload: ' + JSON.stringify(got));
+      /* CONTROL: the other way round too, so it is a read and not a default that happens to match. */
+      FM.settings.set('collabLabs', false);
+      FM.settings.set('collabCursors', true);
+      FM.settings.set('collabSelections', true);
+      FM.settings.init();
+      if (FM.settings.get('collabLabs') !== false || FM.settings.get('collabCursors') !== true || FM.settings.get('collabSelections') !== true) throw new Error('CONTROL: the switches did not read back as set the second time');
+    } finally {
+      FM.settings.set('collabCursors', was.collabCursors !== false);
+      FM.settings.set('collabSelections', was.collabSelections !== false);
+      FM.settings.set('collabLabs', !!was.collabLabs);
+      try { C.ui.syncLabs(); } catch (e) {}
+    }
+  });
+
+  test('921 S5 the guest panel lists who is here, printed as text, each with a Follow', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S5('the guest’s people panel');
+    const HOSTILE = '<img src=x onerror=go()>';
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (c) {
+        C.end();
+        const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'manual' });
+        loop.a.onmessage = function () {};
+        const G = C.Session({ adapter: C.bridge, role: 'editor', mid: 'm7', base: jclone921({ project: C._viewOfProject(FM.scene.project), layers: FM.scene.layers }), epoch: 'e1' });
+        G.pid = FM.projects.currentId();
+        G.setLink(loop.b);
+        C.attach(G, { autoTick: false });
+        clock921(C);
+        loop.a.send('ctl', { t: 'roster', people: [
+          { mid: 'o', name: 'Ezra', color: '#ff9f43', role: 'owner', st: 'here', ls: null },
+          { mid: 'm7', name: 'Me', color: '#a3e635', role: 'editor', st: 'here', ls: null },
+          { mid: 'm8', name: HOSTILE, color: 'url(javascript:alert(1))', role: 'editor', st: 'away', ls: null }] });
+        loop.pump();
+        await ui.share();
+        const card = document.getElementById('collab-share');
+        if (!card) throw new Error('the guest panel did not open');
+        const rows = Array.prototype.slice.call(card.querySelectorAll('.cs-person[data-mid]'));
+        const mids = rows.map(function (r) { return r.getAttribute('data-mid'); });
+        if (mids.join() !== 'o,m8') throw new Error('the guest panel lists ' + JSON.stringify(mids) + ', not the owner and the other guest (and not itself)');
+        if (card.querySelector('img')) throw new Error('a name full of HTML was parsed into the guest panel');
+        if (rows[1].querySelector('.cs-pname').textContent !== HOSTILE) throw new Error('the hostile name was not printed as text');
+        if (rows[1].querySelector('.cs-dot').style.background.indexOf('javascript') >= 0) throw new Error('a colour outside the palette reached a style attribute');
+        const f = rows[0].querySelector('.cs-follow');
+        if (!f) throw new Error('the owner’s row has no Follow');
+        f.click();
+        if (C.presence.following() !== 'o') throw new Error('Follow on the owner’s row did not start following the owner');
+        C.presence.unfollow();
+      });
+    });
+  });
+
+  /* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   * #921 STAGE S5 — THE REVIEW'S FINDINGS, each with the test that fails without its fix.
+   * ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+  /* The real app as a GUEST, on the fixture's document, with a raw host on the other end of the wire:
+     `send` delivers one host message, `got` is everything the guest sent. Call inside withCollab921,
+     which armed an OWNER session — this stands it down first. */
+  function guest921S5(C, role) {
+    C.end();
+    const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'manual' });
+    const got = [];
+    loop.a.onmessage = function (ch, msg) { got.push({ ch: ch, msg: msg }); };
+    const G = C.Session({ adapter: C.bridge, role: role || 'editor', mid: 'm7', base: jclone921({ project: C._viewOfProject(FM.scene.project), layers: FM.scene.layers }), epoch: 'e1' });
+    G.pid = FM.projects.currentId();
+    G.setLink(loop.b);
+    C.attach(G, { autoTick: false });
+    return { G: G, loop: loop, got: got, send: function (ch, msg) { loop.a.send(ch, msg); loop.pump(); } };
+  }
+  function rosterMsg921(extra, lsO) {
+    return { t: 'roster', people: [
+      { mid: 'o', name: 'Ezra', color: '#ff9f43', role: 'owner', st: 'here', ls: lsO || null },
+      { mid: 'm7', name: 'Me', color: '#a3e635', role: 'editor', st: 'here', ls: null }].concat(extra || []) };
+  }
+  function prOf921(o) { return Object.assign({ st: 'here', sel: [], pri: null, ph: 0, pl: 0, pn: null, tool: null, ls: null, act: null, af: null, c: null, tap: null, md: null }, o || {}); }
+  const PRESENCE_SEL921 = '#collab-layer, #collab-people, #collab-insp, .cb-box, .cb-ptr, .cb-tap, .tl-peerhead, .tl-peerchip, .clip.peer-sel, .peer-dots, .peer-lock';
+
+  test('921 S5 review: the render hook reads every outline’s geometry before it writes any, a still frame writes nothing, and under a tool it computes nothing', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S5('the render hook’s cost');
+    const T = FM.makeLayer('text', { name: 'Title', text: 'Hi', start: 0, duration: 3 });
+    await withCollab921([layer921('A'), layer921('B'), layer921('C'), T], async function (c) {
+      clock921(C);
+      const ids = c.ids;
+      const gs = [['Sam Lee', '#f472b6'], ['Mia', '#a3e635'], ['Jo Park', '#a78bfa']].map(function (n) { return rawGuest921(c, n[0], n[1]); });
+      /* Three people, two layers each, and a pointer each; `k` moves every one of them somewhere else. */
+      const pick = function (k) {
+        gs.forEach(function (g, i) { const sel = [ids[(i + k) % 3], ids[(i + k + 1) % 3]]; g.pr({ sel: sel, pri: sel[0], c: { s: 'cv', x: 20 + 30 * i + 7 * k, y: 30 + 9 * k } }); });
+        FM.scene.layers.forEach(function (l, i) { if (i < 3) l.x = 40 + 25 * i + 11 * k; });
+        C.presence.tick();
+      };
+      pick(0);
+      C.presence._draw();
+      const layer = document.getElementById('collab-layer');
+      const nBox = Array.prototype.filter.call(layer.querySelectorAll('.cb-box'), shown921).length;
+      if (nBox !== 6) throw new Error('CONTROL: three people with two layers each drew ' + nBox + ' outlines, not 6');
+      const preview = document.getElementById('preview'), wrap = document.getElementById('canvas-wrap');
+      /* A write is a mutation under #collab-layer; `takeRecords()` hands over the ones not yet delivered,
+         so asking for them inside a layout read says whether anything was written BEFORE that read in
+         the same synchronous call — which is exactly what forces a layout. */
+      const mo = new MutationObserver(function () {});
+      mo.observe(layer, { attributes: true, childList: true, characterData: true, subtree: true });
+      let reads = 0, readsAfterWrite = 0, writes = 0;
+      const seen = function () { reads++; const w = mo.takeRecords().length; if (w) { readsAfterWrite++; writes += w; } };
+      const owDesc = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth');
+      const gbcr = preview.getBoundingClientRect;
+      const frame = function () {
+        mo.takeRecords(); reads = 0; readsAfterWrite = 0; writes = 0;
+        C.presence.onRender();
+        writes += mo.takeRecords().length;
+        return { reads: reads, readsAfterWrite: readsAfterWrite, writes: writes };
+      };
+      preview.getBoundingClientRect = function () { seen(); return gbcr.call(this); };
+      Object.defineProperty(wrap, 'offsetWidth', { configurable: true, get: function () { seen(); return owDesc.get.call(this); } });
+      const bf = FM.canvasEdit.boxFor;
+      try {
+        pick(1);
+        const a = frame();
+        if (!a.reads) throw new Error('CONTROL: drawing six moved outlines and three moved pointers read no layout at all, so the order below is about nothing');
+        if (!a.writes) throw new Error('CONTROL: everybody moved and the render hook wrote nothing');
+        if (a.readsAfterWrite) throw new Error('the render hook read layout ' + a.readsAfterWrite + ' time(s) AFTER writing styles in the same frame (' + a.reads + ' reads, ' + a.writes + ' writes) — every such read forces a synchronous style-and-layout pass, and this runs on every rendered frame: people × selections of them per frame during playback');
+        const b = frame();
+        if (b.writes) throw new Error('a frame in which nothing moved wrote ' + b.writes + ' change(s) to the presence layer — during playback of a still selection that is style work on every frame for nothing');
+        /* Under a tool the layer is hidden; it must not be computed either. */
+        /* Count only what the HOOK computes (queue 921 S5). The first version counted every boxFor call in the app, and
+           in the full suite an earlier test's leftover selection made the app's OWN select box call it — measured as
+           "6 outlines computed" while presence's list was empty. The claim is about the render hook, so that is where
+           the counter looks. */
+        let n = 0, inHook = false;
+        FM.canvasEdit.boxFor = function () { if (inHook) n++; return bf.apply(this, arguments); };
+        const hook = function () { inHook = true; try { C.presence.onRender(); } finally { inHook = false; } };
+        FM.textEdit.start(ids[3]);
+        if (!FM.textEdit.isActive()) throw new Error('CONTROL: the text editor did not open, so “under a tool” is not being measured');
+        pick(2);
+        hook();
+        if (!layer.classList.contains('cl-hidden')) throw new Error('CONTROL: with the text editor up the presence layer is not hidden');
+        if (n) throw new Error('with the text editor up the render hook still computed ' + n + ' outline(s) that nobody can see — cl-hidden is only a visibility class, so the whole loop ran behind it on every frame');
+        FM.textEdit.stop();
+        hook();
+        if (!n) throw new Error('CONTROL: with the editor closed again the outlines were not computed either, so the zero above proves nothing');
+        if (layer.classList.contains('cl-hidden')) throw new Error('the presence layer stayed hidden after the tool closed');
+      } finally {
+        FM.canvasEdit.boxFor = bf;
+        if (FM.textEdit.isActive()) FM.textEdit.stop();
+        delete preview.getBoundingClientRect;
+        delete wrap.offsetWidth;
+        mo.disconnect();
+      }
+    });
+    C.presence._clock(null);
+  });
+
+  test('921 S5 review: Follow never replays a frozen state — somebody who goes quiet mid-play is not seeked back to, and Follow ends, saying why, once they are offline', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S5('Follow on a stale state');
+    const realToast = FM.toast, toasts = [];
+    await withCollab921([layer921('A', { duration: 20 })], async function (c) {
+      const k = clock921(C);
+      FM.setTime(0);
+      const g = rawGuest921(c, 'Sam Lee', '#f472b6');
+      const realSet = FM.setTime;
+      let seeks = 0;
+      FM.toast = function (m) { toasts.push(String(m)); };
+      try {
+        g.pr({ ph: 2, pl: 1 });
+        k.step(100); C.presence.tick();
+        if (!C.presence.follow(g.mid)) throw new Error('CONTROL: follow() refused somebody who is here and playing');
+        if (!FM.playing) throw new Error('CONTROL: Sam is playing and the follower did not start');
+        /* Sam's phone locks mid-play: nothing more arrives. The follower's own playback runs on. */
+        await settle921(700);
+        if (Math.abs(FM.time - 2) <= 0.4) throw new Error('CONTROL: the follower’s playhead is at ' + FM.time + ', within 0.4 s of Sam’s last frame, so a re-seek could not be provoked');
+        FM.setTime = function () { seeks++; return realSet.apply(this, arguments); };
+        k.step(1500); C.presence.tick();
+        k.step(1600); C.presence.tick();
+        if (seeks) throw new Error('Sam has sent nothing for 3 s and Follow seeked the follower back to his last playhead ' + seeks + ' time(s): every 0.4 s of drift is a synchronous render and a jump back to the same frame, so playback loops the same fraction of a second for as long as that frozen frame lives — for ever on a guest');
+        if (!C.presence.following()) throw new Error('Follow ended 3 s into a silence — it should hold still while he might only be slow, and end when he reads as offline');
+        const played = FM.playing;
+        FM.pause();
+        k.step(300); C.presence.tick();
+        if (FM.playing && played) throw new Error('he paused, and Follow restarted playback from a “playing” frame that is 3.4 s old');
+        /* §22: silent past six seconds is offline, and Follow says so as it stops. */
+        k.step(3000); C.presence.tick();
+        if (C.presence.following()) throw new Error('Sam has been silent for 6.5 s (§22: offline) and Follow is still on');
+        if (!toasts.some(function (t) { return /Stopped following — Sam Lee went offline/.test(t); })) throw new Error('Follow ended without a word — toasts: ' + JSON.stringify(toasts));
+        const b = document.getElementById('collab-banner');
+        if (b && /Following/.test(b.textContent)) throw new Error('Follow ended and the banner still says ' + JSON.stringify(b.textContent));
+      } finally { FM.setTime = realSet; FM.toast = realToast; C.presence.unfollow(); if (FM.playing) FM.pause(); }
+    });
+    C.presence._clock(null);
+  });
+
+  test('921 S5 review: a guest whose session the owner ended keeps no presence — no timer, listener, chip, lock or Follow — and the roster it last heard no longer closes its own text editor', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S5('presence after the owner ends');
+    const T = FM.makeLayer('text', { name: 'Title', text: 'Hi', start: 0, duration: 3 });
+    const realToast = FM.toast, toasts = [];
+    await withCollab921([T, layer921('B')], async function (c) {
+      const tid = FM.scene.layers[0].id;
+      const g = guest921S5(C);
+      const k = clock921(C);
+      FM.toast = function (m) { toasts.push(String(m)); };
+      try {
+        g.send('ctl', rosterMsg921([{ mid: 'm8', name: 'Sam Lee', color: '#f472b6', role: 'editor', st: 'here', ls: tid }]));
+        g.send('pres', { t: 'PR', n: 1, full: 1, m: { o: prOf921({ ph: 1 }), m8: prOf921({ sel: [tid], pri: tid, tool: 'text', ls: tid, act: 'type' }) } });
+        k.step(100); C.presence.tick(); C.presence._draw();
+        if (!document.getElementById('collab-people')) throw new Error('CONTROL: a live guest session drew no people chip');
+        if (!document.querySelector('#tl-tracks .clip[data-id="' + tid + '"] .peer-lock')) throw new Error('CONTROL: the roster says Sam holds Title and no lock is painted');
+        if (!C.presence.follow('o')) throw new Error('CONTROL: the guest could not follow the owner');
+        /* The owner taps Stop sharing. */
+        g.send('ctl', { t: 'bye', why: 'ended' });
+        if (!g.G.ended) throw new Error('CONTROL: the guest did not take the bye');
+        const st = C.presence._state();
+        if (st.attached || st.timer || st.listeners) throw new Error('the owner ended the session and presence on the guest is still ' + JSON.stringify(st) + ' — its 10–15 Hz timer, its listeners and the render hook go on running for a session that no longer exists, until the guest happens to find Leave');
+        if (C.presence.following()) throw new Error('Follow is still driving the playhead after the session ended');
+        const left = document.querySelectorAll(PRESENCE_SEL921);
+        if (left.length) throw new Error('the session ended and ' + left.length + ' presence element(s) are still on screen (' + left[0].className + ')');
+        /* Her own copy now: the text editor on Title opens and stays open. */
+        toasts.length = 0;
+        FM.textEdit.start(tid);
+        if (!FM.textEdit.isActive()) throw new Error('CONTROL: the text editor did not open at all');
+        k.step(100); C.presence.tick();
+        if (!FM.textEdit.isActive()) throw new Error('the session is over and the text editor on her own copy of Title was closed — the roster she last heard says Sam holds it');
+        if (toasts.some(function (t) { return /is editing this/.test(t); })) throw new Error('a session that ended still refuses a layer by name: ' + JSON.stringify(toasts));
+      } finally {
+        if (FM.textEdit.isActive()) FM.textEdit.stop();
+        FM.toast = realToast;
+        C.presence._clock(null);
+      }
+    });
+  });
+
+  test('921 S5 review: a guest whose link dropped obeys nothing from the last roster — its text editor stays open, no lock is painted, and Follow ends saying the link dropped', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S5('presence on an offline guest');
+    const T = FM.makeLayer('text', { name: 'Title', text: 'Hi', start: 0, duration: 3 });
+    const realToast = FM.toast, toasts = [];
+    await withCollab921([T, layer921('B')], async function (c) {
+      const tid = FM.scene.layers[0].id;
+      const g = guest921S5(C);
+      const k = clock921(C);
+      FM.toast = function (m) { toasts.push(String(m)); };
+      try {
+        g.send('ctl', rosterMsg921([{ mid: 'm8', name: 'Sam Lee', color: '#f472b6', role: 'editor', st: 'here', ls: tid }]));
+        g.send('pres', { t: 'PR', n: 1, full: 1, m: { o: prOf921({ ph: 1 }), m8: prOf921({ sel: [tid], pri: tid, tool: 'text', ls: tid }) } });
+        k.step(100); C.presence.tick(); C.presence._draw();
+        if (!C.presence.follow('o')) throw new Error('CONTROL: the guest could not follow the owner');
+        /* CONTROL: while live, the roster's lease is obeyed. */
+        FM.textEdit.start(tid);
+        k.step(100); C.presence.tick();
+        if (FM.textEdit.isActive()) throw new Error('CONTROL: while the link was up, the roster saying Sam holds Title did not refuse the editor');
+        g.G.setOnline(false);
+        if (g.G.online !== false) throw new Error('CONTROL: the guest did not go offline');
+        k.step(100); C.presence.tick(); C.presence._draw();
+        if (C.presence.following()) throw new Error('the live link dropped and Follow is still obeying the owner’s last frame');
+        if (!toasts.some(function (t) { return /Stopped following — the live link dropped/.test(t); })) throw new Error('Follow ended without saying why — toasts: ' + JSON.stringify(toasts));
+        if (document.querySelector('#tl-tracks .clip[data-id="' + tid + '"] .peer-lock')) throw new Error('offline, the lock from the last roster is still painted on Title — a lock nobody behind it is holding');
+        toasts.length = 0;
+        FM.textEdit.start(tid);
+        k.step(100); C.presence.tick();
+        if (!FM.textEdit.isActive()) throw new Error('offline, the text editor on Title was closed by the last roster — “Sam is editing this”, from a Sam this device can no longer hear');
+      } finally {
+        if (FM.textEdit.isActive()) FM.textEdit.stop();
+        FM.toast = realToast;
+        C.presence._clock(null);
+      }
+    });
+  });
+
+  test('921 S5 review: every PR frame fits in 1 KB — the owner with 64 layers selected, and a guest’s full-size pr relayed', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S5('the pres frame size');
+    const layers = [];
+    for (let i = 0; i < 64; i++) layers.push(layer921('L' + i));
+    await withCollab921(layers, async function (c) {
+      const k = clock921(C);
+      const ann = rawGuest921(c, 'Ann', '#a3e635'), bo = rawGuest921(c, 'Bo', '#a78bfa');
+      FM.selectAll();
+      if (FM.selectionIds().length !== 64) throw new Error('CONTROL: select-all selected ' + FM.selectionIds().length + ' layers, not 64');
+      const mine = C.presence._sample();
+      if (JSON.stringify(mine).length <= 1024) throw new Error('CONTROL: the owner’s whole state is only ' + JSON.stringify(mine).length + ' bytes, so this cannot test the cap');
+      /* Ann selects everything too, and sends the biggest pr a guest's own cap allows: 1 KB with t and n. */
+      const mk = function (sel) { return Object.assign({ t: 'pr', n: 999 }, prOf921({ sel: sel, pri: sel[0] })); };
+      const sel = c.ids.slice();
+      while (JSON.stringify(mk(sel)).length > 1024) sel.pop();
+      ann.pr({ sel: sel, pri: sel[0] });
+      k.step(100); C.presence.tick();
+      bo.deliver();
+      const frames = bo.got.filter(function (m) { return m.ch === 'pres' && m.msg && m.msg.t === 'PR'; });
+      if (!frames.length) throw new Error('CONTROL: Bo received no PR frame at all');
+      const sizes = frames.map(function (m) { return JSON.stringify(m.msg).length; });
+      const big = sizes.filter(function (n) { return n > 1024; });
+      if (big.length) throw new Error(big.length + ' of ' + sizes.length + ' PR frames are over 1 KB (' + sizes.join(', ') + ' bytes) — §20 caps pres at 1 KB because it is unreliable: a frame the network has to cut into fragments is lost whole when any one of them is, and the owner’s frames went out like this fifteen times a second while he had a big selection');
+      const om = c.S.host.ownerMid;
+      const owner = frames.map(function (m) { return m.msg.m[om]; }).filter(Boolean)[0];
+      const a = frames.map(function (m) { return m.msg.m[ann.mid]; }).filter(Boolean)[0];
+      if (!owner || !owner.sel.length || owner.sel.indexOf(owner.pri) < 0) throw new Error('the owner’s state did not arrive with the layer he is editing still in its selection: ' + JSON.stringify(owner && { pri: owner.pri, n: owner.sel.length }));
+      if (!a || !a.sel.length || a.sel.indexOf(sel[0]) < 0) throw new Error('Ann’s relayed state did not arrive with her primary layer: ' + JSON.stringify(a && { pri: a.pri, n: a.sel.length }));
+      /* CONTROL: the owner's own screen still has everything he selected — only the wire is trimmed. */
+      if (FM.selectionIds().length !== 64) throw new Error('trimming his outgoing state changed his own selection');
+    });
+    C.presence._clock(null);
+  });
+
+  test('921 S5 review: a remote pointer glides on a transform — never on left/top — and sits exactly where their pointer is', { item: '921', budgetMs: 60000 }, async function () {
+    const C = need921S5('the pointer’s glide');
+    await withCollab921([layer921('A')], async function (c) {
+      clock921(C);
+      const g = rawGuest921(c, 'Mia', '#a3e635');
+      g.pr({ c: { s: 'cv', x: 100, y: 60 } });
+      C.presence.tick(); C.presence._draw();
+      const p = document.querySelector('#collab-layer .cb-ptr[data-mid="' + g.mid + '"]');
+      if (!shown921(p)) throw new Error('CONTROL: no pointer was drawn for Mia');
+      const tp = getComputedStyle(p).transitionProperty;
+      if (/(^|,\s*)(left|top)(\s*,|$)/.test(tp)) throw new Error('the pointer glides on a transition of ' + tp + ' — left/top are layout properties, so every frame of every moving pointer lays the page out; a transform is moved by the compositor');
+      if (!/transform/.test(tp)) throw new Error('the pointer does not glide at all (transition-property: ' + tp + ')');
+      await settle921(200);
+      const wr = document.getElementById('canvas-wrap').getBoundingClientRect(), r = p.getBoundingClientRect();
+      const s = wr.width / FM.scene.project.width;
+      if (Math.abs(r.left - (wr.left + 100 * s)) > 1 || Math.abs(r.top - (wr.top + 60 * s)) > 1) throw new Error('Mia’s pointer is at ' + Math.round(r.left) + ',' + Math.round(r.top) + ' on screen; her point (100, 60) is at ' + Math.round(wr.left + 100 * s) + ',' + Math.round(wr.top + 60 * s));
+      const lt = getComputedStyle(p).left + ' ' + getComputedStyle(p).top;
+      g.pr({ c: { s: 'cv', x: 150, y: 90 } });
+      C.presence.tick(); C.presence._draw();
+      await settle921(200);
+      const r2 = p.getBoundingClientRect();
+      if (Math.abs(r2.left - (wr.left + 150 * s)) > 1) throw new Error('CONTROL: the pointer did not follow her to (150, 90)');
+      if (getComputedStyle(p).left + ' ' + getComputedStyle(p).top !== lt) throw new Error('the pointer moved by changing left/top (' + lt + ' → ' + getComputedStyle(p).left + ' ' + getComputedStyle(p).top + ')');
+    });
+    C.presence._clock(null);
+  });
+
+  test('921 S5 review: looking at a gradient’s Colour view or a drawn shape’s Element view locks nothing — the text editor still does', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S5('which tools are leased');
+    const Gr = FM.makeLayer('shape', { name: 'Grad', start: 0, duration: 3 });
+    Gr.fillMode = 'gradient';
+    Gr.fillGradient = { enabled: true, type: 'linear', c0: '#ff0000', c1: '#0000ff', angle: 90 };
+    const He = FM.makeLayer('shape', { name: 'Heart', shape: 'heart', start: 0, duration: 3 });
+    const Tx = FM.makeLayer('text', { name: 'Title', text: 'Hi', start: 0, duration: 3 });
+    await withCollab921([Gr, He, Tx], async function (c) {
+      const k = clock921(C);
+      const gid = c.ids[0], hid = c.ids[1], tid = c.ids[2];
+      const sam = rawGuest921(c, 'Sam Lee', '#f472b6');
+      try {
+        FM.selectLayer(gid);
+        FM.inspector.openCategory('color');
+        FM.inspector.refresh();
+        if (!FM.fillDrag.isActive()) throw new Error('CONTROL: the Colour view of a gradient layer did not start the fill drag, so this is not the case the review found');
+        k.step(100); C.presence.tick();
+        if (c.S.host.leases[gid]) throw new Error('just having the Colour view of a gradient open took the lease on it (holder ' + c.S.host.leases[gid] + ') — the fill drag starts itself whenever that view draws, so looking at a panel locked the layer for everybody else, renewed every 2 s for as long as it stayed open');
+        sam.pr({ sel: [gid], pri: gid, tool: 'text', ls: gid });
+        k.step(100); C.presence.tick();
+        if (c.S.host.leases[gid] !== sam.mid) throw new Error('Sam opened the text editor on a layer he was only LOOKED AT on the owner’s screen and was refused (holder ' + c.S.host.leases[gid] + ')');
+        sam.pr({ sel: [gid], pri: gid });
+        k.step(100); C.presence.tick();
+        FM.selectLayer(hid);
+        FM.inspector.openCategory('element');
+        FM.inspector.refresh();
+        if (!FM.pointEdit.isActive() || !FM.pointEdit.isEmbedded()) throw new Error('CONTROL: the Element view of a drawn shape did not start the embedded Edit Points');
+        k.step(100); C.presence.tick();
+        if (c.S.host.leases[hid]) throw new Error('just having the Element view of a drawn shape open took the lease on it (holder ' + c.S.host.leases[hid] + ')');
+        /* CONTROL: a tool he opens on purpose is still exclusive. */
+        FM.selectLayer(tid);
+        FM.textEdit.start(tid);
+        k.step(100); C.presence.tick();
+        if (c.S.host.leases[tid] !== c.S.host.ownerMid) throw new Error('CONTROL: the text editor he opened did not lease Title (holder ' + c.S.host.leases[tid] + ')');
+      } finally {
+        if (FM.textEdit.isActive()) FM.textEdit.stop();
+        if (FM.fillDrag.isActive()) FM.fillDrag.stop();
+        FM.selectLayer(null);
+      }
+    });
+    C.presence._clock(null);
+  });
+
+  test('921 S5 review: a guest greys a host that has gone silent, and the owner’s own “away” leaves in the visibility handler rather than at the next tick', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S5('silence in both directions');
+    /* The guest's side. */
+    await withCollab921([layer921('A')], async function (c) {
+      const g = guest921S5(C);
+      const k = clock921(C);
+      try {
+        g.send('ctl', rosterMsg921());
+        g.send('pres', { t: 'PR', n: 1, full: 1, m: { o: prOf921({ ph: 1 }) } });
+        k.step(100); C.presence.tick(); C.presence._draw();
+        const face = function () { const a = document.querySelector('#collab-people .cp-av[data-mid="o"]'); return a ? getComputedStyle(a).backgroundColor : null; };
+        if (C.presence.stateOf('o') !== 'here' || face() !== rgb921('#ff9f43')) throw new Error('CONTROL: the owner who just spoke reads ' + C.presence.stateOf('o') + ' in ' + face());
+        k.step(3000); C.presence.tick(); C.presence._draw();
+        if (C.presence.stateOf('o') !== 'here') throw new Error('CONTROL: 3 s of quiet — inside the 2 s heartbeat’s allowance for one lost frame — already reads as ' + C.presence.stateOf('o'));
+        k.step(3500); C.presence.tick(); C.presence._draw();
+        if (C.presence.stateOf('o') !== 'off') throw new Error('the host has said nothing for 6.6 s (§22: offline after 6) and the guest still reads him as “' + C.presence.stateOf('o') + '” — his face stays in full colour while his outlines have already faded, until ICE gives up half a minute later');
+        if (face() === rgb921('#ff9f43')) throw new Error('the silent host’s face is still in full colour on the chip');
+        g.send('pres', { t: 'PR', n: 2, full: 1, m: { o: prOf921({ ph: 1 }) } });
+        C.presence.tick(); C.presence._draw();
+        if (C.presence.stateOf('o') !== 'here') throw new Error('CONTROL: the host spoke again and still reads ' + C.presence.stateOf('o'));
+      } finally { C.presence._clock(null); }
+    });
+    /* The owner's side: his page is hidden, and nothing ticks after that. */
+    await withCollab921([layer921('A')], async function (c) {
+      const k = clock921(C);
+      const g = rawGuest921(c, 'Sam Lee', '#f472b6');
+      g.pr({});
+      k.step(100); C.presence.tick();
+      g.deliver();
+      g.got.length = 0;
+      const vs = Object.getOwnPropertyDescriptor(Document.prototype, 'visibilityState');
+      const hd = Object.getOwnPropertyDescriptor(Document.prototype, 'hidden');
+      try {
+        Object.defineProperty(document, 'visibilityState', { configurable: true, get: function () { return 'hidden'; } });
+        Object.defineProperty(document, 'hidden', { configurable: true, get: function () { return true; } });
+        if (document.visibilityState !== 'hidden') throw new Error('CONTROL: the page could not be made to read as hidden');
+        document.dispatchEvent(new Event('visibilitychange'));
+        g.deliver();
+        const roster = g.got.filter(function (m) { return m.ch === 'ctl' && m.msg && m.msg.t === 'roster'; }).pop();
+        const om = c.S.host.ownerMid;
+        const row = roster && roster.msg.people.filter(function (r) { return r.mid === om; })[0];
+        if (!row || row.st !== 'away') throw new Error('his page went hidden and no roster saying he is away left in the handler (' + (row ? 'st ' + row.st : 'no roster at all') + ') — on the owner the handler only stored his state for the next tick, and a phone whose screen just locked may never run that tick');
+        const pr = g.got.filter(function (m) { return m.ch === 'pres' && m.msg && m.msg.t === 'PR' && m.msg.m[om]; }).pop();
+        if (!pr || pr.msg.m[om].st !== 'away') throw new Error('his page went hidden and his own state saying “away” did not go out in the handler');
+      } finally {
+        delete document.visibilityState; delete document.hidden;
+        if (document.visibilityState !== vs.get.call(document) || document.hidden !== hd.get.call(document)) throw new Error('could not put document.visibilityState back');
+        document.dispatchEvent(new Event('visibilitychange'));
+        C.presence._clock(null);
+      }
+    });
+  });
+
+  test('921 S5 review: a Viewer who follows is told so in the banner, and gets the × to stop', { item: '921', budgetMs: 60000 }, async function () {
+    const C = need921S5('the viewer’s Follow banner');
+    await withCollab921([layer921('A')], async function (c) {
+      const g = guest921S5(C, 'viewer');
+      const k = clock921(C);
+      try {
+        g.send('ctl', rosterMsg921());
+        g.send('pres', { t: 'PR', n: 1, full: 1, m: { o: prOf921({ ph: 1 }) } });
+        k.step(100); C.presence.tick();
+        C.ui.syncBanner();
+        const b0 = document.getElementById('collab-banner');
+        if (!b0 || !/View only/.test(b0.textContent)) throw new Error('CONTROL: a Viewer’s banner does not say View only (' + (b0 ? b0.textContent : 'none') + ')');
+        if (!C.presence.follow('o')) throw new Error('CONTROL: a Viewer could not follow the owner');
+        const b = document.getElementById('collab-banner');
+        if (!b || !/Following Ezra/.test(b.textContent)) throw new Error('a Viewer is following Ezra and the banner says ' + JSON.stringify(b && b.textContent) + ' — the playhead is moving by itself and nothing on screen says why');
+        const x = b.querySelector('.cb-x');
+        if (!x) throw new Error('a Viewer following has no × to stop following');
+        x.click();
+        if (C.presence.following()) throw new Error('the × did not stop Follow');
+        const b2 = document.getElementById('collab-banner');
+        if (!b2 || b2.textContent !== 'View only — ask for edit access') throw new Error('after Follow stopped the banner reads ' + JSON.stringify(b2 && b2.textContent) + ', not the View only line');
+      } finally { C.presence.unfollow(); C.presence._clock(null); }
+    });
+  });
+
+  test('921 S5 review: the Share panel paints each person in the colour presence draws them in', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S5('the Share panel’s colours');
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (c) {
+        clock921(C);
+        /* The fixture's owner colour is not one of the eight, so presence gives him the first — red —
+           and a guest who picked red is re-coloured. */
+        const g = rawGuest921(c, 'Sam Lee', '#ff6b6b');
+        g.pr({});
+        C.presence.tick(); C.presence._draw();
+        const drawn = C.presence.people().filter(function (p) { return p.mid === g.mid; })[0].color;
+        if (drawn === '#ff6b6b') throw new Error('CONTROL: presence did not re-colour a guest who clashes with the owner, so there is nothing to disagree about');
+        await ui.share();
+        const card = document.getElementById('collab-share');
+        if (!card) throw new Error('CONTROL: the Share panel did not open');
+        const row = Array.prototype.filter.call(card.querySelectorAll('.cs-person'), function (r) { const n = r.querySelector('.cs-pname'); return n && n.textContent === 'Sam Lee'; })[0];
+        if (!row) throw new Error('CONTROL: Sam has no row in the Share panel');
+        const dot = getComputedStyle(row.querySelector('.cs-dot')).backgroundColor;
+        if (dot !== rgb921(drawn)) throw new Error('Sam’s dot in the Share panel is ' + dot + ' while everything drawn for him on the canvas and timeline is ' + rgb921(drawn) + ' — the panel is the legend, and it names the wrong person for his outlines (the dot is the red he picked, the same as the owner’s own)');
+      });
+    });
+    C.presence._clock(null);
+  });
+
+  test('921 S5 review: at 1280×760 the inspector line takes no height from the band — the cards neither scroll nor move when somebody else selects the layer', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S5('the inspector line’s place');
+    const root = document.documentElement, tl0 = root.style.getPropertyValue('--tl-h');
+    await atSize921(1280, 760, async function () {
+      await withCollab921([layer921('A'), layer921('B')], async function (c) {
+        clock921(C);
+        root.style.setProperty('--tl-h', '232px');       // the band at 1280×800 by default: the cards solved to fit exactly
+        try {
+          FM.selectLayer(c.ids[0]);
+          await settle921(300);
+          const panel = document.getElementById('inspector-panel'), insp = document.getElementById('inspector');
+          const cards = function () { return Array.prototype.slice.call(panel.querySelectorAll('.cat-card')); };
+          if (cards().length < 6) throw new Error('CONTROL: the category grid is not showing (' + cards().length + ' cards)');
+          const scroll = function () { return insp.scrollHeight - insp.clientHeight; };
+          if (scroll() > 2) throw new Error('CONTROL: with nobody else here the cards already scroll by ' + scroll() + 'px');
+          const top0 = cards()[0].getBoundingClientRect().top;
+          const g = rawGuest921(c, 'Sam Lee', '#f472b6');
+          g.pr({ sel: [c.ids[0]], pri: c.ids[0] });
+          C.presence.tick(); C.presence._draw();
+          await settle921(200);
+          const line = document.getElementById('collab-insp');
+          if (!shown921(line)) throw new Error('CONTROL: Sam is on the same layer and the inspector line is not showing');
+          if (scroll() > 2) throw new Error('with the “Sam Lee is here too” line up, the cards need ' + scroll() + 'px of scrolling at 1280×800 — the bottom row slides under the fold (queue 285/518’s regression), because the line takes its height from a band whose rows were solved to fit exactly');
+          const moved = cards()[0].getBoundingClientRect().top - top0;
+          if (Math.abs(moved) > 1) throw new Error('the card grid moved ' + Math.round(moved) + 'px when Sam selected the layer — it jumps under his pointer every time somebody else selects or deselects it');
+          const hit = function (a, b) { return a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5; };
+          const lr = line.getBoundingClientRect();
+          if (hit(lr, document.getElementById('preview').getBoundingClientRect())) throw new Error('the inspector line sits over the canvas');
+          const rail = document.getElementById('key-rail');
+          if (rail && shown921(rail) && hit(lr, rail.getBoundingClientRect())) throw new Error('the inspector line sits over the A/S/D keys');
+          const name = document.getElementById('proj-name-s');
+          if (name && hit(lr, name.getBoundingClientRect())) throw new Error('the inspector line sits over the layer’s name');
+        } finally {
+          if (tl0) root.style.setProperty('--tl-h', tl0); else root.style.removeProperty('--tl-h');
+        }
+      });
+    });
+    C.presence._clock(null);
+  });
+
+  test('921 S5 review: at 380 px the banner clears a four-person chip, and a long Follow name never pushes the × out', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S5('the banner beside the chip');
+    const hit = function (a, b) { return a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5; };
+    await withCollab921([layer921('A')], async function (c) {
+      clock921(C);
+      ['Sam Lee', 'Mia', 'Jo Park', 'Kai'].forEach(function (n, i) { rawGuest921(c, n, C.presence.PALETTE[i + 1]).pr({}); });
+      try {
+        await atSize921(380, 760, async function () {
+          C.presence.tick(); C.presence._draw();
+          const chip = document.getElementById('collab-people');
+          if (!shown921(chip) || chip.querySelectorAll('.cp-av').length !== 3 || !chip.querySelector('.cp-more')) throw new Error('CONTROL: the chip is not at its widest (three faces and +1)');
+          const stage = document.getElementById('stage').getBoundingClientRect();
+          C.ui.banner('View only — ask for edit access');
+          C.presence._draw();
+          let b = document.getElementById('collab-banner');
+          const cr = chip.getBoundingClientRect(), br = b.getBoundingClientRect();
+          if (hit(cr, br)) throw new Error('the people chip [' + Math.round(cr.left) + '–' + Math.round(cr.right) + '] covers the start of the banner [' + Math.round(br.left) + '–' + Math.round(br.right) + '] — “View only — ask for edit access” reads with its first letters under the faces');
+          if (b.scrollWidth > b.clientWidth + 1) throw new Error('the banner clears the chip but no longer fits its words (' + b.scrollWidth + ' > ' + b.clientWidth + ')');
+          if (br.right > stage.right - 40) throw new Error('the banner runs under the view bar (right edge ' + Math.round(br.right) + ' of ' + Math.round(stage.right) + ')');
+          /* The longest name there can be (32 characters), following: the × must stay in view. */
+          let closed = 0;
+          C.ui.banner('Following ' + 'Alexandra Montgomery-Whitfield Jr'.slice(0, 32), { onClose: function () { closed++; }, closeLabel: 'Stop following' });
+          b = document.getElementById('collab-banner');
+          const x = b.querySelector('.cb-x');
+          if (!x) throw new Error('CONTROL: the Follow banner has no ×');
+          const xr = x.getBoundingClientRect(), b2 = b.getBoundingClientRect();
+          if (xr.right > b2.right + 0.5 || xr.left < b2.left || xr.width < 20) throw new Error('with a long name the × is pushed out of the banner (× ' + Math.round(xr.left) + '–' + Math.round(xr.right) + ', banner ' + Math.round(b2.left) + '–' + Math.round(b2.right) + ') — the words cannot shrink, so the one control is what gets clipped');
+          if (hit(chip.getBoundingClientRect(), b2)) throw new Error('the Follow banner runs under the people chip');
+          x.click();
+          if (closed !== 1) throw new Error('CONTROL: the × did not answer a click');
+        });
+        /* CONTROL: where the chip is nowhere near, the banner stays centred on the stage. */
+        await atSize921(1280, 760, async function () {
+          C.presence._draw();
+          C.ui.banner('View only — ask for edit access');
+          const b = document.getElementById('collab-banner').getBoundingClientRect(), st = document.getElementById('stage').getBoundingClientRect();
+          if (Math.abs((b.left + b.right) / 2 - (st.left + st.right) / 2) > 1) throw new Error('at 1280 the banner moved off the stage’s centre although the chip is nowhere near it');
+        });
+      } finally { C.ui.hideBanner(); }
+    });
+    C.presence._clock(null);
+  });
+
+  test('921 S5 review: the people panels stay current while open, a Follow on somebody who has left says so and keeps the panel, and a Follow that ends by itself says why', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S5('the people panels');
+    const realToast = FM.toast, toasts = [];
+    FM.toast = function (m) { toasts.push(String(m)); };
+    try {
+      await withLabs921(async function (ui) {
+        /* The owner's Share panel. */
+        await withCollab921([layer921('A')], async function (c) {
+          const k = clock921(C);
+          const g = rawGuest921(c, 'Sam Lee', '#f472b6');
+          g.pr({});
+          k.step(100); C.presence.tick(); C.presence._draw();
+          await ui.share();
+          const line = function () {
+            const card = document.getElementById('collab-share');
+            const row = card && Array.prototype.filter.call(card.querySelectorAll('.cs-person'), function (r) { const n = r.querySelector('.cs-pname'); return n && n.textContent === 'Sam Lee'; })[0];
+            return row ? row.querySelector('.cs-prole').textContent : null;
+          };
+          if (line() == null || /away/.test(line())) throw new Error('CONTROL: Sam’s row is ' + JSON.stringify(line()));
+          g.pr({ st: 'away' });
+          k.step(100); C.presence.tick(); C.presence._draw();
+          if (!/away/.test(line() || '')) throw new Error('Sam went away while the Share panel was open and his row still reads ' + JSON.stringify(line()) + ' — the panel is a snapshot of the moment it opened');
+          ui.close();
+        });
+        /* The guest's people panel. */
+        await withCollab921([layer921('A')], async function (c) {
+          const gs = guest921S5(C);
+          const k = clock921(C);
+          const sam = { mid: 'm8', name: 'Sam Lee', color: '#f472b6', role: 'editor', st: 'here', ls: null };
+          gs.send('ctl', rosterMsg921([sam]));
+          gs.send('pres', { t: 'PR', n: 1, full: 1, m: { o: prOf921(), m8: prOf921() } });
+          k.step(100); C.presence.tick(); C.presence._draw();
+          /* 1. Follow ends by itself when the person leaves — and says so. */
+          if (!C.presence.follow('m8')) throw new Error('CONTROL: could not follow Sam');
+          gs.send('ctl', rosterMsg921([]));
+          k.step(100); C.presence.tick();
+          if (C.presence.following()) throw new Error('CONTROL: Sam left and Follow is still on');
+          if (!toasts.some(function (t) { return /Stopped following — Sam Lee left/.test(t); })) throw new Error('Sam left and Follow simply stopped — the banner vanished without a word: ' + JSON.stringify(toasts));
+          /* 2. A Follow on somebody who left while the panel was open. */
+          const kai = { mid: 'm9', name: 'Kai', color: '#a78bfa', role: 'editor', st: 'here', ls: null };
+          gs.send('ctl', rosterMsg921([kai]));
+          gs.send('pres', { t: 'PR', n: 2, full: 1, m: { o: prOf921(), m9: prOf921() } });
+          k.step(100); C.presence.tick(); C.presence._draw();
+          await ui.share();
+          const card = document.getElementById('collab-share');
+          const kRow = card && card.querySelector('.cs-person[data-mid="m9"]');
+          if (!kRow) throw new Error('CONTROL: Kai is not in the guest panel');
+          const f = kRow.querySelector('.cs-follow');
+          /* Kai leaves; before anything redraws, the tap lands on his Follow. */
+          gs.send('ctl', rosterMsg921([]));
+          toasts.length = 0;
+          f.click();
+          if (!document.getElementById('collab-share')) throw new Error('Follow on somebody who had just left closed the panel and did nothing — no banner, no word');
+          if (!toasts.some(function (t) { return /Kai has left/.test(t); })) throw new Error('a Follow on somebody who had left said nothing: ' + JSON.stringify(toasts));
+          if (document.querySelector('#collab-share .cs-person[data-mid="m9"]')) throw new Error('Kai has left and is still listed in the open panel');
+          ui.close();
+        });
+      });
+    } finally { FM.toast = realToast; C.presence._clock(null); }
+  });
+
+  test('921 S5 review: a lease refusal names who holds the layer — on the owner, and on a guest', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S5('the refusal toasts');
+    const realToast = FM.toast, toasts = [];
+    FM.toast = function (m) { toasts.push(String(m)); };
+    try {
+      await withCollab921([FM.makeLayer('text', { name: 'Title', text: 'Hi', start: 0, duration: 3 })], async function (c) {
+        const k = clock921(C);
+        const tid = c.ids[0];
+        const sam = rawGuest921(c, 'Sam Lee', '#f472b6');
+        sam.pr({ sel: [tid], pri: tid, tool: 'text', ls: tid, act: 'type' });
+        k.step(100); C.presence.tick();
+        if (c.S.host.leases[tid] !== sam.mid) throw new Error('CONTROL: Sam was not granted Title');
+        FM.layerById(FM.scene, tid).name = 'Mine';
+        FM.history.commit();
+        if (FM.layerById(FM.scene, tid).name !== 'Title') throw new Error('CONTROL: the owner’s edit on a leased layer was not refused (the name is ' + FM.layerById(FM.scene, tid).name + ')');
+        if (!toasts.some(function (t) { return /^Sam Lee is editing this/.test(t); })) throw new Error('the owner was refused an edit on Sam’s layer and told ' + JSON.stringify(toasts) + ' — §22 promises “Sam is editing this”, and presence knows it is Sam');
+      });
+      toasts.length = 0;
+      await withCollab921([FM.makeLayer('text', { name: 'Title', text: 'Hi', start: 0, duration: 3 })], async function (c) {
+        const tid = FM.scene.layers[0].id;
+        const g = guest921S5(C);
+        clock921(C);
+        g.send('ctl', rosterMsg921([], tid));
+        FM.layerById(FM.scene, tid).name = 'Mine';
+        FM.history.commit();
+        g.G.tick('hot');
+        g.loop.pump();
+        const tx = g.got.filter(function (m) { return m.ch === 'ctl' && m.msg && m.msg.t === 'tx'; }).pop();
+        if (!tx) throw new Error('CONTROL: the guest’s edit never left for the host (' + JSON.stringify(g.got.map(function (m) { return m.msg && m.msg.t; })) + ')');
+        g.send('ctl', { t: 'ack', cid: tx.msg.cid, seq: null, at: 0, ops: [], fix: [], rej: [[0, 'lease']], lost: [] });
+        if (!toasts.some(function (t) { return /^Ezra is editing that layer/.test(t); })) throw new Error('the guest was refused an edit on the layer Ezra holds and told ' + JSON.stringify(toasts));
+      });
+    } finally { FM.toast = realToast; C.presence._clock(null); }
+  });
+
+  test('921 S5 review: demoting an editor releases the layer they held, even with their text editor still open', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S5('a lease across a demotion');
+    const realToast = FM.toast, toasts = [];
+    await withCollab921([FM.makeLayer('text', { name: 'Title', text: 'Hi', start: 0, duration: 3 })], async function (c) {
+      const k = clock921(C);
+      const tid = c.ids[0];
+      const sam = rawGuest921(c, 'Sam Lee', '#f472b6');
+      FM.toast = function (m) { toasts.push(String(m)); };
+      try {
+        sam.pr({ sel: [tid], pri: tid, tool: 'text', ls: tid, act: 'type' });
+        k.step(100); C.presence.tick();
+        if (c.S.host.leases[tid] !== sam.mid) throw new Error('CONTROL: Sam was not granted Title');
+        c.S.setPeerRole(sam.mid, 'viewer');
+        /* His editor is still open, so his device goes on saying so every heartbeat. */
+        sam.pr({ sel: [tid], pri: tid, tool: 'text', ls: tid, act: 'type' });
+        k.step(2000); C.presence.tick();
+        sam.pr({ sel: [tid], pri: tid, tool: 'text', ls: tid, act: 'type' });
+        k.step(2000); C.presence.tick(); C.presence._draw();
+        if (c.S.host.leases[tid]) throw new Error('Sam is a Viewer now and still holds Title (holder ' + c.S.host.leases[tid] + ') — a viewer can write nothing, and the owner is refused every edit on that layer for as long as Sam’s editor stays open');
+        if (document.querySelector('#tl-tracks .clip[data-id="' + tid + '"] .peer-lock')) throw new Error('the lock stayed on Title after Sam was demoted');
+        FM.textEdit.start(tid);
+        k.step(100); C.presence.tick();
+        if (!FM.textEdit.isActive()) throw new Error('the owner’s text editor on Title was refused after Sam was demoted: ' + JSON.stringify(toasts));
+      } finally {
+        if (FM.textEdit.isActive()) FM.textEdit.stop();
+        FM.toast = realToast;
+      }
+    });
+    C.presence._clock(null);
+  });
+
+  test('921 S5 review: the roster goes to a peer at most twice a second however fast a member flips its state — and the latest one still arrives', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S5('the roster’s rate');
+    await withCollab921([layer921('A')], async function (c) {
+      const k = clock921(C);
+      const vic = rawGuest921(c, 'Vic', '#6366f1');
+      c.S.setPeerRole(vic.mid, 'viewer');
+      const obs = rawGuest921(c, 'Obs', '#a3e635');
+      vic.pr({}); obs.pr({});
+      k.step(100); C.presence.tick();
+      k.step(600); C.presence.tick();
+      obs.deliver();
+      obs.got.length = 0;
+      /* Three seconds of a hand-made client flipping away/here on every frame, at 15 a second. */
+      for (let i = 0; i < 45; i++) {
+        vic.pr({ st: i % 2 ? 'here' : 'away' });
+        k.step(67); C.presence.tick();
+      }
+      obs.deliver();
+      const rosters = obs.got.filter(function (m) { return m.ch === 'ctl' && m.msg && m.msg.t === 'roster'; });
+      if (rosters.length < 2) throw new Error('CONTROL: only ' + rosters.length + ' roster(s) in three seconds of flipping, so the flips are not reaching it');
+      if (rosters.length > 8) throw new Error('three seconds of one member flipping its state sent ' + rosters.length + ' whole rosters to everybody else on the reliable channel the document shares — at most two a second is plenty for who is here');
+      /* The trailing edge: the last state is what is left in everybody's roster. */
+      vic.pr({ st: 'away' });
+      k.step(67); C.presence.tick();
+      k.step(600); C.presence.tick();
+      obs.deliver();
+      const last = obs.got.filter(function (m) { return m.ch === 'ctl' && m.msg && m.msg.t === 'roster'; }).pop();
+      const row = last && last.msg.people.filter(function (r) { return r.mid === vic.mid; })[0];
+      if (!row || row.st !== 'away') throw new Error('the throttle lost the last change: Vic is away and the last roster says ' + (row ? row.st : 'nothing about him'));
+    });
+    C.presence._clock(null);
+  });
+
+  test('921 S5 review: one person’s taps make at most one ring per 600 ms, and a ring lands inside the project', { item: '921', budgetMs: 60000 }, async function () {
+    const C = need921S5('the tap rings');
+    await withCollab921([layer921('A', { duration: 4 })], async function (c) {
+      const k = clock921(C);
+      const g = rawGuest921(c, 'Sam Lee', '#f472b6');
+      const rings = function () { return Array.prototype.slice.call(document.querySelectorAll('.cb-tap[data-mid="' + g.mid + '"]')); };
+      /* One second of a hand-made client at the 30/s accept cap, a new tap on every frame. */
+      for (let i = 0; i < 30; i++) { g.pr({ tap: { s: 'cv', x: 10 + i * 5, y: 20, k: i + 1 } }); k.step(33); }
+      await frame921();
+      const n = rings().length;
+      if (!n) throw new Error('CONTROL: thirty taps drew no ring at all');
+      if (n > 2) throw new Error('one second of one person’s taps put ' + n + ' rings on the stage at once — the promise is one per person per 600 ms');
+      k.step(700);
+      g.pr({ tap: { s: 'cv', x: 1e5, y: -1e5, k: 500 } });
+      await frame921();
+      const far = rings().pop();
+      const wr = document.getElementById('canvas-wrap').getBoundingClientRect(), fr = far.getBoundingClientRect();
+      if (fr.left > wr.right + 1 || fr.top < wr.top - 1) throw new Error('a tap said to be at (1e5, −1e5) put its ring at ' + Math.round(fr.left) + ',' + Math.round(fr.top) + ', outside the canvas ' + JSON.stringify([Math.round(wr.left), Math.round(wr.top), Math.round(wr.right), Math.round(wr.bottom)]));
+      k.step(700);
+      g.pr({ tap: { s: 'tl', t: 86400, l: null, k: 501 } });
+      await frame921();
+      const tr = rings().filter(function (r) { return r.parentNode && r.parentNode.id === 'tl-inner'; }).pop();
+      if (!tr) throw new Error('CONTROL: a timeline tap drew no ring');
+      const endX = FM.timeline.timeToX(FM.scene.project.duration);
+      if (parseFloat(tr.style.left) > endX + 1) throw new Error('a tap said to be a day into the timeline put its ring at x ' + tr.style.left + ', past the end of the project (' + endX + ') — it widens the timeline’s scroll range while it lives');
+    });
+    C.presence._clock(null);
+  });
+
+  test('921 S5 review: a peer’s pn and af are looked up, never printed — prototype keys and free text show nothing, real ones read as the app names them', { item: '921', budgetMs: 60000 }, async function () {
+    const C = need921S5('the pn and af labels');
+    await withCollab921([layer921('A')], async function (c) {
+      clock921(C);
+      const id = c.ids[0];
+      const g = rawGuest921(c, 'Sam Lee', '#f472b6');
+      FM.selectLayer(id);
+      const where = function () { return C.presence.people().filter(function (p) { return p.mid === g.mid; })[0].where || ''; };
+      g.pr({ sel: [id], pri: id, pn: 'effects' });
+      C.presence.tick();
+      if (!/Effects/.test(where())) throw new Error('CONTROL: a real panel key reads ' + JSON.stringify(where()));
+      g.pr({ sel: [id], pri: id, pn: 'constructor' });
+      C.presence.tick();
+      if (/function|native|constructor/i.test(where())) throw new Error('a peer’s pn of “constructor” printed ' + JSON.stringify(where()) + ' in the Share panel — the label map is a plain object and resolved Object’s own function');
+      g.pr({ sel: [id], pri: id, pn: 'removed you' });
+      C.presence.tick();
+      if (/removed you/.test(where())) throw new Error('a peer’s pn of free text printed ' + JSON.stringify(where()) + ' under their name, as if it were app status');
+      g.pr({ sel: [id], pri: id, act: 'drag', af: 'L/' + id + '/constructor' });
+      C.presence.tick(); C.presence._draw();
+      const line = document.getElementById('collab-insp');
+      if (!line) throw new Error('CONTROL: the inspector line is not up');
+      if (/function|native|constructor/i.test(line.textContent)) throw new Error('an af of “…/constructor” printed ' + JSON.stringify(line.textContent) + ' in the inspector');
+      g.pr({ sel: [id], pri: id, act: 'drag', af: 'L/' + id + '/transform/opacity' });
+      C.presence.tick(); C.presence._draw();
+      if (!/Sam Lee is adjusting Opacity/.test(document.getElementById('collab-insp').textContent)) throw new Error('CONTROL: a real af key reads ' + JSON.stringify(document.getElementById('collab-insp').textContent));
+    });
+    C.presence._clock(null);
   });
 
   /* The one thing that separates this from sanitizeAudioFx, and the reason it is not a copy of it.

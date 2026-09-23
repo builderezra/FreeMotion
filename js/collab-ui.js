@@ -252,15 +252,63 @@ window.FM = window.FM || {};
     return list;
   }
 
-  function personRow(name, color, role, mid, s) {
+  /* S5: what presence knows about one person — here/away, which layer, what they have open — as one
+     line under their name. Also how the phone's one-row solo view names what somebody else is on (§18.4). */
+  function presenceOf(mid) {
+    if (!mid || !C.presence || !C.presence.people) return null;
+    const list = C.presence.people();
+    for (let i = 0; i < list.length; i++) if (list[i].mid === mid) return list[i];
+    return null;
+  }
+  function statusLine(role, pz) {
+    const bits = [role === 'you' ? 'You · Owner' : labelFor(role)];
+    if (pz) {
+      if (pz.st === 'away') bits.push('away');
+      else if (pz.st === 'off') bits.push('offline');
+      if (pz.st !== 'off' && pz.where) bits.push(pz.where);
+      if (pz.following) bits.push('you are following');
+    }
+    return bits.join(' · ');
+  }
+  /* Follow, from either panel. ⚠️ A REFUSED FOLLOW IS SAID, AND THE PANEL STAYS (S5 review): the panel
+     closed whatever `follow()` answered, so tapping Follow on somebody who had just left shut the panel
+     and did nothing at all — no banner, no word. Returns whether it is now following. */
+  function startFollow(mid, name) {
+    if (!C.presence) return false;
+    if (C.presence.follow(mid)) { closeCard(); return true; }
+    const why = C.presence.canFollow ? C.presence.canFollow(mid) : 'left';
+    const who = cleanName(name) || 'They';
+    if (FM.toast) FM.toast(why === 'away' ? who + ' is away right now' : why === 'off' ? who + ' is offline right now'
+      : why === 'gone' ? 'The live link is down — nobody to follow' : who + ' has left', 2600);
+    U.onPeople();
+    return false;
+  }
+  function followItem(mid, name) {
+    const pz = presenceOf(mid);
+    if (!pz || !C.presence) return null;
+    return pz.following
+      ? { label: 'Stop following', action: function () { C.presence.unfollow(); redrawShare(); } }
+      : { label: 'Follow', action: function () { startFollow(mid, name); } };
+  }
+  /* The dot is the legend for everything drawn in that person's colour, so it wears the colour presence
+     DRAWS them in (S5 review): the host re-colours a guest whose colour clashes with somebody already in
+     (paletteFor), and the Share panel went on painting the colour they picked — the same red as his own
+     "You" row, while their outlines on the canvas were orange. */
+  function dotColor(pz, color) { return cleanColor(pz && pz.color) || cleanColor(color) || '#888888'; }
+
+  function personRow(name, color, role, mid, s, pzIn) {
     const li = el('li', 'cs-person');
+    if (mid) li.setAttribute('data-mid', mid);
+    li.setAttribute('data-role', role || '');
+    const pz = pzIn || presenceOf(mid);
     const dot = el('span', 'cs-dot');
-    dot.style.background = cleanColor(color) || '#888888';
+    dot.style.background = dotColor(pz, color);
     li.appendChild(dot);
     const txt = el('div', 'cs-ptext');
     /* textContent — this is the other person's name, typed on their device (§14.9). */
     txt.appendChild(el('div', 'cs-pname', cleanName(name) || 'Someone'));
-    txt.appendChild(el('div', 'cs-prole', role === 'you' ? 'You · Owner' : labelFor(role)));
+    txt.appendChild(el('div', 'cs-prole', statusLine(role, pz)));
+    if (pz && pz.st !== 'here') li.classList.add('cs-away');
     li.appendChild(txt);
     if (mid && s) {
       const b = btn('cs-role', labelFor(role) + ' ▾', function (e) {
@@ -272,6 +320,9 @@ window.FM = window.FM || {};
           return { label: p[1], action: function () { s.setPeerRole(mid, p[0]); redrawShare(); } };
         });
         items.push({ sep: true });
+        /* §19.1: Follow sits in the same menu, between the roles and Remove. */
+        const f = followItem(mid, name);
+        if (f) items.push(f);
         items.push({ label: 'Remove…', danger: true, action: function () { removePerson(s, mid, name); } });
         FM.contextMenu.show(r.left, r.bottom + 4, items);
         e.stopPropagation();
@@ -282,6 +333,7 @@ window.FM = window.FM || {};
     return li;
   }
   function labelFor(role) {
+    if (role === 'owner') return 'Owner';
     for (let i = 0; i < ROLES.length; i++) if (ROLES[i][0] === role) return ROLES[i][1];
     return 'Editor';
   }
@@ -729,6 +781,44 @@ window.FM = window.FM || {};
     return U.knock({ name: cleanName(hello.name), role: (hostRoom.settings.linkRole || 'editor'), dev: hello.dev });
   }
 
+  function followBtn(f, pz) {
+    const t = pz.following ? 'Following' : 'Follow';
+    if (f.textContent !== t) f.textContent = t;
+    f.setAttribute('aria-pressed', pz.following ? 'true' : 'false');
+    f.setAttribute('aria-label', (pz.following ? 'Stop following ' : 'Follow ') + (cleanName(pz.name) || 'them'));
+  }
+  /* Presence calls this whenever what the people panels show would change (S5 review: they were
+     snapshots). The rows are brought up to date IN PLACE — a whole redraw would replace the button under
+     a finger that is half-way through tapping it. Only a guest's list changing membership is redrawn:
+     that list IS presence's, whereas the owner's comes from the member table, which the join and leave
+     paths already redraw. */
+  U.onPeople = function () {
+    if (!card || card.id !== 'collab-share') return;
+    const s = C.session;
+    if (!s) return;
+    const list = (C.presence && C.presence.people) ? C.presence.people() : [];
+    const byMid = Object.create(null);
+    list.forEach(function (pz) { byMid[pz.mid] = pz; });
+    const rows = Array.prototype.slice.call(card.querySelectorAll('.cs-person[data-mid]'));
+    if (!s.isOwner) {
+      const shown = rows.map(function (r) { return r.getAttribute('data-mid'); }).join();
+      if (shown !== list.map(function (pz) { return pz.mid; }).join()) { drawGuestPanel(s); return; }
+    }
+    rows.forEach(function (li) {
+      const pz = byMid[li.getAttribute('data-mid')];
+      if (!pz) return;
+      const role = li.getAttribute('data-role');
+      const line = li.querySelector('.cs-prole');
+      const t = statusLine(role, pz);
+      if (line && line.textContent !== t) line.textContent = t;
+      li.classList.toggle('cs-away', pz.st !== 'here');
+      const dot = li.querySelector('.cs-dot');
+      if (dot) dot.style.background = dotColor(pz, null);
+      const f = li.querySelector('.cs-follow');
+      if (f) followBtn(f, pz);
+    });
+  };
+
   /* The guest's own view of the same card (§19.1 "Guest panel"). */
   function drawGuestPanel(s) {
     const c = openCard('collab-share', { label: 'This shared project' });
@@ -736,6 +826,25 @@ window.FM = window.FM || {};
     c.appendChild(el('div', 'cs-state', s.ended ? 'Ended — your copy stays on this device'
       : s.online === false ? 'Offline — the live link dropped; your changes are kept here' : 'Live'));
     c.appendChild(el('div', 'collab-sub', 'You’re ' + (s.role === 'viewer' ? 'a Viewer' : s.role === 'commenter' ? 'a Commenter' : 'an Editor') + '.'));
+    /* S5 (§19.1 "Guest panel"): who else is in, read-only, each with Follow. The names come from the
+       host's roster via presence, so this is the same list the owner sees, in the same colours. */
+    if (C.presence && C.presence.people) {
+      const list = el('ul', 'cs-people');
+      C.presence.people().forEach(function (pz) {
+        const li = personRow(pz.name, pz.color, pz.role === 'owner' ? 'owner' : pz.role, null, null, pz);
+        li.setAttribute('data-mid', pz.mid);
+        /* The button reads the state when it is PRESSED, not when it was drawn: the row is kept up to
+           date in place (U.onPeople), so what it was drawn with may be minutes old. */
+        const f = btn('cs-role cs-follow', '', function () {
+          if (C.presence.following() === pz.mid) { C.presence.unfollow(); U.onPeople(); }
+          else startFollow(pz.mid, pz.name);
+        });
+        followBtn(f, pz);
+        li.appendChild(f);
+        list.appendChild(li);
+      });
+      if (list.children.length) c.appendChild(list);
+    }
     const foot = el('div', 'cs-foot');
     foot.appendChild(btn('cs-stop', 'Leave', function () {
       /* ⚠️ IT SAID "or delete it from this device" AND HAD NO DELETE BUTTON (queue 921 S3 review).
@@ -971,11 +1080,42 @@ window.FM = window.FM || {};
       const stage = document.getElementById('stage') || document.body;
       stage.appendChild(bannerEl);
     }
-    bannerEl.textContent = text;
+    /* The words in a span of their own, so THEY are what gives when the line is too long (S5 review):
+       as a bare text node beside the × they were an anonymous flex item that cannot shrink, so a long
+       name pushed "Following Alexandra Montgomery ×" past the banner's edge and the × was clipped away. */
+    bannerEl.textContent = '';
+    bannerEl.appendChild(el('span', 'cb-text', text));
     bannerEl.classList.toggle('warn', !!o.warn);
+    /* S5: "Following Sam ×" shares this slot (§18.7), and it is the one state with something to press. */
+    bannerEl.classList.toggle('has-x', typeof o.onClose === 'function');
+    if (typeof o.onClose === 'function') {
+      const x = btn('cb-x', '\u00d7', function (e) { e.stopPropagation(); o.onClose(); });
+      x.setAttribute('aria-label', o.closeLabel || 'Close');
+      bannerEl.appendChild(x);
+    }
     if (bannerTimer) { clearTimeout(bannerTimer); bannerTimer = null; }
     if (o.ms) bannerTimer = setTimeout(U.hideBanner, o.ms);
+    U.placeBanner();
     return bannerEl;
+  };
+  /* ⚠️ THE BANNER CLEARS THE PEOPLE CHIP (S5 review). Both live at the top of the stage: the chip in the
+     left corner, the banner centred with 70 px each side — which the chip outgrows once four or more
+     people are in (three faces and "+1" reach x≈102 at 380 px), and then it sat over the first letters of
+     "View only — ask for edit access". So when centring would put the banner under the chip, it starts
+     just past the chip instead, and may run to 46 px from the right edge (the view bar is 40) to keep
+     its words. Presence calls this whenever the chip changes; `U.banner` whenever the words do. */
+  U.placeBanner = function () {
+    const b = bannerEl;
+    if (!b || !b.parentNode) return;
+    b.style.left = ''; b.style.transform = ''; b.style.maxWidth = '';
+    const chip = document.getElementById('collab-people');
+    if (!chip || chip.parentNode !== b.parentNode || !chip.offsetWidth) return;
+    const sr = b.parentNode.getBoundingClientRect(), cr = chip.getBoundingClientRect(), br = b.getBoundingClientRect();
+    const minL = cr.right - sr.left + 6;
+    if (br.left - sr.left >= minL || cr.bottom <= br.top || cr.top >= br.bottom) return;
+    b.style.transform = 'none';
+    b.style.left = minL + 'px';
+    b.style.maxWidth = Math.max(60, sr.width - 46 - minL) + 'px';
   };
   U.hideBanner = function () {
     if (bannerTimer) { clearTimeout(bannerTimer); bannerTimer = null; }
@@ -994,8 +1134,16 @@ window.FM = window.FM || {};
        so "will send when you reconnect" was untrue. It says what is true instead. */
     if (s.ended) return U.banner('This live session has ended — your copy stays on this device', { warn: true });
     if (s.online === false) return U.banner('Offline — the live link dropped; your changes are kept on this device', { warn: true });
-    if (!s.isOwner && (s.role === 'viewer' || s.role === 'commenter')) return U.banner('View only — ask for edit access');
+    const fl = C.presence && C.presence.followLabel ? C.presence.followLabel() : null;
+    const follow = { onClose: function () { C.presence.unfollow(); }, closeLabel: 'Stop following' };
+    /* ⚠️ A VIEWER WHO FOLLOWS IS TOLD SO, AND GETS THE × (S5 review). The view-only line returned before
+       Follow was ever asked about, so the person most likely to follow — a client watching the edit —
+       saw the playhead start moving by itself under a banner that said nothing about it and offered
+       nothing to press. Both facts are true, so the banner says both. */
+    if (!s.isOwner && (s.role === 'viewer' || s.role === 'commenter')) return fl ? U.banner('View only · ' + fl, follow) : U.banner('View only — ask for edit access');
     if (C._pendingReload && C._pendingReload()) return U.banner('Update ready — it applies when you leave the session');
+    /* Lowest: what he chose to do, below what the session is telling him. */
+    if (fl) return U.banner(fl, follow);
     return U.hideBanner();
   };
 
@@ -1145,7 +1293,13 @@ window.FM = window.FM || {};
      live ENDS it rather than hiding it — a switch that leaves a connection running behind a hidden UI is
      worse than no switch, and he can read the promise off the label. */
   U.syncLabs = function () {
-    if (U.labsOn()) return U.install();
+    if (U.labsOn()) {
+      const r = U.install();
+      /* S5: this is also the one call every settings change makes, so the pointer and selection switches
+         take effect here, on the next frame, rather than at the next thing somebody else does. */
+      if (C.presence && C.presence.refresh) C.presence.refresh();
+      return r;
+    }
     /* ⚠️ `C.end()` IS THE OWNER'S DOOR AND A GUEST WAS BEING PUSHED THROUGH IT (queue 921 S3 review).
        A guest's project is a LINKED copy: its card carries a `collab` record and its layers deliberately
        keep the HOST's ids. `C.end()` stops the session and detaches, but only `C.leave` calls

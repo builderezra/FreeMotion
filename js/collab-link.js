@@ -272,14 +272,21 @@ window.FM = window.FM || {};
       dc.bufferedAmountLowThreshold = Math.floor(st.high / 2);
       dc.onbufferedamountlow = function () { st.waiting = false; pump(name); };
       dc.onmessage = function (e) { onFrame(name, e.data); };
-      if (name === 'ctl') {
-        dc.onopen = function () {
+      /* ⚠️ THE LINK IS OPEN WHEN ALL THREE CHANNELS ARE, NOT WHEN `ctl` IS (queue 921). The three negotiated channels
+         open independently, a few milliseconds apart. `opened` used to resolve on `ctl` alone, so about one pairing in
+         ten had `bulk` still connecting at the moment the link said it was ready — and ep.send on a channel that is not
+         open DROPPED the message and returned false, which nobody checks. Measured: 8 MB sent, "nothing arrived" for
+         150 s, both channels open at the timeout, bufferedAmount never above 0. In the app that is a friend's footage
+         silently never sent. Now each channel's own open re-pumps its queue, and the link opens once all are up. */
+      dc.onopen = function () {
+        pump(name);
+        if (CHANNELS.every(function (n) { return chans[n] && chans[n].dc.readyState === 'open'; }) && !ep.open) {
           ep.open = true;
           if (openedResolve) { openedResolve(ep); openedResolve = null; openedReject = null; }
           if (typeof ep.onopen === 'function') ep.onopen();
-        };
-        dc.onclose = function () { ep.close('channel'); };
-      }
+        }
+      };
+      if (name === 'ctl') dc.onclose = function () { ep.close('channel'); };
       chans[name] = st;
       return st;
     }
@@ -382,7 +389,8 @@ window.FM = window.FM || {};
       if (!ep.open || closed) { ep.dropped++; return false; }
       if (CHANNELS.indexOf(ch) < 0) throw new Error('unknown collab channel ' + ch);
       const st = chans[ch];
-      if (!st || st.dc.readyState !== 'open') { ep.dropped++; return false; }
+      /* A channel that is still CONNECTING queues (its onopen pumps it); only one that is closing or closed drops. */
+      if (!st || st.dc.readyState === 'closing' || st.dc.readyState === 'closed') { ep.dropped++; return false; }
       ep.sent++;
       if (msg instanceof ArrayBuffer || ArrayBuffer.isView(msg)) {
         const bytes = msg instanceof ArrayBuffer ? new Uint8Array(msg) : new Uint8Array(msg.buffer, msg.byteOffset, msg.byteLength);

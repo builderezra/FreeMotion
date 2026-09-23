@@ -55,6 +55,11 @@ window.FM = window.FM || {};
        collabCursors, collabSelections, collabCodesOnly — arrive with the stages that READ them (S5
        presence, S6 the relay); a preference row that changes nothing is worse than no row. */
     collabLabs: false,
+    /* S5 (§18.3, §19.8): whether the other people's pointers and taps, and their selections, are drawn
+       on THIS device. Local preferences — nothing travels — and on by default, because seeing where the
+       others are is the point of the feature. Each hides only its own half. */
+    collabCursors: true,
+    collabSelections: true,
   };
   const DURATIONS = [0.5, 1, 2, 3, 5, 10, 15];
 
@@ -86,7 +91,11 @@ window.FM = window.FM || {};
          ⚠️ The splash in index.html reads the SAME key straight from localStorage, before this file
          exists — so it honoured the choice correctly and then this file overrode it a moment later.
          The dark intro followed by a light home screen was the two halves disagreeing, not two bugs. */
-      ['demoMode', 'showTouches', 'systemFonts', 'homeLight'].forEach(k => { if (typeof saved[k] === 'boolean') state[k] = saved[k]; });
+      /* ⚠️ …AND `collabLabs` WAS MISSING FROM IT TOO — the #688 bug again (queue 921 S5). The Labs switch
+         was saved on every flip and reset to off on every launch, so the collaboration feature switched
+         itself off each time the app was opened; S3's test only asked whether the key EXISTED. The two
+         S5 display switches join it here rather than repeating the mistake. */
+      ['demoMode', 'showTouches', 'systemFonts', 'homeLight', 'collabLabs', 'collabCursors', 'collabSelections'].forEach(k => { if (typeof saved[k] === 'boolean') state[k] = saved[k]; });
       const d = +saved.layerDuration;
       if (isFinite(d) && d > 0 && d <= 60) state.layerDuration = d;
       // hand-editable storage, and this string is handed straight to a canvas fillStyle
@@ -790,6 +799,10 @@ window.FM = window.FM || {};
         me ? me.name : 'Not set yet — you are asked the first time you share or join',
         'Change…', () => ui.profile({ force: true })));
       kids.appendChild(actionRow('Join a live project', 'Paste a code somebody read you.', 'Join…', () => ui.join()));
+      /* S5: the two §19.8 display switches. Local to this device — they change what YOU see, never what
+         the others see of you. `apply()` is not needed: presence reads the setting on every draw. */
+      kids.appendChild(toggleRow('Show others’ pointers', 'Their mouse pointer and their taps, in their colour.', 'collabCursors'));
+      kids.appendChild(toggleRow('Show others’ selections', 'An outline in their colour around the layers they have selected, and a ring on those clips.', 'collabSelections'));
       body.appendChild(group(
         switchRow('Live collaboration (preview)',
           'Edit one project on two devices at once. Nothing goes through a server — the two devices talk to each other directly, and you connect them by reading a code across.',

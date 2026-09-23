@@ -164,6 +164,10 @@ window.FM = window.FM || {};
     onOnline: function () { syncCollabBanner(); },
     onRole: function () { syncCollabBanner(); },
     onEnd: function (why) {
+      /* S5 review: presence goes with the session, here and now. `C.detach` is not called on this path
+         (the session object stays, for the Ended banner and the guest panel), and presence was left
+         ticking behind it — chip, listeners, Follow, and a stale roster closing his text editor. */
+      if (FM.collab && FM.collab.presence) { try { FM.collab.presence.detach(); } catch (e) {} }
       /* “The owner ended this” is NOT an offline state and must not read as one — offline implies it
          comes back, and S3 has no reconnect. Said once, as a toast, and then held in the banner. */
       if (FM.toast) FM.toast(why === 'removed'

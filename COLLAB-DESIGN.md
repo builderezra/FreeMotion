@@ -131,7 +131,7 @@ All are plain classic scripts that attach to `window.FM`. There is no module sys
 | `js/collab-link.js` | `FM.collab.link` | Link interface. `LoopLink` (in-page) and `PostLink` (postMessage, used only by tests). `RtcLink` (RTCPeerConnection, 3 channels, framing, backpressure). Minimal-SDP codec. (≈600) |
 | `js/collab-signal.js` | `FM.collab.signal` | WebCrypto (HKDF, AES-GCM, HMAC, PBKDF2). Invite link and code codec. Envelope. `PeerJsDriver`, `MqttDriver`, `FakeDriver` (tests). Auth handshake. (≈650) |
 | `js/collab-media.js` | `FM.collab.media` | Manifest, want/have, bulk transfer, IndexedDB parts, resume, sameAs, replace/prev, fonts, storage checks, GC. (≈650) — **as built (S4) ≈760**, plus the `#collab-media` progress card; `sameAs` is the manifest's own grouping rather than a wire field (§15 as-built). |
-| `js/collab-presence.js` | `FM.collab.presence` | `pr`/`PR` messages, canvas overlay, timeline paint, remote playheads, people chip, inspector chip, follow, lease UI. (≈750) |
+| `js/collab-presence.js` | `FM.collab.presence` | `pr`/`PR` messages, canvas overlay, timeline paint, remote playheads, people chip, inspector chip, follow, lease UI. (≈750) — **as built (S5) ≈1170**, plus the `roster` and `lease-no` halves of §20 that nothing sent before S5 (see §18 "as built"). |
 | `js/collab-ui.js` | `FM.collab.ui` | Share panel, Join sheet, knock card, banner, profile prompt, iOS landing card, Home hooks, Settings Labs rows. (≈1100) |
 | `js/collab-comments.js` | `FM.collab.comments` | Comments card, composer, ruler marks. (≈400) |
 | `vendor/qrcode-generator.js` | global `qrcode` | MIT, about 20 KB, loaded lazily with `?v=1`. |
@@ -1101,11 +1101,29 @@ reassembled with a hole — a corruption with no error anywhere, because every w
 
 ### 17.2 Leases (exclusive tools)
 
-- **Request:** presence `ls` is set to the tool's target layer while a tool is active: text-edit, mask, point-edit, crop, fill-drag, motion-path (`activeId`), draw, touchup, tracker or graph-editor. The target is `FM.scene.selectedId` unless the tool exposes its own id.
+- **Request:** presence `ls` is set to the tool's target layer while a tool is active: text-edit, mask, point-edit, crop, fill-drag, motion-path (`activeId`), draw, touchup, tracker or graph-editor. The target is `FM.scene.selectedId` unless the tool exposes its own id. **As built after the S5 review: fill-drag and an embedded (auto-started) point-edit are NOT leased** — they start themselves when a panel merely draws; see §18 "The S5 review".
 - **Granting:** the host grants first come, first served, and publishes the lease in `roster.people[].ls`.
 - **Denial:** a conflicting device gets `lease-no{lid, by}`, then `FM.cancelGesturesOn(lid)` and the toast "Sam is editing this — try again when they're done".
 - **Expiry:** the tool closes (`ls:null`), the member disconnects, or 30 s pass without presence.
 - **Delete-anyway:** deleting a leased layer is rejected, and the host's fix re-inserts it. The toast "Sam is editing 'Logo' — it wasn't deleted [Delete anyway]" sends `lr{f:1}`, which revokes the lease.
+
+**As built (S5).** Everything above except Delete-anyway, which is S7's (its toast needs the three-button ask).
+Three things were decided on the way, each in a comment in `js/collab-presence.js` as well:
+
+- **A lease is refused BEFORE it is asked for, and the host still decides.** The presence tick sees a tool come
+  up and knows at once whether somebody else holds that layer — the owner from `host.leases`, a guest from the
+  last `roster` — so the refusal (close the tool through `FM.cancelGesturesOn`, toast "Sam Lee is editing this —
+  try again when they're done") costs no round trip. Two people opening one layer in the same frame are separated
+  by the host: first `pr` wins, the other gets `lease-no{lid, by}` on `ctl`.
+- **⚠️ Only an EDITOR may hold a lease, and only on a layer that exists.** §17.2 grants "first come, first served"
+  with no role in the sentence — but a lease blocks the OWNER's own edits on that layer (`H.local` in
+  collab-host.js), so a viewer, or a hand-made `pr`, that could take one could lock him out of his own project one
+  layer at a time for as long as it kept talking. Measured by `921 S5 a viewer cannot take a lease…`, mutation-
+  proved. A viewer's tools cannot write anyway, so nothing is lost by not recording it.
+- **The toast is throttled per layer (3 s).** A tool that does not close on request would otherwise be told so at
+  the presence rate, fifteen times a second.
+- **The lock shows in two places:** a 14 px lock in the holder's colour on the clip (`.clip .peer-lock`, on a
+  dark backing so it reads on a clip of the same hue) and a lock glyph in the holder's name tag on the canvas.
 
 ---
 
@@ -1195,6 +1213,91 @@ reassembled with a hole — a corruption with no error anywhere, because every w
 - Selection and viewport are **not** mirrored.
 - Following ends on any local `pointerdown` on the canvas, timeline or inspector, or any keydown.
 
+### 18.8 As built (S5)
+
+**Options were drawn first and rendered through the real app** (`tools/shot.py`, a real owner session, three
+virtual guests on real LoopLinks sending real `pr` frames, the real module drawing them; the alternatives are CSS
+or markup variants on top of it). Every PNG is kept, at 380×800 and 1280×900, named `<surface>-<option>-<width>.png`:
+
+| surface | options (recommended first) | why the recommended one |
+|---|---|---|
+| people chip | **A1 stage top-left** · A2 stage top-right · A3 in the top bar | Measured: A2 sits on the view bar when it is open (chip 307–372 × 58–86 against the rail at 340–380 × 59–365 at 380 px). A3 pushed the project name AND the Export button off the phone's bar. A1 clears the canvas at 9:16 and 16:9 at both widths. |
+| canvas selection | **B1 solid primary, dashed rest, one tag** · B2 tinted fill, all solid, a tag on every box · B3 corner brackets | B2's tint recolours the layer he is looking at and loses "which one are they editing"; B3 reads as crop marks and vanishes at phone size. |
+| timeline selection | **C1 ring outside the clip, dots top-right** · C2 underline bar · C3 inset border | C1 leaves the clip's own colour untouched and the dark gap makes a ring in the clip's own hue still read. C3 was mistaken for the clip's border. |
+| remote playhead | **D2 line + initial flag on the ruler** · D1 line + small triangle · D3 ruler marker only | Picked over the spec's bare line (D1): with three or more people a line's colour alone does not say whose it is, and the edge chip already carries the initial — so the initial is now always there, on screen or off. |
+| pointer / tap | **E2 arrow + the same tag the outline wears** (initials on a phone, initials and name on a PC) · E1 arrow + initials only · E3 dot with halo + initials, filled tap | A pointer and an outline in one colour read as one person when they wear one tag. E3's dot hid what was under it. The arrow is 14 px, not §18.3's 12: at 1280 a 12 px arrow next to an 18 px tag read as a speck. |
+
+**Decisions against the letter of §18, each measured, each commented in the code:**
+
+- **Every `pr` carries the WHOLE state, not a delta** (§18.2 read as deltas plus a periodic full). `pres` is
+  unordered and `maxRetransmits:0`, so a lost delta leaves a stale selection on somebody's screen and a late one can
+  put back a selection that was already cleared. The complete state is a few hundred bytes (`sel` ≤ 64, and a frame
+  that would pass 1 KB halves `sel` until it fits); `n` drops a late arrival outright. Still sent only on change,
+  plus the heartbeat. The host's `PR` is split into ≤ 1 KB frames sharing one `n`, and a `full` frame is always
+  taken — a host that reloaded counts from zero again.
+- **The heartbeat is 2 s, not 5.** §22 greys an avatar after 6 s of silence, a number that came from the reliable
+  2 s `ping` S6 builds. With presence the only liveness signal, a 5 s heartbeat on a lossy channel turns ONE dropped
+  frame into a grey face; at 2 s three have to go missing in a row.
+- **The send rate halves under backpressure only on `bufferedAmount`.** The RTT half needs S6's ping; a halving keyed
+  to a number nobody measures would be decoration.
+- **The people chip exists only while a session is live** (§18.5 has it as a "person+" Share button whenever Labs is
+  on). The Share button already lives in both top bars (S3), and §23 promises no presence DOM without a session. Live
+  and alone, the chip IS the person+ invite; with people, their faces (first on top, 3 then "+N", grey for away or
+  silent, dashed for a reused colour, a conic ring with the percentage while their media is still arriving).
+- **`md`** (a joining guest's media %) rides in `pr`: only the guest knows it, and §18.5's ring needs it.
+- **The inspector line sits above `#inspector`, not inside `.panel-title`.** Measured at 1280: that strip is 306 px
+  and the A/S/D key rail occupies 158–294 of it; on a phone `.panel-title` is `display:none`. One slim line, only while
+  somebody else has his selected layer: "Sam Lee is here too", "Sam Lee is adjusting Opacity" (the last key segment of
+  their held path through a small label map, raw key otherwise), "Sam Lee is editing this" while they hold its lease.
+- **Follow compares on the FRAME when paused.** `FM.setTime` snaps to a frame, so an off-grid `ph` compared raw would
+  re-seek, and re-render, on every tick for ever. Playing: past 0.4 s only (D19).
+- **The two display switches (`collabCursors`, `collabSelections`) are local and on by default**, and
+  `collabCursors` also suppresses taps. They are read on every draw and `syncLabs` — the one call every settings
+  change makes — asks presence to redraw.
+- **⚠️ Found on the way, an S3 bug with the #688 shape:** `settings.js` restores booleans through an explicit
+  whitelist and `collabLabs` was never added to it — so the Labs switch was saved on every flip and reset to OFF on
+  every launch, and S3's test only asked whether the key existed. It is in the whitelist now beside the two new keys,
+  and `921 S5 the Labs switch and the two display switches survive a reload` is mutation-proved against dropping it.
+- **Nothing on the phone's track head** (§18.4) — and on the phone's one-row solo view the other people's layers are
+  named in the people rows ("Editor · on 'Logo' · Effects"), which is the same line the owner's Share panel shows.
+- **The Home `.hm-live` badge is still not built.** §4.2 moved it to "S5/S6"; its linked-copy half ("SHARED · last
+  synced") is link-shaped, and a badge that says LIVE on one kind of card and nothing on the other would be half an
+  answer. S6.
+
+**The S5 review (18 findings, each fixed with a `921 S5 review: …` test that fails against the pre-review tree):**
+
+- **Only tools he ENTERS are leased.** §17.2's list included fill-drag and point-edit, but the Colour view of a
+  gradient/image fill starts the fill drag by itself, and the Element view of a drawn shape starts Edit Points by
+  itself (`isEmbedded`) — so LOOKING at a panel locked the layer for everybody, renewed by the heartbeat. Those two
+  still own the canvas (the overlays stand aside) but take no lease; Edit Points entered on purpose still does.
+- **A lease is re-checked on every frame, and a demotion releases it** (`H.setRole` and `leaseFor`): an editor
+  demoted with the text editor open used to keep the layer. A viewer's device no longer sends `ls` at all.
+- **Follow obeys only a current state.** It holds still on a `pr` older than a heartbeat + 1 s, or "playing" with a
+  playhead that has not moved for 1 s, and it ENDS — with a toast saying why — when the person leaves, goes away,
+  reads as offline, or this guest's own link drops. It used to replay a frozen "playing at 12.3" in 0.4 s loops.
+- **A guest's presence ends with its session.** The bridge's `onEnd` detaches presence (the tick does too, as a
+  backstop); an offline guest refuses nothing and paints no lock from its last roster.
+- **On a guest, the host's silence is everybody's:** six seconds with no `PR` or `roster` greys every face. On the
+  owner, the visibility handler sends his "away" at once (a locked phone may never run another tick).
+- **Every `PR` frame fits in 1 KB, the owner's own included** — `fitPr` trims `sel` from the end, never `pri`, at
+  the one place PR frames are built; his own screen still draws his whole selection.
+- **The roster goes to any one peer at most every 500 ms**, never while that peer's `ctl` is backed up, and always
+  the latest list. **Taps:** one ring per person per 600 ms, clamped to the project.
+- **`pn`/`af` are looked up, never printed:** prototype-free label maps, `PN_LABELS` is now the inspector's real view
+  keys, an unknown `af` key reads "a setting" and an unknown panel is not mentioned.
+- **The render hook reads every geometry, then writes, and skips unchanged values** — it runs on every rendered
+  frame. It computes nothing under a tool, with both switches off, or with nobody current. Pointers glide on
+  `transform`, not left/top.
+- **The panels are live:** presence tells an open Share/guest panel when what it shows changes (rows updated in
+  place); a Follow on somebody who has left keeps the panel and says so; the Share panel's dot is the colour
+  presence DRAWS the person in (the host re-colours clashes). Lease refusals name the holder ("Sam Lee is editing
+  this") on both sides.
+- **Two visual changes, rendered and offered as options (rule 16):** at ≥701 px the inspector line is a pill ON THE
+  SEAM above the panel, taking no height from the band (in the flow it scrolled the solved card grid by ~29 px at
+  1280×800 and moved it under his pointer); the phone keeps it in the flow. And the session banner starts just past
+  the people chip when centring would put it under the chip (four+ people at 380 px), with its words in their own
+  ellipsised span so a long "Following …" name can never push the × out.
+
 ---
 
 ## 19. UI surfaces (all behind Labs; draw options first, per rule 16)
@@ -1255,6 +1358,9 @@ the resting view is lean (§19.1's own word) and the exchange is a step you go i
 [Share…] and no "Reset link and code" — all four need the rendezvous (S6). No settings drill-in and no
 "Earlier versions…" (S7 / checkpoints). The "General access" block is therefore one row, *When someone
 joins with a code* [Ask me first | Let them in], which is the code half of §19.1's own segment.
+
+**Guest panel, S5:** adds the people list — read-only, from the host's `roster`, in the same colours the owner
+sees, each row with a [Follow] — and the owner's role menu gains Follow between the roles and Remove (§19.1).
 
 **Guest panel as built:** state, role and [Leave] (which goes through `FM.collab.leave({keep:true})` —
 §12.3's recommended answer). Follow and Comments are S5 / S7.
@@ -1786,6 +1892,38 @@ something nothing will ever do. `t3until921` ticks every instance in the room, t
   - pointer and selection toggles hide overlays
   - the chip overlaps neither `#view-bar` nor the canvas at 380×800 (9:16 and 16:9) and 1280×800
 - **Visible:** yes.
+
+**As built.** `js/collab-presence.js`, the lease UI and Follow, hooks in `collab-core.js` (attach/detach),
+`collab-session.js` (the `pres` channel and presence's half of `ctl`, answered before §8.9's frozen queue like media;
+`onJoin` on hello), `collab-ui.js` (people rows, Follow, the "Following Sam ×" banner state), `settings.js` (the two
+switches, and the `collabLabs` whitelist fix), and the `PRESENCE` section of `styles.css`. The design step and every
+decision are in §18.8. Fifteen tests, all `921 S5 …`, every one failing against HEAD (where the module is absent)
+and every one ALSO mutation-proved against the behaviour it names — seventeen mutations, each keeping the module
+and removing one rule (presence calling requestRender, `collabLabs` out of the whitelist, no dashed secondaries,
+no local lease check, the viewer guard, Follow never ending, the cursor switch ignored, the chip moved onto the
+canvas, detach leaving the canvas layer, the playhead 6 px out, the away face not greyed, the inspector ignoring
+`af`, the guest ignoring `lease-no`, the clip dot without its dark edge, the guest panel empty, a refusal that does
+not close the tool, the lock not painted from the roster):
+
+- `a three-layer remote multi-select draws three outlines — one solid, two dashed — and rings the same three clips…` (PC 1280 AND phone 380 in one test)
+- `two seconds of a remote pointer moving never renders the scene — requestRender and renderScene both stay at zero…` — spies on BOTH, because `FM.setTime` renders without going through `requestRender`; it waits 1.5 s first, because setting up the fixture leaves the app's own debounced re-rasterise and motion-idle sharpen in flight (measured: both landed inside the window and were blamed on the pointer)
+- `a remote playhead sits at timeToX, and one off screen becomes a chip at the lane edge that takes you there`
+- `the people chip shows three faces and +N, the ones away or silent go grey, and alone it is an invite`
+- `follow tracks their playhead within 0.4 s, starts and stops with them, and ends on a local tap`
+- `a text lease: while Sam types in a layer, opening it here is refused with a toast and the lock shows…`
+- `a viewer cannot take a lease, and nobody can lease a layer that does not exist`
+- `a text lease seen from a GUEST: the host's lease-no closes the editor there and says who has it`
+- `the pointer and selection switches hide their own overlays, and only their own`
+- `the people chip overlaps neither the view bar nor the canvas — 9:16 and 16:9 at 380×800, and at 1280×800` (resizes the runner frame's height as well as its width, and opens the view bar)
+- `with no session there is no presence DOM, listener or timer, and ending a session takes all three away`
+- `the inspector says when someone else is on the layer you have open, and what they are adjusting`
+- `the eight person colours read on the dark canvas, are never mistaken for my selection, the keyframes or the playhead, and a clip dot carries a dark edge` — §18.1's contrast test. The palette is KEPT (people already chose from it in S3): lowest canvas contrast 4.35:1, lowest ΔE76 to a reserved colour 28, lowest pair 24. It sits within ΔE 8–14 of some CLIP_COLORS by design, so everything drawn ON a clip carries a dark edge, and the test checks that edge against all eight clip colours
+- `the Labs switch and the two display switches survive a reload`
+- `the guest panel lists who is here, printed as text, each with a Follow`
+
+The S2 inertness test now allows `presence` in the namespace and asserts it holds no session, timer or listener at
+load. The presence footprint is what §23 promises: nothing is built, bound or started until a session on the real app
+attaches it, and `detach()` takes every element, listener, timer and class away.
 
 ### S6 · Links, codes, relay and automatic reconnect
 

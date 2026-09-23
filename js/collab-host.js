@@ -253,7 +253,14 @@ window.FM = window.FM || {};
       delete members[mid];
       Object.keys(leases).forEach(function (lid) { if (leases[lid] === mid) delete leases[lid]; });
     };
-    H.setRole = function (mid, role) { if (members[mid] && ROLES[role]) members[mid].role = role; };
+    /* ⚠️ ONLY AN EDITOR MAY HOLD A LEASE (§17.2), so a demotion lets go of whatever the member held
+       (S5 review). A lease is checked when it is TAKEN; an editor demoted with the text editor open kept
+       the layer, and the owner was refused every edit on it for as long as that editor stayed open. */
+    H.setRole = function (mid, role) {
+      if (!members[mid] || !ROLES[role]) return;
+      members[mid].role = role;
+      if (role !== 'editor') Object.keys(leases).forEach(function (lid) { if (leases[lid] === mid) delete leases[lid]; });
+    };
     H.grantLease = function (lid, mid) { if (!leases[lid]) { leases[lid] = mid; return true; } return leases[lid] === mid; };
     H.releaseLease = function (lid) { delete leases[lid]; };
 

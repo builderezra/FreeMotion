@@ -218,6 +218,10 @@ window.FM = window.FM || {};
     undoHandover = true;
     handoverSession = session;
     if (C.bridge && session.adapter === C.bridge) C.bridge.install();   // a PlainAdapter session has no DOM to listen to
+    /* S5: presence is the only other thing a session switches on, and it too refuses a PlainAdapter
+       session — there is no screen to draw the other people on. Its timer follows `autoTick` like the
+       engine's, so a suite that ticks by hand ticks presence by hand too. */
+    if (C.presence) { try { C.presence.attach(session, o); } catch (e) { C.lastError = e; } }
     if (o.autoTick !== false) {
       const ms = (FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone()) ? C.LIMITS.TICK_PHONE : C.LIMITS.TICK_PC;
       ticker = setInterval(function () { try { session.tick('hot'); } catch (e) { C.lastError = e; } }, ms);
@@ -233,6 +237,8 @@ window.FM = window.FM || {};
     C.role = 'owner';
     if (ticker) { clearInterval(ticker); ticker = null; }
     if (C.bridge) C.bridge.uninstall();
+    /* …and every overlay, listener and timer presence made goes with it (§23: no session, no presence). */
+    if (C.presence) { try { C.presence.detach(); } catch (e) {} }
     if (FM.history && FM.history.syncButtons) FM.history.syncButtons();
     /* §14.8: a service-worker takeover that arrived mid-session was held, because reloading then drops
        the connection and with it anything not yet sent — which reads as "it lost my work". */

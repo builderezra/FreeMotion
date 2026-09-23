@@ -491,7 +491,10 @@ window.FM = window.FM || {};
          bytes as well would stall a transfer for the length of an export and then need the whole
          window re-sent. */
       if (ch === 'bulk') { if (C.media) C.media.onBulk(S, fromMid || (isOwner ? null : 'h'), msg); return; }
-      if (ch !== 'ctl') return;                     // pres is S5
+      /* §18 (S5): presence has its own channel and its own module, and it never touches the document —
+         so it is answered here, before §8.9's frozen/busy queue, exactly like the media bytes above. */
+      if (ch === 'pres') { if (C.presence) { try { C.presence.onPres(S, isOwner ? fromMid : 'h', msg); } catch (e) { C.lastError = e; } } return; }
+      if (ch !== 'ctl') return;
       if (!msg || typeof msg !== 'object') return;
       if (isOwner) return hostMessage(fromMid, msg);
       return guestMessage(msg);
@@ -536,6 +539,8 @@ window.FM = window.FM || {};
     function onHello(mid, msg) {
       const m = host.members[mid] || host.join(mid, { role: msg.role || 'editor', name: msg.name, color: msg.color });
       const have = msg.have || {};
+      /* S5: a member who says hello (joined, or came back) is owed the roster and everybody's state now. */
+      if (C.presence) { try { C.presence.onJoin(S, mid); } catch (e) {} }
       sendTo(mid, { t: 'welcome', mid: mid, epoch: host.epoch, seq: host.seq, role: m.role, proto: C.PROTO, schema: C.SCHEMA_REV });
       if (have.epoch === host.epoch) {
         const tail = host.tail(have.seq || 0);
@@ -549,6 +554,10 @@ window.FM = window.FM || {};
          rather than parked in it (S4). Queueing `want` for the length of an export would stall the
          other device's transfer; queueing `mf` would hide files the export dialog has to ask about. */
       if (C.media && C.media.onCtl(S, 'h', msg)) return;
+      /* …and so is presence's half of `ctl` (S5): who is here (`roster`) and a refused lease (`lease-no`).
+         Queued behind an export, a `lease-no` would leave the text editor open on a layer somebody else
+         holds for as long as the export runs. */
+      if (C.presence && C.presence.onCtl(S, 'h', msg)) return;
       /* §8.9: a guest queues WHOLE incoming messages while frozen or busy, so an export or a half-built
          paste never sees a document somebody else is changing underneath it. */
       if ((frozen() || busy()) && msg.t !== 'welcome') { msgQueue.push({ kind: 'msg', msg: msg }); S.stats.queued++; return; }
@@ -617,7 +626,7 @@ window.FM = window.FM || {};
       applyIncoming((ack.ops || []).concat(ack.fix || []), { own: true, cid: ack.cid });
       adoptOrder(ack.ord);
       if (ack.seq != null) S.bs = Math.max(S.bs, ack.seq);
-      if ((ack.lost && ack.lost.length) || (ack.rej && ack.rej.length)) { forceRefused(ack, entry); onClash(ack); }
+      if ((ack.lost && ack.lost.length) || (ack.rej && ack.rej.length)) { forceRefused(ack, entry); onClash(ack, entry); }
       persistSoon();
     }
 
@@ -649,14 +658,14 @@ window.FM = window.FM || {};
 
     /* §13.4: the clashes are counted and named, and "Save my version as a copy" is offered. `myVersion`
        was taken before the reconnect, so the offer is real rather than a phrase. */
-    function onClash(ack) {
+    function onClash(ack, entry) {
       const lost = (ack.lost || []).length, gone = (ack.rej || []).filter(function (r) { return r[1] === 'gone'; }).length;
       const role = (ack.rej || []).filter(function (r) { return r[1] === 'role'; }).length;
       const lease = (ack.rej || []).filter(function (r) { return r[1] === 'lease'; }).length;
       S.clashes = (S.clashes || 0) + lost + gone;
       /* The WORDING follows S.role, not the reason code: a viewer told "you can only comment" is being
          given the wrong permission to ask for (queue 921 S3 review). */
-      if (role || lease) toast(role ? (S.role === 'viewer' ? 'View only — ask for edit access' : 'You can only comment in this project') : 'Someone else is editing that layer');
+      if (role || lease) toast(role ? (S.role === 'viewer' ? 'View only — ask for edit access' : 'You can only comment in this project') : holderSaid(ack.rej, entry && entry.ops) + ' is editing that layer');
       if (lost || gone) {
         S.lastClash = { lost: lost, gone: gone, at: now() };
         toast(lost + gone + ' of your offline changes clashed with newer edits and were not applied');
@@ -1149,7 +1158,18 @@ window.FM = window.FM || {};
         else applyLive({ o: 's', p: p, v: clone(cur) }, sum);
       }
       if (A.afterApply) A.afterApply(sum);
-      toast('Someone else is editing this');
+      toast(holderSaid(rej, ops) + ' is editing this');
+    }
+    /* §22's "Sam is editing this" (S5 review). Before S5 nothing granted a lease, so "Someone else" was
+       all a refusal could say; presence now knows who holds every layer, so the toast names them. The
+       first refused op's layer is the one asked about; a name nobody knows stays "Someone else". */
+    function holderSaid(rej, ops) {
+      const r = (rej || []).filter(function (x) { return x[1] === 'lease'; })[0];
+      const op = r && ops ? ops[r[0]] : null;
+      const lid = op ? layerIdOf(op) : null;
+      let name = null;
+      if (lid && C.presence && C.presence.holderName) { try { name = C.presence.holderName(lid); } catch (e) { name = null; } }
+      return name || 'Someone else';
     }
 
     return S;
