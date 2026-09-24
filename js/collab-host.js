@@ -226,7 +226,11 @@ window.FM = window.FM || {};
   }
   function validateTx(tx) {
     if (!tx || typeof tx !== 'object') return 'shape';
-    if (!(tx.cid >= 0) || Math.floor(tx.cid) !== tx.cid) return 'cid';
+    /* ⚠️ A SAFE INTEGER, not just a whole number (S8, the adversarial fuzz). `cid: 1e300` passed — it is ≥ 0 and
+       floor() leaves it alone — and became the member's `lastCid`, so every later tx from that device, counted
+       1, 2, 3… as an honest one counts, read as a duplicate of something already done and was dropped without a
+       word for the rest of the session. Past 2^53 a counter cannot even count by one. */
+    if (!Number.isSafeInteger(tx.cid) || tx.cid < 0) return 'cid';
     if (!Array.isArray(tx.ops)) return 'ops';
     if (tx.ops.length > LIM.TX_OPS) return 'ops:count';
     let bytes = 0;
@@ -309,7 +313,8 @@ window.FM = window.FM || {};
         mid: mid, role: ROLES[i.role] ? i.role : 'viewer',
         name: typeof i.name === 'string' ? i.name.slice(0, LIM.NAME) : '',
         color: /^#[0-9a-f]{6}$/i.test(i.color || '') ? i.color : '#888888',
-        lastCid: -1, acks: [], tokens: LIM.TX_BURST, tokenAt: now(), flagged: false
+        lastCid: -1, acks: [], tokens: LIM.TX_BURST, tokenAt: now(), flagged: false,
+        fixTokens: LIM.FIX_BURST, fixAt: now()
       };
       return members[mid];
     };
@@ -568,8 +573,18 @@ window.FM = window.FM || {};
         const rs = D.valueAt(base, op.p);
         if (Array.isArray(rs) && rs.length >= LIM.REPLIES) return 'replies';
       }
-      if (op.o === 's' && isCommentsPath(op.p) && op.p[op.p.length - 1] === 'text' &&
-          typeof op.v === 'string' && op.v.length > LIM.COMMENT) return 'comment';
+      /* ⚠️ S8 review: AND IT IS A STRING, AND `resolved` IS A BOOLEAN — FOR EVERY ROLE. The cap above was
+         measured only `typeof op.v === 'string'`, so a Commenter's `s …/text` carrying an ARRAY of ten
+         199 999-character strings passed every check (each leaf under STRING_LEAF, the whole under
+         OP_VALUE_BYTES) and landed 2 MB in his document per op; `…/resolved` was not looked at at all.
+         Three of those and the owner's autosave hit the localStorage quota: "autosave paused", and every
+         edit after it — his and everybody's — lost on reload. The only values these two fields ever hold
+         are a string and true/false (sanitizeComment writes nothing else). */
+      if (op.o === 's' && isCommentsPath(op.p)) {
+        const last = op.p[op.p.length - 1];
+        if (last === 'text' && (typeof op.v !== 'string' || op.v.length > LIM.COMMENT)) return 'comment';
+        if (last === 'resolved' && typeof op.v !== 'boolean') return 'comment';
+      }
       /* ⚠️ THE SAME CAP, ON THE OP THAT CREATES THE COMMENT. It was enforced only on an EDIT, so the
          identical body sent as the `ai` that makes the comment was stored in full: 199 000 characters
          against a 2000 ceiling, from a commenter, sequenced and broadcast (queue 921). */
@@ -596,6 +611,18 @@ window.FM = window.FM || {};
       const touched = Object.create(null);
       let projectTouched = false, structural = false;
       const guest = !!m && m !== ownerMember() && m.mid !== H.ownerMid;
+      /* S8 review: what every comment together may weigh, measured once per tx (only when the tx touches
+         comments) and counted forward op by op — an overestimate for a set that replaces text, which is the
+         safe side. A guest only: the owner's own device is never role-checked either. */
+      let cBytes = -1;
+      function commentsOver(op) {
+        if (!guest || !op || !isCommentsPath(op.p) || !hasOwn(op, 'v')) return false;
+        if (cBytes < 0) cBytes = canon((base.project && base.project.comments) || []).length;
+        const add = canon(op.v).length + (op.o === 'ai' ? 192 : 0);   // …plus the author and time the host stamps on an insert
+        if (cBytes + add > LIM.COMMENT_BYTES) return true;
+        cBytes += add;
+        return false;
+      }
       for (let i = 0; i < ops.length; i++) {
         /* ⚠️ A GUEST'S WHOLE COMMENT LIST, WHERE BASE ALREADY HAS ONE, BECOMES INSERTS (S7 review). The role
            check ran against the PRE-tx base, so two `s P/comments` in one tx both passed it as "the first
@@ -608,7 +635,7 @@ window.FM = window.FM || {};
           if (resyncOut) resyncOut.push(indexOf(i));          // the sender is handed the real list back
           for (let j = 0; j < ins.length; j++) {
             if (goneRefused(m, ins[j])) continue;             // somebody else's deleted comment is not hers to bring back
-            if (overLimit(ins[j])) { rejOut.push([indexOf(i), 'limit']); break; }
+            if (overLimit(ins[j]) || commentsOver(ins[j])) { rejOut.push([indexOf(i), 'limit']); break; }
             const rop = resolveOp(ins[j], m);
             if (D.apply(base, rop) === 'ok') { accepted.push(rop); projectTouched = true; }
           }
@@ -620,7 +647,7 @@ window.FM = window.FM || {};
         /* §21, against the RAW op (resolveOp clamps a comment, which would make the cap unmeasurable)
            and after the earlier ops in this tx have landed: counting against the PRE-TX base let one
            message of 520 comments through a 500 ceiling, because nothing had been applied yet. */
-        const lim = overLimit(ops[i]);
+        const lim = overLimit(ops[i]) || (commentsOver(ops[i]) ? 'comments' : null);
         if (lim) { rejOut.push([indexOf(i), 'limit']); continue; }
         /* What a comment delete takes away is remembered, so its Undo brings back the right authors. */
         if (ops[i].o === 'ar' && isCommentsPath(ops[i].p) && (ops[i].p.length === 3 || ops[i].p.length === 5)) {
@@ -732,7 +759,7 @@ window.FM = window.FM || {};
       if (!Array.isArray(op.p)) return out;
       const p = (op.o === 'ai') ? op.p.concat(op.k) : op.p;
       const cur = D.valueAt(base, p);
-      if (cur !== undefined) { out.push({ o: 's', p: p, v: clone(cur) }); return out; }
+      if (cur !== undefined) { out.push(presentOp(p, cur)); return out; }
       let at = p;
       for (let n = 2; n <= p.length; n++) {                 // the shallowest prefix that is already absent
         const pre = p.slice(0, n);
@@ -744,6 +771,28 @@ window.FM = window.FM || {};
       else out.push({ o: 'd', p: at });
       return out;
     }
+
+    /* ⚠️ S8 (found by the eight-device fuzz): A KEYED ELEMENT THAT IS STILL HERE IS SAID AS AN `ai`, NOT AN `s`.
+       The sender of a refused `ar` — a Commenter's Undo of her own reply, landing just after the owner made her a
+       Viewer; an Editor deleting an effect on a layer somebody holds — has ALREADY removed that element from its
+       own base and screen. An `s` on the element's path cannot put it back: `apply` finds no element with that
+       key and answers 'gone', so the device kept a document without it for good (a divergence only §11.4's hash
+       could ever notice, ten quiet seconds later, and only if nobody was editing). A refused `am` had the other
+       half of the same hole: the `s` restored the element's fields and left it where the sender had moved it.
+       An `ai` is an upsert WITH a position — it re-inserts what is missing, rewrites what is there, and puts it
+       after the sibling it follows here — which is exactly what `li` already does for a whole layer above. */
+    function presentOp(p, cur) {
+      const last = p[p.length - 1];
+      if (p.length >= 3 && P.isKeyedSeg(last) && isPlainObject(cur)) {
+        const arrPath = p.slice(0, -1);
+        const arr = D.valueAt(base, arrPath);
+        const field = P.keyedField(last);
+        const prev = Array.isArray(arr) ? anchorOf(arr, field, P.keyedValue(last)) : null;
+        return { o: 'ai', p: arrPath, k: last, a: prev == null ? null : P.keyedSeg(field, prev), v: clone(cur) };
+      }
+      return { o: 's', p: p, v: clone(cur) };
+    }
+    H._presentOp = presentOp;
 
     function sequence(by, accepted, fix) {
       if (!accepted.length && !fix.length) return null;
@@ -834,13 +883,32 @@ window.FM = window.FM || {};
       const r = applyAndFix(pass, m, rej, function (i) { return idx[i]; }, resync);          // 7 + 8
       const fix = r.fix.slice();
       const seen = Object.create(null);
+      /* ⚠️ S8 review: THE REPAIR IS A COPY, AND A PEER CHOOSES WHAT IT COPIES. Every refused op names a path or a
+         layer, and the host answers with a clone of what is there now — so a Viewer (who is refused EVERYTHING)
+         sending 500 tiny `mv`s, one per layer id it saw in the snapshot, got the whole document back in one
+         ack, 30 times a second under the token bucket, each one cloned, serialised and queued by the owner's
+         phone, and 64 of them kept in `m.acks`. `catchUp` exists because "a copy of the document is the one
+         thing a peer can make the owner pay for", and this was a second door to the same room. So the repair
+         is budgeted — per tx (FIX_OPS / FIX_BYTES) and per member (FIX_BURST refilled at FIX_PER_SEC) — and
+         whatever does not fit is not dropped: the ack says `resync`, and the sender's copy comes through
+         `catchUp`, which is the one budget a copy of the document is allowed to cost. */
+      const ft = now();
+      m.fixTokens = Math.min(LIM.FIX_BURST, (m.fixTokens == null ? LIM.FIX_BURST : m.fixTokens) + (ft - (m.fixAt || ft)) / 1000 * LIM.FIX_PER_SEC);
+      m.fixAt = ft;
+      let fixN = 0, fixBytes = 0, cut = false;
       rej.concat(lost, resync.map(function (i) { return [i, 'resync']; })).forEach(function (e) {   // 11: current value for refusals
+        if (cut) return;
         const oi = e[0];
         const op = (oi === '*') ? null : tx.ops[oi];
         if (!op) return;
         currentStateOps(op).forEach(function (f) {
-          const k = f.o + '|' + P.key(f.p || ['L', f.id]);
-          if (seen[k]) return; seen[k] = 1; fix.push(f);
+          if (cut) return;
+          const k = f.o + '|' + P.key(f.o === 'ai' ? f.p.concat(f.k) : (f.p || ['L', f.id]));   // two elements of one array are two fixes
+          if (seen[k]) return;
+          const n = canon(f).length;
+          if (fixN >= LIM.FIX_OPS || fixBytes + n > LIM.FIX_BYTES || n > m.fixTokens) { cut = true; return; }
+          seen[k] = 1; fix.push(f);
+          fixN++; fixBytes += n; m.fixTokens -= n;
         });
       });
 
@@ -855,7 +923,12 @@ window.FM = window.FM || {};
          name that means that (queue 921). */
       const ack = { t: 'ack', cid: tx.cid, seq: b ? b.seq : null, at: H.seq, ops: r.accepted, fix: fix, rej: rej, lost: lost };
       if (b && b.ord) ack.ord = b.ord;     // the sender's own resolution may differ; it adopts too
-      m.acks.push(ack);
+      if (cut) ack.resync = 1;
+      /* …and what is KEPT for a resend is not the repair (S8 review): 64 cached acks each carrying a copy of a
+         2 MB document is 128 MB held for one member. A resend of a tx that was refused gets the ack without its
+         repair, and `resync` in its place — the same budgeted copy, only when it is really asked for. */
+      const repaired = fix.length > r.fix.length;
+      m.acks.push(repaired ? Object.assign({}, ack, { fix: r.fix, resync: 1 }) : ack);
       while (m.acks.length > LIM.ACK_CACHE) m.acks.shift();
       return { ack: ack, b: b };
     };

@@ -1156,6 +1156,11 @@ html[data-home="light"] body.home-open .set-action.danger:not(:disabled):hover {
 }
 /* The report boxes: a quiet well inside the white card, with ink that still reads at 11px. */
 html[data-home="light"] body.home-open .set-perf-out { background: #f3f5f9; border-color: rgba(16, 30, 52, .10); color: #46566e; }
+/* Test connection's ✓ and ✕ (S8 review): #57d98a and #ff8a8a are picked to glow on near-black and are 1.7:1 and
+   2.3:1 on this white card — the glyph that answers "does it work here" at a glance, barely there. The same
+   green and red family, dark enough for paper (5.4:1 and 6.5:1 on the card, measured). */
+html[data-home="light"] body.home-open .set-conn-lines .ok { color: #1f7a45; }
+html[data-home="light"] body.home-open .set-conn-lines .no { color: #b3261e; }
 
 /* THE KEYBOARD SHORTCUTS SHEET — the same variables, set on its overlay above; the veil and card below.
    Its Close is hard-coded #0c1c25 by this file (the sticky footer needed an opaque fill of its own), so
@@ -1242,6 +1247,7 @@ html[data-home="light"] .hm-top { border-bottom-color: rgba(16, 30, 52, .10); }
 .collab-scrim.collab-light .cs-sasacts button,
 .collab-scrim.collab-light .cj-clashbtn,
 .collab-scrim.collab-light .cj-paste,
+.collab-scrim.collab-light .cj-fieldrow .cj-scan,
 .collab-scrim.collab-light .cs-foot button {
   background-color: rgba(16, 30, 52, .05); border-color: rgba(16, 30, 52, .14); color: #10151f;
 }
@@ -1271,6 +1277,7 @@ html[data-home="light"] .hm-top { border-bottom-color: rgba(16, 30, 52, .10); }
 .collab-scrim.collab-light .cs-roomcode,
 .collab-scrim.collab-light .cs-copycode,
 .collab-scrim.collab-light .cj-alt { background-color: #ffffff; border-color: rgba(16, 30, 52, .14); color: #10151f; }
+.collab-scrim.collab-light .cj-fieldrow .cj-scan.on { background-color: #1780b4; border-color: #1780b4; color: #ffffff; }   /* S8 */
 .collab-scrim.collab-light .cs-linkrow .cs-copylink.accent,
 .collab-scrim.collab-light .cj-alt.accent { background-color: #1780b4; border-color: #1780b4; color: #ffffff; }
 .collab-scrim.collab-light .cs-relay,

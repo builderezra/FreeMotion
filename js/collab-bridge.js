@@ -171,7 +171,23 @@ window.FM = window.FM || {};
     onRole: function () { if (C.ui && C.ui.onRole) { try { C.ui.onRole(); } catch (e) {} } syncCollabBanner(); },
     onSettings: function () { if (C.ui && C.ui.onSettings) { try { C.ui.onSettings(); } catch (e) {} } },
     /* S7: §17.2's delete-anyway is a toast you can press, and the delete itself is the app's own. */
-    toastAction: function (m, fn) { if (FM.toast) FM.toast(m, 5200, fn); },
+    toastAction: function (m, fn, ms) { if (FM.toast) FM.toast(m, ms || 5200, fn); },
+    /* §13.4 (S8 review): "Save my version as a copy" — `duplicateFrom` is the one copier, with its rollback, and it
+       takes a document that has no card of its own (collab-session.js keeps it before an offline flush). */
+    saveVersion: function (D) {
+      if (!D || !FM.projects || !FM.projects.duplicateFrom) return Promise.resolve(null);
+      const nm = ((FM.scene && FM.scene.project && FM.scene.project.name) || 'Shared project') + ' — my version';
+      return FM.projects.duplicateFrom(D, { name: nm }).then(function (nid) {
+        if (FM.toast) FM.toast(nid ? 'Saved your version on Home as “' + nm + '”' : 'Could not save your version — the device may be full', 3200);
+        if (nid && FM.home && FM.home.refresh) { try { FM.home.refresh(); } catch (e) {} }
+        return nid;
+      }, function () { if (FM.toast) FM.toast('Could not save your version — the device may be full', 3200); return null; });
+    },
+    /* §13.1 (S8 review): the outbox is full (read-only until it drains) or has drained. */
+    onOutboxFull: function () { syncCollabBanner(); },
+    /* S8 review: a guest said `bye` — the UI keeps the room's member table, and a guest who LEFT is not coming back
+       on that token. */
+    onPeerLeft: function (mid, why) { if (C.ui && C.ui.onPeerLeft) { try { C.ui.onPeerLeft(mid, why); } catch (e) {} } },
     deleteLayer: function (id) { if (FM.deleteLayer && FM.layerById && FM.layerById(FM.scene, id)) FM.deleteLayer(id); },
     onEnd: function (why) {
       /* S5 review: presence goes with the session, here and now. `C.detach` is not called on this path

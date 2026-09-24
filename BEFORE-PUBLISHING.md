@@ -64,6 +64,16 @@ Each of these was built from an AM screenshot and needs an original treatment:
   had been mis-read as "duplicate"; v4.44 corrected it to set parenting, which is what the screenshot
   was actually showing. The glyph and its placement are AM's.
 
+- **The Share panel — modelled on GOOGLE DOCS, not Alight Motion (queue 921, live collaboration, S3–S7).**
+  Its whole shape is Docs' share dialog: "Share “name”" as the title, the people list with a role drop-down
+  on each row (Editor / Commenter / Viewer), "General access" with the link below it and [Copy link], and a
+  ⚙ that opens a second page of sharing settings ("Editors can invite others", "Viewers and commenters can
+  export"). The wording follows Docs too — *Editor, Commenter, Viewer*, *Copy link*, *Stop sharing*. That was
+  deliberate (a share dialog people already know how to read is the fastest one to trust), and it is exactly
+  the kind of borrowing this file exists to catch: redraw the panel's layout and find our own words for the
+  roles before it leaves Labs. The presence pieces around it (the initials chip on the stage, the coloured
+  outlines, the playhead flags on the ruler) are our own drawing and can stay.
+
 Our own already: the logo and splash animation (Ezra's), the effect set and its internals, the
 slip ghost, the Apple-squircle corner rounding, the media library, and everything under the hood.
 
@@ -173,6 +183,19 @@ answer in this category, but check rather than assume.
 walks through freezes that screen's design — doing it before the visual-identity work above means
 building it twice.
 
+### Live collaboration: an invite link shows the app to people who never chose to install it
+
+**Queue 921, S8.** Everything above assumed the only people who see FreeMotion before launch are Ezra and
+whoever he hands his phone to. Live collaboration ends that the day it leaves Labs: an invite link opens the
+real app, on a stranger's device, on the Share panel, the Join sheet, the knock card and the comments card —
+so the Alight Motion resemblance in this file (and the Google Docs one in the list above) is shown to people
+outside the circle **before** anything has been published. The same goes for a QR code on his screen in a
+room full of people. So the rule in "Do this before" applies to the first invite he sends to anybody outside
+his own devices, not only to a store listing: settle the identity pass for every screen a guest can reach
+(Home, the editor chrome, the collaboration cards) first — or keep sharing to his own Mac and iPhone, which
+is what Labs is for. **Labs gating stays on until he has tried Mac ↔ iPhone himself (COLLAB-DESIGN.md §29
+Q7).**
+
 ## One thing here is already OURS
 
 **The cursor-proximity glow on the add / layer panel (queue 286, v8.78) is the first piece of visual
@@ -186,6 +209,8 @@ ideas rather than only borrowed ones, and it is a good seed to design the rest o
 ## Do this before
 
 - Any public link Ezra promotes, any store listing, any tutorial or demo video.
+- **Any live-collaboration invite (link, short code or QR) sent to somebody who is not Ezra** — see the
+  section above: the invite IS a public link to the app's UI.
 - Not before then — it costs real time and the app should be worth publishing first.
 
 ## Icons redrawn away from Alight Motion (log them here as they land)

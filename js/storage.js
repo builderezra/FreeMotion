@@ -606,6 +606,60 @@ window.FM = window.FM || {};
     // an export/import. The bound is what protects us; the whitelist was just lossy.)
     p.fps = Math.max(1, Math.min(120, Math.round(+p.fps) || 30));
     p.duration = Math.max(0, Math.min(3600, +p.duration || 0));
+    sanitizeProjectFields(p);
+  }
+  /* ⚠️ THE REST OF THE PROJECT'S KEYS HAVE SHAPES THE APP ASSUMES (queue 921 S8 review). Only the four numbers
+     above were ever checked, and the app reads the others without a guard: `mks.some(mk => !mk.thumb …)` in
+     the play loop's own readout, `P.markers.find(…)` behind the benchmark and thumbnail toggles, and the
+     timeline's `(markers || []).forEach(mk => mk.t …)`. A live Editor's `s P/markers [null]` (or "x") went
+     straight through — the host's only project invariant was THIS function — and playback stopped after one
+     frame, refreshAll threw before it redrew, the controls that could remove the bad entry threw too, and
+     the autosave kept it for every reopen. A hand-edited .fmotion.json is the same door. So every key a
+     peer or a file can reach is put in the shape the app reads, here, where every load, import and every
+     collab batch already passes. Nothing a valid project holds is changed. */
+  function sanitizeProjectFields(p) {
+    if (!p) return;
+    if ('markers' in p) {
+      if (!Array.isArray(p.markers)) p.markers = [];
+      else {
+        const out = [];
+        for (let i = 0; i < p.markers.length && out.length < 1000; i++) {
+          const m = p.markers[i];
+          if (!m || typeof m !== 'object' || Array.isArray(m) || typeof m.t !== 'number' || !isFinite(m.t)) continue;
+          /* EVERY plain field a marker carries is kept, in its own order — not a list of the ones the app writes today.
+             The first version of this kept `t`, `label` and `thumb` only, and a marker saved as {t, name} lost its
+             name on the next load (the round-trip test caught it; the shipping gate refused the release). What a
+             peer or a file must not get through is a SHAPE the app would choke on — an object, an array, a huge
+             string, a prototype name — so that is what is refused. `thumb` stays strictly boolean: the app reads
+             it by truthiness, and "false" is truthy. */
+          const k = {};
+          let n = 0;
+          Object.keys(m).forEach(key => {
+            if (n >= 24 || key in Object.prototype) return;
+            const v = m[key];
+            if (key === 't') { k.t = Math.max(0, Math.min(3600, v)); n++; }
+            else if (key === 'thumb') { if (typeof v === 'boolean') { k.thumb = v; n++; } }
+            else if (typeof v === 'string') { k[key] = v.slice(0, key === 'label' ? 80 : 200); n++; }
+            else if (typeof v === 'boolean' || (typeof v === 'number' && isFinite(v))) { k[key] = v; n++; }
+          });
+          if (!('t' in k)) k.t = Math.max(0, Math.min(3600, m.t));
+          out.push(k);
+        }
+        if (out.length !== p.markers.length || out.some((k, i) => JSON.stringify(k) !== JSON.stringify(p.markers[i]))) p.markers = out;
+      }
+    }
+    if ('name' in p && typeof p.name !== 'string') delete p.name;
+    else if (typeof p.name === 'string' && p.name.length > 200) p.name = p.name.slice(0, 200);
+    if ('background' in p && p.background !== null && !(typeof p.background === 'string' && p.background.length <= 64)) p.background = null;   // null IS a value: transparent
+    ['loopIn', 'loopOut'].forEach(k => { if (k in p && p[k] !== null && !(typeof p[k] === 'number' && isFinite(p[k]))) p[k] = null; });
+    if ('thumbPinned' in p && typeof p.thumbPinned !== 'boolean') p.thumbPinned = false;
+    if ('notes' in p) {
+      if (!Array.isArray(p.notes)) p.notes = [];
+      else {
+        const keep = p.notes.filter(n => n && typeof n === 'object' && !Array.isArray(n) && (n.text == null || typeof n.text === 'string')).slice(0, 500);
+        if (keep.length !== p.notes.length) p.notes = keep;
+      }
+    }
   }
   // An imported layer.fillImage flows straight to img.src / CSS url() on the first render — an external
   // URL there is a zero-click tracking beacon / LAN-probe (SSRF). Only a data:image/ URL is safe (the
@@ -1191,6 +1245,7 @@ window.FM = window.FM || {};
      arithmetic above, which is two sources of truth for one rule and exactly the shape the whitelist-
      drift memory note is about. The bridge uses this; the suite now compares against it. */
   FM.storage._clampProjectDims = clampProjectDims;
+  FM.storage._sanitizeProjectFields = sanitizeProjectFields;
   /* ═══ THE `collab:` CORNER OF INDEXEDDB (queue 921 S2, spec §12.4) ═════════════════════════════
    * Checkpoints, a guest's persisted base and (in S4) media parts all live in the media store under
    * `collab:` keys — which `pruneOrphans` was already taught to skip in S0. Three one-line wrappers,
@@ -2029,7 +2084,12 @@ window.FM = window.FM || {};
       // index the copy BEFORE the (slow, awaited) media copies — killing the tab mid-copy used to
       // strand an invisible doc that no home card showed and pruneOrphans then gutted
       const idx = this.list();
-      idx.unshift(Object.assign({}, src, { id: nid, name: name, created: Date.now(), modified: Date.now(), layers: re.layers.length, thumb: null }));
+      const card = Object.assign({}, src, { id: nid, name: name, created: Date.now(), modified: Date.now(), layers: re.layers.length, thumb: null });
+      /* queue 921 S8 review: A COPY IS NOBODY'S LINKED COPY. `collab` holds a room's sid, key and this device's member
+         token; Duplicate on a shared copy handed all of it to a second card, and both then reconnected as the same
+         member, each displacing the other. detachLinked stripped it afterwards; every copy is made here. */
+      delete card.collab;
+      idx.unshift(card);
       if (!this.saveIndex(idx)) { try { localStorage.removeItem('fm.proj.' + nid); } catch (e) {} return done(false); }
       // duplicate the media blobs under the new layer ids so the copy survives deleting the original
       const wrote = [];

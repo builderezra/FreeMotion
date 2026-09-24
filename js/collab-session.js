@@ -220,6 +220,9 @@ window.FM = window.FM || {};
       if (!isOwner) {
         res = backstop(res);
         if (!res.ops.length) return 0;
+        /* A guest whose outbox is full holds no more (§13.1, S8 review): what was just done is written back from
+           base, the way a Viewer's edit is — before it is recorded, held or queued — until the queue drains. */
+        if (S.outboxFull) { revertToBase(res.ops); return 0; }
       }
       /* §17.2 delete-anyway (S7): a delete the person confirmed carries `f:1`, which the host reads as
          "revoke the lease and take it". Only the layer he said yes for, and only once. */
@@ -274,7 +277,13 @@ window.FM = window.FM || {};
       outstanding.push(entry);
       outboxOps += ops.length;
       outboxBytes += canon(ops).length;
-      if (outboxOps > LIM.OUTBOX_OPS || outboxBytes > LIM.OUTBOX_BYTES) S.outboxFull = true;   // §13.1
+      /* §13.1 (S8 review): past the cap this device turns read-only and says so — the flag was set and nothing
+         read it, so the outbox went on growing past the size it exists to bound. */
+      if (!S.outboxFull && (outboxOps > LIM.OUTBOX_OPS || outboxBytes > LIM.OUTBOX_BYTES)) {
+        S.outboxFull = true;
+        keepMyVersion();
+        if (A.onOutboxFull) { try { A.onOutboxFull(true); } catch (e) {} }
+      }
       if (S.online) flushOutstanding();
       S.stats.tx++;
       return res.ops.length;
@@ -595,8 +604,10 @@ window.FM = window.FM || {};
           return;
         }
         case 'resync':
+          /* Only a member is owed a copy of the document — and only as fast as `catchUp` allows (S8). */
+          if (!host.members[mid]) { strangerNote(mid, 'resync'); return; }
           S.stats.resyncs++;
-          sendTo(mid, host.snapshot());
+          catchUp(mid, null);
           return;
         case 'bye':
           host.part(mid);
@@ -609,6 +620,11 @@ window.FM = window.FM || {};
           if (peers[mid]) { try { peers[mid].close(); } catch (e) {} }
           delete peers[mid];
           delete grants[mid];
+          delete catchBudget[mid];
+          if (C.media && C.media.forget) C.media.forget(S, mid);
+          /* S8 review: the UI owns the room's member table, and a member who LEFT is not coming back on that
+             token (their copy became their own). `paused` and a dropped link are not this. */
+          if (A.onPeerLeft) { try { A.onPeerLeft(mid, typeof msg.why === 'string' ? msg.why.slice(0, 16) : ''); } catch (e) {} }
           return;
         default:
           /* ⚠️ OFFERING A FILE IS AN EDIT (S7 review). A peer's `ann` makes it the SOURCE of a file for a layer,
@@ -627,8 +643,16 @@ window.FM = window.FM || {};
     }
 
     function onHello(mid, msg) {
-      const m = host.members[mid] || host.join(mid, { role: msg.role || 'editor', name: msg.name, color: msg.color });
-      const have = msg.have || {};
+      /* ⚠️ A HELLO NEVER MAKES A MEMBER, AND NEVER NAMES ITS OWN ROLE (queue 921 S8, found by the adversarial
+         fuzz). It used to be `members[mid] || host.join(mid, {role: msg.role || 'editor'})` — so a hello from an
+         endpoint whose member had been dropped (`dropPeer` forgets the member and leaves the endpoint bound; a
+         transport that delivers one more message after its close is all it takes) came back as a member with
+         whatever role it SAID: `{t:'hello', role:'owner'}` was an owner, whose next tx the host took whole —
+         layers, the project, anybody's comments. Membership is minted in exactly one place, `addPeer`, from what
+         the owner's UI decided, and a hello from anywhere else is a stranger's and is not answered. */
+      const m = host.members[mid];
+      if (!m) { strangerNote(mid, 'hello'); return; }
+      const have = (msg.have && typeof msg.have === 'object') ? msg.have : {};
       /* S5: a member who says hello (joined, or came back) is owed the roster and everybody's state now. */
       if (C.presence) { try { C.presence.onJoin(S, mid); } catch (e) {} }
       const welcome = { t: 'welcome', mid: mid, epoch: host.epoch, seq: host.seq, role: m.role, proto: C.PROTO, schema: C.SCHEMA_REV };
@@ -644,11 +668,62 @@ window.FM = window.FM || {};
       sendTo(mid, welcome);
       /* S7: …and the room's switches, as they apply to this member, before a byte of the document. */
       sendSettings(mid);
-      if (have.epoch === host.epoch) {
+      catchUp(mid, have);
+    }
+
+    /* ═══ S8 · A COPY OF THE DOCUMENT IS THE ONE THING A PEER CAN MAKE THE OWNER PAY FOR ═══════════════════
+     * A `hello` and a `resync` are each one small message, and each makes the owner clone, hash and send the
+     * whole document — or a tail of up to the ring's 2000 batches / 8 MB. Nothing limited them: the
+     * adversarial fuzz had a VIEWER ask for a copy on every message it sent, and the owner's device spent the
+     * minute making copies (§14.9 — treat every peer as untrusted, and a Viewer is a peer). An honest device
+     * asks once per connection and once per divergence, which §11.4 already spaces to one per ten seconds;
+     * so each member gets CATCHUP_BURST copies at once and one more every CATCHUP_EVERY. A request over the
+     * budget is not refused — it is OWED, and the newest one wins: the next tick with a token sends it. A
+     * guest that really fell behind therefore still gets exactly one current copy, a little later, and a
+     * flood costs the owner three copies and then one every two seconds, whatever its rate. */
+    const catchBudget = Object.create(null);         // mid -> {tokens, at, owed}
+    function catchToken(mid) {
+      const t = now();
+      let b = catchBudget[mid];
+      if (!b) b = catchBudget[mid] = { tokens: LIM.CATCHUP_BURST, at: t, owed: null };
+      b.tokens = Math.min(LIM.CATCHUP_BURST, b.tokens + (t - b.at) / LIM.CATCHUP_EVERY);
+      b.at = t;
+      if (b.tokens < 1) return false;
+      b.tokens -= 1;
+      return true;
+    }
+    function catchUp(mid, have) {
+      if (!catchToken(mid)) { catchBudget[mid].owed = { have: have }; return false; }
+      catchBudget[mid].owed = null;
+      sendCopy(mid, have);
+      return true;
+    }
+    function sendCopy(mid, have) {
+      if (have && have.epoch === host.epoch) {
         const tail = host.tail(have.seq || 0);
         if (tail) { sendTo(mid, tail); return; }
       }
       sendTo(mid, host.snapshot());
+    }
+    function serveOwed() {
+      const ks = Object.keys(catchBudget);
+      for (let i = 0; i < ks.length; i++) {
+        const mid = ks[i], b = catchBudget[mid];
+        if (!host.members[mid] || !peers[mid]) { delete catchBudget[mid]; continue; }
+        if (b.owed && catchToken(mid)) { const o = b.owed; b.owed = null; sendCopy(mid, o.have); }
+      }
+    }
+    S._catchUp = function (mid) { const b = catchBudget[mid]; return b ? { tokens: b.tokens, owed: !!b.owed } : null; };
+    /* A message from an endpoint with no member behind it — dropped, removed or never let in. Counted, once a
+       second at most, so a flood of them is visible in the diagnostics without being able to fill them. */
+    let strangerAt = 0, strangerN = 0;
+    function strangerNote(mid, what) {
+      strangerN++;
+      const t = now();
+      if (t - strangerAt < 1000) return;
+      strangerAt = t;
+      reports.push({ what: 'stranger', at: t, mid: mid, msg: what, n: strangerN });
+      while (reports.length > 20) reports.shift();       // the same ceiling onHash keeps
     }
 
     function guestMessage(msg) {
@@ -753,6 +828,10 @@ window.FM = window.FM || {};
         outboxOps -= entry.ops.length;
         outboxBytes -= canon(entry.ops).length;
         outstanding.splice(i, 1);
+        if (S.outboxFull && outboxOps <= LIM.OUTBOX_OPS && outboxBytes <= LIM.OUTBOX_BYTES) {
+          S.outboxFull = false;
+          if (A.onOutboxFull) { try { A.onOutboxFull(false); } catch (e) {} }
+        }
       }
       Object.keys(pending).forEach(function (k) { if (pending[k] <= ack.cid) delete pending[k]; });
       flushBefore();
@@ -760,6 +839,9 @@ window.FM = window.FM || {};
       adoptOrder(ack.ord);
       if (ack.seq != null) S.bs = Math.max(S.bs, ack.seq);
       if ((ack.lost && ack.lost.length) || (ack.rej && ack.rej.length)) { forceRefused(ack, entry); onClash(ack, entry); }
+      /* S8 review: the host's repair of what it refused did not all fit its budget (collab-host.js FIX_OPS), so
+         the rest of the truth comes as a copy — asked for once, and paced by the owner's `catchUp`. */
+      if (ack.resync === 1) sendToHost({ t: 'resync', seq: S.bs, h: S.baseHash() });
       persistSoon();
     }
 
@@ -785,6 +867,16 @@ window.FM = window.FM || {};
         dropDeferredUnder(p);          // the deferred map is keyed by the INCOMING path — see dropHeldUnder
 
         const cur = D.valueAt(S.base, p);
+        /* S8: a keyed element that is back in base goes back on screen as an upsert with its place — an `s` on
+           an element this screen has already removed is 'gone' (see collab-host.js `presentOp`). */
+        const last = p[p.length - 1];
+        if (cur !== undefined && p.length >= 3 && P.isKeyedSeg(last) && cur && typeof cur === 'object' && !Array.isArray(cur)) {
+          const arr = D.valueAt(S.base, p.slice(0, -1));
+          const field = P.keyedField(last);
+          const at = Array.isArray(arr) ? P.indexOfKey(arr, field, P.keyedValue(last)) : -1;
+          forced.push({ o: 'ai', p: p.slice(0, -1), k: last, a: at > 0 ? P.keyedSeg(field, arr[at - 1][field]) : null, v: clone(cur) });
+          continue;
+        }
         forced.push(cur === undefined ? { o: 'd', p: p } : { o: 's', p: p, v: clone(cur) });
       }
     }
@@ -804,7 +896,13 @@ window.FM = window.FM || {};
       else if (lease) leaseToast(ack.rej, entry && entry.ops, 'that layer');
       if (lost || gone) {
         S.lastClash = { lost: lost, gone: gone, at: now() };
-        toast(lost + gone + ' of your offline changes clashed with newer edits and were not applied');
+        /* §13.4 (S8 review): [Save my version as a copy] — a real offer now, because the version was kept
+           before the flush. Ten seconds, and only while that version is under ten minutes old. */
+        const mv = S.myVersionKept && (now() - S.myVersionKept.at) < 600000 ? S.myVersionKept : null;
+        const said = lost + gone + ' of your offline changes clashed with newer edits and were not applied';
+        if (mv && A.toastAction && A.saveVersion) {
+          try { A.toastAction(said + ' — tap to save your version as a copy', function () { A.saveVersion(mv.D); }, 10000); } catch (e) {}
+        } else toast(said);
       }
     }
 
@@ -1074,6 +1172,7 @@ window.FM = window.FM || {};
     /* The scheduled work of §9, in one call so the app has one timer and the suite has one entry. */
     S.tick = function (scope) {
       if (!S.active) return 0;
+      if (isOwner) serveOwed();
       drainQueue();
       if (!interacting() && (Object.keys(held).length || deferredOrd)) release();   // settle
       const n = pushLocal(scope || 'hot');
@@ -1165,6 +1264,7 @@ window.FM = window.FM || {};
       S.cid += 1;
       for (let i = 0; i < ops.length; i++) if (ops[i].o === 's' || ops[i].o === 'd') pending[P.key(ops[i].p)] = S.cid;
       outstanding.push({ cid: S.cid, ops: ops, sent: false, queued: true });
+      keepMyVersion();                          // §13.2 step 5: a reload's recovered work is offline work too
       return ops.length;
     };
 
@@ -1189,11 +1289,21 @@ window.FM = window.FM || {};
       if (!on) { markOffline(); return; }
       S.online = true;
       lastHeard = now();
+      keepMyVersion();
       /* Reconnect (§13.2): say where we are and let the host choose tail or snap. */
       sendToHost(helloMsg());
       if (A.onOnline) try { A.onOnline(); } catch (e) {}
     };
     S.myVersion = function () { return clone({ project: view().project, layers: view().layers }); };
+    /* §13.2 step 5 (S8 review): "before sending, keep myVersion = clone(D live) for 10 minutes". Nothing kept it —
+       `myVersion()` above had no caller, and by the time a clash toast could have used it the acks had already
+       put the other editor's values into live. Kept at the one moment it is still this device's version: when
+       there is offline work to send and it has not gone yet. */
+    S.myVersionKept = null;
+    function keepMyVersion() {
+      if (isOwner || !outstanding.some(function (e) { return !e.sent; })) return;
+      S.myVersionKept = { D: S.myVersion(), at: now() };
+    }
 
     /* §4.2 storage hook: media a deleted layer still needs, because undo can bring it back. */
     S.reachable = function (id) {
@@ -1321,7 +1431,10 @@ window.FM = window.FM || {};
       return true;
     };
     S._settingsFor = settingsFor;
-    S.dropPeer = function (mid) { host.part(mid); delete peers[mid]; delete grants[mid]; };
+    S.dropPeer = function (mid) {
+      host.part(mid); delete peers[mid]; delete grants[mid]; delete catchBudget[mid];
+      if (C.media && C.media.forget) C.media.forget(S, mid);     // S8: nothing keyed by a member outlives it
+    };
     S.peerIds = function () { return Object.keys(peers); };
 
     /* ── the seams §15's media module reaches the wire through (S4) ───────────────────────────────
@@ -1708,6 +1821,9 @@ window.FM = window.FM || {};
 
   /* §12.3. `keep` is the recommended answer and the default: his copy becomes his, with new layer ids
      so a later rejoin cannot collide with it. */
+  let leaving = 0;
+  /* A Leave is still copying the project into his own (collab-ui.js resumeOpen must not start a second copy). */
+  C.leaving = function () { return leaving > 0; };
   C.leave = function (opts) {
     const o = opts || {};
     const s = C.session;
@@ -1724,10 +1840,20 @@ window.FM = window.FM || {};
        whose card carries no `collab` record is not a linked copy, whatever the session believes. */
     const card = ((FM.projects && FM.projects.list()) || []).filter(function (p) { return p.id === gpid; })[0];
     if (!card || !card.collab) { s.stop('left'); C.detach(); return Promise.resolve(null); }
+    /* ⚠️ S8 review: THE CARD IS MARKED LEFT FIRST, AND A WAITING APP UPDATE WAITS FOR THE COPY. `C.detach` runs a
+       deferred service-worker reload synchronously, so an update that had landed during the session reloaded
+       the page before `detachLinked` had copied a byte — and the linked card, untouched, reconnected on the
+       next open (the owner still accepts its token): he was back in the room he had just left, sending his
+       edits into Ezra's project. A failed copy (a full phone) did the same without any update. Marked `ended`
+       before anything else, a copy that never finishes becoming his is still never dialled again, and the
+       reload runs once the copy has settled either way. */
+    try { if (FM.projects.patchCollab) FM.projects.patchCollab(gpid, { ended: 'left' }); } catch (e) {}
+    leaving++;
     s.stop('left');
-    C.detach();
-    if (o.keep === false) return FM.projects.remove(gpid).then(function () { return null; });
-    return FM.projects.detachLinked(gpid);
+    C.detach({ holdReload: true });
+    const settled = function (v) { leaving = Math.max(0, leaving - 1); C.runPendingReload(); return v; };
+    const job = (o.keep === false) ? FM.projects.remove(gpid).then(function () { return null; }) : FM.projects.detachLinked(gpid);
+    return Promise.resolve(job).then(settled, function (e) { settled(); throw e; });
   };
 
   /* §12.4's guest reload recovery, and the only piece of §12.2 that runs when nothing was clicked: the

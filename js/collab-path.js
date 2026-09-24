@@ -27,7 +27,20 @@ window.FM = window.FM || {};
      ⚠️ A `{__proto__:1}` literal would NOT have worked as a lookup table — that syntax sets the
      prototype rather than an own key — so this is a list, checked by ===. */
   const FORBIDDEN = ['__proto__', 'constructor', 'prototype'];
-  const KEYVAL_RE = /^[\w.-]{1,64}$/;      // the id/uid inside a #i:/#u: segment, and a layer id
+  /* ⚠️ S8 (the adversarial fuzz): AN ID IS NEVER THE NAME OF SOMETHING EVERY OBJECT ALREADY HAS. `[\w.-]{1,64}`
+     let an Editor insert layers called `__proto__`, `constructor`, `toString`, `hasOwnProperty` — the host
+     sequenced them, every device applied them and the owner's autosave wrote them into his project. Collab is
+     the ONE door a peer-chosen layer id comes in by without being re-minted (storage's import re-ids every
+     layer), and the app keys plain `{}` tables by layer id in places (a selection set, an export's media
+     table): there `set['toString']` is truthy for a layer nobody selected and `media['__proto__'] = …` sets a
+     prototype instead of a key. Nothing the app mints can be one of these (FM.uid's `l_…`, comments' `c_…`,
+     8-character uids), so refusing them costs nothing. A FIXED list, never read from `Object.prototype` at
+     run time: two browsers must agree to the letter on what is a valid id, or one device's keyed array is
+     the other's atomic one. */
+  const PROTO_NAMES = ['__proto__', '__defineGetter__', '__defineSetter__', '__lookupGetter__', '__lookupSetter__',
+    'constructor', 'hasOwnProperty', 'isPrototypeOf', 'propertyIsEnumerable', 'toLocaleString', 'toString', 'valueOf', 'prototype'];
+  const NOT_PROTO = '(?!(?:' + PROTO_NAMES.join('|') + ')$)';
+  const KEYVAL_RE = new RegExp('^' + NOT_PROTO + '[\\w.-]{1,64}$');   // the id/uid inside a #i:/#u: segment, and a layer id
 
   function escSeg(s) { return String(s).replace(/~/g, '~0').replace(/\//g, '~1'); }
   /* ~1 before ~0, the JSON-Pointer order: the other way round turns an escaped literal "~1" back into
@@ -166,7 +179,27 @@ window.FM = window.FM || {};
      same deterministic derived writes (autoFitDuration, _fillFxParams, inheritLoopModes) without them
      turning into a message storm between peers — each one computes the same value, the diff sees no
      difference, and nothing is sent. Mutating it is one of the §25.6 mutation proofs. */
-  function eq(a, b) { return canon(a) === canon(b); }
+  /* ⚠️ S8: THE ANSWER IS STILL canon(a) === canon(b) — the fast paths below are that comparison, decided
+     without building two strings. Measured at 500 layers under a 4× CPU throttle, the commit hook's full
+     diff was 24 ms of a 27 ms commit against §26 S8's 30 ms budget, and nearly every call it makes lands
+     HERE with two numbers or two strings — one leaf of one layer — where canon is two JSON.stringify calls
+     to learn what `===` already knows. Each shortcut is exact, not approximate, and each is checked
+     against canon itself by `921 S8 a 500-layer project…` over every leaf pair it can construct:
+       · a === b          → canon of one value is canon of the same value (NaN is the one value !== itself,
+                            and it falls through to canon, which says 'null' for both);
+       · two strings       → canon is JSON.stringify, which is injective on strings;
+       · two booleans      → 'true' / 'false';
+       · two numbers       → canon maps every non-finite number to 'null' and -0 to 0 (already === 0),
+                            and is injective on the rest. */
+  function eq(a, b) {
+    if (a === b) return true;
+    const ta = typeof a;
+    if (ta === typeof b) {
+      if (ta === 'string' || ta === 'boolean') return false;
+      if (ta === 'number') return !isFinite(a) && !isFinite(b);
+    }
+    return canon(a) === canon(b);
+  }
 
   /* cyrb53 — a 53-bit non-cryptographic hash. Used for the divergence detector (§11.4), for `bh` on
      removals (§6.1) and for the schema fingerprint. Never for security. */
@@ -263,7 +296,7 @@ window.FM = window.FM || {};
   /* The sanitizers keep a uid only when it matches this (storage.js `keepUid`, queue 921 S0). Minting
      anything else would produce a uid the next load throws away, and the array would silently go
      atomic on one device and keyed on another. */
-  const UID_RE = /^[a-z0-9]{4,16}$/;
+  const UID_RE = new RegExp('^' + NOT_PROTO + '[a-z0-9]{4,16}$');      // S8: `constructor` is eleven lowercase letters
   function mintUid(rand) {
     let s = '';
     const r = rand || Math.random;

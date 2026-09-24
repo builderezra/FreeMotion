@@ -4924,6 +4924,14 @@ body:not(.home-open) #hm-grain::after { animation-play-state: paused; }
 .hm-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .hm-thumb-empty { font-size: 26px; opacity: .25; }
 .hm-dur { position: absolute; bottom: 5px; left: 5px; font-size: 9.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: #fff; background: rgba(8, 11, 17, .78); border-radius: 6px; padding: 2px 6px; }
+/* §19.6 (queue 921 S8 review): the thumbnail's free bottom-right corner — "LIVE · n" while he hosts this project,
+   "SHARED" (with the owner's colour) on somebody else's copy. The duration's plate, so it reads as one family. */
+.hm-live { position: absolute; bottom: 5px; right: 5px; display: inline-flex; align-items: center; gap: 4px; font-size: 8px; font-weight: 800; letter-spacing: .6px; line-height: 1; color: #fff; background: rgba(8, 11, 17, .78); border-radius: 6px; padding: 3px 6px; white-space: nowrap; }
+.hm-live:not(.hm-shared) { background: rgba(224, 49, 49, .88); }
+/* "● SHARED" is wider than the room beside the duration on an 86 px thumbnail (measured: it sat over "0:03"), so a
+   shared copy's badge sits ABOVE the duration instead — the one corner of the stack that is always free. */
+.hm-live.hm-shared { right: auto; left: 5px; bottom: 25px; }
+.hm-live-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; box-shadow: 0 0 0 1px rgba(0, 0, 0, .35) inset; }
 /* Pinned indicator (queue 138). Ezra asked for "a little design indicator … you decide".
    Top-RIGHT because the other two corners are taken: OPEN sits top-left, the duration bottom-left.
    Same dark plate and radius as .hm-dur so it reads as one family of thumb badges rather than a new
@@ -10041,6 +10049,11 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
 }
 .collab-media.warn { border-color: rgba(224, 49, 49, .55); }
 .collab-media.warn .cm-bar { background: #ff8a8a; }
+/* S8 review: "Not now" is a deferral, so the card that says the clips are blank carries the way back. */
+.collab-media .cm-now {
+  display: block; margin-top: 8px; min-height: 36px; padding: 0 14px; border-radius: 10px;
+  border: 0; background: var(--accent); color: #0b0e14; font-weight: 700; font-size: 13px; cursor: pointer;   /* the accent buttons' own dark ink */
+}
 
 /* §15.10: a clip whose picture has not arrived says so where the clip is, rather than being blank. */
 .clip.cm-missing { outline: 1px dashed rgba(255, 255, 255, .28); outline-offset: -1px; }
@@ -10433,6 +10446,8 @@ body.collab-ro #btn-split, body.collab-ro #vb-camera, body.collab-ro #drop-hint 
 .cc-av { width: 22px; height: 22px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 9.5px; font-weight: 800; color: #111; box-shadow: 0 0 0 1px rgba(0, 0, 0, .18) inset; }
 .cc-name { font-weight: 800; font-size: 13px; color: #23211a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .cc-time { font-size: 11.5px; color: #9a8f74; white-space: nowrap; }
+/* S8 review: the one mark on a byline another device cannot choose (collab-comments.js `byline`). */
+.cc-owner { flex: none; padding: 1px 6px; border-radius: 5px; background: #23211a; color: #fff6d6; font-size: 10px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase; }
 .cc-pin { display: inline-block; margin: 6px 0 0; padding: 2px 8px; border: 0; border-radius: 6px; background: #ffe7a0; color: #6b4f00; font-size: 11.5px; font-weight: 700; cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cc-text { font-size: 14px; line-height: 1.42; color: #23211a; margin-top: 5px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .cc-reply { margin: 8px 0 0 12px; padding-left: 10px; border-left: 2px solid #efe0b4; }
@@ -10484,6 +10499,15 @@ body.collab-ro #btn-split, body.collab-ro #vb-camera, body.collab-ro #drop-hint 
    toast (60). Lifted only while the card is open, and still under FM.ask (3200). */
 body.cc-open #ctx-menu, body.cc-open .collab-knock { z-index: 3100; }
 body.cc-open #toast { z-index: 3150; }
+/* S8 review: …and the same for every other collaboration card. The scrim is 222, so a toast raised from the
+   Share panel, the Join sheet or the iPhone landing card ("Link copied", "Invite copied", the copy and paste
+   failures, the phone host's keep-open warning) was painted under the card that raised it. 225 is above the
+   scrim and still under every modal that can open over a card (#fm-ask 3200, #ctx-menu 300). It cannot eat a
+   tap meant for the card beneath it: only a toast that IS a button takes pointer events. */
+body.collab-card-open #toast { z-index: 225; }
+/* …and a copy the browser refused is put in a field under the button that asked, selected (collab-ui.js copyPlain). */
+.cs-copyfield { display: block; width: 100%; box-sizing: border-box; margin-top: 8px; font-size: 12px; }
+body.collab-card-open #toast:not(.toast-tap) { pointer-events: none; }
 .cs-vstatus { margin-top: 4px; font-weight: 600; color: var(--text); }
 .cs-vstatus.warn { color: #ffb347; }
 /* …and "Earlier versions…" opens on the light Home now (collab-ui.js `U.versions`), where every one of these
@@ -10499,3 +10523,30 @@ body.cc-open #toast { z-index: 3150; }
 @media (min-width: 701px) {
   .cc-scrim { align-items: center; padding: 20px; }
 }
+
+/* ═══ COLLAB S8 (#921) — THE QR SCANNER AND THE TEST-CONNECTION ROW (§19.2, §19.8, §25.5) ══════════════════
+   The scanner is a square button beside Paste (the field keeps its width on a 380 px phone), and the camera
+   opens in the sheet under the field — never full screen, so Cancel and Join stay where they were. */
+.cj-fieldrow .cj-scan {
+  flex: 0 0 auto; width: 44px; min-height: 42px; padding: 0; border-radius: 9px; border: 1px solid var(--line);
+  background: var(--panel-2); color: var(--text); cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+}
+.cj-fieldrow .cj-scan.on { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
+.cj-scanner { position: relative; margin-top: 10px; border-radius: 12px; overflow: hidden; background: #000; }
+/* S8 review: 30svh at most — in iPhone Safari's 82svh card a 42vh camera left no room for the rest of the sheet. */
+.cj-scanvid { display: block; width: 100%; aspect-ratio: 4 / 3; max-height: min(42vh, 30svh); object-fit: cover; background: #000; }
+/* A square guide in the middle: where the code should sit. Pointer-transparent, so it never eats a tap. */
+.cj-scanframe {
+  position: absolute; left: 50%; top: calc(50% - 16px); width: min(56%, 42vh); aspect-ratio: 1; transform: translate(-50%, -50%);
+  border: 2px solid rgba(255, 255, 255, .85); border-radius: 14px; box-shadow: 0 0 0 999px rgba(0, 0, 0, .28); pointer-events: none;
+}
+.cj-scanline { position: relative; padding: 8px 10px; font-size: 12.5px; line-height: 1.4; color: #e6e9ef; background: rgba(12, 14, 20, .92); overflow-wrap: anywhere; }
+
+/* Settings → Labs → Test connection: what worked, one line each, in the Reports' monospace box. */
+.set-conn-lines { margin: 8px 0 0; padding: 0; list-style: none; font-size: 13px; line-height: 1.45; }
+.set-conn-lines li { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; overflow-wrap: anywhere; }
+.set-conn-lines .ok { color: #57d98a; font-weight: 700; flex: 0 0 auto; }
+.set-conn-lines .no { color: #ff8a8a; font-weight: 700; flex: 0 0 auto; }
+.set-conn-lines .skip { color: var(--text-dim); font-weight: 700; flex: 0 0 auto; }
+/* Thumb-sized on a phone: the row's two buttons are the whole of what it asks him to do. */
+.set-conn .set-perf-btns .set-action { min-height: 40px; }

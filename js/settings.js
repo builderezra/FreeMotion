@@ -806,6 +806,55 @@ window.FM = window.FM || {};
         me ? me.name : 'Not set yet — you are asked the first time you share or join',
         'Change…', () => ui.profile({ force: true })));
       kids.appendChild(actionRow('Join a live project', 'Paste an invite link, or type the short code somebody read you.', 'Join…', () => ui.join()));
+      /* S8 (§25.5): "Test connection". Not an actionRow — that shuts the panel, and the answer IS this row. Nothing
+         is tried until the button is tapped (§23); the result is one sentence per question and the numbers behind
+         them in the same copyable box the Reports use, kept as `fm.lastConnReport`. */
+      if (ui.testConnection) {
+        const cw = el('div', 'set-row set-perf set-conn'); cw.id = 'set-conn';
+        const ch = el('div', 'set-rowtext');
+        ch.appendChild(el('div', 'set-label', 'Test connection'));
+        ch.appendChild(el('div', 'set-hint', 'Tries the free connection services and this device’s live connections, then says plainly what works on this network. Nothing about your projects is sent.'));
+        const cb = el('div', 'set-perf-btns');
+        const tb = el('button', 'set-action set-conn-go', 'Test'); tb.type = 'button';
+        const cc = el('button', 'set-action', 'Copy'); cc.type = 'button';
+        const lines = el('ul', 'set-conn-lines');
+        const cout = el('pre', 'set-perf-out');
+        let last = '';
+        try { last = localStorage.getItem('fm.lastConnReport') || ''; } catch (e) {}
+        cout.textContent = last || 'Nothing yet — tap Test.';
+        cc.disabled = !last;
+        tb.addEventListener('click', () => {
+          tb.disabled = true; tb.textContent = 'Testing…';
+          lines.textContent = '';
+          const wait = el('li'); wait.appendChild(el('span', 'skip', '…')); wait.appendChild(el('span', null, 'Trying — this takes up to ten seconds.'));
+          lines.appendChild(wait);
+          ui.testConnection().then(r => {
+            lines.textContent = '';
+            r.lines.forEach(x => {
+              const li = el('li');
+              li.appendChild(el('span', x.st, x.st === 'ok' ? '✓' : x.st === 'no' ? '✕' : '–'));
+              li.appendChild(el('span', null, x.text));
+              lines.appendChild(li);
+            });
+            cout.textContent = r.report; cc.disabled = false;
+          }, e => { lines.textContent = ''; const li = el('li'); li.appendChild(el('span', 'no', '✕')); li.appendChild(el('span', null, 'The test itself failed: ' + ((e && e.message) || e))); lines.appendChild(li); })
+            .then(() => { tb.disabled = false; tb.textContent = 'Test again'; });
+        });
+        /* S8 review: the answer is SAID ON THE BUTTON. A toast from this panel is painted under .set-scrim (see the
+           Clear buttons above), so "Copied" was never seen and a tap looked like it did nothing. */
+        let ccT = 0;
+        const ccSay = (t) => { clearTimeout(ccT); cc.textContent = t; ccT = setTimeout(() => { cc.textContent = 'Copy'; }, 1800); };
+        cc.addEventListener('click', async () => {
+          try { await navigator.clipboard.writeText(cout.textContent); ccSay('Copied ✓'); }
+          catch (e) {
+            ccSay('Select it ↓');
+            try { const rg = document.createRange(); rg.selectNodeContents(cout); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rg); } catch (e2) {}
+          }
+        });
+        cb.append(tb, cc);
+        cw.append(ch, cb, lines, cout);
+        kids.appendChild(cw);
+      }
       /* S6 (§19.8): Codes only. toggleRow → `apply()` → `syncLabs()`, which stops any relay already running
          the moment it goes on — the switch is a promise about sockets, not about the next session. */
       kids.appendChild(toggleRow('Connect with codes only', 'No free relay at all: nothing but the two devices. Invite links and short codes stop working — you swap a long code with each person instead.', 'collabCodesOnly'));

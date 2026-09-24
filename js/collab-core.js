@@ -61,6 +61,23 @@ window.FM = window.FM || {};
        DERIVED from the knock it is waiting on, plus the room a handshake and a snapshot need. */
     JOIN_WAIT: 120000 + 20000,
     ACK_CACHE: 64,                         // §7.1 step 3: the acks kept per member for a resend
+    /* S8: a copy of the document (a hello's tail or snapshot, a resync) per member — three at once, then one
+       every two seconds; a request past that is owed, not refused (collab-session.js `catchUp`). */
+    CATCHUP_BURST: 3, CATCHUP_EVERY: 2000,
+    /* S8 review: the host's CURRENT VALUE for refused ops (§7.1 step 11) is a copy of whatever they named — a
+       Viewer naming every layer was handed the whole document per tx. Per tx at most FIX_OPS ops / FIX_BYTES,
+       and per member a budget of FIX_BURST bytes refilled at FIX_PER_SEC; past either the ack says `resync`
+       and the copy goes through `catchUp`'s budget instead. */
+    FIX_OPS: 200, FIX_BYTES: 512 * 1024, FIX_BURST: 1024 * 1024, FIX_PER_SEC: 256 * 1024,
+    /* S8 review: everything in `P/comments` together. The count caps multiply to ~200 M characters, all of it
+       writable by the lowest writable role, in a document that autosaves into a ~5 MB localStorage. */
+    COMMENT_BYTES: 1024 * 1024,
+    /* S8 review: envelopes a rendezvous will try to OPEN per room per second (one decrypt per member key in the
+       hub), before any of them has proved it is anybody's. Honest traffic is a few a minute. */
+    ENV_PER_SEC: 20, ENV_BURST: 60,
+    /* S8 review: a removed member's token is kept only to sign "removed" to its device — REVOKED_TELLS answers
+       at most, one at a time and never in a member's slot, and then its envelopes stop opening at all. */
+    REVOKED_TELLS: 3,
     /* ═══ S6: the relay and the reconnect (§13.5, §14.3, §14.4, §22) ═══
        §13.5's schedule: every 3 s for two minutes, every 10 s to ten minutes, every 30 s after that.
        ⚠️ OFFERS_PER_MIN IS PER SENDER, and OFFERS_ALL_PER_MIN caps the room (S6, measured against the
@@ -253,7 +270,7 @@ window.FM = window.FM || {};
     return session;
   };
 
-  C.detach = function () {
+  C.detach = function (opts) {
     const s = C.session;
     C.session = null;
     C.active = false;
@@ -271,8 +288,17 @@ window.FM = window.FM || {};
     if (FM.history && FM.history.syncButtons) FM.history.syncButtons();
     /* §14.8: a service-worker takeover that arrived mid-session was held, because reloading then drops
        the connection and with it anything not yet sent — which reads as "it lost my work". */
-    if (pendingReload) { pendingReload = false; try { C._reload(); } catch (e) {} }
+    /* ⚠️ …EXCEPT WHEN THE CALLER STILL HAS WORK TO FINISH (S8 review): Leave copies the linked project into his own
+       AFTER the session lets go, and a reload fired here unloaded the page in the middle of that copy. It calls
+       `runPendingReload` once the copy has settled. */
+    if (!(opts && opts.holdReload)) C.runPendingReload();
     return s;
+  };
+  C.runPendingReload = function () {
+    if (!pendingReload || C.session) return false;
+    pendingReload = false;
+    try { C._reload(); } catch (e) {}
+    return true;
   };
 
   C.beforeSnap = function () { const s = S(); if (s) s.beforeSnap(); };
@@ -339,19 +365,32 @@ window.FM = window.FM || {};
     if (!s || !C.active || s.ended || s.active === false) return 'owner';
     return s.isOwner ? 'owner' : (s.role === 'viewer' || s.role === 'commenter' ? s.role : 'editor');
   };
-  C.readOnly = function () { const r = C.myRole(); return r === 'viewer' || r === 'commenter'; };
+  function roleReadOnly() { const r = C.myRole(); return r === 'viewer' || r === 'commenter'; }
+  /* …and a guest holding as many offline changes as §13.1 allows (5000 ops / 4 MB) is read-only until they are
+     sent (S8 review: the flag was set and nothing read it). The session writes back anything that slips past. */
+  C.readOnly = function () {
+    if (roleReadOnly()) return true;
+    const s = C.session;
+    return !!(s && C.active && !s.isOwner && !s.ended && s.outboxFull);
+  };
   C.canComment = function () { return C.myRole() !== 'viewer'; };
   /* The owner's room settings as this device last heard them (§20 `settings`). An owner reads his own. */
   C.roomSettings = function () { const s = C.session; return (s && s.roomSettings) || {}; };
   /* D11: viewers and commenters may export unless the owner turned it off. Everyone else always may. */
-  C.canExport = function () { return !C.readOnly() || C.roomSettings().roExport !== false; };
+  C.canExport = function () { return !roleReadOnly() || C.roomSettings().roExport !== false; };
   /* Somebody else would see a change right now — the question the canvas-size confirm asks (D10). */
   C.othersHere = function () {
     const s = C.session;
     if (!s || !C.active || s.ended || s.active === false) return false;
     return s.isOwner ? !!(s.peerIds && s.peerIds().length) : true;
   };
-  C.deferReload = function () { pendingReload = true; return true; };
+  /* S8 review: …and the banner says so the moment it happens ("Update ready — it applies when you leave the
+     session"), not at whatever next repaints it. */
+  C.deferReload = function () {
+    pendingReload = true;
+    if (C.ui && C.ui.syncBanner) { try { C.ui.syncBanner(); } catch (e) {} }
+    return true;
+  };
   /* One level of indirection, purely so the DEFERRAL is testable. A suite that could not stand in for
      the reload could only ever assert that a flag was set, which is the half of the rule that does not
      matter; the half that does is that the reload happens when the session lets go, and `location.reload`

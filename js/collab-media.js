@@ -52,7 +52,13 @@ window.FM = window.FM || {};
     PART_TTL: 7 * 24 * 3600 * 1000, // §12.4 — parts older than a week are nobody's resume point
     SWEEP: 1500,                    // §9's sweep rule applied to media: notice what nothing announced
     NAME_MAX: 200,                  // a file name is a peer's string
-    TRIES: 2                        // §14.9 — a file that arrives broken twice is not asked for a third time
+    TRIES: 2,                       // §14.9 — a file that arrives broken twice is not asked for a third time
+    /* S8 review: fonts are the one thing this file writes OUTSIDE the project — into the font index, where
+       `rehydrateAll` puts every one back on every boot, for every project. An Editor writes the text layers
+       that decide which fonts are "used", so per session at most this many, and this many bytes, are taken;
+       and a font this session installed that no project uses when it ends is taken out again (`M.detach`). */
+    FONTS_SESSION: 12,
+    FONT_SESSION_BYTES: 24 * 1024 * 1024
   });
   M.LIMITS = LIM;
 
@@ -114,6 +120,42 @@ window.FM = window.FM || {};
 
   function ctlOf(S) { return S && S._media ? S._media : null; }
 
+  /* ⚠️ S8 review: THE MEDIA STORE IS ONE STORE, KEYED BY LAYER ID, FOR EVERY PROJECT ON THIS DEVICE — and a
+     peer writes layer ids. The promise at the top of this file ("never a layer id that is not in the OPEN
+     project's document") was kept by asking the open document, and the open document is exactly what an
+     Editor edits: `li` with the id of a layer in one of his OTHER projects (ids travel in every exported
+     file and every copy he ever shared), and `scanLocal` read that project's clip off disk and served it to
+     the room; at `mediaRev + 1` a transfer wrote over it, with no `prev:` copy. The same-device refusal
+     (§12.2 check 3) runs once, at the join, and never on anything that arrives after it.
+     So the ids that are someone ELSE's here are named once, when the session starts: every layer of every
+     other project doc on this device, and every media-library key the open project does not itself use.
+     App ids are unique across projects by construction (every import and every copy re-ids), so an id in
+     that set is never legitimately this project's — and no read, stash, copy or write below touches one. */
+  function foreignIds(S) {
+    const out = Object.create(null);
+    const pid = S && S.pid ? String(S.pid) : null;
+    const own = Object.create(null);
+    try {
+      const v = S && S.adapter && S.adapter.view ? S.adapter.view() : null;
+      ((v && v.layers) || []).forEach(function (l) { if (l && typeof l.id === 'string') own[l.id] = 1; });
+    } catch (e) {}
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k || k.indexOf('fm.proj.') !== 0 || (pid && k === 'fm.proj.' + pid)) continue;
+        let d = null;
+        try { d = JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { d = null; }
+        const ls = d && Array.isArray(d.layers) ? d.layers : [];
+        for (let j = 0; j < ls.length; j++) if (ls[j] && typeof ls[j].id === 'string') out[ls[j].id] = 1;
+      }
+    } catch (e) {}
+    try {
+      if (FM.mediaLib && FM.mediaLib.keys) (FM.mediaLib.keys() || []).forEach(function (k) { if (typeof k === 'string' && !own[k]) out[k] = 1; });
+    } catch (e) {}
+    return out;
+  }
+  function isForeign(ctl, lid) { return !!(ctl && ctl.foreign && typeof lid === 'string' && ctl.foreign[lid]); }
+
   M.install = function (S, opts) {
     if (!S) return null;
     if (S._media) return S._media;
@@ -146,9 +188,17 @@ window.FM = window.FM || {};
       tries: Object.create(null),     // fid -> attempts that ended in a file this device could not use
       bad: Object.create(null),       // fid -> 1 once this device has stopped asking for it
       capped: false,                  // "Get what fits" is in force — a budget spent to 0 is still a budget
+      deferred: Object.create(null),  // fid -> 1: skipped by "Not now" / "Skip media" — still missing, still said (S8 review)
+      skipWhy: null,                  // 'big' ("Not now") | 'space' ("Skip media")
+      fontN: 0, fontBytes: 0,         // fonts taken this session (S8 review, FONTS_SESSION)
+      fontsIn: Object.create(null),   // font id -> css, for the fonts THIS session installed
+      /* S8 review: the layer ids that belong to his OTHER projects (or to the media library) on this device,
+         read once, when the session starts — see `foreignIds`. */
+      foreign: null,
       stats: { sentBytes: 0, gotBytes: 0, localCopies: 0, resumed: 0, wants: 0, writes: 0 }
     };
     S._media = ctl;
+    ctl.foreign = foreignIds(S);
     /* §15.10's markers are CLASSES AND CHILDREN ON `.clip` ELEMENTS, and the timeline replaces every
        one of those on each rebuild — a pinch, a clip drag, a file landing. The only repaint was behind
        a flag that a data FRAME sets, so a rebuild during a stall, between two files, or before the
@@ -173,10 +223,38 @@ window.FM = window.FM || {};
        failing on a device that looks empty. Fire and forget, and NEVER forced: this room's own parts
        are still somebody's resume point (§15.7); what goes is what the rooms before it left behind. */
     try { M._gc = M.gcParts({ sid: ctl.sid, ctl: ctl }).catch(function () { return 0; }); } catch (e) {}
+    try { M._gcFonts = gcFonts(ctl.fontsIn).catch(function () { return 0; }); } catch (e) {}
     S._media = null;
     M.ui.hide();
     return true;
   };
+
+  /* S8 review: a font this session installed and that no text layer in any project on this device uses when it
+     ends goes back out of the font index — the Editor who made the layers that asked for it may have deleted
+     them since, and `rehydrateAll` would otherwise register it on every boot for good. Read from the project
+     docs on disk AND the live scene (the last autosave may be 600 ms behind). */
+  async function gcFonts(fontsIn) {
+    const ids = Object.keys(fontsIn || {});
+    if (!ids.length || !FM.fonts || !FM.fonts.remove) return 0;
+    const used = Object.create(null);
+    const see = function (ls) { (ls || []).forEach(function (l) { if (l && l.type === 'text' && typeof l.fontFamily === 'string') used[l.fontFamily] = 1; }); };
+    try { see(FM.scene && FM.scene.layers); } catch (e) {}
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k || k.indexOf('fm.proj.') !== 0) continue;
+        let d = null;
+        try { d = JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { d = null; }
+        see(d && d.layers);
+      }
+    } catch (e) { return 0; }
+    let n = 0;
+    for (let i = 0; i < ids.length; i++) {
+      if (used[fontsIn[ids[i]]]) continue;
+      try { await FM.fonts.remove(ids[i]); n++; } catch (e) {}
+    }
+    return n;
+  }
 
   M.state = function (S) {
     const ctl = ctlOf(S || C.session);
@@ -197,15 +275,21 @@ window.FM = window.FM || {};
     const ctl = ctlOf(S || C.session);
     if (!ctl) return { n: 0, pct: 100, bytes: 0 };
     const n = ctl.queue.length + Object.keys(ctl.inb).length + ctl.held.length;
-    return { n: n, bytes: Math.max(0, ctl.bytesWant - ctl.bytesGot), pct: ctl.bytesWant ? Math.min(100, Math.round(ctl.bytesGot / ctl.bytesWant * 100)) : 100 };
+    return { n: n, skipped: deferredN(ctl), bytes: Math.max(0, ctl.bytesWant - ctl.bytesGot), pct: ctl.bytesWant ? Math.min(100, Math.round(ctl.bytesGot / ctl.bytesWant * 100)) : 100 };
   };
+  /* The files "Not now" / "Skip media" left behind that are still not here (S8 review). */
+  function deferredN(ctl) {
+    let n = 0;
+    Object.keys(ctl.deferred).forEach(function (fid) { if (!ctl.have[fid] && !ctl.wanted[fid] && !ctl.bad[fid]) n++; });
+    return n;
+  }
   /* Which layers in the open document are still without their picture — the timeline paints these. */
   M.missingLayers = function (S) {
     const ctl = ctlOf(S || C.session);
     const out = Object.create(null);
     if (!ctl) return out;
     Object.keys(ctl.peer).forEach(function (fid) {
-      if (ctl.have[fid] || !ctl.wanted[fid]) return;
+      if (ctl.have[fid] || (!ctl.wanted[fid] && !ctl.deferred[fid])) return;
       const e = ctl.peer[fid];
       const inb = ctl.inb[fid];
       const pct = inb && e.size ? Math.min(99, Math.round(inb.got / e.size * 100)) : 0;
@@ -227,6 +311,7 @@ window.FM = window.FM || {};
     for (let i = 0; i < layers.length; i++) {
       const L = layers[i];
       if (!carriesMedia(L)) continue;
+      if (isForeign(ctl, L.id)) continue;                  // S8 review: another project's clip is never offered from here
       const rev = L.mediaRev || 0;
       let rec = FM.media.get(L.id);
       if (!rec || !rec.file || (rec.rev || 0) !== rev) {
@@ -337,6 +422,13 @@ window.FM = window.FM || {};
     const S = ctl.S;
     const all = Object.keys(ctl.mine);
     const targets = S.isOwner ? S.peerIds() : ['h'];
+    /* ⚠️ S8 (the one-hour soak): WHAT WE TOLD SOMEBODY IS KEPT ONLY WHILE THEY ARE HERE. `told` is one table per
+       member — every file's stamp — and nothing ever removed one, so a session grew a table for every person
+       who ever joined, left or reconnected under a new id, for as long as it ran. A member who comes back is
+       simply told again, which is what a device that has just reconnected needs anyway. */
+    const here = Object.create(null);
+    for (let i = 0; i < targets.length; i++) here[targets[i]] = 1;
+    Object.keys(ctl.told).forEach(function (m) { if (!here[m]) delete ctl.told[m]; });
     for (let t = 0; t < targets.length; t++) {
       const to = targets[t];
       const seen = ctl.told[to] || (ctl.told[to] = Object.create(null));
@@ -356,9 +448,18 @@ window.FM = window.FM || {};
   }
 
   /* ═══ RECEIVING A MANIFEST ════════════════════════════════════════════════════════════════════ */
+  /* ⚠️ S8: WHAT PEERS TELL US IS CAPPED, AS A WHOLE AND PER ENTRY. `onManifest` read at most 4000 entries of
+     one message and then kept every new fid for the life of the session, and merged every layer pair a delta
+     named into the entry it already had — so a peer that kept announcing new names grew `ctl.peer` without
+     limit, and `planWants` walks all of it on every sweep (the adversarial fuzz). A project holds at most
+     §21's 2000 layers, so no honest room names more than that many files plus its fonts: past PEER_MAX new
+     fids are not taken (entries already known still merge), and one entry never lists more layers than a
+     project can hold. */
+  const PEER_MAX = 4000, LAYERS_PER_ENTRY = 2000;
   function onManifest(ctl, fromMid, msg) {
     const lists = [msg.files, msg.fonts];
     let n = 0;
+    let room = PEER_MAX - Object.keys(ctl.peer).length;
     for (let k = 0; k < lists.length; k++) {
       const arr = lists[k];
       if (!Array.isArray(arr)) continue;
@@ -374,7 +475,7 @@ window.FM = window.FM || {};
         if (prev) {
           const seen = Object.create(null);
           prev.layers.forEach(function (p) { seen[p[0] + '@' + p[1]] = 1; });
-          e.layers.forEach(function (p) { if (!seen[p[0] + '@' + p[1]]) prev.layers.push(p); });
+          e.layers.forEach(function (p) { if (!seen[p[0] + '@' + p[1]] && prev.layers.length < LAYERS_PER_ENTRY) { seen[p[0] + '@' + p[1]] = 1; prev.layers.push(p); } });
           /* ⚠️ `miss` AND `from` ARE THE TWO FIELDS A DELTA MOVES, AND A STRANGER MUST NOT MOVE THEM
              (§14.9). Everything else above merges or is left alone; these two were taken from whoever
              spoke last. `miss` makes `planWants` skip the entry for the rest of the session — including
@@ -396,6 +497,8 @@ window.FM = window.FM || {};
              and §15.8's card asked about a clip that could never arrive on every export forever. */
           if (prev.miss && ctl.inb[e.fid]) abort(ctl, e.fid, 'miss');
         } else {
+          if (room <= 0) continue;
+          room--;
           ctl.peer[e.fid] = e;
         }
         n++;
@@ -435,6 +538,7 @@ window.FM = window.FM || {};
     for (let i = 0; i < layers.length; i++) {
       const L = layers[i];
       if (!carriesMedia(L)) continue;
+      if (isForeign(ctl, L.id)) continue;                  // S8 review: …nor stashed over (`prev:` is one slot per id)
       const rev = L.mediaRev || 0;
       const was = ctl.revs[L.id];
       if (was === rev) continue;
@@ -499,7 +603,21 @@ window.FM = window.FM || {};
     const v = ctl.S.adapter.view();
     const layers = (v && v.layers) || [];
     const byId = Object.create(null);
-    layers.forEach(function (l) { if (l && l.id) byId[l.id] = l; });
+    /* ⚠️ S8 (the adversarial fuzz): WHAT THE DOCUMENT USES DECIDES WHAT IS ASKED FOR, not what a peer offers.
+       Both halves of that were missing. A font was wanted whenever a peer announced one — `fontHere` asks "is
+       it installed already", never "does any text here use it" — so an Editor's `ann` of a thousand FMF…
+       families made this device download every one and `applyEmbedded` wrote each into the font index for
+       good (`rehydrateAll` puts them back on every boot). And a file was wanted for ANY layer id the manifest
+       named, a shape and a text layer included: `writeRecord` then stored the peer's bytes against a layer
+       that has no picture to show, in his IndexedDB, where nothing would ever look at them or collect them.
+       So: a font only while a text layer here uses its family — the same rule `scanLocal` advertises by, so
+       an honest peer loses nothing — and bytes only for a layer that carries media. */
+    const usedFonts = Object.create(null);
+    layers.forEach(function (l) {
+      if (!l || !l.id) return;
+      byId[l.id] = l;
+      if (l.type === 'text' && typeof l.fontFamily === 'string') usedFonts[l.fontFamily] = 1;
+    });
     const fids = Object.keys(ctl.peer);
     const fresh = [];
     let want = 0;
@@ -511,6 +629,7 @@ window.FM = window.FM || {};
       if (e.kind === 'font') {
         if (e.size > LIM.FONT_MAX) { ctl.bad[fid] = 1; continue; }   // §15.9, for a stale entry that got past takeEntry
         if (ctl.have[fid] || fontHere(e)) { ctl.have[fid] = 1; continue; }
+        if (!usedFonts[e.css]) continue;                     // nothing here writes in it (yet): not asked for, not marked
         if (!ctl.wanted[fid]) fresh.push({ fid: fid, e: e, key: orderKey(ctl, e) });
         want += e.size;
         continue;
@@ -523,6 +642,8 @@ window.FM = window.FM || {};
         const lid = e.layers[j][0], rev = e.layers[j][1];
         const L = byId[lid];
         if (!L) continue;
+        if (!carriesMedia(L)) continue;                      // S8: a shape or a text layer has no picture to receive
+        if (isForeign(ctl, lid)) continue;                   // S8 review: an id of one of his OTHER projects — never asked for, never written
         /* ⚠️ AND NOT A LAYER THAT HAS MOVED PAST THIS FILE. If he replaced that clip here, or imported
            one into a layer whose shared bytes had not landed yet, the layer is at a HIGHER `mediaRev`
            and the file this entry names is the OLD one — asking for it is asking to be handed the thing
@@ -559,7 +680,16 @@ window.FM = window.FM || {};
        and so could never be shown at all. What he saw instead, for the rest of the session, was
        "Receiving media · 3 of 17 · 41%" with a bar frozen forever. The local-copy pass above still
        runs, because a file already on this device costs no room. */
-    if (ctl.skip) { ctl.bytesWant = ctl.bytesGot + want; return; }
+    /* ⚠️ S8 review: …AND A SKIPPED FILE IS STILL A MISSING FILE. "Not now" and "Skip media" returned before
+       anything was `wanted`, and `wanted` is what the timeline's missing marker, the card and the export's
+       "clips are still arriving" question all read — so after one "Not now" the clips were blank with no
+       marker, the card was gone, and an export rendered the video without its footage and without a word.
+       Deferred files are remembered, painted as missing, named by the card (which offers [Download now]) and
+       asked about by the export. The byte budget below is untouched: nothing is queued or moved. */
+    if (ctl.skip) {
+      if (!ctl.full) fresh.forEach(function (f) { ctl.deferred[f.fid] = 1; });
+      ctl.bytesWant = ctl.bytesGot + want; return;
+    }
     if (!fresh.length) { ctl.bytesWant = ctl.bytesGot + want; return; }
 
     fresh.sort(function (a, b) { return a.key - b.key; });
@@ -570,7 +700,7 @@ window.FM = window.FM || {};
       const total = fresh.reduce(function (a, x) { return a + x.e.size; }, 0);
       const biggest = fresh.reduce(function (a, x) { return Math.max(a, x.e.size); }, 0);
       const ok = await roomCheck(ctl, total, biggest);
-      if (!ok) return;
+      if (!ok) { if (ctl.skip && !ctl.full) fresh.forEach(function (f) { ctl.deferred[f.fid] = 1; }); M.ui.sync(ctl); return; }
     }
     for (let i = 0; i < fresh.length; i++) {
       const f = fresh[i];
@@ -586,7 +716,18 @@ window.FM = window.FM || {};
         if (f.e.size > ctl.cap) { ctl.bad[f.fid] = 1; ctl.failed++; continue; }
         ctl.cap -= f.e.size;
       }
+      /* ⚠️ S8 review: "USED BY A TEXT LAYER" IS A CONDITION THE EDITOR WRITES. The rule above stops fonts nobody
+         uses — and an Editor who wants a hundred fonts in his font index simply makes a hundred text layers
+         (or switches one layer's family after each font lands), each under §15.4's once-per-session question.
+         So a session takes at most FONTS_SESSION fonts and FONT_SESSION_BYTES of them; past that a font is not
+         asked for (its text falls back, which is what it did before the font existed), and the ones it did
+         take are collected at the end if nothing uses them any more (`M.detach`). */
+      if (f.e.kind === 'font') {
+        if (ctl.fontN >= LIM.FONTS_SESSION || ctl.fontBytes + f.e.size > LIM.FONT_SESSION_BYTES) { ctl.bad[f.fid] = 1; continue; }
+        ctl.fontN++; ctl.fontBytes += f.e.size;
+      }
       ctl.wanted[f.fid] = 1;
+      delete ctl.deferred[f.fid];
       ctl.queue.push(f.fid);
       ctl.files++;
       ctl.bytesWant += f.e.size;
@@ -622,7 +763,7 @@ window.FM = window.FM || {};
           + 'Taking what fits keeps the rest of the project working — the clips that do not fit stay on the other device.',
         ok: 'Get what fits', cancel: 'Skip media'
       });
-      if (!yes) { ctl.skip = true; M.ui.sync(ctl); return false; }
+      if (!yes) { ctl.skip = true; ctl.skipWhy = 'space'; M.ui.sync(ctl); return false; }
       /* The budget leaves the largest file's worth of headroom, because a part file and the finished
          file are both on disk for the moment between the last part landing and the parts being
          deleted (§15.6). Filling to the brim is how a device with room for the file runs out during
@@ -638,7 +779,7 @@ window.FM = window.FM || {};
         message: 'The shared project has ' + mb(total) + ' of clips. They will download in the background — you can start editing now either way.',
         ok: 'Download', cancel: 'Not now'
       });
-      if (!yes) { ctl.skip = true; M.ui.sync(ctl); return false; }
+      if (!yes) { ctl.skip = true; ctl.skipWhy = 'big'; M.ui.sync(ctl); return false; }
     }
     return true;
   }
@@ -651,6 +792,21 @@ window.FM = window.FM || {};
     if (!FM.ask) return Promise.resolve(true);
     return FM.ask(opts).then(function (v) { return !!v; }, function () { return false; });
   }
+
+  /* S8 review: [Download now] on the card — "Not now" was a deferral, and this is the way back. After "Not now"
+     the size was already agreed to by this tap, so nothing is asked again; after "Skip media" (no room) the
+     room question is asked again, because the answer to it may have changed. */
+  M.resume = function (S) {
+    const ctl = ctlOf(S || C.session);
+    if (!ctl || !ctl.skip || ctl.full) return false;
+    ctl.skip = false;
+    ctl.asked = ctl.skipWhy !== 'space';
+    ctl.skipWhy = null;
+    ctl.deferred = Object.create(null);
+    ctl.cardHidden = null;
+    kick(ctl);
+    return true;
+  };
 
   /* ═══ THE PUMP ════════════════════════════════════════════════════════════════════════════════ */
   function pump(ctl) {
@@ -962,7 +1118,17 @@ window.FM = window.FM || {};
       try {
         if (FM.fonts && FM.fonts.applyEmbedded) {
           const durl = await new Promise(function (res) { const r = new FileReader(); r.onload = function () { res(r.result); }; r.onerror = function () { res(null); }; r.readAsDataURL(file); });
-          if (durl) { await FM.fonts.applyEmbedded({ x: { name: e.name, family: e.family, css: e.css, dataURL: durl } }); ok = true; }
+          if (durl) {
+            const had = fontHere(e);
+            await FM.fonts.applyEmbedded({ x: { name: e.name, family: e.family, css: e.css, dataURL: durl } });
+            ok = true;
+            /* S8 review: which font THIS session put in the index, so the end of the session can take it back
+               out if nothing uses it (`gcFonts`). One that was already here is his, and never collected. */
+            if (!had) {
+              const got = (FM.fonts.list() || []).filter(function (x) { return x && x.family === e.family; })[0];
+              if (got && got.id) ctl.fontsIn[got.id] = got.css || e.css;
+            }
+          }
         }
       } catch (x) { ok = false; }
       ctl.have[e.fid] = 1;
@@ -981,6 +1147,8 @@ window.FM = window.FM || {};
     for (let i = 0; i < e.layers.length; i++) {
       const lid = e.layers[i][0], rev = e.layers[i][1];
       if (!byId[lid]) continue;                                   // not a layer of the open document
+      if (!carriesMedia(byId[lid])) continue;                     // S8: …nor one that has no picture (it may have changed type since the want)
+      if (isForeign(ctl, lid)) continue;                          // S8 review: …nor one of his other projects' ids
       /* ⚠️ AND NOT OVER A PICTURE THAT IS ALREADY AHEAD OF THIS FILE (queue 921 S4). The want was
          planned when the transfer STARTED, and on a 400 MB clip over a phone that is minutes ago: if he
          replaced that clip in the meantime, or imported one into a layer whose shared bytes had not
@@ -1021,6 +1189,8 @@ window.FM = window.FM || {};
      with no element is a clip that appears at the next boot, and an element with no record is a clip
      that disappears at the next boot. */
   async function writeRecord(ctl, lid, rev, file, kind) {
+    /* The last door, for a caller that forgot the rule above: nothing is written, and it is not an error. */
+    if (isForeign(ctl, lid)) return true;
     FM._mediaBusy = (FM._mediaBusy || 0) + 1;
     let ok = false;
     try { ok = await FM.storage.writeMedia(lid, { file: file, kind: kind, rev: rev || 0 }); }
@@ -1056,8 +1226,15 @@ window.FM = window.FM || {};
         return true;
       }
       case 'ok': {
+        /* ⚠️ S8 (the adversarial fuzz): ONLY FROM THE PEER THE TRANSFER GOES TO, AND NEVER PAST WHAT WAS SENT.
+           `upto` is §15.5's second brake — the receiver says how much it has PERSISTED, and the sender stays
+           within WINDOW of that. Looked up by xid alone, any member could acknowledge another member's
+           transfer and run the owner's upload past that receiver's window; and `upto: Infinity` (or 1e12)
+           lifted the brake for the rest of the file. A receiver cannot have kept bytes it was never sent. */
         const job = ctl.out[+msg.xid];
-        if (job) job.upto = Math.max(job.upto, +msg.upto || 0);
+        const src = fromMid || (S.isOwner ? null : 'h');
+        const n = +msg.upto;
+        if (job && job.to === src && n >= 0) job.upto = Math.max(job.upto, Math.min(n, job.off));
         return true;
       }
       case 'have':
@@ -1065,6 +1242,15 @@ window.FM = window.FM || {};
       default:
         return false;
     }
+  };
+
+  /* S8: a member left (bye, Remove, a dropped link). What we told it goes at once — `advertise` also prunes it,
+     but only on its next sweep, and a session whose members churn should not have to wait for one. */
+  M.forget = function (S, mid) {
+    const ctl = ctlOf(S);
+    if (!ctl || mid == null) return false;
+    delete ctl.told[mid];
+    return true;
   };
 
   M.onBulk = function (S, fromMid, buf) {
@@ -1112,6 +1298,15 @@ window.FM = window.FM || {};
         .then(function () { return false; });
     }
     const p = M.pending(S);
+    /* S8 review: clips he chose not to download are not "still arriving" — they are not coming at all unless he
+       says so — and the export must not leave them out without a word. */
+    if (!p.n && p.skipped) {
+      return ask({
+        title: p.skipped === 1 ? '1 clip was not downloaded' : p.skipped + ' clips were not downloaded',
+        message: 'You chose not to download the shared media, so exporting now leaves ' + (p.skipped === 1 ? 'that clip' : 'those clips') + ' out of the video. Tap the media card to download ' + (p.skipped === 1 ? 'it' : 'them') + ' first.',
+        ok: 'Export anyway', cancel: 'Cancel'
+      });
+    }
     if (!p.n) return Promise.resolve(true);
     return ask({
       title: p.n === 1 ? '1 clip is still arriving (' + p.pct + '%)' : p.n + ' clips are still arriving (' + p.pct + '%)',
@@ -1167,13 +1362,18 @@ window.FM = window.FM || {};
     cardEl = null; barEl = null; textEl = null; subEl = null;
   };
   /* What the card is SAYING, so a dismissal can be remembered against it rather than against a moment. */
-  function sigOf(ctl) { return ctl.failed ? ('f' + ctl.failed + (ctl.full ? '!' : '')) : 'ok'; }
+  function sigOf(ctl) { return ctl.failed ? ('f' + ctl.failed + (ctl.full ? '!' : '')) : (deferredN(ctl) ? 'd' + deferredN(ctl) : 'ok'); }
   UI.sync = function (ctl) {
     if (!ctl) return UI.hide();
     UI._ctl = ctl;
     const pend = ctl.queue.length + Object.keys(ctl.inb).length + ctl.held.length;
     const failed = ctl.failed;
-    if (!pend && !failed) { ctl.cardHidden = null; return UI.hide(); }
+    const later = deferredN(ctl);
+    /* S8 review: a phone that is RECEIVING has to stay awake as much as one that hosts — iOS drops every
+       connection soon after the screen locks, and the download stops at the last part until he unlocks. The
+       wake lock lives with the host's (collab-ui.js); this says when it is wanted. */
+    if (C.ui && C.ui.syncWake) { try { C.ui.syncWake(); } catch (e) {} }
+    if (!pend && !failed && !later) { ctl.cardHidden = null; return UI.hide(); }
     /* ⚠️ AND THE × HAS TO MEAN SOMETHING. `sync` runs at the tail of every data frame and on every
        1.5 s sweep, and `hide` only took the card out of the DOM — so it was back within milliseconds
        and the button was dead for the whole download, and dead forever once a failure had happened.
@@ -1200,6 +1400,21 @@ window.FM = window.FM || {};
       (document.getElementById('stage') || document.body).appendChild(cardEl);
     }
     const pct = ctl.bytesWant ? Math.min(100, Math.round(ctl.bytesGot / ctl.bytesWant * 100)) : 0;
+    let more = cardEl.querySelector('.cm-now');
+    if (later && !pend && !failed) {
+      cardEl.classList.add('warn');
+      textEl.textContent = 'Media not downloaded';
+      subEl.textContent = later === 1 ? '1 clip is blank on this device.' : later + ' clips are blank on this device.';
+      barEl.style.width = '0%';
+      if (!more) {
+        more = document.createElement('button');
+        more.type = 'button'; more.className = 'cm-now'; more.textContent = 'Download now';
+        more.addEventListener('click', function () { const c = UI._ctl; if (c) M.resume(c.S); });
+        cardEl.insertBefore(more, cardEl.querySelector('.cm-close'));
+      }
+      return cardEl;
+    }
+    if (more) more.remove();
     if (failed && !pend) {
       cardEl.classList.add('warn');
       textEl.textContent = ctl.full ? 'This device is full' : 'Some media was skipped';
@@ -1211,7 +1426,8 @@ window.FM = window.FM || {};
     cardEl.classList.toggle('warn', !!failed);
     textEl.textContent = 'Receiving media';
     subEl.textContent = (ctl.filesDone + ' of ' + ctl.files + ' · ' + pct + '%')
-      + (failed ? ' · ' + failed + ' skipped' : '');
+      + (failed ? ' · ' + failed + ' skipped' : '')
+      + ((FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone()) ? ' · keep this screen on until it finishes' : '');
     barEl.style.width = Math.max(2, pct) + '%';
     return cardEl;
   };

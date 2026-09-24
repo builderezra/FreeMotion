@@ -513,18 +513,37 @@ window.FM = window.FM || {};
     if (!eq(b, l)) push(out, { o: 's', p: path, v: clone(l) }, { p: path, o: 's', b: clone(b) });
   }
 
+  /* ⚠️ S8: THE SAME WALK, WITHOUT A PATH PER LEAF. Measured at 500 layers under a 4× CPU throttle (§26 S8),
+     the commit hook's full diff was the whole of the budget, and most of it was spent allocating: a
+     `seen` table and a key list for every object, and a fresh `path.concat(k)` for every leaf of every
+     layer — twenty thousand arrays a commit, nearly all of them thrown away because the leaf was equal.
+     The order of emission is unchanged (b's keys in b's order, then the keys only l has, in l's order),
+     a path is built only for a leaf that DIFFERS or a node the walk descends into, and a pair of plain
+     values is compared here exactly as diffNode would compare it (neither is an object or an array, so
+     diffNode's only branch for them is the `eq` at its foot — whatever the depth). The 200-scene
+     diff/apply round trip (`921 S1 diff then apply…`) is what holds this to the old answer. */
   function diffObject(path, b, l, out) {
-    const seen = Object.create(null);
     const bk = Object.keys(b), lk = Object.keys(l);
-    const keys = [];
-    for (let i = 0; i < bk.length; i++) { const k = bk[i]; if (!seen[k] && syncableKey(k)) { seen[k] = 1; keys.push(k); } }
-    for (let i = 0; i < lk.length; i++) { const k = lk[i]; if (!seen[k] && syncableKey(k)) { seen[k] = 1; keys.push(k); } }
-    for (let i = 0; i < keys.length; i++) {
-      const k = keys[i], inB = present(b, k), inL = present(l, k);
+    for (let i = 0; i < bk.length; i++) {
+      const k = bk[i];
+      if (!syncableKey(k)) continue;
+      const bv = b[k];
+      const inB = bv !== undefined, inL = present(l, k);
+      if (inB && !inL) { const p = path.concat(k); push(out, { o: 'd', p: p }, { p: p, o: 'd', b: clone(bv) }); }
+      else if (!inB && inL) { const p = path.concat(k); push(out, { o: 's', p: p, v: clone(l[k]) }, { p: p, o: 's', b: undefined }); }
+      else if (inB && inL) {
+        const lv = l[k];
+        if ((bv === null || typeof bv !== 'object') && (lv === null || typeof lv !== 'object')) {
+          if (!eq(bv, lv)) { const p = path.concat(k); push(out, { o: 's', p: p, v: clone(lv) }, { p: p, o: 's', b: clone(bv) }); }
+        } else diffNode(path.concat(k), bv, lv, out);
+      }
+    }
+    for (let i = 0; i < lk.length; i++) {
+      const k = lk[i];
+      if (hasOwn(b, k) || !syncableKey(k)) continue;         // b's own keys were all decided above
+      if (l[k] === undefined) continue;
       const p = path.concat(k);
-      if (inB && !inL) push(out, { o: 'd', p: p }, { p: p, o: 'd', b: clone(b[k]) });
-      else if (!inB && inL) push(out, { o: 's', p: p, v: clone(l[k]) }, { p: p, o: 's', b: undefined });
-      else if (inB && inL) diffNode(p, b[k], l[k], out);
+      push(out, { o: 's', p: p, v: clone(l[k]) }, { p: p, o: 's', b: undefined });
     }
   }
 

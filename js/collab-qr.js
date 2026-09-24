@@ -1,4 +1,5 @@
-/* FreeMotion — live collaboration (queue 921), STAGE S6: a QR code for the invite link.
+/* FreeMotion — live collaboration (queue 921), STAGE S6: a QR code for the invite link — and (S8) the reader
+ * the Join sheet's [Scan QR] uses to read one back, at the foot of the file.
  *
  * §19.1 puts a [QR] beside [Copy link], so a phone on the same table can join by pointing its camera at
  * the screen instead of being sent anything. This file draws one, and nothing else.
@@ -261,6 +262,125 @@ window.FM = window.FM || {};
       for (let x = 0; x < qr.size; x++) if (qr.modules[y][x]) g.fillRect((x + m) * s, (y + m) * s, s, s);
     }
     return c;
+  };
+
+  /* ═══ S8 · READING ONE BACK (§19.2 [Scan QR]) ══════════════════════════════════════════════════════════
+   *
+   * The browser's own `BarcodeDetector` where it has one (Chrome on a Mac, on Android — measured: it reads this
+   * file's codes back byte for byte, which the S6 test already relies on). Where it has not — Safari, on the
+   * iPhone this feature is for — jsQR, fetched from the CDN the first time the SCANNER OPENS and never before:
+   * nothing here runs at load, a person who never taps [Scan QR] never downloads a byte of it, and one who has
+   * a BarcodeDetector never downloads it at all.
+   *
+   * 📐 THE FALLBACK IS A PINNED VERSION ON cdn.jsdelivr.net/npm/, not a copy in vendor/. The plan (§26 S8) said
+   * `vendor/jsqr.js`; the brief for S8 said the CDN, and the CDN is the safer of the two here: a vendored copy is
+   * a 250 KB file nobody has reviewed sitting in the repo and in the service worker's cache forever, for a
+   * feature behind Labs, where a pinned npm version is immutable (npm never lets a version be republished) and
+   * costs nothing until the one tap that needs it, with `crossorigin` so a failure is a failure.
+   *
+   * ⚠️ AND IT IS NEVER LOADED WITHOUT ITS INTEGRITY HASH — FAIL CLOSED (S8 security pass). A script from a CDN runs
+   * with everything this page can reach, and this page keeps his own AI key in localStorage (js/ai-key.js): one
+   * compromised CDN edge would be one stolen key. `integrity` makes the browser refuse any byte that is not the
+   * file the hash names. The hash is not pinned YET because pinning it means fetching the file once to hash it,
+   * which an unattended build does not do — so until `JSQR_SRI` holds it, a browser with no BarcodeDetector is
+   * told the reader is not available here and to open the link with its camera app or paste it (the iPhone's own
+   * Camera app reads the QR and opens the link anyway). Pinning it is one line: COLLAB-DESIGN.md §26 S8 as built.
+   * index.html sets no CSP. */
+  Q.JSQR_URL = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+  Q.JSQR_SRI = null;           // 'sha384-…' — see above; null keeps the fallback OFF
+  let jsqrP = null;
+  /* The loader, as a seam: the suite stands in for the network (it must never touch it), and a failed load is
+     forgotten so the next tap can try again rather than failing forever on one bad moment of signal. */
+  Q._load = function (url, sri) {
+    return new Promise(function (res, rej) {
+      const sc = document.createElement('script');
+      sc.src = url;
+      sc.async = true;
+      sc.crossOrigin = 'anonymous';
+      if (sri) sc.integrity = sri;
+      sc.onload = function () { res(window.jsQR); };
+      sc.onerror = function () { sc.remove(); rej(new Error('jsQR did not load')); };
+      document.head.appendChild(sc);
+    });
+  };
+  function loadJsQR() {
+    if (typeof window.jsQR === 'function') return Promise.resolve(window.jsQR);
+    if (!Q.JSQR_SRI) return Promise.reject(new Error('jsQR is not pinned (no integrity hash), so it is not loaded'));
+    if (!jsqrP) {
+      jsqrP = Q._load(Q.JSQR_URL, Q.JSQR_SRI).then(function (f) {
+        if (typeof f !== 'function') throw new Error('jsQR loaded but is not a function');
+        return f;
+      });
+      jsqrP.catch(function () { jsqrP = null; });
+    }
+    return jsqrP;
+  }
+  Q._jsqrRequested = function () { return !!jsqrP; };
+  /* S8 review: can this browser read a QR code AT ALL — asked synchronously, with nothing loaded, when the Join
+     sheet decides whether to offer [Scan QR]. A browser with no BarcodeDetector and no pinned jsQR (Safari on
+     the iPhone, today) could only ever answer every tap with "can't read QR codes here yet", so it is not
+     offered the button; the sheet points at the Camera app instead, which reads the code and opens the link. */
+  Q.canRead = function () {
+    return typeof window.BarcodeDetector === 'function' || !!Q.JSQR_SRI || typeof window.jsQR === 'function';
+  };
+  Q._forget = function () { jsqrP = null; };          // suite seam: a stand-in reader must not outlive its test
+
+  /* Which reader this browser gets, and nothing loaded to find out. A detector that exists but cannot read
+     QR codes (some builds list only 1-D formats) is no detector. */
+  Q.nativeReader = function () {
+    const BD = window.BarcodeDetector;
+    if (typeof BD !== 'function') return Promise.resolve(null);
+    const formats = typeof BD.getSupportedFormats === 'function' ? BD.getSupportedFormats() : Promise.resolve(['qr_code']);
+    return Promise.resolve(formats).then(function (f) {
+      if (!Array.isArray(f) || f.indexOf('qr_code') < 0) return null;
+      let det = null;
+      try { det = new BD({ formats: ['qr_code'] }); } catch (e) { return null; }
+      return function (source) {
+        return det.detect(source).then(function (found) {
+          for (let i = 0; i < (found || []).length; i++) if (found[i] && typeof found[i].rawValue === 'string') return found[i].rawValue;
+          return null;
+        }, function () { return null; });
+      };
+    }, function () { return null; });
+  };
+
+  /* One frame from a video, a canvas or an image, as the pixels jsQR reads — at most 640 px on the long side,
+     which is plenty for a code filling a quarter of the frame and keeps each attempt a few milliseconds on a
+     phone. */
+  function pixels(source, canvas) {
+    const w = source.videoWidth || source.naturalWidth || source.width || 0;
+    const h = source.videoHeight || source.naturalHeight || source.height || 0;
+    if (!w || !h) return null;
+    const k = Math.min(1, 640 / Math.max(w, h));
+    const cw = Math.max(1, Math.round(w * k)), ch = Math.max(1, Math.round(h * k));
+    const c = canvas || document.createElement('canvas');
+    if (c.width !== cw) c.width = cw;
+    if (c.height !== ch) c.height = ch;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(source, 0, 0, cw, ch);
+    return g.getImageData(0, 0, cw, ch);
+  }
+
+  /* A reader: `read(source)` → the text of the first QR code in it, or null. Native if it can be; otherwise
+     jsQR, loaded now. Rejects only when neither exists — the caller says so and offers Paste. */
+  Q.reader = function () {
+    return Q.nativeReader().then(function (nat) {
+      if (nat) return { kind: 'native', read: nat };
+      return loadJsQR().then(function (jsQR) {
+        const cv = document.createElement('canvas');
+        return {
+          kind: 'jsqr',
+          read: function (source) {
+            try {
+              const img = pixels(source, cv);
+              if (!img) return Promise.resolve(null);
+              const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' });
+              return Promise.resolve(code && typeof code.data === 'string' ? code.data : null);
+            } catch (e) { return Promise.resolve(null); }
+          }
+        };
+      });
+    });
   };
 
   C.qr = Q;

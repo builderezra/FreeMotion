@@ -353,6 +353,9 @@ It returns `'ok' | 'noop' | 'gone' | 'bad'`. `target` is either `base` (plain JS
 11. **Send.**
     - To the sender: `ack{cid, seq, ops, fix, rej, lost}`, where `fix` also contains the current host value for every rejected or lost path.
       **It names the deepest ancestor that still exists (S1).** If the refusal was `'gone'` because the *effect* the path runs through was deleted, then `d` on `…/#u:x/params/amount` is a lie about where the change is — and on a device that still holds that effect it would delete a real parameter. The truthful statement is `ar` on the element (or `lr` on the layer).
+      **And a keyed element that still EXISTS goes back as an `ai` upsert with its anchor, never an `s` (S8).** The sender
+      of a refused `ar` has already removed it from its own copy, and an `s` on a missing element is `'gone'`; a refused
+      `am` needs its position back as well as its fields. A whole layer already went back as an `li`.
     - To every other member: `b{seq, by, ops, fix, ord?}`.
 12. `FM.storage.autosave()`. **Required:** autosave is otherwise called only from commit, undo and redo (`history.js:158-162`).
 
@@ -1714,6 +1717,15 @@ family again, a rule that covers most of a family and misses the members declare
 in `theme-glass.css` beside the `#fm-ask.fm-ask-light` rules, which the collaboration cards now share by
 name rather than by copy.
 
+**As built (S8): [Scan QR]** is a 44 px square beside [Paste] (the field keeps its width at 380), hidden under
+Codes only (the only QR this app draws is an invite link). Tapped, the back camera opens in the sheet under the
+field — 4:3, at most 42 % of the screen high, a square guide in the middle — read a few times a second by the
+browser's BarcodeDetector, or by jsQR loaded from `cdn.jsdelivr.net/npm/jsqr@1.4.0` at that tap when there is none
+(Safari) — once its integrity hash is pinned; until then Safari is told to use its camera app or paste (§26 S8). An invite goes into the field and the sheet says "Found an invite — tap Join to connect."; a QR code that
+is not one says so and keeps looking; the camera stops on a find, on [Scan QR] again, on Cancel and when the sheet
+closes (including a camera still starting). No camera / no permission / no reader each get one sentence that ends
+"paste the link instead". Rendered: `join-scan-380.png`, `join-scan-1280.png`.
+
 ### 19.3 Knock card: `#collab-knock`
 
 - Text: "Sam (iPhone) wants to join as Editor", with [Don't allow] [Let in].
@@ -1782,6 +1794,10 @@ whitelist the same day it was added — the #688 bug with a privacy consequence 
 and flipping it reaches anything already running: on, and the host's relay, a reconnect and a join in flight
 all stop and every socket closes; off, and a sharing host's relay starts. The Labs switch's own sentence no
 longer says "nothing goes through a server" — it says what the relay sees. Rendered: `settings-labs-380.png`.
+
+**As built (S8): "Test connection"** sits in the Labs group under "Join a live project": [Test] and [Copy], then
+one line per question with ✓ / ✕ / –, then the report. Not an actionRow — the answer is the row, so the panel
+stays open. Rendered: `settings-labs-380.png`, `settings-labs-1280.png`.
 
 ---
 
@@ -1858,6 +1874,9 @@ app, and clamps `max`.
 | Relay (S6) | driver up within 8 s; an attempt waits 6 s for its answer; offers 10/min per peer, 30/min per room; ≤ 4 offers being answered at once; PeerJS heartbeat 5 s, ID-TAKEN retried 60 s; MQTT keep-alive 30 s; envelope clock skew 120 s, nonce memory 10 min |
 | Pending join | 24 h |
 | `SCHEMA_REV` / `PROTO` | 1 / 1 |
+| Catch-up copies (S8) | per member: 3 at once, then one every 2 s (`CATCHUP_BURST` / `CATCHUP_EVERY`); a request over budget is owed, not refused |
+| Peer media manifest (S8) | 4000 entries, 2000 layers per entry (`collab-media.js` `PEER_MAX` / `LAYERS_PER_ENTRY`) |
+| Ids (S8) | a layer id, uid or comment id is never one of the 13 `Object.prototype` names (`KEYVAL_RE`, `UID_RE`); a tx `cid` is a safe integer |
 
 ---
 
@@ -2474,6 +2493,160 @@ ignored, an owner's forced delete keeping the lease, the desktop delete still of
   - `BEFORE-PUBLISHING.md` entries: "Share panel modelled on Google Docs"; "invite links show the UI to other people"
   - `CLAUDE.md` note on running the collab tests
 - **Labs gating is kept** until he has done Tier 5 (Q7).
+
+**As built (S8).** Labs gating is still ON — he has not tried Mac ↔ iPhone yet, and that is his, not ours (Q7).
+Seven tests, all `921 S8 …`, and every one written to FIND something. What they found is fixed below, each with the
+test that fails without it.
+
+*The tests* (seven — the six the brief names and the deterministic test for the one bug the eight-device fuzz found)
+- `adversarial peer fuzz` — a minute (27 000 rounds, ~330 000 messages) from a Viewer, a Commenter and an Editor on
+  `ctl`, `pres` and `bulk`, plus raw frames written under RtcLink's framing on a real WebRTC link, against the REAL
+  app as owner (bridge, presence and media all live). Oracles: nothing throws (the pump, `C.lastError`, window
+  errors and rejections); the layer ids and order, every layer field honest traffic does not write, the project and
+  the owner's comment are byte-identical to the start; no hostile name ever lands; the member table and its roles
+  never move; leases only on editors and existing layers; presence stays sanitised; the owner's screen, the room and
+  an honest editor's copy stay identical; the honest editor's every tx is answered in the same exchange; every ping
+  gets its pong; no single round holds the main thread past 250 ms (measured worst 83 ms); no member gets more
+  document copies than the catch-up budget allows. Each hostile channel has a CONTROL proving it arrived.
+- `eight devices converge` — owner + 7 guests, every one the real `Session`, 400 seeded rounds: renames, transforms,
+  effects added / removed / edited concurrently, layers inserted / deleted / reordered, parents (including ones
+  that close a loop), keyframes, comments, replies, resolves, undo; role changes; dropped links with offline work;
+  leaves and fresh rejoins; an owner reload (new epoch → everybody back through a snapshot). Ends with every copy
+  and every base identical and nothing outstanding. It found one bug (10 below) once replies, resolves, parents and
+  keyframes were added to what it edits; after the fix, its own seed and eight more at 1500 rounds all converge.
+- `a 500-layer project under a 4× CPU throttle` — through a real `Emulation.setCPUThrottlingRate` that the test asks
+  `tests/_cdp.py` for (below), with a control that the throttled commits are really slower. Measured on this Mac:
+  **before S8 the commit-hook diff was median 27.2 / p90 27.9 ms — 2 ms inside the 30 ms budget — and after it,
+  median 13.7 / p90 15.2 ms; the hot tick median 3.1 / p90 3.7 ms against 8.** The numbers are in the test.
+- `an accelerated one-hour soak` — the real app as owner on a fake clock, 3 600 one-second steps: guests joining and
+  leaving every five minutes, one going quiet for two minutes every ten, a stream of new paths. Every step's ceiling
+  is read — the ring (reached 2000), lastBy / lastW (reached 10 000), each member's ack cache (reached 64), the
+  diagnostics, the deleted-comment memory, reports, pending, the presence people and DOM pools — and every table
+  keyed by WHO must hold only who is here. Leases expire at 30 s of silence and presence purges at 60 s, measured.
+- `[Scan QR]` — below. `Settings → Labs → Test connection` — below.
+
+*Bugs the fuzz and the soak found (each fixed, each caught by its test with the fix reverted)*
+1. **A `hello` made members, with the role it claimed.** `onHello` was `members[mid] || host.join(mid, {role: msg.role})`
+   — a hello from an endpoint whose member had been dropped came back as an OWNER. Membership is now minted only by
+   `addPeer`; a hello or a resync from a non-member is counted (`reports`, once a second) and not answered.
+2. **A copy of the document was free to ask for.** Every `hello` (a tail up to 8 MB or a snapshot) and every
+   `resync` made the owner clone, hash and send the whole document, unlimited. Now `CATCHUP_BURST` (3) at once and
+   one per `CATCHUP_EVERY` (2 s) per member; a request over budget is OWED, newest wins, and the next tick with a
+   token sends it — an honest guest still gets exactly one current copy.
+3. **`cid: 1e300` passed validation** (it is ≥ 0 and floor() leaves it alone) and became `lastCid`, so every later
+   tx from that device read as a duplicate. A cid must be a safe integer.
+4. **An Editor could plant layers called `__proto__`, `constructor`, `toString`…** and the owner's autosave kept
+   them. Collab is the one door a peer-chosen id enters by without being re-minted, and the app has plain `{}`
+   tables keyed by layer id. `KEYVAL_RE` and `UID_RE` now refuse the thirteen `Object.prototype` names — a FIXED
+   list, never read at run time, so two browsers agree to the letter.
+5. **The owner downloaded fonts no layer used** — any `FMF…` family an Editor announced was fetched and installed for
+   good. A font is wanted only while a text layer here uses it (the rule `scanLocal` advertises by).
+6. **…and bytes for layers with no picture.** A manifest naming a shape or text layer made the owner ask for, and
+   `writeRecord` store, a peer's bytes against it. Only media-carrying layers are wanted or written.
+7. **The peer manifest grew without limit** (every new fid, every merged layer pair) and `planWants` walked all of it
+   every sweep. Capped: 4000 entries, 2000 layers per entry.
+8. **Any member could move another member's transfer window**, and `upto: Infinity` lifted §15.5's brake for good.
+   An `ok` now moves only a transfer to the peer that sent it, and never past what was sent.
+9. **Media kept what it had told every member who ever joined** (`told`, one table per mid, for the session). Pruned
+   at `bye` and `dropPeer` (`C.media.forget`) and at every advertise.
+10. **A refused delete of a keyed element never came back on the device that tried it** — found by the eight-device
+   fuzz (seed 921008, round 397): a Commenter undid her own reply just as the owner made her a Viewer; the host refused
+   it and, per §7.1 step 11, sent "the current value" — as an `s` on the reply's path, which her device could not
+   apply because the reply was already gone from it (`apply` → 'gone'). Her copy never had the reply again. The same
+   hole took an effect from an Editor who deleted it on a held layer, and left a refused `am` where the sender had
+   moved it. **§7.1 step 11 now says a keyed element that still exists as an `ai` upsert with its anchor**
+   (collab-host.js `presentOp`), exactly as a whole layer already went back as an `li`; the guest's §8.2 `forced`
+   list does the same. Its own test: `a refused delete or move puts the element back…`.
+
+One older test changed with the rules it measures: `921 S6 the collaboration code can reach exactly the relays…`
+admits ONE more host, `cdn.jsdelivr.net/npm/jsqr@1.4.0`, in ONE file, `collab-qr.js`, and checks the reader uses it.
+
+*Decisions against the spec's letter (each also in a code comment)*
+- **§26's `vendor/jsqr.js` became a pinned CDN load** — the S8 brief asked for `cdn.jsdelivr.net/npm/`, and it is the
+  safer of the two: an unreviewed 250 KB file in the repo and the service worker's cache forever, against an
+  immutable npm version fetched only at the tap that needs it. **And it FAILS CLOSED until its integrity hash is
+  pinned** (S8 security pass): a CDN script runs with everything the page can reach, and the page holds his AI key.
+  Pinning means fetching the file once to hash it, which an unattended build does not do; until then a browser with
+  no BarcodeDetector (Safari) is told "This browser can’t read QR codes here yet — open the link with your camera
+  app, or paste it instead", is never asked for the camera, and downloads nothing. To turn it on, one line:
+  `curl -s https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js | openssl dgst -sha384 -binary | openssl base64 -A`
+  and put `'sha384-' + that` in `C.qr.JSQR_SRI` (js/collab-qr.js).
+- **The scanner asks for the reader before the camera.** A browser that cannot read a code is never asked for camera
+  permission, and no camera is started that a failed reader would leave running (the first version did — the stream
+  arrived, the reader failed, and the error path had no stream to stop).
+- **A scanned invite fills the field and waits for Join** (§19.2 says only "[Scan QR]"): S6's review made an invite
+  in the address bar wait for one tap because anybody can send the browser to one; anybody can hold up a QR code.
+- **"Test connection" is three questions, not a readout** (§25.5 names the numbers; §22 names the sentences): can this
+  network reach the relays, can this device learn its public address, does this device's WebRTC work and how fast.
+  Each is one plain line (§22's own words where they exist), the numbers go in a copyable report
+  (`fm.lastConnReport`). Nothing is built until the tap (§23), Codes only wins over everything including the suite's
+  stand-in, and a loopback page never reaches a real relay.
+- **Two exact rewrites made the budget, not a cache.** §6.2 allowed a per-layer stringify fast path; S1 declined it
+  as "an untested cache that decides what to diff". S8 keeps that position: `eq` answers `canon(a) === canon(b)`
+  without building strings when the answer is already known (two strings, two booleans, two numbers, the same
+  reference — each exact, each checked against canon in the perf test), and `diffObject` stops allocating a path per
+  equal leaf. Every leaf is still compared on every commit.
+- **The CPU throttle is the driver's, asked for by the page.** A page cannot throttle itself, and every tool reaches
+  the suite through `tests/_cdp.py` (ship, prove, spotcheck, mutate), so it polls `__fmWantCpu = {rate, until}` and
+  answers `__fmCpuRate`. `until` is the lock: past it the rate goes back to 1 whatever the page says.
+
+*Layout pass (380 × 820 and 1280 × 860, every collaboration surface)* — the Share panel, its settings page, Earlier
+versions, the Join sheet with and without the camera, the profile prompt, the knock card, the banner, the comments
+card, the stage with three people (chip, outlines, pointers, ruler flags), a Viewer's guest panel, Settings → Labs
+with a finished Test connection, the Labs question and the iOS landing card. Nothing off-screen or sticking out of
+its card at either width. Small-target notes at 380 (all S3–S7 surfaces, left for his design pass rather than
+restyled unasked): the role drop-downs (29 px), "Reset link and code" (26 px), the Ask/Let-in segments (28 px),
+Restore in Earlier versions (28 px), and the comment pin chips (16 px).
+
+*S8 review — 29 confirmed findings (25 distinct; 4 were the same defect found twice), each with a `921 S8r` test that
+fails with the fix reverted.* What changed, and the decisions the spec did not already make:
+- **Media never touches another project's clip** (collab-media.js `foreignIds`). The store is keyed by layer id for
+  every project, and a peer writes layer ids: at `M.install` the ids of every OTHER project doc on the device (and
+  every media-library key the open project does not use) are named once, and no read, advertise, stash, want or
+  write touches one. Chosen over rejecting the `li` at the host because it covers BOTH directions — a guest cannot
+  refuse the owner's ops without diverging.
+- **A refused op's repair is budgeted** (`FIX_OPS` 200 / `FIX_BYTES` 512 KB per tx, `FIX_BURST` 1 MB refilled at
+  `FIX_PER_SEC` 256 KB per member); past it the ack says `resync: 1` and the guest asks for one, paced by `catchUp`.
+  A cached ack keeps no repair. RtcLink's send queue is NOT bounded: with the repair budgeted, an ack is at most
+  512 KB and usually tiny, and a byte cap there would have to be sized against a legitimate snapshot.
+- **`P/comments` text is a string and `resolved` a boolean for every role, and all comments together stay under
+  `COMMENT_BYTES` 1 MB** (guests only; the owner's own device is never role-checked).
+- **Project keys have shapes** (storage.js `sanitizeProjectFields`, run by `clampProjectDims` — so at every load,
+  import and collab batch): markers `{t, label?, thumb?}`, `loopIn/loopOut` finite or null, `notes` an array,
+  `thumbPinned` boolean, `background` a string or null (null is transparent), `name` a string.
+- **Fonts from a room**: at most 12 fonts / 24 MB per session, and a font this session installed that no text layer
+  in any project uses when it ends is removed from the font index. Not session-scoped registration: an Editor's font
+  that the owner's project keeps using is the owner's to keep.
+- **A removed member's token** gets its own door (one answer at a time, never a member's slot, its own flood count)
+  and `REVOKED_TELLS` 3 answers in all; then its room leaves the hub and its envelopes stop opening. The hub is NOT
+  rotated on Remove — a member whose phone was locked at that moment would lose its way back for good.
+- **A knock is quiet** (RtcLink `quiet`): frames from a link waiting on the knock are counted and dropped unread, and
+  past the hello's own budget (32 frames / 256 KB) the link closes and the card goes with it. **The room is counted
+  again after "Let in"** (`deny('full')`).
+- **Envelopes are rate-limited per room before decrypting** (`ENV_PER_SEC` 20, `ENV_BURST` 60). No key hint was added
+  to the envelope: that is a wire change, and the budget bounds the cost without one.
+- **Leave**: the card is marked `ended:'left'` first; a deferred app update waits until the copy has settled
+  (`C.detach({holdReload})` + `C.runPendingReload`); a resume never starts a second copy while one runs
+  (`C.leaving`); the room is checked first (§12.3 step 1: "Not enough room to keep a copy — [Delete it instead]
+  [Stay in the session]"); the result is said either way. The owner forgets a member whose `bye` says `left`, and an
+  offline row has **Forget** (no block, no rotation) beside Remove.
+- **One tab per room** — §12.1 step 6's Web Lock, `fm-collab-host-<pid>`; the guest's is `fm-collab-guest-<gpid>`
+  (the copy, not the sid: two copies of one room on one device are already refused by §12.2 check 3).
+- **§13.1/§13.4 as specified**: myVersion is kept before an offline flush and offered as a 10 s tappable toast; a
+  full outbox makes the guest read-only (edits written back from base) with the banner and its action.
+- **"Not now" defers**: skipped clips stay marked missing, the card says "Media not downloaded · [Download now]", and
+  an export asks first. **A guest phone receiving media holds a wake lock** and the card says to keep the screen on.
+- **Every toast raised from a collaboration card is lifted above its scrim** (z 225, and it takes no taps unless it is
+  a button); a refused copy puts the text in a selected field; Settings' Test connection Copy answers on its button.
+- **Cards have a scrolling middle** (Join, profile, landing, Labs); the scanner video is capped at 30svh.
+- **[Scan QR] only where a reader can exist** (`C.qr.canRead`); otherwise the sheet points at the Camera app.
+- **§19.6 Home, built**: `.hm-live` "LIVE · n" / "SHARED" (owner's colour), "Shared by X · live now / last synced", and
+  a linked copy's ⋯ is Open · Keep as my own copy · Export video · Leave & delete (no Duplicate, template, element or
+  Share live…); his own projects get "Share live…". `duplicateFrom` never copies a `collab` record. **This is a
+  visual change he has not seen as options** — the spec's own design, but it should go in front of him before it ships.
+- Smaller: an ended guest session is stood down by a new join; a code-joined copy says it cannot reconnect by itself;
+  an unanswered old link names a reset as a reason; the short code on an open panel is extended, never re-minted, and
+  its half hour starts at the close; an "Owner" mark on the owner's comments while shared; light-theme ✓/✕ colours.
 
 ---
 
