@@ -1251,6 +1251,31 @@ window.FM = window.FM || {};
     return { score: Math.max(n, d), exact: n >= 0.45 || inRange, why: d > n ? why : '' };
   }
 
+  /* ═══ queue 921 S8 review · §19.6: WHAT IS SHARED, SAID ON HOME ════════════════════════════════════════════
+     §19.6 was deferred from S3 to S5/S6 and never built: going Home while sharing, the card said OPEN and nothing
+     else while the relay and the knock door were still live; and a guest's linked copy was indistinguishable from
+     his own project — after a Leave and a rejoin, two identical "Untitled" cards — with a ⋯ menu that offered
+     Duplicate (which handed the copy's room token to a second card) and Save as template/element. With Labs on
+     only (§23: nothing collab with it off). */
+  function collabOf(p) {
+    const C = FM.collab;
+    if (!C || !C.ui || !C.ui.labsOn || !C.ui.labsOn()) return null;
+    const s = C.session;
+    if (s && s.isOwner && C.active && s.pid === p.id) return { kind: 'live', n: s.peerIds ? s.peerIds().length : 0 };
+    if (p.collab && typeof p.collab === 'object') {
+      const now = s && !s.isOwner && C.active && s.gpid === p.id && !s.ended && s.online !== false;
+      return { kind: 'shared', host: (C.ui.cleanName && C.ui.cleanName(p.collab.hostName)) || 'the owner',
+        color: (C.ui.cleanColor && C.ui.cleanColor(p.collab.hostColor)) || null, now: !!now, seen: +p.collab.seen || 0, ended: !!p.collab.ended };
+    }
+    return null;
+  }
+  function liveBadge(cx) {
+    const b = el('span', 'hm-live' + (cx.kind === 'shared' ? ' hm-shared' : ''));
+    if (cx.kind === 'shared' && cx.color) { const d = el('span', 'hm-live-dot'); d.style.background = cx.color; b.appendChild(d); }
+    b.appendChild(document.createTextNode(cx.kind === 'live' ? (cx.n ? 'LIVE · ' + cx.n : 'LIVE') : 'SHARED'));
+    return b;
+  }
+
   function projectCard(p, subOverride) {
     // a DIV, not a button — a card is a <button> and the ⋯ is a nested <button>, which is invalid
     // HTML and silently breaks the inner tap on iOS Safari (the "three dots do nothing" bug).
@@ -1268,6 +1293,8 @@ window.FM = window.FM || {};
     th.appendChild(el('span', 'hm-dur', fmtDur(p.duration)));   // AM-style timecode badge on the thumb
     if (isOpen) th.appendChild(el('span', 'hm-open-badge', 'OPEN'));
     if (isPinned('projects', p.id)) { th.appendChild(pinBadge()); card.classList.add('is-pinned'); }
+    const cx = collabOf(p);
+    if (cx) th.appendChild(liveBadge(cx));
     // The tick is selectify's now (v6.17) — appending one here as well would put TWO in the corner.
     const name = el('div', 'hm-name', p.name || 'Untitled');
     // duration lives on the thumb badge; the meta line carries the AM set: aspect · resolution · fps · layers
@@ -1277,7 +1304,9 @@ window.FM = window.FM || {};
     mi(resLabel(p.width, p.height));
     mi(p.fps ? p.fps + 'fps' : '');       // older cards have no fps yet — it fills in when the project is next opened
     mi(p.layers != null ? p.layers + (p.layers === 1 ? ' layer' : ' layers') : '');
-    const sub = el('div', 'hm-sub', subOverride || ('edited ' + ago(p.modified)));
+    const sub = el('div', 'hm-sub', subOverride || (cx && cx.kind === 'shared'
+      ? 'Shared by ' + cx.host + (cx.ended ? '' : cx.now ? ' · live now' : cx.seen ? ' · last synced ' + ago(cx.seen) : '')
+      : 'edited ' + ago(p.modified)));
     const more = moreBtn();
     more.setAttribute('aria-label', 'Project actions');
     more.addEventListener('click', (ev) => {
@@ -1292,7 +1321,37 @@ window.FM = window.FM || {};
         pinMenuItem('projects', p.id),
         { label: 'Rename…', action: async () => { const n = await FM.ask({ title: 'Rename project', input: { value: p.name || '' }, ok: 'Rename' }); if (n && n.trim()) { FM.projects.rename(p.id, n.trim()); render(); } } },
         // queue 915 clause 3: duplicate() now says when there is no whole copy — the template/element twins' wording
-        { label: 'Duplicate', action: async () => { if (FM.toast) FM.toast('Duplicating…', 1200); const ok = await FM.projects.duplicate(p.id); render(); if (!ok && FM.toast) FM.toast('Could not duplicate — storage is full'); } },
+        /* §19.6: somebody else's shared copy is not his to duplicate, template or share — it can be kept as his
+           own (the same detach Leave does), exported, or left and deleted. */
+        ...(cx && cx.kind === 'shared' ? [
+          { label: 'Keep as my own copy', action: async () => {
+            if (!await FM.ask({ title: 'Keep this as your own project?', message: 'It stops being a copy of ' + cx.host + '’s project and becomes yours — their changes stop arriving.', ok: 'Keep as mine' })) return;
+            const s = FM.collab.session;
+            if (s && !s.isOwner && s.gpid === p.id) { await FM.collab.leave({ keep: true }); }
+            else {
+              try { FM.projects.patchCollab(p.id, { ended: 'left' }); } catch (e) {}
+              const nid = await FM.projects.detachLinked(p.id);
+              if (!nid && FM.toast) FM.toast('Could not make it your own — the device may be full');
+            }
+            render();
+          } },
+          { label: 'Leave & delete', danger: true, action: async () => {
+            if (!await FM.ask({ title: 'Leave and delete this copy?', message: 'Your copy of ' + cx.host + '’s project is removed from this device. Their project is not touched.', ok: 'Leave & delete', danger: true })) return;
+            const s = FM.collab.session;
+            if (s && !s.isOwner && s.gpid === p.id) await FM.collab.leave({ keep: false });
+            else await FM.projects.remove(p.id);
+            render();
+          } }
+        ] : [
+          { label: 'Duplicate', action: async () => { if (FM.toast) FM.toast('Duplicating…', 1200); const ok = await FM.projects.duplicate(p.id); render(); if (!ok && FM.toast) FM.toast('Could not duplicate — storage is full'); } },
+          /* §19.6: "Share live…" after Duplicate — it opens the project, then the Share panel. */
+          ...((FM.collab && FM.collab.ui && FM.collab.ui.labsOn && FM.collab.ui.labsOn() && FM.collab.ui.share)
+            ? [{ label: 'Share live…', action: async () => {
+              const ok = await openProject(p.id);
+              if (!ok) { if (FM.toast) FM.toast('Busy opening a project — try again'); return; }
+              setTimeout(() => { try { FM.collab.ui.share(); } catch (e) {} }, 260);
+            } }] : [])
+        ]),
         /* queue 921 S7 review: the save points taken while he shared this project, readable WITHOUT sharing it
            again (Share would arm a new room, and write a save point of its own, just to show the list). With
            Labs on only, and never on somebody else's shared copy — the save points are the owner's. */
@@ -1318,6 +1377,7 @@ window.FM = window.FM || {};
             render();
           } }];
         })(),
+        ...(cx && cx.kind === 'shared' ? [] : [
         { label: 'Save as template…', action: async () => {
           const n = await FM.ask({ title: 'Save as template', message: 'Template name', input: { value: p.name || 'My template' }, ok: 'Save' }); if (!n || !n.trim()) return;
           const ok = await FM.templates.save(n.trim(), p.id);
@@ -1330,7 +1390,7 @@ window.FM = window.FM || {};
           const ok = await FM.elements.saveFromProject(p.id, n.trim());
           if (FM.toast) FM.toast(ok ? 'Element saved' : 'Could not save element');
           render();
-        } },
+        } }]),
         { label: 'Select…', action: () => { enterSelect(p.id); } },
         // EXPORT VIDEO — the same dialog the editor's Export button opens (format, resolution, frame
         // rate, quality, range). It used to fire FM.storage.exportFile() the instant you tapped, which

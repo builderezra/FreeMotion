@@ -840,9 +840,16 @@ window.FM = window.FM || {};
           }, e => { lines.textContent = ''; const li = el('li'); li.appendChild(el('span', 'no', '✕')); li.appendChild(el('span', null, 'The test itself failed: ' + ((e && e.message) || e))); lines.appendChild(li); })
             .then(() => { tb.disabled = false; tb.textContent = 'Test again'; });
         });
+        /* S8 review: the answer is SAID ON THE BUTTON. A toast from this panel is painted under .set-scrim (see the
+           Clear buttons above), so "Copied" was never seen and a tap looked like it did nothing. */
+        let ccT = 0;
+        const ccSay = (t) => { clearTimeout(ccT); cc.textContent = t; ccT = setTimeout(() => { cc.textContent = 'Copy'; }, 1800); };
         cc.addEventListener('click', async () => {
-          try { await navigator.clipboard.writeText(cout.textContent); if (FM.toast) FM.toast('Copied — paste it to me', 3000); }
-          catch (e) { try { const rg = document.createRange(); rg.selectNodeContents(cout); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rg); } catch (e2) {} }
+          try { await navigator.clipboard.writeText(cout.textContent); ccSay('Copied ✓'); }
+          catch (e) {
+            ccSay('Select it ↓');
+            try { const rg = document.createRange(); rg.selectNodeContents(cout); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rg); } catch (e2) {}
+          }
         });
         cb.append(tb, cc);
         cw.append(ch, cb, lines, cout);

@@ -371,10 +371,16 @@ window.FM = window.FM || {};
     a.style.background = cleanColor(by && by.color) || GREY;
     return a;
   }
+  /* ⚠️ S8 review: A NAME AND A COLOUR ARE CHOSEN ON THE OTHER DEVICE, SO THEY CANNOT SAY WHO IS THE OWNER. The host
+     stamps every comment with the sender's member id (§16.2), and the owner's is always `o` — but the byline
+     drew only the name and colour, so a guest whose profile said "Ezra" in Ezra's colour wrote comments that
+     looked exactly like his on every device, his own included. The badge is drawn from the id the host wrote,
+     which nobody else can have. */
   function byline(x) {
     const top = el('div', 'cc-top');
     top.appendChild(avatar(x.by));
     top.appendChild(el('span', 'cc-name', cleanName(x.by && x.by.name) || 'Someone'));
+    if (C.active && x.by && x.by.mid === 'o') top.appendChild(el('span', 'cc-owner', 'Owner'));   // only while shared: alone, every comment is his
     top.appendChild(el('span', 'cc-time', '· ' + ago(x.at)));
     return top;
   }

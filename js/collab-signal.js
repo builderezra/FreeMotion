@@ -848,7 +848,8 @@ window.FM = window.FM || {};
            strangers knocking through the link or the code do not share one budget, so thirty offers a
            minute from anybody holding the code cannot lock every member's reconnect out. */
         if (o.isHost && inner.t === 'offer') {
-          const k = kind === 'member' ? 'member' : 'join';
+          /* S8 review: a REMOVED member's token has a door of its own, so its offers never spend the members'. */
+          const k = kind === 'member' ? 'member' : kind === 'revoked' ? 'revoked' : 'join';
           offers = offers.filter(function (x) { return t - x.t < 60000; });
           let mine = 0, door = 0;
           for (let i = 0; i < offers.length; i++) { if (offers[i].from === inner.from) mine++; if (offers[i].k === k) door++; }
@@ -1282,17 +1283,36 @@ window.FM = window.FM || {};
       }
       return next();
     }
+    /* ⚠️ S8 review: NOTHING IS DECRYPTED FASTER THAN A ROOM COULD HONESTLY BE SPOKEN TO. The only checks before
+       `openIn` were the envelope's shape and a nonce the sender chooses, and in the hub `openIn` tries every
+       member's key in turn — up to ~30 AES-GCM decrypts per envelope, for anybody who can publish on a public
+       broker's topic, at whatever rate the broker carries. Honest traffic is a few envelopes a minute (three
+       copies of each, one per driver); a room gets ENV_PER_SEC, bursting to ENV_BURST, and the rest is dropped
+       unopened — counted, so a flood is visible. */
+    const envBucket = new Map();
+    function envToken(room) {
+      const t = now();
+      let b = envBucket.get(room);
+      if (!b) { b = { tokens: lim('ENV_BURST', 60), at: t }; envBucket.set(room, b); }
+      b.tokens = Math.min(lim('ENV_BURST', 60), b.tokens + (t - b.at) / 1000 * lim('ENV_PER_SEC', 20));
+      b.at = t;
+      if (b.tokens < 1) return false;
+      b.tokens -= 1;
+      return true;
+    }
+    R.stats.throttled = 0;
     function deliver(env, meta) {
       R.stats.in++;
       if (!started) return;
       if (!env || typeof env !== 'object' || typeof env.n !== 'string') { R.stats.bad++; return; }
       if (guard.seen(env.n)) { R.stats.dup++; return; }
+      if (!meta || !meta.room || !envToken(meta.room)) { R.stats.throttled++; return; }
       openIn(meta.room, env).then(function (got) {
         if (!started) return;
         if (!got) { R.stats.bad++; return; }
         const inner = got.inner, room = got.room;
         if (inner.from === tag) return;                    // our own `here`, back from the broker
-        if (guard.check(env, inner, room.kind)) { R.stats.dup++; return; }
+        if (guard.check(env, inner, room.quiet ? 'revoked' : room.kind)) { R.stats.dup++; return; }
         if (meta.pjs) { routes.set(inner.from, meta.pjs); if (routes.size > 256) routes.delete(routes.keys().next().value); }
         R.stats.delivered++;
         if (role === 'host') { if (inner.t === 'offer' && R.onEnvelope) R.onEnvelope(inner, room, env); return; }
@@ -1408,6 +1428,7 @@ window.FM = window.FM || {};
     };
     /* A foreground, an `online` event or a `here`: any driver that is down tries again now. */
     R.kick = function () { drivers.forEach(function (d) { d.kick(); }); };
+    R._deliver = deliver;             // suite seam: an envelope as a driver hands it over, with no broker in between
     return R;
   };
 

@@ -2598,6 +2598,56 @@ its card at either width. Small-target notes at 380 (all S3–S7 surfaces, left 
 restyled unasked): the role drop-downs (29 px), "Reset link and code" (26 px), the Ask/Let-in segments (28 px),
 Restore in Earlier versions (28 px), and the comment pin chips (16 px).
 
+*S8 review — 29 confirmed findings (25 distinct; 4 were the same defect found twice), each with a `921 S8r` test that
+fails with the fix reverted.* What changed, and the decisions the spec did not already make:
+- **Media never touches another project's clip** (collab-media.js `foreignIds`). The store is keyed by layer id for
+  every project, and a peer writes layer ids: at `M.install` the ids of every OTHER project doc on the device (and
+  every media-library key the open project does not use) are named once, and no read, advertise, stash, want or
+  write touches one. Chosen over rejecting the `li` at the host because it covers BOTH directions — a guest cannot
+  refuse the owner's ops without diverging.
+- **A refused op's repair is budgeted** (`FIX_OPS` 200 / `FIX_BYTES` 512 KB per tx, `FIX_BURST` 1 MB refilled at
+  `FIX_PER_SEC` 256 KB per member); past it the ack says `resync: 1` and the guest asks for one, paced by `catchUp`.
+  A cached ack keeps no repair. RtcLink's send queue is NOT bounded: with the repair budgeted, an ack is at most
+  512 KB and usually tiny, and a byte cap there would have to be sized against a legitimate snapshot.
+- **`P/comments` text is a string and `resolved` a boolean for every role, and all comments together stay under
+  `COMMENT_BYTES` 1 MB** (guests only; the owner's own device is never role-checked).
+- **Project keys have shapes** (storage.js `sanitizeProjectFields`, run by `clampProjectDims` — so at every load,
+  import and collab batch): markers `{t, label?, thumb?}`, `loopIn/loopOut` finite or null, `notes` an array,
+  `thumbPinned` boolean, `background` a string or null (null is transparent), `name` a string.
+- **Fonts from a room**: at most 12 fonts / 24 MB per session, and a font this session installed that no text layer
+  in any project uses when it ends is removed from the font index. Not session-scoped registration: an Editor's font
+  that the owner's project keeps using is the owner's to keep.
+- **A removed member's token** gets its own door (one answer at a time, never a member's slot, its own flood count)
+  and `REVOKED_TELLS` 3 answers in all; then its room leaves the hub and its envelopes stop opening. The hub is NOT
+  rotated on Remove — a member whose phone was locked at that moment would lose its way back for good.
+- **A knock is quiet** (RtcLink `quiet`): frames from a link waiting on the knock are counted and dropped unread, and
+  past the hello's own budget (32 frames / 256 KB) the link closes and the card goes with it. **The room is counted
+  again after "Let in"** (`deny('full')`).
+- **Envelopes are rate-limited per room before decrypting** (`ENV_PER_SEC` 20, `ENV_BURST` 60). No key hint was added
+  to the envelope: that is a wire change, and the budget bounds the cost without one.
+- **Leave**: the card is marked `ended:'left'` first; a deferred app update waits until the copy has settled
+  (`C.detach({holdReload})` + `C.runPendingReload`); a resume never starts a second copy while one runs
+  (`C.leaving`); the room is checked first (§12.3 step 1: "Not enough room to keep a copy — [Delete it instead]
+  [Stay in the session]"); the result is said either way. The owner forgets a member whose `bye` says `left`, and an
+  offline row has **Forget** (no block, no rotation) beside Remove.
+- **One tab per room** — §12.1 step 6's Web Lock, `fm-collab-host-<pid>`; the guest's is `fm-collab-guest-<gpid>`
+  (the copy, not the sid: two copies of one room on one device are already refused by §12.2 check 3).
+- **§13.1/§13.4 as specified**: myVersion is kept before an offline flush and offered as a 10 s tappable toast; a
+  full outbox makes the guest read-only (edits written back from base) with the banner and its action.
+- **"Not now" defers**: skipped clips stay marked missing, the card says "Media not downloaded · [Download now]", and
+  an export asks first. **A guest phone receiving media holds a wake lock** and the card says to keep the screen on.
+- **Every toast raised from a collaboration card is lifted above its scrim** (z 225, and it takes no taps unless it is
+  a button); a refused copy puts the text in a selected field; Settings' Test connection Copy answers on its button.
+- **Cards have a scrolling middle** (Join, profile, landing, Labs); the scanner video is capped at 30svh.
+- **[Scan QR] only where a reader can exist** (`C.qr.canRead`); otherwise the sheet points at the Camera app.
+- **§19.6 Home, built**: `.hm-live` "LIVE · n" / "SHARED" (owner's colour), "Shared by X · live now / last synced", and
+  a linked copy's ⋯ is Open · Keep as my own copy · Export video · Leave & delete (no Duplicate, template, element or
+  Share live…); his own projects get "Share live…". `duplicateFrom` never copies a `collab` record. **This is a
+  visual change he has not seen as options** — the spec's own design, but it should go in front of him before it ships.
+- Smaller: an ended guest session is stood down by a new join; a code-joined copy says it cannot reconnect by itself;
+  an unanswered old link names a reset as a reason; the short code on an open panel is extended, never re-minted, and
+  its half hour starts at the close; an "Owner" mark on the owner's comments while shared; light-theme ✓/✕ colours.
+
 ---
 
 ## 27. Judge findings and where they are fixed

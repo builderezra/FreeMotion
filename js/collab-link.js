@@ -251,6 +251,7 @@ window.FM = window.FM || {};
     const ep = {
       kind: 'rtc', self: o.self || 'me', peer: o.peer || 'them', open: false,
       onmessage: null, onclose: null, onopen: null,
+      quiet: null,                     // {maxN, max}: drop every frame unread, and close past the budget (S8 review)
       sent: 0, recv: 0, dropped: 0, pc: pc, mk: null,
       fpLocal: null, fpRemote: null
     };
@@ -271,7 +272,20 @@ window.FM = window.FM || {};
       const st = { dc: dc, q: [], high: name === 'bulk' ? BULK_HIGH : CTL_HIGH, parts: null, waiting: false };
       dc.bufferedAmountLowThreshold = Math.floor(st.high / 2);
       dc.onbufferedamountlow = function () { st.waiting = false; pump(name); };
-      dc.onmessage = function (e) { onFrame(name, e.data); };
+      dc.onmessage = function (e) {
+        /* S8 review: a link that has not been let in yet (a knock the owner has not answered) is QUIET — every
+           frame is counted and dropped unread, never reassembled or parsed; past its budget the link is closed. */
+        const q = ep.quiet;
+        if (q) {
+          const d = e.data;
+          q.n = (q.n || 0) + 1;
+          q.bytes = (q.bytes || 0) + (typeof d === 'string' ? d.length : (d && d.byteLength) || 0);
+          ep.dropped++;
+          if (q.n > q.maxN || q.bytes > q.max) { ep.quiet = null; ep.close('flood'); }
+          return;
+        }
+        onFrame(name, e.data);
+      };
       /* ⚠️ THE LINK IS OPEN WHEN ALL THREE CHANNELS ARE, NOT WHEN `ctl` IS (queue 921). The three negotiated channels
          open independently, a few milliseconds apart. `opened` used to resolve on `ctl` alone, so about one pairing in
          ten had `bulk` still connecting at the moment the link said it was ready — and ep.send on a channel that is not

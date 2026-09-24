@@ -316,6 +316,13 @@ window.FM = window.FM || {};
     return jsqrP;
   }
   Q._jsqrRequested = function () { return !!jsqrP; };
+  /* S8 review: can this browser read a QR code AT ALL — asked synchronously, with nothing loaded, when the Join
+     sheet decides whether to offer [Scan QR]. A browser with no BarcodeDetector and no pinned jsQR (Safari on
+     the iPhone, today) could only ever answer every tap with "can't read QR codes here yet", so it is not
+     offered the button; the sheet points at the Camera app instead, which reads the code and opens the link. */
+  Q.canRead = function () {
+    return typeof window.BarcodeDetector === 'function' || !!Q.JSQR_SRI || typeof window.jsQR === 'function';
+  };
   Q._forget = function () { jsqrP = null; };          // suite seam: a stand-in reader must not outlive its test
 
   /* Which reader this browser gets, and nothing loaded to find out. A detector that exists but cannot read

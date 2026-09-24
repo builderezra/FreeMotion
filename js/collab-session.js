@@ -220,6 +220,9 @@ window.FM = window.FM || {};
       if (!isOwner) {
         res = backstop(res);
         if (!res.ops.length) return 0;
+        /* A guest whose outbox is full holds no more (§13.1, S8 review): what was just done is written back from
+           base, the way a Viewer's edit is — before it is recorded, held or queued — until the queue drains. */
+        if (S.outboxFull) { revertToBase(res.ops); return 0; }
       }
       /* §17.2 delete-anyway (S7): a delete the person confirmed carries `f:1`, which the host reads as
          "revoke the lease and take it". Only the layer he said yes for, and only once. */
@@ -274,7 +277,13 @@ window.FM = window.FM || {};
       outstanding.push(entry);
       outboxOps += ops.length;
       outboxBytes += canon(ops).length;
-      if (outboxOps > LIM.OUTBOX_OPS || outboxBytes > LIM.OUTBOX_BYTES) S.outboxFull = true;   // §13.1
+      /* §13.1 (S8 review): past the cap this device turns read-only and says so — the flag was set and nothing
+         read it, so the outbox went on growing past the size it exists to bound. */
+      if (!S.outboxFull && (outboxOps > LIM.OUTBOX_OPS || outboxBytes > LIM.OUTBOX_BYTES)) {
+        S.outboxFull = true;
+        keepMyVersion();
+        if (A.onOutboxFull) { try { A.onOutboxFull(true); } catch (e) {} }
+      }
       if (S.online) flushOutstanding();
       S.stats.tx++;
       return res.ops.length;
@@ -613,6 +622,9 @@ window.FM = window.FM || {};
           delete grants[mid];
           delete catchBudget[mid];
           if (C.media && C.media.forget) C.media.forget(S, mid);
+          /* S8 review: the UI owns the room's member table, and a member who LEFT is not coming back on that
+             token (their copy became their own). `paused` and a dropped link are not this. */
+          if (A.onPeerLeft) { try { A.onPeerLeft(mid, typeof msg.why === 'string' ? msg.why.slice(0, 16) : ''); } catch (e) {} }
           return;
         default:
           /* ⚠️ OFFERING A FILE IS AN EDIT (S7 review). A peer's `ann` makes it the SOURCE of a file for a layer,
@@ -816,6 +828,10 @@ window.FM = window.FM || {};
         outboxOps -= entry.ops.length;
         outboxBytes -= canon(entry.ops).length;
         outstanding.splice(i, 1);
+        if (S.outboxFull && outboxOps <= LIM.OUTBOX_OPS && outboxBytes <= LIM.OUTBOX_BYTES) {
+          S.outboxFull = false;
+          if (A.onOutboxFull) { try { A.onOutboxFull(false); } catch (e) {} }
+        }
       }
       Object.keys(pending).forEach(function (k) { if (pending[k] <= ack.cid) delete pending[k]; });
       flushBefore();
@@ -823,6 +839,9 @@ window.FM = window.FM || {};
       adoptOrder(ack.ord);
       if (ack.seq != null) S.bs = Math.max(S.bs, ack.seq);
       if ((ack.lost && ack.lost.length) || (ack.rej && ack.rej.length)) { forceRefused(ack, entry); onClash(ack, entry); }
+      /* S8 review: the host's repair of what it refused did not all fit its budget (collab-host.js FIX_OPS), so
+         the rest of the truth comes as a copy — asked for once, and paced by the owner's `catchUp`. */
+      if (ack.resync === 1) sendToHost({ t: 'resync', seq: S.bs, h: S.baseHash() });
       persistSoon();
     }
 
@@ -877,7 +896,13 @@ window.FM = window.FM || {};
       else if (lease) leaseToast(ack.rej, entry && entry.ops, 'that layer');
       if (lost || gone) {
         S.lastClash = { lost: lost, gone: gone, at: now() };
-        toast(lost + gone + ' of your offline changes clashed with newer edits and were not applied');
+        /* §13.4 (S8 review): [Save my version as a copy] — a real offer now, because the version was kept
+           before the flush. Ten seconds, and only while that version is under ten minutes old. */
+        const mv = S.myVersionKept && (now() - S.myVersionKept.at) < 600000 ? S.myVersionKept : null;
+        const said = lost + gone + ' of your offline changes clashed with newer edits and were not applied';
+        if (mv && A.toastAction && A.saveVersion) {
+          try { A.toastAction(said + ' — tap to save your version as a copy', function () { A.saveVersion(mv.D); }, 10000); } catch (e) {}
+        } else toast(said);
       }
     }
 
@@ -1239,6 +1264,7 @@ window.FM = window.FM || {};
       S.cid += 1;
       for (let i = 0; i < ops.length; i++) if (ops[i].o === 's' || ops[i].o === 'd') pending[P.key(ops[i].p)] = S.cid;
       outstanding.push({ cid: S.cid, ops: ops, sent: false, queued: true });
+      keepMyVersion();                          // §13.2 step 5: a reload's recovered work is offline work too
       return ops.length;
     };
 
@@ -1263,11 +1289,21 @@ window.FM = window.FM || {};
       if (!on) { markOffline(); return; }
       S.online = true;
       lastHeard = now();
+      keepMyVersion();
       /* Reconnect (§13.2): say where we are and let the host choose tail or snap. */
       sendToHost(helloMsg());
       if (A.onOnline) try { A.onOnline(); } catch (e) {}
     };
     S.myVersion = function () { return clone({ project: view().project, layers: view().layers }); };
+    /* §13.2 step 5 (S8 review): "before sending, keep myVersion = clone(D live) for 10 minutes". Nothing kept it —
+       `myVersion()` above had no caller, and by the time a clash toast could have used it the acks had already
+       put the other editor's values into live. Kept at the one moment it is still this device's version: when
+       there is offline work to send and it has not gone yet. */
+    S.myVersionKept = null;
+    function keepMyVersion() {
+      if (isOwner || !outstanding.some(function (e) { return !e.sent; })) return;
+      S.myVersionKept = { D: S.myVersion(), at: now() };
+    }
 
     /* §4.2 storage hook: media a deleted layer still needs, because undo can bring it back. */
     S.reachable = function (id) {
@@ -1785,6 +1821,9 @@ window.FM = window.FM || {};
 
   /* §12.3. `keep` is the recommended answer and the default: his copy becomes his, with new layer ids
      so a later rejoin cannot collide with it. */
+  let leaving = 0;
+  /* A Leave is still copying the project into his own (collab-ui.js resumeOpen must not start a second copy). */
+  C.leaving = function () { return leaving > 0; };
   C.leave = function (opts) {
     const o = opts || {};
     const s = C.session;
@@ -1801,10 +1840,20 @@ window.FM = window.FM || {};
        whose card carries no `collab` record is not a linked copy, whatever the session believes. */
     const card = ((FM.projects && FM.projects.list()) || []).filter(function (p) { return p.id === gpid; })[0];
     if (!card || !card.collab) { s.stop('left'); C.detach(); return Promise.resolve(null); }
+    /* ⚠️ S8 review: THE CARD IS MARKED LEFT FIRST, AND A WAITING APP UPDATE WAITS FOR THE COPY. `C.detach` runs a
+       deferred service-worker reload synchronously, so an update that had landed during the session reloaded
+       the page before `detachLinked` had copied a byte — and the linked card, untouched, reconnected on the
+       next open (the owner still accepts its token): he was back in the room he had just left, sending his
+       edits into Ezra's project. A failed copy (a full phone) did the same without any update. Marked `ended`
+       before anything else, a copy that never finishes becoming his is still never dialled again, and the
+       reload runs once the copy has settled either way. */
+    try { if (FM.projects.patchCollab) FM.projects.patchCollab(gpid, { ended: 'left' }); } catch (e) {}
+    leaving++;
     s.stop('left');
-    C.detach();
-    if (o.keep === false) return FM.projects.remove(gpid).then(function () { return null; });
-    return FM.projects.detachLinked(gpid);
+    C.detach({ holdReload: true });
+    const settled = function (v) { leaving = Math.max(0, leaving - 1); C.runPendingReload(); return v; };
+    const job = (o.keep === false) ? FM.projects.remove(gpid).then(function () { return null; }) : FM.projects.detachLinked(gpid);
+    return Promise.resolve(job).then(settled, function (e) { settled(); throw e; });
   };
 
   /* §12.4's guest reload recovery, and the only piece of §12.2 that runs when nothing was clicked: the
