@@ -3,7 +3,8 @@
  * audio effects gets its element pulled into Web Audio: el -> MediaElementSource -> chain -> speakers.
  * el.volume / el.muted stay upstream of the source node, so app.js's volume/fade/solo/mute reconcile
  * keeps working untouched. A layer with no audio effects is never routed at all — it keeps today's
- * exact native path.
+ * exact native path. (One exception, queue 690: on an iPhone el.volume cannot be set, so a clip whose
+ * level is not a flat 100% is routed through a gain there — see volumeLocked / needsLevel.)
  */
 window.FM = window.FM || {};
 (function (FM) {
@@ -23,7 +24,8 @@ window.FM = window.FM || {};
    * right — one source per element, cached on the media rec, `passthrough` on every exit. Boost
    * simply becomes another reason to route, so there is exactly one place that can get it wrong.
    *
-   * A layer at or below 100% is still NEVER routed, and keeps today's exact native path. */
+   * A layer at or below 100% is still NEVER routed, and keeps today's exact native path — except on an
+   * iPhone, where el.volume is read-only and a level below 100% has nowhere else to go (queue 690). */
   function boostOf(layer) {
     if (!layer || layer.muted) return 1;
     const v = layer.volume;
@@ -40,11 +42,52 @@ window.FM = window.FM || {};
   function needsBoost(layer) { return boostOf(layer) > 1.0001; }
   FM._audioNeedsBoost = needsBoost;   // read by the suite
 
+  /* ═══ ON AN IPHONE, el.volume DOES NOTHING (queue 690, audio hunt) ═══════════════════════════════════
+   * His words for the hunt: "go re audit, find some bugs coz theres a shit load".
+   * Everything below 100% — a clip at 25%, a fade, a volume keyframe, the de-click — reached a forward clip
+   * through ONE line in the playback tick: `m.el.volume = vol`. On an iPhone a page cannot set a media
+   * element's volume at all: Apple's Safari audio guide says the property is not settable from JavaScript
+   * on iOS and always reads 1, because the level belongs to the hardware buttons. So on his phone every
+   * one of those was silently ignored while editing — and the export honours all of them, so what he mixed
+   * by ear on the phone was not what the file contained.
+   * DETECTED, NOT SNIFFED: write a level, read it back. An element that will not keep it is one whose
+   * level has to come from Web Audio instead, and the element's own `volume` then only ever reads 1, so
+   * the gain stage carries the WHOLE level rather than just the part above 100%. Asked once per element
+   * and remembered on the media rec (underscore = never saved), which is replaced together with the
+   * element, so a new element is asked again. MUTE does not need any of this — el.muted IS settable on
+   * iOS, and the playback tick now uses it for every level of zero (js/app.js). */
+  function volumeLocked(m) {
+    if (!m || !m.el) return false;
+    if (m._volLocked != null) return m._volLocked;
+    let locked = false;
+    try {
+      const el = m.el, was = el.volume;
+      const probe = was > 0.5 ? 0.25 : 0.75;
+      el.volume = probe;
+      locked = Math.abs(el.volume - probe) > 0.01;
+      el.volume = was;
+    } catch (e) { locked = false; }
+    m._volLocked = locked;
+    return locked;
+  }
+  /* Does this layer's level need the gain stage on an element that cannot set its own volume? Only when
+   * the level is not a flat 100%: a plain song at 100% keeps the native path on the phone exactly as
+   * today, and never spends an audio context. Muted is el.muted's job, and it works on iOS. */
+  function needsLevel(layer, m) {
+    if (!layer || layer.muted || !volumeLocked(m)) return false;
+    const v = layer.volume;
+    const flat = v == null || (typeof v === 'number' && Math.abs(v - 1) < 1e-4);
+    const w = FM.fadeWindows ? FM.fadeWindows(layer, layer.duration) : { fi: layer.fadeIn || 0, fo: layer.fadeOut || 0 };
+    return !flat || w.fi > 0 || w.fo > 0;
+  }
+
   // Structure = what forces a rebuild (order, types, enabled). Param values do not; they ride applyAt.
   // The boost STAGE's presence is structural too — its gain value is not, that rides setBoost.
-  function signature(layer) {
+  function signature(layer, m) {
     const fx = (layer && layer.audioFx) || [];
-    let s = needsBoost(layer) ? 'B|' : '';
+    if (m === undefined) m = layer && FM.media.get(layer.id);
+    // 'L|' is the level stage an iPhone needs below 100% (queue 690): a gain with no limiter, see makeLevelStage.
+    let s = needsBoost(layer) ? 'B|' : (needsLevel(layer, m) ? 'L|' : '');
     for (let i = 0; i < fx.length; i++) {
       const f = fx[i]; if (!f) continue;
       s += f.type + (f.enabled === false ? '0' : '1') + '|';
@@ -77,6 +120,15 @@ window.FM = window.FM || {};
     const lim = makeLimiter(ctx);
     gain.connect(lim);
     return { input: gain, output: lim, gain: gain };
+  }
+  /* THE LEVEL STAGE (queue 690): the same gain, and NO limiter, because it only ever turns a clip DOWN.
+   * A limiter sitting at -1.5 dBFS would squash the peaks of a song mastered near full scale even at 90%,
+   * and nothing is being boosted here. A layer that also goes above 100% gets the boost stage instead,
+   * whose gain then carries the whole level (setBoost), limiter and all. */
+  function makeLevelStage(ctx) {
+    const gain = ctx.createGain();
+    gain.gain.value = 1;
+    return { input: gain, output: gain, gain: gain };
   }
 
   // The element's source node is created ONCE per element, ever: a second call throws, and once it
@@ -163,9 +215,9 @@ window.FM = window.FM || {};
     if (!m._afxChain) {
       if (!m._boost) return false;                                          // not routed at all yet
       if (FM.layerHasAudioFx && FM.layerHasAudioFx(layer)) return false;    // it needs a chain now and has none
-      return m._afxSig === signature(layer);
+      return m._afxSig === signature(layer, m);
     }
-    if (m._afxSig !== signature(layer)) return false;
+    if (m._afxSig !== signature(layer, m)) return false;
     const list = (layer && layer.audioFx) || [];
     const cached = m._afxInsts;
     return !!cached && cached.length === list.length && cached.every((x, i) => x === list[i]);
@@ -176,7 +228,7 @@ window.FM = window.FM || {};
       if (!layer || layer.type !== 'video') return;
       const m = FM.media.get(layer.id);
       if (!m || !m.el) return;
-      const has = (FM.layerHasAudioFx && FM.layerHasAudioFx(layer)) || needsBoost(layer);
+      const has = (FM.layerHasAudioFx && FM.layerHasAudioFx(layer)) || needsBoost(layer) || needsLevel(layer, m);   // …or an iPhone level below 100% (queue 690)
       if (!has) {
         if (m._mes) passthrough(m);   // was routed; can't un-route an element, so hand it straight through
         return;                       // never routed and nothing to route: touch nothing, build no context
@@ -187,7 +239,7 @@ window.FM = window.FM || {};
       const ctx = FM.audioCtx();
       const mes = sourceFor(m);
       if (!mes) return;
-      const sig = signature(layer);
+      const sig = signature(layer, m);
       if (chainIsCurrent(m, layer)) return;
       try { mes.disconnect(); } catch (e) {}
       if (m._afxChain) { try { m._afxChain.dispose(); } catch (e) {} m._afxChain = null; }
@@ -197,7 +249,7 @@ window.FM = window.FM || {};
        * the final thing in the path or an effect downstream of it can push the signal back over the
        * ceiling it was there to hold. A layer routed only because of its volume has no fx chain at
        * all, and then the boost IS the whole chain. */
-      const boost = needsBoost(layer) ? makeBoostStage(ctx) : null;
+      const boost = needsBoost(layer) ? makeBoostStage(ctx) : (needsLevel(layer, m) ? makeLevelStage(ctx) : null);
       m._boost = boost;
       const tail = boost ? boost.input : ctx.destination;
       if (!chain) {
@@ -237,7 +289,9 @@ window.FM = window.FM || {};
         : (FM.layerVolume
             ? FM.layerVolume(layer, _t) * (FM.fadeMul ? FM.fadeMul(layer, _t - (layer.start || 0), layer.duration) : 1)
             : 1);
-      const g = Math.max(1, Math.min(10, isFinite(v) ? v : 1));
+      /* Floored at 1 where el.volume carries everything up to unity — and at 0 on an element whose volume
+         cannot be set (an iPhone, queue 690), where this stage is the only thing that can turn it down. */
+      const g = Math.max(volumeLocked(m) ? 0 : 1, Math.min(10, isFinite(v) ? v : 1));
       try {
         const ctx = FM.audioCtx();
         m._boost.gain.gain.setTargetAtTime(g, ctx.currentTime, 0.01);
@@ -372,6 +426,8 @@ window.FM = window.FM || {};
 
     // Exposed so the suite can assert the routing decision without standing up a real graph.
     needsBoost(layer) { return needsBoost(layer); },
+    volumeLocked(m) { return volumeLocked(m); },            // queue 690: an iPhone element whose el.volume is read-only
+    needsLevel(layer) { return needsLevel(layer, layer && FM.media.get(layer.id)); },
     boostOf(layer) { return boostOf(layer); },
     makeLimiter(ctx) { return makeLimiter(ctx); },   // the reversed preview's output stage (queue 916)
 

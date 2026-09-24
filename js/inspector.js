@@ -5122,7 +5122,9 @@ window.FM = window.FM || {};
       if (FM.audioFxLive) {
         const nowBoosted = FM.audioFxLive.needsBoost && FM.audioFxLive.needsBoost(layer);
         if (nowBoosted !== wasBoosted) FM.audioFxLive.sync(layer);
-        else if (nowBoosted && FM.audioFxLive.setBoost) FM.audioFxLive.setBoost(layer, f);
+        /* Any gain stage the clip has follows the drag — the boost, and on an iPhone the level stage that
+           stands in for its read-only el.volume (queue 690). setBoost is a no-op on a clip with neither. */
+        else if (FM.audioFxLive.setBoost) FM.audioFxLive.setBoost(layer, f);
       }
       FM.requestRender(); if (FM.reconcileAudio) FM.reconcileAudio();
     };

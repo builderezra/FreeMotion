@@ -87887,11 +87887,11 @@
   });
 
 
-  /* ═══ HUNT-e — AUDIO (queue 690, his words: go re audit, find some bugs coz theres a shit load) ═══════════════════════════════
-   * Four audio faults found by measuring, each written to FAIL today. Nothing here is fixed; each test says what he
-   * would see. Two of them are about his iPhone, which this suite cannot run: where a test stands in for WebKit it says
-   * exactly which documented WebKit behaviour it copies, and it keeps a control that passes today so the instrument is
-   * proven on the same run. */
+  /* ═══ 690 — AUDIO (queue 690, his words: go re audit, find some bugs coz theres a shit load) ═══════════════════════════════
+   * Four audio faults found by measuring (the HUNT-e pass), each first written to FAIL, then fixed; each test says what he
+   * would have seen. Two of them are about his iPhone, which this suite cannot run: where a test stands in for WebKit it
+   * says exactly which documented WebKit behaviour it copies, and it keeps a control so the instrument is proven on the
+   * same run. */
   function huntEWav(secs, fn, name) {
     const sr = 48000, n = Math.max(1, Math.floor(secs * sr));
     const oac = new OfflineAudioContext(2, n, sr);
@@ -87917,8 +87917,10 @@
    * The stand-in: the element's volume is made unsettable, reading 1, exactly as WebKit on iPhone has it. What reaches
    * the speakers is measured as the element's own output when it plays natively, plus whatever Web Audio sends to the
    * destination (every connection to it is tapped), so a fix that routes the level through Web Audio is measured too.
-   * CONTROL: a 200% clip — the one level that already goes through Web Audio — must measure about 2x on the same tap. */
-  test('HUNT-e on an iPhone a MUTED clip still plays at full volume in the preview, and 25 percent plays at 100 percent, because iOS ignores el.volume', { item: '690', budgetMs: 90000 }, async function () {
+   * CONTROL: a 200% clip — the one level that already goes through Web Audio — must measure about 2x on the same tap.
+   * FIXED (queue 690): a level of zero is el.muted, which iOS does honour, and an element whose volume will not stick
+   * (write, read back — js/audio-fx-live.js volumeLocked) takes any level other than a flat 100% through a Web Audio gain. */
+  test('690 on an iPhone, where el.volume cannot be set, a muted clip is silent in the preview and a 25 percent clip plays at 25 percent', { item: '690', budgetMs: 90000 }, async function () {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
     const saved = FM.scene, made = [];
@@ -87957,7 +87959,7 @@
       return { level: web + native, web: web, native: native, routed: routed, paused: rec.el.paused, muted: rec.el.muted };
     }
     async function run(label, setup) {
-      window.__fmStep = 'HUNT-e iOS level ' + label;
+      window.__fmStep = '690 iOS level ' + label;
       const rec = await FM.loadVideoFile(huntEWav(4, t => 0.4 * Math.sin(2 * Math.PI * 440 * t), 'hunte-' + label));
       // WebKit on iPhone: the volume attribute cannot be set by a page and always reads 1
       Object.defineProperty(rec.el, 'volume', { configurable: true, get: function () { return 1; }, set: function () {} });
@@ -88008,8 +88010,11 @@
    * The lag is made the plain way: the element is set 200 ms behind where the transport is. Pitch is read from the
    * element (playbackRate against the clip's own speed, unless it is preserving pitch); the lag from
    * FM.layerLocalTime against el.currentTime, measured before the stall and again once the controller has settled.
-   * CONTROL: the controller must see the lag (a trim or a seek), or the readings below mean nothing. */
-  test('HUNT-e after a 200 ms stall the song is played about 1.6 semitones sharp for a second and then left over 100 ms late for the rest of the clip', { item: '690', budgetMs: 60000 }, async function () {
+   * CONTROL: the controller must see the lag (a trim or a seek), or the readings below mean nothing.
+   * FIXED (queue 690): a 1x clip keeps its pitch through a trim (FM.pitchForRate — only a sped-up clip resamples, which
+   * is what queue 916 asked), and the latency learner only learns inside the dead band (FM._syncMayLearn), so a stall is
+   * corrected rather than absorbed. Measured after: 0 cents, and 33-36 ms left, inside the 45 ms dead band. */
+  test('690 after a 200 ms stall a 1x song keeps its pitch while it catches up, and ends back in step with the picture', { item: '690', budgetMs: 60000 }, async function () {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
     const saved = FM.scene, pr0 = FM.previewRate;
@@ -88028,7 +88033,7 @@
       const e0 = []; for (let k = 0; k < 10; k++) { e0.push(errNow()); await new Promise(r => requestAnimationFrame(r)); }
       const before = med(e0);
       FM.playbackStats.trims = 0; FM.playbackStats.seeks = 0;
-      window.__fmStep = 'HUNT-e sync stall';
+      window.__fmStep = '690 sync stall';
       rec.el.currentTime = Math.max(0, rec.el.currentTime - 0.2);   // the element is now 200 ms behind the transport
       const log = [];
       const t0 = performance.now();
@@ -88073,14 +88078,16 @@
    * #677 (two sound effects, x0.853). Real songs are mastered close to full scale, so almost any overlap trips it.
    * Measured in the FILE: a real export, decoded, the song's level read from 0.5 to 1.5 s, well before the sound effect
    * at 2.0 s. CONTROL: the same song exported alone must come back at its own level, which proves the decode and the
-   * reading and pins the drop on the overlap. */
-  test('HUNT-e one short sound effect over a song turns the WHOLE song about 5 dB down in the exported file, not just the overlap', { item: '690', budgetMs: 120000 }, async function () {
+   * reading and pins the drop on the overlap.
+   * FIXED (queue 690): a look-ahead limiter (js/exporter.js limitMix) turns down only the moments that would clip, so
+   * the song keeps its level before and after the overlap, and the overlap is still held under 1.0. */
+  test('690 one short sound effect over a song turns down only the overlap in the exported file, not the whole song', { item: '690', budgetMs: 120000 }, async function () {
     if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
     if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
     const saved = FM.scene, made = [];
     const SONG = 0.9;
     async function exportLevel(withSfx) {
-      window.__fmStep = 'HUNT-e mix ' + (withSfx ? 'song+sfx' : 'song');
+      window.__fmStep = '690 mix ' + (withSfx ? 'song+sfx' : 'song');
       const recS = await FM.loadVideoFile(huntEWav(4, t => SONG * Math.sin(2 * Math.PI * 220 * t), 'hunte-song'));
       const song = FM.makeLayer('video', { name: 'song', x: 32, y: 32, start: 0, duration: 4 });
       FM.media.set(song.id, recS); made.push(song.id);
@@ -88099,9 +88106,8 @@
       const ab = await blob.arrayBuffer();
       const dec = await new OfflineAudioContext(2, 48000, 48000).decodeAudioData(ab);
       const d = dec.getChannelData(0), sr = dec.sampleRate;
-      let s = 0; const a = Math.floor(0.5 * sr), b = Math.floor(1.5 * sr);
-      for (let i = a; i < b; i++) s += d[i] * d[i];
-      return { rms: Math.sqrt(s / (b - a)), gain: FM._lastMixGain, raw: FM._lastMixRawPeak };
+      const rmsOf = (t0, t1) => { let s = 0; const a = Math.floor(t0 * sr), b = Math.floor(t1 * sr); for (let i = a; i < b; i++) s += d[i] * d[i]; return Math.sqrt(s / (b - a)); };
+      return { rms: rmsOf(0.5, 1.5), after: rmsOf(2.6, 3.6), gain: FM._lastMixGain, raw: FM._lastMixRawPeak, peak: FM._lastMixPeak };
     }
     try {
       const alone = await exportLevel(false);
@@ -88111,10 +88117,69 @@
       const mixed = await exportLevel(true);
       const dropDb = 20 * Math.log10(mixed.rms / alone.rms);
       if (dropDb < -1) throw new Error('one 0.2 s sound effect at 2.0 s made the WHOLE song ' + (-dropDb).toFixed(1) + ' dB quieter in the exported file, from 0.5 to 1.5 s where nothing else plays (the mix peaked at ' + (mixed.raw || 0).toFixed(2) + ' and every sample was scaled by ' + (mixed.gain || 0).toFixed(3) + ') — the export turns the entire soundtrack down by its single loudest moment, so a song with a sound effect on it comes out much quieter than the preview');
+      // …and AFTER the overlap too: the limiter lets go within a fraction of a second, so 0.4 s on the song is back.
+      const afterDb = 20 * Math.log10(mixed.after / alone.after);
+      if (afterDb < -1) throw new Error('from 2.6 to 3.6 s, well after the 0.2 s sound effect ended, the song is still ' + (-afterDb).toFixed(1) + ' dB down in the exported file — the mix limiter never let go');
+      // …while the overlap itself was really held under the ceiling, or the fix would just be letting it clip.
+      if (!(mixed.raw > 1.2)) throw new Error('CONTROL: the song and the sound effect only summed to ' + (mixed.raw || 0).toFixed(2) + ', so the overlap never needed limiting and this proves nothing');
+      if (!(mixed.peak <= 1)) throw new Error('the overlap was left at a peak of ' + (mixed.peak || 0).toFixed(3) + ' in the mix — over 1.0 it hard-clips through AAC, which is the buzz queue 604 fixed');
+      if (!(mixed.gain < 0.9)) throw new Error('the mix summed to ' + (mixed.raw || 0).toFixed(2) + ' and the deepest gain applied was ' + (mixed.gain || 0).toFixed(3) + ' — the overlap was not turned down at all');
     } finally {
       FM.scene = saved;
       made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
       try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 3b — THE LIMITER ITSELF, on a buffer long enough to cross its internal blocks. js/exporter.js limitMix works in
+   * blocks so a long export does not need a second full-length array on a phone, and a block edge is exactly where a
+   * look-ahead limiter goes wrong without anything sounding obviously broken: a gain that jumps at the seam is a click
+   * in the middle of the song. So the overs here sit ACROSS the seams (one is a single sample on a block's last
+   * sample), and the test reads the applied gain back sample by sample. It holds the three things the fix promises
+   * without re-implementing it: nothing comes out above the ceiling; the gain never moves faster than one attack or
+   * one release slope per sample, seam or no seam; and everything well away from an over is left bit-for-bit alone.
+   * CONTROL: the fixture really does go over, by a lot, in every burst. */
+  test('690 the export limiter keeps every sample under the ceiling, never jumps its gain at a block seam, and leaves the song away from an over untouched', { item: '690' }, function () {
+    if (typeof FM._limitMix !== 'function') throw new Error('FM._limitMix is not exposed — the mix limiter cannot be driven directly');
+    const sr = 48000, n = sr * 4, C = 0.995, BLK = 32768;
+    const buf = new AudioBuffer({ numberOfChannels: 2, length: n, sampleRate: sr });
+    // across a seam; ending just past one; a single sample on a block's last sample; and STARTING exactly on a seam, so
+    // its attack has to reach back into the block before it
+    const bursts = [[BLK - 500, BLK + 500], [2 * BLK - 3000, 2 * BLK + 100], [3 * BLK - 1, 3 * BLK], [4 * BLK, 4 * BLK + 400]];
+    for (let c = 0; c < 2; c++) {
+      const d = buf.getChannelData(c);
+      for (let i = 0; i < n; i++) d[i] = 0.5 * Math.sin(2 * Math.PI * 220 * i / sr + c);
+      for (const k of [0, 1, 3]) for (let i = bursts[k][0]; i < bursts[k][1]; i++) d[i] += 0.9 * Math.sin(2 * Math.PI * 880 * i / sr + 1);
+      d[3 * BLK - 1] = c ? -1.8 : 1.8;   // one sample, the last of a block
+    }
+    const src = [new Float32Array(buf.getChannelData(0)), new Float32Array(buf.getChannelData(1))];
+    let rawPeak = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < n; i++) rawPeak = Math.max(rawPeak, Math.abs(src[c][i]));
+    if (!(rawPeak > 1.3)) throw new Error('CONTROL: the fixture only peaks at ' + rawPeak.toFixed(2) + ', so the limiter has nothing to do');
+    const res = FM._limitMix(buf, C);
+    const out = [buf.getChannelData(0), buf.getChannelData(1)];
+    let peak = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(out[c][i]));
+    if (peak > C + 1e-6) throw new Error('the limited mix still peaks at ' + peak.toFixed(4) + ', over the ' + C + ' ceiling — it would clip through AAC');
+    if (Math.abs(res.peak - peak) > 1e-6) throw new Error('limitMix reported a peak of ' + res.peak + ' but the buffer peaks at ' + peak + ' — the export report would print a wrong number');
+    if (!(res.low < 0.7)) throw new Error('the deepest gain reported was ' + res.low + ' for a mix that peaked at ' + rawPeak.toFixed(2) + ' — it was not turned down');
+    // The applied gain, read back where the input is loud enough to divide by, must never step faster than the slopes allow.
+    const fall = 1 / Math.round(0.005 * sr), rise = 1 / Math.round(0.25 * sr);
+    let prevI = -1, prevG = 1, worst = 0, worstAt = -1;
+    for (let i = 0; i < n; i++) {
+      const x = src[0][i]; if (Math.abs(x) < 0.05) continue;
+      const g = out[0][i] / x;
+      if (prevI >= 0) {
+        const allowed = (i - prevI) * Math.max(fall, rise) + 1e-4;
+        const step = Math.abs(g - prevG) - allowed;
+        if (step > worst) { worst = step; worstAt = i; }
+      }
+      prevI = i; prevG = g;
+    }
+    if (worst > 0) throw new Error('the limiter gain jumped ' + worst.toFixed(4) + ' more than its slope allows at sample ' + worstAt + ' (block seams every ' + BLK + ') — that is a click in the exported song');
+    // Untouched away from an over: before the first burst's attack, and after the last over's full release.
+    const A = Math.round(0.005 * sr), R = Math.round(0.25 * sr);
+    const quiet = [[0, bursts[0][0] - A - 2000], [bursts[3][1] + R + 10, n]];
+    for (const q of quiet) for (let c = 0; c < 2; c++) for (let i = q[0]; i < q[1]; i++) {
+      if (out[c][i] !== src[c][i]) throw new Error('sample ' + i + ' (' + (i / sr).toFixed(3) + ' s), nowhere near an over, was changed from ' + src[c][i] + ' to ' + out[c][i] + ' — the limiter is touching the song where nothing clips');
     }
   });
 
@@ -88128,8 +88193,10 @@
    * clips play. #562 was exactly 'previewing sound effects doesn't work'; v12.78 fixed a real throw, and this is the
    * part a desktop could never show.
    * The stand-in: navigator.audioSession as Safari exposes it, starting at 'auto'. The ▶ is pressed with a REAL click.
-   * CONTROL: the click must reach the preview (its row lights up), or the assertion would pass on a dead button. */
-  test('HUNT-e on an iPhone set to silent the sound effect preview makes no sound, because the app never asks for the playback audio session', { item: '690', budgetMs: 60000 }, async function () {
+   * CONTROL: the click must reach the preview (its row lights up), or the assertion would pass on a dead button.
+   * FIXED (queue 690): FM.audioCtx() asks for the playback session (FM.playbackSession) — see the next test for the
+   * microphone, which must be left to WebKit. */
+  test('690 the sound effect preview asks for the playback audio session, so an iPhone set to silent still plays it', { item: '690', budgetMs: 60000 }, async function () {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
     if (!FM.sfx || !FM.sfx.open) throw new Error('FM.sfx.open is missing — the sound-effects sheet has no opener');
@@ -88150,12 +88217,51 @@
           let lit = false;
           const obs = new MutationObserver(() => { if (row && row.classList.contains('playing')) lit = true; });
           if (row) obs.observe(row, { attributes: true, attributeFilter: ['class'] });
-          window.__fmStep = 'HUNT-e sfx preview click';
+          window.__fmStep = '690 sfx preview click';
           try { await realInput924([{ t: 'mouseMove', x: x, y: y, ms: 30 }, { t: 'mouseDown', x: x, y: y, ms: 60 }, { t: 'mouseUp', x: x, y: y, ms: 0 }], 'the ▶ of a sound effect'); await sleep(350); }
           finally { obs.disconnect(); }
           if (!lit) throw new Error('CONTROL: the real click on the ▶ never reached the preview (its row did not light up) — nothing below means anything');
           if (session.type !== 'playback') throw new Error('the sound effect previewed through Web Audio with navigator.audioSession left at ' + String(session.type) + ' — on an iPhone that is the ambient session, which the ring/silent switch mutes, so on a phone set to silent every ▶ in the sound effects list (and every reversed clip) makes no sound while his other clips still play');
         } finally { try { if (FM.sfx.stopPreview) FM.sfx.stopPreview(); FM.sfx.close(); } catch (e) {} await sleep(250); }
+      });
+    } finally {
+      if (prev) Object.defineProperty(navigator, 'audioSession', prev); else delete navigator.audioSession;
+    }
+  });
+
+  /* 4b — …AND THE MICROPHONE STILL RECORDS. The fix above sets navigator.audioSession to 'playback' whenever the shared
+   * audio context is reached. On an iPhone that override would also beat the play-and-record session WebKit picks for
+   * a capture, and a playback-only session cannot record — the voice recorder would break on exactly the phone the fix
+   * is for. So the recorder hands the session back to WebKit ('auto') before it asks for the mic, the app leaves it
+   * there while a mic track is live, and puts playback back when the mic is released. Driven through the real recorder
+   * with the suite's permission-free microphone (withFakeMic), and the session stubbed as Safari exposes it.
+   * CONTROL: reaching the shared context on its own must ask for playback, or nothing below is measured. */
+  test('690 while the microphone is open the app leaves the audio session to WebKit, and asks for playback again once it is released', { item: '690', budgetMs: 45000 }, async function () {
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (!FM.voiceRec || !FM.voiceRec.micLive) throw new Error('FM.voiceRec.micLive is missing — the audio session cannot tell whether the microphone is open');
+    const had = Object.prototype.hasOwnProperty.call(navigator, 'audioSession');
+    const prev = had ? Object.getOwnPropertyDescriptor(navigator, 'audioSession') : null;
+    const session = { type: 'auto', state: 'inactive' };
+    Object.defineProperty(navigator, 'audioSession', { configurable: true, enumerable: true, get: function () { return session; } });
+    try {
+      window.__fmStep = '690 mic session control';
+      FM.audioCtx();
+      if (session.type !== 'playback') throw new Error('CONTROL: reaching the shared audio context left navigator.audioSession at ' + session.type + ' — the playback session is never asked for, so nothing below means anything');
+      await withFakeMic(async function () {
+        window.__fmStep = '690 mic session open';
+        FM.voiceRec.open();
+        const pend = FM.voiceRec._micPending();
+        if (session.type !== 'auto') throw new Error('the recorder asked for the microphone with the audio session still forced to ' + session.type + ' — on an iPhone that override beats the play-and-record session a recording needs');
+        FM.audioCtx();   // a sound while the permission prompt is up
+        if (session.type !== 'auto') throw new Error('the app forced the audio session back to ' + session.type + ' while the microphone request was still waiting on its answer');
+        await pend;
+        if (!FM.voiceRec.micLive()) throw new Error('CONTROL: the fake microphone never went live, so the session could not be tested while it was held');
+        FM.audioCtx();   // any sound while the mic is open — a boosted clip, a sound-effect preview
+        if (session.type !== 'auto') throw new Error('the app forced the audio session to ' + session.type + ' while the microphone was open — the recording would lose its play-and-record session');
+        window.__fmStep = '690 mic session close';
+        FM.voiceRec.close();
+        if (FM.voiceRec.micLive()) throw new Error('CONTROL: closing the recorder left a microphone track live');
+        if (session.type !== 'playback') throw new Error('the microphone was released and the audio session was left at ' + session.type + ' — on a phone set to silent the sound effect preview goes quiet again until something else asks');
       });
     } finally {
       if (prev) Object.defineProperty(navigator, 'audioSession', prev); else delete navigator.audioSession;

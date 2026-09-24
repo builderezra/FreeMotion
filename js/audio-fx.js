@@ -12,9 +12,36 @@ window.FM = window.FM || {};
   // iOS caps live AudioContexts (~4). This is THE one; never construct another live context.
   let _ac = null;
   FM.audioCtx = function () {
+    FM.playbackSession();   // before the context exists, so its very first sound is in the right session (queue 690)
     if (!_ac) { const AC = window.AudioContext || window.webkitAudioContext; _ac = new AC(); }
     if (_ac.state === 'suspended') _ac.resume();
     return _ac;
+  };
+  /* ═══ WEB AUDIO MUST BE "PLAYBACK", OR THE SILENT SWITCH MUTES IT (queue 690, audio hunt) ═══════════════
+   * His #562: "Previewing sound effects in the sound effect menu doesn't work". v12.78 fixed a real throw
+   * there; this is the half a desktop can never show.
+   * On an iPhone, WebKit chooses the audio session from what the page is playing: an audible media element
+   * gets the PLAYBACK session, but a page playing only Web Audio gets AMBIENT — and ambient is exactly what
+   * Silent mode mutes. The ▶ in Add ▸ Audio ▸ Sound effects is Web Audio alone (js/sfx.js preview), and so
+   * are reversed clips (js/audio-play.js), while every clip's element sits paused and muted whenever the
+   * transport is stopped. So with the phone on silent every ▶ made no sound at all, while his ordinary
+   * clips played. navigator.audioSession (Safari 16.4+) is the page's way to say "this is media": WebKit
+   * takes that type ahead of its own guess.
+   * Asked every time the shared context is reached, not once, because a browser that grows the API later
+   * and a microphone that has just been released both need it put back — and it is one property read.
+   * Only ever moved off 'auto', so nothing the page chose on purpose is overwritten. WHILE THE MIC IS OPEN
+   * it is left alone: WebKit picks play-and-record for a capture itself, and an override would take
+   * precedence over that — js/voice-rec.js hands the choice back to WebKit before it asks for the mic.
+   * A browser without the API keeps today's behaviour exactly. */
+  FM.playbackSession = function () {
+    let s = null;
+    try { s = navigator.audioSession; } catch (e) { s = null; }
+    if (!s) return false;
+    try {
+      if (FM.voiceRec && FM.voiceRec.micLive && FM.voiceRec.micLive()) return false;
+      if (s.type === 'auto') s.type = 'playback';
+      return s.type === 'playback';
+    } catch (e) { return false; }
   };
   // The context if there IS one, without creating or resuming anything. app.js's transport clock
   // reads this: it wants the audio clock when one is already running, but pressing play on a

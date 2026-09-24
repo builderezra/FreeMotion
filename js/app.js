@@ -705,8 +705,10 @@ window.FM = window.FM || {};
       if (layer.type !== 'video') return;
       const m = FM.media.get(layer.id);
       if (m && m.el && !layer.reversed) {
+        const r = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * FM.previewRate));
         if (FM.pitchFollowsSpeed) FM.pitchFollowsSpeed(m.el);   // queue 916: the pitch rides the rate, like the export
-        try { m.el.playbackRate = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * FM.previewRate)); } catch (e) {}
+        if (FM.pitchForRate) FM.pitchForRate(m.el, r);          // …except at 1x, where a rate change is only a sync trim (queue 690)
+        try { m.el.playbackRate = r; } catch (e) {}
       }
     });
     /* The <select> is a display like any other, so it is driven from here rather than patched by each
@@ -1823,11 +1825,37 @@ window.FM = window.FM || {};
   };
   FM._SYNC_WARMUP = SYNC_WARMUP;   // suite seam: the test states the number it is asserting about
 
-  FM._syncBiasStep = function (m, rawErr) {
+  /* `learn` (queue 690) says whether this sample may teach the bias at all. Omitted, it always does — the
+     step on its own is only arithmetic. The sync tick passes FM._syncMayLearn, below, and that is where the
+     decision lives. */
+  FM._syncBiasStep = function (m, rawErr, learn) {
     const fresh = (m._errBias == null || !isFinite(m._errBias));
     if (fresh) m._errBias = rawErr;
-    else m._errBias += (rawErr - m._errBias) * ERR_BIAS_ALPHA;
+    else if (learn !== false) m._errBias += (rawErr - m._errBias) * ERR_BIAS_ALPHA;
     return { deBiased: rawErr - m._errBias, fresh: fresh };
+  };
+  /* ═══ A STALL IS NOT LATENCY — DO NOT LEARN IT (queue 690, audio hunt) ═══════════════════════════════
+   * His words for the hunt: "go re audit, find some bugs coz theres a shit load".
+   * The bias above exists to soak up ONE thing: the constant output latency between el.currentTime and
+   * what is actually coming out of the speaker. Its comment argues real drift outruns it because drift
+   * accumulates. That is true of drift and false of a STALL, which is a one-off step: the element falls
+   * 200 ms behind in one go and then plays on normally. While the trim closes that step the EMA was still
+   * learning, so the two met in the middle — the de-biased error read zero with only ~40% of the step
+   * closed, the trim stopped, and the song stayed ~135 ms behind the picture and every other layer until
+   * the next press of play (measured: 132-152 ms left, 4.5 s after a 200 ms stall, 0 seeks). A second
+   * stall added to it rather than triggering the hard seek, because the seek is judged AFTER the bias is
+   * taken off. His phone falls behind often — his 10 Sep report (before queue 848) measured the clock a
+   * median 158 ms out.
+   * The trade, stated: the latency is now taken from the warm-up's seed and what the hold band lets it
+   * learn after that, so an error over 45 ms is always treated as lag. That is what SYNC_WARMUP exists to
+   * make safe — the seed is taken once the element has settled.
+   * So a sample only teaches the bias while it sits inside the dead band, i.e. while the controller is
+   * HOLDING. An error big enough to act on is corrected, not learned; once the trim has pulled it back
+   * inside the band, learning resumes and absorbs what is left, which is at most the band itself. A fresh
+   * bias (play, a wrap, a seek) is still seeded from the first warm sample exactly as before. */
+  FM._syncMayLearn = function (m, rawErr) {
+    if (!m || m._errBias == null || !isFinite(m._errBias)) return true;   // seeding: the step takes it whole anyway
+    return Math.abs(rawErr - m._errBias) <= SYNC_DEAD;
   };
   FM._noteSyncError = function (v, now) {
     const p = FM.playbackStats; if (!p) return;
@@ -1986,6 +2014,10 @@ window.FM = window.FM || {};
           else {
             // speed RAMP: follow the keyframed curve live; the trim rides on top of it.
             const base = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * (FM.previewRate || 1)));
+            /* A 1x clip keeps its pitch while the trim below nudges its rate; a sped-up one resamples, as queue 916
+               asked. Every frame, because a speed ramp or a preview-rate change can carry a clip across 1x
+               mid-play; it only writes when the answer changes (queue 690 — see FM.pitchForRate). */
+            if (FM.pitchForRate) FM.pitchForRate(m.el, base);
             /* ============ THE SCRATCHY-AUDIO FIX (queue 148) ============
              * Ezra: "the audio i import is making a realy scratchy popping noise that hurts my ears
              * when im trying to play back stuff, this is related to the long on going lag issues."
@@ -2000,9 +2032,10 @@ window.FM = window.FM || {};
              * audible, and what it sounds like is scratchy. No sample is ever dropped, so none of
              * this showed up in the seek counter or as a hole in the waveform — which is why five
              * separate readings of this file found nothing.
-             * (Since queue 916 preservesPitch is OFF — his rule is that a sped-up clip sounds sped up,
-             * as the export always did — so a write is now a plain resample and a trim is a slight
-             * pitch bend rather than a stretcher re-prime. Rate-limiting the writes matters as much.)
+             * (Since queue 916 preservesPitch is OFF on a sped-up clip — his rule is that a sped-up clip
+             * sounds sped up, as the export always did — so there a write is a plain resample and a trim
+             * is a pitch bend. A 1x clip keeps its pitch again since queue 690, because a +10% trim
+             * resampled is 1.65 semitones sharp. Rate-limiting the writes matters as much.)
              *
              * WHY IT NEVER CONVERGED, which is the actual defect. `el.currentTime` is not the
              * instantaneous audible position: it is latched to the last block the element handed the
@@ -2042,7 +2075,7 @@ window.FM = window.FM || {};
                all. That is the very constant v11.70 identified and removed, put straight back into the
                "worst" figure the report prints. Computed once, here, from the bias the controller is
                actually acting on. */
-            const step = FM._syncBiasStep(m, rawErr);
+            const step = FM._syncBiasStep(m, rawErr, FM._syncMayLearn(m, rawErr));   // a stall is corrected, not learned (queue 690)
             const plan = FM.mediaSyncPlan(step.deBiased, base, m._syncAt == null ? Infinity : now - m._syncAt);
             if (plan.action === 'seek') {
               m.el.currentTime = local; m._syncAt = now; FM.playbackStats.seeks++;
@@ -2065,12 +2098,23 @@ window.FM = window.FM || {};
           }
           // Reconcile volume/mute every tick (fadeMul = 1 when there are no fades) so a volume/fade
           // edit mid-playback takes effect immediately instead of sticking.
-          const vol = FM.layerVolume(layer, FM.time) * FM.fadeMul(layer, FM.time - layer.start, layer.duration)
-                    * declickGain(layer, FM.time, m, now);   // keyframed volume animates on forward clips; the last term is the edge de-click (#148)
+          const lvl = FM.layerVolume(layer, FM.time) * FM.fadeMul(layer, FM.time - layer.start, layer.duration);
+          const vol = lvl * declickGain(layer, FM.time, m, now);   // keyframed volume animates on forward clips; the last term is the edge de-click (#148)
           // A soloed layer silences the others' AUDIO too, matching the picture (compositor) and the
           // exported soundtrack (exporter buildAudioMix). Mute rather than pause so un-soloing resumes
           // instantly without a re-seek.
-          if (FM.soloSilenced(layer)) { m.el.muted = true; }
+          /* ⚠️ …AND A LEVEL OF ZERO IS el.muted, NOT el.volume = 0 (queue 690, audio hunt). The mute button,
+             a volume of 0 and a fade at its silent end all used to reach the element as `muted = false;
+             volume = 0` — and on an iPhone a page cannot set el.volume at all (it always reads 1), so the
+             muted clip played at FULL level while he edited. Extract Audio and Remove Vocals both mute the
+             original, so on the phone he heard the sound twice, or the vocals stayed in. el.muted IS
+             settable on iOS. `lvl` leaves out the de-click, whose zero lasts one tick and is not a mute. The
+             level stage, if the element has one, goes to 0 too, in case an engine lets a routed element's
+             audio past el.muted. */
+          if (FM.soloSilenced(layer) || !(lvl > 0)) {
+            m.el.muted = true;
+            if (m._boost && FM.audioFxLive && FM.audioFxLive.setBoost) FM.audioFxLive.setBoost(layer, 0);
+          }
           else {
             m.el.muted = false;
             /* SPLIT AT UNITY (queue 195). `el.volume` cannot go above 1 — assigning 2 throws
@@ -2225,13 +2269,21 @@ window.FM = window.FM || {};
         m._errBias = null; m._rateAt = 0; m._baseRate = null; m._warmCt = null;
         /* A sped-up clip sounds sped up (queue 916) — set on the element when it is made (js/media.js),
            and asserted again here so an element that reached the scene by any other route still does. */
+        const base0 = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * (FM.previewRate || 1)));
         if (FM.pitchFollowsSpeed) FM.pitchFollowsSpeed(m.el);
-        try { m.el.playbackRate = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * (FM.previewRate || 1))); } catch (e) {}
-        m.el.muted = FM.soloSilenced(layer);   // solo silences the others' audio, not just their picture
+        if (FM.pitchForRate) FM.pitchForRate(m.el, base0);   // a 1x clip keeps its pitch through the sync trims (queue 690)
+        try { m.el.playbackRate = base0; } catch (e) {}
+        /* Solo silences the others' audio, not just their picture — and a muted layer starts MUTED (queue 690):
+           on an iPhone the el.volume = 0 below is ignored, so a muted clip used to open at full level. Its
+           volume only, not its fade: the start wait below skips a muted element, and a clip fading in from
+           silence must still hold the transport until its sound has begun. */
+        m.el.muted = FM.soloSilenced(layer) || !(FM.layerVolume(layer, FM.time) > 0);
         // Pressing PLAY is the other place a waveform gets opened at an arbitrary sample — and the one
         // you hear most often. Start at zero; the sync tick's declickGain lifts it over 45ms. (#148)
         m._resumedAt = performance.now();
         m.el.volume = 0;
+        // …and where el.volume is read-only (an iPhone) the level stage is what opens silent (queue 690).
+        if (m._boost && FM.audioFxLive && FM.audioFxLive.volumeLocked && FM.audioFxLive.volumeLocked(m)) FM.audioFxLive.setBoost(layer, 0);
         /* A REFUSED play() IS THE REPORT (queue 786). On iOS the likeliest shape of "the song will not play at all" is
            play() rejecting — NotAllowedError without a gesture, NotSupportedError for a codec, AbortError when the
            element was torn down — and this catch used to swallow every one. "Your last playback" can only say what it

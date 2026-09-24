@@ -92,6 +92,27 @@ window.FM = window.FM || {};
     try { el.mozPreservesPitch = false; } catch (e) {}
     return el;
   };
+  /* …EXCEPT AT 1x, WHERE A RATE CHANGE IS A SYNC TRIM AND NOT A SPEED (queue 690, audio hunt).
+   * The playback tick holds each element to the transport by nudging playbackRate up to +-10% for a
+   * second or so (js/app.js FM.mediaSyncPlan). That was designed when preservesPitch was on, so a nudge
+   * was a time-stretch nobody could hear. With pitch following speed, the same nudge is a RESAMPLE: +10%
+   * is the song 1.65 semitones sharp — measured 1.3 s of it after one 200 ms stall — and on his phone,
+   * where the element falls behind constantly, songs kept going out of tune while he edited.
+   * His rule (queue 916) was about SPEED: "if you speed something up it should sound sped up". A clip at
+   * 1x has not been sped up, so it keeps its pitch through a trim; any other speed, or a preview rate
+   * other than 1x, still resamples exactly as queue 916 asked. `base` is the rate the clip should play
+   * at (its speed x the preview rate), not the trimmed rate — the trim is the thing being hidden.
+   * Written only when it changes, because the tick calls this every frame. */
+  FM.pitchForRate = function (el, base) {
+    if (!el) return el;
+    const keep = Math.abs((base || 1) - 1) < 1e-4;
+    const now = el.preservesPitch !== undefined ? el.preservesPitch : el.webkitPreservesPitch;
+    if (now === keep) return el;
+    try { el.preservesPitch = keep; } catch (e) {}
+    try { el.webkitPreservesPitch = keep; } catch (e) {}
+    try { el.mozPreservesPitch = keep; } catch (e) {}
+    return el;
+  };
 
   /* Load a video file -> { kind:'video', el, width, height, duration, url } */
   FM.loadVideoFile = function (file) {
