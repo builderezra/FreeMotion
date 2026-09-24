@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>927 Big Panels</title>
+<!-- queue 927 — the options sheet. Every picture is the REAL app, rendered by tools/design/927-render.py from branch
+     fm-design-927; the JPG beside this file is this page, rendered at 900px wide for his phone. -->
+<style>
+  :root { --bg: #0d131a; --card: #151e28; --line: #243241; --text: #eef3f8; --dim: #a9b7c6; --acc: #5cc8ef; --rec: #4fd18b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 26px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif; }
+  .page { width: 900px; margin: 0 auto; padding: 44px 36px 56px; }
+  h1 { font-size: 46px; line-height: 1.12; margin: 0 0 14px; letter-spacing: -.5px; }
+  h1 small { display: block; font-size: 27px; color: var(--dim); font-weight: 500; margin-top: 12px; letter-spacing: 0; }
+  h2 { font-size: 36px; margin: 56px 0 8px; letter-spacing: -.3px; }
+  h2 .n { display: inline-block; min-width: 50px; height: 50px; line-height: 50px; text-align: center; border-radius: 25px; background: var(--acc); color: #06202b; font-size: 28px; margin-right: 12px; vertical-align: 4px; padding: 0 10px; }
+  .lead { color: var(--dim); margin: 0 0 20px; }
+  .opt { background: var(--card); border: 2px solid var(--line); border-radius: 22px; padding: 22px 22px 18px; margin: 18px 0; }
+  .opt.rec { border-color: var(--rec); box-shadow: 0 0 0 4px rgba(79, 209, 139, .18); }
+  .opt h3 { font-size: 32px; margin: 0 0 6px; }
+  .opt h3 .tag { font-size: 21px; font-weight: 800; color: #06231a; background: var(--rec); border-radius: 999px; padding: 4px 14px; vertical-align: 5px; margin-left: 8px; letter-spacing: .3px; }
+  .opt p { margin: 0 0 14px; color: var(--dim); font-size: 25px; }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .g4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; }
+  figure { margin: 0; }
+  figure img { display: block; width: 100%; border-radius: 12px; border: 1px solid var(--line); background: #000; }
+  figcaption { font-size: 22px; color: var(--dim); margin: 6px 2px 4px; line-height: 1.25; }
+  figcaption b { color: var(--text); }
+  .real { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
+  .real .row { display: flex; gap: 12px; align-items: flex-start; }
+  .real img { border-radius: 8px; border: 1px solid var(--line); display: block; }
+  .strip figcaption { font-size: 21px; }
+  .how { background: var(--card); border: 2px solid var(--line); border-radius: 22px; padding: 20px 26px; margin-top: 18px; }
+  .how li { margin: 8px 0; }
+  .how b { color: var(--text); }
+  .how li { color: var(--dim); }
+  .pick { margin-top: 36px; background: rgba(79, 209, 139, .12); border: 2px solid var(--rec); border-radius: 22px; padding: 22px 26px; font-size: 28px; }
+  .pick b { color: var(--rec); }
+  .note { font-size: 22px; color: var(--dim); margin-top: 10px; }
+  /* the JPG is this page at 900px; opened on a phone the page itself reflows instead of scrolling sideways */
+  @media (max-width: 700px) {
+    body { font-size: 16px; }
+    .page { width: auto; padding: 22px 16px 36px; }
+    h1 { font-size: 27px; } h1 small { font-size: 16px; }
+    h2 { font-size: 22px; margin-top: 36px; } h2 .n { min-width: 32px; height: 32px; line-height: 32px; font-size: 18px; border-radius: 16px; }
+    .opt { padding: 14px; border-radius: 16px; } .opt h3 { font-size: 20px; } .opt h3 .tag { font-size: 13px; }
+    .opt p, figcaption, .strip figcaption, .note { font-size: 14px; } .pick { font-size: 18px; }
+    .g4 { grid-template-columns: 1fr 1fr; }
+    .real .row { flex-wrap: wrap; } .real img { max-width: 100%; height: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>#927 · Notes and Shortcuts: grab the corner to make them BIG
+    <small>Built and working on branch fm-design-927 — tested with a real mouse and a real finger. Every picture is the real app. Two things for you to pick.</small>
+  </h1>
+
+  <h2><span class="n">1</span>The grab corner</h2>
+  <p class="lead">Sits on the corner facing into the screen: top-left on PC (the panel hangs above its button, bottom-right), top-right on the phone (clear of Done, Tutorials and Close). Cursor becomes ↖↘ over it on PC. 48px to grab on the phone.</p>
+
+  <div class="opt rec">
+    <h3>A · Corner arc <span class="tag">RECOMMENDED</span></h3>
+    <p>A rounded bracket that follows the panel’s own corner — the handle iPad windows use. Reads as “grab here” without a word; grows a little under the cursor.</p>
+    <div class="g2">
+      <figure><img src="927/grip-arc-pc-notes.jpg"><figcaption><b>PC</b> · Notes, close up</figcaption></figure>
+      <figure><img src="927/grip-arc-pc-shortcuts-hover.jpg"><figcaption><b>PC</b> · Shortcuts, cursor on it</figcaption></figure>
+      <figure><img src="927/grip-arc-phone-notes.jpg"><figcaption><b>Phone</b> · Notes</figcaption></figure>
+      <figure><img src="927/grip-arc-phone-shortcuts.jpg"><figcaption><b>Phone</b> · Shortcuts</figcaption></figure>
+    </div>
+    <div class="real"><figcaption><b>1:1 with the screen</b> — PC, then phone</figcaption>
+      <div class="row"><img src="927/grip-arc-pc-notes-1x.jpg" style="width:400px"><img src="927/grip-arc-phone-notes-1x.jpg" style="width:368px"></div></div>
+  </div>
+
+  <div class="opt">
+    <h3>B · Grip lines</h3>
+    <p>Three diagonal ridges — the mark on the corner of desktop windows and text boxes. Familiar on PC; quieter on the phone.</p>
+    <div class="g2">
+      <figure><img src="927/grip-lines-pc-notes.jpg"><figcaption><b>PC</b> · Notes, close up</figcaption></figure>
+      <figure><img src="927/grip-lines-pc-shortcuts-hover.jpg"><figcaption><b>PC</b> · Shortcuts, cursor on it</figcaption></figure>
+      <figure><img src="927/grip-lines-phone-notes.jpg"><figcaption><b>Phone</b> · Notes</figcaption></figure>
+      <figure><img src="927/grip-lines-phone-shortcuts.jpg"><figcaption><b>Phone</b> · Shortcuts</figcaption></figure>
+    </div>
+    <div class="real"><figcaption><b>1:1 with the screen</b> — PC, then phone</figcaption>
+      <div class="row"><img src="927/grip-lines-pc-notes-1x.jpg" style="width:400px"><img src="927/grip-lines-phone-notes-1x.jpg" style="width:368px"></div></div>
+  </div>
+
+  <div class="opt">
+    <h3>C · Expand button</h3>
+    <p>A round button with arrows out (turns to arrows in when big). Says what it does, most obvious on a phone — but reads as a button to tap more than a corner to drag.</p>
+    <div class="g2">
+      <figure><img src="927/grip-chip-pc-notes.jpg"><figcaption><b>PC</b> · Notes, close up</figcaption></figure>
+      <figure><img src="927/grip-chip-pc-shortcuts-hover.jpg"><figcaption><b>PC</b> · Shortcuts, cursor on it</figcaption></figure>
+      <figure><img src="927/grip-chip-phone-notes.jpg"><figcaption><b>Phone</b> · Notes</figcaption></figure>
+      <figure><img src="927/grip-chip-phone-shortcuts.jpg"><figcaption><b>Phone</b> · Shortcuts</figcaption></figure>
+    </div>
+    <div class="real"><figcaption><b>1:1 with the screen</b> — PC, then phone</figcaption>
+      <div class="row"><img src="927/grip-chip-pc-notes-1x.jpg" style="width:400px"><img src="927/grip-chip-phone-notes-1x.jpg" style="width:368px"></div></div>
+  </div>
+
+  <h2><span class="n">2</span>How big is BIG (on PC)</h2>
+  <p class="lead">Always centred, same size for both panels. On the phone BIG is simply the whole screen, whichever you pick.</p>
+
+  <div class="opt">
+    <h3>Roomy · up to 640 × 580</h3>
+    <p>A clearly bigger panel that still leaves most of the editor showing. Shortcuts stay one column.</p>
+    <figure><img src="927/size-roomy-notes-big.jpg"><figcaption>Notes, BIG, on a 1280×800 screen</figcaption></figure>
+  </div>
+
+  <div class="opt rec">
+    <h3>Focus · up to 880 × 820 <span class="tag">RECOMMENDED</span></h3>
+    <p>Covers most of the screen but keeps a comfortable line length for reading notes. Shortcuts go two columns, so nearly all of them fit without scrolling.</p>
+    <figure><img src="927/pc-notes-big.jpg"><figcaption>Notes, BIG, on a 1280×800 screen</figcaption></figure>
+  </div>
+
+  <div class="opt">
+    <h3>Most of the screen · 32px margins</h3>
+    <p>Nearly full screen. On a wide monitor the note lines get very long.</p>
+    <figure><img src="927/size-most-notes-big.jpg"><figcaption>Notes, BIG, on a 1280×800 screen</figcaption></figure>
+  </div>
+
+  <h2>Small and BIG, side by side</h2>
+  <p class="lead">With the recommended picks. PC at 1280:</p>
+  <div class="g2">
+    <figure><img src="927/pc-notes-small.jpg"><figcaption><b>Notes</b> small (as today)</figcaption></figure>
+    <figure><img src="927/pc-notes-big.jpg"><figcaption><b>Notes</b> BIG</figcaption></figure>
+    <figure><img src="927/pc-shortcuts-small.jpg"><figcaption><b>Shortcuts</b> small (as today)</figcaption></figure>
+    <figure><img src="927/pc-shortcuts-big.jpg"><figcaption><b>Shortcuts</b> BIG</figcaption></figure>
+  </div>
+  <p class="lead" style="margin-top:18px">Phone at 380:</p>
+  <div class="g4">
+    <figure><img src="927/phone-notes-small.jpg"><figcaption>Notes small</figcaption></figure>
+    <figure><img src="927/phone-notes-big.jpg"><figcaption>Notes BIG</figcaption></figure>
+    <figure><img src="927/phone-shortcuts-small.jpg"><figcaption>Shortcuts small</figcaption></figure>
+    <figure><img src="927/phone-shortcuts-big.jpg"><figcaption>Shortcuts BIG</figcaption></figure>
+  </div>
+
+  <h2>Going BIG — the animation</h2>
+  <p class="lead">Drag the corner out. It leans after you a little; past the point a dashed outline shows the BIG size. Let go and it grows into the middle. Let go short of it and it springs back. Only two sizes.</p>
+  <div class="g2 strip">
+    <figure><img src="927/x-pc-notes-a0.jpg"><figcaption><b>1</b> Cursor on the corner: ↖↘</figcaption></figure>
+    <figure><img src="927/x-pc-notes-a2.jpg"><figcaption><b>2</b> Pull out: the BIG outline shows</figcaption></figure>
+    <figure><img src="927/x-pc-notes-m040.jpg"><figcaption><b>3</b> Let go · 40 ms</figcaption></figure>
+    <figure><img src="927/x-pc-notes-m110.jpg"><figcaption><b>4</b> 110 ms</figcaption></figure>
+    <figure><img src="927/x-pc-notes-m180.jpg"><figcaption><b>5</b> 180 ms</figcaption></figure>
+    <figure><img src="927/x-pc-notes-m359.jpg"><figcaption><b>6</b> 360 ms · BIG, centred</figcaption></figure>
+  </div>
+  <p class="lead" style="margin-top:18px">Phone (a tap on the corner does it too):</p>
+  <div class="g4 strip">
+    <figure><img src="927/x-phone-notes-a0.jpg"><figcaption>Finger on it</figcaption></figure>
+    <figure><img src="927/x-phone-notes-a2.jpg"><figcaption>Pull: outline</figcaption></figure>
+    <figure><img src="927/x-phone-notes-m110.jpg"><figcaption>110 ms</figcaption></figure>
+    <figure><img src="927/x-phone-notes-m359.jpg"><figcaption>BIG</figcaption></figure>
+  </div>
+
+  <h2>Closing while BIG — shrink, then fold into the button</h2>
+  <p class="lead">It shrinks down onto itself first, then tips back and folds into the button it came from, which gives a small bump as it takes it. (Closing while small is instant, as today.)</p>
+  <div class="g2 strip">
+    <figure><img src="927/x-pc-notes-f-rest.jpg"><figcaption><b>1</b> Press Done</figcaption></figure>
+    <figure><img src="927/x-pc-notes-f210.jpg"><figcaption><b>2</b> 210 ms · shrunk onto itself</figcaption></figure>
+    <figure><img src="927/x-pc-notes-f290.jpg"><figcaption><b>3</b> 290 ms · starts to fold</figcaption></figure>
+    <figure><img src="927/x-pc-notes-f360.jpg"><figcaption><b>4</b> 360 ms · tipping back</figcaption></figure>
+    <figure><img src="927/x-pc-notes-f420.jpg"><figcaption><b>5</b> 420 ms</figcaption></figure>
+    <figure><img src="927/x-pc-notes-f480.jpg"><figcaption><b>6</b> 480 ms · into the 📒 button</figcaption></figure>
+  </div>
+  <p class="lead" style="margin-top:18px">Shortcuts fold into the <b>?</b> button:</p>
+  <div class="g2 strip">
+    <figure><img src="927/x-pc-shortcuts-f-rest.jpg"><figcaption>Press Close</figcaption></figure>
+    <figure><img src="927/x-pc-shortcuts-f210.jpg"><figcaption>210 ms · shrunk</figcaption></figure>
+    <figure><img src="927/x-pc-shortcuts-f360.jpg"><figcaption>360 ms · folding</figcaption></figure>
+    <figure><img src="927/x-pc-shortcuts-f420.jpg"><figcaption>420 ms · into the ?</figcaption></figure>
+  </div>
+  <p class="lead" style="margin-top:18px">Phone — folds up into the Notes button in the top bar:</p>
+  <div class="g4 strip">
+    <figure><img src="927/x-phone-notes-f-rest.jpg"><figcaption>Tap Done</figcaption></figure>
+    <figure><img src="927/x-phone-notes-f140.jpg"><figcaption>140 · shrinking</figcaption></figure>
+    <figure><img src="927/x-phone-notes-f290.jpg"><figcaption>290 · folding</figcaption></figure>
+    <figure><img src="927/x-phone-notes-f420.jpg"><figcaption>420 · into 📒</figcaption></figure>
+  </div>
+
+  <h2>How it behaves</h2>
+  <ul class="how">
+    <li><b>Two sizes only.</b> Pull the corner — or the edge next to it — out past the outline: BIG, centred. Short of it: springs back.</li>
+    <li><b>Drag it back in</b> (corner or edge): small again, back above its button.</li>
+    <li><b>A tap on the corner</b> switches too — easier on the phone.</li>
+    <li><b>Remembered</b>, for Notes and Shortcuts separately, every time you open them.</li>
+    <li><b>Reduce Motion</b> on: same two sizes, no animation, closes instantly.</li>
+  </ul>
+
+  <div class="pick">Recommended: <b>A · Corner arc</b> + <b>Focus</b> size.<div class="note">Reply with a letter and a size (e.g. “A, Focus”). The other two looks and sizes get deleted when it ships.</div></div>
+
+</div>
+</body>
+</html>

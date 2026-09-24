@@ -87711,4 +87711,387 @@
     }
   });
 
+  /* ═══ 927 — NOTES AND SHORTCUTS/TIPS: GRAB THE CORNER TO GO BIG ═════════════════════════════════════════════════════
+   * His words, in full in REQUESTS.md #927: "when you grab the corner of a window … the cursor will change … only has two
+   * states either zoomed in or zoomed out … expands into a bigger view where it basically covers up more of the screen and
+   * is in the center … grab the edges again and drag it back in again it'll go back to smaller … it'll remember what you
+   * last had it like … if you extend it out big and you close it … shrinks down onto itself … and then folding into the
+   * button". Driven with REAL input (tests/_cdp.py's __fmWantInput, see 924): a grab is a hit-test and a pointer capture,
+   * and a synthetic event answers both by fiat. The CONTROL on every drag is that the recorded moves were trusted and of the
+   * expected kind. At the 380 pass the outer page is only 380 wide, so a PC panel parked at the right of a 1100px frame is
+   * brought into reach by sliding the frame left (aim927) — the app inside does not move or resize. */
+  const sleep927 = ms => new Promise(r => setTimeout(r, ms));
+  function rect927(el) { const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, w: r.width, h: r.height, cx: r.left + r.width / 2, cy: r.top + r.height / 2, r: r.right, b: r.bottom }; }
+  function near927(a, b, tol) { return Math.abs(a.l - b.l) <= tol && Math.abs(a.t - b.t) <= tol && Math.abs(a.w - b.w) <= tol && Math.abs(a.h - b.h) <= tol; }
+  function fmt927(a) { return Math.round(a.l) + ',' + Math.round(a.t) + ' ' + Math.round(a.w) + '×' + Math.round(a.h); }
+  function aim927(x) {
+    // slide the (already on-screen) frame left just enough that app-x `x` sits in the middle of what real input can reach
+    const fe = window.frameElement, topW = (window.top && window.top.innerWidth) || 380;
+    const left = x > topW - 60 ? Math.round(topW / 2 - x) : 0;
+    fe.style.left = left + 'px';
+    return left;
+  }
+  function tidy927() {
+    try { if (FM.shortcuts && FM.shortcuts.hide) FM.shortcuts.hide({ now: true }); } catch (e) {}
+    try { if (FM.notepad && FM.notepad.close) FM.notepad.close({ now: true }); } catch (e) {}
+    document.querySelectorAll('.np-scrim, .pb-ghost').forEach(n => n.remove());
+    document.querySelectorAll('.pop-tail').forEach(n => n.remove());
+    document.querySelectorAll('.pop-src').forEach(n => n.classList.remove('pop-src'));
+    document.documentElement.removeAttribute('data-pb-cursor');
+    try { localStorage.removeItem('fm.panelBig'); } catch (e) {}
+    if (FM.panelSize) FM.panelSize._reduce = false;
+  }
+  function mouseDrag927(x0, y0, dx, dy, n) {
+    const s = [{ t: 'mouseMove', x: x0, y: y0, ms: 60 }, { t: 'mouseDown', x: x0, y: y0, ms: 60 }];
+    for (let k = 1; k <= n; k++) s.push({ t: 'mouseMove', x: x0 + dx * k / n, y: y0 + dy * k / n, ms: 28 });
+    s.push({ t: 'mouseUp', x: x0 + dx, y: y0 + dy, ms: 0 });
+    return s;
+  }
+  function touchDrag927(x0, y0, dx, dy, n) {
+    const s = [{ t: 'touchStart', x: x0, y: y0, ms: 80 }];
+    for (let k = 1; k <= n; k++) s.push({ t: 'touchMove', x: x0 + dx * k / n, y: y0 + dy * k / n, ms: 30 });
+    s.push({ t: 'touchEnd', x: x0 + dx, y: y0 + dy, ms: 0 });
+    return s;
+  }
+  /* Everything the page saw while the input ran: each move (trusted? which kind? was the panel big yet, how wide was its
+     LAYOUT box, was the preview outline up) and a width sample every 10 ms, so an animation shows as in-between widths. */
+  function watch927(card, btn) {
+    const moves = [], widths = [];
+    const onMove = (e) => moves.push({ trusted: e.isTrusted, kind: e.pointerType, big: card.classList.contains('pb-big'), lw: card.offsetWidth, ghost: !!document.querySelector('.pb-ghost.on') });
+    window.addEventListener('pointermove', onMove, true);
+    const iv = setInterval(() => widths.push({ w: card.getBoundingClientRect().width, big: card.classList.contains('pb-big'), lift: !!(btn && btn.classList.contains('pop-src')) }), 10);
+    return { moves: moves, widths: widths, stop: () => { window.removeEventListener('pointermove', onMove, true); clearInterval(iv); } };
+  }
+  function control927(W, kind, what) {
+    const m = W.moves.filter(x => x.kind === kind);
+    if (m.length < 4) throw new Error(what + ': only ' + m.length + ' ' + kind + ' moves reached the page — the drag did not happen');
+    const fake = W.moves.filter(x => !x.trusted);
+    if (fake.length) throw new Error('CONTROL: ' + fake.length + ' recorded moves in ' + what + ' were not trusted input — this is not a real ' + kind);
+  }
+  function grip927(card) {
+    const g = card && card.querySelector('.pb-grip');
+    if (!g) throw new Error('the panel has no grab corner (.pb-grip) — there is nothing to grab');
+    return g;
+  }
+  function hitIs927(x, y, el, what) {
+    const hit = document.elementFromPoint(x, y);
+    if (!hit || !(hit === el || el.contains(hit))) throw new Error(what + ' is covered at ' + Math.round(x) + ',' + Math.round(y) + ' by ' + (hit ? (hit.className && hit.className.baseVal !== undefined ? hit.tagName : (hit.className || hit.tagName)) : 'nothing') + ' — a real press there would not reach it');
+  }
+
+  test('927 PC — a real mouse on the Notes corner: resize cursor, a short pull springs back, a pull OUT snaps BIG and centred (the same big however far), and the corner or the edge dragged back IN returns it to exactly where it was', { item: '927', budgetMs: 120000 }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    tidy927();
+    try {
+      await atWideWidth(async function () {
+        await onScreen924(async function () {
+          if (FM.home.isOpen()) { FM.home.close(); await sleep927(300); }
+          FM.notepad.open(); await sleep927(600);
+          const card = document.querySelector('.np-scrim .np-card');
+          if (!card) throw new Error('setup: the notepad did not open');
+          const grip = grip927(card);
+          if (!card.classList.contains('pop-card')) throw new Error('setup: at 1100 the notepad did not pop out of its button — this is not the PC layout he uses');
+          const small = rect927(card), g = rect927(grip);
+          /* clause 2 — a corner you can grab, the one facing into the screen, with the resize cursor */
+          if (card.getAttribute('data-pb-corner') !== 'tl') throw new Error('the grip is on the ' + card.getAttribute('data-pb-corner') + ' corner — the panel sits above its button at the right, so the corner to pull is the TOP-LEFT');
+          if (Math.abs(g.l - small.l) > 2 || Math.abs(g.t - small.t) > 2) throw new Error('the grip is at ' + fmt927(g) + ', not in the card’s top-left corner (' + fmt927(small) + ')');
+          if (g.w < 24 || g.h < 24) throw new Error('the grip is only ' + Math.round(g.w) + '×' + Math.round(g.h) + ' — too small to grab with a mouse');
+          const cur = getComputedStyle(grip).cursor;
+          if (cur !== 'nwse-resize') throw new Error('over the corner the cursor is “' + cur + '”, not the diagonal resize arrow he described');
+          const eh = card.querySelector('.pb-edge-h'), ev = card.querySelector('.pb-edge-v');
+          if (!eh || !ev || getComputedStyle(eh).cursor !== 'ns-resize' || getComputedStyle(ev).cursor !== 'ew-resize') throw new Error('the edges beside the corner do not show the edge resize cursors (' + (eh && getComputedStyle(eh).cursor) + ' / ' + (ev && getComputedStyle(ev).cursor) + ')');
+          const mark = [].slice.call(grip.querySelectorAll('.pb-mark')).find(m => m.getBoundingClientRect().width > 0 && getComputedStyle(m).display !== 'none');
+          if (!mark) throw new Error('the grip draws nothing — a corner you cannot see is not a corner you know to grab');
+          const x0 = g.l + g.w / 2, y0 = g.t + g.h / 2;
+          hitIs927(x0, y0, grip, 'the grip');
+          aim927(x0);
+
+          /* a SHORT pull springs back: two states, and not having pulled far enough is not a third */
+          let W = watch927(card);
+          try { await realInput924(mouseDrag927(x0, y0, -13, -13, 5), 'a short pull on the corner'); await sleep927(450); } finally { W.stop(); }
+          control927(W, 'mouse', 'the short pull');
+          if (card.classList.contains('pb-big')) throw new Error('an 18px pull made the notes BIG — it should spring back short of the commit point');
+          if (!near927(rect927(card), small, 1.5)) throw new Error('after a short pull the notes sit at ' + fmt927(rect927(card)) + ', not back where they were (' + fmt927(small) + ')');
+
+          /* pull OUT: nothing resizes while the button is down (no free sizing), the outline of big shows past the point, and letting go snaps big */
+          W = watch927(card);
+          try { await realInput924(mouseDrag927(x0, y0, -70, -60, 10), 'pulling the corner out'); await sleep927(700); } finally { W.stop(); }
+          control927(W, 'mouse', 'the pull out');
+          const during = W.moves.filter(m => m.kind === 'mouse');
+          if (during.some(m => m.big)) throw new Error('the notes went BIG while the button was still down — he asked for it to snap between two sizes, not follow the pointer');
+          if (during.some(m => Math.abs(m.lw - small.w) > 1)) throw new Error('the panel’s size changed while dragging (' + during.map(m => m.lw).join(' ') + ') — that is free sizing, which he ruled out');
+          if (!during.some(m => m.ghost)) throw new Error('pulled past the commit point, no outline of the big size appeared — nothing tells him what letting go will do');
+          if (!card.classList.contains('pb-big')) throw new Error('pulled the corner out 90px and let go: the notes did not go BIG');
+          const big = rect927(card);
+          if (Math.abs(big.cx - innerWidth / 2) > 2 || Math.abs(big.cy - innerHeight / 2) > 2) throw new Error('BIG is not centred: its centre is ' + Math.round(big.cx) + ',' + Math.round(big.cy) + ' in a ' + innerWidth + '×' + innerHeight + ' window');
+          if (!(big.w * big.h > small.w * small.h * 2.5)) throw new Error('BIG is ' + fmt927(big) + ' against small ' + fmt927(small) + ' — that does not “cover up more of the screen”');
+          const mids = W.widths.filter(s => s.big && s.w > small.w + 4 && s.w < big.w - 4);
+          if (mids.length < 3) throw new Error('going big was a jump, not an animation: only ' + mids.length + ' in-between widths were seen (' + W.widths.map(s => Math.round(s.w)).join(' ') + ')');
+          if (!FM.panelSize.isBig('notes')) throw new Error('BIG was not remembered for the notes');
+          if (document.querySelector('.pb-ghost')) throw new Error('the preview outline is still on screen after letting go');
+          const bottomBtn = document.getElementById('btn-notes');
+          if (bottomBtn && bottomBtn.classList.contains('pop-src')) throw new Error('the Notes button is still lifted over the scrim while the panel is big — it shows THROUGH the big panel where they overlap');
+
+          /* drag the corner back IN: small again, exactly where it was */
+          const gb = rect927(grip);
+          if (Math.abs(gb.l - big.l) > 2 || Math.abs(gb.t - big.t) > 2) throw new Error('when big, the grip is not in the big panel’s top-left corner (' + fmt927(gb) + ' vs ' + fmt927(big) + ')');
+          const x1 = gb.l + gb.w / 2, y1 = gb.t + gb.h / 2;
+          aim927(x1 + 60);
+          W = watch927(card, bottomBtn);
+          try { await realInput924(mouseDrag927(x1, y1, 64, 64, 9), 'dragging the corner back in'); await sleep927(650); } finally { W.stop(); }
+          control927(W, 'mouse', 'the drag back in');
+          if (card.classList.contains('pb-big')) throw new Error('dragged the corner 90px back in: still big');
+          /* the button comes back up over the scrim only once small has LANDED — lifted mid-shrink it shows through the big card */
+          const early = W.widths.filter(s => s.lift && s.w > small.w + 30);
+          if (early.length) throw new Error('the Notes button was lifted over the scrim while the shrinking panel was still ' + Math.round(early[0].w) + 'px wide — it shows through the panel');
+          if (bottomBtn && !bottomBtn.classList.contains('pop-src')) throw new Error('back to small, the Notes button is not lifted again — the small panel no longer reads as coming out of it');
+          if (!near927(rect927(card), small, 2)) throw new Error('back to small, the notes sit at ' + fmt927(rect927(card)) + ' — not where they were (' + fmt927(small) + ')');
+          if (FM.panelSize.isBig('notes')) throw new Error('small was not remembered');
+
+          /* a much longer pull gives the SAME big — two sizes, not one per distance */
+          aim927(x0);
+          W = watch927(card);
+          try { await realInput924(mouseDrag927(x0, y0, -300, -24, 14), 'a long pull out'); await sleep927(700); } finally { W.stop(); }
+          control927(W, 'mouse', 'the long pull');
+          if (!card.classList.contains('pb-big')) throw new Error('a 300px pull did not make it big');
+          if (!near927(rect927(card), big, 1)) throw new Error('a 300px pull gave ' + fmt927(rect927(card)) + ' but a 90px pull gave ' + fmt927(big) + ' — BIG must be one size');
+
+          /* and the EDGE: "grab the edges again and drag it back in" */
+          const eTop = rect927(eh);
+          if (!(eTop.w > 40 && eTop.h >= 4)) throw new Error('the top edge strip is ' + fmt927(eTop) + ' — nothing to grab');
+          const xe = eTop.l + Math.min(160, eTop.w / 2), ye = eTop.t + eTop.h / 2;
+          hitIs927(xe, ye, eh, 'the top edge');
+          aim927(xe);
+          W = watch927(card);
+          try { await realInput924(mouseDrag927(xe, ye, 0, 70, 8), 'dragging the top edge back in'); await sleep927(650); } finally { W.stop(); }
+          control927(W, 'mouse', 'the edge drag');
+          if (card.classList.contains('pb-big')) throw new Error('dragging the top EDGE 70px in did not make it small again');
+          if (!near927(rect927(card), small, 2)) throw new Error('after the edge drag the notes sit at ' + fmt927(rect927(card)) + ', not ' + fmt927(small));
+        });
+      }, 1100);
+    } finally {
+      tidy927();
+      try { if (hadHome && !FM.home.isOpen()) FM.home.open(); } catch (e) {}
+      await sleep927(120);
+    }
+  });
+
+  test('927 PC — Shortcuts/tips goes big the same way, a real click on Close folds it away, and each panel remembers ITS OWN size across closing and opening', { item: '927', budgetMs: 120000 }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    tidy927();
+    try {
+      await atWideWidth(async function () {
+        await onScreen924(async function () {
+          if (FM.home.isOpen()) { FM.home.close(); await sleep927(300); }
+          FM.shortcuts.show(); await sleep927(600);
+          const ov = document.getElementById('shortcuts-overlay'), card = ov && ov.querySelector('.shortcuts-card');
+          if (!card || !FM.shortcuts.isOpen()) throw new Error('setup: the shortcuts sheet did not open');
+          const grip = grip927(card), small = rect927(card), g = rect927(grip);
+          if (card.getAttribute('data-pb-corner') !== 'tl' || getComputedStyle(grip).cursor !== 'nwse-resize') throw new Error('the shortcuts grip is not the top-left resize corner (' + card.getAttribute('data-pb-corner') + ', ' + getComputedStyle(grip).cursor + ')');
+          const x0 = g.l + g.w / 2, y0 = g.t + g.h / 2;
+          hitIs927(x0, y0, grip, 'the shortcuts grip');
+          aim927(x0);
+          let W = watch927(card);
+          try { await realInput924(mouseDrag927(x0, y0, -80, -40, 10), 'pulling the shortcuts corner out'); await sleep927(700); } finally { W.stop(); }
+          control927(W, 'mouse', 'the shortcuts pull');
+          if (!card.classList.contains('pb-big')) throw new Error('pulled out and let go: the shortcuts sheet did not go big');
+          const big = rect927(card);
+          if (Math.abs(big.cx - innerWidth / 2) > 2 || Math.abs(big.cy - innerHeight / 2) > 2) throw new Error('big shortcuts are not centred (' + fmt927(big) + ')');
+          if (!(big.w > small.w * 1.6)) throw new Error('big shortcuts are only ' + Math.round(big.w) + 'px wide against ' + Math.round(small.w));
+          /* big uses the room: Keyboard and Mouse / stage side by side */
+          const subs = [].slice.call(card.querySelectorAll('.shortcuts-sub')).map(rect927);
+          if (subs.length !== 2 || Math.abs(subs[0].t - subs[1].t) > 2 || !(subs[1].l > subs[0].l + 200)) throw new Error('big shortcuts do not put Keyboard and Mouse / stage side by side (' + subs.map(fmt927).join(' | ') + ')');
+          let stored = null; try { stored = JSON.parse(localStorage.getItem('fm.panelBig') || 'null'); } catch (e) {}
+          if (!stored || stored.shortcuts !== true || stored.notes) throw new Error('what is remembered is ' + JSON.stringify(stored) + ' — it should be shortcuts big, notes untouched');
+
+          /* a real click on Close: it is closed at once (a second ? would open it) but still on screen, folding */
+          const close = [].slice.call(card.querySelectorAll('.shortcuts-foot .btn')).find(b => !b.classList.contains('shortcuts-tut'));
+          const c = rect927(close);
+          aim927(c.cx);
+          await realInput924([{ t: 'mouseMove', x: c.cx, y: c.cy, ms: 40 }, { t: 'mouseDown', x: c.cx, y: c.cy, ms: 50 }, { t: 'mouseUp', x: c.cx, y: c.cy, ms: 0 }], 'clicking Close on the big sheet');
+          if (FM.shortcuts.isOpen()) throw new Error('after Close the sheet still says it is open — a second ? would close it instead of opening it');
+          if (ov.classList.contains('hidden')) throw new Error('closing the BIG sheet hid it at once — there was no shrink-and-fold');
+          await sleep927(800);
+          if (!ov.classList.contains('hidden')) throw new Error('the fold never finished — the sheet is still on screen 800ms after Close');
+          if (document.querySelector('.pop-tail')) throw new Error('a comic tail was left behind after the fold');
+
+          /* reopen: BIG, straight away, centred — and the notes are still SMALL, their own size */
+          FM.shortcuts.show(); await sleep927(500);
+          if (!card.classList.contains('pb-big')) throw new Error('closed big and reopened: the shortcuts came back small — it did not remember');
+          if (!near927(rect927(card), big, 2)) throw new Error('reopened big at ' + fmt927(rect927(card)) + ', not where big is (' + fmt927(big) + ')');
+          FM.notepad.open(); await sleep927(500);
+          const nc = document.querySelector('.np-scrim .np-card');
+          if (!nc || nc.classList.contains('pb-big')) throw new Error('making the SHORTCUTS big made the NOTES open big too — each panel keeps its own size');
+          FM.notepad.close(); await sleep927(200);
+          if (document.querySelector('.np-scrim')) throw new Error('small notes did not close at once');
+
+          /* back in → small; closing small is instant; reopens small */
+          const gb = rect927(grip);
+          aim927(gb.cx + 60);
+          W = watch927(card);
+          try { await realInput924(mouseDrag927(gb.cx, gb.cy, 60, 60, 8), 'dragging the shortcuts corner back in'); await sleep927(650); } finally { W.stop(); }
+          control927(W, 'mouse', 'the shortcuts drag in');
+          if (card.classList.contains('pb-big')) throw new Error('dragged back in: the shortcuts are still big');
+          FM.shortcuts.hide();
+          if (!ov.classList.contains('hidden')) throw new Error('closing the SMALL sheet did not hide it at once — the fold is for big only');
+          FM.shortcuts.show(); await sleep927(450);
+          if (card.classList.contains('pb-big')) throw new Error('closed small and reopened: it came back big');
+          if (!near927(rect927(card), small, 2)) throw new Error('reopened small at ' + fmt927(rect927(card)) + ', not ' + fmt927(small));
+          stored = null; try { stored = JSON.parse(localStorage.getItem('fm.panelBig') || 'null'); } catch (e) {}
+          if (stored && stored.shortcuts) throw new Error('small was not remembered: ' + JSON.stringify(stored));
+        });
+      }, 1100);
+    } finally {
+      tidy927();
+      try { if (hadHome && !FM.home.isOpen()) FM.home.open(); } catch (e) {}
+      await sleep927(120);
+    }
+  });
+
+  test('927 closing while BIG shrinks onto itself first, then folds into its button — a real click on Done on PC and a real tap on a phone', { item: '927', budgetMs: 120000 }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    tidy927();
+    async function once(where, kind, notesBtnId) {
+      if (FM.home.isOpen()) { FM.home.close(); await sleep927(300); }
+      try { localStorage.setItem('fm.panelBig', JSON.stringify({ notes: true })); } catch (e) {}
+      FM.notepad.open(); await sleep927(700);
+      const scrim = document.querySelector('.np-scrim'), card = scrim && scrim.querySelector('.np-card');
+      if (!card || !card.classList.contains('pb-big')) throw new Error(where + ': setup: the notepad did not open big from the remembered size');
+      const btn = document.getElementById(notesBtnId);
+      if (!btn || !(btn.getBoundingClientRect().width > 0)) throw new Error(where + ': setup: #' + notesBtnId + ' is not on screen to fold into');
+      const B = rect927(card), T = rect927(btn);
+      card.classList.remove('pb-big'); const sw = card.offsetWidth; card.classList.add('pb-big');   // small's width, for the first beat
+      const done = card.querySelector('.np-done'), d = rect927(done);
+      if (kind === 'mouse') aim927(d.cx); else window.frameElement.style.left = '0px';
+      const S = [];
+      const iv = setInterval(() => { if (!card.isConnected) return; const r = rect927(card); S.push({ cx: r.cx, cy: r.cy, w: r.w, h: r.h, o: parseFloat(getComputedStyle(card).opacity) }); }, 8);
+      try {
+        const tap = kind === 'mouse' ? [{ t: 'mouseMove', x: d.cx, y: d.cy, ms: 40 }, { t: 'mouseDown', x: d.cx, y: d.cy, ms: 50 }, { t: 'mouseUp', x: d.cx, y: d.cy, ms: 0 }]
+                                     : [{ t: 'touchStart', x: d.cx, y: d.cy, ms: 60 }, { t: 'touchEnd', x: d.cx, y: d.cy, ms: 0 }];
+        await realInput924(tap, where + ' — pressing Done on the big notes');
+        if (FM.notepad.isOpen()) throw new Error(where + ': after Done the notepad still says it is open — tapping Notes again would close it instead of opening it');
+        if (!scrim.isConnected) throw new Error(where + ': closing the BIG notes removed them at once — no shrink, no fold');
+        await sleep927(900);
+      } finally { clearInterval(iv); }
+      if (scrim.isConnected) throw new Error(where + ': the notes were still on screen 900ms after Done — the fold never finished');
+      if (btn.classList.contains('pop-src') || document.querySelector('.pop-tail')) throw new Error(where + ': the fold left the button lifted or a tail behind');
+      if (S.length < 12) throw new Error(where + ': only ' + S.length + ' samples of the closing panel — it was not animated long enough to see (' + JSON.stringify(S.slice(0, 3)) + ')');
+      /* by AREA: on a phone big and small are nearly the same width, so there the first beat is mostly height */
+      const onItself = S.findIndex(s => Math.abs(s.cx - B.cx) <= 4 && Math.abs(s.cy - B.cy) <= 4 && s.w * s.h < B.w * B.h * 0.85 && s.w > sw * 0.6);
+      if (onItself < 0) throw new Error(where + ': it never shrank ONTO ITSELF (smaller, same centre) before moving — sizes ' + S.map(s => Math.round(s.w) + '×' + Math.round(s.h)).join(' ') + ', centres ' + S.map(s => Math.round(s.cx) + '/' + Math.round(s.cy)).slice(0, 12).join(' '));
+      const moved = S.findIndex(s => Math.hypot(s.cx - B.cx, s.cy - B.cy) > 40);
+      if (moved < 0) throw new Error(where + ': after shrinking it never moved toward the button — it did not fold into it');
+      if (!(onItself < moved)) throw new Error(where + ': it moved toward the button (sample ' + moved + ') before it had shrunk onto itself (sample ' + onItself + ') — the order he described is shrink THEN fold');
+      for (let i = 1; i < S.length; i++) if (S[i].w > S[i - 1].w + 2) throw new Error(where + ': it grew again while closing (' + Math.round(S[i - 1].w) + ' → ' + Math.round(S[i].w) + ')');
+      const last = S.filter(s => s.o > 0.02).pop();
+      const toBtn = Math.hypot(last.cx - T.cx, last.cy - T.cy), fromBtn0 = Math.hypot(B.cx - T.cx, B.cy - T.cy);
+      if (!(toBtn < fromBtn0 * 0.25)) throw new Error(where + ': its last visible frame was ' + Math.round(toBtn) + 'px from the Notes button (it started ' + Math.round(fromBtn0) + 'px away) — it did not fold INTO the button');
+      if (!(last.w < sw * 0.5)) throw new Error(where + ': its last visible frame was still ' + Math.round(last.w) + 'px wide — it did not go into the button');
+      FM.notepad.open(); await sleep927(500);
+      const again = document.querySelector('.np-scrim .np-card');
+      if (!again || !again.classList.contains('pb-big')) throw new Error(where + ': closed big, reopened — it did not come back big');
+      FM.notepad.close({ now: true });
+    }
+    try {
+      await onScreen924(async function () {
+        await atWideWidth(function () { return once('PC (1100)', 'mouse', 'btn-notes'); }, 1100);
+        await atPhoneWidth(function () { return once('phone (360)', 'touch', 'm-notes'); }, 360);
+      });
+    } finally {
+      tidy927();
+      try { if (hadHome && !FM.home.isOpen()) FM.home.open(); } catch (e) {}
+      await sleep927(120);
+    }
+  });
+
+  test('927 phone — a finger has no cursor: the grip is visible and big enough, a real drag takes Notes and Shortcuts to the whole screen and back, and a tap on it switches too', { item: '927', budgetMs: 120000 }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    tidy927();
+    async function panel(name, open, find) {
+      open(); await sleep927(650);
+      const card = find();
+      if (!card) throw new Error(name + ': setup: it did not open at phone width');
+      const grip = grip927(card), small = rect927(card), g = rect927(grip);
+      if (g.w < 44 || g.h < 44) throw new Error(name + ': the grip is ' + Math.round(g.w) + '×' + Math.round(g.h) + ' — under the 44px a finger needs');
+      const mark = [].slice.call(grip.querySelectorAll('.pb-mark')).find(m => getComputedStyle(m).display !== 'none' && m.getBoundingClientRect().width >= 16);
+      if (!mark) throw new Error(name + ': the grip draws nothing (or a mark under 16px) — on a phone there is no cursor to show it is there');
+      const col = getComputedStyle(grip).color.match(/[\d.]+/g) || [];
+      if (col.length === 4 && parseFloat(col[3]) < 0.45) throw new Error(name + ': the grip mark is only ' + col[3] + ' opaque — too faint to find');
+      if (card.getAttribute('data-pb-corner') !== 'tr') throw new Error(name + ': on a phone the grip should be the top-right corner (clear of Done / Tutorials / Close), not ' + card.getAttribute('data-pb-corner'));
+      const x0 = g.l + g.w / 2, y0 = g.t + g.h / 2;
+      if (x0 > 370 || y0 > 740 || y0 < 0) throw new Error(name + ': setup: the grip is at ' + Math.round(x0) + ',' + Math.round(y0) + ', out of reach of real input');
+      hitIs927(x0, y0, grip, name + '’s grip');
+      let W = watch927(card);
+      try { await realInput924(touchDrag927(x0, y0, 10, -90, 10), name + ' — a finger pulling the corner up'); await sleep927(700); } finally { W.stop(); }
+      control927(W, 'touch', name + ' — the finger drag');
+      if (!card.classList.contains('pb-big')) throw new Error(name + ': a finger pulled the corner 90px up and let go — it did not go big');
+      const big = rect927(card);
+      if (!(big.w >= innerWidth * 0.9 && big.h >= innerHeight * 0.85)) throw new Error(name + ': big on a phone is ' + fmt927(big) + ' in a ' + innerWidth + '×' + innerHeight + ' screen — it should fill it');
+      if (big.l < 0 || big.t < 0 || big.r > innerWidth || big.b > innerHeight) throw new Error(name + ': big runs off the screen (' + fmt927(big) + ')');
+      const gb = rect927(grip);
+      const x1 = gb.l + gb.w / 2, y1 = gb.t + gb.h / 2;
+      hitIs927(x1, y1, grip, name + '’s grip when big');
+      W = watch927(card);
+      try { await realInput924(touchDrag927(x1, y1, -50, 80, 10), name + ' — a finger pushing the corner back in'); await sleep927(650); } finally { W.stop(); }
+      control927(W, 'touch', name + ' — the finger drag back');
+      if (card.classList.contains('pb-big')) throw new Error(name + ': pushed back in with a finger — still big');
+      if (!near927(rect927(card), small, 2)) throw new Error(name + ': back to small at ' + fmt927(rect927(card)) + ', not where it was (' + fmt927(small) + ')');
+      /* a plain TAP on the grip switches too — the corner of a phone-wide card is hard to pull outward */
+      const g2 = rect927(grip);
+      await realInput924([{ t: 'touchStart', x: g2.cx, y: g2.cy, ms: 70 }, { t: 'touchEnd', x: g2.cx, y: g2.cy, ms: 0 }], name + ' — a tap on the grip');
+      await sleep927(650);
+      if (!card.classList.contains('pb-big')) throw new Error(name + ': a tap on the grip did not make it big');
+      const g3 = rect927(grip);
+      await realInput924([{ t: 'touchStart', x: g3.cx, y: g3.cy, ms: 70 }, { t: 'touchEnd', x: g3.cx, y: g3.cy, ms: 0 }], name + ' — a second tap');
+      await sleep927(650);
+      if (card.classList.contains('pb-big')) throw new Error(name + ': a second tap did not make it small again');
+    }
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          if (FM.home.isOpen()) { FM.home.close(); await sleep927(300); }
+          await panel('Notes', () => FM.notepad.open(), () => document.querySelector('.np-scrim .np-card'));
+          FM.notepad.close({ now: true }); await sleep927(150);
+          await panel('Shortcuts', () => FM.shortcuts.show(), () => { const o = document.getElementById('shortcuts-overlay'); return o && !o.classList.contains('hidden') ? o.querySelector('.shortcuts-card') : null; });
+        });
+      }, 360);
+    } finally {
+      tidy927();
+      try { if (hadHome && !FM.home.isOpen()) FM.home.open(); } catch (e) {}
+      await sleep927(120);
+    }
+  });
+
+  test('927 the grip is a button a keyboard can use, and with reduced motion the size still switches and closing is instant', { item: '927' }, async function () {
+    tidy927();
+    try {
+      if (!FM.panelSize) throw new Error('FM.panelSize is missing — js/panelsize.js did not load');
+      if (FM.home.isOpen()) { FM.home.close(); await sleep927(300); }
+      FM.panelSize._reduce = true;
+      FM.notepad.open(); await sleep927(450);
+      const card = document.querySelector('.np-scrim .np-card'), grip = grip927(card);
+      if (grip.getAttribute('role') !== 'button' || grip.tabIndex !== 0) throw new Error('the grip is not a focusable button (role ' + grip.getAttribute('role') + ', tabIndex ' + grip.tabIndex + ')');
+      if (!/bigger/i.test(grip.getAttribute('aria-label') || '')) throw new Error('small, the grip is labelled “' + grip.getAttribute('aria-label') + '” — it should say it makes the notes bigger');
+      const before = card.getBoundingClientRect().width;
+      grip.focus();
+      grip.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      if (!card.classList.contains('pb-big')) throw new Error('Enter on the grip did not make the notes big');
+      const w = card.getBoundingClientRect().width;
+      if (!(w > before + 40)) throw new Error('with reduced motion the size did not change straight away (' + Math.round(before) + ' → ' + Math.round(w) + ')');
+      if (card.getAnimations().some(a => a.playState === 'running' && a.effect && a.effect.getKeyframes().some(k => k.width))) throw new Error('with reduced motion the size change still animates');
+      if (!/smaller/i.test(grip.getAttribute('aria-label') || '')) throw new Error('big, the grip is still labelled “' + grip.getAttribute('aria-label') + '”');
+      FM.notepad.close();
+      if (document.querySelector('.np-scrim')) throw new Error('with reduced motion, closing the big notes still folds instead of closing at once');
+      FM.notepad.open(); await sleep927(300);
+      const c2 = document.querySelector('.np-scrim .np-card');
+      if (!c2 || !c2.classList.contains('pb-big')) throw new Error('reopened: not big');
+      const g2 = grip927(c2);
+      g2.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+      if (c2.classList.contains('pb-big')) throw new Error('Space on the grip did not make it small again');
+      FM.notepad.close();
+    } finally {
+      tidy927();
+      await sleep927(80);
+    }
+  });
+
 })();

@@ -93,6 +93,26 @@
       paint();
       const bcx = br.left + br.width / 2;
 
+      /* A BIG PANEL IS CENTRED, NOT HUNG OFF ITS BUTTON (queue 927). The Notes and Shortcuts/tips panels have a
+         second size — "a bigger view where it basically covers up more of the screen and is in the center" — which
+         js/panelsize.js switches with `.pb-big`. The stylesheet sizes it and the scrim centres it; this only has to
+         stand aside: no offset, no cap, and no tail pointing from the middle of the screen at a button. */
+      /* …and the button comes back down under the scrim. It is lifted so it reads as attached to the card; a big
+         card is not attached to it, and the lift would put the button THROUGH the big card wherever they overlap
+         (the scrim is its own stacking context, so no z-index on the card can get above it). */
+      if (!opts.placed && card.classList.contains('pb-big')) {
+        card.style.maxHeight = ''; card.style.overflowY = '';
+        card.style.setProperty('--pop-dx', '0px');
+        card.style.setProperty('--pop-dy', '0px');
+        tail.style.display = 'none';
+        btn.classList.remove('pop-src');
+        return true;
+      }
+      tail.style.display = '';
+      // lifted again once small has LANDED — not while a shrinking big card is still over the button (panelsize.js
+      // holds it down with _pbHoldLift for the length of the shrink)
+      if (!card._pbHoldLift) btn.classList.add('pop-src');
+
       if (opts.placed) {
         // Decorate only — the card owns its own position; just aim the tail at the button.
         const op0 = card.offsetParent || document.body, opr0 = op0.getBoundingClientRect();
@@ -184,6 +204,8 @@
        frames in 500ms and hung. An rAF-based retry therefore never runs in a background tab, which is
        precisely where a menu might be opened by a restored session or a script. setTimeout is throttled
        there, not frozen, and a few throttled attempts still land. */
+    card._popPlace = place;   // queue 927: a size change re-places the card in the same tick (js/panelsize.js)
+
     let tries = 0;
     (function attempt() {
       if (done) return;
@@ -228,6 +250,7 @@
         card.style.maxHeight = ''; card.style.overflowY = '';
       }
       delete card._popTail;
+      if (card._popPlace === place) delete card._popPlace;
       if (tail.parentNode) tail.parentNode.removeChild(tail);
     }
     return cleanup;
