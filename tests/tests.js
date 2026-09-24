@@ -87886,4 +87886,239 @@
     } finally { FM.scene = saved; try { FM.refreshAll(); } catch (e) {} }
   });
 
+  /* ═══ HUNT-d — RENDER PARITY ACROSS LAYER TYPES AND COMPOSITION (queue 690, 25 Sep) ════════════════════════════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". The area: the preview must be the export — the idea of
+   * 913.5 (render the whole frame and a zoomed slice and compare) carried across layer types and composition rather than the
+   * effect catalogue. Each test below FAILS on v16.93 because of a real bug, and each carries a control that proves the
+   * comparison can see what it claims to. Probed first with a sweep of text / shapes / images / groups / nested groups /
+   * masks / blend modes / adjustment layers / camera / motion blur / parenting at the reduced playback plate (0.5, 0.3), a
+   * 2x and a 3x zoomed slice — the plain compositing paths all matched; these four did not. */
+
+  /* HUNT-d 1 — the View menu Layers button (isolate) is documented as VIEW ONLY: "this shouldnt change anything but just be
+   * its own little tool to help you visualise stuff" (v5.27). FM.isolate is read inside FM.renderScene — and the exporter
+   * calls that same function on FM.scene, and nothing on the way to an export (showExportDialog, runExport, the exporter)
+   * clears it. So a layer left isolated exports ALONE: every other layer is missing from the file. Driven through the real
+   * button and the real PNG-frames exporter; the frames are read back out of the zip it builds. */
+  test('HUNT-d the view-only Isolate button leaks into the export — the exported file holds only the isolated layer', { item: '690', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.exporter || !FM.exporter.runFrames || !FM.zipWrite || !FM.zipWrite.create) throw new Error('setup: the PNG-frames exporter is not reachable');
+    const btn = document.getElementById('vb-layers');
+    if (!btn) throw new Error('setup: the View menu Layers (isolate) button is gone');
+    const saved = FM.scene;
+    const realURL = URL.createObjectURL, realClick = HTMLAnchorElement.prototype.click, realCreate = FM.zipWrite.create;
+    const grabbed = [];
+    async function exportFrame0() {
+      grabbed.length = 0;
+      await FM.exporter.runFrames({ scale: 1, fps: 10, from: 0, to: 0.2, name: 'hunt-d-iso', format: 'png', onProgress: function () {} });
+      if (!grabbed.length) throw new Error('setup: the frames export produced no frames to read back');
+      const bmp = await createImageBitmap(new Blob([grabbed[0]], { type: 'image/png' }));
+      const c = offscreen(bmp.width, bmp.height), g = c.getContext('2d', { willReadFrequently: true });
+      g.drawImage(bmp, 0, 0);
+      return g;
+    }
+    const isBlue = (g) => { const d = g.getImageData(90, 60, 1, 1).data; return d[2] > 200 && d[0] < 60; };
+    const isRed = (g) => { const d = g.getImageData(30, 60, 1, 1).data; return d[0] > 200 && d[2] < 60; };
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      const red = FM.makeLayer('shape', { name: 'HD red', shape: 'rect', x: 30, y: 60, shapeW: 40, shapeH: 40, fill: '#ff0000', start: 0, duration: 1 });
+      const blue = FM.makeLayer('shape', { name: 'HD blue', shape: 'rect', x: 90, y: 60, shapeW: 40, shapeH: 40, fill: '#0000ff', start: 0, duration: 1 });
+      FM.scene = scene([red, blue], { project: { width: 120, height: 120, fps: 10, duration: 1, background: '#000000' } });
+      FM.refreshAll(); FM.setTime(0); await sleep(120);
+      URL.createObjectURL = function () { return 'blob:hunt-d'; };   // nothing may actually download
+      HTMLAnchorElement.prototype.click = function () {};
+      FM.zipWrite.create = function () {
+        const z = realCreate.apply(this, arguments), add = z.add;
+        z.add = function (name, buf) { grabbed.push(buf); return add.apply(this, arguments); };
+        return z;
+      };
+      // CONTROL 1: with nothing isolated the export holds both squares, so the read-back can see the blue one
+      if (FM.setIsolate) FM.setIsolate(0);
+      const plain = await exportFrame0();
+      if (!isRed(plain) || !isBlue(plain)) throw new Error('CONTROL FAILED — with nothing isolated the exported frame does not show both squares, so this harness cannot read an export');
+      // his path: select the red square, tap the View menu Layers button once (only this layer)
+      FM.selectLayer(red.id); await sleep(60);
+      btn.click(); await sleep(60);
+      if (!(FM.isolate && FM.isolate.id === red.id && FM.isolate.mode === 1)) throw new Error('setup: tapping the Layers button with one clip selected did not isolate it (FM.isolate is ' + (FM.isolate ? FM.isolate.id + ' mode ' + FM.isolate.mode : 'off') + ')');
+      // CONTROL 2: the PREVIEW is isolated, which is the tool doing its job
+      const pv = offscreen(120, 120), pg = pv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(pg, FM.scene, 0);
+      if (isBlue(pg)) throw new Error('CONTROL FAILED — the preview still shows the blue square with the red one isolated, so the isolate did not take effect');
+      const iso = await exportFrame0();
+      if (!isRed(iso)) throw new Error('setup: the isolated red square is missing from the export as well');
+      if (!isBlue(iso)) throw new Error('with one layer isolated by the View menu Layers button (a view-only tool), the EXPORTED frame is missing every other layer — the blue square is not in the file. He exports a video that holds only the one clip he was looking at');
+    } finally {
+      URL.createObjectURL = realURL; HTMLAnchorElement.prototype.click = realClick; FM.zipWrite.create = realCreate;
+      if (FM.setIsolate) FM.setIsolate(0);
+      FM.scene = saved; FM.selectLayer(null);
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* HUNT-d 2 — a Blur on a GREEN-SCREENED clip. A keyed media layer bakes its CSS filter into the key offscreen
+   * (compositor.js media branch: chromaKey(src, w, h, …, ctx.filter, …)), and that offscreen is in SOURCE pixels — but the
+   * filter string was built for the TARGET in device pixels (effectFilter(layer, t, renderScale(ctx))). So the blur radius is
+   * multiplied by the preview's render scale twice: once into the string, once more when the keyed source is drawn through
+   * the canvas transform. The export (scale 1) is right; the phone preview (about 0.58), the playback tier (down to 0.3)
+   * and a zoomed preview (up to 6) all show a different softness. Measured as the width of the red edge ramp, in project
+   * pixels, across the subject's left edge. CONTROL: the same blur on the same clip WITHOUT the key is the same width at
+   * every scale, so the ruler is sound. Glow goes the same way (it is a drop-shadow length in the same string). */
+  test('HUNT-d a Blur on a green-screened clip is a different softness in the preview than in the export — half on the phone, tripled zoomed in', { item: '690', budgetMs: 30000 }, function () {
+    const PW = 320, PH = 240, T = 0.5, ids = [];
+    function build(keyed) {
+      const tex = offscreen(200, 120), c = tex.getContext('2d');
+      c.fillStyle = '#00ff00'; c.fillRect(0, 0, 200, 120);
+      c.fillStyle = '#ff0000'; c.fillRect(60, 20, 80, 80);   // the subject: project x 120..200 once centred at 160
+      const L = FM.makeLayer('image', { name: 'HD keyed', x: 160, y: 120, start: 0, duration: 3 });
+      L.start = 0; L.duration = 3;
+      const blur = FM.fxRegistry.makeInstance('blur'); blur.params.radius = 8;
+      L.effects = (keyed ? [FM.fxRegistry.makeInstance('chromakey')] : []).concat([blur]);
+      FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 120 }); ids.push(L.id);
+      return { project: { width: PW, height: PH, fps: 30, duration: 3, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] };
+    }
+    // width (project px) over which the red channel climbs from 10% to 90% along row y=120, across project x 95..145
+    function ramp(sc, st) {
+      const cv = offscreen(st.w, st.h);
+      if (st.crop) { cv.__fmCrop = true; cv.__fmRS = st.rs; cv.__fmOX = st.ox; cv.__fmOY = st.oy; }
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, sc, T);
+      const ox = st.ox || 0, oy = st.oy || 0, rs = st.rs;
+      const d = ctx.getImageData(0, Math.round((120 - oy) * rs), st.w, 1).data;
+      const vals = [];
+      for (let px = 0; px < st.w; px++) { const X = ox + (px + 0.5) / rs; if (X >= 95 && X <= 145) vals.push([X, d[px * 4]]); }
+      const mx = Math.max.apply(null, vals.map(v => v[1]));
+      let lo = null, hi = null;
+      vals.forEach(v => { if (lo == null && v[1] > 0.1 * mx) lo = v[0]; if (hi == null && v[1] > 0.9 * mx) hi = v[0]; });
+      if (lo == null || hi == null || !(mx > 100)) throw new Error('setup: no red edge found to measure at scale ' + rs);
+      return hi - lo;
+    }
+    const SCALES = [
+      { name: 'the export', w: PW, h: PH, rs: 1 },
+      { name: 'the phone preview (scale 0.58)', w: 186, h: 139, rs: 186 / 320 },
+      { name: 'the playback tier (scale 0.3)', w: 96, h: 72, rs: 0.3 },
+      { name: 'a 3x zoomed preview', w: 240, h: 180, rs: 3, ox: 90, oy: 90, crop: true },
+    ];
+    try {
+      const plain = build(false), keyed = build(true);
+      // CONTROL: unkeyed, the ruler reads the same softness at every scale
+      const pw = SCALES.map(s => ramp(plain, s));
+      pw.forEach((w, i) => { if (Math.abs(w - pw[0]) > 1.5) throw new Error('CONTROL FAILED — an UNKEYED blur measured ' + w.toFixed(1) + ' px in ' + SCALES[i].name + ' against ' + pw[0].toFixed(1) + ' in the export, so the ruler itself is scale-dependent'); });
+      // CONTROL: the key is really on — the green around the subject is gone (the black background shows)
+      const kc = offscreen(PW, PH), kx = kc.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(kx, keyed, T);
+      const g = kx.getImageData(75, 120, 1, 1).data;
+      if (g[1] > 60) throw new Error('setup: the chroma key did not remove the green screen, so this is not a keyed clip');
+      const kw = SCALES.map(s => ramp(keyed, s));
+      const bad = [];
+      for (let i = 1; i < SCALES.length; i++) {
+        if (Math.abs(kw[i] - kw[0]) > Math.max(2, kw[0] * 0.25)) bad.push(kw[i].toFixed(1) + ' px in ' + SCALES[i].name);
+      }
+      if (bad.length) throw new Error('a Blur on a green-screened clip is ' + kw[0].toFixed(1) + ' px soft in the export but ' + bad.join(', ') + ' — he judges the softness on a preview that does not match the file (the same blur without the key is ' + pw[0].toFixed(1) + ' px everywhere)');
+    } finally {
+      ids.forEach(id => FM.media.remove(id));
+    }
+  });
+
+  /* HUNT-d 3 — a mask added from Effects → Mask is born as a MARKER in the effect stack (queue 560, fx-browser.js
+   * addMaskFromBrowser), so it is applied inside whatever plate the layer is being drawn into. Motion Blur (Object)
+   * dispatches OUTERMOST and draws the layer into a plate padded by the travel on every side (drawMotionBlur:
+   * plate.__fmOX = -m). drawPenMaskAt then builds the mask's stencil at project (0,0) and stamps it at the plate's origin
+   * (-m,-m): the reveal window lands m px up and left of where he drew it — in the preview AND the export — for as long as
+   * the layer moves, and snaps back when it stops (the blur declines and the plate is not padded). m is the travel plus 2,
+   * up to a quarter of the frame. CONTROLS: the same mask without Motion Blur, and the same mask UNMARKED with Motion Blur,
+   * both land exactly on the drawn path. */
+  test('HUNT-d a mask added from Effects slides up and left of where he drew it whenever Motion Blur is on and the layer moves', { item: '690', budgetMs: 30000 }, function () {
+    const PW = 320, PH = 240, T = 0.25;
+    const PATH = [[140, 100], [180, 100], [180, 140], [140, 140]];   // the window he drew, in frame pixels
+    function layerWith(blur, marker) {
+      const L = FM.makeLayer('shape', { name: 'HD masked', shape: 'rect', x: 160, y: 120, shapeW: 300, shapeH: 200, fill: '#e0245e', start: 0, duration: 3 });
+      L.start = 0; L.duration = 3;
+      L.transform.x = { kf: [{ t: 0, v: 100 }, { t: 0.5, v: 220 }] };   // a brisk move across the frame
+      const m = (FM.masks && FM.masks.make) ? FM.masks.make('add') : { id: 'hd-m', enabled: true, mode: 'add', feather: 0, opacity: 1, invert: false, closed: true, path: [] };
+      m.path = PATH.map(p => p.slice());
+      L.masks = [m];
+      L.effects = [];
+      if (blur) { const ob = FM.fxRegistry.makeInstance('objectblur'); ob.params.shutter = 2; L.effects.push(ob); }
+      if (marker) L.effects.push({ type: 'penmask', maskId: m.id });   // exactly what Effects → Mask adds
+      return L;
+    }
+    function box(L) {
+      const cv = offscreen(PW, PH), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, { project: { width: PW, height: PH, fps: 30, duration: 3, background: null }, layers: [L], selectedId: null, selectedIds: [] }, T);
+      const d = ctx.getImageData(0, 0, PW, PH).data;
+      let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+      for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) if (d[(y * PW + x) * 4 + 3] > 128) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      return x1 < 0 ? null : { x0: x0, y0: y0, x1: x1 + 1, y1: y1 + 1 };
+    }
+    const at = b => b ? b.x0 + ',' + b.y0 + ' to ' + b.x1 + ',' + b.y1 : 'nothing';
+    const onPath = b => b && Math.abs(b.x0 - 140) <= 1 && Math.abs(b.y0 - 100) <= 1 && Math.abs(b.x1 - 180) <= 1 && Math.abs(b.y1 - 140) <= 1;
+    // CONTROL: Motion Blur really engages on this move — unmasked, the leading edge is smeared, not sharp
+    const bare = layerWith(true, false); bare.masks = [];
+    const bc = offscreen(PW, PH), bx = bc.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(bx, { project: { width: PW, height: PH, fps: 30, duration: 3, background: null }, layers: [bare], selectedId: null, selectedIds: [] }, T);
+    const edge = []; for (let x = 300; x < PW; x++) edge.push(bx.getImageData(x, 120, 1, 1).data[3]);
+    if (!edge.some(a => a > 20 && a < 235)) throw new Error('CONTROL FAILED — Motion Blur did not smear this move at all, so nothing below would exercise the blur plate');
+    const noBlur = box(layerWith(false, true)), unmarked = box(layerWith(true, false)), marked = box(layerWith(true, true));
+    if (!onPath(noBlur)) throw new Error('CONTROL FAILED — without Motion Blur the Effects mask is not on the drawn path (' + at(noBlur) + '), so the fixture is wrong, not the blur');
+    if (!onPath(unmarked)) throw new Error('CONTROL FAILED — an ordinary (unmarked) mask with Motion Blur is off the drawn path too (' + at(unmarked) + ')');
+    if (!onPath(marked)) throw new Error('with Motion Blur on, the mask he added from Effects shows through ' + at(marked) + ' instead of the 140,100 to 180,140 he drew — it slides ' + (140 - marked.x0) + ' px left and ' + (100 - marked.y0) + ' px up while the layer moves, in the preview and the export, and snaps back when it stops');
+  });
+
+  /* HUNT-d 4 — 913.5 made every EFFECT draw the same in a zoomed slice as in the whole frame, and v16.90 told him so
+   * ("zooming into the preview no longer changes your effects"). It was proved on an IMAGE layer only. An ADJUSTMENT layer
+   * grades a snapshot of the target instead (applyAdjustment), and on a zoomed preview that target is the SLICE: Pixelate
+   * counts its blocks across the slice and starts them at the slice's corner, and RGB Split's Radial centres on the slice.
+   * So zoom in on an adjustment-layer Pixelate and the blocks are different sizes in different places from the export.
+   * Same comparison as 913.5 (a slice at 1:1 and at 2x against the whole frame at that scale, byte-for-byte). CONTROLS: no
+   * effect, an adjustment Brightness, and the SAME Pixelate / RGB Split on the image layer itself all match exactly. */
+  test('HUNT-d zooming into the preview changes an adjustment layer Pixelate and RGB Split — the 913.5 fix never reached adjustment layers', { item: '690', budgetMs: 60000 }, function () {
+    const PW = 320, PH = 240, T = 0.5;
+    const tex = offscreen(PW, PH), tc = tex.getContext('2d');
+    for (let y = 0; y < PH; y += 10) for (let x = 0; x < PW; x += 10) { tc.fillStyle = ((x + y) / 10) % 2 ? '#e8e8e8' : '#1c4aa8'; tc.fillRect(x, y, 10, 10); }
+    tc.fillStyle = '#d0302a'; tc.fillRect(20, 30, 50, 40);
+    const img = FM.makeLayer('image', { name: 'HD plate', x: PW / 2, y: PH / 2, start: 0, duration: 3 });
+    img.start = 0; img.duration = 3;
+    FM.media.set(img.id, { kind: 'image', el: tex, width: PW, height: PH });
+    function fx(type, params) { const f = FM.fxRegistry.makeInstance(type); if (!f) throw new Error('setup: ' + type + ' is not in the catalog'); Object.assign(f.params, params || {}); return f; }
+    function adj(f) { const A = FM.makeLayer('adjustment', { name: 'HD adjust', start: 0, duration: 3 }); A.start = 0; A.duration = 3; A.effects = [f]; return A; }
+    function render(layers, st) {
+      const cv = offscreen(st.w, st.h);
+      cv.__fmRS = st.rs; cv.__fmOX = st.ox; cv.__fmOY = st.oy; cv.__fmCrop = !!st.crop;
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, { project: { width: PW, height: PH, fps: 30, duration: 3, background: '#000000' }, layers: layers, selectedId: null, selectedIds: [] }, T);
+      return { d: ctx.getImageData(0, 0, st.w, st.h).data, w: st.w };
+    }
+    // a slice at an ordinary, un-round origin — where a pinch-zoom actually leaves the preview's crop
+    const PASSES = [
+      { name: '1:1', full: { rs: 1, ox: 0, oy: 0, w: PW, h: PH }, crop: { rs: 1, ox: 73, oy: 51, w: 120, h: 90, crop: true }, dx: 73, dy: 51 },
+      { name: '2x zoom', full: { rs: 2, ox: 0, oy: 0, w: PW * 2, h: PH * 2 }, crop: { rs: 2, ox: 73, oy: 51, w: 240, h: 180, crop: true }, dx: 146, dy: 102 },
+    ];
+    function worst(layers) {
+      let out = 0;
+      PASSES.forEach(p => {
+        const A = render(layers, p.full), B = render(layers, p.crop);
+        let n = 0;
+        for (let y = 0; y < p.crop.h; y++) for (let x = 0; x < p.crop.w; x++) {
+          const i = (y * B.w + x) * 4, j = ((y + p.dy) * A.w + (x + p.dx)) * 4;
+          if (Math.abs(A.d[j] - B.d[i]) > 12 || Math.abs(A.d[j + 1] - B.d[i + 1]) > 12 || Math.abs(A.d[j + 2] - B.d[i + 2]) > 12) n++;
+        }
+        out = Math.max(out, n / (p.crop.w * p.crop.h));
+      });
+      return out;
+    }
+    const pct = f => (f * 100).toFixed(1) + '%';
+    try {
+      if (worst([img]) > 0) throw new Error('CONTROL FAILED — with no effect at all the zoomed slice differs from the whole frame, so the harness misplaces the slice');
+      if (worst([adj(fx('brightness')), img]) > 0.01) throw new Error('CONTROL FAILED — an adjustment Brightness, which does not care where it is, differs in the slice — the adjustment snapshot itself is misplaced');
+      const lp = worst([Object.assign({}, img, { effects: [fx('pixelate')] })]), lr = worst([Object.assign({}, img, { effects: [fx('rgbsplit', { radial: 100 })] })]);
+      if (lp > 0.01 || lr > 0.01) throw new Error('CONTROL FAILED — the same effects on the IMAGE layer differ when zoomed too (Pixelate ' + pct(lp) + ', RGB Split ' + pct(lr) + '), which is 913.5 regressing, not this');
+      const ap = worst([adj(fx('pixelate')), img]), ar = worst([adj(fx('rgbsplit', { radial: 100 })), img]);
+      const bad = [];
+      if (ap > 0.01) bad.push('Pixelate ' + pct(ap));
+      if (ar > 0.01) bad.push('RGB Split with Radial ' + pct(ar));
+      if (bad.length) throw new Error('zoomed into the preview, an ADJUSTMENT layer draws differently from the export (' + bad.join(', ') + ' of the visible pixels differ) — the pixel blocks sit in other places and at other sizes than in the file, while the same effects on the clip itself match exactly');
+    } finally {
+      FM.media.remove(img.id);
+    }
+  });
+
 })();
