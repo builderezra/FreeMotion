@@ -65174,8 +65174,11 @@
       val.dispatchEvent(new PointerEvent('pointerdown', at));
       val.dispatchEvent(new PointerEvent('pointerup', at));
       await sleep(140);
-      const live = document.querySelector('.mt-vbox-val.editing') || (val.isContentEditable ? val : null);
-      if (!live) throw new Error('one tap on the X position number did not open the editor — it was swallowed switching axis, which is what he is reporting');
+      /* ON SCREEN, WITH THE FOCUS IN IT (queue 690). This used to accept `val.isContentEditable` on the box that was
+         tapped — and a box thrown away by a rebuild still reports that, so for months this passed while a real tap
+         opened nothing: the glide's settle rebuilt the card under the tap and the editor opened on the detached box. */
+      const live = document.querySelector('.mt-vbox-val.editing');
+      if (!live || !live.isConnected || document.activeElement !== live) throw new Error('one tap on the X position number did not open an editor on screen with the focus in it — ' + (!val.isConnected ? 'the card was rebuilt under the tap, so the editor opened on a box no longer on screen (queue 690)' : 'it was swallowed switching axis, which is what he is reporting'));
       if (FM._mtAxis !== 'xy') throw new Error('the tap opened the editor but did not move the axis to the one you touched (' + FM._mtAxis + ')');
     } finally {
       FM._mtAxis = axis0;
@@ -87886,10 +87889,11 @@
     } finally { FM.scene = saved; try { FM.refreshAll(); } catch (e) {} }
   });
 
-  /* ═══ HUNT-b (queue 690) — PHONE EDITING SHEETS, REAL TOUCH ═════════════════════════════════════════════════════════
-   * His standing brief: "go re audit, find some bugs coz theres a shit load". Each test below fails TODAY because of the
-   * bug it names, and its failure message says what he would see. Real input through tests/_cdp.py (see 924) wherever
-   * the behaviour depends on it; the control in each proves the gesture really landed where the test says it did. */
+  /* ═══ QUEUE 690 (hunt b) — PHONE EDITING SHEETS, REAL TOUCH ══════════════════════════════════════════════════════════
+   * His standing brief: "go re audit, find some bugs coz theres a shit load". Each test below was written failing, against
+   * the bug it guards, and was proven to fail again with its fix reverted; its failure message says what he would see.
+   * Real input through tests/_cdp.py (see 924) wherever the behaviour depends on it; the control in each proves the
+   * gesture really landed where the test says it did. */
   async function huntBScene(layersFn) {
     if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
     if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd();
@@ -87903,14 +87907,15 @@
   }
   function huntBTap(x, y) { return [{ t: 'touchStart', x: x, y: y, ms: 80 }, { t: 'touchEnd', x: x, y: y, ms: 0 }]; }
 
-  test('HUNT-b tapping a Position number (X / Y / Z) with a real finger opens no editor and no keyboard', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 one real tap on a Position number (X / Y) opens its editor ON SCREEN with the focus in it', { item: '690', budgetMs: 60000 }, async function () {
     /* Queue 414 promised it: "The buttons that show a number for the position should be able to be tapped on and
        customised, so you can type exactly the number you want." The box's own pointerup opens the editor — but the
-       glide attached to the same box runs its pointerup FIRST, and a tap is a zero-velocity release, so it settles at
-       once: commitH() + FM.inspector.refresh(), which throws the whole card away and builds a new one. The editor is
-       then opened on the old, detached box, where focus() does nothing. The 414 test passed because a detached
-       contenteditable still reports isContentEditable. This asks the only question that matters: after one real tap,
-       is there an editor ON SCREEN with the focus in it. */
+       glide attached to the same box runs its pointerup FIRST, and a tap is a zero-velocity release, so it settled at
+       once: commitH() + FM.inspector.refresh(), which threw the whole card away and built a new one. The editor was
+       then opened on the old, detached box, where focus() does nothing. Fixed in mtVBox: the settle skips the rebuild
+       while `drag` still marks a tap. The 414 test passed throughout because a detached contenteditable still
+       reports isContentEditable. This asks the only question that matters: after one real tap, is there an editor
+       ON SCREEN with the focus in it. */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const saved = FM.scene, axis0 = FM._mtAxis;
     try {
@@ -87948,17 +87953,19 @@
     }
   });
 
-  test('HUNT-b a short drag down on the Add sheet that does not close it makes the sheet drop off screen and open a second time', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 a short drag down on the Add sheet that does not close it leaves the sheet where it rests — it never opens a second time', { item: '690', budgetMs: 60000 }, async function () {
     /* His #676 and #706: "when you open the add menu it opens twice", "the add layer on mobile still has the glitch
        that opens up twice now". Both entries measured one open and one render per tap and parked on a description.
        Since v15.21 (queue 773, two days AFTER #706 was logged, so not proven to be his original cause) there is a
        concrete second opening that needs no second tap: the swipe-to-dismiss claims any downward drag over 6px and
        switches the sheet's hinge animation OFF (panel.style.animation = 'none'); when the drag ends short of closing —
-       released, or taken over by the browser as a scroll — settle() hands it back with animation = ''. Clearing an
-       animation and putting the same one back RESTARTS it, and fm-hinge-up starts at translateY(100%): the sheet jumps
-       to below the screen and swings up again. A finger that lands on the sheet with a little downward travel — a
-       tap with a wobble, or the start of a scroll through the tiles — is all it takes. The top edge is sampled every
-       frame from before the touch until well after, and must never leave the neighbourhood of where the sheet rests. */
+       released, or taken over by the browser as a scroll — settle() handed it back with animation = ''. Clearing an
+       animation and putting the same one back RESTARTS it, and fm-hinge-up starts at translateY(100%): the sheet jumped
+       to below the screen and swung up again. A finger that lands on the sheet with a little downward travel — a
+       tap with a wobble, or the start of a scroll through the tiles — was all it took. Fixed in makeSwipeDown: a panel
+       whose animation was running when the drag began keeps it off until openAdd() next opens it. The top edge is
+       sampled every frame from before the touch until well after, and must never leave the neighbourhood of where
+       the sheet rests. */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const saved = FM.scene;
     let iv = 0;
@@ -87988,6 +87995,12 @@
           if (!sheet.classList.contains('open')) throw new Error('CONTROL: a 32px drag closed the Add sheet — this test is about a drag too short to close it');
           const worst = Math.max.apply(null, tops);
           if (worst > rest.top + 120) throw new Error('a 32px drag down on the open Add sheet made it OPEN AGAIN: its top edge jumped from ' + Math.round(rest.top) + ' to ' + worst + ' (off the bottom of the screen) and swung back up, the same hinge it opens with — that is the sheet opening twice (top edge per frame: ' + tops.join(' ') + ')');
+          /* …AND THE NEXT OPENING STILL SWINGS. The fix keeps the hinge off after the drag rather than replaying it, so
+             openAdd() has to hand it back — or from the first swipe on, the sheet would arrive in a single frame. */
+          FM.mobile.closeAdd(); await sleep(500);
+          FM.mobile.openAdd(); await sleep(60);
+          const an = getComputedStyle(sheet).animationName;
+          if (an !== 'fm-hinge-up') throw new Error('after the drag, the next opening of the Add sheet did not swing: its animation is ' + an + ' (inline ' + (sheet.style.animation || 'unset') + ') — the hinge was switched off for the drag and never handed back');
         });
       }, 380);
     } finally {
@@ -87997,13 +88010,14 @@
     }
   });
 
-  test('HUNT-b opening the effects browser moves the playhead he parked, and closing it or adding an effect leaves it wherever the preview loop was', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 leaving the effects browser by the X or by Add puts the playhead back where he parked it', { item: '690', budgetMs: 60000 }, async function () {
     /* The browser's preview loop takes the clock the moment it opens (restartPreview: setTime(layer.start), then a
        24fps ticker). Queue 722 captured the PARKED time in _anchorTime so a preset lands on it — and close() then
-       throws _anchorTime away without putting the playhead back. So every trip through + Add Effect, whether he adds
-       one or backs out with the X, leaves the playhead at a random point inside the clip. The next keyframe diamond
-       he taps — on the effect he just added — lands at that random time, and the canvas is showing a different frame
-       from the one he was working on. Both exits are driven with real taps. */
+       threw _anchorTime away without putting the playhead back. So every trip through + Add Effect, whether he added
+       one or backed out with the X, left the playhead at a random point inside the clip. The next keyframe diamond
+       he tapped — on the effect he had just added — landed at that random time, and the canvas was showing a different
+       frame from the one he was working on. Fixed in close(): the loop stops ON the parked time. Both exits are driven
+       with real taps. */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const saved = FM.scene;
     try {
@@ -88052,14 +88066,15 @@
     }
   });
 
-  test('HUNT-b typing a number into an effect or opacity value box after a real tap adds the digits to the old number instead of replacing it', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 a real tap on an effect or opacity value box selects the number, so what he types replaces it', { item: '690', budgetMs: 60000 }, async function () {
     /* The comment on rangeRow says it plainly: "Typing an exact number still has to work: the ruler is for feel, the box
        is for precision." Every effect parameter (fxScrubber) and every rangeRow (fill opacity, stroke width, corner
-       radius, feather… 37 call sites) puts its number in an <input type=text> and does nothing on focus. A real tap on a
-       phone drops a CARET into the old text rather than selecting it, so the digits he types go INTO the old number:
-       Twist 140° + 90 becomes 14900° and lands on the 360° maximum; Opacity 100 + 50 becomes 10050 or 15000 and stays at
-       100. (The Position boxes select their text on edit — these never have.) The typing is done the way a keyboard does
-       it — inserted at whatever selection the real tap left — and committed the way the keyboard's Done does, by blur. */
+       radius, feather… 37 call sites) put its number in an <input type=text> and did nothing on focus. A real tap on a
+       phone drops a CARET into the old text rather than selecting it, so the digits he typed went INTO the old number:
+       Twist 140° + 90 became 14900° and landed on the 360° maximum; Opacity 100 + 50 became 10050 or 15000 and stayed at
+       100. (The Position boxes select their text on edit — these never did.) Fixed by typeInBox in js/inspector.js,
+       which all four builders now call. The typing is done the way a keyboard does it — inserted at whatever selection
+       the real tap left — and committed the way the keyboard's Done does, by blur. */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const saved = FM.scene;
     try {
