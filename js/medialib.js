@@ -53,6 +53,10 @@ window.FM = window.FM || {};
   }
   const inFlight = new Set();   // mids whose use() has not finished — a repeat tap on one is ignored (queue 915 phase B)
   const PREPARING = 'Preparing…';
+  /* First reuses still preparing, across ALL tiles. "Preparing…" is one shared message, so it comes down only
+     when the LAST of them finishes: two different tiles tapped in a row both show it, and the first to finish
+     used to take it down while the second was still copying — seconds of nothing on a phone (review, round 1). */
+  let preparingNow = 0;
 
   FM.mediaLib = {
     // Newest first. Entries are NOT verified here (that would mean an IDB read per tile on every
@@ -176,7 +180,7 @@ window.FM = window.FM || {};
         else if (st.shareMedia && (!e.fp || fingerprint(rec.file) === e.fp)) {
           /* FIRST REUSE. (A fingerprint that no longer matches means the record under the tile's key is a
              different file now — a Replace landed first — and that file is not this tile's to share.) */
-          preparing = true;
+          preparing = true; preparingNow++;
           if (FM.toast) FM.toast(PREPARING, 0);
           const sh = await st.shareMedia(mid, rec);
           if (sh) { file = sh.file; ref = fileKey = sh.key; rekey(mid, e.key, sh.key); }
@@ -193,7 +197,8 @@ window.FM = window.FM || {};
         return false;
       } finally {
         inFlight.delete(mid);
-        if (preparing) {   // take "Preparing…" down — unless something has already said something else
+        if (preparing && --preparingNow <= 0) {   // take "Preparing…" down once NO tile is still preparing — unless something has already said something else
+          preparingNow = 0;
           const t = document.getElementById('toast');
           if (t && t.textContent === PREPARING && FM.hideToast) FM.hideToast();
         }

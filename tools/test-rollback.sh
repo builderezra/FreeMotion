@@ -1,7 +1,7 @@
 #!/bin/bash
 # ═══ THE FAILSAFE'S OWN TEST ═══════════════════════════════════════════════════════════════════════
 #
-#   tools/test-rollback.sh        # ~15 seconds, touches nothing outside a temp clone
+#   tools/test-rollback.sh        # ~30 seconds, touches nothing outside a temp clone
 #
 # WHY THIS EXISTS. `tools/rollback.sh` is the answer to his question "whats the fail safe if an ai
 # fucks up all the code?" — and on the day it was written it broke TWICE, in opposite directions:
@@ -89,6 +89,49 @@ BACK="$(grep -o '>v[0-9][0-9.]*<' index.html | head -1 | tr -d '><')"
 if ./tools/rollback.sh "$TARGET" < /dev/null >"$TMP/noty.txt" 2>&1; then
   bad "it published with no tty and no -y — an agent can pull the failsafe silently"
 else ok "it refuses to publish when there is no one to ask (and no -y)"; fi
+
+# 9. THE VERDICT ON A BUILD OLDER THAN v16.80 IS RUN HERE, NOT JUST FOUND IN THE TEXT (queue 915 clause 5,
+#    review round 1). An older build cannot read a clip reused from Add → Media, and its first launch can delete
+#    the shared copy for good — the warning is the only thing between him and that. The browser suite can only
+#    read this script's text, so a flipped version comparison, or a warning that could never fire, passed it.
+#    v15.99 is here on purpose: its minor number is ABOVE 80, so a comparison that forgot the major fails on it.
+label_now() { grep -o '>v[0-9][0-9.]*<' index.html | head -1 | tr -d '><'; }
+H0="$(git rev-parse HEAD)"; L0="$(label_now)"
+unchanged() { [ "$(git rev-parse HEAD)" = "$H0" ] && [ "$(label_now)" = "$L0" ] && [ -z "$(git status --porcelain)" ]; }
+verdict() {   # $1 = target, $2 = warn | ok
+  local out rc; out="$(./tools/rollback.sh "$1" --check 2>&1)"; rc=$?
+  if [ "$2" = warn ]; then
+    if [ $rc = 0 ] && printf '%s' "$out" | grep -q 'OLDER THAN v16.80' && printf '%s' "$out" | grep -q 'FIRST TIME IT OPENS'; then ok "$1 --check warns that it cannot read reused clips and can delete shared copies at its first launch"
+    else bad "$1 --check did NOT warn (exit $rc) — a rollback there would blank every reused clip with no warning"; fi
+  else
+    if [ $rc = 0 ] && printf '%s' "$out" | grep -q '✅' && ! printf '%s' "$out" | grep -q 'OLDER THAN'; then ok "$1 --check says it can read reused clips"
+    else bad "$1 --check warned (exit $rc) although it can read reused clips"; fi
+  fi
+}
+verdict v16.79 warn
+verdict v15.99 warn
+verdict "$(git rev-list --max-parents=0 HEAD | tail -1)" warn   # no version label at all: decided by ancestry
+verdict v16.80 ok
+verdict "$L0" ok
+unchanged && ok "--check touched nothing" || bad "--check changed the tree or made a commit"
+
+# 10. …and publishing one takes the version TYPED BACK. A "y" is what every safe rollback takes, and -y is a
+#     script saying yes — neither may be the keystroke that costs him clips for good.
+if ./tools/rollback.sh v16.79 -y < /dev/null >"$TMP/y79.txt" 2>&1; then bad "-y published a release older than v16.80 from a script"
+elif unchanged; then ok "-y does not publish a release older than v16.80 (nothing changed)"
+else bad "-y was refused but the tree or history changed anyway"; fi
+if command -v expect >/dev/null 2>&1; then
+  expect -c 'set timeout 60; spawn ./tools/rollback.sh v16.79; expect "type v16.79 and press enter"; send "y\r"; expect eof' >"$TMP/t79y.txt" 2>&1
+  if unchanged && grep -q 'stopped. Nothing was changed' "$TMP/t79y.txt"; then ok "at a terminal, a y does not publish a release older than v16.80"
+  else bad "at a terminal, a y published (or started to publish) a release older than v16.80"; fi
+  expect -c 'set timeout 180; spawn ./tools/rollback.sh v16.79; expect "type v16.79 and press enter"; send "v16.79\r"; expect eof' >"$TMP/t79v.txt" 2>&1
+  [ "$(label_now)" = "v16.79" ] && ok "typing the version back does publish it" \
+                                 || bad "typing v16.79 back did not roll back to it (the app says $(label_now)): $(tail -2 "$TMP/t79v.txt")"
+  ./tools/rollback.sh "$L0" -y >/dev/null 2>&1
+  [ "$(label_now)" = "$L0" ] && ok "and rolling forward to $L0 again works" || bad "could not roll forward to $L0 again (the app says $(label_now))"
+else
+  bad "expect is not installed, so the typed-back question cannot be exercised"
+fi
 
 echo
 [ "$FAILED" = 0 ] && echo "✅ rollback.sh holds up." || echo "❌ rollback.sh is BROKEN — do not rely on it until this passes."
