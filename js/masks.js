@@ -125,10 +125,19 @@ window.FM = window.FM || {};
    * `s` (optional, default 1) — project pixels per canvas pixel, for a REDUCED PREVIEW plate. Mask
    * paths are stored in project coordinates, so a W×H buffer that is not project-sized has to draw
    * them through a matching scale or the stencil lands in the wrong place. Defaulted to 1 so every
-   * existing caller — and every export, which is always 1:1 — is byte-for-byte unchanged. */
-  FM.buildMaskAlpha = function (layer, t, W, H, out, s) {
+   * existing caller — and every export, which is always 1:1 — is byte-for-byte unchanged.
+   *
+   * `ox`, `oy` (optional, default 0) — the PROJECT point that buffer pixel (0,0) stands for (queue 690, HUNT-d). A plate
+   * padded past the frame — Motion Blur's, Squish's — starts left of and above the comp (its __fmOX/__fmOY are negative),
+   * and the compositor stamps this buffer at that origin. Traced from project (0,0) regardless, a mask added from
+   * Effects → Mask (a marker, applied INSIDE that padded plate) landed up and left of where he drew it by the padding —
+   * 17 px left and 18 px up on a brisk move — for exactly as long as the layer moved, then snapped back. Defaulted to 0,
+   * so every caller whose buffer starts at the comp's corner is untouched. */
+  FM.buildMaskAlpha = function (layer, t, W, H, out, s, ox, oy) {
     if (!(W > 0) || !(H > 0)) return null;
     s = (s > 0 && isFinite(s)) ? s : 1;
+    ox = isFinite(ox) ? +ox : 0; oy = isFinite(oy) ? +oy : 0;
+    const mapped = s !== 1 || ox !== 0 || oy !== 0;
     const list = layer && layer.masks;
     if (!Array.isArray(list) || !list.length) return null;
     const enabled = [];
@@ -170,11 +179,11 @@ window.FM = window.FM || {};
       tctx.filter = feather > 0 ? ('blur(' + (feather * s) + 'px)') : 'none';
       tctx.clearRect(0, 0, W, H);
       tctx.fillStyle = '#fff';
-      if (s !== 1) tctx.setTransform(s, 0, 0, s, 0, 0);   // pts are project coordinates — see `s` above
+      if (mapped) tctx.setTransform(s, 0, 0, s, -ox * s, -oy * s);   // pts are project coordinates — see `s` and `ox` above
       tctx.beginPath();
       FM.buildSubPath(tctx, pts, m.closed !== false, null);   // identity map: pts already in canvas space
       tctx.fill();
-      if (s !== 1) tctx.setTransform(1, 0, 0, 1, 0, 0);   // back to buffer pixels — the rect below must cover ALL of it
+      if (mapped) tctx.setTransform(1, 0, 0, 1, 0, 0);   // back to buffer pixels — the rect below must cover ALL of it
       // 2) invert WITHIN the frame if asked: source-out draws white only where the shape did NOT cover,
       //    so temp alpha becomes 1 - coverage (the feather edge reverses). No blur on the full-frame rect.
       if (m.invert) {

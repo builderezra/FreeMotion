@@ -3743,8 +3743,20 @@ window.FM = window.FM || {};
        layer for export", used by both. */
     const soloTarget = o.soloId ? FM.layerById(FM.scene, o.soloId) : null;
     const soloRestore = soloTarget ? exportSoloPrep(soloTarget) : null;
+    /* THE VIEW MENU'S ISOLATE IS THE PREVIEW'S, NOT THE FILE'S (queue 690, HUNT-d). The video exporters are covered by the
+       compositor ignoring FM.isolate under FM._exporting; this still renders without that flag, so it holds the isolate
+       aside for its one render and puts it straight back — the preview he is looking at does not change. The Free-Crop
+       tool's show-the-whole-frame flag is the same kind of view state and is held aside the same way. (Not by setting
+       FM._exporting here: that flag also switches off the preview's hold-frame substitution for video, which is a
+       bigger change to what this still draws than this fix is about.) */
+    const isoWas = FM.isolate; FM.isolate = null;
+    const cropHeld = FM.scene.layers.filter(l => l && l._cropEditing);
+    cropHeld.forEach(l => { l._cropEditing = false; });
     try { FM.renderScene(full.getContext('2d'), FM.scene, t); }
-    finally { if (soloRestore) soloRestore.forEach(([l, v]) => { l.solo = v; }); }
+    finally {
+      FM.isolate = isoWas; cropHeld.forEach(l => { l._cropEditing = true; });
+      if (soloRestore) soloRestore.forEach(([l, v]) => { l.solo = v; });
+    }
     const c = document.createElement('canvas');
     c.width = Math.max(1, Math.round(P.width * sc));
     c.height = Math.max(1, Math.round(P.height * sc));

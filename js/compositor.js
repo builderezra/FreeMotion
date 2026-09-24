@@ -2813,8 +2813,10 @@ window.FM = window.FM || {};
   }
   // `s` = project pixels per buffer pixel, so a reduced-preview plate gets a matching stencil rather
   // than a project-sized one drawn into a small buffer. Omitted (project-sized W/H) everywhere else.
-  function maskAlphaAt(layer, t, W, H, d, s) {
-    try { return FM.buildMaskAlpha(layer, t, W, H, pmSlot(d).mask, s); } catch (e) { return null; }
+  // `ox`/`oy` = the plate's origin in project units (nestedPlate's OX/OY), which the stencil is stamped at — so it has to be
+  // traced from there too, or a padded plate's mask lands up and left by the padding (queue 690; see FM.buildMaskAlpha).
+  function maskAlphaAt(layer, t, W, H, d, s, ox, oy) {
+    try { return FM.buildMaskAlpha(layer, t, W, H, pmSlot(d).mask, s, ox, oy); } catch (e) { return null; }
   }
   function drawPenMaskLayer(ctx, layer, t, scene) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
@@ -2831,7 +2833,7 @@ window.FM = window.FM || {};
       const ids = markedMaskIds(layer);
       const unmarked = (layer.masks || []).filter(function (m) { return m && !ids.has(m.id); });
       const marked = (layer.masks || []).filter(function (m) { return m && ids.has(m.id); });
-      const maskCanvas = maskAlphaAt(ids.size ? Object.assign({}, layer, { masks: unmarked }) : layer, t, W, H, d, ps);   // unmarked only (queue 560)
+      const maskCanvas = maskAlphaAt(ids.size ? Object.assign({}, layer, { masks: unmarked }) : layer, t, W, H, d, ps, OX, OY);   // unmarked only (queue 560); traced from the plate's origin (queue 690)
       // No drawable coverage (all masks empty / off) → render the layer as if it had none.
       if (!maskCanvas) { drawLayer(ctx, Object.assign({}, layer, { masks: marked.length ? marked : null }), t, scene); return; }
       const off = pmSlot(d).plate; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }   // cleared below
@@ -2886,7 +2888,7 @@ window.FM = window.FM || {};
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const d = _pmDepth++;
     try {
-      const maskCanvas = maskAlphaAt(Object.assign({}, layer, { masks: [m] }), t, W, H, d, ps);
+      const maskCanvas = maskAlphaAt(Object.assign({}, layer, { masks: [m] }), t, W, H, d, ps, OX, OY);   // from the plate's origin — Motion Blur's is padded (queue 690)
       if (!maskCanvas) { drawLayer(ctx, inner, t, scene); return; }
       const tmp = Object.assign({}, inner, { blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
       const off = pmSlot(d).plate; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }
@@ -3388,6 +3390,27 @@ window.FM = window.FM || {};
    * __fmRS === 1 and this returns exactly what plateScale returns. Do NOT reach for this anywhere
    * a PLATE is being sized — see the 48-effect wreckage measured when the cap was lifted globally. */
   function renderScale(ctx) { const s = ctx.canvas.__fmRS; return (s > 0 && isFinite(s)) ? s : 1; }
+
+  /* A FILTER STRING MOVED FROM THE TARGET TO A SOURCE-PIXEL OFFSCREEN (queue 690, HUNT-d).
+   * Every length in a layer's ctx.filter (blur, a glow's drop-shadow, the camera's focus blur) is written in the TARGET's
+   * device pixels — right where it is built, because ctx.filter ignores the transform. A keyed clip does not use it there:
+   * chromaKey / lumaKey bake it into an offscreen the size of the SOURCE, and that offscreen is then drawn through the
+   * whole transform (render scale, the layer's own scale, its parents). So every length was scaled a second time: a Blur
+   * on a green-screened clip measured 13 px in the export, 8.6 on the phone preview, 3.3 while playing and 23.7 zoomed in,
+   * where the same blur without the key is 20 at every one of them. He tunes softness on the preview; it has to be the file.
+   * `k` is source pixels per target device pixel — 1 / the transform's scale at the draw — so the length lands on the
+   * target exactly as the unkeyed layer's does. Only `px` lengths change: colours, amounts and angles carry no unit. */
+  function filterToSource(f, k) {
+    if (!f || f === 'none' || !(k > 0) || !isFinite(k) || Math.abs(k - 1) < 1e-9) return f;
+    return f.replace(/(\d*\.?\d+(?:e[-+]?\d+)?)px/gi, function (_, n) { return (+(parseFloat(n) * k).toFixed(3)) + 'px'; });
+  }
+  FM._filterToSource = filterToSource;   // suite seam
+  // Target device pixels per unit of the CURRENT transform (a source pixel, inside a media layer's draw): the square root of
+  // the transform's area scale, so a rotated or non-uniformly scaled clip gets the mean of its two axes.
+  function deviceScaleOf(ctx) {
+    try { const m = ctx.getTransform(), s = Math.sqrt(Math.abs(m.a * m.d - m.b * m.c)); return (s > 0 && isFinite(s)) ? s : 1; }
+    catch (e) { return renderScale(ctx); }
+  }
 
   /* The anchor is deliberately read as a RAW NUMBER everywhere in the compositor — never through
      FM.evalProp — and the inspector withholds the ◆ button for it because of exactly that. Nothing
@@ -14793,6 +14816,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const ck = layer.effects && layer.effects.find(e => e.type === 'chromakey' && e.enabled !== false);
         const lk = layer.effects && layer.effects.find(e => e.type === 'lumakey' && e.enabled !== false);
         let keyed = false;
+        // …in SOURCE pixels, not the target's (queue 690): see filterToSource. The keyed canvas is w×h and is drawn at w×h
+        // local units (the crop path samples it 1:1), so a source pixel covers exactly deviceScaleOf(ctx) target pixels. A
+        // floor on the scale keeps a clip shrunk to nothing from asking for a blur hundreds of times its own size.
+        const keyFilter = (ck || lk) ? filterToSource(ctx.filter, 1 / Math.max(0.02, deviceScaleOf(ctx))) : 'none';
         if (ck && src) {
           const p = resolveFxColors(ck.params || {}, t);   // queue 686: a keyframed key colour is an object; chromaKey then threw and took the whole composite with it
           // evalProp, not the raw prop: a KEYFRAMED tolerance is an object → tol*441 = NaN → dist<NaN
@@ -14800,14 +14827,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           const tol = p.tolerance == null ? 0.3 : FM.evalProp(p.tolerance, t);
           const cks = p.softness == null ? 0 : Math.max(0, Math.min(1, FM.evalProp(p.softness, t)));
           const ckd = p.despill == null ? 0 : Math.max(0, Math.min(1, FM.evalProp(p.despill, t)));
-          src = chromaKey(src, w, h, p.color || '#00ff00', tol, ctx.filter, cks, ckd); keyed = true;
+          src = chromaKey(src, w, h, p.color || '#00ff00', tol, keyFilter, cks, ckd); keyed = true;
         }
         if (lk && src) {
           const p = lk.params || {};
           const thr = p.threshold == null ? 0.25 : FM.evalProp(p.threshold, t);
           const lks = p.softness == null ? 28 : Math.max(0, Math.min(128, FM.evalProp(p.softness, t)));
           const lkm = p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0);
-          src = lumaKey(src, w, h, thr, keyed ? 'none' : ctx.filter, lks, lkm); keyed = true;
+          src = lumaKey(src, w, h, thr, keyed ? 'none' : keyFilter, lks, lkm); keyed = true;
         }
         if (keyed) ctx.filter = 'none';                   // filter already applied to the keyed source
         try {
@@ -14899,14 +14926,18 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return out || p;
   }
   FM._resolveFxColors = resolveFxColors;   // suite seam
-  FM._applyPixelFx = function (d, fx, t, W, H, ps) { return applyPixelFx(d, fx, t, W, H, ps); };   // suite seam: the adjustment-layer pixel path
+  FM._applyPixelFx = function (d, fx, t, W, H, ps, geo) { return applyPixelFx(d, fx, t, W, H, ps, geo); };   // suite seam: the adjustment-layer pixel path
 
   /* `ps` REACHES THE ADJUSTMENT PATH TOO (#691, second half). The per-layer kernel call was fixed to
      scale absolute-pixel parameters to the reduced preview plate; THIS path — an adjustment layer
      grading everything beneath it — hardcoded a scale of 1 and so kept the original bug. RGB Split is
      the one PIXEL_ADJ member measured in pixels (`amount` and `green` are offsets), and the caller has
      the scale in hand already: it stamps `_adjCv.__fmRS = rs` two lines before calling this. */
-  function applyPixelFx(d, fx, t, W, H, ps) {
+  /* `geo` (optional) — WHERE THE FRAME IS on this buffer, in its pixels: { cx, cy, maxR } (queue 690, HUNT-d). Omitted, the
+     buffer IS the frame and its middle is the frame's middle, which is every export and every unzoomed preview. Zoomed in,
+     an adjustment layer's buffer is only the slice he can see, and RGB Split's Radial centred on the slice instead of the
+     frame — the split-free point followed his pinch. applyAdjustment passes the frame's real centre and radius. */
+  function applyPixelFx(d, fx, t, W, H, ps, geo) {
     const S = (ps > 0) ? ps : 1;
     const p = resolveFxColors(fx.params || {}, t);
     // Levels is the one grade people reach for on an adjustment layer — "set the black point for
@@ -14926,7 +14957,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const gsh = (p.green == null ? 0 : FM.evalProp(p.green, t)) * S;   // …and the green channel's own offset
         const ux = ang === 0 ? 1 : Math.cos(ang), uy = ang === 0 ? 0 : Math.sin(ang);
         const src = d.slice();
-        const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy) || 1;
+        const cx = geo ? geo.cx : W / 2, cy = geo ? geo.cy : H / 2, maxR = (geo ? geo.maxR : Math.hypot(cx, cy)) || 1;
         const at = (x, y, c) => {
           const xi = x < 0 ? 0 : (x >= W ? W - 1 : x | 0);
           const yi = y < 0 ? 0 : (y >= H ? H - 1 : y | 0);
@@ -14959,6 +14990,42 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       duotonePixels(d, am, A, B, p, t);
     }
   }
+  /* Pixelate a plate that is NOT the frame (a zoomed slice, a padded plate) on the frame's own block grid (queue 690).
+     The export's blocks: round(W / size) across, each W / that wide, starting at project 0 — and each block's colour is what
+     the export's downscale samples, the snapshot bilinear at the block's centre (measured: Chrome's drawImage downscale is
+     that to within 4 levels, not a box average). So the downscale here is the SAME drawImage with the same scale and phase,
+     reading the slice at the block centres the export reads. It reads through `_adjEdge`: the slice copied at an integer
+     offset (no resampling of the slice itself) with its outermost pixels stretched a block past every edge, so the sample
+     rectangle never leaves its source — a rectangle past the edge is clipped by drawImage, and the blocks there came out
+     half-transparent. The blocks are then laid back with smoothing off, at their project positions. */
+  let _adjEdge = null;
+  function pixelateOnFrameGrid(a, cw, ch, rs, OX, OY, W, H, size) {
+    const nX = Math.max(1, Math.round(W / size)), nY = Math.max(1, Math.round(H / size));
+    const bw = W / nX, bh = H / nY;                                   // one block, project units — the export's own
+    const x0 = Math.floor(OX / bw), y0 = Math.floor(OY / bh);
+    const nx = Math.max(1, Math.ceil((OX + cw / rs) / bw) - x0), ny = Math.max(1, Math.ceil((OY + ch / rs) / bh) - y0);
+    const px = Math.ceil(bw * rs) + 2, py = Math.ceil(bh * rs) + 2;   // at most one block hangs past each edge
+    if (!_adjEdge) _adjEdge = document.createElement('canvas');
+    const EW = cw + 2 * px, EH = ch + 2 * py;
+    if (_adjEdge.width !== EW || _adjEdge.height !== EH) { _adjEdge.width = EW; _adjEdge.height = EH; }
+    const e = _adjEdge.getContext('2d');
+    e.setTransform(1, 0, 0, 1, 0, 0); e.globalAlpha = 1; e.globalCompositeOperation = 'source-over'; e.filter = 'none';
+    e.clearRect(0, 0, EW, EH);                                        // (not 'copy': that wipes everything outside each draw)
+    e.imageSmoothingEnabled = false;                                  // edge pixels REPEATED, not blended with their neighbours
+    e.drawImage(a.canvas, px, py);
+    e.drawImage(a.canvas, 0, 0, 1, ch, 0, py, px, ch);               // left
+    e.drawImage(a.canvas, cw - 1, 0, 1, ch, px + cw, py, px, ch);    // right
+    e.drawImage(_adjEdge, 0, py, EW, 1, 0, 0, EW, py);               // top (the row already carries its left/right)
+    e.drawImage(_adjEdge, 0, py + ch - 1, EW, 1, 0, py + ch, EW, py);   // bottom
+    if (!_adjTmp) _adjTmp = document.createElement('canvas');
+    _adjTmp.width = nx; _adjTmp.height = ny;
+    const tctx = _adjTmp.getContext('2d');
+    tctx.clearRect(0, 0, nx, ny); tctx.imageSmoothingEnabled = true;
+    tctx.drawImage(_adjEdge, (x0 * bw - OX) * rs + px, (y0 * bh - OY) * rs + py, nx * bw * rs, ny * bh * rs, 0, 0, nx, ny);   // downscale: the export's samples
+    a.imageSmoothingEnabled = false; a.clearRect(0, 0, cw, ch);
+    a.drawImage(_adjTmp, 0, 0, nx, ny, (x0 * bw - OX) * rs, (y0 * bh - OY) * rs, nx * bw * rs, ny * bh * rs);   // upscale → blocky, at their project positions
+    a.imageSmoothingEnabled = true;
+  }
   function applyAdjustment(ctx, layer, t, scene) {
     const filter = effectFilter(layer, t, renderScale(ctx)), hasCss = filter && filter !== 'none';   // applied to ctx (baseT-scaled) further down
     const ppfx = (layer.effects || []).filter(e => PIXEL_ADJ[e.type] && e.enabled !== false);
@@ -14986,12 +15053,30 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const a = _adjCv.getContext('2d');
     a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, cw, ch); a.globalAlpha = 1; a.filter = 'none';
     a.drawImage(ctx.canvas, 0, 0);                 // snapshot current frame (background + layers below), now 1:1
+    /* ═══ ZOOMED IN, AN ADJUSTMENT LAYER STILL GRADES THE WHOLE FRAME'S GEOMETRY (queue 690, HUNT-d) ═══════════════════
+     * 913.5 made every per-layer effect draw the same in a zoomed slice as in the frame, and v16.90 told him "a zoomed view
+     * is exactly the export, just closer". Adjustment layers never got it: this snapshot is the TARGET, and zoomed in the
+     * target is the slice. So Pixelate counted its blocks across the slice and started them at the slice's corner — blocks
+     * of other sizes in other places than in the file, and moving whenever he panned (54.7% of the pixels differed) — and
+     * RGB Split's Radial centred on the slice (73.3%). A comp-sized snapshot is not available here (the layers below were
+     * only ever drawn into the slice), so the two geometric passes are told where the frame is instead: Pixelate's grid is
+     * the export's grid, anchored at the frame's corner with the export's block size, and RGB Split's centre and radius are
+     * the frame's. `onFrame` is the plate being exactly the frame — the export, every unzoomed preview, every playback
+     * tier — and there nothing below changes by a byte. The one thing a slice cannot know is what lies past its own edge,
+     * so a block straddling it, or a split sampling past it, reads the nearest pixel it has. The preview renders 18% past
+     * every visible edge (app.js CROP_MARGIN) so that band is off screen. */
+    const aOX = ctx.canvas.__fmOX || 0, aOY = ctx.canvas.__fmOY || 0;
+    const onFrame = Math.abs(aOX * rs) <= 0.5 && Math.abs(aOY * rs) <= 0.5 && Math.abs(cw - W * rs) <= 1 && Math.abs(ch - H * rs) <= 1;
+    const frameGeo = onFrame ? null : { cx: (W / 2 - aOX) * rs, cy: (H / 2 - aOY) * rs, maxR: Math.hypot(W / 2, H / 2) * rs };
     if (ppfx.length) {                             // per-pixel post-fx grade the whole snapshot, in stack order
       const img = a.getImageData(0, 0, cw, ch), d = img.data;
-      ppfx.forEach(fx => applyPixelFx(d, fx, t, cw, ch, rs));   // rs: the adjustment plate's own scale (#691)
+      ppfx.forEach(fx => applyPixelFx(d, fx, t, cw, ch, rs, frameGeo));   // rs: the adjustment plate's own scale (#691); frameGeo: where the frame is (queue 690)
       a.putImageData(img, 0, 0);
     }
-    if (pixFx) {                                   // pixelate the whole scene below (down- then up-scale the snapshot)
+    if (pixFx && !onFrame) {                       // …the same blocks, on the export's grid (queue 690)
+      const size = Math.max(1, Math.round(FM.evalProp((pixFx.params || {}).size, t) || 1));
+      if (size > 1) pixelateOnFrameGrid(a, cw, ch, rs, aOX, aOY, W, H, size);
+    } else if (pixFx) {                            // pixelate the whole scene below (down- then up-scale the snapshot)
       const size = Math.max(1, Math.round(FM.evalProp((pixFx.params || {}).size, t) || 1));
       if (size > 1) {
         // Block COUNT comes from the visible area in PROJECT units (cw / rs), not from the plate's
@@ -15526,8 +15611,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          2 — draw everything, but draw THIS one last so it sits on top
        Mode 2 is skipped for a layer inside a group unit: those members composite as one flattened
        unit at the group's z-slot, so lifting one member out of it would change what the group IS,
-       not just what order it draws in. */
-    const _iso = (FM.isolate && FM.isolate.id && FM.isolate.mode && scene.layers.some(l => l.id === FM.isolate.id)) ? FM.isolate : null;
+       not just what order it draws in.
+       ⚠️ AND NEVER IN AN EXPORT (queue 690, HUNT-d). "View only" was true of the scene and false of the FILE: the exporter
+       renders through this same function, and nothing on the way to an export cleared the isolate — so a clip left isolated
+       on PC (the Export button stays up while it is selected, and clicking it keeps the selection) exported ALONE, every
+       other layer missing from the video, or in mode 2 with that clip wrongly on top, and the dialog said "All layers".
+       Exporting just one layer is the dialog's own choice (expSoloId → exportSoloPrep); this is the preview's. So the
+       isolate is simply not read while an export is rendering, exactly like FM.fxPreviewListFor above — and the still
+       (FM.snapshotPNG) holds it aside for its one render, because it renders without FM._exporting. */
+    const _iso = (!FM._exporting && FM.isolate && FM.isolate.id && FM.isolate.mode && scene.layers.some(l => l.id === FM.isolate.id)) ? FM.isolate : null;
     const _isoTop = (_iso && _iso.mode === 2 && !(memberToUnit && memberToUnit[_iso.id]))
       ? scene.layers.find(l => l.id === _iso.id) : null;
     /* FILL BEHIND goes down HERE — on the background, under every layer in the stack. See
@@ -15650,8 +15742,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const m = FM.media && FM.media.get(layer.id);
     const mw = m ? m.width : 0, mh = m ? m.height : 0;
     const c = layer.crop;
-    // While the Free-Crop tool is open on this layer, show the WHOLE frame so you can re-crop from it.
-    if (!c || !mw || !mh || layer._cropEditing) return { x: 0, y: 0, w: mw, h: mh, full: true };
+    // While the Free-Crop tool is open on this layer, show the WHOLE frame so you can re-crop from it — in the PREVIEW only
+    // (queue 690, HUNT-d): the same view-only leak as the isolate — an export started with the crop tool still open
+    // wrote the whole uncropped frame into the file. The crop he committed is what exports.
+    if (!c || !mw || !mh || (layer._cropEditing && !FM._exporting)) return { x: 0, y: 0, w: mw, h: mh, full: true };
     if (t == null) t = FM.time;
     const ev = (v, d) => (v == null ? d : FM.evalProp(v, t));
     let w = Math.max(1, Math.min(mw, ev(c.w, mw))), h = Math.max(1, Math.min(mh, ev(c.h, mh)));

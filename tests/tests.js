@@ -87894,47 +87894,67 @@
    * masks / blend modes / adjustment layers / camera / motion blur / parenting at the reduced playback plate (0.5, 0.3), a
    * 2x and a 3x zoomed slice — the plain compositing paths all matched; these four did not. */
 
-  /* HUNT-d 1 — the View menu Layers button (isolate) is documented as VIEW ONLY: "this shouldnt change anything but just be
-   * its own little tool to help you visualise stuff" (v5.27). FM.isolate is read inside FM.renderScene — and the exporter
+  /* 690 (HUNT-d 1) — the View menu Layers button (isolate) is documented as VIEW ONLY: "this shouldnt change anything but just
+   * be its own little tool to help you visualise stuff" (v5.27). FM.isolate is read inside FM.renderScene — and the exporter
    * calls that same function on FM.scene, and nothing on the way to an export (showExportDialog, runExport, the exporter)
-   * clears it. So a layer left isolated exports ALONE: every other layer is missing from the file. Driven through the real
-   * button and the real PNG-frames exporter; the frames are read back out of the zip it builds. */
-  test('HUNT-d the view-only Isolate button leaks into the export — the exported file holds only the isolated layer', { item: '690', budgetMs: 60000 }, async function () {
+   * cleared it. So a layer left isolated exported ALONE: every other layer missing from the file — or, in mode 2, that clip
+   * wrongly on top. The fix: the compositor does not read the isolate while FM._exporting, and the still (FM.snapshotPNG,
+   * which renders without that flag) holds it aside for its one render. Driven through the real button, the real PNG-frames
+   * exporter (the frames are read back out of the zip it builds) and the real still (its PNG blob is read back). */
+  const grab690 = { frames: [], blob: null };
+  function stub690() {
+    const realURL = URL.createObjectURL, realClick = HTMLAnchorElement.prototype.click, realCreate = FM.zipWrite.create;
+    URL.createObjectURL = function (b) { if (b && b.type === 'image/png') grab690.blob = b; return 'blob:hunt-d'; };   // nothing may actually download
+    HTMLAnchorElement.prototype.click = function () {};
+    FM.zipWrite.create = function () {
+      const z = realCreate.apply(this, arguments), add = z.add;
+      z.add = function (name, buf) { grab690.frames.push(buf); return add.apply(this, arguments); };
+      return z;
+    };
+    return function () { URL.createObjectURL = realURL; HTMLAnchorElement.prototype.click = realClick; FM.zipWrite.create = realCreate; };
+  }
+  async function pngCtx690(bytes) {
+    const bmp = await createImageBitmap(bytes instanceof Blob ? bytes : new Blob([bytes], { type: 'image/png' }));
+    const c = offscreen(bmp.width, bmp.height), g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(bmp, 0, 0);
+    return g;
+  }
+  async function exportFrame690(name) {   // frame 0 of the real PNG-frames export
+    grab690.frames.length = 0;
+    await FM.exporter.runFrames({ scale: 1, fps: 10, from: 0, to: 0.2, name: name, format: 'png', onProgress: function () {} });
+    if (!grab690.frames.length) throw new Error('setup: the frames export produced no frames to read back');
+    return pngCtx690(grab690.frames[0]);
+  }
+  async function stillFrame690() {        // the real single-frame PNG (the toolbar snapshot, and This frame in the dialog)
+    grab690.blob = null;
+    FM.snapshotPNG();
+    for (let i = 0; i < 100 && !grab690.blob; i++) await new Promise(r => setTimeout(r, 20));
+    if (!grab690.blob) throw new Error('setup: the still produced no PNG to read back');
+    return pngCtx690(grab690.blob);
+  }
+  test('690 the View menu isolate stays out of the export — the video and the still hold every layer, in their own order', { item: '690', budgetMs: 60000 }, async function () {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
-    if (!FM.exporter || !FM.exporter.runFrames || !FM.zipWrite || !FM.zipWrite.create) throw new Error('setup: the PNG-frames exporter is not reachable');
+    if (!FM.exporter || !FM.exporter.runFrames || !FM.zipWrite || !FM.zipWrite.create || !FM.snapshotPNG) throw new Error('setup: the PNG-frames exporter or the still is not reachable');
     const btn = document.getElementById('vb-layers');
     if (!btn) throw new Error('setup: the View menu Layers (isolate) button is gone');
     const saved = FM.scene;
-    const realURL = URL.createObjectURL, realClick = HTMLAnchorElement.prototype.click, realCreate = FM.zipWrite.create;
-    const grabbed = [];
-    async function exportFrame0() {
-      grabbed.length = 0;
-      await FM.exporter.runFrames({ scale: 1, fps: 10, from: 0, to: 0.2, name: 'hunt-d-iso', format: 'png', onProgress: function () {} });
-      if (!grabbed.length) throw new Error('setup: the frames export produced no frames to read back');
-      const bmp = await createImageBitmap(new Blob([grabbed[0]], { type: 'image/png' }));
-      const c = offscreen(bmp.width, bmp.height), g = c.getContext('2d', { willReadFrequently: true });
-      g.drawImage(bmp, 0, 0);
-      return g;
-    }
-    const isBlue = (g) => { const d = g.getImageData(90, 60, 1, 1).data; return d[2] > 200 && d[0] < 60; };
-    const isRed = (g) => { const d = g.getImageData(30, 60, 1, 1).data; return d[0] > 200 && d[2] < 60; };
+    const at = (g, x, y) => g.getImageData(x, y, 1, 1).data;
+    const isRed = g => { const d = at(g, 30, 60); return d[0] > 200 && d[1] < 60 && d[2] < 60; };
+    const isBlue = g => { const d = at(g, 74, 60); return d[2] > 200 && d[0] < 60 && d[1] < 60; };        // blue's edge, clear of the green
+    const greenOnBlue = g => { const d = at(g, 90, 60); return d[1] > 200 && d[0] < 60 && d[2] < 60; };   // green sits ABOVE blue in the stack
+    let unstub = null;
     try {
       if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      const green = FM.makeLayer('shape', { name: 'HD green', shape: 'rect', x: 90, y: 60, shapeW: 20, shapeH: 20, fill: '#00ff00', start: 0, duration: 1 });
       const red = FM.makeLayer('shape', { name: 'HD red', shape: 'rect', x: 30, y: 60, shapeW: 40, shapeH: 40, fill: '#ff0000', start: 0, duration: 1 });
       const blue = FM.makeLayer('shape', { name: 'HD blue', shape: 'rect', x: 90, y: 60, shapeW: 40, shapeH: 40, fill: '#0000ff', start: 0, duration: 1 });
-      FM.scene = scene([red, blue], { project: { width: 120, height: 120, fps: 10, duration: 1, background: '#000000' } });
+      FM.scene = scene([green, red, blue], { project: { width: 120, height: 120, fps: 10, duration: 1, background: '#000000' } });
       FM.refreshAll(); FM.setTime(0); await sleep(120);
-      URL.createObjectURL = function () { return 'blob:hunt-d'; };   // nothing may actually download
-      HTMLAnchorElement.prototype.click = function () {};
-      FM.zipWrite.create = function () {
-        const z = realCreate.apply(this, arguments), add = z.add;
-        z.add = function (name, buf) { grabbed.push(buf); return add.apply(this, arguments); };
-        return z;
-      };
-      // CONTROL 1: with nothing isolated the export holds both squares, so the read-back can see the blue one
+      unstub = stub690();
+      // CONTROL 1: with nothing isolated the export holds all three, so the read-back can see each of them
       if (FM.setIsolate) FM.setIsolate(0);
-      const plain = await exportFrame0();
-      if (!isRed(plain) || !isBlue(plain)) throw new Error('CONTROL FAILED — with nothing isolated the exported frame does not show both squares, so this harness cannot read an export');
+      const plain = await exportFrame690('hunt-d-iso');
+      if (!isRed(plain) || !isBlue(plain) || !greenOnBlue(plain)) throw new Error('CONTROL FAILED — with nothing isolated the exported frame does not show all three squares in their order, so this harness cannot read an export');
       // his path: select the red square, tap the View menu Layers button once (only this layer)
       FM.selectLayer(red.id); await sleep(60);
       btn.click(); await sleep(60);
@@ -87943,40 +87963,104 @@
       const pv = offscreen(120, 120), pg = pv.getContext('2d', { willReadFrequently: true });
       FM.renderScene(pg, FM.scene, 0);
       if (isBlue(pg)) throw new Error('CONTROL FAILED — the preview still shows the blue square with the red one isolated, so the isolate did not take effect');
-      const iso = await exportFrame0();
+      const iso = await exportFrame690('hunt-d-iso');
       if (!isRed(iso)) throw new Error('setup: the isolated red square is missing from the export as well');
-      if (!isBlue(iso)) throw new Error('with one layer isolated by the View menu Layers button (a view-only tool), the EXPORTED frame is missing every other layer — the blue square is not in the file. He exports a video that holds only the one clip he was looking at');
+      if (!isBlue(iso) || !greenOnBlue(iso)) throw new Error('with one layer isolated by the View menu Layers button (a view-only tool), the EXPORTED frame is missing every other layer — the blue square is not in the file. He exports a video that holds only the one clip he was looking at');
+      const still = await stillFrame690();
+      if (!isRed(still) || !isBlue(still)) throw new Error('with one layer isolated, the exported STILL (the single-frame PNG) holds only that layer — the blue square is missing from it');
+      if (!(FM.isolate && FM.isolate.id === red.id && FM.isolate.mode === 1)) throw new Error('the export switched his isolate off — the preview he was looking at changed (FM.isolate is ' + (FM.isolate ? FM.isolate.id + ' mode ' + FM.isolate.mode : 'off') + ')');
+      // mode 2 — the blue square brought to the top: the preview lifts it over the green, the file must keep the green on top
+      FM.selectLayer(blue.id); await sleep(60);
+      btn.click(); await sleep(60); btn.click(); await sleep(60);
+      if (!(FM.isolate && FM.isolate.id === blue.id && FM.isolate.mode === 2)) throw new Error('setup: two taps on the Layers button did not bring the blue square to the top (FM.isolate is ' + (FM.isolate ? FM.isolate.id + ' mode ' + FM.isolate.mode : 'off') + ')');
+      FM.renderScene(pg, FM.scene, 0);
+      if (greenOnBlue(pg)) throw new Error('CONTROL FAILED — with the blue square brought to the top the preview still draws the green over it, so mode 2 did not take effect');
+      const top = await exportFrame690('hunt-d-iso');
+      if (!greenOnBlue(top) || !isRed(top)) throw new Error('with a layer brought to the top by the View menu Layers button, the EXPORTED frame draws it over the layers above it — the file stacks his clips in an order he never set');
+      const topStill = await stillFrame690();
+      if (!greenOnBlue(topStill)) throw new Error('with a layer brought to the top by the View menu Layers button, the exported STILL draws it over the layers above it');
     } finally {
-      URL.createObjectURL = realURL; HTMLAnchorElement.prototype.click = realClick; FM.zipWrite.create = realCreate;
+      if (unstub) unstub();
       if (FM.setIsolate) FM.setIsolate(0);
       FM.scene = saved; FM.selectLayer(null);
       try { FM.refreshAll(); } catch (e) {}
     }
   });
 
-  /* HUNT-d 2 — a Blur on a GREEN-SCREENED clip. A keyed media layer bakes its CSS filter into the key offscreen
+  /* 690 (HUNT-d 1, its sibling) — the Free-Crop tool is the same kind of view state: while it is open the layer shows its
+   * WHOLE frame so he can re-crop from it (layer._cropEditing, read by FM.cropOf). Nothing cleared it on the way to an export
+   * either, so an export started with the tool open wrote the whole uncropped frame into the file. Opened through the real
+   * tool; exported through the real PNG-frames exporter and the real still. */
+  test('690 an export started with the Free-Crop tool still open holds the crop he committed, not the whole frame', { item: '690', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.cropTool || !FM.cropTool.start || !FM.exporter || !FM.exporter.runFrames || !FM.snapshotPNG) throw new Error('setup: the crop tool, the frames exporter or the still is not reachable');
+    const saved = FM.scene;
+    const tex = offscreen(120, 120), tc = tex.getContext('2d');
+    tc.fillStyle = '#ff0000'; tc.fillRect(0, 0, 60, 120);
+    tc.fillStyle = '#0000ff'; tc.fillRect(60, 0, 60, 120);
+    const L = FM.makeLayer('image', { name: 'HD cropped', x: 60, y: 60, start: 0, duration: 1 });
+    L.start = 0; L.duration = 1;
+    L.crop = { x: 0, y: 0, w: 60, h: 120 };   // he kept the red half: a 60-wide frame centred on x 60 (30..90)
+    FM.media.set(L.id, { kind: 'image', el: tex, width: 120, height: 120 });
+    const blueAt = (g, x) => { const d = g.getImageData(x, 60, 1, 1).data; return d[2] > 200 && d[0] < 60; };
+    const redAt = (g, x) => { const d = g.getImageData(x, 60, 1, 1).data; return d[0] > 200 && d[2] < 60; };
+    let unstub = null;
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      FM.scene = scene([L], { project: { width: 120, height: 120, fps: 10, duration: 1, background: '#000000' } });
+      FM.refreshAll(); FM.setTime(0); await sleep(120);
+      unstub = stub690();
+      // CONTROL 1: the committed crop exports as the red half alone
+      const plain = await exportFrame690('hunt-d-crop');
+      if (!redAt(plain, 60) || blueAt(plain, 100)) throw new Error('CONTROL FAILED — with the crop tool closed the export is not the cropped red half, so this harness cannot read a crop');
+      FM.cropTool.start(L.id); await sleep(60);
+      if (!(FM.cropTool.isActive && FM.cropTool.isActive())) throw new Error('setup: the Free-Crop tool did not open on the image');
+      // CONTROL 2: the PREVIEW shows the whole frame while the tool is open — the tool doing its job
+      const pv = offscreen(120, 120), pg = pv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(pg, FM.scene, 0);
+      if (!blueAt(pg, 100)) throw new Error('CONTROL FAILED — with the crop tool open the preview does not show the whole frame, so the tool state did not take effect');
+      const open = await exportFrame690('hunt-d-crop');
+      if (blueAt(open, 100)) throw new Error('an export started with the Free-Crop tool open wrote the WHOLE uncropped frame into the file — the half he cropped away is back in his video');
+      const still = await stillFrame690();
+      if (blueAt(still, 100)) throw new Error('a still exported with the Free-Crop tool open holds the whole uncropped frame');
+      if (!FM.cropTool.isActive() || !L._cropEditing) throw new Error('the export closed his crop tool or dropped its whole-frame view');
+    } finally {
+      try { if (FM.cropTool && FM.cropTool.stop) FM.cropTool.stop(); } catch (e) {}
+      if (unstub) unstub();
+      FM.media.remove(L.id);
+      FM.scene = saved; FM.selectLayer(null);
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 (HUNT-d 2) — a Blur on a GREEN-SCREENED clip. A keyed media layer bakes its CSS filter into the key offscreen
    * (compositor.js media branch: chromaKey(src, w, h, …, ctx.filter, …)), and that offscreen is in SOURCE pixels — but the
    * filter string was built for the TARGET in device pixels (effectFilter(layer, t, renderScale(ctx))). So the blur radius is
    * multiplied by the preview's render scale twice: once into the string, once more when the keyed source is drawn through
    * the canvas transform. The export (scale 1) is right; the phone preview (about 0.58), the playback tier (down to 0.3)
    * and a zoomed preview (up to 6) all show a different softness. Measured as the width of the red edge ramp, in project
    * pixels, across the subject's left edge. CONTROL: the same blur on the same clip WITHOUT the key is the same width at
-   * every scale, so the ruler is sound. Glow goes the same way (it is a drop-shadow length in the same string). */
-  test('HUNT-d a Blur on a green-screened clip is a different softness in the preview than in the export — half on the phone, tripled zoomed in', { item: '690', budgetMs: 30000 }, function () {
+   * every scale, so the ruler is sound. Glow goes the same way (it is a drop-shadow length in the same string).
+   * The fix (compositor.js filterToSource): the string handed to the key offscreen has every px length divided by the
+   * transform's scale at the draw, so it lands on the target exactly as the unkeyed layer's does. */
+  test('690 a Blur on a green-screened clip is the same softness in every preview as in the export, and at any clip scale', { item: '690', budgetMs: 30000 }, function () {
     const PW = 320, PH = 240, T = 0.5, ids = [];
-    function build(keyed) {
+    function build(keyed, scale) {
       const tex = offscreen(200, 120), c = tex.getContext('2d');
       c.fillStyle = '#00ff00'; c.fillRect(0, 0, 200, 120);
-      c.fillStyle = '#ff0000'; c.fillRect(60, 20, 80, 80);   // the subject: project x 120..200 once centred at 160
+      c.fillStyle = '#ff0000'; c.fillRect(60, 20, 80, 80);   // the subject: project x 120..200 once centred at 160 (at scale 1)
       const L = FM.makeLayer('image', { name: 'HD keyed', x: 160, y: 120, start: 0, duration: 3 });
       L.start = 0; L.duration = 3;
+      if (scale) L.transform.scale = scale;   // an imported clip is fitted to the frame this way (app.js: transform.scale = fit)
       const blur = FM.fxRegistry.makeInstance('blur'); blur.params.radius = 8;
       L.effects = (keyed ? [FM.fxRegistry.makeInstance('chromakey')] : []).concat([blur]);
       FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 120 }); ids.push(L.id);
       return { project: { width: PW, height: PH, fps: 30, duration: 3, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] };
     }
-    // width (project px) over which the red channel climbs from 10% to 90% along row y=120, across project x 95..145
-    function ramp(sc, st) {
+    // width (project px) over which the red channel climbs from 10% to 90% along row y=120, across 25 px either side of the
+    // subject's left edge (project x 120 at scale 1; 160 - 40 * scale in general)
+    function ramp(sc, st, edge) {
+      const E = edge == null ? 120 : edge;
       const cv = offscreen(st.w, st.h);
       if (st.crop) { cv.__fmCrop = true; cv.__fmRS = st.rs; cv.__fmOX = st.ox; cv.__fmOY = st.oy; }
       const ctx = cv.getContext('2d', { willReadFrequently: true });
@@ -87984,7 +88068,7 @@
       const ox = st.ox || 0, oy = st.oy || 0, rs = st.rs;
       const d = ctx.getImageData(0, Math.round((120 - oy) * rs), st.w, 1).data;
       const vals = [];
-      for (let px = 0; px < st.w; px++) { const X = ox + (px + 0.5) / rs; if (X >= 95 && X <= 145) vals.push([X, d[px * 4]]); }
+      for (let px = 0; px < st.w; px++) { const X = ox + (px + 0.5) / rs; if (X >= E - 25 && X <= E + 25) vals.push([X, d[px * 4]]); }
       const mx = Math.max.apply(null, vals.map(v => v[1]));
       let lo = null, hi = null;
       vals.forEach(v => { if (lo == null && v[1] > 0.1 * mx) lo = v[0]; if (hi == null && v[1] > 0.9 * mx) hi = v[0]; });
@@ -88007,26 +88091,35 @@
       FM.renderScene(kx, keyed, T);
       const g = kx.getImageData(75, 120, 1, 1).data;
       if (g[1] > 60) throw new Error('setup: the chroma key did not remove the green screen, so this is not a keyed clip');
+      // MEASURED (25 Sep): after the fix the keyed ramp is 13.0 / 13.8 / 13.3 / 13.3 px across the four scales; before it,
+      // the nearest miss was 4.4 px off (8.6 against 13.0). 2 px sits between the two.
       const kw = SCALES.map(s => ramp(keyed, s));
       const bad = [];
       for (let i = 1; i < SCALES.length; i++) {
-        if (Math.abs(kw[i] - kw[0]) > Math.max(2, kw[0] * 0.25)) bad.push(kw[i].toFixed(1) + ' px in ' + SCALES[i].name);
+        if (Math.abs(kw[i] - kw[0]) > 2) bad.push(kw[i].toFixed(1) + ' px in ' + SCALES[i].name);
       }
       if (bad.length) throw new Error('a Blur on a green-screened clip is ' + kw[0].toFixed(1) + ' px soft in the export but ' + bad.join(', ') + ' — he judges the softness on a preview that does not match the file (the same blur without the key is ' + pw[0].toFixed(1) + ' px everywhere)');
+      /* …AND IN THE FILE ITSELF, a keyed clip's Blur no longer depends on the clip's own scale. The same double scaling made it
+         the layer's scale times the radius: a green-screen clip fitted to the frame at half size (a 4K clip in a 1080 project)
+         exported HALF as soft as the same Blur on the same clip unkeyed — and as the same keyed clip at full size. So this is
+         the one thing the fix changes in an export: a keyed clip that is not at 100% scale gets the softness its Blur says. */
+      const hk = ramp(build(true, 0.5), SCALES[0], 140), hp = ramp(build(false, 0.5), SCALES[0], 140);
+      if (Math.abs(hp - pw[0]) > 1.5) throw new Error('CONTROL FAILED — an UNKEYED blur on the half-size clip measured ' + hp.toFixed(1) + ' px against ' + pw[0].toFixed(1) + ' at full size, so the ruler does not survive the layer scale');
+      if (Math.abs(hk - kw[0]) > 2) throw new Error('in the EXPORT, a Blur on a green-screened clip scaled to half is ' + hk.toFixed(1) + ' px soft against ' + kw[0].toFixed(1) + ' px at full size — the Blur follows the clip scale only when the key is on');
     } finally {
       ids.forEach(id => FM.media.remove(id));
     }
   });
 
-  /* HUNT-d 3 — a mask added from Effects → Mask is born as a MARKER in the effect stack (queue 560, fx-browser.js
+  /* 690 (HUNT-d 3) — a mask added from Effects → Mask is born as a MARKER in the effect stack (queue 560, fx-browser.js
    * addMaskFromBrowser), so it is applied inside whatever plate the layer is being drawn into. Motion Blur (Object)
    * dispatches OUTERMOST and draws the layer into a plate padded by the travel on every side (drawMotionBlur:
    * plate.__fmOX = -m). drawPenMaskAt then builds the mask's stencil at project (0,0) and stamps it at the plate's origin
    * (-m,-m): the reveal window lands m px up and left of where he drew it — in the preview AND the export — for as long as
    * the layer moves, and snaps back when it stops (the blur declines and the plate is not padded). m is the travel plus 2,
    * up to a quarter of the frame. CONTROLS: the same mask without Motion Blur, and the same mask UNMARKED with Motion Blur,
-   * both land exactly on the drawn path. */
-  test('HUNT-d a mask added from Effects slides up and left of where he drew it whenever Motion Blur is on and the layer moves', { item: '690', budgetMs: 30000 }, function () {
+   * both land exactly on the drawn path. The fix: FM.buildMaskAlpha takes the plate's origin and traces the path from it. */
+  test('690 a mask added from Effects stays where he drew it while Motion Blur is on and the layer moves', { item: '690', budgetMs: 30000 }, function () {
     const PW = 320, PH = 240, T = 0.25;
     const PATH = [[140, 100], [180, 100], [180, 140], [140, 140]];   // the window he drew, in frame pixels
     function layerWith(blur, marker) {
@@ -88061,17 +88154,37 @@
     if (!onPath(noBlur)) throw new Error('CONTROL FAILED — without Motion Blur the Effects mask is not on the drawn path (' + at(noBlur) + '), so the fixture is wrong, not the blur');
     if (!onPath(unmarked)) throw new Error('CONTROL FAILED — an ordinary (unmarked) mask with Motion Blur is off the drawn path too (' + at(unmarked) + ')');
     if (!onPath(marked)) throw new Error('with Motion Blur on, the mask he added from Effects shows through ' + at(marked) + ' instead of the 140,100 to 180,140 he drew — it slides ' + (140 - marked.x0) + ' px left and ' + (100 - marked.y0) + ' px up while the layer moves, in the preview and the export, and snaps back when it stops');
+    // …and the ORDINARY mask pass (drawPenMaskLayer) has the same origin to honour: any plate padded past the frame — the
+    // way Motion Blur's and Squish's start left of and above it — holds an ordinary mask where he drew it too.
+    const PAD = 20, pc = offscreen(PW + 2 * PAD, PH + 2 * PAD);
+    pc.__fmCrop = true; pc.__fmRS = 1; pc.__fmOX = -PAD; pc.__fmOY = -PAD;   // plate pixel (0,0) IS project (-20,-20)
+    const px2 = pc.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(px2, { project: { width: PW, height: PH, fps: 30, duration: 3, background: null }, layers: [layerWith(false, false)], selectedId: null, selectedIds: [] }, T);
+    const pd = px2.getImageData(0, 0, pc.width, pc.height).data;
+    let q = { x0: 1e9, y0: 1e9, x1: -1, y1: -1 };
+    for (let y = 0; y < pc.height; y++) for (let x = 0; x < pc.width; x++) if (pd[(y * pc.width + x) * 4 + 3] > 128) { q.x0 = Math.min(q.x0, x - PAD); q.y0 = Math.min(q.y0, y - PAD); q.x1 = Math.max(q.x1, x + 1 - PAD); q.y1 = Math.max(q.y1, y + 1 - PAD); }
+    if (q.x1 < 0) q = null;
+    if (!onPath(q)) throw new Error('drawn into a plate that starts 20 px left of and above the frame, an ordinary mask shows through ' + at(q) + ' instead of the 140,100 to 180,140 he drew — the stencil is traced from the frame corner and stamped at the plate corner');
   });
 
-  /* HUNT-d 4 — 913.5 made every EFFECT draw the same in a zoomed slice as in the whole frame, and v16.90 told him so
+  /* 690 (HUNT-d 4) — 913.5 made every EFFECT draw the same in a zoomed slice as in the whole frame, and v16.90 told him so
    * ("zooming into the preview no longer changes your effects"). It was proved on an IMAGE layer only. An ADJUSTMENT layer
    * grades a snapshot of the target instead (applyAdjustment), and on a zoomed preview that target is the SLICE: Pixelate
-   * counts its blocks across the slice and starts them at the slice's corner, and RGB Split's Radial centres on the slice.
-   * So zoom in on an adjustment-layer Pixelate and the blocks are different sizes in different places from the export.
-   * Same comparison as 913.5 (a slice at 1:1 and at 2x against the whole frame at that scale, byte-for-byte). CONTROLS: no
-   * effect, an adjustment Brightness, and the SAME Pixelate / RGB Split on the image layer itself all match exactly. */
-  test('HUNT-d zooming into the preview changes an adjustment layer Pixelate and RGB Split — the 913.5 fix never reached adjustment layers', { item: '690', budgetMs: 60000 }, function () {
-    const PW = 320, PH = 240, T = 0.5;
+   * counted its blocks across the slice and started them at the slice's corner, and RGB Split's Radial centred on the slice.
+   * So zoom in on an adjustment-layer Pixelate and the blocks were different sizes in different places from the export
+   * (54.7% of the pixels), and RGB Split with Radial 73.3%.
+   * The fix tells the two passes where the frame is (pixelateOnFrameGrid; applyPixelFx's geo). What a slice cannot know is
+   * what lies past its own edge — the layers below were only ever drawn into it — so a block straddling the edge, or a split
+   * sampling past it, reads the nearest pixel it has. The real preview renders CROP_MARGIN (18%) of the visible size past
+   * every visible edge (app.js previewCrop) precisely so that band is never on screen, so the comparison is over the part of
+   * the slice the preview SHOWS. MEASURED after the fix: every pixel that differs lies within 5.5 px of the slice edge (RGB
+   * Split's reach) — except Pixelate at 1:1, where two blocks differ by 13 levels at most: the export's downscale and the
+   * slice's sample the same point, and the bilinear weights round differently on a 184-level edge. A misplaced block is
+   * about 200 levels off, so the per-pixel threshold is 24 — above that rounding, far below the fault.
+   * Same comparison as 913.5 otherwise (a slice at 1:1 and at 2x against the whole frame at that scale). CONTROLS: no effect,
+   * an adjustment Brightness, and the SAME Pixelate / RGB Split on the image layer itself all match over the WHOLE slice. */
+  test('690 zooming into the preview leaves an adjustment layer Pixelate and RGB Split where the export draws them', { item: '690', budgetMs: 60000 }, function () {
+    const PW = 320, PH = 240, T = 0.5, CROP_MARGIN = 0.18, TOL = 24;
     const tex = offscreen(PW, PH), tc = tex.getContext('2d');
     for (let y = 0; y < PH; y += 10) for (let x = 0; x < PW; x += 10) { tc.fillStyle = ((x + y) / 10) % 2 ? '#e8e8e8' : '#1c4aa8'; tc.fillRect(x, y, 10, 10); }
     tc.fillStyle = '#d0302a'; tc.fillRect(20, 30, 50, 40);
@@ -88092,30 +88205,35 @@
       { name: '1:1', full: { rs: 1, ox: 0, oy: 0, w: PW, h: PH }, crop: { rs: 1, ox: 73, oy: 51, w: 120, h: 90, crop: true }, dx: 73, dy: 51 },
       { name: '2x zoom', full: { rs: 2, ox: 0, oy: 0, w: PW * 2, h: PH * 2 }, crop: { rs: 2, ox: 73, oy: 51, w: 240, h: 180, crop: true }, dx: 146, dy: 102 },
     ];
-    function worst(layers) {
+    // `shown`: only the part of the slice the preview puts on screen — the slice is the visible area plus CROP_MARGIN of it
+    // on every side, so the margin is CROP_MARGIN / (1 + 2 * CROP_MARGIN) of the slice
+    function worst(layers, shown, tol) {
       let out = 0;
       PASSES.forEach(p => {
         const A = render(layers, p.full), B = render(layers, p.crop);
-        let n = 0;
-        for (let y = 0; y < p.crop.h; y++) for (let x = 0; x < p.crop.w; x++) {
+        const f = shown ? CROP_MARGIN / (1 + 2 * CROP_MARGIN) : 0;
+        const mx = Math.ceil(p.crop.w * f), my = Math.ceil(p.crop.h * f);
+        let n = 0, all = 0;
+        for (let y = my; y < p.crop.h - my; y++) for (let x = mx; x < p.crop.w - mx; x++) {
           const i = (y * B.w + x) * 4, j = ((y + p.dy) * A.w + (x + p.dx)) * 4;
-          if (Math.abs(A.d[j] - B.d[i]) > 12 || Math.abs(A.d[j + 1] - B.d[i + 1]) > 12 || Math.abs(A.d[j + 2] - B.d[i + 2]) > 12) n++;
+          all++;
+          if (Math.abs(A.d[j] - B.d[i]) > tol || Math.abs(A.d[j + 1] - B.d[i + 1]) > tol || Math.abs(A.d[j + 2] - B.d[i + 2]) > tol) n++;
         }
-        out = Math.max(out, n / (p.crop.w * p.crop.h));
+        out = Math.max(out, n / all);
       });
       return out;
     }
     const pct = f => (f * 100).toFixed(1) + '%';
     try {
-      if (worst([img]) > 0) throw new Error('CONTROL FAILED — with no effect at all the zoomed slice differs from the whole frame, so the harness misplaces the slice');
-      if (worst([adj(fx('brightness')), img]) > 0.01) throw new Error('CONTROL FAILED — an adjustment Brightness, which does not care where it is, differs in the slice — the adjustment snapshot itself is misplaced');
-      const lp = worst([Object.assign({}, img, { effects: [fx('pixelate')] })]), lr = worst([Object.assign({}, img, { effects: [fx('rgbsplit', { radial: 100 })] })]);
+      if (worst([img], false, 12) > 0) throw new Error('CONTROL FAILED — with no effect at all the zoomed slice differs from the whole frame, so the harness misplaces the slice');
+      if (worst([adj(fx('brightness')), img], false, 12) > 0.01) throw new Error('CONTROL FAILED — an adjustment Brightness, which does not care where it is, differs in the slice — the adjustment snapshot itself is misplaced');
+      const lp = worst([Object.assign({}, img, { effects: [fx('pixelate')] })], false, 12), lr = worst([Object.assign({}, img, { effects: [fx('rgbsplit', { radial: 100 })] })], false, 12);
       if (lp > 0.01 || lr > 0.01) throw new Error('CONTROL FAILED — the same effects on the IMAGE layer differ when zoomed too (Pixelate ' + pct(lp) + ', RGB Split ' + pct(lr) + '), which is 913.5 regressing, not this');
-      const ap = worst([adj(fx('pixelate')), img]), ar = worst([adj(fx('rgbsplit', { radial: 100 })), img]);
+      const ap = worst([adj(fx('pixelate')), img], true, TOL), ar = worst([adj(fx('rgbsplit', { radial: 100 })), img], true, TOL);
       const bad = [];
       if (ap > 0.01) bad.push('Pixelate ' + pct(ap));
       if (ar > 0.01) bad.push('RGB Split with Radial ' + pct(ar));
-      if (bad.length) throw new Error('zoomed into the preview, an ADJUSTMENT layer draws differently from the export (' + bad.join(', ') + ' of the visible pixels differ) — the pixel blocks sit in other places and at other sizes than in the file, while the same effects on the clip itself match exactly');
+      if (bad.length) throw new Error('zoomed into the preview, an ADJUSTMENT layer draws differently from the export (' + bad.join(', ') + ' of the pixels on screen differ) — the pixel blocks sit in other places and at other sizes than in the file, while the same effects on the clip itself match exactly');
     } finally {
       FM.media.remove(img.id);
     }
