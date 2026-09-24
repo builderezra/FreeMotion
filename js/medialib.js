@@ -57,6 +57,11 @@ window.FM = window.FM || {};
      while the first one gave up. Two first reuses of one tile at once are safe — the second finds the shared
      copy already there (idbPutSharedOnce answers 'exists') and points at it. */
   const inFlight = new Set();
+  /* 'mid|project' → when a use() of that tile last ADDED a clip in that project, on the same clock as each tap's
+     start (review, round 3). A tap in B that gives up because he moved to C, where he tapped the same tile and
+     the clip has landed (or is landing), must not then say "Not added": he watched it arrive. */
+  const landed = new Map();
+  let clock = 0;
   const PREPARING = 'Preparing…';
   /* First reuses still preparing, across ALL tiles. "Preparing…" is one shared message, so it comes down only
      when the LAST of them finishes: two different tiles tapped in a row both show it, and the first to finish
@@ -168,9 +173,23 @@ window.FM = window.FM || {};
       const tappedIn = openId();
       const flight = mid + '|' + tappedIn;
       if (inFlight.has(flight)) return false;
+      const tappedAt = ++clock;
       const moved = () => openId() !== tappedIn;
-      const gaveUp = () => { if (FM.toast) FM.toast('Not added — you switched projects', 4000); return false; };
+      /* Give up quietly when the same tile has landed, or is still landing, in the project he is in NOW (review,
+         round 3): he tapped it again there, and "Not added" over the clip he just watched arrive reads as a
+         failure — and invites a third tap that adds it twice. */
+      const gaveUp = () => {
+        const here = mid + '|' + openId();
+        if (!inFlight.has(here) && !((landed.get(here) || 0) > tappedAt) && FM.toast) FM.toast('Not added — you switched projects', 4000);
+        return false;
+      };
       const gone = () => {
+        /* Never drop a tile while another tap on it is still copying its file (review, round 3). That tap found
+           the file — on screen, in the clip it was given — and is writing it to the tile's shared copy, so the
+           file IS stored, or about to be; only the record THIS tap read is behind. */
+        for (const f of inFlight) {
+          if (f !== flight && f.indexOf(mid + '|') === 0) { if (FM.toast) FM.toast('Still copying that file — tap it again in a moment'); return false; }
+        }
         const me = readIndex().find(x => x.mid === mid);
         if (me && me.key === e.key) this.remove(mid);   // only a tile that still names the record it was read from
         if (FM.toast) FM.toast('That file is no longer stored — import it again');
@@ -178,8 +197,24 @@ window.FM = window.FM || {};
       };
       inFlight.add(flight);
       let preparing = false;
+      const prepare = () => {
+        if (preparing) return;
+        preparing = true; preparingNow++;
+        if (FM.toast) FM.toast(PREPARING, 0);
+      };
       try {
         let rec = await st.readMedia(e.key);
+        /* THE DISK MAY ONLY BE BEHIND (review, round 3). The tile's key is a clip's own record, it does not hold the
+           tile's file (or holds nothing), and a save is still running: Replace media and every import give the file
+           its tile before their save has written it, and a project switch then takes the clip off screen, so
+           nothing below could tell "not written YET" from "gone". Let every running save finish and read again
+           first. It costs no time: a first copy's write would queue behind those saves anyway. A shared copy is
+           written once and read back before a tile points at it, so a tile keyed at one never waits. */
+        if (!isLib(e.key) && !(rec && rec.file && (!e.fp || fingerprint(rec.file) === e.fp)) && st.pendingSaves && st.pendingSaves() && st.settled) {
+          prepare();
+          await st.settled();
+          rec = await st.readMedia(e.key);
+        }
         if (!rec || !rec.file) return gone();   // the blob went away (project deleted before this shipped, storage cleared)
         /* IS THE FILE UNDER THE TILE'S KEY STILL THE TILE'S FILE? (review, round 2.) A shared copy is written once
            and checked then, so a tile keyed at one is. Anything else is a clip's own record, and Replace media can
@@ -204,8 +239,7 @@ window.FM = window.FM || {};
           if (isLib(rec.ref)) { ref = fileKey = rec.ref; rekey(mid, e.key, rec.ref); }   // keyed at a clip that is itself a pointer
           else if (st.shareMedia) {
             // FIRST REUSE
-            preparing = true; preparingNow++;
-            if (FM.toast) FM.toast(PREPARING, 0);
+            prepare();
             const sh = await st.shareMedia(mid, rec);
             if (sh) { file = sh.file; ref = fileKey = sh.key; rekey(mid, e.key, sh.key); }
           }
@@ -216,6 +250,7 @@ window.FM = window.FM || {};
         if (ref) loaded.ref = ref;        // → storage.save writes a pointer, not the file again
         loaded.fileKey = fileKey;         // → nothing deletes the record this clip's bytes came out of while it plays
         FM.addMediaLayer(loaded);
+        landed.set(flight, ++clock);
         return true;
       } catch (err) {
         if (FM.toast) FM.toast('Could not open that file');

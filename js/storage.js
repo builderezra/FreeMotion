@@ -450,6 +450,15 @@ window.FM = window.FM || {};
     });
     return jobs;
   }
+  /* ═══ THE DISK CAN BE BEHIND THE EDITOR (queue 915 phase B, review round 3) ═══════════════════════════════
+   * Replace media and every import start a save they do not wait for, and give the file a library tile at
+   * once — so for as long as that save takes (seconds for a video on a phone, longer queued behind another
+   * big write) the tile's record on disk is still the OLD file, or nothing at all. A tap on the tile in that
+   * window read the disk, found another file of another size and nothing on screen to say otherwise, and
+   * dropped the tile with "That file is no longer stored" — about a file seconds from being written.
+   * Every save is counted while it runs; pendingSaves() says whether one is, and settled() resolves once
+   * every save running NOW has finished, so mediaLib.use can let the disk catch up before it decides. */
+  const _saving = new Set();
   FM.storage = {
     _writeJobs: planBlobWrites,   // queue 830 suite seam
     _hydrateSceneMedia: hydrateSceneMedia,   // queue 834 (u8) suite seam: the shared-run guard itself
@@ -478,7 +487,13 @@ window.FM = window.FM || {};
         return got || null;
       } catch (e) { return null; }
     },
+    pendingSaves() { return _saving.size; },
+    settled() { return Promise.all(Array.from(_saving)).then(() => true, () => true); },
     async save() {
+      let saved = null;
+      const running = new Promise(r => { saved = r; });
+      _saving.add(running);   // queue 915 phase B, review round 3: see _saving above
+      try {
       let sceneOk = writeScene();   // rev-guarded; a quota failure shouldn't block the IDB media save below
       const warnedBefore = _quotaWarned;
       /* queue 748 (hunt MEDIUM #31): `warnedBefore` can only see a flag raised THIS tick, and the index write's result was
@@ -536,6 +551,7 @@ window.FM = window.FM || {};
         // handle explicit deletions; FM.projects.pruneOrphans() sweeps true orphans once at boot.
         db.close();
       } catch (e) { /* storage unavailable — ignore */ }
+      } finally { _saving.delete(running); saved(); }
     },
 
     /* Synchronous best-effort scene write for page unload (the 600ms debounce can't run there).
