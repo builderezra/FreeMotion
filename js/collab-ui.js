@@ -2107,6 +2107,8 @@ window.FM = window.FM || {};
        then succeeded it would open a project he had just backed out of. S6: the relay join too — its
        rendezvous, its retry timer and the attempt in flight. */
     c._onclose = function () {
+      /* S8: the camera light goes off with the sheet, whatever state the scanner was in. */
+      if (c._scan) { try { c._scan.stop(); } catch (e) {} c._scan = null; }
       if (joinLink) { try { joinLink.close(); } catch (e) {} joinLink = null; }
       if (joinFlow && joinFlow.cancel) joinFlow.cancel();
       /* §12.4: a pending invite is spent "on use" — joined, or looked at and put away. */
@@ -2133,6 +2135,16 @@ window.FM = window.FM || {};
         });
       } catch (e) { if (FM.toast) FM.toast('Paste it into the box yourself', 2400); }
     }));
+    /* S8 (§19.2): [Scan QR] — the camera reads the code on the other person's screen straight into the field.
+       Not under Codes only: the only QR this app draws is an invite LINK, and a link cannot connect there. */
+    let scan = null;
+    if (!C.signal.codesOnly() && C.qr && C.qr.reader) {
+      const sb = btn('cj-scan', null, function () { if (scan) { scan.stop(); scan = null; return; } scan = openScanner(c, input, status, go, sb, function () { scan = null; }); });
+      sb.setAttribute('aria-label', 'Scan a QR code');
+      sb.title = 'Scan a QR code';
+      sb.appendChild(scanIcon());
+      fieldRow.appendChild(sb);
+    }
     c.appendChild(fieldRow);
     /* 📐 ONE LINE THAT REPLACES ITSELF, picked over a five-step checklist (the second drawn option,
        kept as join-stacked-*.png). Listing all five up front answers "how long will this take" and
@@ -2167,6 +2179,266 @@ window.FM = window.FM || {};
       try { go.focus(); } catch (e) {}
     } else input.focus();
     return c;
+  }
+
+  /* ═══ S8 · THE QR SCANNER (§19.2 [Scan QR]) ═══════════════════════════════════════════════════════════
+   * The back camera in a box under the field, read a few times a second by `C.qr.reader()` — the browser's
+   * BarcodeDetector where there is one, jsQR from the CDN (loaded at THIS tap and never before) where there is
+   * not. What it finds goes INTO THE FIELD and waits for Join, exactly like a pending link (S6 review: an
+   * invite that arrives by itself is not a tap — anybody can hold up a QR code). A code that is not an invite
+   * says so and keeps looking. The camera stops the moment it finds one, on [Scan QR] again, on Cancel and on
+   * the sheet closing — a light left on is the one thing a camera feature must never do.
+   * `U._camera` is the seam the suite uses to stand in for a lens (a canvas stream showing the app's own code). */
+  U._camera = function () {
+    const md = navigator.mediaDevices;
+    if (!md || typeof md.getUserMedia !== 'function') return Promise.reject({ why: 'no-camera' });
+    return md.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+  };
+  function scanIcon() {
+    const ns = 'http://www.w3.org/2000/svg';
+    const sv = document.createElementNS(ns, 'svg');
+    sv.setAttribute('viewBox', '0 0 24 24'); sv.setAttribute('width', '22'); sv.setAttribute('height', '22'); sv.setAttribute('aria-hidden', 'true');
+    ['M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9', 'M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9', 'M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15', 'M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15', 'M7 12h10'].forEach(function (d) {
+      const p = document.createElementNS(ns, 'path');
+      p.setAttribute('d', d); p.setAttribute('fill', 'none'); p.setAttribute('stroke', 'currentColor');
+      p.setAttribute('stroke-width', '2'); p.setAttribute('stroke-linecap', 'round');
+      sv.appendChild(p);
+    });
+    return sv;
+  }
+  function openScanner(card, input, status, go, button, onEnd) {
+    const box = el('div', 'cj-scanner');
+    const vid = el('video', 'cj-scanvid');
+    vid.setAttribute('playsinline', ''); vid.muted = true; vid.autoplay = true;
+    vid.setAttribute('aria-label', 'Camera view');
+    const frame = el('div', 'cj-scanframe');
+    box.appendChild(vid); box.appendChild(frame);
+    const line = el('div', 'cj-scanline', 'Starting the camera…');
+    box.appendChild(line);
+    const row = card.querySelector('.cj-fieldrow');
+    if (row && row.nextSibling) card.insertBefore(box, row.nextSibling); else card.appendChild(box);
+    button.classList.add('on');
+    button.setAttribute('aria-pressed', 'true');
+    let stream = null, timer = null, stopped = false, reader = null, lastWrong = 0;
+    const api = {
+      stop: function () {
+        if (stopped) return;
+        stopped = true;
+        clearTimeout(timer);
+        if (stream) { try { stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} }
+        try { vid.srcObject = null; } catch (e) {}
+        if (box.parentNode) box.parentNode.removeChild(box);
+        button.classList.remove('on');
+        button.setAttribute('aria-pressed', 'false');
+        if (card._scan === api) card._scan = null;
+        if (onEnd) onEnd();
+      },
+      _stream: function () { return stream; }, _reader: function () { return reader; }
+    };
+    card._scan = api;
+    function fail(text) {
+      api.stop();
+      status.textContent = text;
+    }
+    function tick() {
+      if (stopped) return;
+      Promise.resolve(vid.readyState >= 2 ? reader.read(vid) : null).then(function (text) {
+        if (stopped) return;
+        if (text != null) {
+          const k = C.signal.classify(text);
+          if (k && (k.kind === 'link' || k.kind === 'code')) {
+            input.value = String(text).trim();
+            api.stop();
+            status.textContent = 'Found an invite — tap Join to connect.';
+            go.disabled = false;
+            try { go.focus(); } catch (e) {}
+            return;
+          }
+          const t = Date.now();
+          if (t - lastWrong > 2500) { lastWrong = t; line.textContent = 'That QR code isn’t a FreeMotion invite — keep looking.'; }
+        }
+        timer = setTimeout(tick, 220);
+      });
+    }
+    /* The READER first, then the camera: a browser that cannot read a code is never asked for the camera (no
+       permission prompt for nothing), and a camera is never started that a failed reader would then leave on —
+       which is what the first version did (S8 security pass: the stream had arrived, the reader had not, and the
+       error path had no stream to stop). */
+    C.qr.reader().then(function (r) {
+      if (stopped) return null;
+      reader = r;
+      line.textContent = 'Starting the camera…';
+      return U._camera();
+    }).then(function (st) {
+      if (!st) return;
+      if (stopped) { try { st.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} return; }
+      stream = st;
+      vid.srcObject = stream;
+      const pl = vid.play && vid.play();
+      if (pl && pl.catch) pl.catch(function () {});
+      line.textContent = 'Point the camera at the QR code on their screen.';
+      tick();
+    }, function (e) {
+      if (stopped) return;
+      const why = e && (e.why || e.name);
+      if (why === 'NotAllowedError' || why === 'SecurityError') fail('The camera is turned off for FreeMotion — allow it in your browser’s settings, or paste the link instead.');
+      else if (why === 'no-camera' || why === 'NotFoundError' || why === 'OverconstrainedError') fail('This device has no camera FreeMotion can use — paste the link instead.');
+      else if (e instanceof Error && /not pinned/.test(e.message)) fail('This browser can’t read QR codes here yet — open the link with your camera app, or paste it instead.');
+      else if (e instanceof Error && /jsQR/.test(e.message)) fail('The QR reader could not be downloaded — check the connection, or paste the link instead.');
+      else fail('The camera could not start — paste the link instead.');
+    });
+    return api;
+  }
+
+  /* ═══ S8 · SETTINGS → LABS → "TEST CONNECTION" (§25.5, §22) ═══════════════════════════════════════════
+   * Three questions, each answered in a sentence a person can act on, and the numbers behind them written into
+   * a report he can copy (§25.5: candidate types, SDP size, maxMessageSize and throughput):
+   *   · Can this network reach the free connection services? — every relay driver the join path uses, tried at
+   *     once on a throwaway room, for §22's eight seconds. Up → invite links and short codes work here.
+   *   · Can this device learn its public address? — one peer connection gathering against the two STUN servers
+   *     for §21's gather cap. A server-reflexive candidate means devices on other networks can usually connect.
+   *   · Does this device's WebRTC work at all, and how fast? — two real connections to each other, through the
+   *     same connection-code codec a join uses, and a 2 MB message timed across them.
+   * ⚠️ NOTHING HERE RUNS UNTIL THE BUTTON IS TAPPED (§23: no sockets, no peer connections until he asks), and it
+   * obeys every rule a session obeys: Codes only means no relay and no STUN at all, and a loopback page is not
+   * allowed out (relayGate). The throwaway room's keys are thrown away — nothing is announced to anybody. */
+  const RELAY_NAMES = { pjs: 'PeerJS', mqtt1: 'EMQX', mqtt2: 'HiveMQ' };
+  U._connOpts = null;      // suite seam: shorter waits and a stand-in STUN peer connection; nothing in the app sets it
+  U.testConnection = function (opts) {
+    const o = Object.assign({}, U._connOpts || {}, opts || {});
+    const LIM = C.LIMITS || {};
+    const S = C.signal;
+    const out = { at: new Date().toISOString(), relays: [], relayGate: null, stun: null, direct: null };
+    const relayP = new Promise(function (resolve) {
+      const gate = S.relayGate();
+      if (!gate.ok) { out.relayGate = gate.why; resolve(); return; }
+      S.linkKeys(S.newRoom()).then(function (keys) {
+        const t0 = Date.now();
+        const upAt = Object.create(null);
+        const rv = S.Rendezvous({ role: 'guest', rooms: [{ kind: 'link', keys: keys }] });
+        const wait = o.relayWait || LIM.RELAY_UP || 8000;
+        let done = false;
+        function finish() {
+          if (done) return;
+          done = true;
+          clearInterval(poll);
+          const st = rv.state();
+          out.relays = st.drivers.map(function (d) { return { name: d.name, label: RELAY_NAMES[d.name] || d.name, up: d.state === 'up', ms: upAt[d.name] == null ? null : upAt[d.name], why: d.state === 'up' ? null : (d.why || (d.state === 'connecting' ? 'timeout' : d.state)) }; });
+          try { rv.stop(); } catch (e) {}
+          resolve();
+        }
+        const poll = setInterval(function () {
+          const st = rv.state();
+          st.drivers.forEach(function (d) { if (d.state === 'up' && upAt[d.name] == null) upAt[d.name] = Date.now() - t0; });
+          if (st.drivers.every(function (d) { return d.state === 'up'; }) || Date.now() - t0 >= wait) finish();
+        }, 100);
+        rv.start();
+      }, function () { out.relayGate = 'crypto'; resolve(); });
+    });
+    const stunP = new Promise(function (resolve) {
+      /* Codes only wins over everything, the suite's stand-in included: it is a promise about third parties. */
+      const servers = S.codesOnly() ? [] : (o.iceServers || S.iceServers());
+      if (!servers.length) {
+        out.stun = { skipped: S.codesOnly() ? 'codes-only' : ((function () { try { return navigator.onLine === false; } catch (e) { return false; } })() ? 'offline' : 'not-allowed') };
+        resolve(); return;
+      }
+      const PC = o.stunPC || window.RTCPeerConnection;
+      let pc = null;
+      try { pc = new PC({ iceServers: servers }); } catch (e) { out.stun = { error: String(e && e.message || e) }; resolve(); return; }
+      const types = Object.create(null);
+      let n = 0, finished = false;
+      function done() {
+        if (finished) return;
+        finished = true;
+        clearTimeout(t);
+        out.stun = { types: Object.assign({}, types), n: n, srflx: !!types.srflx, servers: servers.map(function (x) { return x.urls; }) };
+        try { pc.close(); } catch (e) {}
+        resolve();
+      }
+      pc.onicecandidate = function (e) {
+        if (!e || !e.candidate) { done(); return; }
+        const m = / typ ([a-z]+)/.exec(e.candidate.candidate || '');
+        const k = m ? m[1] : 'other';
+        types[k] = (types[k] || 0) + 1; n++;
+      };
+      pc.onicegatheringstatechange = function () { if (pc.iceGatheringState === 'complete') done(); };
+      const t = setTimeout(done, o.stunWait || Math.max(LIM.ICE_GATHER || 3000, 4000));
+      try { pc.createDataChannel('probe'); } catch (e) {}
+      pc.createOffer().then(function (d) { return pc.setLocalDescription(d); }).catch(function (e) { out.stun = { error: String(e && e.message || e) }; finished = true; clearTimeout(t); try { pc.close(); } catch (x) {} resolve(); });
+    });
+    const directP = new Promise(function (resolve) {
+      if (typeof RTCPeerConnection === 'undefined') { out.direct = { ok: false, why: 'This browser has no WebRTC' }; resolve(); return; }
+      let a = null, b = null;
+      const t0 = Date.now();
+      function end(res) { try { a && a.close(); } catch (e) {} try { b && b.close(); } catch (e) {} out.direct = res; resolve(); }
+      const guard = setTimeout(function () { end({ ok: false, why: 'timeout' }); }, o.directWait || 15000);
+      try { a = C.link.RtcLink({ self: 'a', peer: 'b' }); b = C.link.RtcLink({ self: 'b', peer: 'a' }); }
+      catch (e) { clearTimeout(guard); end({ ok: false, why: String(e && e.message || e) }); return; }
+      let offer = null, answer = null;
+      a.createOffer().then(function (c) { offer = c; return b.acceptOffer(c); })
+        .then(function (c) { answer = c; return a.acceptAnswer(c); })
+        .then(function () { return Promise.all([a.opened, b.opened]); })
+        .then(function () {
+          const up = Date.now() - t0;
+          const size = o.bytes || 2 * 1024 * 1024;
+          const buf = new Uint8Array(size);
+          for (let i = 0; i < size; i += 4096) buf[i] = i & 255;
+          const t1 = performance.now();
+          b.onmessage = function (ch, msg) {
+            if (ch !== 'bulk') return;
+            const ms = Math.max(1, performance.now() - t1);
+            clearTimeout(guard);
+            const got = msg && msg.byteLength;
+            end({ ok: got === size, why: got === size ? null : 'the test message arrived short (' + got + ' of ' + size + ' bytes)',
+              connectMs: up, bytes: size, ms: Math.round(ms), mbps: Math.round(size / 1048576 / (ms / 1000) * 10) / 10,
+              maxMessageSize: (a.pc.sctp && a.pc.sctp.maxMessageSize) || null,
+              sdpBytes: (a.pc.localDescription && a.pc.localDescription.sdp || '').length, offerCode: (offer || '').length, answerCode: (answer || '').length });
+          };
+          a.send('bulk', buf.buffer);
+        })
+        .catch(function (e) { clearTimeout(guard); end({ ok: false, why: (e && (e.why || e.message)) || String(e) }); });
+    });
+    return Promise.all([relayP, stunP, directP]).then(function () {
+      out.lines = connLines(out);
+      out.report = connReport(out);
+      try { localStorage.setItem('fm.lastConnReport', out.report); } catch (e) {}
+      return out;
+    });
+  };
+  /* What it means, for him — one line per question, each saying what works and, when something does not, the
+     one thing that does (§22's sentences, reused, so the test and a failed join say the same thing). */
+  function connLines(r) {
+    const L = [];
+    if (r.relayGate === 'codes-only') L.push({ st: 'skip', text: 'Invite links and short codes: off — “Connect with codes only” is on, so nothing was tried.' });
+    else if (r.relayGate) L.push({ st: 'skip', text: 'Invite links and short codes: not tried here (' + (r.relayGate === 'loopback' ? 'a test copy of the app' : r.relayGate) + ').' });
+    else {
+      const up = r.relays.filter(function (x) { return x.up; }), down = r.relays.filter(function (x) { return !x.up; });
+      if (up.length) L.push({ st: 'ok', text: 'Invite links and short codes work here — reached ' + up.map(function (x) { return x.label; }).join(', ') + (down.length ? ' (' + down.map(function (x) { return x.label; }).join(', ') + ' didn’t answer)' : '') + '.' });
+      else L.push({ st: 'no', text: 'Couldn’t reach the free connection service on this network — invite links and short codes won’t work here. Connect with a code instead.' });
+    }
+    const st = r.stun || {};
+    if (st.skipped) L.push({ st: 'skip', text: 'Other networks: not checked (' + (st.skipped === 'codes-only' ? 'Codes only is on' : st.skipped === 'offline' ? 'this device is offline' : 'a test copy of the app') + ').' });
+    else if (st.error) L.push({ st: 'no', text: 'Other networks: couldn’t check (' + st.error + ').' });
+    else if (st.srflx) L.push({ st: 'ok', text: 'Other networks: this device found its public address, so someone on a different network can usually connect.' });
+    else L.push({ st: 'no', text: 'Other networks: this network hides this device’s address. Put both devices on the same Wi-Fi, or turn off mobile data.' });
+    const d = r.direct || {};
+    if (d.ok) L.push({ st: 'ok', text: 'This device: live connections work — ' + d.mbps + ' MB/s between two connections here' + (d.maxMessageSize ? ', messages up to ' + Math.round(d.maxMessageSize / 1024) + ' KB' : '') + '.' });
+    else L.push({ st: 'no', text: 'This device: live connections didn’t start (' + (d.why || 'unknown') + ').' });
+    return L;
+  }
+  function connReport(r) {
+    const lines = ['FreeMotion connection test · ' + r.at];
+    if (r.relayGate) lines.push('relays: not tried (' + r.relayGate + ')');
+    else lines.push('relays: ' + r.relays.map(function (x) { return x.label + ' ' + (x.up ? 'up ' + x.ms + ' ms' : 'down (' + x.why + ')'); }).join(', '));
+    const st = r.stun || {};
+    if (st.skipped) lines.push('stun: not tried (' + st.skipped + ')');
+    else if (st.error) lines.push('stun: error ' + st.error);
+    else lines.push('stun: ' + st.n + ' candidates — ' + Object.keys(st.types || {}).map(function (k) { return k + ' ' + st.types[k]; }).join(', ') + (st.srflx ? '' : ' (no srflx)'));
+    const d = r.direct || {};
+    if (d.ok) lines.push('webrtc: connected in ' + d.connectMs + ' ms · maxMessageSize ' + d.maxMessageSize + ' · offer SDP ' + d.sdpBytes + ' bytes · codes ' + d.offerCode + '/' + d.answerCode + ' chars · ' + (d.bytes / 1048576) + ' MB in ' + d.ms + ' ms = ' + d.mbps + ' MB/s');
+    else lines.push('webrtc: failed (' + d.why + ')');
+    try { lines.push('device: ' + navigator.userAgent); } catch (e) {}
+    return lines.join('\n');
   }
 
   /* S6: one field, three kinds of thing (§19.2) — an invite link, the 9-character room code, or S3's long

@@ -254,6 +254,29 @@ the test's last `window.__fmStep` marker, and every run reports its eight slowes
 pointer/mouse/touch/click event on an element that is not in the document fails the test that did it; re-acquire
 the element (`attached(el, what)`) after anything that rebuilds.
 
+### Running the live-collaboration tests (#921)
+
+Every collaboration test is in `tests/tests.js`, named `921 S<stage> …` (S0–S8) with `{ item: '921' }` — so
+`?only=921` runs all of them (about 240, roughly ten minutes) and `?only=921%20S8` one stage:
+
+```bash
+python3 tests/_cdp.py --port 8777 --timeout 1800 --url 'http://localhost:8777/tests/run.html?only=921'
+```
+Run them at `--width 380` too: several assert the phone layout and only mean something there.
+- **No network, ever.** Relays are a fake socket network (`withFakeNet921`), WebRTC pairs connect inside the page
+  with `iceServers: []`, and on a loopback page `relayGate()` refuses a real socket and `iceServers()` returns none.
+  A local copy only reaches the real relays with `?fmrelay=1` in the address — never in a test.
+- **Tier 3 boots extra app frames on `h.`/`a.`/`b.localhost`** with `?fmtest=collab` (the test agent, `tests/collab-agent.js`,
+  loads only under both). That needs `tools/serve.sh` (it binds 127.0.0.1); `python3 -m http.server` drops scripts.
+- **`921 S8 a 500-layer project under a 4× CPU throttle…` asks THIS DRIVER for the throttle** (`window.__fmWantCpu` →
+  `Emulation.setCPUThrottlingRate`, answered in `__fmCpuRate`). Run it through `tests/_cdp.py` or it fails saying so,
+  and never beside another heavy job — its numbers are the point. The request expires on its own, so a test that
+  dies mid-measure cannot leave the rest of the suite four times slower.
+- **`921 S8 adversarial peer fuzz…` takes just over a minute on purpose** (a minute of hostile traffic); its budget
+  is 240 s. `921 S8 eight devices converge…` and the one-hour soak are seconds, on fake clocks.
+- **On his devices the equivalent is Settings → Labs → Test connection** — relays, the STUN address lookup and a
+  local WebRTC pair, one sentence each, with a report he can copy (`fm.lastConnReport`).
+
 ## ⚠️ THE LOOP LIVES IN [LOOP.md](LOOP.md) — he should not be pasting it
 
 He said it himself on 20 Aug: *"the following loop thing doesnt seem to be working properly"*. It was

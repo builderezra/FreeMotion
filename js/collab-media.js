@@ -337,6 +337,13 @@ window.FM = window.FM || {};
     const S = ctl.S;
     const all = Object.keys(ctl.mine);
     const targets = S.isOwner ? S.peerIds() : ['h'];
+    /* ⚠️ S8 (the one-hour soak): WHAT WE TOLD SOMEBODY IS KEPT ONLY WHILE THEY ARE HERE. `told` is one table per
+       member — every file's stamp — and nothing ever removed one, so a session grew a table for every person
+       who ever joined, left or reconnected under a new id, for as long as it ran. A member who comes back is
+       simply told again, which is what a device that has just reconnected needs anyway. */
+    const here = Object.create(null);
+    for (let i = 0; i < targets.length; i++) here[targets[i]] = 1;
+    Object.keys(ctl.told).forEach(function (m) { if (!here[m]) delete ctl.told[m]; });
     for (let t = 0; t < targets.length; t++) {
       const to = targets[t];
       const seen = ctl.told[to] || (ctl.told[to] = Object.create(null));
@@ -356,9 +363,18 @@ window.FM = window.FM || {};
   }
 
   /* ═══ RECEIVING A MANIFEST ════════════════════════════════════════════════════════════════════ */
+  /* ⚠️ S8: WHAT PEERS TELL US IS CAPPED, AS A WHOLE AND PER ENTRY. `onManifest` read at most 4000 entries of
+     one message and then kept every new fid for the life of the session, and merged every layer pair a delta
+     named into the entry it already had — so a peer that kept announcing new names grew `ctl.peer` without
+     limit, and `planWants` walks all of it on every sweep (the adversarial fuzz). A project holds at most
+     §21's 2000 layers, so no honest room names more than that many files plus its fonts: past PEER_MAX new
+     fids are not taken (entries already known still merge), and one entry never lists more layers than a
+     project can hold. */
+  const PEER_MAX = 4000, LAYERS_PER_ENTRY = 2000;
   function onManifest(ctl, fromMid, msg) {
     const lists = [msg.files, msg.fonts];
     let n = 0;
+    let room = PEER_MAX - Object.keys(ctl.peer).length;
     for (let k = 0; k < lists.length; k++) {
       const arr = lists[k];
       if (!Array.isArray(arr)) continue;
@@ -374,7 +390,7 @@ window.FM = window.FM || {};
         if (prev) {
           const seen = Object.create(null);
           prev.layers.forEach(function (p) { seen[p[0] + '@' + p[1]] = 1; });
-          e.layers.forEach(function (p) { if (!seen[p[0] + '@' + p[1]]) prev.layers.push(p); });
+          e.layers.forEach(function (p) { if (!seen[p[0] + '@' + p[1]] && prev.layers.length < LAYERS_PER_ENTRY) { seen[p[0] + '@' + p[1]] = 1; prev.layers.push(p); } });
           /* ⚠️ `miss` AND `from` ARE THE TWO FIELDS A DELTA MOVES, AND A STRANGER MUST NOT MOVE THEM
              (§14.9). Everything else above merges or is left alone; these two were taken from whoever
              spoke last. `miss` makes `planWants` skip the entry for the rest of the session — including
@@ -396,6 +412,8 @@ window.FM = window.FM || {};
              and §15.8's card asked about a clip that could never arrive on every export forever. */
           if (prev.miss && ctl.inb[e.fid]) abort(ctl, e.fid, 'miss');
         } else {
+          if (room <= 0) continue;
+          room--;
           ctl.peer[e.fid] = e;
         }
         n++;
@@ -499,7 +517,21 @@ window.FM = window.FM || {};
     const v = ctl.S.adapter.view();
     const layers = (v && v.layers) || [];
     const byId = Object.create(null);
-    layers.forEach(function (l) { if (l && l.id) byId[l.id] = l; });
+    /* ⚠️ S8 (the adversarial fuzz): WHAT THE DOCUMENT USES DECIDES WHAT IS ASKED FOR, not what a peer offers.
+       Both halves of that were missing. A font was wanted whenever a peer announced one — `fontHere` asks "is
+       it installed already", never "does any text here use it" — so an Editor's `ann` of a thousand FMF…
+       families made this device download every one and `applyEmbedded` wrote each into the font index for
+       good (`rehydrateAll` puts them back on every boot). And a file was wanted for ANY layer id the manifest
+       named, a shape and a text layer included: `writeRecord` then stored the peer's bytes against a layer
+       that has no picture to show, in his IndexedDB, where nothing would ever look at them or collect them.
+       So: a font only while a text layer here uses its family — the same rule `scanLocal` advertises by, so
+       an honest peer loses nothing — and bytes only for a layer that carries media. */
+    const usedFonts = Object.create(null);
+    layers.forEach(function (l) {
+      if (!l || !l.id) return;
+      byId[l.id] = l;
+      if (l.type === 'text' && typeof l.fontFamily === 'string') usedFonts[l.fontFamily] = 1;
+    });
     const fids = Object.keys(ctl.peer);
     const fresh = [];
     let want = 0;
@@ -511,6 +543,7 @@ window.FM = window.FM || {};
       if (e.kind === 'font') {
         if (e.size > LIM.FONT_MAX) { ctl.bad[fid] = 1; continue; }   // §15.9, for a stale entry that got past takeEntry
         if (ctl.have[fid] || fontHere(e)) { ctl.have[fid] = 1; continue; }
+        if (!usedFonts[e.css]) continue;                     // nothing here writes in it (yet): not asked for, not marked
         if (!ctl.wanted[fid]) fresh.push({ fid: fid, e: e, key: orderKey(ctl, e) });
         want += e.size;
         continue;
@@ -523,6 +556,7 @@ window.FM = window.FM || {};
         const lid = e.layers[j][0], rev = e.layers[j][1];
         const L = byId[lid];
         if (!L) continue;
+        if (!carriesMedia(L)) continue;                      // S8: a shape or a text layer has no picture to receive
         /* ⚠️ AND NOT A LAYER THAT HAS MOVED PAST THIS FILE. If he replaced that clip here, or imported
            one into a layer whose shared bytes had not landed yet, the layer is at a HIGHER `mediaRev`
            and the file this entry names is the OLD one — asking for it is asking to be handed the thing
@@ -981,6 +1015,7 @@ window.FM = window.FM || {};
     for (let i = 0; i < e.layers.length; i++) {
       const lid = e.layers[i][0], rev = e.layers[i][1];
       if (!byId[lid]) continue;                                   // not a layer of the open document
+      if (!carriesMedia(byId[lid])) continue;                     // S8: …nor one that has no picture (it may have changed type since the want)
       /* ⚠️ AND NOT OVER A PICTURE THAT IS ALREADY AHEAD OF THIS FILE (queue 921 S4). The want was
          planned when the transfer STARTED, and on a 400 MB clip over a phone that is minutes ago: if he
          replaced that clip in the meantime, or imported one into a layer whose shared bytes had not
@@ -1056,8 +1091,15 @@ window.FM = window.FM || {};
         return true;
       }
       case 'ok': {
+        /* ⚠️ S8 (the adversarial fuzz): ONLY FROM THE PEER THE TRANSFER GOES TO, AND NEVER PAST WHAT WAS SENT.
+           `upto` is §15.5's second brake — the receiver says how much it has PERSISTED, and the sender stays
+           within WINDOW of that. Looked up by xid alone, any member could acknowledge another member's
+           transfer and run the owner's upload past that receiver's window; and `upto: Infinity` (or 1e12)
+           lifted the brake for the rest of the file. A receiver cannot have kept bytes it was never sent. */
         const job = ctl.out[+msg.xid];
-        if (job) job.upto = Math.max(job.upto, +msg.upto || 0);
+        const src = fromMid || (S.isOwner ? null : 'h');
+        const n = +msg.upto;
+        if (job && job.to === src && n >= 0) job.upto = Math.max(job.upto, Math.min(n, job.off));
         return true;
       }
       case 'have':
@@ -1065,6 +1107,15 @@ window.FM = window.FM || {};
       default:
         return false;
     }
+  };
+
+  /* S8: a member left (bye, Remove, a dropped link). What we told it goes at once — `advertise` also prunes it,
+     but only on its next sweep, and a session whose members churn should not have to wait for one. */
+  M.forget = function (S, mid) {
+    const ctl = ctlOf(S);
+    if (!ctl || mid == null) return false;
+    delete ctl.told[mid];
+    return true;
   };
 
   M.onBulk = function (S, fromMid, buf) {

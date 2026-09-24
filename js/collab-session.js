@@ -595,8 +595,10 @@ window.FM = window.FM || {};
           return;
         }
         case 'resync':
+          /* Only a member is owed a copy of the document — and only as fast as `catchUp` allows (S8). */
+          if (!host.members[mid]) { strangerNote(mid, 'resync'); return; }
           S.stats.resyncs++;
-          sendTo(mid, host.snapshot());
+          catchUp(mid, null);
           return;
         case 'bye':
           host.part(mid);
@@ -609,6 +611,8 @@ window.FM = window.FM || {};
           if (peers[mid]) { try { peers[mid].close(); } catch (e) {} }
           delete peers[mid];
           delete grants[mid];
+          delete catchBudget[mid];
+          if (C.media && C.media.forget) C.media.forget(S, mid);
           return;
         default:
           /* ⚠️ OFFERING A FILE IS AN EDIT (S7 review). A peer's `ann` makes it the SOURCE of a file for a layer,
@@ -627,8 +631,16 @@ window.FM = window.FM || {};
     }
 
     function onHello(mid, msg) {
-      const m = host.members[mid] || host.join(mid, { role: msg.role || 'editor', name: msg.name, color: msg.color });
-      const have = msg.have || {};
+      /* ⚠️ A HELLO NEVER MAKES A MEMBER, AND NEVER NAMES ITS OWN ROLE (queue 921 S8, found by the adversarial
+         fuzz). It used to be `members[mid] || host.join(mid, {role: msg.role || 'editor'})` — so a hello from an
+         endpoint whose member had been dropped (`dropPeer` forgets the member and leaves the endpoint bound; a
+         transport that delivers one more message after its close is all it takes) came back as a member with
+         whatever role it SAID: `{t:'hello', role:'owner'}` was an owner, whose next tx the host took whole —
+         layers, the project, anybody's comments. Membership is minted in exactly one place, `addPeer`, from what
+         the owner's UI decided, and a hello from anywhere else is a stranger's and is not answered. */
+      const m = host.members[mid];
+      if (!m) { strangerNote(mid, 'hello'); return; }
+      const have = (msg.have && typeof msg.have === 'object') ? msg.have : {};
       /* S5: a member who says hello (joined, or came back) is owed the roster and everybody's state now. */
       if (C.presence) { try { C.presence.onJoin(S, mid); } catch (e) {} }
       const welcome = { t: 'welcome', mid: mid, epoch: host.epoch, seq: host.seq, role: m.role, proto: C.PROTO, schema: C.SCHEMA_REV };
@@ -644,11 +656,62 @@ window.FM = window.FM || {};
       sendTo(mid, welcome);
       /* S7: …and the room's switches, as they apply to this member, before a byte of the document. */
       sendSettings(mid);
-      if (have.epoch === host.epoch) {
+      catchUp(mid, have);
+    }
+
+    /* ═══ S8 · A COPY OF THE DOCUMENT IS THE ONE THING A PEER CAN MAKE THE OWNER PAY FOR ═══════════════════
+     * A `hello` and a `resync` are each one small message, and each makes the owner clone, hash and send the
+     * whole document — or a tail of up to the ring's 2000 batches / 8 MB. Nothing limited them: the
+     * adversarial fuzz had a VIEWER ask for a copy on every message it sent, and the owner's device spent the
+     * minute making copies (§14.9 — treat every peer as untrusted, and a Viewer is a peer). An honest device
+     * asks once per connection and once per divergence, which §11.4 already spaces to one per ten seconds;
+     * so each member gets CATCHUP_BURST copies at once and one more every CATCHUP_EVERY. A request over the
+     * budget is not refused — it is OWED, and the newest one wins: the next tick with a token sends it. A
+     * guest that really fell behind therefore still gets exactly one current copy, a little later, and a
+     * flood costs the owner three copies and then one every two seconds, whatever its rate. */
+    const catchBudget = Object.create(null);         // mid -> {tokens, at, owed}
+    function catchToken(mid) {
+      const t = now();
+      let b = catchBudget[mid];
+      if (!b) b = catchBudget[mid] = { tokens: LIM.CATCHUP_BURST, at: t, owed: null };
+      b.tokens = Math.min(LIM.CATCHUP_BURST, b.tokens + (t - b.at) / LIM.CATCHUP_EVERY);
+      b.at = t;
+      if (b.tokens < 1) return false;
+      b.tokens -= 1;
+      return true;
+    }
+    function catchUp(mid, have) {
+      if (!catchToken(mid)) { catchBudget[mid].owed = { have: have }; return false; }
+      catchBudget[mid].owed = null;
+      sendCopy(mid, have);
+      return true;
+    }
+    function sendCopy(mid, have) {
+      if (have && have.epoch === host.epoch) {
         const tail = host.tail(have.seq || 0);
         if (tail) { sendTo(mid, tail); return; }
       }
       sendTo(mid, host.snapshot());
+    }
+    function serveOwed() {
+      const ks = Object.keys(catchBudget);
+      for (let i = 0; i < ks.length; i++) {
+        const mid = ks[i], b = catchBudget[mid];
+        if (!host.members[mid] || !peers[mid]) { delete catchBudget[mid]; continue; }
+        if (b.owed && catchToken(mid)) { const o = b.owed; b.owed = null; sendCopy(mid, o.have); }
+      }
+    }
+    S._catchUp = function (mid) { const b = catchBudget[mid]; return b ? { tokens: b.tokens, owed: !!b.owed } : null; };
+    /* A message from an endpoint with no member behind it — dropped, removed or never let in. Counted, once a
+       second at most, so a flood of them is visible in the diagnostics without being able to fill them. */
+    let strangerAt = 0, strangerN = 0;
+    function strangerNote(mid, what) {
+      strangerN++;
+      const t = now();
+      if (t - strangerAt < 1000) return;
+      strangerAt = t;
+      reports.push({ what: 'stranger', at: t, mid: mid, msg: what, n: strangerN });
+      while (reports.length > 20) reports.shift();       // the same ceiling onHash keeps
     }
 
     function guestMessage(msg) {
@@ -785,6 +848,16 @@ window.FM = window.FM || {};
         dropDeferredUnder(p);          // the deferred map is keyed by the INCOMING path — see dropHeldUnder
 
         const cur = D.valueAt(S.base, p);
+        /* S8: a keyed element that is back in base goes back on screen as an upsert with its place — an `s` on
+           an element this screen has already removed is 'gone' (see collab-host.js `presentOp`). */
+        const last = p[p.length - 1];
+        if (cur !== undefined && p.length >= 3 && P.isKeyedSeg(last) && cur && typeof cur === 'object' && !Array.isArray(cur)) {
+          const arr = D.valueAt(S.base, p.slice(0, -1));
+          const field = P.keyedField(last);
+          const at = Array.isArray(arr) ? P.indexOfKey(arr, field, P.keyedValue(last)) : -1;
+          forced.push({ o: 'ai', p: p.slice(0, -1), k: last, a: at > 0 ? P.keyedSeg(field, arr[at - 1][field]) : null, v: clone(cur) });
+          continue;
+        }
         forced.push(cur === undefined ? { o: 'd', p: p } : { o: 's', p: p, v: clone(cur) });
       }
     }
@@ -1074,6 +1147,7 @@ window.FM = window.FM || {};
     /* The scheduled work of §9, in one call so the app has one timer and the suite has one entry. */
     S.tick = function (scope) {
       if (!S.active) return 0;
+      if (isOwner) serveOwed();
       drainQueue();
       if (!interacting() && (Object.keys(held).length || deferredOrd)) release();   // settle
       const n = pushLocal(scope || 'hot');
@@ -1321,7 +1395,10 @@ window.FM = window.FM || {};
       return true;
     };
     S._settingsFor = settingsFor;
-    S.dropPeer = function (mid) { host.part(mid); delete peers[mid]; delete grants[mid]; };
+    S.dropPeer = function (mid) {
+      host.part(mid); delete peers[mid]; delete grants[mid]; delete catchBudget[mid];
+      if (C.media && C.media.forget) C.media.forget(S, mid);     // S8: nothing keyed by a member outlives it
+    };
     S.peerIds = function () { return Object.keys(peers); };
 
     /* ── the seams §15's media module reaches the wire through (S4) ───────────────────────────────

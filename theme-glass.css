@@ -1242,6 +1242,7 @@ html[data-home="light"] .hm-top { border-bottom-color: rgba(16, 30, 52, .10); }
 .collab-scrim.collab-light .cs-sasacts button,
 .collab-scrim.collab-light .cj-clashbtn,
 .collab-scrim.collab-light .cj-paste,
+.collab-scrim.collab-light .cj-fieldrow .cj-scan,
 .collab-scrim.collab-light .cs-foot button {
   background-color: rgba(16, 30, 52, .05); border-color: rgba(16, 30, 52, .14); color: #10151f;
 }
@@ -1271,6 +1272,7 @@ html[data-home="light"] .hm-top { border-bottom-color: rgba(16, 30, 52, .10); }
 .collab-scrim.collab-light .cs-roomcode,
 .collab-scrim.collab-light .cs-copycode,
 .collab-scrim.collab-light .cj-alt { background-color: #ffffff; border-color: rgba(16, 30, 52, .14); color: #10151f; }
+.collab-scrim.collab-light .cj-fieldrow .cj-scan.on { background-color: #1780b4; border-color: #1780b4; color: #ffffff; }   /* S8 */
 .collab-scrim.collab-light .cs-linkrow .cs-copylink.accent,
 .collab-scrim.collab-light .cj-alt.accent { background-color: #1780b4; border-color: #1780b4; color: #ffffff; }
 .collab-scrim.collab-light .cs-relay,

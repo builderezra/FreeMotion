@@ -226,7 +226,11 @@ window.FM = window.FM || {};
   }
   function validateTx(tx) {
     if (!tx || typeof tx !== 'object') return 'shape';
-    if (!(tx.cid >= 0) || Math.floor(tx.cid) !== tx.cid) return 'cid';
+    /* ⚠️ A SAFE INTEGER, not just a whole number (S8, the adversarial fuzz). `cid: 1e300` passed — it is ≥ 0 and
+       floor() leaves it alone — and became the member's `lastCid`, so every later tx from that device, counted
+       1, 2, 3… as an honest one counts, read as a duplicate of something already done and was dropped without a
+       word for the rest of the session. Past 2^53 a counter cannot even count by one. */
+    if (!Number.isSafeInteger(tx.cid) || tx.cid < 0) return 'cid';
     if (!Array.isArray(tx.ops)) return 'ops';
     if (tx.ops.length > LIM.TX_OPS) return 'ops:count';
     let bytes = 0;
@@ -732,7 +736,7 @@ window.FM = window.FM || {};
       if (!Array.isArray(op.p)) return out;
       const p = (op.o === 'ai') ? op.p.concat(op.k) : op.p;
       const cur = D.valueAt(base, p);
-      if (cur !== undefined) { out.push({ o: 's', p: p, v: clone(cur) }); return out; }
+      if (cur !== undefined) { out.push(presentOp(p, cur)); return out; }
       let at = p;
       for (let n = 2; n <= p.length; n++) {                 // the shallowest prefix that is already absent
         const pre = p.slice(0, n);
@@ -744,6 +748,28 @@ window.FM = window.FM || {};
       else out.push({ o: 'd', p: at });
       return out;
     }
+
+    /* ⚠️ S8 (found by the eight-device fuzz): A KEYED ELEMENT THAT IS STILL HERE IS SAID AS AN `ai`, NOT AN `s`.
+       The sender of a refused `ar` — a Commenter's Undo of her own reply, landing just after the owner made her a
+       Viewer; an Editor deleting an effect on a layer somebody holds — has ALREADY removed that element from its
+       own base and screen. An `s` on the element's path cannot put it back: `apply` finds no element with that
+       key and answers 'gone', so the device kept a document without it for good (a divergence only §11.4's hash
+       could ever notice, ten quiet seconds later, and only if nobody was editing). A refused `am` had the other
+       half of the same hole: the `s` restored the element's fields and left it where the sender had moved it.
+       An `ai` is an upsert WITH a position — it re-inserts what is missing, rewrites what is there, and puts it
+       after the sibling it follows here — which is exactly what `li` already does for a whole layer above. */
+    function presentOp(p, cur) {
+      const last = p[p.length - 1];
+      if (p.length >= 3 && P.isKeyedSeg(last) && isPlainObject(cur)) {
+        const arrPath = p.slice(0, -1);
+        const arr = D.valueAt(base, arrPath);
+        const field = P.keyedField(last);
+        const prev = Array.isArray(arr) ? anchorOf(arr, field, P.keyedValue(last)) : null;
+        return { o: 'ai', p: arrPath, k: last, a: prev == null ? null : P.keyedSeg(field, prev), v: clone(cur) };
+      }
+      return { o: 's', p: p, v: clone(cur) };
+    }
+    H._presentOp = presentOp;
 
     function sequence(by, accepted, fix) {
       if (!accepted.length && !fix.length) return null;
@@ -839,7 +865,7 @@ window.FM = window.FM || {};
         const op = (oi === '*') ? null : tx.ops[oi];
         if (!op) return;
         currentStateOps(op).forEach(function (f) {
-          const k = f.o + '|' + P.key(f.p || ['L', f.id]);
+          const k = f.o + '|' + P.key(f.o === 'ai' ? f.p.concat(f.k) : (f.p || ['L', f.id]));   // two elements of one array are two fixes
           if (seen[k]) return; seen[k] = 1; fix.push(f);
         });
       });

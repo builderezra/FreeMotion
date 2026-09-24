@@ -205,7 +205,31 @@ def main():
         deadline = time.time() + a.timeout
         payload = None
         last_seen = ""
+        cpu = [1]
         while time.time() < deadline:
+            # A TEST MAY ASK FOR A CPU THROTTLE, AND ONLY THIS DRIVER CAN GIVE ONE (queue 921 S8). The page cannot
+            # slow itself down — `Emulation.setCPUThrottlingRate` is a DevTools call — and a performance budget
+            # measured on a fast Mac says nothing about a phone. So a test writes `window.__fmWantCpu =
+            # {rate, until}` in the app frame, this loop applies it and answers `__fmCpuRate`, and the test
+            # waits for the answer before it measures. `until` is the lock on the other door: a test that dies
+            # mid-measure (a timeout, a throw before its finally) must not leave the REST of the suite running
+            # four times slower, which would read as a hundred unrelated failures. Past `until` the rate goes
+            # back to 1 whatever the page says. Every tool reaches the suite through here (ship, prove,
+            # spotcheck, mutate), so the throttle is the same on every path.
+            try:
+                want = cdp.eval("(function(){var f=document.getElementById('app');"
+                                "var w=f&&f.contentWindow;var q=w&&w.__fmWantCpu;"
+                                "if(!q||typeof q.rate!=='number') return 1;"
+                                "if(!(q.until>Date.now())) return 1;"
+                                "return Math.max(1,Math.min(20,q.rate));})()")
+                want = want if isinstance(want, (int, float)) else 1
+                if want != cpu[0]:
+                    cdp.send("Emulation.setCPUThrottlingRate", rate=want)
+                    cpu[0] = want
+                cdp.eval("(function(){var f=document.getElementById('app');var w=f&&f.contentWindow;"
+                         "if(w) w.__fmCpuRate=%s;})()" % json.dumps(cpu[0]))
+            except Exception:
+                pass
             try:
                 payload = cdp.eval("(function(){"
                                    "var s=document.getElementById('sum');"
@@ -219,7 +243,9 @@ def main():
                 payload = None            # navigation can tear the context down mid-poll
             if payload:
                 break
-            time.sleep(1.0)
+            # A throttle request is answered within a quarter of a second rather than a whole one; the poll itself
+            # is two evaluations and costs nothing measurable against the suite.
+            time.sleep(0.25)
 
         if not payload:
             # say WHERE it stopped rather than just "timed out" — a hang is always a specific test

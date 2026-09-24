@@ -10499,3 +10499,29 @@ body.cc-open #toast { z-index: 3150; }
 @media (min-width: 701px) {
   .cc-scrim { align-items: center; padding: 20px; }
 }
+
+/* ═══ COLLAB S8 (#921) — THE QR SCANNER AND THE TEST-CONNECTION ROW (§19.2, §19.8, §25.5) ══════════════════
+   The scanner is a square button beside Paste (the field keeps its width on a 380 px phone), and the camera
+   opens in the sheet under the field — never full screen, so Cancel and Join stay where they were. */
+.cj-fieldrow .cj-scan {
+  flex: 0 0 auto; width: 44px; min-height: 42px; padding: 0; border-radius: 9px; border: 1px solid var(--line);
+  background: var(--panel-2); color: var(--text); cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+}
+.cj-fieldrow .cj-scan.on { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
+.cj-scanner { position: relative; margin-top: 10px; border-radius: 12px; overflow: hidden; background: #000; }
+.cj-scanvid { display: block; width: 100%; aspect-ratio: 4 / 3; max-height: 42vh; object-fit: cover; background: #000; }
+/* A square guide in the middle: where the code should sit. Pointer-transparent, so it never eats a tap. */
+.cj-scanframe {
+  position: absolute; left: 50%; top: calc(50% - 16px); width: min(56%, 42vh); aspect-ratio: 1; transform: translate(-50%, -50%);
+  border: 2px solid rgba(255, 255, 255, .85); border-radius: 14px; box-shadow: 0 0 0 999px rgba(0, 0, 0, .28); pointer-events: none;
+}
+.cj-scanline { position: relative; padding: 8px 10px; font-size: 12.5px; line-height: 1.4; color: #e6e9ef; background: rgba(12, 14, 20, .92); overflow-wrap: anywhere; }
+
+/* Settings → Labs → Test connection: what worked, one line each, in the Reports' monospace box. */
+.set-conn-lines { margin: 8px 0 0; padding: 0; list-style: none; font-size: 13px; line-height: 1.45; }
+.set-conn-lines li { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; overflow-wrap: anywhere; }
+.set-conn-lines .ok { color: #57d98a; font-weight: 700; flex: 0 0 auto; }
+.set-conn-lines .no { color: #ff8a8a; font-weight: 700; flex: 0 0 auto; }
+.set-conn-lines .skip { color: var(--text-dim); font-weight: 700; flex: 0 0 auto; }
+/* Thumb-sized on a phone: the row's two buttons are the whole of what it asks him to do. */
+.set-conn .set-perf-btns .set-action { min-height: 40px; }

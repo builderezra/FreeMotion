@@ -61,6 +61,9 @@ window.FM = window.FM || {};
        DERIVED from the knock it is waiting on, plus the room a handshake and a snapshot need. */
     JOIN_WAIT: 120000 + 20000,
     ACK_CACHE: 64,                         // §7.1 step 3: the acks kept per member for a resend
+    /* S8: a copy of the document (a hello's tail or snapshot, a resync) per member — three at once, then one
+       every two seconds; a request past that is owed, not refused (collab-session.js `catchUp`). */
+    CATCHUP_BURST: 3, CATCHUP_EVERY: 2000,
     /* ═══ S6: the relay and the reconnect (§13.5, §14.3, §14.4, §22) ═══
        §13.5's schedule: every 3 s for two minutes, every 10 s to ten minutes, every 30 s after that.
        ⚠️ OFFERS_PER_MIN IS PER SENDER, and OFFERS_ALL_PER_MIN caps the room (S6, measured against the
