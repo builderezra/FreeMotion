@@ -87886,4 +87886,228 @@
     } finally { FM.scene = saved; try { FM.refreshAll(); } catch (e) {} }
   });
 
+  /* ═══ HUNT-b (queue 690) — PHONE EDITING SHEETS, REAL TOUCH ═════════════════════════════════════════════════════════
+   * His standing brief: "go re audit, find some bugs coz theres a shit load". Each test below fails TODAY because of the
+   * bug it names, and its failure message says what he would see. Real input through tests/_cdp.py (see 924) wherever
+   * the behaviour depends on it; the control in each proves the gesture really landed where the test says it did. */
+  async function huntBScene(layersFn) {
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd();
+    if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+    const L = layersFn();
+    FM.scene = scene(L, { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+    FM.selectLayer(null); if (FM.pause) FM.pause(); FM.setTime(0);
+    FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    await new Promise(r => setTimeout(r, 300));
+    return L;
+  }
+  function huntBTap(x, y) { return [{ t: 'touchStart', x: x, y: y, ms: 80 }, { t: 'touchEnd', x: x, y: y, ms: 0 }]; }
+
+  test('HUNT-b tapping a Position number (X / Y / Z) with a real finger opens no editor and no keyboard', { item: '690', budgetMs: 60000 }, async function () {
+    /* Queue 414 promised it: "The buttons that show a number for the position should be able to be tapped on and
+       customised, so you can type exactly the number you want." The box's own pointerup opens the editor — but the
+       glide attached to the same box runs its pointerup FIRST, and a tap is a zero-velocity release, so it settles at
+       once: commitH() + FM.inspector.refresh(), which throws the whole card away and builds a new one. The editor is
+       then opened on the old, detached box, where focus() does nothing. The 414 test passed because a detached
+       contenteditable still reports isContentEditable. This asks the only question that matters: after one real tap,
+       is there an editor ON SCREEN with the focus in it. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, axis0 = FM._mtAxis;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await huntBScene(() => [FM.makeLayer('shape', { name: 'HB number', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#c05030', start: 0, duration: 4 })]);
+          FM.selectLayer(L[0].id); await sleep(300);
+          FM.inspector.openCategory('transform'); await sleep(450);
+          for (const lab of ['X', 'Y']) {
+            const boxes = [].slice.call(document.querySelectorAll('#inspector-panel .mt-vbox'));   // re-read: finishing an edit rebuilds the card
+            const box = boxes.find(b => ((b.querySelector('.mt-vbox-lab') || {}).textContent || '').trim() === lab);
+            if (!box) throw new Error('setup: no ' + lab + ' number box in Position / Scale at phone width (boxes: ' + boxes.map(b => (b.querySelector('.mt-vbox-lab') || {}).textContent).join(', ') + ')');
+            const val = box.querySelector('.mt-vbox-val');
+            const r = val.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+            if (x > 370 || y > 740 || y < 0) throw new Error('setup: the ' + lab + ' box is at ' + Math.round(x) + ',' + Math.round(y) + ', out of reach of real input');
+            const downs = [];
+            const onDown = e => downs.push({ trusted: e.isTrusted, kind: e.pointerType, hit: !!(e.target && e.target.closest && e.target.closest('.mt-vbox-val')) });
+            window.addEventListener('pointerdown', onDown, true);
+            try { await realInput924(huntBTap(x, y), 'the tap on the ' + lab + ' number'); } finally { window.removeEventListener('pointerdown', onDown, true); }
+            await sleep(350);
+            /* CONTROL: a real finger, and it landed on the number box. */
+            if (!downs.length || !downs[0].trusted || downs[0].kind !== 'touch') throw new Error('CONTROL: the tap on ' + lab + ' did not arrive as a trusted touch (' + downs.map(d => d.kind + (d.trusted ? ' trusted' : ' untrusted')).join(', ') + ')');
+            if (!downs[0].hit) throw new Error('CONTROL: the tap on ' + lab + ' landed on something other than its number box');
+            const a = document.activeElement;
+            const live = a && a.classList && a.classList.contains('mt-vbox-val') && a.isContentEditable && a.isConnected;
+            if (!live) throw new Error('one tap on the ' + lab + ' position number opened NO editor — nothing to type into and no keyboard comes up. The box he tapped was thrown away and rebuilt by the scrub glide settling on the tap, so the editor opened on a box no longer on screen (tapped box still on screen: ' + val.isConnected + ', focus is on ' + (a ? (a.id || a.className || a.tagName) : 'nothing') + ')');
+            a.blur(); await sleep(250);
+          }
+        });
+      }, 380);
+    } finally {
+      FM._mtAxis = axis0;
+      document.querySelectorAll('.mt-vbox-val.editing').forEach(n => { n.contentEditable = 'false'; n.classList.remove('editing'); });
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  test('HUNT-b a short drag down on the Add sheet that does not close it makes the sheet drop off screen and open a second time', { item: '690', budgetMs: 60000 }, async function () {
+    /* His #676 and #706: "when you open the add menu it opens twice", "the add layer on mobile still has the glitch
+       that opens up twice now". Both entries measured one open and one render per tap and parked on a description.
+       Since v15.21 (queue 773, two days AFTER #706 was logged, so not proven to be his original cause) there is a
+       concrete second opening that needs no second tap: the swipe-to-dismiss claims any downward drag over 6px and
+       switches the sheet's hinge animation OFF (panel.style.animation = 'none'); when the drag ends short of closing —
+       released, or taken over by the browser as a scroll — settle() hands it back with animation = ''. Clearing an
+       animation and putting the same one back RESTARTS it, and fm-hinge-up starts at translateY(100%): the sheet jumps
+       to below the screen and swings up again. A finger that lands on the sheet with a little downward travel — a
+       tap with a wobble, or the start of a scroll through the tiles — is all it takes. The top edge is sampled every
+       frame from before the touch until well after, and must never leave the neighbourhood of where the sheet rests. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    let iv = 0;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          await huntBScene(() => [FM.makeLayer('shape', { name: 'HB add', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3050c0', start: 0, duration: 4 })]);
+          const sheet = document.getElementById('add-sheet');
+          if (!sheet || !FM.mobile || !FM.mobile.openAdd) throw new Error('setup: no phone Add sheet');
+          FM.mobile.openAdd();
+          await sleep(900);   // the opening swing (360ms) is over
+          if (!sheet.classList.contains('open')) throw new Error('setup: the Add sheet did not open');
+          const rest = sheet.getBoundingClientRect();
+          const x = Math.min(rest.left + rest.width / 2, 360), y0 = rest.top + 34;   // the title strip, clear of tiles and inputs
+          if (y0 > 700 || y0 < 0) throw new Error('setup: the Add sheet top is at ' + Math.round(rest.top) + ', out of reach of real input');
+          const tops = [];
+          iv = setInterval(() => { tops.push(Math.round(sheet.getBoundingClientRect().top)); }, 16);
+          const steps = [{ t: 'touchStart', x: x, y: y0, ms: 60 }];
+          for (let k = 1; k <= 4; k++) steps.push({ t: 'touchMove', x: x, y: y0 + 8 * k, ms: 35 });
+          steps.push({ t: 'touchEnd', x: x, y: y0 + 32, ms: 0 });
+          const R = recorder924();
+          try { await realInput924(steps, 'a short drag down on the Add sheet'); } finally { R.stop(); }
+          await sleep(900);
+          clearInterval(iv); iv = 0;
+          /* CONTROL: a real finger, and the sheet was still open at the end — a drag this short is not a dismiss. */
+          if (!R.downs.length || !R.downs[0].trusted || R.downs[0].kind !== 'touch') throw new Error('CONTROL: the drag did not arrive as a trusted touch (' + R.downs.map(d => d.kind + (d.trusted ? ' trusted' : ' untrusted') + ' on ' + d.what).join(', ') + ')');
+          if (!sheet.classList.contains('open')) throw new Error('CONTROL: a 32px drag closed the Add sheet — this test is about a drag too short to close it');
+          const worst = Math.max.apply(null, tops);
+          if (worst > rest.top + 120) throw new Error('a 32px drag down on the open Add sheet made it OPEN AGAIN: its top edge jumped from ' + Math.round(rest.top) + ' to ' + worst + ' (off the bottom of the screen) and swung back up, the same hinge it opens with — that is the sheet opening twice (top edge per frame: ' + tops.join(' ') + ')');
+        });
+      }, 380);
+    } finally {
+      if (iv) clearInterval(iv);
+      try { if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd(); } catch (e) {}
+      FM.scene = saved; try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  test('HUNT-b opening the effects browser moves the playhead he parked, and closing it or adding an effect leaves it wherever the preview loop was', { item: '690', budgetMs: 60000 }, async function () {
+    /* The browser's preview loop takes the clock the moment it opens (restartPreview: setTime(layer.start), then a
+       24fps ticker). Queue 722 captured the PARKED time in _anchorTime so a preset lands on it — and close() then
+       throws _anchorTime away without putting the playhead back. So every trip through + Add Effect, whether he adds
+       one or backs out with the X, leaves the playhead at a random point inside the clip. The next keyframe diamond
+       he taps — on the effect he just added — lands at that random time, and the canvas is showing a different frame
+       from the one he was working on. Both exits are driven with real taps. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await huntBScene(() => [FM.makeLayer('shape', { name: 'HB park', shape: 'rect', x: 540, y: 700, shapeW: 300, shapeH: 300, fill: '#20a060', start: 0, duration: 5 })]);
+          const layer = L[0];
+          FM.selectLayer(layer.id); await sleep(250);
+          const PARK = 2.5;
+          const fps = FM.scene.project.fps || 30;
+          async function trip(how) {
+            FM.setTime(PARK); await sleep(150);
+            if (Math.abs(FM.time - PARK) > 1e-6) throw new Error('setup: could not park the playhead at ' + PARK + 's (' + FM.time + ')');
+            FM.fxBrowser.open(layer);
+            await sleep(1100);   // browsing for a second — the preview loop is running
+            const root = document.getElementById('fx-browser');
+            if (!root || root.classList.contains('hidden')) throw new Error('setup: the effects browser did not open');
+            /* CONTROL: the loop really did take the clock while the browser was up (that part is by design). */
+            if (Math.abs(FM.time - PARK) < 1 / fps) throw new Error('CONTROL: with the browser open the playhead never moved from ' + PARK + 's — the preview loop is not running, so this test cannot see the bug');
+            let btn;
+            if (how === 'X') btn = root.querySelector('.fxb-close');
+            else {
+              const tile = [].slice.call(root.querySelectorAll('[data-fxid]')).find(t => FM.fxRegistry.get(t.dataset.fxid) && FM.fxRegistry.supportsLayer(t.dataset.fxid, layer));
+              if (!tile) throw new Error('setup: no effect tile to pick');
+              tile.click(); await sleep(400);
+              btn = root.querySelector('.fxb-commit-go');
+            }
+            if (!btn) throw new Error('setup: no ' + how + ' button in the effects browser');
+            const r = btn.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+            if (x > 370 || y > 740 || y < 0) throw new Error('setup: the ' + how + ' button is at ' + Math.round(x) + ',' + Math.round(y) + ', out of reach of real input');
+            const n0 = (FM.scene.layers[0].effects || []).length;
+            await realInput924(huntBTap(x, y), 'tapping ' + how + ' in the effects browser');
+            await sleep(500);
+            if (!root.classList.contains('hidden')) throw new Error('CONTROL: a real tap on ' + how + ' did not close the effects browser');
+            if (how !== 'X' && !((FM.scene.layers[0].effects || []).length > n0)) throw new Error('CONTROL: tapping Add did not add the picked effect');
+            if (Math.abs(FM.time - PARK) > 0.5 / fps) return (how === 'X' ? 'backing out with the X' : 'adding an effect with Add') + ' left it at ' + FM.time.toFixed(2) + 's';
+            return '';
+          }
+          const bad = [await trip('X'), await trip('Add')].filter(Boolean);
+          if (bad.length) throw new Error('he parked the playhead at ' + PARK + 's and went into + Add Effect: ' + bad.join('; ') + '. The preview loop moved it and nothing put it back, so the next keyframe he sets lands at the wrong time and the canvas shows a different frame from the one he was working on');
+        });
+      }, 380);
+    } finally {
+      try { FM.fxBrowser.close(); } catch (e) {}
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  test('HUNT-b typing a number into an effect or opacity value box after a real tap adds the digits to the old number instead of replacing it', { item: '690', budgetMs: 60000 }, async function () {
+    /* The comment on rangeRow says it plainly: "Typing an exact number still has to work: the ruler is for feel, the box
+       is for precision." Every effect parameter (fxScrubber) and every rangeRow (fill opacity, stroke width, corner
+       radius, feather… 37 call sites) puts its number in an <input type=text> and does nothing on focus. A real tap on a
+       phone drops a CARET into the old text rather than selecting it, so the digits he types go INTO the old number:
+       Twist 140° + 90 becomes 14900° and lands on the 360° maximum; Opacity 100 + 50 becomes 10050 or 15000 and stays at
+       100. (The Position boxes select their text on edit — these never have.) The typing is done the way a keyboard does
+       it — inserted at whatever selection the real tap left — and committed the way the keyboard's Done does, by blur. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await huntBScene(() => {
+            const a = FM.makeLayer('shape', { name: 'HB type', shape: 'rect', x: 540, y: 700, shapeW: 300, shapeH: 300, fill: '#c05030', start: 0, duration: 4 });
+            const tw = FM.fxRegistry.makeInstance('twirl'); tw.params.amount = 140; tw._expanded = true;
+            a.effects = [tw];
+            return [a];
+          });
+          const layer = L[0];
+          FM.selectLayer(layer.id); await sleep(250);
+          async function typeInto(box, text, what) {
+            box.scrollIntoView({ block: 'center' }); await sleep(250);
+            const r = box.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+            if (x > 370 || y > 740 || y < 0) throw new Error('setup: the ' + what + ' box is at ' + Math.round(x) + ',' + Math.round(y) + ', out of reach of real input');
+            const before = box.value;
+            await realInput924(huntBTap(x, y), 'the tap on the ' + what + ' box');
+            await sleep(300);
+            /* CONTROL: the real tap put the keyboard focus in that box. */
+            if (document.activeElement !== box) throw new Error('CONTROL: a real tap on the ' + what + ' box did not focus it (focus is on ' + (document.activeElement && (document.activeElement.className || document.activeElement.tagName)) + ')');
+            if (!document.execCommand('insertText', false, text)) throw new Error('setup: this browser cannot insert text the way a keyboard does');
+            const shown = box.value;
+            box.blur(); await sleep(250);
+            return { before: before, shown: shown };
+          }
+          const bad = [];
+          FM.inspector.openCategory('effects'); await sleep(450);
+          const twRow = [].slice.call(document.querySelectorAll('#inspector-panel .fx-scrub-row')).find(r => /Twist/.test((r.querySelector('.fx-scrub-label') || {}).textContent || ''));
+          if (!twRow) throw new Error('setup: no Twist row in the open Twirl effect');
+          const t = await typeInto(twRow.querySelector('.fx-scrub-val'), '90', 'Twist');
+          const amt = FM.scene.layers[0].effects[0].params.amount;
+          if (amt !== 90) bad.push('Twist: tapped ' + t.before + ', typed 90, the box read ' + t.shown + ' and the effect became ' + amt + '°');
+          FM.inspector.openCategory('color'); await sleep(450);
+          const opRow = [].slice.call(document.querySelectorAll('#inspector-panel .prop-row--scrub')).find(r => /Opacity/i.test((r.querySelector('label') || {}).textContent || ''));
+          if (!opRow) throw new Error('setup: no Opacity row in Colouring');
+          const o = await typeInto(opRow.querySelector('.fx-scrub-val'), '50', 'Opacity');
+          const fo = FM.scene.layers[0].fillOpacity;
+          const opNow = Math.round((fo != null ? fo : 1) * 100);
+          if (opNow !== 50) bad.push('Opacity: tapped ' + o.before + ', typed 50, the box read ' + o.shown + ' and the fill opacity became ' + opNow + '%');
+          if (bad.length) throw new Error('typing an exact number into a value box does not set it — the real tap leaves a caret inside the old number, so his digits are added to it instead of replacing it. ' + bad.join('; '));
+        });
+      }, 380);
+    } finally {
+      try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (e) {}
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
 })();
