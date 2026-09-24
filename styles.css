@@ -875,6 +875,7 @@ body.text-editing .sb-wrap { display: none !important; }
 .vb-btn:hover { background: rgba(255,255,255,.08); }
 .vb-btn.on { color: var(--accent); }
 .vb-btn:disabled { opacity: .35; cursor: default; }
+.vb-btn.vb-na { opacity: .35; }   /* queue 926: unavailable (Layers with no single clip selected) — a tap still says why */
 /* The camera button reports its state (queue 365): lit when a camera is on, dimmed-with-a-slash feel
    when it is hidden. Two classes rather than one, so "no camera yet" is visibly a third thing — a
    button that looked identical whether it would ADD or SHOW would be the confusing half of a state
@@ -3233,7 +3234,10 @@ body.white-chrome #time-readout:active {
    triangle goes too; timeline.js puts .tl-empty-start on the panel in the same place it decides the
    row is empty, so the two can never disagree about what "empty" means. */
 #timeline-panel.tl-empty-start #tl-centerline { display: none; }
-.kf-dot { position: absolute; top: 13px; width: 11px; height: 11px; background: #ffffff; transform: translateX(-5.5px) rotate(45deg); z-index: 6; box-shadow: 0 0 0 1px rgba(0,0,0,.55); cursor: ew-resize; }
+.kf-dot { position: absolute; top: calc(50% - 5.5px); width: 11px; height: 11px; background: #ffffff; transform: translateX(-5.5px) rotate(45deg); z-index: 6; box-shadow: 0 0 0 1px rgba(0,0,0,.55); cursor: ew-resize; }
+/* ↑ `top: calc(50% - 5.5px)`, not 13px (queue 928): "keyframes aren't in the center of the layer … They're like a bit up."
+   13px was the centre of a clip that no longer has that height — measured 2.5px high on the PC clip (32px in a 42px row). The
+   lane is the row's height and the clip is centred in it, so half the lane IS the clip's centre line, at every row height. */
 .kf-dot::after { content: ''; position: absolute; inset: -12px; }   /* invisible ~35px touch pad — the 11px diamond alone is untappable on a phone */
 .kf-dot.ease-linear { background: #ffffff; }      /* linear */
 .kf-dot.ease-smooth { background: var(--accent); } /* ease in/out */
@@ -9756,12 +9760,13 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
    the ::before and painted above it by document order anyway; the z-index was doing no work and the
    rule would have gone on doing no work the day that order changed. Caught by reading the element that
    is actually created, not the one the rule assumed. */
-.clip.clip-kfcolor > .clip-label { position: relative; z-index: 2; }
-.clip.clip-kfcolor::before {
-  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 112px; z-index: 1;
-  pointer-events: none; border-radius: inherit;
-  background: linear-gradient(90deg, rgba(6, 12, 20, .72), rgba(6, 12, 20, 0));
-}
+/* ⚠️ THE DARK GROUND IS GONE, AND SO IS `position: relative` (queue 928). Ezra, with a PC screenshot of a pink clip going
+   near-black at its start: "make it so that it doesn't start black … It kind of looks bad. Get rid of that", and "the
+   name of the layer goes to the bottom of the layer like it's sitting on the bottom line". Both came from this block.
+   The ::before was the 112px dark fade — the readability it bought is already carried by `.clip-label`'s own text-shadow,
+   which every other clip's name relies on over every other fill. And `position: relative` here OVERRODE the label's
+   `position: absolute; top: 50%; translateY(-50%)`, so the name fell into flow and `top: 50%` pushed it down — measured
+   9px below the centre of a 32px PC clip. The label is already z-index 2 on its own rule; nothing here was needed. */
 
 /* SHAPE TILES: WHITE GLYPH ON THE COLOURED PLATE (queue 760 clause 2, his words: "the colour choices are bad"). Four treatments were
    drawn and sent on 3 Sep — A each shape its own hue on a tinted plate (as shipped), B one teal, C the Shape tab's violet, D white glyphs on

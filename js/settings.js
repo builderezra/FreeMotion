@@ -212,6 +212,77 @@ window.FM = window.FM || {};
   // two-item overflow menu next to a settings cog was two front doors to the same cupboard.
   // `tone` marks a destructive one red (Reset project) so it never reads as one more neutral button
   // in a column of them — the same warning the ⋯ menu's `danger` flag used to carry.
+  /* ONE BACKUP, TWO DOORS (queue 920, 24 Sep): the Settings row below, and the note an install from before the status-bar fix
+     shows on Home (js/statusbar.js), whose first step is "back up". The handler was inline in the row; lifted out unchanged so
+     both run the identical code, rather than a second copy of the "say what is not in it" rules. */
+  FM.backupEverything = async function () {
+    if (!FM.storage || !FM.storage.backupAll) return null;
+    /* actionRow closes the panel before it runs the handler, so progress has to live in a toast
+       rather than on the button. A library of videos takes a few seconds and silence in that gap
+       reads as "nothing happened", which is how people tap a thing twice. */
+    if (FM.toast) FM.toast('Packing up your projects…', 4000);
+    let r = null;
+    try {
+      r = await FM.storage.backupAll(null);
+    } catch (e) { r = { ok: false, reason: 'The backup could not be written.' }; }
+    if (!r || !r.ok) { if (FM.toast) FM.toast((r && r.reason) || 'The backup could not be written.', 6000); return; }
+    /* ⚠️ SAY WHAT IS NOT IN IT, EVERY TIME. A backup that quietly leaves a clip out is worse
+       than no backup, because he would trust it and find out when it mattered. */
+    const miss = (r.notIncluded && r.notIncluded.media) || [];
+    const mb = Math.round((r.bytes || 0) / 1048576);
+    /* queue 915 clause 8: drafts are counted as what they are, not as projects he would go looking for */
+    const nd = r.drafts || 0, np = r.count - nd;
+    let msg = 'Backed up ' + np + (np === 1 ? ' project' : ' projects') + (nd ? ' and ' + nd + (nd === 1 ? ' draft' : ' drafts') : '') + ' (' + (mb >= 1 ? mb + ' MB' : 'under 1 MB') + ').';
+    /* queue 915 phase A: a clip with NO footage stored is listed too (`missing`), and it is not "too big" —
+       "Clip (0 MB) was too big" would be a second lie on top of the blank. Two sentences, each true. */
+    const big = miss.filter(m => !m.missing), gone = miss.filter(m => m.missing);
+    if (big.length) {
+      const names = big.slice(0, 3).map(m => m.file + ' (' + m.mb + ' MB)').join(', ');
+      msg += ' ⚠️ ' + big.length + (big.length === 1 ? ' clip was' : ' clips were') + ' too big to include: ' + names + (big.length > 3 ? ' and more' : '') + '.';
+    }
+    if (gone.length) {
+      const names = gone.slice(0, 3).map(m => m.file + ' in ' + m.project).join(', ');
+      msg += ' ⚠️ ' + gone.length + (gone.length === 1 ? ' clip has' : ' clips have') + ' no footage stored on this device, so the file has none either: ' + names + (gone.length > 3 ? ' and more' : '') + '.';
+    }
+    if (miss.length) msg += ' Everything else is in the file.';
+    if (FM.toast) FM.toast(msg, miss.length ? 12000 : 6000);
+    return r;
+  };
+  /* A LABS ROW OPENS ITS CARD ON TOP OF SETTINGS, AND CLOSING THE CARD COMES BACK HERE (queue 933). Ezra: "every time I
+     test something out, like one of the options and then click out, it just like completely closes the settings. So you
+     have to reopen the settings and go all the way to the bottom, which is very frustrating." actionRow shuts the panel
+     first because its other rows hand him the app (a backup, a sample); the collaboration cards are the opposite — each
+     is a question about THIS section, and their scrim already sits above Settings' (222 over 220), so a click out lands
+     on the card's scrim and closes only the card. Settings never moved, so it is exactly where he left it, scrolled to
+     Labs. Two things still follow the card: a JOIN that succeeds takes him into the project, so Settings gets out of the
+     way then; and anything the card changed (his name) is re-read into the row. */
+  function stayRow(label, hint, btnLabel, fn, after) {
+    const row = el('div', 'set-row');
+    const txt = el('div', 'set-rowtext');
+    txt.appendChild(el('div', 'set-label', label));
+    const h = hint ? el('div', 'set-hint', hint) : null;
+    if (h) txt.appendChild(h);
+    const b = el('button', 'set-action', btnLabel);
+    b.type = 'button';
+    b.addEventListener('click', () => {
+      const wasLive = !!(FM.collab && FM.collab.active);
+      let seen = false;
+      const mo = new MutationObserver(() => {
+        const up = document.body.classList.contains('collab-card-open');
+        if (up) { seen = true; return; }
+        if (!seen) return;                       // the class toggling on its way UP, not the card closing
+        mo.disconnect();
+        if (!wasLive && FM.collab && FM.collab.active) { FM.settings.close(); return; }
+        if (after) after(h);
+      });
+      mo.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+      seen = document.body.classList.contains('collab-card-open');
+      fn();
+      if (document.body.classList.contains('collab-card-open')) seen = true;
+    });
+    row.appendChild(txt); row.appendChild(b);
+    return row;
+  }
   function actionRow(label, hint, btnLabel, fn, tone) {
     const row = el('div', 'set-row');
     const txt = el('div', 'set-rowtext');
@@ -465,39 +536,12 @@ window.FM = window.FM || {};
        * Deliberately a FILE HE SAVES, which is option A of #869 and the only one that changes
        * nothing about what this app is: no server, no account, nothing of his on anyone else's
        * machine. Say the word and it can become something else. */
+      /* Only on an install from before the status-bar fix (queue 920) — the steps again, for whenever he is ready. */
+      (FM.statusBar && FM.statusBar.staleInstall && FM.statusBar.staleInstall())
+        ? actionRow('Remove the blur at the top of the screen', 'This copy was added to your Home Screen before the fix. A fresh install fixes it — the steps, with a backup first.', 'How…', () => FM.statusBar.explain(true))
+        : null,
       actionRow('Back up every project', 'Writes ALL your projects into one file you keep wherever you like. Nothing is uploaded anywhere — it saves to this device like any download.', 'Back up…',
-        async () => {
-          if (!FM.storage || !FM.storage.backupAll) return;
-          /* actionRow closes the panel before it runs the handler, so progress has to live in a toast
-             rather than on the button. A library of videos takes a few seconds and silence in that gap
-             reads as "nothing happened", which is how people tap a thing twice. */
-          if (FM.toast) FM.toast('Packing up your projects…', 4000);
-          let r = null;
-          try {
-            r = await FM.storage.backupAll(null);
-          } catch (e) { r = { ok: false, reason: 'The backup could not be written.' }; }
-          if (!r || !r.ok) { if (FM.toast) FM.toast((r && r.reason) || 'The backup could not be written.', 6000); return; }
-          /* ⚠️ SAY WHAT IS NOT IN IT, EVERY TIME. A backup that quietly leaves a clip out is worse
-             than no backup, because he would trust it and find out when it mattered. */
-          const miss = (r.notIncluded && r.notIncluded.media) || [];
-          const mb = Math.round((r.bytes || 0) / 1048576);
-          /* queue 915 clause 8: drafts are counted as what they are, not as projects he would go looking for */
-          const nd = r.drafts || 0, np = r.count - nd;
-          let msg = 'Backed up ' + np + (np === 1 ? ' project' : ' projects') + (nd ? ' and ' + nd + (nd === 1 ? ' draft' : ' drafts') : '') + ' (' + (mb >= 1 ? mb + ' MB' : 'under 1 MB') + ').';
-          /* queue 915 phase A: a clip with NO footage stored is listed too (`missing`), and it is not "too big" —
-             "Clip (0 MB) was too big" would be a second lie on top of the blank. Two sentences, each true. */
-          const big = miss.filter(m => !m.missing), gone = miss.filter(m => m.missing);
-          if (big.length) {
-            const names = big.slice(0, 3).map(m => m.file + ' (' + m.mb + ' MB)').join(', ');
-            msg += ' ⚠️ ' + big.length + (big.length === 1 ? ' clip was' : ' clips were') + ' too big to include: ' + names + (big.length > 3 ? ' and more' : '') + '.';
-          }
-          if (gone.length) {
-            const names = gone.slice(0, 3).map(m => m.file + ' in ' + m.project).join(', ');
-            msg += ' ⚠️ ' + gone.length + (gone.length === 1 ? ' clip has' : ' clips have') + ' no footage stored on this device, so the file has none either: ' + names + (gone.length > 3 ? ' and more' : '') + '.';
-          }
-          if (miss.length) msg += ' Everything else is in the file.';
-          if (FM.toast) FM.toast(msg, miss.length ? 12000 : 6000);
-        }),
+        () => FM.backupEverything()),
       actionRow('Restore from a backup', 'Adds every project from a backup file back in. It never replaces or deletes what is already here.', 'Restore…',
         () => {
           const input = document.createElement('input');
@@ -802,10 +846,11 @@ window.FM = window.FM || {};
       const ui = FM.collab.ui;
       const me = ui.getProfile();
       const kids = el('div', 'set-labs' + (state.collabLabs ? '' : ' hidden'));
-      kids.appendChild(actionRow('Your name and colour',
+      kids.appendChild(stayRow('Your name and colour',
         me ? me.name : 'Not set yet — you are asked the first time you share or join',
-        'Change…', () => ui.profile({ force: true })));
-      kids.appendChild(actionRow('Join a live project', 'Paste an invite link, or type the short code somebody read you.', 'Join…', () => ui.join()));
+        'Change…', () => ui.profile({ force: true }),
+        (h) => { const p = ui.getProfile(); if (h && p && p.name) h.textContent = p.name; }));
+      kids.appendChild(stayRow('Join a live project', 'Paste an invite link, or type the short code somebody read you.', 'Join…', () => ui.join()));
       /* S8 (§25.5): "Test connection". Not an actionRow — that shuts the panel, and the answer IS this row. Nothing
          is tried until the button is tapped (§23); the result is one sentence per question and the numbers behind
          them in the same copyable box the Reports use, kept as `fm.lastConnReport`. */

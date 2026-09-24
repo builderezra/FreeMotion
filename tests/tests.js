@@ -79398,17 +79398,16 @@
       const C = mk('same');
       C.fill = { kf: [{ t: 0, v: '#22c55e' }, { t: 3, v: '#22c55e' }] };
       if (FM._clipColorStops(C) !== null) throw new Error('a colour that is keyframed but never changes took the gradient path — that is a flat fill wearing a gradient\'s clothes');
-      // 4. THE NAME MUST KEEP A FIXED GROUND. That fade is the whole difference between his option A
-      //    and the C he picked, and the clip name is already the lowest-contrast text in the editor.
+      // 4. NO DARK GROUND ANY MORE — HIS LATER WORD OVERRULES HIS EARLIER PICK (queue 928). He chose option C in #679 (a dark
+      //    fade under the name); on 24 Sep, looking at it on his PC: "make it so that it doesn't start black because for some
+      //    reason it always makes the start of it black … Get rid of that." So the fade is gone, and the name is kept legible
+      //    the way every other clip's is — by `.clip-label`'s own text-shadow, which this now checks is still there.
       const css = await (await fetch('../styles.css?boot=' + Date.now())).text();
-      if (!/\.clip\.clip-kfcolor::before/.test(css))
-        throw new Error('the dark fade behind the clip name is gone — that is option A, not the C he chose, and it puts the least readable text in the editor on a background that changes along its own length');
-      /* ⚠️ AND IT MUST NAME THE ELEMENT THAT EXISTS. The first version of this rule said `.clip-name`;
-         a clip's label is `.clip-label`, so it styled nothing. It looked correct only because the label
-         is a later sibling than the ::before and painted above it by document order anyway — the rule
-         was inert and would have stayed inert the day that order changed. */
-      if (!/\.clip\.clip-kfcolor > \.clip-label/.test(css))
-        throw new Error('the kfcolor rule no longer targets .clip-label — check the class the clip actually creates, not the one the rule assumes');
+      if (/\.clip\.clip-kfcolor::before\s*\{/.test(css))
+        throw new Error('the dark fade behind a keyframed-colour clip is back — he asked for it to go in #928 (it makes the clip start black)');
+      const labelRule = (css.match(/\n\.clip-label\s*\{[^}]*\}/) || [''])[0];
+      if (!/text-shadow/.test(labelRule))
+        throw new Error('the clip name lost its text-shadow — with the #679 fade gone (#928) the shadow is all that keeps it legible over a colour arc');
       /* THE INK. On a gradient bar the label cannot take its colour from a measurement of ONE colour:
          the arc may run from near-black to near-white, so the start colour says nothing about what is
          under the text. Option C gives the label a fixed dark ground, so the ink is fixed to match it. */
@@ -85635,6 +85634,604 @@
     } finally {
       FM._sliceFxLegacy = false;
       FM.media.remove(id);
+    }
+  });
+
+  /* ═══ 924 — THE ADD SWITCH, DRIVEN BY A REAL FINGER ═════════════════════════════════════════════════════════════════
+   * His fifth report (after #438, #533, #570, #865): "When you drag any layer … the level of where the switch is should
+   * resemble where that layer is in the project. And also it should update live." Every earlier proof used SYNTHETIC
+   * pointer events dispatched from this script — untrusted, uncapturable, never hit-tested — and every one came back.
+   * These use REAL input: tests/_cdp.py turns `__fmWantInput` into Input.dispatchTouchEvent / dispatchMouseEvent, so
+   * the drag goes through the browser's own touch → pointer pipeline, capture and all, like his phone. The control on
+   * every test is that the recorded moves are isTrusted and of the expected pointerType; a run without the driver fails
+   * saying so rather than passing on nothing. The switch is SAMPLED ON EVERY MOVE WHILE THE FINGER IS DOWN — "live"
+   * means before the release, and the release is the one moment all the earlier probes happened to agree. */
+  async function realInput924(steps, what) {
+    const seq = (window.__fmInputSeq = (window.__fmInputSeq || 0) + 1);
+    window.__fmInputErr = '';
+    window.__fmWantInput = { seq: seq, steps: steps };
+    const deadline = Date.now() + 30000;
+    while (window.__fmInputDone !== seq) {
+      if (Date.now() > deadline) throw new Error('no real input arrived for ' + what + ' — this test needs tests/_cdp.py, which turns __fmWantInput into trusted touches and clicks');
+      await new Promise(r => setTimeout(r, 40));
+    }
+    if (window.__fmInputErr) throw new Error('the driver could not send the input for ' + what + ': ' + window.__fmInputErr);
+    await new Promise(r => setTimeout(r, 30));   // let the recorder's deferred reads land
+  }
+  async function onScreen924(fn) {
+    // real events land where the frame IS; run.html parks it at left -10000px, so bring it into view and put it back
+    const fe = window.frameElement;
+    if (!fe) throw new Error('this test needs run.html’s iframe to be able to bring it on screen');
+    const l0 = fe.style.left, t0 = fe.style.top, z0 = fe.style.zIndex;
+    fe.style.left = '0px'; fe.style.top = '0px'; fe.style.zIndex = '99999';
+    try { await new Promise(r => setTimeout(r, 120)); return await fn(); }
+    finally { fe.style.left = l0; fe.style.top = t0; fe.style.zIndex = z0; }
+  }
+  function recorder924() {
+    const sw = document.getElementById('btn-addside');
+    const rec = [];
+    /* The switch is read AFTER the whole event has been dispatched (queue 924 review). The add row's gestures listen on
+       window too, registered after this recorder, so reading inline sampled the switch one move stale — and the grip
+       test's first check passed on the old value every time. A 0 ms timer runs once every listener has had the event. */
+    const on = (e) => {
+      const s = { trusted: e.isTrusted, kind: e.pointerType, type: e.type, y: e.clientY, buttons: e.buttons, sw: NaN, held: null };
+      rec.push(s);
+      setTimeout(() => { s.sw = parseFloat(sw.style.getPropertyValue('--sw')); s.held = FM.dragLayerId || null; const tl = document.getElementById('timeline'); s.scroll = tl ? tl.scrollTop : 0; s.addAt = FM.dragAddAt; }, 0);
+    };
+    const downs = [], events = [];
+    const onAny = (e) => { if (events.length < 12) events.push(e.type + (e.pointerType ? ':' + e.pointerType : '') + '@' + Math.round(performance.now() % 100000) + (FM.dragLayerId ? '+held' : '')); };
+    ['pointercancel', 'lostpointercapture', 'gotpointercapture', 'touchcancel'].forEach(t => window.addEventListener(t, onAny, true));
+    const onDown = (e) => { const t = e.target; downs.push({ kind: e.pointerType, trusted: e.isTrusted, x: Math.round(e.clientX), y: Math.round(e.clientY), what: (t && t.closest ? ((t.closest('.row-drag') ? '≡ ' : '') + (t.className && t.className.baseVal !== undefined ? 'svg ' + t.tagName : (t.className || t.tagName))) : String(t)) }); };
+    window.addEventListener('pointerdown', onDown, true);   // capture: see the press even if the gesture stops it
+    window.addEventListener('pointermove', on);     // bubble: fires AFTER the gesture's own handler has updated the switch
+    window.addEventListener('pointerup', on);
+    return { rec: rec, downs: downs, events: events, stop: () => { ['pointercancel', 'lostpointercapture', 'gotpointercapture', 'touchcancel'].forEach(t => window.removeEventListener(t, onAny, true)); window.removeEventListener('pointerdown', onDown, true); window.removeEventListener('pointermove', on); window.removeEventListener('pointerup', on); } };
+  }
+  async function stack924(n, addAt) {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const cols = ['#e0245e', '#3b82f6', '#22c55e', '#f59e0b', '#a855f7', '#14b8a6'];
+    const L = [];
+    for (let i = 0; i < n; i++) L.push(FM.makeLayer('shape', { name: 'S924 ' + 'ABCDEF'[i], shape: 'rect', x: 200 + i * 20, y: 300, shapeW: 120, shapeH: 120, fill: cols[i], start: 0, duration: 4 }));
+    FM.scene = scene(L, { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+    FM.selectLayer(null); if (FM.pause) FM.pause(); FM.setTime(0);
+    FM.addAt = addAt; FM.dragAddAt = null; FM.dragLayerId = null; FM.dragLayerAt = null;
+    FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+    await sleep(350);
+    const tl = document.getElementById('timeline'); if (tl) tl.scrollTop = 0;
+    await sleep(150);
+    return L;
+  }
+
+  test('924 a real finger dragging a LAYER moves the switch live, step by step, to where THAT LAYER is — before the finger lifts', { item: '924', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await stack924(5, 5);   // five layers, the add row at the very bottom — out of the way of the layer
+          const headA = [].slice.call(document.querySelectorAll('#tl-tracks .track-row .track-head')).find(h => FM.scene.layers[parseInt(h.dataset.idx, 10)] === L[0]);
+          const handle = headA && headA.closest('.track-row').querySelector('.row-drag');
+          if (!handle) throw new Error('setup: no ≡ reorder handle on the top layer at phone width — nothing to drag');
+          const r = handle.getBoundingClientRect(), rowH = headA.closest('.track-row').getBoundingClientRect().height;
+          const x = r.left + r.width / 2, y0 = r.top + r.height / 2;
+          if (x > 370 || y0 > 740) throw new Error('setup: the handle is at ' + Math.round(x) + ',' + Math.round(y0) + ', off the part of the frame real input can reach');
+          const sw = document.getElementById('btn-addside');
+          const topId = FM.scene.layers[parseInt(headA.dataset.idx, 10)].id;   // the layer under the handle, as the scene holds it now
+          const R = recorder924();
+          const steps = [{ t: 'touchStart', x: x, y: y0, ms: 120 }];
+          const travel = rowH * 4.6;
+          for (let k = 1; k <= 23; k++) steps.push({ t: 'touchMove', x: x, y: y0 + travel * k / 23, ms: 45 });
+          steps.push({ t: 'touchEnd', x: x, y: y0 + travel, ms: 0 });
+          try { await realInput924(steps, 'the layer drag'); await sleep(450); } finally { R.stop(); }
+          const moves = R.rec.filter(s => s.type === 'pointermove');
+          /* CONTROL: this was a real finger, not a script. */
+          if (moves.length < 10) throw new Error('only ' + moves.length + ' pointer moves reached the page from 23 real touch moves — the drag did not happen');
+          const fake = moves.filter(s => !s.trusted || s.kind !== 'touch');
+          if (fake.length) throw new Error('CONTROL: ' + fake.length + ' of the recorded moves were not trusted touch (' + fake[0].kind + ', trusted ' + fake[0].trusted + ') — this is not the phone’s pipeline');
+          const held = moves.filter(s => s.held === topId);
+          if (held.length < 8) throw new Error('only ' + held.length + ' of ' + moves.length + ' moves had a layer in hand — the ≡ drag did not start from a real touch (the press landed on ' + JSON.stringify(R.downs) + ', the handle is at ' + Math.round(r.left) + '..' + Math.round(r.right) + ' x ' + Math.round(r.top) + '..' + Math.round(r.bottom) + '; moves ' + JSON.stringify(moves.slice(0, 4).map(m => [m.buttons, m.held, m.sw])) + '; events ' + JSON.stringify(R.events) + ')');
+          const vals = held.map(s => s.sw);
+          const distinct = vals.filter((v, i) => i === 0 || Math.abs(v - vals[i - 1]) > 1e-6);
+          if (!(vals[0] <= 0.26)) throw new Error('at the start of the drag the switch read ' + vals[0].toFixed(3) + ' while the layer in hand was at the TOP of the project — it is showing something else (the add row sits at the bottom: 1.0)');
+          if (!(Math.max.apply(null, vals) >= 0.74)) throw new Error('carried four rows down, the switch only ever reached ' + Math.max.apply(null, vals).toFixed(3) + ' while the finger was still down — it did not follow the layer live (samples ' + vals.map(v => v.toFixed(2)).join(' ') + ')');
+          for (let i = 1; i < vals.length; i++) if (vals[i] < vals[i - 1] - 1e-6) throw new Error('the switch went back UP while the layer only went down: ' + vals.map(v => v.toFixed(2)).join(' '));
+          if (distinct.length < 4) throw new Error('the switch moved in ' + (distinct.length - 1) + ' step(s) across four rows — it should step once per slot, live (samples ' + vals.map(v => v.toFixed(2)).join(' ') + ')');
+          const bad = vals.filter(v => Math.abs(v * 4 - Math.round(v * 4)) > 1e-6);
+          if (bad.length) throw new Error('with five layers the switch should sit on a slot (0, .25, .5, .75, 1) — it read ' + bad[0]);
+          /* …and it landed where the switch last said: the layer is now that far down. */
+          const at = FM.scene.layers.findIndex(l => l.id === topId);
+          if (Math.abs(at / 4 - vals[vals.length - 1]) > 1e-6) throw new Error('the switch last showed ' + vals[vals.length - 1] + ' but the layer landed at index ' + at + ' of 5');
+          if (FM.dragLayerId || FM.dragLayerAt != null) throw new Error('the drag ended but the switch still thinks a layer is in hand');
+          if (Math.abs(parseFloat(sw.style.getPropertyValue('--sw')) - FM.addAt / 5) > 1e-6) throw new Error('after the drop the switch did not go back to the add row’s level');
+        });
+      }, 360);
+    } finally { FM.scene = saved; FM.dragLayerId = null; FM.dragLayerAt = null; FM.dragAddAt = null; try { FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {} }
+  });
+
+  test('924 a real finger dragging the ADD ROW by its grip moves the switch while the finger is still down', { item: '924', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          await stack924(4, 0);   // the add row at the TOP
+          const grip = document.querySelector('.tl-addrow .tl-addrow-grip');
+          if (!grip) throw new Error('setup: no add-row grip at phone width');
+          const r = grip.getBoundingClientRect(), rowH = document.querySelector('#tl-tracks .track-row').getBoundingClientRect().height;
+          const x = r.left + r.width / 2, y0 = r.top + r.height / 2;
+          if (x > 370 || y0 > 740) throw new Error('setup: the grip is at ' + Math.round(x) + ',' + Math.round(y0) + ', off the part of the frame real input can reach');
+          const R = recorder924();
+          const steps = [{ t: 'touchStart', x: x, y: y0, ms: 100 }];
+          for (let k = 1; k <= 18; k++) steps.push({ t: 'touchMove', x: x, y: y0 + rowH * 3.6 * k / 18, ms: 45 });
+          steps.push({ t: 'touchEnd', x: x, y: y0 + rowH * 3.6, ms: 0 });
+          try { await realInput924(steps, 'the add-row grip drag'); await sleep(450); } finally { R.stop(); }
+          const moves = R.rec.filter(s => s.type === 'pointermove');
+          if (moves.length < 8) throw new Error('only ' + moves.length + ' pointer moves reached the page from 18 real touch moves');
+          if (moves.some(s => !s.trusted || s.kind !== 'touch')) throw new Error('CONTROL: not every recorded move was a trusted touch');
+          const vals = moves.map(s => s.sw);
+          if (!(vals[0] <= 0.26)) throw new Error('the add row started at the top but the switch read ' + vals[0]);
+          if (!(Math.max.apply(null, vals) >= 0.74)) throw new Error('dragged three rows down, the switch only reached ' + Math.max.apply(null, vals).toFixed(3) + ' before the finger lifted (samples ' + vals.map(v => v.toFixed(2)).join(' ') + ')');
+          if (!(FM.addAt >= 3)) throw new Error('the add row did not land lower down (addAt ' + FM.addAt + ') — the drag did not really happen');
+        });
+      }, 360);
+    } finally { FM.scene = saved; FM.dragAddAt = null; FM.addAt = 0; try { FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {} }
+  });
+
+  test('924 on PC a real mouse dragging the add LINE moves the switch while the button is still down', { item: '924', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atWideWidth(async function () {
+        await onScreen924(async function () {
+          await stack924(4, 0);
+          const line = document.querySelector('.tl-addrow.tl-addrow--line');
+          if (!line) throw new Error('setup: at a desktop width the add row is not the PC line — this would measure the phone grip');
+          const lr = line.getBoundingClientRect(), rowH = document.querySelector('#tl-tracks .track-row').getBoundingClientRect().height;
+          const x = Math.min(lr.left + 40, 360), y0 = lr.top + lr.height / 2;
+          if (y0 > 740 || y0 < 0) throw new Error('setup: the add line is at y ' + Math.round(y0) + ', off the part of the frame real input can reach');
+          const R = recorder924();
+          const steps = [{ t: 'mouseMove', x: x, y: y0, ms: 60 }, { t: 'mouseDown', x: x, y: y0, ms: 80 }];
+          for (let k = 1; k <= 18; k++) steps.push({ t: 'mouseMove', x: x, y: y0 + rowH * 3.6 * k / 18, ms: 45 });
+          steps.push({ t: 'mouseUp', x: x, y: y0 + rowH * 3.6, ms: 0 });
+          try { await realInput924(steps, 'the add-line drag'); await sleep(450); } finally { R.stop(); }
+          const moves = R.rec.filter(s => s.type === 'pointermove');
+          const down = moves.slice(1);   // the first move is the hover before the press
+          if (down.length < 8) throw new Error('only ' + down.length + ' pointer moves reached the page while the button was down');
+          if (down.some(s => !s.trusted || s.kind !== 'mouse')) throw new Error('CONTROL: not every recorded move was a trusted mouse move');
+          /* Judged on the moves made BEFORE the timeline's bottom edge. At the edge the list auto-scrolls, and that loop
+             re-publishes the row on its own — so a switch that only moves there would pass a whole-drag check while
+             being frozen for the drag itself (that is how this test first let the unfixed build through). */
+          const tl = document.getElementById('timeline').getBoundingClientRect();
+          const clear = down.filter(s => s.type === 'pointermove' && s.y < tl.bottom - 48);
+          if (clear.length < 6) throw new Error('setup: only ' + clear.length + ' moves happened clear of the auto-scroll edge — the drag starts too low to judge');
+          const vals = clear.map(s => s.sw);
+          if (!(Math.max.apply(null, vals) >= 0.49)) throw new Error('dragged two rows down, clear of the edge, the switch only reached ' + Math.max.apply(null, vals).toFixed(3) + ' with the button still down — it jumps on release instead of moving live (samples ' + vals.map(v => v.toFixed(2)).join(' ') + ')');
+          if (!(FM.addAt >= 3)) throw new Error('the add line did not land lower down (addAt ' + FM.addAt + ') — the drag did not really happen');
+        });
+      }, 1100);
+    } finally { FM.scene = saved; FM.dragAddAt = null; FM.addAt = 0; try { FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {} }
+  });
+
+  test('932 an AI setProject never renames his project — not the Director, not a template, not any op', { item: '932' }, function () {
+    /* Queue 932: "when you use the AI director, it changes the name of the project to AI scene". The op still sets what it
+       is for — size, rate, length, background — so the control is that those DID change in the same call. */
+    if (!FM.aiOps || !FM.aiOps.applyOps) throw new Error('FM.aiOps.applyOps is not exposed — the suite cannot drive the real op path');
+    const P = FM.scene.project, keep = { name: P.name, width: P.width, height: P.height, fps: P.fps, duration: P.duration, background: P.background };
+    try {
+      P.name = 'Ezra’s beach edit';
+      FM.aiOps.applyOps([{ op: 'setProject', width: 720, height: 1280, fps: 24, duration: 5, background: '#123456', name: 'AI Scene' }]);
+      if (P.name !== 'Ezra’s beach edit') throw new Error('the AI renamed the project to “' + P.name + '” — his own name must stay');
+      if (P.fps !== 24 || P.background !== '#123456' || P.width !== 720) throw new Error('CONTROL: the same setProject did not set the size, rate or background (' + P.width + ', ' + P.fps + ', ' + P.background + ') — this call proves nothing about the name');
+      FM.aiOps.applyOps([{ op: 'setProject', name: 'Template scene' }]);
+      if (P.name !== 'Ezra’s beach edit') throw new Error('a name-only setProject renamed the project to “' + P.name + '”');
+    } finally {
+      Object.assign(P, keep);
+      if (FM.resizeCanvas) FM.resizeCanvas();
+    }
+  });
+
+  test('933 trying a Labs option in Settings and clicking out comes back to Settings, where he was — phone taps and PC clicks, for real', { item: '933', budgetMs: 90000 }, async function () {
+    /* Queue 933: "every time I test something out, like one of the options and then click out, it just like completely
+       closes the settings. So you have to reopen the settings and go all the way to the bottom". Real input (see 924): a
+       click-out is a hit-test question — which scrim is under the finger — and a synthetic event answers it by fiat. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.settings || !FM.settings.open || !FM.collab || !FM.collab.ui) throw new Error('settings or the collaboration UI is not loaded');
+    const wasLabs = FM.settings.get ? FM.settings.get('collabLabs') : undefined;
+    const scroller = (el) => { for (let n = el && el.parentElement; n; n = n.parentElement) { const cs = getComputedStyle(n); if (/auto|scroll/.test(cs.overflowY) && n.scrollHeight > n.clientHeight + 1) return n; } return null; };
+    const joinBtn = () => [].slice.call(document.querySelectorAll('.set-labs .set-action')).find(b => /Join/.test(b.textContent));
+    const centre = (el) => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, r: r }; };
+    async function once(kind, where) {
+      if (FM.settings.isOpen && FM.settings.isOpen()) FM.settings.close();
+      await sleep(250);
+      if (FM.settings.set) FM.settings.set('collabLabs', true);
+      FM.settings.open();
+      await sleep(450);
+      const b = joinBtn();
+      if (!b) throw new Error(where + ': no Join… row in Settings → Labs with Labs on');
+      b.scrollIntoView({ block: 'center' });
+      await sleep(250);
+      const sc = scroller(b);
+      if (!sc) throw new Error(where + ': could not find the Settings scroller around the Join row');
+      if (!(sc.scrollTop > 40)) throw new Error(where + ': setup: Settings did not need scrolling to reach Labs (scrollTop ' + sc.scrollTop + ') — the case he describes is not being made');
+      const top0 = sc.scrollTop, c = centre(b);
+      if (c.x > 370 || c.y > 740 || c.y < 0) throw new Error(where + ': setup: the Join button is at ' + Math.round(c.x) + ',' + Math.round(c.y) + ', out of reach of real input');
+      const tap = (x, y) => kind === 'touch' ? [{ t: 'touchStart', x: x, y: y, ms: 60 }, { t: 'touchEnd', x: x, y: y, ms: 60 }]
+                                            : [{ t: 'mouseMove', x: x, y: y, ms: 30 }, { t: 'mouseDown', x: x, y: y, ms: 60 }, { t: 'mouseUp', x: x, y: y, ms: 60 }];
+      await realInput924(tap(c.x, c.y), where + ' — tapping Join…');
+      await sleep(500);
+      // Join asks for his name first when none is set — that card IS what he meets, so any collaboration card counts
+      const openCard = () => document.querySelector('.collab-scrim .collab-card');
+      const card = openCard();
+      if (!card) throw new Error(where + ': a real ' + kind + ' on Join… opened no collaboration card');
+      if (!(FM.settings.isOpen && FM.settings.isOpen())) throw new Error(where + ': opening the Join card CLOSED Settings — this is his complaint exactly');
+      // click out: a point on the card's scrim, well clear of the card
+      const cr = card.getBoundingClientRect();
+      const out = { x: 12, y: Math.max(12, Math.min(cr.top - 20, 60)) };
+      if (out.y >= cr.top && out.y <= cr.bottom && out.x >= cr.left && out.x <= cr.right) throw new Error(where + ': setup: no scrim clear of the card to click on');
+      await realInput924(tap(out.x, out.y), where + ' — clicking out of the card');
+      await sleep(600);
+      if (openCard()) throw new Error(where + ': the click out landed but the card (' + card.id + ') is still open — the test did not click out');
+      if (!(FM.settings.isOpen && FM.settings.isOpen())) throw new Error(where + ': clicking out of the Join card closed SETTINGS as well — he has to reopen it and scroll to the bottom again');
+      const b2 = joinBtn(), sc2 = b2 && scroller(b2);
+      if (!b2 || !sc2) throw new Error(where + ': Settings is open but the Labs rows are gone');
+      if (Math.abs(sc2.scrollTop - top0) > 2) throw new Error(where + ': Settings came back scrolled to ' + sc2.scrollTop + ' instead of ' + top0 + ' — not where he left it');
+      /* …and Escape out of the card is the same promise. */
+      await realInput924(tap(c.x, c.y), where + ' — tapping Join… again');
+      await sleep(500);
+      if (!openCard()) throw new Error(where + ': the second tap on Join… did not open the card');
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      await sleep(400);
+      if (openCard()) throw new Error(where + ': Escape did not close the card');
+      if (!(FM.settings.isOpen && FM.settings.isOpen())) throw new Error(where + ': Escape out of the Join card closed Settings too');
+      FM.settings.close();
+      await sleep(250);
+    }
+    try {
+      await onScreen924(async function () {
+        await atPhoneWidth(function () { return once('touch', 'phone (360)'); }, 360);
+        await atWideWidth(function () { return once('mouse', 'PC (1100)'); }, 1100);
+      });
+    } finally {
+      try { if (FM.collab.ui.close) FM.collab.ui.close(); } catch (e) {}
+      const s = document.querySelector('.collab-scrim'); if (s) s.remove();
+      document.body.classList.remove('collab-card-open');
+      try { if (FM.settings.isOpen && FM.settings.isOpen()) FM.settings.close(); } catch (e) {}
+      if (FM.settings.set && wasLabs !== undefined) FM.settings.set('collabLabs', wasLabs);
+    }
+  });
+
+  test('928 a colour-keyframed clip has no black start, its name stays centred, and its keyframe diamonds sit on the centre line — PC and phone', { item: '928', budgetMs: 60000 }, async function () {
+    /* Queue 928 (his PC screenshot at v16.90): the Rect clip's colour arc darkened to near-black at its left end, "Rect" sat
+       on the clip's bottom line while Hexagon and Squircle were centred, and the two ◇ sat high. Measured on the elements
+       he is looking at, at the two layouts he uses — never on a stylesheet reading. The plain clip beside it is the control:
+       the same measurements must hold for a clip that never had the keyframed-colour styling. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    async function measure(where) {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      const A = FM.makeLayer('shape', { name: 'Rect', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 150, fill: '#e0457b', start: 0, duration: 4 });
+      A.fill = { kf: [{ t: 0.5, v: '#e0457b', e: 'linear' }, { t: 2.5, v: '#7a7a7a', e: 'linear' }] };
+      const B = FM.makeLayer('shape', { name: 'Hexagon', shape: 'rect', x: 300, y: 600, shapeW: 200, shapeH: 150, fill: '#22b8e0', start: 0, duration: 4 });
+      FM.scene = scene([A, B], { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+      FM.refreshAll(); FM.selectLayer(A.id); if (FM.timeline.rebuild) FM.timeline.rebuild();
+      await sleep(400);
+      const clipOf = (L) => document.querySelector('#tl-tracks .clip[data-id="' + L.id + '"]');
+      let ca = clipOf(A), cb = clipOf(B);
+      if (!ca) throw new Error(where + ': setup: the keyframed clip is not on the timeline');
+      /* The phone shows a selected layer on its own (the solo row), so the plain clip is measured with nothing selected —
+         and the keyframed clip's NAME is measured both ways, since that is where the two layouts differ. */
+      let caFree = null;
+      if (!cb) {
+        FM.selectLayer(null); if (FM.timeline.rebuild) FM.timeline.rebuild(); await sleep(300);
+        cb = clipOf(B); caFree = clipOf(A);
+        if (!cb) throw new Error(where + ': setup: the plain clip is not on the timeline even with nothing selected');
+      }
+      if (!ca.classList.contains('clip-kfcolor')) throw new Error(where + ': setup: the keyframed clip is not drawn as a colour arc (no clip-kfcolor) — this is not the case he reported');
+      if (cb.classList.contains('clip-kfcolor')) throw new Error(where + ': CONTROL: the plain clip is drawn as a colour arc');
+      const out = [];
+      /* 1. NO BLACK START — the dark ground that sat under the first ~110px. Measured as the pseudo-element he sees. */
+      const bf = getComputedStyle(ca, '::before');
+      if (bf.content !== 'none' && /rgba?\(\s*6,\s*12,\s*20/.test(bf.backgroundImage + ' ' + bf.backgroundColor)) out.push('the clip still has its dark ground over the start (' + bf.backgroundImage.slice(0, 80) + ')');
+      /* 2. THE NAME IS CENTRED, like the plain clip's */
+      [[caFree || ca, 'the keyframed clip'], [cb, 'the plain clip (control)']].forEach(function (p) {
+        const lab = p[0].querySelector('.clip-label');
+        if (!lab) { out.push(p[1] + ' has no name on it'); return; }
+        const cr = p[0].getBoundingClientRect(), lr = lab.getBoundingClientRect();
+        const d = (lr.top + lr.height / 2) - (cr.top + cr.height / 2);
+        if (Math.abs(d) > 1.5) out.push(p[1] + '’s name is ' + d.toFixed(1) + 'px off the clip’s centre (clip ' + cr.top.toFixed(1) + '..' + cr.bottom.toFixed(1) + ', name ' + lr.top.toFixed(1) + '..' + lr.bottom.toFixed(1) + ')');
+      });
+      /* 3. THE DIAMONDS SIT ON THE CENTRE LINE of the clip they belong to — shown while it is selected */
+      if (caFree) { FM.selectLayer(A.id); if (FM.timeline.rebuild) FM.timeline.rebuild(); await sleep(300); ca = clipOf(A); if (!ca) throw new Error(where + ': setup: reselecting lost the keyframed clip'); }
+      const row = ca.closest('.track-row') || ca.parentElement;
+      const dots = [].slice.call((row || document).querySelectorAll('.kf-dot'));
+      if (dots.length < 2) out.push('setup: ' + dots.length + ' keyframe diamond(s) on the selected clip’s row, expected 2');
+      const cr = ca.getBoundingClientRect(), mid = cr.top + cr.height / 2;
+      dots.forEach(function (d, i) { const r = d.getBoundingClientRect(), y = r.top + r.height / 2; if (Math.abs(y - mid) > 1) out.push('diamond ' + (i + 1) + ' is centred at ' + y.toFixed(1) + ', the clip’s centre line is ' + mid.toFixed(1) + ' (' + (y - mid).toFixed(1) + 'px)'); });
+      if (out.length) throw new Error(where + ': ' + out.join('; '));
+    }
+    try {
+      await atWideWidth(function () { return measure('PC (1280)'); }, 1280);
+      await atPhoneWidth(function () { return measure('phone (380)'); }, 380);
+    } finally { FM.scene = saved; try { FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {} }
+  });
+
+  test('924 a real finger carrying a GROUP moves the switch by the whole block, and it lands where the switch last said', { item: '924', budgetMs: 60000 }, async function () {
+    /* Review finding: the switch first read the grabbed ROW's slot, while the drop moves the whole block — a group and all
+       its members, some with no row on screen. The level is now the block's top over the places a block that size can sit. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await stack924(5, 0);   // add row at the TOP, so it never sits between the block and the rows it passes
+          FM.scene.selectedIds = [L[3].id, L[4].id]; FM.scene.selectedId = L[3].id;
+          FM.groupSelection();
+          const G = FM.scene.layers.filter(l => l.type === 'group')[0];
+          if (!G) throw new Error('setup: grouping made no group');
+          FM.selectLayer(null); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); await sleep(350);
+          const n = FM.scene.layers.length, block = [G.id].concat(FM.groupDescendants ? FM.groupDescendants(G.id).map(m => m.id) : []);
+          const span = FM.scene.layers.filter(l => block.indexOf(l.id) >= 0).length;
+          if (span < 3) throw new Error('setup: the group block is ' + span + ' layers, expected the group and its two members');
+          const top0 = FM.scene.layers.findIndex(l => block.indexOf(l.id) >= 0);
+          if (top0 !== n - span) throw new Error('setup: the group is not at the bottom of the project (block top ' + top0 + ' of ' + n + ')');
+          const headG = [].slice.call(document.querySelectorAll('#tl-tracks .track-row .track-head')).find(h => FM.scene.layers[parseInt(h.dataset.idx, 10)] === G);
+          const handle = headG && headG.closest('.track-row').querySelector('.row-drag');
+          if (!handle) throw new Error('setup: no ≡ handle on the group row');
+          const r = handle.getBoundingClientRect(), rowH = headG.closest('.track-row').getBoundingClientRect().height;
+          const x = r.left + r.width / 2, y0 = r.top + r.height / 2;
+          if (x > 370 || y0 > 740) throw new Error('setup: the group handle is at ' + Math.round(x) + ',' + Math.round(y0) + ', out of reach');
+          const R = recorder924();
+          const steps = [{ t: 'touchStart', x: x, y: y0, ms: 120 }];
+          const travel = -(y0 - 20 - (document.querySelector('#tl-tracks .track-row').getBoundingClientRect().top));   // up to the first row
+          for (let k = 1; k <= 20; k++) steps.push({ t: 'touchMove', x: x, y: y0 + travel * k / 20, ms: 45 });
+          steps.push({ t: 'touchEnd', x: x, y: y0 + travel, ms: 0 });
+          try { await realInput924(steps, 'the group drag'); await sleep(450); } finally { R.stop(); }
+          const held = R.rec.filter(s => s.type === 'pointermove' && s.held === G.id);
+          if (held.length < 8) throw new Error('only ' + held.length + ' moves had the group in hand');
+          const vals = held.map(s => s.sw), slots = n - span;
+          if (Math.abs(vals[0] - 1) > 1e-6) throw new Error('holding a group that sits at the BOTTOM, the switch read ' + vals[0].toFixed(3) + ' — it should be 1 (the block can go no lower)');
+          const bad = vals.filter(v => Math.abs(v * slots - Math.round(v * slots)) > 1e-6);
+          if (bad.length) throw new Error('with a ' + span + '-layer block in ' + n + ' layers the switch should sit on steps of 1/' + slots + ' — it read ' + bad[0]);
+          const topNow = FM.scene.layers.findIndex(l => block.indexOf(l.id) >= 0);
+          if (Math.abs(topNow / slots - vals[vals.length - 1]) > 1e-6) throw new Error('the switch last showed ' + vals[vals.length - 1].toFixed(3) + ' but the block landed with its top at ' + topNow + ' (' + (topNow / slots).toFixed(3) + ')');
+          if (topNow !== 0) throw new Error('carried to the top row, the group landed with its top at ' + topNow + ' — the drag did not go where it was taken');
+        });
+      }, 360);
+    } finally { FM.scene = saved; FM.dragLayerId = null; FM.dragLayerAt = null; FM.dragAddAt = null; try { FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {} }
+  });
+
+  test('924 pressing the switch while a real finger holds a layer throws it to the far end — and letting go does not put it back', { item: '924', budgetMs: 60000 }, async function () {
+    /* Review finding: the throw left the ≡ gesture running, so the release re-applied the finger's slot and undid it, and
+       until then the knob and the rows described the finger. One gesture in two requests: hold and carry, press the switch
+       with the finger still down, then move and lift. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          await stack924(5, 5);
+          const heads = [].slice.call(document.querySelectorAll('#tl-tracks .track-row .track-head'));
+          const headA = heads.find(h => parseInt(h.dataset.idx, 10) === 0);
+          const topId = FM.scene.layers[0].id;
+          const handle = headA && headA.closest('.track-row').querySelector('.row-drag');
+          if (!handle) throw new Error('setup: no ≡ handle on the top layer');
+          const r = handle.getBoundingClientRect(), rowH = headA.closest('.track-row').getBoundingClientRect().height;
+          const x = r.left + r.width / 2, y0 = r.top + r.height / 2;
+          const carry = [{ t: 'touchStart', x: x, y: y0, ms: 120 }];
+          for (let k = 1; k <= 14; k++) carry.push({ t: 'touchMove', x: x, y: y0 + rowH * 3.6 * k / 14, ms: 45 });
+          await realInput924(carry, 'carrying the layer down');
+          await sleep(150);
+          if (FM.dragLayerId !== topId) throw new Error('setup: the layer is not in hand after the carry (held ' + FM.dragLayerId + ')');
+          const pBefore = FM._addSwitchProportion();
+          if (!(pBefore >= 0.5)) throw new Error('setup: carried nearly to the bottom, the switch reads ' + pBefore.toFixed(3) + ' — the throw would go the wrong way for this test');
+          FM.toggleAddSide();   // the press — the finger is still down
+          await sleep(200);
+          const atThrow = FM.scene.layers.findIndex(l => l.id === topId);
+          if (atThrow !== 0) throw new Error('pressing the switch while holding the layer low down left it at index ' + atThrow + ' — it should be thrown to the TOP');
+          if (FM.dragLayerId) throw new Error('the throw did not end the drag — the switch still thinks a layer is in hand, so the release will re-apply the old slot');
+          await realInput924([{ t: 'touchMove', x: x, y: y0 + rowH * 3.8, ms: 45 }, { t: 'touchEnd', x: x, y: y0 + rowH * 3.8, ms: 0 }], 'moving on and lifting the finger');
+          await sleep(450);
+          const atEnd = FM.scene.layers.findIndex(l => l.id === topId);
+          if (atEnd !== 0) throw new Error('letting go after the throw put the layer at index ' + atEnd + ' — the release undid the throw');
+        });
+      }, 360);
+    } finally { FM.scene = saved; FM.dragLayerId = null; FM.dragLayerAt = null; FM.dragAddAt = null; try { FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {} }
+  });
+
+  test('924 on PC the add line dragged into the auto-scroll edge keeps moving the switch as the list scrolls, and lands under the pointer', { item: '924', budgetMs: 60000 }, async function () {
+    /* Review finding (the fault is #411's): the line drag measured rows in SCREEN coordinates snapshotted at the grab, so
+       once the list auto-scrolled under a still pointer it kept answering the pre-scroll slot — the switch froze and the
+       drop landed on the row that had been under the pointer before the scroll. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atWideWidth(async function () {
+        await onScreen924(async function () {
+          await stack924(6, 0);
+          // six is not enough to scroll the PC timeline — add more
+          for (let i = 0; i < 10; i++) FM.scene.layers.push(FM.makeLayer('shape', { name: 'S924 more ' + i, shape: 'rect', x: 200, y: 200, shapeW: 50, shapeH: 50, fill: '#888888', start: 0, duration: 4 }));
+          FM.addAt = 0; FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); await sleep(400);
+          const tlEl = document.getElementById('timeline'); tlEl.scrollTop = 0; await sleep(150);
+          if (!(tlEl.scrollHeight > tlEl.clientHeight + 80)) throw new Error('setup: the timeline does not scroll (' + tlEl.scrollHeight + ' vs ' + tlEl.clientHeight + ') — the edge case cannot be made');
+          const line = document.querySelector('.tl-addrow.tl-addrow--line');
+          if (!line) throw new Error('setup: no PC add line');
+          const lr = line.getBoundingClientRect(), tl = tlEl.getBoundingClientRect();
+          const x = Math.min(lr.left + 60, 360), y0 = lr.top + lr.height / 2, yEdge = Math.min(tl.bottom - 8, 745);
+          if (y0 < 0 || y0 > 740) throw new Error('setup: the add line is at y ' + Math.round(y0) + ', out of reach');
+          const R = recorder924();
+          const steps = [{ t: 'mouseMove', x: x, y: y0, ms: 40 }, { t: 'mouseDown', x: x, y: y0, ms: 80 }];
+          for (let k = 1; k <= 10; k++) steps.push({ t: 'mouseMove', x: x, y: y0 + (yEdge - y0) * k / 10, ms: 40 });
+          for (let k = 0; k < 12; k++) steps.push({ t: 'mouseMove', x: x, y: yEdge, ms: 180 });   // hold at the edge while the list scrolls
+          steps.push({ t: 'mouseUp', x: x, y: yEdge, ms: 0 });
+          let scrolled = 0;
+          try { await realInput924(steps, 'the add-line edge drag'); scrolled = tlEl.scrollTop; await sleep(500); } finally { R.stop(); }
+          if (!(scrolled > 40)) throw new Error('setup: holding at the edge did not auto-scroll the list (scrollTop ' + scrolled + ')');
+          const moves = R.rec.filter(s => s.type === 'pointermove' && s.buttons === 1);
+          const firstAtEdge = moves.findIndex(s => Math.abs(s.y - yEdge) < 1);
+          if (firstAtEdge < 0) throw new Error('setup: no move reached the edge');
+          const atEdge = moves[firstAtEdge].sw, last = moves[moves.length - 1].sw;
+          if (!(last > atEdge + 1e-6)) throw new Error('while the list auto-scrolled ' + Math.round(scrolled) + 'px under a still pointer, the switch stayed at ' + atEdge.toFixed(3) + ' → ' + last.toFixed(3) + ' — it is still judging the rows where they were before the scroll (samples at the edge [scroll, slot, switch]: ' + JSON.stringify(moves.slice(firstAtEdge).map(m => [Math.round(m.scroll), m.addAt, +m.sw.toFixed(3)])) + ')');
+          // the list keeps scrolling between the last move and the release, so the drop is judged against the switch AT the release
+          const n = FM.scene.layers.length, upS = R.rec.filter(s => s.type === 'pointerup').pop();
+          if (!upS) throw new Error('setup: the release was not recorded');
+          if (Math.abs(FM.addAt / n - upS.sw) > 1e-6) throw new Error('at the release the switch showed ' + upS.sw.toFixed(3) + ' but the line landed at ' + FM.addAt + ' of ' + n);
+          if (!(FM.addAt >= n - 4)) throw new Error('held at the bottom edge while the list scrolled, the line landed at ' + FM.addAt + ' of ' + n + ' — nowhere near where the pointer had taken it');
+        });
+      }, 1100);
+    } finally { FM.scene = saved; FM.dragAddAt = null; FM.addAt = 0; try { FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {} }
+  });
+
+  test('925 on PC a real click on the Export button closes the export menu when it is open, and opens it when it is not', { item: '925', budgetMs: 60000 }, async function () {
+    /* Queue 925: "the export menu doesn't go away when you click on it again it just keeps reopening". A real click, because
+       the question is which element the second click LANDS on — the lifted button or the dialog's scrim — and only the
+       browser's own hit-test answers that. The frame is slid sideways so the button is inside the part of the page real
+       input can reach at either suite width. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const dlg = document.getElementById('export-dialog');
+    const fe = window.frameElement;
+    if (!dlg || !fe) throw new Error('setup: no export dialog, or no runner frame');
+    const shown = () => !dlg.classList.contains('hidden');
+    try {
+      await atWideWidth(async function () {
+        if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        await sleep(300);
+        const btn = document.getElementById('btn-export');
+        if (!btn || !btn.getBoundingClientRect().width) throw new Error('setup: the Export button is not on screen at a desktop width');
+        // (Studio is the only desktop layout since queue 293 — there is no second one to check.)
+        const l0 = fe.style.left, t0 = fe.style.top, z0 = fe.style.zIndex;
+        const br = btn.getBoundingClientRect();
+        fe.style.left = Math.round(180 - br.left) + 'px'; fe.style.top = Math.round(Math.min(0, 300 - br.top)) + 'px'; fe.style.zIndex = '99999';
+        try {
+          await sleep(150);
+          const click = async (what) => {
+            const r = btn.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+            await realInput924([{ t: 'mouseMove', x: x, y: y, ms: 40 }, { t: 'mouseDown', x: x, y: y, ms: 60 }, { t: 'mouseUp', x: x, y: y, ms: 60 }], what);
+            await sleep(700);
+          };
+          if (shown()) throw new Error('setup: the export menu is already open');
+          await click('the first click on Export');
+          if (!shown()) throw new Error('CONTROL: a real click on Export did not open the export menu — nothing below would mean anything');
+          await click('the second click on Export');
+          if (shown()) throw new Error('clicking the Export button with the menu open left it OPEN — it should close, like the notes button');
+          await click('the third click on Export');
+          if (!shown()) throw new Error('after closing it with the button, clicking Export again did not open the menu');
+        } finally {
+          fe.style.left = l0; fe.style.top = t0; fe.style.zIndex = z0;
+        }
+      }, 1100);
+    } finally {
+      if (shown()) { const c = document.getElementById('exp-cancel'); if (c) c.click(); }
+      await sleep(200);
+    }
+  });
+
+  test('926 the view menu: Layers is greyed with no single clip selected, and the Camera button and the camera’s timeline eye are one state', { item: '926', budgetMs: 90000 }, async function () {
+    /* Queue 926. The eye is pressed with REAL input (see 924) — it is a pointerdown paint gesture on the timeline, and the
+       clash he described is between two different routes to the same flag, so the route has to be the real one. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const vbL = document.getElementById('vb-layers'), vbC = document.getElementById('vb-camera');
+    if (!vbL || !vbC) throw new Error('setup: the view rail has no Layers or Camera button');
+    const greyed = (b) => b.classList.contains('vb-na') && parseFloat(getComputedStyle(b).opacity) < 0.6;
+    async function run(where) {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      const A = FM.makeLayer('shape', { name: 'A926', shape: 'rect', x: 300, y: 300, shapeW: 100, shapeH: 100, fill: '#e0457b', start: 0, duration: 4 });
+      const B = FM.makeLayer('shape', { name: 'B926', shape: 'rect', x: 500, y: 500, shapeW: 100, shapeH: 100, fill: '#22b8e0', start: 0, duration: 4 });
+      FM.scene = scene([A, B], { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+      FM.selectLayer(null); FM.refreshAll(); await sleep(250);
+      /* 1. LAYERS: greyed with none, live with one, greyed with two */
+      if (!greyed(vbL)) throw new Error(where + ': with nothing selected the Layers button is not greyed (opacity ' + getComputedStyle(vbL).opacity + ')');
+      FM.selectLayer(A.id); await sleep(120);
+      if (greyed(vbL)) throw new Error(where + ': with one clip selected the Layers button is still greyed');
+      FM.scene.selectedIds = [A.id, B.id]; FM.scene.selectedId = A.id; FM.refreshAll(); await sleep(120);
+      if (!greyed(vbL)) throw new Error(where + ': with two clips selected (isolate needs ONE) the Layers button is not greyed');
+      FM.selectLayer(null); await sleep(120);
+      if (!greyed(vbL)) throw new Error(where + ': deselecting did not grey the Layers button again');
+      /* 2. CAMERA: add it with the button, hide it with the timeline eye, the button must follow */
+      vbC.click(); await sleep(300);
+      const cam = FM.scene.layers.filter(l => l.type === 'camera')[0];
+      if (!cam) throw new Error(where + ': setup: the Camera button did not add a camera');
+      FM.selectLayer(null); if (FM.timeline.rebuild) FM.timeline.rebuild(); await sleep(250);
+      if (!vbC.classList.contains('on') || vbC.classList.contains('cam-off')) throw new Error(where + ': CONTROL: a visible camera does not show as on in the view menu');
+      const eye = document.querySelector('#tl-tracks .th-eye[data-lid="' + cam.id + '"]');
+      if (!eye) throw new Error(where + ': setup: no eye on the camera row');
+      const er = eye.getBoundingClientRect(), x = er.left + er.width / 2, y = er.top + er.height / 2;
+      if (x > 370 || y > 740 || y < 0) throw new Error(where + ': setup: the camera eye is at ' + Math.round(x) + ',' + Math.round(y) + ', out of reach of real input');
+      const tap = (kind) => kind === 'touch' ? [{ t: 'touchStart', x: x, y: y, ms: 60 }, { t: 'touchEnd', x: x, y: y, ms: 80 }]
+                                             : [{ t: 'mouseMove', x: x, y: y, ms: 30 }, { t: 'mouseDown', x: x, y: y, ms: 60 }, { t: 'mouseUp', x: x, y: y, ms: 80 }];
+      await realInput924(tap(where.indexOf('phone') === 0 ? 'touch' : 'mouse'), where + ' — the camera’s eye');
+      await sleep(400);
+      if (cam.visible !== false) throw new Error(where + ': setup: a real tap on the camera’s eye did not hide it');
+      if (!vbC.classList.contains('cam-off') || vbC.classList.contains('on')) throw new Error(where + ': the camera was hidden from the TIMELINE EYE but the view menu’s Camera button still shows it on — the clash he reported');
+      /* …and back the other way: the view menu shows it, the eye must open */
+      vbC.click(); await sleep(350);
+      if (cam.visible === false) throw new Error(where + ': the Camera button did not show the camera again');
+      const eye2 = document.querySelector('#tl-tracks .th-eye[data-lid="' + cam.id + '"]');
+      if (!eye2 || eye2.classList.contains('off')) throw new Error(where + ': the camera was shown from the VIEW MENU but its timeline eye is still shut');
+      if (!vbC.classList.contains('on')) throw new Error(where + ': the Camera button does not show itself on after showing the camera');
+      /* …and undo keeps them together */
+      if (FM.history && FM.history.undo) { FM.history.undo(); await sleep(400);
+        const camU = FM.scene.layers.filter(l => l.type === 'camera')[0];
+        if (camU && (camU.visible === false) !== vbC.classList.contains('cam-off')) throw new Error(where + ': after undo the camera is ' + (camU.visible === false ? 'hidden' : 'shown') + ' but the Camera button says the opposite');
+      }
+    }
+    try {
+      await onScreen924(async function () {
+        await atWideWidth(function () { return run('PC (1100)'); }, 1100);
+        await atPhoneWidth(function () { return run('phone (360)'); }, 360);
+      });
+    } finally { FM.scene = saved; try { FM.refreshAll(); } catch (e) {} }
+  });
+
+  test('920 an install from before the status-bar fix tells him once, on Home, how to get rid of the blur — and a fresh install never does', { item: '920', budgetMs: 45000 }, async function () {
+    /* Queue 920, 24 Sep: "The fade at the top is still an issue" — his screenshot shows the status bar drawn OVER the page,
+       which only an install from before v16.78's `default` status bar can do (iOS reads that setting once, at install).
+       The runner is not an installed app and has no status bar, so the two facts are faked through the seam; the measuring
+       of env(safe-area-inset-top) itself is exercised by tools/shot.py --safe-top. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const SB = FM.statusBar;
+    if (!SB || !SB.staleInstall || !SB._maybeTell) throw new Error('FM.statusBar exposes no stale-install check');
+    if (SB.staleInstall()) throw new Error('the test runner, which is not an installed app, reads as a stale install — the check would nag every browser tab');
+    const realAsk = FM.ask, realBackup = FM.backupEverything, asked = [], backups = [];
+    let seen0 = null; try { seen0 = localStorage.getItem(SB._SEEN); localStorage.removeItem(SB._SEEN); } catch (e) {}
+    const hadHome = FM.home && FM.home.isOpen && FM.home.isOpen();
+    try {
+      FM.ask = async (o) => { asked.push(o); return true; };
+      FM.backupEverything = async () => { backups.push(1); return { ok: true }; };
+      if (FM.home && FM.home.open && !hadHome) { FM.home.open(); await sleep(400); }
+      /* a FRESH install: installed, nothing under the status bar */
+      SB._fake = { installed: true, inset: 0 };
+      SB._maybeTell(); await sleep(50);
+      if (asked.length) throw new Error('a fresh install (page below the status bar) was told to reinstall');
+      /* the OLD install he has */
+      SB._fake = { installed: true, inset: 47 };
+      if (!SB.staleInstall()) throw new Error('an installed app with its page 47px under the status bar is not recognised as the old install');
+      SB._maybeTell(); await sleep(80);
+      if (asked.length !== 1) throw new Error('the old install was not told on Home (' + asked.length + ' notes)');
+      const o = asked[0];
+      if (!/blur/i.test(o.title || '') || !/Back up/.test(o.message || '') || !/Add to Home Screen/.test(o.message || '') || !/Restore/.test(o.message || '')) throw new Error('the note does not carry the steps (back up, remove, Add to Home Screen, restore): ' + JSON.stringify(o).slice(0, 200));
+      if (!/Back up/.test(o.ok || '')) throw new Error('the note’s button is “' + o.ok + '”, not a Back up');
+      if (backups.length !== 1) throw new Error('pressing “' + o.ok + '” did not start a backup');
+      SB._maybeTell(); await sleep(50);
+      if (asked.length !== 1) throw new Error('the note came back a second time — it is said once per install');
+      /* …and Settings keeps the steps for whenever he is ready */
+      if (FM.settings && FM.settings.open) {
+        FM.settings.open(); await sleep(400);
+        const row = [].slice.call(document.querySelectorAll('.set-label')).find(l => /blur at the top/i.test(l.textContent));
+        FM.settings.close(); await sleep(200);
+        if (!row) throw new Error('Settings has no “Remove the blur at the top” row on the old install');
+        SB._fake = { installed: true, inset: 0 };
+        FM.settings.open(); await sleep(400);
+        const row2 = [].slice.call(document.querySelectorAll('.set-label')).find(l => /blur at the top/i.test(l.textContent));
+        FM.settings.close(); await sleep(200);
+        if (row2) throw new Error('a fresh install still shows the “Remove the blur” row');
+      }
+    } finally {
+      delete SB._fake;
+      FM.ask = realAsk; FM.backupEverything = realBackup;
+      try { if (seen0 === null) localStorage.removeItem(SB._SEEN); else localStorage.setItem(SB._SEEN, seen0); } catch (e) {}
+      if (FM.home && !hadHome && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
     }
   });
 

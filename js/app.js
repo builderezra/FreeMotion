@@ -857,6 +857,7 @@ window.FM = window.FM || {};
 
   FM.syncSelectionChrome = function () {
     const n = FM.selectionIds ? FM.selectionIds().length : 0;
+    if (FM._syncViewRail) FM._syncViewRail();   // the Layers button's greyed state follows the selection (queue 926)
     if (n === 0 && FM.selectMode) FM.selectMode = false;   // select-mode ends when the selection empties
     const selOwns = !!FM.selectMode || n >= 2;             // the SELECTION owns the bar, not the project
     // m-editing is phone-only: it drives --head-w and the docked sheet, and the rules that read it are
@@ -2481,6 +2482,17 @@ window.FM = window.FM || {};
        sliding on screen. js/timeline.js publishes where the row currently SITS as `FM.dragAddAt`, on
        the same lifetime as `FM.dragLayerId`, and this prefers it while it exists. Reading it rather
        than writing addAt is what keeps a cancelled drag from leaving a half-applied index behind. */
+    /* ⚠️ WITH A LAYER IN HAND, THE SWITCH IS THAT LAYER'S LEVEL (queue 924 — his fifth report). Ezra: "When you
+       drag any layer, it should, the level of where the switch is should resemble where that layer is in the
+       project. And also it should update live." Everything above this comment made the switch follow the ADD
+       ROW during a layer drag, and the add row only moves when the layer crosses it — so for most of a drag the
+       switch sat still, and each "fix" measured the add row honestly and missed what he meant. The held layer's
+       level (js/timeline.js publishes the carried block's top as the drop would leave it, on every pointermove) over the
+       places a block that size can sit: top of the project 0, bottom 1, stepping a slot at a time. */
+    if (FM.dragLayerId && typeof FM.dragLayerAt === 'number' && FM.dragLayerAt >= 0) {
+      const slots = n - Math.max(1, FM.dragLayerSpan | 0);   // a block of k layers can sit in n − k + 1 places
+      return slots > 0 ? Math.max(0, Math.min(1, FM.dragLayerAt / slots)) : 0;
+    }
     const live = (typeof FM.dragAddAt === 'number') ? FM.dragAddAt
                : (FM.clampAddAt ? FM.clampAddAt() : FM.addAt);
     return Math.max(0, Math.min(1, live / n));
@@ -2507,7 +2519,10 @@ window.FM = window.FM || {};
       b.classList.remove('sw-dragging');
       b.style.removeProperty('--sw-colour');
     }
-    b.title = p <= 0.001 ? 'Add row is at the TOP — tap to send it to the bottom'
+    b.title = dragged ? (p <= 0.001 ? 'The layer you are holding is at the TOP — tap to throw it to the bottom'
+                         : p >= 0.999 ? 'The layer you are holding is at the BOTTOM — tap to throw it to the top'
+                         : 'The layer you are holding is ' + Math.round(p * 100) + '% down — tap to throw it to the far end')
+            : p <= 0.001 ? 'Add row is at the TOP — tap to send it to the bottom'
             : p >= 0.999 ? 'Add row is at the BOTTOM — tap to send it to the top'
             : 'Add row is ' + Math.round(p * 100) + '% down — tap to send it to the far end';
   }
@@ -2521,10 +2536,22 @@ window.FM = window.FM || {};
     const dragId = FM.dragLayerId;
     const layers = (FM.scene && FM.scene.layers) || [];
     const i = dragId ? layers.findIndex(l => l.id === dragId) : -1;
-    if (i >= 0 && n > 1) {
-      const toTop = (i / n) >= 0.5;                     // nearer the bottom → throw it to the top
-      const target = toTop ? layers[0] : null;          // beforeId null = the very end
-      if (FM.moveLayers) FM.moveLayers([dragId], toTop ? target.id : null);
+    if (i >= 0) {
+      /* Decided from what the switch SHOWS — the held block's live level (queue 924) — not from where it started: a
+         layer carried from the top to the bottom and then thrown goes back up, the way the knob says.
+         ⚠️ AND THE THROW ENDS THE DRAG (queue 924 review). It used to leave the ≡ gesture running, so its release re-applied
+         the finger's slot and put the layer straight back, and until then the rows, the canvas and the knob all described
+         the finger. Now the gesture is abandoned first (no drop), then the whole carried block — a multi-selection, a
+         group and its members — goes to the far end, and the switch returns to the add row. */
+      const ids = (FM.dragLayerIds && FM.dragLayerIds.length) ? FM.dragLayerIds.slice() : [dragId];
+      const set = {}; ids.forEach(id => { set[id] = 1; });
+      const rest = layers.filter(l => !set[l.id]);
+      if (!rest.length) return;                          // nothing to throw it past (one layer, or the whole project held)
+      // what the switch shows while a live drag has published a level; the layer's own index otherwise
+      const p = (typeof FM.dragLayerAt === 'number') ? addSwitchProportion() : i / Math.max(1, n - 1);
+      const toTop = p >= 0.5;                            // nearer the bottom → throw it to the top
+      if (FM.timeline && FM.timeline.abandonReorder) FM.timeline.abandonReorder();
+      if (FM.moveLayers) FM.moveLayers(ids, toTop ? rest[0].id : null);   // beforeId null = the very end
       if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
       if (FM.history) FM.history.commit();
       syncAddSwitch();
@@ -6088,7 +6115,16 @@ window.FM = window.FM || {};
       try { await FM.addSampleClip(); } catch (e) { FM.reportError('adding the sample clip', e, 'The sample clip could not be built on this device.'); }
       sampleBtn.disabled = false; sampleBtn.textContent = 'Sample clip';
     });
-    document.getElementById('btn-export').addEventListener('click', showExportDialog);
+    /* THE BUTTON OPENS AND CLOSES IT (queue 925). Ezra, on PC: "the export menu doesn't go away when you click on it
+       again it just keeps reopening like the button for it should make it close and open not just open". The card pops
+       out of the button and `popFrom` lifts the button above the dialog's scrim so the two read as one object — which
+       also means the second click reaches the BUTTON, not the scrim, and it only ever knew how to open. Same rule as the
+       notepad's button (queue 762: tap again to close). */
+    document.getElementById('btn-export').addEventListener('click', () => {
+      const dlg = document.getElementById('export-dialog');
+      if (dlg && !dlg.classList.contains('hidden')) { hideExportDialog(); return; }
+      showExportDialog();
+    });
     ['btn-notes', 'm-notes'].forEach(id => {   // the desktop bar's and the phone's (queue 171) — same panel, same handler
       const b = document.getElementById(id);
       if (b) b.addEventListener('click', () => { if (FM.notepad) (FM.notepad.toggle || FM.notepad.open)(); });   // queue 762: tap again to close
@@ -6585,6 +6621,18 @@ window.FM = window.FM || {};
       }
       FM.requestRender();
     };
+    /* GREYED WHEN IT CANNOT DO ANYTHING (queue 926). Ezra: "the layers button, should be grayed out when … you don't have a
+       layer selected … because it doesn't actually do anything." It isolates ONE clip, so it is live with exactly one
+       selected and greyed otherwise. Not `disabled`: a tap on it still says why ("Select a clip first") rather than
+       doing nothing at all — the look says it is unavailable, the tap says what would make it available. */
+    FM._syncViewRail = function () {
+      if (vbLayers) {
+        const one = (FM.selectionIds ? FM.selectionIds() : []).length === 1;
+        vbLayers.classList.toggle('vb-na', !one);
+        vbLayers.setAttribute('aria-disabled', one ? 'false' : 'true');
+      }
+      if (FM._syncCameraBtn) FM._syncCameraBtn();
+    };
     if (vbLayers) vbLayers.addEventListener('click', () => {
       const ids = FM.selectionIds ? FM.selectionIds() : [];
       if (ids.length !== 1) { if (FM.toast) FM.toast(ids.length ? 'Select a single clip to isolate it' : 'Select a clip first', 1600); return; }
@@ -6628,18 +6676,23 @@ window.FM = window.FM || {};
         vbCam.classList.toggle('cam-off', !!c && c.visible === false);
         vbCam.title = !c ? 'Add a camera' : (c.visible === false ? 'Camera hidden — tap to show · hold for its settings' : 'Camera on — tap to hide · hold for its settings');
       };
+      /* ONE STATE, TWO SWITCHES (queue 926). Ezra: "the camera button inside of the view menu it grays out when you turn it
+         on and off but as soon as you turn it on and off through the timeline … the little eyeball button on the timeline
+         … those two things don't work together … they clash." Both switches already write the same `camera.visible`;
+         the clash was that this button only re-read it when IT was pressed. It re-reads on every timeline rebuild now
+         (FM._syncViewRail), which every route to a hidden or shown camera ends in — the eye, undo, a remote edit. */
       FM._syncCameraBtn = syncCam;
       syncCam();
       /* Hold opens the settings. A timer rather than a long-press library, and the click that ENDS the
          hold has to be swallowed or the release would also toggle visibility — the same guard the
          timecode's hold uses two hundred lines up. */
-      let camLp = null, camLpFired = false, camDown = null;
+      let camLp = null, camLpFired = 0, camDown = null;
       vbCam.addEventListener('pointerdown', (e) => {
         if (e.pointerType === 'mouse' && e.button !== 0) return;
-        camDown = { x: e.clientX, y: e.clientY }; camLpFired = false;
+        camDown = { x: e.clientX, y: e.clientY }; camLpFired = 0;
         clearTimeout(camLp);
         camLp = setTimeout(() => {
-          camLp = null; camLpFired = true;
+          camLp = null; camLpFired = (typeof performance !== 'undefined' ? performance.now() : Date.now());
           const c = cam();
           if (!c) { if (FM.toast) FM.toast('No camera yet — tap to add one'); return; }
           FM.selectLayer(c.id);
@@ -6652,7 +6705,12 @@ window.FM = window.FM || {};
       vbCam.addEventListener('pointerup', camEnd);
       vbCam.addEventListener('pointercancel', camEnd);
       vbCam.addEventListener('click', () => {
-        if (camLpFired) { camLpFired = false; return; }   // the hold already answered this press
+        /* The hold already answered THIS press — but only a click that follows it closely is that press (queue 926). A flag
+           left standing forever swallowed the next click that came without a pointerdown of its own to reset it — a
+           keyboard Enter, or a click after a hold whose release landed off the button. */
+        const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+        if (camLpFired && now - camLpFired < 1000) { camLpFired = 0; return; }
+        camLpFired = 0;
         const c = cam();
         if (!c) { if (FM.addCameraLayer) FM.addCameraLayer(); }
         else {

@@ -49,6 +49,48 @@ window.FM = window.FM || {};
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-home'] });
     if (document.body) mo.observe(document.body, { attributes: true, attributeFilter: ['class'] });
   }
+  /* ═══ AN INSTALL FROM BEFORE THE FIX SAYS SO ITSELF (queue 920, 24 Sep) ═══════════════════════════════════════════
+   * He reported the blur again at v16.90 — "The fade at the top is still an issue" — and his screenshot answers why: the
+   * status bar is drawn OVER the page. With v16.78's `default` style a fresh install starts the page BELOW an opaque status
+   * bar, so nothing can be under it. Drawn over the page means this copy was added to his Home Screen while the page still
+   * asked for `black-translucent`, and iOS reads that ONCE, at install — every later release, the fix included, is ignored
+   * by it. Research (24 Sep) agrees there is no CSS or meta switch for the iOS 26 edge blur; the only lever is not putting
+   * the page under the status bar, which only a fresh install does.
+   * So the app detects the condition — installed, AND the page's top sits under the status bar (env(safe-area-inset-top)
+   * above zero) — and tells him once, with the steps and a Back up button, instead of a note in a file he may not open.
+   * A fresh install measures 0 and never sees it; a browser tab is not "installed" and never sees it either. */
+  function insetTop() {
+    const d = document.createElement('div');
+    d.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:env(safe-area-inset-top,0px);visibility:hidden;pointer-events:none';
+    (document.body || document.documentElement).appendChild(d);
+    const h = d.getBoundingClientRect().height;
+    d.remove();
+    return h;
+  }
+  function installed() { return navigator.standalone === true || !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches); }
+  function staleInstall() {
+    const t = FM.statusBar && FM.statusBar._fake;   // suite seam: { installed, inset }
+    return t ? (!!t.installed && t.inset > 12) : (installed() && insetTop() > 12);
+  }
+  const SEEN = 'fm.sb920.told';
+  const STEPS = 'Your iPhone draws a blur over the top of FreeMotion because this copy was added to your Home Screen before the fix. iOS only applies the fix to a fresh install:\n\n'
+    + '1. Back up (the button below) — removing the app deletes what is stored in it.\n'
+    + '2. Remove FreeMotion from your Home Screen.\n'
+    + '3. In Safari open builderezra.github.io/FreeMotion → Share → Add to Home Screen.\n'
+    + '4. Open it → Settings → Restore from a backup.';
+  async function explain(force) {
+    if (!FM.ask) return;
+    if (!force) { try { if (localStorage.getItem(SEEN)) return; localStorage.setItem(SEEN, '1'); } catch (e) {} }
+    const go = await FM.ask({ title: 'Remove the blur at the top', message: STEPS, ok: 'Back up now', cancel: 'Not now' });
+    if (go && FM.backupEverything) FM.backupEverything();
+  }
+  function maybeTell() {
+    if (!staleInstall()) return;
+    const home = document.getElementById('home-screen');
+    if (!home || home.classList.contains('hidden')) return;   // said on Home, not over a project he has open
+    explain(false);
+  }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
-  FM.statusBar = { colours: COLOURS, sync, want };
+  setTimeout(maybeTell, 2500);   // after the intro and the Home cards have settled
+  FM.statusBar = { colours: COLOURS, sync, want, staleInstall: staleInstall, explain: explain, _maybeTell: maybeTell, _SEEN: SEEN };
 })(window.FM);

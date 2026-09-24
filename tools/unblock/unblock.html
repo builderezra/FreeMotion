@@ -216,13 +216,14 @@
 
     <div class="card" data-id="920" data-kind="say">
       <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#920</span> Is the faded bar at the top gone?</h3>
-        <p>Since iOS 26 an installed web app that draws under the status bar gets Apple&rsquo;s own fade over the top of the
-          screen &mdash; white over a light screen, black over a dark one. FreeMotion now sits below the status bar instead,
-          which iOS only reads <b>when the app is added to the Home Screen</b>. So: remove FreeMotion from your Home Screen,
-          add it again from Safari, and say whether the fade is gone.</p>
+        <h3><span class="mono" style="color:var(--faint)">#920</span> The blur at the top — it needs a fresh install</h3>
+        <p>Your 24 Sep screenshot shows the status bar drawn <b>over</b> the page, which only an install from before the fix can do:
+          iOS reads that setting once, when the app is added. Since v16.91 the app shows you the steps itself on Home, with a
+          Back up button: <b>back up</b> (removing the app deletes what it stores) → <b>remove FreeMotion</b> from your Home Screen →
+          in Safari open builderezra.github.io/FreeMotion → <b>Share → Add to Home Screen</b> → open it → <b>Settings → Restore</b>.
+          Then say whether the blur is gone.</p>
       </div>
-      <div class="says"><textarea class="say" rows="2" placeholder="gone / still there / something else"></textarea></div>
+      <div class="says"><textarea class="say" rows="2" placeholder="gone / still there after reinstalling / something else"></textarea></div>
     </div>
 
     <div class="card" data-id="917e" data-item="917 (export rows)" data-kind="pick">

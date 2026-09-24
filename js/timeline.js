@@ -348,6 +348,7 @@ window.FM = window.FM || {};
      indistinguishable from the timeline being laggy. Module-level because the gate cannot see a closure. */
   let headPan = false;
   let reorderActive = false;       // a ≡ reorder drag is in flight (its listeners live on the captured handle — a rebuild would kill it)
+  let abandonActiveReorder = null;   // the live ≡ drag's own abort — the switch's throw ends the gesture through it (queue 924)
   /* ⚠️ A GESTURE FLAG THAT OUTLIVES ITS GESTURE BREAKS THE TIMELINE PERMANENTLY, AND IT DID (queue 541).
      Ezra: "i broke the timeline somehow, fix this issue" — his PC screenshot shows layer rows drawn on
      top of one another with the ≡ handles piled up in a stack, and it does not recover.
@@ -460,7 +461,8 @@ window.FM = window.FM || {};
   function recoverStuckGesture() {
     restoreGestures();   // queue 796: the clip (and its group), trim, keyframes and slip go BACK where they started — not left where the lost pointer dropped them
     reorderActive = false; kfDrag = null; trimDrag = null; clipMove = null; slipDrag = null;
-    FM._dragOrderIds = null; FM.dragLayerId = null; FM.dragAddAt = null;
+    FM._dragOrderIds = null; FM.dragLayerId = null; FM.dragAddAt = null; FM.dragLayerAt = null; FM.dragLayerIds = null; FM.dragLayerSpan = null;
+    abandonActiveReorder = null;
     /* …AND THE THINGS THE GESTURE PUT ON SCREEN (queue 751, hunt MEDIUM #34). This recovers a drag whose pointer was lost,
        but it used to clear only the STATE, so a recovered trim left its HUD and snap line painted and the sheet suppressed
        — the variables were tidy and the screen was not. Line 299 already says the suppression must lift "by every route,
@@ -1570,6 +1572,13 @@ window.FM = window.FM || {};
          layer it will jump that layer to the top or bottom." Published rather than passed, because the
          switch lives in app.js and has no other way to know a drag is happening. */
       FM.dragLayerId = layer.id;
+      /* …and WHERE it is (queue 924). Ezra, the fifth time: "When you drag any layer … the level of where the
+         switch is should resemble where that layer is in the project. And also it should update live."
+         Every earlier fix (#438, #533, #570, #865) made the switch follow the ADD ROW more faithfully during a
+         layer drag — and the add row only moves when the dragged layer CROSSES it, so for most of a drag the
+         switch sat still. He was never talking about the add row: while a layer is in hand, the switch shows
+         THAT LAYER's level. `FM.dragLayerAt` is where the held BLOCK's top would sit in the project if he let go —
+         set just below, once the block is known, and moved by layout() on every pointermove. */
       if (FM.syncAddSwitch) FM.syncAddSwitch();
 
       // if the grabbed layer is inside the current multi-selection, move the whole set together
@@ -1587,6 +1596,14 @@ window.FM = window.FM || {};
         groupIds = expand;
       }
       const groupSet = {}; groupIds.forEach(id => { groupSet[id] = 1; });
+      /* THE BLOCK, NOT THE ROW (queue 924 review). A multi-selection or a group carries layers with it — some of them
+         with no row on screen (a collapsed group's members) — so the switch shows where the whole carried block sits:
+         its top index over the slots it could occupy (n − its size), 0 at the top of the project and 1 at the bottom.
+         `FM.dragLayerIds` is the block itself, so the switch can throw all of it rather than tear one layer out. */
+      FM.dragLayerIds = groupIds.slice();
+      FM.dragLayerSpan = Math.max(1, FM.scene.layers.filter(l => groupSet[l.id]).length);
+      FM.dragLayerAt = FM.scene.layers.findIndex(l => groupSet[l.id]);
+      if (FM.syncAddSwitch) FM.syncAddSwitch();
 
       const startY = e.clientY, startScroll = timelineEl ? timelineEl.scrollTop : 0;
       const EDGE = 44;   // px zone at the list's top/bottom that arms auto-scroll during a reorder drag
@@ -1805,6 +1822,17 @@ window.FM = window.FM || {};
         }
         FM._dragAddAtFromRow = ai >= 0;   // for the suite: which of the two branches produced this number
         FM.dragAddAt = dropAddAt;
+        /* THE HELD BLOCK'S OWN LEVEL (queue 924), read off the DROP TARGET itself — `moveLayers(groupIds, dropBeforeId)`
+           puts the block's top exactly where `dropBeforeId` sits among the layers that are not moving, and at the end
+           when there is none. So the switch and the drop are one number and cannot disagree. It was first computed as
+           `baseAbove(g) + pi`, and the review found three places that number was not where the layer lands: inside
+           Edit Group the bottom slot is the bottom of the GROUP (`bottomBefore`), not of the project; `pi` counts rows
+           on screen while the block can carry members that have none; and a group reported its own row, not its block.
+           It steps a slot at a time, which is what he picked in #570 ("stepped"). */
+        if (dropBeforeId !== undefined) {
+          const land = dropBeforeId === null ? -1 : restOrder.indexOf(dropBeforeId);
+          FM.dragLayerAt = land >= 0 ? land : restOrder.length;
+        }
         if (FM.syncAddSwitch) FM.syncAddSwitch();
         if (g !== lastGap) {
           lastGap = g;
@@ -1878,6 +1906,8 @@ window.FM = window.FM || {};
         if (hadPreview && FM.requestRender) FM.requestRender();
         FM.dragLayerId = null;                                  // the switch goes back to its own colour (queue 416)
         FM.dragAddAt = null;                                    // …and back to the real index (queue 438)
+        FM.dragLayerAt = null; FM.dragLayerIds = null; FM.dragLayerSpan = null;   // …and to the add row's level, not the layer's (queue 924)
+        abandonActiveReorder = null;
         if (FM.syncAddSwitch) FM.syncAddSwitch();
         // clear via a fresh query too — a mid-drag rebuild can leave our stored refs detached
         // `.tl-addrow` too — it is a slot in the model now (queue 357), so it also carries row-part and
@@ -1921,6 +1951,15 @@ window.FM = window.FM || {};
         }
       };
       const abort = () => { unlisten(); cleanup(); };   // pointercancel (browser stole the gesture) = never apply the move
+      /* A THROW IS A DROP (queue 924 review). Pressing the switch while holding a layer throws the block to the far end;
+         the gesture then has to END, or its own release re-applies the finger's slot and puts the layer straight back —
+         and until then the rows, the canvas preview and the knob all describe the finger, not the throw. */
+      /* …and it FORGETS THIS FINGER (queue 924 review, caught by the suite's leaked-gesture check with a real touch): the
+         throw rebuilds the rows, the ≡ handle holding the touch leaves the document, and a touch's later events belong to
+         the element it started on — so the lift is delivered to a detached node and never reaches window's release
+         listener. The gesture is over by our own hand; the pointer must stop vouching for a finger that is still "down". */
+      const pid = e.pointerId;
+      abandonActiveReorder = () => { heldPointers.delete(pid); pointers.delete(pid); abort(); };   // both trackers: the held-pointer map AND the pinch tracker
       h.addEventListener('pointermove', move); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', abort);
     });
     return h;
@@ -3017,7 +3056,7 @@ window.FM = window.FM || {};
       if (step) {
         scrollAcc -= step;
         const b = timelineEl.scrollTop; timelineEl.scrollTop = b + step;
-        if (timelineEl.scrollTop !== b) { wantAt = motion.boundaryAt(y); motion.to(wantAt, y - y0); }
+        if (timelineEl.scrollTop !== b) { wantAt = motion.boundaryAt(y); motion.to(wantAt, y - y0); FM.dragAddAt = wantAt; if (FM.syncAddSwitch) FM.syncAddSwitch(); }
       }
       autoRAF = requestAnimationFrame(autoScroll);
     }
@@ -3032,6 +3071,12 @@ window.FM = window.FM || {};
       e.preventDefault();
       wantAt = motion.boundaryAt(e.clientY);
       motion.to(wantAt, e.clientY - y0);
+      /* THE SWITCH MOVES WITH THE LINE, NOT AFTER IT (queue 924, clause 1). The phone's grip has published
+         where the row is on every move since queue 438; this — the PC line, the other way to drag the add row —
+         never did, so on a PC the switch sat still for the whole drag and jumped on release. Same channel, same
+         rule, cleared in finish(). */
+      FM.dragAddAt = wantAt;
+      if (FM.syncAddSwitch) FM.syncAddSwitch();
       if (timelineEl) {
         const vr = timelineEl.getBoundingClientRect();
         if ((e.clientY < vr.top + EDGE || e.clientY > vr.bottom - EDGE) && !autoRAF) { lastT = 0; autoRAF = requestAnimationFrame(autoScroll); }
@@ -3041,6 +3086,7 @@ window.FM = window.FM || {};
       addDragging = false;
       row.classList.remove('tl-addrow-dragging');
       FM.addAt = wantAt;
+      FM.dragAddAt = null;                        // the real index is authoritative again (queue 924)
       if (FM.syncAddSwitch) FM.syncAddSwitch();   // the switch leans with the DRAG too (queue 373 clause 6) — these two paths set addAt directly, not through moveAddMarker
       buildTracks();          // the ONE rebuild of the whole gesture, after the marker has landed
     };
@@ -3121,13 +3167,22 @@ window.FM = window.FM || {};
    * is the wrong one for every frame after it, and the gap would be a third of the marker.
    */
   function addDragMotion(rowEl) {
+    /* ⚠️ IN CONTENT COORDINATES — the list's own, not the screen's (queue 924 review; the fault is #411's). Every position
+       here was a viewport rectangle snapshotted at grab time, and the PC line's auto-scroll then scrolled the list under
+       a still pointer and asked `boundaryAt` the same screen y against the same stale rectangles — so it answered the
+       same slot every frame: the switch froze, the drop landed on the row that was under the pointer BEFORE the scroll,
+       and the line drifted off the pointer. The layer reorder has worked in content coordinates for exactly this reason
+       (acquire: "viewport top + scrollTop, so it stays valid through auto-scroll"). Same here: snapshot + scrollTop, and
+       every query adds the scroll as it is NOW. With no scroll the numbers are the old ones exactly. */
+    const scNow = () => (timelineEl ? timelineEl.scrollTop : 0);
+    const sc0 = scNow();
     const rows = [].slice.call(tracksEl.querySelectorAll('.track-row')).map(r => {
       const hd = r.querySelector('.track-head');
       const i = hd ? parseInt(hd.dataset.idx, 10) : NaN;
       const b = r.getBoundingClientRect();
-      return { el: r, idx: isFinite(i) ? i : FM.scene.layers.length, top: b.top, bottom: b.bottom };
+      return { el: r, idx: isFinite(i) ? i : FM.scene.layers.length, top: b.top + sc0, bottom: b.bottom + sc0 };
     });
-    const markerTop = rowEl.getBoundingClientRect().top;
+    const markerTop = rowEl.getBoundingClientRect().top + sc0;
     const slot0 = FM.clampAddAt ? FM.clampAddAt() : (FM.addAt || 0);
     const markerH = () => rowEl.getBoundingClientRect().height;
     const shiftFor = (at, idx, h) => {
@@ -3158,8 +3213,9 @@ window.FM = window.FM || {};
     const clear = () => { rows.forEach(r => { r.el.classList.remove('row-part'); r.el.style.transform = ''; }); rowEl.style.transform = ''; };
     return {
       any: rows.length > 0,
-      boundaryAt(y) {
+      boundaryAt(yv) {
         if (!rows.length) return 0;
+        const y = yv + scNow();   // the pointer's SCREEN y, placed in the list as it is scrolled now
         for (let k = 0; k < rows.length; k++) {
           if (y < rows[k].top + (rows[k].bottom - rows[k].top) / 2) return rows[k].idx;
           if (y < rows[k].bottom) return rows[k].idx + 1;
@@ -3169,12 +3225,12 @@ window.FM = window.FM || {};
       begin() { rows.forEach(r => r.el.classList.add('row-part')); },
       to(at, dy) {
         const h = markerH();
-        rowEl.style.transform = 'translateY(' + Math.round(dy) + 'px)';
+        rowEl.style.transform = 'translateY(' + Math.round(dy + (scNow() - sc0)) + 'px)';   // the list scrolled under the pointer: follow it
         rows.forEach(r => { r.el.style.transform = 'translateY(' + shiftFor(at, r.idx, h) + 'px)'; });
       },
       // Exposed so a test can compare the settle TARGET with where the marker actually comes to rest
       // after the rebuild. Those two must be the same number; that they were not is queue 678.
-      targetTopFor(at) { return gapTop(at, markerH()); },
+      targetTopFor(at) { return gapTop(at, markerH()) - scNow(); },   // on SCREEN, as the test measures the marker
       settle(at, done) {
         rowEl.classList.add('tl-addrow-settling');
         rowEl.style.transform = 'translateY(' + Math.round(gapTop(at, markerH()) - markerTop) + 'px)';
@@ -3381,6 +3437,10 @@ window.FM = window.FM || {};
       })[0];
       tracksEl.insertBefore(buildAddRow(), before || null);
     }
+    /* The view rail's Camera and Layers buttons describe the same layers this just drew (queue 926): every change a
+       person can see — the eye, undo, a remote edit, the camera button itself — ends in a rebuild, so this is the one
+       place their state cannot be skipped. */
+    if (FM._syncViewRail) FM._syncViewRail();
   }
 
   // ---- inertial scrubbing: a flick keeps gliding after you let go, decelerating to a stop ----
@@ -4108,6 +4168,9 @@ window.FM = window.FM || {};
   }
 
   FM.timeline = {
+    /* End the live ≡ drag WITHOUT its drop (queue 924 review) — for the switch's throw, which is a drop of its own. A
+       no-op when nothing is being dragged. */
+    abandonReorder() { const f = abandonActiveReorder; if (f) f(); return !!f; },
     // Whether a trim drag is live. Read-only seam: the hold guard (queue 336) is only meaningful if a
     // test can tell "a trim started" from "nothing happened", and without this the mouse half of that
     // test can only assume it worked — which is not a test.
@@ -4374,6 +4437,13 @@ window.FM = window.FM || {};
          * behaviour byte for byte. The PC line (.tl-addrow--line) detects its own tap on window pointerup, which
          * capture cannot steal, so it is left alone too. */
         if (e.pointerType === 'mouse' && e.target.closest('.tl-addrow:not(.tl-addrow--line)')) return;
+        /* ⚠️ AND A PRESS ON THE PC ADD LINE IS THE LINE'S, WHATEVER POINTER (queue 924 review). Left to the scrub, a drag of
+           the line ALSO started the timeline's vertical grab-pan, which sets scrollTop = start − dy on every move — so
+           dragging the line down panned the list up, and each move threw away whatever the line's own edge auto-scroll
+           had scrolled (measured: 0 → 38px, then back to 8 on the next move, over and over, the drop stuck a row short).
+           The line has its own drag, its own edge scroll and its own tap (window pointerup, which capture cannot steal),
+           so the scrub has nothing to add here. */
+        if (e.target.closest('.tl-addrow--line')) return;
         onDown(e);
       });
       // right-click ruler → add / remove a marker
