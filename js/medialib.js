@@ -10,6 +10,11 @@
  * id (storage.js save()), so an entry just points at that key — a library of 200 clips costs a few
  * KB of index, not a second copy of every video. FM.projects.pruneOrphans() is taught to keep any
  * key the library references, so deleting the project that first imported a file doesn't evict it.
+ * ⚠️ That was true of the INDEX and not of reuse (queue 915 clause 5): every tap on a tile wrote the
+ * whole file again under the new layer's id — four copies of a photo used three times. His answer was
+ * "Yes, one copy (Recommended)". So the FIRST reuse of a tile writes one shared copy under 'lib:<mid>'
+ * and the tile is re-keyed to it; every clip made from the tile is stored as a pointer at it (storage.js,
+ * shareMedia / idbPutPointer). His ORIGINAL import is never touched — it stays a whole copy of its own.
  * Thumbnails are generated lazily on first display (after waiting for a real decoded frame —
  * see frameReady) and cached at 'libthumb2:<mid>'.
  */
@@ -35,6 +40,19 @@ window.FM = window.FM || {};
     if (!file) return '';
     return [file.name || '', file.size || 0, file.lastModified || 0].join('|');
   }
+  function isLib(k) { return typeof k === 'string' && k.indexOf('lib:') === 0; }
+  /* Point a tile at its shared copy — but only a tile that still names the record it was read from. One
+     removed or re-pointed meanwhile (Replace media drops the tiles keyed at the clip it replaces; Clear
+     forgets them) is left exactly as it is: the clip being added holds its own pointer either way. */
+  function rekey(mid, from, to) {
+    const list = readIndex(), me = list.find(x => x.mid === mid);
+    if (!me || me.key !== from || !isLib(to)) return false;
+    me.key = to;
+    writeIndex(list);
+    return true;
+  }
+  const inFlight = new Set();   // mids whose use() has not finished — a repeat tap on one is ignored (queue 915 phase B)
+  const PREPARING = 'Preparing…';
 
   FM.mediaLib = {
     // Newest first. Entries are NOT verified here (that would mean an IDB read per tile on every
@@ -46,13 +64,17 @@ window.FM = window.FM || {};
       if (!rec || !key || !rec.file) return null;
       const fp = fingerprint(rec.file);
       const list = readIndex();
-      const hit = list.find(e => e.fp === fp);
+      /* …or a clip made FROM a tile (queue 915 phase B): it points at that tile's shared copy, so it IS that
+         tile — a backfilled tile has no fingerprint to match, and reusing one used to leave a second tile. And
+         a tile made for a pointer clip is keyed at the SHARED copy, never at the layer's few-byte pointer. */
+      const shared = isLib(rec.ref) ? rec.ref : null;
+      const hit = list.find(e => e.fp === fp) || (shared ? list.find(e => e.key === shared) : null);
       if (hit) {
         // Already known — float it to the front, but DON'T repoint it at this import's blob. The
         // old anchor may live in a project the user is keeping; re-pointing it at a copy inside a
         // project they later delete would take the library entry down with it.
         hit.added = Date.now();
-        if (!hit.key) hit.key = key;
+        if (!hit.key) hit.key = shared || key;
         writeIndex([hit].concat(list.filter(e => e !== hit)));
         return hit.mid;
       }
@@ -81,7 +103,7 @@ window.FM = window.FM || {};
       const saysVideo = !saysAudio && (/^video\//i.test(ftype) || /\.(mp4|m4v|mov|webm|mkv|avi|3gp)$/i.test(fname));
       const isAud = (rec.kind || 'image') !== 'image' && !(rec.width > 0 && rec.height > 0) && !saysVideo;
       const entry = {
-        mid: newMid(), key: key, fp: fp,
+        mid: newMid(), key: shared || key, fp: fp,
         name: rec.file.name || (isAud ? 'Audio' : rec.kind === 'video' ? 'Video' : 'Photo'),
         kind: rec.kind || 'image',
         type: ftype,
@@ -115,22 +137,66 @@ window.FM = window.FM || {};
     },
 
     // Add this item to the timeline right now — the whole point of the library.
+    /* ═══ ONE STORED COPY (queue 915 clause 5, phase B) ══════════════════════════════════════════════
+     * The new clip is stored as a POINTER at the tile's one shared copy, 'lib:<mid>', written on the tile's
+     * FIRST reuse only. Each rule below answers a defect the review of the first attempt found
+     * (audits/915-5-review.json):
+     *  · The tile's file is read HERE, at the tap, and the shared copy is written from that — nothing looks
+     *    the tile up again afterwards. A Replace media that drops the tile mid-copy therefore cannot turn the
+     *    tap into a wrong "no longer stored"; the clip still lands, holding its own pointer.
+     *  · The open project is captured before the first await. A first reuse writes a whole file, which on a
+     *    phone takes seconds; if he opens another project meanwhile, the clip is NOT added — it never lands
+     *    in a project he did not tap in — and a toast says so.
+     *  · "Preparing…" shows while the shared copy is written, and a second tap on the same tile while the
+     *    first is still going is ignored (it used to add a second clip).
+     *  · His ORIGINAL import is never touched: it keeps its whole copy under its own layer id.
+     * A null from shareMedia is never an error: the clip is simply stored the old way, as a copy of its own. */
     async use(mid) {
       const e = readIndex().find(x => x.mid === mid);
       if (!e) return false;
-      const file = await this.getFile(mid);
-      if (!file) {   // the blob went away (project deleted before this shipped, storage cleared)
-        this.remove(mid);
-        if (FM.toast) FM.toast('That file is no longer stored — import it again');
-        return false;
-      }
+      if (inFlight.has(mid)) return false;
+      const st = FM.storage;
+      const openId = () => (st && st.openProjectId) ? st.openProjectId() : null;
+      const tappedIn = openId();
+      const moved = () => openId() !== tappedIn;
+      const gaveUp = () => { if (FM.toast) FM.toast('Not added — you switched projects', 4000); return false; };
+      inFlight.add(mid);
+      let preparing = false;
       try {
+        const rec = await st.readMedia(e.key);
+        if (!rec || !rec.file) {   // the blob went away (project deleted before this shipped, storage cleared)
+          const me = readIndex().find(x => x.mid === mid);
+          if (me && me.key === e.key) this.remove(mid);   // only a tile that still names the empty record
+          if (FM.toast) FM.toast('That file is no longer stored — import it again');
+          return false;
+        }
+        let file = rec.file, ref = null, fileKey = e.key;
+        if (isLib(e.key)) ref = e.key;                                        // already on its shared copy: a few bytes per reuse
+        else if (isLib(rec.ref)) { ref = fileKey = rec.ref; rekey(mid, e.key, rec.ref); }   // keyed at a clip that is itself a pointer
+        else if (st.shareMedia && (!e.fp || fingerprint(rec.file) === e.fp)) {
+          /* FIRST REUSE. (A fingerprint that no longer matches means the record under the tile's key is a
+             different file now — a Replace landed first — and that file is not this tile's to share.) */
+          preparing = true;
+          if (FM.toast) FM.toast(PREPARING, 0);
+          const sh = await st.shareMedia(mid, rec);
+          if (sh) { file = sh.file; ref = fileKey = sh.key; rekey(mid, e.key, sh.key); }
+        }
+        if (moved()) return gaveUp();
         const loaded = e.kind === 'image' ? await FM.loadImageFile(file) : await FM.loadVideoFile(file);
+        if (moved()) { try { if (loaded && loaded.url) URL.revokeObjectURL(loaded.url); } catch (x) {} return gaveUp(); }
+        if (ref) loaded.ref = ref;        // → storage.save writes a pointer, not the file again
+        loaded.fileKey = fileKey;         // → nothing deletes the record this clip's bytes came out of while it plays
         FM.addMediaLayer(loaded);
         return true;
       } catch (err) {
         if (FM.toast) FM.toast('Could not open that file');
         return false;
+      } finally {
+        inFlight.delete(mid);
+        if (preparing) {   // take "Preparing…" down — unless something has already said something else
+          const t = document.getElementById('toast');
+          if (t && t.textContent === PREPARING && FM.hideToast) FM.hideToast();
+        }
       }
     },
 
@@ -177,7 +243,8 @@ window.FM = window.FM || {};
       writeIndex(readIndex().filter(e => e.mid !== mid));
       memThumb.delete(mid);
       if (FM.storage && FM.storage.removeMedia) FM.storage.removeMedia(THUMB + mid);
-      // the blob itself is left alone — pruneOrphans collects it if no project still uses it
+      // the blob itself is left alone — pruneOrphans collects it if no project still uses it. A tile keyed at
+      // a shared 'lib:' copy leaves that copy behind for good: clips in any project point at it (queue 915).
     },
 
     // How much history is remembered, split the way the Add menu splits it: songs are one tab, clips

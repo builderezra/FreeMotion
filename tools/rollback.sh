@@ -13,7 +13,12 @@
 #   tools/rollback.sh 35c1fe7         …or by commit id, if a version is not what you have
 #
 # ⚠️ WHAT IT DOES NOT TOUCH: HIS PROJECTS. They live in localStorage and IndexedDB on the device, not in
-# this repo — a rollback changes the app's code, never his work. He cannot lose a project this way.
+# this repo — a rollback changes the app's code, never his work.
+# ⚠️ …BUT AN OLD ENOUGH BUILD CANNOT READ ALL OF HIS WORK (queue 915 clause 5). A clip added more than once
+# from Add → Media is stored ONCE, as a shared copy every reuse points at. v16.80 was the first release that
+# can read one; anything older shows those clips BLANK, leaves them out of backups/templates/elements, and
+# its boot sweep can delete the shared copy for good once the clip's Media tile is gone. This script says
+# so, plainly, BEFORE it asks to publish — `tools/rollback.sh <version> --check` prints only that verdict.
 #
 # ⚠️ IT NEVER REWRITES HISTORY. It makes a NEW commit that restores the old files, so the record of what
 # happened stays intact and there is no force-push. Roll back the rollback the same way if need be.
@@ -48,6 +53,32 @@ fi
 SUBJ="$(git log -1 --format='%s' "$HASH" | cut -c1-90)"
 echo "→ putting the app back to:  $SUBJ"
 echo "   (commit $HASH)"
+
+# ── A BUILD OLDER THAN v16.80 CANNOT READ A REUSED CLIP (queue 915 clause 5) ─────────────────────
+# Said BEFORE the question below, because after the publish a warning is only a post-mortem. The version
+# comes from the target's OWN index.html label — a rollback commit carries the old label, so this is right
+# even when the target is itself an earlier rollback — and ancestry is the fallback for a commit with no label.
+READER_V=16.80
+target_label="$(git show "$HASH:index.html" 2>/dev/null | grep -o '>v[0-9][0-9]*\.[0-9][0-9]*<' | head -1 | tr -d '><v')"
+PREDATES=0
+if [ -n "$target_label" ]; then
+  PREDATES="$(awk -v a="$target_label" -v b="$READER_V" 'BEGIN { split(a, x, "."); split(b, y, "."); print ((x[1]+0 < y[1]+0) || (x[1]+0 == y[1]+0 && x[2]+0 < y[2]+0)) ? 1 : 0 }')"
+else
+  READER_HASH="$(git log --format='%H %s' | grep -m1 -E "^[0-9a-f]+ v${READER_V}( |—|\$)" | cut -d' ' -f1)"
+  if [ -z "$READER_HASH" ] || ! git merge-base --is-ancestor "$READER_HASH" "$HASH" 2>/dev/null; then PREDATES=1; fi
+fi
+if [ "$PREDATES" = 1 ]; then
+  echo
+  echo "⚠️  WARNING — ${target_label:+v$target_label }IS OLDER THAN v$READER_V, AND CANNOT READ CLIPS YOU REUSED FROM ADD → MEDIA."
+  echo "   Since then a clip added more than once from the Media tiles is stored once and shared. On this older"
+  echo "   build every one of those clips shows BLANK, backups/templates/elements made there leave them out, and"
+  echo "   removing or clearing that clip's Media tile while on it can delete the shared copy FOR GOOD."
+  echo "   Your original imports are safe. Unless you are sure you never reused a clip, pick v$READER_V or later."
+  echo
+elif [ "${2:-}" = "--check" ]; then
+  echo "✅ ${target_label:+v$target_label }can read clips reused from Add → Media (v$READER_V or later)."
+fi
+[ "${2:-}" = "--check" ] && exit 0
 
 # ── ASK BEFORE PUBLISHING, BECAUSE THE NEXT STEP IS PUBLIC ───────────────────────────────────────
 # One argument and this commits AND pushes to the URL his installed app updates from. A mistyped version
@@ -139,7 +170,8 @@ git commit -q -m "ROLLBACK to $SUBJ
 
 Put the app's files back to $HASH. Nothing was deleted from the history — this is a new
 commit that restores the old content, so the rollback itself can be rolled back.
-His projects are untouched: they live in localStorage / IndexedDB on the device, not here." || { echo "❌ commit failed."; exit 1; }
+His projects are untouched: they live in localStorage / IndexedDB on the device, not here.
+(A build older than v16.80 cannot read clips reused from Add → Media — rollback.sh warns before publishing.)" || { echo "❌ commit failed."; exit 1; }
 
 # ⚠️ A FRESH CLONE HAS NO `ssh` REMOTE — it is a hand-added remote on his Mac, and remotes are not
 # committed. On a new machine this script used to restore the files, commit, then die with "'ssh' does
