@@ -147,8 +147,10 @@ window.FM = window.FM || {};
   /* queue 915 phase B: WHICH STORED KEY A LIVE RECORD'S BYTES WERE READ OUT OF. A Blob read from IndexedDB
      is backed by that record, and whether it stays readable once the record is deleted is not something
      this app has ever measured on WebKit — so nothing deletes a record while another copy still plays
-     from it. `fileKey` is stamped wherever a Blob is read from the store (hydrate, a tile reuse) and
-     carried by every copy made from it (split, duplicate, copy/paste — app.js). */
+     from it. `fileKey` is stamped wherever a Blob is read from the store for a clip — hydrate, a tile
+     reuse, and a template or element dropped into a project (hydratePack, review round 2: deleting the
+     element with its clip still on screen was not refused) — and carried by every copy made from it
+     (split, duplicate, copy/paste — app.js). */
   function heldByAnother(key) {
     if (typeof key !== 'string' || !key) return false;
     try {
@@ -1757,7 +1759,12 @@ window.FM = window.FM || {};
     return { layers: JSON.parse(JSON.stringify(layers, FM.jsonReplacer)), media: media };
   }
   // Register a pack's media for freshly re-id'd layers: in-memory registry + IDB (so it autosaves).
-  async function hydratePack(layers, media, idMap) {
+  /* `packKey` ('tpl:<id>' / 'elem:<id>') is the record the pack's Blobs were read out of. Every clip made here
+     plays from one until a reopen reads it back from its own record, so it is stamped as the clip's fileKey
+     (queue 915 phase B, review round 2): deleting that template or element while such a clip — or a split,
+     duplicate or paste of it — is on screen then leaves the pack record for the sweep to collect later,
+     instead of pulling the file out from under the clip. */
+  async function hydratePack(layers, media, idMap, packKey) {
     FM._mediaBusy = (FM._mediaBusy || 0) + 1;   // pruneOrphans stands down while packs hydrate
     let db = null;
     try { db = await openDB(); } catch (e) {}
@@ -1773,6 +1780,7 @@ window.FM = window.FM || {};
       try { if (db) await idbPut(db, newLayerId, { file: md.file, kind: md.kind }); } catch (e) {}
       try {
         const rec = md.kind === 'video' ? await FM.loadVideoFile(md.file) : await FM.loadImageFile(md.file);
+        if (typeof packKey === 'string' && packKey) rec.fileKey = packKey;
         FM.media.set(newLayerId, rec);
         if (rec.kind === 'video' && rec.el) rec.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); });
         if (FM.wireVideoRepaint) FM.wireVideoRepaint(rec);
@@ -2711,7 +2719,7 @@ window.FM = window.FM || {};
          is the way BACK, and there was nothing recording where the project came from to go back to.
          Kept on the project object, so it saves and reloads with the doc, AND mirrored onto the index entry
          so the Home card can offer the update without reading every project's document to find out. */
-      await this._adopt(pack, { name: FM.scene.project.name, notes: [], fromTemplate: tid });
+      await this._adopt(pack, { name: FM.scene.project.name, notes: [], fromTemplate: tid }, 'tpl:' + tid);
       try { const idx = FM.projects.list(); const e = idx.find(x => x.id === pid); if (e) { e.fromTemplate = tid; FM.projects.saveIndex(idx); } } catch (e) {}
       if (FM.resizeCanvas) FM.resizeCanvas();
       if (FM.refreshAll) FM.refreshAll();
@@ -2729,7 +2737,7 @@ window.FM = window.FM || {};
        and autosave wrote it to disk. Measured, end to end. What that costs is in clampProjectDims' own
        note: ~1GB per canvas, an OOM crash on open, and — being the current project — again on every
        relaunch. A brick. */
-    async _adopt(pack, extra) {
+    async _adopt(pack, extra, packKey) {
       const proj = JSON.parse(JSON.stringify(pack.project));
       // packs saved before v15.04 may carry a session's pointers; the way OUT strips them as the way in now does
       ['ofTemplate', 'ofElement', 'returnTo', 'fromTemplate'].forEach(k => { delete proj[k]; });
@@ -2737,7 +2745,7 @@ window.FM = window.FM || {};
       clampProjectDims(FM.scene.project);
       const re = reIdLayers(pack.layers);
       FM.scene.layers = re.layers;
-      await hydratePack(re.layers, pack.media, re.map);
+      await hydratePack(re.layers, pack.media, re.map, packKey);
     },
     /* ═══ OPEN A TEMPLATE FOR EDITING (queue 505 clause 4) — the shape `elements.openForEdit` settled on.
        Ezra, 1 Sep: "The element opens as its own document" — and his words were "Elements AND templates".
@@ -2760,7 +2768,7 @@ window.FM = window.FM || {};
            other project bumps `rev`; a workspace built from the older pack would, on Home, write the OLD contents
            back over the NEW ones. Re-adopt the current pack instead — the workspace was stale by definition. */
         if ((FM.scene.project.ofTemplateRev || 0) !== rev) {
-          await this._adopt(pack, Object.assign({ name: meta.name || 'Template', notes: [], ofTemplate: tid, ofTemplateRev: rev }, FM.scene.project.returnTo ? { returnTo: FM.scene.project.returnTo } : {}));
+          await this._adopt(pack, Object.assign({ name: meta.name || 'Template', notes: [], ofTemplate: tid, ofTemplateRev: rev }, FM.scene.project.returnTo ? { returnTo: FM.scene.project.returnTo } : {}), 'tpl:' + tid);
           if (FM.selectLayer) FM.selectLayer(null); FM.scene.selectedIds = [];
           if (FM.resizeCanvas) FM.resizeCanvas(); if (FM.refreshAll) FM.refreshAll(); if (FM.history) FM.history.reset();
           if (FM.storage) { FM.storage.markDirty(); await FM.storage.save(); }
@@ -2771,7 +2779,7 @@ window.FM = window.FM || {};
       const pid = await FM.projects.create({ name: meta.name || 'Template', width: pack.project.width, height: pack.project.height, templateDraft: true, ofTemplate: tid });
       if (!pid) return null;
       // the pack's project replaces the doc's, so the session's own pointers ride in as `extra`
-      await this._adopt(pack, Object.assign({ name: meta.name || 'Template', notes: [], ofTemplate: tid, ofTemplateRev: rev }, returnTo ? { returnTo: returnTo } : {}));
+      await this._adopt(pack, Object.assign({ name: meta.name || 'Template', notes: [], ofTemplate: tid, ofTemplateRev: rev }, returnTo ? { returnTo: returnTo } : {}), 'tpl:' + tid);
       /* ⚠️ ARRIVE WITH NOTHING SELECTED — the element path's lesson ("it's just opening you having every
          layer selected"). Nothing here selects, but say it explicitly so a later change cannot. */
       if (FM.selectLayer) FM.selectLayer(null);
@@ -2873,7 +2881,7 @@ window.FM = window.FM || {};
       // one) gave the project multiple cameras, and the composite silently uses the first it finds.
       if (FM.scene.layers.some(l => l.type === 'camera')) re.layers = re.layers.filter(l => l.type !== 'camera');
       FM.scene.layers = re.layers.concat(FM.scene.layers);
-      await hydratePack(re.layers, pack.media, re.map);
+      await hydratePack(re.layers, pack.media, re.map, 'tpl:' + tid);
       if (FM.refreshAll) FM.refreshAll();
       if (FM.history) FM.history.commit();
       FM.storage.autosave();
@@ -3079,7 +3087,7 @@ window.FM = window.FM || {};
       const t0 = Math.min.apply(null, re.layers.length ? re.layers.map(l => l.start || 0) : [0]);
       re.layers.forEach(l => { const d = FM.time - t0; l.start = (l.start || 0) + d; if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(l, d); });   // keyframes are absolute time — inserted animation rides to the playhead
       FM.scene.layers = re.layers.concat(FM.scene.layers);
-      await hydratePack(re.layers, pack.media, re.map);
+      await hydratePack(re.layers, pack.media, re.map, 'elem:' + eid);
       FM.scene.selectedId = re.layers[0] ? re.layers[0].id : FM.scene.selectedId;
       FM.scene.selectedIds = re.layers.map(l => l.id);
       if (FM.refreshAll) FM.refreshAll();

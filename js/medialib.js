@@ -51,7 +51,12 @@ window.FM = window.FM || {};
     writeIndex(list);
     return true;
   }
-  const inFlight = new Set();   // mids whose use() has not finished — a repeat tap on one is ignored (queue 915 phase B)
+  /* 'mid|project' for every use() that has not finished — a repeat tap on the same tile IN THE SAME PROJECT is
+     ignored (queue 915 phase B). Keyed on the project too (review, round 2): a tap on that tile after he has
+     moved to another project is a different request, not a double add, and used to be dropped without a word
+     while the first one gave up. Two first reuses of one tile at once are safe — the second finds the shared
+     copy already there (idbPutSharedOnce answers 'exists') and points at it. */
+  const inFlight = new Set();
   const PREPARING = 'Preparing…';
   /* First reuses still preparing, across ALL tiles. "Preparing…" is one shared message, so it comes down only
      when the LAST of them finishes: two different tiles tapped in a row both show it, and the first to finish
@@ -151,39 +156,59 @@ window.FM = window.FM || {};
      *  · The open project is captured before the first await. A first reuse writes a whole file, which on a
      *    phone takes seconds; if he opens another project meanwhile, the clip is NOT added — it never lands
      *    in a project he did not tap in — and a toast says so.
-     *  · "Preparing…" shows while the shared copy is written, and a second tap on the same tile while the
-     *    first is still going is ignored (it used to add a second clip).
+     *  · "Preparing…" shows while the shared copy is written, and a second tap on the same tile in the same
+     *    project while the first is still going is ignored (it used to add a second clip).
      *  · His ORIGINAL import is never touched: it keeps its whole copy under its own layer id.
      * A null from shareMedia is never an error: the clip is simply stored the old way, as a copy of its own. */
     async use(mid) {
       const e = readIndex().find(x => x.mid === mid);
       if (!e) return false;
-      if (inFlight.has(mid)) return false;
       const st = FM.storage;
       const openId = () => (st && st.openProjectId) ? st.openProjectId() : null;
       const tappedIn = openId();
+      const flight = mid + '|' + tappedIn;
+      if (inFlight.has(flight)) return false;
       const moved = () => openId() !== tappedIn;
       const gaveUp = () => { if (FM.toast) FM.toast('Not added — you switched projects', 4000); return false; };
-      inFlight.add(mid);
+      const gone = () => {
+        const me = readIndex().find(x => x.mid === mid);
+        if (me && me.key === e.key) this.remove(mid);   // only a tile that still names the record it was read from
+        if (FM.toast) FM.toast('That file is no longer stored — import it again');
+        return false;
+      };
+      inFlight.add(flight);
       let preparing = false;
       try {
-        const rec = await st.readMedia(e.key);
-        if (!rec || !rec.file) {   // the blob went away (project deleted before this shipped, storage cleared)
-          const me = readIndex().find(x => x.mid === mid);
-          if (me && me.key === e.key) this.remove(mid);   // only a tile that still names the empty record
-          if (FM.toast) FM.toast('That file is no longer stored — import it again');
-          return false;
+        let rec = await st.readMedia(e.key);
+        if (!rec || !rec.file) return gone();   // the blob went away (project deleted before this shipped, storage cleared)
+        /* IS THE FILE UNDER THE TILE'S KEY STILL THE TILE'S FILE? (review, round 2.) A shared copy is written once
+           and checked then, so a tile keyed at one is. Anything else is a clip's own record, and Replace media can
+           put a different file there. Three answers:
+            · the clip is open here and ITS file is the tile's — the disk is behind (Replace keys its new tile at
+              the clip before its save lands): use that file. Reading the disk tied the new tile to the OLD
+              file's shared copy for good.
+            · a different SIZE as well: the tile's file is not stored there any more (Replace, then Undo, wrote
+              the old file back over it). Say so and drop the tile — it used to add the other file's footage,
+              on every tap, without a word.
+            · same size, other name or date: a stored File that lost its metadata. Still a copy of its own,
+              never shared and the tile never re-keyed (`mine` below). */
+        let mine = !e.fp || fingerprint(rec.file) === e.fp;
+        if (!mine && !isLib(e.key)) {
+          const live = FM.media && FM.media.get ? FM.media.get(e.key) : null;
+          if (live && live.file && fingerprint(live.file) === e.fp) { rec = { file: live.file, kind: live.kind || e.kind }; mine = true; }
+          else if (e.size && rec.file.size !== e.size) return gone();
         }
         let file = rec.file, ref = null, fileKey = e.key;
         if (isLib(e.key)) ref = e.key;                                        // already on its shared copy: a few bytes per reuse
-        else if (isLib(rec.ref)) { ref = fileKey = rec.ref; rekey(mid, e.key, rec.ref); }   // keyed at a clip that is itself a pointer
-        else if (st.shareMedia && (!e.fp || fingerprint(rec.file) === e.fp)) {
-          /* FIRST REUSE. (A fingerprint that no longer matches means the record under the tile's key is a
-             different file now — a Replace landed first — and that file is not this tile's to share.) */
-          preparing = true; preparingNow++;
-          if (FM.toast) FM.toast(PREPARING, 0);
-          const sh = await st.shareMedia(mid, rec);
-          if (sh) { file = sh.file; ref = fileKey = sh.key; rekey(mid, e.key, sh.key); }
+        else if (mine) {
+          if (isLib(rec.ref)) { ref = fileKey = rec.ref; rekey(mid, e.key, rec.ref); }   // keyed at a clip that is itself a pointer
+          else if (st.shareMedia) {
+            // FIRST REUSE
+            preparing = true; preparingNow++;
+            if (FM.toast) FM.toast(PREPARING, 0);
+            const sh = await st.shareMedia(mid, rec);
+            if (sh) { file = sh.file; ref = fileKey = sh.key; rekey(mid, e.key, sh.key); }
+          }
         }
         if (moved()) return gaveUp();
         const loaded = e.kind === 'image' ? await FM.loadImageFile(file) : await FM.loadVideoFile(file);
@@ -196,7 +221,7 @@ window.FM = window.FM || {};
         if (FM.toast) FM.toast('Could not open that file');
         return false;
       } finally {
-        inFlight.delete(mid);
+        inFlight.delete(flight);
         if (preparing && --preparingNow <= 0) {   // take "Preparing…" down once NO tile is still preparing — unless something has already said something else
           preparingNow = 0;
           const t = document.getElementById('toast');
