@@ -27375,6 +27375,7 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ **AND HE ANSWERED A STANDING QUESTION IN PASSING:** *"not those effects like brightness not
       working, they are good"* — the colour/black-and-white family WORKS on his device now. That closes
       #593, #603 and #645, which had been open since 26 Aug and cost three sessions of testing.
+      ↻ **25 Sep, his words in full: *"Keep going"*** — sent right after I stopped the loop at v16.93 with the actionable list dry and everything else waiting on his picks. Read as this brief, restated: the loop is re-armed, and the work is a bug hunt — with REAL touch and mouse input this time (tests/_cdp.py's channel from #924), because his phone complaints kept surviving synthetic tests.
 
 - [x] **691b — SAME BUG, OTHER HALF, found 1 Sep by re-running #691's own audit.** Fixed v14.81.
       JUMPED: this IS #691, which is closed — the same bug in the dispatcher its audit never asked about.
