@@ -1042,8 +1042,8 @@ window.FM = window.FM || {};
       attachLongPress(card, reg);
       row.appendChild(card);
     });
-    // pause auto-scroll while the user is touching it
-    row.addEventListener('pointerdown', () => { autoPauseUntil = perfNow() + 3000; });
+    // pause auto-scroll while he is using it, and for a while after (queue 931 — see FM.carouselPause below)
+    FM.carouselPause(row, () => autoPauseUntil, (t) => { autoPauseUntil = t; });
     sec.appendChild(row);
     return { sec: sec, row: row };
   }
@@ -1721,6 +1721,39 @@ window.FM = window.FM || {};
 
   // tiny monotonic clock (Date.now is fine in app runtime, just not in workflow sandbox)
   function perfNow() { return (window.performance && performance.now) ? performance.now() : Date.now(); }
+  /* ═══ THE "NEW" STRIP STOPS WHILE HE LOOKS AT IT (queue 931) ═══════════════════════════════════════════════════════
+   * Ezra: "when you swipe on that, it should pause it from auto scrolling for a bit because like it's annoying when you
+   * try to slide it to see something at the start, but then it instantly starts scrolling. So you can't see the first
+   * effect that shows up." The pause was 3 s counted from the PRESS — so a slow swipe resumed under his finger, the tick
+   * then wrote scrollLeft over the fling (which kills a momentum scroll on iOS: "instantly starts"), and a wheel or
+   * trackpad scroll on PC never paused it at all.
+   * Now: held while a pointer is down on it; every scroll that is NOT the strip's own tick — a drag, the fling after it, a
+   * wheel — pushes the pause to CAROUSEL_PAUSE_MS from that moment; and it resumes from wherever he left it. One helper for
+   * the effects and the audio-effects strips, so the two cannot disagree. */
+  const CAROUSEL_PAUSE_MS = 8000;
+  FM.carouselPause = function (row, get, set) {
+    const push = (ms) => { const t = perfNow() + ms; if (t > get()) set(t); };
+    let held = false, lastInput = -1e9;
+    const touched = () => { lastInput = perfNow(); };
+    row.addEventListener('pointerdown', () => { held = true; touched(); push(60000); });   // held; a release this row never hears still resumes within a minute
+    const release = () => { if (!held) return; held = false; touched(); set(perfNow() + CAROUSEL_PAUSE_MS); };
+    row.addEventListener('pointerup', release);
+    row.addEventListener('pointercancel', release);   // the browser took the pan — the scroll events below keep it paused
+    row.addEventListener('wheel', () => { touched(); push(CAROUSEL_PAUSE_MS); }, { passive: true });
+    row.addEventListener('keydown', () => { touched(); push(CAROUSEL_PAUSE_MS); });
+    /* A scroll counts as HIS only close behind his own input — a drag, the fling after it (each of whose events re-arms
+       the window, so a long fling stays his to the end), a wheel, a key. Not every scroll that is not the tick's: the
+       browser moves the strip itself when its box changes (the PC browser docking into the inspector clamps it), and that
+       read as a swipe and froze the strip for eight seconds the moment it opened. */
+    row.addEventListener('scroll', () => {
+      if (Math.abs(row.scrollLeft - (typeof row._autoLeft === 'number' ? row._autoLeft : -99)) <= 1) return;   // the tick's own write
+      if (!held && perfNow() - lastInput > 2500) return;                                                         // not him
+      touched();
+      push(held ? 60000 : CAROUSEL_PAUSE_MS);
+    }, { passive: true });
+  };
+  FM._carouselPauseMs = CAROUSEL_PAUSE_MS;   // for the suite
+  FM._fxAutoPausedFor = function () { return Math.max(0, autoPauseUntil - perfNow()); };   // suite seam: ms of pause left
   function stopAuto() { if (autoTimer) { clearInterval(autoTimer); autoTimer = 0; } }
   function startAuto(row) {
     stopAuto();
@@ -1731,6 +1764,7 @@ window.FM = window.FM || {};
       if (max <= 2) return;
       if (row.scrollLeft >= max - 0.5) return;   // reached the end → STOP here (hit the wall, no loop-back)
       row.scrollLeft = Math.min(max, row.scrollLeft + 1.2);
+      row._autoLeft = row.scrollLeft;   // so the strip's own scroll event is not taken for his (queue 931)
     }, 30);
   }
   // Seam: the suite reads this builder's title string rather than OPENING the browser, because

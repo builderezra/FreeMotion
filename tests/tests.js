@@ -87711,4 +87711,179 @@
     }
   });
 
+  test('930 the Assistant and the Director never stack, and the API key is entered in Settings, reached from a button in each', { item: '930', budgetMs: 60000 }, async function () {
+    /* Queue 930 — his clauses: one AI panel at a time; the key entered in App Settings in its own section; a button in both
+       panels that opens Settings there; nothing he already entered is lost. And, because it is his real key: the full key
+       is never written into the page, and the field is cleared once it is saved. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.aiKey || !FM.aiPanel || !FM.aiChat || !FM.settings || !FM.settings.openAt) throw new Error('setup: the AI panels, the key store or FM.settings.openAt are missing');
+    const had = FM.aiKey.get(), hadRem = FM.aiKey.remembered();
+    const realAsk = FM.ask; const asked = [];
+    const FAKE = 'sk-ant-test0930-' + 'x'.repeat(24) + 'Q9Z1';
+    const pageHas = (k) => document.documentElement.outerHTML.indexOf(k) >= 0 || [].slice.call(document.querySelectorAll('input')).some(i => i.value === k);
+    async function run(where) {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      FM.aiKey.forget();
+      /* 1. never both */
+      FM.aiPanel.show(); await sleep(200);
+      FM.aiChat.show(); await sleep(200);
+      if (FM.aiPanel.isOpen()) throw new Error(where + ': opening the Assistant left the Director open under it');
+      FM.aiPanel.show(); await sleep(200);
+      if (FM.aiChat.isOpen()) throw new Error(where + ': opening the Director left the Assistant open under it');
+      /* 2. the Director's button goes to Settings → AI key */
+      const dBtn = document.querySelector('.ai-keyform .ai-keysettings');
+      if (!dBtn || !dBtn.offsetParent) throw new Error(where + ': with no key the Director shows no “Add your key in Settings” button');
+      dBtn.click(); await sleep(500);
+      if (FM.aiPanel.isOpen()) throw new Error(where + ': the Director stayed open over Settings');
+      if (!FM.settings.isOpen()) throw new Error(where + ': the Director’s key button did not open Settings');
+      const sec = document.getElementById('set-aikey');
+      if (!sec) throw new Error(where + ': Settings has no AI key section');
+      const sr = sec.getBoundingClientRect();
+      if (sr.top < -2 || sr.top > innerHeight * 0.5) throw new Error(where + ': Settings opened but the AI key section is at y ' + Math.round(sr.top) + ' — not brought into view');
+      /* 3. entering the key there: saved to the one key store, masked on screen, never in the page */
+      const input = sec.querySelector('input[type=password]');
+      /* review fixes: 16px so iOS does not zoom into the field; Remember starts UNTICKED for a new key (the Director's default) */
+      if (input && parseFloat(getComputedStyle(input).fontSize) < 16) throw new Error(where + ': the key field is ' + getComputedStyle(input).fontSize + ' — iOS zooms the whole page into a field under 16px');
+      const remBox = sec.querySelector('.set-aikey-rem input[type=checkbox]');
+      if (!remBox) throw new Error(where + ': no Remember box');
+      if (remBox.checked) throw new Error(where + ': Remember on this device starts TICKED for a new key — it was unticked in the Director, and a key should only be stored if he chooses');
+      const save = [].slice.call(sec.querySelectorAll('button')).find(b => /Save/.test(b.textContent));
+      if (!input || !save) throw new Error(where + ': the AI key section has no password field or no Save');
+      remBox.checked = true; remBox.dispatchEvent(new Event('change'));
+      input.value = FAKE; save.click(); await sleep(150);
+      if (!FM.aiKey.remembered()) throw new Error(where + ': saved with Remember ticked, but the key is not remembered');
+      /* the toast about it is not painted under the panel */
+      if (!document.body.classList.contains('set-open') || parseInt(getComputedStyle(document.getElementById('toast')).zIndex, 10) <= 220) throw new Error(where + ': with Settings open the toast sits at z-index ' + getComputedStyle(document.getElementById('toast')).zIndex + ', under the panel (220)');
+      /* unticking Remember takes the key out of storage at once */
+      remBox.checked = false; remBox.dispatchEvent(new Event('change')); await sleep(60);
+      if (FM.aiKey.remembered()) throw new Error(where + ': unticking Remember left the key stored on the device');
+      if (FM.aiKey.get() !== FAKE) throw new Error(where + ': unticking Remember lost the key for this session');
+      if (FM.aiKey.get() !== FAKE) throw new Error(where + ': Save did not put the key in FM.aiKey (the one place it lives)');
+      if (input.value) throw new Error(where + ': the password field still holds the key after Save');
+      if (pageHas(FAKE)) throw new Error(where + ': the FULL key is written somewhere in the page after Save');
+      if (sec.textContent.indexOf(FM.aiKey.masked()) < 0) throw new Error(where + ': the section does not show the masked key (' + FM.aiKey.masked() + ')');
+      /* …and junk is refused without being stored */
+      input.value = 'not-a-key'; save.click(); await sleep(100);
+      if (FM.aiKey.get() !== FAKE) throw new Error(where + ': an invalid key replaced the saved one');
+      FM.settings.close(); await sleep(300);
+      /* 4. the Assistant's header button goes to the same place */
+      FM.aiChat.show(); await sleep(200);
+      const aBtn = document.querySelector('.aic-keybtn');
+      if (!aBtn || !aBtn.offsetParent) throw new Error(where + ': the Assistant has no API key button');
+      aBtn.click(); await sleep(500);
+      if (FM.aiChat.isOpen()) throw new Error(where + ': the Assistant stayed open over Settings');
+      if (!FM.settings.isOpen() || !document.getElementById('set-aikey')) throw new Error(where + ': the Assistant’s key button did not open Settings at the AI key section');
+      /* THE HIGH ONE: the hidden Assistant cannot take the focus (a reply landing used to focus it, and the key pasted for
+         Settings went into the chat) */
+      const box = document.querySelector('#ai-chat textarea, #ai-chat input[type=text]');
+      if (box) { box.focus(); if (document.activeElement === box) throw new Error(where + ': the HIDDEN Assistant’s text box took the focus — a key pasted for Settings would land in the chat'); }
+      /* 5. Forget */
+      const forget = [].slice.call(document.getElementById('set-aikey').querySelectorAll('button')).find(b => /Forget/.test(b.textContent));
+      if (!forget) throw new Error(where + ': no Forget key with a key saved');
+      FM.ask = async (o) => { asked.push(o); return true; };
+      forget.click(); await sleep(150);
+      FM.ask = realAsk;
+      if (!asked.length) throw new Error(where + ': Forget key did not ask first — it is one tap from Save');
+      if (FM.aiKey.has()) throw new Error(where + ': Forget key (confirmed) left the key in place');
+      FM.settings.close(); await sleep(600);
+      /* …and the panel that sent him to Settings comes back */
+      if (!FM.aiChat.isOpen()) throw new Error(where + ': closing Settings did not bring the Assistant back — he has to find it again to use the key');
+      FM.aiChat.hide(); await sleep(200);
+      /* ROUND 2 of the review. (a) closed means unreachable, from the start */
+      const chatEl = document.getElementById('ai-chat');
+      if (chatEl && !chatEl.inert) throw new Error(where + ': the closed Assistant is not inert — something can still focus or type into it off screen');
+      /* (b) Settings opened OVER an open Assistant (the cog route): the Assistant must not pull the focus out of the key field */
+      FM.aiKey.set(FAKE, false);
+      FM.aiChat.show(); await sleep(250);
+      FM.settings.open(); await sleep(450);
+      const kf = document.querySelector('#set-aikey input[type=password]');
+      if (!kf) throw new Error(where + ': setup: no key field');
+      kf.focus();
+      FM.aiChat.show(); await sleep(300);   // show()'s own focus timer — the same one a landing reply goes through
+      if (document.activeElement !== kf) throw new Error(where + ': with Settings open over the Assistant, the Assistant took the focus from the Settings key field (now ' + (document.activeElement && (document.activeElement.className || document.activeElement.tagName)) + ')');
+      FM.settings.close(); await sleep(400);
+      /* (c) a key pasted into the chat is never sent */
+      const box2 = document.querySelector('#ai-chat textarea');
+      const sendB = document.querySelector('#ai-chat .aic-send');
+      if (box2 && sendB) {
+        const before = document.querySelectorAll('#ai-chat .aic-me, #ai-chat .aic-bubble').length;
+        box2.value = 'my key is ' + FAKE; sendB.click(); await sleep(200);
+        if (pageHas(FAKE)) throw new Error(where + ': a key typed into the chat is still in the page after Send');
+        if (document.querySelectorAll('#ai-chat .aic-me, #ai-chat .aic-bubble').length > before) throw new Error(where + ': a message holding the key was put in the chat');
+      } else throw new Error(where + ': setup: no chat box or Send button');
+      FM.aiChat.hide(); await sleep(200);
+      /* (d) a Settings row that closes Settings to hand him something else does NOT bring the Assistant back over it */
+      FM.aiChat.show(); await sleep(200);
+      document.querySelector('.aic-keybtn').click(); await sleep(500);
+      const handOff = [].slice.call(document.querySelectorAll('.set-action')).find(bt => /^Show$/.test(bt.textContent.trim()));
+      if (handOff) {
+        handOff.click(); await sleep(700);
+        if (FM.aiChat.isOpen()) throw new Error(where + ': a Settings row that closes Settings to open something else brought the Assistant back over it');
+        const sc = document.getElementById('shortcuts-overlay'); if (sc) { const x = sc.querySelector('button'); if (x) x.click(); sc.classList.add('hidden'); }
+        await sleep(300);
+      } else { FM.settings.close({ handBack: false }); await sleep(300); }
+      FM.aiKey.forget();
+      /* 6. a key entered BEFORE this change (the Director used FM.aiKey.set directly) shows as connected — nothing lost */
+      FM.aiKey.set(FAKE, false);
+      FM.settings.openAt('aikey'); await sleep(450);
+      const t = document.getElementById('set-aikey').textContent;
+      if (t.indexOf(FM.aiKey.masked()) < 0) throw new Error(where + ': a key that was already set does not show as connected in Settings');
+      FM.settings.close(); await sleep(300);
+      FM.aiKey.forget();
+    }
+    try {
+      await atPhoneWidth(function () { return run('phone (380)'); }, 380);
+      await atWideWidth(function () { return run('PC (1280)'); }, 1280);
+    } finally {
+      FM.ask = realAsk;
+      try { FM.aiPanel.hide(); FM.aiChat.hide(); if (FM.settings.isOpen()) FM.settings.close(); } catch (e) {}
+      if (had) FM.aiKey.set(had, hadRem); else FM.aiKey.forget();
+    }
+  });
+
+  test('931 swiping the New effects strip pauses its auto-scroll well past the old 3 s, and it resumes from where he left it — real touch and a real wheel', { item: '931', budgetMs: 90000 }, async function () {
+    /* Queue 931: "it's annoying when you try to slide it to see something at the start, but then it instantly starts
+       scrolling. So you can't see the first effect that shows up." Real input (see 924): a swipe is a native pan whose events
+       a script cannot fake, and a PC scroll is a wheel or trackpad, which never presses a pointer at all. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    async function run(where, kind) {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      const L = FM.makeLayer('shape', { name: 'S931', shape: 'rect', x: 300, y: 300, shapeW: 100, shapeH: 100, fill: '#e0457b', start: 0, duration: 4 });
+      FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+      FM.refreshAll(); FM.selectLayer(L.id); await sleep(200);
+      FM.fxBrowser.open(L); await sleep(700);
+      try {
+        const row = document.querySelector('#fx-browser .fxb-featured');
+        if (!row) throw new Error(where + ': setup: no New strip in the effects browser');
+        if (!(row.scrollWidth - row.clientWidth > 300)) throw new Error(where + ': setup: the New strip does not overflow enough to swipe (' + row.scrollWidth + ' vs ' + row.clientWidth + ')');
+        // CONTROL: left alone, it does auto-scroll
+        const a0 = row.scrollLeft; await sleep(900);
+        if (!(row.scrollLeft > a0 + 5)) throw new Error(where + ': CONTROL: left alone the strip did not auto-scroll (' + a0 + ' → ' + row.scrollLeft + '; paused for another ' + Math.round(FM._fxAutoPausedFor ? FM._fxAutoPausedFor() : -1) + ' ms) — nothing below would mean anything');
+        row.scrollLeft = 260; row._autoLeft = 260; await sleep(80);   // somewhere past the start, as if it had been running
+        const r = row.getBoundingClientRect(), x = Math.min(r.left + r.width * 0.3, 200), y = r.top + r.height / 2;
+        if (y > 740 || y < 0) throw new Error(where + ': setup: the strip is at y ' + Math.round(y) + ', out of reach');
+        const steps = kind === 'touch'
+          ? [{ t: 'touchStart', x: x, y: y, ms: 60 }].concat(Array.from({ length: 10 }, (_, k) => ({ t: 'touchMove', x: x + 28 * (k + 1), y: y, ms: 35 })), [{ t: 'touchEnd', x: x + 280, y: y, ms: 0 }])
+          : [{ t: 'mouseMove', x: x, y: y, ms: 30 }, { t: 'wheel', x: x, y: y, dx: -150, dy: 0, ms: 40 }, { t: 'wheel', x: x, y: y, dx: -150, dy: 0, ms: 40 }];
+        await realInput924(steps, where + ' — scrolling the strip back to the start');
+        await sleep(300);
+        const back = row.scrollLeft;
+        if (!(back < 120)) throw new Error(where + ': setup: the real ' + (kind === 'touch' ? 'swipe' : 'wheel') + ' did not take the strip back towards the start (scrollLeft ' + back + ')');
+        await sleep(4200);   // past the old pause (3 s from the PRESS)
+        if (Math.abs(row.scrollLeft - back) > 2) throw new Error(where + ': 4.5 s after he scrolled it back, the strip had moved from ' + back.toFixed(1) + ' to ' + row.scrollLeft.toFixed(1) + ' — it did not stay put for him to look at the first effects');
+        await sleep(Math.max(0, (FM._carouselPauseMs || 8000) - 4200) + 1500);
+        const later = row.scrollLeft;
+        if (!(later > back + 3)) throw new Error(where + ': well after the pause the strip had not started again (' + back.toFixed(1) + ' → ' + later.toFixed(1) + ')');
+        if (later > back + 80) throw new Error(where + ': it resumed with a jump (' + back.toFixed(1) + ' → ' + later.toFixed(1) + ') instead of carrying on from where he left it');
+      } finally { FM.fxBrowser.close(); await sleep(300); }
+    }
+    try {
+      await onScreen924(async function () {
+        await atPhoneWidth(function () { return run('phone (360)', 'touch'); }, 360);
+        await atWideWidth(function () { return run('PC (1100)', 'wheel'); }, 1100);
+      });
+    } finally { FM.scene = saved; try { FM.refreshAll(); } catch (e) {} }
+  });
+
 })();

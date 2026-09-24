@@ -6866,6 +6866,23 @@ body.fm-pushing #toast { z-index: 213; }
    red the context menu and the home screen already use for "this deletes things", so it warns in the
    place a column of identical grey buttons would not. The hover rule above is overridden, not just
    restated: without it, pointing at Reset turns it accent-blue like a safe one. */
+/* SETTINGS → AI KEY (queue 930): the one place the Anthropic key is entered. The row stacks — the label and its state
+   above, the field full width below — because a password field squeezed beside a label is unreadable at 380. */
+.set-row.set-aikey { flex-direction: column; align-items: stretch; gap: 10px; }
+.set-aikey-form { display: flex; flex-direction: column; gap: 8px; }
+.set-aikey-input {
+  width: 100%; box-sizing: border-box; min-height: 40px; padding: 8px 12px; border-radius: 10px;
+  /* 16px, not 14: iOS zooms the whole page into any field set smaller than 16px (queue 930 review) */
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text); font: 16px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.set-aikey-input:focus { outline: none; border-color: var(--accent); }
+.set-aikey-input.bad { border-color: #e03131; }
+.set-aikey-rem { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-dim); }
+.set-aikey-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.set-aikey-get { font-size: 12.5px; color: var(--accent); text-decoration: none; display: inline-block; align-self: flex-start; padding: 4px 0; }   /* its own width, not the row's (queue 930 review) */
+.set-row.set-flash { animation: set-flash 1.3s ease; }
+@keyframes set-flash { 0%, 35% { background: rgba(41, 217, 187, .16); } 100% { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .set-row.set-flash { animation: none; } }
 .set-action.danger { color: #ff8a8a; border-color: rgba(224, 49, 49, .40); background: rgba(224, 49, 49, .10); }
 .set-action.danger:hover { color: #ff6b6b; border-color: rgba(224, 49, 49, .70); background: rgba(224, 49, 49, .18); }
 /* Nothing to clear (Clear songs / Clear photos & videos with an empty library — see clearRow). The
@@ -9816,6 +9833,12 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
 .aic-title { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 700; color: var(--text); }
 .aic-spark { color: var(--accent); font-size: 13px; }
 .aic-status { margin-left: auto; font-size: 11.5px; color: var(--text-faint); }
+/* queue 930: the Assistant's door to Settings → AI key, in its header beside ✕ */
+.aic-keybtn {
+  flex: 0 0 auto; background: transparent; border: 1px solid var(--line); color: var(--text-dim);
+  height: 28px; padding: 0 10px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; margin-right: 4px;
+}
+.aic-keybtn:hover { color: var(--text); border-color: var(--accent); }
 .aic-close {
   flex: 0 0 auto; background: transparent; border: 0; color: var(--text-dim);
   width: 30px; height: 30px; border-radius: 8px; cursor: pointer; font-size: 14px; line-height: 1;
@@ -10510,6 +10533,7 @@ body.cc-open #toast { z-index: 3150; }
    scrim and still under every modal that can open over a card (#fm-ask 3200, #ctx-menu 300). It cannot eat a
    tap meant for the card beneath it: only a toast that IS a button takes pointer events. */
 body.collab-card-open #toast { z-index: 225; }
+body.set-open #toast { z-index: 225; }   /* queue 930 review: a toast raised from Settings (Key saved / forgotten) was painted under it */
 /* …and a copy the browser refused is put in a field under the button that asked, selected (collab-ui.js copyPlain). */
 .cs-copyfield { display: block; width: 100%; box-sizing: border-box; margin-top: 8px; font-size: 12px; }
 body.collab-card-open #toast:not(.toast-tap) { pointer-events: none; }

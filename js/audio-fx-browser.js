@@ -140,7 +140,9 @@ window.FM = window.FM || {};
       card.addEventListener('click', () => addEffect(reg.type));
       row.appendChild(card);
     });
-    row.addEventListener('pointerdown', () => { autoPauseUntil = perfNow() + 3000; });
+    // the effects strip's rule, shared (queue 931): held while touched, and for a while after his last scroll
+    if (FM.carouselPause) FM.carouselPause(row, () => autoPauseUntil, (t) => { autoPauseUntil = t; });
+    else row.addEventListener('pointerdown', () => { autoPauseUntil = perfNow() + 3000; });
     sec.appendChild(row);
     return { sec: sec, row: row };
   }
@@ -329,6 +331,7 @@ window.FM = window.FM || {};
       if (max <= 2) return;
       if (row.scrollLeft >= max - 0.5) return;   // reached the end → STOP here (hit the wall, no loop-back)
       row.scrollLeft = Math.min(max, row.scrollLeft + 1.2);
+      row._autoLeft = row.scrollLeft;   // queue 931: the strip's own scroll is not his
     }, 30);
   }
 

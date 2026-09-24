@@ -146,12 +146,20 @@ window.FM = window.FM || {};
   async function send() {
     var text = (inputEl.value || '').trim();
     if (!text || busy) return;
+    if (KEYLIKE.test(text)) {
+      inputEl.value = ''; autosize();
+      note('That looks like your API key — it goes in Settings → AI key, never in the chat. Nothing was sent.', 'aic-warn');
+      var kb = el('button', 'aic-linkbtn', 'Open Settings → AI key');
+      kb.type = 'button'; kb.addEventListener('click', openKeySettings);
+      listEl.appendChild(kb); listEl.scrollTop = listEl.scrollHeight;
+      return;
+    }
 
     if (!FM.ai.DRY_RUN && !FM.aiKey.has()) {
-      note('Connect your Anthropic key first — it is the same key the Director uses.', 'aic-warn');
-      var b = el('button', 'aic-linkbtn', 'Connect a key');
+      note('Connect your Anthropic key first — it goes in Settings → AI key, and the Director uses the same one.', 'aic-warn');
+      var b = el('button', 'aic-linkbtn', 'Add your key in Settings');
       b.type = 'button';
-      b.addEventListener('click', function () { if (FM.aiPanel) FM.aiPanel.show(); });
+      b.addEventListener('click', openKeySettings);   // queue 930: Settings, not the Director
       listEl.appendChild(b);
       listEl.scrollTop = listEl.scrollHeight;
       return;
@@ -205,7 +213,10 @@ window.FM = window.FM || {};
       note((e && e.message) || 'Something went wrong reaching Claude.', 'aic-err');
     } finally {
       setBusy(false);
-      if (inputEl) inputEl.focus();
+      /* ⚠️ ONLY WHEN IT IS OPEN (queue 930 security review, high). A reply that lands while the Assistant is hidden — he
+         tapped "API key" while it was thinking — used to focus this hidden box, so the key he then pasted for Settings
+         went HERE, and Enter sent his key to the model as a chat message. */
+      if (canTakeFocus()) inputEl.focus();
     }
   }
 
@@ -247,6 +258,11 @@ window.FM = window.FM || {};
     head.appendChild(title);
     statusEl = el('span', 'aic-status', '');
     head.appendChild(statusEl);
+    /* The key's door, always in the header (queue 930: "a button in both pages that takes you to app settings"). */
+    var keyBtn = el('button', 'aic-keybtn', 'API key');
+    keyBtn.type = 'button'; keyBtn.title = 'Your Anthropic key — in Settings'; keyBtn.setAttribute('aria-label', 'API key settings');
+    keyBtn.addEventListener('click', openKeySettings);
+    head.appendChild(keyBtn);
     var close = el('button', 'aic-close', '✕');
     close.type = 'button'; close.title = 'Close'; close.setAttribute('aria-label', 'Close assistant');
     close.addEventListener('click', hide);
@@ -276,6 +292,7 @@ window.FM = window.FM || {};
     panelEl.appendChild(comp);
 
     document.body.appendChild(panelEl);
+    panelEl.inert = true;   // built closed, so unreachable from the start — not only after the first hide (queue 930 review)
 
     /* The on-screen keyboard does not change window.innerHeight, only the visual viewport — so a bottom
        sheet whose text field is at the bottom sits UNDER the keyboard without this. FM.kbInset is the
@@ -300,16 +317,38 @@ window.FM = window.FM || {};
          '"start it half a second later". Tap a layer first and "this" means that one.');
   }
 
+  /* THE CHAT BOX TAKES THE FOCUS ONLY WHEN NOTHING ELSE HAS IT (queue 930 review, round 2). "Only when open" was not enough:
+     opened through the cog → App settings, Settings covers an OPEN Assistant, and a reply landing then pulled the focus out of
+     the Settings key field — a pasted key and Enter would go to the chat. So: open, Settings not up, and the focus is on
+     nothing or already in this panel. */
+  function canTakeFocus() {
+    if (!inputEl || !isOpen()) return false;
+    if (FM.settings && FM.settings.isOpen && FM.settings.isOpen()) return false;
+    var a = document.activeElement;
+    return !a || a === document.body || a === document.documentElement || panelEl.contains(a);
+  }
+  /* A KEY IS NEVER A CHAT MESSAGE (queue 930 review, round 2). js/ai-key.js promises the key is never put in a message body;
+     a key pasted here by mistake — the note above the box says "connect your key" — would have been sent to the model, shown
+     as a bubble and re-sent with every later turn. */
+  var KEYLIKE = /\bsk-ant-[A-Za-z0-9_\-]{16,}/;
+  function openKeySettings() {
+    hide();
+    if (FM.settings && FM.settings.openAt) FM.settings.openAt('aikey', { onClose: show });   // and it comes back when Settings closes
+  }
   function show() {
     if (!panelEl) build();
+    // ONE AI PANEL AT A TIME (queue 930) — see js/ai-panel.js show()
+    if (FM.aiPanel && FM.aiPanel.isOpen && FM.aiPanel.isOpen()) FM.aiPanel.hide();
     if (FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone() && FM.mobile.close) FM.mobile.close();
     panelEl.classList.add('open');
+    panelEl.inert = false;
     document.body.classList.add('aic-open');
-    setTimeout(function () { if (inputEl) inputEl.focus(); }, 120);
+    setTimeout(function () { if (canTakeFocus()) inputEl.focus(); }, 120);
   }
   function hide() {
     if (!panelEl) return;
     panelEl.classList.remove('open');
+    panelEl.inert = true;   // closed = unreachable: nothing can focus or type into it off screen (queue 930 review)
     document.body.classList.remove('aic-open');
     if (inputEl) inputEl.blur();
   }

@@ -260,6 +260,9 @@ def main():
                                 pts = [] if typ in ("touchEnd", "touchCancel") else [{"x": x, "y": y, "id": 1}]
                                 cdp.send("Input.dispatchTouchEvent", type=typ, touchPoints=pts)
                                 inp["touch_down"] = typ in ("touchStart", "touchMove")
+                            elif t == "wheel":
+                                # a real wheel / trackpad scroll (queue 931: the PC half of pausing the New strip)
+                                cdp.send("Input.dispatchMouseEvent", type="mouseWheel", x=x, y=y, deltaX=float(st.get("dx", 0)), deltaY=float(st.get("dy", 0)))
                             elif t.startswith("mouse"):
                                 typ = {"mouseDown": "mousePressed", "mouseMove": "mouseMoved", "mouseUp": "mouseReleased"}[t]
                                 if typ == "mouseMoved":

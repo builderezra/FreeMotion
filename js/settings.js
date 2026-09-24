@@ -272,7 +272,7 @@ window.FM = window.FM || {};
         if (up) { seen = true; return; }
         if (!seen) return;                       // the class toggling on its way UP, not the card closing
         mo.disconnect();
-        if (!wasLive && FM.collab && FM.collab.active) { FM.settings.close(); return; }
+        if (!wasLive && FM.collab && FM.collab.active) { FM.settings.close({ handBack: false }); return; }
         if (after) after(h);
       });
       mo.observe(document.body, { attributes: true, attributeFilter: ['class'] });
@@ -290,7 +290,7 @@ window.FM = window.FM || {};
     if (hint) txt.appendChild(el('div', 'set-hint', hint));
     const b = el('button', 'set-action' + (tone ? ' ' + tone : ''), btnLabel);
     b.type = 'button';
-    b.addEventListener('click', () => { FM.settings.close(); fn(); });
+    b.addEventListener('click', () => { FM.settings.close({ handBack: false }); fn(); });
     row.appendChild(txt); row.appendChild(b);
     return row;
   }
@@ -394,6 +394,7 @@ window.FM = window.FM || {};
   }
 
   let panel = null, scrim = null, escBound = null;
+  let _onClose = null;   // queue 930: FM.settings.openAt(…, { onClose }) — who to hand back to when Settings closes
 
   function build() {
     scrim = el('div', 'set-scrim');
@@ -522,6 +523,73 @@ window.FM = window.FM || {};
       ));
     }
 
+    /* ── YOUR AI KEY, IN ONE PLACE (queue 930) ───────────────────────────────────────────────────────────────────
+     * Ezra: "the only way you can put in an API key is in the director menu. So basically what you should do is move it so
+     * that there's a button in both pages that takes you to app settings and it takes you to a section in the app settings
+     * where you put in the API key and you put it in there instead." (And, in the same breath, NOT a password lock: "we'll
+     * add accounts … people will just … be protected by their account.")
+     * The key still lives in ONE place — js/ai-key.js, FM.aiKey, the only module that holds it — so a key he entered in the
+     * Director before this is the same key here; nothing moves in storage. This row only reads the MASKED form ("sk-ant-…a1b2")
+     * and never writes the key into the page: the field is a password field, it starts empty, and it is cleared the moment
+     * the key is saved. `FM.settings.openAt('aikey')` is the door the Director and the Assistant each have. */
+    if (FM.aiKey) {
+      const ak = el('div', 'set-row set-aikey');
+      ak.id = 'set-aikey';
+      const txt = el('div', 'set-rowtext');
+      txt.appendChild(el('div', 'set-label', 'AI — your Anthropic key'));
+      const state = el('div', 'set-hint');
+      const paint = () => { state.textContent = FM.aiKey.has() ? ('Connected: ' + FM.aiKey.masked() + (FM.aiKey.remembered() ? ' · remembered on this device' : ' · for this session only')) : 'No key yet — the Director and the Assistant use it. Used only on this device, sent only to api.anthropic.com, never logged or uploaded; spend is on your own account.'; };
+      paint();
+      txt.appendChild(state);
+      ak.appendChild(txt);
+      const form = el('div', 'set-aikey-form');
+      const input = el('input', 'set-aikey-input');
+      input.type = 'password'; input.placeholder = 'sk-ant-…'; input.autocomplete = 'off'; input.spellcheck = false;
+      input.setAttribute('autocapitalize', 'off'); input.setAttribute('aria-label', 'Anthropic API key');
+      /* NOT A LOGIN (queue 930 review): a password field invites the browser and password-manager extensions to offer to save
+         it — the key would then live in a vault that Forget cannot reach. These are the opt-outs the common managers honour.
+         (Not autocomplete="one-time-code": on his iPhone that makes the keyboard offer SMS codes into the key field.) */
+      ['data-1p-ignore', 'data-bwignore'].forEach(a => input.setAttribute(a, ''));
+      input.setAttribute('data-lpignore', 'true'); input.setAttribute('data-form-type', 'other');
+      const remRow = el('label', 'set-aikey-rem');
+      /* Unticked for a new key, as the Director's was — a key is kept for the session unless he chooses otherwise; ticked
+         only if the key he has IS remembered (queue 930 review). */
+      const rem = el('input'); rem.type = 'checkbox'; rem.checked = FM.aiKey.remembered();
+      remRow.appendChild(rem); remRow.appendChild(el('span', null, 'Remember on this device'));
+      const save = el('button', 'set-action', 'Save key'); save.type = 'button';
+      const forget = el('button', 'set-action danger', 'Forget key'); forget.type = 'button';
+      const getKey = el('a', 'set-aikey-get', 'Get a key → console.anthropic.com');
+      getKey.href = 'https://console.anthropic.com/settings/keys'; getKey.target = '_blank'; getKey.rel = 'noopener';
+      const sync = () => { paint(); forget.classList.toggle('hidden', !FM.aiKey.has()); if (FM.aiPanel && FM.aiPanel.refreshKey) FM.aiPanel.refreshKey(); };
+      /* The box means what it says the moment it changes (queue 930 review): unticking it takes a remembered key out of this
+         device's storage at once, ticking it keeps the key he has — not only on the next Save. */
+      rem.addEventListener('change', () => { if (FM.aiKey.has()) { FM.aiKey.set(FM.aiKey.get(), rem.checked); sync(); } });
+      save.addEventListener('click', () => {
+        const v = input.value.trim();
+        if (!FM.aiKey.looksValid(v)) { input.classList.add('bad'); input.value = ''; input.placeholder = 'That doesn\u2019t look like an sk-ant- key'; return; }
+        FM.aiKey.set(v, rem.checked);
+        input.value = ''; input.classList.remove('bad'); input.placeholder = 'sk-ant-…';
+        sync();
+        if (FM.toast) FM.toast('Key saved — the Director and the Assistant will use it', 2200);
+      });
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save.click(); } });
+      forget.addEventListener('click', async () => {
+        // one tap from Save, so it asks (queue 930 review) — and a Director build running on the key is stopped, not left to fail stage by stage
+        const running = !!(FM.ai && FM.ai.isRunning && FM.ai.isRunning());
+        const ok = FM.ask ? await FM.ask({ title: 'Forget your key?', message: 'The Director and the Assistant stop working until you add it again.' + (running ? ' The scene being built now is stopped.' : ''), ok: 'Forget', cancel: 'Keep it', danger: true }) : true;
+        if (!ok) return;
+        if (running && FM.ai.cancel) FM.ai.cancel();
+        FM.aiKey.forget(); rem.checked = false; sync();
+        if (FM.toast) FM.toast('Key forgotten on this device', 1800);
+      });
+      form.appendChild(input); form.appendChild(remRow);
+      const btns = el('div', 'set-aikey-btns'); btns.appendChild(save); btns.appendChild(forget);
+      form.appendChild(btns); form.appendChild(getKey);
+      ak.appendChild(form);
+      sync();
+      body.appendChild(group(ak));
+    }
+
     // The old home ⋯ menu, rehomed. Both are app-level rather than project-level, so they belong
     // with the rest of the app's settings and work the same from Home or from inside a project.
     body.appendChild(group(
@@ -589,7 +657,7 @@ window.FM = window.FM || {};
       perfBtn.addEventListener('click', () => {
         if (perfBtn.disabled) return;
         perfBtn.disabled = true; copyBtn.disabled = true;
-        FM.settings.close();                       // he has to be able to USE the app while it samples
+        FM.settings.close({ handBack: false });     // he has to be able to USE the app while it samples
         /* One definition of "measure", shared with the automatic offer that fires when playback is
            struggling (js/app.js). It stores the report; this panel reads it back from storage when
            reopened, which is what the `stored` branch below already does. */
@@ -950,17 +1018,44 @@ window.FM = window.FM || {};
          first, which is all the transition needed. */
       void panel.offsetWidth;
       requestAnimationFrame(() => { if (scrim) scrim.classList.add('open'); });
+      document.body.classList.add('set-open');   // lifts #toast above the panel (queue 930 review: "Key saved" appeared behind it)
+      _onClose = null;                           // a plain open never inherits a return trip; openAt sets it after this
       escBound = e => { if (e.key === 'Escape') { e.preventDefault(); FM.settings.close(); } };
       document.addEventListener('keydown', escBound);
     },
-    close() {
+    close(opts) {
       if (!scrim) return;
+      document.body.classList.remove('set-open');
+      /* The panel that sent him here comes back only when he DISMISSES Settings (✕, the scrim, Escape, the cog) — not when a
+         row closes it to hand him something else (a backup, Measure, a joined project), which the AI panel would then cover
+         (queue 930 review, round 2). And never over a Settings he has already reopened. */
+      const back = (opts && opts.handBack === false) ? null : _onClose; _onClose = null;
+      if (back) setTimeout(() => { if (FM.settings.isOpen()) return; try { back(); } catch (e) {} }, 280);   // after the slide-out
       scrim.classList.remove('open');
       if (escBound) { document.removeEventListener('keydown', escBound); escBound = null; }
       const s = scrim; scrim = null; panel = null;
       setTimeout(() => s.remove(), 260);   // after the slide-out
     },
     isOpen() { return !!scrim; },
+    /* Open straight at one section (queue 930: the Director's and the Assistant's "API key" buttons). The panel is rebuilt
+       on every open, so the section is looked up after it, scrolled to the top of the panel, and — with a real keyboard —
+       its first field focused; on a phone a focus would throw the keyboard over the very row he came to read. */
+    openAt(which, opts) {
+      FM.settings.open();
+      _onClose = (opts && typeof opts.onClose === 'function') ? opts.onClose : null;   // the panel that sent him here comes back
+      const id = which === 'aikey' ? 'set-aikey' : String(which || '');
+      const target = id && document.getElementById(id);
+      if (!target) return false;
+      requestAnimationFrame(() => {
+        try { target.scrollIntoView({ block: 'start' }); } catch (e) {}
+        target.classList.add('set-flash');
+        setTimeout(() => target.classList.remove('set-flash'), 1400);
+        const fine = window.matchMedia && window.matchMedia('(pointer: fine)').matches;
+        const f = target.querySelector('input[type=password]');
+        if (fine && f) { try { f.focus({ preventScroll: true }); } catch (e) {} }
+      });
+      return true;
+    },
     toggle() { if (FM.settings.isOpen()) FM.settings.close(); else FM.settings.open(); },   // by name, not `this`: callers pass it detached — `(FM.settings.toggle || FM.settings.open)()` — and a detached method has no `this` in strict mode   // a second tap on the button CLOSES it (queue 762)
   };
 

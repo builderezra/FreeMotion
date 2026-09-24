@@ -241,7 +241,7 @@ window.FM = window.FM || {};
       else { P.error((err && err.message) || 'Something went wrong'); }
       return { error: err };
     } finally {
-      state.running = false; state.dry = false;
+      state.running = false; state.dry = false; state.abort = false;   // a Cancel belongs to the run it cancelled — left set, the Assistant's later calls lose their 429/5xx retries (queue 930 review)
     }
   }
 
@@ -286,7 +286,7 @@ window.FM = window.FM || {};
       FM.refreshAll();
       P.row(task.id, task.label, 'done', null, 're-roll failed — kept', true);
     } finally {
-      state.running = false; state.dry = false;
+      state.running = false; state.dry = false; state.abort = false;   // a Cancel belongs to the run it cancelled — left set, the Assistant's later calls lose their 429/5xx retries (queue 930 review)
     }
   }
 
@@ -330,7 +330,7 @@ window.FM = window.FM || {};
       FM.refreshAll();
       P.row('refine', 'Refine failed — scene unchanged', 'done', null, (e && e.message) || 'error');
     } finally {
-      state.running = false; state.dry = false;
+      state.running = false; state.dry = false; state.abort = false;   // a Cancel belongs to the run it cancelled — left set, the Assistant's later calls lose their 429/5xx retries (queue 930 review)
     }
   }
 
