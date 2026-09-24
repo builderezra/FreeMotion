@@ -87886,4 +87886,280 @@
     } finally { FM.scene = saved; try { FM.refreshAll(); } catch (e) {} }
   });
 
+
+  /* ═══ HUNT-e — AUDIO (queue 690, his words: go re audit, find some bugs coz theres a shit load) ═══════════════════════════════
+   * Four audio faults found by measuring, each written to FAIL today. Nothing here is fixed; each test says what he
+   * would see. Two of them are about his iPhone, which this suite cannot run: where a test stands in for WebKit it says
+   * exactly which documented WebKit behaviour it copies, and it keeps a control that passes today so the instrument is
+   * proven on the same run. */
+  function huntEWav(secs, fn, name) {
+    const sr = 48000, n = Math.max(1, Math.floor(secs * sr));
+    const oac = new OfflineAudioContext(2, n, sr);
+    const b = oac.createBuffer(2, n, sr);
+    for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); for (let i = 0; i < n; i++) d[i] = fn(i / sr); }
+    return new File([FM.audioBufferToWav(b)], (name || 'hunte') + '.wav', { type: 'audio/wav' });
+  }
+  function huntEScene(layers, dur) {
+    return scene(layers, { project: { width: 64, height: 64, fps: 30, duration: dur, background: '#000000' } });
+  }
+
+  /* 1 — ON HIS IPHONE THE PREVIEW IGNORES MUTE, VOLUME AND FADES.
+   * Every level below 100% reaches a forward clip through ONE line — js/app.js syncMediaToClock:
+   *   m.el.muted = false; m.el.volume = Math.max(0, Math.min(1, vol));
+   * (vol = layerVolume x fadeMul x declick; layer.muted makes it 0). FM.play does the same (m.el.volume = 0, then the
+   * tick lifts it). On an iPhone, WebKit does not let a page set a media element's volume: Apple's own Safari audio
+   * guide says the volume property is not settable in JavaScript on iOS and always reads 1, because the level belongs
+   * to the hardware buttons. So on his phone the MUTE button leaves the clip playing at full level (the line
+   * above un-mutes the element and writes a 0 that is ignored), a clip set to 25% plays at 100%, fades and volume
+   * keyframes do nothing, and the 45 ms de-click does nothing. The export honours all of it (a Web Audio GainNode), so
+   * what he hears while mixing on the phone is not what the file contains — and the mute that Extract Audio and
+   * Remove Vocals rely on does not happen, so the original plays on top of the copy.
+   * The stand-in: the element's volume is made unsettable, reading 1, exactly as WebKit on iPhone has it. What reaches
+   * the speakers is measured as the element's own output when it plays natively, plus whatever Web Audio sends to the
+   * destination (every connection to it is tapped), so a fix that routes the level through Web Audio is measured too.
+   * CONTROL: a 200% clip — the one level that already goes through Web Audio — must measure about 2x on the same tap. */
+  test('HUNT-e on an iPhone a MUTED clip still plays at full volume in the preview, and 25 percent plays at 100 percent, because iOS ignores el.volume', { item: '690', budgetMs: 90000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, made = [];
+    const ctx = FM.audioCtx();
+    const origConnect = AudioNode.prototype.connect;
+    const tapIn = ctx.createGain(), an = ctx.createAnalyser();
+    an.fftSize = 2048;
+    origConnect.call(tapIn, an); origConnect.call(an, ctx.destination);
+    const REF = 0.4 / Math.SQRT2;   // RMS of the 0.4 sine at full level
+    /* The shared context has to be RUNNING before anything is measured — on a cold start a headless Chrome can take a
+       moment to open its audio device, and a stopped clock reads as silence (the same wait the recorder test uses). */
+    try { await ctx.resume(); } catch (e) {}
+    { const w0 = Date.now(), c0 = ctx.currentTime;
+      while (!(ctx.state === 'running' && ctx.currentTime > c0 + 0.05)) {
+        if (Date.now() - w0 > 9000) { AudioNode.prototype.connect = origConnect; throw new Error('setup: the audio context never ran (state ' + ctx.state + ', currentTime ' + ctx.currentTime.toFixed(2) + ') — the environment refuses to run audio at all'); }
+        await sleep(50);
+      } }
+    AudioNode.prototype.connect = function () {
+      const a = Array.prototype.slice.call(arguments);
+      if (a[0] === ctx.destination && this !== an) a[0] = tapIn;
+      return origConnect.apply(this, a);
+    };
+    async function heard(rec) {
+      const buf = new Float32Array(an.fftSize);
+      let acc = 0;
+      for (let k = 0; k < 6; k++) {
+        an.getFloatTimeDomainData(buf);
+        let s = 0; for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i];
+        acc += Math.sqrt(s / buf.length);
+        await sleep(40);
+      }
+      const web = acc / 6 / REF;
+      const routed = !!rec._mes;
+      // a natively playing element is heard at its own volume — which on iOS reads back 1 whatever was written
+      const native = (!routed && !rec.el.paused && !rec.el.muted) ? rec.el.volume : 0;
+      return { level: web + native, web: web, native: native, routed: routed, paused: rec.el.paused, muted: rec.el.muted };
+    }
+    async function run(label, setup) {
+      window.__fmStep = 'HUNT-e iOS level ' + label;
+      const rec = await FM.loadVideoFile(huntEWav(4, t => 0.4 * Math.sin(2 * Math.PI * 440 * t), 'hunte-' + label));
+      // WebKit on iPhone: the volume attribute cannot be set by a page and always reads 1
+      Object.defineProperty(rec.el, 'volume', { configurable: true, get: function () { return 1; }, set: function () {} });
+      const L = FM.makeLayer('video', { name: 'song ' + label, x: 32, y: 32, start: 0, duration: 4 });
+      setup(L);
+      FM.media.set(L.id, rec); made.push(L.id);
+      FM.scene = huntEScene([L], 4);
+      FM.refreshAll(); FM.setTime(0);
+      FM.play();
+      await sleep(900);
+      const r = await heard(rec);
+      FM.pause();
+      await sleep(120);
+      return r;
+    }
+    const fmt = r => 'level ' + r.level.toFixed(2) + ' (web audio ' + r.web.toFixed(2) + ', native ' + r.native.toFixed(2) + ', routed ' + r.routed + ', paused ' + r.paused + ', el.muted ' + r.muted + ')';
+    try {
+      const boost = await run('200', L => { L.volume = 2; });
+      if (!(boost.level > 1.5 && boost.level < 2.8)) throw new Error('CONTROL: a 200 percent clip measured ' + fmt(boost) + ' (context ' + ctx.state + ')' + ' — the speaker tap cannot read the Web Audio path, so nothing below means anything');
+      const muted = await run('muted', L => { L.muted = true; });
+      if (!(muted.level < 0.05)) throw new Error('on an iPhone a MUTED clip still plays at full volume in the preview (' + fmt(muted) + ') — the app mutes by writing el.volume = 0 and setting el.muted = false, and iOS ignores el.volume; the export is silent, so the mute button, Extract Audio and Remove Vocals all leave the original playing while he edits');
+      const quarter = await run('25', L => { L.volume = 0.25; });
+      if (Math.abs(quarter.level - 0.25) > 0.1) throw new Error('on an iPhone a clip set to 25 percent plays at ' + Math.round(quarter.level * 100) + ' percent in the preview (' + fmt(quarter) + ') — every level below 100 percent, every fade and volume keyframe and the de-click are written to el.volume, which iOS ignores; only the export honours them, so the phone preview is not the file');
+    } finally {
+      AudioNode.prototype.connect = origConnect;
+      try { FM.pause(); } catch (e) {}
+      try { tapIn.disconnect(); an.disconnect(); } catch (e) {}
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 2 — AFTER A STALL, THE CATCH-UP DETUNES THE SONG AND THEN LEAVES IT LATE FOR GOOD.
+   * When a playing element falls behind the transport (a decode stall — the normal state of his phone: his 10 Sep
+   * report measured the clock a median 158 ms out, 357 ms at worst, 94 trims in 1.2 s), js/app.js syncMediaToClock
+   * does two things, and both are wrong for a STEP of lag, which is what a stall is:
+   *   · it trims playbackRate by err/SYNC_TAU, capped at +-10% (FM.mediaSyncPlan). That was written when preservesPitch
+   *     was on and a trim was a time-stretch. Since queue 916 (v16.77) js/media.js turns preservesPitch OFF on every
+   *     element so a sped-up clip sounds sped up — so every trim is now a PITCH BEND: +10% is the song 1.65 semitones
+   *     sharp for as long as the catch-up lasts;
+   *   · and it never finishes catching up. FM._syncBiasStep learns the element's output latency with a slow EMA
+   *     (ERR_BIAS_ALPHA 0.01, about 1.7 s) and corrects only what is left over. Its comment says real drift outruns
+   *     that EMA because drift accumulates — but a stall does not accumulate, it is a STEP, and the EMA swallows it as
+   *     if it were latency while the trim is still closing it. The two meet in the middle, the de-biased error reads
+   *     zero, and the song stays most of the stall behind the picture and every other layer for the rest of the clip,
+   *     until a later stall pushes it past the 350 ms hard seek (an audible jump). That is his 158 ms median.
+   * The lag is made the plain way: the element is set 200 ms behind where the transport is. Pitch is read from the
+   * element (playbackRate against the clip's own speed, unless it is preserving pitch); the lag from
+   * FM.layerLocalTime against el.currentTime, measured before the stall and again once the controller has settled.
+   * CONTROL: the controller must see the lag (a trim or a seek), or the readings below mean nothing. */
+  test('HUNT-e after a 200 ms stall the song is played about 1.6 semitones sharp for a second and then left over 100 ms late for the rest of the clip', { item: '690', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, pr0 = FM.previewRate;
+    let id = null;
+    try {
+      const rec = await FM.loadVideoFile(huntEWav(12, t => 0.3 * Math.sin(2 * Math.PI * 440 * t), 'hunte-sync'));
+      const L = FM.makeLayer('video', { name: 'song', x: 32, y: 32, start: 0, duration: 12 });
+      FM.media.set(L.id, rec); id = L.id;
+      FM.scene = huntEScene([L], 12);
+      FM.refreshAll(); FM.setTime(0);
+      FM.play();
+      await sleep(1600);   // past the start wait and SYNC_WARMUP, so the controller has learned this element's latency
+      if (!FM.playing || rec.el.paused) throw new Error('setup: the song is not playing (' + (FM.playing ? 'element paused' : 'transport stopped') + ')');
+      const errNow = () => FM.layerLocalTime(L, FM.time) - rec.el.currentTime;
+      const med = a => a.slice().sort((x, y) => x - y)[a.length >> 1];
+      const e0 = []; for (let k = 0; k < 10; k++) { e0.push(errNow()); await new Promise(r => requestAnimationFrame(r)); }
+      const before = med(e0);
+      FM.playbackStats.trims = 0; FM.playbackStats.seeks = 0;
+      window.__fmStep = 'HUNT-e sync stall';
+      rec.el.currentTime = Math.max(0, rec.el.currentTime - 0.2);   // the element is now 200 ms behind the transport
+      const log = [];
+      const t0 = performance.now();
+      await new Promise(res => {
+        (function f() {
+          const base = (FM.speedAt ? FM.speedAt(L, FM.time) : 1) * (FM.previewRate || 1);
+          const follows = rec.el.preservesPitch !== true;
+          const cents = follows ? 1200 * Math.log2((rec.el.playbackRate || 1) / base) : 0;
+          log.push({ w: performance.now() - t0, cents: cents, rate: rec.el.playbackRate, err: errNow() });
+          if (performance.now() - t0 < 4500 && FM.playing) requestAnimationFrame(f); else res();
+        })();
+      });
+      FM.pause();
+      const corrections = FM.playbackStats.trims + FM.playbackStats.seeks;
+      if (!corrections) throw new Error('CONTROL: the sync controller never saw the 200 ms stall (0 trims, 0 seeks) — the lag did not register, so nothing below means anything');
+      const worst = log.reduce((a, s) => Math.abs(s.cents) > Math.abs(a.cents) ? s : a, log[0]);
+      const off = log.filter(s => Math.abs(s.cents) > 25);
+      const offMs = off.length ? Math.round(off[off.length - 1].w - off[0].w) : 0;
+      const left = med(log.slice(-20).map(s => s.err)) - before;   // how much of the stall is still there once it has settled
+      const detuned = Math.abs(worst.cents) > 25, late = Math.abs(left) > 0.06;
+      if (detuned || late) {
+        throw new Error('after the song fell 200 ms behind, the catch-up ' +
+          (detuned ? 'played it ' + (worst.cents / 100).toFixed(2) + ' semitones ' + (worst.cents > 0 ? 'sharp' : 'flat') + ' (rate ' + worst.rate.toFixed(3) + ' with pitch following speed) for about ' + offMs + ' ms' : 'kept its pitch') +
+          ' and ' + (late ? 'then stopped with the song still ' + Math.round(left * 1000) + ' ms later than before the stall, 4.5 s on — the latency learner swallowed the stall and nothing will correct it until the error passes the 350 ms hard seek' : 'closed the lag') +
+          ' (' + FM.playbackStats.trims + ' trims, ' + FM.playbackStats.seeks + ' seeks). On his phone stalls are constant, so songs keep going out of tune and drift out of step with the picture and every other layer while he edits; the export is right, so the preview is not the file');
+      }
+    } finally {
+      try { FM.pause(); } catch (e) {}
+      FM.previewRate = pr0;
+      FM.scene = saved;
+      if (id) { try { FM.media.remove(id); } catch (e) {} }
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 3 — ONE SHORT SOUND OVER A SONG TURNS THE WHOLE EXPORT DOWN.
+   * js/exporter.js buildAudioMix (queue 604) measures the peak of the WHOLE rendered mix and, if it is over 1, divides
+   * EVERY sample of the soundtrack by it. So the loudest single moment sets the level of the entire file: a 0.2 s sound
+   * effect over a song that peaks at 0.9 makes the whole song — minutes of it, nowhere near the overlap — about 5 dB
+   * quieter in the export than in the preview and than the original file. That is his own #604 setup word for word
+   * (a clip plus one sound effect, measured there at peak 1.52-1.61, so that whole file went out about 4 dB down), and
+   * #677 (two sound effects, x0.853). Real songs are mastered close to full scale, so almost any overlap trips it.
+   * Measured in the FILE: a real export, decoded, the song's level read from 0.5 to 1.5 s, well before the sound effect
+   * at 2.0 s. CONTROL: the same song exported alone must come back at its own level, which proves the decode and the
+   * reading and pins the drop on the overlap. */
+  test('HUNT-e one short sound effect over a song turns the WHOLE song about 5 dB down in the exported file, not just the overlap', { item: '690', budgetMs: 120000 }, async function () {
+    if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, made = [];
+    const SONG = 0.9;
+    async function exportLevel(withSfx) {
+      window.__fmStep = 'HUNT-e mix ' + (withSfx ? 'song+sfx' : 'song');
+      const recS = await FM.loadVideoFile(huntEWav(4, t => SONG * Math.sin(2 * Math.PI * 220 * t), 'hunte-song'));
+      const song = FM.makeLayer('video', { name: 'song', x: 32, y: 32, start: 0, duration: 4 });
+      FM.media.set(song.id, recS); made.push(song.id);
+      const layers = [song];
+      if (withSfx) {
+        const recX = await FM.loadVideoFile(huntEWav(0.2, t => 0.9 * Math.sin(2 * Math.PI * 880 * t), 'hunte-whoosh'));
+        const sfx = FM.makeLayer('video', { name: 'whoosh', x: 32, y: 32, start: 2, duration: 0.2 });
+        FM.media.set(sfx.id, recX); made.push(sfx.id);
+        layers.unshift(sfx);
+      }
+      FM.scene = huntEScene(layers, 4);
+      FM.refreshAll();
+      let blob = null;
+      await FM.exporter.run({ fps: 10, scale: 1, name: 'hunte', onReady: async r => { blob = r.blob; } });
+      if (!blob) throw new Error('setup: the export produced no file');
+      const ab = await blob.arrayBuffer();
+      const dec = await new OfflineAudioContext(2, 48000, 48000).decodeAudioData(ab);
+      const d = dec.getChannelData(0), sr = dec.sampleRate;
+      let s = 0; const a = Math.floor(0.5 * sr), b = Math.floor(1.5 * sr);
+      for (let i = a; i < b; i++) s += d[i] * d[i];
+      return { rms: Math.sqrt(s / (b - a)), gain: FM._lastMixGain, raw: FM._lastMixRawPeak };
+    }
+    try {
+      const alone = await exportLevel(false);
+      const own = SONG / Math.SQRT2;
+      const aloneDb = 20 * Math.log10(alone.rms / own);
+      if (Math.abs(aloneDb) > 1) throw new Error('CONTROL: the song exported ALONE came back at ' + aloneDb.toFixed(1) + ' dB from its own level (rms ' + alone.rms.toFixed(3) + ' vs ' + own.toFixed(3) + ') — the decode or the reading is off, so the comparison below means nothing');
+      const mixed = await exportLevel(true);
+      const dropDb = 20 * Math.log10(mixed.rms / alone.rms);
+      if (dropDb < -1) throw new Error('one 0.2 s sound effect at 2.0 s made the WHOLE song ' + (-dropDb).toFixed(1) + ' dB quieter in the exported file, from 0.5 to 1.5 s where nothing else plays (the mix peaked at ' + (mixed.raw || 0).toFixed(2) + ' and every sample was scaled by ' + (mixed.gain || 0).toFixed(3) + ') — the export turns the entire soundtrack down by its single loudest moment, so a song with a sound effect on it comes out much quieter than the preview');
+    } finally {
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 4 — ON AN IPHONE SET TO SILENT, THE SOUND-EFFECT PREVIEW IS SILENT.
+   * The ▶ in Add ▸ Audio ▸ Sound effects plays through Web Audio alone (js/sfx.js preview), and so do reversed clips
+   * (js/audio-play.js). WebKit gives a page that is only playing Web Audio the AMBIENT audio session, which the
+   * ring/silent switch mutes — ordinary media elements get the playback session and are not muted. That is why Safari
+   * 16.4+ has navigator.audioSession: a page sets its type to 'playback' so its Web Audio is treated like media. The app
+   * never touches it (no audioSession anywhere in js/), so on a phone in silent mode — which is how most iPhones sit —
+   * every ▶ in the sound-effects list does nothing at all, and a reversed clip plays without sound, while his other
+   * clips play. #562 was exactly 'previewing sound effects doesn't work'; v12.78 fixed a real throw, and this is the
+   * part a desktop could never show.
+   * The stand-in: navigator.audioSession as Safari exposes it, starting at 'auto'. The ▶ is pressed with a REAL click.
+   * CONTROL: the click must reach the preview (its row lights up), or the assertion would pass on a dead button. */
+  test('HUNT-e on an iPhone set to silent the sound effect preview makes no sound, because the app never asks for the playback audio session', { item: '690', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (!FM.sfx || !FM.sfx.open) throw new Error('FM.sfx.open is missing — the sound-effects sheet has no opener');
+    const had = Object.prototype.hasOwnProperty.call(navigator, 'audioSession');
+    const prev = had ? Object.getOwnPropertyDescriptor(navigator, 'audioSession') : null;
+    const session = { type: 'auto', state: 'inactive' };
+    Object.defineProperty(navigator, 'audioSession', { configurable: true, enumerable: true, get: function () { return session; } });
+    try {
+      await onScreen924(async function () {
+        FM.sfx.open(); await sleep(450);
+        try {
+          const play = document.querySelector('.sfx-play');
+          if (!play) throw new Error('setup: the sound-effects sheet has no ▶ button');
+          play.scrollIntoView({ block: 'center' }); await sleep(150);
+          const r = play.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+          if (!(r.width > 0) || y < 0 || y > 740 || x < 0 || x > 890) throw new Error('setup: the ▶ is at ' + Math.round(x) + ',' + Math.round(y) + ', out of reach of real input');
+          const row = play.closest('.sfx-row');
+          let lit = false;
+          const obs = new MutationObserver(() => { if (row && row.classList.contains('playing')) lit = true; });
+          if (row) obs.observe(row, { attributes: true, attributeFilter: ['class'] });
+          window.__fmStep = 'HUNT-e sfx preview click';
+          try { await realInput924([{ t: 'mouseMove', x: x, y: y, ms: 30 }, { t: 'mouseDown', x: x, y: y, ms: 60 }, { t: 'mouseUp', x: x, y: y, ms: 0 }], 'the ▶ of a sound effect'); await sleep(350); }
+          finally { obs.disconnect(); }
+          if (!lit) throw new Error('CONTROL: the real click on the ▶ never reached the preview (its row did not light up) — nothing below means anything');
+          if (session.type !== 'playback') throw new Error('the sound effect previewed through Web Audio with navigator.audioSession left at ' + String(session.type) + ' — on an iPhone that is the ambient session, which the ring/silent switch mutes, so on a phone set to silent every ▶ in the sound effects list (and every reversed clip) makes no sound while his other clips still play');
+        } finally { try { if (FM.sfx.stopPreview) FM.sfx.stopPreview(); FM.sfx.close(); } catch (e) {} await sleep(250); }
+      });
+    } finally {
+      if (prev) Object.defineProperty(navigator, 'audioSession', prev); else delete navigator.audioSession;
+    }
+  });
+
 })();
