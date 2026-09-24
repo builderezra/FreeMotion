@@ -87892,7 +87892,7 @@
    * through tests/_cdp.py (realInput924), because the phone timeline's gestures depend on capture, hit-testing and the
    * browser's own touch -> pointer pipeline, and his phone bugs have repeatedly survived synthetic events. Each one
    * carries a control that proves the gesture really engaged, so a red here is the app, not a gesture that never started.
-   * Found and written by the hunt; nothing here is fixed yet. */
+   * Found by the hunt as four failing HUNT-a tests; all four fixed in js/timeline.js and renamed 690 for what they now hold. */
   async function huntKfFixture() {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     if (FM.contextMenu) FM.contextMenu.hide();
@@ -87922,7 +87922,7 @@
     return !!(m && !m.classList.contains('hidden') && /Delete keyframe/.test(m.textContent));
   }
 
-  test('HUNT-a holding a keyframe diamond for its menu fails when the finger trembles, and nudges the keyframe instead', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 a trembling hold on a keyframe diamond still opens its menu, and a drag moves the keyframe by the finger travel, not to the finger', { item: '690', budgetMs: 60000 }, async function () {
     /* On the phone the hold IS the only way to delete a keyframe or change its easing — a finger never produces a
        double-click or a right-click (the diamond's own comment says so). The hold arms at KF_HOLD_MS; after that, the
        window pointermove branch sets kfDrag.moved = true on ANY move, with no slop at all, and writes
@@ -87972,6 +87972,31 @@
           if (!menu) bad.push('he held the keyframe diamond for 0.65 s to delete it or change its easing, his finger drifted 1px, and the menu never opened — on the phone that hold is the only way in');
           if (t3 == null || Math.abs(t3 - 3) > 1e-6) bad.push('the same hold moved the keyframe from 3.000 s to ' + (t3 == null ? '?' : t3.toFixed(3)) + ' s — a press a few pixels off the diamond centre plus one pixel of drift retimes it, and the release records it in undo');
           if (bad.length) throw new Error(bad.join('; AND '));
+          if (FM.contextMenu) FM.contextMenu.hide();
+
+          /* …AND A REAL DRAG STILL RETIMES — by how far the finger TRAVELLED, not to wherever the finger is. The same
+             off-centre press (8px right of the diamond), held until it arms, then a deliberate 30px drag right: the
+             keyframe must move 30px worth, where the old absolute placement moved it 38px worth. */
+          L = await huntKfFixture(); FM.setTime(2.5); FM.timeline.updatePlayhead(); await sleep(150);
+          const d1 = huntDotAt(1); d = huntDotAt(3);
+          if (!d1 || !d) throw new Error('setup: the diamonds at 1 s and 3 s are not both live');
+          const pps = (d.getBoundingClientRect().left - d1.getBoundingClientRect().left) / 2;
+          if (!(pps > 20)) throw new Error('setup: the lane is drawn at ' + pps.toFixed(1) + ' px a second, too tight to tell 30px from 38px');
+          r = d.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2;
+          const xs = cx + 8;
+          await realInput924([
+            { t: 'touchStart', x: xs, y: cy, ms: 650 },
+            { t: 'touchMove', x: xs + 10, y: cy, ms: 40 },
+            { t: 'touchMove', x: xs + 20, y: cy, ms: 40 },
+            { t: 'touchMove', x: xs + 30, y: cy, ms: 120 },
+            { t: 'touchEnd', x: xs + 30, y: cy, ms: 0 },
+          ], 'a hold, then a deliberate 30px drag');
+          await sleep(300);
+          const want = Math.round((3 + 30 / pps) * 30) / 30, absolute = Math.round((3 + 38 / pps) * 30) / 30;
+          const ts = L.transform.x.kf.map(k => k.t);
+          const moved = ts.filter(t => Math.abs(t - 1) > 1e-6 && Math.abs(t - 5) > 1e-6)[0];
+          if (huntCtxUp()) throw new Error('a deliberate 30px drag after the hold opened the keyframe menu instead of moving the keyframe');
+          if (moved == null || Math.abs(moved - want) > 0.5 / 30) throw new Error('a hold then a 30px drag put the keyframe at ' + (moved == null ? '?' : moved.toFixed(3)) + ' s; the finger travelled ' + (30 / pps).toFixed(3) + ' s worth, so it belongs at ' + want.toFixed(3) + ' s' + (moved != null && Math.abs(moved - absolute) < 0.5 / 30 ? ' — it went to where the finger is, not by how far it moved' : ''));
         });
       }, 380);
     } finally {
@@ -87981,7 +88006,7 @@
     }
   });
 
-  test('HUNT-a a sideways swipe that starts on a keyframe diamond does not scrub — the middle of the timeline goes dead', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 a sideways swipe that starts on a keyframe diamond scrubs the timeline like the clip under it', { item: '690', budgetMs: 60000 }, async function () {
     /* With a property editor open (Move and Transform on the phone), that property's diamonds are LIVE and carry a ~35px
        invisible touch pad (styles.css .kf-dot::after). The diamond's pointerdown stops propagation and captures the
        pointer, so neither the clip's scrub nor the timeline's own grab ever sees the finger; and the window pointermove
@@ -88035,7 +88060,7 @@
     }
   });
 
-  test('HUNT-a flicking the layer list up from a clip or a layer name stops dead — only bare lane glides', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 a flick of the layer list glides from a clip and from a layer name, not only from bare lane', { item: '690', budgetMs: 60000 }, async function () {
     /* Queue 415 gave the vertical pan a glide ("Scrolling up and down on timeline should have some glide to it like
        dragging left and right") — but only in the empty-lane branch (scrub.axis === y samples vY and flings). A vertical
        drag that starts ON A CLIP runs the clipTap branch, which pans scrollTop and samples nothing, and its release only
@@ -88116,12 +88141,17 @@
     }
   });
 
-  test('HUNT-a touching the timeline to stop a glide selects the clip under the finger and throws up the edit sheet', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 a touch that catches a gliding timeline stops it without selecting or deselecting anything', { item: '690', budgetMs: 90000 }, async function () {
     /* Queue 823 c9 made a touch on a clip STOP a glide (the capture-phase pointerdown on #timeline kills both momenta),
-       but the touch is still read as a TAP by the clip's pointerup: clipTap was never moved, so it calls
+       but the touch was still read as a TAP by the clip's pointerup: clipTap was never moved, so it called
        FM.selectLayer. On the phone a selection flips the timeline to the one-row solo view and raises the edit sheet,
-       so catching a flick where he wants it costs him his whole view and a tap-off to get it back. A touch that catches
-       a moving list is a catch, not a tap, everywhere else on his phone. */
+       so catching a flick where he wants it cost him his whole view and a tap-off to get it back. A touch that catches
+       a moving list is a catch, not a tap, everywhere else on his phone. Three taps had the same hole, and each is held
+       here with its own control — a plain tap on a still timeline must keep doing its job:
+         A. a clip — the catch must not select it;
+         B. the ruler, with a layer selected — the catch must not deselect it (the lane / ruler tap-off);
+         C. a layer name — the catch must not select it. Its select rides on the CLICK, and every clip release arms a
+            300 ms click shield (queue 707), so the catch is made after the shield is down or the test proves nothing. */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const saved = FM.scene;
     try {
@@ -88134,30 +88164,92 @@
           if (FM.pause) FM.pause();
           FM.selectLayer(null); FM.refreshAll(); FM.setTime(2); FM.timeline.rebuild(); FM.timeline.updatePlayhead();
           await sleep(400);
-          const c = [].filter.call(document.querySelectorAll('#tl-tracks .clip'), el => el.dataset.id === Ls[1].id)[0];
-          if (!c) throw new Error('setup: no clip on screen');
-          const y = c.getBoundingClientRect().top + c.getBoundingClientRect().height / 2;
-          if (y > 740) throw new Error('setup: the clip is at y ' + Math.round(y) + ', out of reach');
-          const fling = [{ t: 'touchStart', x: 300, y: y, ms: 16 }];
-          for (let k = 1; k <= 6; k++) fling.push({ t: 'touchMove', x: 300 - 30 * k, y: y, ms: 16 });
-          fling.push({ t: 'touchEnd', x: 120, y: y, ms: 0 });
-          await realInput924(fling, 'the flick');
-          const g1 = FM.time; await sleep(90); const g2 = FM.time;
-          /* CONTROL: the timeline really is gliding when he touches it. */
-          if (!(g2 > g1 + 0.02)) throw new Error('CONTROL: after the flick the playhead was not gliding (' + g1.toFixed(2) + ' -> ' + g2.toFixed(2) + ' s), so there is no glide to catch');
+          const clipOf = (L) => [].filter.call(document.querySelectorAll('#tl-tracks .clip'), el => el.dataset.id === L.id)[0] || null;
+          const tap = (x, y) => [{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 0 }];
+          /* A hard sideways flick on a clip, then proof the playhead really is gliding: without a glide there is nothing
+             to catch and every check below would pass on nothing. */
+          const flickOn = async (L, what) => {
+            const c = clipOf(L);
+            if (!c) throw new Error('setup: no clip on screen for ' + what);
+            const y = c.getBoundingClientRect().top + c.getBoundingClientRect().height / 2;
+            if (y > 740) throw new Error('setup: the clip for ' + what + ' is at y ' + Math.round(y) + ', out of reach');
+            const fling = [{ t: 'touchStart', x: 300, y: y, ms: 16 }];
+            for (let k = 1; k <= 6; k++) fling.push({ t: 'touchMove', x: 300 - 30 * k, y: y, ms: 16 });
+            fling.push({ t: 'touchEnd', x: 120, y: y, ms: 0 });
+            FM.setTime(2); FM.timeline.updatePlayhead(); await sleep(120);
+            await realInput924(fling, 'the flick for ' + what);
+            return y;
+          };
+          const gliding = async (what, wait) => {
+            await sleep(wait || 0);
+            const g1 = FM.time; await sleep(60); const g2 = FM.time;
+            if (!(g2 > g1 + 0.02)) throw new Error('CONTROL: after the flick for ' + what + ' the playhead was not gliding (' + g1.toFixed(2) + ' -> ' + g2.toFixed(2) + ' s), so there is no glide to catch');
+          };
+          const stopped = async (what) => {
+            const s1 = FM.time; await sleep(350); const s2 = FM.time;
+            if (Math.abs(s2 - s1) > 0.02) throw new Error(what + ': the touch did not even stop the glide (' + s1.toFixed(2) + ' -> ' + s2.toFixed(2) + ' s)');
+          };
+          const selName = () => { const s = FM.scene.selectedId ? FM.layerById(FM.scene, FM.scene.selectedId) : null; return s ? s.name : null; };
+
+          /* ── A. THE CLIP ── */
+          const y = await flickOn(Ls[1], 'the clip catch');
+          await gliding('the clip catch', 30);
           if (FM.scene.selectedId) throw new Error('setup: the flick itself selected a layer');
           const D = huntDowns();
-          try { await realInput924([{ t: 'touchStart', x: 250, y: y, ms: 70 }, { t: 'touchEnd', x: 250, y: y, ms: 0 }], 'the touch that catches the glide'); } finally { D.stop(); }
-          const s1 = FM.time; await sleep(350); const s2 = FM.time;
+          try { await realInput924(tap(250, y), 'the touch that catches the glide'); } finally { D.stop(); }
+          await stopped('on a clip');
           if (!D.downs.length || !D.downs[0].trusted || !/(^| )clip( |$)/.test(D.downs[0].cls)) throw new Error('CONTROL: the catching touch did not land on a clip (' + JSON.stringify(D.downs) + ')');
-          if (Math.abs(s2 - s1) > 0.02) throw new Error('the touch did not even stop the glide (' + s1.toFixed(2) + ' -> ' + s2.toFixed(2) + ' s)');
-          const sel = FM.scene.selectedId ? FM.layerById(FM.scene, FM.scene.selectedId) : null;
-          if (sel) throw new Error('he flicked the timeline and touched it to stop the glide — it stopped, but the same touch selected ' + sel.name + (FM._soloLayerId && FM._soloLayerId() ? ', the timeline collapsed to that one row and the edit sheet came up' : '') + ', so every catch of a glide costs him his view and a tap-off');
-          /* …and a plain tap with nothing moving still selects, so the fix must tell a catch from a tap, not stop taps. */
+          if (selName()) throw new Error('he flicked the timeline and touched it to stop the glide — it stopped, but the same touch selected ' + selName() + (FM._soloLayerId && FM._soloLayerId() ? ', the timeline collapsed to that one row and the edit sheet came up' : '') + ', so every catch of a glide costs him his view and a tap-off');
+          /* …and a plain tap with nothing moving still selects, so the fix tells a catch from a tap rather than stopping taps. */
           await sleep(200);
-          await realInput924([{ t: 'touchStart', x: 250, y: y, ms: 70 }, { t: 'touchEnd', x: 250, y: y, ms: 0 }], 'a plain tap on a still timeline');
+          await realInput924(tap(250, y), 'a plain tap on a still timeline');
           await sleep(300);
-          if (!FM.scene.selectedId) throw new Error('a plain tap on a clip with nothing gliding no longer selects it — the catch must not cost the tap');
+          if (selName() !== 'HUNT g1') throw new Error('a plain tap on a clip with nothing gliding no longer selects it (selected: ' + selName() + ') — the catch must not cost the tap');
+
+          /* ── B. THE RULER, WITH A LAYER SELECTED ── */
+          await sleep(400);
+          const ruler = document.getElementById('tl-ruler');
+          if (!ruler) throw new Error('setup: no #tl-ruler');
+          const rr = ruler.getBoundingClientRect(), rx = 240, ry = rr.top + rr.height / 2;
+          const underR = document.elementFromPoint(rx, ry);
+          if (!underR || !underR.closest || !underR.closest('#tl-ruler')) throw new Error('setup: the ruler is not what sits at ' + rx + ',' + Math.round(ry) + ' with a layer selected (' + (underR ? underR.id || underR.className : 'nothing') + ')');
+          await flickOn(Ls[1], 'the ruler catch');
+          await gliding('the ruler catch', 30);
+          if (selName() !== 'HUNT g1') throw new Error('setup: the flick on the selected clip changed the selection to ' + selName());
+          const DR = huntDowns();
+          try { await realInput924(tap(rx, ry), 'the touch on the ruler that catches the glide'); } finally { DR.stop(); }
+          await stopped('on the ruler');
+          if (!DR.downs.length || !DR.downs[0].trusted || DR.downs[0].kind !== 'touch') throw new Error('CONTROL: the ruler catch was not a trusted touch (' + JSON.stringify(DR.downs) + ')');
+          if (selName() !== 'HUNT g1') throw new Error('he touched the ruler to stop a glide and it also DESELECTED his layer (now: ' + selName() + ') — the catch cost him the selection he was working on');
+          await sleep(400);
+          await realInput924(tap(rx, ry), 'a plain tap on the still ruler');
+          await sleep(300);
+          if (selName()) throw new Error('CONTROL: a plain tap on the ruler with nothing gliding no longer deselects (still ' + selName() + ') — the catch must not cost the tap-off');
+
+          /* ── C. A LAYER NAME ── */
+          FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); await sleep(300);
+          const headAt = (L) => {
+            const row = [].filter.call(document.querySelectorAll('#tl-tracks .track-row'), r => { const c = r.querySelector('.clip'); return c && c.dataset.id === L.id; })[0];
+            const hEl = row && row.querySelector('.track-head'); if (!hEl) return null;
+            const h = hEl.getBoundingClientRect(), eEl = hEl.querySelector('.th-eye'), e = eEl ? eEl.getBoundingClientRect() : { right: h.left };
+            const p = { x: Math.round((Math.max(e.right, h.left) + h.right) / 2), y: h.top + h.height / 2 };
+            const hit = document.elementFromPoint(p.x, p.y);
+            return (hit && hit.closest && hit.closest('.track-head') === hEl && !hit.closest('.th-eye')) ? p : null;
+          };
+          const hp = headAt(Ls[2]);
+          if (!hp) throw new Error('setup: no reachable layer name for HUNT g2');
+          await flickOn(Ls[1], 'the name catch');
+          await gliding('the name catch', 380);   // past the clip release's 300 ms click shield (queue 707)
+          if (FM._clickShieldLeft && FM._clickShieldLeft() > 0) throw new Error('CONTROL: the click shield was still up (' + Math.round(FM._clickShieldLeft()) + ' ms), so it, not the catch, would swallow the tap');
+          const DH = huntDowns();
+          try { await realInput924(tap(hp.x, hp.y), 'the touch on a layer name that catches the glide'); } finally { DH.stop(); }
+          await stopped('on a layer name');
+          if (!DH.downs.length || !DH.downs[0].trusted || !DH.downs[0].head) throw new Error('CONTROL: the name catch did not land on a layer name (' + JSON.stringify(DH.downs) + ')');
+          if (selName()) throw new Error('he touched a layer name to stop a glide and it selected ' + selName() + (FM._soloLayerId && FM._soloLayerId() ? ', collapsing the timeline to that one row' : '') + ' — a catch is not a tap');
+          await sleep(400);
+          await realInput924(tap(hp.x, hp.y), 'a plain tap on a still layer name');
+          await sleep(300);
+          if (selName() !== 'HUNT g2') throw new Error('CONTROL: a plain tap on a layer name with nothing gliding no longer selects it (selected: ' + selName() + ')');
         });
       }, 380);
     } finally {
