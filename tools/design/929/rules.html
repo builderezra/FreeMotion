@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FreeMotion — test runner</title>
+<style>
+  body { font: 13px/1.5 system-ui, sans-serif; background: #0d0f13; color: #e6e9ef; margin: 0; padding: 18px; }
+  h1 { font-size: 15px; margin: 0 0 4px; }
+  .sub { color: #8a93a6; font-size: 12px; margin-bottom: 14px; }
+  #sum { font-size: 15px; font-weight: 700; margin: 10px 0 14px; }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 12px; margin-right: 8px; }
+  .green { background: #10331f; color: #57d98a; } .red { background: #3a1518; color: #ff7a85; }
+  .row { padding: 7px 11px; border-radius: 7px; margin: 4px 0; display: flex; gap: 10px; align-items: baseline; }
+  .row.ok { background: #11251a; } .row.fail { background: #2a1416; } .row.pend { opacity: .8; }
+  .tag { font-weight: 700; flex: 0 0 46px; }
+  .ok .tag { color: #57d98a; } .fail .tag { color: #ff7a85; }
+  .err { color: #c98; font-size: 12px; }
+  .item { color: #6a7488; }
+  /* Parked off-screen, NOT display:none. Two tests measure real on-screen geometry (the preview's
+     size vs its backing store, and the edit-points overlay's hit area), and a display:none subtree
+     gives every element a 0x0 box — so those two could only ever report "no size to compare" and the
+     suite sat permanently at 19/21 for a reason that had nothing to do with the app. A real 900x760
+     box off the left edge is invisible and measurable. */
+  iframe { position: fixed; left: -10000px; top: 0; width: 900px; height: 760px; border: 0; }
+  .note { color: #6a7488; font-size: 11.5px; margin-top: 14px; }
+</style>
+</head>
+<body>
+  <h1>FreeMotion test suite</h1>
+  <div class="sub">Headless render + DOM assertions against a synthetic scene. Loads the real app in a hidden frame, runs <code>tests.js</code>, reports green/red. "pending" = a known backlog gap not built yet.</div>
+  <div id="sum">Loading app…</div>
+  <div id="list"></div>
+  <div class="note">Regression must be all-green to ship. Re-run after any change.</div>
+  <iframe id="app" src="../../../index.html"></iframe>
+  <script>
+    var frame = document.getElementById('app');
+    frame.addEventListener('load', function () {
+      var w = frame.contentWindow;
+      // no-store, not a plain fetch: the browser was serving tests.js from cache, so the runner
+      // could report green against a version of the suite that no longer exists on disk. A test
+      // harness that silently tests stale code is worse than no harness.
+      fetch('../../../tests/tests.js', { cache: 'no-store' }).then(function (r) { return r.text(); }).then(function (src) {
+        /* ⚠️ THE APP MUST ACTUALLY BE THERE BEFORE A SINGLE TEST RUNS (21 Sep). The iframe's `load`
+           event fires when the document and its subresources are done — but if ONE of the app's ~40
+           script tags fails to execute (a dropped request under load is the observed case), FM is
+           left half-built and the suite runs anyway. The first test to touch the missing piece then
+           reports something like "FM.makeLayer is not a function", which reads as a bug in THAT test
+           and is nothing of the kind. It has cost two ship cycles: v16.31 (`Cannot read properties of
+           undefined (reading 'refresh')`) and v16.35 (`FM.makeLayer is not a function`), each ~20
+           minutes of diagnosis before the answer turned out to be "the app never loaded".
+           Same argument as the no-store fetch above: a harness that silently tests something other
+           than what it claims is worse than no harness. Naming the failure costs one line. */
+        var CORE = ['makeLayer', 'renderScene', 'newScene', 'layerById', 'refreshAll', 'scene'];
+        var missing = CORE.filter(function (k) { return !w.FM || w.FM[k] === undefined; });
+        if (missing.length) throw new Error('THE APP DID NOT LOAD IN THE TEST FRAME — FM is missing ' +
+          missing.join(', ') + '. Every failure below would be misattributed to whichever test touched ' +
+          'it first. This is usually a dropped script request under load: re-run, and if it repeats, ' +
+          'check for stale headless Chrome processes (see tests/_cdp.py).');
+        /* #929 RULES CHECK: swap one option's geometry into the app BEFORE the suite runs, so the people/heart
+           rules report on that option exactly as they would if it shipped. ?opt=aiga|maki|material (people),
+           ?heart=fixed|material|classic. Nothing on disk changes. */
+        var qs929 = new URLSearchParams(location.search), o929 = qs929.get('opt'), h929 = qs929.get('heart');
+        if (o929 || h929) {
+          var xhr = new XMLHttpRequest(); xhr.open('GET', 'options.js', false); xhr.send();
+          (new w.Function(xhr.responseText.replace('window.OPT929', 'this.OPT929'))).call(w);
+          if (o929) { w.FM.SHAPE_POLYS.person = w.OPT929.people[o929].person; w.FM.SHAPE_POLYS.woman = w.OPT929.people[o929].woman; }
+          if (h929) { w.FM.SHAPE_POLYS.heart = w.OPT929.hearts[h929].heart; w.FM.SHAPE_ASPECT.heart = w.OPT929.hearts[h929].aspect; }
+        }
+        var s = w.document.createElement('script'); s.textContent = src; w.document.body.appendChild(s);
+        if (!w.FMTests) throw new Error('FMTests did not load (is FM initialised?)');
+        return w.FMTests.run();
+      }).then(function (res) {
+        /* The FULL pass/fail list, not just the reds. #115 has now cost three attempts partly because
+         * a failing run only ever showed its three failures, and the three reds were almost certainly
+         * downstream of something earlier that still "passed". Diffing two complete runs finds the
+         * FIRST test that behaves differently, which is the actual question. tests/_fmdiff.py reads it. */
+        window.__fmResults = res.results.map(function (r) { return { name: r.name, item: r.item || '', ok: !!r.ok, pending: !!r.pending, error: r.error || '' }; });
+        document.getElementById('sum').innerHTML =
+          '<span class="pill ' + (res.regressionGreen ? 'green' : 'red') + '">Regression ' + res.regressionPass + '/' + res.regressionTotal + (res.regressionGreen ? ' ✓' : ' ✗') + '</span>' +
+          '<span class="pill">Pending ' + res.pendingPass + '/' + res.pendingTotal + ' built</span>';
+        document.getElementById('list').innerHTML = res.results.map(function (r) {
+          var cls = r.ok ? 'ok' : (r.pending ? 'fail pend' : 'fail');
+          return '<div class="row ' + cls + '">' +
+            '<span class="tag">' + (r.ok ? 'PASS' : 'FAIL') + '</span>' +
+            '<span>' + r.name + (r.pending ? ' <em style="opacity:.6">(pending)</em>' : '') +
+            (r.error ? ' <span class="err">— ' + r.error + '</span>' : '') + '</span></div>';
+        }).join('');
+      }).catch(function (e) {
+        document.getElementById('sum').innerHTML = '<span class="pill red">Error</span>' + (e && e.message || e);
+      });
+    });
+  </script>
+</body>
+</html>

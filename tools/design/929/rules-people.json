@@ -1,0 +1,39 @@
+{
+ "aiga": {
+  "summary": "Regression 2/8 \u2717Pending 0/0 built",
+  "failures": [
+   "FAILfigures: person and woman are the same figure below the neck \u2014 the pair disagree on width across the arms: person 196 vs woman 170 px (tolerance 3)",
+   "FAILfigures: pictogram proportions \u2014 1:6\u20131:7 head, legs, shoulders, and a torso that only tapers \u2014 woman measures 2.18 head-widths across the arms (want 2.5\u20133.3) \u2014 under that the arms have closed against the body, over it they are held out like a lat spread",
+   "FAILfigures: still legible at 24 and 48px \u2014 head off the shoulders, legs apart, no holes \u2014 person at 24px renders 1 components \u2014 a pictogram is exactly 2 (head, body+legs), so the head has fused to the shoulders",
+   "FAILthe person and woman shapes have arms, and the two do not converge (queue 160) \u2014 person at 51px: the armpit is 1px of clear background \u2014 the arms have closed up against the body, which is the fault every judge named",
+   "FAILthe two people pictograms survive 24px, and still tell each other apart there \u2014 at 24px the \"person\" head has fused into the shoulders \u2014 there is no clear row between them",
+   "FAIL760: the people are the round-two construction \u2014 rounded shoulders, an open armpit channel, a hem that clears his widest point \u2014 and both render \u2014 person has 2 and woman 2 subpaths \u2014 head, torso/dress, two legs, two arms is six each (queue 760 clause 3)"
+  ]
+ },
+ "maki": {
+  "summary": "Regression 2/8 \u2717Pending 0/0 built",
+  "failures": [
+   "FAILfigures: person and woman are the same figure below the neck \u2014 the pair disagree on width across the arms: person 180 vs woman 197 px (tolerance 3)",
+   "FAILfigures: pictogram proportions \u2014 1:6\u20131:7 head, legs, shoulders, and a torso that only tapers \u2014 person is 1:4.65 heads tall \u2014 outside the 1:6\u20131:7 pictogram band",
+   "FAILfigures: still legible at 24 and 48px \u2014 head off the shoulders, legs apart, no holes \u2014 woman at 48px has 3 enclosed hole(s) \u2014 the nonzero union of the parts has broken",
+   "FAILthe person and woman shapes have arms, and the two do not converge (queue 160) \u2014 person at 51px: the armpit is 0px of clear background \u2014 the arms have closed up against the body, which is the fault every judge named",
+   "FAILthe two people pictograms survive 24px, and still tell each other apart there \u2014 at 24px the \"person\" has 0 open armpit(s) instead of 2 \u2014 the arms have merged into the torso, which is the \"it has no arms\" read",
+   "FAIL760: the people are the round-two construction \u2014 rounded shoulders, an open armpit channel, a hem that clears his widest point \u2014 and both render \u2014 person has 6 and woman 2 subpaths \u2014 head, torso/dress, two legs, two arms is six each (queue 760 clause 3)"
+  ]
+ },
+ "material": {
+  "summary": "Regression 2/8 \u2717Pending 0/0 built",
+  "failures": [
+   "FAILfigures: person and woman are the same figure below the neck \u2014 the pair disagree on width across the arms: person 200 vs woman 120 px (tolerance 3)",
+   "FAILfigures: pictogram proportions \u2014 1:6\u20131:7 head, legs, shoulders, and a torso that only tapers \u2014 person is 1:5.02 heads tall \u2014 outside the 1:6\u20131:7 pictogram band",
+   "FAILfigures: still legible at 24 and 48px \u2014 head off the shoulders, legs apart, no holes \u2014 person at 24px has 1 ink run(s) across the legs \u2014 they have merged into one column",
+   "FAILthe person and woman shapes have arms, and the two do not converge (queue 160) \u2014 person at 51px: the armpit is 0px of clear background \u2014 the arms have closed up against the body, which is the fault every judge named",
+   "FAILthe two people pictograms survive 24px, and still tell each other apart there \u2014 at 24px the \"person\" legs have merged into one column \u2014 the gap between them closed",
+   "FAIL760: the people are the round-two construction \u2014 rounded shoulders, an open armpit channel, a hem that clears his widest point \u2014 and both render \u2014 person has 2 and woman 2 subpaths \u2014 head, torso/dress, two legs, two arms is six each (queue 760 clause 3)"
+  ]
+ },
+ "current": {
+  "summary": "Regression 8/8 passed (run 25 Sep against v16.91)",
+  "failures": []
+ }
+}
