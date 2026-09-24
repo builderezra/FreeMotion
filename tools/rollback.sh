@@ -67,16 +67,17 @@ else
   READER_HASH="$(git log --format='%H %s' | grep -m1 -E "^[0-9a-f]+ v${READER_V}( |—|\$)" | cut -d' ' -f1)"
   if [ -z "$READER_HASH" ] || ! git merge-base --is-ancestor "$READER_HASH" "$HASH" 2>/dev/null; then PREDATES=1; fi
 fi
+WHO="${target_label:+v$target_label}"; [ -n "$WHO" ] || WHO="THAT RELEASE"   # a commit with no version label still gets a readable sentence
 if [ "$PREDATES" = 1 ]; then
   echo
-  echo "⚠️  WARNING — ${target_label:+v$target_label }IS OLDER THAN v$READER_V, AND CANNOT READ CLIPS YOU REUSED FROM ADD → MEDIA."
+  echo "⚠️  WARNING — $WHO IS OLDER THAN v$READER_V, AND CANNOT READ CLIPS YOU REUSED FROM ADD → MEDIA."
   echo "   Since then a clip added more than once from the Media tiles is stored once and shared. On this older"
   echo "   build every one of those clips shows BLANK, backups/templates/elements made there leave them out, and"
   echo "   removing or clearing that clip's Media tile while on it can delete the shared copy FOR GOOD."
   echo "   Your original imports are safe. Unless you are sure you never reused a clip, pick v$READER_V or later."
   echo
 elif [ "${2:-}" = "--check" ]; then
-  echo "✅ ${target_label:+v$target_label }can read clips reused from Add → Media (v$READER_V or later)."
+  echo "✅ $WHO can read clips reused from Add → Media (v$READER_V or later)."
 fi
 [ "${2:-}" = "--check" ] && exit 0
 

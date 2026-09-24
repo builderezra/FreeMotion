@@ -1304,7 +1304,14 @@
       const a = await q915bImport('FX915B once', '#9b5de5'); made.push(a.pid);
       const lk = 'lib:' + a.tile.mid; libs.push(lk);
       made.push(await FM.projects.create({ name: 'FX915B once reuse', width: 320, height: 240 }));
-      for (let i = 0; i < 3; i++) if (!(await q915bReuse(a.tile.mid))) throw new Error('setup: reuse ' + (i + 1) + ' of the tile was refused');
+      /* every write to the store is counted by key: that the shared copy is written ONCE is observed directly,
+         because rewriting it with the same file would leave nothing on disk to tell the two apart */
+      const realPut = IDBObjectStore.prototype.put, puts = [];
+      IDBObjectStore.prototype.put = function (v, k) { puts.push(k); return realPut.apply(this, arguments); };
+      try { for (let i = 0; i < 3; i++) if (!(await q915bReuse(a.tile.mid))) throw new Error('setup: reuse ' + (i + 1) + ' of the tile was refused'); }
+      finally { IDBObjectStore.prototype.put = realPut; }
+      const libPuts = puts.filter(function (k) { return k === lk; }).length;
+      if (libPuts > 1) throw new Error('three reuses wrote the shared copy ' + libPuts + ' times - it is written on the first reuse only');
       const ids = q915bImages().map(function (l) { return l.id; });
       if (ids.length !== 3) throw new Error('setup: three reuses made ' + ids.length + ' clips');
 
@@ -1327,8 +1334,11 @@
       // landed (a full localStorage) must not write the shared copy a second time under clips that play from it
       const list = FM.mediaLib.list(); list.forEach(function (e) { if (e.mid === a.tile.mid) e.key = a.orig; });
       localStorage.setItem('fm.medialib', JSON.stringify(list));
-      const before = raw[lk].file;
-      if (!(await q915bReuse(a.tile.mid))) throw new Error('a reuse through a tile whose re-key had not landed was refused');
+      const before = raw[lk].file, puts4 = [];
+      IDBObjectStore.prototype.put = function (v, k) { puts4.push(k); return realPut.apply(this, arguments); };
+      try { if (!(await q915bReuse(a.tile.mid))) throw new Error('a reuse through a tile whose re-key had not landed was refused'); }
+      finally { IDBObjectStore.prototype.put = realPut; }
+      if (puts4.indexOf(lk) >= 0) throw new Error('the shared copy was written again by a later reuse - a clip may be playing from it');
       const raw2 = await q915aRaw();
       const fourth = q915bImages().map(function (l) { return l.id; }).filter(function (id) { return ids.indexOf(id) < 0; })[0];
       if (!q915bIsPtr(raw2[fourth], lk)) throw new Error('with the shared copy already on disk, the next reuse stored ' + q915bShape(raw2[fourth]) + ' instead of a pointer at it');
@@ -1374,6 +1384,10 @@
       await FM.projects.open(away);
       await FM.projects.pruneOrphans();
       if ((await q915aRaw())[a.orig]) throw new Error('control: the deleted original was not collected by the sweep, so the clips below could still be reading it - nothing was proved');
+      // …and a template or element made from the CLOSED project carries the real bytes, read through the pointers
+      const got = await FM._packFromProject(bId, true);
+      const packed = reused.filter(function (id) { const m = got && got.pack && got.pack.media[id]; return !!(m && m.file && m.file.size === a.file.size && !m.ref); });
+      if (packed.length !== 2) throw new Error('a template or element made from the project carries footage for ' + packed.length + ' of the 2 reused clips - a pack must hold the real bytes, never a pointer into this device');
       await FM.projects.open(bId);
       q915bMustShow(reused, a.rgb, 'after his original clip was deleted and its record collected');
 
