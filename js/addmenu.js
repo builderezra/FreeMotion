@@ -1089,6 +1089,8 @@ window.FM = window.FM || {};
      KEYED by them, and a miss on the second is silent — the tile keeps working and loses its
      colour. Reading both from outside is what lets that be asserted instead of hoped. */
   FM._instantLabels = function () { return INSTANT.map(function (o) { return o.label; }); };
+  // …and the tabs, in the order the 1–5 keys open them — the ? sheet writes its rows from these two (queue 690)
+  FM._tabLabels = function () { return TABS.map(function (t) { return t.label; }); };
   FM._tileTints = function () { return Object.keys(BY_LABEL); };
 
   FM.addMenu = {
@@ -1629,7 +1631,7 @@ window.FM = window.FM || {};
       }
     },
     // number-key shortcut targets
-    TAB_KEYS: TABS.map(function (t) { return t.key; }),   // 1-5 → Shape / Media / Audio / Object / Template
+    TAB_KEYS: TABS.map(function (t) { return t.key; }),   // 1-5 → Elements / Shape / Media / Audio / Template (TABS order)
     // Open the Add menu on a specific tab (deselects on PC so the inspector shows it).
     openTab: function (key) {
       if (!key) return;

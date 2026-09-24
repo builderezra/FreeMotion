@@ -2,10 +2,34 @@
 window.FM = window.FM || {};
 (function (FM) {
   'use strict';
+  /* ═══ THE ADD-MENU KEYS ARE READ FROM THE ADD MENU, NOT TYPED HERE (queue 690) ═════════════════════════════
+   * These two rows were typed out by hand and the Add menu moved on without them: Elements went to the front
+   * of the tabs and Captions joined the instant tools, and the sheet went on saying 1 opens Shape, 4 opens
+   * Object/Element, ⇧2 adds Sketching and ⇧3 Custom shape. The keys really did Elements · Shape · Media ·
+   * Audio · Template and Text · Captions · Sketching · Custom shape — so he pressed ⇧2 to draw, as the
+   * sheet told him, and got a Captions track with two placeholder captions and the text editor open.
+   * Now each row is written from the SAME lists the keys index (js/app.js's Digit branch → FM.addMenu.openTab
+   * with TAB_KEYS[n - 1], and FM.addMenu.instant(n - 1)), at the moment the sheet is built, so the next reorder
+   * or rename of a tab or a tool cannot leave it behind. Capped at what that branch takes: 1–5 for the tabs
+   * (with nothing selected) and ⇧1–4 for the tools. The typed text is only a fallback for a build where
+   * addmenu.js is missing, and says what the keys do today. */
+  const ADD_TABS_ROW = ['1 – 5', 'Add menu → Elements · Shape · Media · Audio · Template'];
+  const ADD_INSTANT_ROW = ['⇧ 1 / 2 / 3 / 4', 'Add Text · Captions · Sketching · Custom shape'];
+  function addMenuRow(row) {
+    if (row === ADD_TABS_ROW) {
+      const labels = (FM._tabLabels ? FM._tabLabels() : []).slice(0, 5);
+      return labels.length ? ['1 – ' + labels.length, 'Add menu → ' + labels.join(' · ')] : row;
+    }
+    if (row === ADD_INSTANT_ROW) {
+      const labels = (FM._instantLabels ? FM._instantLabels() : []).slice(0, 4);
+      return labels.length ? ['⇧ ' + labels.map((l, i) => i + 1).join(' / '), 'Add ' + labels.join(' · ')] : row;
+    }
+    return row;
+  }
   const SHORTCUTS = [
     ['Space', 'Play / pause'],
-    ['1 – 5', 'Add menu → Shape · Media · Audio · Object/Element · Template'],
-    ['⇧ 1 / 2 / 3', 'Add Text · Sketching · Custom shape'],
+    ADD_TABS_ROW,      // 1 – 5 and ⇧ 1 – 4: written from the Add menu's own lists when the sheet is built — see addMenuRow()
+    ADD_INSTANT_ROW,
     ['← / →', 'Nudge selected layer  (Shift = 10px)'],
     ['↑ / ↓', 'Nudge selected layer vertically'],
     [', / .', 'Step one frame back / forward'],
@@ -62,7 +86,7 @@ window.FM = window.FM || {};
        at the end of the scroll and nowhere else. A sticky footer inside the scroller can only ever
        approximate a pinned one; a footer that is a SIBLING of the scroller cannot move at all. */
     const scroll = document.createElement('div'); scroll.className = 'shortcuts-scroll';
-    section(scroll, 'Keyboard', SHORTCUTS, 'shortcut-key');
+    section(scroll, 'Keyboard', SHORTCUTS.map(addMenuRow), 'shortcut-key');
     section(scroll, 'Mouse / stage', TIPS, 'shortcut-key wide');
     card.appendChild(scroll);
     /* A WAY OUT TO THE TUTORIALS (queue 274). Ezra: "At the bottom of the keyboard shortcuts menu when

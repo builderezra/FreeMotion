@@ -1020,7 +1020,16 @@ window.FM = window.FM || {};
       requestAnimationFrame(() => { if (scrim) scrim.classList.add('open'); });
       document.body.classList.add('set-open');   // lifts #toast above the panel (queue 930 review: "Key saved" appeared behind it)
       _onClose = null;                           // a plain open never inherits a return trip; openAt sets it after this
-      escBound = e => { if (e.key === 'Escape') { e.preventDefault(); FM.settings.close(); } };
+      /* ONE Escape listener, ever (queue 690). open() on an already-open panel — openAt from the Director's or the
+         Assistant's key button, a second route in — rebuilt the panel and added a SECOND listener without taking the
+         first one off, and close() only removes the newest. The stranded one then answered every Escape for the rest of
+         the session: preventDefault on a key nothing was listening for. That used to be harmless noise; since the
+         editor now leaves an Escape that something else has already answered (js/app.js, the Escape branch), it
+         silently turned Escape off everywhere after the panel had been opened twice. Measured in the suite after the
+         930 test: the editor's Escape stopped reaching its handler at all. So the old one goes first, and the listener
+         only answers while the panel is actually up. */
+      if (escBound) document.removeEventListener('keydown', escBound);
+      escBound = e => { if (e.key === 'Escape' && FM.settings.isOpen()) { e.preventDefault(); FM.settings.close(); } };
       document.addEventListener('keydown', escBound);
     },
     close(opts) {

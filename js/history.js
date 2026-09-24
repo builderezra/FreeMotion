@@ -39,13 +39,44 @@ window.FM = window.FM || {};
     /* WHAT WAS SELECTED BEFORE THIS UNDO/REDO — captured before the swap, because the whole question
        below is whether the layer he was working on survived it (queue 629). */
     const wasSelected = FM.scene.selectedId;
+    const wasIds = FM.selectionIds ? FM.selectionIds() : (wasSelected ? [wasSelected] : []);
+    const hadIds = new Set(FM.scene.layers.map(l => l.id));
     suppress = true;
     FM.scene.project = s.project;
     FM.scene.layers = s.layers;
-    FM.scene.selectedId = s.selectedId;
-    // Restore the full multi-selection (filtered to surviving layers), so undo right after a
-    // multi-select edit doesn't collapse the set align/distribute/nudge act on. (#20)
-    FM.scene.selectedIds = (Array.isArray(s.selectedIds) ? s.selectedIds : (s.selectedId ? [s.selectedId] : [])).filter(id => FM.layerById(FM.scene, id));
+    /* ═══ UNDO DOES NOT CHOOSE WHICH LAYER HE IS ON (queue 690) ═══════════════════════════════════════
+     * This used to put back the SNAPSHOT's selection, and a snapshot's selection is whatever was
+     * selected at the PREVIOUS commit — and selecting never commits (a real click on a clip or its
+     * thumbnail adds no history step; measured). So: add Blue (selected, committed), CLICK Red, nudge
+     * it or press Delete, press Cmd+Z — Red went back, and the selection and the panel jumped to Blue.
+     * The next arrow key, slider drag or Delete then landed on Blue, a layer he never chose. That is
+     * #629's reason exactly (*"it shouldn't force you to have another previous layer selected"*), in
+     * the far more common case where the layer he was on still exists — which the 629 rule, below in
+     * _afterExternalChange, never looks at.
+     * The rule now, in three cases:
+     *   · the layer he had selected survives → it STAYS selected, with the rest of his multi-selection
+     *     that survived too (so undo right after an align/nudge of several keeps the set — #20);
+     *   · he had nothing selected (a Delete leaves him there, #556) → select what the undo BROUGHT
+     *     BACK, if anything: undoing a Delete puts the deleted layer back exactly as he had it, selected
+     *     — never some third layer from an older commit. Only the TOPS of what came back: undoing the
+     *     delete of a group brings its members back too, and he had the group selected, not them;
+     *   · the layer he had selected is gone → nothing (#629, unchanged, applied in _afterExternalChange).
+     * The snapshot's own choice is never used. */
+    const alive = id => !!FM.layerById(FM.scene, id);
+    if (wasSelected && alive(wasSelected)) {
+      const keep = wasIds.filter(alive);
+      FM.scene.selectedId = wasSelected;
+      FM.scene.selectedIds = keep.indexOf(wasSelected) >= 0 ? keep : [wasSelected];
+    } else if (!wasSelected) {
+      const back = FM.scene.layers.filter(l => !hadIds.has(l.id));
+      const backIds = new Set(back.map(l => l.id));
+      const tops = back.filter(l => !(l.parent && backIds.has(l.parent))).map(l => l.id);
+      FM.scene.selectedId = tops.length ? tops[0] : null;
+      FM.scene.selectedIds = tops;
+    } else {
+      FM.scene.selectedId = null;   // the 629 rule in _afterExternalChange says the same; set here so no
+      FM.scene.selectedIds = [];    // snapshot selection is ever installed, even for a moment
+    }
     suppress = false;
     /* The block that used to stand here — the 629 rule, restoreReplacedMedia, the groupContext exit, the
        mask resync and the time clamp — is now _afterExternalChange below, WORD FOR WORD. See it for why
@@ -54,6 +85,16 @@ window.FM = window.FM || {};
     if (FM.resizeCanvas) FM.resizeCanvas();
     FM.refreshAll();
     if (FM.seekVideosToTime) FM.seekVideosToTime();
+    /* The stack entry we are now standing on still names the OLD selection. commit() treats a snapshot
+       identical to stack[index] as a no-op, and one that differs only by selection as a real step — so
+       without this, the first no-op commit after an undo (a panel that commits on close, a slider let go
+       where it was) would push a selection-only step and throw the whole redo tail away. Re-stamped in
+       snap()'s own key order, so it is byte-identical to what snap() would write for this state. Returned
+       rather than written here because restore() does not know the index. */
+    const sid = FM.scene.selectedId, sids = FM.scene.selectedIds;
+    if (sid === s.selectedId && JSON.stringify(sids) === JSON.stringify(s.selectedIds)) return null;
+    const o = JSON.parse(str);
+    return JSON.stringify({ project: o.project, layers: o.layers, selectedId: sid, selectedIds: sids }, FM.jsonReplacer);
   }
 
   /* ═══ THE SCENE CHANGED UNDER THE UI — PUT THE UI BACK IN AGREEMENT WITH IT (queue 921 S0) ═════════
@@ -214,7 +255,7 @@ window.FM = window.FM || {};
        WHOLE document back, wiping out everything the other people have done since — his rule for the
        feature was "undo only undoes your own changes". So while collab owns undo, it answers instead.
        One line, first, and false until a session starts. */
-    undo() { if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) return FM.collab.undo(); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (index > 0) { index--; restore(stack[index]); if (FM.storage) FM.storage.autosave(); } syncButtons(); },   // persist so a hard kill after undo can't resurrect the edit
-    redo() { if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) return FM.collab.redo(); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (index < stack.length - 1) { index++; restore(stack[index]); if (FM.storage) FM.storage.autosave(); } syncButtons(); },
+    undo() { if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) return FM.collab.undo(); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (index > 0) { index--; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } syncButtons(); },   // persist so a hard kill after undo can't resurrect the edit; `re` — see the end of restore()
+    redo() { if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) return FM.collab.redo(); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (index < stack.length - 1) { index++; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } syncButtons(); },
   };
 })(window.FM);

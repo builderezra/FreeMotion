@@ -7568,11 +7568,37 @@ window.FM = window.FM || {};
     { const ef = document.getElementById('exp-format'); if (ef) ef.addEventListener('change', syncExportFormat); }
     document.getElementById('export-cancel').addEventListener('click', () => { FM._exportCancel = true; });
 
-    // drag + drop
+    // drag + drop — the canvas lights up while a file is over it (the import itself is the window's, below)
     const stage = document.getElementById('stage');
     ['dragenter', 'dragover'].forEach(ev => stage.addEventListener(ev, e => { e.preventDefault(); stage.classList.add('dragover'); }));
     ['dragleave', 'drop'].forEach(ev => stage.addEventListener(ev, e => { e.preventDefault(); if (ev === 'drop' || e.target === stage) stage.classList.remove('dragover'); }));
-    stage.addEventListener('drop', e => { if (e.dataTransfer && e.dataTransfer.files.length) handleFiles(Array.from(e.dataTransfer.files)); });
+    /* ═══ A FILE DROPPED ANYWHERE ON THE EDITOR IS IMPORTED — NOT ONLY ON THE CANVAS (queue 690) ═══════════════
+     * The stage above was the ONLY drop target in the app. Everywhere else nothing called preventDefault on
+     * dragover, and a drop nobody takes is the BROWSER's: measured with a real drag at 1280x800, a PNG dropped
+     * on the timeline — where every desktop editor takes a clip, and at that width the biggest thing on screen
+     * after the canvas — imported nothing and Chrome opened file:///…png on its own (Safari replaces the tab).
+     * The Add menu, right next to its own Media tab, did the same.
+     * So the WINDOW takes a file drag: every drop on the editor goes through the one import the stage used,
+     * exactly once (the stage no longer imports by itself, so a drop there cannot be imported twice).
+     * Only a drag that carries FILES — text dragged into a field is still the browser's to insert.
+     * While a full-screen overlay owns the screen (Home, Settings, the Export dialog…) the drop is refused
+     * with the no-entry cursor and nothing imported: the project behind it is loaded, but he cannot see it,
+     * and a clip landing in a project he is not looking at is the same silent surprise the keyboard guard
+     * (FM.overlayOwnsScreen, below) exists to stop. Refused is still TAKEN, so the file never opens in place
+     * of FreeMotion. */
+    const carriesFiles = e => { const t = e.dataTransfer && e.dataTransfer.types; return !!t && Array.prototype.indexOf.call(t, 'Files') >= 0; };
+    window.addEventListener('dragover', e => {
+      if (!carriesFiles(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = FM.overlayOwnsScreen() ? 'none' : 'copy';
+    });
+    window.addEventListener('drop', e => {
+      if (!carriesFiles(e)) return;
+      e.preventDefault();
+      stage.classList.remove('dragover');
+      if (FM.overlayOwnsScreen()) return;
+      if (e.dataTransfer.files.length) handleFiles(Array.from(e.dataTransfer.files));
+    });
 
     /* ---- "does a full-screen overlay own the screen?" -------------------------------------------
      * Asked GEOMETRICALLY, never from a list of ids — the list is precisely what went stale. v5.07
@@ -7759,7 +7785,8 @@ window.FM = window.FM || {};
       else if ((e.code === 'Minus' || e.code === 'NumpadSubtract') && FM.timeline.zoomBy) { e.preventDefault(); FM.timeline.zoomBy(1 / 1.5); }
       // Number keys. With a layer SELECTED: 1..N open its category cards (Color & Fill, Border,
       // Blending, Move & Transform, …) — the badge on each card shows its key. With NOTHING selected:
-      // 1-5 open the Add-menu tabs. Shift+1/2/3 always add Text / Freehand / Vector.
+      // 1-5 open the Add-menu tabs (Elements · Shape · Media · Audio · Template). Shift+1..4 always add
+      // Text / Captions / Sketching / Custom shape. The ? sheet reads both lists from js/addmenu.js (queue 690).
       else if (/^Digit[1-9]$/.test(e.code) && !mod) {
         const n = parseInt(e.code.slice(5), 10);
         if (e.shiftKey) { if (n <= 4 && FM.addMenu && FM.addMenu.instant) { e.preventDefault(); FM.addMenu.instant(n - 1); } }   // 4 rail entries now: Text / Captions / Freehand / Vector
@@ -7771,7 +7798,26 @@ window.FM = window.FM || {};
       // Esc: step BACK a page (effects → grid → deselect), not straight to closed. Also bails out of
       // any modal overlay / point-edit / tracking pick first.
       else if (e.code === 'Escape') {
+        /* ═══ ESCAPE GETS HIM OUT OF WHAT IS OPEN — IT NEVER REACHES THROUGH IT TO THE LAYER (queue 690) ═══
+         * On a PC Escape is the key everyone presses to back out of a dialog or a menu. This branch knew the
+         * shortcuts sheet, the canvas tools and (via #809, above) the Effects browser, and nothing else — so
+         * with the Export dialog, Canvas settings, Notes or a right-click menu up, Escape fell all the way
+         * down to inspector.back(), which DESELECTED the layer underneath and left the dialog where it was.
+         * The right-click menu then still offered Delete and Lock for a layer that was no longer selected.
+         * Measured at 1280 and 900, all four (the Export dialog and the right-click menu with a real key too). Two locks:
+         *   · a surface that answers Escape ITSELF (Settings, Home's dialog, a toast) calls preventDefault
+         *     on it, and its document listener runs before this window one — so an Escape already answered
+         *     is not answered AGAIN here. Settings did exactly that: it closed, and then this deselected the
+         *     layer behind it. Any new panel that handles its own Escape the ordinary way is covered free;
+         *   · the four that never listened for it are closed here, each asked whether it is open — the
+         *     same live questions FM.toolOwnsCanvas asks, not a list of ids. The right-click menu first:
+         *     it is always the topmost thing on screen. */
+        if (e.defaultPrevented) return;
         e.preventDefault();
+        if (FM.contextMenu && FM.contextMenu.isOpen && FM.contextMenu.isOpen()) { FM.contextMenu.hide(); return; }
+        if (FM.notepad && FM.notepad.escape && FM.notepad.escape()) return;   // Notes, or its "Before you export" card (= Back)
+        { const xd = document.getElementById('export-dialog'); if (xd && !xd.classList.contains('hidden')) { hideExportDialog(); return; } }
+        { const cd = document.getElementById('canvas-dialog'); if (cd && !cd.classList.contains('hidden')) { const c = document.getElementById('cv-cancel'); if (c) c.click(); else cd.classList.add('hidden'); return; } }
         if (FM.shortcuts && FM.shortcuts.isOpen()) { FM.shortcuts.hide(); return; }
         if (FM.eyedropper && FM.eyedropper.isActive && FM.eyedropper.isActive()) { FM.eyedropper.stop(); return; }
         if (FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive()) { FM.cropTool.stop(); return; }
