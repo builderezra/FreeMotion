@@ -87886,4 +87886,284 @@
     } finally { FM.scene = saved; try { FM.refreshAll(); } catch (e) {} }
   });
 
+
+  /* ═══ HUNT-a (queue 690) — THE PHONE TIMELINE, DRIVEN BY A REAL FINGER ════════════════════════════════════════════
+   * His standing brief: "go re audit, find some bugs coz theres a shit load". Every test below uses TRUSTED touch
+   * through tests/_cdp.py (realInput924), because the phone timeline's gestures depend on capture, hit-testing and the
+   * browser's own touch -> pointer pipeline, and his phone bugs have repeatedly survived synthetic events. Each one
+   * carries a control that proves the gesture really engaged, so a red here is the app, not a gesture that never started.
+   * Found and written by the hunt; nothing here is fixed yet. */
+  async function huntKfFixture() {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.contextMenu) FM.contextMenu.hide();
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const L = FM.makeLayer('shape', { name: 'HUNT kf', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#e0245e', start: 0, duration: 6 });
+    L.transform.x = { kf: [{ t: 1, v: 100 }, { t: 3, v: 500 }, { t: 5, v: 300 }] };
+    FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+    if (FM.pause) FM.pause();
+    FM.refreshAll(); FM.selectLayer(L.id);
+    await sleep(250);
+    FM.inspector.openCategory('transform'); FM._mtMode = 'move';
+    FM.timeline.rebuild(); FM.timeline.updatePlayhead();
+    await sleep(300);
+    return L;
+  }
+  function huntDotAt(t) {
+    return [].filter.call(document.querySelectorAll('#tl-tracks .kf-dot.kf-live'), d => Math.abs(parseFloat(d.dataset.t) - t) < 1e-3)[0] || null;
+  }
+  function huntDowns() {
+    const downs = [];
+    const on = (e) => { const t = e.target; downs.push({ trusted: e.isTrusted, kind: e.pointerType, cls: t && t.className && t.className.baseVal === undefined ? String(t.className) : (t ? t.tagName : '?'), head: !!(t && t.closest && t.closest('.track-head')) }); };
+    window.addEventListener('pointerdown', on, true);
+    return { downs: downs, stop: () => window.removeEventListener('pointerdown', on, true) };
+  }
+  function huntCtxUp() {
+    const m = document.getElementById('ctx-menu');
+    return !!(m && !m.classList.contains('hidden') && /Delete keyframe/.test(m.textContent));
+  }
+
+  test('HUNT-a holding a keyframe diamond for its menu fails when the finger trembles, and nudges the keyframe instead', { item: '690', budgetMs: 60000 }, async function () {
+    /* On the phone the hold IS the only way to delete a keyframe or change its easing — a finger never produces a
+       double-click or a right-click (the diamond's own comment says so). The hold arms at KF_HOLD_MS; after that, the
+       window pointermove branch sets kfDrag.moved = true on ANY move, with no slop at all, and writes
+       kf.t = timeFromX(finger) — an ABSOLUTE position. So a real finger that drifts one pixel while it waits for the
+       menu (the diamond's comment calls it the first speck of finger drift) turns the hold into a drag: no menu, and if
+       the press landed anywhere but dead centre of the 35px touch pad, the keyframe jumps to under the finger and the
+       release commits it to history. His #625 was sometimes I try to delete them and I cant. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          // CONTROL: the same hold with a perfectly still finger opens the menu, so the route exists in this harness.
+          let L = await huntKfFixture(); FM.setTime(2.5); FM.timeline.updatePlayhead(); await sleep(150);
+          let d = huntDotAt(3);
+          if (!d) throw new Error('setup: no live diamond for the position keyframe at 3 s with Move and Transform open');
+          let r = d.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+          if (cx > 370 || cy > 740 || cx < 10) throw new Error('setup: the diamond is at ' + Math.round(cx) + ',' + Math.round(cy) + ', out of reach of real input');
+          const D = huntDowns();
+          try { await realInput924([{ t: 'touchStart', x: cx, y: cy, ms: 650 }, { t: 'touchEnd', x: cx, y: cy, ms: 0 }], 'a still hold on the diamond'); } finally { D.stop(); }
+          await sleep(300);
+          if (!D.downs.length || !D.downs[0].trusted || D.downs[0].kind !== 'touch') throw new Error('CONTROL: the hold was not a trusted touch (' + JSON.stringify(D.downs) + ')');
+          if (!/kf-dot/.test(D.downs[0].cls)) throw new Error('CONTROL: the press landed on ' + D.downs[0].cls + ', not on the diamond');
+          if (!huntCtxUp()) throw new Error('CONTROL: a perfectly still 0.65 s hold on the diamond did not open its menu either, so this test cannot judge the trembling hold');
+          if (FM.contextMenu) FM.contextMenu.hide();
+
+          // THE CASE: the same hold, pressed 8px right of centre (inside the diamond's own touch pad) with a 1px tremor.
+          L = await huntKfFixture(); FM.setTime(2.5); FM.timeline.updatePlayhead(); await sleep(150);
+          d = huntDotAt(3); r = d.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2;
+          const x = cx + 8;
+          const under = document.elementFromPoint(x, cy);
+          if (!under || !under.classList.contains('kf-dot')) throw new Error('setup: 8px right of the diamond centre is ' + (under ? under.className : 'nothing') + ', not its touch pad');
+          const D2 = huntDowns();
+          try {
+            await realInput924([
+              { t: 'touchStart', x: x, y: cy, ms: 650 },
+              { t: 'touchMove', x: x + 1, y: cy, ms: 80 },
+              { t: 'touchMove', x: x, y: cy, ms: 80 },
+              { t: 'touchEnd', x: x, y: cy, ms: 0 },
+            ], 'a hold with a one-pixel tremor');
+          } finally { D2.stop(); }
+          await sleep(300);
+          if (!D2.downs.length || !/kf-dot/.test(D2.downs[0].cls)) throw new Error('CONTROL: the trembling hold did not land on the diamond (' + JSON.stringify(D2.downs) + ')');
+          const menu = huntCtxUp();
+          const t3 = L.transform.x.kf.map(k => k.t).filter(t => Math.abs(t - 3) < 0.6)[0];
+          const bad = [];
+          if (!menu) bad.push('he held the keyframe diamond for 0.65 s to delete it or change its easing, his finger drifted 1px, and the menu never opened — on the phone that hold is the only way in');
+          if (t3 == null || Math.abs(t3 - 3) > 1e-6) bad.push('the same hold moved the keyframe from 3.000 s to ' + (t3 == null ? '?' : t3.toFixed(3)) + ' s — a press a few pixels off the diamond centre plus one pixel of drift retimes it, and the release records it in undo');
+          if (bad.length) throw new Error(bad.join('; AND '));
+        });
+      }, 380);
+    } finally {
+      if (FM.contextMenu) FM.contextMenu.hide();
+      try { FM.timeline._abortGestures(); } catch (e) {}
+      FM.scene = saved; try { FM.inspector.openCategory('home'); FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
+    }
+  });
+
+  test('HUNT-a a sideways swipe that starts on a keyframe diamond does not scrub — the middle of the timeline goes dead', { item: '690', budgetMs: 60000 }, async function () {
+    /* With a property editor open (Move and Transform on the phone), that property's diamonds are LIVE and carry a ~35px
+       invisible touch pad (styles.css .kf-dot::after). The diamond's pointerdown stops propagation and captures the
+       pointer, so neither the clip's scrub nor the timeline's own grab ever sees the finger; and the window pointermove
+       branch, seeing travel before the hold arms, just drops the gesture (kfDrag = null) — no scrub, no scroll. The
+       keyframe he has just set sits at the PLAYHEAD, i.e. dead centre of the lane, so the natural next swipe to move on
+       lands on it and does nothing. Queue 699 was the same dead strip on the trim grips; this is the diamonds.
+       #768 (scrubbing with a layer selected is jumpy) is still open, and diamonds only exist with a layer selected. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await huntKfFixture();
+          FM.setTime(3); FM.timeline.updatePlayhead(); await sleep(200);   // parked on the keyframe he just made
+          const d = huntDotAt(3);
+          if (!d) throw new Error('setup: no live diamond at the playhead');
+          const r = d.getBoundingClientRect(), x = r.left + r.width / 2 + 4, y = r.top + r.height / 2;
+          const swipe = (x0, y0) => { const s = [{ t: 'touchStart', x: x0, y: y0, ms: 40 }]; for (let k = 1; k <= 10; k++) s.push({ t: 'touchMove', x: x0 - 8 * k, y: y0, ms: 30 }); s.push({ t: 'touchEnd', x: x0 - 80, y: y0, ms: 0 }); return s; };
+
+          // CONTROL: the identical swipe on the same clip, clear of every diamond, scrubs.
+          const clip = [].filter.call(document.querySelectorAll('#tl-tracks .clip'), c => c.dataset.id === L.id)[0];
+          const cr = clip.getBoundingClientRect(), cy = cr.top + cr.height / 2;
+          const dotXs = [].map.call(document.querySelectorAll('#tl-tracks .kf-dot'), q => { const b = q.getBoundingClientRect(); return b.left + b.width / 2; });
+          let clearX = null;
+          for (let xx = Math.max(cr.left + 24, 90); xx < Math.min(cr.right - 24, 360); xx += 4) if (dotXs.every(dx => Math.abs(dx - xx) > 34)) { clearX = xx; break; }
+          if (clearX == null) throw new Error('setup: no stretch of the clip is clear of the diamonds to run the control swipe on');
+          const D0 = huntDowns();
+          const tA = FM.time;
+          try { await realInput924(swipe(clearX, cy), 'the control swipe on the clip'); } finally { D0.stop(); }
+          await sleep(500);
+          const movedClip = Math.abs(FM.time - tA);
+          if (!D0.downs.length || !D0.downs[0].trusted || D0.downs[0].kind !== 'touch') throw new Error('CONTROL: the swipe was not a trusted touch (' + JSON.stringify(D0.downs) + ')');
+          if (!(movedClip > 0.5)) throw new Error('CONTROL: an 80px swipe on the clip moved the playhead only ' + movedClip.toFixed(2) + ' s, so this test cannot judge the diamond');
+
+          FM.setTime(3); FM.timeline.updatePlayhead(); await sleep(250);
+          const d2 = huntDotAt(3), r2 = d2.getBoundingClientRect(), x2 = r2.left + r2.width / 2 + 4, y2 = r2.top + r2.height / 2;
+          const D1 = huntDowns();
+          const tB = FM.time;
+          try { await realInput924(swipe(x2, y2), 'the swipe from the diamond'); } finally { D1.stop(); }
+          await sleep(500);
+          const movedDot = Math.abs(FM.time - tB);
+          if (!D1.downs.length || !/kf-dot/.test(D1.downs[0].cls)) throw new Error('CONTROL: the swipe did not start on the diamond (' + JSON.stringify(D1.downs) + ')');
+          const kfT = L.transform.x.kf.map(k => k.t);
+          if (kfT.join() !== '1,3,5') throw new Error('the swipe from the diamond retimed a keyframe (' + kfT.join(', ') + ')');
+          if (!(movedDot > movedClip * 0.5)) throw new Error('an 80px sideways swipe that started on the keyframe diamond under the playhead moved the playhead ' + movedDot.toFixed(2) + ' s, where the same swipe on the clip moves it ' + movedClip.toFixed(2) + ' s — with a keyframe at the playhead the middle of the phone timeline is dead to his thumb');
+        });
+      }, 380);
+    } finally {
+      try { FM.timeline._abortGestures(); FM.timeline.stopMomentum(); } catch (e) {}
+      FM.scene = saved; try { FM.inspector.openCategory('home'); FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
+    }
+  });
+
+  test('HUNT-a flicking the layer list up from a clip or a layer name stops dead — only bare lane glides', { item: '690', budgetMs: 60000 }, async function () {
+    /* Queue 415 gave the vertical pan a glide ("Scrolling up and down on timeline should have some glide to it like
+       dragging left and right") — but only in the empty-lane branch (scrub.axis === y samples vY and flings). A vertical
+       drag that starts ON A CLIP runs the clipTap branch, which pans scrollTop and samples nothing, and its release only
+       flings for axis x; a drag on a LAYER NAME is the head pan (queue 815), which has no release velocity at all. Queue
+       351 was exactly this split for the horizontal fling. With a real project every row is mostly clip and the name
+       column is the natural place to scroll, so nearly every flick he makes stops the instant his finger lifts.
+       The #415 test dispatches on #tl-inner itself, i.e. only ever the bare-lane path. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+          const Ls = [];
+          for (let i = 0; i < 24; i++) Ls.push(FM.makeLayer('shape', { name: 'HUNT v' + i, shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#3b82f6', start: i % 2 ? 0 : 3, duration: 3 }));
+          FM.scene = scene(Ls, { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+          if (FM.pause) FM.pause();
+          FM.selectLayer(null); FM.refreshAll(); FM.setTime(1); FM.timeline.rebuild(); FM.timeline.updatePlayhead();
+          await sleep(400);
+          const tl = document.getElementById('timeline');
+          if (tl.scrollHeight - tl.clientHeight < 400) throw new Error('setup: the list only overflows by ' + (tl.scrollHeight - tl.clientHeight) + 'px, not enough to flick and glide in');
+          const flick = async (pick, what) => {
+            tl.scrollTop = 0; await sleep(150);
+            const p = pick();
+            if (!p) throw new Error('setup: nothing on screen to start the flick from ' + what);
+            const D = huntDowns();
+            const steps = [{ t: 'touchStart', x: p.x, y: p.y, ms: 16 }];
+            for (let k = 1; k <= 6; k++) steps.push({ t: 'touchMove', x: p.x, y: p.y - 22 * k, ms: 16 });
+            steps.push({ t: 'touchEnd', x: p.x, y: p.y - 132, ms: 0 });
+            try { await realInput924(steps, 'the flick from ' + what); } finally { D.stop(); }
+            const atLift = tl.scrollTop; await sleep(450); const later = tl.scrollTop;
+            return { atLift: atLift, later: later, down: D.downs[0] || null, t: FM.time };
+          };
+          const tlr = tl.getBoundingClientRect();
+          const rows = () => [].slice.call(document.querySelectorAll('#tl-tracks .track-row')).filter(r => { const b = r.getBoundingClientRect(); return b.top > tlr.top + 150 && b.bottom < Math.min(tlr.bottom, 740); }).reverse();   // lowest first: room to flick upwards
+          const idxOf = row => { const h = row.querySelector('.track-head'); return h ? parseInt(h.dataset.idx, 10) : -1; };
+          const pickLane = () => {   // a row whose clip starts at 3 s: bare lane between the name column and the clip
+            const row = rows().filter(r => FM.scene.layers[idxOf(r)] && FM.scene.layers[idxOf(r)].start === 3)[0]; if (!row) return null;
+            const h = row.querySelector('.track-head').getBoundingClientRect(), c = row.querySelector('.clip').getBoundingClientRect();
+            const x = Math.round((h.right + c.left) / 2) - 20; return (c.left - h.right > 90) ? { x: x, y: c.top + c.height / 2 } : null;
+          };
+          const pickClip = () => {
+            const row = rows().filter(r => FM.scene.layers[idxOf(r)] && FM.scene.layers[idxOf(r)].start === 0)[0]; if (!row) return null;
+            const c = row.querySelector('.clip').getBoundingClientRect();
+            return { x: Math.round(c.left + c.width * 0.6), y: c.top + c.height / 2 };
+          };
+          const pickName = () => {   // the layer's own cell on the left (on the phone: its thumbnail — the name text is hidden), clear of the eye and of the phone's bottom buttons
+            for (const row of rows()) {
+              const hEl = row.querySelector('.track-head'), eEl = row.querySelector('.th-eye'); if (!hEl) continue;
+              const h = hEl.getBoundingClientRect(), e = eEl ? eEl.getBoundingClientRect() : { right: h.left };
+              if (h.right - e.right < 16) continue;
+              const p = { x: Math.round((Math.max(e.right, h.left) + h.right) / 2), y: h.top + h.height / 2 };
+              const hit = document.elementFromPoint(p.x, p.y);
+              if (hit && hit.closest && hit.closest('.track-head') === hEl && !hit.closest('.th-eye')) return p;
+            }
+            return null;
+          };
+          // CONTROL: from bare lane the same flick keeps gliding after the finger lifts.
+          const lane = await flick(pickLane, 'bare lane');
+          if (!lane.down || !lane.down.trusted || lane.down.kind !== 'touch') throw new Error('CONTROL: the lane flick was not a trusted touch (' + JSON.stringify(lane.down) + ')');
+          if (!/track-lane/.test(lane.down.cls)) throw new Error('CONTROL: the lane flick landed on ' + lane.down.cls + ', not bare lane');
+          if (!(lane.atLift > 60)) throw new Error('CONTROL: the lane flick only scrolled the list ' + lane.atLift + 'px under the finger');
+          if (!(lane.later > lane.atLift + 20)) throw new Error('CONTROL: even from bare lane the flick did not glide (' + lane.atLift + ' -> ' + lane.later + 'px), so this test cannot judge the others');
+          const clip = await flick(pickClip, 'a clip');
+          const name = await flick(pickName, 'a layer name');
+          if (!clip.down || !/(^| )clip( |$)/.test(clip.down.cls)) throw new Error('CONTROL: the clip flick landed on ' + (clip.down && clip.down.cls) + ', not a clip');
+          if (!name.down || !name.down.head || /th-eye/.test(name.down.cls)) throw new Error('CONTROL: the name flick landed on ' + (name.down && name.down.cls) + ', not a layer name');
+          if (!(clip.atLift > 60) || !(name.atLift > 60)) throw new Error('CONTROL: a flick did not scroll the list under the finger at all (clip ' + clip.atLift + 'px, name ' + name.atLift + 'px)');
+          const bad = [];
+          if (!(clip.later > clip.atLift + 20)) bad.push('from a clip the list stopped dead the moment his finger lifted (' + clip.atLift + ' -> ' + clip.later + 'px)');
+          if (!(name.later > name.atLift + 20)) bad.push('from a layer name it stopped dead too (' + name.atLift + ' -> ' + name.later + 'px)');
+          if (bad.length) throw new Error('the same upward flick that glides ' + (lane.later - lane.atLift) + 'px from bare lane does not glide at all from anywhere else: ' + bad.join('; ') + ' — on a full timeline almost every flick starts on a clip or a name');
+        });
+      }, 380);
+    } finally {
+      try { FM.timeline._abortGestures(); } catch (e) {}
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
+    }
+  });
+
+  test('HUNT-a touching the timeline to stop a glide selects the clip under the finger and throws up the edit sheet', { item: '690', budgetMs: 60000 }, async function () {
+    /* Queue 823 c9 made a touch on a clip STOP a glide (the capture-phase pointerdown on #timeline kills both momenta),
+       but the touch is still read as a TAP by the clip's pointerup: clipTap was never moved, so it calls
+       FM.selectLayer. On the phone a selection flips the timeline to the one-row solo view and raises the edit sheet,
+       so catching a flick where he wants it costs him his whole view and a tap-off to get it back. A touch that catches
+       a moving list is a catch, not a tap, everywhere else on his phone. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+          const Ls = [];
+          for (let i = 0; i < 4; i++) Ls.push(FM.makeLayer('shape', { name: 'HUNT g' + i, shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#22c55e', start: 0, duration: 30 }));
+          FM.scene = scene(Ls, { project: { width: 1080, height: 1920, fps: 30, duration: 30, background: '#000000' } });
+          if (FM.pause) FM.pause();
+          FM.selectLayer(null); FM.refreshAll(); FM.setTime(2); FM.timeline.rebuild(); FM.timeline.updatePlayhead();
+          await sleep(400);
+          const c = [].filter.call(document.querySelectorAll('#tl-tracks .clip'), el => el.dataset.id === Ls[1].id)[0];
+          if (!c) throw new Error('setup: no clip on screen');
+          const y = c.getBoundingClientRect().top + c.getBoundingClientRect().height / 2;
+          if (y > 740) throw new Error('setup: the clip is at y ' + Math.round(y) + ', out of reach');
+          const fling = [{ t: 'touchStart', x: 300, y: y, ms: 16 }];
+          for (let k = 1; k <= 6; k++) fling.push({ t: 'touchMove', x: 300 - 30 * k, y: y, ms: 16 });
+          fling.push({ t: 'touchEnd', x: 120, y: y, ms: 0 });
+          await realInput924(fling, 'the flick');
+          const g1 = FM.time; await sleep(90); const g2 = FM.time;
+          /* CONTROL: the timeline really is gliding when he touches it. */
+          if (!(g2 > g1 + 0.02)) throw new Error('CONTROL: after the flick the playhead was not gliding (' + g1.toFixed(2) + ' -> ' + g2.toFixed(2) + ' s), so there is no glide to catch');
+          if (FM.scene.selectedId) throw new Error('setup: the flick itself selected a layer');
+          const D = huntDowns();
+          try { await realInput924([{ t: 'touchStart', x: 250, y: y, ms: 70 }, { t: 'touchEnd', x: 250, y: y, ms: 0 }], 'the touch that catches the glide'); } finally { D.stop(); }
+          const s1 = FM.time; await sleep(350); const s2 = FM.time;
+          if (!D.downs.length || !D.downs[0].trusted || !/(^| )clip( |$)/.test(D.downs[0].cls)) throw new Error('CONTROL: the catching touch did not land on a clip (' + JSON.stringify(D.downs) + ')');
+          if (Math.abs(s2 - s1) > 0.02) throw new Error('the touch did not even stop the glide (' + s1.toFixed(2) + ' -> ' + s2.toFixed(2) + ' s)');
+          const sel = FM.scene.selectedId ? FM.layerById(FM.scene, FM.scene.selectedId) : null;
+          if (sel) throw new Error('he flicked the timeline and touched it to stop the glide — it stopped, but the same touch selected ' + sel.name + (FM._soloLayerId && FM._soloLayerId() ? ', the timeline collapsed to that one row and the edit sheet came up' : '') + ', so every catch of a glide costs him his view and a tap-off');
+          /* …and a plain tap with nothing moving still selects, so the fix must tell a catch from a tap, not stop taps. */
+          await sleep(200);
+          await realInput924([{ t: 'touchStart', x: 250, y: y, ms: 70 }, { t: 'touchEnd', x: 250, y: y, ms: 0 }], 'a plain tap on a still timeline');
+          await sleep(300);
+          if (!FM.scene.selectedId) throw new Error('a plain tap on a clip with nothing gliding no longer selects it — the catch must not cost the tap');
+        });
+      }, 380);
+    } finally {
+      try { FM.timeline.stopMomentum(); FM.timeline._abortGestures(); } catch (e) {}
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
+    }
+  });
+
 })();
