@@ -72,15 +72,79 @@ window.FM = window.FM || {};
     }
     return !!comment.by && comment.by.mid === mid;
   }
+  /* ⚠️ S7: A COMMENT'S AUTHOR AND TIME ARE THE HOST'S TO WRITE, FOR EVERY ROLE. §16.2 has the host
+     overwrite `by`/`at` on an `ai` so "identity cannot be spoofed" — and then lets an Editor send any op,
+     which includes `s P/comments/#i:c/by {name:'Ezra'}`: one op, and a comment reads as his, uneditable by
+     the person who wrote it (ownsComment reads `by.mid`). The safer reading keeps §16.2's promise for
+     everybody: inside `P/comments` an Editor (and the owner's own device, which never passes through here)
+     may insert, remove and move whole comments and replies — the host stamps every insert — and may change
+     `text` and `resolved`, which is §16.1's "edit, delete or resolve anyone's". Nothing else in a comment
+     is writable by a peer: not `by`, `at`, `id`, the pin (`lid`/`t`), and not the whole list at once — the
+     one `s` it accepts on `P/comments` itself is the FIRST list, where base has none, and every comment in
+     it is stamped as the sender's (`firstList`, `stampList`). A whole list that arrives where base already
+     has one is never a rewrite: the host turns it into one insert per comment base does not have
+     (`lateList`, `listToInserts`). */
+  function editorCommentOp(op, base) {
+    const p = op.p;
+    /* ⚠️ AN `ai` IS AN UPSERT (collab-diff.js applyAi), SO "INSERT" IS A QUESTION ABOUT BASE (S7 review).
+       Only a comment or a reply, only keyed by its `id` (a `#u:` key stores an element with no id, which
+       makes the id-keyed list atomic on every device for good — collab-path.js arrayMode), and an insert
+       on an id that already exists keeps its author, time and pin (stampAuthor), so it can change the
+       words and the resolved flag and nothing §16.2 keeps for the host. */
+    if (op.o === 'ai') return isCommentInsert(op) && commentKeyOk(op);
+    if (op.o === 'ar' || op.o === 'am') return true;
+    if (op.o === 's' && p.length === 2) return firstList(op, base);
+    if (op.o !== 's' && op.o !== 'd') return false;
+    const last = p[p.length - 1];
+    if (last !== 'text' && last !== 'resolved') return false;
+    return (p.length === 4 && P.isKeyedSeg(p[2])) || (p.length === 6 && P.isKeyedSeg(p[2]) && p[3] === 'replies' && P.isKeyedSeg(p[4]) && last === 'text');
+  }
+  /* The FIRST comment in a project whose document has no list yet does not arrive as an `ai` — the diff
+     sees a key only live has and says `s P/comments [the comment]`. Refusing it would make the first
+     comment impossible for a Commenter; accepting it unexamined would let anybody plant a whole list of
+     comments in anybody's name. So it is accepted only where base has NO list, from anybody who may
+     comment, and resolveOp stamps every element in it with the SENDER as author, exactly as an `ai`. */
+  function firstList(op, base) {
+    const have = base && base.project && base.project.comments;
+    return Array.isArray(op.v) && !Array.isArray(have);
+  }
+  /* ⚠️ …AND ONE THAT ARRIVES WHEN A LIST ALREADY EXISTS IS NOT A ROLE QUESTION AT ALL (S7 review). Two people
+     posting the first comment at once both send a whole list against a base with none, and the second one's
+     was refused as 'role' and lost — an Editor was told "you can only comment". It is still never applied
+     as a list (`allowed` keeps refusing a rewrite, above): the host turns it into one stamped insert per
+     comment base does not have (`listToInserts`), which is exactly what separate `ai`s would have done, and
+     hands the sender the real list back. So a whole-list set can never replace, re-author or re-pin anything
+     that exists. Only from a role that may add a comment at all. */
+  function lateList(role, op, base) {
+    if (role !== 'editor' && role !== 'commenter') return false;
+    if (!op || op.o !== 's' || !Array.isArray(op.p) || op.p.length !== 2 || !isCommentsPath(op.p) || !Array.isArray(op.v)) return false;
+    return !!(base && base.project && Array.isArray(base.project.comments));
+  }
+  function isCommentInsert(op) {
+    const p = op && op.p;
+    if (!op || op.o !== 'ai' || !Array.isArray(p) || !isCommentsPath(p)) return false;
+    return p.length === 2 || (p.length === 4 && P.isKeyedSeg(p[2]) && p[3] === 'replies');
+  }
+  function commentKeyOk(op) { return P.isKeyedSeg(op.k) && P.keyedField(op.k) === 'id'; }
   function allowed(role, op, base, mid) {
-    if (role === 'owner' || role === 'editor') return true;
+    if (role === 'owner' || role === 'editor') return !isCommentsPath(op.p) || editorCommentOp(op, base);
     if (role !== 'commenter') return false;                 // viewer, or anything unknown
     const p = op.p;
+    if (op.o === 's' && Array.isArray(p) && p.length === 2 && isCommentsPath(p)) return firstList(op, base);
     if (op.o === 'ai') {
-      if (!Array.isArray(p)) return false;
-      if (p.length === 2 && isCommentsPath(p)) return true;                               // a new comment
-      if (p.length === 4 && isCommentsPath(p) && P.isKeyedSeg(p[2]) && p[3] === 'replies') return true;  // a reply
-      return false;
+      /* A new comment, or a reply — keyed by its id, and NEW. An `ai` on an id that exists is an upsert
+         that would rewrite somebody else's words under their name (S7 review), so on an existing id it is
+         only his own. */
+      if (!isCommentInsert(op) || !commentKeyOk(op)) return false;
+      const at = p.concat(op.k);
+      if (D.valueAt(base, at) !== undefined) return ownsComment(base, at, mid);
+      return true;
+    }
+    /* Taking his own `resolved` away is how his own Undo of a Resolve arrives (invertStep turns an `s` whose
+       value was absent into a `d`), and refusing it told him "you can only comment" (S7 review). */
+    if (op.o === 'd') {
+      if (!Array.isArray(p) || p.length !== 4 || p[3] !== 'resolved') return false;
+      return ownsComment(base, p, mid);
     }
     if (op.o === 's') {
       if (!Array.isArray(p)) return false;
@@ -329,7 +393,7 @@ window.FM = window.FM || {};
         if (op.o === 'lr' && op.f === 1) r.f = 1;
       } else {
         r.p = op.p.slice();
-        if (op.o === 's') r.v = clone(op.v);
+        if (op.o === 's') { r.v = clone(op.v); stampList(r, m); }
         if (op.o === 'ai') {
           r.k = op.k; r.v = clone(op.v);
           const arr = D.valueAt(base, op.p);
@@ -358,11 +422,100 @@ window.FM = window.FM || {};
        whatever an `ai` carries is what the session stores, hashes and shows, forever (queue 921). */
     const COMMENT_KEYS = { id: 1, by: 1, at: 1, text: 1, lid: 1, t: 1, resolved: 1, replies: 1 };
     const REPLY_KEYS = { id: 1, by: 1, at: 1, text: 1 };
+    /* ⚠️ THE AUTHORS OF WHAT WAS DELETED (S7 review). An Undo of a comment delete arrives as an ordinary
+       `ai` carrying the whole thread — and stamping it as the sender re-authored the comment AND every
+       reply inside it as whoever pressed Undo: Sam's reply read as Mia's, editable by Mia and no longer by
+       Sam. The host remembers each comment and reply it removes, and a removed id that comes back comes
+       back as it was: its author, its time and its words. (Words included, so nobody can bring an id
+       back with new text under somebody else's name.) Per host lifetime, capped. */
+    const gone = new Map();
+    function goneKey(isReply, id) { return (isReply ? 'r:' : 'c:') + id; }
+    function remember(el, isReply) {
+      if (!isPlainObject(el) || typeof el.id !== 'string') return;
+      gone.delete(goneKey(isReply, el.id));
+      gone.set(goneKey(isReply, el.id), { by: clone(el.by), at: el.at, text: el.text });
+      if (!isReply && Array.isArray(el.replies)) el.replies.forEach(function (r) { remember(r, true); });
+      while (gone.size > 2000) gone.delete(gone.keys().next().value);
+    }
+    H._gone = gone;
+    /* A Commenter may bring back only what was his (the Undo of his own delete); an Editor may bring back
+       anybody's, since he may delete anybody's. */
+    function goneRefused(m, op) {
+      if (!m || m.role !== 'commenter' || !isCommentInsert(op) || !P.isKeyedSeg(op.k)) return false;
+      const was = gone.get(goneKey(op.p.length === 4, P.keyedValue(op.k)));
+      return !!was && !(was.by && was.by.mid === m.mid);
+    }
     function stampAuthor(r, m) {
       const p = r.p;
       const isComment = isCommentsPath(p) && (p.length === 2 || (p.length === 4 && p[3] === 'replies'));
       if (!isComment || !isPlainObject(r.v)) return;
-      sanitizeComment(r.v, m, p.length === 4);
+      const isReply = p.length === 4;
+      /* ⚠️ AN INSERT ON AN ID THAT IS ALREADY THERE IS AN UPSERT (S7 review): patchObject would delete every
+         key the value leaves out — the pin, the resolved flag, every reply — and the stamp would make it
+         the sender's. It changes the words and the resolved flag, and nothing else. */
+      const cur = D.valueAt(base, p.concat(r.k));
+      if (isPlainObject(cur)) {
+        const v = clone(cur);
+        if (typeof r.v.text === 'string') v.text = r.v.text.slice(0, LIM.COMMENT);
+        if (!isReply && hasOwn(r.v, 'resolved')) v.resolved = r.v.resolved === true;
+        r.v = v;
+        /* …and it stays where it is: with its anchor as sent (null), the upsert moved it to the top of
+           everybody's list. */
+        const arr = D.valueAt(base, p);
+        const field = P.keyedField(r.k);
+        const prev = Array.isArray(arr) ? anchorOf(arr, field, P.keyedValue(r.k)) : null;
+        r.a = prev == null ? null : P.keyedSeg(field, prev);
+        return;
+      }
+      sanitizeComment(r.v, m, isReply);
+      /* The id IS the key. A value naming another id would be stored under that one (applyAi asserts the
+         key's own field), and a second element with an id the list already has makes it atomic. */
+      r.v.id = P.keyedValue(r.k);
+      const was = gone.get(goneKey(isReply, r.v.id));
+      if (was) restore(r.v, was);
+    }
+    function restore(v, was) {
+      v.by = clone(was.by); v.at = was.at;
+      if (typeof was.text === 'string') v.text = was.text;
+    }
+    /* S7: the first comment list (see `firstList`) — every element stamped as the sender's, ids checked
+       and de-duplicated, capped at §21's 500, exactly what 500 separate `ai`s would have produced. */
+    function stampList(r, m) {
+      if (!isCommentsPath(r.p) || r.p.length !== 2 || !Array.isArray(r.v)) return;
+      /* Only the FIRST list. The owner's own device is never role-checked, and if his list ever went atomic
+         for one diff (a duplicated id, §5.3) the whole-list set that follows must not re-author every comment
+         in it as his. (A guest's list that arrives when base already has one never gets here — it is turned
+         into inserts by `listToInserts`.) */
+      if (base.project && Array.isArray(base.project.comments)) return;
+      const seen = Object.create(null);
+      r.v = r.v.filter(function (c) {
+        if (!isPlainObject(c) || typeof c.id !== 'string' || !P.KEYVAL_RE.test(c.id) || seen[c.id]) return false;
+        seen[c.id] = 1;
+        return true;
+      }).slice(0, LIM.COMMENTS);
+      r.v.forEach(function (c) {
+        sanitizeComment(c, m, false);
+        const was = gone.get(goneKey(false, c.id));
+        if (was) restore(c, was);
+      });
+    }
+    /* A guest's whole comment list, arriving where base already HAS one (a second list in the same tx, or
+       the first-comment race): one insert per comment base does not have, in the list's order, each going
+       through the same limit, stamp and apply as an `ai` would. Comments base has are left exactly as base
+       has them. */
+    function listToInserts(op) {
+      const out = [];
+      const have = base.project.comments;
+      const seen = Object.create(null);
+      let prev = null;                                        // each one after the last, as a push would put it
+      for (let i = 0; i < have.length; i++) if (have[i] && typeof have[i].id === 'string') { seen[have[i].id] = 1; prev = have[i].id; }
+      (op.v || []).forEach(function (c) {
+        if (!isPlainObject(c) || typeof c.id !== 'string' || !P.KEYVAL_RE.test(c.id) || seen[c.id]) return;
+        seen[c.id] = 1;
+        out.push({ o: 'ai', p: ['P', 'comments'], k: P.keyedSeg('id', c.id), a: prev == null ? null : P.keyedSeg('id', prev), v: clone(c) });
+        prev = c.id;
+      });
+      return out;
     }
     function sanitizeComment(v, m, isReply) {
       const keep = isReply ? REPLY_KEYS : COMMENT_KEYS;
@@ -384,6 +537,10 @@ window.FM = window.FM || {};
         if (!isPlainObject(rep) || typeof rep.id !== 'string' || !P.KEYVAL_RE.test(rep.id) || seen[rep.id]) { v.replies.splice(i, 1); continue; }
         seen[rep.id] = 1;
         sanitizeComment(rep, m, true);
+        /* A reply the host removed coming back inside its comment (the Undo of a delete) is its author's,
+           not the person who pressed Undo. */
+        const was = gone.get(goneKey(true, rep.id));
+        if (was) restore(rep, was);
       }
     }
     /* ⚠️ THE OWNER HAS A NAME TOO. `H.local` used to hand resolveOp a literal null, which is the "no
@@ -434,16 +591,41 @@ window.FM = window.FM || {};
     /* Steps 7–8: apply the accepted ops to base, then run the invariants on CLONES and turn the
        difference into fix ops. Never sanitize live objects — storage's sanitizers REASSIGN effects,
        masks, audioFx, behaviors and kf, which detaches every reference the app is holding (§11.2). */
-    function applyAndFix(ops, m, rejOut, indexOf) {
+    function applyAndFix(ops, m, rejOut, indexOf, resyncOut) {
       const accepted = [];
       const touched = Object.create(null);
       let projectTouched = false, structural = false;
+      const guest = !!m && m !== ownerMember() && m.mid !== H.ownerMid;
       for (let i = 0; i < ops.length; i++) {
+        /* ⚠️ A GUEST'S WHOLE COMMENT LIST, WHERE BASE ALREADY HAS ONE, BECOMES INSERTS (S7 review). The role
+           check ran against the PRE-tx base, so two `s P/comments` in one tx both passed it as "the first
+           list" — and the second was applied raw, because stampList only stamps the first: a comment "by
+           Ezra" that Ezra never wrote, over the 500 cap, with any keys it liked. Decided HERE, against the
+           base this op is actually applied to. */
+        if (guest && ops[i].o === 's' && isCommentsPath(ops[i].p) && ops[i].p.length === 2 &&
+            base.project && Array.isArray(base.project.comments)) {
+          const ins = listToInserts(ops[i]);
+          if (resyncOut) resyncOut.push(indexOf(i));          // the sender is handed the real list back
+          for (let j = 0; j < ins.length; j++) {
+            if (goneRefused(m, ins[j])) continue;             // somebody else's deleted comment is not hers to bring back
+            if (overLimit(ins[j])) { rejOut.push([indexOf(i), 'limit']); break; }
+            const rop = resolveOp(ins[j], m);
+            if (D.apply(base, rop) === 'ok') { accepted.push(rop); projectTouched = true; }
+          }
+          continue;
+        }
+        /* A comment or reply keyed any way but by its id is refused from every device, the owner's too: the
+           stored element would have no id, and the list would be atomic for good (S7 review). */
+        if (isCommentsPath(ops[i].p) && ops[i].o === 'ai' && !commentKeyOk(ops[i])) { rejOut.push([indexOf(i), 'bad']); continue; }
         /* §21, against the RAW op (resolveOp clamps a comment, which would make the cap unmeasurable)
            and after the earlier ops in this tx have landed: counting against the PRE-TX base let one
            message of 520 comments through a 500 ceiling, because nothing had been applied yet. */
         const lim = overLimit(ops[i]);
         if (lim) { rejOut.push([indexOf(i), 'limit']); continue; }
+        /* What a comment delete takes away is remembered, so its Undo brings back the right authors. */
+        if (ops[i].o === 'ar' && isCommentsPath(ops[i].p) && (ops[i].p.length === 3 || ops[i].p.length === 5)) {
+          remember(D.valueAt(base, ops[i].p), ops[i].p.length === 5);
+        }
         /* ⚠️ RESOLVED HERE, ONE OP AT A TIME — NOT IN A PASS BEFOREHAND (queue 921). An anchor names a
            sibling, and in a tx that inserts two layers the second one's anchor IS the first: resolving
            the whole tx against the pre-tx base collapsed it to null, so a two-layer paste landed
@@ -601,6 +783,9 @@ window.FM = window.FM || {};
         if (validOp(op)) { rej.push([i, 'bad']); continue; }
         const lid = layerOf(op);
         if (lid && leases[lid] && leases[lid] !== H.ownerMid && !(op.o === 'lr' && op.f === 1)) { rej.push([i, 'lease']); continue; }
+        /* §17.2 delete-anyway (S7): the owner's forced delete revokes the lease it overrode, as a guest's does
+           in `receive` — otherwise the holder's next heartbeat keeps a lease on a layer that no longer exists. */
+        if (op.o === 'lr' && op.f === 1 && leases[lid]) delete leases[lid];
         pass.push(op); idx.push(i);
       }
       const r = applyAndFix(pass, ownerMember(), rej, function (i) { return idx[i]; });
@@ -632,7 +817,8 @@ window.FM = window.FM || {};
       const rej = [], lost = [], pass = [], idx = [];
       for (let i = 0; i < tx.ops.length; i++) {
         const op = tx.ops[i];
-        if (!allowed(m.role, op, base, mid)) { rej.push([i, 'role']); continue; }          // 4
+        if (!allowed(m.role, op, base, mid) && !lateList(m.role, op, base)) { rej.push([i, 'role']); continue; }   // 4
+        if (goneRefused(m, op)) { rej.push([i, 'role']); continue; }
         const lid = layerOf(op);                                                            // 5
         if (lid && leases[lid] && leases[lid] !== mid && !(op.o === 'lr' && op.f === 1)) { rej.push([i, 'lease']); continue; }
         if (tx.q === 1) {                                                                   // 6
@@ -644,10 +830,11 @@ window.FM = window.FM || {};
         pass.push(op); idx.push(i);
       }
 
-      const r = applyAndFix(pass, m, rej, function (i) { return idx[i]; });                  // 7 + 8
+      const resync = [];
+      const r = applyAndFix(pass, m, rej, function (i) { return idx[i]; }, resync);          // 7 + 8
       const fix = r.fix.slice();
       const seen = Object.create(null);
-      rej.concat(lost).forEach(function (e) {                                                // 11: current value for refusals
+      rej.concat(lost, resync.map(function (i) { return [i, 'resync']; })).forEach(function (e) {   // 11: current value for refusals
         const oi = e[0];
         const op = (oi === '*') ? null : tx.ops[oi];
         if (!op) return;

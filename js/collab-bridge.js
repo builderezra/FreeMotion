@@ -149,7 +149,7 @@ window.FM = window.FM || {};
     flushPendingCommit: function () { if (FM.flushPendingCommit) FM.flushPendingCommit(); },
     autosave: function () { if (FM.storage && FM.storage.autosave) FM.storage.autosave(); },
     syncUndoButtons: function () { if (FM.history && FM.history.syncButtons) FM.history.syncButtons(); },
-    toast: function (m) { if (FM.toast) FM.toast(m); },
+    toast: function (m, ms) { if (FM.toast) FM.toast(m, ms); },
 
     /* ── §12.3 / §13.1: THE LINK'S OWN STATE, SAID OUT LOUD ────────────────────────────────
      * ⚠️ THE SESSION HAS CALLED THESE SINCE S2 AND NOTHING WAS LISTENING (queue 921 S3 review).
@@ -166,7 +166,13 @@ window.FM = window.FM || {};
     onOnline: function () { syncCollabBanner(); },
     onWelcome: function () { if (C.ui && C.ui.onWelcome) { try { C.ui.onWelcome(); } catch (e) {} } syncCollabBanner(); },
     onDeny: function (why) { if (C.ui && C.ui.onDeny) { try { C.ui.onDeny(why); } catch (e) {} } syncCollabBanner(); },
-    onRole: function () { syncCollabBanner(); },
+    /* S7: a role change applies AT ONCE on this device — the gating classes (§16.3's UI courtesy), the
+       banner, any open panel — not at the next thing the person tries and is refused. */
+    onRole: function () { if (C.ui && C.ui.onRole) { try { C.ui.onRole(); } catch (e) {} } syncCollabBanner(); },
+    onSettings: function () { if (C.ui && C.ui.onSettings) { try { C.ui.onSettings(); } catch (e) {} } },
+    /* S7: §17.2's delete-anyway is a toast you can press, and the delete itself is the app's own. */
+    toastAction: function (m, fn) { if (FM.toast) FM.toast(m, 5200, fn); },
+    deleteLayer: function (id) { if (FM.deleteLayer && FM.layerById && FM.layerById(FM.scene, id)) FM.deleteLayer(id); },
     onEnd: function (why) {
       /* S5 review: presence goes with the session, here and now. `C.detach` is not called on this path
          (the session object stays, for the Ended banner and the guest panel), and presence was left
@@ -208,6 +214,8 @@ window.FM = window.FM || {};
       if (FM.requestRender) FM.requestRender();
       if (needsTimeline(sum)) scheduleRebuild();
       if (needsInspector(sum)) scheduleInspector();
+      /* S7: somebody commented, replied or resolved — the open card and the ruler marks say so now. */
+      if (pk.comments && C.comments && C.comments.onChange) { try { C.comments.onChange(); } catch (e) {} }
     },
 
     /* ── install / uninstall ──────────────────────────────────────────────────────────────────── */

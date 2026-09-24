@@ -378,6 +378,10 @@ window.FM = window.FM || {};
       addSheet.style.setProperty('--add-sheet-top', Math.max(0, Math.round(b)) + 'px');
     }
     function openAdd() {
+      /* queue 921 S7 review: a Viewer or a Commenter adds nothing — the sheet opened, a picked photo became a
+         layer, and the backstop took it away a tick later. The + is hidden for them (styles.css); this is the
+         door for every other way in (the empty-timeline tap, a shortcut). */
+      if (FM.collab && FM.collab.active && FM.collab.readOnly && FM.collab.readOnly()) return;
       close(); redrawAdd(); syncAddSheetTop();
       if (addSheet._closeTimer) { clearTimeout(addSheet._closeTimer); addSheet._closeTimer = 0; }   // reopened mid-close: cancel the release
       addSheet.classList.remove('closing'); addSheet.style.transition = ''; addSheet.style.transform = '';

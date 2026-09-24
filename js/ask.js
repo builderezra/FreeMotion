@@ -29,6 +29,7 @@ window.FM = window.FM || {};
   'use strict';
 
   let scrim = null, card = null, titleEl = null, msgEl = null, input = null, okBtn = null, cancelBtn = null;
+  let line = null, area = null;   // the one-line field and the multi-line one; `input` is whichever is showing
   let pending = null;        // { resolve, withInput } for the dialog on screen, or null
   let returnFocus = null;    // what had focus before, so Tab / a screen reader land back where they were
   let downOnScrim = false;   // the press that started on the scrim itself — see the click handler
@@ -43,16 +44,22 @@ window.FM = window.FM || {};
     card.setAttribute('aria-describedby', 'fm-ask-msg');
     titleEl = el('div', 'fm-ask-title', 'fm-ask-title');
     msgEl = el('div', 'fm-ask-msg', 'fm-ask-msg');
-    input = el('input', 'fm-ask-input');
+    input = line = el('input', 'fm-ask-input');
     input.type = 'text';
     input.spellcheck = false;
     input.autocomplete = 'off';
     input.setAttribute('enterkeyhint', 'done');   // the phone keyboard's return key says what it does
+    /* `input: { multiline: true }` (queue 921 S7 review): a comment is written in a textarea, and an
+       <input type=text> strips every line break out of the value it is given — so editing one joined its
+       lines into one, even on a Save with nothing changed. */
+    area = el('textarea', 'fm-ask-input fm-ask-area hidden');
+    area.rows = 4;
+    area.spellcheck = true;
     const actions = el('div', 'fm-ask-actions');
     cancelBtn = el('button', 'fm-ask-cancel'); cancelBtn.type = 'button';
     okBtn = el('button', 'fm-ask-ok'); okBtn.type = 'button';
     actions.appendChild(cancelBtn); actions.appendChild(okBtn);
-    card.appendChild(titleEl); card.appendChild(msgEl); card.appendChild(input); card.appendChild(actions);
+    card.appendChild(titleEl); card.appendChild(msgEl); card.appendChild(line); card.appendChild(area); card.appendChild(actions);
     scrim.appendChild(card);
     document.body.appendChild(scrim);
 
@@ -80,12 +87,13 @@ window.FM = window.FM || {};
     if (e.key === 'Escape') { e.preventDefault(); finish(null); return; }
     if (e.key === 'Enter') {
       if (e.isComposing || e.keyCode === 229) return;   // an IME confirming a word, not the dialog
+      if (e.target === area && !(e.metaKey || e.ctrlKey)) return;   // a new line; ⌘/Ctrl+Enter answers
       e.preventDefault();
       finish(e.target === cancelBtn ? null : answer());   // Enter on a Tabbed-to Cancel means Cancel
       return;
     }
     if (e.key === 'Tab') {   // keep focus inside the card; anything behind it is not reachable while it is up
-      const stops = [pending.withInput ? input : null, cancelBtn, okBtn].filter(Boolean);
+      const stops = [pending.withInput ? input : null, cancelBtn.classList.contains('hidden') ? null : cancelBtn, okBtn].filter(Boolean);
       const i = stops.indexOf(document.activeElement);
       e.preventDefault();
       stops[(i + (e.shiftKey ? stops.length - 1 : 1) + stops.length) % stops.length].focus();
@@ -107,15 +115,21 @@ window.FM = window.FM || {};
     if (!scrim) build();
     if (pending) finish(null);   // a second ask replaces the first, which answers Cancel — never two cards
     const withInput = !!opts.input;
+    const multi = withInput && !!opts.input.multiline;
     titleEl.textContent = opts.title || '';
     titleEl.classList.toggle('hidden', !opts.title);
     msgEl.textContent = opts.message || '';
     msgEl.classList.toggle('hidden', !opts.message);
-    input.classList.toggle('hidden', !withInput);
+    line.classList.toggle('hidden', !withInput || multi);
+    area.classList.toggle('hidden', !multi);
+    input = multi ? area : line;
     input.value = withInput && opts.input.value != null ? String(opts.input.value) : '';
     input.placeholder = withInput && opts.input.placeholder ? String(opts.input.placeholder) : '';
     input.setAttribute('aria-label', opts.message || opts.title || 'Name');
     cancelBtn.textContent = opts.cancel || 'Cancel';
+    /* `single: true` (queue 921 S7 review): a notice has one answer. "Exporting is turned off" drew Close
+       AND OK side by side, both doing the same thing — on a phone that reads as a choice there is not. */
+    cancelBtn.classList.toggle('hidden', !!opts.single);
     okBtn.textContent = opts.ok || 'OK';
     okBtn.classList.toggle('danger', !!opts.danger);
     okBtn.classList.toggle('accent', !opts.danger);

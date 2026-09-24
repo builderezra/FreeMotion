@@ -1293,6 +1293,11 @@ window.FM = window.FM || {};
         { label: 'Rename…', action: async () => { const n = await FM.ask({ title: 'Rename project', input: { value: p.name || '' }, ok: 'Rename' }); if (n && n.trim()) { FM.projects.rename(p.id, n.trim()); render(); } } },
         // queue 915 clause 3: duplicate() now says when there is no whole copy — the template/element twins' wording
         { label: 'Duplicate', action: async () => { if (FM.toast) FM.toast('Duplicating…', 1200); const ok = await FM.projects.duplicate(p.id); render(); if (!ok && FM.toast) FM.toast('Could not duplicate — storage is full'); } },
+        /* queue 921 S7 review: the save points taken while he shared this project, readable WITHOUT sharing it
+           again (Share would arm a new room, and write a save point of its own, just to show the list). With
+           Labs on only, and never on somebody else's shared copy — the save points are the owner's. */
+        ...((FM.collab && FM.collab.ui && FM.collab.ui.labsOn && FM.collab.ui.labsOn() && FM.collab.ui.versions && !p.collab)
+          ? [{ label: 'Earlier versions…', action: () => { FM.collab.ui.versions(p.id, p.name || 'Untitled'); } }] : []),
         // Sits directly under Duplicate: both make a NEW thing out of this project, so they read as a
         // pair. It was buried below Select… (a mode, not a creation) and Ezra asked for a feature that
         // was already here — which is a findability problem, not a missing one.

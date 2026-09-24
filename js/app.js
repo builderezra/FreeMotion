@@ -664,6 +664,8 @@ window.FM = window.FM || {};
        tap to add or remove a bookmark now, so it has to say which of the two your tap will do. */
     const _cl = document.getElementById('tl-centerline');
     if (_cl) { _cl.classList.toggle('on-mark', onMark); _cl.classList.toggle('on-thumb', onThumb); }
+    /* queue 921 S7 review: …and wears the comment it is parked on, whose mark it covers (collab-comments.js). */
+    if (FM.collab && FM.collab.comments && FM.collab.comments.installed && FM.collab.comments.installed()) FM.collab.comments.syncHead();
     // Keep the open Move & Transform readouts (value boxes, dial, scale strip) in step with the
     // playhead for animated props — every time-change path passes through here. (#2)
     if (FM.inspector && FM.inspector.syncTransform) FM.inspector.syncTransform();
@@ -4823,6 +4825,14 @@ window.FM = window.FM || {};
      * file), and calling it unconditionally on a dialog open is exactly the kind of thing that causes a
      * later "I pressed play and nothing happened". */
     if (FM.playing) FM.pause();
+    /* queue 921 S7 (D11, §16.1): the owner can turn exporting off for viewers and commenters. It is his
+       request, honoured by this device — the Share panel tells him in so many words that it cannot stop a
+       screen recording — and it is said, never silently ignored. One comparison with no session. */
+    if (FM.collab && FM.collab.active && FM.collab.canExport && !FM.collab.canExport()) {
+      if (FM.ask) await FM.ask({ title: 'Exporting is turned off', ok: 'OK', single: true,
+        message: 'The owner of this project has turned off exporting for viewers and commenters. You can still watch it here — ask them if you need a copy.' });
+      return;
+    }
     if (FM.notepad && FM.notepad.confirmExport) {
       const go = await FM.notepad.confirmExport();
       if (!go) return;
@@ -5957,6 +5967,11 @@ window.FM = window.FM || {};
       headTap.addEventListener('click', (e) => {
         e.preventDefault(); e.stopPropagation();          // never let it fall through to a scrub
         if (hFired) { hFired = false; return; }            // the hold already handled this press
+        /* queue 921 S7 review: parked on a comment, the head IS that comment's mark (it covers it), so the
+           tap opens it — it used to drop a bookmark on top of it instead. */
+        const CMx = FM.collab && FM.collab.comments;
+        const cmAt = CMx && CMx.installed && CMx.installed() && CMx.atHead ? CMx.atHead() : null;
+        if (cmAt) { CMx.open({ at: cmAt }); return; }
         if (FM.toggleMarkerAtPlayhead) FM.toggleMarkerAtPlayhead();
       });
       headTap.title = 'Tap: add or remove a bookmark here · hold: set this frame as the project thumbnail';
@@ -7380,7 +7395,31 @@ window.FM = window.FM || {};
         document.body.classList.remove('cv-up');
           (FM._cvPop && (FM._cvPop(), FM._cvPop = null), document.body.classList.remove('cv-anchored', 'cv-up'));
         }
+        cvRoleNote();
         cvDialog.classList.remove('hidden');
+      };
+      /* queue 921 S7 review: A VIEWER OR COMMENTER IS TOLD IN THE CARD, BEFORE THEY TRY — Apply is off and a
+         line says why, in words that fit the role. It was a toast from Apply, and the toast (z 60) sat under
+         this dialog's own full-screen backdrop (z 100), which stayed open: pressing Apply did nothing
+         visible at all, and a Commenter was told "View only". */
+      const cvRoleNote = () => {
+        const CL = FM.collab;
+        const ro = !!(CL && CL.active && CL.readOnly && CL.readOnly());
+        const card = cvDialog.querySelector('.export-card');
+        let n = document.getElementById('cv-ro');
+        if (ro && !n && card) {
+          n = document.createElement('div');
+          n.id = 'cv-ro'; n.className = 'cv-oversize cv-ro'; n.setAttribute('role', 'note');
+          const t = card.querySelector('.export-title');
+          card.insertBefore(n, t ? t.nextSibling : card.firstChild);
+        }
+        if (n) {
+          n.classList.toggle('hidden', !ro);
+          n.textContent = ro ? ((CL.myRole && CL.myRole() === 'commenter' ? 'You can comment on this project, not change its canvas' : 'View only')
+            + ' — the canvas belongs to everyone in it, so only an editor can change it.') : '';
+        }
+        const go = document.getElementById('cv-go');
+        if (go) { go.disabled = ro; go.setAttribute('aria-disabled', ro ? 'true' : 'false'); }
       };
       FM.openCanvasDialog = openCanvasDialog;
       canvasBtn.addEventListener('click', () => {
@@ -7407,8 +7446,13 @@ window.FM = window.FM || {};
         cvDialog.classList.add('hidden');
       });
       document.getElementById('cv-cancel').addEventListener('click', () => ((FM._cvPop && (FM._cvPop(), FM._cvPop = null), document.body.classList.remove('cv-anchored', 'cv-up')), cvDialog.classList.add('hidden')));
-      document.getElementById('cv-go').addEventListener('click', () => {
-        const s = cvCompute();
+      /* queue 921 S7 (D10, §4.2): IN A LIVE SESSION THE CANVAS IS EVERYBODY'S, so a change of size or frame
+         rate is asked about first — "Change the canvas for everyone?" — and a Viewer or Commenter is told
+         they cannot (the host would refuse it anyway; this says so before anything moves). With no session,
+         or nobody else in it, this is one comparison and Apply runs exactly as it always has, synchronously.
+         📐 The owner is asked too, not only an Editor: D10 names Editors, but the change reaches everybody
+         whoever makes it, and §4.2's own line says "when a session is live". */
+      const cvApply = (s) => {
         /* MOVE THE WORK WITH THE FRAME. Changing the size here used to change two numbers and nothing
            else, so every layer kept coordinates that meant something in the OLD frame — resize a
            finished composition and it scattered, silently. It is also what made the v9.27 import cap
@@ -7423,12 +7467,26 @@ window.FM = window.FM || {};
           }
         }
         FM.scene.project.width = s.w; FM.scene.project.height = s.h;
-        const rawFps = (fpsSel && fpsSel.value === 'custom') ? (fpsNum ? fpsNum.value : 30) : (fpsSel ? fpsSel.value : 30);
-        FM.scene.project.fps = Math.max(1, Math.min(120, parseInt(rawFps, 10) || 30));
+        FM.scene.project.fps = s.fps;
         FM.scene.project.background = cvBg === 'none' ? null : cvBg;   // null = transparent
         resizeCanvas(); refreshAll();
         if (FM.history) FM.history.commit();
         ((FM._cvPop && (FM._cvPop(), FM._cvPop = null), document.body.classList.remove('cv-anchored', 'cv-up')), cvDialog.classList.add('hidden'));
+      };
+      document.getElementById('cv-go').addEventListener('click', () => {
+        const s = cvCompute();
+        const rawFps = (fpsSel && fpsSel.value === 'custom') ? (fpsNum ? fpsNum.value : 30) : (fpsSel ? fpsSel.value : 30);
+        s.fps = Math.max(1, Math.min(120, parseInt(rawFps, 10) || 30));
+        const CL = FM.collab;
+        if (CL && CL.active && CL.readOnly && CL.readOnly()) { cvRoleNote(); return; }
+        const P0 = FM.scene.project;
+        if (CL && CL.othersHere && CL.othersHere() && FM.ask && (s.w !== P0.width || s.h !== P0.height || s.fps !== (P0.fps || 30))) {
+          FM.ask({ title: 'Change the canvas for everyone?', ok: 'Change it',
+            message: 'This changes the canvas to ' + s.w + ' × ' + s.h + ' at ' + s.fps + ' fps for everyone in this project, not only for you.' })
+            .then(yes => { if (yes) cvApply(s); });
+          return;
+        }
+        cvApply(s);
       });
     }
 

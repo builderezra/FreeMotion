@@ -747,6 +747,13 @@ Secrets live in localStorage, like the AI key. The layer ids are the host's, so 
 - **As built (S4): `C.media.gcParts()` collects the `part` family, and still nothing sweeps at boot.** §23's bargain is that no collab code runs at load, and an IndexedDB sweep is the one thing in this table that would break it — so the collector runs when a SESSION ENDS, which is the moment an abandoned part is known to be abandoned. A part younger than a week, in a room that still exists, is somebody's resume point and is left alone; a part that is arriving right now is never a candidate. `ckpt` is trimmed by the arm that writes it (S3) and `base` by the guest that owns it (S2), so there is still no `FM.collab.gc()` and nothing needs one.
 - **`FM.collab.gc()` is NOT in S2.** Of the three key families in the table, `ckpt` is written by arming (S3), `part` by media (S4), and `base` by S2 — so a collector shipped now would run at every boot, on every device, to collect two kinds of key that cannot exist yet. §23's bargain with a solo user is that `collab-core.js` does nothing at load; a boot-time IndexedDB sweep is the one thing in this table that would break it. It ships with the stage that creates the keys it collects.
 
+**As built (S7), checkpoints:** written at arm (S3), **every 10 minutes while anything changes**, and at
+Stop sharing; ten kept. "Changed" is the host's own counter — `epoch:seq` differs from the last save point's —
+because every change anybody makes, his own included, is a sequenced batch, and comparing two numbers costs
+nothing where hashing the document every tick would not. The timer (30 s) exists only while he hosts and goes
+with the session. A save point's key time comes from one clock and never repeats (two in one millisecond used to
+share a key). "Earlier versions…" is in the settings menu (§19.1 as built).
+
 **The `collab:` corner of IndexedDB reaches storage.js through three seams** — `FM.storage.collabPut/collabGet/collabDel` — rather than a second `openDB()` inside the collab modules. The database name, the store name and the quota handling are `storage.js`'s business, and the key prefix is *enforced* by those seams rather than trusted: anything outside `collab:` would be a media record, and a collab module writing one would be invisible to every rule that owns them.
 
 ---
@@ -1220,6 +1227,67 @@ reassembled with a hole — a corruption with no error anywhere, because every w
 
 ---
 
+### 16.4 As built (S7)
+
+Everything in §16.1–§16.3 is built. Where the letter was wrong against the code, the safer reading was
+measured and taken, and each is also a comment at the line that implements it:
+
+- **⚠️ A comment's `by` and `at` are nobody's to write but the host's — an Editor's included.** §16.2 gives
+  Owner and Editor "all ops" and, in the same breath, promises that comment identity "cannot be spoofed" by
+  overwriting `by`/`at` on every `ai`. Both cannot be true: one `s P/comments/#i:c/by {name:'Ezra'}` from an
+  Editor makes any comment read as his, and because ownership is read from `by.mid`, the person who wrote it
+  can no longer edit it. So inside `P/comments` an Editor may insert, remove and move whole comments and
+  replies (every insert is stamped), and change `text` and `resolved` — §16.1's "edit, delete or resolve
+  anyone's" — and nothing else: not `by`, `at`, `id`, the pin (`lid`/`t`), and not the whole list at once
+  (`collab-host.js` `editorCommentOp`). The S1 role table was changed to say so, with three new rows.
+- **The FIRST comment is a whole-list set, and it is stamped too.** In a project whose document has no
+  `comments` array yet, the diff sees a key only live has and emits `s P/comments [the comment]` — which the
+  role table refused for a Commenter, so a Commenter could never post the first comment in a room. It is
+  accepted where base has NO list, from anybody who may comment, and every element in it is stamped as the
+  sender's exactly like an `ai` (`firstList`, `stampList`). Arming does NOT add an empty list to his project
+  instead: that would be a document change on every Share and an extra step on his undo stack.
+- **The backstop runs for every guest, not only the read-only roles, and it runs BEFORE the op is recorded,
+  held or sent** (`collab-session.js` `pushLocal`, `revertToBase`). It asks the host's own `Host.allowed`
+  against the same base the host will judge by, so the two can never disagree. For an Editor it only ever
+  catches a comment stamp the host rewrote while a finger was down — a repair, said to nobody. For a Viewer
+  or Commenter it writes base back and says once (4 s): "View only — ask Ezra for edit access" / "You can
+  comment here — ask Ezra for edit access to change the project". **Nothing is sent**: the S2 test that
+  measured the host's refusal and §8.2's forced list now makes its device believe it is still an Editor —
+  which is exactly the moment a demotion is in flight.
+- **Writing base back is the diff from live TO base, filtered to the refused paths** — not a hand-built
+  inverse per op kind. The old owner-side `refuseLocal` wrote `s ['L', id]` for a refused delete, which
+  `apply` answers `'gone'` for: an owner whose delete of a leased layer was refused lost the layer on his own
+  screen while base kept it, and the next diff sent the delete again, every tick. A refused reorder puts
+  the whole stack back to base's order.
+- **The UI courtesy:** `body.collab-ro` (+ `.collab-viewer` / `.collab-commenter`) hides `#add-fab`, turns
+  `#inspector` and `#key-rail` off, and puts one line above the inspector ("View only — you can watch, play
+  and follow" / "Commenter — you can comment, not change the edit"). The inspector's controls container is
+  `#inspector` itself (§16.3 left that to S7): the add menu lives inside it on a PC, so the one rule covers
+  both. The canvas guards `startMove`'s drag (a locked press: it still tap-deselects, the view still pans
+  and pinches), `startHandle`, and the layer pinch; the timeline guards the clip move (touch hold and
+  mouse), trim, slip and keyframe drag — each after the selection handling, so a Viewer can still pick a clip
+  to look at. Classes follow `role` the moment it lands (`bridge.onRole` → `ui.onRole`), with a toast
+  "Ezra made you a Viewer", and go with the session. **They are also applied at `attach`**: somebody who
+  JOINS as a Viewer gets no `role` message (nothing changed), and photographing a Viewer's phone showed the
+  + and every inspector control live until the first role change — found by the picture, not by the suite,
+  and the role test now starts as a Viewer. The layer actions (phone `#m-group/#m-dup/#m-maskgroup/#m-del`,
+  PC `#btn-parent/#btn-group/#btn-maskgroup/#btn-del-layer`) are hidden and both name fields take no taps.
+- **`roExport` is the Export button, not "save a copy".** §16.1 puts both behind the switch, but a guest's
+  copy of the project is on its device by construction — the session cannot work otherwise — so claiming
+  to block "keep my own copy" would be the dishonest half. The switch's own words say so: "Their device
+  makes the video, so this only asks it not to — it can’t stop a screen recording, and their copy is on
+  their device either way." A Viewer or Commenter pressing Export with it off gets an `FM.ask` "Exporting is
+  turned off" and nothing opens.
+- **`editorsInvite` hands an Editor the LINK, never the short code.** The owner listens on the code's topic
+  only while it is fresh — half an hour after it was last on HIS screen (S6 review, `CODE_TTL`) — and he
+  cannot know when an Editor's screen shows it, so a code shown there could be a door nobody listens at.
+  The link does not lapse. Turning the switch off hides it again; "a link they already copied works until
+  you reset it" is said under the switch. A Remove or a Reset re-sends the NEW link to every Editor who may
+  invite, at once.
+- **§20's `settings` is per member, not a broadcast.** One `s` to everybody would have handed the room's key
+  to every Viewer. Each member gets `{roExport, editorsInvite, max, owner}` plus `link` only when it is an
+  Editor and the switch is on — with the welcome, on every change, and again when its role changes.
+
 ## 17. Comments and leases
 
 ### 17.1 Comments (`js/collab-comments.js`)
@@ -1264,6 +1332,45 @@ Three things were decided on the way, each in a comment in `js/collab-presence.j
   dark backing so it reads on a clip of the same hue) and a lock glyph in the holder's name tag on the canvas.
 
 ---
+
+### 17.3 As built (S7)
+
+**Comments** are `js/collab-comments.js` (`FM.collab.comments`), installed only while Labs is on. Three
+layouts were drawn first and rendered in the real app at 380 and 1280 (rule 16 / #545):
+
+| option | what it is | at 380 / 1280 |
+|---|---|---|
+| **A · paper card** (built) | the notepad's card (§17.1): yellow glued edge, newest first, replies indented, resolved folded into "N resolved — show", the composer at the foot with the pin under the thumb | `comments-A-paper-380.png`, `comments-A-paper-1280.png` |
+| B · inside the Share card | a thread list behind a [People \| Comments] segment in the dark sharing card | `comments-B-glass-380.png`, `comments-B-glass-1280.png` |
+| C · speech bubble | one thread at a time, anchored at its ruler mark | `comments-C-bubble-380.png`, `comments-C-bubble-1280.png` |
+
+A because a comment IS writing, and the app already has exactly one surface that says "people's writing"
+at a glance. B made a comment look like one more sharing setting; C covers the ruler it points at on a phone
+and still needs a list somewhere for the rest.
+
+Departures from §17.1, each measured:
+- **The ruler marks live in `#tl-ruler`, not `#tl-inner`.** The ruler row is `position: sticky`, so a mark
+  in `#tl-inner` at ruler height scrolls away with the tracks, and `#tl-ruler` already carries the clip that
+  keeps bookmarks off the icon column (queue 429). x is still `timeToX(t)`, less the ruler's offset. A mark is
+  a `<button>` (the scrub skips buttons) whose pointerdown stops before the ruler's long-press menu.
+- **A comment is timed even with no layer selected** — "At 0:04 on the timeline" — because the ruler mark is
+  how anybody finds it again. Untick for a comment about the whole project.
+- **Tapping a comment's "at 0:04" moves the playhead there** (and selects its layer for somebody who may edit).
+- **`resolved` is written `false`, never deleted,** because the host lets a Commenter `s` his own `resolved`
+  and refuses `d`.
+- **The owner's own stamped comment is applied back to his live** (`pushLocal`, `commentStamp`), and a
+  guest's own ack echo of a stamped comment is taken even while `P/comments` is held (the Post tap is still
+  "interacting" for 250 ms) — otherwise live kept its guess at `at` and the next diff tried to send it.
+- **Entry points:** a "Comments · N open" row in the Share panel and in the guest panel, and the ruler marks.
+  The people chip's unread-count bubble (§18.5) is not built.
+- **D9 holds and is tested:** an export with open comments goes straight to the export dialog; a note with
+  `remind` still stops it (the control).
+
+**Delete-anyway (§17.2):** the refused delete is put back where it was (the reverse diff above), and the
+toast "Sam is editing “Logo” — it wasn’t deleted. Tap to delete anyway" is the button — `FM.toast`'s
+`onTap`, so no three-button ask is needed. The tap runs the app's own `FM.deleteLayer` (its undo step, its
+playback teardown) and the diff that carries it marks the `lr` `f:1`; `H.local` now revokes the lease on an
+owner's forced delete as `receive` already did for a guest's.
 
 ## 18. Presence (`js/collab-presence.js`)
 
@@ -1530,6 +1637,45 @@ sees, each row with a [Follow] — and the owner's role menu gains Follow betwee
 **Guest panel as built:** state, role and [Leave] (which goes through `FM.collab.leave({keep:true})` —
 §12.3's recommended answer). Follow and Comments are S5 / S7.
 
+**As built (S7): the settings menu, drawn three ways first and rendered in the real app (rule 16 / #545).**
+
+| option | what it is | at 380 / 1280 |
+|---|---|---|
+| **A · drill-in** (built) | ⚙ in the Share card's foot opens "Sharing settings" in the same card, with a ‹ back: You (name and colour) · People in this project (Editors can invite others, Viewers and commenters can export, Most people at once) · On this device (pointers, selections, Codes only) · Connection (status, "Having trouble? Connect with a code") · Earlier versions… · privacy · version | `settings-A-drillin-main-380.png`, `settings-A-drillin-settings-380.png`, and the `-1280` pair |
+| B · tabs | [People \| Invite \| Settings] across the top of the card | `settings-B-tabs-people-380.png`, `settings-B-tabs-settings-380.png`, and the `-1280` pair |
+| C · one page | every section on one long scroll, Docs' single dialog | `settings-C-onepage-380.png`, `settings-C-onepage-1280.png` |
+
+A keeps the resting view to "who is here and how do I invite someone", which is what he opens the panel
+for; B split the people from the invite; C put the settings two and a half screens down at 380 px.
+Also as built:
+- **The foot is [⚙] [Stop sharing] [Done], and "Comments" is a row in the body.** §19.1's four foot items do
+  not fit 380 px (a 332 px content box; the drawn four cut Stop sharing in half), and Stop sharing is the one
+  that must never be two taps away.
+- **"New people join as [Editor ▾]"** is on the main view, under the ask row — Docs puts the role a link
+  grants beside the link. It is where a stranger starts; a member keeps what he gave them.
+- **"Most people at once"** offers 2 up to the device's cap (12 PC, 6 phone), counting him.
+- **The three device switches write the one settings store** Settings → Labs uses, so the two places cannot
+  disagree. **Name and colour** changes the host's own record of him too, so the next roster carries it.
+- **Earlier versions…** lists the kept save points, newest first ("Today, 3:42 pm · 12 layers · 1080×1920"),
+  each with [Restore] → "Bring this version back?" → a NEW project "<name> — Today, 3:42 pm" on Home, through
+  `duplicateFrom` (new layer ids, clips copied under them, 915.3's rollback). The shared project is not
+  touched. The card takes the saved document's size, not today's.
+- **Guest panel:** its body scrolls now; it says what the role means ("You can watch, play and follow
+  along." / "You can read and add comments…"), whether exporting is on, lists the people, has the Comments
+  row, and — for an Editor the owner lets invite — the invite LINK with Copy / Share… / QR.
+
+**As built (S7): the phone's Share button moved OFF the top bar, onto the stage.** Measured at 380 px with
+Labs on: `#topbar-m` holds back 42 · name · version chip 65 · ? 42 · notes 42 · cog 42 · share 42 · export 38,
+and the project-name field was left **34 px — "U.." for "Untitled"**. D18 predicted exactly this ("the phone top
+bar has about 85 px to spare and the notes/cog gap is signed off (#189)") and put the presence chip on the stage
+instead; §18.5 drew that chip, alone, as "a single 28 px round person+ Share button". So on a phone `#btn-share`
+IS that chip at rest — same corner, same classes, same hide rules — and once a session is live the faces
+(`#collab-people`) take its place (`#stage:has(> #collab-people) > #btn-share { display:none }`). The name is
+80 px again (the same as with Labs off, which the test asserts). On a PC nothing moved. Drawn against: the
+version chip shrunk to its icon (69 px for the name, and a signed-off chip loses its words) and the bar icons
+narrowed (breaks the #189 gap). Before/after: `topbar-before-380.png`, `topbar-after-380.png`, and the
+alternatives `topbar-B-verchip-380.png`, `topbar-C-narrow-380.png`.
+
 ### 19.2 Join sheet: `#collab-join`
 
 - Title "Join a live project".
@@ -1677,6 +1823,11 @@ broadcast) and `hostName`; `hello` carries `proto, schema, app, mk, dev` every t
 (the guest pings every 2 s, the owner answers from `onmessage`, never queued); `deny` is also sent AFTER the
 handshake — the owner's answer to a reconnect's hello — and a guest session hands it to the app
 (`onDeny`). S3's `refused` stays for the connection-code path.
+
+**As built (S7):** `settings` is sent per member — `s:{roExport, editorsInvite, max, owner, link?}`, the
+`link` only to an Editor and only while "Editors can invite others" is on (§16.4) — with the welcome, on every
+change, and again when that member's role changes. The guest keeps only a link that is an invite link to this
+app, and clamps `max`.
 
 ---
 
@@ -2269,6 +2420,44 @@ changed after a removal without cutting every other member loose.
   - checkpoints: at arm, every 10 min if changed (fake clock), keep 10; restore creates a new project with media
 - `/security-review`.
 - **Visible:** yes.
+
+**As built.** `js/collab-comments.js` (new), the role filter's comment rule and the first list in
+`js/collab-host.js`, the backstop, delete-anyway, `settings` and the stamped-comment echo in
+`js/collab-session.js`, the role/settings/delete hooks in `js/collab-bridge.js`, the role answers in
+`js/collab-core.js`, the settings menu, Earlier versions, the ten-minute save points, the guest panel, the role
+classes and the phone's stage Share button in `js/collab-ui.js`, the canvas confirm and the export switch in
+`js/app.js`, the gesture guards in `js/canvas-edit.js` and `js/timeline.js`, one script tag in index.html, and
+the `COLLAB S7` block of `styles.css`. Every decision against the spec's letter is in §16.4, §17.3, §19.1 and
+§12.4 "as built (S7)". Eleven tests, all `921 S7 …` (the eleventh is below):
+
+- `the host refuses whatever a role may not do, whatever the device claims — a Viewer’s forged edit, a Commenter on somebody else’s comment, an Editor rewriting who wrote one — and stamps every comment with its real author`
+- `an Editor changes the canvas only after “Change the canvas for everyone?” — Cancel changes nothing — a Viewer is told they can’t, and alone nobody is asked`
+- `a role change reaches the other device at once — the gating classes, the note above the inspector and the + follow it — and a Viewer’s stray edit is written back without a word on the wire`
+- `Remove sends “removed”, revokes the token and rotates the link and code — the old link reaches nobody — and an Editor allowed to invite is handed the NEW link, never the old`
+- `comments: add, reply and resolve on the card, a mark on the ruler at the comment’s time that opens it, the other device sees it — and an export with open comments goes straight to the export dialog`
+- `with “Viewers and commenters can export” off, a Viewer’s Export says so and opens nothing; on, it opens — and an Editor is never stopped`
+- `deleting a layer somebody holds is refused and put back where it was, and “Delete anyway” deletes it and frees the lease — on the owner and on a guest`
+- `save points: one when sharing starts, another only after ten minutes with a change, never more than ten — and “Earlier versions…” brings one back as a NEW project with its clips`
+- `the sharing settings menu has every switch in one place, each reaches only the people it applies to, and it fits a 380 px phone`
+- `with Labs on, a phone’s top bar keeps the project name whole — Share is the round invite on the stage, which opens the Share panel, and on a PC it stays beside Export`
+
+Two older tests changed with the rules they measure: the S1 role table (owner and Editor may no longer rewrite
+a comment wholesale, its author, its time or its pin) and the S2 viewer-refusal test (its device now believes it
+is still an Editor, so the HOST's refusal and §8.2's forced list are still what it measures). The S2 inertness
+test admits the new names and asserts that with no session this device reads as the owner, and that comments
+are not installed with Labs off. The S3 phone-button test now looks for the button on the stage (or, with a
+session live, the people chip that takes its corner); the S6 host scan includes `collab-comments.js`.
+An eleventh test, `a Viewer’s drag on the canvas and on a clip moves nothing, not even for a tick — their tap
+still selects — and an Editor’s same drag moves both`, measures the gesture guards MID-gesture (the pointerup's
+commit would run the backstop and hide a missing guard).
+
+**Proved:** every S7 test fails with the S7 source reverted; each changed file reverted alone turns at least one
+S7 test red (collab-core, collab-ui, collab-comments and index.html on the stage gate; the rest on behaviour);
+and ten behaviour mutations are each caught by the test that names the rule — no "if changed" on save points,
+role classes never applied, role classes not applied at attach, the phone Share back in a bar, Remove not
+re-sending the link, the link sent to every role, resolved comments keeping their ruler mark, the export switch
+ignored, an owner's forced delete keeping the lease, the desktop delete still offered to a Viewer. The whole
+`921` set is green at 1280 and at 380 (200 tests). `/security-review` is the integrator's, before ship.
 
 ### S8 · Hardening and release
 

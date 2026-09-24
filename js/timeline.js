@@ -310,6 +310,9 @@ window.FM = window.FM || {};
   function hideSnap() { if (snaplineEl) snaplineEl.classList.add('hidden'); }
   let dragging = false;
   let kfDrag = null;
+  /* queue 921 S7 (§16.3): this device's role may not change the edit. Asked at each gesture START, after the
+     selection handling, so a Viewer can still pick a clip to look at. */
+  const roNow = () => !!(FM.collab && FM.collab.readOnly && FM.collab.readOnly());
   // Press-and-hold before a keyframe becomes draggable. Was 600ms ("hold on it for a second"), which
   // in the hand felt like waiting rather than deciding; 320ms still can't be hit by a tap or by the
   // start of a timeline scrub (both move within ~100ms) but stops the deliberate press from dragging.
@@ -2095,7 +2098,9 @@ window.FM = window.FM || {};
         // if you have them selected, you should be able to drag clips by holding down on them without
         // selecting." Requiring a prior selection made moving a clip a two-gesture job — tap it, wait
         // for the sheet, then press-hold — when the hold alone is unambiguous.
-        if (!layer.locked) {
+        /* queue 921 S7 (§16.3): a Viewer's or Commenter's clips are locked clips — the tap still selects and the
+           finger still scrubs, but a hold never picks one up. A courtesy; the host refuses the move anyway. */
+        if (!layer.locked && !roNow()) {
           // Press-and-HOLD (finger settled) on a clip grabs it to move in time. But a finger
           // that is still travelling is a SCRUB, not a hold — a slow "drag the line over the clips to
           // find a spot" gesture emits continuous pointermoves and may cover <8px in the first 350ms.
@@ -2178,7 +2183,7 @@ window.FM = window.FM || {};
       }
       // else: NOT selected here any more. A mouse press that turns into a drag must not change the
       // selection; a press that turns out to be a plain click selects on release, below.
-      if (layer.locked) { FM.selectLayer(layer.id); return; }   // locked: selectable, never movable — so there is no drag to wait for
+      if (layer.locked || roNow()) { FM.selectLayer(layer.id); return; }   // locked: selectable, never movable — so there is no drag to wait for (queue 921 S7: a Viewer's clips too)
       touchGesture();   // queue 541: a gesture that never gets stamped looks stale to rebuild() the instant it starts
       clipMove = { pid: e.pointerId, layer: layer, startX: e.clientX, origStart: layer.start, origProjDur: (FM.scene.project.duration || 0), moved: false, downTime: timeFromX(e.clientX), group: group.filter(g => !g.layer.locked), sup: snappedTargetsOf(layer) };
       try { innerEl.setPointerCapture(e.pointerId); } catch (_) {}   // a released/synthetic pointerId throws NotFoundError; every other call site in this app already guards
@@ -2224,6 +2229,7 @@ window.FM = window.FM || {};
       const unwatch = () => { if (!armWatch) return; if (armWatch.move) window.removeEventListener('pointermove', armWatch.move, true); window.removeEventListener('pointerup', armWatch.end, true); window.removeEventListener('pointercancel', armWatch.end, true); armWatch = null; };
       const disarm = () => { if (armTimer) { clearTimeout(armTimer); armTimer = null; } armAt = null; unwatch(); grip.classList.remove('armed'); };
       const beginTrim = (e) => {
+        if (roNow()) return;   // queue 921 S7: no trim for a Viewer or Commenter
         try { grip.setPointerCapture(e.pointerId); } catch (_) {}   // keep the drag alive if the mouse leaves the window
         const m = FM.media.get(layer.id);
         // `caps` is the cue list AS IT WAS AT THE GRAB — every move recomputes from the original, the
@@ -2340,7 +2346,7 @@ window.FM = window.FM || {};
            pending gesture on arm and the vibrate that tells him it went live. A mouse is unchanged: it
            slips at once, as it always has. */
         const armSlip = (e, immediate) => {
-          if (pinch) return;
+          if (pinch || roNow()) return;   // queue 921 S7: no slip for a Viewer or Commenter
           try { slip.setPointerCapture(e.pointerId); } catch (_) {}
           touchGesture();   // queue 541: a gesture that never gets stamped looks stale to rebuild() the instant it starts
           slipDrag = { pid: e.pointerId, layer: layer, startX: e.clientX, trim0: layer.trimStart || 0, rate: advTotal / Math.max(1e-6, layer.duration), max: m.duration - advTotal, m: m, pps: pxPerSec() };
@@ -2568,6 +2574,7 @@ window.FM = window.FM || {};
           // arm delay and nulled kfDrag, so a hold-to-drag could never have armed on a phone. The two
           // now share one hold — arm at KF_HOLD_MS, and if you let go without moving, that same hold
           // opens the menu instead. One gesture, both outcomes, and touch keeps its route in.
+          if (roNow()) return;   // queue 921 S7: a Viewer's keyframes are read, never dragged
           touchGesture();   // queue 541: a gesture that never gets stamped looks stale to rebuild() the instant it starts
           kfDrag = { pid: e.pointerId, layer: layer, kfs: kfs, dot: dot, orig: kfs.map(k => k.t), armed: false,
                      downX: e.clientX, downY: e.clientY,   // where the press landed — the arm test measures travel FROM here

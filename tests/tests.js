@@ -28358,8 +28358,15 @@
       ['edit SOMEONE ELSE\'S reply', { o: 's', p: ['P', 'comments', '#i:c1', 'replies', '#i:r2', 'text'], v: 'x' }, 1, 1, 0, 0],
       ['delete my own reply', { o: 'ar', p: ['P', 'comments', '#i:c1', 'replies', '#i:r1'] }, 1, 1, 1, 0],
       ['delete SOMEONE ELSE\'S reply', { o: 'ar', p: ['P', 'comments', '#i:c1', 'replies', '#i:r2'] }, 1, 1, 0, 0],
-      ['rewrite the whole comment list', { o: 's', p: ['P', 'comments'], v: [] }, 1, 1, 0, 0],
-      ['rewrite a comment wholesale', { o: 's', p: ['P', 'comments', '#i:c1'], v: { id: 'c1' } }, 1, 1, 0, 0],
+      /* queue 921 S7: a comment's author and time are the HOST's to write, for every role — §16.2 stamps
+         them on every insert, and an Editor who could `s` them afterwards could make any comment read as
+         Ezra's (collab-host.js `editorCommentOp`). So the whole list, a whole comment, `by`, `at` and the
+         pin are nobody's to rewrite; text, resolved, insert, remove and move stay the Editor's. */
+      ['rewrite the whole comment list', { o: 's', p: ['P', 'comments'], v: [] }, 0, 0, 0, 0],
+      ['rewrite a comment wholesale', { o: 's', p: ['P', 'comments', '#i:c1'], v: { id: 'c1' } }, 0, 0, 0, 0],
+      ['rewrite who wrote a comment', { o: 's', p: ['P', 'comments', '#i:c2', 'by'], v: { mid: 'o', name: 'Ezra' } }, 0, 0, 0, 0],
+      ['rewrite when a reply was written', { o: 's', p: ['P', 'comments', '#i:c1', 'replies', '#i:r2', 'at'], v: 1 }, 0, 0, 0, 0],
+      ['move a comment\'s pin', { o: 's', p: ['P', 'comments', '#i:c2', 't'], v: 9 }, 0, 0, 0, 0],
       ['move a comment', { o: 'am', p: ['P', 'comments', '#i:c1'], a: null }, 1, 1, 0, 0]
     ];
     const roles = ['owner', 'editor', 'commenter', 'viewer'];
@@ -29124,9 +29131,15 @@
          and only when the address carries an invite; `qr` is the hand-written QR encoder, a library that
          draws only when the Share panel's [QR] is pressed. The relay itself lives inside `signal` and opens
          no socket until a session asks — `921 S6 Codes only starts no WebSocket…` counts them. */
-      'stashJoin', 'qr'];
+      'stashJoin', 'qr',
+      /* S7 (queue 921): what this device's role lets it do — answers, not state; each reads the session and
+         answers 'owner' / false with none — and `comments`, a library that builds nothing, binds nothing
+         and paints no mark until Settings → Labs installs it (collab-ui.js `install`). */
+      'myRole', 'readOnly', 'canComment', 'roomSettings', 'canExport', 'othersHere', 'comments'];
     const extra = Object.keys(C).filter(function (k) { return allowed.indexOf(k) < 0; });
-    if (extra.length) throw new Error('FM.collab gained ' + extra.join(', ') + ' — stage S6 is the engine, its hooks, the connection codes and the relay, the UI, media and presence, and anything beyond that list belongs to a later stage (comments S7)');
+    if (extra.length) throw new Error('FM.collab gained ' + extra.join(', ') + ' — stage S7 is the engine, its hooks, the connection codes and the relay, the UI, media, presence, roles and comments, and anything beyond that list belongs to a later stage');
+    if (C.readOnly && (C.readOnly() !== false || C.myRole() !== 'owner' || C.canExport() !== true)) throw new Error('with no session this device reads as read-only, or not the owner — a solo user would be locked out of his own project');
+    if (C.comments && C.comments.installed && C.comments.installed()) throw new Error('the comments module is installed with Labs off — it would be painting ruler marks and listening to every timeline rebuild for a solo user');
     /* Media is the stage most able to break §23's bargain, because everything it does is IndexedDB: a
        boot-time sweep, a manifest built at load, a progress card that exists before there is anything
        to report. None of it may happen until a session installs a controller. */
@@ -30286,6 +30299,12 @@
   test('921 S2 a viewer cannot write: the refusal comes back with the host value and the local change is reverted (an editor sticks)', { item: '921', budgetMs: 60000 }, async function () {
     await withCollab921([layer921('A')], async function (c) {
       const viewer = c.addGuest({ role: 'viewer', name: 'Vee' });
+      /* queue 921 S7: a Viewer's OWN device now writes a refused change back before it is ever sent (§16.3's
+         backstop, collab-session.js `revertToBase`) — so to measure the HOST's refusal, and §8.2's forced
+         list behind it, this device is made to believe it is still an Editor. That is not contrived: it is
+         exactly the moment a demotion is in flight, and "the host rejects whatever a client sends" means a
+         client that is wrong about its own role too. */
+      viewer.G.role = 'editor';
       viewer.doc.layers[0].name = 'viewer-tried';
       viewer.G.tick('full');
       viewer.loop.settle();
@@ -31902,14 +31921,21 @@
         await atPhoneWidth(async function () {
           ui.install();
           await settle921(80);
-          const b = document.getElementById('btn-share');
-          if (!b) throw new Error('with Labs on, at 380px, there is no #btn-share in the page at all');
+          /* queue 921 S7: with a session live, the people chip IS the phone's way in (the round Share button
+             hands its corner over to the faces), so the thing to press is whichever of the two is showing. */
+          const b0 = document.getElementById('btn-share');
+          if (!b0) throw new Error('with Labs on, at 380px, there is no #btn-share in the page at all');
+          const chip = document.getElementById('collab-people');
+          const b = (b0.getBoundingClientRect().width > 0 || !chip) ? b0 : chip;
           const r = b.getBoundingClientRect();
           if (!(r.width > 0 && r.height > 0)) throw new Error('#btn-share is in the page at 380px but has no box (parent ' +
             (b.parentNode && (b.parentNode.id || b.parentNode.className)) + ') — it was inserted beside #btn-export inside <header id="topbar">, which styles.css sets to display:none at every phone width. He turns the switch on, opens a project, and there is nothing to tap: the whole owner half is unreachable, and so is the guest’s Leave button, because this is the only door to the guest panel');
-          const bar = document.getElementById('topbar-m');
-          if (!bar || !bar.contains(b)) throw new Error('#btn-share is visible at 380px but not in #topbar-m (it is in ' +
-            (b.parentNode && (b.parentNode.id || b.parentNode.className)) + ') — the phone’s own bar is the only one on screen');
+          /* queue 921 S7: the phone's Share moved OFF #topbar-m — it squeezed the project name to "U.." — and onto
+             the stage's top-left corner, where the people chip lives (D18, §18.5). What this test is for is
+             unchanged: on a phone there is a Share button, on screen, that he can press. */
+          const stage = document.getElementById('stage');
+          if (!stage || b.parentNode !== stage) throw new Error('#btn-share is visible at 380px but not on the stage (it is in ' +
+            (b.parentNode && (b.parentNode.id || b.parentNode.className)) + ') — on a phone it is the round invite in the stage’s corner');
           if (r.top > window.innerHeight || r.bottom < 0) throw new Error('#btn-share is off screen vertically at 380px');
         }, 380);
         /* CONTROL: the desktop placement is unchanged — beside Export, wherever Export currently lives. */
@@ -35333,7 +35359,7 @@
     const C = need921S6('the relay hosts');
     const S = C.signal;
     const FILES = ['collab-core', 'collab-path', 'collab-diff', 'collab-host', 'collab-signal', 'collab-link', 'collab-session',
-      'collab-bridge', 'collab-media', 'collab-qr', 'collab-ui', 'collab-presence'];
+      'collab-bridge', 'collab-media', 'collab-qr', 'collab-ui', 'collab-presence', 'collab-comments'];
     const ALLOWED = ['wss://0.peerjs.com/peerjs', 'wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt',
       'stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478',
       'https://builderezra.github.io/FreeMotion/', 'http://www.w3.org/2000/svg'];
@@ -36918,6 +36944,1369 @@
         });
       });
     });
+  });
+
+  /* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   * #921 STAGE S7 — ROLES, COMMENTS, OWNER CONTROL (§12.1 checkpoints, §16, §17, §19.1, §26 S7).
+   *
+   * Two rigs. The real app as the OWNER is `withCollab921` (plain guests, or raw wires that send exactly
+   * the tx a hostile device would). The real app as a GUEST is `withGuestApp921` below: an owner Session
+   * over plain objects with a real Host inside it, on the other end of a manual LoopLink — so the guest's
+   * courtesies, its backstop and its toasts are the app's own, and the refusal is the host's own.
+   * ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+  function need921S7(what) {
+    const C = need921S6(what);
+    if (!C.comments || typeof C.comments.add !== 'function' || typeof C.readOnly !== 'function' || !C.ui || typeof C.ui._ckptTick !== 'function') {
+      throw new Error('the stage-S7 pieces are missing (js/collab-comments.js, FM.collab.readOnly, the checkpoint timer) — so ' + what + ' cannot be measured at all');
+    }
+    return C;
+  }
+  async function withGuestApp921(role, layers, fn) {
+    const C = need921S7('the guest side of a role');
+    return withCollab921(layers, async function (c) {
+      C.end();
+      const hdoc = jclone921({ project: C._viewOfProject(FM.scene.project), layers: FM.scene.layers });
+      const inv = C.bridge.invariants();
+      const HA = plainAdapter921(hdoc, inv);
+      const H = C.Host({ base: jclone921(hdoc), invariants: inv, ownerInfo: { name: 'Ezra', color: '#ff9f43' } });
+      const HS = C.Session({ adapter: HA, role: 'owner', mid: 'o', host: H });
+      const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'manual' });
+      const hostGot = [];
+      const mid = HS.addPeer(loop.a, { role: role, name: 'Guest', color: '#a3e635' });
+      const onA = loop.a.onmessage;
+      loop.a.onmessage = function (ch, msg) { hostGot.push({ ch: ch, msg: msg }); return onA.apply(this, arguments); };
+      const G = C.Session({ adapter: C.bridge, role: role, mid: mid, base: jclone921(hdoc), epoch: H.epoch });
+      G.pid = FM.projects.currentId();
+      G.hostName = 'Ezra';
+      G.setLink(loop.b);
+      G.bs = H.seq;
+      C.attach(G, { autoTick: false });
+      const g = { C: C, H: H, HS: HS, HA: HA, G: G, loop: loop, mid: mid, ids: c.ids, hdoc: hdoc, hostGot: hostGot,
+        settle: function () { loop.settle(); },
+        tick: function () { G.tick('hot'); loop.settle(); } };
+      try { return await fn(g); }
+      finally { try { G.stop('left'); } catch (e) {} try { C.detach(); } catch (e) {} }
+    });
+  }
+  function toastsWithTap921() {
+    const real = FM.toast, got = [];
+    FM.toast = function (m, ms, onTap) { got.push({ m: String(m), onTap: onTap }); };
+    got.restore = function () { FM.toast = real; };
+    return got;
+  }
+  function rawWire921(ctx, role, name) {
+    const C = ctx.C;
+    const loop = C.link.LoopLink({ aTag: 'h', bTag: 'w' + ctx.guests.length, mode: 'manual' });
+    const mid = ctx.S.addPeer(loop.a, { role: role, name: name, color: '#a78bfa' });
+    const got = [];
+    loop.b.onmessage = function (ch, msg) { if (ch === 'ctl') got.push(msg); };
+    let cid = 0;
+    const w = { mid: mid, loop: loop, got: got,
+      tx: function (ops) { loop.b.send('ctl', { t: 'tx', cid: ++cid, ops: ops }); loop.settle(); return got.filter(function (m) { return m.t === 'ack' && m.cid === cid; })[0] || null; },
+      say: function (msg) { loop.b.send('ctl', msg); loop.settle(); } };
+    ctx.guests.push(w);
+    return w;
+  }
+
+  test('921 S7 the host refuses whatever a role may not do, whatever the device claims — a Viewer’s forged edit, a Commenter on somebody else’s comment, an Editor rewriting who wrote one — and stamps every comment with its real author', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S7('the role filter at the host');
+    /* The first comment in a room with no list arrives as a whole-list set; it is stamped as the SENDER's. */
+    const inv = C.bridge.invariants();
+    const H0 = C.Host({ base: { project: { width: 320, height: 240 }, layers: [] }, invariants: inv });
+    H0.join('m1', { role: 'commenter', name: 'Mia', color: '#a3e635' });
+    const r0 = H0.receive('m1', { cid: 1, ops: [{ o: 's', p: ['P', 'comments'], v: [{ id: 'c_first', text: 'hi', by: { mid: 'o', name: 'Ezra' }, at: 1, replies: [] }] }] });
+    const c0 = H0.base.project.comments && H0.base.project.comments[0];
+    if (!c0 || (r0.ack.rej || []).length) throw new Error('a Commenter’s FIRST comment (the whole-list set a room with no list produces) was refused: ' + JSON.stringify(r0.ack.rej));
+    if (c0.by.mid !== 'm1' || c0.by.name !== 'Mia' || c0.at === 1) throw new Error('the first comment kept the author it CLAIMED (' + JSON.stringify(c0.by) + ', at ' + c0.at + ') — anybody could post as Ezra');
+    /* S7 review: once the list exists, a whole-list set is NOT a replacement (it was refused, which lost the
+       second of two first comments) — it becomes that person's own inserts and touches nothing else. */
+    const r0b = H0.receive('m1', { cid: 2, ops: [{ o: 's', p: ['P', 'comments'], v: [{ id: 'c_second', text: 'and this' }] }] });
+    const l0 = H0.base.project.comments;
+    if ((r0b.ack.rej || []).length) throw new Error('a second first-list (two people posting at once) was refused as ' + JSON.stringify(r0b.ack.rej) + ' and lost');
+    if (l0.length !== 2 || l0[0].id !== 'c_first' || l0[0].text !== 'hi' || l0[1].id !== 'c_second' || l0[1].by.mid !== 'm1') throw new Error('once the list exists a Commenter’s whole-list set replaced it: ' + JSON.stringify(l0));
+
+    await withCollab921([layer921('A')], async function (ctx) {
+      const lid = ctx.ids[0];
+      /* The owner comments first, on his own device — through the real module, which is how the list starts. */
+      const mine = C.comments.add('Tighten the cut', { pin: true });
+      FM.history.commit();
+      const baseMine = ctx.S.base.project.comments.filter(function (c) { return c.id === mine; })[0];
+      if (!baseMine || baseMine.by.mid !== 'o' || baseMine.by.name !== 'Ezra') throw new Error('the owner’s own comment is not in the room as Ezra’s: ' + JSON.stringify(baseMine && baseMine.by));
+      const liveMine = FM.scene.project.comments.filter(function (c) { return c.id === mine; })[0];
+      if (liveMine.at !== baseMine.at) throw new Error('the host stamped the owner’s comment at ' + baseMine.at + ' and his own screen still says ' + liveMine.at + ' — the next diff would try to send its guess');
+
+      /* A VIEWER, sending what an Editor would — and claiming, in a second hello, to BE one. */
+      const V = rawWire921(ctx, 'viewer', 'Vee');
+      V.say({ t: 'hello', role: 'editor', name: 'Vee', have: { epoch: null, seq: 0 } });
+      const av = V.tx([{ o: 's', p: ['L', lid, 'name'], v: 'HACKED' }, { o: 'lr', id: lid }]);
+      if (!av || av.rej.length !== 2 || av.rej.some(function (r) { return r[1] !== 'role'; })) throw new Error('a Viewer’s forged ops came back ' + JSON.stringify(av && av.rej));
+      if (FM.scene.layers.length !== 1 || FM.scene.layers[0].name !== 'A' || ctx.S.base.layers[0].name !== 'A') throw new Error('a Viewer’s forged op changed the document');
+      if (ctx.S.host.members[V.mid].role !== 'viewer') throw new Error('a hello that CLAIMED Editor changed the member’s role to ' + ctx.S.host.members[V.mid].role);
+
+      /* A COMMENTER: may comment, reply and change their own — not the owner's. */
+      const M = rawWire921(ctx, 'commenter', 'Mia');
+      const am = M.tx([{ o: 'ai', p: ['P', 'comments'], k: '#i:c_mia', a: null, v: { id: 'c_mia', text: 'Too thin', by: { mid: 'o', name: 'Ezra' }, at: 5, replies: [] } }]);
+      if (!am || am.rej.length) throw new Error('a Commenter could not add a comment: ' + JSON.stringify(am && am.rej));
+      const cm = FM.scene.project.comments.filter(function (c) { return c.id === 'c_mia'; })[0];
+      if (!cm || cm.by.mid !== M.mid || cm.by.name !== 'Mia') throw new Error('a Commenter’s comment reached his screen as ' + JSON.stringify(cm && cm.by) + ' — the author it claimed, not the one the host knows');
+      const own = M.tx([{ o: 's', p: ['P', 'comments', '#i:c_mia', 'text'], v: 'Too thin on a phone' }]);
+      if (own.rej.length || ctx.S.base.project.comments.filter(function (c) { return c.id === 'c_mia'; })[0].text !== 'Too thin on a phone') throw new Error('a Commenter could not edit their OWN comment');
+      const theirs = M.tx([{ o: 's', p: ['P', 'comments', '#i:' + mine, 'text'], v: 'rewritten' }, { o: 'ar', p: ['P', 'comments', '#i:' + mine] }]);
+      if (theirs.rej.length !== 2) throw new Error('a Commenter changed or deleted the owner’s comment: ' + JSON.stringify(theirs.rej));
+      if (FM.scene.project.comments.filter(function (c) { return c.id === mine; })[0].text !== 'Tighten the cut') throw new Error('the owner’s comment was changed by a Commenter');
+
+      /* An EDITOR: may resolve and edit anyone's — and may NOT say somebody else wrote it. */
+      const E = rawWire921(ctx, 'editor', 'Ed');
+      const spoof = E.tx([{ o: 's', p: ['P', 'comments', '#i:c_mia', 'by'], v: { mid: 'o', name: 'Ezra', color: '#ff9f43' } }]);
+      if (!spoof.rej.length || spoof.rej[0][1] !== 'role') throw new Error('an Editor rewrote who wrote Mia’s comment — it now reads as Ezra’s, uneditable by Mia');
+      if (FM.scene.project.comments.filter(function (c) { return c.id === 'c_mia'; })[0].by.mid !== M.mid) throw new Error('the author of Mia’s comment changed on the owner’s screen');
+      /* CONTROL: the same Editor resolving it is fine, so the refusal above is the author rule and not an Editor refused everything. */
+      const res = E.tx([{ o: 's', p: ['P', 'comments', '#i:c_mia', 'resolved'], v: true }, { o: 's', p: ['L', lid, 'name'], v: 'Edited' }]);
+      if (res.rej.length || !FM.scene.project.comments.filter(function (c) { return c.id === 'c_mia'; })[0].resolved || FM.scene.layers[0].name !== 'Edited') throw new Error('CONTROL: an Editor could not resolve a comment or rename a layer: ' + JSON.stringify(res.rej));
+    });
+  });
+
+  test('921 S7 an Editor changes the canvas only after “Change the canvas for everyone?” — Cancel changes nothing — a Viewer is told they can’t, and alone nobody is asked', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S7('the canvas confirm');
+    function setSize(w, h) {
+      FM.openCanvasDialog();
+      document.querySelector('#canvas-dialog .aspect-chip[data-aspect="custom"]').click();
+      document.getElementById('cv-cw').value = String(w); document.getElementById('cv-ch').value = String(h);
+      document.getElementById('cv-cw').dispatchEvent(new Event('input'));
+      document.getElementById('cv-go').click();
+    }
+    function asking() { const a = document.getElementById('fm-ask'); return a && !a.classList.contains('hidden') ? a : null; }
+    const toasts = toasts921();
+    try {
+      await withGuestApp921('editor', [layer921('A')], async function (g) {
+        const w0 = FM.scene.project.width;
+        setSize(400, 300);
+        const ask = await until921S6('the confirm', function () { return asking(); }, 3000);
+        if (!/Change the canvas for everyone\?/.test(ask.textContent) || !/400 × 300/.test(ask.textContent)) throw new Error('the confirm does not say what it changes, or for whom: "' + ask.textContent + '"');
+        if (FM.scene.project.width !== w0) throw new Error('the canvas changed BEFORE he answered the confirm');
+        ask.querySelector('.fm-ask-cancel').click();
+        await settle921(80);
+        g.tick();
+        if (FM.scene.project.width !== w0 || g.H.base.project.width !== w0) throw new Error('Cancel changed the canvas');
+        setSize(400, 300);
+        (await askOk921()).click();
+        await settle921(80);
+        g.tick();
+        if (FM.scene.project.width !== 400 || FM.scene.project.height !== 300) throw new Error('OK did not change the Editor’s canvas (' + FM.scene.project.width + '×' + FM.scene.project.height + ')');
+        if (g.H.base.project.width !== 400 || g.HA.doc().project.width !== 400) throw new Error('the Editor’s canvas change did not reach the owner');
+        /* A Viewer: said, and nothing moves — not even on this device for a tick. */
+        g.HS.setPeerRole(g.mid, 'viewer'); g.settle();
+        setSize(640, 480);
+        await settle921(60);
+        if (asking()) throw new Error('a Viewer was asked to confirm a canvas change they may not make');
+        if (FM.scene.project.width !== 400) throw new Error('a Viewer changed the canvas on their own screen');
+        /* S7 review: said IN the card — a toast from Apply was painted under this dialog's own backdrop. */
+        const ron = document.getElementById('cv-ro');
+        if (!ron || ron.classList.contains('hidden') || !/View only/.test(ron.textContent) || !/only an editor can change it/.test(ron.textContent)) throw new Error('a Viewer’s Canvas settings does not say, in the card, that they can’t change it: ' + (ron ? '“' + ron.textContent + '”' : 'no note') + ' — toasts: ' + JSON.stringify(toasts));
+      });
+      /* CONTROL: the owner with nobody else in is NOT asked — Apply runs as it always has, at once. */
+      await withCollab921([layer921('A')], async function () {
+        setSize(360, 240);
+        if (asking()) throw new Error('CONTROL: the owner alone in a session was asked "for everyone"');
+        if (FM.scene.project.width !== 360) throw new Error('CONTROL: with nobody else in, Apply did not change the canvas synchronously');
+      });
+    } finally {
+      toasts.restore();
+      const a = document.getElementById('fm-ask'); if (a && !a.classList.contains('hidden')) { const x = a.querySelector('.fm-ask-cancel'); if (x) x.click(); }
+      const d = document.getElementById('canvas-dialog'); if (d) d.classList.add('hidden');
+      document.body.classList.remove('cv-anchored', 'cv-up');
+    }
+  });
+
+  test('921 S7 a role change reaches the other device at once — the gating classes, the note above the inspector and the + follow it — and a Viewer’s stray edit is written back without a word on the wire', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S7('a live role change');
+    const toasts = toasts921();
+    try {
+      await withLabs921(async function () {
+        await withGuestApp921('viewer', [layer921('A'), layer921('B')], async function (g) {
+          const B = document.body;
+          /* Joined AS a Viewer: read-only from the first frame, with no role message at all — nothing changed,
+             so nothing says so (found by photographing a Viewer's phone: the + and the inspector were live). */
+          if (!B.classList.contains('collab-ro') || !document.getElementById('collab-ro-note')) throw new Error('a device that joined as a Viewer is not read-only until something changes its role (' + B.className + ')');
+          g.HS.setPeerRole(g.mid, 'editor');
+          g.settle();
+          if (B.classList.contains('collab-ro')) throw new Error('promoted to Editor, the read-only classes stayed on');
+          toasts.length = 0;
+          g.HS.setPeerRole(g.mid, 'viewer');
+          g.settle();
+          /* No tick, no draw, no frame: the classes are on the moment the message lands. */
+          if (!B.classList.contains('collab-ro') || !B.classList.contains('collab-viewer')) throw new Error('a demotion to Viewer did not put the read-only classes on at once (' + B.className + ')');
+          if (!C.readOnly()) throw new Error('FM.collab.readOnly() still says false for a Viewer');
+          const note = document.getElementById('collab-ro-note');
+          if (!note || !/View only/.test(note.textContent) || note.nextElementSibling !== document.getElementById('inspector')) throw new Error('no “View only” line above the inspector: ' + (note ? '"' + note.textContent + '"' : 'none'));
+          /* With a layer SELECTED — the one state in which the app shows its delete buttons at all. */
+          const delShown = function () {
+            return ['m-del', 'btn-del-layer'].filter(function (id) { const d = document.getElementById(id); return d && getComputedStyle(d).display !== 'none'; });
+          };
+          FM.selectLayer(g.ids[0]);
+          await settle921(60);
+          if (delShown().length) throw new Error(delShown().join(', ') + ' (delete layer) is still offered to a Viewer');
+          FM.selectLayer(null);
+          const fab = document.getElementById('add-fab');
+          if (fab && getComputedStyle(fab).display !== 'none') throw new Error('the + is still on a Viewer’s screen');
+          if (getComputedStyle(document.getElementById('inspector')).pointerEvents !== 'none') throw new Error('the inspector’s controls still take a Viewer’s taps');
+          if (!toasts.some(function (t) { return /made you a Viewer/.test(t); })) throw new Error('the person was not told their role changed — toasts: ' + JSON.stringify(toasts));
+          /* The backstop: an edit that slipped past every courtesy (a shortcut, a script) goes back from base,
+             and NOTHING is sent — the Viewer's device knows the rule as well as the host does. */
+          const sentBefore = g.hostGot.filter(function (m) { return m.msg && m.msg.t === 'tx'; }).length;
+          FM.scene.layers[0].name = 'stray';
+          FM.scene.layers.splice(1, 1);
+          g.tick();
+          if (FM.scene.layers[0].name !== 'A' || FM.scene.layers.length !== 2 || FM.scene.layers[1].id !== g.ids[1]) throw new Error('a Viewer’s stray edit stayed on their screen: ' + JSON.stringify(FM.scene.layers.map(function (l) { return l.name; })));
+          const sent = g.hostGot.filter(function (m) { return m.msg && m.msg.t === 'tx'; }).length - sentBefore;
+          if (sent) throw new Error('a Viewer’s device sent ' + sent + ' tx for an edit it knew it could not make');
+          if (!toasts.some(function (t) { return /View only/.test(t); })) throw new Error('the written-back edit was not explained');
+          /* Commenter: read-only for the edit, but a comment of their own goes through. */
+          g.HS.setPeerRole(g.mid, 'commenter');
+          g.settle();
+          if (!B.classList.contains('collab-commenter') || B.classList.contains('collab-viewer')) throw new Error('a Commenter carries the wrong classes: ' + B.className);
+          const cid = C.comments.add('Can we slow this down?', { pin: false });
+          g.tick();
+          const hc = (g.H.base.project.comments || []).filter(function (c) { return c.id === cid; })[0];
+          if (!hc || hc.by.mid !== g.mid) throw new Error('a Commenter’s comment did not reach the owner as theirs: ' + JSON.stringify(hc));
+          /* CONTROL: back to Editor, the classes go and the same edit sticks. */
+          g.HS.setPeerRole(g.mid, 'editor');
+          g.settle();
+          if (B.classList.contains('collab-ro') || document.getElementById('collab-ro-note')) throw new Error('CONTROL: an Editor kept the read-only look');
+          FM.selectLayer(g.ids[0]);
+          await settle921(60);
+          if (!delShown().length) throw new Error('CONTROL: with a layer selected an Editor is offered no delete button either, so “hidden from a Viewer” measured nothing');
+          FM.selectLayer(null);
+          FM.scene.layers[0].name = 'kept';
+          g.tick();
+          if (g.H.base.layers[0].name !== 'kept') throw new Error('CONTROL: an Editor’s edit did not reach the owner');
+        });
+        if (document.body.classList.contains('collab-ro')) throw new Error('the read-only classes outlived the session');
+      });
+    } finally { toasts.restore(); }
+  });
+
+  test('921 S7 Remove sends “removed”, revokes the token and rotates the link and code — the old link reaches nobody — and an Editor allowed to invite is handed the NEW link, never the old', { item: '921', budgetMs: 240000 }, async function () {
+    const C = need921S7('Remove');
+    const S = C.signal;
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          const H = await relayHost921(ui, ctx);
+          await ui.share(); letThemIn921(ui);
+          /* "Editors can invite others", from the settings menu itself. */
+          document.querySelector('#collab-share .cs-gear').click();
+          const sw = Array.prototype.filter.call(document.querySelectorAll('#collab-share .cs-srow'), function (r) { return /Editors can invite others/.test(r.textContent); })[0];
+          if (!sw) throw new Error('the settings menu has no “Editors can invite others”');
+          sw.querySelector('.set-switch').click();
+          ui.close();
+          const room = H.room;
+          const oldLink = S.inviteLink(H.rec);
+          const gA = await relayGuest921(C, room, { key: room.keys.auth, mode: 'link', name: 'Ann', mk: 'mk-ann-000000000000000' });
+          const wA = await gA.wait('welcome'); await gA.wait('snap');
+          const gB = await relayGuest921(C, room, { key: room.keys.auth, mode: 'link', name: 'Bob', mk: 'mk-bob-000000000000000' });
+          const wB = await gB.wait('welcome'); await gB.wait('snap');
+          const s0 = await gA.wait('settings');
+          if (s0.s.link !== oldLink) throw new Error('an Editor allowed to invite was not handed the link: ' + JSON.stringify(s0.s));
+          await ui.share();
+          document.querySelector('.cs-person[data-mid="' + wB.mid + '"] .cs-role').click();
+          Array.prototype.filter.call(document.querySelectorAll('#ctx-menu .ctx-item'), function (x) { return /Remove/.test(x.textContent); })[0].click();
+          (await askOk921()).click();
+          const bye = await gB.wait('bye');
+          if (bye.why !== 'removed') throw new Error('the removed device was told "' + bye.why + '", not "removed"');
+          ui.close();
+          const rec2 = hostRec921(ctx.pid);
+          if (rec2.sid === H.rec.sid || rec2.sk === H.rec.sk || rec2.code === H.rec.code) throw new Error('Remove left the link or the code as they were');
+          if (rec2.members[wB.rid] || rec2.blocked.indexOf(wB.rid) < 0 || !rec2.revoked[wB.rid]) throw new Error('Bob’s token was not revoked: ' + JSON.stringify({ member: !!rec2.members[wB.rid], blocked: rec2.blocked, revoked: Object.keys(rec2.revoked || {}) }));
+          /* His token, in the members' hub: refused by name, and signed so his device can believe it. */
+          const mB = await S.memberRoom(wB.hub, wB.rid, wB.tok);
+          let e = null;
+          try { await relayGuest921(C, mB, { key: S.fromB64url(wB.tok), mode: 'tok', rid: wB.rid, name: 'Bob' }); } catch (x) { e = x; }
+          if (!e || e.why !== 'removed' || !e.proven) throw new Error('Bob’s token after Remove was ' + (e ? 'refused as ' + e.why + (e.proven ? '' : ', unsigned') : 'ACCEPTED'));
+          /* The old link: nobody answers. */
+          e = null;
+          try { await relayGuest921(C, room, { key: room.keys.auth, mode: 'link', name: 'Bob again', mk: 'mk-bob-other-000000000', wait: 4000 }); } catch (x) { e = x; }
+          if (!e || e.why !== 'no-answer') throw new Error('the OLD link after a Remove was ' + (e ? 'answered: ' + e.why : 'let in'));
+          /* …and Ann, still an Editor who may invite, now holds the NEW link — the one that works. */
+          const newLink = S.inviteLink(rec2);
+          const s1 = await until921S6('Ann to be handed the new link', function () { return gA.msgs.filter(function (m) { return m.t === 'settings' && m.s && m.s.link === newLink; })[0] || null; }, 6000);
+          if (!s1 || newLink === oldLink) throw new Error('CONTROL: the link did not change, so "the new one" means nothing');
+          if (gB.msgs.some(function (m) { return m.t === 'settings' && m.s && m.s.link === newLink; })) throw new Error('the REMOVED device was sent the new link');
+          gA.close(); gB.close();
+        });
+      });
+    });
+  });
+
+  test('921 S7 comments: add, reply and resolve on the card, a mark on the ruler at the comment’s time that opens it, the other device sees it — and an export with open comments goes straight to the export dialog', { item: '921', budgetMs: 150000 }, async function () {
+    const C = need921S7('comments');
+    await withLabs921(async function () {
+      await withCollab921([layer921('A', { duration: 6 })], async function (ctx) {
+        const g = ctx.addGuest({ role: 'commenter', name: 'Mia' });
+        FM.selectLayer(ctx.ids[0]);
+        FM.setTime(1.5);
+        C.comments.open();
+        const card = document.getElementById('collab-comments');
+        if (!card || !card.classList.contains('np-card')) throw new Error('the comments card is not the notepad’s paper card (§17.1)');
+        const pinLabel = card.querySelector('.cc-pinlabel');
+        if (!pinLabel || !/Pin to “A” at 0:01/.test(pinLabel.textContent)) throw new Error('the composer does not offer to pin to the selected layer at the playhead: "' + (pinLabel && pinLabel.textContent) + '"');
+        card.querySelector('.cc-input').value = 'Logo lands on the cut';
+        card.querySelector('.cc-post').click();
+        const c1 = FM.scene.project.comments[FM.scene.project.comments.length - 1];
+        if (!c1 || c1.text !== 'Logo lands on the cut' || c1.lid !== ctx.ids[0] || Math.abs(c1.t - 1.5) > 0.05) throw new Error('the comment was not written pinned to the layer and time: ' + JSON.stringify(c1));
+        if (!card.querySelector('.cc-c[data-cid="' + c1.id + '"]')) throw new Error('the new comment is not on the card');
+        /* The ruler mark: at timeToX(t), in the author's colour, and it opens the card at that comment. */
+        FM.timeline.rebuild();
+        const mark = document.querySelector('#tl-ruler .tl-cmark[data-cid="' + c1.id + '"]');
+        if (!mark) throw new Error('no mark on the ruler for a comment at 0:01');
+        const ruler = document.getElementById('tl-ruler');
+        const want = FM.timeline.timeToX(c1.t) - ruler.offsetLeft;
+        if (Math.abs(parseFloat(mark.style.left) - want) > 0.5) throw new Error('the mark is at ' + mark.style.left + ', timeToX says ' + want);
+        /* Reply and resolve, through the card's own buttons. */
+        let th = document.querySelector('#collab-comments .cc-c[data-cid="' + c1.id + '"]');
+        th.querySelector('.cc-replybtn').click();
+        th = document.querySelector('#collab-comments .cc-c[data-cid="' + c1.id + '"]');
+        th.querySelector('.cc-replyinput').value = 'Moving it now';
+        th.querySelector('.cc-replypost').click();
+        if (!c1.replies || c1.replies.length !== 1 || c1.replies[0].text !== 'Moving it now') throw new Error('the reply was not written: ' + JSON.stringify(c1.replies));
+        g.loop.settle(); g.G.tick('hot'); g.loop.settle();
+        const gc = (g.doc.project.comments || []).filter(function (c) { return c.id === c1.id; })[0];
+        if (!gc || gc.replies.length !== 1 || gc.by.name !== 'Ezra') throw new Error('the other device did not get the comment and its reply as Ezra’s: ' + JSON.stringify(gc));
+        document.querySelector('#collab-comments .cc-c[data-cid="' + c1.id + '"] .cc-resolve').click();
+        if (c1.resolved !== true) throw new Error('Resolve did not resolve it');
+        if (document.querySelector('#tl-ruler .tl-cmark[data-cid="' + c1.id + '"]')) throw new Error('a resolved comment still has a mark on the ruler');
+        const fold = document.querySelector('#collab-comments .cc-resolved');
+        if (!fold || !/1 resolved/.test(fold.textContent) || document.querySelector('#collab-comments .cc-c[data-cid="' + c1.id + '"]')) throw new Error('a resolved comment is not folded away');
+        /* Reopen it and tap its mark: the card opens AT it. */
+        fold.click();
+        document.querySelector('#collab-comments .cc-c[data-cid="' + c1.id + '"] .cc-resolve').click();
+        C.comments.close();
+        document.querySelector('#tl-ruler .tl-cmark[data-cid="' + c1.id + '"]').click();
+        const foc = document.querySelector('#collab-comments .cc-c.cc-focus');
+        if (!foc || foc.getAttribute('data-cid') !== c1.id) throw new Error('tapping the mark did not open the card at that comment');
+        C.comments.close();
+        /* D9: an open comment never stops an export — the dialog opens with no card in front of it. */
+        if (!C.comments.count()) throw new Error('CONTROL: no open comment, so "export is not blocked" would prove nothing');
+        const exp = document.getElementById('export-dialog');
+        try {
+          await FM.showExportDialog();
+          await settle921(60);
+          if (document.querySelector('.np-remind')) throw new Error('an open COMMENT put the reminder card in front of the export');
+          if (exp.classList.contains('hidden')) throw new Error('with an open comment the export dialog did not open');
+          exp.classList.add('hidden');
+          /* CONTROL: a note with a reminder DOES stop it, so the card above would have been seen. */
+          FM.scene.project.notes = [{ id: 'n_s7', text: 'check audio', remind: true }];
+          const p = FM.showExportDialog();
+          await until921S6('the reminder card', function () { return document.querySelector('.np-remind'); }, 3000);
+          document.querySelector('.np-remind .np-back').click();
+          await p;
+        } finally {
+          exp.classList.add('hidden');
+          const o = document.getElementById('export-overlay'); if (o) o.classList.add('hidden');
+          FM.scene.project.notes = [];
+        }
+      });
+    });
+  });
+
+  test('921 S7 with “Viewers and commenters can export” off, a Viewer’s Export says so and opens nothing; on, it opens — and an Editor is never stopped', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S7('the export switch');
+    const exp = document.getElementById('export-dialog');
+    function closeAll() {
+      const a = document.getElementById('fm-ask'); if (a && !a.classList.contains('hidden')) { const x = a.querySelector('.fm-ask-ok'); if (x) x.click(); }
+      exp.classList.add('hidden');
+      const o = document.getElementById('export-overlay'); if (o) o.classList.add('hidden');
+    }
+    try {
+      await withGuestApp921('viewer', [layer921('A')], async function (g) {
+        g.HS.setRoomSettings({ roExport: false, editorsInvite: false, max: 8 });
+        g.settle();
+        if (C.roomSettings().roExport !== false || C.canExport()) throw new Error('the owner’s switch did not reach the Viewer (' + JSON.stringify(C.roomSettings()) + ')');
+        const p = FM.showExportDialog();
+        const ask = await until921S6('the message', function () { const a = document.getElementById('fm-ask'); return a && !a.classList.contains('hidden') ? a : null; }, 3000);
+        if (!/Exporting is turned off/.test(ask.textContent)) throw new Error('the message does not say exporting is off: "' + ask.textContent + '"');
+        if (!exp.classList.contains('hidden')) throw new Error('the export dialog opened behind the message');
+        ask.querySelector('.fm-ask-ok').click();
+        await p;
+        await settle921(60);
+        if (!exp.classList.contains('hidden')) throw new Error('the export dialog opened after the message');
+        /* On again: it opens. */
+        g.HS.setRoomSettings({ roExport: true, editorsInvite: false, max: 8 });
+        g.settle();
+        await FM.showExportDialog();
+        await settle921(60);
+        if (exp.classList.contains('hidden')) throw new Error('with the switch on, a Viewer’s export did not open');
+        closeAll();
+        /* An Editor is never stopped by it. */
+        g.HS.setRoomSettings({ roExport: false, editorsInvite: false, max: 8 });
+        g.HS.setPeerRole(g.mid, 'editor');
+        g.settle();
+        await FM.showExportDialog();
+        await settle921(60);
+        if (exp.classList.contains('hidden')) throw new Error('an Editor was stopped by the viewers-and-commenters switch');
+      });
+    } finally { closeAll(); }
+  });
+
+  test('921 S7 deleting a layer somebody holds is refused and put back where it was, and “Delete anyway” deletes it and frees the lease — on the owner and on a guest', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S7('delete-anyway');
+    const toasts = toastsWithTap921();
+    try {
+      /* The owner deletes a layer an Editor is typing into. */
+      await withCollab921([layer921('A'), layer921('B'), layer921('C')], async function (ctx) {
+        const g = ctx.addGuest({ role: 'editor', name: 'Sam' });
+        const id = ctx.ids[1];
+        ctx.S.host.grantLease(id, g.mid);
+        FM.deleteLayer(id);
+        FM.history.commit();
+        const at = FM.scene.layers.map(function (l) { return l.id; });
+        if (at.join() !== ctx.ids.join()) throw new Error('the owner’s delete of a held layer was refused but the layer did not come back where it was: ' + JSON.stringify(at));
+        if (!ctx.S.host.base.layers.some(function (l) { return l.id === id; })) throw new Error('CONTROL: the host deleted a held layer');
+        const t = toasts.filter(function (x) { return /wasn’t deleted/.test(x.m) && typeof x.onTap === 'function'; }).pop();
+        if (!t || !/Tap to delete anyway/.test(t.m)) throw new Error('no “Delete anyway” offer — toasts: ' + JSON.stringify(toasts.map(function (x) { return x.m; })));
+        t.onTap();
+        FM.history.commit();
+        if (FM.scene.layers.some(function (l) { return l.id === id; }) || ctx.S.host.base.layers.some(function (l) { return l.id === id; })) throw new Error('Delete anyway did not delete it');
+        if (ctx.S.host.leases[id]) throw new Error('Delete anyway left the lease in the host’s table');
+        g.loop.settle();
+        if (g.doc.layers.some(function (l) { return l.id === id; })) throw new Error('the guest holding it still has the layer');
+      });
+      /* A guest deletes a layer the OWNER holds. */
+      toasts.length = 0;
+      await withGuestApp921('editor', [layer921('A'), layer921('B')], async function (g) {
+        const id = g.ids[0];
+        g.H.grantLease(id, 'o');
+        FM.deleteLayer(id);
+        FM.history.commit();
+        g.settle();
+        if (!FM.scene.layers.some(function (l) { return l.id === id; })) throw new Error('the host refused the guest’s delete and the layer did not come back on the guest');
+        const t = toasts.filter(function (x) { return /wasn’t deleted/.test(x.m) && typeof x.onTap === 'function'; }).pop();
+        if (!t) throw new Error('the guest got no “Delete anyway” — toasts: ' + JSON.stringify(toasts.map(function (x) { return x.m; })));
+        t.onTap();
+        FM.history.commit();
+        g.settle();
+        if (g.H.base.layers.some(function (l) { return l.id === id; })) throw new Error('the guest’s Delete anyway did not reach the host');
+        if (g.H.leases[id]) throw new Error('the guest’s Delete anyway left the owner’s lease');
+        if (FM.scene.layers.some(function (l) { return l.id === id; })) throw new Error('the layer is still on the guest after Delete anyway');
+      });
+    } finally { toasts.restore(); }
+  });
+
+  test('921 S7 save points: one when sharing starts, another only after ten minutes with a change, never more than ten — and “Earlier versions…” brings one back as a NEW project with its clips', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S7('save points');
+    await withLabs921(async function (ui) {
+      const wasHome = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+      if (wasHome) FM.home.close();
+      let t = Date.now() - 3 * 3600000;
+      ui._ckptClock(function () { return t; });
+      try {
+        made.push(await FM.projects.create({ name: 'FX921 S7 versions', width: 320, height: 240 }));
+        const pid = FM.projects.currentId();
+        const L = mediaLayer921('Pic', 'image');
+        FM.scene.layers.push(L);
+        const png = await q921png([30, 200, 90], 's7.png');
+        await q921give(L.id, png, 'image', 0);
+        FM.history.commit(); FM.storage.markDirty(); await FM.storage.save();
+        const keys = function () { return FM.storage.collabKeys('collab:ckpt:' + pid + ':'); };
+        await ui.share();
+        ui.close();
+        if ((await keys()).length !== 1) throw new Error('sharing did not write exactly one save point (' + (await keys()).length + ')');
+        if (!ui._ckptTimer()) throw new Error('no ten-minute timer while sharing');
+        /* Ten minutes, nothing changed: none. */
+        t += 600001;
+        await ui._ckptTick();
+        if ((await keys()).length !== 1) throw new Error('a save point was written with nothing changed');
+        /* A change, now that ten minutes have passed since the arm: one. */
+        FM.scene.layers[0].name = 'Pic 2'; FM.history.commit();
+        t += 1;
+        await ui._ckptTick();
+        if ((await keys()).length !== 2) throw new Error('a change ten minutes after the last save point did not write one');
+        /* A change only five minutes after THAT one: none yet — then, at ten, one. */
+        FM.scene.layers[0].name = 'Pic 3'; FM.history.commit();
+        t += 300000;
+        await ui._ckptTick();
+        if ((await keys()).length !== 2) throw new Error('a save point was written five minutes after the last one');
+        t += 300001;
+        await ui._ckptTick();
+        if ((await keys()).length !== 3) throw new Error('ten minutes after the last save point, with a change, nothing was written');
+        /* Never more than ten. */
+        for (let i = 0; i < 9; i++) { FM.scene.layers[0].name = 'Pic v' + i; FM.history.commit(); t += 600001; await ui._ckptTick(); }
+        const all = await keys();
+        if (all.length !== 10) throw new Error(all.length + ' save points kept, not 10');
+        /* "Earlier versions…", through the menu: the list, and Restore on the OLDEST kept. */
+        await ui.share();
+        document.querySelector('#collab-share .cs-gear').click();
+        document.querySelector('#collab-share .cs-versions-nav').click();
+        const rows = await until921S6('the list of save points', function () { const r = document.querySelectorAll('#collab-share .cs-version'); return r.length ? r : null; }, 4000);
+        if (rows.length !== 10) throw new Error('Earlier versions lists ' + rows.length + ' save points, not 10');
+        if (rows[rows.length - 1].getAttribute('data-key') !== all[0]) throw new Error('the list is not newest first');
+        const before = FM.projects.list().map(function (p) { return p.id; });
+        rows[rows.length - 1].querySelector('.cs-restore').click();
+        (await askOk921()).click();
+        const nid = await until921S6('the restored project', function () { const n = FM.projects.list().filter(function (p) { return before.indexOf(p.id) < 0; })[0]; return n ? n.id : null; }, 8000);
+        made.push(nid);
+        ui.close();
+        const doc = JSON.parse(localStorage.getItem('fm.proj.' + nid));
+        if (!doc || doc.layers.length !== 1) throw new Error('the restored project has no layers');
+        if (doc.layers[0].id === L.id) throw new Error('the restored project reuses the shared project’s layer ids — two projects on one device with the same ids');
+        await until921S6('the clip to be copied', async function () { const m = await FM.storage.readMedia(doc.layers[0].id); return m && m.file && m.file.size === png.size ? m : null; }, 6000)
+          .catch(function () { throw new Error('the restored project’s clip has no media — “with its clips” is not true'); });
+        /* ⚠️ …and the project he is sharing is exactly as it was. */
+        if (FM.projects.currentId() !== pid || FM.scene.layers[0].id !== L.id || FM.scene.layers[0].name !== 'Pic v8') throw new Error('restoring a version touched the project being shared');
+      } finally {
+        ui._ckptClock(null);
+        try { C.end(); } catch (e) {}
+        await q915aCleanup(made, orig, wasHome, [], [], []);
+      }
+    });
+  });
+
+  test('921 S7 the sharing settings menu has every switch in one place, each reaches only the people it applies to, and it fits a 380 px phone', { item: '921', budgetMs: 150000 }, async function () {
+    const C = need921S7('the settings menu');
+    const was = { c: FM.settings.get('collabCursors'), s: FM.settings.get('collabSelections') };
+    try {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          const ed = ctx.addGuest({ role: 'editor', name: 'Ed' });
+          const vi = ctx.addGuest({ role: 'viewer', name: 'Vee' });
+          await atPhoneWidth(async function () {
+            await ui.share();
+            await settle921(420);   // the hinge entrance; measure the layout box, not the swing
+            const card = document.getElementById('collab-share');
+            card.querySelector('.cs-gear').click();
+            const menu = document.getElementById('collab-share');
+            const labels = Array.prototype.map.call(menu.querySelectorAll('.cs-slabel'), function (n) { return n.textContent; });
+            ['Editors can invite others', 'Viewers and commenters can export', 'Most people at once', 'Show others’ pointers', 'Show others’ selections', 'Connect with codes only'].forEach(function (want) {
+              if (labels.indexOf(want) < 0) throw new Error('the settings menu has no “' + want + '” (has ' + JSON.stringify(labels) + ')');
+            });
+            if (!menu.querySelector('.cs-versions-nav') || !menu.querySelector('.cs-profile') || !menu.querySelector('.cs-stop')) throw new Error('the menu is missing Earlier versions, name and colour, or Stop sharing');
+            const body = menu.querySelector('.cs-body');
+            if (body.scrollWidth > body.clientWidth + 1) throw new Error('the settings menu scrolls sideways at 380 px (' + body.scrollWidth + ' > ' + body.clientWidth + ')');
+            const cr = menu.getBoundingClientRect();
+            Array.prototype.forEach.call(menu.querySelectorAll('.cs-switch, .cs-role, .cs-foot button'), function (b) {
+              const r = b.getBoundingClientRect();
+              if (r.width && (r.left < cr.left - 1 || r.right > cr.right + 1)) throw new Error('a control sticks out of the card at 380 px: ' + b.className + ' ' + Math.round(r.left) + '–' + Math.round(r.right) + ' vs ' + Math.round(cr.left) + '–' + Math.round(cr.right));
+            });
+            const rowOf = function (txt) { return Array.prototype.filter.call(document.querySelectorAll('#collab-share .cs-srow'), function (r) { return r.querySelector('.cs-slabel') && r.querySelector('.cs-slabel').textContent === txt; })[0]; };
+            /* Editors can invite: the link goes to the Editor — and never to the Viewer. */
+            rowOf('Editors can invite others').querySelector('.set-switch').click();
+            ed.loop.settle(); vi.loop.settle();
+            const rec = hostRec921(ctx.pid);
+            if (!rec.settings.editorsInvite) throw new Error('the switch did not save');
+            const link = C.signal.inviteLink(rec);
+            if (!ed.G.roomSettings || ed.G.roomSettings.link !== link) throw new Error('the Editor was not handed the link: ' + JSON.stringify(ed.G.roomSettings));
+            if (!vi.G.roomSettings || vi.G.roomSettings.link) throw new Error('the VIEWER was handed the link — it is the room’s key');
+            /* Viewers and commenters can export: off reaches the Viewer. */
+            rowOf('Viewers and commenters can export').querySelector('.set-switch').click();
+            vi.loop.settle();
+            if (vi.G.roomSettings.roExport !== false || hostRec921(ctx.pid).settings.roExport !== false) throw new Error('turning export off did not reach the Viewer');
+            /* Most people at once. */
+            rowOf('Most people at once').querySelector('.cs-max').click();
+            Array.prototype.filter.call(document.querySelectorAll('#ctx-menu .ctx-item'), function (x) { return x.textContent.trim().indexOf('4') === 0; })[0].click();
+            if (hostRec921(ctx.pid).settings.max !== 4) throw new Error('Most people at once did not save 4');
+            /* A device switch is this device's own setting, one store with Settings → Labs. */
+            rowOf('Show others’ pointers').querySelector('.set-switch').click();
+            if (FM.settings.get('collabCursors') !== false) throw new Error('Show others’ pointers did not reach the app setting');
+            /* The ⚙ takes him back; Stop sharing is in the foot from every view. */
+            document.querySelector('#collab-share .cs-gear').click();
+            if (!document.querySelector('#collab-share .cs-invite')) throw new Error('the ⚙ did not take him back to the people and the invite');
+            if (!document.querySelector('#collab-share .cs-joinas')) throw new Error('the main view has no “New people join as”');
+            ui.close();
+          }, 380);
+        });
+      });
+    } finally {
+      FM.settings.set('collabCursors', was.c !== false);
+      FM.settings.set('collabSelections', was.s !== false);
+    }
+  });
+
+  test('921 S7 a Viewer’s drag on the canvas and on a clip moves nothing, not even for a tick — their tap still selects — and an Editor’s same drag moves both', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S7('the gesture guards');
+    await withGuestApp921('viewer', [layer921('A', { start: 1, duration: 3 }), layer921('B', { start: 1, duration: 3 })], async function (g) {
+      const idA = g.ids[0], idB = g.ids[1];
+      const L = function (id) { return FM.layerById(FM.scene, id); };
+      /* Each drag reports where the layer is MID-GESTURE, with the finger still down — before the pointerup's
+         commit runs the backstop, which would put it back anyway. This is about the courtesy: nothing moves
+         under a Viewer's finger in the first place. */
+      function canvasDrag(id) {
+        const pv = document.getElementById('preview');
+        const r = pv.getBoundingClientRect();
+        const x = r.left + r.width / 2, y = r.top + r.height / 2;
+        pv.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 31, pointerType: 'mouse', isPrimary: true, clientX: x, clientY: y, button: 0, buttons: 1 }));
+        for (let k = 1; k <= 6; k++) window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 31, pointerType: 'mouse', isPrimary: true, clientX: x + 10 * k, clientY: y + 6 * k, buttons: 1 }));
+        const mid = { x: FM.evalProp(L(id).transform.x, FM.time), y: FM.evalProp(L(id).transform.y, FM.time) };
+        window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 31, pointerType: 'mouse', isPrimary: true, clientX: x + 60, clientY: y + 36 }));
+        return mid;
+      }
+      async function clipDrag(id) {
+        FM.timeline.rebuild();
+        const clip = document.querySelector('#tl-tracks .clip[data-id="' + id + '"]');
+        if (!clip) throw new Error('CONTROL: no clip on the timeline for ' + id);
+        const r = clip.getBoundingClientRect();
+        if (!r.width) throw new Error('CONTROL: the clip has no box to press');
+        const x = r.left + Math.min(40, r.width / 2), y = r.top + r.height / 2;
+        clip.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 32, pointerType: 'mouse', isPrimary: true, clientX: x, clientY: y, button: 0, buttons: 1 }));
+        for (let k = 1; k <= 6; k++) document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 32, pointerType: 'mouse', isPrimary: true, clientX: x + 20 * k, clientY: y, buttons: 1 }));
+        const mid = L(id).start;
+        document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 32, pointerType: 'mouse', isPrimary: true, clientX: x + 120, clientY: y }));
+        await settle921(60);
+        return mid;
+      }
+      FM.selectLayer(idA);
+      const x0 = FM.evalProp(L(idA).transform.x, FM.time), y0 = FM.evalProp(L(idA).transform.y, FM.time);
+      const m1 = canvasDrag(idA);
+      if (m1.x !== x0 || m1.y !== y0) throw new Error('a Viewer’s canvas drag moved the layer under their finger (' + x0 + ',' + y0 + ' → ' + m1.x + ',' + m1.y + ')');
+      const s0 = L(idB).start;
+      FM.selectLayer(null);
+      const m2 = await clipDrag(idB);
+      if (m2 !== s0 || L(idB).start !== s0) throw new Error('a Viewer’s clip drag moved the clip (' + s0 + ' → ' + m2 + ')');
+      if (FM.scene.selectedId !== idB) throw new Error('a Viewer’s press on a clip did not select it — they must still be able to pick a layer to look at');
+      /* CONTROL: an Editor's identical gestures move both, so the stillness above is the guard. */
+      g.HS.setPeerRole(g.mid, 'editor'); g.settle();
+      FM.selectLayer(idA);
+      const m3 = canvasDrag(idA);
+      if (m3.x === x0 && m3.y === y0) throw new Error('CONTROL: an Editor’s canvas drag did not move the layer either, so the drag is not reaching the canvas');
+      FM.selectLayer(null);
+      const s1 = L(idB).start;
+      const m4 = await clipDrag(idB);
+      if (m4 === s1) throw new Error('CONTROL: an Editor’s clip drag did not move the clip either, so the drag is not reaching the timeline');
+    });
+  });
+
+  test('921 S7 with Labs on, a phone’s top bar keeps the project name whole — Share is the round invite on the stage, which opens the Share panel, and on a PC it stays beside Export', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S7('the phone top bar');
+    const wasLabs = FM.settings.get('collabLabs');
+    try { await withCollab921([layer921('A')], async function () {
+      C.end();
+      await atPhoneWidth(async function () {
+        const name = document.getElementById('proj-name-m');
+        FM.settings.set('collabLabs', false); C.ui.syncLabs();
+        await settle921(80);
+        const off = name.getBoundingClientRect().width;
+        await withLabs921(async function (ui) {
+          await settle921(120);
+          const on = name.getBoundingClientRect().width;
+          if (on < off - 1) throw new Error('with Labs on the project name is ' + Math.round(on) + ' px, with it off ' + Math.round(off) + ' px — the Share button squeezes it (it read “U..” for “Untitled”)');
+          const b = document.getElementById('btn-share');
+          if (!b || b.parentNode !== document.getElementById('stage')) throw new Error('the phone’s Share is not on the stage (it is in ' + (b && b.parentNode && (b.parentNode.id || b.parentNode.className)) + ')');
+          const r = b.getBoundingClientRect();
+          if (!(r.width >= 24 && r.height >= 24)) throw new Error('the phone’s Share has no box');
+          /* Where the people chip is, and clear of what the chip is kept clear of (the S5 placement test's
+             two shapes of canvas, and the view bar open). */
+          const hit = function (a, c) { return a.left < c.right - 0.5 && c.left < a.right - 0.5 && a.top < c.bottom - 0.5 && c.top < a.bottom - 0.5; };
+          const vb = document.getElementById('view-bar'), vbtn = document.getElementById('btn-amfit');
+          for (const d of [[1080, 1920], [1920, 1080]]) {
+            FM.scene.project.width = d[0]; FM.scene.project.height = d[1];
+            if (FM.resizeCanvas) FM.resizeCanvas();
+            if (FM.setSideBar && vb && vbtn) FM.setSideBar(vb, vbtn, true);
+            await settle921(420);
+            const rb = b.getBoundingClientRect();
+            if (hit(rb, document.getElementById('preview').getBoundingClientRect())) throw new Error('the phone’s Share sits on a ' + d.join('×') + ' canvas');
+            if (vb && vb.getBoundingClientRect().width && hit(rb, vb.getBoundingClientRect())) throw new Error('the phone’s Share sits on the view bar');
+            if (FM.setSideBar && vb && vbtn) FM.setSideBar(vb, vbtn, false);
+            await settle921(220);
+          }
+          b.click();
+          await until921S6('the Share panel', function () { return document.getElementById('collab-share'); }, 4000);
+          ui.close();
+          if (C.session) C.end();
+        });
+      }, 380);
+      /* CONTROL: on a PC nothing moved — beside Export, wherever Export is. */
+      await withLabs921(async function (ui) {
+        await atWideWidth(async function () {
+          ui.install();
+          const b = document.getElementById('btn-share'), e = document.getElementById('btn-export');
+          if (!b || b.nextSibling !== e) throw new Error('CONTROL: at 1280 #btn-share is not immediately before #btn-export');
+        }, 1280);
+      });
+    }); } finally { FM.settings.set('collabLabs', !!wasLabs); C.ui.syncLabs(); }
+  });
+
+  /* ═══ #921 S7 REVIEW — the findings a skeptic confirmed against the S7 build, one test per door. ═══════════
+   * The host half is pure (a Host and its members, no app), so each door is measured by the exact message
+   * a modified client would send. */
+  function s7rHost(C, list) {
+    const inv = C.bridge.invariants();
+    const H = C.Host({ base: { project: { width: 320, height: 240 }, layers: [] }, invariants: inv, ownerInfo: { name: 'Ezra', color: '#ff9f43' } });
+    H.join('m1', { role: 'commenter', name: 'Mia', color: '#a3e635' });
+    H.join('m2', { role: 'commenter', name: 'Sam', color: '#a78bfa' });
+    H.join('m3', { role: 'editor', name: 'Ed', color: '#f472b6' });
+    let cid = 0;
+    const h = {
+      H: H,
+      tx: function (mid, ops) { return H.receive(mid, { cid: ++cid, ops: ops }).ack; },
+      list: function () { return (H.base.project && H.base.project.comments) || []; },
+      c: function (id) { return h.list().filter(function (x) { return x && x.id === id; })[0] || null; },
+      rep: function (cid_, rid) { const c = h.c(cid_); return c && (c.replies || []).filter(function (r) { return r && r.id === rid; })[0] || null; }
+    };
+    if (list) {
+      const r = H.local([{ o: 's', p: ['P', 'comments'], v: list }]);
+      if (r.rej.length) throw new Error('CONTROL: the owner could not start the list: ' + JSON.stringify(r.rej));
+    }
+    return h;
+  }
+  function s7rRejs(ack) { return (ack && ack.rej || []).map(function (r) { return r[1]; }).join(',') || 'none'; }
+
+  test('921 S7 review: an `ai` on a comment or reply that already exists is not an insert — a Commenter cannot overwrite anybody else’s, and an Editor’s changes only its words, never who wrote it, when, or its pin and replies', { item: '921' }, function () {
+    const C = need921S7('the upsert door');
+    const h = s7rHost(C, [{ id: 'c0', text: 'Opening', replies: [] }, { id: 'c1', text: 'Tighten the cut', lid: 'L1', t: 2, replies: [] }]);
+    const order = function () { return h.list().map(function (x) { return x.id; }).join(','); };
+    const own = h.c('c1');
+    const at0 = own.at;
+    if (!own || own.by.mid !== 'o') throw new Error('CONTROL: the owner’s comment is not his: ' + JSON.stringify(own));
+    const rs = h.tx('m2', [{ o: 'ai', p: ['P', 'comments', '#i:c1', 'replies'], k: '#i:r_sam', a: null, v: { id: 'r_sam', text: 'On it' } }]);
+    if (rs.rej.length || !h.rep('c1', 'r_sam')) throw new Error('CONTROL: Sam could not reply: ' + s7rRejs(rs));
+    /* Mia, a Commenter, on Ezra's comment and on Sam's reply. */
+    const a1 = h.tx('m1', [{ o: 'ai', p: ['P', 'comments'], k: '#i:c1', a: null, v: { text: 'Delete the intro' } }]);
+    const c1 = h.c('c1');
+    if (s7rRejs(a1) !== 'role' || c1.text !== 'Tighten the cut' || c1.by.mid !== 'o' || c1.lid !== 'L1' || (c1.replies || []).length !== 1) {
+      throw new Error('a Commenter’s `ai` on the owner’s existing comment was ' + s7rRejs(a1) + ' and the comment now reads ' + JSON.stringify(c1));
+    }
+    const a2 = h.tx('m1', [{ o: 'ai', p: ['P', 'comments', '#i:c1', 'replies'], k: '#i:r_sam', a: null, v: { text: 'hijacked' } }]);
+    if (s7rRejs(a2) !== 'role' || h.rep('c1', 'r_sam').text !== 'On it' || h.rep('c1', 'r_sam').by.mid !== 'm2') throw new Error('a Commenter’s `ai` on Sam’s existing reply was ' + s7rRejs(a2) + ': ' + JSON.stringify(h.rep('c1', 'r_sam')));
+    /* An Editor: the words change, and nothing §16.2 keeps for the host. */
+    const e1 = h.tx('m3', [{ o: 'ai', p: ['P', 'comments'], k: '#i:c1', a: null, v: { id: 'c1', text: 'Tighten the cut — done', by: { mid: 'm3', name: 'Ed' }, at: 1, lid: 'L9', t: 7 } }]);
+    const c1b = h.c('c1');
+    if (e1.rej.length) throw new Error('an Editor could not change the words of a comment: ' + s7rRejs(e1));
+    if (c1b.text !== 'Tighten the cut — done') throw new Error('an Editor’s upsert did not change the words');
+    if (c1b.by.mid !== 'o' || c1b.at !== at0 || c1b.lid !== 'L1' || c1b.t !== 2 || (c1b.replies || []).length !== 1) throw new Error('an Editor’s `ai` on an existing comment rewrote what only the host writes: ' + JSON.stringify(c1b));
+    if (order() !== 'c0,c1') throw new Error('an Editor’s upsert on c1 moved it — the list is now ' + order());
+    /* CONTROL: Mia on her OWN comment, and a genuinely new one, still go through. */
+    const m1 = h.tx('m1', [{ o: 'ai', p: ['P', 'comments'], k: '#i:c_mia', a: null, v: { id: 'c_mia', text: 'Too thin' } }]);
+    if (m1.rej.length || !h.c('c_mia') || h.c('c_mia').by.mid !== 'm1') throw new Error('CONTROL: a Commenter could not post a new comment: ' + s7rRejs(m1));
+    const m2 = h.tx('m1', [{ o: 'ai', p: ['P', 'comments'], k: '#i:c_mia', a: '#i:c0', v: { text: 'Too thin on a phone' } }]);
+    if (m2.rej.length || h.c('c_mia').text !== 'Too thin on a phone') throw new Error('CONTROL: a Commenter could not re-send her own comment: ' + s7rRejs(m2));
+    if (order() !== 'c_mia,c0,c1') throw new Error('a Commenter’s re-send of her own comment moved it — the list is now ' + order());
+  });
+
+  test('921 S7 review: a comment keyed `#u:` or naming another comment’s id is refused, so the id-keyed list can never go atomic — every comment keeps one id of its own', { item: '921' }, function () {
+    const C = need921S7('the key door');
+    const h = s7rHost(C, [{ id: 'c1', text: 'first', replies: [] }]);
+    const a = h.tx('m1', [{ o: 'ai', p: ['P', 'comments'], k: '#u:zz', a: null, v: { text: 'x' } }]);
+    if (s7rRejs(a) !== 'role') throw new Error('a Commenter’s `#u:` comment was ' + s7rRejs(a));
+    const e = h.tx('m3', [{ o: 'ai', p: ['P', 'comments'], k: '#u:yy', a: null, v: { id: 'c1', text: 'dup' } }]);
+    if (s7rRejs(e) !== 'role') throw new Error('an Editor’s `#u:` comment carrying an existing id was ' + s7rRejs(e));
+    const own = h.H.local([{ o: 'ai', p: ['P', 'comments'], k: '#u:ww', a: null, v: { text: 'x' } }]);
+    if (!own.rej.length) throw new Error('the owner’s own device stored a comment keyed `#u:`');
+    /* A value that names ANOTHER id than its key is stored under its key. */
+    const b = h.tx('m1', [{ o: 'ai', p: ['P', 'comments'], k: '#i:c_new', a: null, v: { id: 'c1', text: 'not c1' } }]);
+    if (b.rej.length) throw new Error('CONTROL: a plain new comment was refused: ' + s7rRejs(b));
+    const ids = h.list().map(function (c) { return c.id; });
+    const uniq = ids.filter(function (x, i) { return typeof x === 'string' && ids.indexOf(x) === i; });
+    if (uniq.length !== ids.length || ids.indexOf('c_new') < 0) throw new Error('the list holds ids ' + JSON.stringify(ids) + ' — a missing or repeated id makes it atomic on every device');
+    if (h.c('c1').text !== 'first') throw new Error('an insert naming c1 in its value rewrote c1');
+    if (C.path.arrayMode('comments', h.list()) !== 'id') throw new Error('the comment list went atomic');
+  });
+
+  test('921 S7 review: two whole-list sets in one tx cannot plant a comment in anybody’s name — the second becomes inserts stamped as the sender, capped at 500', { item: '921' }, function () {
+    const C = need921S7('the second-list door');
+    const h = s7rHost(C, null);
+    const many = [{ id: 'b', text: 'Approved — ship it', by: { mid: 'o', name: 'Ezra', color: '#ff9f43' }, at: 0, replies: [{ id: 'rx', text: 'agreed', by: { mid: 'o', name: 'Ezra' } }], extra: 'x' }];
+    for (let i = 0; i < 520; i++) many.push({ id: 'k' + i, text: 'n' + i });
+    const a = h.tx('m1', [{ o: 's', p: ['P', 'comments'], v: [{ id: 'a', text: 'x' }] }, { o: 's', p: ['P', 'comments'], v: many }]);
+    const l = h.list();
+    const planted = l.filter(function (c) { return c.by && c.by.mid !== 'm1'; }).concat(
+      l.reduce(function (acc, c) { return acc.concat((c.replies || []).filter(function (r) { return !r.by || r.by.mid !== 'm1'; })); }, []));
+    if (planted.length) throw new Error('a Commenter’s second whole-list set put ' + planted.length + ' comment(s) or replies in the list under another name — e.g. ' + JSON.stringify(planted[0]));
+    if (l.length > 500) throw new Error('the list holds ' + l.length + ' comments, past the 500 ceiling');
+    if (l.some(function (c) { return Object.prototype.hasOwnProperty.call(c, 'extra'); })) throw new Error('a key §17.1 does not have got into a stored comment');
+    if (!h.c('a') || !h.c('b') || h.c('b').by.mid !== 'm1') throw new Error('CONTROL: her own comments did not land as hers (' + s7rRejs(a) + ')');
+  });
+
+  test('921 S7 review: the first comment posted at the same moment as somebody else’s is not lost — an Editor’s or a Commenter’s whole-list set against a list that now exists lands as their own comment, and nobody else’s is touched', { item: '921' }, function () {
+    const C = need921S7('the first-comment race');
+    const h = s7rHost(C, [{ id: 'c_own', text: 'first', replies: [] }]);
+    const e = h.H.receive('m3', { cid: 900, ops: [{ o: 's', p: ['P', 'comments'], v: [{ id: 'c_ed', text: 'mine too', replies: [] }] }] }).ack;
+    if (e.rej.length) throw new Error('an Editor’s first comment, crossing the owner’s, was refused as ' + s7rRejs(e) + ' and lost');
+    if (!h.c('c_ed') || h.c('c_ed').by.mid !== 'm3' || !h.c('c_own') || h.c('c_own').by.mid !== 'o' || h.c('c_own').text !== 'first') throw new Error('after the race the list is ' + JSON.stringify(h.list()));
+    const back = (e.fix || []).filter(function (f) { return f.o === 's' && f.p && f.p.join('/') === 'P/comments'; })[0];
+    if (!back || back.v.length !== 2) throw new Error('the Editor was not handed the real list back, so his screen would lose the owner’s comment: ' + JSON.stringify(e.fix));
+    const m = h.H.receive('m1', { cid: 901, ops: [{ o: 's', p: ['P', 'comments'], v: [{ id: 'c_own', text: 'overwritten' }, { id: 'c_mia', text: 'me' }] }] }).ack;
+    if (m.rej.length || !h.c('c_mia') || h.c('c_mia').by.mid !== 'm1') throw new Error('a Commenter’s crossing first comment was ' + s7rRejs(m));
+    if (h.c('c_own').text !== 'first') throw new Error('a whole-list set from a Commenter rewrote the owner’s comment');
+  });
+
+  test('921 S7 review: undoing a comment delete brings back the right authors — Sam’s reply stays Sam’s, an Editor’s undo of Sam’s comment gives it back to Sam — and a Commenter cannot bring back somebody else’s', { item: '921' }, function () {
+    const C = need921S7('the author ledger');
+    const h = s7rHost(C, []);
+    h.tx('m1', [{ o: 'ai', p: ['P', 'comments'], k: '#i:c_mia', a: null, v: { id: 'c_mia', text: 'Too thin', t: 1 } }]);
+    h.tx('m2', [{ o: 'ai', p: ['P', 'comments', '#i:c_mia', 'replies'], k: '#i:r_sam', a: null, v: { id: 'r_sam', text: 'Agreed' } }]);
+    const thread = JSON.parse(JSON.stringify(h.c('c_mia')));
+    if (!thread || h.rep('c_mia', 'r_sam').by.mid !== 'm2') throw new Error('CONTROL: the thread did not build: ' + JSON.stringify(thread));
+    /* Mia deletes her own comment (allowed), then Undo re-inserts the thread as an ordinary `ai`. */
+    const d = h.tx('m1', [{ o: 'ar', p: ['P', 'comments', '#i:c_mia'] }]);
+    if (d.rej.length || h.c('c_mia')) throw new Error('CONTROL: Mia could not delete her own comment: ' + s7rRejs(d));
+    const u = h.tx('m1', [{ o: 'ai', p: ['P', 'comments'], k: '#i:c_mia', a: null, v: thread }]);
+    if (u.rej.length) throw new Error('Mia’s Undo of her own delete was refused: ' + s7rRejs(u));
+    const r = h.rep('c_mia', 'r_sam');
+    if (!r || r.by.mid !== 'm2' || r.text !== 'Agreed') throw new Error('after Mia’s Undo, Sam’s reply reads as ' + JSON.stringify(r && r.by) + ' — the person who pressed Undo became its author');
+    if (h.c('c_mia').by.mid !== 'm1') throw new Error('Mia’s own comment came back as ' + JSON.stringify(h.c('c_mia').by));
+    const own = h.tx('m1', [{ o: 's', p: ['P', 'comments', '#i:c_mia', 'replies', '#i:r_sam', 'text'], v: 'mine now' }]);
+    if (s7rRejs(own) !== 'role') throw new Error('after the Undo, Mia could edit Sam’s reply');
+    /* Sam posts, an Editor deletes it and undoes: it comes back as Sam's. */
+    h.tx('m2', [{ o: 'ai', p: ['P', 'comments'], k: '#i:c_sam', a: null, v: { id: 'c_sam', text: 'Logo late' } }]);
+    const sam = JSON.parse(JSON.stringify(h.c('c_sam')));
+    h.tx('m3', [{ o: 'ar', p: ['P', 'comments', '#i:c_sam'] }]);
+    const eu = h.tx('m3', [{ o: 'ai', p: ['P', 'comments'], k: '#i:c_sam', a: null, v: sam }]);
+    if (eu.rej.length || !h.c('c_sam') || h.c('c_sam').by.mid !== 'm2') throw new Error('an Editor’s Undo of deleting Sam’s comment made it ' + JSON.stringify(h.c('c_sam') && h.c('c_sam').by));
+    /* Sam deletes his own; Mia cannot bring it back under his name, or with her words. */
+    h.tx('m2', [{ o: 'ar', p: ['P', 'comments', '#i:c_sam'] }]);
+    const steal = h.tx('m1', [{ o: 'ai', p: ['P', 'comments'], k: '#i:c_sam', a: null, v: { id: 'c_sam', text: 'Sam says: ship it' } }]);
+    if (s7rRejs(steal) !== 'role' || h.c('c_sam')) throw new Error('a Commenter brought back somebody else’s deleted comment (' + s7rRejs(steal) + '): ' + JSON.stringify(h.c('c_sam')));
+    /* …nor inside a whole list, which the host turns into inserts. */
+    h.tx('m1', [{ o: 's', p: ['P', 'comments'], v: [{ id: 'c_sam', text: 'Logo late' }, { id: 'c_mia2', text: 'mine' }] }]);
+    if (h.c('c_sam')) throw new Error('a Commenter brought back somebody else’s deleted comment inside a whole list: ' + JSON.stringify(h.c('c_sam')));
+    if (!h.c('c_mia2') || h.c('c_mia2').by.mid !== 'm1') throw new Error('CONTROL: the rest of her whole list did not land as hers');
+  });
+
+  test('921 S7 review: a Commenter may take her own `resolved` away — the Undo of her own Resolve — and still not anybody else’s', { item: '921' }, function () {
+    const C = need921S7('the resolve undo');
+    const h = s7rHost(C, [{ id: 'c1', text: 'owner', replies: [] }]);
+    h.tx('m1', [{ o: 'ai', p: ['P', 'comments'], k: '#i:c_mia', a: null, v: { id: 'c_mia', text: 'x' } }]);
+    const r = h.tx('m1', [{ o: 's', p: ['P', 'comments', '#i:c_mia', 'resolved'], v: true }]);
+    if (r.rej.length || h.c('c_mia').resolved !== true) throw new Error('CONTROL: Mia could not resolve her own comment');
+    const u = h.tx('m1', [{ o: 'd', p: ['P', 'comments', '#i:c_mia', 'resolved'] }]);
+    if (u.rej.length || h.c('c_mia').resolved) throw new Error('the Undo of Mia’s own Resolve (a `d`) was ' + s7rRejs(u));
+    h.H.local([{ o: 's', p: ['P', 'comments', '#i:c1', 'resolved'], v: true }]);
+    const x = h.tx('m1', [{ o: 'd', p: ['P', 'comments', '#i:c1', 'resolved'] }]);
+    if (s7rRejs(x) !== 'role' || h.c('c1').resolved !== true) throw new Error('a Commenter reopened the owner’s comment with a `d`');
+  });
+
+  /* The app half of the S7 review. */
+  function s7rContrast(a, b) {
+    const lum = function (s) {
+      const m = String(s).match(/[\d.]+/g) || [0, 0, 0];
+      const c = [+m[0], +m[1], +m[2]].map(function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+      return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    };
+    const x = lum(a), y = lum(b);
+    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+  }
+  function s7rHit(el) {
+    const r = el.getBoundingClientRect();
+    return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  }
+  function s7rName(n) { return n ? (n.id ? '#' + n.id : '') + (n.className && typeof n.className === 'string' ? '.' + n.className.trim().split(/\s+/).join('.') : '') || n.tagName : 'nothing'; }
+
+  test('921 S7 review: a guest’s Undo runs the same backstop as an edit — an Editor made a Viewer sends nothing when he presses Undo, a reload finds nothing to send, and a Commenter can undo her own Resolve', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S7('the backstop on undo');
+    const toasts = toasts921();
+    try {
+      await withGuestApp921('editor', [layer921('A')], async function (g) {
+        FM.scene.layers[0].name = 'Moved'; FM.history.commit(); g.tick();
+        if (g.H.base.layers[0].name !== 'Moved') throw new Error('CONTROL: the Editor’s edit did not reach the owner');
+        g.HS.setPeerRole(g.mid, 'viewer'); g.settle();
+        const txs = function () { return g.hostGot.filter(function (m) { return m.msg && m.msg.t === 'tx'; }).length; };
+        const before = txs(), depth = g.G._undoDepth().undo;
+        C.undo();
+        g.settle();
+        if (txs() !== before) throw new Error('a Viewer’s Undo sent ' + (txs() - before) + ' tx — the device knew the role and sent it anyway');
+        if (g.G._undoDepth().undo !== depth) throw new Error('a refused Undo used up the step (' + depth + ' → ' + g.G._undoDepth().undo + ') — made an Editor again, he could not undo his own move');
+        if (FM.scene.layers[0].name !== 'Moved' || g.G.base.layers[0].name !== 'Moved') throw new Error('a Viewer’s Undo moved their own copy: live “' + FM.scene.layers[0].name + '”, base “' + g.G.base.layers[0].name + '”');
+        /* A reload's recovery diff goes through the same door. */
+        FM.scene.layers[0].name = 'stray';
+        const q = g.G.recoverOutbox({ D: jclone921({ project: g.G.base.project, layers: g.G.base.layers }), epoch: g.G.epoch, seq: g.G.bs });
+        if (q) throw new Error('a Viewer’s reload queued ' + q + ' op(s) for the owner to refuse');
+        if (FM.scene.layers[0].name !== 'Moved') throw new Error('a Viewer’s stray edit survived the reload recovery: “' + FM.scene.layers[0].name + '”');
+        /* A Commenter's Undo of her own Resolve is a `d` — hers to send. */
+        g.HS.setPeerRole(g.mid, 'commenter'); g.settle();
+        const cid = C.comments.add('Slow this down', { pin: false }); g.tick();
+        C.comments.resolve(cid, true); g.tick();
+        const hc = function () { return (g.H.base.project.comments || []).filter(function (c) { return c.id === cid; })[0]; };
+        if (!hc() || hc().resolved !== true) throw new Error('CONTROL: the Commenter’s Resolve did not reach the owner');
+        toasts.length = 0;
+        C.undo(); g.settle();
+        if (toasts.some(function (t) { return /only comment/.test(t); })) throw new Error('a Commenter’s Undo of her own Resolve was refused: ' + JSON.stringify(toasts));
+        if (hc().resolved) throw new Error('a Commenter’s Undo of her own Resolve did not reach the owner');
+      });
+    } finally { toasts.restore(); }
+  });
+
+  test('921 S7 review: a Viewer cannot put her own bytes on the owner’s clip through the media channel — only an Editor may offer media, and only for the rev the document names', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S7('media offers');
+    await withCollab921([mediaLayer921('Pic', 'image'), mediaLayer921('Empty', 'image')], async function (c) {
+      const ctl = C.media._ctl(c.S);
+      if (!ctl) throw new Error('CONTROL: the host session has no media controller');
+      const picId = c.ids[0], emptyId = c.ids[1];
+      const rev = FM.layerById(FM.scene, picId).mediaRev || 0, revE = FM.layerById(FM.scene, emptyId).mediaRev || 0;
+      const his = await q921noisePng(120, 61, 'his.png');
+      await q921give(picId, his, 'image', rev);
+      FM.history.commit();
+      const rogue = await q921noisePng(96, 62, 'rogue.png'), vees = await q921noisePng(100, 63, 'vee.png'), good = await q921noisePng(104, 64, 'good.png');
+      /* Vee, a Viewer, offers bytes for the layer that has none, at exactly the rev the document names. */
+      const loopV = C.link.LoopLink({ aTag: 'h', bTag: 'pv', mode: 'async' });
+      c.S.addPeer(loopV.a, { role: 'viewer', name: 'Vee', color: '#44aaff' });
+      const pV = mediaPeer921(loopV.b);
+      pV.add(vees, 'image', [[emptyId, revE]]);
+      pV.announce('ann');
+      /* Ed, an Editor, offers bytes for HIS clip one rev ahead of the document — and, as the control, the
+         missing layer's picture at its own rev. */
+      const loopE = C.link.LoopLink({ aTag: 'h', bTag: 'pe', mode: 'async' });
+      c.S.addPeer(loopE.a, { role: 'editor', name: 'Ed', color: '#ffaa44' });
+      const pE = mediaPeer921(loopE.b);
+      const rogueFid = pE.add(rogue, 'image', [[picId, rev + 1]]);
+      const goodFid = pE.add(good, 'image', [[emptyId, revE]]);
+      pE.announce('ann');
+      await until921('the Editor’s good file to be asked for (CONTROL)', async function () { return pE.wants.some(function (w) { return w.fid === goodFid; }) ? true : null; }, 60000);
+      await settle921(1200);
+      if (C.session) { try { C.session.tick('full'); } catch (e) {} }
+      await settle921(800);
+      if (pV.wants.length) throw new Error('the owner’s device asked a VIEWER for the bytes of one of his layers (' + pV.wants.length + ' want(s)) — whatever she sends is written over that layer’s record');
+      if (pE.wants.some(function (w) { return w.fid === rogueFid; })) throw new Error('the owner’s device asked for a file at mediaRev ' + (rev + 1) + ', a rev the document does not name — its bytes would overwrite his clip at ' + rev);
+      const rec = await FM.storage.readMedia(picId);
+      if (!rec || !rec.file || rec.file.size !== his.size) throw new Error('his clip’s record on disk is no longer his file (' + (rec && rec.file ? rec.file.size : 'none') + ' bytes, his is ' + his.size + ')');
+      loopV.a.close(); loopE.a.close();
+    });
+  });
+
+  test('921 S7 review: a new session never hands a newcomer somebody else’s comments by number — mids start past every author the document names', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S7('mids across sessions');
+    await withCollab921([layer921('A')], async function (ctx) {
+      const sam = ctx.addGuest({ role: 'commenter', name: 'Sam' });
+      sam.A.doc().project.comments = [{ id: 'c_sam', text: 'Sam here', replies: [] }];
+      sam.G.tick('hot'); sam.loop.settle();
+      const cs = (ctx.S.base.project.comments || []).filter(function (c) { return c.id === 'c_sam'; })[0];
+      if (!cs || cs.by.mid !== sam.mid) throw new Error('CONTROL: Sam’s comment is not stamped as his: ' + JSON.stringify(cs));
+      /* The owner re-arms over the same document (a resume, or Stop sharing and Share again). */
+      C.end();
+      const S2 = C.share({ autoTick: false, ownerInfo: { name: 'Ezra', color: '#ff8800' } });
+      const loop = C.link.LoopLink({ aTag: 'h', bTag: 'x', mode: 'manual' });
+      const alex = S2.addPeer(loop.a, { role: 'commenter', name: 'Alex', color: '#44aaff' });
+      if (alex === cs.by.mid) throw new Error('the first person into the new session was handed ' + alex + ' — Sam’s mid — and with it Sam’s comments');
+      if (C.Host.allowed('commenter', { o: 'ar', p: ['P', 'comments', '#i:c_sam'] }, S2.base, alex)) throw new Error('a newcomer may delete Sam’s comment as their own');
+    });
+  });
+
+  test('921 S7 review: a member who comes back through its token after the owner’s session restarts gets its own mid again, and a newcomer who arrives first does not get it', { item: '921', budgetMs: 240000 }, async function () {
+    const C = need921S7('mids on a resume');
+    const S = C.signal;
+    await withFakeNet921(async function () {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          const Hh = await relayHost921(ui, ctx);
+          await ui.share(); letThemIn921(ui); ui.close();
+          const room = Hh.room;
+          const gS = await relayGuest921(C, room, { key: room.keys.auth, mode: 'link', name: 'Sam', mk: 'mk-sam-111111111111111' });
+          const wS = await gS.wait('welcome'); await gS.wait('snap');
+          const gA = await relayGuest921(C, room, { key: room.keys.auth, mode: 'link', name: 'Ann', mk: 'mk-ann-111111111111111' });
+          const wA = await gA.wait('welcome'); await gA.wait('snap');
+          gS.close(); gA.close();
+          /* He switches project and back: the session pauses, and comes back on the same room. */
+          C.session.stop('paused'); C.detach();
+          await ui.resumeOpen();
+          if (!C.session) throw new Error('CONTROL: reopening did not resume sharing');
+          await until921S6('the relay to come back', function () { const x = ui._relay(); return x && x.status === 'up' && x.rooms ? x : null; }, 12000);
+          const gX = await relayGuest921(C, room, { key: room.keys.auth, mode: 'link', name: 'Alex', mk: 'mk-alex-11111111111111' });
+          const wX = await gX.wait('welcome');
+          const mS = await S.memberRoom(wS.hub, wS.rid, wS.tok);
+          const gS2 = await relayGuest921(C, mS, { key: S.fromB64url(wS.tok), mode: 'tok', rid: wS.rid, name: 'Sam', mk: 'mk-sam-111111111111111' });
+          const wS2 = await gS2.wait('welcome');
+          gX.close(); gS2.close();
+          if (wX.mid === wS.mid || wX.mid === wA.mid) throw new Error('a newcomer after the resume was handed ' + wX.mid + ' — ' + (wX.mid === wS.mid ? 'Sam’s' : 'Ann’s') + ' mid, and with it their comments');
+          if (wS2.mid !== wS.mid) throw new Error('Sam came back as ' + wS2.mid + ', not ' + wS.mid + ' — the comments he wrote are no longer his');
+        });
+      });
+    });
+  });
+
+  test('921 S7 review: “Editors can invite others” says what the link does — straight in with “Let them in”, nothing to pass on under Codes only — and the Editor’s own panel says the same', { item: '921', budgetMs: 150000 }, async function () {
+    const C = need921S7('the invite wording');
+    const wasCodes = FM.settings.get('collabCodesOnly');
+    try {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          const ed = ctx.addGuest({ role: 'editor', name: 'Ed' });
+          await ui.share();
+          letThemIn921(ui);
+          document.querySelector('#collab-share .cs-gear').click();
+          const rowOf = function (txt) { return Array.prototype.filter.call(document.querySelectorAll('#collab-share .cs-srow'), function (r) { return r.querySelector('.cs-slabel') && r.querySelector('.cs-slabel').textContent === txt; })[0]; };
+          rowOf('Editors can invite others').querySelector('.set-switch').click();
+          const hint = rowOf('Editors can invite others').querySelector('.cs-shint').textContent;
+          if (/you still let each person in/.test(hint) || !/straight in/.test(hint)) throw new Error('with the link set to “Let them in”, the switch says: “' + hint + '”');
+          ed.loop.settle();
+          if (!ed.G.roomSettings || !ed.G.roomSettings.link || ed.G.roomSettings.ask !== false) throw new Error('the Editor was handed the link without being told it lets people straight in: ' + JSON.stringify(ed.G.roomSettings));
+          FM.settings.set('collabCodesOnly', true); ui._pushSettings(); ui.share({ keepStep: true });
+          const h2 = rowOf('Editors can invite others').querySelector('.cs-shint').textContent;
+          if (!/codes only/i.test(h2)) throw new Error('under Codes only the switch still says “' + h2 + '” — no link is sent at all');
+          FM.settings.set('collabCodesOnly', false);
+          ui.close();
+        });
+        /* The Editor's own panel, on the Editor's device. */
+        await withGuestApp921('editor', [layer921('A')], async function (g) {
+          const link = 'https://example.test/FreeMotion/#j=' + 'A'.repeat(44);
+          g.HS.setRoomSettings({ roExport: true, editorsInvite: true, max: 8, link: link, ask: false });
+          g.settle();
+          await ui.share();
+          const line = document.querySelector('#collab-share .cs-guestinvite .cs-relay');
+          if (!line) throw new Error('CONTROL: the Editor’s panel has no invite');
+          if (/still says yes/.test(line.textContent) || !/straight in/.test(line.textContent)) throw new Error('the Editor is told “' + line.textContent + '” while the link lets people straight in');
+          ui.close();
+          g.HS.setRoomSettings({ roExport: true, editorsInvite: true, max: 8, link: link, ask: true });
+          g.settle();
+          await ui.share();
+          const l2 = document.querySelector('#collab-share .cs-guestinvite .cs-relay');
+          if (!l2 || !/still says yes/.test(l2.textContent)) throw new Error('CONTROL: with “Ask me first” the Editor is not told the owner says yes to each person');
+          ui.close();
+        });
+      });
+    } finally { FM.settings.set('collabCodesOnly', !!wasCodes); }
+  });
+
+  test('921 S7 review: under “Connect with codes only”, Sharing settings does not print the relay privacy paragraph under “nothing but the devices themselves”', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S7('the codes-only privacy line');
+    const wasCodes = FM.settings.get('collabCodesOnly');
+    try {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function () {
+          await ui.share();
+          document.querySelector('#collab-share .cs-gear').click();
+          if (!document.querySelector('#collab-share .cs-privacy')) throw new Error('CONTROL: with the relay on, the settings do not name the relays');
+          FM.settings.set('collabCodesOnly', true);
+          ui.share({ keepStep: true });
+          if (!/Codes only/.test(document.querySelector('#collab-share .cs-sstatus').textContent)) throw new Error('CONTROL: the Connection line does not say Codes only');
+          const p = document.querySelector('#collab-share .cs-privacy');
+          if (p) throw new Error('under Codes only the settings still say: “' + p.textContent.slice(0, 80) + '…”');
+          ui.close();
+        });
+      });
+    } finally { FM.settings.set('collabCodesOnly', !!wasCodes); }
+  });
+
+  test('921 S7 review: a comment’s ⋯ opens ABOVE the comments card, so Edit and Delete can be tapped at 380 and at 1280 — and Edit keeps the comment’s line breaks', { item: '921', budgetMs: 150000 }, async function () {
+    const C = need921S7('the comment ⋯ menu');
+    await withLabs921(async function () {
+      await withCollab921([layer921('A')], async function () {
+        const text = 'First line\nSecond line\nThird';
+        for (const w of [380, 1280]) {
+          await (w === 380 ? atPhoneWidth : atWideWidth)(async function () {
+            const id = C.comments.add(text, { pin: false });
+            C.comments.open();
+            await settle921(300);
+            document.querySelector('#collab-comments .cc-c[data-cid="' + id + '"] .cc-more').click();
+            await settle921(200);
+            const edit = Array.prototype.filter.call(document.querySelectorAll('#ctx-menu .ctx-item'), function (x) { return /Edit/.test(x.textContent); })[0];
+            if (!edit) throw new Error('CONTROL: the ⋯ menu has no Edit at ' + w);
+            const hit = s7rHit(edit);
+            if (!hit || !hit.closest('#ctx-menu')) throw new Error('at ' + w + ' px the ⋯ menu is under the comments card — a tap on Edit lands on ' + s7rName(hit));
+            edit.click();
+            const a = await until921S6('the edit field', function () { const x = document.getElementById('fm-ask'); return x && !x.classList.contains('hidden') ? x : null; }, 3000);
+            const field = Array.prototype.filter.call(a.querySelectorAll('.fm-ask-input'), function (f) { return !f.classList.contains('hidden'); })[0];
+            if (!field || field.value !== text) throw new Error('the Edit field holds ' + JSON.stringify(field && field.value) + ' — the line breaks are gone before he types');
+            a.querySelector('.fm-ask-ok').click();
+            await settle921(80);
+            const c = FM.scene.project.comments.filter(function (x) { return x.id === id; })[0];
+            if (!c || c.text !== text) throw new Error('Save, with nothing changed, stored ' + JSON.stringify(c && c.text));
+            C.comments.close();
+          }, w);
+        }
+      });
+    });
+  });
+
+  test('921 S7 review: with the comments card open, a knock’s “Let in” and a toast are ABOVE it, and the 500-comment ceiling is said on the card', { item: '921', budgetMs: 120000 }, async function () {
+    const C = need921S7('what must stay above the comments card');
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function () {
+        await atPhoneWidth(async function () {
+          C.comments.open();
+          await settle921(300);
+          const kp = ui.knock({ name: 'Sam', role: 'editor', dev: 'phone', via: 'link' });
+          try {
+            const yes = await until921S6('the knock card', function () { return document.querySelector('#collab-knock .ck-yes'); }, 3000);
+            await settle921(400);
+            const hit = s7rHit(yes);
+            if (!hit || !hit.closest('#collab-knock')) throw new Error('“Let in” is under the comments card — a tap on it lands on ' + s7rName(hit) + ' (and closes the card instead)');
+          } finally { kp.cancel('gone'); }
+          await settle921(300);
+          FM.toast('Sam made you a Commenter', 3000);
+          await settle921(250);
+          const th = s7rHit(document.getElementById('toast'));
+          if (!th || !th.closest('#toast')) throw new Error('a toast raised while the comments card is open is under it — its centre is ' + s7rName(th));
+          if (FM.hideToast) FM.hideToast();
+          /* The ceiling: said where he pressed Post. */
+          if (!C.comments.isOpen()) C.comments.open();
+          const l = FM.scene.project.comments || (FM.scene.project.comments = []);
+          const was = l.length;
+          for (let i = 0; i < 500; i++) l.push({ id: 'c_fill' + i, text: 'x', by: { mid: 'o', name: 'Ezra' }, at: 1, replies: [] });
+          try {
+            if (C.comments.add('one more', { pin: false })) throw new Error('CONTROL: a 501st comment was added');
+            const say = document.querySelector('#collab-comments .cc-say');
+            if (!say || say.classList.contains('hidden') || !/500 comments/.test(say.textContent)) throw new Error('at 500 comments Post says nothing on the card');
+            if (/resolve/i.test(say.textContent)) throw new Error('the card says to resolve some — the ceiling counts resolved comments too: “' + say.textContent + '”');
+          } finally { l.splice(was); }
+          C.comments.close();
+        }, 380);
+      });
+    });
+  });
+
+  test('921 S7 review: on a phone a Viewer is not offered the timeline’s +, the ⋯ of edits or the ≡ grips, and the add sheet will not open for them — and every change put back is said, not only the first in four seconds', { item: '921', budgetMs: 150000 }, async function () {
+    const C = need921S7('the phone’s read-only courtesies');
+    await withLabs921(async function () {
+      await withGuestApp921('viewer', [layer921('A'), layer921('B')], async function (g) {
+        await atPhoneWidth(async function () {
+          FM.timeline.rebuild(); await settle921(200);
+          const shown = function (el) { return !!el && getComputedStyle(el).display !== 'none'; };
+          const add = document.querySelector('.tl-addrow');
+          if (shown(add)) throw new Error('the timeline’s + (“' + add.getAttribute('aria-label') + '”) is offered to a Viewer at 380');
+          if (shown(document.querySelector('.row-drag'))) throw new Error('the ≡ reorder grips are offered to a Viewer');
+          FM.selectLayer(g.ids[0]); await settle921(150);
+          if (shown(document.getElementById('m-more'))) throw new Error('the ⋯ of clip edits (lock, flip, fit, reset) is offered to a Viewer');
+          FM.selectLayer(null);
+          FM.mobile.openAdd(); await settle921(80);
+          const sheet = document.getElementById('add-sheet');
+          if (sheet && sheet.classList.contains('open')) { FM.mobile.closeAdd(); throw new Error('the add sheet opened for a Viewer'); }
+          /* CONTROL: an Editor has the + — so its absence above is the role. */
+          g.HS.setPeerRole(g.mid, 'editor'); g.settle(); FM.timeline.rebuild(); await settle921(200);
+          if (!shown(document.querySelector('.tl-addrow'))) throw new Error('CONTROL: an Editor has no + on the timeline either, so its absence measured nothing');
+          g.HS.setPeerRole(g.mid, 'viewer'); g.settle();
+        }, 380);
+        const toasts = toasts921();
+        try {
+          FM.scene.layers[0].name = 'flip one'; g.tick();
+          const n1 = toasts.filter(function (t) { return /View only — ask/.test(t); }).length;
+          await settle921(1700);
+          FM.scene.layers[0].name = 'flip two'; g.tick();
+          const n2 = toasts.filter(function (t) { return /View only — ask/.test(t); }).length;
+          if (FM.scene.layers[0].name !== 'A') throw new Error('CONTROL: the Viewer’s change was not put back');
+          if (n1 !== 1 || n2 !== 2) throw new Error('two changes put back 1.7 s apart were said ' + n2 + ' time(s) — the second snapped back without a word');
+        } finally { toasts.restore(); }
+      });
+    });
+  });
+
+  test('921 S7 review: a Commenter who opens Canvas settings is told in the card, in words for a Commenter, that only an editor can change it — and Apply is off', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S7('the canvas note');
+    try {
+      await withGuestApp921('commenter', [layer921('A')], async function (g) {
+        await atPhoneWidth(async function () {
+          FM.openCanvasDialog(); await settle921(300);
+          const note = document.getElementById('cv-ro');
+          if (!note || note.classList.contains('hidden')) throw new Error('Canvas settings says nothing, in the card, to a Commenter');
+          if (/View only/.test(note.textContent) || !/comment/i.test(note.textContent)) throw new Error('a Commenter is told “' + note.textContent + '”');
+          const hit = s7rHit(note);
+          if (!hit || !note.contains(hit)) throw new Error('the note is covered by ' + s7rName(hit));
+          if (!document.getElementById('cv-go').disabled) throw new Error('Apply is still offered to a Commenter');
+          document.getElementById('cv-cancel').click();
+          /* CONTROL: an Editor gets Apply and no note. */
+          g.HS.setPeerRole(g.mid, 'editor'); g.settle();
+          FM.openCanvasDialog(); await settle921(200);
+          const n2 = document.getElementById('cv-ro');
+          if ((n2 && !n2.classList.contains('hidden')) || document.getElementById('cv-go').disabled) throw new Error('CONTROL: an Editor is told they cannot change the canvas');
+          document.getElementById('cv-cancel').click();
+        }, 380);
+      });
+    } finally {
+      const d = document.getElementById('canvas-dialog'); if (d) d.classList.add('hidden');
+      document.body.classList.remove('cv-anchored', 'cv-up');
+    }
+  });
+
+  test('921 S7 review: the save point from when sharing started is never the one trimmed — twelve save points later it is still there — and reopening a shared project with nothing changed writes none', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S7('the pinned save point');
+    await withLabs921(async function (ui) {
+      const wasHome = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+      if (wasHome) FM.home.close();
+      let t = Date.now() - 5 * 3600000;
+      ui._ckptClock(function () { return t; });
+      let keys = null;
+      try {
+        made.push(await FM.projects.create({ name: 'FX921 S7r arm', width: 320, height: 240 }));
+        const pid = FM.projects.currentId();
+        FM.scene.layers.push(layer921('A'));
+        FM.history.commit(); FM.storage.markDirty(); await FM.storage.save();
+        keys = function () { return FM.storage.collabKeys('collab:ckpt:' + pid + ':'); };
+        await ui.share(); ui.close();
+        const arm = (await keys())[0];
+        if (!arm) throw new Error('CONTROL: sharing wrote no save point');
+        for (let i = 0; i < 12; i++) { FM.scene.layers[0].name = 'v' + i; FM.history.commit(); t += 600001; await ui._ckptTick(); }
+        const after = await keys();
+        if (after.indexOf(arm) < 0) throw new Error('twelve save points later, the one from when sharing started is gone — the trim deletes the oldest, which is the one he needs');
+        if (after.length > 10) throw new Error(after.length + ' save points kept, more than ten');
+        const newest = after[after.length - 1];
+        /* He switches project and back with nothing changed: the resume writes nothing. */
+        C.session.stop('paused'); C.detach();
+        t += 5000;
+        await ui.resumeOpen();
+        if (!C.session) throw new Error('CONTROL: reopening did not resume sharing');
+        const after2 = await keys();
+        if (after2[after2.length - 1] !== newest || after2.indexOf(arm) < 0) throw new Error('reopening the shared project with nothing changed wrote a save point (' + after.length + ' → ' + after2.length + ', newest ' + after2[after2.length - 1] + ')');
+      } finally {
+        ui._ckptClock(null);
+        try { C.end(); } catch (e) {}
+        try { if (keys) { const ks = await keys(); for (let i = 0; i < ks.length; i++) await FM.storage.collabDel(ks[i]); } } catch (e) {}
+        await q915aCleanup(made, orig, wasHome, [], [], []);
+      }
+    });
+  });
+
+  test('921 S7 review: “Earlier versions…” opens from the project’s ⋯ on Home with no session — nothing is armed and no save point is written — and a restore says what happened in its own row, under a name whose date stays true', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S7('versions without a session');
+    await withLabs921(async function (ui) {
+      const wasHome = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+      if (wasHome) FM.home.close();
+      let keys = null;
+      try {
+        made.push(await FM.projects.create({ name: 'FX921 S7r versions', width: 320, height: 240 }));
+        const pid = FM.projects.currentId();
+        FM.scene.layers.push(layer921('A'));
+        FM.history.commit(); FM.storage.markDirty(); await FM.storage.save();
+        keys = function () { return FM.storage.collabKeys('collab:ckpt:' + pid + ':'); };
+        await ui.share(); ui.close();
+        /* Stop sharing, through the panel. */
+        await ui.share();
+        document.querySelector('#collab-share .cs-stop').click();
+        (await askOk921()).click();
+        await until921S6('the session to stop', function () { return !C.session; }, 4000);
+        await settle921(300);
+        const k0 = await keys();
+        if (!k0.length) throw new Error('CONTROL: there are no save points to look at');
+        FM.home.open();
+        await settle921(400);
+        const more = document.querySelector('.hm-card[data-pid="' + pid + '"] .hm-card-more');
+        if (!more) throw new Error('CONTROL: the project has no card on Home');
+        more.click();
+        await settle921(150);
+        const item = Array.prototype.filter.call(document.querySelectorAll('#ctx-menu .ctx-item'), function (x) { return /Earlier versions/.test(x.textContent); })[0];
+        if (!item) { if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(); throw new Error('the project’s ⋯ on Home has no “Earlier versions…” — the only way to the save points is to share the project again'); }
+        item.click();
+        const rows = await until921S6('the list', function () { const r = document.querySelectorAll('#collab-versions .cs-version'); return r.length ? r : null; }, 4000);
+        if (C.session || ui._relay()) throw new Error('opening Earlier versions armed a session or started the relay');
+        if ((await keys()).length !== k0.length) throw new Error('opening Earlier versions wrote a save point');
+        const before = FM.projects.list().map(function (p) { return p.id; });
+        const row = rows[rows.length - 1];
+        row.querySelector('.cs-restore').click();
+        const ok = await askOk921();
+        const msg = document.getElementById('fm-ask').textContent;
+        ok.click();
+        const said = await until921S6('the row to say what happened', function () { const s = row.querySelector('.cs-vstatus'); return s && !s.classList.contains('hidden') && s.textContent ? s : null; }, 8000);
+        const nid = FM.projects.list().filter(function (p) { return before.indexOf(p.id) < 0; })[0];
+        if (nid) made.push(nid.id);
+        if (!nid || !/Saved as/.test(said.textContent)) throw new Error('the row says “' + said.textContent + '” and the new project is ' + (nid ? 'there' : 'missing'));
+        const hit = s7rHit(said);
+        if (!hit || !said.contains(hit)) throw new Error('what the restore did is covered by ' + s7rName(hit));
+        /* Readable on the card it is on — on the light Home that card is white paper. */
+        const card = document.getElementById('collab-versions');
+        [row.querySelector('.cs-slabel'), said].forEach(function (n) {
+          const cr = s7rContrast(getComputedStyle(n).color, getComputedStyle(card).backgroundColor);
+          if (cr < 3) throw new Error('“' + n.textContent.slice(0, 40) + '” is ' + getComputedStyle(n).color + ' on a ' + getComputedStyle(card).backgroundColor + ' card — ' + cr.toFixed(2) + ':1, unreadable');
+        });
+        if (/Today|Yesterday/.test(nid.name) || /Today|Yesterday/.test(msg)) throw new Error('the restored project is named “' + nid.name + '” — “Today” is wrong from tomorrow on');
+        if (nid.name.indexOf('FX921 S7r versions — ') !== 0) throw new Error('the restored project is named “' + nid.name + '”');
+        ui.close();
+      } finally {
+        try { ui.close(); } catch (e) {}
+        try { if (C.session) C.end(); } catch (e) {}
+        try { if (keys) { const ks = await keys(); for (let i = 0; i < ks.length; i++) await FM.storage.collabDel(ks[i]); } } catch (e) {}
+        await q915aCleanup(made, orig, wasHome, [], [], []);
+      }
+    });
+  });
+
+  test('921 S7 review: a comment pinned at the playhead is not hidden under its head — the head wears it, and a tap where the mark is opens the comment instead of dropping a bookmark, at 380 and at 1280', { item: '921', budgetMs: 150000 }, async function () {
+    const C = need921S7('the head on a comment');
+    await withLabs921(async function () {
+      await withCollab921([layer921('A', { duration: 6 })], async function () {
+        for (const w of [380, 1280]) {
+          await (w === 380 ? atPhoneWidth : atWideWidth)(async function () {
+            FM.setTime(w === 380 ? 1.5 : 2.5);
+            const id = C.comments.add('Logo lands here', { pin: true });
+            FM.timeline.rebuild(); await settle921(250);
+            const mark = document.querySelector('#tl-ruler .tl-cmark[data-cid="' + id + '"]');
+            if (!mark) throw new Error('CONTROL: no mark for a comment at the playhead');
+            const marks0 = (FM.scene.project.markers || []).length;
+            const hit = s7rHit(mark);
+            if (!hit) throw new Error('nothing at the mark’s centre');
+            hit.click();
+            await settle921(120);
+            const marks1 = (FM.scene.project.markers || []).length;
+            const foc = document.querySelector('#collab-comments .cc-c.cc-focus');
+            C.comments.close();
+            if (marks1 !== marks0) throw new Error('at ' + w + ' px a tap on the comment’s mark (under ' + s7rName(hit) + ') added a bookmark instead');
+            if (!foc || foc.getAttribute('data-cid') !== id) throw new Error('at ' + w + ' px a tap where the mark is did not open that comment (it hit ' + s7rName(hit) + ')');
+            if (!document.getElementById('tl-centerline').classList.contains('on-comment')) throw new Error('the head does not show it is parked on a comment');
+            /* CONTROL: off the comment, the head still bookmarks. */
+            FM.setTime(w === 380 ? 4.5 : 5.2); await settle921(100);
+            if (document.getElementById('tl-centerline').classList.contains('on-comment')) throw new Error('the head still wears the comment away from it');
+            document.getElementById('tl-headtap').click();
+            await settle921(80);
+            if ((FM.scene.project.markers || []).length !== marks0 + 1) throw new Error('CONTROL: the head did not bookmark away from the comment');
+            FM.scene.project.markers.pop();
+          }, w);
+        }
+      });
+    });
+  });
+
+  test('921 S7 review: a Viewer’s Comments row does not offer to reply or leave a note — a Commenter’s does', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S7('the comments row');
+    await withLabs921(async function (ui) {
+      await withGuestApp921('viewer', [layer921('A')], async function (g) {
+        await ui.share();
+        const sub = document.querySelector('#collab-share .cs-comments .cs-add-sub');
+        if (!sub) throw new Error('CONTROL: the guest panel has no Comments row');
+        if (/reply|Leave a note/i.test(sub.textContent)) throw new Error('a Viewer’s Comments row says “' + sub.textContent + '”');
+        ui.close();
+        g.HS.setPeerRole(g.mid, 'commenter'); g.settle();
+        await ui.share();
+        const s2 = document.querySelector('#collab-share .cs-comments .cs-add-sub');
+        if (!s2 || !/reply|Leave a note/i.test(s2.textContent)) throw new Error('CONTROL: a Commenter is not offered to write one: “' + (s2 && s2.textContent) + '”');
+        ui.close();
+      });
+    });
+  });
+
+  test('921 S7 review: the composer’s “At 0:01” follows the playhead — after tapping another comment’s “at 0:03”, it says 0:03, and that is where Post puts it', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S7('the pin label');
+    await withLabs921(async function () {
+      await withCollab921([layer921('A', { duration: 6 })], async function () {
+        FM.selectLayer(null);
+        FM.setTime(3.2);
+        const other = C.comments.add('At three', { pin: true });
+        FM.setTime(1.2);
+        C.comments.open();
+        const lab = function () { return document.querySelector('#collab-comments .cc-pinlabel').textContent; };
+        if (!/0:01/.test(lab())) throw new Error('CONTROL: the label does not start at 0:01: “' + lab() + '”');
+        document.querySelector('#collab-comments .cc-c[data-cid="' + other + '"] .cc-pin').click();
+        if (!/0:03/.test(lab())) throw new Error('after the playhead moved to 0:03 the label still says “' + lab() + '”');
+        /* …and so does playback, or any other time change, while the card is open. */
+        FM.setTime(4.4);
+        if (!/0:04/.test(lab())) throw new Error('after the playhead moved to 0:04 the label says “' + lab() + '”');
+        FM.setTime(3.2);
+        document.querySelector('#collab-comments .cc-input').value = 'Here too';
+        document.querySelector('#collab-comments .cc-post').click();
+        const c = FM.scene.project.comments[FM.scene.project.comments.length - 1];
+        if (!c || c.text !== 'Here too' || Math.floor(c.t) !== 3) throw new Error('the comment landed at ' + (c && c.t) + ' under a label that said “' + lab() + '”');
+        C.comments.close();
+      });
+    });
+  });
+
+  test('921 S7 review: “Exporting is turned off” is a notice with one button, not a choice between two that do the same thing', { item: '921', budgetMs: 90000 }, async function () {
+    const C = need921S7('the export notice');
+    try {
+      await withGuestApp921('viewer', [layer921('A')], async function (g) {
+        g.HS.setRoomSettings({ roExport: false, editorsInvite: false, max: 8 });
+        g.settle();
+        const p = FM.showExportDialog();
+        const ask = await until921S6('the notice', function () { const a = document.getElementById('fm-ask'); return a && !a.classList.contains('hidden') ? a : null; }, 3000);
+        const btns = Array.prototype.filter.call(ask.querySelectorAll('.fm-ask-actions button'), function (b) { return getComputedStyle(b).display !== 'none'; });
+        const labels = btns.map(function (b) { return b.textContent; });
+        ask.querySelector('.fm-ask-ok').click();
+        await p;
+        if (btns.length !== 1) throw new Error('the notice offers ' + btns.length + ' buttons: ' + JSON.stringify(labels));
+        /* CONTROL: an ordinary confirm keeps both. */
+        const q = FM.ask({ title: 'x', ok: 'Yes' });
+        const both = Array.prototype.filter.call(document.querySelectorAll('#fm-ask .fm-ask-actions button'), function (b) { return getComputedStyle(b).display !== 'none'; }).length;
+        document.querySelector('#fm-ask .fm-ask-cancel').click();
+        await q;
+        if (both !== 2) throw new Error('CONTROL: an ordinary confirm shows ' + both + ' buttons');
+      });
+    } finally {
+      const a = document.getElementById('fm-ask'); if (a && !a.classList.contains('hidden')) { const x = a.querySelector('.fm-ask-ok'); if (x) x.click(); }
+    }
   });
 
   /* The one thing that separates this from sanitizeAudioFx, and the reason it is not a copy of it.

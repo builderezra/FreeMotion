@@ -301,7 +301,7 @@ window.FM = window.FM || {};
     // view-zoom. Snapshot the starting scale once here, exactly as the corner-handle drag does, so
     // every move is an absolute write and the multiplicative shiftTransform converges.
     const sel = FM.selectedLayer(FM.scene);
-    if (sel && sel.type !== 'camera' && !sel.locked) {
+    if (sel && sel.type !== 'camera' && !sel.locked && !(FM.collab && FM.collab.readOnly && FM.collab.readOnly())) {   // queue 921 S7: a Viewer's pinch zooms the view
       /* ⚠️ queue 914.10: THE CORNER HANDLE'S GUARD, ON THE PINCH TOO (queue 834 u18). The pinch multiplies the
          scale it starts from exactly as the corner drag does, so on a layer scaled to nothing it did the same
          damage: `|| 0.0001` rounded every product to zero, the 0.02 floor caught it, and shiftTransform lifted
@@ -399,6 +399,7 @@ window.FM = window.FM || {};
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       const layer = FM.selectedLayer(FM.scene);
       if (!layer || layer.locked) return;   // lock means LOCKED — scale/rotate too, not just move
+      if (FM.collab && FM.collab.readOnly && FM.collab.readOnly()) return;   // queue 921 S7: a Viewer's handles are a locked layer's
       if (drag) return;                     // another pointer's drag is live — don't overwrite it
       if (e.pointerType === 'touch') {
         // register in the pinch pointer cache like body touches — otherwise handle-finger + canvas-finger
@@ -557,6 +558,10 @@ window.FM = window.FM || {};
       return;
     }
     if (drag.mode === 'move' && drag.layer.locked) return;   // locked layer: press may tap-deselect, never move
+    /* queue 921 S7 (§16.3): a Viewer's or Commenter's press is a LOCKED press — it may still tap-deselect,
+       and the view still pans and pinches, but nothing on the canvas moves. After the selection handling
+       on purpose (the tap still resolves in onUp). A courtesy: the host refuses the edit anyway. */
+    if (drag.mode !== 'viewpan' && FM.collab && FM.collab.readOnly && FM.collab.readOnly()) return;
     const p = eventToProject(e);
     const L = drag.layer;
     if (!drag.moved) {

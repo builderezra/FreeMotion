@@ -529,6 +529,11 @@ window.FM = window.FM || {};
            he just got rid of. `satisfied` cannot see this: it asks "is the rev the MANIFEST names here",
            and the answer for a layer that has moved on is honestly no. */
         if ((L.mediaRev || 0) > (rev || 0)) continue;
+        /* ⚠️ …NOR ONE THE DOCUMENT HAS NOT REACHED (S7 review). A rev AHEAD of the layer names a file the
+           document does not name at all, and writing it overwrites the layer's own record with bytes nobody
+           put in the edit — a peer only has to add one to a layer's rev. When the op that raises the rev
+           lands, this same sweep asks for it. */
+        if ((rev || 0) !== (L.mediaRev || 0)) continue;
         if (await satisfied(lid, rev)) continue;
         missing.push([lid, rev]);
       }
@@ -985,6 +990,7 @@ window.FM = window.FM || {};
          there was nothing to replace. `planWants` makes exactly this check with `satisfied()`; it makes
          it at WANT time, and the gap between want and apply is the whole download. */
       if ((byId[lid].mediaRev || 0) > (rev || 0)) continue;
+      if ((rev || 0) !== (byId[lid].mediaRev || 0)) continue;     // …or one it no longer (or never) names (S7 review)
       const ok = await writeRecord(ctl, lid, rev, file, e.kind);
       if (!ok) { outOfRoom(ctl, e.fid); return false; }
       wrote++;

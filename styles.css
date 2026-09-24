@@ -5277,6 +5277,7 @@ body.hm-selecting #hm-new { visibility: hidden; pointer-events: none; }
 /* pre-line: Settings' Clear asks in two paragraphs ("\n\nForget them?"), and confirm() showed the break */
 .fm-ask-msg { font-size: 14px; line-height: 1.45; color: var(--text-dim); white-space: pre-line; overflow-wrap: anywhere; margin-bottom: 14px; }
 .fm-ask-input { margin-bottom: 4px; }
+.fm-ask-area { font: inherit; font-size: 16px; line-height: 1.4; min-height: 96px; max-height: 40vh; resize: vertical; }
 .fm-ask-actions { padding-top: 14px; gap: 10px; }
 .fm-ask-actions button { flex: 1; min-height: 44px; font-size: 15px; font-weight: 700; }
 .fm-ask-actions button:focus { outline: none; }
@@ -10348,4 +10349,153 @@ body.text-editing .collab-people { display: none; }
 .collab-banner .cb-act {
   flex: 0 0 auto; height: 22px; padding: 0 10px; border: 0; border-radius: 11px;
   background: var(--accent); color: #0b0e14; font-size: 12px; font-weight: 700; cursor: pointer;
+}
+
+/* ═══ COLLAB S7 (#921) — ROLES, COMMENTS, OWNER CONTROL (§16, §17.1, §19.1) ═══════════════════════════════
+   Every choice below was drawn as options first and rendered in the real app at 380 and 1280 (rule 16 /
+   #545); the picked ones and why are in COLLAB-DESIGN.md §19 and §17 "as built (S7)". Mobile first: the
+   phone rules are the base, and nothing here scrolls sideways at 380 px. */
+
+/* The phone's Share button is the people chip at rest (collab-ui.js `shareHost`): once the chip is on the
+   stage — a session is live — it IS the way in, and two circles in one corner would be one too many. */
+#stage:has(> #collab-people) > #btn-share.cs-stagebtn { display: none; }
+#btn-share.cs-stagebtn { color: var(--text); }
+
+/* ── §16.3's courtesy: a Viewer or a Commenter sees what they cannot change, and is told why ── */
+body.collab-ro #add-fab { display: none; }
+body.collab-ro #inspector { pointer-events: none; opacity: .55; }
+body.collab-ro #key-rail { pointer-events: none; opacity: .45; }
+/* The phone's layer actions and both name fields change the project; a Viewer or Commenter is not offered them. */
+body.collab-ro #m-group, body.collab-ro #m-dup, body.collab-ro #m-maskgroup, body.collab-ro #m-del,
+body.collab-ro #btn-parent, body.collab-ro #btn-group, body.collab-ro #btn-maskgroup, body.collab-ro #btn-del-layer { display: none !important; }
+body.collab-ro #proj-name-m, body.collab-ro #clip-name-m, body.collab-ro #proj-name-s, body.collab-ro #proj-name { pointer-events: none; }
+/* S7 review: #add-fab is display:none at EVERY width already (queue 294), so the rule above hid nothing. The
+   phone's + is the timeline's add row, the ⋯ is a menu of edits (lock, flip, fit, reset, masks), the ≡ grips
+   reorder layers, and the empty stage says "Tap + below" — none of it is a Viewer's or a Commenter's. */
+body.collab-ro .tl-addrow, body.collab-ro .row-drag, body.collab-ro #m-more, body.collab-ro #btn-more-layer,
+body.collab-ro #btn-split, body.collab-ro #vb-camera, body.collab-ro #drop-hint .dh-phone { display: none !important; }
+.collab-ro-note {
+  margin: 6px 10px 4px; padding: 6px 10px; border-radius: 9px; font-size: 12px; font-weight: 600; line-height: 1.35;
+  background: rgba(90, 199, 237, .1); border: 1px solid rgba(90, 199, 237, .32); color: var(--text);
+}
+
+/* ── The Share panel's foot: ⚙ · Stop sharing · Done ── */
+.cs-foot .cs-gear { flex: 0 0 48px; padding: 0; display: grid; place-items: center; }
+.cs-foot .cs-gear.on { border-color: var(--accent); color: var(--accent); }
+.cs-gearico { width: 20px; height: 20px; }
+.cs-navrow {
+  display: block; width: 100%; text-align: left; padding: 12px; border-radius: 11px;
+  border: 1px dashed var(--line); background: var(--panel-2); color: var(--text);
+  font-size: 14.5px; font-weight: 700; cursor: pointer;
+}
+.cs-navrow .cs-add-sub { display: block; margin-top: 3px; font-size: 11.5px; font-weight: 500; color: var(--text-dim); }
+.cs-body > .cs-comments { margin: 0 0 14px; }
+.cs-joinrow { margin-top: 12px; }
+
+/* ── The settings drill-in (§19.1) ── */
+.cs-backrow { display: flex; align-items: center; gap: 4px; margin: -4px 0 10px; }
+.cs-backrow .fm-ask-title { margin: 0; }
+.cs-backbtn {
+  flex: 0 0 auto; width: 40px; height: 40px; margin-left: -8px; border: 0; border-radius: 10px;
+  background: transparent; color: var(--accent); font-size: 28px; line-height: 1; cursor: pointer;
+}
+.cs-sgroup { margin: 0 0 12px; padding: 2px 12px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255, 255, 255, .025); }
+.cs-sgtitle { font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--text-dim); margin: 9px 0 1px; }
+.cs-srow { display: flex; align-items: center; gap: 10px; padding: 9px 0; min-width: 0; border-top: 1px solid rgba(255, 255, 255, .06); }
+.cs-sgtitle + .cs-srow { border-top: 0; }
+.cs-stext { flex: 1; min-width: 0; }
+.cs-slabel { font-size: 14px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.cs-shint { font-size: 11.5px; line-height: 1.4; color: var(--text-dim); margin-top: 2px; overflow-wrap: anywhere; }
+.cs-switch { flex: 0 0 auto; }
+.cs-sstatus { margin-top: 8px; }
+.cs-slink { display: block; padding: 8px 0 9px; border: 0; background: transparent; color: var(--accent); font-size: 13px; font-weight: 700; cursor: pointer; text-align: left; }
+.cs-body > .cs-versions-nav { margin: 0 0 4px; }
+.cs-ver { font-size: 11px; color: var(--text-dim); text-align: center; margin: 12px 0 2px; }
+.cs-versions { list-style: none; margin: 4px 0 0; padding: 0; }
+.cs-version { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid rgba(255, 255, 255, .06); }
+.cs-version:first-child { border-top: 0; }
+.cs-vempty { font-size: 13px; color: var(--text-dim); padding: 10px 0; }
+.cs-rolehint { margin: 0 0 10px; }
+.cs-guestinvite { margin-top: 14px; }
+
+/* ── Comments (§17.1): the notepad's paper, because a comment is somebody's writing ── */
+.cc-scrim { align-items: flex-end; padding: 10px 8px calc(10px + env(safe-area-inset-bottom)); }
+.cc-card { width: min(460px, 100%); max-height: min(84vh, 84dvh); }
+.cc-card .np-head { padding: 10px 12px 10px 16px; }
+.cc-card .np-done { min-height: 36px; padding: 0 14px; border-radius: 9px; border: 1px solid #3a2f05; background: #1c1a12; color: #fff6d6; font-weight: 700; font-size: 14px; cursor: pointer; }
+.cc-list { flex: 1 1 auto; overflow-y: auto; min-height: 0; padding: 10px 12px 6px; display: flex; flex-direction: column; gap: 8px; -webkit-overflow-scrolling: touch; }
+.cc-empty { color: #7a6f52; font-size: 13.5px; line-height: 1.45; padding: 14px 4px; }
+.cc-c { background: #fffbe8; border: 1px solid #efe0b4; border-radius: 10px; padding: 9px 11px; min-width: 0; }
+.cc-c.cc-focus { border-color: #e0ab1d; box-shadow: 0 0 0 2px rgba(224, 171, 29, .35); }
+.cc-c.cc-done { background: #f7f4ea; border-color: #e6dfc9; }
+.cc-c.cc-done .cc-text { color: #7a6f52; }
+.cc-top { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.cc-av { width: 22px; height: 22px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 9.5px; font-weight: 800; color: #111; box-shadow: 0 0 0 1px rgba(0, 0, 0, .18) inset; }
+.cc-name { font-weight: 800; font-size: 13px; color: #23211a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.cc-time { font-size: 11.5px; color: #9a8f74; white-space: nowrap; }
+.cc-pin { display: inline-block; margin: 6px 0 0; padding: 2px 8px; border: 0; border-radius: 6px; background: #ffe7a0; color: #6b4f00; font-size: 11.5px; font-weight: 700; cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-text { font-size: 14px; line-height: 1.42; color: #23211a; margin-top: 5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cc-reply { margin: 8px 0 0 12px; padding-left: 10px; border-left: 2px solid #efe0b4; }
+.cc-acts { display: flex; align-items: center; gap: 16px; margin-top: 4px; }
+.cc-acts button { min-height: 32px; padding: 0; border: 0; background: none; font-size: 12.5px; font-weight: 700; color: #7a6f52; cursor: pointer; }
+.cc-acts .cc-more { min-width: 32px; font-size: 16px; letter-spacing: 1px; }
+.cc-top .cc-rmore { margin-left: auto; min-width: 32px; min-height: 28px; padding: 0; border: 0; background: none; color: #7a6f52; font-size: 16px; font-weight: 700; letter-spacing: 1px; cursor: pointer; }
+.cc-resolved { flex: none; padding: 10px; border: 1px dashed #ddd3b8; border-radius: 10px; background: none; color: #7a6f52; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.cc-replybox { display: flex; gap: 8px; align-items: flex-end; margin-top: 8px; }
+.cc-replybox .cc-input { flex: 1; min-width: 0; }
+.cc-comp { flex: none; border-top: 1px solid #efe7d2; padding: 10px 12px 12px; background: #fffdf7; }
+.cc-input {
+  display: block; width: 100%; box-sizing: border-box; resize: none; min-height: 40px; max-height: 140px;
+  border: 1px solid #edcd6a; border-radius: 9px; background: #fffbe8; padding: 9px 10px;
+  font: inherit; font-size: 16px; line-height: 1.35; color: #23211a;   /* 16 px: iOS zooms the page into anything smaller */
+}
+.cc-input::placeholder { color: #b3a888; }
+.cc-input:focus { outline: none; border-color: #e0ab1d; }
+.cc-comprow { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.cc-pinbox { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #4a4232; cursor: pointer; }
+.cc-pinbox input { flex: none; width: 18px; height: 18px; margin: 0; accent-color: #e0ab1d; }
+.cc-pinlabel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-post { flex: none; min-height: 40px; padding: 0 16px; border-radius: 9px; border: 1px solid #e0ab1d; background: #ffcf47; color: #3a2f05; font-weight: 800; font-size: 14px; cursor: pointer; }
+.cc-note { font-size: 12.5px; line-height: 1.4; color: #7a6f52; }
+
+/* The ruler mark: a speech bubble in the author's colour, on the ruler at the comment's time. A button,
+   so the scrub leaves it alone; 14 px drawn, and the finger gets the whole ruler height and 30 px across
+   (S7 review: the comment said 22 px and the box was 18 × 16). The hit box is an ::after-free padding
+   ring rather than a bigger drawing, so the bubble stays the size it was drawn at. */
+.tl-cmark {
+  position: absolute; top: 0; width: 30px; height: 22px; margin-left: -15px; padding: 0; border: 0;
+  background: transparent; z-index: 6; cursor: pointer;
+}
+.tl-cmark::before {
+  content: ""; position: absolute; left: 8px; top: 3px; width: 14px; height: 11px; border-radius: 4px 4px 4px 1px;
+  background: var(--peer, #8a8f98); box-shadow: 0 0 0 1.5px #0b0d12;
+}
+.tl-cmark::after { content: ""; position: absolute; left: 10px; top: 13px; border: 3px solid transparent; border-top-color: var(--peer, #8a8f98); border-left-width: 0; }
+/* S7 review: the playhead's head covers a comment's mark when it is parked on it (a comment is pinned at the
+   playhead by default), so there the head WEARS it — the disc in the author's colour, with the bubble's
+   tail — and a tap on it opens the comment (collab-comments.js `atHead`). The white collar is re-stated
+   (see the warning above #tl-headtap:hover). */
+#tl-centerline.on-comment #tl-headtap::after {
+  background: var(--cm-peer, #8a8f98); border-radius: 50% 50% 50% 3px;
+  box-shadow: 0 0 0 2px #eaf0f8, 0 1px 3px rgba(0, 0, 0, .45);
+}
+/* ⚠️ WHAT MUST STAY ABOVE THE COMMENTS CARD (S7 review). The card is the notepad's scrim, z 3000, and it
+   covered the ⋯ menu (300) that holds Edit and Delete, the knock card (225) with its "Let in", and every
+   toast (60). Lifted only while the card is open, and still under FM.ask (3200). */
+body.cc-open #ctx-menu, body.cc-open .collab-knock { z-index: 3100; }
+body.cc-open #toast { z-index: 3150; }
+.cs-vstatus { margin-top: 4px; font-weight: 600; color: var(--text); }
+.cs-vstatus.warn { color: #ffb347; }
+/* …and "Earlier versions…" opens on the light Home now (collab-ui.js `U.versions`), where every one of these
+   was the dark theme's near-white ink on white paper — photographed, not guessed. Named here in the same edit
+   that puts the list there, the rule theme-glass.css's light collab block keeps writing down. */
+.collab-scrim.collab-light .cs-slabel { color: #10151f; }
+.collab-scrim.collab-light .cs-shint, .collab-scrim.collab-light .cs-vempty { color: #5a6478; }
+.collab-scrim.collab-light .cs-vstatus { color: #10151f; }
+.collab-scrim.collab-light .cs-vstatus.warn { color: #b3261e; }
+.collab-scrim.collab-light .cs-version { border-top-color: rgba(16, 30, 52, .1); }
+.cc-say { margin: 0 0 8px; padding: 7px 10px; border-radius: 8px; background: rgba(224, 171, 29, .16); color: #5b4a0e; font-weight: 600; }
+
+@media (min-width: 701px) {
+  .cc-scrim { align-items: center; padding: 20px; }
 }

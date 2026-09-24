@@ -43,6 +43,13 @@ window.FM = window.FM || {};
   }
 
   function pathOf(op) { return op.p || ['L', op.id]; }
+  /* S7: an insert into the comment list or a reply list, or the first list itself — the ops whose value
+     the host rewrites (`by`, `at`) on the way through. */
+  function commentStamp(op) {
+    const p = op && op.p;
+    if (!Array.isArray(p) || p[0] !== 'P' || p[1] !== 'comments') return false;
+    return op.o === 'ai' || (op.o === 's' && p.length === 2);
+  }
   function isStructuralOp(op) { return op.o === 'lr' || op.o === 'ar'; }
   function isMoveOp(op) { return op.o === 'li' || op.o === 'mv' || op.o === 'ai' || op.o === 'am'; }
 
@@ -88,6 +95,8 @@ window.FM = window.FM || {};
        acknowledged — whether that is because it is in flight or because there is nothing to fly. */
     const outstanding = [];                       // [{cid, ops, sent}]
     const pending = Object.create(null);          // pathKey -> cid, for `s` and `d` ONLY (§8.1)
+    const forceIds = Object.create(null);         // S7: layer ids whose next `lr` is a confirmed delete-anyway
+    let refusedAt = 0;                            // S7: the §16.3 toast, said once rather than every tick
     let outboxOps = 0, outboxBytes = 0;
 
     /* ── the local interaction (§8.2) ────────────────────────────────────────────────────────── */
@@ -110,7 +119,11 @@ window.FM = window.FM || {};
     /* ── links ───────────────────────────────────────────────────────────────────────────────── */
     const peers = Object.create(null);            // owner: mid -> endpoint
     let link = null;                              // guest: the host endpoint
-    let nextMid = 0;
+    /* ⚠️ NOT FROM ZERO EVERY TIME (S7 review). A comment's author is the mid the host stamped (`by.mid`), and
+       the comment outlives the session — so a new session that minted m1, m2… again in arrival order handed
+       Sam's comments to whoever reconnected first. The owner starts past every mid the document or the room
+       has ever used (`C.share` works it out), and a returning member is given back its own (collab-ui.js). */
+    let nextMid = Math.max(0, Math.floor(+o.midFloor || 0));
     /* S6: what the owner granted each member when it was let in — the id its token is filed under and
        the token itself — so its `welcome` can carry them (§20 `you:{mid, role, color, tok?}`). */
     const grants = Object.create(null);
@@ -132,7 +145,7 @@ window.FM = window.FM || {};
     function frozen() { return !!(A.frozen && A.frozen()); }
     function busy() { return !!(A.busy && A.busy()); }
     function interacting() { return !!(A.interacting && A.interacting()); }
-    function toast(m) { if (A.toast) try { A.toast(m); } catch (e) {} }
+    function toast(m, ms) { if (A.toast) try { A.toast(m, ms); } catch (e) {} }
     function liveOpts() { return { live: true, teardown: A.teardown }; }
 
     /* ═══ SENDING ═══════════════════════════════════════════════════════════════════════════════ */
@@ -192,8 +205,28 @@ window.FM = window.FM || {};
       if (S.pid && FM.projects && FM.projects.currentId && FM.projects.currentId() !== S.pid) return 0;
       if (A.normalizeDerived) A.normalizeDerived();  // §11.1 — deterministic, so it is a no-op on peers
       P.stampIds(doc());                             // §5.4 — before every diff
-      const res = diffNow(scope);
+      let res = diffNow(scope);
       if (!res.ops.length) return 0;
+      /* ═══ S7 · §16.3 THE STRUCTURAL BACKSTOP ════════════════════════════════════════════════════════
+         Every op this device's role may not send is written back from base into live, here, before it is
+         recorded, held or sent — whatever slipped past the UI's courtesies (a shortcut, a context menu, a
+         paste, a tool nobody guarded). The rule is the HOST's own (`Host.allowed`), asked of the same base
+         the host will judge it against, so the two can never disagree about what a Viewer may do.
+         ⚠️ FOR EVERY GUEST, NOT ONLY THE READ-ONLY ROLES. An Editor's device may not rewrite a comment's
+         `by`/`at` either (collab-host.js `editorCommentOp`), and the one way it could try is a stamp the
+         host rewrote arriving while the finger was still down. Sending it would earn a refusal toast that
+         says "you can only comment" to an Editor; writing base back says nothing, which is right — it is a
+         repair, not a person being told no. */
+      if (!isOwner) {
+        res = backstop(res);
+        if (!res.ops.length) return 0;
+      }
+      /* §17.2 delete-anyway (S7): a delete the person confirmed carries `f:1`, which the host reads as
+         "revoke the lease and take it". Only the layer he said yes for, and only once. */
+      for (let i = 0; i < res.ops.length; i++) {
+        const op = res.ops[i];
+        if (op.o === 'lr' && forceIds[op.id]) { op.f = 1; delete forceIds[op.id]; }
+      }
 
       hotLast = Object.create(null);
       for (let i = 0; i < res.ops.length; i++) {
@@ -216,6 +249,10 @@ window.FM = window.FM || {};
              which means through the receive rules so it cannot yank a control under a finger. */
           if (r.b.fix && r.b.fix.length) applyIncoming(r.b.fix, { by: S.mid, own: true });
           if (r.b.ord) adoptOrder(r.b.ord);
+          /* S7: the host STAMPED every comment it just took (`by` and `at` are its to write, §16.2) — so
+             his own screen shows what everybody else's does, rather than the time his tap happened to be
+             read. Straight into live: this is his own comment coming back, and no finger is on its `at`. */
+          for (let i = 0; i < r.b.ops.length; i++) if (commentStamp(r.b.ops[i])) D.apply(doc(), r.b.ops[i], liveOpts());
         }
         if (r.rej && r.rej.length) refuseLocal(r.rej, res.ops);
         S.stats.tx++;
@@ -241,6 +278,28 @@ window.FM = window.FM || {};
       if (S.online) flushOutstanding();
       S.stats.tx++;
       return res.ops.length;
+    }
+
+    /* §16.3's backstop as one function, because it has THREE callers and it had one (S7 review): a guest's
+       Undo and Redo (runStep) and the reload outbox (recoverOutbox) diffed, applied to base and sent without
+       it — so an Editor demoted to Viewer who pressed Cmd+Z sent the ops anyway, and a Commenter's Undo of
+       her own Resolve was refused with "you can only comment". Every op the role may not send is written
+       back from base into live, BEFORE it is applied to base, recorded or queued. */
+    function backstop(res) {
+      const keep = { ops: [], recs: [], orders: res.orders }, bad = [];
+      for (let i = 0; i < res.ops.length; i++) {
+        if (C.Host.allowed(S.role, res.ops[i], S.base, S.mid)) { keep.ops.push(res.ops[i]); keep.recs.push(res.recs[i]); }
+        else bad.push(res.ops[i]);
+      }
+      if (!bad.length) return res;
+      /* An order statement describes the stack this diff SAW; a refused move never happened, so the
+         step must not remember one (undo would "restore" an order nobody made). */
+      if (bad.some(function (op) { return op.o === 'li' || op.o === 'lr' || op.o === 'mv' || op.o === 'am'; })) {
+        keep.orders = (res.orders || []).filter(function (st) { return keep.ops.some(function (op) { return op.o === 'ai' && st.p && P.key(st.p) === P.key(op.p); }); });
+      }
+      revertToBase(bad);
+      if (S.role === 'viewer' || S.role === 'commenter') refusedOnce();
+      return keep;
     }
 
     /* Every op we may have to replay carries the value its author saw (§6.1), because the host's CAS
@@ -417,7 +476,10 @@ window.FM = window.FM || {};
           /* §8.5: our own ack repairs any host-side resolution difference. It always lands in base;
              it lands in live unless a later cid or the current interaction owns that path. */
           D.apply(S.base, op);
-          if (!laterPending(p, oo.cid) && !overlapsHeld(p)) applyLive(op, sum);
+          /* S7: a comment the host stamped is our own comment coming back with its real author and time
+             — taken even while `P/comments` is held (the Post tap is still "interacting" for 250 ms), or
+             live keeps our guess at `at` and the next diff tries to send it. */
+          if (!laterPending(p, oo.cid) && (!overlapsHeld(p) || commentStamp(op))) applyLive(op, sum);
           continue;
         }
 
@@ -501,7 +563,11 @@ window.FM = window.FM || {};
          under `collab:` and only the APPLY has to wait (see collab-media.js `complete`). Holding the
          bytes as well would stall a transfer for the length of an export and then need the whole
          window re-sent. */
-      if (ch === 'bulk') { if (C.media) C.media.onBulk(S, fromMid || (isOwner ? null : 'h'), msg); return; }
+      if (ch === 'bulk') {
+        if (isOwner && !mayOffer(fromMid)) return;           // S7 review: see `mayOffer`
+        if (C.media) C.media.onBulk(S, fromMid || (isOwner ? null : 'h'), msg);
+        return;
+      }
       /* §18 (S5): presence has its own channel and its own module, and it never touches the document —
          so it is answered here, before §8.9's frozen/busy queue, exactly like the media bytes above. */
       if (ch === 'pres') { if (C.presence) { try { C.presence.onPres(S, isOwner ? fromMid : 'h', msg); } catch (e) { C.lastError = e; } } return; }
@@ -545,9 +611,19 @@ window.FM = window.FM || {};
           delete grants[mid];
           return;
         default:
+          /* ⚠️ OFFERING A FILE IS AN EDIT (S7 review). A peer's `ann` makes it the SOURCE of a file for a layer,
+             and the file it sends is written over that layer's record on this device — so a Viewer who named
+             one of his clips at `mediaRev + 1` could replace it with any bytes she liked, with no document op,
+             nothing kept in `prev:` and nothing any role check would ever see. Only a member who may change
+             the document may offer it media; everybody may still ASK for it (`want`, `ok`, `have`). */
+          if ((msg.t === 'ann' || msg.t === 'mf') && !mayOffer(mid)) return;
           if (C.media && C.media.onCtl(S, mid, msg)) return;      // mf / ann / want / ok / have (§15, S4)
           return;
       }
+    }
+    function mayOffer(mid) {
+      const m = host && mid != null ? host.members[mid] : null;
+      return !!m && m.role === 'editor';
     }
 
     function onHello(mid, msg) {
@@ -566,6 +642,8 @@ window.FM = window.FM || {};
       }
       if (host.ownerSelf && typeof host.ownerSelf.name === 'string') welcome.hostName = host.ownerSelf.name.slice(0, LIM.NAME);
       sendTo(mid, welcome);
+      /* S7: …and the room's switches, as they apply to this member, before a byte of the document. */
+      sendSettings(mid);
       if (have.epoch === host.epoch) {
         const tail = host.tail(have.seq || 0);
         if (tail) { sendTo(mid, tail); return; }
@@ -591,6 +669,7 @@ window.FM = window.FM || {};
           S.mid = msg.mid || S.mid;
           S.epoch = msg.epoch;
           S.role = msg.role || S.role;
+          if (typeof msg.hostName === 'string' && msg.hostName) S.hostName = msg.hostName.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').slice(0, LIM.NAME);
           /* S6 review: the owner has ADMITTED this hello — the one moment "back in sync" is true. */
           if (A.onWelcome) try { A.onWelcome(msg); } catch (e) {}
           return;
@@ -612,6 +691,23 @@ window.FM = window.FM || {};
           if (r === S.role) return;
           S.role = r;
           if (A.onRole) try { A.onRole(r); } catch (e) {}
+          return;
+        }
+        /* S7 (§20 `settings`): the owner's room switches as they apply to THIS member — export for viewers
+           and commenters, the invite for editors. A stranger's string all of it: the booleans are booleans,
+           the number is a number, and the link is kept only if it is an invite link to this app. */
+        case 'settings': {
+          const x = msg.s && typeof msg.s === 'object' ? msg.s : {};
+          const rs = { roExport: x.roExport !== false, editorsInvite: x.editorsInvite === true, max: (typeof x.max === 'number' && isFinite(x.max)) ? Math.max(2, Math.min(12, Math.round(x.max))) : null };
+          if (typeof x.link === 'string' && x.link.length <= 400 && /^https?:\/\/[^\s#]+#j=[A-Za-z0-9_-]{44}$/.test(x.link)) {
+            rs.link = x.link;
+            rs.ask = x.ask !== false;
+            rs.linkRole = (x.linkRole === 'viewer' || x.linkRole === 'commenter') ? x.linkRole : 'editor';
+          }
+          if (typeof x.owner === 'string') rs.owner = x.owner.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').slice(0, LIM.NAME);
+          S.roomSettings = rs;
+          if (rs.owner) S.hostName = rs.owner;
+          if (A.onSettings) try { A.onSettings(rs); } catch (e) {}
           return;
         }
         /* ⚠️ `paused` IS NOT AN END (S6). The owner sends it when he opens ANOTHER project (§12.1 `paused`),
@@ -702,7 +798,10 @@ window.FM = window.FM || {};
       S.clashes = (S.clashes || 0) + lost + gone;
       /* The WORDING follows S.role, not the reason code: a viewer told "you can only comment" is being
          given the wrong permission to ask for (queue 921 S3 review). */
-      if (role || lease) toast(role ? (S.role === 'viewer' ? 'View only — ask for edit access' : 'You can only comment in this project') : holderSaid(ack.rej, entry && entry.ops) + ' is editing that layer');
+      /* …and an Editor is not a Commenter: the one thing an Editor is refused is a comment's author, time or
+         pin, which only the host writes (S7 review). */
+      if (role) toast(S.role === 'viewer' ? 'View only — ask for edit access' : S.role === 'commenter' ? 'You can only comment in this project' : 'That change to a comment wasn’t allowed, so it was put back');
+      else if (lease) leaseToast(ack.rej, entry && entry.ops, 'that layer');
       if (lost || gone) {
         S.lastClash = { lost: lost, gone: gone, at: now() };
         toast(lost + gone + ' of your offline changes clashed with newer edits and were not applied');
@@ -903,8 +1002,18 @@ window.FM = window.FM || {};
       /* The inverse reaches everyone the ordinary way: an immediate full diff. Nothing special travels
          for an undo, which is why an undo can be received by a peer with no undo-specific rule at all. */
       recording = false;
-      const res = diffNow('full');
+      let res = diffNow('full');
       recording = true;
+      if (!isOwner && res.ops.length) {
+        res = backstop(res);
+        /* Refused whole — nothing was undone, so the step is NOT used up: an Editor made a Viewer who presses
+           Undo has it back when he is an Editor again, rather than losing one step per press. */
+        if (!res.ops.length) {
+          if (st.pre) preIdx++;
+          else (intoRedo ? undoStack : redoStack).push(st);
+          return false;
+        }
+      }
       if (res.ops.length) {
         if (isOwner) {
           const r = host.local(res.ops);
@@ -1045,11 +1154,12 @@ window.FM = window.FM || {};
     S.recoverOutbox = function (persisted) {
       if (!persisted || !persisted.D) return 0;
       const pb = persisted.D;
-      const res = D.diffDoc(pb, view());
       S.base = { project: clone(pb.project), layers: clone(pb.layers) };
       S.epoch = persisted.epoch;
       S.bs = persisted.seq || 0;
+      let res = D.diffDoc(S.base, view());
       if (!res.ops.length) return 0;
+      if (!isOwner) { res = backstop(res); if (!res.ops.length) return 0; }
       const ops = res.ops.map(function (op, i) { return withBefore(op, res.recs[i]); });
       for (let i = 0; i < res.ops.length; i++) D.apply(S.base, res.ops[i]);
       S.cid += 1;
@@ -1176,13 +1286,41 @@ window.FM = window.FM || {};
     };
     /* The owner's half of a role change: the table AND the person. One call, so a panel cannot do the
        first and forget the second — which is exactly what shipped (queue 921 S3 review). */
+    S.midTop = function () { return nextMid; };
     S.setPeerRole = function (mid, role) {
       if (!isOwner || !host.members[mid]) return false;
       host.setRole(mid, role);
       const now_ = host.members[mid].role;
       sendTo(mid, { t: 'role', role: now_ });
+      /* S7: what the settings say depends on the role — an Editor gets the invite when he allows it, and
+         loses it the moment he is not one. */
+      sendSettings(mid);
       return now_ === role;
     };
+    /* ═══ S7 · THE ROOM'S SWITCHES (§16.1, §20 `settings`) ════════════════════════════════════════
+       The owner's UI keeps them (the host record); the session is only the wire. Each member is told what
+       applies to IT: the link travels only to an Editor, and only while "Editors can invite others" is on
+       — §20's broadcast of one `s` to everybody would have handed the room's key to every Viewer. */
+    S.roomSettings = isOwner ? { roExport: true, editorsInvite: false, max: LIM.PEOPLE_DEFAULT } : null;
+    function settingsFor(mid) {
+      const rs = S.roomSettings || {};
+      const m = host && host.members[mid];
+      const out = { roExport: rs.roExport !== false, editorsInvite: rs.editorsInvite === true, max: rs.max || LIM.PEOPLE_DEFAULT };
+      if (host && host.ownerSelf && host.ownerSelf.name) out.owner = host.ownerSelf.name;
+      /* …with what the link does (S7 review): an Editor's panel promised "the owner still says yes to each new
+         person" while the owner's link let people straight in. */
+      if (out.editorsInvite && m && m.role === 'editor' && typeof rs.link === 'string') { out.link = rs.link; out.ask = rs.ask !== false; out.linkRole = rs.linkRole || 'editor'; }
+      return out;
+    }
+    function sendSettings(mid) { if (isOwner && host && host.members[mid]) sendTo(mid, { t: 'settings', s: settingsFor(mid) }); }
+    S.setRoomSettings = function (rs) {
+      if (!isOwner || !rs || typeof rs !== 'object') return false;
+      S.roomSettings = { roExport: rs.roExport !== false, editorsInvite: rs.editorsInvite === true, max: rs.max || LIM.PEOPLE_DEFAULT, link: typeof rs.link === 'string' ? rs.link : null,
+        ask: rs.ask !== false, linkRole: (rs.linkRole === 'viewer' || rs.linkRole === 'commenter') ? rs.linkRole : 'editor' };
+      Object.keys(peers).forEach(sendSettings);
+      return true;
+    };
+    S._settingsFor = settingsFor;
     S.dropPeer = function (mid) { host.part(mid); delete peers[mid]; delete grants[mid]; };
     S.peerIds = function () { return Object.keys(peers); };
 
@@ -1224,21 +1362,91 @@ window.FM = window.FM || {};
     S._pushLocal = pushLocal;
     S._forced = function () { return forced.length; };
 
+    /* ═══ S7 · WRITING BASE BACK INTO LIVE (§16.3, §7.2, §17.2) ══════════════════════════════════
+       Live changed in ways the room will not take (a role, a lease), so live goes back to base on exactly
+       those paths. The ops that do it are the diff FROM live TO base, filtered to the paths that were
+       refused — not a hand-built inverse per op kind. That matters for the one case the old version got
+       wrong: a refused DELETE. `s ['L', id]` cannot put back a layer live no longer has (apply answers
+       'gone'), so an owner whose delete of a leased layer was refused lost the layer on his own screen while
+       base kept it, and the next diff sent the delete again, and again. The reverse diff says `li` with the
+       anchor base really has. A refused reorder puts the whole stack back to base's order, because two
+       LIS walks over the same move need not pick the same layers to move. */
+    function revKey(op) {
+      if (op.o === 'li' || op.o === 'lr' || op.o === 'mv') return 'L*';
+      if (op.o === 'am') return 'A:' + P.key(op.p.slice(0, -1));
+      if (op.o === 'ai') return P.key(op.p.concat(op.k));
+      return P.key(op.p);
+    }
+    function revertToBase(bad) {
+      if (!bad || !bad.length) return 0;
+      const want = Object.create(null);
+      for (let i = 0; i < bad.length; i++) want[revKey(bad[i])] = 1;
+      const sum = { wasSelected: A.selected ? A.selected() : null, paths: [], layerIds: Object.create(null), removed: [], inserted: [], structural: false, projectKeys: Object.create(null) };
+      const back = D.diffDoc(view(), S.base);
+      let n = 0;
+      for (let i = 0; i < back.ops.length; i++) {
+        const op = back.ops[i];
+        if (!want[revKey(op)]) continue;
+        applyLive(op, sum);
+        n++;
+      }
+      if (want['L*'] && Array.isArray(S.base.layers)) {
+        D.applyOrder(doc(), { p: null, f: 'id', k: S.base.layers.map(function (l) { return l && l.id; }) });
+        sum.structural = true;
+      }
+      keepIds = null;
+      if (A.afterApply) A.afterApply(sum);
+      S.stats.reverted = (S.stats.reverted || 0) + n;
+      return n;
+    }
+    S._revertToBase = revertToBase;
+    /* ⚠️ SAID EVERY TIME A CHANGE IS PUT BACK, NOT ONCE PER FOUR SECONDS (S7 review). A Viewer who flipped a
+       clip and then flipped it the other way two seconds later watched the second one snap back with no
+       word: the first toast had gone and the throttle swallowed the second. The toast now outlives the
+       throttle, so there is a message on screen for every change that is put back — and a drag that is
+       refused every tick still re-shows one toast rather than stacking them. */
+    function refusedOnce() {
+      const t = now();
+      if (t - refusedAt < 1500) return;
+      refusedAt = t;
+      toast(S.role === 'viewer' ? 'View only — ask ' + ownerWord() + ' for edit access' : 'You can comment here — ask ' + ownerWord() + ' for edit access to change the project', 3000);
+    }
+    function ownerWord() { return (S.hostName && typeof S.hostName === 'string') ? S.hostName : 'the owner'; }
+
     /* §7.2: an owner op the host refuses (a lease) is put back to the host's value and named, rather
        than left sitting at a number only this device believes in. */
     function refuseLocal(rej, ops) {
-      const sum = { wasSelected: A.selected ? A.selected() : null, paths: [], layerIds: Object.create(null), removed: [], inserted: [], structural: false, projectKeys: Object.create(null) };
-      for (let i = 0; i < rej.length; i++) {
-        const op = ops[rej[i][0]];
-        if (!op) continue;
-        const p = pathOf(op);
-        const cur = D.valueAt(S.base, p);
-        if (cur === undefined) applyLive({ o: 'd', p: p }, sum);
-        else applyLive({ o: 's', p: p, v: clone(cur) }, sum);
-      }
-      if (A.afterApply) A.afterApply(sum);
-      toast(holderSaid(rej, ops) + ' is editing this');
+      const bad = [];
+      for (let i = 0; i < rej.length; i++) { const op = ops[rej[i][0]]; if (op) bad.push(op); }
+      revertToBase(bad);
+      leaseToast(rej, ops, 'this');
     }
+    /* §17.2's words, and for a refused DELETE its one action: "Sam is editing 'Logo' — it wasn't deleted
+       [Delete anyway]". The whole toast is the button (FM.toast's onTap), so it can be pressed on a phone
+       without a third control. */
+    function leaseToast(rej, ops, what) {
+      const who = holderSaid(rej, ops);
+      const r = (rej || []).filter(function (x) { return x[1] === 'lease'; });
+      let del = null;
+      for (let i = 0; i < r.length; i++) { const op = ops && ops[r[i][0]]; if (op && op.o === 'lr') { del = op.id; break; } }
+      if (del && A.toastAction) {
+        const L = D.valueAt(S.base, ['L', del]);
+        const nm = (L && typeof L.name === 'string' && L.name) ? '“' + L.name.slice(0, 40) + '”' : 'that layer';
+        try { A.toastAction(who + ' is editing ' + nm + ' — it wasn’t deleted. Tap to delete anyway', function () { S.forceDelete(del); }); } catch (e) {}
+        return;
+      }
+      toast(who + ' is editing ' + (what || 'this'));
+    }
+    /* Delete-anyway (§17.2): the layer goes through the app's own delete (its undo step, its playback
+       teardown, its selection repair), and the diff that carries it marks it `f:1` — see pushLocal. */
+    S.forceDelete = function (id) {
+      if (typeof id !== 'string') return false;
+      forceIds[id] = 1;
+      if (A.deleteLayer) { try { A.deleteLayer(id); } catch (e) {} }
+      pushLocal('hot');
+      return true;
+    };
+    S._forceIds = function () { return Object.keys(forceIds); };
     /* §22's "Sam is editing this" (S5 review). Before S5 nothing granted a lease, so "Someone else" was
        all a refusal could say; presence now knows who holds every layer, so the toast names them. The
        first refused op's layer is the one asked about; a name nobody knows stays "Someone else". */
@@ -1323,6 +1531,23 @@ window.FM = window.FM || {};
     return out.ops.length;
   }
 
+  /* The highest `m<n>` any comment or reply in a document was stamped with — a new session mints past it, so
+     no newcomer is ever handed somebody else's comments by number (S7 review). */
+  function midsUsed(doc) {
+    let top = 0;
+    const see = function (by) {
+      const m = by && typeof by.mid === 'string' ? /^m(\d{1,6})$/.exec(by.mid) : null;
+      if (m) top = Math.max(top, +m[1]);
+    };
+    const l = doc && doc.project && Array.isArray(doc.project.comments) ? doc.project.comments : [];
+    for (let i = 0; i < l.length; i++) {
+      if (!l[i] || typeof l[i] !== 'object') continue;
+      see(l[i].by);
+      if (Array.isArray(l[i].replies)) for (let j = 0; j < l[i].replies.length; j++) see(l[i].replies[j] && l[i].replies[j].by);
+    }
+    return top;
+  }
+
   C.share = function (opts) {
     const o = opts || {};
     const A = o.adapter || C.bridge;
@@ -1332,7 +1557,7 @@ window.FM = window.FM || {};
     const base = clone({ project: v.project, layers: v.layers });
     const tidied = tidyOnArm(A, inv, base);
     const host = C.Host({ base: base, invariants: inv, ownerInfo: o.ownerInfo, now: o.now, rand: o.rand });
-    const S = Session({ adapter: A, role: 'owner', mid: 'o', host: host, now: o.now, rand: o.rand });
+    const S = Session({ adapter: A, role: 'owner', mid: 'o', host: host, now: o.now, rand: o.rand, midFloor: Math.max(+o.midFloor || 0, midsUsed(base)) });
     S.tidied = tidied;
     S.pid = (FM.projects && FM.projects.currentId) ? FM.projects.currentId() : null;
     /* §15: the owner serves media AND receives it (a guest adding a clip), so the controller is the

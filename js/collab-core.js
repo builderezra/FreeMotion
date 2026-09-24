@@ -246,6 +246,10 @@ window.FM = window.FM || {};
       ticker = setInterval(function () { try { session.tick('hot'); } catch (e) { C.lastError = e; } }, ms);
     }
     if (FM.history && FM.history.syncButtons) FM.history.syncButtons();
+    /* S7: somebody who JOINS as a Viewer or Commenter is read-only from the first frame — no `role`
+       message ever arrives to say so, because nothing changed. Found by photographing a Viewer's phone:
+       the + and every inspector control were live until the first role change. */
+    if (C.ui && C.ui.applyRoleClasses) { try { C.ui.applyRoleClasses(); } catch (e) {} }
     return session;
   };
 
@@ -321,6 +325,32 @@ window.FM = window.FM || {};
   /* §4.2: media a deleted layer still needs, because this person's undo can bring it back. */
   C.reachable = function (id) { const s = S(); return s ? s.reachable(id) : false; };
   C.isGuest = function () { return !!C.active && C.role !== 'owner'; };
+
+  /* ═══ S7: WHAT THIS DEVICE'S ROLE LETS IT DO (§16) ═══════════════════════════════════════════════
+   * One answer, asked by every courtesy in the app — the canvas and timeline gesture guards, the + button,
+   * the inspector, the export gate, the comments card. ⚠️ THESE ARE COURTESIES. The host refuses anything a
+   * role may not do whatever a device sends (collab-host.js `allowed`), and a read-only session writes
+   * back from base whatever slipped past the UI (collab-session.js `revertToBase`). A device that lies
+   * about its own role gains nothing: the host has never asked it.
+   * A session that has ENDED is no longer anybody's room — the copy is his to do what he likes with, so
+   * nothing is read-only after `bye` (the next open detaches it into a project of his own anyway). */
+  C.myRole = function () {
+    const s = C.session;
+    if (!s || !C.active || s.ended || s.active === false) return 'owner';
+    return s.isOwner ? 'owner' : (s.role === 'viewer' || s.role === 'commenter' ? s.role : 'editor');
+  };
+  C.readOnly = function () { const r = C.myRole(); return r === 'viewer' || r === 'commenter'; };
+  C.canComment = function () { return C.myRole() !== 'viewer'; };
+  /* The owner's room settings as this device last heard them (§20 `settings`). An owner reads his own. */
+  C.roomSettings = function () { const s = C.session; return (s && s.roomSettings) || {}; };
+  /* D11: viewers and commenters may export unless the owner turned it off. Everyone else always may. */
+  C.canExport = function () { return !C.readOnly() || C.roomSettings().roExport !== false; };
+  /* Somebody else would see a change right now — the question the canvas-size confirm asks (D10). */
+  C.othersHere = function () {
+    const s = C.session;
+    if (!s || !C.active || s.ended || s.active === false) return false;
+    return s.isOwner ? !!(s.peerIds && s.peerIds().length) : true;
+  };
   C.deferReload = function () { pendingReload = true; return true; };
   /* One level of indirection, purely so the DEFERRAL is testable. A suite that could not stand in for
      the reload could only ever assert that a flag was set, which is the half of the rule that does not

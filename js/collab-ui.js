@@ -55,6 +55,10 @@ window.FM = window.FM || {};
   let versionNote = null;                    // guest: the owner refused a reconnect on version — { why }
   let resumeT = null;
   let docWatch = false;                      // visibilitychange + online, only while a relay or a reconnect runs
+  /* ── S7 ── */
+  let ckptTimer = null;                      // host: §12.4's "every 10 min if changed", only while sharing
+  let ckptSig = null, ckptWhen = 0, lastCkTs = 0;
+  let ckptClock = null;                      // test seam: ten real minutes is not a thing a suite waits out
 
   /* ═══ SMALL DOM HELPERS ═══════════════════════════════════════════════════════════════════════ */
 
@@ -233,6 +237,13 @@ window.FM = window.FM || {};
       saveRoom(pid, r);
     }
     return r;
+  }
+  /* The highest mid this room has handed out, kept on the record so the next session mints past it (S7 review). */
+  function noteMidTop(s) {
+    if (!hostRoom || !s || !s.midTop) return;
+    const top = s.midTop();
+    if (!(top <= (hostRoom.midTop || 0))) hostRoom.midTop = top;
+    saveRoom(hostRoomPid || currentPid(), hostRoom);
   }
   function saveRoom(pid, r) {
     try { localStorage.setItem(hostKey(pid), JSON.stringify(r)); } catch (e) {}
@@ -487,6 +498,9 @@ window.FM = window.FM || {};
     saveRoom(hostRoomPid || currentPid(), hostRoom);
     stopHostRelay();
     startHostRelay();
+    /* S7: an Editor allowed to invite was holding the OLD link — the one that now reaches nobody. They get
+       the new one at once; the removed person, who is no longer a member, gets nothing. */
+    pushSettings();
   }
   /* S6: the room's member table remembers the role he chose, so a member who drops out and comes back
      with its token comes back as what he made it — not as the link's default. */
@@ -586,22 +600,206 @@ window.FM = window.FM || {};
      hands, and §23's bargain with a solo user is that nothing runs at load — a boot-time IndexedDB sweep
      is the one thing in that table that would break it. A writer that keeps its own last ten needs no
      sweep at all, and `pruneOrphans` already skips everything under `collab:` (S0). */
-  function checkpoint(pid) {
+  function ckNow() { return ckptClock ? ckptClock() : Date.now(); }
+  /* `kind`: 'arm' (Share), 'resume' (a reopen re-arming), 'tick' (ten minutes, changed) or 'stop'.
+     ⚠️ THE ARM'S SAVE POINT IS PINNED (S7 review). It is "before anybody touched it" — the one he comes back
+     for when a guest has wrecked the edit — and the trim deleted the OLDEST key, which is exactly that one:
+     90 minutes of editing, or ten reopens of the project on a phone, and it was gone. Its key ends `-arm`, and
+     the trim keeps the newest arm key whatever its age, the other nine by age.
+     ⚠️ AND A REOPEN OR A STOP WITH NOTHING NEW WRITES NOTHING. A resume wrote a save point every time the
+     project was reopened, changed or not, and each one pushed a real one off the end. */
+  function checkpoint(pid, kind) {
     if (!pid || !FM.storage || !FM.storage.collabPut) return Promise.resolve(false);
     const D = { project: C._viewOfProject(FM.scene.project), layers: FM.scene.layers };
     let body;
     try { body = JSON.stringify(D, FM.jsonReplacer); } catch (e) { return Promise.resolve(false); }
     const prefix = 'collab:ckpt:' + pid + ':';
-    return FM.storage.collabPut(prefix + Date.now(), body).then(function () {
-      if (!FM.storage.collabKeys) return true;
-      return FM.storage.collabKeys(prefix).then(function (keys) {
-        const keep = (C.LIMITS && C.LIMITS.CKPT_KEEP) || 10;
-        const old = keys.slice(0, Math.max(0, keys.length - keep));
-        return Promise.all(old.map(function (k) { return FM.storage.collabDel(k); })).then(function () { return true; });
+    /* S7: the key's time is the one "Earlier versions…" prints, so two save points written in the same
+       millisecond (arm, then Stop sharing on a fast machine) must not share a key and overwrite each other. */
+    const ts = Math.max(Math.round(ckNow()), lastCkTs + 1);
+    lastCkTs = ts;
+    const s = C.session;
+    if (s && s.isOwner && s.host) { ckptSig = s.host.epoch + ':' + s.host.seq; ckptWhen = ckNow(); }
+    const same = (kind === 'resume' || kind === 'stop') && FM.storage.collabKeys
+      ? FM.storage.collabKeys(prefix).then(function (keys) {
+        return keys.length ? FM.storage.collabGet(keys[keys.length - 1]).then(function (v) { return v === body; }) : false;
+      }).catch(function () { return false; })
+      : Promise.resolve(false);
+    return same.then(function (dup) {
+      if (dup) return true;
+      return FM.storage.collabPut(prefix + ts + (kind === 'arm' ? '-arm' : ''), body).then(function () {
+        if (!FM.storage.collabKeys) return true;
+        return FM.storage.collabKeys(prefix).then(function (keys) {
+          const keep = (C.LIMITS && C.LIMITS.CKPT_KEEP) || 10;
+          const arms = keys.filter(isArmKey);
+          const pinned = arms.length ? arms[arms.length - 1] : null;
+          const rest = keys.filter(function (k) { return k !== pinned; });
+          const old = rest.slice(0, Math.max(0, rest.length - (pinned ? keep - 1 : keep)));
+          return Promise.all(old.map(function (k) { return FM.storage.collabDel(k); })).then(function () { return true; });
+        });
       });
     }).catch(function () { return false; });
   }
+  function isArmKey(k) { return /-arm$/.test(k); }
   U._checkpoint = checkpoint;
+
+  /* ═══ S7 · §12.4 "EVERY 10 MIN IF CHANGED" ═══════════════════════════════════════════════════════
+   * While he shares, a save point every ten minutes — but only if the room has sequenced anything since
+   * the last one, so a project left open overnight does not fill the ten slots with ten copies of the
+   * same picture and push the arm's "before anybody touched it" save point off the end. "Changed" is the
+   * host's own counter (epoch + seq): every change anybody makes, his included, is a sequenced batch,
+   * and comparing two numbers costs nothing where hashing the document every tick would not. */
+  U._ckptClock = function (fn) { ckptClock = typeof fn === 'function' ? fn : null; return !!ckptClock; };
+  function ckptTick() {
+    const s = C.session;
+    if (!s || !s.isOwner || !s.host) return Promise.resolve(false);
+    const every = (C.LIMITS && C.LIMITS.CKPT_EVERY) || 600000;
+    if (ckNow() - ckptWhen < every) return Promise.resolve(false);
+    if (s.host.epoch + ':' + s.host.seq === ckptSig) return Promise.resolve(false);
+    return checkpoint(s.pid || currentPid(), 'tick');
+  }
+  U._ckptTick = ckptTick;
+  function armCkpt() {
+    stopCkpt();
+    const s = C.session;
+    if (s && s.host) ckptSig = s.host.epoch + ':' + s.host.seq;
+    ckptWhen = ckNow();
+    ckptTimer = setInterval(function () { try { ckptTick(); } catch (e) { C.lastError = e; } }, 30000);
+  }
+  function stopCkpt() { if (ckptTimer) { clearInterval(ckptTimer); ckptTimer = null; } }
+  U._ckptTimer = function () { return !!ckptTimer; };
+
+  /* The save points of one project, newest first, read back: when, how many layers, what size. */
+  function listCheckpoints(pid) {
+    if (!pid || !FM.storage || !FM.storage.collabKeys) return Promise.resolve([]);
+    const prefix = 'collab:ckpt:' + pid + ':';
+    return FM.storage.collabKeys(prefix).then(function (keys) {
+      return Promise.all(keys.slice().reverse().map(function (k) {
+        return FM.storage.collabGet(k).then(function (v) {
+          let d = null;
+          try { d = typeof v === 'string' ? JSON.parse(v) : v; } catch (e) { d = null; }
+          const ts = parseInt(k.slice(prefix.length), 10);
+          if (!d || !d.project || !Array.isArray(d.layers) || !isFinite(ts)) return null;
+          return { key: k, ts: ts, arm: isArmKey(k), layers: d.layers.length, w: d.project.width, h: d.project.height };
+        });
+      }));
+    }).then(function (rows) { return rows.filter(Boolean); }, function () { return []; });
+  }
+  U._listCheckpoints = listCheckpoints;
+  function whenLabel(ts) {
+    const d = new Date(ts), now = new Date();
+    let t = '';
+    try { t = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); } catch (e) { t = d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); }
+    if (d.toDateString() === now.toDateString()) return 'Today, ' + t;
+    const y = new Date(now.getTime() - 86400000);
+    if (d.toDateString() === y.toDateString()) return 'Yesterday, ' + t;
+    try { return d.toLocaleDateString() + ', ' + t; } catch (e) { return t; }
+  }
+  /* For a NAME, which is kept for good: "Today" in a project name is wrong from tomorrow on (S7 review). */
+  function absLabel(ts) {
+    const d = new Date(ts);
+    let day = '', t = '';
+    try { day = d.toLocaleDateString([], d.getFullYear() === new Date().getFullYear() ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' }); } catch (e) { day = d.toDateString(); }
+    try { t = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); } catch (e) { t = d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); }
+    return day + ', ' + t;
+  }
+  U._absLabel = absLabel;
+  /* §24: "Earlier versions…" ALWAYS restores as a NEW project. It goes through `duplicateFrom` — new layer
+     ids, the media copied under them, queue 915.3's rollback if the device fills up half way — so the
+     project he is sharing, and everybody's copy of it, is not touched in any way. */
+  function restoreCheckpoint(key, name) {
+    return FM.storage.collabGet(key).then(function (v) {
+      let d = null;
+      try { d = typeof v === 'string' ? JSON.parse(v) : v; } catch (e) { d = null; }
+      if (!d || !d.project || !Array.isArray(d.layers)) return null;
+      return FM.projects.duplicateFrom(d, { name: name }).then(function (nid) {
+        if (!nid) return null;
+        /* No source card is named (its thumbnail and size are TODAY's, not this version's), so the card
+           takes the size the saved document itself has. */
+        try {
+          const idx = FM.projects.list();
+          const e = idx.find(function (x) { return x.id === nid; });
+          if (e) { e.width = d.project.width; e.height = d.project.height; e.fps = d.project.fps; e.duration = d.project.duration; FM.projects.saveIndex(idx); }
+        } catch (e) {}
+        return nid;
+      });
+    });
+  }
+  U._restoreCheckpoint = restoreCheckpoint;
+
+  /* ═══ S7 · THE ROOM'S SWITCHES, TO THE PEOPLE THEY APPLY TO ════════════════════════════════════════
+   * The host record keeps them; the session carries them (collab-session.js `setRoomSettings`), each
+   * member getting only what applies to it. Called whenever one of them, or the link, changes. */
+  function pushSettings() {
+    const s = C.session;
+    if (!s || !s.isOwner || !s.setRoomSettings || !hostRoom) return false;
+    const st = hostRoom.settings || {};
+    return s.setRoomSettings({ roExport: st.roExport !== false, editorsInvite: !!st.editorsInvite, max: maxPeople(),
+      ask: st.ask !== false, linkRole: st.linkRole || 'editor',
+      link: C.signal.codesOnly() ? null : C.signal.inviteLink(hostRoom) });
+  }
+  U._pushSettings = pushSettings;
+
+  /* ═══ S7 · §16.3's UI COURTESY — THE ROLE, ON THE WHOLE EDITOR ═══════════════════════════════════
+   * `body.collab-ro` hides the + and turns the inspector's controls off (styles.css); the canvas and the
+   * timeline guard their gesture starts on `FM.collab.readOnly()`. A line above the inspector says why, in
+   * words, so a Viewer is never left pressing things that do nothing. None of this is the lock — that is
+   * the host, and the backstop in collab-session.js — it is what keeps a Viewer from feeling locked out. */
+  function applyRoleClasses() {
+    const b = document.body;
+    const r = C.myRole ? C.myRole() : 'owner';
+    const ro = installed && (r === 'viewer' || r === 'commenter');
+    b.classList.toggle('collab-ro', ro);
+    b.classList.toggle('collab-commenter', ro && r === 'commenter');
+    b.classList.toggle('collab-viewer', ro && r === 'viewer');
+    let note = document.getElementById('collab-ro-note');
+    if (!ro) { if (note) note.remove(); return; }
+    const panel = document.getElementById('inspector-panel'), insp = document.getElementById('inspector');
+    if (!panel || !insp || insp.parentNode !== panel) return;
+    if (!note) { note = el('div', 'collab-ro-note'); note.id = 'collab-ro-note'; note.setAttribute('role', 'status'); }
+    if (note.parentNode !== panel || note.nextSibling !== insp) panel.insertBefore(note, insp);
+    const t = r === 'viewer' ? 'View only — you can watch, play and follow' : 'Commenter — you can comment, not change the edit';
+    if (note.textContent !== t) note.textContent = t;
+  }
+  U.applyRoleClasses = applyRoleClasses;
+  function roleWords(r) { return r === 'viewer' ? 'a Viewer' : r === 'commenter' ? 'a Commenter' : 'an Editor'; }
+  /* The owner changed this device's role: said, applied, and every open surface redrawn — now, not at
+     the next thing the person tries (§16.3 "live role changes update these classes immediately"). */
+  U.onRole = function () {
+    applyRoleClasses();
+    const s = C.session;
+    if (card && card.id === 'collab-share' && s && !s.isOwner) drawGuestPanel(s);
+    if (C.comments && C.comments.onRole) { try { C.comments.onRole(); } catch (e) {} }
+    if (s && !s.isOwner && FM.toast) FM.toast((s.hostName || 'The owner') + ' made you ' + roleWords(s.role), 2600);
+  };
+  U.onSettings = function () {
+    const s = C.session;
+    if (card && card.id === 'collab-share' && s && !s.isOwner) drawGuestPanel(s);
+  };
+  /* A comment was added, answered or resolved: the "Comments" row of whichever panel is open says so. */
+  U.onComments = function () {
+    if (!card || card.id !== 'collab-share') return;
+    const row = card.querySelector('.cs-comments');
+    if (!row) return;
+    const fresh = commentsRow();
+    row.parentNode.replaceChild(fresh, row);
+  };
+  function commentsRow() {
+    const n = C.comments ? C.comments.count() : 0;
+    /* ⚠️ NOT `.cs-add`: that class is the "Connect with a code" door, and the S3 suite (and anything else)
+       finds that door by it — a comments row sharing the class sat first in the card and took its clicks. */
+    const b = btn('cs-navrow cs-comments', n ? 'Comments · ' + n + ' open' : 'Comments', function () {
+      closeCard();
+      if (C.comments) C.comments.open();
+    });
+    /* By role (S7 review): a Viewer was told to "reply" and "leave a note", and the card behind the row lets
+       a Viewer do neither. */
+    const canWrite = !C.comments || !C.comments.canWrite || C.comments.canWrite();
+    b.appendChild(el('span', 'cs-add-sub', !canWrite
+      ? (n ? 'Read what people have said — ask to be a Commenter to add your own' : 'Nothing yet — ask to be a Commenter to add one')
+      : n ? 'Read them and reply — comments never stop an export' : 'Leave a note about the edit for everyone — it never stops an export'));
+    return b;
+  }
   /* Test seam, the same one level of indirection `FM.collab._reload()` exists for (S2's note): the
      revocation above is a thing that has to be MEASURED as absent, and "no live offer" is not visible
      from outside the module any other way. */
@@ -630,9 +828,9 @@ window.FM = window.FM || {};
         const pid = currentPid();
         useRoom(pid, true);
         showCode();                          // the panel is about to show it: live from the first second
-        return checkpoint(pid).then(function () {
+        return checkpoint(pid, 'arm').then(function () {
           /* S6: the room's own id keys the media resume parts now that there is one (§15's note). */
-          C.share({ ownerInfo: { name: p.name, color: p.color }, sid: hostRoom.sid });
+          C.share({ ownerInfo: { name: p.name, color: p.color }, sid: hostRoom.sid, midFloor: hostRoom.midTop || 0 });
           afterArm();
           return drawShare();
         });
@@ -649,6 +847,10 @@ window.FM = window.FM || {};
     ridMid = Object.create(null);
     hostOlder = null;
     startHostRelay();
+    /* S7: the room's switches reach every member from the first hello (collab-session.js sends them with
+       the welcome), and a save point every ten minutes while anything changes (§12.4). */
+    pushSettings();
+    armCkpt();
     /* The foreground listener is for the WAKE LOCK as much as for the relay — a phone hosting with Codes
        only has no relay and still needs its lock back after every glance at another app — so it is
        installed here, at once, not when the relay's keys have been derived. */
@@ -663,12 +865,24 @@ window.FM = window.FM || {};
   function drawShare() {
     const s = C.session;
     useRoom((s && s.pid) || currentPid(), true);
-    if (shareStep !== 'code') { showCode(); startHostRelay(); }   // the code is on screen, so it stays live
+    if (shareStep === 'main') showCode();                        // the code is on screen, so it stays live
+    if (shareStep !== 'code') startHostRelay();
     const anchor = shareBtn && shareBtn.getBoundingClientRect().width > 0 ? shareBtn : null;
     const c = openCard('collab-share', { label: 'Share this project', anchor: anchor });
     const head = el('div', 'cs-head');
-    head.appendChild(el('h2', 'fm-ask-title', 'Share “' + projectName() + '”'));
-    head.appendChild(el('div', 'cs-state', stateLine(s)));
+    const drill = shareStep === 'settings' || shareStep === 'versions';
+    if (drill) {
+      /* S7: the drill-in's own header — a back arrow and where you are, in place of the project title. */
+      const bk = el('div', 'cs-backrow');
+      const back = btn('cs-backbtn', '\u2039', function () { shareStep = shareStep === 'versions' ? 'settings' : 'main'; redrawShare(); });
+      back.setAttribute('aria-label', 'Back');
+      bk.appendChild(back);
+      bk.appendChild(el('h2', 'fm-ask-title', shareStep === 'versions' ? 'Earlier versions' : 'Sharing settings'));
+      head.appendChild(bk);
+    } else {
+      head.appendChild(el('h2', 'fm-ask-title', 'Share “' + projectName() + '”'));
+      head.appendChild(el('div', 'cs-state', stateLine(s)));
+    }
     /* Rendered once and consumed: it says what happened to the code that is no longer on screen. */
     if (shareNote) { head.appendChild(el('div', 'cs-note', shareNote)); shareNote = null; }
     c.appendChild(head);
@@ -685,14 +899,20 @@ window.FM = window.FM || {};
        he opens the panel to see. So the resting view is lean (§19.1's own word), and the exchange is a
        step you go into and come back from. */
     if (shareStep === 'code') drawCodeStep(body);
+    else if (shareStep === 'settings') drawSettingsStep(body);
+    else if (shareStep === 'versions') drawVersionsStep(body);
     else {
       body.appendChild(memberRows(s));
+      /* S7 (§17.1 entry points): the comments, one tap from the people — the same row the guest panel has. */
+      if (C.comments && C.comments.installed && C.comments.installed()) body.appendChild(commentsRow());
       /* S6 (§19.1 "General access"): the link, the QR and the 9-character code, then who gets asked. The
          connection-code exchange stays — it is the way in that needs no relay at all — but as the second
          choice rather than the only one. */
       const relayOn = !C.signal.codesOnly();
       body.appendChild(inviteBlock());
       if (relayOn) body.appendChild(askRow());
+      /* S7 (§19.1 "They join as [Editor ▾]"): Docs puts the role a link grants right beside the link. */
+      body.appendChild(joinAsRow());
       const addBtn = btn('cs-add', relayOn ? 'Connect with a code instead' : 'Add someone with a code', function () { shareStep = 'code'; redrawShare(); });
       addBtn.appendChild(el('span', 'cs-add-sub', relayOn
         ? 'No relay at all — you send them a long code and they send one back'
@@ -702,16 +922,32 @@ window.FM = window.FM || {};
       if (relayOn) body.appendChild(el('div', 'cs-privacy', PRIVACY_LINE));
     }
 
+    /* 📐 S7: THE FOOT IS [⚙] [Stop sharing] [Done], and "Comments" is a row in the body. §19.1 lists four
+       things for the foot — ⚙ · "Comments (3)" · [Stop sharing] · [Done] — and at 380 px they do not fit:
+       the card's content box is 332 px, "Stop sharing" needs ~115 of it and "Comments (3)" ~120, and the
+       drawn option with all four cut Stop sharing in half. Stop sharing is the one that must never be two
+       taps away, so it keeps its place and the comments go where the people are. */
     const foot = el('div', 'cs-foot');
+    if (shareStep !== 'code') {
+      const gear = btn('cs-gear' + (drill ? ' on' : ''), '', function () { shareStep = drill ? 'main' : 'settings'; redrawShare(); });
+      gear.appendChild(gearSvg());
+      gear.setAttribute('aria-label', drill ? 'Back to sharing' : 'Sharing settings');
+      gear.setAttribute('aria-pressed', drill ? 'true' : 'false');
+      foot.appendChild(gear);
+    }
     foot.appendChild(btn('cs-stop', 'Stop sharing', function () {
       FM.ask({
         title: 'Stop sharing?', danger: true, ok: 'Stop sharing',
         message: 'Everyone here keeps their own copy. The codes you have handed out stop working.'
       }).then(function (yes) {
         if (!yes) return;
+        const pid = currentPid();
+        /* §12.1 "ending": a final save point, BEFORE the room goes — the last picture of the project as the
+           people in it left it. Not awaited: IndexedDB takes its own time and the stop must not wait on it. */
+        checkpoint(pid, 'stop');
         C.end();
         dropOffer();                 // …and the code he read out a minute ago really does stop working
-        dropRoom(currentPid());
+        dropRoom(pid);
         hostRoom = null; hostRoomPid = null;
         U.syncBanner();
         closeCard();
@@ -722,6 +958,241 @@ window.FM = window.FM || {};
     c.appendChild(foot);
     return c;
   }
+
+  function gearSvg() {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '1.8'); svg.setAttribute('stroke-linecap', 'round'); svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('class', 'cs-gearico'); svg.setAttribute('aria-hidden', 'true');
+    const c1 = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    c1.setAttribute('cx', '12'); c1.setAttribute('cy', '12'); c1.setAttribute('r', '3');
+    const p1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p1.setAttribute('d', 'M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z');
+    svg.appendChild(c1); svg.appendChild(p1);
+    return svg;
+  }
+
+  /* "New people join as [Editor ▾]" — the role the link and the short code grant (§19.1). A member he has
+     already let in keeps the role he gave them; this is only where a stranger starts. */
+  function joinAsRow() {
+    const row = el('div', 'cs-row cs-joinrow');
+    row.appendChild(el('div', 'cs-rowlabel', 'New people join as'));
+    const cur = (hostRoom && hostRoom.settings && hostRoom.settings.linkRole) || 'editor';
+    const b = btn('cs-role cs-joinas', labelFor(cur) + ' \u25be', function (e) {
+      const r = b.getBoundingClientRect();
+      FM.contextMenu.show(r.left, r.bottom + 4, ROLES.map(function (p) {
+        return { label: p[1] + (p[0] === cur ? '  \u2713' : ''), action: function () {
+          if (!hostRoom) return;
+          hostRoom.settings.linkRole = p[0];
+          saveRoom(hostRoomPid || currentPid(), hostRoom);
+          pushSettings();
+          redrawShare();
+        } };
+      }));
+      e.stopPropagation();
+    });
+    b.setAttribute('aria-label', 'New people join as ' + labelFor(cur));
+    row.appendChild(b);
+    return row;
+  }
+
+  /* ═══ S7 · THE COLLABORATION SETTINGS MENU (§19.1 "Settings drill-in") ═════════════════════════════
+   * His words: "it might need its own settings menu for when you do have it enabled … take inspiration
+   * from what Google Docs has". One place for all of it, grouped the way Docs groups its sharing settings:
+   * who you are, what the people in it may do, what THIS device shows, how it connects, and the save
+   * points. Stop sharing stays in the foot, where it is from every view.
+   * 📐 DRAWN THREE WAYS FIRST (rule 16 / #545), all rendered in the real app at 380 and 1280:
+   *   A · a drill-in behind ⚙ in the Share card's foot (BUILT) — the resting view stays "who is here and
+   *       how do I invite someone", which is what he opens the panel for, and the settings are one tap away;
+   *   B · tabs across the top [People | Invite | Settings] — the invite and the people could no longer be
+   *       seen together, and a third of his taps became tab switches;
+   *   C · one long page — at 380 px the settings began two and a half screens down, under the invite.
+   * §19.1 wanted this too, as the "⚙ (settings drill-in using the sb-panel-in family)". */
+  function switchRow(label, hint, on, flip) {
+    const row = el('div', 'cs-srow');
+    const t = el('div', 'cs-stext');
+    t.appendChild(el('div', 'cs-slabel', label));
+    if (hint) t.appendChild(el('div', 'cs-shint', hint));
+    row.appendChild(t);
+    const sw = el('button', 'set-switch cs-switch' + (on ? ' on' : ''));
+    sw.type = 'button';
+    sw.setAttribute('role', 'switch');
+    sw.setAttribute('aria-checked', on ? 'true' : 'false');
+    sw.setAttribute('aria-label', label);
+    sw.appendChild(el('span', 'set-knob'));
+    sw.addEventListener('click', function () { flip(!on); });
+    row.appendChild(sw);
+    return row;
+  }
+  function sgroup(title) {
+    const g = el('div', 'cs-sgroup');
+    if (title) g.appendChild(el('div', 'cs-sgtitle', title));
+    return g;
+  }
+  function drawSettingsStep(body) {
+    const st = hostRoom.settings;
+    /* You */
+    const you = sgroup('You');
+    const me = U.getProfile() || { name: 'You', color: PALETTE[0] };
+    const yr = el('div', 'cs-srow');
+    const dot = el('span', 'cs-dot'); dot.style.background = cleanColor(me.color) || PALETTE[0];
+    yr.appendChild(dot);
+    const yt = el('div', 'cs-stext');
+    yt.appendChild(el('div', 'cs-slabel', cleanName(me.name) || 'You'));
+    yt.appendChild(el('div', 'cs-shint', 'Your name and colour, as the others see them'));
+    yr.appendChild(yt);
+    yr.appendChild(btn('cs-role cs-profile', 'Change…', function () {
+      U.profile({ force: true }).then(function (p) {
+        /* The owner is never in the member table, so the roster reads his name from the host itself —
+           which is what makes a change here reach every screen at the next roster, not the next session. */
+        const ss = C.session;
+        if (p && ss && ss.isOwner && ss.host && ss.host.ownerSelf) { ss.host.ownerSelf.name = p.name; ss.host.ownerSelf.color = p.color; pushSettings(); }
+        if (C.session && C.session.isOwner) { shareStep = 'settings'; U.share({ keepStep: true }); }
+      });
+    }));
+    you.appendChild(yr);
+    body.appendChild(you);
+
+    /* People */
+    const ppl = sgroup('People in this project');
+    /* ⚠️ SAID AS IT IS (S7 review). "You still let each person in" is only true while the link asks him first:
+       with "Let them in", whoever an Editor hands the link to walks straight in — which is his setting, so
+       the switch says so rather than promising a knock that will not come. And with Codes only on there is
+       no link to hand anyone, so it says that too. */
+    const inviteHint = C.signal.codesOnly()
+      ? 'Off while “Connect with codes only” is on — there is no link to pass on. It comes back when you turn that off.'
+      : st.ask
+        ? 'They see the link and can pass it on; you still let each person in. A link they already copied works until you reset it.'
+        : 'They see the link and can pass it on — and with the link set to “Let them in”, whoever they give it to gets straight in. A link they already copied works until you reset it.';
+    ppl.appendChild(switchRow('Editors can invite others', inviteHint,
+      !!st.editorsInvite, function (v) { st.editorsInvite = v; saveRoom(hostRoomPid || currentPid(), hostRoom); pushSettings(); redrawShare(); }));
+    /* D11: said honestly. The video is made on THEIR device, from a copy of the project that has to be on
+       their device for the session to work at all, so this can only ask their FreeMotion to hold back. */
+    ppl.appendChild(switchRow('Viewers and commenters can export',
+      'Their device makes the video, so this only asks it not to — it can’t stop a screen recording, and their copy is on their device either way.',
+      st.roExport !== false, function (v) { st.roExport = v; saveRoom(hostRoomPid || currentPid(), hostRoom); pushSettings(); redrawShare(); }));
+    const cap = isPhoneNow() ? ((C.LIMITS && C.LIMITS.PEOPLE_MAX_PHONE) || 6) : ((C.LIMITS && C.LIMITS.PEOPLE_MAX_PC) || 12);
+    const mr = el('div', 'cs-srow');
+    const mt = el('div', 'cs-stext');
+    mt.appendChild(el('div', 'cs-slabel', 'Most people at once'));
+    mt.appendChild(el('div', 'cs-shint', 'Counting you. Up to 12 from a computer, 6 from a phone.'));
+    mr.appendChild(mt);
+    const mb = btn('cs-role cs-max', String(maxPeople()) + ' \u25be', function (e) {
+      const r = mb.getBoundingClientRect();
+      const items = [];
+      for (let n = 2; n <= cap; n++) {
+        (function (n) {
+          items.push({ label: String(n) + (n === maxPeople() ? '  \u2713' : ''), action: function () { st.max = n; saveRoom(hostRoomPid || currentPid(), hostRoom); pushSettings(); redrawShare(); } });
+        })(n);
+      }
+      FM.contextMenu.show(r.left, r.bottom + 4, items);
+      e.stopPropagation();
+    });
+    mb.setAttribute('aria-label', 'Most people at once: ' + maxPeople());
+    mr.appendChild(mb);
+    ppl.appendChild(mr);
+    body.appendChild(ppl);
+
+    /* On this device — the same three switches Settings → Labs has (§19.8), read and written through the
+       one settings store, so the two places can never disagree. */
+    const dev = sgroup('On this device');
+    const flipSetting = function (k) { return function (v) { FM.settings.set(k, v); redrawShare(); }; };
+    dev.appendChild(switchRow('Show others’ pointers', 'Their mouse pointer and their taps, in their colour.', FM.settings.get('collabCursors') !== false, flipSetting('collabCursors')));
+    dev.appendChild(switchRow('Show others’ selections', 'An outline in their colour around the layers they have selected.', FM.settings.get('collabSelections') !== false, flipSetting('collabSelections')));
+    dev.appendChild(switchRow('Connect with codes only', 'No free relay at all. The link and the short code stop working — you swap a long code with each person instead.', !!FM.settings.get('collabCodesOnly'), function (v) {
+      FM.settings.set('collabCodesOnly', v);
+      pushSettings();
+      shareStep = 'settings';
+      redrawShare();
+    }));
+    body.appendChild(dev);
+
+    /* Connection */
+    const con = sgroup('Connection');
+    const line = el('div', 'cs-relay cs-sstatus', C.signal.codesOnly() ? 'Codes only — nothing but the devices themselves' : relayLine());
+    if (!C.signal.codesOnly()) { line.id = 'collab-relay-status'; if (relayWarn()) line.classList.add('warn'); }
+    con.appendChild(line);
+    con.appendChild(btn('cs-slink', 'Having trouble? Connect with a code', function () { shareStep = 'code'; redrawShare(); }));
+    body.appendChild(con);
+
+    const ev = btn('cs-navrow cs-versions-nav', 'Earlier versions…', function () { shareStep = 'versions'; redrawShare(); });
+    ev.appendChild(el('span', 'cs-add-sub', 'Save points from while you shared — any one comes back as a new project'));
+    body.appendChild(ev);
+
+    /* Only where a relay is in use — the main view has always guarded it, and under Codes only it said the
+       opposite of the "nothing but the devices themselves" line just above it (S7 review). */
+    if (!C.signal.codesOnly()) body.appendChild(el('div', 'cs-privacy', PRIVACY_LINE));
+    const ver = document.querySelector('.ver');
+    body.appendChild(el('div', 'cs-ver', 'FreeMotion ' + (ver ? ver.textContent.trim() : '')));
+  }
+
+  /* ═══ S7 · "EARLIER VERSIONS…" (§12.1, §24) ═══════════════════════════════════════════════════════ */
+  function drawVersionsStep(body, forPid, forName) {
+    const pid = forPid || currentPid();
+    const pname = forName || projectName();
+    body.appendChild(el('div', 'collab-sub', 'A save point is made when you start sharing, every 10 minutes while anything changes, and when you stop. The last 10 are kept, and always the one from when you started. Bringing one back makes a NEW project — this one, and everybody’s copy of it, is not touched.'));
+    const ul = el('ul', 'cs-versions');
+    ul.appendChild(el('li', 'cs-vempty', 'Looking…'));
+    body.appendChild(ul);
+    listCheckpoints(pid).then(function (rows) {
+      if (!ul.isConnected) return;
+      ul.textContent = '';
+      if (!rows.length) { ul.appendChild(el('li', 'cs-vempty', 'No save points yet — they are made while you share this project.')); return; }
+      rows.forEach(function (r) {
+        const li = el('li', 'cs-version');
+        li.setAttribute('data-key', r.key);
+        const t = el('div', 'cs-stext');
+        t.appendChild(el('div', 'cs-slabel', whenLabel(r.ts)));
+        t.appendChild(el('div', 'cs-shint', (r.arm ? 'When sharing started · ' : '') + r.layers + (r.layers === 1 ? ' layer' : ' layers') + (r.w && r.h ? ' · ' + r.w + '×' + r.h : '')));
+        /* ⚠️ THE RESULT IS SAID IN THE ROW (S7 review). It was a toast, and the toast (z 60) is painted under
+           this card's own scrim (222) — "Saved as …" and "the device may be full" were both invisible, and
+           with no sign of anything happening the natural thing was to tap Restore again. */
+        const said = el('div', 'cs-shint cs-vstatus hidden');
+        said.setAttribute('role', 'status');
+        t.appendChild(said);
+        li.appendChild(t);
+        const rb = btn('cs-role cs-restore', 'Restore', function () {
+          const nm = pname + ' — ' + absLabel(r.ts);
+          FM.ask({ title: 'Bring this version back?', ok: 'Make a copy',
+            message: 'It becomes a new project on Home called “' + nm + '”, with its clips. “' + pname + '” stays exactly as it is, for you and for everyone in it.' })
+            .then(function (yes) {
+              if (!yes) return;
+              rb.disabled = true; rb.textContent = 'Restoring…';
+              said.classList.add('hidden');
+              restoreCheckpoint(r.key, nm).then(function (nid) { return nid; }, function () { return null; }).then(function (nid) {
+                rb.disabled = false; rb.textContent = 'Restore';
+                said.textContent = nid ? 'Saved as “' + nm + '” on Home' : 'Could not bring that version back — the device may be full';
+                said.classList.remove('hidden');
+                said.classList.toggle('warn', !nid);
+                if (nid && FM.home && FM.home.refresh) { try { FM.home.refresh(); } catch (e) {} }
+              });
+            });
+        });
+        li.appendChild(rb);
+        ul.appendChild(li);
+      });
+    });
+  }
+
+  /* ⚠️ "EARLIER VERSIONS…" WITHOUT SHARING (S7 review). Its only door was Share → ⚙, and Share on a project
+     with no session ARMS one — a new room, a new link and code, the public relays, and a fresh save point
+     that pushed the oldest one out — all to read a list that is on this device. After Stop sharing, which is
+     exactly when a wrecked session is looked back on, that was the only way in. This is the list on its own
+     card, for any project, reached from the project's ⋯ on Home; nothing is armed and nothing is written. */
+  U.versions = function (pid, name) {
+    if (!pid) return null;
+    const c = openCard('collab-versions', { label: 'Earlier versions' });
+    const head = el('div', 'cs-head');
+    head.appendChild(el('h2', 'fm-ask-title', 'Earlier versions of “' + (name || 'this project') + '”'));
+    c.appendChild(head);
+    const body = el('div', 'cs-body');
+    c.appendChild(body);
+    drawVersionsStep(body, pid, name || 'this project');
+    const foot = el('div', 'cs-foot');
+    foot.appendChild(btn('cs-done accent', 'Done', function () { closeCard(); }));
+    c.appendChild(foot);
+    return c;
+  };
 
   /* 📐 "THE LINK", NOT "THE LINK OR CODE". §19.1 labels this row "When someone uses the link or code",
      and §14.1 says in the same spec that "code joins ALWAYS knock". Both cannot be true of one switch; the
@@ -737,6 +1208,7 @@ window.FM = window.FM || {};
         if (!hostRoom) return;
         hostRoom.settings.ask = p[0] === 'ask';
         saveRoom(currentPid(), hostRoom);
+        pushSettings();                      // an Editor who may invite is told what the link now does (S7 review)
         redrawShare();
       });
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
@@ -866,6 +1338,7 @@ window.FM = window.FM || {};
       saveRoom(currentPid(), hostRoom);
       stopHostRelay();
       startHostRelay();
+      pushSettings();                          // S7: the editors who may invite get the new link
       redrawShare();
       if (FM.toast) FM.toast('New link and code — the old ones no longer work', 2600);
     });
@@ -1086,7 +1559,11 @@ window.FM = window.FM || {};
         /* A member coming back REPLACES its own old link: the phone that locked left a data channel the
            owner still thinks is open, and two endpoints for one person would double every broadcast. */
         const old = ridMid[rid];
-        let reuse = null;
+        /* ⚠️ …AND ACROSS SESSIONS, THE MID IT HAD LAST TIME (S7 review). `ridMid` is emptied at every arm, so a
+           member coming back after a resume or a re-share was minted a fresh mid in arrival order — and a
+           comment's author IS its mid, so Alex reconnecting first inherited Sam's comments. The mid is kept
+           on the member's own record, and the session is armed past every mid this room has used. */
+        let reuse = (member && typeof member.mid === 'string') ? member.mid : null;
         if (old) {
           const ep0 = s._eps && s._eps[old];
           if (ep0) { delete s._eps[old]; ep0.onclose = null; try { ep0.close(); } catch (e) {} }
@@ -1095,6 +1572,8 @@ window.FM = window.FM || {};
         }
         const mid = s.addPeer(link, { role: rec.role, name: rec.name, color: rec.color, rid: rid, tok: rec.tok, hub: hostRoom.hub, mid: reuse });
         if (!mid) { noteGone(rec.name); return 'gone'; }
+        rec.mid = mid;
+        noteMidTop(s);
         if (relay && !member) syncMemberRooms(relay);         // their reconnect is recognised from now on
         ridMid[rid] = mid;
         s._eps = s._eps || Object.create(null);
@@ -1328,6 +1807,7 @@ window.FM = window.FM || {};
            list who was never there and whose row could never clear itself. */
         const mid = s.addPeer(link, { role: role, name: cleanName(hello.name), color: cleanColor(hello.color) || PALETTE[0] });
         if (!mid) return Promise.reject({ why: 'gone' });
+        noteMidTop(s);
         s._eps = s._eps || Object.create(null);
         s._eps[mid] = link;
         link.onclose = function () { try { s.dropPeer(mid); } catch (e) {} redrawShare(); };
@@ -1489,10 +1969,23 @@ window.FM = window.FM || {};
   /* The guest's own view of the same card (§19.1 "Guest panel"). */
   function drawGuestPanel(s) {
     const c = openCard('collab-share', { label: 'This shared project' });
-    c.appendChild(el('h2', 'fm-ask-title', 'Shared with you'));
-    c.appendChild(el('div', 'cs-state', s.ended ? 'Ended — your copy stays on this device'
+    const head = el('div', 'cs-head');
+    head.appendChild(el('h2', 'fm-ask-title', 'Shared with you'));
+    head.appendChild(el('div', 'cs-state', s.ended ? 'Ended — your copy stays on this device'
       : s.online === false ? 'Offline — the live link dropped; your changes are kept here' : 'Live'));
-    c.appendChild(el('div', 'collab-sub', 'You’re ' + (s.role === 'viewer' ? 'a Viewer' : s.role === 'commenter' ? 'a Commenter' : 'an Editor') + '.'));
+    head.appendChild(el('div', 'collab-sub cs-myrole', 'You’re ' + (s.role === 'viewer' ? 'a Viewer' : s.role === 'commenter' ? 'a Commenter' : 'an Editor') + '.'));
+    c.appendChild(head);
+    const body = el('div', 'cs-body');
+    c.appendChild(body);
+    const rs = s.roomSettings || {};
+    const ro = !s.ended && (s.role === 'viewer' || s.role === 'commenter');
+    /* S7: what the role means, in words — and D11's export switch, said where the person will look for it. */
+    if (ro) {
+      body.appendChild(el('div', 'collab-sub cs-rolehint', (s.role === 'viewer'
+        ? 'You can watch, play and follow along. '
+        : 'You can read and add comments, and change or delete your own. ') +
+        (rs.roExport === false ? 'Exporting is turned off for viewers and commenters in this project.' : 'You can export a video of it on this device.')));
+    }
     /* S5 (§19.1 "Guest panel"): who else is in, read-only, each with Follow. The names come from the
        host's roster via presence, so this is the same list the owner sees, in the same colours. */
     if (C.presence && C.presence.people) {
@@ -1510,7 +2003,35 @@ window.FM = window.FM || {};
         li.appendChild(f);
         list.appendChild(li);
       });
-      if (list.children.length) c.appendChild(list);
+      if (list.children.length) body.appendChild(list);
+    }
+    /* S7 (§17.1): the comments, from the guest's side too. */
+    if (C.comments && C.comments.installed && C.comments.installed()) body.appendChild(commentsRow());
+    /* S7 (§16.1 "See link and code: Editor only if editorsInvite"): the LINK, and only the link.
+       📐 NOT THE SHORT CODE. The owner listens on the code's topic only while the code is FRESH — half an
+       hour after it was last on HIS screen (S6 review, CODE_TTL) — and he cannot know when an Editor's
+       screen shows it, so a code shown here could be one nobody is listening for any more, and the person
+       it was read to would wait on a dead door. The link never lapses. */
+    if (!s.ended && s.role === 'editor' && rs.editorsInvite && typeof rs.link === 'string') {
+      const box = el('div', 'cs-invite cs-guestinvite');
+      box.appendChild(el('div', 'cs-rowlabel', 'Invite someone'));
+      const row = el('div', 'cs-linkrow');
+      row.appendChild(btn('cs-copylink accent', 'Copy link', function () { copyPlain(rs.link, 'Link copied'); }));
+      if (navigator.share) {
+        row.appendChild(btn('cs-sharelink', 'Share…', function () {
+          try { navigator.share({ title: 'Join “' + projectName() + '” in FreeMotion', url: rs.link }).catch(function () {}); } catch (e) {}
+        }));
+      }
+      const qrBtn = btn('cs-qrbtn', 'QR', function () { toggleQr(box, rs.link, qrBtn); });
+      qrBtn.setAttribute('aria-pressed', 'false');
+      qrBtn.setAttribute('aria-label', 'Show a QR code of the link');
+      row.appendChild(qrBtn);
+      box.appendChild(row);
+      /* Only when it is true (S7 review): with the link set to "Let them in" nobody is asked. */
+      box.appendChild(el('div', 'cs-relay', rs.ask === false
+        ? 'Whoever you give the link to gets straight in, as ' + (rs.linkRole === 'viewer' ? 'a Viewer' : rs.linkRole === 'commenter' ? 'a Commenter' : 'an Editor') + '.'
+        : (s.hostName || 'The owner') + ' still says yes to each new person.'));
+      body.appendChild(box);
     }
     const foot = el('div', 'cs-foot');
     foot.appendChild(btn('cs-stop', 'Leave', function () {
@@ -2083,6 +2604,7 @@ window.FM = window.FM || {};
   };
   /* Says what the session is, from the session, rather than from a flag somebody remembered to set. */
   U.syncBanner = function () {
+    applyRoleClasses();
     const s = C.session;
     if (!s || !C.active) {
       /* ⚠️ A REOPENED COPY SAID NOTHING WHILE IT LOOKED FOR ITS OWNER (S6 review). No session yet, so
@@ -2366,7 +2888,9 @@ window.FM = window.FM || {};
     /* full / declined / busy: the owner closes this link in a moment and the reconnect carries on. */
   };
   U.onDetach = function (s) {
+    applyRoleClasses();                        // S7: no session, no role — the editor is his again
     if (!s || s.isOwner) {
+      stopCkpt();
       stopHostRelay(); dropWake(); ridMid = Object.create(null); hostOlder = null;
       cancelKnocks(s && s.stopWhy === 'paused' ? 'paused' : 'ended');
     }
@@ -2402,9 +2926,9 @@ window.FM = window.FM || {};
     const p = U.getProfile();
     if (!p) return null;
     hostRoom = room; hostRoomPid = pid;
-    return checkpoint(pid).then(function () {
+    return checkpoint(pid, 'resume').then(function () {
       if (C.session || currentPid() !== pid || !U.labsOn()) return null;
-      C.share({ ownerInfo: { name: p.name, color: p.color }, sid: room.sid });
+      C.share({ ownerInfo: { name: p.name, color: p.color }, sid: room.sid, midFloor: room.midTop || 0 });
       afterArm();
       if (FM.toast) FM.toast('Sharing is on again — people can reconnect', 2600);
       return C.session;
@@ -2529,7 +3053,7 @@ window.FM = window.FM || {};
       if (joinFlow && joinFlow.cancel) joinFlow.cancel();
     } else if (s && s.isOwner) startHostRelay();
     else if (s && !s.isOwner && s.online === false && !s.ended && !versionNote) startRecon(s.gpid, 'live');
-    if (changed) { redrawShare(); U.syncBanner(); }
+    if (changed) { pushSettings(); redrawShare(); U.syncBanner(); }
   }
 
   /* ═══ INSTALL / UNINSTALL (§23) ═══════════════════════════════════════════════════════════════ */
@@ -2556,16 +3080,29 @@ window.FM = window.FM || {};
      So the placement is a question about the SCREEN, asked fresh on every install and again whenever the
      width crosses the breakpoint. Re-homing costs two getElementById and makes every order the same
      order. (queue 921 S3) */
+  /* ⚠️ S7: ON A PHONE THE SHARE BUTTON IS NO LONGER IN #topbar-m — IT IS THE ROUND "person+" IN THE
+     STAGE'S TOP-LEFT CORNER, where the people chip appears once a session is live. Measured at 380 px
+     with Labs on: the bar holds back 42 · name · v-chip 65 · ? 42 · notes 42 · cog 42 · share 42 ·
+     export 38, and the project-name field was left 34 px — "U.." for "Untitled", every project's name
+     cut to one letter on his phone. That is exactly what D18 predicted ("the phone top bar has about 85 px
+     to spare and the notes/cog gap is signed off (#189)") when it put the presence chip on the stage
+     instead, and §18.5 drew the chip, alone, as "a single 28 px round person+ Share button". So that is
+     the phone's Share: the same corner, the same look, and once somebody is in, the faces take its place
+     (styles.css hides it while #collab-people is on the stage). Drawn against two other fixes first —
+     the version chip shrunk to its icon (the name gets 69 px, and a signed-off chip loses its words) and
+     the four bar icons narrowed (breaks the #189 notes/cog gap he approved) — see COLLAB-DESIGN.md §19.
+     On a desktop nothing moves: beside Export, wherever Export currently lives. */
   function shareHost() {
     const phone = !window.matchMedia || window.matchMedia('(max-width: 700px)').matches;
-    const m = document.getElementById('m-export');
+    const st = document.getElementById('stage');
     const d = document.getElementById('btn-export');
-    if (phone && m && m.parentNode) return { before: m, parent: m.parentNode, phone: true };
+    if (phone && st) return { before: null, parent: st, phone: true, stage: true };
     if (d && d.parentNode) return { before: d, parent: d.parentNode, phone: false };
-    if (m && m.parentNode) return { before: m, parent: m.parentNode, phone: true };
+    if (st) return { before: null, parent: st, phone: true, stage: true };
     return null;
   }
 
+  const INVITE_SVG = 'M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM3 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5M19 8v6M16 11h6';
   function makeShareButton() {
     const at = shareHost();
     let b = document.getElementById('btn-share');
@@ -2574,32 +3111,31 @@ window.FM = window.FM || {};
       b = el('button', 'btn icon-btn');
       b.id = 'btn-share';
       b.type = 'button';
-      b.title = 'Share this project live';
-      b.setAttribute('aria-label', 'Share');
+      b.addEventListener('click', function (e) { e.stopPropagation(); U.share(); });
+    }
+    const mode = at.stage ? 'stage' : 'bar';
+    if (b._mode !== mode) {
+      b._mode = mode;
+      b.textContent = '';
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.setAttribute('viewBox', '0 0 24 24');
-      svg.setAttribute('class', 'ico');
       svg.setAttribute('fill', 'none');
       svg.setAttribute('stroke', 'currentColor');
-      svg.setAttribute('stroke-width', '1.8');
+      svg.setAttribute('stroke-width', at.stage ? '1.9' : '1.8');
       svg.setAttribute('stroke-linecap', 'round');
       svg.setAttribute('stroke-linejoin', 'round');
+      svg.setAttribute('class', at.stage ? 'cp-plus' : 'ico');
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('d', SHARE_SVG);
+      path.setAttribute('d', at.stage ? INVITE_SVG : SHARE_SVG);
       svg.appendChild(path);
       b.appendChild(svg);
-      b.addEventListener('click', function () { U.share(); });
+      b.title = at.stage ? 'Share this project live — invite people' : 'Share this project live';
+      b.setAttribute('aria-label', 'Share');
     }
-    /* The two bars are different controls, not one control with two homes: #topbar-m's buttons are
-       `.m-tbtn` with an `.m-ico` glyph and are hidden by the same body classes every other project
-       control on that bar obeys, so the share button leaves with them the moment a selection owns the
-       bar. Swapping the classes is what makes it BELONG to whichever bar it is in. */
-    b.classList.toggle('m-tbtn', at.phone);
-    b.classList.toggle('btn', !at.phone);
-    b.classList.toggle('icon-btn', !at.phone);
-    const svg = b.querySelector('svg');
-    if (svg) svg.setAttribute('class', at.phone ? 'm-ico' : 'ico');
-    if (b.parentNode !== at.parent || b.nextSibling !== at.before) at.parent.insertBefore(b, at.before);
+    /* The stage version wears the people chip's own classes, so it IS that chip at rest: the same size,
+       place and glass, and the same rules hide it (text editing, a phone selection). */
+    b.className = at.stage ? 'collab-people cp-invite cs-stagebtn' : 'btn icon-btn';
+    if (b.parentNode !== at.parent || (at.before ? b.nextSibling !== at.before : false)) at.parent.insertBefore(b, at.before);
     return b;
   }
 
@@ -2632,6 +3168,10 @@ window.FM = window.FM || {};
     const first = !installed;
     installed = true;
     shareBtn = makeShareButton();            // an ENSURE and a RE-HOME: the bar it belongs in can change
+    /* S7: comments and the role courtesies exist while Labs is on — the ruler marks for a project that has
+       comments, and whatever the current session's role says. */
+    if (C.comments && C.comments.install) { try { C.comments.install(); } catch (e) { C.lastError = e; } }
+    applyRoleClasses();
     if (!joinBtn || !joinBtn.isConnected) joinBtn = makeJoinButton();
     if (!widthWatch && window.matchMedia) {
       try {
@@ -2651,6 +3191,9 @@ window.FM = window.FM || {};
        `if (!installed) return false` meant the one sweep that could have caught it never ran again. */
     const was = installed;
     installed = false;
+    if (C.comments && C.comments.uninstall) { try { C.comments.uninstall(); } catch (e) {} }
+    applyRoleClasses();
+    stopCkpt();
     /* S6: the two invite cards are the exception — they are shown BECAUSE Labs is off (or before the
        question arises), and any setting that re-applies must not sweep away the card he is reading. */
     if (!card || (card.id !== 'collab-labs-ask' && card.id !== 'collab-landing')) closeCard();
