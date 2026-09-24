@@ -8,7 +8,9 @@ and it is the same three steps each time.** Unless his first message is plainly 
 
 1. **`./tools/tick.sh`** — computes the facts a tick needs (INBOX, queue, proof debt, reminders). It
    is the one command that tells you where everything stands, so nothing has to be remembered.
-2. **Arm the loop**, because it dies with the chat that made it. `CronCreate` with `*/1 * * * *`,
+2. **Arm the loop — but `CronList` FIRST**, because it dies with the chat that made it and a restarted app can leave
+   one already armed: on 24 Sep two identical every-minute loops were found running side by side after a restart, and
+   every tick arrived twice. Create one only if none is listed. `CronCreate` with `*/1 * * * *`,
    `recurring: true`, and this prompt:
    *"Continue the FreeMotion loop — read LOOP.md first, then run ./tools/next.sh and work the oldest
    actionable item."*
