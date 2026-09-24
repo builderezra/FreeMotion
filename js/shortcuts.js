@@ -62,8 +62,12 @@ window.FM = window.FM || {};
        at the end of the scroll and nowhere else. A sticky footer inside the scroller can only ever
        approximate a pinned one; a footer that is a SIBLING of the scroller cannot move at all. */
     const scroll = document.createElement('div'); scroll.className = 'shortcuts-scroll';
-    section(scroll, 'Keyboard', SHORTCUTS, 'shortcut-key');
-    section(scroll, 'Mouse / stage', TIPS, 'shortcut-key wide');
+    /* An inner wrapper (queue 927): BIG on PC flows the whole list down two columns, and columns need a box whose
+       height follows its content — on the fixed-height scroller itself they would spill sideways instead. */
+    const cols = document.createElement('div'); cols.className = 'shortcuts-cols';
+    section(cols, 'Keyboard', SHORTCUTS, 'shortcut-key');
+    section(cols, 'Mouse / stage', TIPS, 'shortcut-key wide');
+    scroll.appendChild(cols);
     card.appendChild(scroll);
     /* A WAY OUT TO THE TUTORIALS (queue 274). Ezra: "At the bottom of the keyboard shortcuts menu when
        you press the ? Icon it should show a button that takes you straight to the tutorial section and

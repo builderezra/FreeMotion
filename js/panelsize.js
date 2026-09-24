@@ -96,16 +96,28 @@
     grip.setAttribute('role', 'button');
     grip.tabIndex = 0;
     grip.innerHTML = MARKS;
-    // The two edges beside the grip take the same drag on PC (he: "grab the edges again and drag it back in").
-    const edgeH = document.createElement('div'); edgeH.className = 'pb-edge pb-edge-h'; edgeH.setAttribute('aria-hidden', 'true');
-    const edgeV = document.createElement('div'); edgeV.className = 'pb-edge pb-edge-v'; edgeV.setAttribute('aria-hidden', 'true');
+    /* THE FRAME, for a mouse (he: "grab the edges again and drag it back in"). Thin strips on every edge and small
+       squares on every corner, each with its own resize cursor. Which of them are live is the stylesheet's call:
+       SMALL, only the two edges beside the grip (the other two face the button and the screen edge); BIG, all of
+       them, because a centred window can be taken back in from any side — the bottom-right included, where a
+       desktop hand goes first. `.pb-edge-h` / `.pb-edge-v` are the top edge and the grip-side edge. */
+    const handles = ['n', 'w', 'e', 's', 'nw', 'ne', 'sw', 'se'].map(function (z) {
+      const d = document.createElement('div');
+      d.className = 'pb-edge pb-z-' + z + (z === 'n' || z === 's' ? ' pb-edge-h' : z === 'w' || z === 'e' ? ' pb-edge-v' : ' pb-edge-c');
+      d.setAttribute('data-zone', z);
+      d.setAttribute('aria-hidden', 'true');
+      return d;
+    });
     card.classList.add('pb-card');
-    card.append(edgeH, edgeV, grip);
+    card.append.apply(card, handles.concat([grip]));
 
     function parts() { try { return (opts.parts ? opts.parts() : []).filter(Boolean); } catch (e) { return []; } }
 
     function apply(b) {
       card.classList.toggle('pb-big', b);
+      // the scrim knows too: on a phone BIG is the whole screen, and the top bar's lit Export button would otherwise
+      // glow through in the margin right beside the grip (a second corner) — styles.css darkens it
+      if (card.parentElement) card.parentElement.classList.toggle('pb-host-big', b);
       const name = opts.name || 'panel';
       grip.setAttribute('aria-label', (b ? 'Make ' + name + ' smaller' : 'Make ' + name + ' bigger'));
       grip.title = b ? 'Drag in to make it smaller' : 'Drag out to make it bigger';
@@ -129,11 +141,23 @@
       card.setAttribute('data-pb-corner', c);
     }
 
+    /* Each handle's way OUT of the card, as a unit vector: pulling along it grows, pushing against it shrinks. */
+    const OUT = { n: [0, -1], s: [0, 1], w: [-1, 0], e: [1, 0], nw: [-1, -1], ne: [1, -1], sw: [-1, 1], se: [1, 1] };
     function outward(zone) {
-      const sx = corner === 'tl' ? -1 : 1;
-      if (zone === 'h') return { x: 0, y: -1 };            // the top edge: up is out
-      if (zone === 'v') return { x: sx, y: 0 };            // the side edge: away from the card
-      return { x: sx * Math.SQRT1_2, y: -Math.SQRT1_2 };   // the corner: diagonally out
+      const v = OUT[zone], k = v[0] && v[1] ? Math.SQRT1_2 : 1;
+      return { x: v[0] * k, y: v[1] * k };
+    }
+    function cursorOf(zone) {
+      return zone === 'n' || zone === 's' ? 'ns' : zone === 'w' || zone === 'e' ? 'ew' : (zone === 'nw' || zone === 'se') ? 'nwse' : 'nesw';
+    }
+    /* THE LEAN STAYS ON SCREEN. It scales about the side opposite the hand, so on a phone — where the small card
+       already runs nearly edge to edge — a full lean would push the grip off the glass under the finger. This is the
+       most it may grow before any edge comes within 4px of the screen's. */
+    function leanRoom(r, ox, oy) {
+      const M = 4, W = window.innerWidth, H = window.innerHeight;
+      function cap(edge, o, lo, hi) { const d = edge - o; if (d < -0.5) return (lo - o) / d; if (d > 0.5) return (hi - o) / d; return Infinity; }
+      const s = Math.min(1 + LEAN, cap(r.left, ox, M, W - M), cap(r.left + r.width, ox, M, W - M), cap(r.top, oy, M, H - M), cap(r.top + r.height, oy, M, H - M));
+      return Math.max(0, s - 1);
     }
 
     /* The OTHER size's box, for the preview outline: flip the class, measure, flip back — all in one tick, so
@@ -173,27 +197,28 @@
       if (drag || closing) return;
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       const el = e.currentTarget;
-      const zone = el === edgeH ? 'h' : el === edgeV ? 'v' : 'c';
+      const zone = el === grip ? (corner === 'tl' ? 'nw' : 'ne') : el.getAttribute('data-zone');
       e.preventDefault();
       e.stopPropagation();   // the scrim closes on a press that reaches it, and the editor listens on window
       try { el.setPointerCapture(e.pointerId); } catch (err) {}
       halt();
       const now = resting(card), b = box(card);
-      drag = { id: e.pointerId, el: el, zone: zone, x0: e.clientX, y0: e.clientY, u: outward(zone), d: 0, far: 0, other: null };
-      /* The corner OPPOSITE the one in hand stays put while the panel leans. transform-origin is in the card's
-         own untransformed box, and the lean composes with popfrom's translate, so the origin carries that offset. */
-      const ox = (corner === 'tl' ? now.left + now.width : now.left) - b.left;
-      const oy = now.top + now.height - b.top;
-      card.style.transformOrigin = Math.round(ox) + 'px ' + Math.round(oy) + 'px';
+      /* The side OPPOSITE the one in hand stays put while the panel leans. transform-origin is in the card's own
+         untransformed box, and the lean composes with popfrom's translate, so the origin carries that offset. */
+      const v = OUT[zone];
+      const Ox = v[0] < 0 ? now.left + now.width : v[0] > 0 ? now.left : now.left + now.width / 2;
+      const Oy = v[1] < 0 ? now.top + now.height : v[1] > 0 ? now.top : now.top + now.height / 2;
+      drag = { id: e.pointerId, el: el, zone: zone, x0: e.clientX, y0: e.clientY, u: outward(zone), d: 0, far: 0, other: null, room: leanRoom(now, Ox, Oy) };
+      card.style.transformOrigin = Math.round(Ox - b.left) + 'px ' + Math.round(Oy - b.top) + 'px';
       card.classList.add('pb-dragging');
-      document.documentElement.setAttribute('data-pb-cursor', zone === 'h' ? 'ns' : zone === 'v' ? 'ew' : (corner === 'tl' ? 'nwse' : 'nesw'));
+      document.documentElement.setAttribute('data-pb-cursor', cursorOf(zone));
     }
     function move(e) {
       if (!drag || e.pointerId !== drag.id) return;
       const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
       drag.far = Math.max(drag.far, Math.hypot(dx, dy));
       drag.d = dx * drag.u.x + dy * drag.u.y;
-      if (!still()) card.style.scale = String(1 + LEAN * Math.tanh(drag.d / 120));
+      if (!still()) { const t = Math.tanh(drag.d / 120); card.style.scale = String(1 + (t > 0 ? drag.room : LEAN) * t); }
       showGhost(big ? drag.d <= -COMMIT : drag.d >= COMMIT);
     }
     function up(e) {
@@ -204,7 +229,7 @@
       card.classList.remove('pb-dragging');
       document.documentElement.removeAttribute('data-pb-cursor');
       dropGhost();
-      const tap = !cancelled && d.zone === 'c' && d.far < TAP;
+      const tap = !cancelled && d.el === grip && d.far < TAP;
       const commit = !cancelled && (tap || (big ? d.d <= -COMMIT : d.d >= COMMIT));
       if (commit) setBig(!big, true);
       else settle();
@@ -261,8 +286,10 @@
         { width: to.width + 'px', height: to.height + 'px', transform: 'translate(' + (t.x - cx) + 'px, ' + (t.y - cy) + 'px)' }
       ], { duration: dur, easing: big ? 'cubic-bezier(.2, .85, .25, 1.06)' : 'cubic-bezier(.35, .6, .2, 1)' });
       running.push(a);
-      // the body dips while the frame changes, so a reflowing list is never what he watches
-      parts().forEach(p => running.push(p.animate([{ opacity: 1 }, { opacity: 0, offset: 0.28 }, { opacity: 0, offset: 0.62 }, { opacity: 1 }], { duration: dur })));
+      /* The writing DIMS while the frame changes size — it re-wraps to the new width as it goes, and at full strength
+         that reads as lines hopping about. Dimmed, not blanked: an empty slab the size of the screen read as a glitch
+         in the design review, and it should always look like his notes. */
+      parts().forEach(p => running.push(p.animate([{ opacity: 1 }, { opacity: 0.42, offset: 0.3 }, { opacity: 0.42, offset: 0.62 }, { opacity: 1 }], { duration: dur })));
       a.onfinish = function () {
         running = running.filter(x => x !== a);
         card.classList.remove('pb-morph');
@@ -273,31 +300,37 @@
     }
 
     /* CLOSING WHILE BIG — "shrinks down onto itself before closing … shrinking and then folding into the button".
-       Two beats in one animation:
-         1. it shrinks ONTO ITSELF: back to its small size, about its own centre, while its body fades;
-         2. it FOLDS INTO THE BUTTON: tips back over the edge nearest the button, shrinks to the button and goes,
-            and the button gives a small bump as it takes it.
+       Two beats in one animation, all of it TRANSFORM, so his writing stays on the card the whole way and nothing
+       re-lays-out (a width/height animation reflows every frame, which an iPhone feels):
+         1. it shrinks ONTO ITSELF: uniformly, about its own centre, to about the size small would be — never less
+            than a fifth smaller, so on a phone (where small is nearly as wide as big) it still visibly shrinks;
+         2. it FOLDS INTO THE BUTTON: tips back over the edge nearest the button while that edge travels to the
+            button and the card shrinks to its size, fading only in the last moment, once it is there. The button
+            gives a small bump as it takes it.
        The scrim fades across both. Returns { finish } so a caller that has to reopen at once can end it now.
        Calls done() exactly once, whichever way it ends. */
     function fold(done) {
-      let finished = false;
+      let finished = false, bump = null;
       const anims = [];
-      function finish() {
+      function finish(natural) {
         if (finished) return;
         finished = true;
         closing = null;
         try { done(); } catch (e) {}
         clearTimeout(lift);
         anims.forEach(a => { a.onfinish = null; try { a.cancel(); } catch (e) {} });
+        // the button's bump outlives the card on purpose — it is the moment the button takes it — unless the fold
+        // was cut short (reopened mid-way), when a bump would celebrate a close that did not happen
+        if (bump && natural !== true) { try { bump.cancel(); } catch (e) {} }
         card.classList.remove('pb-morph');
         card.style.transformOrigin = '';
       }
       let lift = 0;
-      closing = { finish: finish };
+      closing = { finish: function () { finish(false); } };
       if (drag) { drag = null; card.classList.remove('pb-dragging'); document.documentElement.removeAttribute('data-pb-cursor'); dropGhost(); }
       halt();
       card.style.scale = '';
-      if (still() || !card.animate || !laidOut(card)) { finish(); return null; }   // done() has already run
+      if (still() || !card.animate || !laidOut(card)) { finish(false); return null; }   // done() has already run
 
       const R = card.getBoundingClientRect();
       card.classList.remove('pb-big');
@@ -305,48 +338,52 @@
       card.classList.add('pb-big');
       const b = box(card), cx = b.left + b.width / 2, cy = b.top + b.height / 2;
       const rc = mid(R);
-      const base = 'translate(' + (rc.x - cx) + 'px, ' + (rc.y - cy) + 'px)';
+      const bx = rc.x - cx, by = rc.y - cy;   // where it is drawn, against where it is laid out (0 unless it was moving)
+      const S1 = Math.max(0.2, Math.min(0.8, s.w / b.width, s.h / b.height));
       const btn = opts.button && opts.button();
       const br = laidOut(btn) ? btn.getBoundingClientRect() : null;
-      const P1 = 210, P2 = 300, T = P1 + P2, k = P1 / T;
+      const P1 = 200, P2 = 320, T = P1 + P2, k = P1 / T;
       card.classList.add('pb-morph');
-      let end;
+      card.style.transformOrigin = '50% 50%';
+      /* One transform list for every keyframe, so the browser interpolates it piece by piece:
+           translate(where) · translateY(E) · perspective · rotateX(tip) · scale(S2) · translateY(−E) · scale(S1)
+         scale(S1) is beat 1, about the centre. The rest is beat 2, about the shrunk card's EDGE (E from the centre):
+         the tip and the shrink-to-the-button both pivot on that edge, and `where` carries the edge onto the button.
+         With no tip and S2 = 1 the two translateYs cancel, so beat 1 is exactly a shrink about the centre. */
+      function tf(tx, ty, E, tip, S2, s1) {
+        return 'translate(' + tx.toFixed(2) + 'px, ' + ty.toFixed(2) + 'px) translateY(' + E.toFixed(2) + 'px) perspective(700px) rotateX(' + tip + 'deg) scale(' + S2.toFixed(4) + ') translateY(' + (-E).toFixed(2) + 'px) scale(' + s1.toFixed(4) + ')';
+      }
+      let E = 0, end, S2 = 1;
       if (br) {
         const bc = mid(br);
-        const above = bc.y < rc.y;
-        // it folds on the edge nearest the button, backwards into the screen
-        card.style.transformOrigin = '50% ' + (above ? '0%' : '100%');
-        const ey = rc.y + (above ? -s.h / 2 : s.h / 2);
-        const sc = Math.max(0.05, Math.min(br.width / s.w, br.height / s.h) * 1.3);
-        end = 'translate(' + (rc.x - cx + bc.x - rc.x) + 'px, ' + (rc.y - cy + bc.y - ey) + 'px) perspective(700px) rotateX(' + (above ? -72 : 72) + 'deg) scale(' + sc.toFixed(3) + ')';
+        const below = bc.y > rc.y;   // PC: the button is below the panel; phone: above it, in the top bar
+        E = (below ? 1 : -1) * S1 * b.height / 2;
+        S2 = Math.max(0.03, Math.min(br.width / (S1 * b.width), br.height / (S1 * b.height)) * 1.3);
+        end = tf(bc.x - cx, bc.y - cy - E, E, below ? 72 : -72, S2, S1);
       } else {
-        end = base + ' perspective(700px) rotateX(0deg) scale(0.6)';   // no button on screen (opened from Home): it folds away where it is
+        end = tf(bx, by, 0, 0, 0.6, S1);   // no button on screen (opened from Home): it shrinks on and fades where it is
       }
-      const flat = base + ' perspective(700px) rotateX(0deg) scale(1)';
       const kf = [
-        { offset: 0, width: R.width + 'px', height: R.height + 'px', transform: flat, opacity: 1, easing: 'cubic-bezier(.4, 0, .2, 1)' },
-        { offset: k, width: s.w + 'px', height: s.h + 'px', transform: flat, opacity: 1, easing: 'cubic-bezier(.42, 0, .9, .75)' },
-        { offset: 0.9, opacity: 1 },
-        { offset: 1, width: s.w + 'px', height: s.h + 'px', transform: end, opacity: 0 }
+        { offset: 0, transform: tf(bx, by, E, 0, 1, 1), opacity: 1, easing: 'cubic-bezier(.4, 0, .2, 1)' },
+        { offset: k, transform: tf(bx, by, E, 0, 1, S1), opacity: 1, easing: 'cubic-bezier(.5, 0, .3, 1)' },
+        { offset: k + (1 - k) * 0.78, opacity: 1 },
+        { offset: 1, transform: end, opacity: 0 }
       ];
-      /* The second beat goes INTO the button, so on PC — where popfrom lifts the button over the scrim — the panel
-         drops beneath it as that beat starts (a big panel otherwise sits above it, see styles.css). A keyframe, not
-         a timer, so the drop is where the animation is, however it is played or scrubbed. */
       anims.push(card.animate(kf, { duration: T, fill: 'forwards' }));
       /* The second beat goes INTO the button. On PC popfrom lifts that button over the scrim while the panel is small
          and puts it back down while it is big (js/popfrom.js); it comes back up as the fold starts, so the panel
-         slides in UNDER it rather than landing on top of it. */
-      /* Only while popfrom still owns the button: if it has already torn down (the card went some other way), a late
+         slides in UNDER it rather than landing on top of it.
+         Only while popfrom still owns the button: if it has already torn down (the card went some other way), a late
          lift would leave the button floating over whatever opens next — which the design renders caught. */
       if (br && card.classList.contains('pop-card')) lift = setTimeout(function () { if (card.isConnected && card._popPlace) btn.classList.add('pop-src'); }, P1);
-      parts().forEach(p => anims.push(p.animate([{ opacity: 1 }, { opacity: 0, offset: k * 0.7 }, { opacity: 0 }], { duration: T, fill: 'forwards' })));
       const host = card.parentElement;
       if (host) {
         const bg = getComputedStyle(host).backgroundColor;
         if (bg && bg !== 'rgba(0, 0, 0, 0)') anims.push(host.animate([{ backgroundColor: bg }, { backgroundColor: 'rgba(0, 0, 0, 0)' }], { duration: T, easing: 'ease-in', fill: 'forwards' }));
       }
-      if (br) anims.push(btn.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.2)', offset: 0.45 }, { transform: 'scale(1)' }], { duration: 300, delay: T - 110, easing: 'ease-out' }));
-      anims[0].onfinish = finish;
+      // the bump starts as the card reaches the button (about 85% of the way through the second beat)
+      if (br) bump = btn.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.22)', offset: 0.4 }, { transform: 'scale(1)' }], { duration: 300, delay: Math.round(P1 + P2 * 0.85), easing: 'ease-out' });
+      anims[0].onfinish = function () { finish(true); };
       return closing;
     }
 
@@ -357,7 +394,7 @@
       setBig(!big, true);
     }
 
-    [grip, edgeH, edgeV].forEach(el => {
+    handles.concat([grip]).forEach(el => {
       el.addEventListener('pointerdown', down);
       el.addEventListener('pointermove', move);
       el.addEventListener('pointerup', up);
