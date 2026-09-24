@@ -87886,4 +87886,257 @@
     } finally { FM.scene = saved; try { FM.refreshAll(); } catch (e) {} }
   });
 
+  /* ═══ HUNT-c (queue 690) — PC with a real mouse and keyboard: Studio at 1280 and a narrow 900 window ═══════════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". Four findings, each one a test that FAILS on the code
+   * as it stands, with a message that says what he would see. A shared scene: two squares, Red and Blue, Blue added last
+   * (so the history's newest step has Blue selected, exactly as adding a layer leaves it). */
+  async function huntCScene(where) {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (FM.shortcuts && FM.shortcuts.isOpen()) FM.shortcuts.hide();
+    const R = FM.makeLayer('shape', { name: 'HuntC Red', shape: 'rect', x: 300, y: 500, shapeW: 200, shapeH: 200, fill: '#e0245e', start: 0, duration: 4 });
+    const B = FM.makeLayer('shape', { name: 'HuntC Blue', shape: 'rect', x: 700, y: 500, shapeW: 200, shapeH: 200, fill: '#3b82f6', start: 0, duration: 4 });
+    FM.scene = scene([R, B], { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+    if (FM.pause) FM.pause();
+    FM.setTime(1);
+    FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    if (FM.history && FM.history.reset) FM.history.reset();
+    FM.selectLayer(B.id);                       // Blue was the layer just added — adding selects it and commits
+    if (FM.history) FM.history.commit();
+    await sleep(350);
+    if (!FM.scene.layers.length || FM.scene.selectedId !== B.id) throw new Error(where + ': setup: the two-square scene did not come up with Blue selected');
+    return { R: R, B: B };
+  }
+  function huntCKey(key, code, mods) {
+    const o = Object.assign({ key: key, code: code, bubbles: true, cancelable: true }, mods || {});
+    document.body.dispatchEvent(new KeyboardEvent('keydown', o));
+    document.body.dispatchEvent(new KeyboardEvent('keyup', o));
+  }
+  function huntCName(id) { const l = id && FM.layerById(FM.scene, id); return l ? l.name.replace('HuntC ', '') : 'nothing'; }
+
+  test('HUNT-c Escape does not close the Export dialog, Canvas settings, Notes or a right-click menu — it deselects the layer behind them instead', { item: '690', budgetMs: 60000 }, async function () {
+    /* On a PC, Escape is the key everyone presses to get out of a dialog or a menu. The app's Escape branch (js/app.js, the
+       keydown handler's `e.code === 'Escape'`) knows the shortcuts sheet, the canvas tools and the Effects browser (#809), but
+       not these four — so Escape falls through to inspector.back(), which DESELECTS the layer under the dialog, and the dialog
+       or menu stays up. The right-click menu then still offers Delete / Lock for a layer that is no longer selected. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const bad = [];
+    const surfaces = [
+      { name: 'the Export dialog', open: () => document.getElementById('btn-export').click(),
+        isOpen: () => !document.getElementById('export-dialog').classList.contains('hidden'),
+        close: () => { const c = document.getElementById('exp-cancel'); if (c) c.click(); } },
+      { name: 'Canvas settings', open: () => document.getElementById('btn-canvas').click(),
+        isOpen: () => !document.getElementById('canvas-dialog').classList.contains('hidden'),
+        close: () => { const c = document.getElementById('cv-cancel'); if (c) c.click(); } },
+      { name: 'the Notes panel', open: () => { const b = document.getElementById('btn-notes'); if (b && b.offsetParent) b.click(); else FM.notepad.open(); },
+        isOpen: () => FM.notepad.isOpen(), close: () => FM.notepad.close() },
+      { name: 'the right-click menu on the clip', open: (s) => {
+          const clip = [].slice.call(document.querySelectorAll('#tl-tracks .clip')).find(c => c.textContent.indexOf('Blue') >= 0);
+          if (!clip) throw new Error('setup: no Blue clip on the timeline to right-click');
+          const r = clip.getBoundingClientRect();
+          clip.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 40, clientY: r.top + r.height / 2, button: 2 }));
+        }, isOpen: () => FM.contextMenu.isOpen(), close: () => FM.contextMenu.hide() },
+    ];
+    async function run(where) {
+      for (const s of surfaces) {
+        const sc = await huntCScene(where);
+        s.open(sc); await sleep(450);
+        try {
+          if (!s.isOpen()) throw new Error(where + ': setup: ' + s.name + ' did not open, so Escape cannot be tested on it');
+          if (FM.scene.selectedId !== sc.B.id) throw new Error(where + ': setup: opening ' + s.name + ' already changed the selection');
+          huntCKey('Escape', 'Escape'); await sleep(350);
+          const still = s.isOpen(), lost = FM.scene.selectedId !== sc.B.id;
+          if (still || lost) bad.push(where + ' — Escape ' + (still ? 'left ' + s.name + ' open' : 'closed ' + s.name) +
+            (lost ? (still ? ' AND' : ' but') + ' deselected Blue behind it (now ' + huntCName(FM.scene.selectedId) + ' is selected, the panel flipped to the Add menu)' : ''));
+        } finally { if (s.isOpen()) s.close(); await sleep(250); }
+      }
+    }
+    try {
+      await atWideWidth(function () { return run('PC 1280'); }, 1280);
+      await atWideWidth(function () { return run('PC 900'); }, 900);
+    } finally { FM.scene = saved; try { FM.refreshAll(); } catch (e) {} }
+    if (bad.length) throw new Error('Escape does not get him out: ' + bad.join('; '));
+  });
+
+  test('HUNT-c a video or picture dropped on the timeline or the Add menu is not imported — the browser opens the file and FreeMotion disappears', { item: '690', budgetMs: 60000 }, async function () {
+    /* The only drop target in the whole app is #stage (js/app.js: dragenter/dragover/drop on the stage). Everywhere else nobody
+       calls preventDefault on dragover, so a real drop there is the BROWSER's: it navigates the tab to the file. Measured with a
+       real drag (Input.dispatchDragEvent) at 1280x800: a PNG dropped on the timeline replaced the app with file:///…png.
+       The timeline is where every desktop editor takes a dropped clip, and at 1280 it is the biggest thing on the screen after
+       the canvas. Synthetic events cannot make the browser navigate, so this checks the two things that decide it: did
+       anything TAKE the dragover, and did the drop import the file. The stage is the control — the same drop must work there. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const bad = [];
+    const cv = document.createElement('canvas'); cv.width = 32; cv.height = 32;
+    const g = cv.getContext('2d'); g.fillStyle = '#22c55e'; g.fillRect(0, 0, 32, 32);
+    const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+    if (!blob) throw new Error('setup: could not make a PNG to drop');
+    const added = [];
+    async function dropAt(el, where, what) {
+      const dt = new DataTransfer();
+      dt.items.add(new File([blob], 'hunt-c-drop.png', { type: 'image/png' }));
+      const n0 = FM.scene.layers.length;
+      el.dispatchEvent(new DragEvent('dragenter', { bubbles: true, cancelable: true, dataTransfer: dt }));
+      const notTaken = el.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+      el.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+      for (let k = 0; k < 40 && FM.scene.layers.length === n0; k++) await sleep(100);
+      const grew = FM.scene.layers.length > n0;
+      FM.scene.layers.forEach(l => { if (/hunt-c-drop/.test(l.name || '') && added.indexOf(l.id) < 0) added.push(l.id); });
+      const st = document.getElementById('stage'); if (st) st.classList.remove('dragover');
+      return { taken: !notTaken, imported: grew };
+    }
+    async function run(where) {
+      await huntCScene(where);
+      FM.selectLayer(null); await sleep(300);   // nothing selected: the band shows the Add menu, Media tab and all
+      const stage = document.getElementById('stage');
+      const pv = document.getElementById('preview').getBoundingClientRect();
+      const onStage = document.elementFromPoint(pv.left + pv.width / 2, pv.top + pv.height / 2);
+      if (!onStage || !stage.contains(onStage)) throw new Error(where + ': setup: the middle of the canvas is not inside #stage');
+      const ctl = await dropAt(onStage, where, 'the canvas');
+      if (!ctl.taken || !ctl.imported) throw new Error(where + ': CONTROL: the same drop on the canvas was ' + (ctl.taken ? '' : 'not taken and ') + (ctl.imported ? 'imported' : 'not imported') + ' — the fixture proves nothing');
+      /* Each target is looked up at the moment of ITS drop: an import selects the new layer and rebuilds the band, and an
+         element found before that is detached by then — a drop on a detached node reaches nothing, which would be a false red. */
+      const onTl = () => { const tl = document.getElementById('timeline').getBoundingClientRect(); return document.elementFromPoint(tl.left + tl.width * 0.7, tl.bottom - 16); };
+      const onAdd = () => { const ip = document.getElementById('inspector-panel').getBoundingClientRect(); return document.elementFromPoint(ip.left + ip.width / 2, ip.top + ip.height * 0.6); };
+      for (const t of [{ at: onTl, what: 'the timeline' }, { at: onAdd, what: 'the Add menu' }]) {
+        FM.selectLayer(null); await sleep(400);   // the band back on the Add menu, and settled, before anything is looked up
+        const el = t.at();
+        if (!el) { bad.push(where + ': nothing is under ' + t.what); continue; }
+        const r = await dropAt(el, where, t.what);
+        if (!r.taken || !r.imported) bad.push(where + ' — dropped on ' + t.what + ': ' + (r.imported ? 'imported' : 'NOT imported') + (r.taken ? '' : ', and nothing took the drag, so on his PC the browser opens the file in place of FreeMotion'));
+      }
+    }
+    try {
+      await atWideWidth(function () { return run('PC 1280'); }, 1280);
+      await atWideWidth(function () { return run('PC 900'); }, 900);
+    } finally {
+      added.forEach(id => { try { if (FM.media && FM.media.remove) FM.media.remove(id); } catch (e) {} });
+      FM.scene = saved; try { FM.refreshAll(); } catch (e) {}
+    }
+    if (bad.length) throw new Error('a file dragged in from his desktop only works if it lands on the canvas: ' + bad.join('; '));
+  });
+
+  test('HUNT-c Cmd+Z moves the selection to a layer he never clicked — undo a nudge or a delete on Red and Blue is selected', { item: '690', budgetMs: 60000 }, async function () {
+    /* js/history.js restore() puts back the SNAPSHOT's selectedId — the selection at the PREVIOUS commit — and the #629 guard
+       only steps in when the current layer is gone. Clicking a clip does not commit, so: Blue added (selected, committed),
+       he CLICKS Red with the mouse, nudges it with an arrow key, presses Cmd+Z — Red goes back AND Blue becomes selected, with
+       the panel open on it. #629 said why that matters: it is how the next slider drag, nudge or Delete lands on a layer he
+       never chose. Measured with a real click and real keys at 1280: after undoing a Delete of Red, Blue was selected, and a
+       second Delete took Blue. The click on the clip is REAL mouse input, so if a click ever starts committing the selection
+       this test sees that too. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const bad = [];
+    async function clickRed(where) {
+      /* The clip body where the window reaches it; otherwise the row's thumbnail, which selects the same way (measured: a
+         real click on either selects Red and adds no history step). The suite's phone pass runs Chrome 380 wide, and real
+         input only lands inside the real window, so a point past its edge would be a false red there. */
+      const reach = Math.min(window.innerWidth, (window.top && window.top.innerWidth) || window.innerWidth) - 8;
+      const clip = [].slice.call(document.querySelectorAll('#tl-tracks .clip')).find(c => c.textContent.indexOf('Red') >= 0);
+      if (!clip) throw new Error(where + ': setup: no Red clip on the timeline');
+      const r = clip.getBoundingClientRect();
+      let x = Math.min(r.right - 30, Math.max(r.left + 30, r.left + r.width / 2)), y = r.top + r.height / 2, what = 'the Red clip';
+      if (x > reach) {
+        const row = clip.closest('.track-row');
+        const th = row && row.querySelector('.th-thumb-wrap, .th-thumb');
+        if (!th) throw new Error(where + ': setup: the Red clip is past the reachable ' + reach + 'px and its row has no thumbnail to click');
+        const t = th.getBoundingClientRect(); x = t.left + t.width / 2; y = t.top + t.height / 2; what = 'the Red row thumbnail';
+      }
+      if (x > reach || y > window.innerHeight - 4) throw new Error(where + ': setup: ' + what + ' is off the reachable frame at ' + Math.round(x) + ',' + Math.round(y));
+      await realInput924([{ t: 'mouseMove', x: x, y: y, ms: 40 }, { t: 'mouseDown', x: x, y: y, ms: 70 }, { t: 'mouseUp', x: x, y: y, ms: 60 }], where + ' — clicking ' + what);
+      await sleep(350);
+    }
+    async function run(where) {
+      /* 1. nudge, then undo */
+      let sc = await huntCScene(where);
+      await clickRed(where);
+      if (FM.scene.selectedId !== sc.R.id) throw new Error(where + ': setup: a real click on the Red clip did not select Red (' + huntCName(FM.scene.selectedId) + ')');
+      const x0 = FM.evalProp(FM.layerById(FM.scene, sc.R.id).transform.x, FM.time);
+      huntCKey('ArrowRight', 'ArrowRight', { shiftKey: true }); await sleep(200);
+      const x1 = FM.evalProp(FM.layerById(FM.scene, sc.R.id).transform.x, FM.time);
+      if (!(x1 > x0)) throw new Error(where + ': setup: Shift+Right did not nudge Red (' + x0 + ' → ' + x1 + ')');
+      huntCKey('z', 'KeyZ', { metaKey: true }); await sleep(350);
+      const x2 = FM.evalProp(FM.layerById(FM.scene, sc.R.id).transform.x, FM.time);
+      if (x2 !== x0) throw new Error(where + ': CONTROL: Cmd+Z did not undo the nudge (' + x0 + ' → ' + x1 + ' → ' + x2 + ')');
+      if (FM.scene.selectedId !== sc.R.id) bad.push(where + ' — Cmd+Z undid his nudge of Red and the selection jumped to ' + huntCName(FM.scene.selectedId) + ' (the panel is now on a layer he never clicked)');
+      /* 2. delete, then undo */
+      sc = await huntCScene(where);
+      await clickRed(where);
+      if (FM.scene.selectedId !== sc.R.id) throw new Error(where + ': setup: the second click on the Red clip did not select Red');
+      huntCKey('Delete', 'Delete'); await sleep(250);
+      if (FM.layerById(FM.scene, sc.R.id)) throw new Error(where + ': setup: Delete did not delete Red');
+      huntCKey('z', 'KeyZ', { metaKey: true }); await sleep(350);
+      if (!FM.layerById(FM.scene, sc.R.id)) throw new Error(where + ': CONTROL: Cmd+Z did not bring Red back');
+      if (FM.scene.selectedId === sc.B.id) bad.push(where + ' — Cmd+Z brought back the Red he deleted and selected Blue, so pressing Delete again deletes Blue');
+    }
+    try {
+      await onScreen924(async function () {
+        await atWideWidth(function () { return run('PC 1280'); }, 1280);
+        await atWideWidth(function () { return run('PC 900'); }, 900);
+      });
+    } finally { FM.scene = saved; try { FM.refreshAll(); } catch (e) {} }
+    if (bad.length) throw new Error('undo changes which layer he is editing: ' + bad.join('; '));
+  });
+
+  test('HUNT-c the Shortcuts sheet gives the wrong keys — 1 does not open Shape, 4 does not open Elements, Shift+2 adds Captions not Sketching', { item: '690', budgetMs: 45000 }, async function () {
+    /* The ? sheet (js/shortcuts.js) still describes the Add menu from before Elements moved to the front and Captions joined the
+       instant list: it says 1–5 are Shape · Media · Audio · Object/Element · Template and Shift+1/2/3 are Text · Sketching ·
+       Custom shape. The keys (js/app.js Digit branch → FM.addMenu.openTab / instant) now do Elements · Shape · Media · Audio ·
+       Template and Text · Captions · Sketching · Custom shape. He reads the sheet, presses Shift+2 to draw, and gets a
+       Captions track with the text editor open instead. The expectations are READ FROM THE SHEET, so fixing either side
+       (the sheet or the keys) makes this pass. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const bad = [];
+    const norm = s => String(s || '').toLowerCase().replace(/[^a-z/ ]/g, '').trim();
+    const same = (listed, got) => {
+      const g = norm(got).replace(/s$/, '');
+      return norm(listed).split('/').some(p => { p = p.trim().replace(/s$/, ''); return p && (p === g || g.indexOf(p) === 0 || p.indexOf(g) === 0); });
+    };
+    const real = { text: FM.addTextLayer, cap: FM.addCaptionLayer, draw: FM.startDraw };
+    try {
+      await atWideWidth(async function () {
+        await huntCScene('PC 1280');
+        FM.selectLayer(null); await sleep(300);
+        FM.shortcuts.show(); await sleep(250);
+        const rows = [].slice.call(document.querySelectorAll('#shortcuts-overlay .shortcut-row')).map(r => ({ k: (r.querySelector('.shortcut-key') || {}).textContent || '', d: (r.querySelector('.shortcut-desc') || {}).textContent || '' }));
+        FM.shortcuts.hide(); await sleep(150);
+        const tabRow = rows.find(r => /^1\s*[–-]\s*5$/.test(r.k.trim()));
+        const shRow = rows.find(r => /⇧/.test(r.k) && /1/.test(r.k) && /Text/.test(r.d));
+        if (!tabRow || !shRow) throw new Error('setup: the sheet has no 1–5 row or no ⇧1/2/3 row to check (' + rows.map(r => r.k).join(' | ') + ')');
+        /* 1–5 with nothing selected: which Add-menu tab opens */
+        const tabNames = tabRow.d.split('→').pop().split('·').map(s => s.trim()).filter(Boolean);
+        for (let n = 1; n <= tabNames.length; n++) {
+          FM.selectLayer(null); await sleep(150);
+          huntCKey(String(n), 'Digit' + n); await sleep(250);
+          const act = document.querySelector('.addmenu-tab.active');
+          const got = act ? (act.getAttribute('aria-label') || act.title || act.textContent).trim() : '(no tab)';
+          if (!same(tabNames[n - 1], got)) bad.push('the sheet says ' + n + ' opens ' + tabNames[n - 1] + ', but ' + n + ' opened ' + got);
+        }
+        /* Shift+N: which instant tool runs — spied, so nothing is actually added */
+        const calls = [];
+        FM.addTextLayer = function () { calls.push('Text'); };
+        FM.addCaptionLayer = function () { calls.push('Captions'); };
+        FM.startDraw = function (k) { calls.push(k === 'freehand' ? 'Sketching' : k === 'vector' ? 'Custom shape' : String(k)); };
+        const nums = (shRow.k.match(/\d/g) || []).map(Number);
+        const names = shRow.d.replace(/^Add\s+/i, '').split('·').map(s => s.trim()).filter(Boolean);
+        for (let i = 0; i < nums.length && i < names.length; i++) {
+          calls.length = 0;
+          const n = nums[i];
+          huntCKey('!@#$'[n - 1] || String(n), 'Digit' + n, { shiftKey: true }); await sleep(150);
+          const got = calls[0] || 'nothing';
+          if (!same(names[i], got)) bad.push('the sheet says Shift+' + n + ' adds ' + names[i] + ', but Shift+' + n + ' added ' + got);
+        }
+      }, 1280);
+    } finally {
+      FM.addTextLayer = real.text; FM.addCaptionLayer = real.cap; FM.startDraw = real.draw;
+      if (FM.shortcuts.isOpen()) FM.shortcuts.hide();
+      FM.scene = saved; try { FM.refreshAll(); } catch (e) {}
+    }
+    if (bad.length) throw new Error('the ? sheet teaches him the wrong keys: ' + bad.join('; '));
+  });
+
+
 })();
