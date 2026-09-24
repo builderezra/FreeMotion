@@ -1235,57 +1235,1533 @@
     }
   });
 
-  test('915.5A this release never writes a shared copy or a pointer: three reuses of a tile are still three whole copies', { item: '915', budgetMs: 45000 }, async function () {
-    /* The reader must not start writing the new format by the back door — a pointer written by THIS build is
-       exactly what an older build cannot read. So: the whole everyday route (import, reuse a tile three
-       times, duplicate), and not one `lib:` key or pointer may appear; reuse stays byte-for-byte what it
-       was (a whole copy per tap — the writer release is what changes that). And the store itself refuses
-       both, so no future caller can do it by accident either. */
+  /* ═══ 915.5B — THE WRITER (queue 915 clause 5, phase B) ═══════════════════════════════════════════
+   * His answer, 22 Sep: "Yes, one copy (Recommended)". Phase A (v16.80) taught every reader the pointer;
+   * this release WRITES them. Each test below is one of the rules the review of the first attempt paid for
+   * (audits/915-5-review.json): one shared copy written on the first reuse only; his original import never
+   * swapped; the project captured at the tap; Preparing… and a repeat tap ignored; liveness decided by the
+   * file; split/duplicate/paste carry the pointer; no deleter reaches a shared copy; rollback.sh warns; a
+   * backup holds the bytes; a Replace racing a reuse ends honestly. Photos are drawn here, never his media.
+   * No failure message may contain a double-quote character (the runner's report is JSON). */
+  function q915bShape(v) { return v === undefined ? 'nothing' : (v && typeof v === 'object') ? '{' + Object.keys(v).join(',') + '}' : String(v); }
+  async function q915bImport(name, rgb) {   // a photo imported the everyday way into a NEW project: its layer, its file and its tile
+    const pid = await FM.projects.create({ name: name, width: 320, height: 240 });
+    const file = await q915aPng(name.replace(/\W+/g, ''), rgb);
+    FM.addMediaLayer(await FM.loadImageFile(file));
+    await sleep(60); await FM.storage.save();
+    const fp = [file.name, file.size, file.lastModified].join('|');
+    const tile = FM.mediaLib.list().filter(function (e) { return e.fp === fp; })[0];
+    if (!tile) throw new Error('setup: importing the photo made no library tile, so there is nothing to reuse');
+    const L = FM.scene.layers.filter(function (l) { return l.type === 'image'; })[0];
+    if (!L) throw new Error('setup: importing the photo made no layer');
+    return { pid: pid, file: file, tile: tile, orig: L.id, rgb: rgb };
+  }
+  async function q915bReuse(mid) { const ok = await FM.mediaLib.use(mid); await sleep(60); FM.storage.markDirty(); await FM.storage.save(); return ok; }   // use() does not await its own save
+  function q915bImages() { return FM.scene.layers.filter(function (l) { return l.type === 'image'; }); }
+  function q915bIsPtr(v, lk) { return !!v && typeof v === 'object' && !v.file && v.ref === lk; }
+  function q915bIsWhole(v, file) { return !!v && !!v.file && v.file.size === file.size && !v.ref; }
+  /* The clip PLAYS: rendered through the app on black, its own colour comes out. A clip with nothing loaded
+     renders nothing, so black here is the blank-clip failure. */
+  function q915bPixel(L) {   // the photo's fill, sampled at the LAYER's own position (a first clip resizes an empty project to itself)
+    const P = FM.scene.project, T = L.transform || {};
+    const num = function (v, d) { return typeof v === 'number' && isFinite(v) ? v : d; };
+    const s = num(T.scale, 1);
+    const c = offscreen(P.width, P.height), x = c.getContext('2d');
+    FM.renderScene(x, scene([L], { project: Object.assign({}, P, { background: '#000000' }) }), (L.start || 0) + 0.1);
+    return px(x, Math.round(num(T.x, P.width / 2) + 8 * s), Math.round(num(T.y, P.height / 2) + 6 * s));   // (24,18) of the 32x24 photo: fill colour, clear of its white mark
+  }
+  function q915bShows(L, rgb) {
+    const d = q915bPixel(L);
+    const want = [parseInt(rgb.slice(1, 3), 16), parseInt(rgb.slice(3, 5), 16), parseInt(rgb.slice(5, 7), 16)];
+    return Math.abs(d[0] - want[0]) < 14 && Math.abs(d[1] - want[1]) < 14 && Math.abs(d[2] - want[2]) < 14;
+  }
+  function q915bMustShow(ids, rgb, when) {
+    const blank = ids.filter(function (id) { const L = FM.layerById(FM.scene, id); return !L || !q915bShows(L, rgb); });
+    if (blank.length) throw new Error(blank.length + ' of ' + ids.length + ' clips came back BLANK ' + when + ' (' + blank.map(function (id) {
+      const m = FM.media.get(id), L = FM.layerById(FM.scene, id);
+      return id + ': ' + (m && m.file ? 'loaded, drew rgb ' + Array.prototype.slice.call(q915bPixel(L), 0, 3).join(',') + ' at t ' + ((L.start || 0) + 0.1).toFixed(2) + ' for ' + (L.duration || 0).toFixed(2) + 's, scale ' + JSON.stringify(L.transform && L.transform.scale).replace(/"/g, '') : 'nothing loaded');
+    }).join('; ') + ')');
+  }
+  function q915bGate() {   // hold a step until the test lets go — the phone's seconds-long first copy, made observable
+    const g = { entered: false };
+    g.done = new Promise(function (r) { g.release = r; });
+    return g;
+  }
+  async function q915bFinish(made, orig, wasOpen, libs, idx0) {
+    try { if (idx0 == null) localStorage.removeItem('fm.medialib'); else localStorage.setItem('fm.medialib', idx0); } catch (e) {}
+    await q915aCleanup(made, orig, wasOpen, [], [], libs);
+  }
+
+  test('915.5B three reuses of a tile store ONE shared copy and three pointers, and his original import stays a whole copy', { item: '915', budgetMs: 45000 }, async function () {
     const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
-    const made = [];
+    const made = [], libs = [];
     const ts = Date.now().toString(36);
-    const probeLib = 'lib:q915aprobe' + ts, probeRef = 'l_q915aprobe' + ts, probeCtl = 'l_q915actl' + ts;
+    const probeLib = 'lib:q915bprobe' + ts, probeRef = 'l_q915bprobe' + ts, probeCtl = 'l_q915bctl' + ts;
     try {
       if (wasOpen) FM.home.close();
       await sleep(100);
       const keys0 = new Set(Object.keys(await q915aRaw()));
-      const file = await q915aPng('reuse', '#9b5de5');
-      made.push(await FM.projects.create({ name: 'FX915A import', width: 320, height: 240 }));
-      FM.addMediaLayer(await FM.loadImageFile(file));
+      const a = await q915bImport('FX915B once', '#9b5de5'); made.push(a.pid);
+      const lk = 'lib:' + a.tile.mid; libs.push(lk);
+      made.push(await FM.projects.create({ name: 'FX915B once reuse', width: 320, height: 240 }));
+      /* every write to the store is counted by key: that the shared copy is written ONCE is observed directly,
+         because rewriting it with the same file would leave nothing on disk to tell the two apart */
+      const realPut = IDBObjectStore.prototype.put, puts = [];
+      IDBObjectStore.prototype.put = function (v, k) { puts.push(k); return realPut.apply(this, arguments); };
+      try { for (let i = 0; i < 3; i++) if (!(await q915bReuse(a.tile.mid))) throw new Error('setup: reuse ' + (i + 1) + ' of the tile was refused'); }
+      finally { IDBObjectStore.prototype.put = realPut; }
+      const libPuts = puts.filter(function (k) { return k === lk; }).length;
+      if (libPuts > 1) throw new Error('three reuses wrote the shared copy ' + libPuts + ' times - it is written on the first reuse only');
+      const ids = q915bImages().map(function (l) { return l.id; });
+      if (ids.length !== 3) throw new Error('setup: three reuses made ' + ids.length + ' clips');
+
+      const raw = await q915aRaw();
+      if (!(raw[lk] && raw[lk].file && raw[lk].file.size === a.file.size)) throw new Error('no shared copy under ' + lk + ' after three reuses (found ' + q915bShape(raw[lk]) + ') - every reuse is still a whole copy of its own');
+      const notPtr = ids.filter(function (id) { return !q915bIsPtr(raw[id], lk); });
+      if (notPtr.length) throw new Error(notPtr.length + ' of the 3 reused clips are stored as ' + notPtr.map(function (id) { return q915bShape(raw[id]); }).join(', ') + ', not as a pointer at the shared copy');
+      if (!q915bIsWhole(raw[a.orig], a.file)) throw new Error('his ORIGINAL import is stored as ' + q915bShape(raw[a.orig]) + ' - it must stay a whole copy of its own; swapping it for a pointer is what let a rollback blank it for good');
+      const fresh = Object.keys(raw).filter(function (k) { return !keys0.has(k); });
+      const shared = fresh.filter(function (k) { return /^lib:/.test(k); });
+      if (shared.length !== 1) throw new Error(shared.length + ' shared copies were written (' + shared.join(', ') + ') - the first reuse writes one and no later reuse writes another');
+      const whole = fresh.filter(function (k) { const v = raw[k]; return v && v.file && v.file.name === a.file.name && v.file.size === a.file.size; });
+      if (whole.length !== 2) throw new Error('an import and three reuses left ' + whole.length + ' whole copies of the file, not 2 (his original and the one shared copy)');
+      const tile = FM.mediaLib.list().filter(function (e) { return e.mid === a.tile.mid; })[0];
+      if (!tile || tile.key !== lk) throw new Error('the tile is keyed at ' + (tile ? tile.key : 'nothing') + ', not at its shared copy - the next reuse would start the copy again');
+      if (FM.mediaLib.list().filter(function (e) { return e.fp === a.tile.fp || e.key === lk; }).length !== 1) throw new Error('reusing the tile left a second tile for the same file');
+      q915bMustShow(ids, a.rgb, 'straight after the reuse');
+
+      // …and whether the copy exists is decided by the STORED FILE, not by the index: a tile whose re-key never
+      // landed (a full localStorage) must not write the shared copy a second time under clips that play from it
+      const list = FM.mediaLib.list(); list.forEach(function (e) { if (e.mid === a.tile.mid) e.key = a.orig; });
+      localStorage.setItem('fm.medialib', JSON.stringify(list));
+      const before = raw[lk].file, puts4 = [];
+      IDBObjectStore.prototype.put = function (v, k) { puts4.push(k); return realPut.apply(this, arguments); };
+      try { if (!(await q915bReuse(a.tile.mid))) throw new Error('a reuse through a tile whose re-key had not landed was refused'); }
+      finally { IDBObjectStore.prototype.put = realPut; }
+      if (puts4.indexOf(lk) >= 0) throw new Error('the shared copy was written again by a later reuse - a clip may be playing from it');
+      const raw2 = await q915aRaw();
+      const fourth = q915bImages().map(function (l) { return l.id; }).filter(function (id) { return ids.indexOf(id) < 0; })[0];
+      if (!q915bIsPtr(raw2[fourth], lk)) throw new Error('with the shared copy already on disk, the next reuse stored ' + q915bShape(raw2[fourth]) + ' instead of a pointer at it');
+      if (Object.keys(raw2).filter(function (k) { return !keys0.has(k) && /^lib:/.test(k); }).length !== 1 || !(raw2[lk].file.size === before.size && raw2[lk].file.lastModified === before.lastModified)) throw new Error('the shared copy was written again - a clip may be playing from it');
+
+      // ── the generic writer still refuses both (only the one-copy writer may), and still takes an ordinary record
+      const okLib = await FM.storage.writeMedia(probeLib, { file: a.file, kind: 'image' });
+      const okRef = await FM.storage.writeMedia(probeRef, { ref: lk, kind: 'image', rev: 0 });
+      const okCtl = await FM.storage.writeMedia(probeCtl, { file: a.file, kind: 'image' });
+      const raw3 = await q915aRaw();
+      if (!okCtl || !raw3[probeCtl]) throw new Error('control: an ordinary record could not be written, so the refusals below prove nothing');
+      if (okLib || raw3[probeLib]) throw new Error('writeMedia wrote a lib: key - only the one-copy writer may make a shared copy, and never over one');
+      if (okRef || raw3[probeRef]) throw new Error('writeMedia wrote a pointer - only the one-copy writer may, and only when its shared copy is there');
+    } finally {
+      for (const k of [probeLib, probeRef, probeCtl]) { try { await q915aDel(k); } catch (e) {} }
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5B round trip: two reuses reopen and play, still play after the original is deleted, and back up and restore with their footage', { item: '915', budgetMs: 60000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915B trip A', '#e76f51'); made.push(a.pid);
+      const lk = 'lib:' + a.tile.mid; libs.push(lk);
+      const bId = await FM.projects.create({ name: 'FX915B trip B', width: 320, height: 240 }); made.push(bId);
+      if (!(await q915bReuse(a.tile.mid)) || !(await q915bReuse(a.tile.mid))) throw new Error('setup: a reuse of the tile was refused');
+      const reused = q915bImages().map(function (l) { return l.id; });
+      const raw1 = await q915aRaw();
+      if (reused.length !== 2 || reused.some(function (id) { return !q915bIsPtr(raw1[id], lk); })) throw new Error('the two reused clips are stored as ' + reused.map(function (id) { return q915bShape(raw1[id]); }).join(', ') + ', not as pointers at ' + lk);
+      const away = await FM.projects.create({ name: 'FX915B trip away', width: 320, height: 240 }); made.push(away);
+
+      // 1. reload the project: both play
+      await FM.projects.open(bId);
+      q915bMustShow(reused, a.rgb, 'after the project was reopened');
+
+      // 2. delete his ORIGINAL clip and let the sweep collect its record: the reused ones do not depend on it
+      await FM.projects.open(a.pid);
+      FM.deleteLayer(a.orig);
+      FM.storage.markDirty(); await FM.storage.save();
+      await FM.projects.open(away);
+      await FM.projects.pruneOrphans();
+      if ((await q915aRaw())[a.orig]) throw new Error('control: the deleted original was not collected by the sweep, so the clips below could still be reading it - nothing was proved');
+      // …and a template or element made from the CLOSED project carries the real bytes, read through the pointers
+      const got = await FM._packFromProject(bId, true);
+      const packed = reused.filter(function (id) { const m = got && got.pack && got.pack.media[id]; return !!(m && m.file && m.file.size === a.file.size && !m.ref); });
+      if (packed.length !== 2) throw new Error('a template or element made from the project carries footage for ' + packed.length + ' of the 2 reused clips - a pack must hold the real bytes, never a pointer into this device');
+      await FM.projects.open(bId);
+      q915bMustShow(reused, a.rgb, 'after his original clip was deleted and its record collected');
+
+      // 3. back up and restore: the backup holds the real bytes, and the restored project plays
+      const obj = await FM.storage.buildBackup(null);
+      const entry = obj.projects.filter(function (x) { return x.project && x.project.name === 'FX915B trip B'; })[0];
+      if (!entry) throw new Error('the backup has no entry for the project');
+      const carried = reused.filter(function (id) { return entry.media[id] && /^data:image\/png/.test(entry.media[id].dataURL || ''); });
+      if (carried.length !== 2) throw new Error('the backup carries footage for ' + carried.length + ' of the 2 reused clips - a backup must hold the real bytes, never a pointer into this device');
+      const missing = ((obj.notIncluded && obj.notIncluded.media) || []).filter(function (m) { return m.project === 'FX915B trip B'; });
+      if (missing.length) throw new Error('the backup lists ' + missing.length + ' reused clip(s) as not included');
+      const had = new Set(FM.projects.list().map(function (p) { return p.id; }));
+      const r = await FM.storage.restoreBackup({ app: 'freemotion', backup: 1, v: 1, count: 1, projects: [entry] }, null);
+      const back = FM.projects.list().filter(function (p) { return !had.has(p.id); })[0];
+      if (back) made.push(back.id);
+      if (!r || !r.ok || !back) throw new Error('restoring the backup did not bring the project back');
+      const docIds = ((JSON.parse(localStorage.getItem('fm.proj.' + back.id) || '{}').layers) || []).filter(function (l) { return l.type === 'image'; }).map(function (l) { return l.id; });
+      for (let i = 0; i < 60; i++) { const rr = await q915aRaw(); if (docIds.length && docIds.every(function (id) { return rr[id] && rr[id].file; })) break; await sleep(100); }   // the restore does not await its own save
+      await FM.projects.open(back.id);
+      if (docIds.length !== 2) throw new Error('the restored project has ' + docIds.length + ' photo clips, not 2');
+      q915bMustShow(docIds, a.rgb, 'in the restored project');
+
+      // 4. every deleter he can reach, then the sweep: the shared copy the pointers use is never deleted
+      await FM.projects.open(away);
+      for (const id of [bId, a.pid]) { await FM.projects.remove(id); made.splice(made.indexOf(id), 1); }
+      FM.mediaLib.remove(a.tile.mid);
+      await FM.projects.pruneOrphans();
+      if (!((await q915aRaw())[lk] || {}).file) throw new Error('the shared copy was DELETED once the projects that used it and its tile were gone - this release never deletes one');
+    } finally {
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5B a reused clip never lands in a project he did not tap in: leaving while it prepares gives up with a toast', { item: '915', budgetMs: 45000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [], said = [];
+    const realShare = FM.storage.shareMedia, realLoad = FM.loadImageFile, realToast = FM.toast;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915B tap A', '#2a9d8f'); made.push(a.pid);
+      libs.push('lib:' + a.tile.mid);
+      const bId = await FM.projects.create({ name: 'FX915B tapped in', width: 320, height: 240 }); made.push(bId);
+      const cId = await FM.projects.create({ name: 'FX915B switched to', width: 320, height: 240 }); made.push(cId);
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      const imagesIn = function (pid) { return ((JSON.parse(localStorage.getItem('fm.proj.' + pid) || '{}').layers) || []).filter(function (l) { return l.type === 'image'; }).length; };
+      const round = async function (label, holdShare) {
+        await FM.projects.open(bId);
+        const g = q915bGate();
+        if (holdShare && realShare) FM.storage.shareMedia = async function () { g.entered = true; await g.done; return realShare.apply(this, arguments); };
+        FM.loadImageFile = async function () { g.entered = true; await g.done; return realLoad.apply(this, arguments); };
+        said.length = 0;
+        const p = FM.mediaLib.use(a.tile.mid);                   // he taps the tile in B…
+        for (let i = 0; i < 100 && !g.entered; i++) await sleep(20);
+        if (!g.entered) throw new Error('setup (' + label + '): the reuse never reached the copy or the decode');
+        await FM.projects.open(cId);                             // …and opens C while it is still preparing
+        g.release();
+        const ok = await p;
+        FM.storage.shareMedia = realShare; FM.loadImageFile = realLoad;
+        await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+        if (q915bImages().length || imagesIn(cId)) throw new Error('(' + label + ') the clip he tapped in project B landed in project C, which he opened while it was preparing');
+        if (imagesIn(bId)) throw new Error('(' + label + ') the clip was added to project B behind his back while he was in C');
+        if (ok !== false) throw new Error('(' + label + ') the reuse answered ' + ok + ' although nothing was added');
+        if (!said.some(function (m) { return /not added/i.test(m); })) throw new Error('(' + label + ') nothing told him the clip was not added (toasts: ' + (said.join(' | ') || 'none') + ')');
+      };
+      await round('during the first copy', true);
+      await round('during the decode of a later reuse', false);
+    } finally {
+      FM.storage.shareMedia = realShare; FM.loadImageFile = realLoad; FM.toast = realToast;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5B the first reuse says Preparing while it copies, and a second tap on the same tile is ignored', { item: '915', budgetMs: 45000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    const realShare = FM.storage.shareMedia;
+    const g = q915bGate();
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915B prep A', '#264653'); made.push(a.pid);
+      libs.push('lib:' + a.tile.mid);
+      made.push(await FM.projects.create({ name: 'FX915B prep B', width: 320, height: 240 }));
+      if (realShare) FM.storage.shareMedia = async function () { g.entered = true; await g.done; return realShare.apply(this, arguments); };
+      const p1 = FM.mediaLib.use(a.tile.mid);
+      for (let i = 0; i < 50 && !g.entered; i++) await sleep(20);
+      await sleep(30);
+      const t = document.getElementById('toast');
+      const showing = (t && !t.classList.contains('hidden')) ? t.textContent : '';
+      const p2 = FM.mediaLib.use(a.tile.mid);                   // his second tap while the first is still preparing
+      const second = await Promise.race([p2, sleep(1500).then(function () { return 'still waiting'; })]);
+      g.release();
+      const first = await p1;
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      if (!/^Preparing/.test(showing)) throw new Error('nothing on screen while the first reuse copied the file (toast: ' + (showing || 'none') + ') - on a phone that is seconds of nothing after the sheet closes');
+      const n = q915bImages().length;
+      if (n !== 1) throw new Error('two taps on the tile while the first was preparing added ' + n + ' clips, not 1');
+      if (second !== false) throw new Error('the second tap was not ignored (it answered ' + second + ')');
+      if (first !== true) throw new Error('the first tap answered ' + first + ', not true');
+      const t2 = document.getElementById('toast');
+      if (t2 && !t2.classList.contains('hidden') && /^Preparing/.test(t2.textContent)) throw new Error('Preparing is still on screen after the clip was added');
+    } finally {
+      g.release(); FM.storage.shareMedia = realShare;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5B split, duplicate and paste of a reused clip store pointers, not the whole file again', { item: '915', budgetMs: 45000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib'), clip0 = FM.clipboard;
+    const made = [], libs = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915B copies A', '#e9c46a'); made.push(a.pid);
+      const lk = 'lib:' + a.tile.mid; libs.push(lk);
+      const keys0 = new Set(Object.keys(await q915aRaw()));   // after the import: only what the reuse and its copies write counts
+      const bId = await FM.projects.create({ name: 'FX915B copies B', width: 320, height: 240 }); made.push(bId);
+      if (!(await q915bReuse(a.tile.mid))) throw new Error('setup: the reuse was refused');
+      const L1 = q915bImages()[0];
+      FM.time = L1.start + L1.duration / 2;
+      await FM.splitLayer(L1.id);
+      await FM.duplicateLayer(L1.id);
+      FM.scene.selectedId = L1.id; FM.scene.selectedIds = [L1.id];
+      if (FM.copySelection() !== 1) throw new Error('setup: copying the reused clip copied nothing');
+      await FM.pasteClipboard();
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      const ids = q915bImages().map(function (l) { return l.id; });
+      if (ids.length !== 4) throw new Error('setup: expected the reused clip, its split half, a duplicate and a paste (4 clips), found ' + ids.length);
+      const raw = await q915aRaw();
+      const notPtr = ids.filter(function (id) { return !q915bIsPtr(raw[id], lk); });
+      if (notPtr.length) throw new Error(notPtr.length + ' of the 4 clips (the reuse, its split half, a duplicate, a paste) are stored as ' + notPtr.map(function (id) { return q915bShape(raw[id]); }).join(', ') + ' - a copy of a reused clip must point at the same shared copy');
+      const whole = Object.keys(raw).filter(function (k) { return !keys0.has(k) && raw[k] && raw[k].file && raw[k].file.size === a.file.size; });
+      if (whole.length !== 1) throw new Error('the reuse, a split, a duplicate and a paste wrote ' + whole.length + ' whole copies of the file, not 1 (the shared copy)');
+      made.push(await FM.projects.create({ name: 'FX915B copies away', width: 320, height: 240 }));
+      await FM.projects.open(bId);
+      q915bMustShow(ids, a.rgb, 'after the project was reopened');
+    } finally {
+      FM.clipboard = clip0;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5B a stored file another copy still plays from is not deleted with its project, only once nothing holds it', { item: '915', budgetMs: 45000 }, async function () {
+    /* Liveness is decided by the FILE, never by a layer id alone: a pasted copy (and the clipboard) play from
+       a Blob read out of the original's record, under ids no deleter looks at. Whether WebKit keeps such a
+       Blob readable once its record is deleted has never been measured, so nothing deletes it while held. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib'), clip0 = FM.clipboard;
+    const made = [];
+    let K = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915B held P', '#8ab17d'); made.push(a.pid);
+      K = a.orig;
+      FM.mediaLib.remove(a.tile.mid);   // no tile: nothing in the library keeps the record, only what holds its file
+      const q = await FM.projects.create({ name: 'FX915B held Q', width: 320, height: 240 }); made.push(q);
+      await FM.projects.open(a.pid);    // reopened, so the clip now plays from a Blob read out of its own record
+      FM.scene.selectedId = K; FM.scene.selectedIds = [K];
+      if (FM.copySelection() !== 1) throw new Error('setup: copying the clip copied nothing');
+      await FM.projects.open(q);
+      await FM.pasteClipboard();
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      const pasted = q915bImages()[0];
+      if (!pasted) throw new Error('setup: the paste added nothing');
+      await FM.projects.remove(a.pid); made.splice(made.indexOf(a.pid), 1);
+      if (!(await q915aRaw())[K]) throw new Error('deleting the project deleted the record the clipboard and a pasted copy still play from - decided by the layer id alone, not by who holds the file');
+      await FM.projects.pruneOrphans();
+      if (!(await q915aRaw())[K]) throw new Error('the sweep deleted a record whose file the clipboard and a pasted copy still hold');
+      // nothing holds it any more: now the sweep collects it (the control - holding the file was the reason it stayed)
+      FM.clipboard = [];
+      made.push(await FM.projects.create({ name: 'FX915B held R', width: 320, height: 240 }));   // Q's clips are released
+      await FM.projects.pruneOrphans();
+      const raw = await q915aRaw();
+      if (raw[K]) throw new Error('control: with nothing holding the file the sweep still kept the record, so it may not have run - nothing above was measured');
+      if (!(raw[pasted.id] && raw[pasted.id].file)) throw new Error('the pasted clip has no whole copy of its own (' + q915bShape(raw[pasted.id]) + ')');
+      await FM.projects.open(q);
+      q915bMustShow([pasted.id], a.rgb, 'as the pasted copy, after its source record was collected');
+    } finally {
+      FM.clipboard = clip0;
+      if (K) { try { await q915aDel(K); } catch (e) {} }
+      await q915bFinish(made, orig, wasOpen, [], idx0);
+    }
+  });
+
+  test('915.5B a Replace media that lands while the first reuse is copying ends with the tapped clip, no wrong message and no blank', { item: '915', budgetMs: 45000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [], said = [];
+    const realShare = FM.storage.shareMedia, realToast = FM.toast, realClick = HTMLInputElement.prototype.click;
+    const g = q915bGate();
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915B replace', '#bc4749'); made.push(a.pid);
+      const lk = 'lib:' + a.tile.mid; libs.push(lk);
+      const newer = await q915aPng('replacement', '#6a4c93');
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      if (realShare) FM.storage.shareMedia = async function () { g.entered = true; await g.done; return realShare.apply(this, arguments); };
+      const p = FM.mediaLib.use(a.tile.mid);                      // his tap on the tile…
+      for (let i = 0; i < 50 && !g.entered; i++) await sleep(20);
+      // …and a Replace media on the ORIGINAL clip, through the real route: the picker hands back `newer`
+      HTMLInputElement.prototype.click = function () {
+        if (this.type !== 'file') return realClick.apply(this, arguments);
+        const dt = new DataTransfer(); dt.items.add(newer); this.files = dt.files;
+        this.dispatchEvent(new Event('change'));
+      };
+      FM.replaceMedia(a.orig);
+      HTMLInputElement.prototype.click = realClick;
+      const replaced = function () { const m = FM.media.get(a.orig); return !!(m && m.file && m.file.name === newer.name && !FM.mediaLib.list().some(function (e) { return e.mid === a.tile.mid && e.key === a.orig; })); };
+      for (let i = 0; i < 100 && !replaced(); i++) await sleep(30);
+      if (!replaced()) throw new Error('setup: the Replace media had not landed 3 s after the tap, so it did not race the copy - nothing below would be measured');   // review round 1: this loop used to run out silently
+      await sleep(200);
+      g.release();
+      const ok = await p;
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      const wrong = said.filter(function (m) { return /no longer stored/i.test(m); });
+      if (wrong.length) throw new Error('the tap ended with a wrong message (' + wrong[0] + ') - the file was there, it was being copied');
+      if (ok !== true) throw new Error('the tap added nothing (it answered ' + ok + ')');
+      const added = q915bImages().filter(function (l) { return l.id !== a.orig; });
+      if (added.length !== 1) throw new Error('the tap added ' + added.length + ' clips, not 1');
+      const m = FM.media.get(added[0].id);
+      if (!(m && m.file && m.file.name === a.file.name)) throw new Error('the clip added is ' + (m && m.file ? m.file.name : 'BLANK') + ', not the file on the tile he tapped');
+      const raw = await q915aRaw();
+      if (!q915bIsPtr(raw[added[0].id], lk)) throw new Error('the reused clip is stored as ' + q915bShape(raw[added[0].id]) + ', not as a pointer at its shared copy');
+      if (!(raw[lk] && raw[lk].file && raw[lk].file.name === a.file.name)) throw new Error('the shared copy holds ' + (raw[lk] && raw[lk].file ? raw[lk].file.name : 'nothing') + ' - it must be the file he tapped, not the replacement');
+      if (!(raw[a.orig] && raw[a.orig].file && raw[a.orig].file.name === newer.name)) throw new Error('control: the Replace itself did not land, so nothing raced');
+      made.push(await FM.projects.create({ name: 'FX915B replace away', width: 320, height: 240 }));
+      await FM.projects.open(a.pid);
+      q915bMustShow([added[0].id], a.rgb, 'as the reused clip after a reload');
+      q915bMustShow([a.orig], '#6a4c93', 'as the replaced clip after a reload');
+    } finally {
+      g.release(); FM.storage.shareMedia = realShare; FM.toast = realToast; HTMLInputElement.prototype.click = realClick;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5B tools/rollback.sh warns plainly, before it publishes, when the target is older than v16.80', { item: '915' }, async function () {
+    /* A build before v16.80 reads a pointer as nothing stored and its boot sweep can delete a shared copy once
+       the tile is gone — so a rollback there is the one way phase B's clips can be lost. The script is bash and
+       this suite is a browser, so what is checked is the script's own ORDER: the verdict is computed from the
+       target's version label and printed before the publish question, the push, and any file is touched.
+       (Run for real in bash: v16.79 warns, v16.80 and v16.90 do not.) */
+    const res = await fetch('../tools/rollback.sh?t=' + Date.now(), { cache: 'no-store' });
+    const src = res.ok ? await res.text() : '';
+    if (!/^#!\/bin\/bash/.test(src)) throw new Error('setup: could not read tools/rollback.sh from the server');
+    const at = function (re) { const m = re.exec(src); return m ? m.index : -1; };
+    const reader = at(/READER_V=16\.80\b/);
+    const label = at(/git show "\$HASH:index\.html"/);
+    const warn = at(/echo "[^\n]*WARNING[^\n]*OLDER THAN v\$READER_V/);
+    const check = at(/\[ "\$\{2:-\}" = "--check" \] && exit 0/);
+    const ask = at(/read -r ANS/), touch = at(/git checkout "\$HASH" -- \./), push = at(/git push "\$REMOTE"/);
+    if (reader < 0 || warn < 0) throw new Error('rollback.sh has no warning for a target older than v16.80 - rolling back there blanks every reused clip, and can lose the shared copies for good');
+    if (label < 0 || label > warn) throw new Error('the verdict is not read from the target release own version label');
+    if (!(ask > 0 && warn < ask)) throw new Error('the warning comes AFTER the publish question (or there is no question) - said after the publish it is a post-mortem');
+    if (!(touch > 0 && push > 0 && warn < touch && warn < push)) throw new Error('the warning is not printed before the files are restored and pushed');
+    if (!(check > 0 && check < ask && check < touch)) throw new Error('rollback.sh has no --check that stops before anything is touched, so the verdict cannot be asked for safely');
+  });
+
+  /* ═══ 915.5Br — THE REVIEW OF PHASE B, ROUND 1 ════════════════════════════════════════════════════════
+   * Nine findings, and most of them are the same shape: a guard the writer has that no test would miss if it
+   * were deleted. Each test below pins one of them, and each was proven twice — it fails against main, and it
+   * fails with its own guard taken out of this tree. The rollback.sh verdict itself is RUN in
+   * tools/test-rollback.sh (bash); the test here can only read the script's text. */
+  test('915.5Br a reused clip reopened later still splits, duplicates and pastes as pointers at its one shared copy', { item: '915', budgetMs: 45000 }, async function () {
+    /* The everyday order: reuse a clip, close the app, come back later and split it. The reopened clip's record
+       comes only from hydrate, so hydrate is what must remember it is a pointer — the first test of this did its
+       split in the same session as the reuse, and could not see hydrate forget. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib'), clip0 = FM.clipboard;
+    const made = [], libs = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br reopen A', '#f4a261'); made.push(a.pid);
+      const lk = 'lib:' + a.tile.mid; libs.push(lk);
+      const bId = await FM.projects.create({ name: 'FX915Br reopen B', width: 320, height: 240 }); made.push(bId);
+      if (!(await q915bReuse(a.tile.mid))) throw new Error('setup: the reuse was refused');
+      const L1id = q915bImages()[0].id;
+      made.push(await FM.projects.create({ name: 'FX915Br reopen away', width: 320, height: 240 }));
+      await FM.projects.open(bId);   // closed and reopened: the clip is rebuilt from what is stored
+      const m = FM.media.get(L1id);
+      if (!(m && m.file)) throw new Error('setup: the reused clip did not load when its project was reopened');
+      if (m.ref !== lk) throw new Error('reopened, the reused clip no longer knows it points at its shared copy (ref ' + (m.ref || 'none') + ') - every split, duplicate or paste of it would write the whole file again');
+      const keys0 = new Set(Object.keys(await q915aRaw()));
+      const L1 = FM.layerById(FM.scene, L1id);
+      FM.time = L1.start + L1.duration / 2;
+      await FM.splitLayer(L1id);
+      await FM.duplicateLayer(L1id);
+      FM.scene.selectedId = L1id; FM.scene.selectedIds = [L1id];
+      if (FM.copySelection() !== 1) throw new Error('setup: copying the reopened clip copied nothing');
+      await FM.pasteClipboard();
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      const ids = q915bImages().map(function (l) { return l.id; });
+      if (ids.length !== 4) throw new Error('setup: expected the reopened clip, its split half, a duplicate and a paste (4 clips), found ' + ids.length);
+      const raw = await q915aRaw();
+      const notPtr = ids.filter(function (id) { return !q915bIsPtr(raw[id], lk); });
+      if (notPtr.length) throw new Error(notPtr.length + ' of the 4 clips are stored as ' + notPtr.map(function (id) { return q915bShape(raw[id]); }).join(', ') + ' after the project was reopened - a copy of a reused clip must point at the same shared copy');
+      const whole = Object.keys(raw).filter(function (k) { return !keys0.has(k) && raw[k] && raw[k].file; });
+      if (whole.length) throw new Error('splitting, duplicating and pasting the reopened clip wrote ' + whole.length + ' whole copies of the file - each should be a pointer at the one shared copy');
+      q915bMustShow(ids, a.rgb, 'after a split, a duplicate and a paste of the reopened clip');
+    } finally {
+      FM.clipboard = clip0;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  /* Liveness decided by the FILE, one holder at a time: the first test of this had the clipboard AND a pasted
+     copy holding the file at once, so either check could be deleted and it still passed. */
+  function q915brNoOneElseHolds(K) {
+    const all = (FM.media && FM.media.all && FM.media.all()) || {};
+    return Object.keys(all).filter(function (id) { const r = all[id]; return r && (id === K || r.fileKey === K || r.ref === K); });
+  }
+  test('915.5Br the clipboard alone keeps a stored file: copy, open another project, delete the first, then paste', { item: '915', budgetMs: 45000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib'), clip0 = FM.clipboard;
+    const made = [];
+    let K = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br clip P', '#6d597a'); made.push(a.pid);
+      K = a.orig;
+      FM.mediaLib.remove(a.tile.mid);   // no tile: nothing in the library keeps the record
+      const q = await FM.projects.create({ name: 'FX915Br clip Q', width: 320, height: 240 }); made.push(q);
+      await FM.projects.open(a.pid);    // reopened, so the clip plays from a Blob read out of its own record
+      FM.scene.selectedId = K; FM.scene.selectedIds = [K];
+      if (FM.copySelection() !== 1) throw new Error('setup: copying the clip copied nothing');
+      await FM.projects.open(q);        // P is released: from here ONLY the clipboard holds the file
+      const others = q915brNoOneElseHolds(K);
+      if (others.length) throw new Error('setup: ' + others.length + ' clip(s) in memory still hold the file, so the clipboard is not the only holder');
+      await FM.projects.remove(a.pid); made.splice(made.indexOf(a.pid), 1);
+      if (!(await q915aRaw())[K]) throw new Error('deleting the project deleted the record whose file only the clipboard holds - the paste he makes next could come back blank');
+      await FM.projects.pruneOrphans();
+      if (!(await q915aRaw())[K]) throw new Error('the sweep deleted a record whose file only the clipboard holds');
+      await FM.pasteClipboard();
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      const pasted = q915bImages()[0];
+      if (!pasted) throw new Error('the paste after the project was deleted added nothing');
+      q915bMustShow([pasted.id], a.rgb, 'as the clip pasted after its project was deleted');
+      // the control: nothing holds the file any more, and now the sweep does collect it
+      FM.clipboard = [];
+      made.push(await FM.projects.create({ name: 'FX915Br clip R', width: 320, height: 240 }));
+      await FM.projects.pruneOrphans();
+      if ((await q915aRaw())[K]) throw new Error('control: with nothing holding the file the sweep still kept the record, so it may not have run - nothing above was measured');
+    } finally {
+      FM.clipboard = clip0;
+      if (K) { try { await q915aDel(K); } catch (e) {} }
+      await q915bFinish(made, orig, wasOpen, [], idx0);
+    }
+  });
+
+  test('915.5Br a pasted copy alone keeps the stored file it plays from, with the clipboard empty', { item: '915', budgetMs: 45000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib'), clip0 = FM.clipboard;
+    const made = [];
+    let K = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br paste P', '#b56576'); made.push(a.pid);
+      K = a.orig;
+      FM.mediaLib.remove(a.tile.mid);
+      const q = await FM.projects.create({ name: 'FX915Br paste Q', width: 320, height: 240 }); made.push(q);
+      await FM.projects.open(a.pid);
+      FM.scene.selectedId = K; FM.scene.selectedIds = [K];
+      if (FM.copySelection() !== 1) throw new Error('setup: copying the clip copied nothing');
+      await FM.projects.open(q);
+      await FM.pasteClipboard();
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      const pasted = q915bImages()[0];
+      if (!pasted) throw new Error('setup: the paste added nothing');
+      FM.clipboard = [];                // from here ONLY the pasted copy, playing in Q, holds the file
+      await FM.projects.remove(a.pid); made.splice(made.indexOf(a.pid), 1);
+      if (!(await q915aRaw())[K]) throw new Error('deleting the project deleted the record the pasted copy is still playing from - decided by the layer id alone, not by who holds the file');
+      await FM.projects.pruneOrphans();
+      if (!(await q915aRaw())[K]) throw new Error('the sweep deleted a record the pasted copy is still playing from');
+      // the control: Q released, nothing holds the file, the sweep collects it — and the paste plays from its own copy
+      made.push(await FM.projects.create({ name: 'FX915Br paste R', width: 320, height: 240 }));
+      await FM.projects.pruneOrphans();
+      const raw = await q915aRaw();
+      if (raw[K]) throw new Error('control: with nothing holding the file the sweep still kept the record, so it may not have run - nothing above was measured');
+      if (!(raw[pasted.id] && raw[pasted.id].file)) throw new Error('the pasted clip has no whole copy of its own (' + q915bShape(raw[pasted.id]) + ')');
+      await FM.projects.open(q);
+      q915bMustShow([pasted.id], a.rgb, 'as the pasted copy, after its source record was collected');
+    } finally {
+      FM.clipboard = clip0;
+      if (K) { try { await q915aDel(K); } catch (e) {} }
+      await q915bFinish(made, orig, wasOpen, [], idx0);
+    }
+  });
+
+  test('915.5Br a tile is shared only under its own file: not after Replace then Undo, and not onto another file already at its key', { item: '915', budgetMs: 60000 }, async function () {
+    /* Replace media gives the new file a tile keyed at the clip; Undo puts the OLD file back under that key. Tap
+       the new tile then and its key holds a different file: sharing that would hand out the wrong footage from
+       that tile for good, because this release never deletes a shared copy. Likewise a different file already
+       at lib:<mid> is never pointed at, nor overwritten. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    const realClick = HTMLInputElement.prototype.click;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br undo X', '#457b9d'); made.push(a.pid);
+      libs.push('lib:' + a.tile.mid);
+      const bId = await FM.projects.create({ name: 'FX915Br undo B', width: 320, height: 240 }); made.push(bId);
+      // the control: an ordinary first reuse IS a pointer at its own shared copy — without it the guards below prove nothing
+      if (!(await q915bReuse(a.tile.mid))) throw new Error('setup: the ordinary reuse was refused');
+      const raw0 = await q915aRaw(), r0 = q915bImages()[0];
+      if (!r0 || !q915bIsPtr(raw0[r0.id], 'lib:' + a.tile.mid)) throw new Error('control: an ordinary first reuse is stored as ' + q915bShape(r0 && raw0[r0.id]) + ', not as a pointer at its shared copy - the guards below would prove nothing');
+
+      // 1. Replace media on X with Y, through the real picker route, then Undo
+      await FM.projects.open(a.pid);
+      const y = await q915aPng('undoY', '#e63946');
+      const fpY = [y.name, y.size, y.lastModified].join('|');
+      HTMLInputElement.prototype.click = function () {
+        if (this.type !== 'file') return realClick.apply(this, arguments);
+        const dt = new DataTransfer(); dt.items.add(y); this.files = dt.files;
+        this.dispatchEvent(new Event('change'));
+      };
+      FM.replaceMedia(a.orig);
+      HTMLInputElement.prototype.click = realClick;
+      let tileY = null;
+      for (let i = 0; i < 100 && !tileY; i++) { tileY = FM.mediaLib.list().filter(function (e) { return e.fp === fpY; })[0] || null; if (!tileY) await sleep(30); }
+      if (!tileY) throw new Error('setup: Replace media made no tile for the replacement file');
+      if (tileY.key !== a.orig) throw new Error('setup: the replacement tile is keyed at ' + tileY.key + ', not at the clip it replaced');
+      const lkY = 'lib:' + tileY.mid; libs.push(lkY);
+      await sleep(150);
+      FM.history.undo();
+      for (let i = 0; i < 100; i++) { const m = FM.media.get(a.orig); if (m && m.file && m.file.name === a.file.name) break; await sleep(30); }
+      const mu = FM.media.get(a.orig);
+      if (!(mu && mu.file && mu.file.name === a.file.name)) throw new Error('setup: Undo did not bring the original file back (the clip holds ' + (mu && mu.file ? mu.file.name : 'nothing') + ')');
+      FM.storage.markDirty(); await FM.storage.save();
+      const rawU = await q915aRaw();
+      if (!(rawU[a.orig] && rawU[a.orig].file && rawU[a.orig].file.name === a.file.name)) throw new Error('setup: after Undo the clip record holds ' + (rawU[a.orig] && rawU[a.orig].file ? rawU[a.orig].file.name : 'nothing') + ', not the original');
+      await FM.projects.open(bId);
+      await q915bReuse(tileY.mid);   // his tap on the replacement tile, whose key holds X again
+      const rawY = await q915aRaw();
+      if (rawY[lkY] && !(rawY[lkY].file && rawY[lkY].file.name === y.name)) throw new Error('the replacement tile shared ' + (rawY[lkY].file ? rawY[lkY].file.name : q915bShape(rawY[lkY])) + ' under its own key - that tile would hand out the wrong footage for good');
+      const tY = FM.mediaLib.list().filter(function (e) { return e.mid === tileY.mid; })[0];
+      if (tY && tY.key !== a.orig && !(rawY[tY.key] && rawY[tY.key].file && rawY[tY.key].file.name === y.name)) throw new Error('the replacement tile was re-keyed to ' + tY.key + ', which does not hold its file');
+
+      // 2. a different file already under the tile's shared key: never pointed at, never overwritten
+      const w = await q915bImport('FX915Br samefile W', '#2b9348'); made.push(w.pid);
+      const lkW = 'lib:' + w.tile.mid; libs.push(lkW);
+      const other = await q915aPng('samefileOther', '#ff006e');
+      await q915aPut(lkW, { file: other, kind: 'image' });
+      await FM.projects.open(bId);
+      const had = new Set(q915bImages().map(function (l) { return l.id; }));
+      if (!(await q915bReuse(w.tile.mid))) throw new Error('the tap on a tile whose shared key already holds another file added nothing');
+      const nw = q915bImages().filter(function (l) { return !had.has(l.id); })[0];
+      if (!nw) throw new Error('the tap on a tile whose shared key already holds another file added no clip');
+      const rawW = await q915aRaw();
+      const mW = FM.media.get(nw.id);
+      if (!(mW && mW.file && mW.file.name === w.file.name)) throw new Error('the clip added plays ' + (mW && mW.file ? mW.file.name : 'nothing') + ', not the file on the tile he tapped');
+      if (q915bIsPtr(rawW[nw.id], lkW)) throw new Error('the clip was stored as a pointer at ' + lkW + ', which holds a different file - after a reload it would play the wrong footage');
+      if (!(rawW[lkW] && rawW[lkW].file && rawW[lkW].file.name === other.name)) throw new Error('the file already at the shared key was overwritten - a clip may be playing from it');
+      const tW = FM.mediaLib.list().filter(function (e) { return e.mid === w.tile.mid; })[0];
+      if (!tW || tW.key !== w.orig) throw new Error('the tile was re-keyed to ' + (tW ? tW.key : 'nothing') + ' - a shared copy holding another file');
+      q915bMustShow([nw.id], w.rgb, 'as the clip from a tile whose shared key held another file');
+    } finally {
+      HTMLInputElement.prototype.click = realClick;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br Preparing stays on screen for a first copy that takes longer than a toast lasts', { item: '915', budgetMs: 45000 }, async function () {
+    /* A toast expires after 2.2 s unless told not to. A big video's first copy on his phone takes longer than
+       that, so Preparing is read here at 2.7 s — the first test read it 50 ms in, and an expiring one passed. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    const realShare = FM.storage.shareMedia;
+    const g = q915bGate();
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br long A', '#1d3557'); made.push(a.pid);
+      libs.push('lib:' + a.tile.mid);
+      made.push(await FM.projects.create({ name: 'FX915Br long B', width: 320, height: 240 }));
+      if (realShare) FM.storage.shareMedia = async function () { g.entered = true; await g.done; return realShare.apply(this, arguments); };
+      const p = FM.mediaLib.use(a.tile.mid);
+      for (let i = 0; i < 100 && !g.entered; i++) await sleep(20);
+      if (!g.entered) throw new Error('setup: the first reuse never reached the copy');
+      await sleep(2700);
+      const t = document.getElementById('toast');
+      const showing = (t && !t.classList.contains('hidden')) ? t.textContent : '';
+      g.release();
+      const ok = await p;
+      if (!/^Preparing/.test(showing)) throw new Error('2.7 s into a first copy the screen shows ' + (showing || 'nothing') + ' - a big video copies for longer than that, and Preparing must stay until it is done');
+      if (ok !== true) throw new Error('setup: the reuse answered ' + ok);
+      const t2 = document.getElementById('toast');
+      if (t2 && !t2.classList.contains('hidden') && /^Preparing/.test(t2.textContent)) throw new Error('Preparing is still on screen after the clip was added');
+    } finally {
+      g.release(); FM.storage.shareMedia = realShare;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br two different tiles copying at once: Preparing stays until the last one is done', { item: '915', budgetMs: 45000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    const realShare = FM.storage.shareMedia;
+    const gates = {};
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br pair A', '#bc6c25'); made.push(a.pid);
+      const b = await q915bImport('FX915Br pair B', '#606c38'); made.push(b.pid);
+      libs.push('lib:' + a.tile.mid, 'lib:' + b.tile.mid);
+      made.push(await FM.projects.create({ name: 'FX915Br pair T', width: 320, height: 240 }));
+      gates[a.tile.mid] = q915bGate(); gates[b.tile.mid] = q915bGate();
+      if (realShare) FM.storage.shareMedia = async function (mid) { const g = gates[mid]; if (g) { g.entered = true; await g.done; } return realShare.apply(this, arguments); };
+      const pa = FM.mediaLib.use(a.tile.mid);
+      for (let i = 0; i < 100 && !gates[a.tile.mid].entered; i++) await sleep(20);
+      const pb = FM.mediaLib.use(b.tile.mid);   // he reopens Add, taps a second first-time tile
+      for (let i = 0; i < 100 && !gates[b.tile.mid].entered; i++) await sleep(20);
+      if (!gates[a.tile.mid].entered || !gates[b.tile.mid].entered) throw new Error('setup: the two first reuses did not both reach their copy');
+      gates[a.tile.mid].release();
+      const okA = await pa;
+      await sleep(50);
+      const t = document.getElementById('toast');
+      const showing = (t && !t.classList.contains('hidden')) ? t.textContent : '';
+      gates[b.tile.mid].release();
+      const okB = await pb;
+      if (okA !== true || okB !== true) throw new Error('setup: the reuses answered ' + okA + ' and ' + okB);
+      if (!/^Preparing/.test(showing)) throw new Error('the first tile finished while the second was still copying, and the screen went to ' + (showing || 'nothing') + ' - Preparing must stay until the last copy is done');
+      const t2 = document.getElementById('toast');
+      if (t2 && !t2.classList.contains('hidden') && /^Preparing/.test(t2.textContent)) throw new Error('Preparing is still on screen after both clips were added');
+      if (q915bImages().length !== 2) throw new Error('two taps on two tiles added ' + q915bImages().length + ' clips, not 2');
+    } finally {
+      Object.keys(gates).forEach(function (k) { gates[k].release(); });
+      FM.storage.shareMedia = realShare;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br the project is captured at the tap: switching while the tile is still being read gives up with a toast', { item: '915', budgetMs: 45000 }, async function () {
+    /* The first test held the copy and the decode, which both come AFTER the tile's record is read — so taking the
+       project after that first read passed it too. This holds the read itself. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [], said = [];
+    const realRead = FM.storage.readMedia, realToast = FM.toast;
+    const g = q915bGate();
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br read A', '#4a4e69'); made.push(a.pid);
+      libs.push('lib:' + a.tile.mid);
+      const bId = await FM.projects.create({ name: 'FX915Br read B', width: 320, height: 240 }); made.push(bId);
+      const cId = await FM.projects.create({ name: 'FX915Br read C', width: 320, height: 240 }); made.push(cId);
+      await FM.projects.open(bId);
+      const imagesIn = function (pid) { return ((JSON.parse(localStorage.getItem('fm.proj.' + pid) || '{}').layers) || []).filter(function (l) { return l.type === 'image'; }).length; };
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      let held = false;
+      FM.storage.readMedia = async function (key) { if (!held && key === a.tile.key) { held = true; g.entered = true; await g.done; } return realRead.apply(this, arguments); };
+      const p = FM.mediaLib.use(a.tile.mid);                   // he taps the tile in B…
+      for (let i = 0; i < 100 && !g.entered; i++) await sleep(20);
+      if (!g.entered) throw new Error('setup: the tap never read the tile record');
+      await FM.projects.open(cId);                             // …and opens C while its record is still being read
+      g.release();
+      const ok = await p;
+      FM.storage.readMedia = realRead;
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      if (q915bImages().length || imagesIn(cId)) throw new Error('the clip he tapped in project B landed in project C, which he opened while the tile was still being read');
+      if (imagesIn(bId)) throw new Error('the clip was added to project B behind his back while he was in C');
+      if (ok !== false) throw new Error('the reuse answered ' + ok + ' although nothing was added');
+      if (!said.some(function (m) { return /not added/i.test(m); })) throw new Error('nothing told him the clip was not added (toasts: ' + (said.join(' | ') || 'none') + ')');
+    } finally {
+      g.release(); FM.storage.readMedia = realRead; FM.toast = realToast;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br a tile with no fingerprint (the kind backfill made) is reused as a pointer and stays one tile', { item: '915', budgetMs: 45000 }, async function () {
+    /* Backfill wrote the tiles for everything imported before the library existed, with fp ''. There is no
+       fingerprint for the add that follows a reuse to match, so it must find the tile by its shared key. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br backfill A', '#9a8c98'); made.push(a.pid);
+      const lk = 'lib:' + a.tile.mid; libs.push(lk);
+      const list = FM.mediaLib.list(); list.forEach(function (e) { if (e.mid === a.tile.mid) e.fp = ''; });
+      localStorage.setItem('fm.medialib', JSON.stringify(list));
+      made.push(await FM.projects.create({ name: 'FX915Br backfill B', width: 320, height: 240 }));
+      if (!(await q915bReuse(a.tile.mid))) throw new Error('the reuse of a tile with no fingerprint was refused');
+      const L = q915bImages()[0];
+      if (!L) throw new Error('the reuse of a tile with no fingerprint added no clip');
+      const raw = await q915aRaw();
+      if (!q915bIsPtr(raw[L.id], lk)) throw new Error('the clip from a tile with no fingerprint is stored as ' + q915bShape(raw[L.id]) + ', not as a pointer at ' + lk);
+      const naming = FM.mediaLib.list().filter(function (e) { return e.key === lk || e.fp === a.tile.fp; });
+      if (naming.length !== 1) throw new Error('reusing a tile with no fingerprint left ' + naming.length + ' tiles for the same file (' + naming.map(function (e) { return e.key; }).join(', ') + '), not 1');
+      if (naming[0].mid !== a.tile.mid) throw new Error('the tile left is a new one, not the tile he tapped');
+      q915bMustShow([L.id], a.rgb, 'as the clip from a tile with no fingerprint');
+    } finally {
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br tools/rollback.sh says an older build deletes shared copies at its first launch, and asks for the version typed back', { item: '915' }, async function () {
+    /* The first warning named removing or clearing a tile as the way to lose a shared copy, which reads as "so
+       leave the tiles alone" — but an older build's boot sweep deletes, at its FIRST launch, every shared copy
+       whose tile is already gone, and the 300-tile cap removes tiles with nothing done by him. The wording is
+       checked here; what the script DOES (the verdicts, -y refused, y refused, the typed version accepted) is
+       run for real in tools/test-rollback.sh, which ship.sh runs whenever this script changes. */
+    const res = await fetch('../tools/rollback.sh?t=' + Date.now(), { cache: 'no-store' });
+    const src = res.ok ? await res.text() : '';
+    if (!/^#!\/bin\/bash/.test(src)) throw new Error('setup: could not read tools/rollback.sh from the server');
+    const at = function (re) { const m = re.exec(src); return m ? m.index : -1; };
+    const warn = at(/echo "[^\n]*WARNING[^\n]*OLDER THAN v\$READER_V/);
+    const first = at(/echo "[^\n]*FIRST TIME IT OPENS[^\n]*"/);
+    const gone = at(/echo "[^\n]*already gone[^\n]*"/), pushedOff = at(/echo "[^\n]*pushed off the end of the list[^\n]*"/);
+    const tpl = at(/echo "[^\n]*updating a template or element there drops them[^\n]*"/);
+    const notSafe = at(/echo "[^\n]*Leaving the tiles alone does NOT make it safe[^\n]*"/);
+    const typed = at(/type %s and press enter[^\n]*' "\$WANT"/), cmp = at(/\[ "\$ANS" = "\$WANT" \]/);
+    const noScript = at(/never published from a script/);
+    const touch = at(/git checkout "\$HASH" -- \./), push = at(/git push "\$REMOTE"/);
+    if (warn < 0) throw new Error('rollback.sh has no warning for a release older than v16.80');
+    if (first < 0 || gone < 0 || pushedOff < 0) throw new Error('the warning does not say an older build deletes, the first time it opens, every shared copy whose tile is already gone (removed, cleared or pushed off the list)');
+    if (/removing or clearing that clip.s Media tile while on it/.test(src)) throw new Error('the warning still names removing or clearing the tile as the way to lose the shared copy - that reads as if leaving the tiles alone were safe');
+    if (notSafe < 0) throw new Error('the warning does not say that leaving the tiles alone does not make an older build safe');
+    if (tpl < 0) throw new Error('the warning does not say that updating a template or element on an older build drops the reused clips from it');
+    if (!(warn < first && first < touch)) throw new Error('the first-launch warning is not printed before any file is restored');
+    if (typed < 0 || cmp < 0) throw new Error('rollback.sh does not ask for the version to be typed back before publishing a release older than v16.80');
+    if (noScript < 0) throw new Error('rollback.sh lets -y publish a release older than v16.80 from a script');
+    if (!(typed < touch && typed < push && noScript < touch)) throw new Error('the typed-back question comes after the files are restored or pushed');
+  });
+
+  /* ═══ 915.5Br — THE REVIEW OF PHASE B, ROUND 2 ════════════════════════════════════════════════════════
+   * Eight findings. Four are guards no test would miss if deleted (the file a first reuse plays from, a split or
+   * duplicate as the only holder, a pointer whose shared copy is gone, this tab's project versus the shared key);
+   * four are code: a clip from an element or template now names its pack record as the file it holds; a tile whose
+   * stored file was put back to another file says so instead of adding that file; the tile Replace media makes
+   * is never tied to the old file; a tap in another project while the first copy runs is no longer dropped. */
+  async function q915brPng(tag, rgb, w, h) {   // like q915aPng, at another size — so its FILE size differs too
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const g = c.getContext('2d'); g.fillStyle = rgb; g.fillRect(0, 0, w, h); g.fillStyle = '#fff'; g.fillRect(3, 3, 7, 5);
+    const blob = await new Promise(function (r) { c.toBlob(r, 'image/png'); });
+    return new File([blob], 'q915br-' + tag + '-' + Date.now() + '.png', { type: 'image/png', lastModified: Date.now() });
+  }
+  async function q915brReplace(id, file) {   // Replace media through the real route: the picker hands back `file`; resolves with its new tile
+    const realClick = HTMLInputElement.prototype.click;
+    const fp = [file.name, file.size, file.lastModified].join('|');
+    HTMLInputElement.prototype.click = function () {
+      if (this.type !== 'file') return realClick.apply(this, arguments);
+      const dt = new DataTransfer(); dt.items.add(file); this.files = dt.files;
+      this.dispatchEvent(new Event('change'));
+    };
+    try { FM.replaceMedia(id); } finally { HTMLInputElement.prototype.click = realClick; }
+    let tile = null;
+    for (let i = 0; i < 100 && !tile; i++) { tile = FM.mediaLib.list().filter(function (e) { return e.fp === fp; })[0] || null; if (!tile) await sleep(30); }
+    if (!tile) throw new Error('setup: Replace media made no tile for the replacement file');
+    return tile;
+  }
+
+  test('915.5Br a first reuse plays from the file read back out of its shared copy, never from his original clip record', { item: '915', budgetMs: 45000 }, async function () {
+    /* The new clip's fileKey names lib:<mid>, the one record that is never deleted, so that is all heldByAnother
+       protects. Had it played from the Blob read out of his ORIGINAL clip's record, nothing would stop that
+       record being deleted under it. Chrome keeps such a Blob readable, so no render can tell the two apart -
+       identity can: loadImageFile hands the same File straight through.
+       Review round 3: comparing the clip with shareMedia's own ANSWER alone let shareMedia hand back the File it
+       was GIVEN (read out of his original's record at the tap) and still pass - both sides were the same wrong
+       File. So the input is kept too, and the clip must not be playing from it. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    const realShare = FM.storage.shareMedia;
+    let shared = null, input = null, calls = 0;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br ownfile A', '#3d405b'); made.push(a.pid);
+      const lk = 'lib:' + a.tile.mid; libs.push(lk);
+      made.push(await FM.projects.create({ name: 'FX915Br ownfile B', width: 320, height: 240 }));
+      if (realShare) FM.storage.shareMedia = async function (mid, rec) { calls++; input = rec; const r = await realShare.apply(this, arguments); shared = r; return r; };
+      const ok = await q915bReuse(a.tile.mid);
+      FM.storage.shareMedia = realShare;
+      const L = q915bImages()[0];
+      if (!ok || !L) throw new Error('setup: the reuse added no clip');
+      if (!(input && input.file)) throw new Error('setup: shareMedia was given no file to share (' + q915bShape(input) + ')');
+      if (!(shared && shared.file && shared.key === lk)) throw new Error('the first reuse wrote no shared copy (shareMedia was called ' + calls + ' time(s) and answered ' + q915bShape(shared) + ')');
+      const m = FM.media.get(L.id);
+      if (!(m && m.file)) throw new Error('the reused clip has nothing loaded');
+      if (m.fileKey !== lk) throw new Error('the reused clip says its bytes came out of ' + (m.fileKey || 'nothing') + ', not its shared copy ' + lk);
+      if (m.file !== shared.file) throw new Error('the reused clip plays from a File read out of another record (his original clip), not the one read back out of its shared copy - its fileKey names ' + lk + ', so nothing would stop the record it really plays from being deleted under it');
+      if (m.file === input.file) throw new Error('the reused clip plays from the very File shareMedia was given - read out of his ORIGINAL clip record at the tap - not one read back out of its shared copy ' + lk + ': its fileKey names ' + lk + ', so nothing stops that original record being deleted under it');
+      q915bMustShow([L.id], a.rgb, 'as the first reuse');
+    } finally {
+      FM.storage.shareMedia = realShare;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br a split half alone, and a duplicate alone, keep the stored file they play from', { item: '915', budgetMs: 90000 }, async function () {
+    /* Rule 5 names split and duplicated copies as holders of a file, but the holder tests only ever had the clipboard
+       or a paste as the holder - so a split or duplicate that stopped carrying fileKey passed them all. Here the ONLY
+       holder is a copy made by split (then by duplicate), carried into another project by copy and paste: the paste
+       can carry only what the split or duplicate gave it. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib'), clip0 = FM.clipboard;
+    const made = [], keys = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const round = async function (how, rgb) {
+        const a = await q915bImport('FX915Br ' + how + ' P', rgb); made.push(a.pid);
+        const K = a.orig; keys.push(K);
+        FM.mediaLib.remove(a.tile.mid);   // no tile: nothing in the library keeps the record
+        const q = await FM.projects.create({ name: 'FX915Br ' + how + ' Q', width: 320, height: 240 }); made.push(q);
+        await FM.projects.open(a.pid);    // reopened, so the clip plays from a Blob read out of its own record
+        const before = new Set(q915bImages().map(function (l) { return l.id; }));
+        const L = FM.layerById(FM.scene, K);
+        if (!L) throw new Error('setup (' + how + '): the clip is not in its reopened project');
+        if (how === 'split') { FM.time = L.start + L.duration / 2; await FM.splitLayer(K); } else await FM.duplicateLayer(K);
+        const made1 = q915bImages().filter(function (l) { return !before.has(l.id); })[0];
+        if (!made1) throw new Error('setup (' + how + '): it made no new clip');
+        FM.scene.selectedId = made1.id; FM.scene.selectedIds = [made1.id];
+        if (FM.copySelection() !== 1) throw new Error('setup (' + how + '): copying the new clip copied nothing');
+        await FM.projects.open(q);        // P is released
+        await FM.pasteClipboard();
+        await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+        const pasted = q915bImages()[0];
+        if (!pasted) throw new Error('setup (' + how + '): the paste added nothing');
+        FM.clipboard = [];                // from here ONLY the pasted copy of the new clip, playing in Q, holds the file
+        await FM.projects.remove(a.pid); made.splice(made.indexOf(a.pid), 1);
+        if (!(await q915aRaw())[K]) throw new Error('(' + how + ') deleting the project deleted the record a copy of its ' + how + ' still plays from - the ' + how + ' did not carry which record its file came out of');
+        await FM.projects.pruneOrphans();
+        if (!(await q915aRaw())[K]) throw new Error('(' + how + ') the sweep deleted the record a copy of its ' + how + ' still plays from');
+        // the control: Q released, nothing holds the file, and now the sweep does collect it
+        made.push(await FM.projects.create({ name: 'FX915Br ' + how + ' R', width: 320, height: 240 }));
+        await FM.projects.pruneOrphans();
+        if ((await q915aRaw())[K]) throw new Error('control (' + how + '): with nothing holding the file the sweep still kept the record, so it may not have run - nothing above was measured');
+        await FM.projects.open(q);
+        q915bMustShow([pasted.id], a.rgb, 'as the pasted ' + how + ', after its source record was collected');
+      };
+      await round('split', '#81b29a');
+      await round('duplicate', '#f2cc8f');
+    } finally {
+      FM.clipboard = clip0;
+      for (const K of keys) { try { await q915aDel(K); } catch (e) {} }
+      await q915bFinish(made, orig, wasOpen, [], idx0);
+    }
+  });
+
+  test('915.5Br a pointer whose shared copy is gone is never saved as a pointer again, and Home never frees it', { item: '915', budgetMs: 45000 }, async function () {
+    /* No build deletes a shared copy yet, so nothing he can do reaches this - which is exactly why only a test would
+       notice these guards going missing before the step that collects shared copies lands:
+        · save writes a pointer only if its shared copy is there, otherwise the whole file (a pointer at nothing
+          reopens as a blank clip, and the file is in memory to write);
+        · Home frees a clip only if storage can give it back - for a pointer, only if its shared copy is there. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br dangling A', '#e07a5f'); made.push(a.pid);
+      const lk = 'lib:' + a.tile.mid; libs.push(lk);
+      made.push(await FM.projects.create({ name: 'FX915Br dangling B', width: 320, height: 240 }));
+      if (!(await q915bReuse(a.tile.mid))) throw new Error('setup: the reuse was refused');
+      const N = q915bImages()[0];
+      const raw0 = await q915aRaw();
+      if (!(N && q915bIsPtr(raw0[N.id], lk))) throw new Error('control: the reused clip is stored as ' + q915bShape(N && raw0[N.id]) + ', not as a pointer at its shared copy - nothing below would be measured');
+      // an ordinary clip beside it: the control that Home's release really runs and frees what storage can give back
+      FM.addMediaLayer(await FM.loadImageFile(await q915aPng('danglingctl', '#3d5a80')));
+      await sleep(60); FM.storage.markDirty(); await FM.storage.save();
+      const ctl = q915bImages().filter(function (l) { return l.id !== N.id; })[0];
+      if (!(ctl && (await q915aRaw())[ctl.id])) throw new Error('setup: the control clip was not stored');
+      await q915aDel(lk);   // the shared copy goes - raw, because no build does this yet
+      // 1. a split of the reused clip carries its pointer; with nothing to point at, the save writes the whole file
+      const before = new Set(q915bImages().map(function (l) { return l.id; }));
+      const NL = FM.layerById(FM.scene, N.id);
+      FM.time = NL.start + NL.duration / 2;
+      await FM.splitLayer(N.id);
+      const H = q915bImages().filter(function (l) { return !before.has(l.id); })[0];
+      if (!H) throw new Error('setup: the split made no new clip');
+      const mh = FM.media.get(H.id);
+      if (!(mh && mh.ref === lk)) throw new Error('setup: the split half does not carry the pointer (ref ' + ((mh && mh.ref) || 'none') + '), so the save below is never asked to write one');
+      await sleep(60); FM.storage.markDirty(); await FM.storage.save();
+      const raw1 = await q915aRaw();
+      if (!q915bIsWhole(raw1[H.id], a.file)) throw new Error('with its shared copy gone the split half was saved as ' + q915bShape(raw1[H.id]) + ', not as the whole file - a pointer at nothing reopens BLANK, and the file was in memory to write');
+      // 2. Home: storage cannot give the reused clip back, so it is not freed
+      const freed = await q385AsIfHome(function () { return FM.storage.releaseSceneMedia(); });
+      const stillN = FM.media.get(N.id), ctlFreed = !FM.media.get(ctl.id);
+      try { await FM.storage.hydrateSceneMedia({ onlyMissing: true }); } catch (e) {}
+      if (!freed || !ctlFreed) throw new Error('control: Home released ' + freed + ' clip(s) and ' + (ctlFreed ? 'did' : 'did NOT') + ' free the ordinary one it can give back - nothing below was measured');
+      if (!(stillN && stillN.file)) throw new Error('Home freed the reused clip although its shared copy is gone - storage cannot give it back, so it would come back BLANK');
+    } finally {
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br the project captured at the tap is this tab own: another tab opening a project neither drops the clip nor moves it', { item: '915', budgetMs: 45000 }, async function () {
+    /* fm.currentProject is shared by every tab on this device; the project THIS tab has open is not. Taking the
+       shared key would make a second tab opening another project throw away the clip he just tapped here - and the
+       project switch tests could not tell, because in one tab the two always agree. Both halves: another tab moving
+       the key changes nothing; this tab moving does give up. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [], said = [];
+    const realRead = FM.storage.readMedia, realToast = FM.toast;
+    let restoreKey = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br tab A', '#5f0f40'); made.push(a.pid);
+      libs.push('lib:' + a.tile.mid);
+      const bId = await FM.projects.create({ name: 'FX915Br tab B', width: 320, height: 240 }); made.push(bId);
+      const cId = await FM.projects.create({ name: 'FX915Br tab C', width: 320, height: 240 }); made.push(cId);
+      const imagesIn = function (pid) { return ((JSON.parse(localStorage.getItem('fm.proj.' + pid) || '{}').layers) || []).filter(function (l) { return l.type === 'image'; }).length; };
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      const tap = async function (label, during) {
+        await FM.projects.open(bId);
+        const k = (FM.mediaLib.list().filter(function (e) { return e.mid === a.tile.mid; })[0] || {}).key;
+        const g = q915bGate(); let held = false;
+        FM.storage.readMedia = async function (key) { if (!held && key === k) { held = true; g.entered = true; await g.done; } return realRead.apply(this, arguments); };
+        said.length = 0;
+        const p = FM.mediaLib.use(a.tile.mid);                 // he taps the tile in B…
+        for (let i = 0; i < 100 && !g.entered; i++) await sleep(20);
+        if (!g.entered) throw new Error('setup (' + label + '): the tap never read the tile record');
+        await during();                                        // …and a project is opened meanwhile
+        g.release();
+        const ok = await p;
+        FM.storage.readMedia = realRead;
+        if (restoreKey) { localStorage.setItem('fm.currentProject', restoreKey); restoreKey = null; }
+        await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+        return ok;
+      };
+      // 1. ANOTHER TAB opens C: only the shared key moves; this tab is still in B, where he tapped
+      const ok1 = await tap('another tab', async function () { restoreKey = localStorage.getItem('fm.currentProject'); localStorage.setItem('fm.currentProject', cId); });
+      if (said.some(function (m) { return /not added/i.test(m); })) throw new Error('another tab opening a project made this tab say the clip was not added - he never left project B');
+      if (ok1 !== true || imagesIn(bId) !== 1) throw new Error('another tab opening a project dropped the clip he tapped in this tab (it answered ' + ok1 + ', project B holds ' + imagesIn(bId) + ' photo clips)');
+      if (imagesIn(cId)) throw new Error('the clip landed in the project another tab opened, not in the one he tapped in');
+      // 2. THIS TAB opens C: it gives up and says so, and nothing lands anywhere
+      const ok2 = await tap('this tab', function () { return FM.projects.open(cId); });
+      if (q915bImages().length || imagesIn(cId)) throw new Error('the clip he tapped in project B landed in project C, which this tab opened while the tile was being read');
+      if (imagesIn(bId) !== 1) throw new Error('the clip was added to project B behind his back while he was in C');
+      if (ok2 !== false) throw new Error('the reuse answered ' + ok2 + ' although nothing was added');
+      if (!said.some(function (m) { return /not added/i.test(m); })) throw new Error('nothing told him the clip was not added (toasts: ' + (said.join(' | ') || 'none') + ')');
+    } finally {
+      if (restoreKey) { try { localStorage.setItem('fm.currentProject', restoreKey); } catch (e) {} }
+      FM.storage.readMedia = realRead; FM.toast = realToast;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br a clip dropped in from an element or a template keeps that pack stored file while it is on screen', { item: '915', budgetMs: 90000 }, async function () {
+    /* Inserting an element or a template plays the new clip from a Blob read out of the pack record (elem:<id> /
+       tpl:<id>), and nothing said so - so deleting that element from the Add menu, with its clip on screen,
+       deleted the record under it. Now the delete leaves the record for the sweep, which collects it once nothing
+       holds it any more (the control at the end). */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], tpls = [], elems = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br pack src', '#6d6875'); made.push(a.pid);
+      FM.mediaLib.remove(a.tile.mid);
+      const L = FM.layerById(FM.scene, a.orig);
+      const e0 = new Set(FM.elements.list().map(function (e) { return e.id; }));
+      if (!(await FM.elements.save('FX915Br elem', [L]))) throw new Error('setup: the element was not saved');
+      const eid = (FM.elements.list().filter(function (e) { return !e0.has(e.id); })[0] || {}).id; elems.push(eid);
+      const t0 = new Set(FM.templates.list().map(function (t) { return t.id; }));
+      if (!(await FM.templates.save('FX915Br tpl 1', a.pid))) throw new Error('setup: the first template was not saved');
+      const tid = (FM.templates.list().filter(function (t) { return !t0.has(t.id); })[0] || {}).id; tpls.push(tid);
+      const t1 = new Set(FM.templates.list().map(function (t) { return t.id; }));
+      if (!(await FM.templates.save('FX915Br tpl 2', a.pid))) throw new Error('setup: the second template was not saved');
+      const tid2 = (FM.templates.list().filter(function (t) { return !t1.has(t.id); })[0] || {}).id; tpls.push(tid2);
+      if (!eid || !tid || !tid2) throw new Error('setup: the element or a template has no card');
+      const q = await FM.projects.create({ name: 'FX915Br pack Q', width: 320, height: 240 }); made.push(q);
+      // 1. an element and a template dropped INTO Q, then both deleted with their clips on screen
+      if (!(await FM.elements.insert(eid))) throw new Error('setup: inserting the element failed');
+      if (!(await FM.templates.insertInto(tid))) throw new Error('setup: inserting the template failed');
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      const inQ = q915bImages().map(function (l) { return l.id; });
+      if (inQ.length !== 2) throw new Error('setup: inserting an element and a template gave ' + inQ.length + ' photo clips, not 2');
+      await FM.elements.remove(eid);
+      await FM.templates.remove(tid);
+      if (FM.elements.list().some(function (e) { return e.id === eid; }) || FM.templates.list().some(function (t) { return t.id === tid; })) throw new Error('setup: deleting them did not remove their cards');
+      const raw1 = await q915aRaw();
+      if (!raw1['elem:' + eid]) throw new Error('deleting the element deleted its stored record while the clip dropped in from it is still on screen, playing from a file read out of it');
+      if (!raw1['tpl:' + tid]) throw new Error('deleting the template deleted its stored record while the clip put in from it is still on screen, playing from a file read out of it');
+      q915bMustShow(inQ, a.rgb, 'after the element and the template they came from were deleted');
+      // 2. a new project started from a template (the route editing a template shares), then that template deleted
+      const u = await FM.templates.useAsNew(tid2);
+      if (u) made.push(u);
+      const inU = q915bImages().map(function (l) { return l.id; });
+      if (!u || inU.length !== 1) throw new Error('setup: starting a project from the template gave ' + inU.length + ' photo clips');
+      await FM.templates.remove(tid2);
+      if (!(await q915aRaw())['tpl:' + tid2]) throw new Error('deleting the template deleted its stored record while the project just started from it still plays from a file read out of it');
+      // the control: nothing holds them any more, and the sweep collects all three
+      made.push(await FM.projects.create({ name: 'FX915Br pack R', width: 320, height: 240 }));
+      await FM.projects.pruneOrphans();
+      const raw2 = await q915aRaw();
+      const left = ['elem:' + eid, 'tpl:' + tid, 'tpl:' + tid2].filter(function (k) { return raw2[k]; });
+      if (left.length) throw new Error('control: with nothing holding them the sweep still kept ' + left.join(', ') + ' - a deleted pack left for the sweep must be collected by it');
+    } finally {
+      try { if (idx0 == null) localStorage.removeItem('fm.medialib'); else localStorage.setItem('fm.medialib', idx0); } catch (e) {}
+      await q915aCleanup(made, orig, wasOpen, tpls, elems, []);
+    }
+  });
+
+  test('915.5Br a tile whose stored file was put back to another file says so and adds nothing, never that file footage', { item: '915', budgetMs: 60000 }, async function () {
+    /* Replace media gives the new file (Y) a tile keyed at the clip; Undo writes the old file (X) back over that key,
+       and Y is stored nowhere. Tapping Y's tile used to add X's footage under Y's name, on every tap, without a word. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [], said = [];
+    const realToast = FM.toast;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br putback X', '#0081a7'); made.push(a.pid);
+      libs.push('lib:' + a.tile.mid);
+      const bId = await FM.projects.create({ name: 'FX915Br putback B', width: 320, height: 240 }); made.push(bId);
+      await FM.projects.open(a.pid);
+      const y = await q915brPng('putbackY', '#f07167', 48, 36);
+      if (y.size === a.file.size) throw new Error('setup: the two photos are the same size, so this is not a tile whose file is gone');
+      const tileY = await q915brReplace(a.orig, y);
+      if (tileY.key !== a.orig) throw new Error('setup: the replacement tile is keyed at ' + tileY.key + ', not at the clip it replaced');
+      libs.push('lib:' + tileY.mid);
+      await sleep(150);
+      FM.history.undo();
+      for (let i = 0; i < 100; i++) { const m = FM.media.get(a.orig); if (m && m.file && m.file.name === a.file.name) break; await sleep(30); }
+      FM.storage.markDirty(); await FM.storage.save();
+      const rawU = await q915aRaw();
+      if (!(rawU[a.orig] && rawU[a.orig].file && rawU[a.orig].file.name === a.file.name)) throw new Error('setup: after Undo the clip record holds ' + (rawU[a.orig] && rawU[a.orig].file ? rawU[a.orig].file.name : 'nothing') + ', not the original');
+      await FM.projects.open(bId);
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      const ok = await FM.mediaLib.use(tileY.mid);   // his tap on the replacement tile, whose key holds X again
+      FM.toast = realToast;
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      const added = q915bImages();
+      if (added.length) { const m = FM.media.get(added[0].id); throw new Error('the tap on the tile for ' + y.name + ' added a clip playing ' + (m && m.file ? m.file.name : 'nothing') + ' - that is the file Undo put back under its key, not the one on the tile he tapped'); }
+      if (ok !== false) throw new Error('the tap answered ' + ok + ' although nothing was added');
+      if (!said.some(function (m) { return /no longer stored/i.test(m); })) throw new Error('nothing told him the file is no longer stored (toasts: ' + (said.join(' | ') || 'none') + ')');
+      if (FM.mediaLib.list().some(function (e) { return e.mid === tileY.mid; })) throw new Error('the tile is still in Add - Media, offering a file that is stored nowhere');
+      if ((await q915aRaw())['lib:' + tileY.mid]) throw new Error('the tap shared the other file under the tile own key');
+      // the control: his clip itself is untouched, and still plays X
+      await FM.projects.open(a.pid);
+      q915bMustShow([a.orig], a.rgb, 'as his own clip after Undo');
+    } finally {
+      FM.toast = realToast;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br the tile Replace media makes is never tied to the old file, even when tapped before the replacement is saved - and that tap still shares the new file', { item: '915', budgetMs: 60000 }, async function () {
+    /* Replace keys its new tile at the clip it replaced and does not wait for its save, so until that save lands the
+       clip's record on disk is still the OLD file - for a reused clip, a pointer at the old tile's shared copy.
+       Tapping the new tile then re-keyed it to that shared copy for good: every later tap added the old footage.
+       The write is held here by dropping it, which is what a save that has not landed yet looks like on disk. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    const realPut = IDBObjectStore.prototype.put;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br early OLD', '#2a6f97'); made.push(a.pid);
+      const lk = 'lib:' + a.tile.mid; libs.push(lk);
+      const bId = await FM.projects.create({ name: 'FX915Br early B', width: 320, height: 240 }); made.push(bId);
+      if (!(await q915bReuse(a.tile.mid))) throw new Error('setup: the reuse was refused');
+      const N = q915bImages()[0];
+      if (!(N && q915bIsPtr((await q915aRaw())[N.id], lk))) throw new Error('control: the reused clip is not stored as a pointer at ' + lk + ' - nothing below would be measured');
+      const nw = await q915brPng('earlyNEW', '#ffb703', 48, 36);
+      let dropped = 0;
+      IDBObjectStore.prototype.put = function (v, k) { if (k === N.id && v && v.file) { dropped++; return undefined; } return realPut.apply(this, arguments); };
+      const M2 = await q915brReplace(N.id, nw);
+      libs.push('lib:' + M2.mid);
+      if (M2.key !== N.id) throw new Error('setup: the new tile is keyed at ' + M2.key + ', not at the clip it replaced');
+      await sleep(150);
+      if (!q915bIsPtr((await q915aRaw())[N.id], lk)) throw new Error('setup: the replacement was saved although its write was held - nothing below is the early tap');
+      const had = new Set(q915bImages().map(function (l) { return l.id; }));
+      const ok1 = await FM.mediaLib.use(M2.mid);   // his tap on the new tile, before the replacement is saved
+      await sleep(60);
+      const c1 = q915bImages().filter(function (l) { return !had.has(l.id); })[0];
+      const m1 = c1 && FM.media.get(c1.id);
+      if (!ok1 || !(m1 && m1.file)) throw new Error('the tap on the new tile added nothing (it answered ' + ok1 + ')');
+      if (m1.file.name !== nw.name) throw new Error('tapped before the replacement was saved, the tile for ' + nw.name + ' added ' + m1.file.name + ' - the OLD file');
+      const t1 = FM.mediaLib.list().filter(function (e) { return e.mid === M2.mid; })[0];
+      if (t1 && t1.key === lk) throw new Error('the new tile was re-keyed to the OLD file shared copy (' + lk + ') - every tap on it from now on adds the old footage');
+      // review round 3: …and the early tap SHARED the new file - a whole second copy per tap is what clause 5 removes
+      if (!t1 || t1.key !== 'lib:' + M2.mid) throw new Error('tapped before the replacement was saved, the new tile is keyed at ' + (t1 ? t1.key : 'nothing') + ', not at its own shared copy lib:' + M2.mid + ' - the tap stored a whole second copy of the file instead of sharing it');
+      // the replacement's save lands
+      IDBObjectStore.prototype.put = realPut;
+      FM.storage.markDirty(); await FM.storage.save();
+      const rawS = await q915aRaw();
+      if (!(rawS[N.id] && rawS[N.id].file && rawS[N.id].file.name === nw.name)) throw new Error('setup: the replacement was not saved once its write was let through (' + q915bShape(rawS[N.id]) + ', ' + dropped + ' write(s) held)');
+      if (!q915bIsPtr(rawS[c1.id], 'lib:' + M2.mid)) throw new Error('the clip from the early tap is stored as ' + q915bShape(rawS[c1.id]) + ', not as a pointer at the new tile shared copy lib:' + M2.mid + ' - a whole second copy of the file');
+      const had2 = new Set(q915bImages().map(function (l) { return l.id; }));
+      if (!(await q915bReuse(M2.mid))) throw new Error('the tap on the new tile after the replacement was saved was refused');
+      const c2 = q915bImages().filter(function (l) { return !had2.has(l.id); })[0];
+      const m2 = c2 && FM.media.get(c2.id);
+      if (!(m2 && m2.file && m2.file.name === nw.name)) throw new Error('after the replacement was saved the tile for ' + nw.name + ' added ' + (m2 && m2.file ? m2.file.name : 'nothing'));
+      const t2 = FM.mediaLib.list().filter(function (e) { return e.mid === M2.mid; })[0];
+      if (!t2 || t2.key === lk) throw new Error('the new tile is keyed at ' + (t2 ? t2.key : 'nothing') + ' - the OLD file shared copy');
+      made.push(await FM.projects.create({ name: 'FX915Br early away', width: 320, height: 240 }));
+      await FM.projects.open(bId);
+      q915bMustShow([c1.id, c2.id, N.id], '#ffb703', 'after a reload, as the replacement and the two clips from its tile');
+    } finally {
+      IDBObjectStore.prototype.put = realPut;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br a tap on the same tile in another project, while its first copy is still running, is added there', { item: '915', budgetMs: 45000 }, async function () {
+    /* He taps a big video in B, realises he is in the wrong project, opens C and taps the same tile while B's copy is
+       still writing. The repeat-tap guard was keyed on the tile alone, so the tap in C was dropped without a word and
+       B's gave up: no clip anywhere. A repeat tap in the SAME project is still ignored (the Preparing test). */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    const realShare = FM.storage.shareMedia;
+    const g = q915bGate();
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br again A', '#7b2cbf'); made.push(a.pid);
+      const lk = 'lib:' + a.tile.mid; libs.push(lk);
+      const bId = await FM.projects.create({ name: 'FX915Br again B', width: 320, height: 240 }); made.push(bId);
+      const cId = await FM.projects.create({ name: 'FX915Br again C', width: 320, height: 240 }); made.push(cId);
+      const imagesIn = function (pid) { return ((JSON.parse(localStorage.getItem('fm.proj.' + pid) || '{}').layers) || []).filter(function (l) { return l.type === 'image'; }).length; };
+      await FM.projects.open(bId);
+      let first = true;
+      if (realShare) FM.storage.shareMedia = async function () { if (first) { first = false; g.entered = true; await g.done; } return realShare.apply(this, arguments); };
+      const pB = FM.mediaLib.use(a.tile.mid);                  // his tap in B…
+      for (let i = 0; i < 100 && !g.entered; i++) await sleep(20);
+      if (!g.entered) throw new Error('setup: the tap in B never reached the first copy');
+      await FM.projects.open(cId);                             // …he opens C instead…
+      const okC = await Promise.race([FM.mediaLib.use(a.tile.mid), sleep(8000).then(function () { return 'still waiting'; })]);   // …and taps the same tile there
+      g.release();
+      const okB = await pB;
+      FM.storage.shareMedia = realShare;
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      const inC = q915bImages();
+      if (okC !== true || inC.length !== 1) throw new Error('his tap in project C, made while the copy started in B was still running, answered ' + okC + ' and added ' + inC.length + ' clips - it was dropped without a word');
+      if (imagesIn(bId)) throw new Error('the clip was added to project B behind his back while he was in C');
+      if (okB !== false) throw new Error('the tap in B answered ' + okB + ' although he had left B');
+      if (!q915bIsPtr((await q915aRaw())[inC[0].id], lk)) throw new Error('the clip added in C is not stored as a pointer at the shared copy');
+      q915bMustShow([inC[0].id], a.rgb, 'as the clip added in C');
+    } finally {
+      g.release(); FM.storage.shareMedia = realShare;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  /* ── review round 3 ────────────────────────────────────────────────────────────────────────────────── */
+  async function q915brVideo(tag) {   // the real splash.mp4 from this origin, as a picked file: a VIDEO, which is what he mostly reuses
+    const r = await fetch('/splash.mp4');
+    if (!r.ok) throw new Error('setup: splash.mp4 could not be fetched from the test origin (' + r.status + ')');
+    return new File([await r.blob()], 'q915br-' + tag + '-' + Date.now() + '.mp4', { type: 'video/mp4', lastModified: Date.now() });
+  }
+  /* A readwrite transaction on the media store, held open until released: every later transaction on the store queues
+     behind it, exactly as behind a big video write on a phone. Only a transaction can be held like this - a single put
+     cannot be delayed from inside its own transaction. */
+  async function q915brHoldStore() {
+    const db = await q915aOpen();
+    const h = { held: true };
+    const tx = db.transaction('media', 'readwrite'), st = tx.objectStore('media');
+    const spin = function () { if (h.held) st.get('q915br-hold').onsuccess = spin; };
+    spin();
+    h.done = new Promise(function (r) { tx.oncomplete = tx.onerror = tx.onabort = function () { try { db.close(); } catch (e) {} r(); }; });
+    h.release = function () { h.held = false; return h.done; };
+    return h;
+  }
+
+  test('915.5Br a reused VIDEO is stored as a pointer that says video, and reopens as a playing video, not blank', { item: '915', budgetMs: 60000 }, async function () {
+    /* Every other 915.5 fixture is a PNG, where image is also the right kind - so a pointer that lost its video kind
+       (reopened through the photo loader, which rejects an mp4, and the per-layer catch swallows it) came back BLANK
+       with the whole suite green. He mostly reuses videos, and songs are video layers too. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const pid = await FM.projects.create({ name: 'FX915Br video A', width: 320, height: 240 }); made.push(pid);
+      const file = await q915brVideo('clip');
+      FM.addMediaLayer(await FM.loadVideoFile(file));
       await sleep(60); await FM.storage.save();
       const fp = [file.name, file.size, file.lastModified].join('|');
       const tile = FM.mediaLib.list().filter(function (e) { return e.fp === fp; })[0];
-      if (!tile) throw new Error('setup: importing the photo made no library tile, so there is nothing to reuse');
-      made.push(await FM.projects.create({ name: 'FX915A reuse', width: 320, height: 240 }));
-      const bId = FM.projects.currentId();
-      for (let i = 0; i < 3; i++) {
-        if (!(await FM.mediaLib.use(tile.mid))) throw new Error('setup: reuse ' + (i + 1) + ' of the tile was refused');
-        await sleep(60); await FM.storage.save();   // use() does not await its own save
-      }
-      if ((await FM.projects.duplicate(bId)) !== true) throw new Error('setup: duplicating the project failed');
-      const dup = FM.projects.list().filter(function (x) { return x.name === 'FX915A reuse copy'; })[0]; if (dup) made.push(dup.id);
-
+      if (!tile) throw new Error('setup: importing the video made no library tile');
+      if (tile.kind !== 'video' || FM.mediaLib.isAudio(tile)) throw new Error('setup: the video tile is filed as ' + tile.kind + (FM.mediaLib.isAudio(tile) ? ' (a song)' : '') + ', not a video');
+      const lk = 'lib:' + tile.mid; libs.push(lk);
+      const bId = await FM.projects.create({ name: 'FX915Br video B', width: 320, height: 240 }); made.push(bId);
+      if (!(await q915bReuse(tile.mid)) || !(await q915bReuse(tile.mid))) throw new Error('setup: a reuse of the video tile was refused');
+      const ids = FM.scene.layers.filter(function (l) { return l.type === 'video'; }).map(function (l) { return l.id; });
+      if (ids.length !== 2) throw new Error('setup: two reuses of the video tile made ' + ids.length + ' video clips');
       const raw = await q915aRaw();
-      const fresh = Object.keys(raw).filter(function (k) { return !keys0.has(k); });
-      const libs = fresh.filter(function (k) { return /^lib:/.test(k); });
-      if (libs.length) throw new Error('this release wrote shared copies (' + libs.join(', ') + ') — only the writer release may, once this reader is on his phone');
-      const refs = fresh.filter(function (k) { const v = raw[k]; return v && typeof v === 'object' && !v.file && typeof v.ref === 'string'; });
-      if (refs.length) throw new Error(refs.length + ' pointer record(s) written (' + refs.join(', ') + ') — a build before this one reads each as a blank clip');
-      const copies = fresh.filter(function (k) { const v = raw[k]; return v && v.file && v.file.name === file.name && v.file.size === file.size; });
-      if (copies.length !== 7) throw new Error('import + 3 reuses + a duplicate of the 3 left ' + copies.length + ' whole copies, not 7 — reuse is meant to be exactly what it was until the writer release');
-
-      // ── the store itself refuses both, and still takes an ordinary record (the control)
-      const okLib = await FM.storage.writeMedia(probeLib, { file: file, kind: 'image' });
-      const okRef = await FM.storage.writeMedia(probeRef, { ref: probeLib, kind: 'image', rev: 0 });
-      const okCtl = await FM.storage.writeMedia(probeCtl, { file: file, kind: 'image' });
-      const raw2 = await q915aRaw();
-      if (!okCtl || !raw2[probeCtl]) throw new Error('control: an ordinary record could not be written, so the refusals below prove nothing');
-      if (okLib || raw2[probeLib]) throw new Error('writeMedia wrote a “lib:” key (' + okLib + ') — this release must not make a shared copy by any route');
-      if (okRef || raw2[probeRef]) throw new Error('writeMedia wrote a pointer record (' + okRef + ') — a build before this one reads it as a blank clip');
+      if (!(raw[lk] && raw[lk].file && raw[lk].kind === 'video')) throw new Error('the shared copy ' + lk + ' is ' + q915bShape(raw[lk]) + ' of kind ' + (raw[lk] && raw[lk].kind) + ', not the video');
+      const bad = ids.filter(function (id) { return !(q915bIsPtr(raw[id], lk) && raw[id].kind === 'video'); });
+      if (bad.length) throw new Error(bad.length + ' of 2 reused video clips are stored as ' + bad.map(function (id) { return q915bShape(raw[id]) + ' of kind ' + (raw[id] && raw[id].kind); }).join(', ') + ' - not as a pointer at ' + lk + ' that says video: reopened, it goes through the photo loader and comes back blank');
+      // reopen: every clip hydrates from its pointer
+      made.push(await FM.projects.create({ name: 'FX915Br video away', width: 320, height: 240 }));
+      await FM.projects.open(bId);
+      const blank = [];
+      ids.forEach(function (id) {
+        const m = FM.media.get(id);
+        const ok = m && m.kind === 'video' && m.el && m.el.tagName === 'VIDEO' && m.el.readyState >= 1 && m.el.videoWidth > 0;
+        if (!ok) blank.push(id + ': ' + (m ? 'kind ' + m.kind + ', ' + (m.el ? m.el.tagName + ' readyState ' + m.el.readyState + ' width ' + m.el.videoWidth : 'no element') : 'nothing loaded'));
+      });
+      if (blank.length) throw new Error(blank.length + ' of 2 reused video clips came back BLANK after a reopen (' + blank.join('; ') + ')');
     } finally {
-      for (const k of [probeLib, probeRef, probeCtl]) { try { await q915aDel(k); } catch (e) {} }
-      try { if (idx0 == null) localStorage.removeItem('fm.medialib'); else localStorage.setItem('fm.medialib', idx0); } catch (e) {}
-      await q915aCleanup(made, orig, wasOpen);
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br a reuse stored the old way, with no shared copy, keeps his original record while it plays from it', { item: '915', budgetMs: 60000 }, async function () {
+    /* When no shared copy can be made - a full phone, or another file already at lib:<mid> - the new clip plays from the
+       Blob read out of his ORIGINAL clip record, and on a full phone its own save fails too, so that record is the only
+       copy it has. Only its mark (fileKey) says so: without it, deleting the original project took the record while
+       the clip still played from it. Another file at the shared key is how no shared copy is made here. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    let K = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br fallback P', '#588157'); made.push(a.pid);
+      K = a.orig;
+      const lk = 'lib:' + a.tile.mid; libs.push(lk);
+      await q915aPut(lk, { file: await q915aPng('fallbackOther', '#ff006e'), kind: 'image' });
+      const q = await FM.projects.create({ name: 'FX915Br fallback Q', width: 320, height: 240 }); made.push(q);
+      if (!(await q915bReuse(a.tile.mid))) throw new Error('setup: the reuse was refused');
+      const nw = q915bImages()[0];
+      if (!nw) throw new Error('setup: the reuse added no clip');
+      if (q915bIsPtr((await q915aRaw())[nw.id], lk)) throw new Error('setup: the reuse was stored as a pointer, so this is not a reuse stored the old way');
+      FM.mediaLib.remove(a.tile.mid);   // no tile: nothing in the library keeps the record, only what plays from its file
+      const others = q915brNoOneElseHolds(K).filter(function (id) { return id !== nw.id; });
+      if (others.length) throw new Error('setup: ' + others.length + ' other clip(s) in memory hold the file, so the reused clip is not the only holder');
+      await FM.projects.remove(a.pid); made.splice(made.indexOf(a.pid), 1);
+      if (!(await q915aRaw())[K]) throw new Error('deleting his original project deleted the record the clip reused from it still plays from - stored the old way, with no shared copy, and on a full phone that record is the only copy it has');
+      await FM.projects.pruneOrphans();
+      if (!(await q915aRaw())[K]) throw new Error('the sweep deleted the record a clip reused the old way still plays from');
+      // the control: Q released, nothing holds the file, the sweep collects it - and the clip plays from its own copy
+      made.push(await FM.projects.create({ name: 'FX915Br fallback R', width: 320, height: 240 }));
+      await FM.projects.pruneOrphans();
+      const raw = await q915aRaw();
+      if (raw[K]) throw new Error('control: with nothing holding the file the sweep still kept the record, so it may not have run - nothing above was measured');
+      if (!(raw[nw.id] && raw[nw.id].file)) throw new Error('the clip reused the old way has no whole copy of its own (' + q915bShape(raw[nw.id]) + ')');
+      await FM.projects.open(q);
+      q915bMustShow([nw.id], a.rgb, 'as the clip reused the old way, after his original record was collected');
+    } finally {
+      if (K) { try { await q915aDel(K); } catch (e) {} }
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br a tap on the same tile in the project he moved to lands there with no Not added message, whichever tap finishes first', { item: '915', budgetMs: 90000 }, async function () {
+    /* He taps a tile in B, opens C and taps it again there while B's first copy runs. The clip lands in C, and B's tap
+       gives up - but it used to say Not added - you switched projects for 4 s, just before or just after his clip
+       arrived: a clip landing under a message saying it was not added, which invites a third tap and a second copy.
+       Both orders are run, and a control: with no tap in C, the message IS said. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [], said = [];
+    const realShare = FM.storage.shareMedia, realToast = FM.toast;
+    const gates = [];
+    const notAdded = function () { return said.filter(function (m) { return /not added/i.test(m); }); };
+    const onScreen = function () { const t = document.getElementById('toast'); return t ? String(t.textContent || '') : ''; };
+    const waitIn = async function (g, what) { for (let i = 0; i < 150 && !g.entered; i++) await sleep(20); if (!g.entered) throw new Error('setup: ' + what + ' never reached its first copy'); };
+    const inProject = function (pid) { return ((JSON.parse(localStorage.getItem('fm.proj.' + pid) || '{}').layers) || []).filter(function (l) { return l.type === 'image'; }).length; };
+    const all = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const tiles = [];
+      for (const n of ['one', 'two', 'ctl']) { const a = await q915bImport('FX915Br landed ' + n, '#9c6644'); made.push(a.pid); libs.push('lib:' + a.tile.mid); tiles.push(a); }
+      const pids = [];
+      for (let i = 0; i < 6; i++) { const id = await FM.projects.create({ name: 'FX915Br landed P' + i, width: 320, height: 240 }); made.push(id); pids.push(id); }
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      if (realShare) FM.storage.shareMedia = async function () { const g = gates.shift(); if (g) { g.entered = true; await g.done; } return realShare.apply(this, arguments); };
+
+      // 1. the tap in C finishes first, then the tap in B gives up
+      said.length = 0;
+      await FM.projects.open(pids[0]);
+      const g1 = q915bGate(); all.push(g1); gates.push(g1);
+      const pB1 = FM.mediaLib.use(tiles[0].tile.mid);
+      await waitIn(g1, 'the tap in B');
+      await FM.projects.open(pids[1]);
+      const okC1 = await Promise.race([FM.mediaLib.use(tiles[0].tile.mid), sleep(8000).then(function () { return 'still waiting'; })]);
+      if (okC1 !== true || q915bImages().length !== 1) throw new Error('setup: the tap in C answered ' + okC1 + ' and C holds ' + q915bImages().length + ' clips');
+      g1.release();
+      const okB1 = await pB1;
+      await sleep(60);
+      if (okB1 !== false) throw new Error('setup: the tap in B answered ' + okB1 + ' although he had left B');
+      if (notAdded().length) throw new Error('his clip landed in C, then the tap he left behind in B said ' + notAdded()[0] + ' - over the clip he just watched arrive (toasts: ' + said.join(' | ') + ')');
+      if (/not added/i.test(onScreen())) throw new Error('the message on screen after his clip landed in C is ' + onScreen());
+
+      // 2. the tap in B gives up first, while the tap in C is still copying
+      said.length = 0;
+      await FM.projects.open(pids[2]);
+      const g2 = q915bGate(), g3 = q915bGate(); all.push(g2, g3); gates.push(g2, g3);
+      const pB2 = FM.mediaLib.use(tiles[1].tile.mid);
+      await waitIn(g2, 'the tap in B');
+      await FM.projects.open(pids[3]);
+      const pC2 = FM.mediaLib.use(tiles[1].tile.mid);
+      await waitIn(g3, 'the tap in C');
+      g2.release();
+      const okB2 = await pB2;
+      if (okB2 !== false) throw new Error('setup: the tap in B answered ' + okB2 + ' although he had left B');
+      if (notAdded().length) throw new Error('while his tap in C was still copying, the tap he left behind in B said ' + notAdded()[0] + ' - his clip then lands under it (toasts: ' + said.join(' | ') + ')');
+      g3.release();
+      const okC2 = await pC2;
+      await sleep(60);
+      if (okC2 !== true || q915bImages().length !== 1) throw new Error('the tap in C answered ' + okC2 + ' and C holds ' + q915bImages().length + ' clips');
+      if (notAdded().length) throw new Error('his clip landed in C and a Not added message was said: ' + said.join(' | '));
+      if (/not added/i.test(onScreen())) throw new Error('the message on screen after his clip landed in C is ' + onScreen());
+      if (inProject(pids[0]) || inProject(pids[2])) throw new Error('a clip was added to a project he had left');
+
+      // 3. the control: a tap in B, he opens C and taps nothing - the message IS said
+      said.length = 0;
+      await FM.projects.open(pids[4]);
+      const g4 = q915bGate(); all.push(g4); gates.push(g4);
+      const pB3 = FM.mediaLib.use(tiles[2].tile.mid);
+      await waitIn(g4, 'the tap in B');
+      await FM.projects.open(pids[5]);
+      g4.release();
+      const okB3 = await pB3;
+      if (okB3 !== false) throw new Error('control: the tap in B answered ' + okB3 + ' although he had left B');
+      if (!notAdded().length) throw new Error('control: a tap he left behind, with nothing added anywhere, said nothing (toasts: ' + (said.join(' | ') || 'none') + ') - the silence above proves nothing');
+    } finally {
+      all.forEach(function (g) { g.release(); });
+      FM.storage.shareMedia = realShare; FM.toast = realToast;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br a tile tapped while the file Replace media gave it is still queued to be saved waits for the save and adds it, never says it is no longer stored', { item: '915', budgetMs: 60000 }, async function () {
+    /* Replace media keys its new tile at the clip and starts a save it does not wait for. Behind a big write - a phone
+       still saving the videos he just imported - that save queues, so the clip record on disk is still the OLD file.
+       He opens another project (the clip on screen is released) and taps the new tile: the disk says another file of
+       another size, and nothing on screen says otherwise. That dropped the tile with no longer stored and added
+       nothing, about a file seconds from being written. The big write is a transaction held open here. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [], said = [];
+    const realToast = FM.toast, realStash = FM.storage.stashPrevMedia, realRead = FM.storage.readMedia;
+    let hold = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br queued X', '#1d3557'); made.push(a.pid);
+      libs.push('lib:' + a.tile.mid);
+      const bId = await FM.projects.create({ name: 'FX915Br queued B', width: 320, height: 240 }); made.push(bId);
+      await FM.projects.open(a.pid);
+      const nw = await q915brPng('queuedNEW', '#e9c46a', 48, 36);
+      if (nw.size === a.file.size) throw new Error('setup: the two photos are the same size, so the disk and the tile would not disagree on it');
+      FM.storage.stashPrevMedia = async function () { const r = await realStash.apply(this, arguments); hold = await q915brHoldStore(); return r; };   // the big write starts just after Replace keeps the old file, so its own save queues
+      const T2 = await q915brReplace(a.orig, nw);
+      FM.storage.stashPrevMedia = realStash;
+      libs.push('lib:' + T2.mid);
+      if (!hold) throw new Error('setup: the held write never started');
+      if (T2.key !== a.orig) throw new Error('setup: the new tile is keyed at ' + T2.key + ', not at the clip it replaced');
+      await FM.projects.open(bId);   // A released: nothing on screen holds the new file
+      const mA = FM.media.get(a.orig);
+      if (mA && mA.file) throw new Error('setup: the replaced clip is still in memory after opening another project, so nothing here is the disk alone');
+      let asked = false;
+      FM.storage.readMedia = function (k) { if (k === a.orig) asked = true; return realRead.apply(this, arguments); };
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      const p = FM.mediaLib.use(T2.mid);   // his tap in B, while the replacement is still queued
+      for (let i = 0; i < 150 && !asked; i++) await sleep(20);
+      if (!asked) throw new Error('setup: the tap never read the tile record');
+      await sleep(200);                    // its read queues behind the held write, ahead of the replacement's own write
+      await hold.release(); hold = null;
+      const ok = await Promise.race([p, sleep(15000).then(function () { return 'still waiting'; })]);
+      FM.storage.readMedia = realRead; FM.toast = realToast;
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      const gone = said.filter(function (m) { return /no longer stored/i.test(m); });
+      if (gone.length) throw new Error('the tap on the tile for a file still queued to be saved said ' + gone[0] + ' (answered ' + ok + ')');
+      if (!FM.mediaLib.list().some(function (e) { return e.mid === T2.mid; })) throw new Error('the tile for a file still queued to be saved was dropped from Add - Media');
+      const c = q915bImages();
+      if (ok !== true || c.length !== 1) throw new Error('the tap answered ' + ok + ' and added ' + c.length + ' clips (toasts: ' + (said.join(' | ') || 'none') + ')');
+      const raw = await q915aRaw();
+      if (!(raw[a.orig] && raw[a.orig].file && raw[a.orig].file.name === nw.name)) throw new Error('setup: the replacement never reached the disk (' + q915bShape(raw[a.orig]) + ')');
+      if (!q915bIsPtr(raw[c[0].id], 'lib:' + T2.mid)) throw new Error('the clip is stored as ' + q915bShape(raw[c[0].id]) + ', not as a pointer at the new tile shared copy');
+      q915bMustShow([c[0].id], '#e9c46a', 'as the clip from the tile tapped while its file was queued');
+    } finally {
+      if (hold) { try { await hold.release(); } catch (e) {} }
+      FM.toast = realToast; FM.storage.stashPrevMedia = realStash; FM.storage.readMedia = realRead;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br a tile tapped while its own import is still being saved waits for the save and adds it, never says it is no longer stored', { item: '915', budgetMs: 60000 }, async function () {
+    /* Every import gives the file its tile at once and starts the save that writes it. On a phone - a video, or behind
+       the one before it - that takes seconds, and a tap on the new tile in that window found no record under its key:
+       the tile was dropped with no longer stored, for a file that was being written as he looked at it. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [], said = [];
+    const realToast = FM.toast, realRead = FM.storage.readMedia;
+    let hold = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      made.push(await FM.projects.create({ name: 'FX915Br importing', width: 320, height: 240 }));
+      const file = await q915aPng('importing', '#bc4749');
+      const rec = await FM.loadImageFile(file);
+      hold = await q915brHoldStore();
+      FM.addMediaLayer(rec);               // its save queues behind the held write
+      const fp = [file.name, file.size, file.lastModified].join('|');
+      const tile = FM.mediaLib.list().filter(function (e) { return e.fp === fp; })[0];
+      if (!tile) throw new Error('setup: the import made no library tile');
+      libs.push('lib:' + tile.mid);
+      const K = tile.key;
+      let asked = false;
+      FM.storage.readMedia = function (k) { if (k === K) asked = true; return realRead.apply(this, arguments); };
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      const p = FM.mediaLib.use(tile.mid);   // his tap on the new tile, at once
+      for (let i = 0; i < 150 && !asked; i++) await sleep(20);
+      if (!asked) throw new Error('setup: the tap never read the tile record');
+      await sleep(200);
+      await hold.release(); hold = null;
+      const ok = await Promise.race([p, sleep(15000).then(function () { return 'still waiting'; })]);
+      FM.storage.readMedia = realRead; FM.toast = realToast;
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      const gone = said.filter(function (m) { return /no longer stored/i.test(m); });
+      if (gone.length) throw new Error('the tap on the tile of a file still being saved said ' + gone[0] + ' (answered ' + ok + ')');
+      if (!FM.mediaLib.list().some(function (e) { return e.mid === tile.mid; })) throw new Error('the tile of a file still being saved was dropped from Add - Media');
+      const ims = q915bImages();
+      if (ok !== true || ims.length !== 2) throw new Error('the tap answered ' + ok + ' and the project holds ' + ims.length + ' clips, not 2 (toasts: ' + (said.join(' | ') || 'none') + ')');
+      const raw = await q915aRaw();
+      const reused = ims.filter(function (l) { return l.id !== K; })[0];
+      if (!q915bIsWhole(raw[K], file)) throw new Error('setup: the import is stored as ' + q915bShape(raw[K]) + ', not as a whole copy');
+      if (!q915bIsPtr(raw[reused.id], 'lib:' + tile.mid)) throw new Error('the reused clip is stored as ' + q915bShape(raw[reused.id]) + ', not as a pointer at the shared copy');
+      q915bMustShow([K, reused.id], '#bc4749', 'as the import and the clip from its tile tapped while it was being saved');
+    } finally {
+      if (hold) { try { await hold.release(); } catch (e) {} }
+      FM.toast = realToast; FM.storage.readMedia = realRead;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br a tile is never dropped while another tap on it is still copying its file', { item: '915', budgetMs: 60000 }, async function () {
+    /* He replaces a clip and its save does not land (held here by dropping it: no room, or still queued). He taps the new
+       tile, which copies the file from the clip on screen to the tile shared copy; opens another project and taps the
+       tile there while that copy runs. The second tap reads the OLD file on disk, finds nothing on screen, and dropped
+       the tile with no longer stored - though the first tap was writing that very file. The tile was lost for good and
+       its shared copy leaked. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [], said = [];
+    const realPut = IDBObjectStore.prototype.put, realShare = FM.storage.shareMedia, realToast = FM.toast;
+    const g = q915bGate();
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br copying X', '#6a4c93'); made.push(a.pid);
+      libs.push('lib:' + a.tile.mid);
+      const bId = await FM.projects.create({ name: 'FX915Br copying B', width: 320, height: 240 }); made.push(bId);
+      await FM.projects.open(a.pid);
+      const nw = await q915brPng('copyingNEW', '#f4a261', 48, 36);
+      IDBObjectStore.prototype.put = function (v, k) { if (k === a.orig && v && v.file) return undefined; return realPut.apply(this, arguments); };
+      const T2 = await q915brReplace(a.orig, nw);
+      const lk2 = 'lib:' + T2.mid; libs.push(lk2);
+      await sleep(150);
+      const raw0 = await q915aRaw();
+      if (!(raw0[a.orig] && raw0[a.orig].file && raw0[a.orig].file.name === a.file.name)) throw new Error('setup: the replacement reached the disk although its write was held');
+      let first = true;
+      if (realShare) FM.storage.shareMedia = async function () { if (first) { first = false; g.entered = true; await g.done; } return realShare.apply(this, arguments); };
+      const p1 = FM.mediaLib.use(T2.mid);   // his tap in A: copies the new file from the clip on screen
+      for (let i = 0; i < 150 && !g.entered; i++) await sleep(20);
+      if (!g.entered) throw new Error('setup: the tap in A never reached the first copy');
+      await FM.projects.open(bId);
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      const ok2 = await Promise.race([FM.mediaLib.use(T2.mid), sleep(8000).then(function () { return 'still waiting'; })]);   // his tap in B, while that copy runs
+      FM.toast = realToast;
+      if (!FM.mediaLib.list().some(function (e) { return e.mid === T2.mid; })) throw new Error('the tile was dropped from Add - Media while another tap on it was still copying its file (the tap answered ' + ok2 + ', toasts: ' + (said.join(' | ') || 'none') + ')');
+      const gone = said.filter(function (m) { return /no longer stored/i.test(m); });
+      if (gone.length) throw new Error('while another tap was copying its file, the tile said ' + gone[0]);
+      if (!said.some(function (m) { return /still copying/i.test(m); })) throw new Error('the tap in B added nothing and said nothing about why (answered ' + ok2 + ', toasts: ' + (said.join(' | ') || 'none') + ')');
+      g.release();
+      await p1;
+      IDBObjectStore.prototype.put = realPut;
+      const t = FM.mediaLib.list().filter(function (e) { return e.mid === T2.mid; })[0];
+      if (!t || t.key !== lk2) throw new Error('once the first copy finished the tile is keyed at ' + (t ? t.key : 'nothing') + ', not at its shared copy ' + lk2);
+      const had = new Set(q915bImages().map(function (l) { return l.id; }));
+      if (!(await q915bReuse(T2.mid))) throw new Error('the tap on the tile after its copy finished was refused');
+      const c = q915bImages().filter(function (l) { return !had.has(l.id); })[0];
+      if (!c) throw new Error('the tap on the tile after its copy finished added nothing');
+      if (!q915bIsPtr((await q915aRaw())[c.id], lk2)) throw new Error('the clip is not stored as a pointer at the tile shared copy');
+      q915bMustShow([c.id], '#f4a261', 'as the clip from the tile once its copy finished');
+    } finally {
+      g.release();
+      IDBObjectStore.prototype.put = realPut; FM.storage.shareMedia = realShare; FM.toast = realToast;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
     }
   });
 

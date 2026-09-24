@@ -3778,6 +3778,17 @@ window.FM = window.FM || {};
     if (m && !layer.reversed && !(layer.frameBlend && (FM.isAnimated(layer.speed) || (layer.speed || 1) < 1))) FM.clearFrameCache(m);   // keep the cache a ramped frame-blend clip still needs (animated speed is an object)
   };
 
+  /* queue 915 phase B: A COPY OF A CLIP CARRIES WHERE ITS FILE IS STORED. `ref` makes a split, duplicate or
+     paste of a clip reused from Add → Media save as a few-byte pointer at the same shared copy instead of the
+     whole file again (storage.js save); `fileKey` names the record its bytes were read out of, so no deleter
+     takes that record while this copy still plays from it (storage.js heldByAnother). */
+  function carryStoredFile(from, to) {
+    if (!from || !to) return to;
+    if (typeof from.ref === 'string' && from.ref.indexOf('lib:') === 0) to.ref = from.ref;
+    if (typeof from.fileKey === 'string' && from.fileKey) to.fileKey = from.fileKey;
+    return to;
+  }
+  FM._carryStoredFile = carryStoredFile;   // queue 915 suite seam
   // Give a cloned layer its OWN fresh media element (never alias the source's — a shared <video>
   // would double-seek). Shared by duplicate / split.
   async function reloadMediaTo(srcId, dstId) {
@@ -3786,6 +3797,7 @@ window.FM = window.FM || {};
     let nrec = null;
     try { nrec = rec.kind === 'video' ? await FM.loadVideoFile(rec.file) : await FM.loadImageFile(rec.file); } catch (e) { nrec = null; }
     if (nrec && nrec !== rec) {
+      carryStoredFile(rec, nrec);
       FM.media.set(dstId, nrec);
       if (nrec.kind === 'video') nrec.el.addEventListener('seeked', () => { if (FM._exporting || FM.playing) return; FM.requestRender(); });   // coalesced AND measured — see the note at the first of these (queue 125)
     }
@@ -3953,6 +3965,7 @@ window.FM = window.FM || {};
     FM.clipboard = ordered.map(layer => {
       const rec = FM.media.get(layer.id);
       const entry = { snapshot: JSON.parse(JSON.stringify(layer)), file: (rec && rec.file) ? rec.file : null, kind: rec ? rec.kind : null };
+      if (rec && rec.file) carryStoredFile(rec, entry);   // queue 915 phase B: the paste stays a pointer, and the record stays while the clipboard holds its file
       if (inside.has(layer.id)) entry.inside = true;
       return entry;
     });
@@ -4041,6 +4054,7 @@ window.FM = window.FM || {};
           else if (entry.kind === 'image') nrec = await FM.loadImageFile(entry.file);
         } catch (e) { nrec = null; }
         if (nrec) {
+          carryStoredFile(entry, nrec);   // queue 915 phase B
           FM.media.set(copy.id, nrec);
           if (nrec.kind === 'video') nrec.el.addEventListener('seeked', () => { if (FM._exporting || FM.playing) return; FM.requestRender(); });   // coalesced AND measured — see the note at the first of these (queue 125)
         }
