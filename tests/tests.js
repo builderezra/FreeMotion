@@ -87889,7 +87889,8 @@
   /* ═══ HUNT-d — RENDER PARITY ACROSS LAYER TYPES AND COMPOSITION (queue 690, 25 Sep) ════════════════════════════════════
    * His brief: "go re audit, find some bugs coz theres a shit load". The area: the preview must be the export — the idea of
    * 913.5 (render the whole frame and a zoomed slice and compare) carried across layer types and composition rather than the
-   * effect catalogue. Each test below FAILS on v16.93 because of a real bug, and each carries a control that proves the
+   * effect catalogue. Each test below FAILED on v16.93 because of a real bug (all four, plus the crop-tool sibling of the
+   * first, fixed on the same branch and proved by reverting the sources), and each carries a control that proves the
    * comparison can see what it claims to. Probed first with a sweep of text / shapes / images / groups / nested groups /
    * masks / blend modes / adjustment layers / camera / motion blur / parenting at the reduced playback plate (0.5, 0.3), a
    * 2x and a 3x zoomed slice — the plain compositing paths all matched; these four did not. */
