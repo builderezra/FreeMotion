@@ -87886,4 +87886,220 @@
     } finally { FM.scene = saved; try { FM.refreshAll(); } catch (e) {} }
   });
 
+  /* ═══ HUNT-f (queue 690, 25 Sep) — DATA SAFETY: four ways his work is lost or silently changed ════════
+     Found by a data-safety hunt under his standing brief ("go re audit, find some bugs coz theres a shit
+     load"). Each test below FAILS on v16.93 because of the bug it names; nothing here is fixed yet.
+     Shared helpers are prefixed hf so they cannot collide with anything else in this file. */
+  async function hfCleanup(made, orig, wasOpen) {
+    try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig); } catch (e) {}
+    for (const id of made) { try { if (FM.projects.list().some(function (p) { return p.id === id; })) await FM.projects.remove(id); } catch (e) {} }
+    try { if (wasOpen) FM.home.open(); } catch (e) {}
+  }
+  function hfDropTiles(layerId) {
+    try { if (FM.mediaLib && FM.mediaLib.list) FM.mediaLib.list().filter(function (e) { return e.key === layerId; }).forEach(function (e) { FM.mediaLib.remove(e.mid); }); } catch (e) {}
+  }
+
+  test('HUNT-f with the phone storage full, opening another project silently throws away everything since the last save', { item: '690', budgetMs: 60000 }, async function () {
+    /* His phone is full. The app said so ONCE ("Storage full — autosave paused…") and let him carry on
+       editing, which is right — the work is safe in memory for as long as he stays. But FM.projects.open()
+       calls flushSync() and throws the answer away: the write fails again, the outgoing scene is emptied,
+       the other project loads, and everything he did since that one toast is gone. No second warning at
+       the moment it matters, nothing to undo (history resets on open), and coming back shows the old
+       version. Home → another card and + → Create both go through the same open(). */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    const realSet = Storage.prototype.setItem, realAsk = FM.ask, realToast = FM.toast;
+    const asked = [], toasts = [];
+    let fullKey = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await FM.projects.create({ name: 'HUNTf full A', width: 320, height: 240 }); made.push(a);
+      const L1 = FM.makeLayer('shape', { name: 'HUNTf saved', shape: 'rect', x: 160, y: 120, shapeW: 60, shapeH: 40, fill: '#2a9d8f' });
+      L1.start = 0; L1.duration = 2; FM.scene.layers.push(L1); FM.refreshAll(); FM.history.commit();
+      if (!FM.storage.flushSync()) throw new Error('setup: project A could not be saved even with room, so nothing below means anything');
+      const b = await FM.projects.create({ name: 'HUNTf full B', width: 320, height: 240 }); made.push(b);
+      await FM.projects.open(a); await sleep(100);
+      if (!FM.scene.layers.some(function (l) { return l.name === 'HUNTf saved'; })) throw new Error('setup: project A did not reopen with its saved layer');
+      /* the phone fills up: every write of THIS project's document is refused, as a full localStorage refuses it */
+      fullKey = 'fm.proj.' + a;
+      Storage.prototype.setItem = function (k, v) {
+        if (k === fullKey) { const e = new Error('quota'); e.name = 'QuotaExceededError'; throw e; }
+        return realSet.call(this, k, v);
+      };
+      FM.toast = function (m) { toasts.push(String(m)); return realToast.apply(this, arguments); };
+      FM.ask = function (o) { asked.push(o); return Promise.resolve(false); };   // if a fix asks first, he says Cancel
+      const L2 = FM.makeLayer('text', { name: 'HUNTf unsaved', text: 'my title', x: 160, y: 60 });
+      L2.start = 0; L2.duration = 2; FM.scene.layers.push(L2); FM.refreshAll(); FM.history.commit();
+      await sleep(900);   // the 600 ms autosave runs and fails
+      if (FM.storage.flushSync()) throw new Error('setup: the save did not fail, so the phone is not full and this measures nothing');
+      /* he goes Home and opens his other project */
+      await FM.projects.open(b); await sleep(150);
+      const switched = FM.projects.currentId() === b;
+      /* space comes back (he deletes something), and he returns to the first project */
+      Storage.prototype.setItem = realSet; fullKey = null;
+      if (switched) { await FM.projects.open(a); await sleep(150); }
+      const names = FM.scene.layers.map(function (l) { return l.name; });
+      if (names.indexOf('HUNTf unsaved') < 0) {
+        throw new Error('with the phone storage full, opening another project threw away the text layer he had just added — ' +
+          'coming back shows only [' + names.join(', ').replace(/"/g, "'") + ']. The only warning was the one toast when the first save failed; ' +
+          'nothing was said at the switch (' + (asked.length ? 'asked ' + asked.length : 'no question asked') + ', toasts: ' + toasts.length + ')');
+      }
+    } finally {
+      Storage.prototype.setItem = realSet; FM.ask = realAsk; FM.toast = realToast;
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('HUNT-f replacing a clip twice and pressing undo twice does not bring his original back — it is deleted, and redo shows the wrong clip too', { item: '690', budgetMs: 60000 }, async function () {
+    /* Queue 829 made ONE wrong pick in Replace media… undoable by stashing the outgoing file — in one slot per
+       layer. Pick wrong twice (or try two replacements) and the second replace overwrites that slot with the
+       FIRST replacement, so the original exists nowhere: the next save writes over the layer's own record and
+       the library tile was removed at the first replace. Undo twice puts the layer's settings back and leaves
+       the second pick on screen; the save after it writes that over the record for good. Redo twice then claims
+       the third file and still shows the second. Driven through the real Replace media… handler (its own
+       hidden file input), not a copy of it. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    let id = null;
+    async function replaceVia(layerId, file) {
+      const before = new Set([].slice.call(document.querySelectorAll('input[type=file]')));
+      FM.replaceMedia(layerId);
+      const inp = [].slice.call(document.querySelectorAll('input[type=file]')).filter(function (i) { return !before.has(i); })[0];
+      if (!inp) throw new Error('setup: Replace media… made no file input to answer');
+      const dt = new DataTransfer(); dt.items.add(file); inp.files = dt.files;
+      inp.dispatchEvent(new Event('change'));
+      for (let i = 0; i < 150; i++) { await sleep(20); const m = FM.media.get(layerId); if (m && m.file === file) break; }
+      await sleep(150); await FM.storage.settled();
+    }
+    const shows = function () { const m = FM.media.get(id); return (m && m.file && m.file.name) || '(nothing)'; };
+    async function settleOn(name) { for (let i = 0; i < 60; i++) { if (shows() === name) return; await sleep(25); } }
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await FM.projects.create({ name: 'HUNTf replace', width: 320, height: 240 }); made.push(a);
+      const fA = await q915aPng('hfORIGINAL', '#d62828'), fB = await q915aPng('hfSECOND', '#2a9d8f'), fC = await q915aPng('hfTHIRD', '#264653');
+      FM.addMediaLayer(await FM.loadImageFile(fA));
+      id = FM.scene.selectedId;
+      await sleep(700); await FM.storage.settled();
+      await replaceVia(id, fB);
+      await replaceVia(id, fC);
+      if (shows() !== fC.name) throw new Error('setup: after two replaces the clip shows ' + shows() + ', not the third file');
+      FM.history.undo(); await settleOn(fB.name); await sleep(200);
+      if (shows() !== fB.name) throw new Error('control: ONE undo of a replace (the queue 829 case) no longer brings the previous file back — it shows ' + shows());
+      FM.history.undo(); await settleOn(fA.name); await sleep(300);
+      await sleep(700); await FM.storage.settled();
+      const onDisk = await FM.storage.readMedia(id);
+      const diskName = (onDisk && onDisk.file && onDisk.file.name) || '(nothing)';
+      if (shows() !== fA.name) {
+        throw new Error('he replaced a photo twice, then pressed undo twice to get his original back: the settings went back but the clip still shows his SECOND pick (' +
+          shows() + '), and the saved copy is now ' + diskName + ' — the original photo is gone from the project for good');
+      }
+      FM.history.redo(); FM.history.redo(); await settleOn(fC.name); await sleep(300);
+      if (shows() !== fC.name) throw new Error('after undoing two replaces and redoing both, the clip shows ' + shows() + ' instead of the last file he picked');
+    } finally {
+      if (id) { hfDropTiles(id); try { await q915aDel('prev:' + id); } catch (e) {} }
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('HUNT-f the AI Director keeps building into whatever project is open — switch projects mid-build and the other project gets its layers', { item: '690', budgetMs: 60000 }, async function () {
+    /* A Director build is a chain of model calls — seconds each, most of a minute on a real key — and every
+       step writes into FM.scene, which is whichever project is open NOW. Close the panel (✕ works mid-run),
+       go Home and open another project while it thinks, and the builders land their layers — a camera
+       among them, which takes over that project's whole view — in the OTHER project, then commit and
+       autosave it there. The project he asked for keeps only the scaffold. Run in the Director's own
+       no-key demo mode (dryRun), so no network is touched; the pipeline and the writes are the real ones. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    const hadLast = FM.ai ? FM.ai._lastBuild : undefined;
+    let run = null;
+    try {
+      if (!FM.ai || typeof FM.ai.generateScene !== 'function') throw new Error('the Director (FM.ai.generateScene) is missing');
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await FM.projects.create({ name: 'HUNTf director A', width: 1080, height: 1920 }); made.push(a);
+      const b = await FM.projects.create({ name: 'HUNTf director B', width: 1080, height: 1920 }); made.push(b);
+      const own = FM.makeLayer('text', { name: 'HUNTf B own', text: 'mine', x: 540, y: 960 });
+      own.start = 0; own.duration = 3; FM.scene.layers.push(own); FM.refreshAll(); FM.history.commit();
+      FM.storage.flushSync();
+      await FM.projects.open(a); await sleep(100);
+      run = FM.ai.generateScene('a neon title card for my channel', null, { dryRun: true, skipCritic: true });
+      for (let i = 0; i < 250 && !FM.scene.layers.length; i++) await sleep(20);
+      if (!FM.scene.layers.length) throw new Error('setup: the Director demo never started building in project A');
+      /* he closes the panel, goes Home and opens his other project while it is still building */
+      try { FM.aiPanel.hide(); } catch (e) {}
+      await FM.projects.open(b); await sleep(50);
+      const bIds = new Set(FM.scene.layers.map(function (l) { return l.id; }));
+      await run; run = null;
+      await sleep(700);
+      const intruders = FM.scene.layers.filter(function (l) { return !bIds.has(l.id); });
+      const onDisk = ((JSON.parse(localStorage.getItem('fm.proj.' + b) || '{}').layers) || []).filter(function (l) { return !bIds.has(l.id); });
+      if (intruders.length) {
+        throw new Error('the AI Director was still building when he opened another project, and it finished INSIDE that project: ' +
+          intruders.length + ' layers he never made (' + intruders.map(function (l) { return l.name + ' ' + l.type; }).slice(0, 5).join(', ').replace(/"/g, "'") + ') were added to it' +
+          (onDisk.length ? ' and saved' : '') + ', while the project he asked for kept only the start of the build');
+      }
+    } finally {
+      if (run) { try { await run; } catch (e) {} }
+      try { FM.aiPanel.hide(); } catch (e) {}
+      if (FM.ai) FM.ai._lastBuild = hadLast;
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('HUNT-f once one storage warning has shown, a clip that cannot be saved says nothing and comes back blank after a reload', { item: '690', budgetMs: 60000 }, async function () {
+    /* warnStore (js/storage.js) latches _storeWarned on its FIRST call and nothing ever clears it. Every IndexedDB
+       write goes through it — the project-card thumbnail that autosave refreshes every 12 s included — so on a
+       nearly-full phone the one warning goes on a picture he never asked about ("Not enough storage to save that
+       media."). Later, after a clip HAS saved fine, the phone fills again and he adds a photo or video: the write
+       is refused, the clip plays from memory, nothing says a word, and after the app is closed it comes back blank. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    const realPut = IDBObjectStore.prototype.put, realToast = FM.toast;
+    const toasts = [];
+    let refuse = null, okId = null, mineId = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await FM.projects.create({ name: 'HUNTf store', width: 320, height: 240 }); made.push(a);
+      const T = FM.makeLayer('text', { name: 'HUNTf title', text: 'card', x: 160, y: 120 });
+      T.start = 0; T.duration = 2; FM.scene.layers.push(T); FM.refreshAll(); FM.history.commit();
+      IDBObjectStore.prototype.put = function (val, key) {
+        if (refuse && typeof key === 'string' && refuse.test(key)) throw new DOMException('refused by the HUNT-f test', 'QuotaExceededError');
+        return realPut.apply(this, arguments);
+      };
+      FM.toast = function (m) { toasts.push(String(m)); return realToast.apply(this, arguments); };
+      /* 1. the phone is full when the card thumbnail is refreshed */
+      refuse = /^thumb:/;
+      FM.projects.pinThumbnail();
+      await sleep(800);
+      /* 2. space comes back and a clip saves perfectly well */
+      refuse = null;
+      FM.addMediaLayer(await FM.loadImageFile(await q915aPng('hfOK', '#8ab17d')));
+      okId = FM.scene.selectedId;
+      await sleep(700); await FM.storage.settled();
+      if (!(await FM.storage.readMedia(okId))) throw new Error('setup: with room to write, the first clip was not saved either — this measures the harness, not the warning');
+      /* 3. the phone fills again and he adds his photo */
+      refuse = /^(layer_|l_)/;
+      toasts.length = 0;
+      FM.addMediaLayer(await FM.loadImageFile(await q915aPng('hfMINE', '#e76f51')));
+      mineId = FM.scene.selectedId;
+      await sleep(700); await FM.storage.settled(); await sleep(500);
+      const stored = await FM.storage.readMedia(mineId);
+      if (stored) throw new Error('setup: the refused write went through anyway, so the phone was not full');
+      const warned = toasts.filter(function (t) { return /storage|could not save|no room|space|full/i.test(t); });
+      if (!warned.length) {
+        throw new Error('the photo he just added could not be saved because the phone is full, and NOTHING said so — the only storage warning of the session had already been used up' +
+          ' (here by a card thumbnail). It plays now and will come back blank the next time the app opens. Toasts at the time: [' + toasts.join(' | ').replace(/"/g, "'") + ']');
+      }
+    } finally {
+      IDBObjectStore.prototype.put = realPut; FM.toast = realToast;
+      if (okId) hfDropTiles(okId);
+      if (mineId) hfDropTiles(mineId);
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
+
 })();
