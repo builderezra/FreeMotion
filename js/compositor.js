@@ -3335,6 +3335,36 @@ window.FM = window.FM || {};
   function nestedPlate(ctx, proj) {
     const ps = plateScale(ctx);
     const OX = ctx.canvas.__fmOX || 0, OY = ctx.canvas.__fmOY || 0;
+    /* ═══ ZOOMED IN, AN EFFECT STILL SEES THE WHOLE FRAME (queue 913.5) ═══════════════════════════════════════════════
+     * Inheriting the target's extent (below) is right for every plate this file makes, and wrong for two canvases:
+     *   · A SLICE. Zoomed in, the preview canvas holds only the part of the comp you can see (app.js resizeCanvas's crop),
+     *     and so does anything stamped on its grid (the blend plate, Copy Background). A plate the size of the slice hands
+     *     every kernel the SLICE's centre as W/2 and its corner as 0,0 — Twirl, Bulge, Fisheye, Kaleidoscope, Tunnel, Lens
+     *     Flare, Speed Lines, the wipes, every grid were drawn around what you could see instead of around the frame; at 3x
+     *     a mild Twirl became a pinwheel and the zoomed view stopped matching the export. So the plate is the COMP at plate
+     *     scale — exactly what the export renders. It costs no more than the slice did: a zoomed plate is capped at scale 1
+     *     and the canvas it replaces was not.
+     *   · A SUPERSAMPLED canvas (__fmRS above 1 with no zoom — a small comp on a retina or big screen; 1.68 was measured on
+     *     a desktop stage). The plate is capped at scale 1 but its size was read off the canvas's DEVICE pixels, so it
+     *     covered rs times the comp and W/2 sat on the comp's far corner. A canvas covers width / its OWN scale in project
+     *     units, not width / the plate's; below 1 those are the same number.
+     * So nothing changes at or below scale 1 over a target that covers the comp — the export, the reduced playback tier,
+     * every plate this file allocates, the padded Squish / motion-blur / Tiles plates: the old numbers, byte for byte.
+     * FM._sliceFxLegacy puts the old sizing back everywhere. It is the suite's control (913.5), not a setting. */
+    if (!FM._sliceFxLegacy && ctx.canvas.width && ctx.canvas.height) {
+      const rs = (ctx.canvas.__fmRS > 0 && isFinite(ctx.canvas.__fmRS)) ? ctx.canvas.__fmRS : 1;
+      // in the target's own device pixels, where rounding is at most half a pixel
+      const covers = OX * rs <= 1 && OY * rs <= 1 &&
+                     (proj.width - OX) * rs <= ctx.canvas.width + 1 && (proj.height - OY) * rs <= ctx.canvas.height + 1;
+      if (!covers) {
+        const W = Math.max(1, Math.round(proj.width * ps)), H = Math.max(1, Math.round(proj.height * ps));
+        return { ps: ps, OX: 0, OY: 0, W: W, H: H, PWp: W / ps, PHp: H / ps };
+      }
+      if (rs > 1) {
+        const W = Math.max(1, Math.round(ctx.canvas.width / rs * ps)), H = Math.max(1, Math.round(ctx.canvas.height / rs * ps));
+        return { ps: ps, OX: OX, OY: OY, W: W, H: H, PWp: W / ps, PHp: H / ps };
+      }
+    }
     const W = Math.max(1, ctx.canvas.width || Math.round(proj.width * ps));
     const H = Math.max(1, ctx.canvas.height || Math.round(proj.height * ps));
     return { ps: ps, OX: OX, OY: OY, W: W, H: H, PWp: W / ps, PHp: H / ps };

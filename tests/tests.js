@@ -81692,8 +81692,9 @@
       if (!clip) throw new Error('setup: the 4s clip is not on the timeline');
       const cr = clip.getBoundingClientRect();
       // the pseudo-element lives inside the border: its screen edges are row.left + border + left (+ width)
-      const measure = () => {
-        const rr = row.getBoundingClientRect(), cs = getComputedStyle(row), ps = getComputedStyle(row, '::before');
+      const measure = (el) => {
+        el = el || row;
+        const rr = el.getBoundingClientRect(), cs = getComputedStyle(el), ps = getComputedStyle(el, '::before');
         const bl = parseFloat(cs.borderLeftWidth) || 0, pl = parseFloat(ps.left), pw = parseFloat(ps.width);
         return { bl: bl, pw: pw, rowLeft: rr.left, x1: parseFloat(cs.getPropertyValue('--ar-x1')), x0: parseFloat(cs.getPropertyValue('--ar-x0')) || 0, decoLeft: rr.left + bl + pl, decoRight: rr.left + bl + pl + pw };
       };
@@ -81707,14 +81708,24 @@
       /* THE PHONE ROW IS THE CASE (queue 592). The runner may build the PC line variant (no border) even at 380px — a
          fine pointer decides it, not the width — and there the overshoot cannot exist. So the phone row's stylesheet is
          measured too, by lifting the variant class: the base rule wears the 1px dashed border he sees on his phone. */
-      const wasLine = row.classList.contains('tl-addrow--line');
-      if (wasLine) row.classList.remove('tl-addrow--line');
-      try {
-        await sleep(30);
-        const phone = measure();
-        if (!(phone.bl >= 1)) throw new Error('setup: the base .tl-addrow rule has no 1px border any more (' + phone.bl + ') — the case this test measures has moved');
-        check(phone, 'phone row (' + phone.bl + 'px border)');
-      } finally { if (wasLine) row.classList.add('tl-addrow--line'); }
+      /* A DETACHED ROW READS AS NO BORDER (v16.90's phone pass, red once in a full run, green alone and in its slice):
+         getComputedStyle on an element the timeline has since rebuilt away answers empty strings, and parseFloat('')
+         || 0 was the 0 that said the rule had moved. So the row is found afresh for each try, and a try whose row was
+         rebuilt away during the pause is taken again rather than read. */
+      let phone = null, pr = null;
+      for (let attempt = 0; attempt < 3 && !phone; attempt++) {
+        pr = document.querySelector('.tl-addrow');
+        if (!pr) break;
+        const wasLine = pr.classList.contains('tl-addrow--line');
+        if (wasLine) pr.classList.remove('tl-addrow--line');
+        try {
+          await sleep(30);
+          if (pr.isConnected) phone = measure(pr);
+        } finally { if (wasLine && pr.isConnected) pr.classList.add('tl-addrow--line'); }
+      }
+      if (!phone) throw new Error('setup: the add row was rebuilt away three times in a row, or is gone — nothing could be measured');
+      if (!(phone.bl >= 1)) throw new Error('setup: the base .tl-addrow rule has no 1px border any more (' + phone.bl + ') — class [' + pr.className + '] border ' + getComputedStyle(pr).borderLeftStyle + ' ' + getComputedStyle(pr).borderLeftWidth + ' theme ' + document.documentElement.getAttribute('data-theme') + ' — the case this test measures has moved');
+      check(phone, 'phone row (' + phone.bl + 'px border)');
     } finally {
       FM.scene = saved; FM.scene.selectedId = savedSel;
       try { FM.refreshAll(); } catch (e) {}
@@ -85536,6 +85547,95 @@
     if (!(at(right, 25, 50) > 200 && at(right, 75, 50) < 80)) throw new Error('Right: the band is not a quarter of the way across (' + at(right, 25, 50) + ' at x25, ' + at(right, 75, 50) + ' at x75)');
     if (!(at(right, 25, 5) > 200 && at(right, 25, 95) > 200)) throw new Error('Right: the bright band is not a whole COLUMN — a sideways scan must light top to bottom');
     if (!(at(left, 75, 50) > 200 && at(left, 25, 50) < 80)) throw new Error('Left: the band is not three quarters across (' + at(left, 75, 50) + ' at x75, ' + at(left, 25, 50) + ' at x25)');
+  });
+
+  /* ═══ 913.5 — ZOOMING IN MUST NOT CHANGE AN EFFECT ═════════════════════════════════════════════════════════════════
+   * Found by the #912 audit (hunt MEDIUM #913, clause 5): zoom into the preview and Twirl, Bulge, Fisheye, Kaleidoscope,
+   * Tunnel, Lens Flare, Speed Lines and the rest of the frame-centred effects are drawn around the ZOOMED SLICE instead of
+   * the whole frame — at 3x a mild Twirl on a square becomes a pinwheel, and the zoomed view no longer matches the export.
+   * The cause is one place: a zoomed preview canvas holds only the visible slice of the comp (app.js resizeCanvas, the
+   * __fmCrop branch), and every effect plate is sized from its target (nestedPlate, queue 323), so the kernels were handed
+   * a plate whose centre, size and origin are the slice's — W/2 is the middle of what you can see, not of the frame.
+   * The test is the invariant, for EVERY effect in the catalog rather than the seven the audit named: a zoomed slice must
+   * show exactly the pixels the whole frame shows at that place. Rendered at 1:1 (plate scale 1 both ways, so equal means
+   * byte-equal) and at a 2x zoom (the real path: the canvas supersamples, the plate is capped at 1).
+   * CONTROL: FM._sliceFxLegacy puts the old slice-sized plate back, and with it Twirl MUST differ — a comparison that
+   * cannot see the bug proves nothing. A second control: Brightness must match with or without the fix, or the harness
+   * itself is misplacing the slice. */
+  test('913.5 zooming into the preview draws every effect exactly as the whole frame does — no effect is centred on the zoomed slice', { item: '913', budgetMs: 240000 }, async function () {
+    const PW = 240, PH = 160, T = 0.5;
+    const tex = offscreen(PW, PH), tc = tex.getContext('2d');
+    for (let y = 0; y < PH; y += 10) for (let x = 0; x < PW; x += 10) {
+      tc.fillStyle = ((x + y) / 10) % 2 ? '#e8e8e8' : '#1c4aa8'; tc.fillRect(x, y, 10, 10);
+    }
+    tc.fillStyle = '#d0302a'; tc.fillRect(20, 30, 50, 40);   // something that is NOT periodic, so a shifted grid cannot pass
+    const L = FM.makeLayer('image', { name: 'FX9135 plate', x: PW / 2, y: PH / 2, start: 0, duration: 3 });
+    L.start = 0; L.duration = 3;
+    const id = L.id;
+    FM.media.set(id, { kind: 'image', el: tex, width: PW, height: PH });
+    function render(fx, st) {
+      const cv = offscreen(st.w, st.h);
+      cv.__fmRS = st.rs; cv.__fmOX = st.ox; cv.__fmOY = st.oy; cv.__fmCrop = !!st.crop;
+      const layer = Object.assign({}, L, { effects: fx ? [JSON.parse(JSON.stringify(fx))] : [] });
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, { project: { width: PW, height: PH, fps: 30, duration: 3, background: '#000000' }, layers: [layer], selectedId: null, selectedIds: [] }, T);
+      return { d: ctx.getImageData(0, 0, st.w, st.h).data, w: st.w };
+    }
+    // full frame vs a zoomed slice covering project (60..180, 40..120) — at 1:1 and at 2x
+    const PASSES = [
+      { name: '1:1', full: { rs: 1, ox: 0, oy: 0, w: PW, h: PH }, crop: { rs: 1, ox: 60, oy: 40, w: 120, h: 80, crop: true }, dx: 60, dy: 40 },
+      { name: '2x zoom', full: { rs: 2, ox: 0, oy: 0, w: PW * 2, h: PH * 2 }, crop: { rs: 2, ox: 60, oy: 40, w: 240, h: 160, crop: true }, dx: 120, dy: 80 },
+    ];
+    function differing(A, B, pass) {
+      let n = 0;
+      for (let y = 0; y < pass.crop.h; y++) for (let x = 0; x < pass.crop.w; x++) {
+        const i = (y * B.w + x) * 4, j = ((y + pass.dy) * A.w + (x + pass.dx)) * 4;
+        if (Math.abs(A.d[j] - B.d[i]) > 12 || Math.abs(A.d[j + 1] - B.d[i + 1]) > 12 || Math.abs(A.d[j + 2] - B.d[i + 2]) > 12 || Math.abs(A.d[j + 3] - B.d[i + 3]) > 12) n++;
+      }
+      return n / (pass.crop.w * pass.crop.h);
+    }
+    function same(A, B) { if (A.d.length !== B.d.length) return false; for (let i = 0; i < A.d.length; i++) if (A.d[i] !== B.d[i]) return false; return true; }
+    function mismatch(fx, pass) { return differing(render(fx, pass.full), render(fx, pass.crop), pass); }
+    try {
+      window.__fmStep = '913.5 controls';
+      const twirl = FM.fxRegistry.makeInstance('twirl'), bright = FM.fxRegistry.makeInstance('brightness');
+      if (!twirl || !bright) throw new Error('twirl or brightness is not in the catalog — the controls below cannot run');
+      if (mismatch(null, PASSES[0]) > 0) throw new Error('with NO effect the zoomed slice already differs from the whole frame — the harness misplaces the slice, so nothing below means anything');
+      FM._sliceFxLegacy = true;
+      let legacyTwirl, legacyBright;
+      try { legacyTwirl = mismatch(twirl, PASSES[0]); legacyBright = mismatch(bright, PASSES[0]); } finally { FM._sliceFxLegacy = false; }
+      if (!(legacyTwirl > 0.05)) throw new Error('CONTROL FAILED — with the old slice-sized plate put back, Twirl still matched the whole frame (' + (legacyTwirl * 100).toFixed(1) + '% of pixels differ), so this comparison cannot see the bug it is here for');
+      /* The 2x pass carries the SUPERSAMPLED half of the fault too: a 2x canvas with no zoom (a small comp on a retina or
+         big screen) sized its plate from device pixels, so it covered twice the comp and centred Twirl on the comp's far
+         corner — while the 2x SLICE now gets the comp. The two only agree when both are right. */
+      FM._sliceFxLegacy = true;
+      let legacy2x;
+      try { legacy2x = mismatch(twirl, PASSES[1]); } finally { FM._sliceFxLegacy = false; }
+      if (!(legacy2x > 0.05)) throw new Error('CONTROL FAILED — on the old path the 2x pass saw Twirl match (' + (legacy2x * 100).toFixed(1) + '% differ), so it cannot see the plate it is here for');
+      if (legacyBright > 0) throw new Error('CONTROL FAILED — Brightness, which does not care where it is, differs in the slice even on the old path (' + (legacyBright * 100).toFixed(2) + '%) — the harness is wrong, not the app');
+      const bad = [], nondet = [], skipped = [];
+      const all = FM.fxRegistry.all().map(r => r.id);
+      for (let k = 0; k < all.length; k++) {
+        const type = all[k];
+        window.__fmStep = '913.5 ' + type;
+        const def = FM.fxRegistry.get(type);
+        if (!def || def.appliesTo === 'text' || !FM.fxRegistry.supportsLayer(type, L) || (FM._fxNeedsSource && FM._fxNeedsSource(type))) { skipped.push(type); continue; }
+        const fx = FM.fxRegistry.makeInstance(type);
+        if (!same(render(fx, PASSES[0].full), render(fx, PASSES[0].full))) { nondet.push(type); continue; }
+        for (let p = 0; p < PASSES.length; p++) {
+          const f = mismatch(fx, PASSES[p]);
+          if (f > 0.01) { bad.push(type + ' (' + PASSES[p].name + ': ' + (f * 100).toFixed(1) + '%)'); break; }
+        }
+
+        if (k % 8 === 7) await new Promise(r => setTimeout(r, 0));
+      }
+      window.__fmLast9135 = { bad: bad, nondet: nondet, skipped: skipped, checked: all.length - skipped.length - nondet.length, legacyTwirl: legacyTwirl };
+      if (all.length - skipped.length < 150) throw new Error('only ' + (all.length - skipped.length) + ' effects could be put on the fixture — too few for this to speak for the catalog');
+      if (bad.length) throw new Error(bad.length + ' effect(s) draw something different in a zoomed slice than in the whole frame: ' + bad.join(', '));
+    } finally {
+      FM._sliceFxLegacy = false;
+      FM.media.remove(id);
+    }
   });
 
 })();
