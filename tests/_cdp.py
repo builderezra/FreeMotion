@@ -304,6 +304,33 @@ def main():
                              "if(w){w.__fmInputErr=%s;w.__fmInputDone=%s;}})()" % (json.dumps(err), json.dumps(q["seq"])))
             except Exception:
                 pass
+            # A TEST MAY ASK FOR A REAL GARBAGE COLLECTION AND THE BROWSER'S OWN COUNTS (queue 690, hunt f). A leak is
+            # "memory that is still held AFTER the collector has run", and the page cannot run the collector itself —
+            # without one, a node that is merely waiting to be collected and a node something still holds look the same.
+            # So a test writes `window.__fmWantGc = {seq}`, this loop runs HeapProfiler.collectGarbage (twice, so objects
+            # freed by the first pass's finalizers go too) and answers `__fmGc = {seq, nodes, listeners, heapMB}` from
+            # Performance.getMetrics — the same DOM-node and listener counters DevTools shows — plus `__fmGcDone = seq`.
+            # Asked only by a test, never on its own, so no other test ever pays for a collection it did not want.
+            try:
+                want_gc = cdp.eval("(function(){var f=document.getElementById('app');var w=f&&f.contentWindow;"
+                                   "var q=w&&w.__fmWantGc;if(!q||typeof q.seq!=='number'||w.__fmGcDone===q.seq) return null;"
+                                   "return q.seq;})()")
+                if isinstance(want_gc, (int, float)):
+                    gerr = ''
+                    got = {}
+                    try:
+                        cdp.send("HeapProfiler.collectGarbage")
+                        cdp.send("HeapProfiler.collectGarbage")
+                        cdp.send("Performance.enable")
+                        got = {m["name"]: m["value"] for m in cdp.send("Performance.getMetrics").get("metrics", [])}
+                    except Exception as ex:
+                        gerr = str(ex)[:300]
+                    ans = {"seq": want_gc, "nodes": got.get("Nodes"), "listeners": got.get("JSEventListeners"),
+                           "heapMB": round((got.get("JSHeapUsedSize") or 0) / 1e6, 2), "err": gerr}
+                    cdp.eval("(function(){var f=document.getElementById('app');var w=f&&f.contentWindow;"
+                             "if(w){w.__fmGc=%s;w.__fmGcDone=%s;}})()" % (json.dumps(ans), json.dumps(want_gc)))
+            except Exception:
+                pass
             try:
                 payload = cdp.eval("(function(){"
                                    "var s=document.getElementById('sum');"

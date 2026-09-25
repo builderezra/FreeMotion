@@ -90037,4 +90037,263 @@
   });
 
 
+  /* ═══ HUNT-f (queue 690, 25 Sep) — PERFORMANCE AND STABILITY, MEASURED GETTING WORSE ═══════════════════════════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load", pointed at his lag reports (#202, #657, #692 and the
+   * unnumbered "Editing lags, and gets bad fast"). Every one of these was MEASURED first — heap snapshots, node and
+   * listener counts after a forced collection, main-thread gaps, the quality ladder's own state — and each test FAILS on
+   * v16.94 because of the thing it names. Helpers are prefixed hf2 so they cannot collide with the storage hunt's hf. */
+
+  /* A real garbage collection, then the browser's own DOM-node and event-listener counts. Only tests/_cdp.py can run the
+     collector (HeapProfiler.collectGarbage); without it "still held" and "not collected yet" look identical, so a run
+     without the driver FAILS saying so rather than passing on a number that means nothing. */
+  async function hf2Gc(what) {
+    const seq = (window.__fmGcSeq = (window.__fmGcSeq || 0) + 1);
+    window.__fmWantGc = { seq: seq };
+    const deadline = Date.now() + 30000;
+    while (window.__fmGcDone !== seq) {
+      if (Date.now() > deadline) throw new Error('no garbage collection arrived for ' + what + ' — this test needs tests/_cdp.py, which turns __fmWantGc into a real collection and the browser node and listener counts');
+      await sleep(40);
+    }
+    const g = window.__fmGc || {};
+    if (g.err) throw new Error('the driver could not collect garbage for ' + what + ': ' + g.err);
+    if (typeof g.nodes !== 'number' || typeof g.listeners !== 'number') throw new Error('the driver answered without node and listener counts for ' + what);
+    return g;
+  }
+
+  /* 1 ─ THE FILTERS TAB AND THE EFFECTS BROWSER KEEP EVERY THUMBNAIL THEY EVER DREW (js/fx-thumbs.js `mounted`).
+     Every tile canvas is added to a module-level Set when it is mounted, and the only thing that ever prunes it is
+     remountLive(), which runs when the fx-art photographs finish decoding — about once a session. So each rebuild of
+     the Filters tab (56 tiles of 192x192) and each open of the effects browser strands every old tile, and through
+     the tile its whole old panel. Measured on a real session: 20,700 page elements and 5,900 listeners held after a
+     forced collection, 3,584 dead filter canvases (about 530 MB of picture memory) after 60 refreshes. */
+  test('HUNT-f trying looks on the Filters tab and opening the effects browser keeps every thumbnail it ever drew alive — memory his phone never gets back', { item: '690', budgetMs: 150000 }, async function () {
+    const saved = FM.scene, wasOpen = FM.home.isOpen();
+    const realCreate = document.createElement;
+    const made = [];
+    try {
+      if (wasOpen) FM.home.close();
+      const L = FM.makeLayer('shape', { name: 'HF2 looks', shape: 'rect', x: 540, y: 675, shapeW: 640, shapeH: 640, fill: '#3a7bd5', start: 0, duration: 4 });
+      FM.scene = scene([L], { project: { width: 1080, height: 1350, fps: 30, duration: 4, background: '#101418' } });
+      FM.selectLayer(L.id); FM.refreshAll(); FM.history.commit();
+      await sleep(300);
+      const layerNow = () => FM.layerById(FM.scene, L.id);
+      const openFilters = async () => { FM.selectLayer(L.id); FM.inspector.openCategory('filters'); await sleep(350); return [].slice.call(document.querySelectorAll('button.flt-tile')).filter(b => b.isConnected); };
+      /* one "try a look": open Filters, pick a tile (it previews on his canvas), Add, then Undo because he did not like it */
+      let markSeen = () => {};
+      const tryLook = async (i) => {
+        const tiles = await openFilters();
+        if (tiles.length < 10) throw new Error('setup: the Filters tab showed ' + tiles.length + ' tiles — there is nothing to try');
+        markSeen();   // the tiles are on screen NOW — after Add the panel moves on to the effect stack
+        tiles[(i * 5) % tiles.length].click();
+        await sleep(150);
+        const go = document.querySelector('.flt-commit .fxb-commit-go');
+        if (!go || !go.isConnected) throw new Error('setup: picking a filter tile brought up no Add button');
+        const n0 = (layerNow().effects || []).length;
+        go.click();
+        await sleep(250);
+        if ((layerNow().effects || []).length !== n0 + 1) throw new Error('setup: Add did not put the picked filter on the layer (' + n0 + ' then ' + (layerNow().effects || []).length + ' effects)');
+        FM.history.undo();
+        await sleep(250);
+      };
+      const browse = async () => { FM.selectLayer(L.id); FM.fxBrowser.open(layerNow()); await sleep(300); FM.fxBrowser.close(); await sleep(150); };
+
+      // warm-up: the first build of each surface may legitimately create caches that live for the session
+      await tryLook(0); await browse();
+      await sleep(300);
+      const g0 = await hf2Gc('the start of the looks');
+
+      document.createElement = function (tag) {
+        const e = realCreate.apply(document, arguments);
+        if (String(tag).toLowerCase() === 'canvas') made.push({ ref: new WeakRef(e), seen: false });
+        return e;
+      };
+      markSeen = () => made.forEach(m => { const c = m.ref.deref(); if (c && c.isConnected) m.seen = true; });
+      const LOOKS = 6, BROWSES = 5;
+      for (let i = 1; i <= LOOKS; i++) { await tryLook(i); markSeen(); }
+      for (let i = 0; i < BROWSES; i++) { FM.selectLayer(L.id); FM.fxBrowser.open(layerNow()); await sleep(300); markSeen(); FM.fxBrowser.close(); await sleep(150); }
+      document.createElement = realCreate;
+      FM.selectLayer(null); FM.refreshAll();
+      await sleep(400);
+      const g1 = await hf2Gc('the end of the looks');
+
+      const shown = made.filter(m => m.seen).length;
+      if (shown < LOOKS * 10) throw new Error('CONTROL: only ' + shown + ' thumbnail canvases were ever on screen across ' + LOOKS + ' looks and ' + BROWSES + ' browses — the tiles did not draw, so nothing below was measured');
+      const dead = made.filter(m => { const c = m.ref.deref(); return m.seen && c && !c.isConnected; });
+      const mb = dead.reduce((s, m) => { const c = m.ref.deref(); return s + (c ? c.width * c.height * 4 : 0); }, 0) / 1e6;
+      const dn = g1.nodes - g0.nodes, dl = g1.listeners - g0.listeners;
+      if (dead.length > 80 || dn > 600) throw new Error('trying ' + LOOKS + ' looks on the Filters tab and opening the effects browser ' + BROWSES + ' times left ' + dead.length + ' of the ' + shown + ' thumbnails he saw alive after they left the screen (' + mb.toFixed(1) + ' MB of picture memory), and ' + dn + ' page elements and ' + dl + ' listeners more than before, after a full garbage collection — none of it is ever given back, so every look he tries makes the app heavier until his iPhone reloads it');
+    } finally {
+      document.createElement = realCreate;
+      try { if (FM.fxBrowser.isOpen()) FM.fxBrowser.close(); } catch (e) {}
+      FM.scene = saved; FM.selectLayer(null); FM.refreshAll();
+      if (wasOpen) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
+  /* 2 ─ THE AUTOSAVE REDRAWS THE WHOLE PROJECT AT FULL SIZE EVERY 12 SECONDS (js/storage.js makeThumb, from
+     touchCurrent on every autosave). The Home card is 360px; the render is done at the PROJECT size (1080x1350 here,
+     his size) and then halved down, on the main thread, 600ms after an edit, at most every 12 s while he works. So a
+     heavy project freezes once every twelve seconds for as long as an EXPORT frame takes — measured 270-333 ms on this
+     Mac against 29 ms for a preview frame of the same project, i.e. a second or more on a phone. */
+  test('HUNT-f while he edits a heavy project the app freezes every 12 seconds, because the autosave redraws the whole project at full size just to refresh its Home card', { item: '690', budgetMs: 90000 }, async function () {
+    const saved = FM.scene, wasOpen = FM.home.isOpen();
+    const realTouch = FM.projects.touchCurrent;
+    let iv = 0;
+    try {
+      if (wasOpen) FM.home.close();
+      if (FM.pause) FM.pause();
+      const types = ['vignette', 'thermal', 'crt', 'halftone', 'glow', 'blur', 'chromaticaberration', 'noise'];
+      const cols = ['#e0245e', '#3b82f6', '#22c55e', '#f59e0b', '#a855f7', '#14b8a6'];
+      const layers = [];
+      for (let i = 0; i < 6; i++) {
+        const L = FM.makeLayer('shape', { name: 'HF2 heavy ' + i, shape: 'rect', x: 200 + i * 120, y: 300 + i * 140, shapeW: 400, shapeH: 400, fill: cols[i], start: 0, duration: 5 });
+        L.effects = [types[i % 8], types[(i + 3) % 8], types[(i + 5) % 8]].map(t => FM.fxRegistry.makeInstance(t)).filter(Boolean);
+        layers.push(L);
+      }
+      const nfx = layers.reduce((s, l) => s + l.effects.length, 0);
+      if (nfx < 15) throw new Error('setup: only ' + nfx + ' of 18 effects could be made — the project is not the heavy one this is about');
+      FM.scene = scene(layers, { project: { width: 1080, height: 1350, fps: 30, duration: 5, background: '#000000' } });
+      FM.selectLayer(null); FM.setTime(1); FM.refreshAll(); FM.history.commit();
+      await sleep(1200);
+      const pid = FM.projects.currentId();
+      const card0 = await FM.projects.getThumb(pid);
+
+      // what one frame of this project costs in the PREVIEW he is looking at (median of 5)
+      const pv = document.getElementById('preview');
+      if (!pv || !pv.width) throw new Error('setup: no preview canvas to measure a frame against');
+      const pctx = pv.getContext('2d'), ft = [];
+      for (let i = 0; i < 5; i++) { const t0 = performance.now(); FM.renderScene(pctx, FM.scene, 1); ft.push(performance.now() - t0); }
+      ft.sort((a, b) => a - b);
+      const frameMs = ft[2];
+
+      // the longest the main thread is ever unavailable while he works, and what the autosave's card refresh cost
+      const cards = [];
+      FM.projects.touchCurrent = function () { const t0 = performance.now(); try { return realTouch.apply(this, arguments); } finally { cards.push(performance.now() - t0); } };
+      let last = performance.now(), worst = 0, worstAt = 0;
+      const start = last;
+      iv = setInterval(() => { const n = performance.now(); if (n - last > worst) { worst = n - last; worstAt = n - start; } last = n; }, 5);
+      /* An edit a second — nudging a layer, as he does all the time — until the card has been refreshed once (the
+         app does that at most every 12 s, so this is 2 to 14 s depending on when it last did) and a little after. */
+      for (let i = 0, refreshedAt = -1; i < 15; i++) {
+        const L = FM.scene.layers[i % 6];
+        L.transform.x = (+L.transform.x || 0) + (i % 2 ? -15 : 15);   // a plain number on a fresh layer — no keyframes involved
+        FM.requestRender(); FM.history.commit();
+        await sleep(1000);
+        if (refreshedAt < 0 && (await FM.projects.getThumb(pid)) !== card0) refreshedAt = i;
+        if (refreshedAt >= 0 && i >= refreshedAt + 1 && i >= 2) break;
+      }
+      clearInterval(iv); iv = 0;
+      FM.projects.touchCurrent = realTouch;
+      const card1 = await FM.projects.getThumb(pid);
+      if (!cards.length) throw new Error('CONTROL: a run of edits never reached the autosave, so nothing was measured');
+      if (!card1 || card1 === card0) throw new Error('CONTROL: fifteen seconds of edits never refreshed the project card, so the thing that freezes was never exercised');
+      const limit = Math.max(120, frameMs * 4);
+      const dearCard = Math.max.apply(null, cards);
+      if (worst > limit) throw new Error('editing a 1080x1350 project with ' + nfx + ' effects, the app froze for ' + Math.round(worst) + ' ms at ' + (worstAt / 1000).toFixed(1) + ' s — ' + (worst / frameMs).toFixed(1) + 'x a whole preview frame (' + frameMs.toFixed(1) + ' ms). The autosave card refresh alone took ' + Math.round(dearCard) + ' ms: it redraws every layer and effect at the full 1080x1350 to make a 360px Home picture, and does it every 12 s while he works — on his phone that is a stall of a second or more, over and over');
+    } finally {
+      if (iv) clearInterval(iv);
+      FM.projects.touchCurrent = realTouch;
+      FM.scene = saved; FM.selectLayer(null); FM.refreshAll();
+      if (wasOpen) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
+  /* 3 ─ THE PLAYBACK QUALITY LADDER NEVER GIVES THE DETAIL BACK (js/app.js notePlaybackCost). It drops a tier when a
+     frame costs over 72% of the budget and climbs only when one costs under 30% — and nothing resets it between plays
+     or projects. So once a heavy stretch has pushed it down, any scene whose cost does not depend on resolution (a plain
+     video: the ladder's own notes measure 8-12 ms at any size) sits between the two lines for ever: never slow enough to
+     drop, never cheap enough to climb, and never probed to see that full resolution costs the same. His 27 Aug PC sample
+     (#657) is exactly this: 2 videos + 2 shapes, NO effects, drawn at 28% scale on a 6-core Mac. */
+  test('HUNT-f after one heavy stretch of playback the preview stays blurry for the rest of the session, even when full resolution costs the same', { item: '690', budgetMs: 60000 }, async function () {
+    if (typeof FM._notePlaybackCost !== 'function' || !FM.playbackQualityInfo) throw new Error('the quality ladder is not reachable from the suite (FM._notePlaybackCost)');
+    const saved = FM.scene, mode0 = FM.settings.get('playbackQuality'), realToast = FM.toast;
+    const q = () => FM.playbackQualityInfo();
+    const park = () => { const p = FM.playing; FM.playing = true; FM.settings.set('playbackQuality', 'detail'); FM._notePlaybackCost(1, 16); FM.playing = p; FM.settings.set('playbackQuality', 'auto'); };
+    try {
+      if (FM.pause) FM.pause();
+      FM.toast = function () {};   // the struggle offer may fire at the bottom of the heavy stretch; not what this is about
+      const L = FM.makeLayer('shape', { name: 'HF2 play', shape: 'rect', x: 540, y: 675, shapeW: 400, shapeH: 400, fill: '#22c55e', start: 0, duration: 60 });
+      FM.scene = scene([L], { project: { width: 1080, height: 1350, fps: 60, duration: 60, background: '#000000' } });
+      FM.selectLayer(null); FM.setTime(0); FM.refreshAll();
+      park();
+      const budget = 1000 / 60;
+
+      /* A HEAVY STRETCH, pixel-bound — shedding pixels genuinely helps (the 202 test's own model of his 24-effect
+         sample), so the ladder is RIGHT to drop here. Driven synchronously between play() and pause(), so the real
+         playback loop never gets a frame in edgeways. */
+      FM.play();
+      for (let i = 0; i < 400; i++) { const c = 294.69 * Math.pow(0.6, q().tier); FM._notePlaybackCost(c, c * 1.06); }
+      const low = q();
+      FM.pause();
+      if (low.tier < 2) throw new Error('CONTROL: the heavy stretch only took the ladder to tier ' + low.tier + ' — it never dropped, so nothing below means anything');
+
+      /* THEN THE HEAVY PART IS GONE — he took the effects off, or opened a plain video project — and plays again for
+         thirty seconds of frames that cost 10 ms at ANY resolution: 60% of a 60 fps frame, comfortably smooth at full
+         detail, and nothing shedding pixels can improve. */
+      FM.play();
+      for (let i = 0; i < 1800; i++) FM._notePlaybackCost(10, budget);
+      const after = q();
+      FM.pause();
+      if (after.tier > 1) throw new Error('one heavy stretch took playback down to ' + Math.round(low.effective * 100) + '% resolution, and 30 s of playback that costs the same 10 ms at any size (60% of a 60 fps frame) never brought it back: it is still drawing at ' + Math.round(after.effective * 100) + '% (tier ' + after.tier + ' of ' + (6 - 1) + '). The preview stays blurry for the rest of the session, in every project — his 27 Aug PC sample was 28% scale with no effects at all');
+    } finally {
+      try { if (FM.playing && FM.pause) FM.pause(); } catch (e) {}
+      FM.toast = realToast;
+      park();
+      FM.settings.set('playbackQuality', mode0 || 'auto');
+      if (FM._resetPerfOffer) FM._resetPerfOffer();
+      FM.scene = saved; FM.selectLayer(null); FM.refreshAll();
+    }
+  });
+
+  /* 4 ─ THE CLIP FILMSTRIPS OF THE PROJECT HE OPENS WAIT BEHIND CLIPS FROM PROJECTS HE ALREADY LEFT (js/frames.js
+     buildClipStrip). Every strip build in the app goes through ONE queue, one at a time. Leave a project before its
+     strip is done and that clip is released — its video loses its src — but its build stays in the queue and waits out
+     a 3 s "loadeddata" timeout (or 500 ms per frame) on a video that will never load again, holding the old timeline
+     and video alive until it does. Measured: 0.6 s to a filmstrip opening a project directly, 3.4 s after one hop,
+     9.0 s after three, 14.4 s after five. */
+  test('HUNT-f opening a project after looking into a few others leaves its clips blank for seconds — its filmstrip waits behind clips from projects he already left', { item: '690', budgetMs: 150000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], clips = [];
+    const stripOf = () => { const V = FM.scene.layers.filter(l => l.type === 'video')[0]; const m = V && FM.media.get(V.id); return !!(m && m.stripFrames && m.stripFrames.length); };
+    const waitStrip = async (limitMs) => { const t0 = performance.now(); while (performance.now() - t0 < limitMs) { if (stripOf()) return performance.now() - t0; await sleep(40); } return -1; };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const r = await fetch('/splash.mp4');
+      if (!r.ok) throw new Error('setup: splash.mp4 could not be fetched from the test origin (' + r.status + ')');
+      const blob = await r.blob();
+      const mk = async (name) => {
+        const id = await FM.projects.create({ name: name, width: 1080, height: 1920 });
+        made.push(id);
+        const file = new File([blob], 'hf2-' + name.replace(/\W+/g, '') + '-' + Date.now() + '.mp4', { type: 'video/mp4', lastModified: Date.now() });
+        FM.addMediaLayer(await FM.loadVideoFile(file));
+        const V = FM.scene.layers.filter(l => l.type === 'video')[0];
+        if (!V) throw new Error('setup: importing the clip into ' + name + ' made no video layer');
+        clips.push(V.id);
+        await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+        if (await waitStrip(15000) < 0) throw new Error('setup: the clip in ' + name + ' never got a filmstrip at all');
+        return id;
+      };
+      const A = await mk('HF2 strip A'), B = await mk('HF2 strip B');
+      await sleep(600);
+
+      // BASELINE: open A straight from B, nothing else in the way
+      await FM.projects.open(A);
+      const direct = await waitStrip(20000);
+      if (direct < 0) throw new Error('CONTROL: opening a project directly never drew its filmstrip, so there is nothing to compare against');
+      await sleep(1500);
+
+      // THE HOPS: B, A, B for a moment each — looking for the right project — then land on A
+      for (const id of [B, A, B]) { await FM.projects.open(id); await sleep(200); }
+      await FM.projects.open(A);
+      const hopped = await waitStrip(30000);
+      const limit = direct * 2 + 1500;
+      if (hopped < 0 || hopped > limit) throw new Error('opened directly, the project showed its filmstrip in ' + (direct / 1000).toFixed(1) + ' s; opened after looking into 3 other projects for a moment each, its clip stayed a blank bar for ' + (hopped < 0 ? 'more than 30 s' : (hopped / 1000).toFixed(1) + ' s') + ' — the strip waits in one queue behind the clips of the projects he already left, each stuck on a video that was released and will never load');
+    } finally {
+      clips.forEach(hfDropTiles);
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
+
 })();
