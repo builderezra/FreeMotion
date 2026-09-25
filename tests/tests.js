@@ -95900,7 +95900,8 @@
    * HUNT-d parity sweep found the preview and the export agree on the plain paths, because both go through FM.renderScene —
    * so each bug below is in the PICTURE ITSELF, and lands in the exported file exactly as he sees it on the canvas (the
    * first test reads it back out of the real PNG-frames export to show that). Each carries a control that proves the
-   * measurement can see the right answer. All four FAIL on v16.98. */
+   * measurement can see the right answer. All four FAIL on v16.98, and are fixed in compositor.js (renamed from HUNT-b to
+   * what each one now guarantees). */
 
   // One frame of the REAL PNG-frames export of `sc` at time t, read back out of the zip it builds (HUNT-d's stub690 keeps
   // anything from downloading). The exporter renders through FM.renderScene into a project-sized canvas, so this is the file.
@@ -95924,7 +95925,9 @@
     }
   }
 
-  /* HUNT-b 1 — CAMERA MOTION BLUR WASHES THE WHOLE PICTURE TOWARD THE BACKGROUND. renderScene's camera composite averages the
+  /* 690 (HUNT-b 1) — CAMERA MOTION BLUR WASHED THE WHOLE PICTURE TOWARD THE BACKGROUND. Fixed: the slices are added at 1/N
+   * with 'lighter' into a scratch canvas on the frame's grid and laid over the background once (compositor.js renderScene).
+   * What was found:  renderScene's camera composite averages the
    * shutter slices by drawing each one with globalAlpha 1/N over a canvas already filled with the background, source-over
    * (compositor.js, the `if (slices)` loop). Source-over does not average: after N slices the picture only reaches
    * 1 - (1 - 1/N)^N of full strength and the background keeps the rest — 25% at two slices, 34% at eight, 36% at 32. So the
@@ -95932,7 +95935,7 @@
    * background dims the whole frame, a white one bleaches it), and the amount changes with the slice count, which follows
    * the camera's speed — the frame pumps brighter and darker through an eased pan. In a transparent export the whole frame
    * turns see-through. The layer version (drawMotionBlur) accumulates with 'lighter' for exactly this reason and says so. */
-  test('HUNT-b camera motion blur washes the whole picture toward the background while the camera moves', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 camera Motion Blur averages its slices — a pan keeps the picture at full brightness, and a transparent export stays solid', { item: '690', budgetMs: 60000 }, async function () {
     const PW = 320, PH = 240, T = 0.5;
     function build(blurOn) {
       const cam = FM.makeLayer('camera', { name: 'HB cam' });
@@ -95971,14 +95974,17 @@
     if (bad.length) throw new Error('with camera Motion Blur on and the camera panning: ' + bad.join('; ') + ' — every frame where the camera moves goes dim, and brighter or darker again as the pan speeds up and slows down');
   });
 
-  /* HUNT-b 2 — THE CAMERA NEVER SEES PAST THE PROJECT EDGE. renderScene draws every layer into the camera plate `_camCv`, and
+  /* 690 (HUNT-b 2) — THE CAMERA NEVER SAW PAST THE PROJECT EDGE. Fixed: the camera plate is sized to what the camera sees
+   * (camPlateBox); a per-layer effect pass inside it keeps the frame-sized plate it always had (nestedPlate), while the
+   * passes that only cut or mix — a pen mask, a group unit, fog, Motion Blur (Object), the blend plates — follow it out.
+   * What was found:  renderScene draws every layer into the camera plate `_camCv`, and
    * that plate is exactly the project rectangle (P.width x P.height, origin 0,0). So anything a layer has outside the frame
    * is thrown away BEFORE the camera looks at it. Pan the camera right and the right of the shot is the empty background —
    * even across a photo scaled up far past the frame, which is exactly how anyone sets up a pan across a picture. Zoom the
    * camera out and the scene is a small box in the middle of the background; turn it and the corners are background.
    * Depth parallax slides layers against the camera and gets cut off the same way. CONTROL: the same pan done WITHOUT a
    * camera — the photo itself moved the other way — fills the frame, so the photo really does reach there. */
-  test('HUNT-b a camera pan, zoom-out or turn cuts every layer off at the project edge and shows the background', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 the camera sees past the project edge — a pan, zoom-out or turn over a big photo shows the photo, masked, grouped, blurred and fogged too', { item: '690', budgetMs: 60000 }, async function () {
     const PW = 320, PH = 240, T = 0.5;
     function photo(x) {   // a picture scaled up well past the frame — four times its width, four times its height
       const L = FM.makeLayer('shape', { name: 'HB big photo', shape: 'rect', x: x, y: 120, shapeW: 1280, shapeH: 960, fill: '#ff0000' });
@@ -96009,15 +96015,71 @@
     const out = covered([cam(160, 0.5), photo(160)]);     // zoom out to 50%
     const turn = covered([cam(160, 1, 15), photo(160)]);  // turn 15 degrees
     const filePan = share(await exportFrameHB(sc([cam(260), photo(160)]), T));   // the pan, out of the real export
+    // …and the passes that only CUT or MIX a layer follow the camera out too, each through its own plate: the photo under a
+    // pen mask bigger than the frame, inside a group with opacity (a flattened unit), and deep enough to sit in the fog
+    function masked() { const L = photo(160), m = FM.masks.make('add'); m.path = [[-600, -500], [900, -500], [900, 700], [-600, 700]]; L.masks = [m]; return L; }
+    function grouped() {
+      const G = FM.makeLayer('group', { name: 'HB group', x: 0, y: 0 }); G.start = 0; G.duration = 3; G.transform.opacity = 0.99;
+      const L = photo(160); L.parent = G.id; return [L, G];
+    }
+    function foggy() {
+      const C = cam(260); C.fog = { enabled: true, near: 0, far: 3000, color: '#ffffff' };   // a light fog: red stays red enough to count
+      const L = photo(160); L.transform.z = 300; return [C, L];
+    }
+    function blurred() {   // Motion Blur (Object) on a photo moving 200 px/s, so it really goes through the blur's own plates
+      const L = photo(160); L.transform.x = { kf: [{ t: 0, v: 60, e: 'linear' }, { t: 1, v: 260, e: 'linear' }] };
+      L.effects = [{ type: 'objectblur', enabled: true, params: { shutter: 0.5, samples: 8 } }]; return L;
+    }
+    function stencil() {   // a Mask-blend layer as big as the photo, on top of it: it keeps the photo wherever it covers
+      const L = FM.makeLayer('shape', { name: 'HB stencil', shape: 'rect', x: 160, y: 120, shapeW: 1280, shapeH: 960, fill: '#ffffff' });
+      L.start = 0; L.duration = 3; L.blendMode = 'mask-include'; return L;
+    }
+    const panMasked = covered([cam(260), masked()]), panGrouped = covered([cam(260)].concat(grouped())), panFog = covered(foggy());
+    const panBlurred = covered([cam(260), blurred()]), panStencil = covered([cam(260), stencil(), photo(160)]);
+    // CONTROL, and the reason an effect pass does NOT follow the plate out: a Twirl turns about the FRAME, so panning the
+    // camera must slide the twirled picture across the screen and change nothing in it. Rendered at rest and panned 100 px,
+    // the two must match pixel for pixel over the part both show.
+    function twirled() {
+      const L = FM.makeLayer('shape', { name: 'HB twirled', shape: 'rect', x: 160, y: 120, shapeW: 200, shapeH: 160, fill: '#ffcc00' });
+      L.start = 0; L.duration = 3; L.effects = [{ type: 'twirl', enabled: true, params: {} }]; return L;
+    }
+    function frameOf(layers) { const cv = offscreen(PW, PH), g = cv.getContext('2d', { willReadFrequently: true }); FM.renderScene(g, sc(layers), T); return g.getImageData(0, 0, PW, PH).data; }
+    const tw0 = frameOf([cam(160), twirled()]), tw1 = frameOf([cam(260), twirled()]);
+    let twN = 0, twOff = 0;
+    for (let y = 0; y < PH; y++) for (let x = 0; x < 215; x++) {
+      const a = (y * PW + x + 100) * 4, b = (y * PW + x) * 4;
+      twN++; if (Math.abs(tw0[a] - tw1[b]) > 8 || Math.abs(tw0[a + 1] - tw1[b + 1]) > 8 || Math.abs(tw0[a + 2] - tw1[b + 2]) > 8) twOff++;
+    }
+    if (twOff > twN * 0.01) throw new Error('a Twirl no longer turns about the frame when the camera pans: ' + twOff + ' of ' + twN + ' pixels changed beyond sliding across — an effect pass took the camera plate instead of the frame');
+    // …and Copy Background read from INSIDE such an effect pass still copies the backdrop from the right place: the backdrop is
+    // red left of scene x 250 and green right of it, and a copy layer with Posterize straddles the line
+    function copier() {
+      const L = FM.makeLayer('shape', { name: 'HB copy', shape: 'rect', x: 250, y: 120, shapeW: 100, shapeH: 120, fill: '#0000ff' });
+      L.start = 0; L.duration = 3; L.effects = [{ type: 'copybg', enabled: true, params: {} }, { type: 'posterize', enabled: true, params: { levels: 8 } }]; return L;
+    }
+    function half(x, w, fill) { const L = FM.makeLayer('shape', { name: 'HB half', shape: 'rect', x: x, y: 120, shapeW: w, shapeH: 960, fill: fill }); L.start = 0; L.duration = 3; return L; }
+    const cb = frameOf([cam(260), copier(), half(-115, 730, '#ff0000'), half(525, 550, '#00ff00')]);
+    const at = (x, y) => { const i = (y * PW + x) * 4; return [cb[i], cb[i + 1], cb[i + 2]]; };
+    const cL = at(125, 120), cR = at(175, 120);   // frame 100..200 is scene 200..300: red to 150, green after
+    const copyOK = cL[0] > 200 && cL[1] < 60 && cR[1] > 200 && cR[0] < 60;
     const bad = [];
     // MEASURED on v16.98: 69%, 25%, 89%, and 69% in the exported frame; 99% allows the anti-aliased rim
     if (pan < 0.99) bad.push('a 100 px pan right shows the photo across only ' + Math.round(pan * 100) + '% of the frame (' + Math.round(filePan * 100) + '% in the exported frame)');
     if (out < 0.99) bad.push('zooming the camera out to 50% shows it across only ' + Math.round(out * 100) + '%');
     if (turn < 0.99) bad.push('turning the camera 15 degrees shows it across only ' + Math.round(turn * 100) + '%');
+    if (panMasked < 0.99) bad.push('the same pan over the photo under a mask bigger than the frame shows it across only ' + Math.round(panMasked * 100) + '%');
+    if (panGrouped < 0.99) bad.push('inside a group at 99% opacity ' + Math.round(panGrouped * 100) + '%');
+    if (panFog < 0.99) bad.push('in the camera fog ' + Math.round(panFog * 100) + '%');
+    if (panBlurred < 0.99) bad.push('moving with Motion Blur (Object) on ' + Math.round(panBlurred * 100) + '%');
+    if (panStencil < 0.99) bad.push('under a Mask-blend layer as big as the photo ' + Math.round(panStencil * 100) + '%');
+    if (!copyOK) bad.push('a Copy Background layer with Posterize copied the backdrop from the wrong place (' + cL.join('/') + ' where the backdrop is red, ' + cR.join('/') + ' where it is green)');
     if (bad.length) throw new Error('with a camera on, a photo scaled up to four times the frame: ' + bad.join(', ') + ' — the rest is the black background, because the camera cannot see past the project edge. A pan across a picture runs off into empty background, in the preview and the export');
   });
 
-  /* HUNT-b 3 — AN OUTLINED LAYER IS COMPOSITED ONE PASS AT A TIME, SO ITS SHADOW AND ITS OPACITY LAND ON ITS OWN OUTLINE.
+  /* 690 (HUNT-b 3) — AN OUTLINED LAYER WAS COMPOSITED ONE PASS AT A TIME, SO ITS SHADOW AND ITS OPACITY LANDED ON ITS OWN
+   * OUTLINE. Fixed: a layer that draws in more than one pass is drawn once into a plate and laid down with its opacity, blend
+   * and Shadow (compositor.js drawOutlinedUnit). The same fix covers a blend mode and the caption pill, checked at the end.
+   * What was found: 
    * drawLayer sets the layer's shadow (applyShadow → ctx.shadow*) and its opacity (ctx.globalAlpha) on the context and then
    * the text / shape branch draws the outline and the fill as SEPARATE strokes and fills. Canvas applies both per draw call:
    *   · the fill's shadow is painted ON TOP of the outline drawn just before it — Outline & Shadows' default soft shadow turns
@@ -96026,7 +96088,7 @@
    *     letters and the outline itself goes two-tone — every Fade In / Fade Out on outlined text or an outlined shape.
    * CONTROLS: the same shadow on text WITHOUT an outline leaves the fill untouched, and the outer half of a faded outline is
    * the right colour. */
-  test('HUNT-b a Shadow darkens the text outline, and a fading outlined layer shows its outline through the fill', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 an outlined title or shape is one picture — its Shadow sits behind the outline, and a fade, a blend or a caption pill never shows through', { item: '690', budgetMs: 60000 }, async function () {
     const PW = 300, PH = 200, T = 0.5;
     const sc = (L, bg) => scene([L], { project: { width: PW, height: PH, fps: 30, duration: 3, background: bg } });
     function render(L, bg) {
@@ -96085,10 +96147,37 @@
       if (Math.abs(t5[i] - tn[i]) > 6 || Math.abs(t5[i + 1] - tn[i + 1]) > 6 || Math.abs(t5[i + 2] - tn[i + 2]) > 6) tinted++;
     }
     if (letter > 500 && tinted > letter * 0.05) bad.push('and a white title with a yellow outline, faded to 50%, has ' + Math.round(tinted / letter * 100) + '% of its letter fill tinted by the outline underneath it');
+    // (4) a blend mode belongs to the layer as a whole too: Multiply over white leaves a blue outline blue all the way across,
+    //     where multiplying the outline pass over the layer's own red fill turned its inner half black
+    const m1 = card(1); m1.blendMode = 'multiply';
+    const sm = render(m1, '#ffffff');
+    let mEdge = 0, mBlack = 0;
+    for (let y = 60; y < 140; y++) for (let x = 0; x < PW; x++) {
+      const i = (y * PW + x) * 4;
+      if (!is(s1, i, 0, 0, 255) || !is(s1, i - 4, 0, 0, 255) || !is(s1, i + 4, 0, 0, 255)) continue;
+      mEdge++; if (!is(sm, i, 0, 0, 255)) mBlack++;
+    }
+    if (mEdge < 100) throw new Error('setup: the multiply card drew only ' + mEdge + ' solid outline pixels');
+    if (mBlack > mEdge * 0.05) bad.push('an outlined shape set to Multiply has ' + Math.round(mBlack / mEdge * 100) + '% of its blue outline gone dark — the outline was multiplied over the fill of the shape itself');
+    // (5) the caption pill: faded to 50%, the words must not show the dark pill through them
+    function pillTitle(pill, opacity) { const L = title(false, false, opacity); L.text = 'HI'; if (pill) L.captionBg = true; return L; }
+    const p1 = render(pillTitle(true, 1), BG), p5 = render(pillTitle(true, 0.5), BG), pn = render(pillTitle(false, 0.5), BG);
+    let word = 0, dimmed = 0;
+    for (let i = 0; i < p1.length; i += 4) if (is(p1, i, 255, 255, 255)) {
+      word++;
+      if (Math.abs(p5[i] - pn[i]) > 6 || Math.abs(p5[i + 1] - pn[i + 1]) > 6 || Math.abs(p5[i + 2] - pn[i + 2]) > 6) dimmed++;
+    }
+    if (word < 500) throw new Error('setup: the caption title drew only ' + word + ' white word pixels');
+    if (dimmed > word * 0.05) bad.push('a caption with its pill, faded to 50%, has ' + Math.round(dimmed / word * 100) + '% of its words darkened by the pill showing through them');
     if (bad.length) throw new Error(bad.join('; ') + '. In the preview and the export.');
   });
 
-  /* HUNT-b 4 — A MASK FROM THE MASK TOOL WIPES OUT THE LAYER'S OUTLINE AND SHADOW. A mask with no place in the effect stack (every
+  /* 690 (HUNT-b 4) — A MASK WIPED OUT THE LAYER'S OUTLINE AND SHADOW. Fixed: both mask passes draw the layer without them, cut,
+   * and then cast the Shadow from — and grow the Outline around — what the mask left (compositor.js drawPenMaskLayer,
+   * drawPenMaskAt). The skeptic's correction stands: the Mask tool itself only edits masks now and Effects → Mask adds a
+   * marker, so the UNMARKED case is every mask drawn before v14.99 and one left behind when an effects preset or a pasted look
+   * replaces the effects — while the Shadow was lost on EVERY mask, marker or not; both are asserted below.
+   * What was found:  A mask with no place in the effect stack (every
    * mask made by the Mask tool or the Masks card — only Effects → Mask adds an ordering marker, queue 560) is applied
    * OUTERMOST, after everything the layer draws. The photo's Outline is the alpha-outline effect effectiveFx appends to the
    * stack, and the Shadow is drawn with the layer itself — so the mask cuts both away with the rest of what lies outside it.
@@ -96097,11 +96186,11 @@
    * can actually see". CONTROLS: the SAME photo cut down to the SAME window with Free Crop instead keeps both its Outline and
    * its Shadow — two ways to cut a photo down, and only one of them deletes the border and the shadow; the SAME mask added
    * from Effects → Mask gives an outline hugging the window, so an outline can follow a mask; the unmasked photo draws both. */
-  test('HUNT-b a mask from the Mask tool wipes out the photo Outline and Shadow entirely', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 a masked photo keeps its Outline and Shadow — the mask cuts the photo, not its border and shadow, with or without an Effects marker', { item: '690', budgetMs: 60000 }, async function () {
     const PW = 300, PH = 200, T = 0.5, ids = [];
     const tex = offscreen(200, 160), tc = tex.getContext('2d');
     tc.fillStyle = '#ff0000'; tc.fillRect(0, 0, 200, 160);
-    function photo(mask, marker, crop) {
+    function photo(mask, marker, crop, noOutline) {
       const L = FM.makeLayer('image', { name: 'HB masked photo', x: 150, y: 100 });
       L.start = 0; L.duration = 3;
       FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 160 }); ids.push(L.id);
@@ -96112,7 +96201,7 @@
         L.masks = [m];
         if (marker) L.effects = [{ type: 'penmask', maskId: m.id }];   // what Effects → Mask adds
       }
-      L.stroke = { enabled: true, width: 8, color: '#00ff00' };                                   // Outline on
+      L.stroke = { enabled: !noOutline, width: 8, color: '#00ff00' };                             // Outline on
       L.shadow = { enabled: true, blur: 0, dx: 15, dy: 15, color: '#000000', alpha: 100 };       // Shadow on (the Drop kind)
       return L;
     }
@@ -96142,7 +96231,13 @@
       // MEASURED on v16.98: masked 0 outline and 0 shadow pixels; the same window cropped 3296 and 2175, the Effects mask's outline 2816
       if (tool.outline < crop.outline * 0.5 || file.outline < crop.outline * 0.5) bad.push('its Outline draws ' + tool.outline + ' pixels (' + file.outline + ' in the exported frame), where the same window cut with Free Crop draws ' + crop.outline + ' (and the same mask added from Effects ' + fx.outline + ')');
       if (tool.shadow < crop.shadow * 0.5 || file.shadow < crop.shadow * 0.5) bad.push('its Shadow draws ' + tool.shadow + ' pixels (' + file.shadow + ' in the exported frame), where the cropped window casts ' + crop.shadow);
-      if (bad.length) throw new Error('a photo masked to a window with the Mask tool, Outline and Shadow both on: ' + bad.join(', and ') + ' — both toggles in Outline and Shadows do nothing once a layer is masked, in the preview and in the exported video');
+      // MEASURED on v16.98 by the skeptic: the same mask added from Effects → Mask keeps its outline but casts 0 shadow pixels
+      if (fx.shadow < crop.shadow * 0.5) bad.push('the same mask added from Effects casts ' + fx.shadow + ' shadow pixels');
+      // …and with the Outline off the Shadow alone still comes through (a different path: no outline to grow around it)
+      const shOnly = count(photo(true, false, false, true)), cropSh = count(photo(false, false, true, true));
+      if (cropSh.shadow < 1000) throw new Error('CONTROL FAILED — the cropped window with only its Shadow on casts ' + cropSh.shadow + ' shadow pixels');
+      if (shOnly.shadow < cropSh.shadow * 0.5) bad.push('with only the Shadow on it casts ' + shOnly.shadow + ' shadow pixels where the cropped window casts ' + cropSh.shadow);
+      if (bad.length) throw new Error('a photo masked to a window, Outline and Shadow both on: ' + bad.join(', and ') + ' — both toggles in Outline and Shadows do nothing once a layer is masked, in the preview and in the exported video');
     } finally {
       ids.forEach(id => FM.media.remove(id));
     }
