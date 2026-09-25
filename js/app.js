@@ -1054,9 +1054,11 @@ window.FM = window.FM || {};
     const mkThumb = (L) => { const cv = document.createElement('canvas'); cv.className = 'ctx-thumb'; cv.width = 38; cv.height = 24; if (FM.renderThumb) { try { FM.renderThumb(L, cv); } catch (e) {} } return cv; };
     const mkGlyph = (g) => { const s = document.createElement('span'); s.className = 'ctx-thumb ctx-thumb-glyph'; s.textContent = g; return s; };
     const cands = FM.scene.layers.filter(l => l.id !== layer.id && l.type !== 'camera' && !(FM.isAncestor && FM.isAncestor(FM.scene, layer.id, l.id)));
-    const items = [{ label: (!layer.parent ? '✓ ' : '') + 'None', iconEl: mkGlyph('⊘'), action: () => { layer.parent = null; FM.refreshAll(); if (FM.history) FM.history.commit(); if (FM.toast) FM.toast('Parent removed', 1200); } }, { sep: true }];
+    // Through FM.relinkParent (queue 690, third hunt): linking and unlinking keep the layer where he sees it.
+    const link = (id, said, ms) => { const note = FM.relinkParent(layer, id); FM.refreshAll(); if (FM.history) FM.history.commit(); if (FM.toast) FM.toast(note ? said + '. ' + note : said, note ? 5000 : ms); };
+    const items = [{ label: (!layer.parent ? '✓ ' : '') + 'None', iconEl: mkGlyph('⊘'), action: () => link(null, 'Parent removed', 1200) }, { sep: true }];
     if (!cands.length) items.push({ label: 'No other layers to attach to', disabled: true });
-    cands.forEach(c => items.push({ label: (layer.parent === c.id ? '✓ ' : '') + (c.name || c.type), iconEl: mkThumb(c), action: () => { layer.parent = c.id; if (!layer.parentMode) layer.parentMode = 'normal'; FM.refreshAll(); if (FM.history) FM.history.commit(); if (FM.toast) FM.toast('Parented to ' + (c.name || c.type), 1300); } }));
+    cands.forEach(c => items.push({ label: (layer.parent === c.id ? '✓ ' : '') + (c.name || c.type), iconEl: mkThumb(c), action: () => link(c.id, 'Parented to ' + (c.name || c.type), 1300) }));
     if (FM.contextMenu) FM.contextMenu.show(Math.max(8, x), y, items);
   };
 
@@ -3554,6 +3556,31 @@ window.FM = window.FM || {};
   }
   FM._planParentBake = planParentBake;   // suite seam (queue 914.4)
 
+  /* ═══ LINKING A LAYER TO A PARENT, OR UNLINKING IT, LEAVES IT WHERE IT IS (queue 690, third hunt) ═════════════
+   * The link button (#btn-parent on PC, #m-dup on the phone) and the Parent row in Move & Transform only wrote
+   * `layer.parent = id`. The renderer reads a child's x/y as an offset FROM its parent (applyParentChain
+   * translates to the parent's x/y first), so the layer was drawn at parent + its own numbers: add a shape and a
+   * Controller — both land in the middle — and link them, exactly as the Controller's own toast says to, and the
+   * shape jumped to the bottom-right corner with three quarters of it off the canvas. Picking None threw a linked
+   * layer the other way. For deleting a parent and for grouping he already chose *"Stay exactly where they are"*
+   * (#914 clauses 4 and 13), and planParentBake is that maths; this is the one door both pickers now go through.
+   * The groups whose families change are pinned first (FM.settleGroupPivotsAbove), so a layer joining or leaving
+   * a scaled group does not drag the pivot its neighbours turn about. What cannot be kept — a keyframed path that
+   * would have to be TURNED into the new frame with x and y keyed at different moments — is still linked (he
+   * asked for the link) and SAID, in the words deleting a parent uses. Returns that note, or ''. */
+  function relinkParent(layer, toId) {
+    toId = toId || null;
+    const from = layer.parent || null;
+    if (from === toId) return '';
+    if (FM.settleGroupPivotsAbove) { FM.settleGroupPivotsAbove(from); FM.settleGroupPivotsAbove(toId); }
+    const plan = planParentBake(layer, toId, FM.time);
+    if (plan) plan.apply();
+    layer.parent = toId;
+    if (toId && !layer.parentMode) layer.parentMode = 'normal';
+    return (plan || !layer.transform) ? '' : '“' + (layer.name || 'Layer') + '” could not keep its place — a keyframed path cannot be turned into its new parent without changing it';
+  }
+  FM.relinkParent = relinkParent;
+
   // ---- AM-style grouping: a 'group' layer is an invisible transform parent; members follow it
   // via the existing parent chain. Timeline shows the group as a collapsible row.
   // opts.mask → MASKING group: the top member clips the rest (composited as one unit in renderScene).
@@ -3684,7 +3711,6 @@ window.FM = window.FM || {};
     // read as identity, returned 0, and its keyframes were dropped without a word.
     if (anim) return { baked: 0, skipped: -1 };            // -1 = "there was something, and it is animated"
     if (identity) return { baked: 0, skipped: 0 };
-    const rad = grot * Math.PI / 180, cos = Math.cos(rad), sin = Math.sin(rad);
     /* ═══ THE BAKE MUST USE THE SAME PIVOT THE RENDERER DOES (queue 630) ═════════════════════════════
      * This function is the algebra of `applyParentChain` written out longhand, so the two are a matched
      * pair: whatever the renderer does to place a member, this must reproduce exactly, or ungrouping
@@ -3692,29 +3718,30 @@ window.FM = window.FM || {};
      * its ANCHOR instead of the origin, this still baked about the origin — and the shipped test
      * "ungrouping leaves the layers where the group put them" caught it immediately, reporting members
      * jumping from 59,22..148,159 to 41,64..103,159.
-     * Read the pivot BEFORE the members are re-parented — which is already why ungroup() calls this
-     * first, and it is the reason that ordering is load-bearing rather than incidental.
-     * Null pivot (an empty group, or no measurable members) falls back to the origin, which is exactly
-     * what the renderer does in the same case. */
-    const _piv = (FM.groupPivot && FM.groupPivot(g, FM.scene, 0)) || { x: 0, y: 0 };
-    const Px = _piv.x || 0, Py = _piv.y || 0;
-    let baked = 0;
+     * ═══ …AND A MEMBER WITH ITS OWN MOTION PATH KEEPS ITS PLACE TOO (queue 690, third hunt) ═════════════
+     * This used to skip any member whose own x or y was keyframed — "cannot be shifted by editing one
+     * number" — and say nothing. So after he dragged a group into place and tapped Ungroup, the still layers
+     * stayed where the group put them and every layer with a move animation (the ones that make it a motion
+     * graphic) snapped back to where it was before the move: measured 224 px, from 700,500 to 500,600 at 2 s.
+     * A keyframed path CAN be re-expressed exactly — a move shifts every key, a scale multiplies them, a turn
+     * needs x and y keyed together — and planParentBake (queue 914.4) already does precisely that, reading
+     * both frames off the renderer's own matrices (so the pivot, split halves and a child's rotation mode come
+     * with it by construction). Every member now goes through it, still and animated alike, so the two kinds
+     * cannot come out of one group by two different sums. What it cannot carry — a path keyed on x and y at
+     * different moments inside a TURNED group — is named by the caller, never dropped quietly.
+     * ALL plans are made before ANY is applied, and the pivots above are pinned first: moving one member
+     * changes the box a group without a stored pivot measures, and the next member's frame would then be
+     * read off a different pivot than the one it was drawn with. */
+    const to = g.parent || null;
+    if (FM.settleGroupPivotsAbove) { FM.settleGroupPivotsAbove(g.id); }
+    const plans = [], unbaked = [];
     FM.scene.layers.forEach(l => {
-      if (l.parent !== g.id) return;
-      const t = l.transform; if (!t) return;
-      // A member with its OWN animated position cannot be shifted by editing one number either.
-      if (FM.isAnimated && (FM.isAnimated(t.x) || FM.isAnimated(t.y))) return;
-      const lx = (FM.evalProp(t.x, 0) || 0) - Px, ly = (FM.evalProp(t.y, 0) || 0) - Py;
-      t.x = gx + Px + (cos * lx - sin * ly) * sc;
-      t.y = gy + Py + (sin * lx + cos * ly) * sc;
-      if (grot && !(FM.isAnimated && FM.isAnimated(t.rotation))) t.rotation = (FM.evalProp(t.rotation, 0) || 0) + grot;
-      if (sc !== 1 && !(FM.isAnimated && FM.isAnimated(t.scale))) {
-        const ls = FM.evalProp(t.scale, 0);
-        t.scale = ((typeof ls === 'number' && isFinite(ls)) ? ls : 1) * sc;
-      }
-      baked++;
+      if (l.parent !== g.id || !l.transform) return;
+      const plan = planParentBake(l, to, FM.time);
+      if (plan) plans.push(plan); else unbaked.push(l);
     });
-    return { baked: baked, skipped: 0 };
+    plans.forEach(p => p.apply());
+    return { baked: plans.length, skipped: 0, unbaked: unbaked };
   }
 
   /* WHAT ELSE THE GROUP WAS CARRYING (bug hunt, 21 Aug). bakeGroupTransform above settles WHERE the
@@ -3760,7 +3787,12 @@ window.FM = window.FM || {};
     // BOTH losses are said (queue 739): the animated-position note used to hide the effects/look note behind an else.
     const animMsg = 'This group’s position is animated — ungrouping cannot carry that onto the layers, so they go back to their own positions';
     const lostMsg = lost.length ? 'Ungrouped — but ' + lost.join(' and ') + ' belonged to the group itself and cannot be carried onto the layers individually' : '';
-    if (FM.toast) { if (bake.skipped === -1 && lostMsg) FM.toast(animMsg + '. ' + lostMsg, 7000); else if (bake.skipped === -1) FM.toast(animMsg, 6000); else if (lostMsg) FM.toast(lostMsg, 6000); }
+    // …and a member whose keyframed path could not be carried out of the group is NAMED (queue 690, third hunt):
+    // it drops into the group's parent with its own numbers, which moves it, and a silent move is the bug.
+    const ub = bake.unbaked || [];
+    const ubMsg = ub.length ? '“' + (ub[0].name || 'Layer') + '”' + (ub.length > 1 ? ' and ' + (ub.length - 1) + ' more' : '') + ' could not keep ' + (ub.length > 1 ? 'their' : 'its') + ' place — a keyframed path cannot be turned out of the group without changing it' : '';
+    const msgs = [bake.skipped === -1 ? animMsg : '', lostMsg, ubMsg].filter(Boolean);
+    if (FM.toast && msgs.length) FM.toast(msgs.join('. '), msgs.length > 1 ? 7000 : 6000);
     FM.scene.layers.forEach(l => { if (l.parent === id) l.parent = g.parent || null; });   // members lift into the parent context
     FM.scene.layers = FM.scene.layers.filter(l => l !== g);
     FM.selectLayer(null);

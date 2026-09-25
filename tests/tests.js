@@ -92118,8 +92118,9 @@
   });
 
   /* ═══ HUNT-c (queue 690, third hunt, 25 Sep) — GROUPS, PARENTING AND THE CAMERA ═════════════════════════════════════
-   * His brief: "go re audit, find some bugs coz theres a shit load". Four findings, each written as a failing test FIRST
-   * (nothing fixed yet). Every one is measured by RENDERING the scene with the app's own renderScene and finding the
+   * His brief: "go re audit, find some bugs coz theres a shit load". Four findings, each written as a failing test FIRST,
+   * confirmed by a skeptic, then fixed — each test proven to fail with its fix reverted. Every one is measured by
+   * RENDERING the scene with the app's own renderScene and finding the
    * layer's ink, so what is asserted is what he sees in the preview and in the export, not a number in the data.
    * The camera finding is driven by a REAL finger through tests/_cdp.py, because the tap resolves through the canvas's
    * own pointer handling. */
@@ -92155,8 +92156,9 @@
    * scaled or turned, the pivot moves whenever a member comes on screen, goes off, or moves — and every OTHER member,
    * standing still, is drawn somewhere new. Unscaled groups are untouched (the pivot sandwich collapses at scale 1), which
    * is the control. Preview and export alike: it is renderScene. */
-  test('HUNT-c a scaled group jumps when one of its layers comes on screen, and its still layers slide when another one moves', { item: '690' }, function () {
-    const saved = FM.scene, bad = [];
+  test('690 a scaled or turned group keeps its still layers still when another layer in it comes on screen, moves, or is moved', { item: '690' }, async function () {
+    const saved = FM.scene, bad = [], mode0 = FM._mtMode;
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
     try {
       const red = FM.makeLayer('shape', { name: 'HUNTc3 red', shape: 'rect', x: 300, y: 600, shapeW: 200, shapeH: 200, fill: '#ff0000', start: 0, duration: 5 });
       const blue = FM.makeLayer('shape', { name: 'HUNTc3 blue', shape: 'rect', x: 700, y: 1200, shapeW: 200, shapeH: 200, fill: '#0000ff', start: 2, duration: 3 });
@@ -92185,8 +92187,50 @@
       const r0 = huntC3Ink(0.5, 'red'), r1 = huntC3Ink(3.5, 'red');
       const rdrift = huntC3Dist(r0, r1);
       if (rdrift > 3) bad.push('turned 20 degrees instead of scaled, the still red square wanders ' + Math.round(rdrift) + ' px the same way');
+      /* THROUGH HIS OWN WRITE PATH. The pinch, the corner handle and Move & Transform all write a group's scale through
+         FM.shiftTransform / FM.setTransform, and that is where the pivot is pinned (FM.settleGroupPivot). Everything
+         above wrote the number directly, which is the older-project path (a pivot measured off the rest box). */
+      g.transform.rotation = 0; g.transform.scale = 1;
+      blue.transform.x = 700; blue.start = 2; blue.duration = 3;
+      /* A pivot left over from an earlier layout (members moved while the group sat at 100 percent): the scale must
+         still go about the middle of the members AS THEY ARE — at 100 percent re-measuring it changes nothing on
+         screen, so it is re-measured the moment the scale leaves 100 (#630's middle). */
+      g.pivot = { x: 0, y: 0 };
+      /* With only red on screen at the playhead, a pinch shrinks what he is looking at about ITS middle — red stays
+         centred where it is, it does not slide toward a layer he cannot see. */
+      FM.setTime(1.5);
+      const o0 = huntC3Ink(1.5, 'red');
+      FM.shiftTransform(g, 'scale', 0.7, 1.5);
+      const o1 = huntC3Ink(1.5, 'red');
+      if (huntC3Dist(o0, o1) > 4) bad.push('with only red on screen, scaling the group through the pinch/handle write path slid red ' + Math.round(huntC3Dist(o0, o1)) + ' px (' + huntC3P(o0) + ' to ' + huntC3P(o1) + ') toward a layer that is not on screen');
+      g.transform.scale = 1; g.pivot = { x: 0, y: 0 };
+      FM.setTime(2.5);
+      const mid = (a, b) => (a && b) ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : null;
+      const w0 = mid(huntC3Ink(2.5, 'red'), huntC3Ink(2.5, 'blue'));
+      FM.shiftTransform(g, 'scale', 0.7, 2.5);
+      if (!g.pivot || (g.pivot.x === 0 && g.pivot.y === 0)) bad.push('scaling the group through the pinch/handle write path did not re-measure its pivot (it is ' + JSON.stringify(g.pivot).replace(/\x22/g, '') + ')');
+      const w1 = mid(huntC3Ink(2.5, 'red'), huntC3Ink(2.5, 'blue'));
+      if (huntC3Dist(w0, w1) > 4) bad.push('scaled through the pinch/handle write path, the group did not shrink about the middle of its layers: their middle moved ' + Math.round(huntC3Dist(w0, w1)) + ' px (' + huntC3P(w0) + ' to ' + huntC3P(w1) + ')');
+      /* …and from then on it is PINNED: he drags blue somewhere else inside the scaled group (or switches it off), and
+         the red square, which he did not touch, stays exactly where it is. */
+      const e0 = huntC3Ink(2.5, 'red');
+      blue.transform.x = 1000; blue.transform.y = 1700;
+      const e1 = huntC3Ink(2.5, 'red');
+      if (huntC3Dist(e0, e1) > 3) bad.push('moving blue inside the scaled group dragged the red square ' + Math.round(huntC3Dist(e0, e1)) + ' px (' + huntC3P(e0) + ' to ' + huntC3P(e1) + ')');
+      blue.visible = false;
+      const e2 = huntC3Ink(2.5, 'red');
+      if (huntC3Dist(e0, e2) > 3) bad.push('switching blue off moved the red square ' + Math.round(huntC3Dist(e0, e2)) + ' px');
+      blue.visible = true;
+      /* Placing the ANCHOR on that scaled group in Move & Transform moves nothing either, although blue has moved since
+         the pivot was stored: the correction is the stored pivot's real travel, not the anchor's step across today's box. */
+      FM.selectLayer(g.id); FM._mtMode = 'anchor'; FM.inspector.openCategory('transform'); FM.inspector.refresh(); await sleep(200);
+      if (!FM.inspector._setAnchor) throw new Error('setup: the anchor mode did not render (no _setAnchor seam)');
+      const n0 = huntC3Ink(2.5, 'red'), nb0 = huntC3Ink(2.5, 'blue');
+      FM.inspector._setAnchor(0, 0); await sleep(30);
+      const n1 = huntC3Ink(2.5, 'red'), nb1 = huntC3Ink(2.5, 'blue');
+      if (huntC3Dist(n0, n1) > 3 || huntC3Dist(nb0, nb1) > 3) bad.push('placing the anchor at the top-left of the scaled group moved its layers (red ' + huntC3P(n0) + ' to ' + huntC3P(n1) + ', blue ' + huntC3P(nb0) + ' to ' + huntC3P(nb1) + ')');
       if (bad.length) throw new Error(bad.join('; AND '));
-    } finally { FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {} }
+    } finally { FM._mtMode = mode0; FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {} }
   });
 
   /* HUNT-c 2 — PICKING A PARENT MOVES THE LAYER. FM.openParentPicker (the link button: #btn-parent on PC, #m-dup on the
@@ -92197,7 +92241,7 @@
    * throws the layer to the bottom-right corner, three quarters off the canvas. Picking None throws a parented layer the
    * other way. He already chose, for deleting a parent and for grouping one (#914 clauses 4 and 13): Stay exactly where
    * they are. planParentBake (queue 914.4) is the maths; the picker never calls it. */
-  test('HUNT-c parenting a layer to a Controller with the link button throws it across the canvas, and unlinking throws it back', { item: '690' }, async function () {
+  test('690 linking a layer to a Controller, or unlinking it, with the link button or the Parent row leaves it where it is', { item: '690' }, async function () {
     const saved = FM.scene, bad = [];
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     async function pick(layer, re) {
@@ -92237,6 +92281,28 @@
       const freed = huntC3Ink(1, 'red');
       const d2 = huntC3Dist(linked, freed);
       if (d2 > 3) bad.push('picking None on a layer linked to a Controller he had moved throws it ' + (isFinite(d2) ? Math.round(d2) + ' px' : 'off the canvas') + ', from ' + huntC3P(linked) + ' to ' + huntC3P(freed));
+      /* THE OTHER DOOR: the Parent row in Move & Transform (inspector.js parentControl). Same promise, and the camera is
+         not offered there as a parent — exactly as the link button's picker leaves it out. */
+      const camL = FM.makeLayer('camera', { name: 'HUNTc3 cam', x: 540, y: 960, start: 0, duration: 5 });
+      FM.scene.layers.push(camL);
+      box.parent = null; box.transform.x = 540; box.transform.y = 960; box.transform.rotation = 0; box.transform.scale = 1;   // back in the middle, on its own
+      ctl.transform.x = 300; ctl.transform.y = 500; ctl.transform.rotation = 30; ctl.transform.scale = 1.5;
+      FM.selectLayer(box.id); FM.refreshAll(); await sleep(80);
+      FM.inspector.openCategory('transform'); await sleep(150);
+      const rowSel = () => document.querySelector('.parent-ctl select');
+      if (!rowSel()) throw new Error('setup: Move & Transform has no Parent row for the shape');
+      if ([].slice.call(rowSel().options).some(o => o.value === camL.id)) bad.push('the Parent row in Move & Transform offers the camera as a parent');
+      const row0 = huntC3Ink(1, 'red');
+      if (!row0 || Math.abs(row0.x - 540) > 6 || Math.abs(row0.y - 960) > 6) throw new Error('setup: the unlinked shape is not back in the middle (' + huntC3P(row0) + ')');
+      rowSel().value = ctl.id; rowSel().dispatchEvent(new Event('change', { bubbles: true })); await sleep(120);
+      if (box.parent !== ctl.id) throw new Error('CONTROL: choosing Controller in the Parent row did not link the layer');
+      const row1 = huntC3Ink(1, 'red');
+      if (huntC3Dist(row0, row1) > 3) bad.push('choosing a turned, scaled Controller in the Move and Transform Parent row moves the shape ' + (isFinite(huntC3Dist(row0, row1)) ? Math.round(huntC3Dist(row0, row1)) + ' px' : 'off the canvas') + ' (' + huntC3P(row0) + ' to ' + huntC3P(row1) + ')');
+      if (!rowSel()) throw new Error('setup: the Parent row went away after linking');
+      rowSel().value = ''; rowSel().dispatchEvent(new Event('change', { bubbles: true })); await sleep(120);
+      if (box.parent) throw new Error('CONTROL: choosing None in the Parent row did not unlink the layer');
+      const row2 = huntC3Ink(1, 'red');
+      if (huntC3Dist(row0, row2) > 3) bad.push('choosing None in the Parent row moves the shape ' + (isFinite(huntC3Dist(row0, row2)) ? Math.round(huntC3Dist(row0, row2)) + ' px' : 'off the canvas') + ' (' + huntC3P(row0) + ' to ' + huntC3P(row2) + ')');
       if (bad.length) throw new Error(bad.join('; AND '));
     } finally { try { FM.contextMenu.hide(); } catch (e) {} FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {} }
   });
@@ -92248,7 +92314,7 @@
    * outside the render loop, so it has none either). With the camera zoomed or panned at the playhead — which is what a
    * camera is for — the selection box and its handles sit where the layer would be WITHOUT the camera, and a tap ON the
    * layer where he sees it lands off the layer the editor thinks it is, so it DESELECTS it. Real finger, phone width. */
-  test('HUNT-c with the camera zoomed in, the selection box sits off the layer and tapping the layer deselects it', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 with the camera zoomed in, the selection box sits on the layer, a tap on it keeps it selected and a drag follows the finger', { item: '690', budgetMs: 60000 }, async function () {
     const saved = FM.scene, bad = [];
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     try {
@@ -92300,7 +92366,7 @@
             finally { window.removeEventListener('pointerdown', onDown, true); }
             await sleep(250);
             if (!downs.length || !downs[0].trusted || downs[0].kind !== 'touch' || !downs[0].on) throw new Error('CONTROL: the tap at zoom ' + zoom + ' was not a trusted touch on the canvas (' + JSON.stringify(downs).replace(/\x22/g, '') + ')');
-            return { off: off, boxW: br ? br.width : 0, drawnW: drawnW, selected: FM.scene.selectedId === red.id };
+            return { off: off, boxW: br ? br.width : 0, drawnW: drawnW, selected: FM.scene.selectedId === red.id, tap: tap };
           }
           /* CONTROL: the camera at rest. The box is on the layer and a tap on the layer keeps it selected. */
           const rest = await trial(1);
@@ -92309,6 +92375,21 @@
           const z = await trial(2);
           if (z.off > 6) bad.push('with the camera zoomed to 200 percent, the selection box and its handles are drawn ' + Math.round(z.off) + ' screen px away from the layer, and ' + Math.round(z.boxW) + ' px wide round a layer that is ' + Math.round(z.drawnW) + ' px wide');
           if (!z.selected) bad.push('a tap right on the layer where he sees it DESELECTS it, because the canvas looks for the layer where it would be without the camera');
+          /* …and a DRAG follows the finger: 40 screen px of finger is 40 screen px of layer on screen, not 80. Selected
+             again first, so this half is measured even when the tap above lost the selection. */
+          {
+            FM.selectLayer(red.id); FM.requestRender(); if (FM.canvasEdit) FM.canvasEdit.update();
+            await sleep(300);
+            const x0 = FM.evalProp(red.transform.x, FM.time), st = z.tap;
+            const steps = [{ t: 'touchStart', x: st.x, y: st.y, ms: 60 }];
+            for (let k = 1; k <= 8; k++) steps.push({ t: 'touchMove', x: st.x + 5 * k, y: st.y, ms: 30 });
+            steps.push({ t: 'touchEnd', x: st.x + 40, y: st.y, ms: 60 });
+            await realInput924(steps, 'a drag of the layer at camera zoom 2');
+            await sleep(200);
+            const perPx = cv.getBoundingClientRect().width / (cv.width / (cv.__fmRS || 1));
+            const onScreenMove = (FM.evalProp(red.transform.x, FM.time) - x0) * 2 * perPx;
+            if (Math.abs(onScreenMove - 40) > 6) bad.push('dragging the layer 40 screen px with the camera zoomed to 200 percent moves it ' + Math.round(onScreenMove) + ' px on screen');
+          }
           if (bad.length) throw new Error(bad.join('; AND '));
         });
       }, 380);
@@ -92322,8 +92403,8 @@
    * number on the group, nothing animated about it) and ungroups, every layer with a move animation — the ones that make
    * it a motion graphic — snaps back to where it was before the group moved, the still ones stay, and nothing is said.
    * A translation folds into keyframes exactly (shift every x and y key by the same amount), so nothing forces the skip. */
-  test('HUNT-c ungrouping a group he moved sends its animated layers back where they were, and says nothing', { item: '690' }, function () {
-    const saved = FM.scene, toasts = [], toast0 = FM.toast;
+  test('690 ungrouping a group he moved, scaled or turned keeps its animated layers where the group put them, and names any it cannot', { item: '690' }, function () {
+    const saved = FM.scene, toasts = [], toast0 = FM.toast, bad = [];
     try {
       const red = FM.makeLayer('shape', { name: 'HUNTc3 slide', shape: 'rect', x: 300, y: 600, shapeW: 200, shapeH: 200, fill: '#ff0000', start: 0, duration: 5 });
       red.transform.x = { kf: [{ t: 0, v: 300 }, { t: 4, v: 700 }] };   // slides right across the clip
@@ -92347,7 +92428,44 @@
       if (huntC3Dist(b0, b1) > 3) throw new Error('CONTROL: the still layer moved on ungroup too (' + huntC3P(b0) + ' to ' + huntC3P(b1) + ') — the bake itself is broken, which is a different bug');
       const jump = huntC3Dist(r0, r1);
       const said = toasts.filter(m => /animat|position|moved|back/i.test(m));
-      if (jump > 3) throw new Error('after moving a group and tapping Ungroup, the still layer stays where the group put it but the animated one snaps ' + Math.round(jump) + ' px back (' + huntC3P(r0) + ' to ' + huntC3P(r1) + ' at 2 s) to where it was before he moved the group' + (said.length ? '' : ' — and nothing is said') + (toasts.length ? ' (toasts: ' + toasts.join(' / ') + ')' : ''));
+      if (jump > 3) bad.push('after moving a group and tapping Ungroup, the still layer stays where the group put it but the animated one snaps ' + Math.round(jump) + ' px back (' + huntC3P(r0) + ' to ' + huntC3P(r1) + ' at 2 s) to where it was before he moved the group' + (said.length ? '' : ' — and nothing is said') + (toasts.length ? ' (toasts: ' + toasts.join(' / ') + ')' : ''));
+      /* …and at EVERY moment of the animation, not just the one measured — a scaled and TURNED group this time, which
+         is where re-expressing a path is hardest (x keyed alone, so y has to take x's keying once the turn folds in). */
+      const red2 = FM.makeLayer('shape', { name: 'HUNTc3 slide2', shape: 'rect', x: 300, y: 600, shapeW: 200, shapeH: 200, fill: '#ff0000', start: 0, duration: 5 });
+      red2.transform.x = { kf: [{ t: 0, v: 300, e: 'linear' }, { t: 4, v: 700, e: 'easeInOut' }] };
+      const blue2 = FM.makeLayer('shape', { name: 'HUNTc3 still2', shape: 'rect', x: 500, y: 1400, shapeW: 200, shapeH: 200, fill: '#0000ff', start: 0, duration: 5 });
+      huntC3Scene([red2, blue2]);
+      FM.scene.selectedIds = [red2.id, blue2.id]; FM.scene.selectedId = red2.id;
+      FM.groupSelection();
+      const g2 = FM.scene.layers.find(l => l.type === 'group');
+      if (!g2) throw new Error('setup: the second Group was not made');
+      FM.shiftTransform(g2, 'x', 60, 2); FM.shiftTransform(g2, 'y', -40, 2);
+      FM.shiftTransform(g2, 'scale', 0.8, 2); FM.shiftTransform(g2, 'rotation', 15, 2);
+      const ts = [0, 1, 2.5, 4];
+      const beforeR = ts.map(t => huntC3Ink(t, 'red')), beforeB = ts.map(t => huntC3Ink(t, 'blue'));
+      FM.ungroup(g2.id);
+      ts.forEach((t, i) => {
+        const a = huntC3Ink(t, 'red'), b = huntC3Ink(t, 'blue');
+        if (huntC3Dist(beforeR[i], a) > 4) bad.push('in a scaled, turned group the animated layer moved ' + Math.round(huntC3Dist(beforeR[i], a)) + ' px at ' + t + ' s on Ungroup (' + huntC3P(beforeR[i]) + ' to ' + huntC3P(a) + ')');
+        if (huntC3Dist(beforeB[i], b) > 4) bad.push('in a scaled, turned group the still layer moved ' + Math.round(huntC3Dist(beforeB[i], b)) + ' px at ' + t + ' s on Ungroup');
+      });
+      /* What cannot be carried is NAMED: a path keyed on x and y at DIFFERENT moments cannot be turned exactly. */
+      const red3 = FM.makeLayer('shape', { name: 'HUNTc3 zigzag', shape: 'rect', x: 300, y: 600, shapeW: 200, shapeH: 200, fill: '#ff0000', start: 0, duration: 5 });
+      red3.transform.x = { kf: [{ t: 0, v: 300, e: 'linear' }, { t: 4, v: 700, e: 'linear' }] };
+      red3.transform.y = { kf: [{ t: 0, v: 600, e: 'linear' }, { t: 1, v: 800, e: 'linear' }] };
+      const blue3 = FM.makeLayer('shape', { name: 'HUNTc3 still3', shape: 'rect', x: 500, y: 1400, shapeW: 200, shapeH: 200, fill: '#0000ff', start: 0, duration: 5 });
+      huntC3Scene([red3, blue3]);
+      FM.scene.selectedIds = [red3.id, blue3.id]; FM.scene.selectedId = red3.id;
+      FM.groupSelection();
+      const g3 = FM.scene.layers.find(l => l.type === 'group');
+      if (!g3) throw new Error('setup: the third Group was not made');
+      FM.shiftTransform(g3, 'rotation', 25, 2);
+      const said3 = [];
+      FM.toast = function (m) { said3.push(String(m)); return toast0.apply(this, arguments); };
+      FM.ungroup(g3.id);
+      FM.toast = toast0;
+      if (!said3.some(m => /zigzag/.test(m))) bad.push('a layer whose path could not be carried out of a turned group was not named (' + (said3.join(' / ') || 'nothing was said') + ')');
+      if (bad.length) throw new Error(bad.join('; AND '));
     } finally { FM.toast = toast0; FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {} }
   });
 
