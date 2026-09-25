@@ -48122,6 +48122,46 @@
     }
   });
 
+  test('the keyframe diamonds follow the playhead, not the moment the panel opened (UX review top #3)', { item: 'uxr-3' }, async function () {
+    /* UX review, confirmed by hand on v16.90: with the only position key at 0:00, scrubbing to 1:07 left
+     * the big rail diamond gold and titled "Remove keyframe at playhead", and tapping it ADDED a key. The
+     * reverse case said "Add" while parked on a key and the tap removed it. The click has always
+     * recomputed (so the action was right); the BUTTON painted once at build time and the panel is not
+     * rebuilt on a scrub. Same for the small per-field X / Y diamonds. */
+    if (!FM.inspector || !FM.inspector.openCategory) throw new Error('the inspector is not reachable');
+    const L = FM.makeLayer('shape', { name: 'kfstale', shape: 'rect', x: 200, y: 200, shapeW: 80, shapeH: 60, fill: '#fff', start: 0, duration: 5 });
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, mode0 = FM._mtMode, t0 = FM.time;
+    const rail = () => document.querySelector('.mt-rail-left .mt-kf');
+    const xDia = () => document.querySelector('.mt-vbox-kf');
+    try {
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM._mtMode = 'move';
+      FM.setTime(0); FM.inspector.openCategory('transform'); await sleep(260);
+      if (!rail()) throw new Error('no keyframe diamond on the rail, so this probe cannot see the thing it tests');
+      rail().click(); await sleep(160);
+      if (!FM.hasKeyframeAt(L.transform.x, 0)) throw new Error('the diamond did not key position at 0:00, so the probe is not exercising the control');
+      FM.inspector.openCategory('transform'); await sleep(260);
+      if (!rail().classList.contains('here')) throw new Error('parked ON the new key, the rail diamond does not show it (the control half of the check is broken)');
+
+      // THE BUG: scrub away without rebuilding the panel.
+      FM.setTime(1.2); await sleep(120);
+      if (rail().classList.contains('here')) throw new Error('at 1.2 s, with the only key at 0:00, the rail diamond still claims a keyframe is here');
+      if (/Remove/.test(rail().title)) throw new Error('at 1.2 s the rail diamond still says "' + rail().title + '", but pressing it would ADD a key');
+      if (xDia() && xDia().classList.contains('on')) throw new Error('the small X diamond still claims a key at 1.2 s');
+
+      // …and back ON the key it lights again, still without a rebuild.
+      FM.setTime(0); await sleep(120);
+      if (!rail().classList.contains('here')) throw new Error('back on the 0:00 key, the rail diamond did not light up again');
+      if (!/Remove/.test(rail().title)) throw new Error('back on the 0:00 key, the rail diamond says "' + rail().title + '"');
+      if (xDia() && !xDia().classList.contains('on')) throw new Error('back on the 0:00 key, the small X diamond is not lit');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM._mtMode = mode0; FM.time = t0;
+      try { FM.selectLayer(sel0); } catch (e) {}
+      FM.refreshAll();
+    }
+  });
+
   test('a clip cannot be dragged off past the end of the project (queue 394)', { item: '394' }, function () {
     /* Ezra: *"Found a glitch where when you drag a layer to the right too far it breaks the project
      * timeline"*, and with a screenshot: *"it just keeps going past the timeline"*.

@@ -4095,11 +4095,19 @@ window.FM = window.FM || {};
       const kf = el('button', 'mt-vbox-kf');
       kf.type = 'button';
       kf.innerHTML = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 .8 9.2 5 5 9.2.8 5z"/></svg>';
-      const on = FM.hasKeyframeAt(kL.transform[kKey], FM.time);
-      if (on) kf.classList.add('on');
-      else if (FM.isAnimated(kL.transform[kKey])) kf.classList.add('anim');
-      kf.title = (on ? 'Remove the ' : 'Add a ') + labelText + ' keyframe at the playhead';
-      kf.setAttribute('aria-label', kf.title);
+      /* Painted from the PLAYHEAD, not from build time (UX review top #3). The panel is not rebuilt on a
+         scrub, so this diamond kept saying "Remove the X keyframe" after the playhead had left the key,
+         and the next tap added one instead. refresh() runs on every time change (syncTransform), so it
+         repaints here too. */
+      const paintKf = () => {
+        const on = FM.hasKeyframeAt(kL.transform[kKey], FM.time);
+        kf.classList.toggle('on', on);
+        kf.classList.toggle('anim', !on && FM.isAnimated(kL.transform[kKey]));
+        kf.title = (on ? 'Remove the ' : 'Add a ') + labelText + ' keyframe at the playhead';
+        kf.setAttribute('aria-label', kf.title);
+      };
+      paintKf();
+      box._paintKf = paintKf;
       kf.addEventListener('click', (e) => {
         e.stopPropagation();
         if (kL.transform[kKey] == null) kL.transform[kKey] = MT_DEF[kKey];
@@ -4182,7 +4190,7 @@ window.FM = window.FM || {};
       const onKey = e => { if (e.key === 'Enter') { e.preventDefault(); val.blur(); } else if (e.key === 'Escape') { e.preventDefault(); finish(false); } };
       val.addEventListener('blur', onBlur); val.addEventListener('keydown', onKey);
     }
-    box._refresh = refresh; return box;
+    box._refresh = () => { refresh(); if (box._paintKf) box._paintKf(); }; return box;
   }
 
   // A horizontal tick-strip you drag to scrub a value.
@@ -4550,7 +4558,6 @@ window.FM = window.FM || {};
     const _selK = (kfSel && kfSel.layerId === layer.id && /^tf:/.test(kfSel.key || '')) ? kfSel.key.slice(3) : null;
     const scoped = (_selK && props.indexOf(_selK) >= 0) ? [_selK] : null;
     const stateProps = scoped || props;
-    const anyAnim = stateProps.some(k => FM.isAnimated(layer.transform[k]));
     /* The lit state and the title follow the SAME judgement as the click (queue 419). Before this the
        diamond titled itself "Remove keyframe at playhead" on the strength of a tilt key while rotation
        had none — the button announced the wrong action before you touched it. */
@@ -4558,9 +4565,22 @@ window.FM = window.FM || {};
       const p = stateProps.filter(k => MT_PRIMARY[mode] && MT_PRIMARY[mode].indexOf(k) >= 0);
       return p.length ? p : stateProps;
     })();
-    const onHere = litProps.some(k => FM.hasKeyframeAt(layer.transform[k], FM.time));
-    const kfBtn = el('button', 'mt-kf' + (anyAnim ? ' active' : '') + (onHere ? ' here' : ''), '◆');
-    kfBtn.title = onHere ? 'Remove keyframe at playhead' : 'Add a keyframe at the playhead';
+    const kfBtn = el('button', 'mt-kf', '◆');
+    /* THE BIG DIAMOND FOLLOWS THE PLAYHEAD (UX review top #3). Its lit state and title were computed once
+       when the panel was built, and the panel is not rebuilt on a scrub. Measured: with the only key at
+       0:00, the playhead at 1:07 still showed a gold "Remove keyframe at playhead", and tapping it ADDED
+       one (the click recomputes, see below, so the ACTION was right and the BUTTON lied). The reverse case
+       showed "Add" while sitting on a key, and the tap removed it. Repainted on every time change through
+       syncFns, which FM.inspector.syncTransform runs from app.js. */
+    const paintKfBtn = () => {
+      const animNow = stateProps.some(k => FM.isAnimated(layer.transform[k]));
+      const here = litProps.some(k => FM.hasKeyframeAt(layer.transform[k], FM.time));
+      kfBtn.classList.toggle('active', animNow);
+      kfBtn.classList.toggle('here', here);
+      kfBtn.title = here ? 'Remove keyframe at playhead' : 'Add a keyframe at the playhead';
+    };
+    paintKfBtn();
+    syncFns.push(paintKfBtn);
     kfBtn.addEventListener('click', () => {
       // recompute at CLICK time — the build-time value goes stale the moment the playhead scrubs
       // (the panel isn't rebuilt on scrub), which made the diamond silently no-op or delete

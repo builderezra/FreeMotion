@@ -1,0 +1,15 @@
+# Building the UX review's "Start here" fixes
+
+His word, 25 Sep, after the review was published: **"Go"**. Read as: build the 12 Start-here fixes on
+this branch, in order, without touching `main`. Each fix gets a test that FAILS against the code before it
+and PASSES after (the prove.sh rule), run in headless Chromium at 1280 and 380 px.
+
+**Before merging to main:** this branch does not bump the version label, the `?v=` cache-busters or
+POLISH-LOG, so it can merge cleanly under whatever `main` has shipped since. `tools/ship.sh` will ask for
+those at merge time, and it is right to: a missed buster serves the old file.
+
+| # | Fix | Status | Test (name contains) | Proof |
+|---|-----|--------|----------------------|-------|
+| 1 | Tap a layer on the preview to select it | **Not built: your decision.** v2.93 "the canvas never selects… Layers are picked from the timeline." Needs your call (see report). | | |
+| 2 | Dragging an animated layer moves the whole animation | **Not built: your decision.** v3.00 "canvas dragging no longer drops keyframes (your clarification)". Needs your call. | | |
+| 3 | Keyframe diamonds show a stale state after the playhead moves | Built | `keyframe diamonds follow the playhead` | Fails on 7bb5058 ("at 1.2 s … the rail diamond still claims a keyframe is here"), passes after, 1280 + 380. The 61 other `keyframe` tests pass. |
