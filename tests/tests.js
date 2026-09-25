@@ -90038,9 +90038,11 @@
 
 
   /* ═══ HUNT-e — KEYFRAMES, MASKS AND POINT EDITING, WITH A REAL FINGER (25 Sep, #690) ═══════════════════════════════
-   * Four findings of the second real-input hunt, each written as a failing test FIRST. Every gesture goes through
-   * tests/_cdp.py (realInput924) as trusted touches — capture, hit-testing and the browser's own touch -> pointer
-   * pipeline — and each test carries a control proving the gesture really engaged, so a red is the app. */
+   * Four findings of the second real-input hunt, each written as a failing test FIRST, confirmed by a skeptic, then
+   * fixed (js/timeline.js liveStackAt + easeKfOf, js/mask-tool.js followPlayhead + grab, js/point-edit.js grab,
+   * js/motion-path.js GRAB_SLOP). Every gesture goes through tests/_cdp.py (realInput924) as trusted touches — capture,
+   * hit-testing and the browser's own touch -> pointer pipeline — and each test carries a control proving the gesture
+   * really engaged, so a red is the app. */
   function huntEWait(ms) { return new Promise(r => setTimeout(r, ms)); }
   function huntEJ(o) { return JSON.stringify(o).replace(/"/g, "'"); }   // a failure message must not carry a double quote
   function huntEDowns() {
@@ -90088,14 +90090,17 @@
   function huntETap(x, y) { return [{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 0 }]; }
   function huntEHold(x, y) { return [{ t: 'touchStart', x: x, y: y, ms: 650 }, { t: 'touchEnd', x: x, y: y, ms: 0 }]; }
 
-  test('HUNT-e dragging the Position keyframe diamond moves only one of X and Y and leaves a diamond behind, and Delete keyframe leaves one there too', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 the Position keyframe diamond is one diamond — a hold-and-drag moves X and Y together, Delete keyframe removes both, and a picked X still moves alone', { item: '690', budgetMs: 90000 }, async function () {
     /* The Position ◆ in Move & Transform keys X and Y TOGETHER (inspector.js moveTransformPanel: with no row picked, a
-       plain position keyframe keys x and y together). The timeline then draws ONE DIAMOND PER PROPERTY (timeline.js,
+       plain position keyframe keys x and y together). The timeline draws ONE DIAMOND PER PROPERTY (timeline.js,
        keyframe diamonds) — so every position keyframe is two live diamonds stacked on the same pixel. The hold-and-drag
-       carries only the diamond on top (kfs = [entry.kf]), and the hold menu Delete keyframe removes only that one
-       (deleteKeyframesAt(layer, tt, entry.prop)). He sees one diamond: drag it and a second one is left behind where it
-       was; delete it and it is still there. That is his #625 word for word — Sometimes I try to move key frames and it
-       just duplicates them and sometimes I try to delete them and I cant — by a route the v13.75 fix never covered. */
+       carried only the diamond on top (kfs = [entry.kf]), and the hold menu Delete keyframe removed only that one
+       (deleteKeyframesAt(layer, tt, entry.prop)). He sees one diamond: dragged, a second one was left behind where it
+       was; deleted, it was still there. That is his #625 word for word — Sometimes I try to move key frames and it just
+       duplicates them and sometimes I try to delete them and I cant — by a route the v13.75 fix never covered.
+       Fixed by liveStackAt: a gesture on a live diamond acts on every LIVE keyframe at its time. Part 3 guards the other
+       half of what he asked for (v4.09 / v5.42: every property owns its keyframes) — with X's name tapped only X is
+       live, and the same drag must leave Y where it was. */
     const saved = FM.scene;
     try {
       await atPhoneWidth(async function () {
@@ -90158,19 +90163,40 @@
           if (xHas && yHas) throw new Error('CONTROL: tapping Delete keyframe removed nothing at all, so the tap did not reach the menu');
           const left = huntELiveDotsAt(3).length;
           if (xHas || yHas || left) bad.push('he held the same diamond and chose Delete keyframe: a diamond is still at 3 s (' + (xHas ? 'X' : 'Y') + ' kept its keyframe there, ' + left + ' live diamond(s) left) — he has to delete it a second time, his #625: sometimes I try to delete them and I cant');
+
+          // 3. ONE PROPERTY'S KEYFRAMES ARE STILL ITS OWN: tap X's name, and the same hold-and-drag moves X alone
+          L = await huntEPosFixture();
+          const xName = [].filter.call(document.querySelectorAll('#inspector .mt-vbox-lab'), n => n.textContent.trim() === 'X')[0];
+          if (!xName || !xName.classList.contains('kf-selectable')) throw new Error('setup: no tappable X name in Move and Transform');
+          xName.click(); await huntEWait(250);
+          dots = huntELiveDotsAt(3);
+          if (dots.length !== 1) throw new Error('CONTROL: with X picked, ' + dots.length + ' live diamonds sit at 3 s — want X alone, so the narrowing is not what this measures');
+          r = dots[0].getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2;
+          await realInput924([
+            { t: 'touchStart', x: cx, y: cy, ms: 650 },
+            { t: 'touchMove', x: cx + 10, y: cy, ms: 40 },
+            { t: 'touchMove', x: cx + 20, y: cy, ms: 40 },
+            { t: 'touchMove', x: cx + 30, y: cy, ms: 120 },
+            { t: 'touchEnd', x: cx + 30, y: cy, ms: 0 },
+          ], 'a hold, then a 30px drag of the X diamond at 3 s with X picked');
+          await huntEWait(350);
+          const xs3 = L.transform.x.kf.map(k => k.t), ys3 = L.transform.y.kf.map(k => k.t);
+          if (!xs3.some(t => t > 3.1 && t < 4.5)) throw new Error('CONTROL: with X picked, the hold and 30px drag did not move X (x ' + xs3.join(', ') + '), so the narrowing cannot be judged');
+          if (!ys3.some(t => Math.abs(t - 3) < 1e-6)) bad.push('with only X picked, dragging its diamond moved Y too (y ' + ys3.map(t => t.toFixed(3)).join(', ') + ' s) — a picked property no longer owns its keyframes');
           if (bad.length) throw new Error(bad.join('; AND '));
         });
       }, 380);
     } finally { huntERestore(saved); }
   });
 
-  test('HUNT-e the mask editor ignores the playhead — after a scrub its outline stays on the old frame, and dragging a point there writes the old frame shape into the new one', { item: '690', budgetMs: 60000 }, async function () {
-    /* js/mask-tool.js seeds its working points ONCE, in open(), from the path at the playhead — and nothing reseeds them
-       when the playhead moves: draw() only reseeds when the mask OBJECT changes (undo / load). So with an animated mask
-       (the AE-style roto its own header advertises: edits write into the keyframe at the playhead), he scrubs to the next
-       frame he wants to fix and the teal outline stays where the mask was on the frame he opened it on, while the mask
-       itself has moved on. Touch a handle there and flush() writes the WHOLE stale outline into a new keyframe at the
-       playhead: that frame snaps back to the old frame's shape with one point moved, and the roto he had there is gone. */
+  test('690 the mask editor follows the playhead — after a scrub its outline is the frame on screen, and dragging a point there keeps the rest of that frame', { item: '690', budgetMs: 60000 }, async function () {
+    /* js/mask-tool.js seeded its working points ONCE, in open(), from the path at the playhead — and nothing reseeded them
+       when the playhead moved: draw() only reseeded when the mask OBJECT changed (undo / load). So with an animated mask
+       (the AE-style roto its own header advertises: edits write into the keyframe at the playhead), he scrubbed to the
+       next frame he wanted to fix and the teal outline stayed where the mask was on the frame he opened it on, while the
+       mask itself had moved on. Touching a handle there made flush() write the WHOLE stale outline into a new keyframe at
+       the playhead: that frame snapped back to the old frame's shape with one point moved, and the roto he had there was
+       gone. Fixed by followPlayhead (draw() and onDown re-read an animated path whenever the playhead has moved). */
     const saved = FM.scene;
     try {
       await atPhoneWidth(async function () {
@@ -90246,13 +90272,14 @@
     } finally { huntERestore(saved); }
   });
 
-  test('HUNT-e a tap to select a point jumps it to the fingertip — Customise Points, a mask point and a motion path dot', { item: '690', budgetMs: 90000 }, async function () {
-    /* All three on-canvas point editors place the point AT THE FINGER on every move — point-edit.js onMove
+  test('690 a tap to select a point leaves it where it was, and a drag moves it by the finger travel — Customise Points, a mask point and a motion path dot', { item: '690', budgetMs: 90000 }, async function () {
+    /* All three on-canvas point editors placed the point AT THE FINGER on every move — point-edit.js onMove
        (p[0] = loc.u), mask-tool.js onMove (p[0] = pp.x) and motion-path.js onMove (setProp x = pp.x) — with no slop.
        Their touch targets are deliberately generous (26px, 16px, 20px), because a fingertip never lands dead centre;
        and a real finger always trembles a pixel or two while it is down. So a TAP just to select a point — to read its
-       X and Y, switch it to a curve, or use the nudge pad — jumps it to wherever the fingertip landed, and the release
-       writes that into undo. The v16.94 hunt fixed exactly this on the keyframe diamonds; the point editors kept it. */
+       X and Y, switch it to a curve, or use the nudge pad — jumped it to wherever the fingertip landed, and the release
+       wrote that into undo. The v16.94 hunt fixed exactly this on the keyframe diamonds; the point editors kept it.
+       Fixed by a grab in each: a touch is ignored until it travels 6px, then moves the point by the finger travel. */
     const saved = FM.scene;
     const bad = [];
     const cv = () => document.getElementById('preview');
@@ -90347,13 +90374,14 @@
     } finally { huntERestore(saved); }
   });
 
-  test('HUNT-e an easing picked on the first keyframe diamond changes nothing — the move out of it stays linear', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 an easing picked on the first keyframe diamond eases the move out of it, and the diamond says so', { item: '690', budgetMs: 60000 }, async function () {
     /* On the phone the diamond's hold menu is the way to ease a keyframe (a finger never makes a double-click or a
-       right-click). Its items write the ease onto THAT diamond's own keyframe (timeline.js openKfMenu: entry.kf.e = key).
+       right-click). Its items wrote the ease onto THAT diamond's own keyframe (timeline.js openKfMenu: entry.kf.e = key).
        But FM.evalProp reads a segment's ease from the keyframe it ENDS on (scene.js: easing resolved from b, the later
        key), and the graph editor agrees (pickKfs edits the END keyframe). So an ease chosen on the FIRST keyframe of a
-       move — the start of the motion, and half the diamonds of any two-keyframe animation — lands on a field nothing
-       reads: the diamond recolours to say it is eased, and the move plays exactly as linearly as before. */
+       move — the start of the motion, and half the diamonds of any two-keyframe animation — landed on a field nothing
+       reads: the diamond recoloured to say it was eased, and the move played exactly as linearly as before.
+       Fixed by easeKfOf: the first diamond's menu writes, and its colour reads, the keyframe the move leaving it ends on. */
     const saved = FM.scene;
     try {
       await atPhoneWidth(async function () {
@@ -90389,6 +90417,7 @@
             throw new Error('he held the first keyframe diamond of a move from 1 s to 3 s and picked Ease In-Out' + (saysEased ? ': the diamond turned green to say it is eased' : '') +
               ', but the move out of it is exactly as linear as before (X at 1.5 s is ' + after.toFixed(1) + ', was ' + before.toFixed(1) + ') — the ease went onto a keyframe nothing before it reads');
           }
+          if (!saysEased) throw new Error('he held the first keyframe diamond and picked Ease In-Out, and the move out of it is eased (X at 1.5 s ' + before.toFixed(1) + ' -> ' + after.toFixed(1) + '), but the diamond he held does not say so (' + (dot ? dot.className : 'no diamond') + ') — it reads as though the pick did nothing');
         });
       }, 380);
     } finally { huntERestore(saved); }

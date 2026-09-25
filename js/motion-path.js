@@ -152,14 +152,27 @@ window.FM = window.FM || {};
   }
 
   /* ---------- pointer ---------- */
+  /* ⚠️ A TAP ON A DOT IS NOT A DRAG (queue 690). The toast tells him to "tap a dot for its handles", and a dot's hit
+     radius is a deliberate 20px — but onMove set the keyframe to the FINGER on every move, with no slop, and a real
+     finger always trembles a pixel while it is down. So that tap moved the keyframe to wherever the fingertip had landed:
+     measured with a trusted touch 12px off the dot, 11 screen px, 73 project px, committed to undo on release.
+     A dot now records where the finger went down and where the keyframe WAS, ignores a touch until it has travelled
+     GRAB_SLOP px (the keyframe diamonds' KF_DRAG_SLOP, v16.94), and then moves by how far the finger has travelled.
+     A mouse does not tremble, so it keeps every pixel. */
+  const GRAB_SLOP = 6;
   function onDown(e) {
     if (!activeId) return;
     e.preventDefault(); e.stopPropagation();
     const l = layer(); if (!l) return;
-    const hit = pick(evtToProj(e));
+    const pp = evtToProj(e);
+    const hit = pick(pp);
     if (!hit) { if (selT != null) { selT = null; draw(); } return; }
     if (hit.kind === 'dot') selT = hit.t;
     drag = { kind: hit.kind, t: hit.t, did: false };
+    if (hit.kind === 'dot') {
+      const o = posAt(l, hit.t);
+      Object.assign(drag, { sx: e.clientX, sy: e.clientY, px: pp.x, py: pp.y, ox: o.x, oy: o.y, slop: e.pointerType === 'mouse' ? 0 : GRAB_SLOP });
+    }
     draw();
     try { overlay.setPointerCapture(e.pointerId); } catch (_) {}
   }
@@ -169,13 +182,16 @@ window.FM = window.FM || {};
     const l = layer(); if (!l) return;
     const pp = evtToProj(e), px = clampN(pp.x), py = clampN(pp.y);
     if (drag.kind === 'dot') {
+      // queue 690: nothing until the finger really travels, then by how far it has — see GRAB_SLOP above
+      if (!drag.did && drag.slop && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < drag.slop) return;
+      const nx = clampN(drag.ox + (pp.x - drag.px)), ny = clampN(drag.oy + (pp.y - drag.py));   // where the keyframe goes
       // moves the keyframes, never the playhead — FM.time is untouched by design.
       // ensureKf first: on an axis that is still a STATIC number, setProp would overwrite the static
       // value — every dot would move together on that axis. Seeding it as animated gives each dot its
       // own keyframe, which is the whole point of a path editor.
       ensureKf(l, 'x', drag.t); ensureKf(l, 'y', drag.t);
-      FM.setProp(l.transform, 'x', Math.round(px), drag.t);
-      FM.setProp(l.transform, 'y', Math.round(py), drag.t);
+      FM.setProp(l.transform, 'x', Math.round(nx), drag.t);
+      FM.setProp(l.transform, 'y', Math.round(ny), drag.t);
     } else {
       const kx = ensureKf(l, 'x', drag.t), ky = ensureKf(l, 'y', drag.t);
       if (!kx || !ky) return;

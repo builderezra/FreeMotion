@@ -19,6 +19,7 @@ window.FM = window.FM || {};
   let drag = null;            // { pi } index of the point being dragged
   let sel = -1;               // selected point index (drives Delete / Smooth)
   let seedOf = null;          // the mask OBJECT `pts` was seeded from — IDENTITY, not contents. See reseed().
+  let seedT = 0;              // the playhead time `pts` was seeded at — an animated path is re-read when it moves. See followPlayhead().
   let dirty = false;          // did anything actually change since open()? gates the flush on Done so
                               // just opening + closing the editor on an ANIMATED path can't inject a
                               // spurious keyframe at the playhead (a no-op roto inspection must not mutate)
@@ -74,11 +75,34 @@ window.FM = window.FM || {};
     drag = null;                       // an in-flight drag indexes the old array
     lastTap = { t: 0, pi: -1 };        // …and a pending double-tap indexes it too
     dirty = false;
-    pts = seedPts(m);
+    pts = seedPts(m); seedT = FM.time;
     closed = pts.length >= 3 && m.closed !== false;
     if (!isAnim() && !Array.isArray(m.path)) m.path = pts;
     sel = -1; seedOf = m;
     updateBar();
+  }
+
+  /* ⚠️ AN ANIMATED PATH IS RE-READ WHEN THE PLAYHEAD MOVES (queue 690). `pts` was seeded once, in open(), from the path
+   * at the playhead, and the only reseed was reseed() above, which fires when the mask OBJECT is replaced — never when the
+   * TIME changes. So with a roto'd mask (this file's own header: edits write into the keyframe at the playhead) he scrubbed
+   * to the next frame he wanted to fix and the teal outline and its handles stayed on the frame he opened it on — measured,
+   * 374 project px from the mask on screen — and the first handle he touched ran flush(), which wrote that WHOLE stale
+   * outline as the keyframe at the new playhead: that frame snapped back to the old shape with one point moved, and the
+   * roto he had there was gone, under an undo entry that looked like an ordinary point drag.
+   * Never mid-drag (the drag is writing the keyframe at the time it started, and a tick must not swap the array under the
+   * finger). `dirty` is cleared because every edit is flushed the moment it is made, so nothing the editor now holds is
+   * unsaved — and Done flushing it anyway would inject a keyframe here that he never made. The selection survives when
+   * the point still exists; the bar is only rebuilt when what it shows (the Smooth / Corner label) would change. */
+  function followPlayhead(m) {
+    if (drag || !m || !isAnim() || Math.abs((FM.time || 0) - seedT) < 1e-6) return;
+    const smoothWas = sel >= 0 && pts[sel] ? pts[sel][2] === 1 : null;
+    const n0 = pts.length;
+    pts = seedPts(m); seedT = FM.time;
+    dirty = false;
+    if (pts.length !== n0) lastTap = { t: 0, pi: -1 };   // a pending double-tap indexes a point that may not exist now
+    if (sel >= pts.length) sel = -1;
+    const smoothNow = sel >= 0 && pts[sel] ? pts[sel][2] === 1 : null;
+    if (smoothNow !== smoothWas) updateBar();
   }
 
   // Write the working points back into the model. Animated path → upsert the keyframe at the playhead
@@ -102,6 +126,7 @@ window.FM = window.FM || {};
     const l = layer(), m = mask(), cv = preview();
     if (!l || !m || !cv || !overlay) { FM.maskTool.stop(); return; }
     if (m !== seedOf) reseed(m);   // the scene was replaced under us (undo/redo, project load)
+    else followPlayhead(m);         // …or the playhead moved on an animated path (queue 690)
     /* Placed through the shared helper (queue 561) — this overlay is a child of the zoomed wrap, and
        writing a SCREEN measurement into its CSS box applied the zoom twice. Measured here before the
        fix: ratio 1.00 / 2.00 / 4.00 with offsets 0,0 / 0,89 / 720,1200. See FM.placeOverlayOnCanvas. */
@@ -181,17 +206,34 @@ window.FM = window.FM || {};
   }
 
   /* ---------- pointer ---------- */
+  /* ⚠️ A TAP TO SELECT A POINT IS NOT A DRAG (queue 690). onMove put the point AT THE FINGER on every move, with no slop,
+     and the hit radius is a deliberate 16px — a fingertip never lands dead centre. A real finger always trembles a pixel
+     while it is down, and the browser reports that as a move, so a TAP just to select a point (for Smooth / Corner, Delete
+     or the nudge pad, which only appear once one is selected) jumped it to wherever the fingertip had landed — measured
+     with a trusted touch 12px off the point: 11 screen px, 73 project px — and the release wrote that into undo.
+     Now a grab records where the finger went down and where the point WAS, ignores a touch until it has travelled
+     GRAB_SLOP px (the keyframe diamonds' own KF_DRAG_SLOP, v16.94 — the same fault, fixed there first), and then moves
+     the point by how far the finger has travelled, never to where it is. A mouse does not tremble, so it keeps every
+     pixel. A point the PEN has just dropped is the exception: it was placed under the finger on purpose, "let the
+     finger fine-tune it", so it still follows the fingertip exactly as before. */
+  const GRAB_SLOP = 6;
+  function grab(e, pi, pp) {
+    const p = pts[pi];
+    return { pi: pi, sx: e.clientX, sy: e.clientY, px: pp.x, py: pp.y, ox: p ? p[0] : pp.x, oy: p ? p[1] : pp.y,
+             slop: e.pointerType === 'mouse' ? 0 : GRAB_SLOP, moved: false };
+  }
   function onDown(e) {
     if (!active) return;
     e.preventDefault(); e.stopPropagation();
+    { const m0 = mask(); if (m0 && m0 === seedOf) followPlayhead(m0); }   // a press straight after a scrub, before the next frame
     const pp = evtToProj(e);
     const P = proj(), cp = { x: clamp(pp.x, 0, P.width), y: clamp(pp.y, 0, P.height) };
     if (!closed) {
       // PEN: tap the first point to close, otherwise drop a new point and let the finger fine-tune it.
       if (pts.length >= 3) { const q = pts[0], d = Math.hypot(q[0] - pp.x, q[1] - pp.y); if (d <= 16 / dispScale()) { closePath(); return; } }
       const hit = nearestPoint(pp);
-      if (hit >= 0) { drag = { pi: hit }; sel = hit; }
-      else { pts.push([cp.x, cp.y]); sel = pts.length - 1; drag = { pi: sel }; dirty = true; flush(); FM.requestRender(); updateBar(); }
+      if (hit >= 0) { drag = grab(e, hit, pp); sel = hit; }
+      else { pts.push([cp.x, cp.y]); sel = pts.length - 1; drag = { pi: sel, follow: true }; dirty = true; flush(); FM.requestRender(); updateBar(); }
       draw();
       try { overlay.setPointerCapture(e.pointerId); } catch (_) {}
       return;
@@ -202,7 +244,7 @@ window.FM = window.FM || {};
       const now = performance.now();
       if (now - lastTap.t < 350 && lastTap.pi === hp) { lastTap = { t: 0, pi: -1 }; delPoint(hp); return; }
       lastTap = { t: now, pi: hp };
-      sel = hp; drag = { pi: hp }; updateBar(); draw();
+      sel = hp; drag = grab(e, hp, pp); updateBar(); draw();
       try { overlay.setPointerCapture(e.pointerId); } catch (_) {}
       return;
     }
@@ -211,7 +253,7 @@ window.FM = window.FM || {};
       const a = pts[hm], b = pts[(hm + 1) % pts.length];
       const mp = FM.subPathMidpoint(pts, hm, true);
       const np = (a[2] === 1 || b[2] === 1) ? [mp[0], mp[1], 1] : [mp[0], mp[1]];
-      pts.splice(hm + 1, 0, np); sel = hm + 1; drag = { pi: sel };
+      pts.splice(hm + 1, 0, np); sel = hm + 1; drag = grab(e, sel, pp);   // it sits on the curve, not under the finger
       dirty = true; flush(); FM.requestRender(); updateBar(); draw();
       try { overlay.setPointerCapture(e.pointerId); } catch (_) {}
       return;
@@ -223,7 +265,13 @@ window.FM = window.FM || {};
     e.preventDefault();
     const P = proj(), pp = evtToProj(e), p = pts[drag.pi];
     if (!p) return;
-    p[0] = clamp(pp.x, 0, P.width); p[1] = clamp(pp.y, 0, P.height);
+    if (drag.follow) { p[0] = clamp(pp.x, 0, P.width); p[1] = clamp(pp.y, 0, P.height); }   // a point the pen just dropped
+    else {
+      // queue 690: nothing until the finger really travels, then by how far it has — see grab()
+      if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < drag.slop) return;
+      drag.moved = true;
+      p[0] = clamp(drag.ox + (pp.x - drag.px), 0, P.width); p[1] = clamp(drag.oy + (pp.y - drag.py), 0, P.height);
+    }
     dirty = true; flush(); FM.requestRender();
   }
   function onUp(e) {
@@ -333,7 +381,7 @@ window.FM = window.FM || {};
       if (FM.selectLayer) FM.selectLayer(l.id);
       active = { layerId, maskId };
       dirty = false;
-      pts = seedPts(m);
+      pts = seedPts(m); seedT = FM.time;
       // Empty → PEN. Existing points that the mask marks closed → EDIT. (A lone <3-point path stays pen.)
       closed = pts.length >= 3 && m.closed !== false;
       if (!isAnim() && !Array.isArray(m.path)) m.path = pts;   // seed a static path so pen edits are live
