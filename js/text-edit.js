@@ -9,7 +9,7 @@ window.FM = window.FM || {};
 (function (FM) {
   'use strict';
 
-  let active = null;                 // { layerId, prevText, cueIndex, createdCue }
+  let active = null;                 // { layerId, prevText, cap, cue, cueArr, cueIndex, cueText, cueGone, createdCue } — see bindTo()
   const MIN_PREVIEW = 120;           // px of canvas that must survive the keyboard lift
   let bar = null, dock = null, panel = null, input = null, pop = null, popKind = '', popBtn = null, popBuild = null;
   let unwatch = null;                // FM.screen.watch()'s one-call unsubscribe
@@ -42,44 +42,96 @@ window.FM = window.FM || {};
    * (That is the whole "captions are fake" experience.) */
   function isCapTrack(l) { return !!(FM.captions && FM.captions.isTrack(l)); }
   function cueList(l) { return (l && Array.isArray(l.captions)) ? l.captions : []; }
+  /* ═══ THE SESSION HOLDS THE CAPTION ITSELF, NOT ITS PLACE IN THE LIST (queue 690, second hunt) ═══════════════════
+   * It used to hold `cueIndex` and read cues[cueIndex] on every keystroke and at Done. But the Aa sheet of THIS editor
+   * hosts the caption list (captions.js, through the inspector's text extras), and its ✕ splices a caption out while
+   * its Start / End fields re-sort the list — so the number quietly came to name a NEIGHBOUR. Measured on his flow:
+   * typing caption 2, ✕ on a stray caption 1, ✓ — the captions read [Bravo, edited | Bravo, edited]: his words were
+   * written over Charlie and Charlie's own words were gone, with no warning. Re-timing the caption he was typing did
+   * the same to another one.
+   * So the session binds the cue OBJECT, and the position is only ever derived from it (indexOf), for the n / N label
+   * and for ‹ ›. What it remembers besides is only how to recognise that caption again:
+   *   cueArr   — the list it was found in. Missing from the SAME list = it was deleted, and the session is bound to
+   *              nothing (cueGone): his words go nowhere rather than onto whichever caption now sits in its place.
+   *   cueText  — the words this editor last gave it. Missing from a REBUILT list (trimming the clip's head, a split,
+   *              Detect speech, an undo all hand back copies) = the copy carrying exactly those words, nearest where
+   *              it was — writing to that one can never replace anybody else's words.
+   *   cueIndex — where it last was, to break a tie between copies and to know where ‹ › start from once it is gone. */
+  function bindTo(cues, i) {
+    active.cue = cues[i]; active.cueArr = cues; active.cueIndex = i; active.cueText = active.cue.text || ''; active.cueGone = false;
+    return active.cue;
+  }
+  function nearestCopy(cues, same) {
+    let best = -1;
+    cues.forEach((c, i) => { if (same(c) && (best < 0 || Math.abs(i - active.cueIndex) < Math.abs(best - active.cueIndex))) best = i; });
+    return best;
+  }
   function activeCue() {
-    if (!active || active.cueIndex == null) return null;
-    return cueList(layer())[active.cueIndex] || null;
+    if (!active || !active.cue || active.cueGone) return null;
+    const cues = cueList(layer());
+    const k = cues.indexOf(active.cue);
+    if (k >= 0) { active.cueIndex = k; active.cueArr = cues; return active.cue; }
+    const copy = cues === active.cueArr ? -1 : nearestCopy(cues, c => (c.text || '') === active.cueText);
+    if (copy >= 0) return bindTo(cues, copy);
+    active.cueGone = true;
+    return null;
+  }
+  /* Where the field's words go: the bound caption on a caption track, layer.text on any other text — including a track
+   * whose last caption was deleted under the editor, because the picture then shows layer.text, as it always did here.
+   * A caption session whose caption has gone writes NOTHING — falling back to the caption now in its old position is
+   * the bug above. */
+  function writeField(l) {
+    if (!active.cap || !isCapTrack(l)) { l.text = input.value; return; }
+    const c = activeCue();
+    if (c) { c.text = input.value; active.cueText = c.text; }
   }
   /* Which cue should this session edit? The one live at the playhead; failing that a NEW one there,
    * so typing always has somewhere visible to land. An auto-created cue that is still empty at Done
    * is removed again, so opening the editor by accident leaves no litter. */
   function bindCue(l) {
     if (!isCapTrack(l)) return;
+    active.cap = true;
     let i = FM.captions.indexAt(l, FM.time);
     if (i < 0) {
       i = FM.captions.addCue(l, Math.max(0, FM.captions.localTime(l, FM.time)));
       active.createdCue = true;
     }
-    active.cueIndex = i;
+    bindTo(cueList(l), i);
   }
   function gotoCue(i) {
     const l = layer(); if (!l) return;
     const cues = cueList(l);
     if (!cues.length) return;
-    i = Math.max(0, Math.min(cues.length - 1, i));
+    /* THE CAPTION IS PICKED BEFORE THE BLANK ONE IS DROPPED (queue 690, second hunt). The editor opened in a gap adds a
+       blank caption there (bindCue), and leaving it drops it again — which moves every caption after it down one. This
+       used to drop FIRST and then use the number it was handed, so › from the gap after Alpha opened Charlie and Bravo
+       was skipped; from before the first caption it opened Bravo. The target is now the caption at that number when
+       › was pressed, found again after the drop. When the target WAS that blank (‹ from before the first caption,
+       › from after the last) it is gone, and the nearest real caption is used, exactly as before. */
+    const target = cues[Math.max(0, Math.min(cues.length - 1, i))];
     // Leaving a cue we invented and never typed into: drop it rather than stranding a blank cue.
     dropEmptyCreated();
     const cues2 = cueList(l);
-    i = Math.max(0, Math.min(cues2.length - 1, i));
-    active.cueIndex = i;
-    const c = cues2[i];
+    if (!cues2.length) { updateCueNav(); return; }
+    let k = cues2.indexOf(target);
+    if (k < 0) k = Math.max(0, Math.min(cues2.length - 1, i));
+    const c = bindTo(cues2, k);
     if (FM.scrubTime) FM.scrubTime((l.start || 0) + c.start + Math.min(0.05, (c.end - c.start) / 2));
     if (input) { input.value = c.text || ''; try { input.focus(); input.select(); } catch (_) {} }
     updateCueNav();
     FM.requestRender();
+  }
+  // ‹ and ›. From a caption that has been deleted under the editor, the one that took its place counts as the next.
+  function stepCue(d) {
+    const here = activeCue() ? active.cueIndex : (active.cueIndex || 0) - (d > 0 ? 1 : 0);
+    gotoCue(here + d);
   }
   function dropEmptyCreated() {
     if (!active || !active.createdCue) return;
     const l = layer(), c = activeCue();
     if (l && c && !(c.text || '').trim()) {
       const cues = cueList(l), k = cues.indexOf(c);
-      if (k >= 0) cues.splice(k, 1);
+      if (k >= 0) { cues.splice(k, 1); active.cueGone = true; }
     }
     active.createdCue = false;
   }
@@ -87,7 +139,7 @@ window.FM = window.FM || {};
     if (!cueNav) return;
     const l = layer(), cues = cueList(l);
     const lbl = cueNav.querySelector('.te-cue-lbl');
-    if (lbl) lbl.textContent = cues.length ? 'Cue ' + (active.cueIndex + 1) + ' / ' + cues.length : 'Cue —';
+    if (lbl) lbl.textContent = cues.length && activeCue() ? 'Cue ' + (active.cueIndex + 1) + ' / ' + cues.length : 'Cue —';
   }
 
   // Built-in families (mirrors inspector.js FONTS); imported fonts come from FM.fonts.list().
@@ -546,17 +598,13 @@ window.FM = window.FM || {};
   // ---- lifecycle -----------------------------------------------------------
   function onInput() {
     const l = layer(); if (!l) return;
-    const c = activeCue();
-    if (c) c.text = input.value; else l.text = input.value;
+    writeField(l);
     FM.requestRender();
   }
 
   function commit() {
     const l = layer();
-    if (l && input) {
-      const c = activeCue();
-      if (c) c.text = input.value; else l.text = input.value;
-    }
+    if (l && input) writeField(l);
     dropEmptyCreated();
     if (l && FM.captions && Array.isArray(l.captions)) FM.captions.normalize(l);
     if (FM.timeline && FM.timeline.rebuild && l && Array.isArray(l.captions)) FM.timeline.rebuild();
@@ -646,7 +694,7 @@ window.FM = window.FM || {};
       if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
       if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
       if (FM.selectLayer) FM.selectLayer(l.id);
-      active = { layerId: layerId, prevText: l.text, cueIndex: null, createdCue: false };
+      active = { layerId: layerId, prevText: l.text, cap: false, cue: null, cueArr: null, cueIndex: 0, cueText: '', cueGone: false, createdCue: false };
       bindCue(l);   // caption track → this session edits a CUE, not layer.text
 
       // ---- the editor's one wrapper ----
@@ -697,11 +745,12 @@ window.FM = window.FM || {};
         const lbl = elc('span', 'te-cue-lbl', '');
         const next = elc('button', 'te-cue-btn', '›'); next.type = 'button'; next.title = 'Next cue';
         const addB = elc('button', 'te-cue-btn te-cue-add', '+'); addB.type = 'button'; addB.title = 'New cue after this one';
-        prev.addEventListener('click', () => gotoCue((active.cueIndex || 0) - 1));
-        next.addEventListener('click', () => gotoCue((active.cueIndex || 0) + 1));
+        prev.addEventListener('click', () => stepCue(-1));
+        next.addEventListener('click', () => stepCue(1));
         addB.addEventListener('click', () => {
-          const ly = layer(), cur = activeCue(); if (!ly || !cur) return;
-          const at = Math.min(cur.end + 0.05, Math.max(0, (ly.duration || 0) - FM.captions.MIN_CUE));
+          const ly = layer(), cur = activeCue(); if (!ly) return;
+          // After the current caption; with none bound (it was deleted under the editor), at the playhead.
+          const at = cur ? Math.min(cur.end + 0.05, Math.max(0, (ly.duration || 0) - FM.captions.MIN_CUE)) : Math.max(0, FM.captions.localTime(ly, FM.time));
           const i = FM.captions.addCue(ly, at);
           active.createdCue = false;   // deliberately created — keep it even if left blank
           gotoCue(i);
@@ -761,6 +810,49 @@ window.FM = window.FM || {};
     },
     // Esc / external close → commit-and-exit (the live value is already applied).
     stop() { if (active) commit(); },
+    /* ═══ ↶ AND ↷ WITH THE CARD OPEN (queue 690, second hunt) ═══════════════════════════════════════════════════════
+     * The PC card is modeless, so the transport's ↶ stays live beside it — and what he types is only committed at ✓.
+     * So ↶ stepped straight over the typing and undid the step BEFORE it. Right after Add text that step is adding the
+     * layer: the layer he was typing into vanished with the editor, and ↷ brought it back reading "Text" — Hello world
+     * gone for good. (Cmd+Z is already held off while the editor is open; the button was not.)
+     * history.undo / redo now call flush() first, the way they already flush a camera zoom's pending commit: his words
+     * become their own step, so ↶ takes back the TYPING and ↷ puts it back. An empty caption the editor invented is
+     * dropped first, so it never becomes a step of its own. */
+    flush() {
+      if (!active) return;
+      const l = layer();
+      if (l && input) writeField(l);
+      dropEmptyCreated();
+      if (FM.history) FM.history.commit();
+    },
+    /* …and resync() after the restore, because the editor stays open whenever the layer survived, and it holds two
+     * things the restore just replaced: the field's COPY of the words (left alone, it shows the pre-undo text and the
+     * next keystroke or ✓ writes it all back, undoing the undo) and, on a caption track, the caption OBJECT — every cue
+     * is a new object after a restore. The caption is found again as its copy with the same words, then as the one with
+     * the same timing (an undo of the typing changes the words, never the timing), and failing both the editor binds
+     * to the playhead exactly as it does when it opens. If the undo made the layer a caption track or took that away,
+     * the editor is rebuilt for what the layer now is. */
+    resync() {
+      if (!active) return;
+      const l = layer(); if (!l) return;   // the undo took the layer — syncToSelection closes the editor
+      if (isCapTrack(l) !== !!active.cap) { FM.textEdit.start(l.id); return; }
+      if (active.cap) {
+        const cues = cueList(l), old = active.cue;
+        let k = old && !active.cueGone ? cues.indexOf(old) : -1;
+        if (k < 0 && old && cues !== active.cueArr) {
+          k = nearestCopy(cues, c => (c.text || '') === active.cueText);
+          if (k < 0) k = nearestCopy(cues, c => Math.abs(c.start - old.start) < 1e-6 && Math.abs(c.end - old.end) < 1e-6);
+        }
+        if (k >= 0) bindTo(cues, k);
+        else { active.createdCue = false; bindCue(l); }
+      }
+      const c = activeCue(), v = active.cap ? (c ? c.text || '' : '') : (l.text || '');
+      if (input && input.value !== v) { input.value = v; const n = v.length; try { input.setSelectionRange(n, n); } catch (_) {} }
+      updateBarLabels();
+      updateCueNav();
+    },
+    // The Aa sheet's caption list changed (✕, a new Start or End, + Add cue, Detect speech): the n / N label follows.
+    cuesChanged() { if (active) updateCueNav(); },
     /* THE EDITOR MUST NOT OUTLIVE ITS SUBJECT (queue 523). Ezra: "as soon as you don't have a layer
        selected that you were editing the text for, that whole screen just goes away."
        He is describing a lifetime bug, not a missing button. The editor is bound to ONE layer and had

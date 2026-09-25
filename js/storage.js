@@ -1902,7 +1902,14 @@ window.FM = window.FM || {};
     try {
       const P = FM.scene.project;
       let src = document.createElement('canvas'); src.width = P.width; src.height = P.height;
-      FM.renderScene(src.getContext('2d'), FM.scene, FM.time);
+      /* ⚠️ THE CARD IS THE PICTURE THE PREVIEW SHOWS, WHICH AT THE END IS NOT THE RAW PLAYHEAD (queue 690, HUNT-c).
+         Playback without Loop parks the playhead ON the project's last instant (FM.time = duration), and every clip's
+         window is half-open, so at that instant nothing is live and a raw render is the bare background. The preview
+         never shows that — render() nudges through `_endInstantTime` (queue 549, his "even if it wasn't the last thing
+         it should still be visible when you're at the end of it") — but this capture used the raw time, so the
+         project he had just watched through came Home as a plain black card. Same rule as the preview, so the card
+         and the screen agree; a genuinely empty moment mid-timeline is left as it is, exactly as the preview leaves it. */
+      FM.renderScene(src.getContext('2d'), FM.scene, FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time);
       const s = Math.min(360 / P.width, 360 / P.height, 1);
       const tw = Math.max(2, Math.round(P.width * s)), th = Math.max(2, Math.round(P.height * s));
       while (src.width >= tw * 2) {   // halve until within 2× of target — each step averages real pixels
@@ -2260,6 +2267,7 @@ window.FM = window.FM || {};
       // OUTGOING project's layer ids and nothing else ever clears them (only the exporter did), so
       // the store grew for the whole session and a re-used id could inherit a stranger's frame.
       if (FM.resetMotionFlowCache) FM.resetMotionFlowCache();
+      if (FM._resetPlayQuality) FM._resetPlayQuality();   // queue 690: the playback quality learned on the outgoing project is not evidence about this one
       if (FM.viewport) FM.viewport.reset();   // fresh project → fresh view (preview pan/zoom is never saved)
       FM.scene.selectedId = null; FM.scene.selectedIds = []; FM.scene.layers = []; FM.time = 0;
       const ok = await FM.storage.load();
@@ -2348,7 +2356,13 @@ window.FM = window.FM || {};
       const name = opts.name || ((src.name || (doc.project && doc.project.name) || 'Project') + ' copy');
       const re = reIdLayers(doc.layers || []);
       const nid = newId('p');
-      if (!writeJSON('fm.proj.' + nid, { project: JSON.parse(JSON.stringify(doc.project)), layers: re.layers, selectedId: null, selectedIds: [] })) return null;
+      /* ⚠️ THE NAME GOES IN THE DOCUMENT TOO, NOT ONLY ON THE CARD (queue 690, HUNT-c). The copy's doc used to keep the
+         ORIGINAL's project.name, and only the index card said "X copy". But every save stamps the card with the doc's
+         name (touchCurrent: `e.name = P.name`), so the first time he opened the copy the editor called it X, and back on
+         Home both cards read X — the copy he had just changed and the original, indistinguishable, which is exactly
+         when the wrong one gets deleted. Every caller's name (Duplicate, bulk Duplicate, collab's "my version", a
+         restored checkpoint, a detached linked copy) is the name the new project should carry everywhere. */
+      if (!writeJSON('fm.proj.' + nid, { project: Object.assign(JSON.parse(JSON.stringify(doc.project)), { name: name }), layers: re.layers, selectedId: null, selectedIds: [] })) return null;
       FM._mediaBusy = (FM._mediaBusy || 0) + 1;
       const done = (ok) => { FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1); return ok ? nid : null; };
       // index the copy BEFORE the (slow, awaited) media copies — killing the tab mid-copy used to

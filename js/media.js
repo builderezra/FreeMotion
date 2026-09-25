@@ -44,6 +44,12 @@ window.FM = window.FM || {};
   }
   function release(rec, id) {
     if (!rec || sharedElsewhere(rec, id)) return false;
+    /* MARKED, so work already queued for it can stand down (queue 690, hunt f). A filmstrip build queued
+       for this clip before he left its project still ran, one at a time in the app's single strip queue,
+       and waited out a 3 s "loadeddata" (or 500 ms a frame) on an element that will never load again —
+       while the clips of the project he had just opened waited behind it as blank bars. js/frames.js
+       reads this. Set before the src goes, so nothing can see an emptied element that is not marked. */
+    rec._released = true;
     if (rec.url) { try { URL.revokeObjectURL(rec.url); } catch (e) {} }
     if (rec.el) {
       try { rec.el.pause(); } catch (e) {}

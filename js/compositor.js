@@ -2437,6 +2437,30 @@ window.FM = window.FM || {};
   function easeOutBack(p) { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2); }
   function hexToRGB(h) { h = String(h || '#000000').replace('#', ''); if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]; return [parseInt(h.slice(0, 2), 16) || 0, parseInt(h.slice(2, 4), 16) || 0, parseInt(h.slice(4, 6), 16) || 0]; }
   function lerpHex(a, b, f) { f = Math.max(0, Math.min(1, f)); const A = hexToRGB(a), B = hexToRGB(b); return 'rgb(' + Math.round(A[0] + (B[0] - A[0]) * f) + ',' + Math.round(A[1] + (B[1] - A[1]) * f) + ',' + Math.round(A[2] + (B[2] - A[2]) * f) + ')'; }
+  /* ═══ ONE CHARACTER HE TYPED IS NOT ONE CODE POINT (queue 690, second hunt) ═══════════════════════════════════════
+   * The animated path and the curve used to split a line with Array.from(line), which splits CODE POINTS. Most of
+   * the emoji keyboard on his iPhone is several code points drawn as one picture: the Australian flag is two
+   * regional-indicator letters, a thumbs-up with a skin tone is the thumb plus a colour swatch, a family is three
+   * people glued by invisible joiners. Each piece was measured and drawn on its own, so the moment a text had any
+   * Animate preset (Fade in, Pop, Typewriter — By Character is the default) or any Curve, G'day 🇦🇺 came out as two
+   * boxed letters A U and 👍🏽 as a yellow thumb beside a brown square — on every frame of the layer, in the preview
+   * AND burned into the export, not only during the entrance.
+   * So a line is cut into GRAPHEMES — what a person calls one character — which is what Intl.Segmenter exists for.
+   * The regex is the fallback for a browser without it (iOS before 14.5): flag pairs, joiner sequences, skin tones,
+   * variation selectors, tag sequences and combining marks each stay glued to the character they belong to. */
+  let graphemeSeg;   // undefined = not tried yet, null = this browser has none
+  const GRAPHEME_RE = /[\u{1F1E6}-\u{1F1FF}]{2}|[^‍︎️\u{1F3FB}-\u{1F3FF}\u{E0020}-\u{E007F}\p{M}][︎️\u{1F3FB}-\u{1F3FF}\u{E0020}-\u{E007F}\p{M}]*(?:‍[^‍︎️\u{1F3FB}-\u{1F3FF}\u{E0020}-\u{E007F}\p{M}\s][︎️\u{1F3FB}-\u{1F3FF}\u{E0020}-\u{E007F}\p{M}]*)*|[\s\S]/gu;
+  function graphemes(s) {
+    s = String(s == null ? '' : s);
+    if (graphemeSeg === undefined) {
+      try { graphemeSeg = (typeof Intl !== 'undefined' && Intl.Segmenter) ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null; } catch (e) { graphemeSeg = null; }
+    }
+    if (graphemeSeg) { const out = []; for (const g of graphemeSeg.segment(s)) out.push(g.segment); return out; }
+    return s.match(GRAPHEME_RE) || [];
+  }
+  FM._graphemes = graphemes;
+  // The regex alone, for the suite: Chrome always has Intl.Segmenter, so the fallback is held against it directly.
+  FM._graphemesFallback = function (s) { return String(s == null ? '' : s).match(GRAPHEME_RE) || []; };
 
   function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg) {
     const an = layer.textAnim || {};
@@ -2538,7 +2562,7 @@ window.FM = window.FM || {};
       if (prevWS != null) ctx.wordSpacing = '0px';
       const prevBase = ctx.textBaseline;
       const done = () => { if (prevLS != null) ctx.letterSpacing = prevLS; if (prevWS != null) ctx.wordSpacing = prevWS; ctx.textAlign = prevAlign; ctx.textBaseline = prevBase; };
-      const chars = Array.from(line);
+      const chars = graphemes(line);   // whole characters, not code points — see graphemes() (queue 690)
       const cw = chars.map(c => ctx.measureText(c).width + (c === ' ' ? wsp : 0));
       const tw = cw.reduce((a, b) => a + b, 0) + lsp * Math.max(0, chars.length - 1);
       if (tw <= 0) { done(); return; }
@@ -2549,7 +2573,10 @@ window.FM = window.FM || {};
       // units as [first, last+1) character ranges, in the same order and with the same membership as the flat path
       const ranges = [];
       if (unit === 'line') { if (chars.length) ranges.push([0, chars.length]); }
-      else if (unit === 'word') { let i = 0; line.split(/(\s+)/).filter(x => x.length).forEach(wd => { const n = Array.from(wd).length; ranges.push([i, i + n]); i += n; }); }
+      /* Words are counted in the SAME graphemes as `chars`, by runs of spaces and non-spaces — which is what
+         line.split(/(\s+)/) gives the flat path. Counting each word on its own could disagree with `chars` by one
+         wherever a mark sits right after a space, and a range running past the end draws at NaN (queue 690). */
+      else if (unit === 'word') { chars.forEach((c, i) => { const sp = /^\s+$/.test(c), last = ranges[ranges.length - 1]; if (last && last.sp === sp) last[1] = i + 1; else { const r = [i, i + 1]; r.sp = sp; ranges.push(r); } }); }
       else chars.forEach((c, i) => ranges.push([i, i + 1]));
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ranges.forEach((rg, gi) => {
@@ -2594,7 +2621,7 @@ window.FM = window.FM || {};
       let units;
       if (unit === 'line') units = [line];
       else if (unit === 'word') units = line.split(/(\s+)/).filter(s => s.length);
-      else units = Array.from(line);
+      else units = graphemes(line);   // a flag or a skin-toned thumb is ONE unit, not two (queue 690)
       const widths = units.map(u => ctx.measureText(u).width);
       const sp = parseFloat(ctx.letterSpacing) || 0;   // global spacing is active; measureText over-counts one trailing gap per unit (#5)
       const lineW = widths.reduce((a, b) => a + b, 0) - (units.length ? sp : 0);
@@ -2634,7 +2661,7 @@ window.FM = window.FM || {};
 
   // Text on a curve: lay characters along a circular arc, each rotated to the tangent.
   function drawArcLine(ctx, line, layer, curveDeg, drawStroke, sbw, scol) {   // sbw/scol passed in — they used to be read from another function's scope (ReferenceError: curved text + border crashed every render)
-    const chars = Array.from(line);
+    const chars = graphemes(line);   // whole characters, not code points — see graphemes() (queue 690)
     // Glyphs are drawn one at a time, so neutralise the global letterSpacing during measurement (it
     // would otherwise add a trailing gap to every single-char measureText, inflating the radius/spacing)
     // and add the spacing back explicitly as inter-char advance. No-op when spacing is 0. (#5)

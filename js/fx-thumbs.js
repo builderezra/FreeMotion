@@ -1579,8 +1579,33 @@ window.FM = window.FM || {};
    * vandalised — *"Why did you change all the filters images to shit photos"*.
    * Naming the second class would fix today and rot the same way the moment a third surface mounts a
    * tile. So the sweep no longer guesses from markup: a canvas is registered here when it is mounted,
-   * and being findable is a consequence of having been painted rather than of wearing the right class. */
-  const mounted = new Set();
+   * and being findable is a consequence of having been painted rather than of wearing the right class.
+   *
+   * HELD WEAKLY (queue 690, hunt f). This was a Set of the canvases themselves, and the only thing that
+   * ever pruned it was remountLive(), which runs when the photographs finish decoding — about once a
+   * session. Every other tile ever mounted stayed in it, and a canvas holds its parents: each rebuild of
+   * the Filters tab (56 tiles, and the inspector rebuilds its whole panel on every edit) and each open
+   * of the effects browser stranded every old tile AND the whole old panel with it. Measured: after six
+   * looks and five browses, 384 of the 413 tiles he had seen were still alive after a full garbage
+   * collection — 56.6 MB of picture memory and 3,500 page elements — so on his iPhone the app got
+   * heavier with every look he tried, until Safari reloaded it and took his unsaved edits with it.
+   * Pruning disconnected canvases on each mount would reopen the window remountLive's note describes: a
+   * tile mounted from the CACHE while its section is still detached is not in pendingQ, so a sweep would
+   * drop it and the photographs landing a moment later would miss it. A WeakRef has no such window —
+   * whatever is alive for any other reason (on the page, waiting in pendingQ, in the caller's hands
+   * before it appends) stays findable, and a tile nothing else wants is simply collected. The refs of
+   * collected tiles are swept out as the set grows, so the set itself stays the size of what is alive. */
+  const mounted = new Set();   // WeakRef per canvas (cv._fxRef), never the canvas itself
+  let mountedSweepAt = 256;
+  function trackMounted(cv) {
+    // Where WeakRef is missing (Safari before 14.1) the ref holds strongly — the old behaviour, no worse.
+    const ref = cv._fxRef || (cv._fxRef = (typeof WeakRef === 'function') ? new WeakRef(cv) : { deref: function () { return cv; } });
+    mounted.add(ref);
+    if (mounted.size > mountedSweepAt) {
+      mounted.forEach(function (r) { if (!r.deref()) mounted.delete(r); });
+      mountedSweepAt = Math.max(256, mounted.size * 2);
+    }
+  }
 
   // Shared mount plumbing: size the canvas, paint from cache or join the generation queue.
   function mountKey(cv, key, m) {
@@ -1594,7 +1619,7 @@ window.FM = window.FM || {};
     if (cv.width !== w) cv.width = w;
     if (cv.height !== h) cv.height = h;
     cv._fxType = key;
-    mounted.add(cv);        // see remountLive — the re-mount sweep must not depend on a CSS class
+    trackMounted(cv);       // see remountLive — the re-mount sweep must not depend on a CSS class
     if (m) meta.set(key, m);
     const hit = cache.get(key);
     if (hit) { paint(cv, hit); if (m && m.layerId) touch(key); return; }
@@ -1695,10 +1720,12 @@ window.FM = window.FM || {};
      * back as its preset rather than as the fallback ball. */
     remountLive: function () {
       const els = [];
-      mounted.forEach(function (cv) {
+      mounted.forEach(function (ref) {
+        const cv = ref.deref();
         // A canvas that has left the document is not coming back — the inspector rebuilds its tiles
         // from scratch on every refresh — so drop it here rather than letting the set grow forever.
-        if (!cv.isConnected) { mounted.delete(cv); return; }
+        // (One already collected has nothing to re-mount — see trackMounted.)
+        if (!cv || !cv.isConnected) { mounted.delete(ref); return; }
         if (cv._fxType) els.push(cv);
       });
       /* IN-FLIGHT TILES ARE CARRIED ACROSS, not just the ones the DOM can see (queue 110).

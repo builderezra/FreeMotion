@@ -146,8 +146,19 @@ window.FM = window.FM || {};
   FM._perfState = function () {
     return { tier: _playTier, tiers: PLAY_TIERS.length, factor: PLAY_TIERS[Math.min(PLAY_TIERS.length - 1, _playTier)],
              renderAvg: _renderAvg, gapAvg: _gapAvg, locked: !!_locked, lockAt: _lockAt, dropFrom: _dropFrom,
+             climbFrom: _climbFrom, climbLockAt: _climbLockAt, bandHits: _bandHits,
              cooldown: _tierCooldown, ctx: _costCtx, inMotion: !!_inMotion,
              canvasPx: (typeof canvas !== 'undefined' && canvas) ? canvas.width * canvas.height : 0 };
+  };
+  /* A NEW PROJECT STARTS THE LADDER AGAIN (queue 690, hunt f). Everything the ladder has learned — the
+   * tier, the costs, both latches — describes the scene it was learned on, and none of it says anything
+   * about a different project: a tier earned in a heavy one used to carry into a plain one opened after
+   * it, which then played soft from its first frame. A fresh project is judged the way a fresh session
+   * is. Called by FM.projects.open, which has already paused, so nothing is resized here. */
+  FM._resetPlayQuality = function () {
+    _playTier = 0; _renderAvg = 0; _gapAvg = 0; _tierCooldown = 0; _skipCost = 0; _costCtx = '';
+    _dropFrom = 0; _locked = 0; _lockAt = 0; _noLowerPx = 0;
+    _climbFrom = 0; _climbLockAt = 0; _bandHits = 0;
   };
   // A tier drop has to EARN its place — see the payoff test in notePlaybackCost.
   const DROP_PAYOFF = 0.85;   // a drop must cut the average by 15%+ to be worth the softer picture
@@ -157,6 +168,18 @@ window.FM = window.FM || {};
   // preview on machines that are keeping up perfectly well. (queue 125)
   const LATE_FACTOR = 2.5;
   let _dropFrom = 0, _dropPx = 0, _locked = 0, _lockAt = 0, _skipCost = 0, _costCtx = '';
+  /* THE MIRROR OF THE PAYOFF TEST: A CLIMB HAS TO BE TRIED (queue 690, hunt f). The ladder climbed only
+   * when a frame cost under 30% of the budget, and nothing ever asked whether the tier ABOVE would fit.
+   * So once a heavy stretch had pushed it down, any scene whose cost sits between the two lines — a
+   * plain video, whose cost the note on the payoff test measures as mostly NOT resolution — stayed at
+   * the low tier for the rest of the session, in every project: never slow enough to drop, never cheap
+   * enough to climb. Measured: one heavy stretch took playback to 48%, and thirty seconds of 10 ms
+   * frames (60% of a 60 fps frame, the same at any size) left it at 48%, while the same scene in a fresh
+   * session plays at 100%. So a tier that has sat comfortably inside the budget for CLIMB_SETTLE
+   * decisions TRIES the tier above, and keeps it unless that pushes the cost over the drop line — then
+   * it goes back, and latches, exactly as a drop that did not pay does. */
+  const CLIMB_SETTLE_PLAY = 120, CLIMB_SETTLE_DRAG = 40;   // ~2-4 s of playback; a drag finds its level faster, as it drops faster
+  let _climbFrom = 0, _climbPx = 0, _climbBack = 0, _climbLockAt = 0, _climbLockTier = 0, _bandHits = 0;
   // The frame INTERVAL average, alongside the JS-time one. See the note in notePlaybackCost: it is
   // the only one of the two that can see GPU filter work or video decode. (queue 125)
   let _gapAvg = 0;
@@ -231,6 +254,21 @@ window.FM = window.FM || {};
     _noLowerPx = (found === _playTier) ? px : 0;
     return found;
   }
+  /* The same question going UP, for the climb probe (queue 690): the nearest tier above the current one
+   * that actually gives pixels back, or the current tier when none does ('smooth' mode floors every tier
+   * above 2 into the same canvas, and so do previewScale()'s clamps). Asked once per settle period, not
+   * per frame, so it needs no cache. */
+  function prevUsefulTier() {
+    const save = _playTier, cur = previewScale();
+    let found = _playTier;
+    try {
+      for (let k = _playTier - 1; k >= 0; k--) {
+        _playTier = k;
+        if (previewScale() !== cur) { found = k; break; }
+      }
+    } finally { _playTier = save; }
+    return found;
+  }
   // Called once per rendered frame with the measured cost of that frame.
   /* How long a frame is ALLOWED to take, in the regime we are currently in. Extracted so the suite
      can read the real value instead of re-deriving it — an assertion that recomputes the formula
@@ -255,13 +293,13 @@ window.FM = window.FM || {};
     // 'detail' never trades sharpness, so the ladder controls nothing at all. Park it at the top
     // rather than let it walk down a ladder that changes no pixels — a tier abandoned down there
     // would bite the moment the mode went back to 'auto'.
-    if (mode === 'detail') { _playTier = 0; _dropFrom = 0; _locked = 0; return; }
+    if (mode === 'detail') { _playTier = 0; _dropFrom = 0; _locked = 0; _climbFrom = 0; _bandHits = 0; return; }
     // Playing and dragging are different cost regimes: a drag repaints a still frame with no video
     // decode, so it is materially cheaper. What was learned in one must never be used to judge the
     // other — a cost-to-beat carried out of a drag made playback undo a drop that was helping, then
     // locked adaptation out while it stuttered. The bookkeeping starts fresh when the regime changes.
     const ctx = FM.playing ? 'play' : 'drag';
-    if (ctx !== _costCtx) { _costCtx = ctx; _renderAvg = 0; _gapAvg = 0; _dropFrom = 0; _locked = 0; _lockAt = 0; _noLowerPx = 0; }
+    if (ctx !== _costCtx) { _costCtx = ctx; _renderAvg = 0; _gapAvg = 0; _dropFrom = 0; _locked = 0; _lockAt = 0; _noLowerPx = 0; _climbFrom = 0; _climbLockAt = 0; _bandHits = 0; }
     // The frame straight after a tier change repaints into a freshly allocated backing store and is
     // the dearest one in the run. Letting it seed the average makes every drop look like it made
     // things worse — which is exactly the judgement the payoff test below has to get right.
@@ -335,7 +373,23 @@ window.FM = window.FM || {};
      *     the same backing store on a big comp (a 2048² project clamps every tier below 0.735).
      * The backing-store size is the one thing that is true in both cases. */
     if (_dropFrom && canvas.width * canvas.height === _dropPx) _dropFrom = 0;
-    if (_dropFrom && cost > _dropFrom * DROP_PAYOFF) {
+    /* DID THE LAST CLIMB FIT? (queue 690 — see CLIMB_SETTLE_PLAY.) Judged on the first decision after its
+     * cooldown, like a drop. Over the drop line means the sharper picture costs more than this machine
+     * can hold here: go straight back — not through the drop branch, whose payoff test would then judge
+     * a "drop" that is really an undo — and latch, so the probe is not repeated at this cost. A climb that
+     * moved no pixels proves nothing either way and is simply forgotten. */
+    let climbMiss = false;
+    if (_climbFrom) {
+      climbMiss = canvas.width * canvas.height !== _climbPx && cost > budget * 0.72;
+      if (climbMiss) { _climbLockAt = _climbFrom; _climbLockTier = _climbBack; }
+      _climbFrom = 0;
+    }
+    // The latch belongs to the tier it was learned at, and lifts when the scene there gets materially
+    // LIGHTER — the mirror of LOCK_ESCAPE.
+    if (_climbLockAt && _playTier === _climbLockTier && cost * LOCK_ESCAPE < _climbLockAt) _climbLockAt = 0;
+    if (climbMiss) {
+      _playTier = _climbBack; _dropFrom = 0;                          // the climb did not fit — back to the tier that did
+    } else if (_dropFrom && cost > _dropFrom * DROP_PAYOFF) {
       _playTier--; _locked = 1; _lockAt = _dropFrom; _dropFrom = 0;   // didn't pay — undo, and remember the cost at the tier we came BACK to
     } else if (cost > budget * 0.72 && _playTier < PLAY_TIERS.length - 1 && !_locked) {
       /* Step to the next tier that actually MOVES PIXELS, not merely the next tier. The guard above
@@ -351,7 +405,16 @@ window.FM = window.FM || {};
       _dropFrom = 0; _playTier--;                                     // lots of headroom → give detail back
     } else if (cost <= budget * 0.72) {
       _dropFrom = 0;                                                  // inside budget: the last drop did its job, stop judging it
+      /* Settled inside the budget below full detail: try the tier above (queue 690). Not while latched —
+         that tier was already tried at this cost and did not fit. */
+      if (_playTier > 0 && !(_climbLockAt && _playTier === _climbLockTier) && ++_bandHits >= (FM.playing ? CLIMB_SETTLE_PLAY : CLIMB_SETTLE_DRAG)) {
+        _bandHits = 0;
+        const up = prevUsefulTier();
+        if (up < _playTier) { _climbFrom = cost; _climbPx = canvas.width * canvas.height; _climbBack = _playTier; _playTier = up; }
+      }
     }
+    // Only an unbroken run inside the budget counts towards a climb — any drop, climb or late frame starts it again.
+    if (_playTier !== before || cost > budget * 0.72) _bandHits = 0;
     // Playback wants a LONG settle — resolution pumping mid-shot is uglier than being one tier low.
     // A drag is short and you're watching position, not detail, so it may find its level quickly.
     if (_playTier !== before) { _tierCooldown = FM.playing ? 24 : 8; _renderAvg = 0; _gapAvg = 0; _skipCost = 1; resizeCanvas(); }
@@ -2247,7 +2310,7 @@ window.FM = window.FM || {};
        whole session while the sync and frame numbers beside them described only the last play. One report,
        two different windows, nothing saying so — and his 10 Sep paste is exactly that report. */
     if (FM.audioHealth && FM.audioHealth.reset) FM.audioHealth.reset();
-    _renderAvg = 0; _tierCooldown = 8; _dropFrom = 0;   // let the first few frames settle before judging the machine, with no verdict pending from before
+    _renderAvg = 0; _tierCooldown = 8; _dropFrom = 0; _climbFrom = 0; _bandHits = 0;   // let the first few frames settle before judging the machine, with no verdict pending from before
     resizeCanvas();                                     // …and re-size the canvas into playback quality
     // Play is the user gesture that unlocks the AudioContext; route the effected clips before they start.
     if (FM.audioFxLive) { FM.audioFxLive.resume(); FM.audioFxLive.syncAll(); }
@@ -5496,10 +5559,12 @@ window.FM = window.FM || {};
          "Picking up an interrupted export…", in amber, and the reason the file had no sound was gone. Both
          writers now live side by side in exporter.js with one rule. */
       const onNote = (text) => { if (FM._exportInfo) FM._exportInfo(text); };
+      /* outW/outH go to ALL THREE (queue 690). They used to reach the MP4 only, so a Custom size typed
+         for a GIF or PNG frames — boxes on screen, no warning — came out at the project size. */
       if (fmt === 'gif') {
-        await FM.exporter.runGif({ scale, fps, from, to, name: expName, transparent, dither: true, onProgress });
+        await FM.exporter.runGif({ scale, fps, from, to, name: expName, transparent, dither: true, outW, outH, onProgress });
       } else if (fmt === 'frames') {
-        await FM.exporter.runFrames({ scale, fps, from, to, name: expName, transparent, format: 'png', onProgress });
+        await FM.exporter.runFrames({ scale, fps, from, to, name: expName, transparent, format: 'png', outW, outH, onProgress });
       } else {
         await FM.exporter.run({ scale, fps, bitrate, name: expName, from, to, outW, outH, onProgress, onNote,
                                 onReady: showExportReady });

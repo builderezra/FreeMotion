@@ -529,6 +529,23 @@ window.FM = window.FM || {};
     return { path: path, key: parts.join(sep) };
   };
 
+  /* EVERY KEYFRAMED PARAM IN AN EFFECT LIST — the stack's own entries and a filter's children, walked exactly as
+   * animatedProps walks a layer's stack (it calls this), so an effect list travelling WITHOUT its layer — the effect
+   * clipboard, a look + animations preset — re-anchors precisely what a clip move retimes, and the two cannot drift.
+   * queue 690: both of those carried their keyframes at the SOURCE clip's absolute times, so a blur-in copied onto a clip
+   * starting at 3 s had finished before that clip began and sat at full blur. */
+  FM.fxListAnimatedProps = function (list) {
+    const out = [];
+    FM.eachFx({ effects: Array.isArray(list) ? list : [] }, fx => { if (fx.params) Object.keys(fx.params).forEach(k => { if (isAnimated(fx.params[k])) out.push(fx.params[k]); }); });
+    return out;
+  };
+  /* Slide an effect list's keyframes by `delta` seconds, in place, and hand the list back. Not clamped at 0, like
+     shiftLayerKeyframes: a key set just before a clip's start still shapes the curve into it. */
+  FM.shiftFxKeyframes = function (list, delta) {
+    if (delta && Number.isFinite(delta)) FM.fxListAnimatedProps(list).forEach(p => p.kf.forEach(k => { k.t = (k.t || 0) + delta; }));
+    return list;
+  };
+
   FM.animatedProps = function (layer) {
     const out = [];
     Object.keys(layer.transform).forEach(k => { if (isAnimated(layer.transform[k])) out.push(layer.transform[k]); });
@@ -566,7 +583,7 @@ window.FM = window.FM || {};
        which everything that walks this list already handles (copy deep-clones; a split takes the shape AT the cut —
        see splitAnimated in js/app.js). */
     if (layer.type === 'shape' && isAnimated(layer.subs)) out.push(layer.subs);
-    FM.eachFx(layer, fx => { if (fx.params) Object.keys(fx.params).forEach(k => { if (isAnimated(fx.params[k])) out.push(fx.params[k]); }); });
+    FM.fxListAnimatedProps(layer.effects).forEach(p => out.push(p));
     (layer.audioFx || []).forEach(fx => { if (fx && fx.params) Object.keys(fx.params).forEach(k => { if (isAnimated(fx.params[k])) out.push(fx.params[k]); }); });
     return out;
   };

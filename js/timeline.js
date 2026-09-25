@@ -310,6 +310,8 @@ window.FM = window.FM || {};
   function hideSnap() { if (snaplineEl) snaplineEl.classList.add('hidden'); }
   let dragging = false;
   let kfDrag = null;
+  // Every diamond a keyframe drag carries — the live stack at its time (queue 690), or the one it started on.
+  const kfDots = (g) => (g && g.dots && g.dots.length) ? g.dots : (g && g.dot ? [g.dot] : []);
   /* queue 921 S7 (§16.3): this device's role may not change the edit. Asked at each gesture START, after the
      selection handling, so a Viewer can still pick a clip to look at. */
   const roNow = () => !!(FM.collab && FM.collab.readOnly && FM.collab.readOnly());
@@ -578,7 +580,7 @@ window.FM = window.FM || {};
       if (kfDrag.orig) kfDrag.kfs.forEach((k, i) => { k.t = kfDrag.orig[i]; });
       if (kfDrag.holdTimer) clearTimeout(kfDrag.holdTimer);
       if (kfDrag.armTimer) clearTimeout(kfDrag.armTimer);   // a stale arm timer would colour a dead diamond
-      if (kfDrag.dot) kfDrag.dot.classList.remove('kf-dragging');
+      kfDots(kfDrag).forEach(d => d.classList.remove('kf-dragging'));
       kfDrag = null;
     }
     if (clipTap) { if (clipTap.holdTimer) clearTimeout(clipTap.holdTimer); clipTap = null; }   // orphaned hold timer could grab the WRONG clip later
@@ -713,6 +715,26 @@ window.FM = window.FM || {};
     return out;
   }
   FM._keyframeSlots = keyframeSlots;   // suite hook: the two lists must not drift again
+
+  /* WHICH KEYFRAME CARRIES A DIAMOND'S EASE (queue 690). FM.evalProp eases a move by the keyframe it ENDS on (js/scene.js
+     reads `b.ez` / `b.bez` / `b.e`, b being the later key), and the graph editor writes there too — so a diamond's ease is
+     the move ARRIVING at it. The FIRST keyframe has nothing arriving: its own ease is read by nothing, ever (before it
+     evalProp returns its value flat, and a loop wraps back INTO the range, never onto it). The hold menu wrote there
+     anyway, so an ease picked on the first diamond of an A-to-B move — half the diamonds of the commonest animation there
+     is — turned it green and left the move exactly as linear as before. On a phone that menu is the way in to easing.
+     So the first diamond speaks for the move LEAVING it: its menu writes, and its colour reads, the next keyframe. Every
+     other diamond is unchanged. By time, not by array position, so an unsorted list cannot pick the wrong neighbour. */
+  function easeKfOf(prop, kf) {
+    const list = prop && Array.isArray(prop.kf) ? prop.kf : null;
+    if (!list || list.length < 2 || !kf) return kf;
+    let before = false, next = null;
+    list.forEach(k => {
+      if (k === kf) return;
+      if (k.t < kf.t) before = true;
+      else if (k.t > kf.t && (!next || k.t < next.t)) next = k;
+    });
+    return (!before && next) ? next : kf;
+  }
 
   function deleteKeyframesAt(layer, tt, only) {
     const slots = keyframeSlots(layer);
@@ -2605,12 +2627,27 @@ window.FM = window.FM || {};
       });
       // outlines first so the live ones paint over them where they share a time
       entries.sort((a, b) => (a.live === b.live) ? 0 : (a.live ? 1 : -1));
+      /* ⚠️ LIVE DIAMONDS STACKED AT ONE TIME ARE ONE DIAMOND (queue 690 — his #625 by another route). The Position ◆
+         keys X AND Y together, and every open panel arms ALL its channels until he taps one name, so each position
+         keyframe was two live diamonds on the very same pixel: he sees one. The drag carried only the one on top, so a
+         second diamond was left where he picked it up and X and Y now arrived at different times, bending the move —
+         *"sometimes I try to move key frames and it just duplicates them"*; and Delete removed only the top one, so the
+         diamond was still there — *"and sometimes I try to delete them and I cant"*. Measured with a trusted touch: X
+         stayed at 3.000 s while Y went to 3.467 s.
+         So a gesture on a live diamond acts on every LIVE keyframe at its time: drag, double-click, Delete, easing.
+         What his "one diamond per property" ended is untouched — an OUTLINE (a property whose editor is not open) is
+         never in the stack, and tapping one name (X) narrows the live set to that property alone, so X can still be
+         moved on its own. Still drawn one per property, so the counts every panel test reads do not change. */
+      const liveStackAt = (t) => entries.filter(en => en.live && en.t === t);
       entries.forEach(entry => {
         const tt = entry.t;
         const dot = document.createElement('div');
+        entry.dot = dot;   // the stack's drag moves every diamond in it, not just the one the finger landed on
         // colour by THIS keyframe's own easing (it used to take the first property that happened to
-        // have a keyframe at this time, which was arbitrary once several shared one)
-        const dotEase = entry.kf.e || (entry.kf.bez ? 'custom' : 'linear');
+        // have a keyframe at this time, which was arbitrary once several shared one) — read from the keyframe that
+        // actually shapes the move, which for the first diamond is the next one (easeKfOf, queue 690)
+        const shapeKf = easeKfOf(entry.prop, entry.kf);
+        const dotEase = shapeKf.e || (shapeKf.bez ? 'custom' : 'linear');
         const easeClass = dotEase === 'hold' ? 'ease-hold'
           : dotEase === 'linear' ? 'ease-linear'
             : (dotEase === 'overshoot' || dotEase === 'anticipate') ? 'ease-back'
@@ -2629,9 +2666,12 @@ window.FM = window.FM || {};
           if (layer.locked || pinch) return;
           try { dot.setPointerCapture(e.pointerId); } catch (_) {}   // survive a release outside the window
           if (!entry.live) return;   // dimmed = belongs to a property you are not editing
-          // ONLY this property's keyframe moves. Retiming every property that shared the time was
-          // the merged behaviour Ezra asked to end.
-          const kfs = [entry.kf];
+          // ONLY the properties whose editor is open move — retiming every property that shared the time was the
+          // merged behaviour Ezra asked to end, and an outline is never live. But every LIVE keyframe stacked at this
+          // time moves together (queue 690, see liveStackAt): they are one diamond on screen.
+          const stack = liveStackAt(tt);
+          const kfs = stack.map(en => en.kf);
+          const dots = stack.map(en => en.dot).filter(Boolean);
           // orig: pre-drag times, so pinch-start/pointercancel can RESTORE instead of half-applying
           // HOLD TO DRAG (Ezra). A keyframe used to retime from the very first pixel, which made it
           // far too easy to nudge one while scrubbing past. Now the gesture has to be held before it
@@ -2643,7 +2683,7 @@ window.FM = window.FM || {};
           // opens the menu instead. One gesture, both outcomes, and touch keeps its route in.
           if (roNow()) return;   // queue 921 S7: a Viewer's keyframes are read, never dragged
           touchGesture();   // queue 541: a gesture that never gets stamped looks stale to rebuild() the instant it starts
-          kfDrag = { pid: e.pointerId, layer: layer, kfs: kfs, dot: dot, orig: kfs.map(k => k.t), armed: false,
+          kfDrag = { pid: e.pointerId, layer: layer, kfs: kfs, dot: dot, dots: dots, orig: kfs.map(k => k.t), armed: false,
                      downX: e.clientX, downY: e.clientY,   // where the press landed — the arm test measures travel FROM here
                      finger: e.pointerType !== 'mouse',   // queue 690: a touch/pen swipe that leaves before the arm becomes a scrub
                      // Carry the menu opener WITH the gesture. Release is handled by a window-level
@@ -2657,14 +2697,17 @@ window.FM = window.FM || {};
             if (!kfDrag || kfDrag.dot !== dot) return;
             kfDrag.armTimer = 0;
             kfDrag.armed = true;
-            dot.classList.add('kf-dragging');
+            kfDots(kfDrag).forEach(d => d.classList.add('kf-dragging'));
             if (navigator.vibrate) { try { navigator.vibrate(10); } catch (err) {} }
           }, KF_HOLD_MS);
           if (FM.playing) FM.pause();
         });
+        // The keyframes a gesture on THIS diamond acts on: the live stack at its time (queue 690), or itself alone.
+        const stackOf = () => (entry.live ? liveStackAt(tt) : [entry]);
         dot.addEventListener('dblclick', (e) => {
           e.stopPropagation();
-          deleteKeyframesAt(layer, tt, entry.prop);   // this diamond's property only — the dimmed ones behind it survive
+          // this diamond's live stack only — the dimmed ones behind it survive (queue 690: X AND Y, not one of them)
+          stackOf().forEach(en => deleteKeyframesAt(layer, tt, en.prop));
           FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); FM.requestRender(); if (FM.history) FM.history.commit();
         });
         const openKfMenu = (mx, my) => {
@@ -2681,7 +2724,9 @@ window.FM = window.FM || {};
                  disagreeing, and on a phone this menu is the ONLY way in, because a double-click never fires
                  on a finger. The graph editor's own writer has deleted it since it was written, with a
                  comment saying why; this copy never did. */
-              entry.kf.bez = FM.EASE_PRESETS[key].slice(); entry.kf.e = key; delete entry.kf.ez;
+              /* queue 690: onto the keyframe that SHAPES the move (easeKfOf — the next one, for the first diamond), and
+                 onto every live keyframe stacked here, so the Position diamond eases X and Y alike. */
+              stackOf().forEach(en => { const k = easeKfOf(en.prop, en.kf); k.bez = FM.EASE_PRESETS[key].slice(); k.e = key; delete k.ez; });
               FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); FM.requestRender(); if (FM.history) FM.history.commit();
             },
           }));
@@ -2689,7 +2734,8 @@ window.FM = window.FM || {};
           items.push({
             label: 'Hold (step)',
             action: () => {
-              entry.kf.e = 'hold'; delete entry.kf.bez; delete entry.kf.ez;   // queue 818: Hold has to beat a live Bounce too
+              // queue 818: Hold has to beat a live Bounce too; queue 690: on the keyframe that shapes the move, for the whole stack
+              stackOf().forEach(en => { const k = easeKfOf(en.prop, en.kf); k.e = 'hold'; delete k.bez; delete k.ez; });
               FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); FM.requestRender(); if (FM.history) FM.history.commit();
             },
           });
@@ -2713,7 +2759,7 @@ window.FM = window.FM || {};
           // long-press menu is also the phone's route to DELETE
           items.push({ sep: true });
           items.push({ label: 'Delete keyframe', danger: true, action: () => {
-            deleteKeyframesAt(layer, tt, entry.prop);   // scoped, same as double-click
+            stackOf().forEach(en => deleteKeyframesAt(layer, tt, en.prop));   // scoped, same as double-click
             FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); FM.requestRender(); if (FM.history) FM.history.commit();
           } });
           FM.contextMenu.show(mx, my, items);
@@ -4771,7 +4817,7 @@ window.FM = window.FM || {};
           const moved = Math.hypot(e.clientX - kfDrag.downX, e.clientY - kfDrag.downY);
           if (moved <= 10) return;
           if (kfDrag.armTimer) clearTimeout(kfDrag.armTimer);
-          kfDrag.dot.classList.remove('kf-dragging');
+          kfDots(kfDrag).forEach(d => d.classList.remove('kf-dragging'));
           const k = kfDrag;
           kfDrag = null;
           /* ⚠️ …AND THEN THE SWIPE HAS TO GO SOMEWHERE (queue 690). "A scrub past the diamond" was only ever the comment:
@@ -4806,7 +4852,7 @@ window.FM = window.FM || {};
           // past its neighbour left the preview evaluating a broken curve for the rest of the drag —
           // you were placing it by watching a picture that was wrong. (bug hunt, 21 Aug)
           if (FM.sortKeyframes) FM.sortKeyframes(kfDrag.layer);
-          kfDrag.dot.style.left = (PAD + nt * pxPerSec()) + 'px';
+          kfDots(kfDrag).forEach(d => { d.style.left = (PAD + nt * pxPerSec()) + 'px'; });   // the whole stack travels (queue 690)
           FM.requestRender();
           return;
         }
@@ -4952,7 +4998,7 @@ window.FM = window.FM || {};
           if (kfDrag.armTimer) clearTimeout(kfDrag.armTimer);
           const layer = kfDrag.layer, armed = kfDrag.armed, moved = kfDrag.moved, dot = kfDrag.dot;
           const openMenu = kfDrag.openMenu;   // grab it before kfDrag is nulled below
-          if (dot) dot.classList.remove('kf-dragging');
+          kfDots(kfDrag).forEach(d => d.classList.remove('kf-dragging'));
           if (moved) {
             // Re-sort every animated prop (transform AND effect params) so evalProp stays correct
             // after a keyframe is dragged past a neighbour in time, dropping any keyframe the drag

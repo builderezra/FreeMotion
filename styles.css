@@ -10537,6 +10537,11 @@ body.set-open #toast { z-index: 225; }   /* queue 930 review: a toast raised fro
 /* …and a copy the browser refused is put in a field under the button that asked, selected (collab-ui.js copyPlain). */
 .cs-copyfield { display: block; width: 100%; box-sizing: border-box; margin-top: 8px; font-size: 12px; }
 body.collab-card-open #toast:not(.toast-tap) { pointer-events: none; }
+/* A TOAST THAT ONLY SAYS SOMETHING NEVER TAKES A TAP (found shipping v16.95, #935). It sits over the middle of the phone
+   timeline for a second or two after nearly every action — "Keyframe added", "Camera hidden" — and it caught the next
+   tap meant for whatever was under it: measured, a real finger on a keyframe diamond right after a keyframe was added
+   landed on #toast, and the hold did nothing. Only a toast that IS a button (.toast-tap, it carries a ›) takes the finger. */
+#toast:not(.toast-tap) { pointer-events: none; }
 .cs-vstatus { margin-top: 4px; font-weight: 600; color: var(--text); }
 .cs-vstatus.warn { color: #ffb347; }
 /* …and "Earlier versions…" opens on the light Home now (collab-ui.js `U.versions`), where every one of these

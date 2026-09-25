@@ -174,16 +174,29 @@ window.FM = window.FM || {};
     return new Promise(res => {
       const el = m.el;
       if (!el || el.error || el.readyState === 0) { res(); return; }   // undecodable / not ready → seek can never fire; don't burn 1500ms × every frame (export looked hung for 20+ min)
-      const target = Math.min(Math.max(time, 0), Math.max(0, (m.duration || 0) - 0.001));
-      if (Math.abs(el.currentTime - target) < 1e-4) { res(); return; }  // already on the frame (a no-op seek to a clamped-frozen last frame emits no 'seeked')
+      // inside the frame, not on its edge — on the edge a third of a 30 fps clip's frames showed the
+      // one before (queue 690, see FM.frameSeekTarget in js/frames.js)
+      const target = FM.frameSeekTarget ? FM.frameSeekTarget(time, m.duration)
+        : Math.min(Math.max(time, 0), Math.max(0, (m.duration || 0) - 0.001));
+      /* Already on the frame (a no-op seek to a clamped-frozen last frame emits no 'seeked') — but only
+         if the frame is actually THERE. currentTime reports a seek's target the moment it is written,
+         so an element still seeking, or with no frame decoded, read as "already there" and the frame
+         was drawn from nothing: black in the file (queue 690 — the filmstrip's last write puts the
+         element back where it was, and that write is still landing when the export takes over). */
+      if (Math.abs(el.currentTime - target) < 1e-4 && !el.seeking && el.readyState >= 2) { res(); return; }
       let done = false, netTimer = 0;
       /* THE NET IS CANCELLED WHEN THE SEEK LANDS, which it never used to be. Found by a mutation run,
          not by reading: a landed seek left its 1500ms timer alive, so on a long export every frame
          parked a live timer, and — the part that actually bites — a timer from one export could fire
          during the NEXT one and report a repeated frame on a render that was perfectly clean. A
          diagnostic that cries wolf stops being read, which is how the last one died. */
-      const finish = () => { if (done) return; done = true; clearTimeout(netTimer); el.removeEventListener('seeked', finish); res(); };
-      el.addEventListener('seeked', finish);
+      const finish = () => { if (done) return; done = true; clearTimeout(netTimer); el.removeEventListener('seeked', onSeeked); res(); };
+      /* A 'seeked' that arrives while the element is STILL seeking is somebody else's — an earlier seek
+         whose event was already queued when this one was written (queue 690). Taking it resolved this
+         frame mid-seek, and the compositor skips a video at readyState 1 in an export: a black frame.
+         Ours has not landed until `seeking` is false. The 1500 ms net below still bounds the wait. */
+      const onSeeked = () => { if (el.seeking) return; finish(); };
+      el.addEventListener('seeked', onSeeked);
       try { el.currentTime = target; } catch (e) { finish(); }
       // safety net only — export is offline, so give a slow/large seek time to land the right frame
       // before giving up (was 250ms, which dropped frames on big 4K seeks) (#15)
@@ -193,6 +206,11 @@ window.FM = window.FM || {};
       }, 1500);
     });
   }
+
+  // Seam for the suite (queue 690): the two conditions above only bite in a race the export cannot be made to lose
+  // on cue, so the test drives this function directly — a seek still under way, and a stray 'seeked' — and checks
+  // what the element is doing at the moment it answers.
+  FM._exportSeekVideo = seekVideo;
 
   function resetSeekWatch() { _staleSeeks = []; FM._lastStaleSeeks = null; }
 
@@ -206,6 +224,40 @@ window.FM = window.FM || {};
       + 'right position, so they repeat the frame before them:\n  · ' + _staleSeeks.join('\n  · '));
     if (FM.toast) FM.toast(_staleSeeks.length + ' frame' + (_staleSeeks.length === 1 ? '' : 's')
       + ' could not be read from the video in time and repeat the frame before — see the console', 6000);
+  }
+
+  /* THE EXPORT OWNS EVERY CLIP'S ELEMENT FROM ITS FIRST FRAME TO ITS LAST (queue 690).
+   * The timeline draws each clip's filmstrip by seeking the clip's OWN <video> eight times, and that
+   * happens after every import, duplicate, paste or replace — and for every clip, one after another,
+   * each time a project is opened. frames.js queues its own users on the element's seek lock, and
+   * the preview stands down for them; the exporter took no part, so pressing Export while strips were
+   * still being drawn made the two fight over the element. Measured: the first 16-22 frames of a 3 s
+   * file came out BLACK, with nothing said — the 1500 ms net never fired, because a 'seeked' did
+   * arrive; it was just the strip's. There is a built-in route straight into it, too: Home → a
+   * project's menu → Export video… opens the project (queueing every strip) and the dialog 260 ms later.
+   * So the export joins the queue: it waits for whatever is using each element to finish, then holds
+   * every element until the file is done. A strip that asks in between is drawn afterwards — nothing
+   * is lost, it is just late, behind a screen that is covering the timeline anyway.
+   * Returns the release; call it in a finally. A Cancel while waiting is honoured here. */
+  async function holdVideoElements(scene, onStatus) {
+    const recs = [];
+    scene.layers.forEach(layer => {
+      if (layer.type !== 'video') return;
+      const m = FM.media.get(layer.id);
+      if (m && m.el && recs.indexOf(m) < 0) recs.push(m);   // one record can back several layers — hold it once
+    });
+    if (!FM.holdSeekLock || !recs.length) return function () {};
+    const holds = recs.map(m => FM.holdSeekLock(m));
+    const release = function () { holds.forEach(h => h.release()); };
+    let got = false, said = false;
+    const all = Promise.all(holds.map(h => h.ready)).then(() => { got = true; });
+    while (!got) {
+      if (FM._exportCancel) { release(); throw new Error('CANCELLED'); }
+      await Promise.race([all, new Promise(r => setTimeout(r, 100))]);
+      // said only if it is really waiting — the ordinary case, nothing drawing, never shows it
+      if (!got && !said && onStatus) { said = true; onStatus('Finishing the timeline thumbnails…'); }
+    }
+    return release;
   }
 
   async function seekAllVideos(scene, t) {
@@ -931,9 +983,10 @@ window.FM = window.FM || {};
    * ⚠️ THE INTENT WAS WRITTEN DOWN AND THE CODE NEVER MATCHED IT: the comment above the old
    * declaration says, in as many words, that blit "is shared by the MP4, GIF and frame paths".
    * It cannot simply be hoisted — it closes over six locals of run() — so it becomes a factory each
-   * path builds with its own. `fit` may be null: the GIF and PNG paths derive their size from the
-   * project's own aspect, so they never letterbox, and passing null says that rather than making them
-   * compute an identity rectangle to satisfy a signature. */
+   * path builds with its own. `fit` may be null: without a custom size the GIF and PNG paths derive
+   * their size from the project's own aspect, so they never letterbox, and passing null says that
+   * rather than making them compute an identity rectangle to satisfy a signature. With one they
+   * letterbox like the MP4 (queue 690). */
   function makeBlit(projCanvas, outW, outH, fit, barFillNow) {
     return function (ctx) {
       ctx.save();
@@ -947,6 +1000,12 @@ window.FM = window.FM || {};
       else ctx.drawImage(projCanvas, 0, 0, outW, outH);
       ctx.restore();
     };
+  }
+
+  // The letterbox bars' colour for the GIF and PNG paths, asked for per frame for the reason run() gives
+  // at its own barFillNow: a transparent export sets its flag after the blit is built, and keeps clear bars.
+  function stillBarFill(P) {
+    return function () { return (FM._exportTransparent || P.background == null) ? null : P.background; };
   }
 
   FM.exporter = {
@@ -1042,7 +1101,7 @@ window.FM = window.FM || {};
 
       FM._exporting = true;   // tells the compositor to skip the preview-only hold-frame capture/substitution (#13,#22)
       // Hoisted out of the try so the finally can shut the recorder down before deciding what to keep.
-      let delivered = false, recorder = null, poster = null;
+      let delivered = false, recorder = null, poster = null, releaseVideos = null;
       try {
       /* CANCEL DURING "Decoding frames…" STOPS HERE (queue 916, clause 3). prepareCaches breaks out of its
        * loop on the flag, and its own comment says that stops the export going on into "the audio mix,
@@ -1054,6 +1113,8 @@ window.FM = window.FM || {};
        * question is asked again after the two long awaits below (the mix and the AAC encode), which
        * are the other places a Cancel tap can land and then wait. */
       if (FM._exportCancel) throw new Error('CANCELLED');
+      // queue 690: no timeline filmstrip seeks these elements while this export is stepping them
+      releaseVideos = await holdVideoElements(scene, s => opts.onProgress && opts.onProgress(0, s, true));
       // audio (best-effort: never let it sink the whole export)
       let mix = null;
       /* THE FIFTH SILENT LOSS, and the last one left in this file (queue 47, v11.67). The other four
@@ -1305,6 +1366,9 @@ window.FM = window.FM || {};
       if (vidErr) throw vidErr;
       encoder.close();
       reportSeekWatch();   // every frame is in the encoder now, so the tally is final
+      // …and the elements are free again (queue 690): the ready card can sit open for as long as he likes,
+      // and the timeline's thumbnails need not wait for it. The finally releases too, for every other exit.
+      if (releaseVideos) { releaseVideos(); releaseVideos = null; }
       // Save the last partial batch. The export is about to finalize, but finalizing is exactly where a
       // long render is most likely to be OOM-killed, and a resume should not have to redo the tail.
       if (recorder) { try { await recorder.settle(); } catch (e) {} }
@@ -1418,6 +1482,7 @@ window.FM = window.FM || {};
         // a heavy reversed/slow clip doesn't keep multiple GB resident and OOM mobile Safari. Preview
         // re-decodes a lightweight downscaled cache on the next scrub/play. (#3)
         exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
+        if (releaseVideos) releaseVideos();   // queue 690 — any strip that waited on the export is drawn now
         FM._exporting = false;
         /* Throw the saved chunks away on a finished file and on Cancel — the first has nothing left to
          * resume, and the second is someone saying they no longer want it. Any OTHER exit keeps them:
@@ -1440,9 +1505,22 @@ window.FM = window.FM || {};
       endAudition();   // queue 916 — see endAudition
       if (!FM.gifEncoder) throw new Error('NO_GIF_ENCODER');
       const scene = FM.scene, P = scene.project;
-      const scale = opts.scale || 1, fps = opts.fps || P.fps || 30;
-      let outW = Math.max(1, Math.round(P.width * scale));
-      let outH = Math.max(1, Math.round(P.height * scale));
+      /* 50 FPS IS AS FAST AS A GIF CAN HONESTLY PLAY (queue 690). A GIF's frame delay is whole
+       * hundredths of a second, and browsers play a delay under 2 (1 or 0) as 10 — so 2 cs is the
+       * shortest real frame. At 60 fps every frame was written as 2 cs and a 2 s project played for
+       * 2.40 s; at 120 fps, 4.80 s. So above 50 the GIF is sampled at 50 fps: fewer frames, each at its
+       * true moment, and the animation lasts exactly as long as the project. (The dialog's GIF note says so.) */
+      const scale = opts.scale || 1, fps = Math.min(50, opts.fps || P.fps || 30);
+      /* CUSTOM SIZE (queue 690, the rest of queue 141). The dialog offers Custom size… for a GIF and PNG
+       * frames exactly as it does for an MP4, and runExport read the boxes — then handed them to the MP4
+       * path only, so 200 x 200 on a 320 x 180 project came out 320 x 180 with the boxes still on
+       * screen, and a square GIF could not be made. Now they are the output size here too, the project
+       * CONTAINED in it the same way (FM.exportFitRect) — bars in the project's background, or clear on
+       * a transparent GIF. The 640 cap below still applies, keeping the custom shape. No even-number
+       * rounding: that is an H.264 rule, and a GIF has no such limit. */
+      const custom = opts.outW > 0 && opts.outH > 0;
+      let outW = Math.max(1, Math.round(custom ? opts.outW : P.width * scale));
+      let outH = Math.max(1, Math.round(custom ? opts.outH : P.height * scale));
       const cap = opts.maxWidth || 640;                 // longest-side ceiling — GIF size/colors are expensive
       const longest = Math.max(outW, outH);
       if (longest > cap) {
@@ -1459,9 +1537,11 @@ window.FM = window.FM || {};
       const projCanvas = document.createElement('canvas');
       projCanvas.width = P.width; projCanvas.height = P.height;
       const projCtx = projCanvas.getContext('2d');
-      /* queue 669: this path's own blit. It never letterboxes — outW/outH come straight off the
-         project's aspect — so `fit` is null and the draw is a plain scale. */
-      const blit = makeBlit(projCanvas, outW, outH, null, null);
+      /* queue 669: this path's own blit. Without a custom size outW/outH come straight off the project's
+         aspect, so `fit` is null and the draw is a plain scale — byte-for-byte what it always was. With
+         one (queue 690) the frame is contained and letterboxed exactly as run() does it. */
+      const fit = custom ? FM.exportFitRect(P.width, P.height, outW, outH) : null;
+      const blit = makeBlit(projCanvas, outW, outH, fit, stillBarFill(P));
       const outCanvas = document.createElement('canvas');
       outCanvas.width = outW; outCanvas.height = outH;
       const outCtx = outCanvas.getContext('2d', { willReadFrequently: true });
@@ -1472,11 +1552,19 @@ window.FM = window.FM || {};
 
       const transparent = !!opts.transparent;
       FM._exporting = true;   // skip the compositor's preview-only hold-frame capture (#13,#22)
+      let releaseVideos = null;
       try {
         if (FM._exportCancel) throw new Error('CANCELLED');   // queue 916 — a Cancel during "Decoding frames…" stops here, not a frame later
+        releaseVideos = await holdVideoElements(scene, s => opts.onProgress && opts.onProgress(0, s, true));   // queue 690
         if (transparent) FM._exportTransparent = true;   // a FLAG, not a write to the saved project (BUG-HUNT)
         const gif = FM.gifEncoder.create(outW, outH, { transparent, dither: !!opts.dither, loop: true });
-        const delayMs = 1000 / fps;
+        /* EACH FRAME'S DELAY ON THE EXACT CLOCK, NOT ROUNDED ON ITS OWN (queue 690). 1000 / fps went to the
+         * encoder, which rounds every frame to whole hundredths by itself: 33.3 ms became 3 cs, every
+         * frame, so a 30 fps GIF — the default project rate — played 10 percent fast (a 2 s project
+         * lasted 1.80 s). Frame f is given the hundredths from ITS start to the NEXT frame's start, both
+         * rounded on the same clock, so the error never builds up: at 30 fps that is 3, 4, 3, 3, 4, 3 …
+         * and 60 frames last exactly 2.00 s. At 25 or 50 fps it is 4 or 2 every frame, as before. */
+        const csAt = k => Math.round(k * 100 / fps);
         for (let f = 0; f < totalFrames; f++) {
           if (FM._exportCancel) throw new Error('CANCELLED');
           const t = start + f / fps;
@@ -1485,13 +1573,14 @@ window.FM = window.FM || {};
           outCtx.clearRect(0, 0, outW, outH);
           blit(outCtx);
           const data = outCtx.getImageData(0, 0, outW, outH).data;
-          gif.addFrame(data, delayMs);   // streaming: encoder appends this frame now, retains no pixels
+          gif.addFrame(data, (csAt(f + 1) - csAt(f)) * 10);   // streaming: encoder appends this frame now, retains no pixels
           if (opts.onProgress) opts.onProgress((f + 1) / totalFrames, 'gif');
           await nextTick();   // yield so the Cancel tap can land between frames (throttle-proof — see nextTick)
         }
         const blob = gif.finish();
         download(blob, (opts.name || 'freemotion-export') + '.gif');
       } finally {
+        if (releaseVideos) releaseVideos();   // queue 690
         FM._exportTransparent = false;
         exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
         FM._exporting = false;
@@ -1505,8 +1594,10 @@ window.FM = window.FM || {};
       if (!FM.zipWrite) throw new Error('NO_ZIP_WRITER');
       const scene = FM.scene, P = scene.project;
       const scale = opts.scale || 1, fps = opts.fps || P.fps || 30;
-      const outW = Math.max(1, Math.round(P.width * scale));
-      const outH = Math.max(1, Math.round(P.height * scale));
+      // Custom size, contained — the same as the GIF above and the MP4 (queue 690, see runGif)
+      const custom = opts.outW > 0 && opts.outH > 0;
+      const outW = Math.max(1, Math.round(custom ? opts.outW : P.width * scale));
+      const outH = Math.max(1, Math.round(custom ? opts.outH : P.height * scale));
       const start = (opts.from != null) ? Math.max(0, opts.from) : 0;
       const end = (opts.to != null) ? Math.min(P.duration, opts.to) : P.duration;
       const totalFrames = Math.max(1, Math.round((end - start) * fps));
@@ -1523,9 +1614,10 @@ window.FM = window.FM || {};
       const projCanvas = document.createElement('canvas');
       projCanvas.width = P.width; projCanvas.height = P.height;
       const projCtx = projCanvas.getContext('2d');
-      /* queue 669: this path's own blit. It never letterboxes — outW/outH come straight off the
-         project's aspect — so `fit` is null and the draw is a plain scale. */
-      const blit = makeBlit(projCanvas, outW, outH, null, null);
+      /* queue 669: this path's own blit — a plain scale without a custom size, contained and
+         letterboxed with one (queue 690), exactly as in runGif. */
+      const fit = custom ? FM.exportFitRect(P.width, P.height, outW, outH) : null;
+      const blit = makeBlit(projCanvas, outW, outH, fit, stillBarFill(P));
       const outCanvas = document.createElement('canvas');
       outCanvas.width = outW; outCanvas.height = outH;
       const outCtx = outCanvas.getContext('2d');
@@ -1535,8 +1627,10 @@ window.FM = window.FM || {};
 
       const transparent = !!opts.transparent;
       FM._exporting = true;
+      let releaseVideos = null;
       try {
         if (FM._exportCancel) throw new Error('CANCELLED');   // queue 916 — a Cancel during "Decoding frames…" stops here, not a frame later
+        releaseVideos = await holdVideoElements(scene, s => opts.onProgress && opts.onProgress(0, s, true));   // queue 690
         if (transparent) FM._exportTransparent = true;   // so exported PNGs carry alpha, without touching saved state
         const zip = FM.zipWrite.create();
         const base = opts.name || 'freemotion-export';
@@ -1556,6 +1650,7 @@ window.FM = window.FM || {};
         const zipBlob = zip.finish();
         download(zipBlob, base + '_frames.zip');
       } finally {
+        if (releaseVideos) releaseVideos();   // queue 690
         FM._exportTransparent = false;
         exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
         FM._exporting = false;

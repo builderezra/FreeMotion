@@ -265,6 +265,8 @@ window.FM = window.FM || {};
     FM.captionsEditor.mount(container, layer);
     FM.requestRender();
     if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    // This list also lives in the text editor's Aa sheet: its Cue n / N label has to follow a delete or a re-sort (queue 690).
+    if (FM.textEdit && FM.textEdit.cuesChanged) FM.textEdit.cuesChanged();
   }
 
   FM.captionsEditor = {

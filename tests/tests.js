@@ -39526,7 +39526,12 @@
           await settle921(300);
           FM.toast('Sam made you a Commenter', 3000);
           await settle921(250);
-          const th = s7rHit(document.getElementById('toast'));
+          /* A plain toast lets taps through since v16.95 (pointer-events: none), so hit-testing skips it; make it
+             hit-testable for the measurement only — the question is what is PAINTED on top, not what takes a tap. */
+          const toastEl = document.getElementById('toast'), pe0 = toastEl.style.pointerEvents;
+          toastEl.style.pointerEvents = 'auto';
+          const th = s7rHit(toastEl);
+          toastEl.style.pointerEvents = pe0;
           if (!th || !th.closest('#toast')) throw new Error('a toast raised while the comments card is open is under it — its centre is ' + s7rName(th));
           if (FM.hideToast) FM.hideToast();
           /* The ceiling: said where he pressed Post. */
@@ -84315,7 +84320,10 @@
         FM.toast('912 probe — backed up 3 projects', 5000); await sleep912(40);
         const r = t.getBoundingClientRect();
         if (!(r.width > 0)) throw new Error('setup: the toast has no box');
+        // painted on top, measured by hit-testing with the toast made hit-testable for this line only (plain toasts let taps through since v16.95)
+        const pe0 = t.style.pointerEvents; t.style.pointerEvents = 'auto';
         const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        t.style.pointerEvents = pe0;
         if (!hit || !(hit === t || t.contains(hit)))
           throw new Error(look + ' Home: at the toast\'s centre the top element is ' + (hit ? (hit.id ? '#' + hit.id : '.' + String(hit.className).split(' ')[0]) : 'nothing') +
                           ', not the toast (z-index ' + getComputedStyle(t).zIndex + ') — pin, duplicate, import errors and the backup warning all vanish under Home');
@@ -90036,5 +90044,2077 @@
     }
   });
 
+
+  /* ═══ HUNT-a (queue 690, 25 Sep, second hunt) — TEXT: typing, the text sheet, captions, emoji, undo while typing ═════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". Four findings in the text area, each a failing test
+   * first. The phone taps go through tests/_cdp.py as REAL touches (realInput924) wherever the finger can reach them.
+   * Found by the hunt as four failing HUNT-a tests; all four fixed (js/compositor.js graphemes, js/text-edit.js binding the
+   * caption object and flush/resync, js/history.js calling them) and renamed 690 for what they now hold. */
+  function hunt2aTap(x, y) { return [{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 40 }]; }
+  function hunt2aReach() { return Math.min(window.innerWidth, (window.top && window.top.innerWidth) || window.innerWidth) - 4; }
+  /* A real finger on an element when it is inside the part of the window real input can reach; its own click otherwise
+     (the phone pass runs Chrome 380 wide). Returns how it was pressed, so a failure can say. */
+  async function hunt2aPress(el, what) {
+    if (!el) throw new Error('setup: there is no ' + what + ' to press');
+    if (el.scrollIntoView) { try { el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (e) {} }
+    await new Promise(r => setTimeout(r, 60));
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) throw new Error('setup: the ' + what + ' has no size on screen');
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    if (x > 2 && y > 2 && x < hunt2aReach() && y < window.innerHeight - 4) {
+      const top = document.elementFromPoint(x, y);
+      if (top && (top === el || el.contains(top))) {
+        await realInput924(hunt2aTap(x, y), 'a finger on the ' + what);
+        await new Promise(r2 => setTimeout(r2, 250));
+        return 'finger';
+      }
+    }
+    el.click();
+    await new Promise(r2 => setTimeout(r2, 250));
+    return 'click';
+  }
+  function hunt2aInk(sc, t) {
+    const c = offscreen(sc.project.width, sc.project.height), x = c.getContext('2d');
+    FM.renderScene(x, sc, t);
+    const d = x.getImageData(0, 0, c.width, c.height).data;
+    let minX = Infinity, maxX = -1, n = 0;
+    for (let y = 0; y < c.height; y++) for (let i = 0; i < c.width; i++) { const k = (y * c.width + i) * 4; if (d[k] + d[k + 1] + d[k + 2] > 60) { n++; if (i < minX) minX = i; if (i > maxX) maxX = i; } }
+    return { w: maxX >= 0 ? maxX - minX + 1 : 0, n: n };
+  }
+
+  test('690 emoji stay whole on animated and curved text — a flag, a skin tone and a family each draw as one picture, By Character and on a Curve', { item: '690' }, function () {
+    /* drawAnimatedText (js/compositor.js) lays an animated text out unit by unit, and for the default unit — by
+       Character — it splits each line with Array.from(line). Array.from splits CODE POINTS, not the characters he typed:
+       the Australian flag is two regional-indicator code points, a thumbs-up with a skin tone is the thumb plus a colour
+       swatch, a family is three people joined by invisible joiners. Each piece is then measured and drawn on its own, so
+       the moment a text has ANY Animate preset (Fade in, Pop, Typewriter, Wave…) his emoji fall apart — and not only
+       during the entrance: every frame of the layer, in the preview and burned into the export. drawArcLine (the Curve
+       slider, or the Text Curve effect) splits the same way. The iPhone emoji keyboard hands him exactly these. */
+    const P = { width: 900, height: 360, fps: 30, duration: 5, background: '#000000' };
+    const mk = (s) => FM.makeLayer('text', { name: 'E', text: s, x: 450, y: 180, fontSize: 150, start: 0, duration: 5 });
+    const widthOf = (s, dress) => { const L = mk(s); if (dress) dress(L); return hunt2aInk({ project: P, layers: [L], selectedId: null, selectedIds: [] }, 3).w; };
+    const FLAG = '🇦🇺', THUMB = '👍🏽', FAMILY = '👨‍👩‍👧';
+    // CONTROL 1: this browser draws a flag as ONE picture — otherwise the split below would look the same as the whole.
+    const flagWhole = widthOf(FLAG), flagApart = widthOf('🇦​🇺');
+    if (!(flagWhole > 20)) throw new Error('setup: the flag drew nothing (' + flagWhole + 'px) — this browser has no emoji font, so nothing below can be judged');
+    if (!(flagWhole < flagApart * 0.8)) throw new Error('setup: this browser draws the flag no narrower whole (' + flagWhole + 'px) than as two letters (' + flagApart + 'px), so it cannot see the bug');
+    const anim = (L) => { L.textAnim = { preset: 'fade', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 }; };
+    const curve = (L) => { L.textCurve = 90; };
+    // By Word on a Curve lays each word out character by character too, from word ranges counted in the same pieces.
+    const wordCurve = (L) => { L.textAnim = { preset: 'fade', unit: 'word', durIn: 0.6, durOut: 0, stagger: 0.04 }; L.textCurve = 90; };
+    // CONTROL 2: plain letters come out the same width animated (the entrance is long over at 3 s) and curved (one letter).
+    const ab = widthOf('AB'), abAnim = widthOf('AB', anim), w1 = widthOf('W'), w1Curve = widthOf('W', curve);
+    if (Math.abs(abAnim - ab) > ab * 0.1) throw new Error('CONTROL: plain AB is ' + ab + 'px still and ' + abAnim + 'px with Fade in finished — the comparison below measures something else');
+    if (Math.abs(w1Curve - w1) > w1 * 0.15) throw new Error('CONTROL: one plain letter on a curve is ' + w1Curve + 'px against ' + w1 + 'px flat — the comparison below measures something else');
+    const bad = [];
+    [['the Australian flag', FLAG], ['a thumbs-up with a skin tone', THUMB], ['a family emoji', FAMILY]].forEach(function (s) {
+      const still = widthOf(s[1]), a = widthOf(s[1], anim), c = widthOf(s[1], curve);
+      if (a > still * 1.25) bad.push(s[0] + ' is ' + still + 'px wide as plain text but ' + a + 'px with Fade in (finished)');
+      if (c > still * 1.25) bad.push(s[0] + ' is ' + still + 'px wide flat but ' + c + 'px on a Curve');
+      const wc = widthOf(s[1], wordCurve);
+      if (wc > still * 1.25) bad.push(s[0] + ' is ' + still + 'px wide flat but ' + wc + 'px on a Curve animated By Word');
+    });
+    /* The fallback splitter (a browser without Intl.Segmenter — iOS before 14.5) must cut these the same way. Chrome
+       always has Segmenter, so the regex is called directly and held against it. */
+    if (!FM._graphemesFallback || typeof Intl === 'undefined' || !Intl.Segmenter) bad.push('there is no fallback splitter to check (FM._graphemesFallback)');
+    else {
+      const seg = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+      ['G’day 🇦🇺 mate 👍🏽!', '🇦🇺🇳🇿', FAMILY, '👩🏽‍💻 ❤️ 1️⃣ 🏴󠁧󠁢󠁳󠁣󠁴󠁿', 'cafe\u0301 AB', ''].forEach(function (str) {
+        const want = Array.from(seg.segment(str), g => g.segment).join('|'), got = FM._graphemesFallback(str).join('|');
+        if (got !== want) bad.push('the fallback splitter cuts ' + str + ' as ' + got + ' where Intl.Segmenter cuts ' + want);
+      });
+    }
+    if (bad.length) throw new Error('emoji fall apart the moment a text is animated or curved — each piece of the emoji is drawn as its own character, in the preview and in the export (the flag turns into two boxed letters A U, the skin tone into a separate square): ' + bad.join('; '));
+  });
+
+  test('690 the caption editor keeps his words on the caption he is typing when a caption is deleted or re-timed in its own Aa sheet', { item: '690', budgetMs: 120000 }, async function () {
+    /* js/text-edit.js binds the cue being typed by its INDEX (active.cueIndex) into layer.captions, and every read and
+       write goes back through that number — onInput, and commit() on Done, which writes the field into cues[index]
+       whether he typed since or not. The Aa sheet of the SAME editor hosts the caption list (captions.js mount, via
+       inspector buildTextExtras), whose ✕ splices a cue out and whose Start/End fields re-sort the list. Either moves the
+       cue he is typing to a different index, so the number now names a neighbour: Done copies his words over it, and the
+       neighbour's own words are gone. On his phone that is: typing caption 2, open Aa, delete the stray caption 1, tap ✓. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedT = FM.time;
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const bad = [];
+    session.label = '';
+    async function session(where, t, typed, act) {
+      const L = FM.makeLayer('text', { name: 'Caps', x: 540, y: 1500, fontSize: 90, start: 0, duration: 6 });
+      L.text = '';
+      L.captions = [{ start: 0, end: 1.5, text: 'Alpha' }, { start: 1.5, end: 3, text: 'Bravo' }, { start: 3, end: 4.5, text: 'Charlie' }];
+      FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+      FM.selectLayer(L.id); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+      FM.setTime(t); await sleep(200);
+      FM.textEdit.start(L.id); await sleep(400);
+      const ta = document.getElementById('te-input');
+      if (!ta || !FM.textEdit.isActive()) throw new Error(where + ': setup: the text editor did not open on the caption track');
+      const bound = ta.value;
+      ta.focus(); ta.value = typed; ta.dispatchEvent(new Event('input', { bubbles: true }));
+      if (!L.captions.some(c => c.text === typed)) throw new Error(where + ': setup: typing did not reach any caption');
+      const how = await hunt2aPress(document.querySelector('.te-bar .te-extras'), 'Aa button');
+      await sleep(450);
+      const pop = document.querySelector('.te-pop-extras');
+      const rows = pop ? [].slice.call(pop.querySelectorAll('.cap-row')) : [];
+      if (rows.length !== 3) throw new Error(where + ': setup: the Aa sheet shows ' + rows.length + ' caption rows, expected 3 (Aa pressed by ' + how + ')');
+      await act(L, rows);
+      if (!FM.textEdit.isActive()) throw new Error(where + ': setup: the editor closed on its own before Done');
+      await hunt2aPress(document.querySelector('.te-bar .te-done'), 'Done tick');
+      await sleep(300);
+      if (FM.textEdit.isActive()) throw new Error(where + ': setup: the Done tick did not close the editor');
+      const live = FM.scene.layers.find(l => l.id === L.id) || L;
+      return { bound: bound, texts: live.captions.map(c => c.text), label: session.label };
+    }
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          /* 1. typing caption 2 (Bravo), he deletes caption 1 (Alpha) in the Aa sheet, then ✓ */
+          let r = await session('deleting caption 1', 2.2, 'Bravo, edited', async function (L, rows) {
+            await hunt2aPress(rows[0].querySelector('.cap-del'), 'first caption’s ✕');
+            await sleep(250);
+            if (L.captions.length !== 2) throw new Error('deleting caption 1: setup: the ✕ did not remove the caption (' + L.captions.length + ' left)');
+            session.label = ((document.querySelector('.te-cue-nav .te-cue-lbl') || {}).textContent || '').trim();
+          });
+          if (r.bound !== 'Bravo') throw new Error('setup: the editor opened on ' + r.bound + ', not on Bravo at the playhead');
+          if (r.texts.join(' | ') !== 'Bravo, edited | Charlie') bad.push('he typed caption 2, deleted caption 1 from the Aa sheet and tapped ✓ — the captions are now [' + r.texts.join(' | ') + '] instead of [Bravo, edited | Charlie]: Done wrote his words over Charlie, and Charlie is gone');
+          if (r.label !== 'Cue 1 / 2') bad.push('after caption 1 was deleted the editor’s label read ' + (r.label || 'nothing') + ' — the caption he is typing is now Cue 1 / 2');
+          /* 1b. typing caption 2 (Bravo), he deletes caption 2 ITSELF, then ✓ — his words go with it, not onto Charlie */
+          r = await session('deleting the caption he is typing', 2.2, 'Bravo, edited', async function (L, rows) {
+            await hunt2aPress(rows[1].querySelector('.cap-del'), 'second caption’s ✕');
+            await sleep(250);
+            if (L.captions.length !== 2) throw new Error('deleting the caption he is typing: setup: the ✕ did not remove the caption (' + L.captions.length + ' left)');
+          });
+          if (r.texts.join(' | ') !== 'Alpha | Charlie') bad.push('he typed caption 2, deleted caption 2 itself from the Aa sheet and tapped ✓ — the captions are now [' + r.texts.join(' | ') + '] instead of [Alpha | Charlie]: Done wrote the deleted caption’s words over the next one');
+          /* 2. typing caption 1 (Alpha), he moves its Start past the others in the Aa sheet, then ✓ */
+          r = await session('re-timing caption 1', 0.5, 'Alpha, edited', async function (L, rows) {
+            const s = rows[0].querySelector('.cap-time');
+            if (!s) throw new Error('re-timing caption 1: setup: no Start field on the first caption row');
+            s.value = '5'; s.dispatchEvent(new Event('input', { bubbles: true })); s.dispatchEvent(new Event('change', { bubbles: true }));
+            await sleep(250);
+            if (!(L.captions[L.captions.length - 1].start >= 4.9)) throw new Error('re-timing caption 1: setup: the Start field did not move the caption to the end');
+          });
+          const want = 'Bravo | Charlie | Alpha, edited';
+          if (r.texts.join(' | ') !== want) bad.push('he typed caption 1, moved its Start to 5 s in the Aa sheet and tapped ✓ — the captions are now [' + r.texts.join(' | ') + '] instead of [' + want + ']: his words landed on another caption and that caption’s own words are gone');
+        });
+      });
+      if (bad.length) throw new Error('the caption editor holds the caption he is typing by its POSITION in the list, so a change to the list in its own Aa sheet sends his words to a different caption: ' + bad.join('; '));
+    } finally {
+      if (FM.textEdit.isActive()) FM.textEdit.stop();
+      FM.scene = saved; FM.time = savedT;
+      FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+      try { try { if (wasOpen) FM.home.open(); } catch (e) {} } catch (e) {}
+    }
+  });
+
+  test('690 on PC, Undo with the text card open takes back only the typing — the layer stays, the field follows, and Redo brings his words back', { item: '690', budgetMs: 120000 }, async function () {
+    /* The PC text editor is a modeless card: the transport's ↶ stays live beside it, and typing is not committed until ✓
+       (js/text-edit.js commit()). So ↶ skips the typing and undoes the step BEFORE it. Right after Add text that step is
+       adding the layer: the layer he is typing into disappears with his words, and ↷ restores the layer as it was
+       committed — the word Text. undo() already knows this shape: it calls FM.flushPendingCommit first so a camera zoom
+       that has not committed yet is not stepped over; the open text editor is not part of it. The ↶ and ↷ are real
+       mouse clicks where the window reaches them. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedT = FM.time;
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    async function press(id, what) {
+      const b = document.getElementById(id);
+      const r = b && b.getBoundingClientRect();
+      if (!r || !r.width) throw new Error('setup: the ' + what + ' button is not on screen');
+      const x = r.left + r.width / 2, y = r.top + r.height / 2;
+      if (x > hunt2aReach() || y > window.innerHeight - 4) { b.click(); await sleep(400); return 'click'; }
+      await realInput924([{ t: 'mouseMove', x: x, y: y, ms: 40 }, { t: 'mouseDown', x: x, y: y, ms: 70 }, { t: 'mouseUp', x: x, y: y, ms: 60 }], 'clicking ' + what);
+      await sleep(400);
+      return 'mouse';
+    }
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      await atWideWidth(async function () {
+        await onScreen924(async function () {
+          FM.scene = scene([], { project: { width: 1080, height: 1920, fps: 30, duration: 5, background: '#000000' } });
+          FM.selectLayer(null); FM.setTime(0); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+          FM.history.reset();
+          await sleep(200);
+          FM.addTextLayer();
+          await sleep(400);
+          const id = FM.textEdit.isActive() ? FM.textEdit.layerId() : null;
+          if (!id) throw new Error('setup: Add text did not open the text editor');
+          const ta = document.getElementById('te-input');
+          ta.focus(); ta.value = 'Hello world'; ta.dispatchEvent(new Event('input', { bubbles: true }));
+          const L0 = FM.scene.layers.find(l => l.id === id);
+          if (!L0 || L0.text !== 'Hello world') throw new Error('setup: typing did not reach the new text layer');
+          const how = await press('btn-undo', 'undo');
+          const afterUndo = FM.scene.layers.find(l => l.id === id);
+          const fieldOpen = FM.textEdit.isActive();
+          const fieldAfterUndo = fieldOpen ? (document.getElementById('te-input') || {}).value : null;
+          await press('btn-redo', 'redo');
+          const fieldAfterRedo = FM.textEdit.isActive() ? (document.getElementById('te-input') || {}).value : null;
+          if (FM.textEdit.isActive()) { FM.textEdit.stop(); await sleep(200); }
+          const afterRedo = FM.scene.layers.find(l => l.id === id);
+          const bad = [];
+          if (!afterUndo) bad.push('one ↶ (' + how + ') took away the whole text layer he was typing into' + (fieldOpen ? '' : ', and the editor closed with it'));
+          else if (afterUndo.text !== 'Text') bad.push('one ↶ left the layer reading ' + afterUndo.text + ' instead of taking back the typing (Text)');
+          /* The editor stays open on the surviving layer, so its field must show what the layer now says — a field still
+             reading Hello world would write it straight back on the next key or at ✓, undoing the undo. */
+          if (afterUndo && fieldOpen && fieldAfterUndo !== afterUndo.text) bad.push('after ↶ the layer reads ' + afterUndo.text + ' but the open field still reads ' + fieldAfterUndo);
+          if (!afterRedo) bad.push('↷ did not bring the layer back at all');
+          else if (afterRedo.text !== 'Hello world') bad.push('↷ brought the layer back reading ' + afterRedo.text + ' — the words he typed, Hello world, are gone for good');
+          else if (fieldAfterRedo != null && fieldAfterRedo !== 'Hello world') bad.push('after ↷ the layer reads Hello world but the open field reads ' + fieldAfterRedo);
+          if (bad.length) throw new Error('on PC he added a text, typed Hello world and pressed ↶ with the card still open: ' + bad.join('; ') + '. The typing was never committed, so ↶ skipped it and undid the step before it.');
+
+          /* THE SAME ON A CAPTION TRACK — every cue is a new object after an undo, so the editor has to find the caption
+             he is typing again. Typing caption 2, ↶ takes back that typing only; ↷ puts it back; more typing still lands
+             on caption 2, and ✓ leaves the other two alone. */
+          const C = FM.makeLayer('text', { name: 'Caps', x: 540, y: 1500, fontSize: 90, start: 0, duration: 6 });
+          C.text = '';
+          C.captions = [{ start: 0, end: 1.5, text: 'Alpha' }, { start: 1.5, end: 3, text: 'Bravo' }, { start: 3, end: 4.5, text: 'Charlie' }];
+          FM.scene = scene([C], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+          FM.selectLayer(C.id); FM.setTime(2.2); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+          FM.history.reset();
+          await sleep(200);
+          FM.textEdit.start(C.id); await sleep(400);
+          const tc = document.getElementById('te-input');
+          if (!tc || tc.value !== 'Bravo') throw new Error('setup: the caption editor did not open on Bravo');
+          tc.focus(); tc.value = 'Bravo, edited'; tc.dispatchEvent(new Event('input', { bubbles: true }));
+          const texts = () => (FM.scene.layers.find(l => l.id === C.id) || { captions: [] }).captions.map(c => c.text).join(' | ');
+          const cb = [];
+          await press('btn-undo', 'undo');
+          const u1 = texts(), f1 = FM.textEdit.isActive() ? document.getElementById('te-input').value : null;
+          if (u1 !== 'Alpha | Bravo | Charlie') cb.push('↶ left the captions [' + u1 + '] instead of taking back the typing');
+          if (f1 !== 'Bravo') cb.push('after ↶ the caption editor ' + (f1 == null ? 'closed' : 'field read ' + f1) + ' instead of reading Bravo');
+          await press('btn-redo', 'redo');
+          const r1 = texts(), f2 = FM.textEdit.isActive() ? document.getElementById('te-input').value : null;
+          if (r1 !== 'Alpha | Bravo, edited | Charlie') cb.push('↷ left the captions [' + r1 + '] instead of putting his typing back');
+          if (f2 !== 'Bravo, edited') cb.push('after ↷ the caption editor ' + (f2 == null ? 'closed' : 'field read ' + f2) + ' instead of Bravo, edited');
+          if (FM.textEdit.isActive()) {
+            const tc2 = document.getElementById('te-input');
+            tc2.value = 'Bravo, edited again'; tc2.dispatchEvent(new Event('input', { bubbles: true }));
+            await press('btn-undo', 'undo');   // takes back only the last typing
+            await press('btn-redo', 'redo');
+            FM.textEdit.stop(); await sleep(200);
+          }
+          const r2 = texts();
+          if (r2 !== 'Alpha | Bravo, edited again | Charlie') cb.push('typing on after ↶ ↷ and tapping ✓ left the captions [' + r2 + '] instead of [Alpha | Bravo, edited again | Charlie]');
+          if (cb.length) throw new Error('on PC, a caption track: ' + cb.join('; '));
+        });
+      }, 1280);
+    } finally {
+      if (FM.textEdit.isActive()) FM.textEdit.stop();
+      FM.scene = saved; FM.time = savedT;
+      FM.history.reset();
+      FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+      try { try { if (wasOpen) FM.home.open(); } catch (e) {} } catch (e) {}
+    }
+  });
+
+  test('690 the caption editor’s next button opens the very next caption when it opened between two captions', { item: '690', budgetMs: 60000 }, async function () {
+    /* Open the text editor on a caption track with the playhead in a GAP (the silence between two detected captions, or
+       before the first) and bindCue adds a blank cue there so typing has somewhere to land (js/text-edit.js). Press › and
+       gotoCue(index + 1) runs dropEmptyCreated() FIRST — which splices that blank cue out and shifts every later caption
+       down one — and only THEN uses the index it was handed. So › lands one caption too far: from the gap after Alpha it
+       opens Charlie, and Bravo is skipped. The › is a real finger tap on the phone. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedT = FM.time;
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const bad = [];
+    async function nextFrom(t, want, where, title) {
+      const L = FM.makeLayer('text', { name: 'Caps', x: 540, y: 1500, fontSize: 90, start: 0, duration: 6 });
+      L.text = '';
+      L.captions = [{ start: 0.5, end: 1.5, text: 'Alpha' }, { start: 2, end: 3, text: 'Bravo' }, { start: 3.5, end: 4.5, text: 'Charlie' }];
+      FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+      FM.selectLayer(L.id); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+      FM.setTime(t); await sleep(200);
+      FM.textEdit.start(L.id); await sleep(400);
+      const ta = document.getElementById('te-input');
+      if (!ta || !FM.textEdit.isActive()) throw new Error(where + ': setup: the text editor did not open on the caption track');
+      if (ta.value !== '') throw new Error(where + ': setup: with the playhead in a gap the editor should open on a new blank caption, it opened on ' + ta.value);
+      const next = [].slice.call(document.querySelectorAll('.te-cue-nav .te-cue-btn')).find(b => b.title === (title || 'Next cue'));
+      const how = await hunt2aPress(next, (title ? 'previous' : 'next') + '-caption button');
+      await sleep(200);
+      const got = (document.getElementById('te-input') || {}).value;
+      const lbl = ((document.querySelector('.te-cue-nav .te-cue-lbl') || {}).textContent || '').trim();
+      FM.textEdit.stop(); await sleep(200);
+      if (got !== want) bad.push(where + ', ' + (title ? '‹' : '›') + ' (' + how + ') opened ' + (got || 'a blank caption') + ' (' + lbl + ') instead of ' + want);
+    }
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          await nextFrom(1.75, 'Bravo', 'from the gap between Alpha and Bravo');
+          await nextFrom(0.2, 'Alpha', 'from before the first caption');
+          // CONTROLS — these always worked and must keep working: ‹ from the same gap, › from after the last caption.
+          await nextFrom(1.75, 'Alpha', 'CONTROL from the gap between Alpha and Bravo', 'Previous cue');
+          await nextFrom(5.2, 'Charlie', 'CONTROL from after the last caption');
+        });
+      });
+      if (bad.length) throw new Error('the next-caption button skips a caption whenever the editor opened in a gap: ' + bad.join('; '));
+    } finally {
+      if (FM.textEdit.isActive()) FM.textEdit.stop();
+      FM.scene = saved; FM.time = savedT;
+      FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+      try { try { if (wasOpen) FM.home.open(); } catch (e) {} } catch (e) {}
+    }
+  });
+
+  /* ═══ 690 — HUNT-b: EFFECTS AND FILTERS, with a real finger where the finger is the point ═════════════════════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". Three findings in picking, presets and copying looks,
+   * each written first as a test that FAILED on the code as it stood, with a message that says what he would see. The
+   * browser tests run at 380 in the effects SHEET (multi-pick, numbered badges) — the mode his phone uses — and drive the
+   * taps and holds through tests/_cdp.py as trusted touches. */
+  function hb2Layer(name, start, dur, fill) {
+    return FM.makeLayer('shape', { name: name, shape: 'rect', x: 540, y: 700, shapeW: 300, shapeH: 300, fill: fill || '#c05030', start: start || 0, duration: dur || 4 });
+  }
+  async function hb2OpenBrowser(layer, cat) {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    FM.selectLayer(layer.id); await sleep(250);
+    FM.fxBrowser.open(FM.layerById(FM.scene, layer.id)); await sleep(700);
+    const root = document.getElementById('fx-browser');
+    if (!FM.fxBrowser.isOpen() || !root) throw new Error('setup: the effects browser did not open');
+    if (!root.classList.contains('fxb-sheet')) throw new Error('setup: at phone width the effects browser did not open as the multi-pick sheet');
+    if (cat) { FM.fxBrowser._openCategory(cat); await sleep(500); }
+    return root;
+  }
+  function hb2Reach(elm, what) {
+    if (!elm) throw new Error('setup: no ' + what + ' on screen');
+    const r = elm.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+    if (!(r.width > 0 && r.height > 0) || x < 0 || x > 370 || y < 0 || y > 740) throw new Error('setup: the ' + what + ' is at ' + Math.round(x) + ',' + Math.round(y) + ', out of reach of real input');
+    return { x: x, y: y, r: r };
+  }
+  function hb2Say(msg) { return String(msg).replace(/"/g, "'"); }   // runtime names go into these messages; the suite forbids a double quote in one
+  function hb2TopView(root) { const v = root.querySelectorAll('.fxb-catview'); return v.length ? v[v.length - 1] : null; }
+  function hb2Keep(keys) { const o = {}; keys.forEach(k => { try { o[k] = localStorage.getItem(k); } catch (e) { o[k] = null; } }); return o; }
+  function hb2Restore(o) { Object.keys(o).forEach(k => { try { if (o[k] == null) localStorage.removeItem(k); else localStorage.setItem(k, o[k]); } catch (e) {} }); }
+
+  test('690 a preset row tapped while he has numbered picks adds his picks and then the preset, in one go', { item: '690', budgetMs: 90000 }, async function () {
+    /* Queue 389 made every exit from the browser mean Done — the X, the backdrop and the Visual/Filters/Audio switch all
+       add the numbered picks, because his report was eight badges on screen and "The effects selected here still don't do
+       anything at allllll". A preset row is the exit that was missed: presetRow's click calls addEffect(reg.id, preset),
+       whose non-quiet path calls FM.fxBrowser.close(), and close() empties _picked. So picking Gaussian Blur and Zoom
+       Blur, then holding Shake and choosing one of its presets, lands ONLY the Shake. The picks are made with real taps
+       and the preset row is tapped for real; the presets sheet is opened through the seam so this measures the preset
+       row alone and not the hold. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, keep = hb2Keep(['fm.fx.recents', 'fm.fx.presetHint']);
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await huntBScene(() => [hb2Layer('HB2 picks')]);
+          try { localStorage.setItem('fm.fx.presetHint', '1'); } catch (e) {}
+          const root = await hb2OpenBrowser(L[0], 'blur');
+          const cat = hb2TopView(root);
+          for (const id of ['blur', 'zoomblur']) {
+            const p = hb2Reach(cat.querySelector('.fxb-tile[data-fxid="' + id + '"]'), (FM.fxRegistry.get(id) || {}).label + ' tile');
+            await realInput924(huntBTap(p.x, p.y), 'picking ' + id); await sleep(350);
+          }
+          /* CONTROL: both real taps picked, in order, and the badges say so. */
+          if (FM._fxPicks().join(',') !== 'blur,zoomblur') throw new Error('CONTROL: two real taps did not pick Gaussian Blur then Zoom Blur (picks: ' + FM._fxPicks().join(', ') + ')');
+          const badge = cat.querySelector('.fxb-tile[data-fxid="zoomblur"] .fxb-pick');
+          if (!badge || badge.textContent !== '2') throw new Error('CONTROL: Zoom Blur does not carry the badge 2 after being picked second');
+          const shake = FM.fxRegistry.get('shake');
+          if (!(FM.effectPresets.for('shake').shipped.length)) throw new Error('setup: Shake has no shipped presets to pick from');
+          FM._fxOpenPresets(shake); await sleep(500);
+          const pv = hb2TopView(root);
+          if (!pv || pv === cat) throw new Error('setup: the Shake presets sheet did not open');
+          const rows = [].slice.call(pv.querySelectorAll('.fxp-row'));
+          const row = rows[1];   // [0] is Default; [1] is the first real preset
+          if (!row) throw new Error('setup: the Shake presets sheet has no preset row after Default');
+          const name = ((row.querySelector('.fxp-name') || {}).firstChild || {}).textContent || 'a preset';
+          row.scrollIntoView({ block: 'center' }); await sleep(250);
+          const p = hb2Reach(row, 'Shake preset row');
+          await realInput924(huntBTap(p.x, p.y), 'tapping a Shake preset'); await sleep(700);
+          const types = (FM.scene.layers[0].effects || []).map(e => e.type);
+          /* CONTROL: the preset tap itself did something — Shake landed, or it was picked. */
+          if (types.indexOf('shake') < 0 && FM._fxPicks().indexOf('shake') < 0) throw new Error('CONTROL: a real tap on the ' + name + ' preset neither added Shake nor picked it');
+          const kept = id => types.indexOf(id) >= 0 || (FM.fxBrowser.isOpen() && FM._fxPicks().indexOf(id) >= 0);
+          const lost = ['blur', 'zoomblur'].filter(id => !kept(id)).map(id => FM.fxRegistry.get(id).label);
+          if (lost.length) {
+            throw new Error(hb2Say('he picked Gaussian Blur and Zoom Blur (numbered 1 and 2), then held Shake and tapped its ' + String(name).trim() + ' preset: the layer got only ' +
+              (types.map(t => (FM.fxRegistry.get(t) || {}).label || t).join(', ') || 'nothing') + (FM.fxBrowser.isOpen() ? '' : ' and the browser closed') +
+              ' — ' + lost.join(' and ') + ' were thrown away without a word. The X, Done and the tabs all add his picks; a preset row is the one way out that still drops them'));
+          }
+          /* …in the order he chose them — his numbered picks, then the preset he tapped last — and the Shake is the PRESET,
+             not a plain Shake at its defaults (the preset row must still mean its preset when it joins the picks). */
+          if (types.join(',') !== 'blur,zoomblur,shake') throw new Error('his picks and the preset landed as ' + types.join(', ') + ', not Gaussian Blur, Zoom Blur, then Shake — the order he chose them in');
+          const shakeFx = (FM.scene.layers[0].effects || []).filter(e => e.type === 'shake')[0];
+          if (JSON.stringify(shakeFx.params) === JSON.stringify(FM.fxRegistry.makeInstance('shake').params)) throw new Error('the Shake landed at its plain defaults — the ' + String(name).trim() + ' preset he tapped was not applied');
+          if (FM.fxBrowser.isOpen()) throw new Error('the browser stayed open after the preset row added everything — a preset row is an exit, like Done');
+        });
+      }, 380);
+    } finally {
+      try { FM.fxBrowser.close(); } catch (e) {}
+      hb2Restore(keep);
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  test('690 an animated effect copied onto a clip that starts later animates from that clip start, by Copy and Paste and by a look + animations preset', { item: '690', budgetMs: 60000 }, async function () {
+    /* Keyframe times are ABSOLUTE project time (scene.js says so above shiftLayerKeyframes), so anything that moves an
+       animation to another clip has to re-anchor it by the difference in start. Paste look does (applyStyle's dt) and the
+       one-effect presets do (effectPresets.capture / makeInstance). Two paths did not:
+       · the effect clipboard — Copy / Paste under the stack and Copy effect / Paste in each row's ⋯ (FM.fxClipboard) —
+         landed the keyframes at the SOURCE clip's times; it now records the source start and read(at) re-anchors;
+       · "Save look + animations" (FM.layerPresets) re-anchored the transform with shiftKf and stored `effects` raw, so the
+         preset's own name was half true: the rotation arrived on time and the blur beside it did not.
+       On a clip that starts after the source's animation has finished, the effect just sat at its last value — his blur-in
+       was a flat full blur. Driven through the real Copy and Paste buttons and the real row ⋯ menu; the preset through its
+       store, which is what the Save look + animations button and its row call. The rotation in the same preset is the
+       CONTROL: it proves this test sees a re-anchored animation when there is one. Writing the row-menu half found a worse
+       fault under it — that Paste never reached the layer at all (it spliced into the merged stack copy and called
+       afterFx instead of the stack's own done) — so the row half asserts the blur lands before it asserts when. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, keep = hb2Keep(['fm.fxclip', 'fm.layerpresets']);
+    const PRESET = '690 probe blur in';
+    try {
+      const A = hb2Layer('HB2 source', 0, 3, '#c05030');
+      const blurIn = FM.fxRegistry.makeInstance('blur');
+      blurIn.params.radius = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 20, e: 'linear' }] };
+      A.effects = [blurIn];
+      A.transform.rotation = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 90, e: 'linear' }] };
+      const B = hb2Layer('HB2 pasted', 3, 3, '#3050c0');
+      const C = hb2Layer('HB2 preset', 3, 3, '#30a050');
+      const D = hb2Layer('HB2 row paste', 3, 3, '#a0a030');
+      const sepia = FM.fxRegistry.makeInstance('sepia'); sepia._expanded = true;   // a row of its own, open, so D has a ⋯ to paste from
+      D.effects = [sepia];
+      await huntBScene(() => [A, B, C, D]);
+      const radiusOf = (layer, t) => { const l = FM.layerById(FM.scene, layer.id), fx = (l.effects || []).filter(e => e.type === 'blur')[0]; return fx ? FM.evalProp(fx.params.radius, t) : NaN; };
+      const kfTimes = (layer) => { const l = FM.layerById(FM.scene, layer.id), fx = (l.effects || []).filter(e => e.type === 'blur')[0]; const r = fx && fx.params.radius; return r && r.kf ? r.kf.map(k => +k.t.toFixed(2)).join(' and ') + ' s' : 'none'; };
+      /* CONTROL on the source: the blur really does animate on A, 0 at its start and 20 a second in. */
+      if (Math.abs(radiusOf(A, 0) - 0) > 0.5 || Math.abs(radiusOf(A, 1) - 20) > 0.5) throw new Error('setup: the source blur does not animate 0 to 20 over its first second');
+      const bad = [];
+      /* 1. Copy under A's stack, Paste under B's — the real buttons. */
+      FM.selectLayer(A.id); await sleep(200);
+      FM.inspector.openCategory('effects'); await sleep(400);
+      const copyBtn = [].slice.call(document.querySelectorAll('#inspector-panel .fx-stack-tools .fx-act')).filter(b => /^Copy$/.test(b.textContent.trim()))[0];
+      if (!copyBtn) throw new Error('setup: no Copy button under the effects stack');
+      copyBtn.click(); await sleep(200);
+      FM.selectLayer(B.id); await sleep(200);
+      FM.inspector.openCategory('effects'); await sleep(400);
+      const pasteBtn = [].slice.call(document.querySelectorAll('#inspector-panel .fx-stack-tools .fx-act')).filter(b => /^Paste/.test(b.textContent.trim()))[0];
+      if (!pasteBtn || pasteBtn.disabled) throw new Error('setup: the Paste button under B is missing or greyed after Copy');
+      pasteBtn.click(); await sleep(300);
+      if (!(FM.layerById(FM.scene, B.id).effects || []).some(e => e.type === 'blur')) throw new Error('CONTROL: Paste did not put the blur on the later clip at all');
+      const b0 = radiusOf(B, 3), b1 = radiusOf(B, 4);
+      if (Math.abs(b0 - 0) > 0.5 || Math.abs(b1 - 20) > 0.5) bad.push('Copy then Paste onto a clip starting at 3 s gave radius ' + b0.toFixed(0) + ' on its first frame and ' + b1.toFixed(0) + ' one second in (keyframes at ' + kfTimes(B) + ', before that clip exists)');
+      /* 2. Save look + animations from A, apply it to C. */
+      FM.layerPresets.save(PRESET, FM.layerById(FM.scene, A.id));
+      FM.layerPresets.apply(PRESET, FM.layerById(FM.scene, C.id)); await sleep(200);
+      const Cl = FM.layerById(FM.scene, C.id);
+      /* CONTROL: the same preset DID re-anchor the rotation onto C, so a re-anchored animation is visible to this test. */
+      if (Math.abs(FM.evalProp(Cl.transform.rotation, 3) - 0) > 0.5 || Math.abs(FM.evalProp(Cl.transform.rotation, 4) - 90) > 0.5) throw new Error('CONTROL: the look + animations preset did not re-anchor its own rotation onto the later clip either, so this cannot tell the blur apart');
+      const c0 = radiusOf(C, 3), c1 = radiusOf(C, 4);
+      if (Math.abs(c0 - 0) > 0.5 || Math.abs(c1 - 20) > 0.5) bad.push('Save look + animations applied to a clip starting at 3 s turned its rotation on time but gave the blur ' + c0.toFixed(0) + ' on the first frame and ' + c1.toFixed(0) + ' one second in (keyframes at ' + kfTimes(C) + ')');
+      /* 3. The row's own ⋯ — Copy effect on A's blur, Paste on D's row. The other door onto the same clipboard. */
+      const menuItem = re => [].slice.call(document.querySelectorAll('#ctx-menu .ctx-item')).filter(n => re.test((n.textContent || '').trim()))[0];
+      const openMore = (layer, what) => {
+        FM.selectLayer(layer.id); FM.inspector.openCategory('effects');
+        const btn = document.querySelector('#inspector-panel .fx-row.fx-open .fx-head .fx-icon-btn[title=More]');
+        if (!btn) throw new Error('setup: no ⋯ on the open effect row of ' + what);
+        btn.click();
+      };
+      FM.layerById(FM.scene, A.id).effects[0]._expanded = true;
+      openMore(A, 'the source clip'); await sleep(150);
+      const copyIt = menuItem(/^Copy effect$/); if (!copyIt) throw new Error('setup: the ⋯ menu has no Copy effect');
+      copyIt.click(); await sleep(150);
+      openMore(D, 'the later clip'); await sleep(150);
+      const pasteIt = menuItem(/^Paste /); if (!pasteIt) throw new Error('setup: the ⋯ menu offers no Paste after Copy effect');
+      pasteIt.click(); await sleep(300);
+      if (!(FM.layerById(FM.scene, D.id).effects || []).some(e => e.type === 'blur')) throw new Error('the row menu Paste said Pasted but put nothing on the later clip — it spliced into the merged copy of the stack and never wrote it back');
+      const d0 = radiusOf(D, 3), d1 = radiusOf(D, 4);
+      if (Math.abs(d0 - 0) > 0.5 || Math.abs(d1 - 20) > 0.5) bad.push('Copy effect then Paste from a row menu onto a clip starting at 3 s gave radius ' + d0.toFixed(0) + ' on its first frame and ' + d1.toFixed(0) + ' one second in (keyframes at ' + kfTimes(D) + ')');
+      /* …and pasting back onto a clip at the SAME start leaves the times exactly as copied (nothing to re-anchor). */
+      openMore(A, 'the source clip'); await sleep(150);
+      const pasteBack = menuItem(/^Paste /); if (!pasteBack) throw new Error('setup: no Paste on the source row');
+      pasteBack.click(); await sleep(300);
+      const again = (FM.layerById(FM.scene, A.id).effects || []).filter(e => e.type === 'blur');
+      const tb = again.length === 2 && again[1].params.radius.kf ? again[1].params.radius.kf.map(k => k.t).join(',') : 'missing';
+      if (tb !== '0,1') bad.push('pasted back onto its own clip, the blur keyframes moved to ' + tb + ' s instead of staying at 0 and 1');
+      if (bad.length) throw new Error('his blur-in (0 to 20 over the first second) moved onto a later clip does not animate there — it sits at full blur from the first frame: ' + bad.join('; '));
+    } finally {
+      try { FM.layerPresets.remove(PRESET); } catch (e) {}
+      try { if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
+      hb2Restore(keep);
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  test('690 a picked effect keeps its number when he pages back to its category, searches for it or opens his faves', { item: '690', budgetMs: 90000 }, async function () {
+    /* paintPicks() — the one function that drew the 1, 2, 3 badges — ran on open(), on a pick and on Clear. The
+       category views (openCategory, and its ‹ › arrows), the search results (rebuild) and the faves screen all build
+       FRESH tiles and never called it. So a picked effect showed no number the next time he saw it: pick Gaussian Blur,
+       page to Warping and back, and its tile was bare while the bar still said Add 1 effect. A bare tile reads as not
+       picked, he taps it — and togglePick REMOVES it. That is one way his picks "do nothing". The fix paints each tile
+       as it is born (paintPick, from guardedAdd), so this walks all three screens. Every tap is real except the search
+       box and the faves seam. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, keep = hb2Keep(['fm.fx.recents', 'fm.fx.presetHint', 'fm.fx.fav']);
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await huntBScene(() => [hb2Layer('HB2 badges')]);
+          try { localStorage.setItem('fm.fx.presetHint', '1'); } catch (e) {}
+          const root = await hb2OpenBrowser(L[0], 'blur');
+          const tileIn = (view, id) => view && view.querySelector('.fxb-tile[data-fxid="' + id + '"]');
+          const badgeOf = t => { const b = t && t.querySelector('.fxb-pick'); return b ? b.textContent : ''; };
+          const titleOf = v => ((v && v.querySelector('.fxb-catview-title')) || {}).textContent || '';
+          let p = hb2Reach(tileIn(hb2TopView(root), 'blur'), 'Gaussian Blur tile');
+          await realInput924(huntBTap(p.x, p.y), 'picking Gaussian Blur'); await sleep(350);
+          /* CONTROL: the real tap picked it and the tile shows 1. */
+          if (FM._fxPicks().join(',') !== 'blur' || badgeOf(tileIn(hb2TopView(root), 'blur')) !== '1') throw new Error('CONTROL: a real tap on Gaussian Blur did not pick it with the badge 1 (picks: ' + FM._fxPicks().join(', ') + ')');
+          const bad = [];
+          /* 1. Page to the next category and back with the arrows under the grid. */
+          const navOf = (v, i) => { const n = v && v.querySelectorAll('.fxb-catnav .fxb-back'); return n && n[i]; };
+          p = hb2Reach(navOf(hb2TopView(root), 1), 'next-category arrow');
+          await realInput924(huntBTap(p.x, p.y), 'the next-category arrow'); await sleep(500);
+          const away = titleOf(hb2TopView(root));
+          if (!away || away === 'Blur') throw new Error('CONTROL: the real tap on the next-category arrow did not leave Blur');
+          p = hb2Reach(navOf(hb2TopView(root), 0), 'previous-category arrow');
+          await realInput924(huntBTap(p.x, p.y), 'the previous-category arrow'); await sleep(500);
+          if (titleOf(hb2TopView(root)) !== 'Blur') throw new Error('CONTROL: the previous-category arrow did not come back to Blur (on ' + titleOf(hb2TopView(root)) + ')');
+          if (FM._fxPicks().join(',') !== 'blur') throw new Error('CONTROL: paging categories changed the picks themselves (' + FM._fxPicks().join(', ') + ')');
+          const back = tileIn(hb2TopView(root), 'blur');
+          if (badgeOf(back) !== '1') bad.push('after paging to ' + away + ' and back, the Gaussian Blur tile shows ' + (badgeOf(back) ? 'the number ' + badgeOf(back) : 'NO number') + ' while the bar still says ' + ((root.querySelector('.fxb-commit-go') || {}).textContent || '?'));
+          /* 2. His faves, with Gaussian Blur starred — a third screen that builds its own fresh tiles. Opened through the
+             seam (the pull-up gesture has its own tests); the badge is what is measured here. */
+          try { localStorage.setItem('fm.fx.fav', JSON.stringify(['blur'])); } catch (e) {}
+          const fav = FM._fxOpenFavourites(); await sleep(400);
+          const favTile = fav && fav.querySelector('.fxb-tile[data-fxid="blur"]');
+          if (!favTile) throw new Error('setup: the faves screen did not show the starred Gaussian Blur');
+          if (badgeOf(favTile) !== '1') bad.push('in his faves, the starred Gaussian Blur shows ' + (badgeOf(favTile) ? 'the number ' + badgeOf(favTile) : 'NO number'));
+          { const fb = fav.querySelector('.fxb-back'); if (fb) fb.click(); await sleep(250); if (fav.isConnected) fav.remove(); }
+          if (titleOf(hb2TopView(root)) !== 'Blur') throw new Error('setup: closing the faves did not come back to Blur');
+          /* 3. Out to the main grid, and search for it. */
+          const view = hb2TopView(root); const bk = view && view.querySelector('.fxb-back'); if (bk) bk.click(); await sleep(300);
+          const sb = root.querySelector('.fxb-search-btn'); if (!sb) throw new Error('setup: no search button');
+          sb.click(); await sleep(200);
+          const si = root.querySelector('.fxb-search-input');
+          si.value = 'gaussian'; si.dispatchEvent(new Event('input', { bubbles: true })); await sleep(500);
+          const found = root.querySelector('.fxb-search-grid .fxb-tile[data-fxid="blur"]');
+          if (!found) throw new Error('setup: searching gaussian did not find Gaussian Blur');
+          if (badgeOf(found) !== '1') bad.push('searching for it, the Gaussian Blur result shows ' + (badgeOf(found) ? 'the number ' + badgeOf(found) : 'NO number'));
+          if (bad.length) {
+            /* …and what a bare tile invites: he taps it to pick it. */
+            p = hb2Reach(found, 'Gaussian Blur search result');
+            await realInput924(huntBTap(p.x, p.y), 'tapping the bare Gaussian Blur result'); await sleep(400);
+            throw new Error(hb2Say('he picked Gaussian Blur (badge 1) and it is still picked, but ' + bad.join('; ') + ' — so it looks un-picked, and tapping it again, as he would, ' +
+              (FM._fxPicks().indexOf('blur') < 0 ? 'UN-PICKED it (the bar now ' + (root.querySelector('.fxb-commit.hidden') ? 'is gone' : 'says ' + (root.querySelector('.fxb-commit-go') || {}).textContent) + ') and nothing he chose would be added' : 'left the picks as ' + FM._fxPicks().join(', '))));
+          }
+        });
+      }, 380);
+    } finally {
+      try { FM.fxBrowser.close(); } catch (e) {}
+      hb2Restore(keep);
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* ═══ HUNT-c (queue 690) — HOME AND PROJECTS, WITH A REAL FINGER AT 380 AND A REAL MOUSE AT 1280 ═══════════════════
+   * His standing brief: "go re audit, find some bugs coz theres a shit load". Each test below was written first and
+   * FAILED on v16.94 because of the bug it names; each passes with its fix and was re-proven failing with that fix
+   * reverted (storage.js for the copy's name and the end-of-play card, home.js for the element draft and the
+   * hold-then-slide). Shared helpers are prefixed hc so they cannot collide with anything else here. */
+  function hcCard(pid) { return document.querySelector('#home-screen .hm-card[data-pid="' + pid + '"]'); }
+  function hcPt(el, dx) { const r = el.getBoundingClientRect(); return { x: Math.round(dx != null ? r.left + dx : r.left + r.width / 2), y: Math.round(r.top + r.height / 2), w: r.width, h: r.height }; }
+  function hcTap(p) { return [{ t: 'touchStart', x: p.x, y: p.y, ms: 70 }, { t: 'touchEnd', x: p.x, y: p.y, ms: 0 }]; }
+  function hcClick(p) { return [{ t: 'mouseMove', x: p.x, y: p.y, ms: 40 }, { t: 'mouseDown', x: p.x, y: p.y, ms: 70 }, { t: 'mouseUp', x: p.x, y: p.y, ms: 0 }]; }
+  /* A real mouse click on `el` at a PC width. The phone pass's browser window is only 380 px wide, so the frame is slid
+     until the element sits inside it (the trick the 690 storage test uses) — a click aimed outside the window lands nowhere. */
+  async function hcMouse(el, what) {
+    const fe = window.frameElement, l0 = fe.style.left, t0 = fe.style.top;
+    const r = el.getBoundingClientRect();
+    fe.style.left = Math.round(Math.min(0, 180 - r.left)) + 'px'; fe.style.top = Math.round(Math.min(0, 300 - r.top)) + 'px';
+    try { await sleep(120); await realInput924(hcClick(hcPt(el)), what); }
+    finally { fe.style.left = l0; fe.style.top = t0; }
+  }
+  async function hcUntil(what, fn, ms) {
+    const end = Date.now() + (ms || 4000);
+    for (;;) { const v = fn(); if (v) return v; if (Date.now() > end) throw new Error('timed out waiting for ' + what); await sleep(40); }
+  }
+  async function hcMenuItem(re) {
+    return hcUntil('the ⋯ menu', function () {
+      const m = document.getElementById('ctx-menu');
+      if (!m || m.classList.contains('hidden')) return null;
+      return Array.prototype.filter.call(m.querySelectorAll('.ctx-item'), function (x) { return re.test(x.textContent); })[0] || null;
+    }, 3000).then(async function (it) { await sleep(500); return it; });   // the menu hinges open — measure it once it has landed
+  }
+  function hcShape(name, fill) {
+    const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: 160, y: 120, shapeW: 80, shapeH: 60, fill: fill || '#2a9d8f' });
+    L.start = 0; L.duration = 2; FM.scene.layers.push(L); FM.refreshAll(); FM.history.commit();
+    return L;
+  }
+  async function hcCleanup(made, orig, wasOpen) {
+    try { if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
+    try { if (FM.home._selectionState && FM.home._selectionState().selectMode) { const b = document.getElementById('hm-select-btn'); if (b) b.click(); } } catch (e) {}
+    try { if (orig && FM.projects.currentId() !== orig && FM.projects.list().some(function (p) { return p.id === orig; })) await FM.projects.open(orig, { confirmed: true }); } catch (e) {}
+    for (const id of made) { try { if (FM.projects.list().some(function (p) { return p.id === id; })) await FM.projects.remove(id); } catch (e) {} }
+    try { if (wasOpen) FM.home.open(); else FM.home.close(); } catch (e) {}
+    await sleep(200);
+  }
+
+  test('690 a duplicated project is still called X copy after he opens it — Home never shows two cards with the original name', { item: '690', budgetMs: 90000 }, async function () {
+    /* ⋯ → Duplicate (and the bulk Duplicate) make X copy on the CARD, but the copy's document still carries the ORIGINAL
+       project name — and every save stamps the card with the document's name. So the first time he opens the copy the
+       editor calls it X, and when he comes back Home there are two cards both called X: he cannot tell the copy he just
+       changed from the original, which is exactly when he deletes the wrong one. Driven with a real mouse at 1280. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await FM.projects.create({ name: 'HUNTc Beach', width: 320, height: 240 }); made.push(a);
+      hcShape('HUNTc sun', '#f4a261');
+      if (!FM.storage.flushSync()) throw new Error('setup: HUNTc Beach could not be saved');
+      await onScreen924(async function () {
+        await atWideWidth(async function () {
+          FM.home.open(); await sleep(900);
+          const sc = document.querySelector('#home-screen .hm-scroll'); if (sc) sc.scrollTop = 0;
+          await sleep(150);
+          const more = hcCard(a) && hcCard(a).querySelector('.hm-card-more');
+          if (!more) throw new Error('setup: HUNTc Beach has no card with a ⋯ on Home');
+          await hcMouse(more, 'a click on the ⋯ of HUNTc Beach');
+          const dup = await hcMenuItem(/^Duplicate$/);
+          await hcMouse(dup, 'a click on Duplicate');
+          const copy = await hcUntil('the copy card', function () { return FM.projects.list().filter(function (p) { return p.name === 'HUNTc Beach copy'; })[0]; }, 6000);
+          made.push(copy.id);
+          await sleep(500);
+          if (sc) sc.scrollTop = 0;
+          await sleep(150);
+          const cc = await hcUntil('the copy card on screen', function () { return hcCard(copy.id); }, 3000);
+          const shown0 = (cc.querySelector('.hm-name') || {}).textContent;
+          if (shown0 !== 'HUNTc Beach copy') throw new Error('setup: the new card reads ' + shown0 + ' straight after Duplicate');
+          await hcMouse(cc.querySelector('.hm-name'), 'a click on the HUNTc Beach copy card');
+          await hcUntil('the copy to open', function () { return FM.projects.currentId() === copy.id && !FM.home.isOpen(); }, 6000);
+          await sleep(900);
+          const inside = FM.scene.project.name;
+          FM.home.open(); await sleep(900);
+          const card = FM.projects.list().filter(function (p) { return p.id === copy.id; })[0];
+          const shown = hcCard(copy.id) && hcCard(copy.id).querySelector('.hm-name');
+          const same = FM.projects.list().filter(function (p) { return p.name === 'HUNTc Beach'; }).length;
+          if (!card || card.name !== 'HUNTc Beach copy' || (shown && shown.textContent !== 'HUNTc Beach copy')) {
+            throw new Error('he duplicated HUNTc Beach, opened the copy and came back Home — and the copy card now reads ' + (shown ? shown.textContent : card && card.name) +
+              ', so ' + same + ' cards say HUNTc Beach and he cannot tell which one is the copy he just changed (inside, the editor called the copy ' + inside + ')');
+          }
+          if (inside !== 'HUNTc Beach copy') throw new Error('inside the copy the editor calls the project ' + inside + ', the original name, so nothing tells him he is not in his original');
+        }, 1280);
+      });
+    } finally {
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('690 holding a Home card until Select comes on, then sliding the same real finger down, ticks every card it passes', { item: '690', budgetMs: 90000 }, async function () {
+    /* The Home cards say a hold enters Select and a drag across paints a run of ticks (selectify, v6.17). With a real
+       finger the hold does enter Select — but the card was scrollable when the finger went down (touch-action is only
+       none once Select is on), so the slide that follows is taken by the browser as a SCROLL: pointercancel ends the
+       paint after the first card and the list scrolls instead. Only the card he held is ticked. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    let R = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      for (let i = 1; i <= 4; i++) { made.push(await FM.projects.create({ name: 'HUNTc run ' + i, width: 320, height: 240 })); await sleep(20); }
+      await onScreen924(async function () {
+        await atPhoneWidth(async function () {
+          FM.home.open(); await sleep(900);
+          const sc = document.querySelector('#home-screen .hm-scroll'); if (sc) sc.scrollTop = 0;
+          await sleep(200);
+          const order = Array.prototype.map.call(document.querySelectorAll('#home-screen .hm-card[data-pid]'), function (c) { return c.dataset.pid; });
+          const mine = made.slice().reverse();   // newest first, as Home lists them
+          if (order.slice(0, 4).join() !== mine.join()) throw new Error('setup: the four HUNTc cards are not the first four on Home');
+          const p0 = hcPt(hcCard(mine[0]), 70), p2 = hcPt(hcCard(mine[2]), 70);
+          if (p2.y > 730) throw new Error('setup: the third card is at y ' + p2.y + ', off the part of the frame real input can reach');
+          const moves = [];
+          for (let k = 1; k <= 12; k++) moves.push({ t: 'touchMove', x: p0.x, y: Math.round(p0.y + (p2.y - p0.y) * k / 12), ms: 35 });
+          /* Listened for on the held card itself as well as the window: the hold re-renders the grid, so the card under
+             the finger is detached and its events no longer bubble up to the window. */
+          const seen = [];
+          const held = hcCard(mine[0]);
+          const note = function (e) { if (e.isTrusted) seen.push(e.type); };
+          const TY = ['pointermove', 'pointercancel', 'pointerup'];
+          TY.forEach(function (t) { window.addEventListener(t, note, true); held.addEventListener(t, note, true); });
+          R = { stop: function () { TY.forEach(function (t) { window.removeEventListener(t, note, true); held.removeEventListener(t, note, true); }); } };
+          const scroll0 = sc ? sc.scrollTop : 0;
+          await realInput924([{ t: 'touchStart', x: p0.x, y: p0.y, ms: 650 }].concat(moves).concat([{ t: 'touchMove', x: p0.x, y: p2.y, ms: 250 }, { t: 'touchEnd', x: p0.x, y: p2.y, ms: 0 }]), 'a hold on HUNTc run 4 then a slide down over two more cards');
+          await sleep(400);
+          const st = FM.home._selectionState();
+          if (!st.selectMode) throw new Error('holding a card with a real finger for 650 ms did not enter Select at all');
+          const got = mine.slice(0, 3).filter(function (id) { return st.selected.indexOf(id) >= 0; }).length;
+          if (!seen.length) throw new Error('no real touch reached the card — this measures the driver, not the app');
+          if (got !== 3) {
+            const moves = seen.filter(function (t) { return t === 'pointermove'; }).length, cancelled = seen.indexOf('pointercancel') >= 0;
+            throw new Error('he held HUNTc run 4 until Select came on and slid the same finger down over HUNTc run 3 and HUNTc run 2 — only ' + got + ' of those 3 cards are ticked' +
+              (cancelled ? '. The browser cancelled his finger after ' + moves + ' move(s): the card was still a scrollable card when the finger went down, so the slide was handed to scrolling, not to the select' : '') +
+              (sc && sc.scrollTop !== scroll0 ? ' (the list scrolled ' + Math.round(sc.scrollTop - scroll0) + ' px instead)' : ''));
+          }
+        }, 380);
+      });
+    } finally {
+      if (R) R.stop();
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+
+  test('690 a plain real-finger swipe on the Home cards still scrolls the list — the hold-then-slide guard takes only a slide that began with a hold', { item: '690', budgetMs: 90000 }, async function () {
+    /* The CONTROL for the test above. The card now cancels touchmove while a paint is live, so the slide after a hold
+       cannot become a scroll — and the only thing that keeps that from swallowing every scroll on Home is the
+       condition that a paint has started. An ordinary swipe (no hold) must still scroll the list and must not
+       enter Select. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      for (let i = 1; i <= 14; i++) { made.push(await FM.projects.create({ name: 'HUNTc swipe ' + i, width: 320, height: 240 })); await sleep(10); }
+      await onScreen924(async function () {
+        await atPhoneWidth(async function () {
+          FM.home.open(); await sleep(900);
+          const sc = document.querySelector('#home-screen .hm-scroll');
+          if (!sc) throw new Error('setup: Home has no scrolling list');
+          sc.scrollTop = 0; await sleep(200);
+          if (sc.scrollHeight - sc.clientHeight < 200) throw new Error('setup: with 14 more projects the Home list still cannot scroll 200 px (' + (sc.scrollHeight - sc.clientHeight) + '), so a swipe proves nothing');
+          const c = hcCard(made[made.length - 3]);
+          if (!c) throw new Error('setup: HUNTc swipe 12 has no card on Home');
+          const p = hcPt(c, 70);
+          if (p.y < 300 || p.y > 730) throw new Error('setup: the card to swipe on is at y ' + p.y + ', not where a swipe up has room');
+          const moves = [];
+          for (let k = 1; k <= 8; k++) moves.push({ t: 'touchMove', x: p.x, y: Math.round(p.y - 200 * k / 8), ms: 16 });
+          await realInput924([{ t: 'touchStart', x: p.x, y: p.y, ms: 30 }].concat(moves).concat([{ t: 'touchEnd', x: p.x, y: p.y - 200, ms: 0 }]), 'a quick swipe up on a Home card');
+          await sleep(600);
+          const st = FM.home._selectionState();
+          if (st.selectMode) throw new Error('a quick swipe with no hold turned Select on');
+          if (!(sc.scrollTop > 60)) throw new Error('a real finger swiped 200 px up across the Home cards and the list moved only ' + Math.round(sc.scrollTop) + ' px — the card is cancelling ordinary scrolls, not only the slide after a hold');
+        }, 380);
+      });
+    } finally {
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('690 a project he played through to the end keeps a picture on its Home card, not a plain black one', { item: '690', budgetMs: 60000 }, async function () {
+    /* Playback without Loop stops with the playhead ON the project's last instant (FM.time = duration), where every
+       clip that runs to the end has already ended — the preview is the bare background. Going Home then captures the
+       card from exactly that frame, so the project he just watched through turns into a solid black card. Element
+       thumbnails learned this in queue 488 (pickThumbTime); project cards never did. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    const bright = async function (url) {
+      if (!url) return -1;
+      const img = new Image(); img.src = url;
+      await new Promise(function (r) { img.onload = r; img.onerror = r; });
+      const c = document.createElement('canvas'); c.width = img.naturalWidth || 1; c.height = img.naturalHeight || 1;
+      const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      let hi = 0; for (let i = 0; i < d.length; i += 4) hi = Math.max(hi, d[i], d[i + 1], d[i + 2]);
+      return hi;
+    };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await FM.projects.create({ name: 'HUNTc end', width: 320, height: 240 }); made.push(a);
+      const L = FM.makeLayer('shape', { name: 'HUNTc card', shape: 'rect', x: 160, y: 120, shapeW: 240, shapeH: 160, fill: '#f4a261' });
+      L.start = 0; L.duration = 1; FM.scene.layers.push(L);
+      FM.scene.project.duration = 1; FM.refreshAll(); FM.history.commit();
+      FM.setTime(0.5); FM.requestRender && FM.requestRender(); await sleep(150);
+      if (!FM.projects.pinThumbnail()) throw new Error('setup: no card picture could be taken at all');
+      FM.scene.project.thumbPinned = false;   // an ordinary project — the auto picture, not a pinned one
+      await sleep(300);
+      const ctl = await bright(await FM.projects.getThumb(a));
+      if (!(ctl > 120)) throw new Error('CONTROL: a card taken halfway through does not show the orange card either (brightest ' + ctl + '), so nothing below can be judged');
+      FM.setTime(0); FM.play();
+      await hcUntil('playback to reach the end', function () { return !FM.playing; }, 6000);
+      await sleep(200);
+      const at = FM.time;
+      FM.home.open();
+      await sleep(PUSH_WAIT_HC);
+      const got = await bright(await FM.projects.getThumb(a));
+      if (!(got > 120)) {
+        throw new Error('he played HUNTc end through to the end and went Home — its card is now a plain black picture (brightest pixel ' + got + ' of 255; halfway through it was ' + ctl +
+          '), because the card is taken at the playhead, ' + at.toFixed(2) + ' s, the instant after every clip has ended');
+      }
+    } finally {
+      try { if (FM.playing) FM.pause(); } catch (e) {}
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+  const PUSH_WAIT_HC = 3200;   // Home takes the card picture after the pop (380 ms + 80) on an idle callback of at most 1.5 s
+
+  test('690 saving a new element from its draft card puts the draft away — Elements never keeps a second card still saying save as element', { item: '690', budgetMs: 90000 }, async function () {
+    /* Elements → + → Build a new one… makes a DRAFT workspace; its card says Draft — open it, build it, then ⋯ → Save as
+       element. He does exactly that. The element appears — and the draft stays, still saying Save as element, so the tab
+       now holds two cards for one thing and tells him it is not saved. Saving it again, as the card asks, makes a second
+       copy of the element; tapping the element makes yet another workspace. Nothing ever puts the draft away. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], madeE = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const base = await FM.projects.create({ name: 'HUNTc base', width: 320, height: 240 }); made.push(base);
+      const d = await FM.projects.create({ name: 'HUNTc logo', width: 1080, height: 1080, elementDraft: true }); made.push(d);
+      FM.scene.project.background = null;
+      const S = FM.makeLayer('shape', { name: 'HUNTc mark', shape: 'rect', x: 540, y: 540, shapeW: 400, shapeH: 400, fill: '#e76f51' });
+      S.start = 0; S.duration = 3; FM.scene.layers.push(S); FM.refreshAll(); FM.history.commit();
+      if (!FM.storage.flushSync()) throw new Error('setup: the draft could not be saved');
+      await FM.projects.open(base, { confirmed: true });
+      await onScreen924(async function () {
+        await atPhoneWidth(async function () {
+          FM.home.open(); await sleep(700);
+          FM.home._render('elements'); await sleep(400);
+          const sc = document.querySelector('#home-screen .hm-scroll'); if (sc) sc.scrollTop = 0;
+          await sleep(150);
+          const card = hcCard(d);
+          if (!card) throw new Error('setup: the HUNTc logo draft has no card under Elements');
+          const sub0 = (card.querySelector('.hm-sub') || {}).textContent || '';
+          if (!/Save as element/.test(sub0)) throw new Error('setup: the draft card does not ask to be saved as an element (' + sub0 + ')');
+          await realInput924(hcTap(hcPt(card.querySelector('.hm-card-more'))), 'a finger on the ⋯ of the draft');
+          const item = await hcMenuItem(/Save as element/);
+          await realInput924(hcTap(hcPt(item)), 'a finger on Save as element…');
+          const s = await hfAskUp('for the element name');
+          await sleep(300);
+          await realInput924(hcTap(hcPt(s.querySelector('.fm-ask-ok'))), 'a finger on Save');
+          const el = await hcUntil('the new element', function () { return FM.elements.list().filter(function (e) { return e.name === 'HUNTc logo'; })[0]; }, 6000);
+          madeE.push(el.id);
+          await sleep(800);
+          const stillDraft = FM.projects.list().filter(function (p) { return p.id === d && p.elementDraft && !p.ofElement; })[0];
+          const dc = hcCard(d);
+          const sub = dc ? ((dc.querySelector('.hm-sub') || {}).textContent || '') : '';
+          if (stillDraft) {
+            throw new Error('he built HUNTc logo and saved it as an element from its own draft card — the element is there, and so is the draft, still reading ' +
+              (sub || 'Save as element') + '. Two cards for one thing, one saying it is not saved; saving again as it asks makes a second HUNTc logo');
+          }
+          await hcElementHoldsTheWork(el, dc, sub);
+        }, 380);
+      });
+    } finally {
+      for (const id of madeE) { try { await FM.elements.remove(id); } catch (e) {} }
+      try { FM.elements.list().filter(function (e) { return e.name === 'HUNTc logo'; }).forEach(function (e) { FM.elements.remove(e.id); }); } catch (e) {}
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+  /* Putting the draft away is only right if nothing he built goes with it — so after the save, the ELEMENT must hold
+     the layer he drew in the draft, there must be exactly one of it, and the draft's card must be gone from the tab. */
+  async function hcElementHoldsTheWork(el, dc, sub) {
+    if (dc && dc.isConnected) throw new Error('the draft is gone from storage but its card is still on the Elements tab, reading ' + sub);
+    const same = FM.elements.list().filter(function (e) { return e.name === 'HUNTc logo'; }).length;
+    if (same !== 1) throw new Error('one Save as element made ' + same + ' elements called HUNTc logo');
+    const pack = await FM.elements.getPack(el.id);
+    const names = pack && pack.layers ? pack.layers.map(function (l) { return l.name; }) : [];
+    if (names.indexOf('HUNTc mark') < 0) throw new Error('the draft was put away but the element does not hold what he built in it (its layers: ' + (names.join(', ') || 'none') + ') — his work went with the draft');
+  }
+
+  test('690 saving an element from the draft still open behind Home puts the draft away too, and lands on a project he already had', { item: '690', budgetMs: 90000 }, async function () {
+    /* His real order of events: Build a new one…, draw it, go Home — the draft is still the OPEN project behind Home —
+       then ⋯ → Save as element on its card. The draft has to be switched away from before it can go (the same dance
+       Delete draft does, queue 617 clause 4), and the switch must land on a project he already had: minting an
+       Untitled while putting a draft away is the failure queue 505 was about. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], madeE = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const base = await FM.projects.create({ name: 'HUNTc base2', width: 320, height: 240 }); made.push(base);
+      const d = await FM.projects.create({ name: 'HUNTc logo', width: 1080, height: 1080, elementDraft: true }); made.push(d);
+      FM.scene.project.background = null;
+      const S = FM.makeLayer('shape', { name: 'HUNTc mark', shape: 'rect', x: 540, y: 540, shapeW: 400, shapeH: 400, fill: '#e76f51' });
+      S.start = 0; S.duration = 3; FM.scene.layers.push(S); FM.refreshAll(); FM.history.commit();
+      if (!FM.storage.flushSync()) throw new Error('setup: the draft could not be saved');
+      if (FM.projects.currentId() !== d) throw new Error('setup: the draft is not the open project');
+      const before = FM.projects.list().filter(function (p) { return !p.elementDraft && !p.templateDraft; }).map(function (p) { return p.id; });
+      await onScreen924(async function () {
+        await atPhoneWidth(async function () {
+          FM.home.open(); await sleep(700);
+          FM.home._render('elements'); await sleep(400);
+          const sc = document.querySelector('#home-screen .hm-scroll'); if (sc) sc.scrollTop = 0;
+          await sleep(150);
+          const card = hcCard(d);
+          if (!card) throw new Error('setup: the open HUNTc logo draft has no card under Elements');
+          await realInput924(hcTap(hcPt(card.querySelector('.hm-card-more'))), 'a finger on the ⋯ of the open draft');
+          const item = await hcMenuItem(/Save as element/);
+          await realInput924(hcTap(hcPt(item)), 'a finger on Save as element…');
+          const s = await hfAskUp('for the element name');
+          await sleep(300);
+          await realInput924(hcTap(hcPt(s.querySelector('.fm-ask-ok'))), 'a finger on Save');
+          const el = await hcUntil('the new element', function () { return FM.elements.list().filter(function (e) { return e.name === 'HUNTc logo'; })[0]; }, 6000);
+          madeE.push(el.id);
+          await sleep(1200);
+          const dc = hcCard(d);
+          const sub = dc ? ((dc.querySelector('.hm-sub') || {}).textContent || '') : '';
+          if (FM.projects.list().some(function (p) { return p.id === d; })) {
+            throw new Error('he saved the draft he still had open as an element from its card — the element is there, and so is the draft, still reading ' + (sub || 'Save as element'));
+          }
+          await hcElementHoldsTheWork(el, dc, sub);
+          const now = FM.projects.list().filter(function (p) { return !p.elementDraft && !p.templateDraft; }).map(function (p) { return p.id; });
+          const minted = now.filter(function (id) { return before.indexOf(id) < 0; });
+          if (minted.length) throw new Error('putting the open draft away minted ' + minted.length + ' new project(s) on Home');
+          if (before.indexOf(FM.projects.currentId()) < 0) throw new Error('with the draft put away, the open project is not one he already had');
+          if (!FM.home.isOpen()) throw new Error('putting the draft away took him off Home');
+        }, 380);
+      });
+    } finally {
+      for (const id of madeE) { try { await FM.elements.remove(id); } catch (e) {} }
+      try { FM.elements.list().filter(function (e) { return e.name === 'HUNTc logo'; }).forEach(function (e) { FM.elements.remove(e.id); }); } catch (e) {}
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  /* ═══ HUNT-d, SECOND PASS (queue 690, 25 Sep) — EXPORT, MEASURED IN THE FILE ═══════════════════════════════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". Every test here makes a real file through the real
+   * exporter and reads it back: the MP4 is demuxed and every frame decoded with VideoDecoder, the GIF's frame delays and
+   * size come out of its own bytes, the PNG size out of the zip. So what is measured is what he would get, not what the
+   * code meant to write.
+   * The video fixture is built in the test: a clip whose frame k carries k as eight black/white bars (bit 0 leftmost), so
+   * a decoded frame says exactly WHICH source frame it shows — and reads -1 when nothing was drawn at all (all black). */
+  function hunt2dDrawIndex(g, k, w, h) {
+    const bw = w / 8;
+    for (let b = 0; b < 8; b++) { g.fillStyle = ((k >> b) & 1) ? '#ffffff' : '#000000'; g.fillRect(b * bw, 0, bw, h); }
+  }
+  function hunt2dReadIndex(g, w, h) {
+    const d = g.getImageData(0, h >> 1, w, 1).data, bw = w / 8;
+    let k = 0;
+    for (let b = 0; b < 8; b++) { const i = Math.floor(b * bw + bw / 2) * 4; if (d[i] > 128) k |= (1 << b); }
+    return k - 1;   // frame k is drawn as k + 1, so an empty (black) frame reads -1
+  }
+  // A 128x32 H.264 clip of `n` frames at `fps`, frame k carrying k — made the way a phone clip is: constant frame
+  // duration, timestamps on the k/fps grid (the muxer lands them on k * 1920 / 57600, i.e. exactly k/30 at 30 fps).
+  async function hunt2dIndexedClip(n, fps) {
+    const w = 128, h = 32;
+    const muxer = new Mp4Muxer.Muxer({ target: new Mp4Muxer.ArrayBufferTarget(), video: { codec: 'avc', width: w, height: h }, fastStart: 'in-memory' });
+    let encErr = null;
+    const enc = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: e => { encErr = e; } });
+    enc.configure({ codec: 'avc1.42e01e', width: w, height: h, bitrate: 2e6, framerate: fps });
+    const cv = new OffscreenCanvas(w, h), g = cv.getContext('2d');
+    for (let k = 0; k < n; k++) {
+      hunt2dDrawIndex(g, k + 1, w, h);
+      const f = new VideoFrame(cv, { timestamp: Math.round(k * 1e6 / fps), duration: Math.round(1e6 / fps) });
+      enc.encode(f, { keyFrame: k % 10 === 0 }); f.close();
+    }
+    await enc.flush(); enc.close();
+    if (encErr) throw new Error('setup: the fixture clip could not be encoded: ' + encErr);
+    muxer.finalize();
+    return new File([muxer.target.buffer], 'hunt2d-indexed.mp4', { type: 'video/mp4' });
+  }
+  // Demux the video track of an MP4 (moov at either end) and decode EVERY sample; returns the bar index of each frame,
+  // in presentation order.
+  async function hunt2dDecodeMp4(blob) {
+    const buf = new Uint8Array(await blob.arrayBuffer()), dv = new DataView(buf.buffer);
+    const u32 = o => dv.getUint32(o);
+    const typ = o => String.fromCharCode(buf[o], buf[o + 1], buf[o + 2], buf[o + 3]);
+    const kids = (s, e) => { const out = []; let o = s; while (o + 8 <= e) { let sz = u32(o), hdr = 8; const t = typ(o + 4); if (sz === 1) { sz = Number(dv.getBigUint64(o + 8)); hdr = 16; } if (sz === 0) sz = e - o; if (sz < 8) break; out.push({ t: t, b: o + hdr, e: o + sz }); o += sz; } return out; };
+    const moov = kids(0, buf.length).find(b => b.t === 'moov');
+    if (!moov) throw new Error('setup: the file has no moov box, so it is not a finished MP4');
+    for (const trak of kids(moov.b, moov.e).filter(b => b.t === 'trak')) {
+      const md = kids(kids(trak.b, trak.e).find(b => b.t === 'mdia').b, kids(trak.b, trak.e).find(b => b.t === 'mdia').e);
+      if (typ(md.find(b => b.t === 'hdlr').b + 8) !== 'vide') continue;
+      const ts = u32(md.find(b => b.t === 'mdhd').b + 12);
+      const minf = md.find(b => b.t === 'minf');
+      const stbl = kids(minf.b, minf.e).find(b => b.t === 'stbl');
+      const st = kids(stbl.b, stbl.e), box = t => st.find(b => b.t === t);
+      const ent = box('stsd').b + 8, entSize = u32(ent);
+      const w = dv.getUint16(ent + 32), h = dv.getUint16(ent + 34);
+      const avcC = kids(ent + 86, ent + entSize).find(b => b.t === 'avcC');
+      const desc = buf.slice(avcC.b, avcC.e);
+      const codec = 'avc1.' + [desc[1], desc[2], desc[3]].map(x => x.toString(16).padStart(2, '0')).join('');
+      const stsz = box('stsz'), fixed = u32(stsz.b + 4), count = u32(stsz.b + 8);
+      const sizes = []; for (let i = 0; i < count; i++) sizes.push(fixed || u32(stsz.b + 12 + i * 4));
+      const stco = box('stco'), co64 = box('co64'), offs = [];
+      if (stco) { for (let i = 0, n = u32(stco.b + 4); i < n; i++) offs.push(u32(stco.b + 8 + i * 4)); }
+      else { for (let i = 0, n = u32(co64.b + 4); i < n; i++) offs.push(Number(dv.getBigUint64(co64.b + 8 + i * 8))); }
+      const stsc = box('stsc'), sc = []; for (let i = 0, n = u32(stsc.b + 4); i < n; i++) sc.push([u32(stsc.b + 8 + i * 12), u32(stsc.b + 12 + i * 12)]);
+      const stts = box('stts'), dts = []; for (let i = 0, n = u32(stts.b + 4), t = 0; i < n; i++) { const c = u32(stts.b + 8 + i * 8), d = u32(stts.b + 12 + i * 8); for (let k = 0; k < c; k++) { dts.push(t); t += d; } }
+      const ctts = box('ctts'), cto = new Array(count).fill(0);
+      if (ctts) { for (let i = 0, n = u32(ctts.b + 4), k = 0; i < n; i++) { const c = u32(ctts.b + 8 + i * 8), o = dv.getInt32(ctts.b + 12 + i * 8); for (let j = 0; j < c; j++) cto[k++] = o; } }
+      const stss = box('stss'), keys = new Set(); if (stss) for (let i = 0, n = u32(stss.b + 4); i < n; i++) keys.add(u32(stss.b + 8 + i * 4) - 1);
+      const soff = []; let s = 0;
+      for (let c = 0; c < offs.length; c++) {
+        let per = 0; for (let i = sc.length - 1; i >= 0; i--) if (c + 1 >= sc[i][0]) { per = sc[i][1]; break; }
+        let o = offs[c]; for (let k = 0; k < per && s < count; k++) { soff.push(o); o += sizes[s]; s++; }
+      }
+      const cv = new OffscreenCanvas(w, h), g = cv.getContext('2d', { willReadFrequently: true });
+      const got = []; let decErr = null;
+      const dec = new VideoDecoder({ output: f => { g.clearRect(0, 0, w, h); g.drawImage(f, 0, 0); got.push({ ts: f.timestamp, k: hunt2dReadIndex(g, w, h) }); f.close(); }, error: e => { decErr = e; } });
+      dec.configure({ codec: codec, description: desc, codedWidth: w, codedHeight: h });
+      for (let i = 0; i < count; i++) {
+        dec.decode(new EncodedVideoChunk({ type: (!stss || keys.has(i)) ? 'key' : 'delta', timestamp: Math.round((dts[i] + cto[i]) / ts * 1e6), data: buf.subarray(soff[i], soff[i] + sizes[i]) }));
+      }
+      await dec.flush(); dec.close();
+      if (decErr) throw new Error('setup: the file would not decode: ' + decErr);
+      got.sort((a, b) => a.ts - b.ts);
+      return got.map(x => x.k);
+    }
+    throw new Error('setup: the file has no video track');
+  }
+  async function hunt2dLoadWarm(file) {
+    const rec = await FM.loadVideoFile(file);
+    const t0 = Date.now();
+    while (rec.el.readyState < 2 && Date.now() - t0 < 8000) await new Promise(r => setTimeout(r, 30));
+    if (rec.el.readyState < 2) throw new Error('setup: the fixture clip never decoded a frame (readyState ' + rec.el.readyState + ')');
+    return rec;
+  }
+  function hunt2dScene(layers, P) {
+    return scene(layers, { project: Object.assign({ width: 128, height: 32, fps: 30, duration: 3, background: '#000000' }, P || {}) });
+  }
+  function hunt2dClipLayer(rec, made) {
+    const V = FM.makeLayer('video', { name: 'hunt2d clip', x: 64, y: 16, start: 0, duration: 3 });
+    V.trimStart = 0; V.trimEnd = 3;
+    FM.media.set(V.id, rec); made.push(V.id);
+    return V;
+  }
+  async function hunt2dExport(opts) {
+    let blob = null;
+    await FM.exporter.run(Object.assign({ scale: 1, name: 'hunt2d', onProgress: function () {}, onReady: async function (r) { blob = r.blob; } }, opts));
+    if (!blob) throw new Error('setup: the export produced no file');
+    return blob;
+  }
+  // Catch what the app hands to a download link, without anything actually downloading.
+  function hunt2dCatchDownloads() {
+    const blobs = [], names = [];
+    const mk = URL.createObjectURL, click = HTMLAnchorElement.prototype.click;
+    URL.createObjectURL = function (b) { const u = mk.call(URL, b); if (b instanceof Blob) blobs.push({ url: u, blob: b }); return u; };
+    HTMLAnchorElement.prototype.click = function () { if (this.download) { names.push({ name: this.download, blob: (blobs.find(x => x.url === this.href) || {}).blob || null }); return; } return click.call(this); };
+    return { files: names, stop: function () { URL.createObjectURL = mk; HTMLAnchorElement.prototype.click = click; } };
+  }
+
+  /* 690 (HUNT-d export 1) — A 30 FPS CLIP CAME OUT OF THE EXPORT WITH EVERY THIRD FRAME MISSING. Fixed: every
+   * export seek lands half a millisecond INSIDE its frame (FM.frameSeekTarget, js/frames.js) — the account below is
+   * of the bug as found.
+   * run() puts each exported frame on the video by writing `el.currentTime = t` with t = f / fps — exactly ON the
+   * boundary between two source frames. A 30 fps clip's frames sit on k/30 (a phone writes them as 20/600-second
+   * steps, which the browser holds in whole microseconds: 33333, 66667, 100000 …), while the seek target 2/30 =
+   * 0.0666666… is held as 66666 µs — one microsecond BEFORE frame 2 starts. So the seek lands on frame 1. It happens
+   * for every frame whose start rounds up (k = 2, 5, 8, …), i.e. a third of them: measured, the file reads
+   * 0,1,1,3,4,4,6,7,7… — frames 2, 5, 8 … are never in it and the one before each plays twice. The preview plays the
+   * clip natively and shows every frame, so it looks smooth while he edits and judders in the file.
+   * CONTROL: the fixture clip itself decodes as 0..89 in order, which proves the demuxer, the decoder and the bar reader
+   * before anything is blamed on the exporter. The filmstrip is kept off this element (that collision is HUNT-d 2). */
+  test('690 a 30 fps clip exported at 30 fps shows every source frame once, in order', { item: '690', budgetMs: 120000 }, async function () {
+    if (typeof VideoEncoder === 'undefined' || typeof VideoDecoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no file to measure');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, made = [];
+    try {
+      const file = await hunt2dIndexedClip(90, 30);
+      const src = await hunt2dDecodeMp4(file);
+      if (src.length !== 90 || src.some((v, i) => v !== i)) throw new Error('CONTROL: the fixture clip itself reads back as ' + src.join(',') + ' instead of 0..89, so the reader is wrong and nothing below means anything');
+      const rec = await hunt2dLoadWarm(file);
+      rec.stripFrames = [];   // no timeline thumbnails seeking this element — that race is HUNT-d 2, kept out of this one
+      FM.scene = hunt2dScene([hunt2dClipLayer(rec, made)], { duration: 3 });
+      FM.refreshAll();
+      const got = await hunt2dDecodeMp4(await hunt2dExport({ fps: 30 }));
+      if (got.length !== 90) throw new Error('the export has ' + got.length + ' frames, not the 90 of a 3 s project at 30 fps');
+      const wrong = [], never = [];
+      got.forEach((v, i) => { if (v !== i) wrong.push('frame ' + i + ' shows ' + v); });
+      for (let k = 0; k < 90; k++) if (got.indexOf(k) < 0) never.push(k);
+      if (wrong.length) throw new Error(wrong.length + ' of the 90 frames in the exported MP4 show the wrong moment of the clip (' + wrong.slice(0, 5).join(', ') + ' …), and source frames ' + never.slice(0, 8).join(', ') + ' … are not in the file at all — every third frame of a plain 30 fps clip is dropped and the one before it plays twice, so the export judders where the preview plays smoothly. File reads: ' + got.slice(0, 15).join(',') + ' …');
+    } finally {
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 (HUNT-d export 1, the frame cache) — THE SAME EDGE, IN THE CACHE A REVERSED CLIP IS DRAWN FROM.
+   * A reversed (or frame-blend slow-mo) clip is not drawn from the element: prepareCaches decodes it into a frame
+   * cache first, by seeking the element to i / fps for every i — the same frame edges as above. So a third of the
+   * cache held the frame BEFORE the one it was meant to, and a reversed 30 fps clip in the export showed one frame
+   * twice and skipped the next, every three frames, the same judder backwards. The cache's seeks now go through the
+   * same FM.frameSeekTarget.
+   * Expected: frame f of the export draws cache index round((3 - f/30) * 30) = 90 - f (89 at f = 0, the clamp), and
+   * that cache frame must BE source frame 90 - f.
+   * CONTROL: the fixture reads 0..89 in order, as in the forward test. */
+  test('690 a reversed 30 fps clip exported at 30 fps shows every source frame once, backwards', { item: '690', budgetMs: 120000 }, async function () {
+    if (typeof VideoEncoder === 'undefined' || typeof VideoDecoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no file to measure');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, made = [];
+    try {
+      const file = await hunt2dIndexedClip(90, 30);
+      const src = await hunt2dDecodeMp4(file);
+      if (src.length !== 90 || src.some((v, i) => v !== i)) throw new Error('CONTROL: the fixture clip itself reads back as ' + src.join(',') + ' instead of 0..89, so the reader is wrong and nothing below means anything');
+      const rec = await hunt2dLoadWarm(file);
+      rec.stripFrames = [];   // no timeline thumbnails seeking this element while the cache is built
+      const V = hunt2dClipLayer(rec, made);
+      V.reversed = true;
+      FM.clearFrameCache(rec);
+      FM.scene = hunt2dScene([V], { duration: 3 });
+      FM.refreshAll();
+      const got = await hunt2dDecodeMp4(await hunt2dExport({ fps: 30 }));
+      if (got.length !== 90) throw new Error('the export has ' + got.length + ' frames, not the 90 of a 3 s project at 30 fps');
+      const wrong = [], never = [];
+      got.forEach((v, f) => { const want = Math.min(89, 90 - f); if (v !== want) wrong.push('frame ' + f + ' shows ' + v + ' not ' + want); });
+      for (let k = 1; k < 90; k++) if (got.indexOf(k) < 0) never.push(k);
+      if (wrong.length) throw new Error(wrong.length + ' of the 90 frames of the reversed clip in the exported MP4 show the wrong moment (' + wrong.slice(0, 4).join(', ') + ' …), and source frames ' + never.slice(0, 8).join(', ') + ' … are not in the file at all — the frame cache a reversed clip is drawn from holds the frame before on every third edge, so the reversed export judders. File reads: ' + got.slice(0, 15).join(',') + ' …');
+    } finally {
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 (HUNT-d export 2) — EXPORT WHILE THE TIMELINE IS STILL DRAWING A CLIP'S THUMBNAILS, AND THE START OF THE VIDEO
+   * WAS BLACK. Fixed: the export holds every clip's element on its seek lock from before its first frame to after its
+   * last (holdVideoElements, js/exporter.js), and seekVideo no longer takes a 'seeked' fired while the element is still
+   * seeking, or calls an element with no decoded frame already there. The account below is of the bug as found.
+   * HUNT-d 2 — EXPORT WHILE THE TIMELINE IS STILL DRAWING A CLIP'S THUMBNAILS, AND THE START OF THE VIDEO IS BLACK.
+   * Every clip's filmstrip is drawn by SEEKING THE CLIP'S OWN <video> eight times (js/frames.js _extractStrip). It runs
+   * whenever a video row is drawn with no strip yet — on every import, duplicate, paste or replace, and for EVERY clip
+   * each time a project is opened (strips are not saved), one clip after another. frames.js serialises its own users
+   * through the element's seek lock and FM.seekBusy, and the preview stands down for it — but the exporter's seekVideo
+   * takes no lock and asks nothing. So an export started while strips are still being drawn fights them for the same
+   * element: the export's frame lands mid-seek (readyState 1, which the compositor skips in an export, so the frame is
+   * BLACK) or on the thumbnail's moment instead of its own. Measured: 19 to 22 black frames at the start of a 3 s file.
+   * On his phone, with several 4K clips, drawing the strips after opening a project takes seconds — about as long as
+   * it takes to tap Export and Export MP4.
+   * The check allows a frame to be one off its index, so it measures this race and not HUNT-d 1.
+   * CONTROL: the same clip exported again once its filmstrip is finished has no black frame and no frame more than one
+   * away from where it belongs. */
+  test('690 an export started while the timeline is still drawing a clip thumbnails has no black or misplaced frame', { item: '690', budgetMs: 120000 }, async function () {
+    if (typeof VideoEncoder === 'undefined' || typeof VideoDecoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no file to measure');
+    if (!FM.buildClipStrip) throw new Error('setup: the timeline filmstrip builder is gone, so there is nothing to race');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, made = [];
+    const badOf = got => got.map((v, i) => (v < 0 || Math.abs(v - i) > 1) ? i : -1).filter(i => i >= 0);
+    try {
+      const rec = await hunt2dLoadWarm(await hunt2dIndexedClip(90, 30));   // decoded and on screen, like a clip he is looking at
+      /* He presses Export while the strip is being drawn: the export starts the moment the filmstrip's first seek goes
+         out on this element. (Waiting on the element's own event rather than a timer, so a strip queued behind another
+         clip's is still caught when it really starts.) */
+      const firstStripSeek = new Promise(res => {
+        const on = () => { rec.el.removeEventListener('seeking', on); res(true); };
+        rec.el.addEventListener('seeking', on);
+        setTimeout(() => { rec.el.removeEventListener('seeking', on); res(false); }, 30000);   // generous: the strip queue is global, one clip at a time
+      });
+      FM.scene = hunt2dScene([hunt2dClipLayer(rec, made)], { duration: 3 });
+      FM.refreshAll();   // the timeline draws the new row and starts the clip's filmstrip, exactly as it does after an import or on opening a project
+      if (!rec._stripPending && !rec._stripBuilding && FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+      if (!rec._stripPending && !rec._stripBuilding) throw new Error('setup: the timeline did not ask for this clip filmstrip (stripFrames ' + (rec.stripFrames ? rec.stripFrames.length : rec.stripFrames) + '), so the export is not racing anything');
+      if (!(await firstStripSeek) || !rec._stripBuilding) throw new Error('setup: the filmstrip never started seeking this clip (building ' + rec._stripBuilding + ', stripFrames ' + (rec.stripFrames ? rec.stripFrames.length : rec.stripFrames) + '), so the export is not racing anything');
+      const got = await hunt2dDecodeMp4(await hunt2dExport({ fps: 30 }));
+      // CONTROL: once the filmstrip is finished, the same export is clean
+      const t1 = Date.now();
+      while ((rec._stripBuilding || rec.stripFrames === undefined) && Date.now() - t1 < 10000) await new Promise(r => setTimeout(r, 30));
+      const again = await hunt2dDecodeMp4(await hunt2dExport({ fps: 30 }));
+      const againBad = badOf(again);
+      if (again.length !== 90 || againBad.length) throw new Error('CONTROL: with the filmstrip finished the export still has ' + againBad.length + ' black or misplaced frames (' + again.slice(0, 20).join(',') + ' …), so the fault below is not the race');
+      const bad = badOf(got);
+      if (bad.length) {
+        const black = bad.filter(i => got[i] < 0);
+        throw new Error('exported while the timeline was still drawing the clip thumbnails, ' + bad.length + ' of the 90 frames came out wrong — ' + black.length + ' of them BLACK (frames ' + black.slice(0, 6).join(', ') + (black.length > 6 ? ' …' : '') + ')' + (bad.length > black.length ? ' and ' + (bad.length - black.length) + ' showing another moment of the clip' : '') + '. So the start of the video in his file is black or jumps about, with nothing said. File reads: ' + got.slice(0, 24).join(',') + ' …');
+      }
+    } finally {
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 (HUNT-d export 2, the other half) — AN EXPORT SEEK ANSWERS ONLY WHEN ITS OWN FRAME IS THERE.
+   * Holding the element's lock keeps the filmstrip from seeking DURING the export, but the strip's last act is to
+   * put the element back where it was, and that write can still be landing when the export takes over. Two ways
+   * that used to end in a black frame, both in seekVideo:
+   *   (a) currentTime reports a seek's target the moment it is written, so an element still SEEKING to the frame
+   *       the export wanted read as already there, and the frame was drawn from an element with nothing decoded;
+   *   (b) a 'seeked' already queued for somebody else's seek was taken as this one landing.
+   * Neither can be made to happen on cue inside a real export, so this drives the exporter's own seekVideo
+   * (FM._exportSeekVideo) into each, and reads the element at the instant it answers: it must not be seeking.
+   * The stray 'seeked' in (b) is dispatched by hand, which is exactly what a stale one looks like to a listener. */
+  test('690 an export seek answers only once its own frame is there, not while the element is still seeking', { item: '690', budgetMs: 60000 }, async function () {
+    if (!FM._exportSeekVideo || !FM.frameSeekTarget) throw new Error('setup: the exporter seek seam or FM.frameSeekTarget is gone');
+    if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so the fixture clip cannot be made');
+    const rec = await hunt2dLoadWarm(await hunt2dIndexedClip(90, 30));
+    const el = rec.el;
+    const settle = async t => { await new Promise(r => { const on = () => { if (el.seeking) return; el.removeEventListener('seeked', on); r(); }; el.addEventListener('seeked', on); el.currentTime = t; setTimeout(r, 3000); }); if (el.seeking || el.readyState < 2) throw new Error('setup: the clip did not settle at ' + t + ' s'); };
+    const at = async p => { await p; return { seeking: el.seeking, ready: el.readyState, t: el.currentTime }; };
+    try {
+      // (a) somebody else is already seeking the element to exactly the export's target
+      await settle(2.5);
+      el.currentTime = FM.frameSeekTarget(1, rec.duration);
+      if (!el.seeking) throw new Error('setup: writing currentTime did not start a seek, so there is nothing under way to catch');
+      const a = await at(FM._exportSeekVideo(rec, 1, 'test clip'));
+      if (a.seeking || a.ready < 2) throw new Error('(a) the export seek answered while the element was still seeking to its frame (seeking ' + a.seeking + ', readyState ' + a.ready + ') — it took currentTime, which reports a seek target the moment it is written, as the frame being there, so the compositor draws nothing and the frame is black in the file');
+      // (b) a stray 'seeked' arrives while the export seek is still under way
+      await settle(2.5);
+      const pb = FM._exportSeekVideo(rec, 0.5, 'test clip');
+      if (!el.seeking) throw new Error('setup: the export seek did not start one, so there is nothing to answer too early');
+      el.dispatchEvent(new Event('seeked'));
+      const b = await at(pb);
+      if (b.seeking || b.ready < 2) throw new Error('(b) the export seek answered on a seeked event that was not its own, while the element was still seeking (seeking ' + b.seeking + ', readyState ' + b.ready + ') — a queued seeked from the filmstrip would end this frame mid-seek, and the frame is black in the file');
+      if (Math.abs(b.t - FM.frameSeekTarget(0.5, rec.duration)) > 1e-3) throw new Error('(b) the export seek landed at ' + b.t + ' s, not at its target');
+    } finally {
+      try { el.pause(); el.removeAttribute('src'); el.load(); } catch (e) {}   // never registered on a layer, so just let the element go
+    }
+  });
+
+  /* 690 (HUNT-d export 3) — A GIF PLAYED AT THE WRONG SPEED. Fixed: runGif gives each frame the hundredths from its
+   * start to the next frame's start on one exact clock (3, 4, 3 … at 30 fps), and samples above 50 fps at 50, the
+   * fastest a GIF can honestly play. Also checked now: a 30 fps GIF keeps all 60 of its frames, and one asked for
+   * at 60 fps is written as 100 frames of 2 cs. The account below is of the bug as found.
+   * HUNT-d 3 — A GIF PLAYS AT THE WRONG SPEED.
+   * GIF frame delays are whole hundredths of a second, and runGif hands each frame 1000 / fps ms, which js/gif-encode.js
+   * rounds ON ITS OWN, every frame, with no carry: 33.3 ms becomes 3 cs (30 ms), 16.7 ms becomes 2 cs (20 ms), 8.3 ms
+   * is floored to 2 cs. Read out of the file's own bytes, a 2 s project exports as a GIF that plays for 1.80 s at
+   * 30 fps (10 percent fast — and 30 is the default project rate), 2.40 s at 60 fps (20 percent slow) and 4.80 s at
+   * 120 fps. The motion in a GIF does not match the project he made, and a looping GIF drifts against anything timed.
+   * CONTROL: at 25 fps the delay is exactly 4 cs, and the same parser reads that GIF as 2.00 s — so the reader is right. */
+  test('690 a GIF lasts as long as the project at 25, 30, 60 and 120 fps', { item: '690', budgetMs: 120000 }, async function () {
+    if (!FM.exporter || !FM.exporter.runGif || !FM.gifEncoder) throw new Error('setup: the GIF exporter is not reachable');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, dl = hunt2dCatchDownloads();
+    const delaysOf = async blob => { const b = new Uint8Array(await blob.arrayBuffer()), out = []; for (let i = 0; i + 7 < b.length; i++) if (b[i] === 0x21 && b[i + 1] === 0xF9 && b[i + 2] === 4) { out.push(b[i + 4] | (b[i + 5] << 8)); i += 7; } return out; };
+    const lengthAt = async fps => {
+      dl.files.length = 0;
+      await FM.exporter.runGif({ scale: 1, fps: fps, name: 'hunt2d', onProgress: function () {} });
+      const f = dl.files[dl.files.length - 1];
+      if (!f || !f.blob) throw new Error('setup: the ' + fps + ' fps GIF export handed nothing to the download link');
+      const d = await delaysOf(f.blob);
+      return { frames: d.length, secs: d.reduce((a, x) => a + x, 0) / 100 };
+    };
+    try {
+      const box = FM.makeLayer('shape', { name: 'hunt2d box', shape: 'rect', x: 32, y: 32, shapeW: 20, shapeH: 20, fill: '#3a7bd5', start: 0, duration: 2 });
+      FM.scene = scene([box], { project: { width: 64, height: 64, fps: 30, duration: 2, background: '#000000' } });
+      FM.refreshAll();
+      const c25 = await lengthAt(25);
+      if (c25.frames !== 50 || Math.abs(c25.secs - 2) > 0.001) throw new Error('CONTROL: the 25 fps GIF reads as ' + c25.frames + ' frames lasting ' + c25.secs + ' s, not 50 frames and 2.00 s, so the delay reader is wrong');
+      const g30 = await lengthAt(30), g60 = await lengthAt(60), g120 = await lengthAt(120);
+      const off = [[30, g30], [60, g60], [120, g120]].filter(x => Math.abs(x[1].secs - 2) > 0.04);
+      if (off.length) throw new Error('a 2 s project exported as a GIF plays for ' + off.map(x => x[1].secs.toFixed(2) + ' s at ' + x[0] + ' fps').join(', ') + ' — each frame delay is rounded to whole hundredths of a second on its own, so a 30 fps GIF runs 10 percent fast and a 60 fps one 20 percent slow; the animation in the GIF is not the speed he made it');
+      // …and the speed was not bought by throwing frames away where a GIF can show them all
+      if (g30.frames !== 60) throw new Error('the 30 fps GIF of a 2 s project has ' + g30.frames + ' frames, not 60 — its length is right only because frames were dropped');
+      if (g60.frames !== 100 || g120.frames !== 100) throw new Error('above 50 fps a GIF should be sampled at 50 fps, the fastest a GIF can play: 100 frames of 2 cs for 2 s, but 60 fps gave ' + g60.frames + ' frames and 120 fps ' + g120.frames);
+    } finally {
+      dl.stop();
+      FM.scene = saved;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 (HUNT-d export 4) — CUSTOM SIZE WAS OFFERED FOR GIF AND PNG FRAMES, AND IGNORED BY BOTH. Fixed: runExport
+   * hands outW/outH to runGif and runFrames too, and both contain the project in it with FM.exportFitRect, as the MP4
+   * does. Also checked now: the picture is CONTAINED, not stretched — in the 200 x 200 file the 60 x 60 box is square
+   * (37.5 px), so a point 25 px above its centre is background; stretched, the box would be 67 px tall and cover it.
+   * The account below is of the bug as found.
+   * HUNT-d 4 — CUSTOM SIZE IS OFFERED FOR GIF AND PNG FRAMES, AND IGNORED BY BOTH.
+   * The export dialog shows Resolution → Custom size… and its width/height boxes for every picture format. runExport
+   * reads them into outW/outH — and hands them to exporter.run (MP4) only; runGif and runFrames get the scale (1 for a
+   * custom size) and nothing else, and size themselves off the project. Measured through the real dialog: Custom size
+   * 200 x 200 on a 320 x 180 project, and both the GIF and the PNG frames came out 320 x 180, with the 200 x 200 still on
+   * screen. A square GIF for a profile picture or a post, which is what the box is for, cannot be made.
+   * CONTROL: the Custom size row really is on screen for the format when Export is pressed, so it was offered. */
+  test('690 a Custom size set in the export dialog is the size of the GIF and of the PNG frames, the project contained in it', { item: '690', budgetMs: 120000 }, async function () {
+    if (!FM.showExportDialog || !FM.exporter || !FM.exporter.runGif || !FM.exporter.runFrames) throw new Error('setup: the export dialog or the GIF / frames exporters are not reachable');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, dl = hunt2dCatchDownloads();
+    let prefs0 = null; try { prefs0 = localStorage.getItem('fm.exportPrefs'); } catch (e) {}
+    const $ = id => document.getElementById(id);
+    // [width, height, the picture itself] — the first GIF frame, or the first PNG cut out of the store-only zip
+    const sizeOf = async (fmt, blob) => {
+      const b = new Uint8Array(await blob.arrayBuffer());
+      if (fmt === 'gif') return [b[6] | (b[7] << 8), b[8] | (b[9] << 8), blob];
+      for (let i = 0; i + 12 < b.length; i++) if (b[i] === 0x49 && b[i + 1] === 0x48 && b[i + 2] === 0x44 && b[i + 3] === 0x52) {
+        const dv = new DataView(b.buffer);
+        let e = i; while (e + 3 < b.length && !(b[e] === 0x49 && b[e + 1] === 0x45 && b[e + 2] === 0x4E && b[e + 3] === 0x44)) e++;
+        return [dv.getUint32(i + 4), dv.getUint32(i + 8), new Blob([b.slice(i - 12, e + 8)], { type: 'image/png' })];
+      }
+      throw new Error('setup: the frames zip holds no PNG');
+    };
+    // what colour the file has at (x, y): 'box' (the blue square), 'bg' (black) or something else
+    const colourAt = async (pic, x, y) => {
+      const bmp = await createImageBitmap(pic), c = new OffscreenCanvas(bmp.width, bmp.height), g = c.getContext('2d');
+      g.drawImage(bmp, 0, 0); const d = g.getImageData(x, y, 1, 1).data;
+      return (d[2] > 150 && d[0] < 120) ? 'box' : (d[0] < 40 && d[1] < 40 && d[2] < 40) ? 'bg' : 'rgb(' + d[0] + ',' + d[1] + ',' + d[2] + ')';
+    };
+    const through = async fmt => {
+      dl.files.length = 0;
+      await FM.showExportDialog();
+      if ($('export-dialog').classList.contains('hidden')) throw new Error('setup: the export dialog did not open');
+      $('exp-format').value = fmt; $('exp-format').dispatchEvent(new Event('change'));
+      $('exp-range').value = 'whole';
+      $('exp-res').value = 'custom'; $('exp-res').dispatchEvent(new Event('change'));
+      $('exp-cw').value = '200'; $('exp-ch').value = '200';
+      const row = $('exp-custom-field');
+      if (!row || row.classList.contains('hidden') || !row.getBoundingClientRect().height) throw new Error('CONTROL: the Custom size row is not on screen for ' + fmt + ', so the dialog never offered it');
+      $('exp-go').click();
+      const t0 = Date.now();
+      while (!dl.files.length && Date.now() - t0 < 30000) await new Promise(r => setTimeout(r, 40));
+      const f = dl.files[0];
+      if (!f || !f.blob) throw new Error('setup: the ' + fmt + ' export handed nothing to the download link');
+      await new Promise(r => setTimeout(r, 1100));   // the progress card lingers 900 ms on Done
+      return sizeOf(fmt, f.blob);
+    };
+    try {
+      const box = FM.makeLayer('shape', { name: 'hunt2d box', shape: 'rect', x: 160, y: 90, shapeW: 60, shapeH: 60, fill: '#3a7bd5', start: 0, duration: 0.3 });
+      FM.scene = scene([box], { project: { width: 320, height: 180, fps: 10, duration: 0.3, background: '#000000' } });
+      FM.selectLayer(null); FM.refreshAll();
+      const gif = await through('gif');
+      const png = await through('frames');
+      const wrong = [['the GIF', gif], ['the PNG frames', png]].filter(x => x[1][0] !== 200 || x[1][1] !== 200);
+      if (wrong.length) throw new Error('Custom size 200 x 200 was set and on screen in the export dialog, and ' + wrong.map(x => x[0] + ' came out ' + x[1][0] + ' x ' + x[1][1]).join(' and ') + ' — the project size. The box is offered for these formats and silently ignored, so a square GIF cannot be made');
+      // contained, not stretched: centre is the box, 25 px above it is background (stretched, the box reaches it)
+      for (const x of [['the GIF', gif], ['the PNG frames', png]]) {
+        const mid = await colourAt(x[1][2], 100, 100), above = await colourAt(x[1][2], 100, 75);
+        if (mid !== 'box' || above !== 'bg') throw new Error(x[0] + ' at 200 x 200 is not the project contained in the frame: the centre reads ' + mid + ' (want box) and 25 px above it reads ' + above + ' (want bg) — the picture was stretched or misplaced to fill the custom size');
+      }
+    } finally {
+      dl.stop();
+      try { if (prefs0 == null) localStorage.removeItem('fm.exportPrefs'); else localStorage.setItem('fm.exportPrefs', prefs0); } catch (e) {}
+      try { $('exp-format').value = 'mp4'; $('exp-res').value = '1'; $('exp-res').dispatchEvent(new Event('change')); $('exp-cw').value = ''; $('exp-ch').value = ''; if (FM._syncExportFormat) FM._syncExportFormat(); } catch (e) {}
+      try { $('export-dialog').classList.add('hidden'); $('export-overlay').classList.add('hidden'); } catch (e) {}
+      FM.scene = saved;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+
+  /* ═══ HUNT-e — KEYFRAMES, MASKS AND POINT EDITING, WITH A REAL FINGER (25 Sep, #690) ═══════════════════════════════
+   * Four findings of the second real-input hunt, each written as a failing test FIRST, confirmed by a skeptic, then
+   * fixed (js/timeline.js liveStackAt + easeKfOf, js/mask-tool.js followPlayhead + grab, js/point-edit.js grab,
+   * js/motion-path.js GRAB_SLOP). Every gesture goes through tests/_cdp.py (realInput924) as trusted touches — capture,
+   * hit-testing and the browser's own touch -> pointer pipeline — and each test carries a control proving the gesture
+   * really engaged, so a red is the app. */
+  function huntEWait(ms) { return new Promise(r => setTimeout(r, ms)); }
+  function huntEJ(o) { return JSON.stringify(o).replace(/"/g, "'"); }   // a failure message must not carry a double quote
+  function huntEDowns() {
+    const downs = [];
+    const on = (e) => { const t = e.target; downs.push({ trusted: e.isTrusted, kind: e.pointerType, id: (t && t.id) || '', cls: t && t.className && t.className.baseVal === undefined ? String(t.className) : (t ? t.tagName : '?') }); };
+    window.addEventListener('pointerdown', on, true);
+    return { downs: downs, stop: () => window.removeEventListener('pointerdown', on, true) };
+  }
+  function huntECleanTools() {
+    try { if (FM.contextMenu) FM.contextMenu.hide(); } catch (e) {}
+    try { if (FM.maskTool && FM.maskTool.isActive()) FM.maskTool.stop(); } catch (e) {}
+    try { if (FM.pointEdit && FM.pointEdit.isActive()) FM.pointEdit.stop(); } catch (e) {}
+    try { if (FM.motionPath && FM.motionPath.isActive()) FM.motionPath.stop(); } catch (e) {}
+    try { FM.timeline._abortGestures(); FM.timeline.stopMomentum(); } catch (e) {}
+  }
+  function huntERestore(saved) {
+    huntECleanTools();
+    FM.scene = saved;
+    try { FM.inspector.openCategory('home'); FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
+  }
+  // A layer animated the way the Position diamond animates one: X AND Y keyed together, at the same times.
+  async function huntEPosFixture() {
+    huntECleanTools();
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const L = FM.makeLayer('shape', { name: 'HUNTe pos', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#e0245e', start: 0, duration: 6 });
+    L.transform.x = { kf: [{ t: 1, v: 100, e: 'linear' }, { t: 3, v: 500, e: 'linear' }, { t: 5, v: 300, e: 'linear' }] };
+    L.transform.y = { kf: [{ t: 1, v: 300, e: 'linear' }, { t: 3, v: 900, e: 'linear' }, { t: 5, v: 600, e: 'linear' }] };
+    FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+    if (FM.pause) FM.pause();
+    FM.refreshAll(); FM.selectLayer(L.id);
+    await huntEWait(250);
+    FM.inspector.openCategory('transform'); FM._mtMode = 'move';
+    FM.setTime(2); FM.timeline.rebuild(); FM.timeline.updatePlayhead();
+    await huntEWait(300);
+    return L;
+  }
+  function huntELiveDotsAt(t) {
+    return [].filter.call(document.querySelectorAll('#tl-tracks .kf-dot.kf-live'), d => Math.abs(parseFloat(d.dataset.t) - t) < 1e-3);
+  }
+  function huntEMenuItem(label) {
+    const m = document.getElementById('ctx-menu');
+    if (!m || m.classList.contains('hidden')) return null;
+    return [].filter.call(m.querySelectorAll('.ctx-item'), b => b.textContent.trim() === label)[0] || null;
+  }
+  function huntETap(x, y) { return [{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 0 }]; }
+  function huntEHold(x, y) { return [{ t: 'touchStart', x: x, y: y, ms: 650 }, { t: 'touchEnd', x: x, y: y, ms: 0 }]; }
+
+  test('690 the Position keyframe diamond is one diamond — a hold-and-drag moves X and Y together, Delete keyframe removes both, and a picked X still moves alone', { item: '690', budgetMs: 90000 }, async function () {
+    /* The Position ◆ in Move & Transform keys X and Y TOGETHER (inspector.js moveTransformPanel: with no row picked, a
+       plain position keyframe keys x and y together). The timeline draws ONE DIAMOND PER PROPERTY (timeline.js,
+       keyframe diamonds) — so every position keyframe is two live diamonds stacked on the same pixel. The hold-and-drag
+       carried only the diamond on top (kfs = [entry.kf]), and the hold menu Delete keyframe removed only that one
+       (deleteKeyframesAt(layer, tt, entry.prop)). He sees one diamond: dragged, a second one was left behind where it
+       was; deleted, it was still there. That is his #625 word for word — Sometimes I try to move key frames and it just
+       duplicates them and sometimes I try to delete them and I cant — by a route the v13.75 fix never covered.
+       Fixed by liveStackAt: a gesture on a live diamond acts on every LIVE keyframe at its time. Part 3 guards the other
+       half of what he asked for (v4.09 / v5.42: every property owns its keyframes) — with X's name tapped only X is
+       live, and the same drag must leave Y where it was. */
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          // CONTROL: the Position ◆ really does key X and Y together, so the fixture is what his taps make.
+          {
+            let L0 = await huntEPosFixture();
+            L0.transform.x = 300; L0.transform.y = 300;
+            FM.setTime(1); FM.inspector.refresh(); await huntEWait(150);
+            const kb = document.querySelector('#inspector-panel .mt-kf, .mt-kf');
+            if (!kb) throw new Error('setup: no Position keyframe button in Move and Transform');
+            kb.click(); await huntEWait(150);
+            L0 = FM.scene.layers[0];
+            if (!(FM.isAnimated(L0.transform.x) && FM.isAnimated(L0.transform.y))) throw new Error('CONTROL: the Position keyframe button did not key X and Y together (x ' + huntEJ(L0.transform.x) + ', y ' + huntEJ(L0.transform.y) + '), so this fixture is not what his taps make');
+          }
+
+          // 1. HOLD, THEN DRAG IT 30px RIGHT
+          let L = await huntEPosFixture();
+          let dots = huntELiveDotsAt(3);
+          if (dots.length < 1) throw new Error('setup: no live diamond at 3 s with Move and Transform open');
+          const lefts = dots.map(d => Math.round(d.getBoundingClientRect().left));
+          let r = dots[dots.length - 1].getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+          if (cx > 370 || cx < 10 || cy > 740) throw new Error('setup: the diamond is at ' + Math.round(cx) + ',' + Math.round(cy) + ', out of reach of real input');
+          /* what is ACTUALLY under the point the finger will land on — a leftover overlay from an earlier test reads here */
+          const over = document.elementFromPoint(cx, cy);
+          if (over && !(over.closest && over.closest('.kf-dot'))) {
+            const chain = []; for (let n = over; n && chain.length < 5; n = n.parentElement) chain.push(n.tagName + (n.id ? '#' + n.id : '') + (typeof n.className === 'string' && n.className ? '.' + n.className.trim().split(/\s+/).join('.') : ''));
+            throw new Error('setup: the diamond at ' + Math.round(cx) + ',' + Math.round(cy) + ' is covered by ' + chain.join(' < ') + ' — something an earlier test left on screen');
+          }
+          const D = huntDowns();
+          try {
+            await realInput924([
+              { t: 'touchStart', x: cx, y: cy, ms: 650 },
+              { t: 'touchMove', x: cx + 10, y: cy, ms: 40 },
+              { t: 'touchMove', x: cx + 20, y: cy, ms: 40 },
+              { t: 'touchMove', x: cx + 30, y: cy, ms: 120 },
+              { t: 'touchEnd', x: cx + 30, y: cy, ms: 0 },
+            ], 'a hold, then a 30px drag of the Position diamond at 3 s');
+          } finally { D.stop(); }
+          await huntEWait(350);
+          if (!D.downs.length || !D.downs[0].trusted || D.downs[0].kind !== 'touch' || !/kf-dot/.test(D.downs[0].cls)) throw new Error('CONTROL: the press was not a trusted touch on the diamond (' + huntEJ(D.downs) + ')');
+          const xs = L.transform.x.kf.map(k => k.t), ys = L.transform.y.kf.map(k => k.t);
+          const xMid = xs.filter(t => t > 1.5 && t < 4.5), yMid = ys.filter(t => t > 1.5 && t < 4.5);
+          const movedAny = xMid.concat(yMid).some(t => Math.abs(t - 3) > 1e-6);
+          if (!movedAny) throw new Error('CONTROL: a hold and a 30px drag moved neither keyframe (x ' + xs.join(', ') + ' / y ' + ys.join(', ') + '), so this test cannot judge the pair');
+          const bad = [];
+          if (xMid.length !== 1 || yMid.length !== 1 || Math.abs(xMid[0] - yMid[0]) > 1e-6) {
+            bad.push('he held the Position keyframe diamond at 3 s and dragged it right: X now has its keyframes at ' + xs.map(t => t.toFixed(3)).join(', ') + ' s and Y at ' + ys.map(t => t.toFixed(3)).join(', ') +
+              ' s — only one of the two stacked diamonds moved (' + dots.length + ' live diamonds sat at 3 s, lefts ' + lefts.join('/') + '), so a second diamond is left behind where he picked it up (his #625: it just duplicates them) and the layer now reaches X and Y at different times');
+          }
+
+          // 2. HOLD FOR THE MENU, THEN DELETE KEYFRAME
+          L = await huntEPosFixture();
+          dots = huntELiveDotsAt(3);
+          r = dots[dots.length - 1].getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2;
+          await realInput924(huntEHold(cx, cy), 'a still hold on the Position diamond at 3 s');
+          await huntEWait(450);
+          if (!huntCtxUp()) throw new Error('CONTROL: a still 0.65 s hold on the Position diamond did not open its menu, so the delete cannot be judged');
+          const del = huntEMenuItem('Delete keyframe');
+          if (!del) throw new Error('CONTROL: the keyframe menu has no Delete keyframe item');
+          const dr = del.getBoundingClientRect();
+          await realInput924(huntETap(dr.left + dr.width / 2, dr.top + dr.height / 2), 'tapping Delete keyframe');
+          await huntEWait(400);
+          const xHas = L.transform.x && FM.isAnimated(L.transform.x) && L.transform.x.kf.some(k => Math.abs(k.t - 3) < 1e-3);
+          const yHas = L.transform.y && FM.isAnimated(L.transform.y) && L.transform.y.kf.some(k => Math.abs(k.t - 3) < 1e-3);
+          if (xHas && yHas) throw new Error('CONTROL: tapping Delete keyframe removed nothing at all, so the tap did not reach the menu');
+          const left = huntELiveDotsAt(3).length;
+          if (xHas || yHas || left) bad.push('he held the same diamond and chose Delete keyframe: a diamond is still at 3 s (' + (xHas ? 'X' : 'Y') + ' kept its keyframe there, ' + left + ' live diamond(s) left) — he has to delete it a second time, his #625: sometimes I try to delete them and I cant');
+
+          // 3. ONE PROPERTY'S KEYFRAMES ARE STILL ITS OWN: tap X's name, and the same hold-and-drag moves X alone
+          L = await huntEPosFixture();
+          const xName = [].filter.call(document.querySelectorAll('#inspector .mt-vbox-lab'), n => n.textContent.trim() === 'X')[0];
+          if (!xName || !xName.classList.contains('kf-selectable')) throw new Error('setup: no tappable X name in Move and Transform');
+          xName.click(); await huntEWait(250);
+          dots = huntELiveDotsAt(3);
+          if (dots.length !== 1) throw new Error('CONTROL: with X picked, ' + dots.length + ' live diamonds sit at 3 s — want X alone, so the narrowing is not what this measures');
+          r = dots[0].getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2;
+          await realInput924([
+            { t: 'touchStart', x: cx, y: cy, ms: 650 },
+            { t: 'touchMove', x: cx + 10, y: cy, ms: 40 },
+            { t: 'touchMove', x: cx + 20, y: cy, ms: 40 },
+            { t: 'touchMove', x: cx + 30, y: cy, ms: 120 },
+            { t: 'touchEnd', x: cx + 30, y: cy, ms: 0 },
+          ], 'a hold, then a 30px drag of the X diamond at 3 s with X picked');
+          await huntEWait(350);
+          const xs3 = L.transform.x.kf.map(k => k.t), ys3 = L.transform.y.kf.map(k => k.t);
+          if (!xs3.some(t => t > 3.1 && t < 4.5)) throw new Error('CONTROL: with X picked, the hold and 30px drag did not move X (x ' + xs3.join(', ') + '), so the narrowing cannot be judged');
+          if (!ys3.some(t => Math.abs(t - 3) < 1e-6)) bad.push('with only X picked, dragging its diamond moved Y too (y ' + ys3.map(t => t.toFixed(3)).join(', ') + ' s) — a picked property no longer owns its keyframes');
+          if (bad.length) throw new Error(bad.join('; AND '));
+        });
+      }, 380);
+    } finally { huntERestore(saved); }
+  });
+
+  test('690 the mask editor follows the playhead — after a scrub its outline is the frame on screen, and dragging a point there keeps the rest of that frame', { item: '690', budgetMs: 60000 }, async function () {
+    /* js/mask-tool.js seeded its working points ONCE, in open(), from the path at the playhead — and nothing reseeded them
+       when the playhead moved: draw() only reseeded when the mask OBJECT changed (undo / load). So with an animated mask
+       (the AE-style roto its own header advertises: edits write into the keyframe at the playhead), he scrubbed to the
+       next frame he wanted to fix and the teal outline stayed where the mask was on the frame he opened it on, while the
+       mask itself had moved on. Touching a handle there made flush() write the WHOLE stale outline into a new keyframe at
+       the playhead: that frame snapped back to the old frame's shape with one point moved, and the roto he had there was
+       gone. Fixed by followPlayhead (draw() and onDown re-read an animated path whenever the playhead has moved). */
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          huntECleanTools();
+          if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+          const L = FM.makeLayer('shape', { name: 'HUNTe mask', shape: 'rect', x: 540, y: 960, shapeW: 1080, shapeH: 1920, fill: '#3b82f6', start: 0, duration: 6 });
+          const A = [[200, 300], [600, 300], [600, 700], [200, 700]], B = [[480, 1100], [880, 1100], [880, 1500], [480, 1500]];
+          const m = FM.masks.make('add');
+          m.path = { kf: [{ t: 0, v: A.map(p => p.slice()), e: 'linear' }, { t: 4, v: B.map(p => p.slice()), e: 'linear' }] };
+          L.masks = [m];
+          FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+          if (FM.pause) FM.pause();
+          FM.setTime(0); FM.refreshAll(); FM.selectLayer(L.id); FM.timeline.rebuild(); FM.timeline.updatePlayhead();
+          await huntEWait(300);
+          FM.maskTool.open(L.id, m.id);
+          await huntEWait(350);
+          const far = (a, b) => { let d = 0; for (let i = 0; i < Math.min(a.length, b.length); i++) d = Math.max(d, Math.hypot(a[i][0] - b[i][0], a[i][1] - b[i][1])); return a.length !== b.length ? Infinity : d; };
+          // CONTROL: on the frame it opened on, the editor's outline IS the mask.
+          if (far(FM.maskTool._points(), A) > 0.5) throw new Error('CONTROL: opened at 0 s, the mask editor does not hold the 0 s shape (' + huntEJ(FM.maskTool._points()) + ')');
+
+          // He scrubs on with a real swipe along his clip, clear of every diamond.
+          const clip = [].filter.call(document.querySelectorAll('#tl-tracks .clip'), c => c.dataset.id === L.id)[0];
+          if (!clip) throw new Error('setup: the masked layer has no clip on the timeline');
+          const cr = clip.getBoundingClientRect(), cy = cr.top + cr.height / 2;
+          const dotXs = [].map.call(document.querySelectorAll('#tl-tracks .kf-dot'), q => { const b = q.getBoundingClientRect(); return b.left + b.width / 2; });
+          let x0 = null;
+          for (let xx = Math.min(cr.right - 24, 360); xx > Math.max(cr.left + 24, 100); xx -= 4) if (dotXs.every(dx => Math.abs(dx - xx) > 34)) { x0 = xx; break; }
+          if (x0 == null || cy > 740) throw new Error('setup: no stretch of the clip is clear of the diamonds to swipe on (clip ' + Math.round(cr.left) + '..' + Math.round(cr.right) + ' at y ' + Math.round(cy) + ')');
+          const sw = [{ t: 'touchStart', x: x0, y: cy, ms: 40 }];
+          for (let k = 1; k <= 10; k++) sw.push({ t: 'touchMove', x: x0 - 8 * k, y: cy, ms: 30 });
+          sw.push({ t: 'touchEnd', x: x0 - 80, y: cy, ms: 0 });
+          const D = huntDowns();
+          try { await realInput924(sw, 'the swipe along the timeline'); } finally { D.stop(); }
+          await huntEWait(700);
+          try { FM.timeline.stopMomentum(); } catch (e) {}
+          await huntEWait(100);
+          const t1 = FM.time;
+          if (!D.downs.length || !D.downs[0].trusted || D.downs[0].kind !== 'touch') throw new Error('CONTROL: the swipe was not a trusted touch (' + huntEJ(D.downs) + ')');
+          if (!(t1 > 0.4 && t1 < 3.9)) throw new Error('CONTROL: an 80px swipe on the clip moved the playhead from 0 s to ' + t1.toFixed(2) + ' s — it has to land between the two mask keyframes (0 s and 4 s) for this test to judge anything');
+          if (!FM.maskTool.isActive()) throw new Error('setup: scrubbing closed the mask editor');
+          const want = FM.evalMaskPath(m, t1).map(p => p.slice());
+          const have = FM.maskTool._points();
+          const bad = [];
+          const off = far(have, want);
+          if (off > 2) bad.push('with the mask editor open he scrubbed from 0 s to ' + t1.toFixed(2) + ' s: the mask moved on, but the teal outline and its handles stayed ' + Math.round(off) + ' px (project) away, on the 0 s shape — he is editing a shape that is not on screen');
+
+          // He grabs the first handle WHERE THE EDITOR DRAWS IT and drags it 40px right.
+          const cv = document.getElementById('preview'), ov = document.getElementById('mask-overlay');
+          if (!cv || !ov) throw new Error('setup: no mask overlay on the canvas');
+          const orr = ov.getBoundingClientRect(), o = FM.projectToOverlay(cv, have[0][0], have[0][1]);
+          const px = orr.left + o.x, py = orr.top + o.y;
+          if (px < 8 || px > 330 || py < 8 || py > 740) throw new Error('setup: the handle is drawn at ' + Math.round(px) + ',' + Math.round(py) + ', out of reach of real input');
+          const D2 = huntEDowns();
+          try {
+            await realInput924([
+              { t: 'touchStart', x: px, y: py, ms: 60 },
+              { t: 'touchMove', x: px + 10, y: py, ms: 30 }, { t: 'touchMove', x: px + 20, y: py, ms: 30 },
+              { t: 'touchMove', x: px + 30, y: py, ms: 30 }, { t: 'touchMove', x: px + 40, y: py, ms: 60 },
+              { t: 'touchEnd', x: px + 40, y: py, ms: 0 },
+            ], 'dragging the first mask handle');
+          } finally { D2.stop(); }
+          await huntEWait(300);
+          if (!D2.downs.length || !D2.downs[0].trusted || D2.downs[0].id !== 'mask-overlay') throw new Error('CONTROL: the drag did not land on the mask overlay (' + huntEJ(D2.downs) + ')');
+          const after = FM.evalMaskPath(m, t1);
+          const movedFirst = Math.hypot(after[0][0] - have[0][0], after[0][1] - have[0][1]);
+          if (!(movedFirst > 20 / FM.previewDispScale() * 0.5)) throw new Error('CONTROL: the 40px drag did not move the handle it started on (' + movedFirst.toFixed(1) + ' project px), so the write cannot be judged');
+          const rest = far(after.slice(1), want.slice(1));
+          if (rest > 2) bad.push('then he dragged one handle 40px there: the mask at ' + t1.toFixed(2) + ' s jumped ' + Math.round(rest) + ' px (project) — the other three points were overwritten with the 0 s shape, a keyframe of the wrong frame was written at the playhead, and the roto he had there is gone');
+          if (bad.length) throw new Error(bad.join('; AND '));
+        });
+      }, 380);
+    } finally { huntERestore(saved); }
+  });
+
+  test('690 a tap to select a point leaves it where it was, and a drag moves it by the finger travel — Customise Points, a mask point and a motion path dot', { item: '690', budgetMs: 90000 }, async function () {
+    /* All three on-canvas point editors placed the point AT THE FINGER on every move — point-edit.js onMove
+       (p[0] = loc.u), mask-tool.js onMove (p[0] = pp.x) and motion-path.js onMove (setProp x = pp.x) — with no slop.
+       Their touch targets are deliberately generous (26px, 16px, 20px), because a fingertip never lands dead centre;
+       and a real finger always trembles a pixel or two while it is down. So a TAP just to select a point — to read its
+       X and Y, switch it to a curve, or use the nudge pad — jumped it to wherever the fingertip landed, and the release
+       wrote that into undo. The v16.94 hunt fixed exactly this on the keyframe diamonds; the point editors kept it.
+       Fixed by a grab in each: a touch is ignored until it travels 6px, then moves the point by the finger travel. */
+    const saved = FM.scene;
+    const bad = [];
+    const cv = () => document.getElementById('preview');
+    // press 12px LEFT of the point, tremble 1px, lift; then a deliberate drag of 30px right from the same place
+    async function tapAndDrag(tool, overlayId, readScreen, selectedOk) {
+      const s0 = readScreen();
+      if (!s0 || s0.x < 20 || s0.x > 330 || s0.y < 10 || s0.y > 740) throw new Error('setup (' + tool + '): the point is drawn at ' + huntEJ(s0) + ', out of reach of real input');
+      const x = s0.x - 12, y = s0.y;
+      const D = huntEDowns();
+      try {
+        await realInput924([
+          { t: 'touchStart', x: x, y: y, ms: 90 },
+          { t: 'touchMove', x: x + 1, y: y, ms: 60 },
+          { t: 'touchEnd', x: x + 1, y: y, ms: 0 },
+        ], tool + ' — a tap 12px off the point with a 1px tremor');
+      } finally { D.stop(); }
+      await huntEWait(600);   // past every double-tap window, so the drag below is not read as a second tap
+      if (!D.downs.length || !D.downs[0].trusted || D.downs[0].kind !== 'touch' || D.downs[0].id !== overlayId) throw new Error('CONTROL (' + tool + '): the tap was not a trusted touch on the editor overlay (' + huntEJ(D.downs) + ')');
+      const ovEl = document.getElementById(overlayId);
+      if (!ovEl) throw new Error('CONTROL (' + tool + '): the editor overlay is gone after the tap');
+      if (selectedOk && !selectedOk()) throw new Error('CONTROL (' + tool + '): the tap 12px off the point did not select it, so it did not land on the point');
+      const s1 = readScreen();
+      const tapMoved = Math.hypot(s1.x - s0.x, s1.y - s0.y);
+      await realInput924([
+        { t: 'touchStart', x: x, y: y, ms: 90 },
+        { t: 'touchMove', x: x + 10, y: y, ms: 40 }, { t: 'touchMove', x: x + 20, y: y, ms: 40 },
+        { t: 'touchMove', x: x + 30, y: y, ms: 100 },
+        { t: 'touchEnd', x: x + 30, y: y, ms: 0 },
+      ], tool + ' — a deliberate 30px drag');
+      await huntEWait(400);
+      const s2 = readScreen();
+      const dragMoved = s2.x - s1.x;
+      if (!(Math.abs(dragMoved) > 8)) throw new Error('CONTROL (' + tool + '): a deliberate 30px drag from 12px off the point moved it ' + dragMoved.toFixed(1) + ' px, so the press is not reaching the point at all');
+      if (tapMoved > 2) bad.push(tool + ': a tap to select the point, landing 12px from its centre with a 1px tremor, moved it ' + tapMoved.toFixed(1) + ' px on screen (' + Math.round(tapMoved / FM.previewDispScale()) + ' px in the project) to where his fingertip was');
+      if (Math.abs(dragMoved - 30) > 3) bad.push(tool + ': a 30px drag moved the point ' + dragMoved.toFixed(1) + ' px — it follows where the fingertip IS, not how far it travelled');
+    }
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          // 1. CUSTOMISE POINTS on a triangle — the bottom-right corner
+          huntECleanTools();
+          if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+          let L = FM.makeLayer('shape', { name: 'HUNTe tri', shape: 'triangle', x: 540, y: 900, shapeW: 800, shapeH: 800, fill: '#22c55e', start: 0, duration: 6 });
+          FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+          if (FM.pause) FM.pause();
+          FM.setTime(0); FM.refreshAll(); FM.selectLayer(L.id); await huntEWait(250);
+          FM.inspector.openCategory('element'); await huntEWait(400);
+          if (!FM.pointEdit.isActive() || !Array.isArray(L.subs)) throw new Error('setup: Customise Points did not open the point editor on the triangle');
+          const peScreen = () => {
+            const p = L.subs[0][1], q = FM.pointEdit._toCanvas(L, p[0], p[1]);
+            const o = FM.projectToOverlay(cv(), q.x, q.y), r = document.getElementById('pe-overlay').getBoundingClientRect();
+            return { x: r.left + o.x, y: r.top + o.y };
+          };
+          await tapAndDrag('Customise Points', 'pe-overlay', peScreen, () => { const s = FM.pointEdit.getSel(); return !!(s && s.pi === 1); });
+          FM.pointEdit.stop();
+
+          // 2. A MASK POINT in the mask editor (a closed mask, so the editor is in its edit mode)
+          huntECleanTools();
+          L = FM.makeLayer('shape', { name: 'HUNTe mask2', shape: 'rect', x: 540, y: 960, shapeW: 1080, shapeH: 1920, fill: '#3b82f6', start: 0, duration: 6 });
+          const m = FM.masks.make('add'); m.path = [[240, 400], [840, 400], [840, 1000], [240, 1000]];
+          L.masks = [m];
+          FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+          FM.setTime(0); FM.refreshAll(); FM.selectLayer(L.id); await huntEWait(250);
+          FM.maskTool.open(L.id, m.id); await huntEWait(350);
+          const mkScreen = () => {
+            const p = FM.evalMaskPath(m, FM.time)[1];
+            const o = FM.projectToOverlay(cv(), p[0], p[1]), r = document.getElementById('mask-overlay').getBoundingClientRect();
+            return { x: r.left + o.x, y: r.top + o.y };
+          };
+          await tapAndDrag('a mask point', 'mask-overlay', mkScreen, () => !!document.querySelector('#mask-bar .mk-del'));
+          FM.maskTool.stop();
+
+          // 3. A MOTION PATH DOT — the keyframe at 0 s
+          huntECleanTools();
+          L = FM.makeLayer('shape', { name: 'HUNTe path', shape: 'rect', x: 300, y: 600, shapeW: 160, shapeH: 160, fill: '#f59e0b', start: 0, duration: 6 });
+          L.transform.x = { kf: [{ t: 0, v: 300, e: 'linear' }, { t: 2, v: 800, e: 'linear' }] };
+          L.transform.y = { kf: [{ t: 0, v: 600, e: 'linear' }, { t: 2, v: 1400, e: 'linear' }] };
+          FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+          FM.setTime(1); FM.refreshAll(); FM.selectLayer(L.id); await huntEWait(250);
+          FM.motionPath.open(L.id); await huntEWait(350);
+          if (!FM.motionPath.isActive()) throw new Error('setup: the motion path editor did not open');
+          const mpScreen = () => {
+            const x = FM.evalProp(L.transform.x, 0), y = FM.evalProp(L.transform.y, 0);
+            const o = FM.projectToOverlay(cv(), x, y), r = document.getElementById('mpath-overlay').getBoundingClientRect();
+            return { x: r.left + o.x, y: r.top + o.y };
+          };
+          await tapAndDrag('a motion path dot', 'mpath-overlay', mpScreen, null);
+          FM.motionPath.stop();
+          if (bad.length) throw new Error(bad.join('; AND '));
+        });
+      }, 380);
+    } finally { huntERestore(saved); }
+  });
+
+  test('690 an easing picked on the first keyframe diamond eases the move out of it, and the diamond says so', { item: '690', budgetMs: 60000 }, async function () {
+    /* On the phone the diamond's hold menu is the way to ease a keyframe (a finger never makes a double-click or a
+       right-click). Its items wrote the ease onto THAT diamond's own keyframe (timeline.js openKfMenu: entry.kf.e = key).
+       But FM.evalProp reads a segment's ease from the keyframe it ENDS on (scene.js: easing resolved from b, the later
+       key), and the graph editor agrees (pickKfs edits the END keyframe). So an ease chosen on the FIRST keyframe of a
+       move — the start of the motion, and half the diamonds of any two-keyframe animation — landed on a field nothing
+       reads: the diamond recoloured to say it was eased, and the move played exactly as linearly as before.
+       Fixed by easeKfOf: the first diamond's menu writes, and its colour reads, the keyframe the move leaving it ends on. */
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          huntECleanTools();
+          if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+          const L = FM.makeLayer('shape', { name: 'HUNTe ease', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#a855f7', start: 0, duration: 6 });
+          L.transform.x = { kf: [{ t: 1, v: 100, e: 'linear' }, { t: 3, v: 500, e: 'linear' }] };   // the commonest animation there is: A to B
+          FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+          if (FM.pause) FM.pause();
+          FM.refreshAll(); FM.selectLayer(L.id); await huntEWait(250);
+          FM.inspector.openCategory('transform'); FM._mtMode = 'move';
+          FM.setTime(2); FM.timeline.rebuild(); FM.timeline.updatePlayhead(); await huntEWait(300);
+          const before = FM.evalProp(L.transform.x, 1.5);
+          const d = huntDotAt(1);
+          if (!d) throw new Error('setup: no live diamond for the first keyframe at 1 s with Move and Transform open');
+          const r = d.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+          if (cx < 10 || cx > 370 || cy > 740) throw new Error('setup: the first diamond is at ' + Math.round(cx) + ',' + Math.round(cy) + ', out of reach of real input');
+          await realInput924(huntEHold(cx, cy), 'a still hold on the first keyframe diamond');
+          await huntEWait(450);
+          if (!huntCtxUp()) throw new Error('CONTROL: a still 0.65 s hold on the first diamond did not open its menu');
+          const it = huntEMenuItem('Ease In-Out');
+          if (!it) throw new Error('CONTROL: the keyframe menu has no Ease In-Out item');
+          const ir = it.getBoundingClientRect();
+          await realInput924(huntETap(ir.left + ir.width / 2, ir.top + ir.height / 2), 'tapping Ease In-Out');
+          await huntEWait(400);
+          const kfs = L.transform.x.kf;
+          if (!kfs.some(k => k.e === 'easeInOut' || (k.ez && k.ez.fam))) throw new Error('CONTROL: tapping Ease In-Out changed no keyframe at all (' + huntEJ(kfs) + '), so the tap did not reach the menu');
+          const after = FM.evalProp(L.transform.x, 1.5);
+          const dot = huntDotAt(1);
+          const saysEased = !!(dot && /ease-smooth/.test(dot.className));
+          if (Math.abs(after - before) < 5) {
+            throw new Error('he held the first keyframe diamond of a move from 1 s to 3 s and picked Ease In-Out' + (saysEased ? ': the diamond turned green to say it is eased' : '') +
+              ', but the move out of it is exactly as linear as before (X at 1.5 s is ' + after.toFixed(1) + ', was ' + before.toFixed(1) + ') — the ease went onto a keyframe nothing before it reads');
+          }
+          if (!saysEased) throw new Error('he held the first keyframe diamond and picked Ease In-Out, and the move out of it is eased (X at 1.5 s ' + before.toFixed(1) + ' -> ' + after.toFixed(1) + '), but the diamond he held does not say so (' + (dot ? dot.className : 'no diamond') + ') — it reads as though the pick did nothing');
+        });
+      }, 380);
+    } finally { huntERestore(saved); }
+  });
+
+
+  /* ═══ HUNT-f (queue 690, 25 Sep) — PERFORMANCE AND STABILITY, MEASURED GETTING WORSE ═══════════════════════════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load", pointed at his lag reports (#202, #657, #692 and the
+   * unnumbered "Editing lags, and gets bad fast"). Every one of these was MEASURED first — heap snapshots, node and
+   * listener counts after a forced collection, main-thread gaps, the quality ladder's own state — and each test FAILED on
+   * v16.94 because of the thing it names; each passes with its fix and fails again with the fix reverted. (A fourth
+   * finding — the autosave's Home-card render freezing the editor every 12 s — did not survive the skeptic and its test was
+   * removed.) Helpers are prefixed hf2 so they cannot collide with the storage hunt's hf. */
+
+  /* A real garbage collection, then the browser's own DOM-node and event-listener counts. Only tests/_cdp.py can run the
+     collector (HeapProfiler.collectGarbage); without it "still held" and "not collected yet" look identical, so a run
+     without the driver FAILS saying so rather than passing on a number that means nothing. */
+  async function hf2Gc(what) {
+    const seq = (window.__fmGcSeq = (window.__fmGcSeq || 0) + 1);
+    window.__fmWantGc = { seq: seq };
+    const deadline = Date.now() + 30000;
+    while (window.__fmGcDone !== seq) {
+      if (Date.now() > deadline) throw new Error('no garbage collection arrived for ' + what + ' — this test needs tests/_cdp.py, which turns __fmWantGc into a real collection and the browser node and listener counts');
+      await sleep(40);
+    }
+    const g = window.__fmGc || {};
+    if (g.err) throw new Error('the driver could not collect garbage for ' + what + ': ' + g.err);
+    if (typeof g.nodes !== 'number' || typeof g.listeners !== 'number') throw new Error('the driver answered without node and listener counts for ' + what);
+    return g;
+  }
+
+  /* 1 ─ THE FILTERS TAB AND THE EFFECTS BROWSER KEPT EVERY THUMBNAIL THEY EVER DREW (js/fx-thumbs.js `mounted`).
+     Every tile canvas was added to a module-level Set when it was mounted, and the only thing that ever pruned it was
+     remountLive(), which runs when the fx-art photographs finish decoding — about once a session. So each rebuild of
+     the Filters tab (56 tiles of 192x192) and each open of the effects browser stranded every old tile, and through
+     the tile its whole old panel. Measured on a real session: 20,700 page elements and 5,900 listeners held after a
+     forced collection, 3,584 dead filter canvases (about 530 MB of picture memory) after 60 refreshes.
+     Fixed by holding the tiles WEAKLY (trackMounted): what is on the page or still in flight stays findable. */
+  test('690 trying looks on the Filters tab and opening the effects browser gives back every thumbnail once it has left the screen — memory his phone gets back', { item: '690', budgetMs: 150000 }, async function () {
+    const saved = FM.scene, wasOpen = FM.home.isOpen();
+    const realCreate = document.createElement;
+    const made = [];
+    try {
+      if (wasOpen) FM.home.close();
+      const L = FM.makeLayer('shape', { name: 'HF2 looks', shape: 'rect', x: 540, y: 675, shapeW: 640, shapeH: 640, fill: '#3a7bd5', start: 0, duration: 4 });
+      FM.scene = scene([L], { project: { width: 1080, height: 1350, fps: 30, duration: 4, background: '#101418' } });
+      FM.selectLayer(L.id); FM.refreshAll(); FM.history.commit();
+      await sleep(300);
+      const layerNow = () => FM.layerById(FM.scene, L.id);
+      const openFilters = async () => { FM.selectLayer(L.id); FM.inspector.openCategory('filters'); await sleep(350); return [].slice.call(document.querySelectorAll('button.flt-tile')).filter(b => b.isConnected); };
+      /* one "try a look": open Filters, pick a tile (it previews on his canvas), Add, then Undo because he did not like it */
+      let markSeen = () => {};
+      const tryLook = async (i) => {
+        const tiles = await openFilters();
+        if (tiles.length < 10) throw new Error('setup: the Filters tab showed ' + tiles.length + ' tiles — there is nothing to try');
+        markSeen();   // the tiles are on screen NOW — after Add the panel moves on to the effect stack
+        tiles[(i * 5) % tiles.length].click();
+        await sleep(150);
+        const go = document.querySelector('.flt-commit .fxb-commit-go');
+        if (!go || !go.isConnected) throw new Error('setup: picking a filter tile brought up no Add button');
+        const n0 = (layerNow().effects || []).length;
+        go.click();
+        await sleep(250);
+        if ((layerNow().effects || []).length !== n0 + 1) throw new Error('setup: Add did not put the picked filter on the layer (' + n0 + ' then ' + (layerNow().effects || []).length + ' effects)');
+        FM.history.undo();
+        await sleep(250);
+      };
+      const browse = async () => { FM.selectLayer(L.id); FM.fxBrowser.open(layerNow()); await sleep(300); FM.fxBrowser.close(); await sleep(150); };
+
+      // warm-up: the first build of each surface may legitimately create caches that live for the session
+      await tryLook(0); await browse();
+      await sleep(300);
+      const g0 = await hf2Gc('the start of the looks');
+
+      document.createElement = function (tag) {
+        const e = realCreate.apply(document, arguments);
+        if (String(tag).toLowerCase() === 'canvas') made.push({ ref: new WeakRef(e), seen: false });
+        return e;
+      };
+      markSeen = () => made.forEach(m => { const c = m.ref.deref(); if (c && c.isConnected) m.seen = true; });
+      const LOOKS = 6, BROWSES = 5;
+      for (let i = 1; i <= LOOKS; i++) { await tryLook(i); markSeen(); }
+      for (let i = 0; i < BROWSES; i++) { FM.selectLayer(L.id); FM.fxBrowser.open(layerNow()); await sleep(300); markSeen(); FM.fxBrowser.close(); await sleep(150); }
+      document.createElement = realCreate;
+      FM.selectLayer(null); FM.refreshAll();
+      await sleep(400);
+      const g1 = await hf2Gc('the end of the looks');
+
+      const shown = made.filter(m => m.seen).length;
+      if (shown < LOOKS * 10) throw new Error('CONTROL: only ' + shown + ' thumbnail canvases were ever on screen across ' + LOOKS + ' looks and ' + BROWSES + ' browses — the tiles did not draw, so nothing below was measured');
+      const dead = made.filter(m => { const c = m.ref.deref(); return m.seen && c && !c.isConnected; });
+      const mb = dead.reduce((s, m) => { const c = m.ref.deref(); return s + (c ? c.width * c.height * 4 : 0); }, 0) / 1e6;
+      const dn = g1.nodes - g0.nodes, dl = g1.listeners - g0.listeners;
+      if (dead.length > 80 || dn > 600) throw new Error('trying ' + LOOKS + ' looks on the Filters tab and opening the effects browser ' + BROWSES + ' times left ' + dead.length + ' of the ' + shown + ' thumbnails he saw alive after they left the screen (' + mb.toFixed(1) + ' MB of picture memory), and ' + dn + ' page elements and ' + dl + ' listeners more than before, after a full garbage collection — none of it is ever given back, so every look he tries makes the app heavier until his iPhone reloads it');
+    } finally {
+      document.createElement = realCreate;
+      try { if (FM.fxBrowser.isOpen()) FM.fxBrowser.close(); } catch (e) {}
+      FM.scene = saved; FM.selectLayer(null); FM.refreshAll();
+      if (wasOpen) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
+  /* 3 ─ THE PLAYBACK QUALITY LADDER NEVER GAVE THE DETAIL BACK (js/app.js notePlaybackCost). It drops a tier when a
+     frame costs over 72% of the budget and climbed only when one cost under 30% — and nothing reset it between plays
+     or projects. So once a heavy stretch had pushed it down, any scene whose cost does not depend on resolution (a plain
+     video: the ladder's own notes measure 8-12 ms at any size) sat between the two lines for ever: never slow enough to
+     drop, never cheap enough to climb, and never probed to see that full resolution costs the same. (His 27 Aug PC
+     sample, #657 — 2 videos + 2 shapes, no effects, 28% scale — looks like this, though the skeptic noted its cost was
+     over the drop line, so it cannot tell this apart from the ladder working as designed.)
+     Fixed by the mirror of the payoff test: a tier settled inside the budget TRIES the tier above and keeps it if it
+     fits — and, the half that matters as much, goes back and latches if it does not, so a scene whose cost really does
+     follow the pixels is not sharpened and softened every few seconds. */
+  test('690 after one heavy stretch of playback the preview sharpens again once full resolution fits — and a scene where it does not fit is not pumped', { item: '690', budgetMs: 60000 }, async function () {
+    if (typeof FM._notePlaybackCost !== 'function' || !FM.playbackQualityInfo) throw new Error('the quality ladder is not reachable from the suite (FM._notePlaybackCost)');
+    const saved = FM.scene, mode0 = FM.settings.get('playbackQuality'), realToast = FM.toast;
+    const q = () => FM.playbackQualityInfo();
+    const park = () => { const p = FM.playing; FM.playing = true; FM.settings.set('playbackQuality', 'detail'); FM._notePlaybackCost(1, 16); FM.playing = p; FM.settings.set('playbackQuality', 'auto'); };
+    try {
+      if (FM.pause) FM.pause();
+      FM.toast = function () {};   // the struggle offer may fire at the bottom of the heavy stretch; not what this is about
+      const L = FM.makeLayer('shape', { name: 'HF2 play', shape: 'rect', x: 540, y: 675, shapeW: 400, shapeH: 400, fill: '#22c55e', start: 0, duration: 60 });
+      FM.scene = scene([L], { project: { width: 1080, height: 1350, fps: 60, duration: 60, background: '#000000' } });
+      FM.selectLayer(null); FM.setTime(0); FM.refreshAll();
+      park();
+      const budget = 1000 / 60;
+
+      /* A HEAVY STRETCH, pixel-bound — shedding pixels genuinely helps (the 202 test's own model of his 24-effect
+         sample), so the ladder is RIGHT to drop here. Driven synchronously between play() and pause(), so the real
+         playback loop never gets a frame in edgeways. */
+      FM.play();
+      for (let i = 0; i < 400; i++) { const c = 294.69 * Math.pow(0.6, q().tier); FM._notePlaybackCost(c, c * 1.06); }
+      const low = q();
+      FM.pause();
+      if (low.tier < 2) throw new Error('CONTROL: the heavy stretch only took the ladder to tier ' + low.tier + ' — it never dropped, so nothing below means anything');
+
+      /* THEN THE HEAVY PART IS GONE — he took the effects off, or opened a plain video project — and plays again for
+         thirty seconds of frames that cost 10 ms at ANY resolution: 60% of a 60 fps frame, comfortably smooth at full
+         detail, and nothing shedding pixels can improve. */
+      FM.play();
+      for (let i = 0; i < 1800; i++) FM._notePlaybackCost(10, budget);
+      const after = q();
+      FM.pause();
+      if (after.tier > 1) throw new Error('one heavy stretch took playback down to ' + Math.round(low.effective * 100) + '% resolution, and 30 s of playback that costs the same 10 ms at any size (60% of a 60 fps frame) never brought it back: it is still drawing at ' + Math.round(after.effective * 100) + '% (tier ' + after.tier + ' of ' + (6 - 1) + '). The preview stays blurry for the rest of the session, in every project — his 27 Aug PC sample was 28% scale with no effects at all');
+
+      /* …AND IT MUST NOT PUMP. Trying the tier above is only right when it FITS. A scene whose cost really does follow
+         the pixels — 60% of a frame at the low tier — may climb as far as the tiers that still fit (previewScale's clamps
+         can make the next tier up only a little bigger, so that can be one or more), may try the first one that does
+         NOT fit once, must come back from it, and must then STAY: a preview that sharpens and softens every few seconds
+         is worse than one that is a tier low (the ladder's own note: resolution pumping mid-shot is uglier). Without the
+         latch this probes every few seconds for the whole thirty. */
+      FM.play();
+      for (let i = 0; i < 400; i++) { const c = 294.69 * Math.pow(0.6, q().tier); FM._notePlaybackCost(c, c * 1.06); }
+      const low2 = q();
+      if (low2.tier < 2) { FM.pause(); throw new Error('CONTROL: the second heavy stretch only took the ladder to tier ' + low2.tier + ', so the no-pumping half measured nothing'); }
+      FM.pause();
+      FM.play();
+      const px0 = FM._perfState().canvasPx;
+      if (!(px0 > 0)) { FM.pause(); throw new Error('setup: the preview canvas reports no size, so a cost that follows its pixels cannot be modelled'); }
+      let moves = 0, downs = 0, late = 0, last = q().tier;
+      const costNow = () => 10 * FM._perfState().canvasPx / px0;   // 10 ms at the low tier, and in proportion to the pixels above it
+      for (let i = 0; i < 1800; i++) {
+        FM._notePlaybackCost(costNow(), budget);
+        const t = q().tier;
+        if (t !== last) { moves++; if (t > last) downs++; if (i >= 900) late++; last = t; }
+      }
+      const end2 = q(), endCost = costNow();
+      FM.pause();
+      if (downs < 1) throw new Error('CONTROL: every sharper tier fitted (' + moves + ' moves, ended at tier ' + end2.tier + '), so a climb that does not fit was never tried and the no-pumping half measured nothing');
+      if (downs > 1 || late || endCost > budget * 0.72) throw new Error('a scene that costs 60% of a frame at ' + Math.round(low2.effective * 100) + '% and grows with the pixels changed resolution ' + moves + ' times in 30 s of playback, ' + downs + ' of them back to softer' + (late ? ', ' + late + ' of them in the last 15 s' : '') + ', and ended at tier ' + end2.tier + ' costing ' + endCost.toFixed(1) + ' ms of a ' + budget.toFixed(1) + ' ms frame — a sharper tier that does not fit must be tried once and then left alone, or the preview visibly sharpens and softens over and over');
+    } finally {
+      try { if (FM.playing && FM.pause) FM.pause(); } catch (e) {}
+      FM.toast = realToast;
+      park();
+      FM.settings.set('playbackQuality', mode0 || 'auto');
+      if (FM._resetPerfOffer) FM._resetPerfOffer();
+      FM.scene = saved; FM.selectLayer(null); FM.refreshAll();
+    }
+  });
+
+  /* 3b ─ A NEW PROJECT IS JUDGED FROM SCRATCH (js/app.js FM._resetPlayQuality, called by FM.projects.open). The tier,
+     the costs and both latches describe the scene they were learned on. Carried into another project, a tier earned in a
+     heavy one made the next project play soft from its first frame — and the climb probe above would only win the
+     detail back a tier every few seconds of playback. Opening a project starts where a fresh session starts. Real
+     projects, opened the way Home opens them, so the synthetic scene of the test above is never saved over one. */
+  test('690 opening another project starts its playback at full detail again, whatever the last project taught the quality ladder', { item: '690', budgetMs: 60000 }, async function () {
+    if (typeof FM._notePlaybackCost !== 'function' || !FM.playbackQualityInfo) throw new Error('the quality ladder is not reachable from the suite (FM._notePlaybackCost)');
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    const mode0 = FM.settings.get('playbackQuality'), realToast = FM.toast;
+    const q = () => FM.playbackQualityInfo();
+    const park = () => { const p = FM.playing; FM.playing = true; FM.settings.set('playbackQuality', 'detail'); FM._notePlaybackCost(1, 16); FM.playing = p; FM.settings.set('playbackQuality', 'auto'); };
+    try {
+      if (wasOpen) FM.home.close();
+      if (FM.pause) FM.pause();
+      FM.toast = function () {};
+      const heavy = await FM.projects.create({ name: 'HF2 ladder heavy', width: 1080, height: 1350, fps: 60 });
+      if (!heavy) throw new Error('setup: the first project could not be made');
+      made.push(heavy);
+      await sleep(200);
+      park();
+      FM.play();
+      for (let i = 0; i < 400; i++) { const c = 294.69 * Math.pow(0.6, q().tier); FM._notePlaybackCost(c, c * 1.06); }
+      const low = q();
+      FM.pause();
+      if (low.tier < 2) throw new Error('CONTROL: the heavy stretch only took the ladder to tier ' + low.tier + ' — nothing below means anything');
+      const plain = await FM.projects.create({ name: 'HF2 ladder plain', width: 1080, height: 1350, fps: 60 });
+      if (!plain) throw new Error('setup: the second project could not be made');
+      made.push(plain);
+      await sleep(200);
+      if (FM.projects.currentId() !== plain) throw new Error('setup: the second project did not open');
+      const now = q(), st = FM._perfState();
+      if (now.tier !== 0 || st.locked || st.climbLockAt || st.dropFrom) throw new Error('a heavy stretch in one project took playback to ' + Math.round(low.effective * 100) + '% (tier ' + low.tier + '), and opening a different project kept it at tier ' + now.tier + (st.locked ? ', drops latched off' : '') + (st.climbLockAt ? ', climbs latched off' : '') + ' — the new project plays soft from its first frame for a reason that belongs to the old one');
+    } finally {
+      try { if (FM.playing && FM.pause) FM.pause(); } catch (e) {}
+      FM.toast = realToast;
+      park();
+      FM.settings.set('playbackQuality', mode0 || 'auto');
+      if (FM._resetPerfOffer) FM._resetPerfOffer();
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
+  /* 4 ─ THE CLIP FILMSTRIPS OF THE PROJECT HE OPENS WAITED BEHIND CLIPS FROM PROJECTS HE ALREADY LEFT (js/frames.js
+     buildClipStrip). Every strip build in the app goes through ONE queue, one at a time. Leave a project before its
+     strip is done and that clip is released — its video loses its src — but its build stayed in the queue and waited
+     out a 3 s "loadeddata" timeout (or 500 ms per frame) on a video that will never load again, holding the old
+     timeline and video alive until it did. Measured: 0.6 s to a filmstrip opening a project directly, 3.4 s after one
+     hop, 9.0 s after three, 14.4 s after five.
+     The skeptic's refinement, measured too: with one-clip projects a human's dwell lets each strip finish, so the way he
+     would really meet it is a project with SEVERAL clips left a moment in — 6.75 s against 0.41 s for an 8-clip one left
+     after 3 s. Both are driven below. Fixed by marking a released record (js/media.js release) so its queued and
+     in-flight builds stand down at once. */
+  test('690 opening a project after looking into others shows its filmstrips as fast as opening it directly — nothing waits behind clips from projects he left', { item: '690', budgetMs: 180000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], clips = [];
+    const stripOf = () => { const V = FM.scene.layers.filter(l => l.type === 'video')[0]; const m = V && FM.media.get(V.id); return !!(m && m.stripFrames && m.stripFrames.length); };
+    const waitStrip = async (limitMs) => { const t0 = performance.now(); while (performance.now() - t0 < limitMs) { if (stripOf()) return performance.now() - t0; await sleep(40); } return -1; };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const r = await fetch('/splash.mp4');
+      if (!r.ok) throw new Error('setup: splash.mp4 could not be fetched from the test origin (' + r.status + ')');
+      const blob = await r.blob();
+      const mk = async (name) => {
+        const id = await FM.projects.create({ name: name, width: 1080, height: 1920 });
+        made.push(id);
+        const file = new File([blob], 'hf2-' + name.replace(/\W+/g, '') + '-' + Date.now() + '.mp4', { type: 'video/mp4', lastModified: Date.now() });
+        FM.addMediaLayer(await FM.loadVideoFile(file));
+        const V = FM.scene.layers.filter(l => l.type === 'video')[0];
+        if (!V) throw new Error('setup: importing the clip into ' + name + ' made no video layer');
+        clips.push(V.id);
+        await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+        if (await waitStrip(15000) < 0) throw new Error('setup: the clip in ' + name + ' never got a filmstrip at all');
+        return id;
+      };
+      const A = await mk('HF2 strip A'), B = await mk('HF2 strip B');
+      // C: the project with several clips — the realistic half (see the note above)
+      const C = await FM.projects.create({ name: 'HF2 strip C', width: 1080, height: 1920 });
+      made.push(C);
+      for (let i = 0; i < 6; i++) {
+        const file = new File([blob], 'hf2-stripC' + i + '-' + Date.now() + '.mp4', { type: 'video/mp4', lastModified: Date.now() });
+        FM.addMediaLayer(await FM.loadVideoFile(file));
+      }
+      FM.scene.layers.filter(l => l.type === 'video').forEach(l => { if (clips.indexOf(l.id) < 0) clips.push(l.id); });
+      if (FM.scene.layers.filter(l => l.type === 'video').length < 6) throw new Error('setup: the several-clip project did not get its six clips');
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      // every strip of C built before it is left, or C's own leftovers would slow the BASELINE below and hide the bug
+      const allStrips = () => FM.scene.layers.filter(l => l.type === 'video').every(l => { const m = FM.media.get(l.id); return m && m.stripFrames && m.stripFrames.length; });
+      for (let t0 = performance.now(); !allStrips(); await sleep(60)) if (performance.now() - t0 > 40000) throw new Error('setup: the six clips of the several-clip project never all got filmstrips');
+      await sleep(600);
+
+      // BASELINE: open A straight from C, nothing else in the way
+      await FM.projects.open(A);
+      const direct = await waitStrip(20000);
+      if (direct < 0) throw new Error('CONTROL: opening a project directly never drew its filmstrip, so there is nothing to compare against');
+      await sleep(1500);
+
+      // THE HOPS: B, A, B for a moment each — looking for the right project — then land on A
+      for (const id of [B, A, B]) { await FM.projects.open(id); await sleep(200); }
+      await FM.projects.open(A);
+      const hopped = await waitStrip(30000);
+      const limit = direct * 2 + 1500;
+      if (hopped < 0 || hopped > limit) throw new Error('opened directly, the project showed its filmstrip in ' + (direct / 1000).toFixed(1) + ' s; opened after looking into 3 other projects for a moment each, its clip stayed a blank bar for ' + (hopped < 0 ? 'more than 30 s' : (hopped / 1000).toFixed(1) + ' s') + ' — the strip waits in one queue behind the clips of the projects he already left, each stuck on a video that was released and will never load');
+      await sleep(1500);
+
+      // THE WAY HE MEETS IT: into the six-clip project for a second — its strips only part built — then on to A
+      await FM.projects.open(C);
+      await sleep(1000);
+      const leftBehind = FM.scene.layers.filter(l => { const m = l.type === 'video' && FM.media.get(l.id); return m && m.stripFrames === undefined; }).length;
+      await FM.projects.open(A);
+      const afterMany = await waitStrip(30000);
+      if (afterMany < 0 || afterMany > limit) throw new Error('opened directly, the project showed its filmstrip in ' + (direct / 1000).toFixed(1) + ' s; opened a second after a project with six clips (' + leftBehind + ' of them still without a filmstrip when he left), its clip stayed a blank bar for ' + (afterMany < 0 ? 'more than 30 s' : (afterMany / 1000).toFixed(1) + ' s') + ' — every strip the other project had not built yet was waited out first, on videos that were released and will never load');
+      if (leftBehind < 2) throw new Error('CONTROL: only ' + leftBehind + ' of the six clips were still waiting for a filmstrip when he left — the several-clip case was not exercised');
+    } finally {
+      clips.forEach(hfDropTiles);
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
+  /* 4b ─ THE SAME QUEUE, THE OTHER BUILDER. A reversed or slow-motion clip builds a frame cache through the same element
+     lock the filmstrip waits on (js/frames.js seekLock), so a cache build still running for a clip he has LEFT held that
+     clip's strip — and the one strip queue behind it — for the rest of the cache: up to 900 seeks at 500 ms each on a
+     video with no source. Released, the build now stops like a cancelled export does: no partial cache stored, the
+     bitmaps it had made closed. A real <video>, so the seeks are real. */
+  test('690 a frame cache being built for a clip he has left stops at once, instead of seeking a video that will never load', { item: '690', budgetMs: 120000 }, async function () {
+    if (!FM.buildFrameCache || !FM._releaseMediaRecord) throw new Error('FM.buildFrameCache / FM._releaseMediaRecord are missing — nothing to test');
+    const el = document.createElement('video');
+    el.src = 'splash.mp4'; el.muted = true; el.playsInline = true; el.preload = 'auto';
+    const ready = await new Promise(function (res) {
+      el.addEventListener('loadeddata', function () { res(true); }, { once: true });
+      el.addEventListener('error', function () { res(false); }, { once: true });
+      setTimeout(function () { res(el.readyState >= 2); }, 12000);
+    });
+    if (!ready || !el.videoWidth || !(el.duration > 0.5)) throw new Error('splash.mp4 did not decode — this test cannot drive a real frame cache build, so it must not report green');
+    const rec = { kind: 'video', el: el, width: el.videoWidth, height: el.videoHeight, duration: el.duration };
+    let seen = 0;
+    const p = FM.buildFrameCache(rec, 24, function (f) { seen = f; }, { maxDim: 64 });
+    for (let i = 0; i < 100 && seen <= 0; i++) await sleep(20);
+    if (seen <= 0) throw new Error('CONTROL: the frame cache build never made progress, so releasing it mid-build measured nothing');
+    if (seen >= 1) throw new Error('CONTROL: the build finished before the clip could be released mid-build');
+    const t0 = performance.now(), at = seen;
+    FM._releaseMediaRecord(rec);   // what leaving the project does to every clip in it (js/media.js release)
+    const out = await p;
+    const took = performance.now() - t0;
+    if (took > 1500 || out || rec.frameCache) throw new Error('the clip was released ' + Math.round(at * 100) + '% of the way through its frame cache, and the build went on for ' + (took / 1000).toFixed(1) + ' s more' + (out || rec.frameCache ? ' and stored a cache of a video that no longer exists' : '') + ' — seeking a video with no source, while the filmstrips of the project he opened wait behind it');
+  });
+
+  test('690 a toast that only says something never catches the tap meant for what is under it — a real finger reaches the button beneath', { item: '690', budgetMs: 45000 }, async function () {
+    /* Found while shipping v16.95: a real touch on a keyframe diamond right after "Keyframe added" landed on #toast, which
+       sits over the middle of the phone timeline for a second or two after nearly every action. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const t = document.getElementById('toast');
+    if (!t || !FM.toast) throw new Error('setup: no toast');
+    const probe = document.createElement('button');
+    probe.textContent = 'under the toast'; let hits = 0;
+    probe.addEventListener('pointerdown', () => { hits++; });
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          FM.toast('Keyframe added', 4000); await sleep(120);
+          const r = t.getBoundingClientRect();
+          if (!(r.width > 20)) throw new Error('setup: the toast is not showing');
+          const tz = parseInt(getComputedStyle(t).zIndex, 10) || 60;
+          probe.style.cssText = 'position:fixed;z-index:' + (tz - 1) + ';left:' + (r.left - 10) + 'px;top:' + (r.top - 10) + 'px;width:' + (r.width + 20) + 'px;height:' + (r.height + 20) + 'px;';
+          document.body.appendChild(probe); await sleep(60);
+          const x = r.left + r.width / 2, y = r.top + r.height / 2;
+          if (x > 370 || y > 740) throw new Error('setup: the toast is at ' + Math.round(x) + ',' + Math.round(y) + ', out of reach');
+          await realInput924([{ t: 'touchStart', x: x, y: y, ms: 60 }, { t: 'touchEnd', x: x, y: y, ms: 60 }], 'a tap under a plain toast');
+          await sleep(150);
+          if (hits !== 1) throw new Error('a real tap on a button under the plain “Keyframe added” toast reached the button ' + hits + ' times — the toast swallowed it (it covers the middle of the phone timeline after nearly every action)');
+          /* CONTROL: a toast that IS a button still takes its tap */
+          {
+            let tapped = 0;
+            FM.toast('Tap to open', 4000, () => { tapped++; }); await sleep(120);
+            if (t.classList.contains('toast-tap')) {
+              const r2 = t.getBoundingClientRect();
+              await realInput924([{ t: 'touchStart', x: r2.left + r2.width / 2, y: r2.top + r2.height / 2, ms: 60 }, { t: 'touchEnd', x: r2.left + r2.width / 2, y: r2.top + r2.height / 2, ms: 60 }], 'a tap on a tappable toast');
+              await sleep(200);
+              if (!tapped) throw new Error('CONTROL: a tappable toast (with its ›) no longer takes its own tap');
+            }
+          }
+        });
+      }, 360);
+    } finally { probe.remove(); if (FM.hideToast) FM.hideToast(); else t.classList.add('hidden'); }
+  });
 
 })();

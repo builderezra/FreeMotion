@@ -248,6 +248,21 @@ window.FM = window.FM || {};
     return true;
   }
 
+  /* ⚠️ A TAP TO SELECT A POINT IS NOT A DRAG (queue 690). onMove put the point AT THE FINGER on every move (p = loc),
+     with no slop, and hitPx gives a finger a deliberate 26px target because a fingertip never lands dead centre. A real
+     finger always trembles a pixel while it is down, and the browser reports that as a move — so a TAP just to select a
+     point (to read its X and Y, switch it to a Curve, or use the nudge pad) jumped it to wherever the fingertip had
+     landed: measured with a trusted touch 12px off the corner, 11 screen px, 73 project px, written into undo on release.
+     So a grab records where the finger went down (in the shape's own units) and where the point WAS, ignores a touch
+     until it has travelled GRAB_SLOP px — the keyframe diamonds' KF_DRAG_SLOP (v16.94), the same fault fixed there
+     first — and then moves the point by how far the finger has travelled, never to where it is. A mouse does not
+     tremble, so it keeps every pixel. Snapping still applies, to the point's new place rather than to the fingertip. */
+  const GRAB_SLOP = 6;
+  function grab(e, l, si, pi) {
+    const pts = subsOf(l)[si], p = pts && pts[pi], at = evtToCanvas(e), loc = toLocal(l, at.x, at.y);
+    return { si: si, pi: pi, sx: e.clientX, sy: e.clientY, lu: loc.u, lv: loc.v,
+             u0: p ? p[0] : loc.u, v0: p ? p[1] : loc.v, slop: e.pointerType === 'mouse' ? 0 : GRAB_SLOP };
+  }
   function onDown(e) {
     const l = layer(); if (!l) return;
     // a tangent handle of the selected point takes priority over selecting another point
@@ -276,7 +291,7 @@ window.FM = window.FM || {};
       const a = pts[hit.pi], b = pts[(hit.pi + 1) % pts.length];
       const np = (a[2] === 1 || b[2] === 1) ? [mp[0], mp[1], 1] : [mp[0], mp[1]];
       pts.splice(hit.pi + 1, 0, np);
-      drag = { si: hit.si, pi: hit.pi + 1 };
+      drag = grab(e, l, hit.si, hit.pi + 1);   // it sits on the curve, not under the finger (queue 690)
       sel = { si: hit.si, pi: hit.pi + 1 };
       notify('points');
     } else {
@@ -288,7 +303,7 @@ window.FM = window.FM || {};
         return;
       }
       lastTap = { t: now, si: hit.si, pi: hit.pi };
-      drag = { si: hit.si, pi: hit.pi };
+      drag = grab(e, l, hit.si, hit.pi);
       sel = { si: hit.si, pi: hit.pi };
       notify('sel');
     }
@@ -328,6 +343,9 @@ window.FM = window.FM || {};
       p[2] = 1; p[3] = hx; p[4] = hy; p.length = 5;
       FM.requestRender(); notify('move'); return;
     }
+    // queue 690: nothing until the finger really travels, then by how far it has travelled — see grab()
+    if (!drag.moved && drag.slop && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < drag.slop) return;
+    const tu = drag.lu == null ? loc.u : drag.u0 + (loc.u - drag.lu), tv = drag.lv == null ? loc.v : drag.v0 + (loc.v - drag.lv);
     // One local unit spans the whole shape, so the threshold is different on each axis and has to be
     // divided back through the layer's own size and scale — a flat number in local units would be
     // hair-fine on a big shape and magnetic on a small one.
@@ -335,14 +353,14 @@ window.FM = window.FM || {};
     const thrU = SNAP_PX / k / Math.max(1e-6, Math.abs(m.w * m.sx));
     const thrV = SNAP_PX / k / Math.max(1e-6, Math.abs(m.h * m.sy));
     const others = otherPoints(l, drag.si, drag.pi);
-    const su = nearestVal(loc.u, others.map(q => q[0]), thrU);
-    const sv = nearestVal(loc.v, others.map(q => q[1]), thrV);
+    const su = nearestVal(tu, others.map(q => q[0]), thrU);
+    const sv = nearestVal(tv, others.map(q => q[1]), thrV);
     if ((su != null || sv != null) && (su !== snapU || sv !== snapV) && navigator.vibrate) {
       try { navigator.vibrate(6); } catch (_) {}    // a tick when it CATCHES, not every frame it holds
     }
     snapU = su; snapV = sv;
-    p[0] = su == null ? loc.u : su;
-    p[1] = sv == null ? loc.v : sv;
+    p[0] = su == null ? tu : su;
+    p[1] = sv == null ? tv : sv;
     drag.moved = true;
     FM.requestRender(); notify('move'); draw();
   }

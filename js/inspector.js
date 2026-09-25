@@ -423,20 +423,34 @@ window.FM = window.FM || {};
 
   FM.fxClipboard = {
     _key: 'fm.fxclip',
-    // Accepts one effect or an array of them.
-    copy(fxOrList) {
+    /* WHERE THE ANIMATION WAS COPIED FROM (queue 690). Keyframe times are ABSOLUTE project time, so an animated effect
+     * copied off one clip and pasted onto another lands at the SOURCE clip's times: his blur-in (0 → 20 over the first
+     * second) pasted onto a clip starting at 3 s had finished before that clip began, and sat at full blur from its first
+     * frame. Paste look has always re-anchored by the difference in start (applyStyle's dt); this clipboard never knew
+     * the start to re-anchor from. So a copy now records the source clip's start beside the list — `from` — and read()
+     * slides the keyframes onto the clip being pasted onto, which is what a clip MOVE does to them (FM.shiftFxKeyframes
+     * walks the same params). Stored as { from, fx } only when a start is given; a clipboard from an older build (a bare
+     * list, or the single object before that) has no `from` and pastes exactly as it always did — its source is unknown,
+     * and guessing would move a correct animation as readily as a wrong one. */
+    // Accepts one effect or an array of them, and the start of the clip they come from.
+    copy(fxOrList, from) {
       const list = (Array.isArray(fxOrList) ? fxOrList : [fxOrList]).filter(Boolean);
       if (!list.length) return false;
+      const box = Number.isFinite(from) ? { from: from, fx: list } : list;
       // jsonReplacer drops the runtime '_' props — without it the clipboard carries _expanded, and a
       // pasted effect arrives with its editor already open, shoving the stack around.
-      try { localStorage.setItem(this._key, JSON.stringify(list, FM.jsonReplacer)); return true; }
+      try { localStorage.setItem(this._key, JSON.stringify(box, FM.jsonReplacer)); return true; }
       catch (e) { return false; }
     },
-    // Always an array, never null. Empty means nothing usable is on it.
-    read() {
+    // Always an array, never null. Empty means nothing usable is on it. `at` is the start of the clip it is about to be
+    // pasted onto: given one, the keyframes arrive re-anchored there (see above); without one, at the times they left.
+    read(at) {
       try {
-        const raw = JSON.parse(localStorage.getItem(this._key) || 'null');
+        let raw = JSON.parse(localStorage.getItem(this._key) || 'null');
         if (!raw) return [];
+        const boxed = !Array.isArray(raw) && typeof raw === 'object' && Array.isArray(raw.fx) && !raw.type;   // an effect always has a type; the box never does
+        const from = (boxed && Number.isFinite(raw.from)) ? raw.from : null;
+        if (boxed) raw = raw.fx;
         // Tolerate the pre-v6.32 single-object format, so a clipboard written by an older build
         // still pastes instead of silently reading as empty.
         const list = Array.isArray(raw) ? raw : [raw];
@@ -456,6 +470,7 @@ window.FM = window.FM || {};
         usable.forEach(fx => {
           if (fx && fx.params && fx.params.source && !FM.layerById(FM.scene, fx.params.source)) fx.params.source = '';
         });
+        if (from !== null && Number.isFinite(at) && FM.shiftFxKeyframes) FM.shiftFxKeyframes(usable, at - from);   // queue 690
         return usable;
       } catch (e) { return []; }
     },
@@ -513,8 +528,14 @@ window.FM = window.FM || {};
     save(name, layer) {
       if (!name || !layer) return;
       const tr = layer.transform || {};
+      /* THE EFFECTS' ANIMATION IS RE-ANCHORED TOO (queue 690). The transform below has always gone through shiftKf, and
+         the comment above it is the rule; the effect stack beside it was stored raw, at the source clip's absolute times.
+         So "Save look + animations" kept half its name: applied to a clip starting later, the rotation arrived on time
+         and a blur-in from the same look had already finished before the clip began. Stored relative to the source's
+         start, the way the transform is, and marked, so applyTo can tell these from presets saved before the fix — those
+         are left exactly as they were, because their source start was never written down. */
       const data = {
-        effects: clone(layer.effects || []),
+        effects: FM.shiftFxKeyframes(clone(layer.effects || []), -(layer.start || 0)), effectsFromStart: true,
         fill: layer.fill, fillMode: layer.fillMode, fillOpacity: layer.fillOpacity, fillImage: layer.fillImage, fillImgX: clone(layer.fillImgX), fillImgY: clone(layer.fillImgY), fillGradient: clone(layer.fillGradient), stroke: clone(layer.stroke),
         shadow: clone(layer.shadow), blendMode: layer.blendMode, colorGrade: clone(layer.colorGrade),
         cornerRadius: layer.cornerRadius,
@@ -577,6 +598,7 @@ window.FM = window.FM || {};
     applyTo(d, layer) {
       if (!d || !layer) return;
       layer.effects = sanitizeFxList(clone(d.effects) || []);   // queue 218 — a saved preset is untrusted too
+      if (d.effectsFromStart === true) FM.shiftFxKeyframes(layer.effects, layer.start || 0);   // queue 690: timed from THIS clip's start, like the transform below
       if (d.fill != null && layer.type === 'shape') layer.fill = d.fill;
       if (d.fillMode != null && (layer.type === 'shape' || layer.type === 'text')) layer.fillMode = d.fillMode;
       if (d.fillOpacity != null) layer.fillOpacity = d.fillOpacity;
@@ -1306,7 +1328,7 @@ window.FM = window.FM || {};
       // Duplicate must carry the CURRENT settings + keyframes (a fresh default instance isn't a duplicate)
       { label: 'Duplicate', action: () => { const copy = JSON.parse(JSON.stringify(fx, FM.jsonReplacer)); listFor().splice(idx + 1, 0, copy); done(); } },
       { label: 'Copy effect', action: () => {
-        const ok = FM.fxClipboard.copy(fx);
+        const ok = FM.fxClipboard.copy(fx, layer.start || 0);   // queue 690: where its keyframes were timed from
         if (FM.toast) FM.toast(ok ? 'Copied ' + ((reg && reg.label) || fx.type) : 'Couldn’t copy this effect', 1600);
       } },
     ];
@@ -1337,13 +1359,18 @@ window.FM = window.FM || {};
     // land on it. Absent entirely when there is nothing to paste, rather than present and dead.
     if (clipLabel) {
       items.push({ label: 'Paste ' + clipLabel, action: () => {
-        const list = FM.fxClipboard.read();
+        const list = FM.fxClipboard.read(layer.start || 0);   // queue 690: its animation re-anchored onto THIS clip
         if (!list.length) { if (FM.toast) FM.toast('Nothing to paste', 1400); return; }
         list.forEach(fxIn => delete fxIn._expanded);
         if (!Array.isArray(layer.effects)) layer.effects = [];
         // …below the effect you opened the menu on, in clipboard order.
         listFor().splice(idx + 1, 0, ...list);
-        afterFx();
+        /* done(), NOT afterFx() (queue 690). A layer's own rows have run on the MERGED stack since queue 560 — listFor()
+           hands back a copy of layer.effects with the masks folded in, and only the stack's own `after` (applyMerged)
+           writes that copy back to the layer. Duplicate and Delete below have always called done(); this called
+           afterFx(), whose refresh threw the copy away — so Paste from a row's ⋯ said "Pasted Gaussian Blur" and put
+           nothing on the layer at all. Found while proving the re-anchoring above: the paste never arrived to be timed. */
+        done();
         if (FM.toast) FM.toast('Pasted ' + clipLabel, 1400);
       } });
     }
@@ -2080,7 +2107,7 @@ window.FM = window.FM || {};
     const cp = el('button', 'fx-act', 'Copy'); cp.disabled = !(layer.effects && layer.effects.length);
     cp.addEventListener('click', () => {
       const n = (layer.effects || []).length;
-      if (!FM.fxClipboard.copy(layer.effects)) { if (FM.toast) FM.toast('Couldn’t copy'); return; }
+      if (!FM.fxClipboard.copy(layer.effects, layer.start || 0)) { if (FM.toast) FM.toast('Couldn’t copy'); return; }   // queue 690: with the start its keyframes were timed from
       if (FM.toast) FM.toast('Copied ' + n + (n === 1 ? ' effect' : ' effects'));
       FM.inspector.refresh();   // the Paste button's label and disabled state are derived from the clipboard
     });
@@ -2088,7 +2115,7 @@ window.FM = window.FM || {};
     // one effect or somebody's whole stack on this layer.
     const pa = el('button', 'fx-act', clipN > 1 ? 'Paste ' + clipN : 'Paste'); pa.disabled = !clipN;
     pa.addEventListener('click', () => {
-      const list = FM.fxClipboard.read();
+      const list = FM.fxClipboard.read(layer.start || 0);   // queue 690: its animation re-anchored onto THIS clip
       if (!list.length) return;
       if (!layer.effects) layer.effects = [];
       /* Fit each entry to THIS layer before landing it. A filter built on a text layer can hold text
