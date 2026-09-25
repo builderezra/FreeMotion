@@ -14764,6 +14764,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           return;
         }
         let src = null;
+        /* ⚠️ queue 690 (HUNT-a): AN ANIMATED GIF PICKS ITS FRAME FROM THE CLIP'S OWN TIME. m.el is a detached <img>, which
+           only ever paints frame 0, so the frames are decoded on load (js/media.js, `anim`) and chosen here — looping,
+           through layerLocalTime so a trim, a speed change and Reverse move it like a clip, and the export (same
+           renderScene) matches the preview. A still image has no `anim` and takes the old path untouched. */
+        if (m.anim && m.anim.frames && m.anim.frames.length > 1 && FM.animFrameAt) {
+          const local = FM.layerLocalTime(layer, t);
+          src = FM.animFrameAt(m.anim, local == null ? 0 : local);
+        }
         // Render from the pre-decoded frame cache: reversed clips always; forward clips when
         // frame-blend slow-mo is on. With frame-blend + speed<1 we cross-dissolve the two
         // nearest source frames so slow motion looks smooth instead of stuttering on dupes.

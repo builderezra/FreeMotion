@@ -2780,7 +2780,11 @@ window.FM = window.FM || {};
     setTimeout(function () { if (FM.loadingDot) FM.loadingDot.check(); }, 0);
     const scene = FM.scene, P = scene.project;
     const first = scene.layers.length === 0;
-    if (first && rec.width && rec.height) {
+    /* ⚠️ queue 690 (HUNT-a): ONLY A SIZE NOBODY CHOSE. A project made from a New project tile other than Custom
+       carries `sizePicked` (js/home.js createFromDialog) — he named its shape and size, so his first clip is
+       fitted INTO that canvas below like any later clip, instead of silently replacing it. Every other empty
+       project (Custom, which says Auto adjusts, and the ones the app makes itself) still takes the file's size. */
+    if (first && rec.width && rec.height && !P.sizePicked) {
       const fit = FM.fitProjectSize(rec.width, rec.height);
       P.width = fit.w; P.height = fit.h;
       // Say so rather than quietly disagreeing with the file — a capped project is a real choice the
@@ -4276,17 +4280,63 @@ window.FM = window.FM || {};
     }
     return true;
   });
+  /* ⚠️ queue 690 (HUNT-a): THE NEW FILE TAKES THE OLD ONE'S PLACE, NOT ITS PIXEL SCALE. A media layer's size on the
+     canvas is the FILE's pixel size times transform.scale (FM.layerSize), and the scale was chosen on import to fit
+     THAT file. Kept as it was, a 4K clip swapped in for a 1080p one of the same shape came in twice as wide and twice
+     as tall — only its middle quarter showed — a 12 MP photo nearly four times, and a small file tiny. So the scale
+     (every keyframe of it) is multiplied by what makes the new file fit the box the old one drew, the same `min` the
+     importer uses to fit a file into the canvas. A crop is in SOURCE pixels, so it is moved onto the new file as the
+     same fraction of the frame. Called only from the swap HE makes (below) — never from replaceMediaWith, which an
+     undo also calls with the layer's own scale already put back by history. Song ↔ song (no picture) is untouched. */
+  function mulProp(obj, key, f) {
+    const p = obj && obj[key];
+    if (FM.isAnimated(p)) p.kf.forEach(k => {
+      if (typeof k.v === 'number' && isFinite(k.v)) k.v *= f;
+      if (Number.isFinite(k.to)) k.to *= f;   // a tangent is in the value's own units, so it scales with it
+      if (Number.isFinite(k.ti)) k.ti *= f;
+    });
+    else if (typeof p === 'number' && isFinite(p)) obj[key] = p * f;
+  }
+  function fitReplacedMedia(layer, old, nrec) {
+    const ow = old && old.width, oh = old && old.height, nw = nrec && nrec.width, nh = nrec && nrec.height;
+    if (!layer || !layer.transform || !(ow > 0 && oh > 0 && nw > 0 && nh > 0)) return;
+    if (layer.crop) {
+      const kx = nw / ow, ky = nh / oh;
+      mulProp(layer.crop, 'x', kx); mulProp(layer.crop, 'w', kx);
+      mulProp(layer.crop, 'y', ky); mulProp(layer.crop, 'h', ky);
+    }
+    const k = Math.min(ow / nw, oh / nh);
+    if (isFinite(k) && k > 0 && Math.abs(k - 1) > 1e-9) mulProp(layer.transform, 'scale', k);
+  }
+  FM._fitReplacedMedia = fitReplacedMedia;   // suite seam (queue 690)
+
   FM.replaceMedia = function (id) {
     const layer = FM.layerById(FM.scene, id);
     if (!layer || layer.type === 'text' || layer.type === 'shape' || layer.type === 'null') return;
+    /* ⚠️ queue 690 (HUNT-a): A SONG IS REPLACED BY A SONG. A song is a video layer with no picture, so the ⋯ menu offers
+       it Replace media… like any clip (and a template's Insert your Media lists it as a slot) — but this picker asked
+       for video/*,image/* only, which on his iPhone greys out every song in Files, and a song that reached it anyway
+       was loaded as a PHOTO, failed, and the toast said Could not load that file. So a song opens the same picker
+       Add ▸ Audio does (the extensions are what iOS matches — see ACCEPT_AUDIO in js/addmenu.js), and the file is
+       sorted by FM.mediaKind exactly as an import is: audio rides the pictureless-video path, and a VIDEO picked
+       for a song gives up its sound, as it does under Add ▸ Audio (queue 448), so the layer stays a song. */
+    const cur = FM.media.get(id);
+    const isSong = layer.type === 'video' && !!cur && !(cur.width > 0 && cur.height > 0);
     const input = document.createElement('input');
-    input.type = 'file'; input.accept = 'video/*,image/*'; input.style.display = 'none';
+    input.type = 'file'; input.accept = (isSong && FM._audioAccept) ? FM._audioAccept() : 'video/*,image/*'; input.style.display = 'none';
     input.addEventListener('change', async () => {
       const file = input.files && input.files[0]; input.remove();
       if (!file) return;
-      const isVideo = /^video\//.test(file.type) || /\.(mp4|mov|webm|mkv|m4v)$/i.test(file.name);
+      const kind = mediaKind(file);
       let nrec = null;
-      try { nrec = isVideo ? await FM.loadVideoFile(file) : await FM.loadImageFile(file); } catch (e) { nrec = null; }
+      try {
+        if (isSong && kind === 'video') {
+          const wav = await audioFromVideo(file);
+          if (!wav) { if (FM.toast) FM.toast('No sound could be read from “' + (file.name || 'that clip') + '” — the song is unchanged', 4200); return; }
+          nrec = await FM.loadVideoFile(wav);
+        } else if (kind === 'video' || kind === 'audio') nrec = await FM.loadVideoFile(file);
+        else nrec = await FM.loadImageFile(file);   // an image, or a name nothing recognises (the old fall-through)
+      } catch (e) { nrec = null; }
       if (!nrec) { if (FM.toast) FM.toast('Could not load that file'); return; }
       /* queue 829: keep the outgoing file BEFORE anything replaces it. The next save writes the new blob
          over the same key, so without this the original is gone from the registry, from IndexedDB and
@@ -4296,6 +4346,7 @@ window.FM = window.FM || {};
         try { await FM.storage.stashPrevMedia(id, outgoing, layer.mediaRev || 0); } catch (e) {}
       }
       FM.replaceMediaWith(id, nrec);
+      fitReplacedMedia(FM.layerById(FM.scene, id), outgoing, nrec);   // queue 690 (HUNT-a): same place, same size — before the commit, so undo puts the old scale back
       if (layer.reversed && FM.ensureReverseCache) { try { await FM.ensureReverseCache(layer); } catch (e) {} }
       /* The outgoing blob is NOT deleted any more, and the layer gets a serialisable marker.
        *

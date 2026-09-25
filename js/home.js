@@ -2681,7 +2681,12 @@ window.FM = window.FM || {};
     const s = npCompute(), fps = npFps();
     try { localStorage.setItem(NEWP_KEY, JSON.stringify({ aspect: npAspect, res: npEl('hm-new-res').value, fps: fps, bg: npBg, w: s.w, h: s.h })); } catch (e) {}
     dlg.classList.add('hidden');
-    const pid = await FM.projects.create({ name: name, width: s.w, height: s.h, fps: fps, background: npBg === 'none' ? null : npBg });
+    /* ⚠️ queue 690 (HUNT-a): A TILE IS A PROMISE. Only Custom says Auto adjusts (his words, #659); the other five
+       name a shape and a size, and he picked one. The first clip or photo used to replace that size with the
+       file's own for EVERY tile (FM.addMediaLayer), so a 16:9 project turned portrait the moment his phone clip
+       landed and a 1080p one became 4K. `sizePicked` rides on the project so addMediaLayer can tell his choice
+       from a size nobody chose; Custom leaves it off and keeps adjusting, as its label says. */
+    const pid = await FM.projects.create({ name: name, width: s.w, height: s.h, fps: fps, background: npBg === 'none' ? null : npBg, sizePicked: npAspect !== 'custom' });
     if (!pid) return;   // queue 690: his open project could not be saved and he chose to stay — Home stays as it is
     FM.home.close({ push: true });   // same hand-off as tapping a card — every route from home into a project pushes
   }

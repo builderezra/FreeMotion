@@ -873,6 +873,7 @@ window.FM = window.FM || {};
     if ('background' in p && p.background !== null && !(typeof p.background === 'string' && p.background.length <= 64)) p.background = null;   // null IS a value: transparent
     ['loopIn', 'loopOut'].forEach(k => { if (k in p && p[k] !== null && !(typeof p[k] === 'number' && isFinite(p[k]))) p[k] = null; });
     if ('thumbPinned' in p && typeof p.thumbPinned !== 'boolean') p.thumbPinned = false;
+    if ('sizePicked' in p && typeof p.sizePicked !== 'boolean') delete p.sizePicked;   // queue 690 (HUNT-a): read by truthiness, and "false" is truthy
     if ('notes' in p) {
       if (!Array.isArray(p.notes)) p.notes = [];
       else {
@@ -2293,6 +2294,7 @@ window.FM = window.FM || {};
       // Anything else is rejected rather than written into the doc — this value goes straight to fillStyle.
       if ('background' in opts) fresh.project.background = /^#[0-9a-f]{6}$/i.test(String(opts.background || '')) ? opts.background : null;
       clampProjectDims(fresh.project);   // opts can come from an untrusted import (importFile passes obj.project.width/height straight through)
+      if (opts.sizePicked) fresh.project.sizePicked = true;   // queue 690 (HUNT-a): he picked this size in New project — the first import must not replace it (FM.addMediaLayer)
       /* WHICH element this workspace is editing (queue 505), stamped on the DOC so it survives a reload
          — the same two-place trick `fromTemplate` uses. Without it the editing session cannot know
          which element it came from, which is the whole reason saving could only ever mint a new one. */

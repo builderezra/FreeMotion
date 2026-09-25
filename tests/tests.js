@@ -92121,7 +92121,9 @@
    * Four findings from a hunt through the Add sheet, the picker, the media library and Replace media. Each test goes in by
    * the route he uses: the New project dialog and the ⋯ menu are driven with a REAL finger at phone width, and every file
    * arrives through the app's own #file-input `change` (exactly what the iOS picker does) or through the input
-   * FM.replaceMedia creates — only the picker's own sheet, which no page can drive, is stood in for. */
+   * FM.replaceMedia creates — only the picker's own sheet, which no page can drive, is stood in for.
+   * Found as four failing HUNT-a tests; all four fixed (js/home.js + js/app.js sizePicked, js/app.js replaceMedia, js/media.js
+   * + js/compositor.js GIF frames) and renamed 690 for what they now hold, with controls beside them. */
   function h3aCodec(w, h) { return w * h <= 414720 ? 'avc1.42e01e' : w * h <= 2100000 ? 'avc1.640028' : 'avc1.640033'; }
   // A real H.264 MP4 made the way a phone clip is (constant frame duration), painted by `paint(g, k, w, h)`.
   async function h3aClip(w, h, n, name, paint) {
@@ -92207,7 +92209,7 @@
     return 'rgb(' + rgb.join(',') + ')';
   }
 
-  test('HUNT-a a new project keeps the aspect and size he picked when the first thing he adds is a phone clip of another shape', { item: '690', budgetMs: 90000 }, async function () {
+  test('690 a new project keeps the aspect and size he picked when the first thing he adds is a phone clip of another shape', { item: '690', budgetMs: 90000 }, async function () {
     /* He starts every project in the New project dialog, and the dialog exists so a project starts the way he wants it
        instead of being corrected later in Canvas settings. Its sixth tile is Custom, labelled Auto adjusts (his words,
        #659) — so the other five are promises. addMediaLayer breaks them: the first clip or photo added to an empty
@@ -92240,11 +92242,23 @@
           const P = FM.scene.project;
           if (P.width !== 1920 || P.height !== 1080) throw new Error('setup: the new project opened at ' + P.width + ' x ' + P.height + ', not the 1920 x 1080 the dialog showed');
           if (FM.scene.layers.length) throw new Error('setup: the new project is not empty');
-          await h3aImport(clip);
+          /* …and he may not add the clip today: leave the empty project and come back to it, so the pick has to have been
+             SAVED with the project, not merely remembered by the page that made it. */
+          if (!FM.storage.flushSync()) throw new Error('setup: the new project could not be saved');
+          made.push(await FM.projects.create({ name: 'HUNT-a away', width: 320, height: 240 }));
+          await FM.projects.open(pid, { confirmed: true });
+          await sleep(300);
+          if (FM.projects.currentId() !== pid || FM.scene.project.width !== 1920) throw new Error('setup: the 16:9 project did not reopen at 1920 x 1080');
+          const L = await h3aImport(clip);
           const W = FM.scene.project.width, H = FM.scene.project.height;
           if (W !== 1920 || H !== 1080) {
             throw new Error('he picked 16:9 Wide at 1080p in New project (1920 x 1080) and added his portrait phone clip first — the project silently became ' +
               W + ' x ' + H + ': the canvas he chose is gone, the preview turned portrait and the export will come out ' + W + ' x ' + H + '. Only the Custom tile says Auto adjusts');
+          }
+          // …and the clip is FITTED into the canvas he chose, the way every later clip is — whole, centred, not cropped off
+          const sz = FM.layerSize(L), dw = sz.w * L.transform.scale, dh = sz.h * L.transform.scale;
+          if (Math.abs(dh - 1080) > 2 || dw > 1920 + 2 || Math.abs(L.transform.x - 960) > 1 || Math.abs(L.transform.y - 540) > 1) {
+            throw new Error('the canvas kept its 1920 x 1080, but his portrait clip draws ' + Math.round(dw) + ' x ' + Math.round(dh) + ' at ' + Math.round(L.transform.x) + ',' + Math.round(L.transform.y) + ' — it should sit whole in the middle, 1080 tall');
           }
         });
       }, 360);
@@ -92256,7 +92270,51 @@
     }
   });
 
-  test('HUNT-a Replace media puts the new clip where the old one was at the same size, instead of blowing it up by its pixel count', { item: '690', budgetMs: 90000 }, async function () {
+  test('690 CONTROL a Custom project still takes the size of the first clip, as its tile says Auto adjusts', { item: '690', budgetMs: 90000 }, async function () {
+    /* The fix above keeps a picked tile's size; this is the other half of the same rule. Custom is the one tile that says
+       Auto adjusts (his words, #659), so a project made with it must STILL take the size of the first thing added — and a
+       project the app makes by itself (no dialog, nothing picked) must too. Same real finger at 360 as the test above. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], lib0 = h3aLibSnapshot();
+    let remembered = null; try { remembered = localStorage.getItem('fm.newproj'); } catch (e) {}
+    try {
+      try { localStorage.setItem('fm.newproj', JSON.stringify({ aspect: '9:16', res: '1080', fps: 30, bg: '#000000', w: 1080, h: 1920 })); } catch (e) {}
+      const clip = await h3aClip(1280, 720, 4, 'IMG_2042.MOV', function (g, k, w, h) { g.fillStyle = '#20a050'; g.fillRect(0, 0, w, h); });
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          FM.home.open(); await sleep(900);
+          const tab = document.querySelector('#home-screen .hm-tab[data-tab="projects"]');
+          if (tab) { tab.click(); await sleep(300); }
+          const before = new Set(FM.projects.list().map(p => p.id));
+          await h3aTap(document.getElementById('hm-new'), 'a tap on + (new project)');
+          const custom = await hcUntil('the New project dialog', () => { const d = document.getElementById('hm-dialog'); return d && !d.classList.contains('hidden') ? d.querySelector('.hm-aspect[data-aspect="custom"]') : null; }, 4000);
+          await sleep(350);
+          await h3aTap(custom, 'a tap on Custom');
+          await sleep(150);
+          await h3aTap(document.getElementById('hm-create'), 'a tap on Create');
+          const pid = await hcUntil('the new project to open', () => { const id = FM.projects.currentId(); return (id && !before.has(id) && !FM.home.isOpen()) ? id : null; }, 8000);
+          made.push(pid);
+          await sleep(400);
+          if (FM.scene.project.width !== 1080 || FM.scene.project.height !== 1920) throw new Error('setup: the Custom project opened at ' + FM.scene.project.width + ' x ' + FM.scene.project.height + ', not 1080 x 1920');
+          await h3aImport(clip);
+          const W = FM.scene.project.width, H = FM.scene.project.height;
+          if (W !== 1280 || H !== 720) throw new Error('a project made with Custom (Auto adjusts) stayed ' + W + ' x ' + H + ' when his 1280 x 720 clip was added first — the one tile that promises to adjust did not');
+        });
+      }, 360);
+      // …and a project nobody sized (made by the app, not the dialog) adjusts as it always has
+      made.push(await FM.projects.create({ name: 'HUNT-a unsized', width: 1080, height: 1920 }));
+      await sleep(250);
+      await h3aImport(await h3aClip(640, 480, 3, 'IMG_2043.MOV', function (g, k, w, h) { g.fillStyle = '#a02050'; g.fillRect(0, 0, w, h); }));
+      if (FM.scene.project.width !== 640 || FM.scene.project.height !== 480) throw new Error('a project no one sized stayed ' + FM.scene.project.width + ' x ' + FM.scene.project.height + ' when a 640 x 480 clip was added first');
+    } finally {
+      try { if (remembered == null) localStorage.removeItem('fm.newproj'); else localStorage.setItem('fm.newproj', remembered); } catch (e) {}
+      try { const d = document.getElementById('hm-dialog'); if (d) d.classList.add('hidden'); } catch (e) {}
+      h3aLibRestore(lib0);
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('690 Replace media puts the new clip where the old one was at the same size, instead of blowing it up by its pixel count', { item: '690', budgetMs: 90000 }, async function () {
     /* Replace media (the ⋯ menu, and the Replace Media button of a template's Insert your Media sheet, which calls the
        same FM.replaceMedia) keeps the layer's transform — and a media layer's size on the canvas is the FILE's pixel size
        times that scale (FM.layerSize). So the scale that made the old file fit is applied to a file of a different
@@ -92295,13 +92353,46 @@
           ' where the clip green border should be. Filling a template slot (Insert your Media) with his own 4K clip or 12 MP photo goes the same way');
       }
       if (h3aName(px.edge) !== 'green') throw new Error('the replaced clip reports the right size but the left edge of the canvas is ' + h3aName(px.edge) + ', not the clip green border');
+      /* UNDO puts the old clip back at the old size. The rescale is part of the replace's own undo step, and the undo's
+         media swap (FM.restoreReplacedMedia → replaceMediaWith) must not rescale a second time on top of it. */
+      FM.history.undo();
+      await hcUntil('undo to bring the 1080p clip back', () => { const r = FM.media.get(L.id); return r && r.width === 1080 ? r : null; }, 8000);
+      await sleep(150);
+      const Lu = FM.layerById(FM.scene, L.id), back = FM.layerSize(Lu).w * Lu.transform.scale;
+      if (Math.abs(back - 1080) > 11) throw new Error('after Undo the original 1080p clip is back but draws ' + Math.round(back) + ' px wide on the 1080 px canvas — the undo rescaled it a second time');
     } finally {
       h3aLibRestore(lib0);
       await hcCleanup(made, orig, wasOpen);
     }
   });
 
-  test('HUNT-a an animated GIF he adds moves on the canvas, instead of freezing on its first frame', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 Replace media fits a file of another size or shape into the box the old one drew, keyframed scale and crop included', { item: '690' }, function () {
+    /* The rule behind the test above, on the cases a real swap can bring: a keyframed scale (every keyframe moves by the same
+       factor, so the animation keeps its shape), a crop (source pixels, so it becomes the same FRACTION of the new frame and
+       shows the same part of the picture), a file of another shape (fits inside the old box, never spills out of it), a
+       small file (grows to the old box), and a song (no picture: nothing to fit). */
+    const fit = FM._fitReplacedMedia;
+    if (typeof fit !== 'function') throw new Error('FM._fitReplacedMedia is missing');
+    const near = (a, b) => Math.abs(a - b) < 1e-6;
+    const L = FM.makeLayer('video', { x: 540, y: 960 });
+    L.transform.scale = { kf: [{ t: 0, v: 0.5 }, { t: 1, v: 1, to: 0.2, ti: -0.1 }] };
+    L.crop = { x: 100, y: { kf: [{ t: 0, v: 200 }, { t: 1, v: 400 }] }, w: 500, h: 600 };
+    fit(L, { width: 1080, height: 1920 }, { width: 2160, height: 3840 });
+    const kf = L.transform.scale.kf;
+    if (!near(kf[0].v, 0.25) || !near(kf[1].v, 0.5) || !near(kf[1].to, 0.1) || !near(kf[1].ti, -0.05)) throw new Error('a keyframed scale became ' + JSON.stringify(kf) + ' for a same-shape file twice the size — every keyframe (and its tangents) should halve');
+    if (!near(L.crop.x, 200) || !near(L.crop.w, 1000) || !near(L.crop.h, 1200) || !near(L.crop.y.kf[0].v, 400) || !near(L.crop.y.kf[1].v, 800)) throw new Error('the crop became ' + JSON.stringify(L.crop) + ' — on a file twice the size it should cover the same part of the picture, so twice the source pixels');
+    const S = FM.makeLayer('image', {}); S.transform.scale = 1;
+    fit(S, { width: 1080, height: 1920 }, { width: 1920, height: 1080 });
+    if (!near(S.transform.scale, 1080 / 1920)) throw new Error('a landscape file swapped in for a portrait one came in at scale ' + S.transform.scale + ' — it should fit inside the old box (1080 / 1920)');
+    const T = FM.makeLayer('image', {}); T.transform.scale = 0.5;
+    fit(T, { width: 4032, height: 3024 }, { width: 1008, height: 756 });
+    if (!near(T.transform.scale, 2)) throw new Error('a small file swapped in for a 12 MP photo came in at scale ' + T.transform.scale + ' — it should grow to the box the photo drew (2)');
+    const A = FM.makeLayer('video', {}); A.transform.scale = 0.7;
+    fit(A, { width: 0, height: 0 }, { width: 0, height: 0 });
+    if (A.transform.scale !== 0.7) throw new Error('a song swapped for a song had its scale changed to ' + A.transform.scale);
+  });
+
+  test('690 an animated GIF he adds moves on the canvas, instead of freezing on its first frame — and still moves when he reopens the project', { item: '690', budgetMs: 60000 }, async function () {
     /* The importer takes .gif as a picture (RE_IMAGE in js/app.js) and loads it into an <img> that is never in the page.
        A detached image never advances its animation, so drawImage paints frame 0 for the whole clip, in the preview and in
        every export (the exporter renders through the same FM.renderScene). Nothing tells him: the reaction GIF or animated
@@ -92340,13 +92431,135 @@
         throw new Error('his animated GIF (four frames a second, red, blue, green, yellow) is frozen on its first frame — the canvas shows ' +
           at.map(function (a) { return a.c + ' at ' + a.dt + ' s'; }).join(', ') + '. It never moves, in the preview or in the export');
       }
+      // each quarter-second is its own frame, in order, and it LOOPS for as long as the clip lasts
+      const want = ['red', 'blue', 'green', 'yellow'];
+      const seq = [0.1, 0.35, 0.6, 0.85, 1.1, 2.6].map(function (dt) { return h3aName(h3aPixel(L.start + dt).centre); });
+      const exp = ['red', 'blue', 'green', 'yellow', 'red', 'green'];
+      if (seq.join() !== exp.join()) throw new Error('the GIF moves but out of step: at 0.1, 0.35, 0.6, 0.85, 1.1 and 2.6 s the canvas shows ' + seq.join(', ') + ' — expected ' + exp.join(', ') + ' (' + want.join(', ') + ', looping)');
+      /* …AND AFTER A REOPEN. The frames are decoded on load, so every other way the file comes back (a reopened project,
+         a restored backup, a clip from the media library) goes through the same FM.loadImageFile — this proves that door. */
+      const pid = FM.projects.currentId();
+      FM.storage.markDirty(); await FM.storage.save();
+      made.push(await FM.projects.create({ name: 'HUNT-a gif away', width: 320, height: 240 }));
+      await FM.projects.open(pid, { confirmed: true });
+      await hcUntil('the reopened GIF to load its frames', function () { const m = FM.media.get(L.id); return m && m.anim && m.anim.frames.length === 4; }, 10000);
+      const again = [0.1, 0.6].map(function (dt) { return h3aName(h3aPixel(L.start + dt).centre); });
+      if (again.join() !== 'red,green') throw new Error('after he left the project and came back the GIF shows ' + again.join(', ') + ' at 0.1 and 0.6 s — it froze again on reopen');
     } finally {
       h3aLibRestore(lib0);
       await hcCleanup(made, orig, wasOpen);
     }
   });
 
-  test('HUNT-a Replace media on a song lets him pick another song, and the layer then plays it', { item: '690', budgetMs: 60000 }, async function () {
+  // A GIF built by hand, byte by byte, so it carries what the export encoder never writes: a global palette, frames smaller
+  // than the screen at an offset, an interlaced frame, a local palette, disposal 2 and 3, and a transparent index. The LZW is
+  // the uncompressed form (a clear code before the table can grow), which every decoder has to read.
+  function h3aGifBytes(W, H, gct, frames) {
+    const out = [], u8 = function (v) { out.push(v & 255); }, u16 = function (v) { u8(v); u8(v >> 8); };
+    const str = function (t) { for (let i = 0; i < t.length; i++) u8(t.charCodeAt(i)); };
+    const depth = function (pal) { let d = 1; while ((1 << d) < pal.length) d++; return Math.max(2, d); };
+    const table = function (pal) { const d = depth(pal); for (let i = 0; i < (1 << d); i++) { const c = pal[i] || [0, 0, 0]; u8(c[0]); u8(c[1]); u8(c[2]); } };
+    str('GIF89a'); u16(W); u16(H); u8(0xF0 | (depth(gct) - 1)); u8(0); u8(0); table(gct);
+    u8(0x21); u8(0xFF); u8(11); str('NETSCAPE2.0'); u8(3); u8(1); u16(0); u8(0);
+    frames.forEach(function (f) {
+      u8(0x21); u8(0xF9); u8(4); u8((f.disposal << 2) | (f.transparent >= 0 ? 1 : 0)); u16(f.delay); u8(f.transparent >= 0 ? f.transparent : 0); u8(0);
+      u8(0x2C); u16(f.x); u16(f.y); u16(f.w); u16(f.h);
+      u8((f.interlaced ? 0x40 : 0) | (f.lct ? 0x80 | (depth(f.lct) - 1) : 0));
+      if (f.lct) table(f.lct);
+      const rows = [];
+      if (f.interlaced) [[0, 8], [4, 8], [2, 4], [1, 2]].forEach(function (ps) { for (let y = ps[0]; y < f.h; y += ps[1]) rows.push(y); });
+      else for (let y = 0; y < f.h; y++) rows.push(y);
+      const idx = []; rows.forEach(function (y) { for (let x = 0; x < f.w; x++) idx.push(f.px(x, y)); });
+      const minCode = depth(f.lct || gct), clear = 1 << minCode, size = minCode + 1, group = clear - 2, data = [];
+      let acc = 0, bits = 0;
+      const put = function (c) { acc |= c << bits; bits += size; while (bits >= 8) { data.push(acc & 255); acc >>= 8; bits -= 8; } };
+      for (let i = 0; i < idx.length; i++) { if (i % group === 0) put(clear); put(idx[i]); }
+      put(clear + 1);
+      if (bits > 0) data.push(acc & 255);
+      u8(minCode);
+      for (let o = 0; o < data.length; o += 255) { const n = Math.min(255, data.length - o); u8(n); for (let k = 0; k < n; k++) u8(data[o + k]); }
+      u8(0);
+    });
+    u8(0x3B);
+    return new Uint8Array(out);
+  }
+
+  test('690 the GIF frames match the browser decoder pixel for pixel — 12-bit LZW, transparency, interlace, offsets and every disposal', { item: '690', budgetMs: 60000 }, async function () {
+    /* The frames are decoded by plain JS on purpose (iPhone Safari has no ImageDecoder), so this holds that decoder to the
+       browser: every frame of two GIFs, composed, compared with what Chrome's ImageDecoder makes of the same bytes. One is
+       noise through the app's own GIF encoder (a transparent key, 255 colours, a code table that fills to 4096 and clears);
+       the other is built by hand with everything that encoder never writes. Timing too: each frame starts where the
+       browser says it does, and a zero delay plays at 100 ms, as every browser plays it. */
+    if (!window.ImageDecoder) throw new Error('setup: this browser has no ImageDecoder to compare against');
+    if (typeof FM._decodeGifAnimation !== 'function') throw new Error('FM._decodeGifAnimation is missing');
+    const cmp = async function (bytes, what, checkTimes) {
+      const file = new File([bytes], what + '.gif', { type: 'image/gif' });
+      const mine = await FM._decodeGifAnimation(file);
+      const d = new ImageDecoder({ data: bytes.buffer ? bytes.buffer.slice(bytes.byteOffset || 0) : await file.arrayBuffer(), type: 'image/gif' });
+      await d.tracks.ready; await d.completed;
+      const n = d.tracks.selectedTrack.frameCount;
+      if (!mine || mine.frames.length !== n) throw new Error(what + ': the app read ' + (mine ? mine.frames.length : 'no') + ' frames, the browser reads ' + n);
+      const W = mine.width, H = mine.height;
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      const g = cv.getContext('2d', { willReadFrequently: true });
+      let t = 0;
+      for (let i = 0; i < n; i++) {
+        const r = await d.decode({ frameIndex: i });
+        g.clearRect(0, 0, W, H); g.drawImage(r.image, 0, 0, W, H);
+        const ref = g.getImageData(0, 0, W, H).data;
+        const dur = r.image.duration; r.image.close();
+        g.clearRect(0, 0, W, H); g.drawImage(mine.frames[i], 0, 0, W, H);
+        const got = g.getImageData(0, 0, W, H).data;
+        for (let p = 0; p < ref.length; p += 4) {
+          const bad = Math.abs(ref[p + 3] - got[p + 3]) > 2 || (ref[p + 3] > 250 && (Math.abs(ref[p] - got[p]) > 2 || Math.abs(ref[p + 1] - got[p + 1]) > 2 || Math.abs(ref[p + 2] - got[p + 2]) > 2));
+          if (bad) {
+            const px = p / 4;
+            throw new Error(what + ': frame ' + (i + 1) + ' of ' + n + ' differs from the browser at ' + (px % W) + ',' + Math.floor(px / W) + ' — browser rgba(' +
+              Array.prototype.slice.call(ref, p, p + 4).join(',') + '), app rgba(' + Array.prototype.slice.call(got, p, p + 4).join(',') + ')');
+          }
+        }
+        if (checkTimes && dur != null && Math.abs(mine.starts[i] - t) > 0.002) throw new Error(what + ': frame ' + (i + 1) + ' starts at ' + mine.starts[i].toFixed(3) + ' s in the app and ' + t.toFixed(3) + ' s in the browser');
+        t += (dur || 0) / 1e6;
+      }
+      d.close();
+      return mine;
+    };
+    /* 1. noise through the app's own encoder, with a transparent key */
+    const NW = 96, NH = 64;
+    const enc = FM.gifEncoder.create(NW, NH, { loop: true, transparent: true });
+    let seed = 7;
+    const rnd = function () { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    for (let f = 0; f < 3; f++) {
+      const rgba = new Uint8ClampedArray(NW * NH * 4);
+      for (let i = 0; i < NW * NH; i++) { rgba[i * 4] = rnd() * 255; rgba[i * 4 + 1] = rnd() * 255; rgba[i * 4 + 2] = rnd() * 255; rgba[i * 4 + 3] = rnd() < 0.2 ? 0 : 255; }
+      enc.addFrame(rgba, 120);
+    }
+    await cmp(new Uint8Array(await enc.finish().arrayBuffer()), 'noise', true);
+    /* 2. by hand: a global palette, then an interlaced sub-rect restored after (disposal 3), a local palette cleared after
+          (disposal 2), and a corner drawn over what the clear left */
+    const gct = [[0, 0, 0], [230, 30, 30], [30, 60, 230], [30, 200, 40], [240, 220, 30], [200, 40, 200], [40, 200, 200], [255, 255, 255]];
+    const lct = [[10, 10, 10], [250, 120, 0], [0, 120, 250], [120, 250, 0]];
+    const hand = h3aGifBytes(40, 30, gct, [
+      { x: 0, y: 0, w: 40, h: 30, disposal: 1, transparent: -1, delay: 20, px: function (x, y) { return ((x >> 2) + (y >> 2)) % 8; } },
+      { x: 5, y: 4, w: 20, h: 15, disposal: 3, transparent: 0, delay: 15, interlaced: true, px: function (x, y) { return (x + y) % 3 === 0 ? 0 : 1 + ((x * y) % 7); } },
+      { x: 10, y: 10, w: 25, h: 16, disposal: 2, transparent: 3, delay: 25, lct: lct, px: function (x, y) { return (x * 3 + y) % 4; } },
+      { x: 0, y: 0, w: 12, h: 12, disposal: 1, transparent: -1, delay: 30, px: function (x, y) { return (x + y) % 8; } },
+    ]);
+    const h = await cmp(hand, 'hand-built', true);
+    if (Math.abs(h.total - 0.9) > 1e-6) throw new Error('hand-built: the loop is ' + h.total + ' s long, not the 0.9 s its four delays add up to');
+    /* 3. a zero delay plays at 100 ms, the way every browser plays it — never as a frame that flashes past */
+    const zero = h3aGifBytes(8, 8, gct, [
+      { x: 0, y: 0, w: 8, h: 8, disposal: 1, transparent: -1, delay: 0, px: function () { return 1; } },
+      { x: 0, y: 0, w: 8, h: 8, disposal: 1, transparent: -1, delay: 0, px: function () { return 2; } },
+    ]);
+    const z = await FM._decodeGifAnimation(new File([zero], 'zero.gif', { type: 'image/gif' }));
+    if (!z || Math.abs(z.total - 0.2) > 1e-6 || Math.abs(z.starts[1] - 0.1) > 1e-6) throw new Error('two zero-delay frames make a loop of ' + (z && z.total) + ' s — each should last 100 ms');
+    /* 4. a single-frame GIF is a still: nothing is decoded or kept for it */
+    const one = h3aGifBytes(8, 8, gct, [{ x: 0, y: 0, w: 8, h: 8, disposal: 1, transparent: -1, delay: 0, px: function () { return 3; } }]);
+    if (await FM._decodeGifAnimation(new File([one], 'one.gif', { type: 'image/gif' }))) throw new Error('a one-frame GIF was decoded as an animation — it should stay a plain still');
+  });
+
+  test('690 Replace media on a song lets him pick another song, and the layer then plays it', { item: '690', budgetMs: 60000 }, async function () {
     /* A song is a video layer with no picture, so its ⋯ menu offers Replace media… like any clip (and a template's Insert
        your Media sheet lists it as a slot). But FM.replaceMedia opens a picker for video/*,image/* only — on his iPhone
        every song in Files is greyed out — and it decides photo-or-video from the file itself: a song handed to it is
@@ -92381,6 +92594,22 @@
           ' — the layer still plays ' + ((rec && rec.file && rec.file.name) || 'nothing')));
       }
       if (!(Math.abs(FM.layerById(FM.scene, L.id).duration - 6) < 0.2)) throw new Error('the song was replaced but its clip length changed to ' + FM.layerById(FM.scene, L.id).duration + ' s');
+      /* …and a VIDEO picked for a song gives up its sound, as it does under Add ▸ Audio (queue 448): the layer stays a song,
+         with no picture arriving on the canvas. (A WAV typed as an MP4 is what an .mp4 off the camera roll looks like to the
+         importer, and it decodes — the same stand-in the queue 448 test uses.) */
+      const clipB = new File([await h3aWav(3, 330, 'x.wav').arrayBuffer()], 'IMG_3001.mp4', { type: 'video/mp4', lastModified: Date.now() });
+      let seen2 = null;
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          seen2 = await h3aPicker(clipB, async function () { await h3aLayerMenu(FM.layerById(FM.scene, L.id), /^Replace media/, 'a second tap on Replace media…'); });
+        });
+      }, 360);
+      if (!seen2 || !seen2.n) throw new Error('setup: the second Replace media… opened no file picker');
+      const r2 = await hcUntil('the video to replace the song', function () { const r = FM.media.get(L.id); return r && r.file && r.file !== songB ? r : null; }, 8000).catch(function () { return null; });
+      if (!r2 || !/IMG_3001 \(audio\)\.wav$/.test(r2.file.name) || r2.width || r2.height) {
+        throw new Error('a video picked to replace his song ' + (r2 ? 'came in as ' + r2.file.name + ' at ' + r2.width + ' x ' + r2.height : 'did not replace it' + (toasts.length ? ' (toast: ' + toasts[toasts.length - 1] + ')' : '')) + ' — it should give its sound, like Add ▸ Audio, and leave the song a song');
+      }
+      if (FM.layerById(FM.scene, L.id).duration > 3.05) throw new Error('a 3 s sound replaced the 6 s song but the clip still claims ' + FM.layerById(FM.scene, L.id).duration + ' s');
     } finally {
       FM.toast = realToast;
       h3aLibRestore(lib0);
