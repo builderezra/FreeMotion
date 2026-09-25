@@ -1331,11 +1331,38 @@ window.FM = window.FM || {};
      and the probe would call them dead on every layer (queue 794, found by the #778 audit of v15.54). A probe that cannot
      see an effect says nothing about it. */
   const GHOST_GATED = { temporaldenoise: 1, timewarp: 1, framestutter: 1, motionflow: 1 };
-  function effectDoesNothing(layer, idx) {
-    if (!layer || !FM.scene || !FM.renderScene) return null;
-    const fx = layer.effects && layer.effects[idx];
-    if (!fx || fx.enabled === false) return null;   // switched off is doing nothing ON PURPOSE
-    if (GHOST_GATED[fx.type]) return null;          // queue 794: the ghost render is a passthrough for these — no verdict possible
+  /* ═══ ACROSS THE CLIP, NOT AT ONE INSTANT (queue 690, sixth hunt, 26 Sep) ═══════════════════════════════════════
+   * This measured ONE frame — the one under the playhead — and the playhead sits on a layer's FIRST frame whenever he
+   * adds an effect to a layer he has just made (new layers start at FM.time). Every effect that works by moving over
+   * time is exactly at rest there: Spin, Swing, Pulse, Drift, Blink, Breathe, Glow Scan, Particles all measured "on ==
+   * off" at the start of a box, so a Spin he had just added said "This is on, but it changes nothing" while the box
+   * visibly turned a second later — the complaint #460/#477 exist to answer, made by the answer.
+   * So "changes nothing" now has to hold at SEVERAL moments of the clip: the playhead (when it is inside the clip — a
+   * layer the playhead is not on is not drawn at all, so that frame alone would call every effect dead), then points
+   * spread through the clip. The spread is a golden-ratio sequence, not an even grid, because an even grid can land on
+   * the same phase of a periodic effect every time (a 1 Hz Blink sampled once a second is always on or always off) —
+   * this one never repeats a phase, and it avoids whole seconds, where a Pulse or a Swing on a default-length clip is
+   * back at rest. Measured on his case, a 360 px box on a 1080x1920 canvas with the playhead on its first frame, clips
+   * of 1 to 10 s (56 cases): Spin, Swing, Pulse, Drift, Breathe and Particles are found working at the second moment
+   * every time; Blink and Glow Scan, which act only part of the time, always within the eight (worst: Blink on a 5 s
+   * clip, at the seventh).
+   * A working effect stops the walk the moment it shows — the first or second moment for nearly all of them — so it
+   * costs about what it always did. Only a truly dead one pays for every moment (eight pairs of full-resolution
+   * renders, measured 208 ms in one go on a 1080x1920 project), which is why the inspector asks for them one per timer
+   * slice (scheduleNoopCheck) and never all at once on the main thread. */
+  const NOOP_SPREAD = [0.618, 0.236, 0.854, 0.472, 0.09, 0.708, 0.326];   // frac(k·0.618…), k = 1..7: clip coverage without a fixed stride
+  function noopTimes(layer) {
+    const s = +layer.start || 0, d = +layer.duration;
+    const now = FM.time;
+    const out = [];
+    const inClip = t => typeof t === 'number' && isFinite(t) && t >= s && t < s + d;   // FM.layerLocalTime's half-open window
+    if (inClip(now)) out.push(now);
+    if (isFinite(d) && d > 0) NOOP_SPREAD.forEach(f => { const t = s + d * f; if (inClip(t) && out.indexOf(t) < 0) out.push(t); });
+    if (!out.length) out.push(typeof now === 'number' && isFinite(now) ? now : s);   // a clip with no length: the old single frame
+    return out;
+  }
+  /* One instant. true = on and off are the same frame, false = they differ, null = could not tell (too slow, or threw). */
+  function noopAt(layer, idx, t) {
     const P = FM.scene.project;
     const w = Math.max(2, P.width | 0), h = Math.max(2, P.height | 0);
     try {
@@ -1347,16 +1374,35 @@ window.FM = window.FM || {};
       let on, off;
       try {
         noopCx.setTransform(1, 0, 0, 1, 0, 0); noopCx.clearRect(0, 0, w, h);
-        FM.renderScene(noopCx, sceneAsIs(layer), FM.time);
+        FM.renderScene(noopCx, sceneAsIs(layer), t);
         if (performance.now() - t0 > NOOP_BUDGET_MS) return null;   // too dear to ask — stay quiet
         on = noopCx.getImageData(0, 0, w, h).data;
         noopCx.setTransform(1, 0, 0, 1, 0, 0); noopCx.clearRect(0, 0, w, h);
-        FM.renderScene(noopCx, sceneWithFxOff(layer, idx), FM.time);
+        FM.renderScene(noopCx, sceneWithFxOff(layer, idx), t);
         off = noopCx.getImageData(0, 0, w, h).data;
       } finally { FM._mfGhost = g0; }
-      for (let i = 0; i < on.length; i++) if (on[i] !== off[i]) return false;
+      /* Four bytes at a time: equal words are equal bytes, so this is the same plain equality in a quarter of the
+         steps — measured 12–20 ms down to 2–5 ms on a 1080x1920 frame, which pays for the extra samples above. */
+      const a = new Uint32Array(on.buffer, on.byteOffset, on.length >> 2), b = new Uint32Array(off.buffer, off.byteOffset, off.length >> 2);
+      for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+      for (let i = a.length << 2; i < on.length; i++) if (on[i] !== off[i]) return false;
       return true;
     } catch (e) { return null; }
+  }
+  /* `t` given: that one instant (the inspector's slices). `t` omitted: every moment noopTimes names, stopping at the
+     first one where the effect shows — the whole verdict in one call, for anything that is not on the panel's clock. */
+  function effectDoesNothing(layer, idx, t) {
+    if (!layer || !FM.scene || !FM.renderScene) return null;
+    const fx = layer.effects && layer.effects[idx];
+    if (!fx || fx.enabled === false) return null;   // switched off is doing nothing ON PURPOSE
+    if (GHOST_GATED[fx.type]) return null;          // queue 794: the ghost render is a passthrough for these — no verdict possible
+    if (typeof t === 'number') return noopAt(layer, idx, t);
+    const times = noopTimes(layer);
+    for (let k = 0; k < times.length; k++) {
+      const v = noopAt(layer, idx, times[k]);
+      if (v !== true) return v;                     // it shows here (false), or this moment could not be told (null — say nothing)
+    }
+    return true;
   }
 
   function canPreview(layer, fxType) {
@@ -1642,7 +1688,9 @@ window.FM = window.FM || {};
        the caller supplies its own throwaway layer to run it on. */
     _override: function (type) { return OVERRIDES[type] || null; },
     // queue 477: does one effect change anything on this layer? null = could not tell.
-    effectDoesNothing: function (layer, idx) { return effectDoesNothing(layer, idx); },
+    effectDoesNothing: function (layer, idx, t) { return effectDoesNothing(layer, idx, t); },
+    // queue 690 (sixth hunt): the moments of the clip the verdict is taken over — the inspector walks them one per slice.
+    noopTimes: function (layer) { return noopTimes(layer); },
     // queue 400: the tile raster follows the screen. Exposed so the rule can be checked without a 3×
     // display, and so the measured cost of changing it can be re-derived rather than taken on trust.
     _tileScaleFor: function (dpr) { return tileScaleFor(dpr); },

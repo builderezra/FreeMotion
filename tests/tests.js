@@ -52664,6 +52664,10 @@
       const base = (typeof v === 'number' && isFinite(v)) ? v : 1;
       child.params[key] = { kf: [ { t: 0, v: base, e: 'linear' }, { t: 2, v: base + 1, e: 'linear' } ] };
       child._expanded = true;                 // he has the child's controls open — the state the scope reads
+      /* …which he can only have INSIDE AN OPEN FILTER: a child's controls are drawn in its filter's body. queue 690 (sixth
+         hunt) made the scope ask for that too — a child left `_expanded` in a SHUT filter held the keyframe focus and froze
+         the effect he was actually looking at — so the fixture opens the filter, the state this test always meant. */
+      box._expanded = true;
       L.effects = [box];
       FM.timeline.rebuild(); FM.selectLayer(L.id); FM.refreshAll(); await sleep(160);
       if (FM.inspector.openCategory) FM.inspector.openCategory('effects');
@@ -97453,6 +97457,402 @@
     } finally {
       localStorage.setItem(key, raw0);
       if (pend0 == null) localStorage.removeItem(PK); else localStorage.setItem(PK, pend0);
+    }
+  });
+
+
+  /* ═══ HUNT-a (queue 690, sixth hunt, 26 Sep) — EFFECT SETTINGS: EDITING AN EFFECT ONCE IT IS ON A LAYER ════════════════
+   * Found by the hunt as four failing HUNT-a tests; all four fixed (js/fx-thumbs.js + js/inspector.js take the changes-
+   * nothing verdict across the clip and ask again when the playhead moves; js/history.js carries the open rows across an
+   * undo; kfScope counts a filter's child as open only while its filter is; the curve button records the effect itself)
+   * and renamed 690 for what they now hold, with one more test for the playhead half of the first.
+   * His standing brief: "go re audit, find some bugs coz theres a shit load". Four findings in editing an effect's settings —
+   * the open effect's own hint, undo, the keyframes of the open effect and the per-parameter easing curve — each written
+   * as a test that FAILS on v16.99 because of the bug it names, with a message that says what he would see. Every tap,
+   * drag and hold is REAL input through tests/_cdp.py (realInput924): a finger at 380 the way his phone delivers it, and
+   * for undo a real mouse at 1280 too (that half runs in the desktop pass, whose window reaches the PC transport). Each
+   * test carries a control proving the gesture engaged, so a red is the app. Every one was also checked GREEN against a
+   * throwaway prototype of its fix (reverted), so each goes red for its bug and nothing else. Helpers are prefixed h6. */
+  const h6Sleep = ms => new Promise(r => setTimeout(r, ms));
+  function h6Say(msg) { return String(msg).replace(/"/g, "'"); }   // runtime values go into these messages; the suite forbids a double quote
+  function h6Tap(p) { return [{ t: 'touchStart', x: p.x, y: p.y, ms: 70 }, { t: 'touchEnd', x: p.x, y: p.y, ms: 0 }]; }
+  function h6Reach(elm, what) {
+    if (!elm) throw new Error('setup: no ' + what + ' on screen');
+    const r = elm.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+    if (!(r.width > 0 && r.height > 0) || x < 2 || x > 375 || y < 2 || y > 745) throw new Error('setup: the ' + what + ' is at ' + Math.round(x) + ',' + Math.round(y) + ', out of reach of real input');
+    const over = document.elementFromPoint(x, y);
+    if (over && over !== elm && !elm.contains(over)) throw new Error('setup: the ' + what + ' at ' + Math.round(x) + ',' + Math.round(y) + ' is covered by ' + (over.id || over.className || over.tagName));
+    return { x: x, y: y, r: r };
+  }
+  // Scroll a node to the middle of the inspector sheet so a real finger can reach it, then measure it.
+  async function h6Bring(elm, what) {
+    if (!elm) throw new Error('setup: no ' + what + ' in the effects panel');
+    elm.scrollIntoView({ block: 'center' }); await h6Sleep(250);
+    return h6Reach(elm, what);
+  }
+  function h6Box(name, fill) {
+    return FM.makeLayer('shape', { name: name, shape: 'rect', x: 540, y: 700, shapeW: 360, shapeH: 360, fill: fill || '#c05030', start: 0, duration: 6 });
+  }
+  async function h6Open(L, t) {
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd();
+    if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+    FM._fxEasing = null;
+    FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+    FM.selectLayer(null); if (FM.pause) FM.pause(); FM.setTime(t || 0);
+    FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    await h6Sleep(300);
+    FM.selectLayer(L.id); await h6Sleep(200);
+    FM.inspector.openCategory('effects'); await h6Sleep(450);
+    return FM.layerById(FM.scene, L.id);
+  }
+  // The header of the effect row called `name` (a filter child's row too), at any depth.
+  function h6Head(name) {
+    const row = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row')).filter(r => {
+      const n = r.querySelector(':scope > .fx-swipe-wrap > .fx-head .fx-name'); return n && n.textContent.trim() === name;
+    })[0];
+    return row ? row.querySelector(':scope > .fx-swipe-wrap > .fx-head') : null;
+  }
+  function h6OpenRowNames() { return [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open')).map(r => (r.querySelector(':scope > .fx-swipe-wrap > .fx-head .fx-name') || {}).textContent); }
+  async function h6TapHead(name) {
+    const h = h6Head(name);
+    const p = await h6Bring(h && (h.querySelector('.fx-name') || h), name + ' row header');
+    await realInput924(h6Tap(p), 'a tap on the ' + name + ' row'); await h6Sleep(350);
+  }
+
+  /* HUNT-a 1 — "THIS IS ON, BUT IT CHANGES NOTHING" ON A SPIN THAT SPINS.
+   * The open effect row measures whether the effect changes the picture (scheduleNoopCheck → fxThumbs.effectDoesNothing,
+   * js/inspector.js) and, when it does not, says so under its controls. It measures ONE frame — the one under the
+   * playhead — and files the answer under the effect's SETTINGS (`_noopKey` has no time in it), so it is never asked
+   * again when the playhead moves. Every effect that works by moving over time — Spin, Swing, Pulse, Drift, Blink, Pulse
+   * Opacity, Glow Scan, Particles — is exactly where it started on the first frame of its clip, which is where the
+   * playhead sits whenever he adds an effect to a layer he has just made. So Spin lands with the sentence he has fought
+   * the app over for weeks (#460, #477: effects that do nothing), and the sentence stays there while the box turns. Added
+   * with his real taps through the effects sheet. CONTROL: a Spin at speed 0 — which really does nothing — gets the line,
+   * so the check runs here and speaks; and the same Spin visibly turns the box by 1.5 s.
+   * FIXED: the verdict is taken at the playhead AND at moments spread through the clip (fx-thumbs noopTimes), one moment
+   * per timer slice, so a Spin is seen turning at the second moment and never gets the line. */
+  test('690 a Spin added at the start of its clip is not told it changes nothing while the box turns', { item: '690', budgetMs: 120000 }, async function () {
+    const saved = FM.scene, keep = hb2Keep(['fm.fx.recents', 'fm.fx.presetHint', 'fm.fx.tapHint']);
+    const hint = () => { const h = document.querySelector('#inspector-panel .fx-row.fx-open .fx-noop-hint'); return h ? h.textContent.trim() : ''; };
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          try { localStorage.setItem('fm.fx.presetHint', '1'); localStorage.setItem('fm.fx.tapHint', '1'); } catch (e) {}
+          /* CONTROL: a Spin that cannot move (speed 0) is measured and told so — the check runs in this environment. */
+          const still = FM.fxRegistry.makeInstance('spin'); still.params.speed = 0; still._expanded = true;
+          const B0 = h6Box('H6 still'); B0.effects = [still];
+          await h6Open(B0, 0); await h6Sleep(1300);
+          if (!/changes nothing/.test(hint())) throw new Error('CONTROL: a Spin at speed 0, which truly changes nothing, got no changes-nothing line after 1.3 s (' + h6Say(hint() || 'no hint') + ') — the check is not running here, so a missing line below would prove nothing');
+          /* His flow: a fresh box, the playhead where the box starts, Effects, Move, tap Spin, Add. */
+          const B = h6Box('H6 spin'); B.effects = [];
+          const L = await h6Open(B, 0);
+          const root = await hb2OpenBrowser(L, 'move');
+          const tile = hb2TopView(root).querySelector('.fxb-tile[data-fxid="spin"]');
+          tile && tile.scrollIntoView({ block: 'center' }); await h6Sleep(250);
+          let p = h6Reach(tile, 'Spin tile');
+          await realInput924(h6Tap(p), 'picking Spin'); await h6Sleep(400);
+          if (FM._fxPicks().join(',') !== 'spin') throw new Error('CONTROL: a real tap on the Spin tile did not pick it (picks: ' + FM._fxPicks().join(', ') + ')');
+          /* Done adds the numbered picks (queue 389) — in a category the sheet's Add bar sits under the category arrows. */
+          const done = [].filter.call(hb2TopView(root).querySelectorAll('.fxb-back'), n => n.textContent.trim() === 'Done')[0];
+          p = h6Reach(done, 'Done button of the effects sheet');
+          await realInput924(h6Tap(p), 'Done, adding the picked Spin'); await h6Sleep(500);
+          const Ln = FM.layerById(FM.scene, L.id);
+          if ((Ln.effects || []).map(e => e.type).join(',') !== 'spin') throw new Error('CONTROL: Add did not put one Spin on the box (effects: ' + (Ln.effects || []).map(e => e.type).join(', ') + ')');
+          if (h6OpenRowNames().join(',') !== 'Spin') throw new Error('setup: after Add the open effect is ' + (h6OpenRowNames().join(', ') || 'none') + ', not Spin');
+          await h6Sleep(1300);
+          const atStart = hint();
+          /* CONTROL: the Spin he added really turns the box — 1.5 s in, with it and without it, the frame differs. */
+          const frame = (fx, t) => {
+            const c = offscreen(270, 480), g = c.getContext('2d', { willReadFrequently: true });
+            const doc = JSON.parse(JSON.stringify(Ln, FM.jsonReplacer)); doc.effects = fx;
+            c.__fmRS = 0.25; c.__fmOX = 0; c.__fmOY = 0; c.__fmCrop = true;
+            FM.renderScene(g, { project: FM.scene.project, layers: [doc], selectedId: null, selectedIds: [] }, t);
+            return g.getImageData(0, 0, 270, 480).data;
+          };
+          const a = frame([], 1.5), b = frame(JSON.parse(JSON.stringify(Ln.effects, FM.jsonReplacer)), 1.5);
+          let moved = 0; for (let i = 0; i < a.length; i += 4) if (Math.abs(a[i] - b[i]) > 30) moved++;
+          if (moved < 500) throw new Error('CONTROL: 1.5 s in, the box with Spin differs from the box without it in only ' + moved + ' pixels — the fixture is not showing Spin at work');
+          /* …and he moves the playhead into the clip, where the box on screen is turning. */
+          FM.setTime(1.5); FM.timeline.updatePlayhead(); FM.inspector.refresh(); await h6Sleep(1300);
+          const later = hint();
+          if (atStart || later) {
+            const also = ['swing', 'pulse', 'drift', 'blink', 'pulseopacity', 'glowscan', 'particles'].filter(id => {
+              const fx = FM.fxRegistry.makeInstance(id); if (!fx) return false;
+              const probe = JSON.parse(JSON.stringify(Ln, FM.jsonReplacer)); probe.effects = [fx];
+              const t0 = FM.time; FM.time = probe.start || 0;
+              try { return FM.fxThumbs.effectDoesNothing(probe, 0) === true; } finally { FM.time = t0; }
+            }).map(id => FM.fxRegistry.get(id).label);
+            throw new Error(h6Say('he added Spin to his box with the playhead where the box starts, and the open Spin says: ' + (atStart || later) +
+              (atStart ? '' : ' (at 1.5 s)') + ' — yet by 1.5 s the box has turned (' + moved + ' pixels change)' +
+              (later ? '; he moves the playhead to 1.5 s, where the box on screen is visibly rotated, and the same line is still under the Speed slider' : '') +
+              '. The app is telling him a working effect is broken. ' + (also.length ? also.join(', ') + ' are measured as doing nothing at the start of a clip the same way.' : '')));
+          }
+        });
+      }, 380);
+    } finally {
+      try { FM.fxBrowser.close(); } catch (e) {}
+      hb2Restore(keep);
+      FM.scene = saved; try { FM.setTime(0); FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 — …AND A LINE THAT IS SHOWING GOES BY ITSELF WHEN HE PARKS WHERE THE EFFECT ACTS. The second half of HUNT-a 1:
+   * the panel does not rebuild while he scrubs, and the verdict was filed under the effect's settings with no time in
+   * it, so whatever the check said stood wherever the playhead went. Eight moments of the clip can still all miss an
+   * effect that acts only for a moment — a blur that flashes once, a Blink between flashes — so a line that IS showing
+   * has to be asked again where he stops. Here a Gaussian Blur whose radius is 0 except for a flash at 2.2–2.6 s, which
+   * no moment of the check lands on. CONTROL: the line is shown (the check runs and the fixture really is dead at every
+   * moment it looked at), and it stays when he parks at 1 s, where the blur is still 0. Then the playhead goes to 2.4 s,
+   * the top of the flash, through FM.setTime — the funnel every time change takes, a scrub included — and the panel is
+   * NOT rebuilt: the line must go on its own. */
+  test('690 a changes-nothing line goes by itself when he parks the playhead where the effect shows', { item: '690', budgetMs: 60000 }, async function () {
+    const saved = FM.scene, keep = hb2Keep(['fm.fx.tapHint']);
+    const hint = () => { const h = document.querySelector('#inspector-panel .fx-row.fx-open .fx-noop-hint'); return h ? h.textContent.trim() : ''; };
+    const until = async (ok, ms) => { const end = Date.now() + ms; while (!ok() && Date.now() < end) await h6Sleep(100); return ok(); };
+    try {
+      await atPhoneWidth(async function () {
+        try { localStorage.setItem('fm.fx.tapHint', '1'); } catch (e) {}
+        const B = h6Box('H6 flash');
+        const fx = FM.fxRegistry.makeInstance('blur'); fx._expanded = true;
+        fx.params.radius = { kf: [{ t: 2.2, v: 0, e: 'linear' }, { t: 2.4, v: 20, e: 'linear' }, { t: 2.6, v: 0, e: 'linear' }] };
+        B.effects = [fx];
+        const L = await h6Open(B, 0);
+        const asked = FM.fxThumbs.noopTimes ? FM.fxThumbs.noopTimes(L) : [FM.time];
+        if (asked.some(t => t > 2.2 && t < 2.6)) throw new Error('setup: the check asks a moment inside the flash (' + asked.map(t => t.toFixed(2)).join(', ') + ') — pick a flash between its moments');
+        if (!await until(() => /changes nothing/.test(hint()), 5000)) throw new Error('CONTROL: a Gaussian Blur at radius 0 everywhere the check looks got no changes-nothing line in 5 s (' + h6Say(hint() || 'no hint') + ') — the check is not running, so the line going below would prove nothing');
+        FM.setTime(1); await h6Sleep(1200);
+        if (!/changes nothing/.test(hint())) throw new Error('CONTROL: parked at 1 s, where the blur is still 0 and the box is untouched, the line went — it is being dropped on any move, not re-asked');
+        const rows = document.querySelector('#inspector-panel .fx-row.fx-open');
+        FM.setTime(2.4);
+        const gone = await until(() => !hint(), 3000);
+        if (document.querySelector('#inspector-panel .fx-row.fx-open') !== rows) throw new Error('setup: the effect row was rebuilt after the playhead moved — this test is about the panel that is NOT rebuilt while he scrubs');
+        if (!gone) throw new Error(h6Say('he parks the playhead at 2.4 s, the top of the blur flash, where the box on screen is blurred 20 px — and 3 s later the open Gaussian Blur still says: ' + hint() + ' The line was measured at the start of the clip and nothing asks again when the playhead moves'));
+      }, 380);
+    } finally {
+      hb2Restore(keep);
+      FM.scene = saved; try { FM.setTime(0); FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* HUNT-a 2 — UNDO SHUTS THE EFFECT HE WAS EDITING.
+   * Which effect row is open is `fx._expanded`, a runtime flag, and FM.jsonReplacer strips every `_` key from the undo
+   * snapshots — so FM.history.restore() puts back a scene in which NO effect is open. Drag a slider, tap Undo to compare:
+   * the value comes back and the controls he was using fold shut under his thumb; Redo does the same. To try the value
+   * again he has to find the effect and tap it open, every time. Real drag on the Gaussian Blur slider, real taps on Undo
+   * and Redo. CONTROL: the drag changed the blur and Undo / Redo really moved it back and forth.
+   * FIXED: history.restore carries the open rows from the scene it replaces onto the one it puts back (keepOpenRows). */
+  test('690 Undo and Redo keep open the effect whose slider he just moved, on the phone and on the PC', { item: '690', budgetMs: 150000 }, async function () {
+    const saved = FM.scene, keep = hb2Keep(['fm.fx.tapHint']);
+    /* One run per device: a real finger at 380, a real mouse at 1280. `mouse` changes only how he presses. */
+    const run = async function (mouse, W) {
+      const press = p => mouse ? [{ t: 'mouseMove', x: p.x, y: p.y, ms: 40 }, { t: 'mouseDown', x: p.x, y: p.y, ms: 70 }, { t: 'mouseUp', x: p.x, y: p.y, ms: 0 }] : h6Tap(p);
+      const reach = (elm, what) => {
+        if (!mouse) return h6Reach(elm, what);
+        if (!elm) throw new Error('setup: no ' + what + ' on screen');
+        const r = elm.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+        if (!(r.width > 0) || x < 2 || x > W - 5 || y < 2 || y > 745) throw new Error('setup: the ' + what + ' is at ' + Math.round(x) + ',' + Math.round(y) + ', out of reach of real input');
+        return { x: x, y: y };
+      };
+      const B = h6Box('H6 undo');
+      B.effects = [FM.fxRegistry.makeInstance('wave'), FM.fxRegistry.makeInstance('tint'), FM.fxRegistry.makeInstance('blur')];
+      const L = await h6Open(B, 0);
+      if (FM.history) FM.history.commit();
+      const blurNow = () => { const l = FM.layerById(FM.scene, L.id); const fx = (l.effects || []).filter(e => e.type === 'blur')[0]; return fx ? FM.evalProp(fx.params.radius, FM.time) : NaN; };
+      const r0 = blurNow();
+      const h = h6Head('Gaussian Blur');
+      h && h.scrollIntoView({ block: 'center' }); await h6Sleep(250);
+      await realInput924(press(reach(h && h.querySelector('.fx-name'), 'Gaussian Blur row header')), 'opening Gaussian Blur'); await h6Sleep(350);
+      if (h6OpenRowNames().join(',') !== 'Gaussian Blur') throw new Error('CONTROL: a real ' + (mouse ? 'click' : 'tap') + ' on the Gaussian Blur row did not open it (open: ' + (h6OpenRowNames().join(', ') || 'none') + ')');
+      const strip = document.querySelector('#inspector-panel .fx-row.fx-open .fx-scrub');
+      strip && strip.scrollIntoView({ block: 'center' }); await h6Sleep(250);
+      const c = reach(strip, 'Gaussian Blur slider');
+      const x0 = c.x + 40, y = c.y, steps = mouse ? [{ t: 'mouseMove', x: x0, y: y, ms: 40 }, { t: 'mouseDown', x: x0, y: y, ms: 40 }] : [{ t: 'touchStart', x: x0, y: y, ms: 40 }];
+      for (let k = 1; k <= 8; k++) steps.push({ t: mouse ? 'mouseMove' : 'touchMove', x: x0 - k * 10, y: y, ms: 30 });
+      steps.push({ t: mouse ? 'mouseMove' : 'touchMove', x: x0 - 80, y: y, ms: 200 });   // held still before letting go — a placing drag, no glide
+      steps.push({ t: mouse ? 'mouseUp' : 'touchEnd', x: x0 - 80, y: y, ms: 40 });
+      await realInput924(steps, 'dragging the Gaussian Blur slider'); await h6Sleep(500);
+      const r1 = blurNow();
+      if (!(r1 > r0 + 1)) throw new Error('CONTROL: an 80 px real ' + (mouse ? 'mouse' : 'finger') + ' drag on the Gaussian Blur slider took it from ' + r0 + ' to ' + r1 + ' — the drag did not reach the slider');
+      const bad = [];
+      await realInput924(press(reach(document.getElementById('btn-undo'), 'Undo button')), 'Undo'); await h6Sleep(600);
+      const r2 = blurNow();
+      if (Math.abs(r2 - r0) > 1e-6) throw new Error('CONTROL: a real press on Undo left the blur at ' + r2 + ', not back at ' + r0);
+      const afterUndo = h6OpenRowNames();
+      if (afterUndo.indexOf('Gaussian Blur') < 0) bad.push('Undo put the blur back to ' + r0 + ' px and shut Gaussian Blur — ' + (afterUndo.length ? 'the open row is now ' + afterUndo.join(', ') : 'no effect is open') + ' and the slider he was using is gone');
+      await realInput924(press(reach(document.getElementById('btn-redo'), 'Redo button')), 'Redo'); await h6Sleep(600);
+      const r3 = blurNow();
+      if (Math.abs(r3 - r1) > 1e-6) throw new Error('CONTROL: a real press on Redo gave the blur ' + r3 + ', not the ' + r1 + ' he dragged to');
+      const afterRedo = h6OpenRowNames();
+      if (afterRedo.indexOf('Gaussian Blur') < 0) bad.push('Redo brought ' + r1.toFixed(1) + ' back with the effect shut as well');
+      return bad.length ? (mouse ? 'on the PC' : 'on the phone') + ', he opened Gaussian Blur, dragged its slider from ' + r0 + ' to ' + r1.toFixed(1) + ' px and ' + (mouse ? 'clicked' : 'tapped') + ' Undo to compare: ' + bad.join('; ') : '';
+    };
+    try {
+      try { localStorage.setItem('fm.fx.tapHint', '1'); } catch (e) {}
+      const said = [];
+      await atPhoneWidth(async function () { await onScreen924(async function () { said.push(await run(false, 380)); }); }, 380);
+      // The PC half needs the driver's own window to be wide: the 380 pass cannot reach the PC transport, which sits past x 380.
+      if (hunt4aWide()) await atWideWidth(async function () { await onScreen924(async function () { said.push(await run(true, 1280)); }); }, 1280);
+      const bad = said.filter(Boolean);
+      if (bad.length) throw new Error(h6Say(bad.join('. And ') + '. Every undo while tuning an effect folds its controls away, and he has to find the effect and open it again to carry on'));
+    } finally {
+      hb2Restore(keep);
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* HUNT-a 3 — AFTER AN EFFECT INSIDE A FILTER HAS BEEN OPEN, THE NEXT EFFECT'S KEYFRAMES ARE DEAD.
+   * The timeline arms only the keyframes of the effect whose controls are open (kfScope, js/inspector.js), and since
+   * queue 819 an open effect INSIDE a filter wins over everything, because opening one leaves its filter open. The
+   * accordion only closes rows at the depth that was tapped, so a filter child stays `_expanded` after its filter is
+   * shut — and kfScope, walking every child whether its filter is open or not, still hands the timeline THAT child. Open
+   * the Tint inside his filter, then open Gaussian Blur: the Blur is the only effect on screen, and its keyframes are
+   * hollow outlines that take no touch — a hold-and-drag on one goes through it to the CLIP and slides the whole clip —
+   * while an effect he cannot see holds the focus. Real taps and a
+   * real hold-and-drag at 380. CONTROL: on the same layer, before the filter was touched, the same drag moves the key.
+   * FIXED: kfScope counts a filter's child as the open effect only while its filter is open too. */
+  test('690 after he opens an effect inside a filter, the next effect he opens still has keyframes he can drag', { item: '690', budgetMs: 120000 }, async function () {
+    const saved = FM.scene, keep = hb2Keep(['fm.fx.tapHint']);
+    const build = () => {
+      const B = h6Box('H6 look');
+      const box = FM.fxRegistry.makeInstance('filter'); box.name = 'My look'; box.effects = [FM.fxRegistry.makeInstance('tint')];
+      const blur = FM.fxRegistry.makeInstance('blur'); blur.params.radius = { kf: [{ t: 1, v: 0, e: 'linear' }, { t: 3, v: 20, e: 'linear' }] };
+      B.effects = [box, blur];
+      return B;
+    };
+    const blurKeys = id => { const l = FM.layerById(FM.scene, id); const fx = l.effects.filter(e => e.type === 'blur')[0]; return fx.params.radius.kf.map(k => +k.t.toFixed(3)); };
+    const dragKey = async function (id, what) {
+      FM.timeline.rebuild(); await h6Sleep(250);
+      const dot = [].filter.call(document.querySelectorAll('#tl-tracks .kf-dot'), d => Math.abs(parseFloat(d.dataset.t) - 3) < 1e-3)[0];
+      if (!dot) throw new Error('setup: no keyframe diamond at 3 s on the timeline for ' + what);
+      /* Where the diamond is DRAWN — not whether it takes the touch: that is the question. */
+      const r = dot.getBoundingClientRect(), p = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      if (!(r.width > 0) || p.x < 2 || p.x > 375 || p.y < 2 || p.y > 745) throw new Error('setup: the 3 s diamond is at ' + Math.round(p.x) + ',' + Math.round(p.y) + ', out of reach of real input');
+      const live = dot.classList.contains('kf-live');
+      const start0 = FM.layerById(FM.scene, id).start || 0;
+      const D = huntDowns();
+      try {
+        await realInput924([
+          { t: 'touchStart', x: p.x, y: p.y, ms: 650 },
+          { t: 'touchMove', x: p.x + 10, y: p.y, ms: 40 },
+          { t: 'touchMove', x: p.x + 20, y: p.y, ms: 40 },
+          { t: 'touchMove', x: p.x + 30, y: p.y, ms: 120 },
+          { t: 'touchEnd', x: p.x + 30, y: p.y, ms: 0 },
+        ], what);
+      } finally { D.stop(); }
+      await h6Sleep(400);
+      if (!D.downs.length || !D.downs[0].trusted || D.downs[0].kind !== 'touch') throw new Error('CONTROL: the press for ' + what + ' was not a trusted touch (' + h6Say(JSON.stringify(D.downs)) + ')');
+      return { keys: blurKeys(id), live: live, onDot: /kf-dot/.test(D.downs[0].cls), landed: D.downs[0].cls, start0: start0, start1: FM.layerById(FM.scene, id).start || 0 };
+    };
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          try { localStorage.setItem('fm.fx.tapHint', '1'); } catch (e) {}
+          /* CONTROL: open Gaussian Blur straight away, and a hold-and-drag on its 3 s keyframe moves it. */
+          let L = await h6Open(build(), 2);
+          await h6TapHead('Gaussian Blur');
+          if (h6OpenRowNames().join(',') !== 'Gaussian Blur') throw new Error('CONTROL: a real tap did not open Gaussian Blur (open: ' + (h6OpenRowNames().join(', ') || 'none') + ')');
+          const ctl = await dragKey(L.id, 'the control drag');
+          if (!ctl.onDot) throw new Error('CONTROL: with Gaussian Blur open the press on its 3 s diamond landed on ' + h6Say(ctl.landed) + ', not on the diamond');
+          /* A keyframe moves WITHIN its clip: a clip that slides carries its keyframes along, which is not the same thing. */
+          const within = g => (g.keys[1] - g.start1) - (3 - g.start0);
+          if (!(within(ctl) > 0.05) || Math.abs(ctl.start1 - ctl.start0) > 1e-6) throw new Error('CONTROL: with Gaussian Blur open before anything else, a hold and a 30 px drag left its keyframes at ' + ctl.keys.join(' and ') + ' s with the clip at ' + ctl.start1 + ' s — this harness cannot move a keyframe, so it cannot judge the filter case');
+          /* His flow: open the filter, open the Tint inside it, then open Gaussian Blur. */
+          L = await h6Open(build(), 2);
+          await h6TapHead('My look');
+          await h6TapHead('Tint');
+          if (h6OpenRowNames().indexOf('Tint') < 0) throw new Error('CONTROL: real taps on My look then Tint did not open the Tint inside the filter (open: ' + (h6OpenRowNames().join(', ') || 'none') + ')');
+          await h6TapHead('Gaussian Blur');
+          if (h6OpenRowNames().join(',') !== 'Gaussian Blur') throw new Error('setup: after tapping Gaussian Blur the open rows on screen are ' + (h6OpenRowNames().join(', ') || 'none') + ', not Gaussian Blur alone');
+          const nameRow = document.querySelector('#inspector-panel .fx-row.fx-open .fx-scrub-label');   // the blur slider's name — tapping it picks its keyframes
+          const got = await dragKey(L.id, 'the drag after the filter');
+          if (!(within(got) > 0.05) || Math.abs(got.start1 - got.start0) > 1e-6) {
+            throw new Error(h6Say('he opened the Tint inside his My look filter, then opened Gaussian Blur — the only effect open on screen — and held and dragged its blur keyframe at 3 s: ' +
+              (within(got) > 0.05 ? 'the keyframe moved' : 'it did not move within the clip (' + (3 - got.start0).toFixed(3) + ' s into it before, ' + (got.keys[1] - got.start1).toFixed(3) + ' s after)') + ' (' +
+              (got.live ? 'the diamond looked live' : 'the diamond is a hollow outline, as if its editor were shut') + '; before he touched the filter the same drag moved it to ' + ctl.keys[1].toFixed(3) + ' s)' +
+              (got.onDot ? '' : ' — his finger went straight through the diamond to the ' + (/clip/.test(got.landed) ? 'clip' : got.landed) + (Math.abs(got.start1 - got.start0) > 1e-6 ? ', and the whole clip slid from ' + got.start0.toFixed(2) + ' s to ' + got.start1.toFixed(2) + ' s' : '')) +
+              (nameRow && !nameRow.classList.contains('kf-selectable') ? '. Tapping the slider name no longer picks its keyframes either' : '') +
+              '. The hidden Tint still holds the keyframe focus, and every effect he opens on this layer stays frozen on the timeline until he goes back into the filter and shuts the Tint'));
+          }
+        });
+      }, 380);
+    } finally {
+      huntECleanTools();
+      hb2Restore(keep);
+      FM.scene = saved; try { FM.setTime(0); FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
+    }
+  });
+
+  /* HUNT-a 4 — THE EASING CURVE OF AN EFFECT INSIDE A FILTER EASES A DIFFERENT EFFECT.
+   * Every keyframed slider has a curve button (fxScrubber, js/inspector.js) that records `FM._fxEasing = { fxIdx, key }`,
+   * where fxIdx is the row's index IN ITS OWN LIST. The inspector then builds the easing editor from
+   * `layer.effects[fxIdx]` — the LAYER's list. For an effect inside a filter (or on a caption cue) that is some other
+   * effect: here the Glow at the top of his stack, which also has a Radius. So he opens the Gaussian Blur inside his
+   * filter, taps the curve button on its slider and picks Ease In, and it is the GLOW's animation that changes, while the Blur he was
+   * shaping stays linear. Real taps throughout. CONTROL: the curve button opened the editor and the preset tap landed.
+   * FIXED: the curve button records the effect itself (and where it was, so an Undo — which swaps in new objects — still
+   * finds it); the editor is built from that. Asserted after an Undo too: he taps Undo to compare, picks Ease Out, and it
+   * is still the Blur that changes. */
+  test('690 the easing curve of an effect inside a filter changes that effect and no other', { item: '690', budgetMs: 90000 }, async function () {
+    const saved = FM.scene, keep = hb2Keep(['fm.fx.tapHint']);
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          try { localStorage.setItem('fm.fx.tapHint', '1'); } catch (e) {}
+          const B = h6Box('H6 ease');
+          const glow = FM.fxRegistry.makeInstance('glow'); glow.params.radius = { kf: [{ t: 0, v: 4, e: 'linear' }, { t: 2, v: 40, e: 'linear' }] };
+          const box = FM.fxRegistry.makeInstance('filter'); box.name = 'My look';
+          const kid = FM.fxRegistry.makeInstance('blur'); kid.params.radius = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 20, e: 'linear' }] };
+          box.effects = [kid];
+          B.effects = [glow, box];
+          const L = await h6Open(B, 0.5);
+          if (FM.history) FM.history.commit();   // the scene as he has it is the step Undo goes back to (h6Open installs it without one)
+          const eases = () => {
+            const l = FM.layerById(FM.scene, L.id), g = l.effects.filter(e => e.type === 'glow')[0], f = l.effects.filter(e => e.type === 'filter')[0];
+            const b = f && (f.effects || []).filter(e => e.type === 'blur')[0];
+            return { glow: g.params.radius.kf.map(k => k.e).join(','), blur: b ? b.params.radius.kf.map(k => k.e).join(',') : 'missing' };
+          };
+          const e0 = eases();
+          await h6TapHead('My look');
+          await h6TapHead('Gaussian Blur');
+          const kidRow = [].slice.call(document.querySelectorAll('#inspector-panel .fx-kids .fx-row.fx-open'))[0];
+          if (!kidRow || (kidRow.querySelector('.fx-name') || {}).textContent !== 'Gaussian Blur') throw new Error('CONTROL: real taps on My look then Gaussian Blur did not open the Blur inside the filter (open: ' + (h6OpenRowNames().join(', ') || 'none') + ')');
+          const curve = kidRow.querySelector('.fx-ease');
+          let p = await h6Bring(curve, 'easing curve button on the slider of the Blur inside the filter');
+          await realInput924(h6Tap(p), 'the easing curve button'); await h6Sleep(500);
+          const rail = [].slice.call(document.querySelectorAll('#inspector-panel .es-preset'));
+          const easeIn = rail.filter(b => b._key === 'easeIn')[0];
+          if (!easeIn) throw new Error('CONTROL: the curve button did not open the easing editor with its presets (' + rail.length + ' preset buttons on screen)');
+          const said = ((document.querySelector('#inspector-panel .cat-body') || {}).textContent || '').replace(/\s+/g, ' ').trim().slice(0, 90);
+          p = await h6Bring(easeIn, 'Ease In preset');
+          await realInput924(h6Tap(p), 'the Ease In preset'); await h6Sleep(400);
+          const e1 = eases();
+          if (e1.glow === e0.glow && e1.blur === e0.blur && !/Animate this/.test(said)) throw new Error('CONTROL: a real tap on Ease In changed no keyframe anywhere on the layer — the tap did not land');
+          if (e1.blur === e0.blur) {
+            throw new Error(h6Say('he opened the Gaussian Blur inside his My look filter, tapped the curve button on its blur slider (which has two keyframes) and picked Ease In: ' +
+              (e1.glow !== e0.glow ? 'the GLOW at the top of his stack now eases in (its Radius keyframes went from ' + e0.glow + ' to ' + e1.glow + ') while the Blur he was shaping is still ' + e1.blur
+                : 'nothing on the Blur changed (still ' + e1.blur + '), and the editor said: ' + said) +
+              ' — the curve editor is reading the effect at the same position in the layer list, not the one inside the filter'));
+          }
+          if (e1.glow !== e0.glow) throw new Error(h6Say('easing the Blur inside his filter also changed the Glow above it (' + e0.glow + ' to ' + e1.glow + ')'));
+          /* …and after an Undo to compare. Undo puts NEW effect objects in, so the editor must find the Blur again by where
+             it was — not fall back to the layer's list, which is the bug again. Real tap on Undo, real tap on Ease Out. */
+          p = h6Reach(document.getElementById('btn-undo'), 'Undo button');
+          await realInput924(h6Tap(p), 'Undo'); await h6Sleep(600);
+          const e2 = eases();
+          if (e2.blur !== e0.blur || e2.glow !== e0.glow) throw new Error('CONTROL: a real tap on Undo did not take the Ease In back (blur ' + e2.blur + ', glow ' + e2.glow + ')');
+          const easeOut = [].slice.call(document.querySelectorAll('#inspector-panel .es-preset')).filter(b => b._key === 'easeOut')[0];
+          if (!easeOut) throw new Error(h6Say('after Undo the curve editor he had open is gone (' + ((document.querySelector('#inspector-panel .cat-body') || {}).textContent || '').replace(/\s+/g, ' ').trim().slice(0, 90) + ')'));
+          p = await h6Bring(easeOut, 'Ease Out preset');
+          await realInput924(h6Tap(p), 'the Ease Out preset'); await h6Sleep(400);
+          const e3 = eases();
+          if (e3.blur === e2.blur || e3.glow !== e2.glow) throw new Error(h6Say('after Undo he picked Ease Out in the curve editor he had open on the Blur inside his filter: the Blur went ' + e2.blur + ' to ' + e3.blur + ' and the Glow ' + e2.glow + ' to ' + e3.glow + ' — the editor lost the effect he picked when Undo put new objects in'));
+        });
+      }, 380);
+    } finally {
+      FM._fxEasing = null;
+      hb2Restore(keep);
+      FM.scene = saved; try { FM.setTime(0); FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
     }
   });
 

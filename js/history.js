@@ -28,6 +28,39 @@ window.FM = window.FM || {};
     return JSON.stringify({ project: FM.scene.project, layers: FM.scene.layers, selectedId: FM.scene.selectedId, selectedIds: FM.scene.selectedIds }, FM.jsonReplacer);
   }
 
+  /* ═══ UNDO KEEPS THE EFFECT HE HAS OPEN (queue 690, sixth hunt) ═══════════════════════════════════════════════
+   * Which effect row is open is `fx._expanded`, a runtime flag, and snap() strips every `_` key — so every snapshot
+   * is a scene in which nothing is open, and restore() put exactly that back. He opens Gaussian Blur, drags it from 6
+   * to 11.5 px, taps Undo to compare: the value came back and the controls he was using folded shut under his thumb;
+   * Redo did the same. Every comparison cost him finding the effect and opening it again, on the phone and the PC.
+   * So the open rows are carried from the scene being replaced onto the one coming back, matched by POSITION in the
+   * same list on the same layer, and only where the thing there is the same kind of thing (same `type`, and the same
+   * `id` where it has one) — so an undo that removed or reordered effects cannot open a different one in its place.
+   * Every list with an open/close row: the effect stack, a filter's children, a caption cue's own stack, the audio
+   * effects and the masks. It can only re-open what was open, so the accordion's one-open-row still holds.
+   * The collab path needs none of this — it patches the live objects and keeps `_expanded` (collab-diff.js). */
+  function carryOpen(from, to) {
+    if (!Array.isArray(from) || !Array.isArray(to)) return;
+    for (let i = 0; i < from.length && i < to.length; i++) {
+      const a = from[i], b = to[i];
+      if (!a || !b || typeof a !== 'object' || typeof b !== 'object' || a.type !== b.type || a.id !== b.id) continue;
+      if (a._expanded) b._expanded = true;
+      carryOpen(a.effects, b.effects);   // a filter's children
+    }
+  }
+  function keepOpenRows(oldLayers, newLayers) {
+    const was = new Map();
+    (oldLayers || []).forEach(l => { if (l && l.id) was.set(l.id, l); });
+    (newLayers || []).forEach(l => {
+      const o = l && was.get(l.id);
+      if (!o) return;
+      carryOpen(o.effects, l.effects);
+      carryOpen(o.audioFx, l.audioFx);
+      carryOpen(o.masks, l.masks);
+      if (Array.isArray(o.captions) && Array.isArray(l.captions)) o.captions.forEach((c, k) => { if (c && l.captions[k]) carryOpen(c.effects, l.captions[k].effects); });
+    });
+  }
+
   function restore(str) {
     const s = JSON.parse(str);
     /* Undo restores from a snapshot we wrote ourselves, so this is belt-and-braces rather than a
@@ -42,8 +75,10 @@ window.FM = window.FM || {};
     const wasIds = FM.selectionIds ? FM.selectionIds() : (wasSelected ? [wasSelected] : []);
     const hadIds = new Set(FM.scene.layers.map(l => l.id));
     suppress = true;
+    const outgoing = FM.scene.layers;
     FM.scene.project = s.project;
     FM.scene.layers = s.layers;
+    try { keepOpenRows(outgoing, s.layers); } catch (e) {}   // a UI nicety: it must never be able to stop an undo
     /* ═══ UNDO DOES NOT CHOOSE WHICH LAYER HE IS ON (queue 690) ═══════════════════════════════════════
      * This used to put back the SNAPSHOT's selection, and a snapshot's selection is whatever was
      * selected at the PREVIOUS commit — and selecting never commits (a real click on a clip or its
