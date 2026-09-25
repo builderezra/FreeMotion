@@ -1024,7 +1024,12 @@ window.FM = window.FM || {};
       if (drag && drag.fine) glide.cancelDrag();
       pend = null; drag = null;
     });   // attachGlide's own pointerup starts the glide and settles
-    strip.addEventListener('pointercancel', end); strip.addEventListener('lostpointercapture', end);
+    strip.addEventListener('pointercancel', end);
+    /* ONLY THE STRIP'S OWN CAPTURE ENDING ends the drag (queue 690). lostpointercapture BUBBLES, so a child
+       that had held the touch — the centre line did, by being where the finger landed — handing it to the
+       strip at the 6px lock reached this listener as if the strip had lost it, and the drag died after its
+       first notch. The CSS now keeps touches off the line; this keeps any other child from doing the same. */
+    strip.addEventListener('lostpointercapture', (e) => { if (e.target === strip) end(); });
     strip._sync = sync;
     return strip;
   }
@@ -2297,7 +2302,10 @@ window.FM = window.FM || {};
         /* The refusals come back as a WORD, not as false, so the button can say why instead of doing
            nothing — "it does nothing" is the report this app gets most often, and each of these is a
            case where auditioning would be a lie about what the project sounds like. */
-        const r = FM.audioFxLive.audition(layer);
+        /* `control` names this button, so the audition stops itself the moment no lit Hear button is on
+           screen — backing out with ‹ Effects, deselecting the clip, anything (queue 690). The refresh
+           below renders it lit before the audition's first frame looks for it. */
+        const r = FM.audioFxLive.audition(layer, { control: '#inspector-panel .fx-hear.on' });
         const why = { reversed: 'A reversed clip\u2019s sound is rebuilt on playback, so it cannot be auditioned here',
                       silent: 'This layer is hidden or muted \u2014 there is nothing to hear',
                       solo: 'Another layer is soloed, so this one is silent' }[r];

@@ -1724,7 +1724,11 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
   background-size: auto 58%, auto 30%; background-position: 0 center; background-repeat: repeat-x; }
 .fx-scrub-mark { position: absolute; top: 10px; bottom: 10px; width: 2px; margin-left: -1px; background: rgba(255,255,255,.8); border-radius: 1px; }   /* midpoint / zero / default / 45° */
 .fx-scrub-mark.end { top: 6px; bottom: 6px; background: #fff; }   /* min & max — the wall */
-.fx-scrub-notch { position: absolute; left: 50%; top: 5px; bottom: 5px; width: 2px; margin-left: -1px; background: var(--accent); border-radius: 1px; }
+/* pointer-events: none (queue 690), like the ticks above. A finger that lands ON the bright centre line is the
+   obvious way to hold the ruler — and a touch is implicitly captured by the element it lands on, so the LINE
+   held it, the ruler's own setPointerCapture took it back at the 6px lock, and the lostpointercapture that
+   fired at the line bubbled up and ended the drag after one notch (Volume 100 → 105, then dead). */
+.fx-scrub-notch { position: absolute; left: 50%; top: 5px; bottom: 5px; width: 2px; margin-left: -1px; background: var(--accent); border-radius: 1px; pointer-events: none; }
 .fx-scrub-val { width: 62px; flex: none; text-align: center; background: var(--panel-3); border: 1px solid var(--line); border-radius: 7px; color: var(--text); font-size: 12px; height: 30px; font-variant-numeric: tabular-nums; }
 /* segmented sub-mode */
 .fx-seg-row { display: flex; align-items: center; gap: 8px; }

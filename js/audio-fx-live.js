@@ -334,6 +334,7 @@ window.FM = window.FM || {};
       this.sync(layer);                     // builds/refreshes the chain and routes the element
       try { FM.audioCtx(); } catch (e) {}   // inside the click stack, or iOS never starts it
       const seconds = (opts && opts.seconds) || 2.5;
+      const ctl = (opts && opts.control) || null;   // the selector of the button that stops it — see the tick
       /* Start from where the playhead is if it is over the clip, and from the clip's own start if it
          is not — auditioning silence because the playhead happens to sit past the end is the kind of
          "it does nothing" that reads as a broken button. */
@@ -370,7 +371,7 @@ window.FM = window.FM || {};
       };
       const tick = function () {
         if (!_aud || _aud.m !== m) return;
-        /* THREE WAYS IT MUST STOP ITSELF, all of them states where the button that would stop it is no
+        /* FOUR WAYS IT MUST STOP ITSELF, all of them states where the button that would stop it is no
            longer reachable. Sound with no visible source is the worst stuck state this app can have,
            because there is nothing on screen to connect it to.
            NOT stopped on an effect edit, deliberately: toggling an effect off while auditioning is how
@@ -385,6 +386,25 @@ window.FM = window.FM || {};
         if (FM._exporting) { self.stopAudition(); return; }
         const layers = (FM.scene && FM.scene.layers) || [];
         if (layers.indexOf(layer) < 0) { self.stopAudition(); return; }                    // the layer was deleted
+        /* …and the one that covers every door out of the panel at once (queue 690): THE STOP BUTTON IS
+           GONE. An audition started from a Hear button names that button's selector (opts.control), and
+           the moment no such button is on screen it stops. Only collapsing the row used to stop it, so
+           backing out with ‹ Effects, tapping away to deselect the clip, switching to the visual tab or
+           opening Home all left the same 2.5 s of his song looping over a panel with no stop on it — the
+           hunt measured it still playing 3 s after ‹ Effects, with 0 stop buttons on screen. Checking the
+           button rather than patching each exit is the point: a new way out of the panel is covered
+           without anyone remembering this. A call with no control (the suite drives audition() directly)
+           keeps the three rules above and nothing else. getClientRects is empty for an element that is
+           gone or under display:none; one query a frame, only while an audition runs. */
+        if (ctl) {
+          const b = document.querySelector(ctl);
+          const home = FM.home && FM.home.isOpen && FM.home.isOpen();   // Home covers the editor without removing it
+          if (!b || !b.getClientRects().length || home) {
+            self.stopAudition();
+            if (b && FM.inspector) FM.inspector.refresh();   // a button still in the panel (under Home) must not stay lit as Stop
+            return;
+          }
+        }
         if (m.el.ended) { try { m.el.currentTime = _aud.t0; m.el.play(); } catch (e) {} }   // ran off the end
         try {
           if (m.el.currentTime - _aud.t0 > seconds) m.el.currentTime = _aud.t0;   // a short loop, so you hear the change repeatedly

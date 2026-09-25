@@ -409,8 +409,35 @@ window.FM = window.FM || {};
 
   function isAudioOnly(l) {
     if (!l || l.type !== 'video') return false;
+    if (l.audioOnly) return true;   // an Extract Audio twin: a copy of the video at opacity 0 — a picture no one can see (queue 70)
     const m = FM.media && FM.media.get(l.id);
     return !!(m && (!m.width || !m.height));   // mp3/wav ride the video path with a 0x0 picture
+  }
+
+  /* WHICH LAYER THE SHEET AIMS AT WHEN IT OPENS (queue 690). The feature is music → motion, so the
+   * default has to be something that MOVES on screen. It used to be the selection, falling back to the
+   * clip the sound comes from — and the only way in is the button on that clip's own Volume card, so
+   * for a song (an mp3 or a wav: a video with a 0x0 picture) both halves were the song. Apply then
+   * baked Scale keyframes onto a layer with no picture: the toast said Baked 77 keyframes onto Song,
+   * the song clip filled with diamonds, and nothing on the canvas pulsed at all.
+   * So, in order: the selection if it has a picture (a video clip driving itself, as before); else the
+   * picture layer he selected most recently before this one — "make the Logo pulse to the song" is
+   * select the Logo, then open the song; else the topmost layer with a picture of its own, preferring
+   * one on screen while the song plays. The song itself only when the project has nothing else. */
+  function defaultTarget(scene, layer, sel) {
+    const drawn = l => !!l && l.visible !== false && !isAudioOnly(l);
+    if (sel && drawn(sel)) return sel.id;
+    const recent = FM._recentSel || [];
+    for (let i = 0; i < recent.length; i++) {
+      const l = scene.layers.find(x => x.id === recent[i]);
+      if (l && l !== layer && drawn(l)) return l.id;
+    }
+    // A camera, null or adjustment layer has no picture of its own to pulse, so it is never the guess.
+    const own = l => drawn(l) && l !== layer && l.type !== 'camera' && l.type !== 'null' && l.type !== 'adjustment';
+    const a = layer.start || 0, b = a + (layer.duration || 0);
+    const overlaps = l => (l.start || 0) < b && (l.start || 0) + (l.duration || 0) > a;
+    const pick = scene.layers.find(l => own(l) && overlaps(l)) || scene.layers.find(own);   // layers[0] is the top of the stack
+    return pick ? pick.id : layer.id;
   }
 
   /* Exposed because closing this sheet is not just removing the node: it also takes back a
@@ -434,7 +461,7 @@ window.FM = window.FM || {};
     const sel = FM.selectedLayer ? FM.selectedLayer(scene) : null;
     const st = {
       band: 'overall', gain: 1, smoothing: 0.4, floor: 0,
-      targetId: (sel && !isAudioOnly(sel)) ? sel.id : layer.id,
+      targetId: defaultTarget(scene, layer, sel),
       prop: 'scale', min: 100, max: 140,
       reqId: 0, debounce: 0,
     };
@@ -567,7 +594,8 @@ window.FM = window.FM || {};
     scene.layers.forEach(l => {
       const o = document.createElement('option');
       o.value = l.id;
-      o.textContent = (l.name || l.type || 'Layer') + (isAudioOnly(l) ? ' (audio)' : '');
+      const nm = l.name || l.type || 'Layer';
+      o.textContent = nm + (isAudioOnly(l) && !/\(audio\)\s*$/.test(nm) ? ' (audio)' : '');   // an Extract Audio twin is already NAMED "… (audio)"
       if (l.id === st.targetId) o.selected = true;
       targetSel.appendChild(o);
     });
