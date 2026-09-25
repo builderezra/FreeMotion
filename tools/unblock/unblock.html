@@ -177,9 +177,9 @@
     <!-- No number in this sentence on purpose (21 Sep): it said "Twenty-nine" while the real figure was
          25, and a hand-written count is a thing that rots between the day it is typed and the day he
          opens the page. The chips underneath count themselves; this line just says what the page IS. -->
-    <p class="stand">Every open item that is built as far as it can go without you is here. Nothing here needs
-      more than a tap or a letter. Pick as you go — the page remembers — then hit <b>Copy my answers</b> and
-      paste the lot back in one message.</p>
+    <p class="stand">Every open item that is built as far as it can go without you is here. Most need a tap or a
+      letter; a few need a test or a report from your phone. Pick as you go — the page remembers — then hit
+      <b>Copy my answers</b> and paste the lot back in one message.</p>
     <ul class="tally">
       <li><span class="n">3</span> new today</li>
       <li><span class="n">12</span> need a report pasted</li>
@@ -188,486 +188,994 @@
     </ul>
   </header>
 
-  <!-- ══ 0. NEW SINCE YOU LAST LOOKED ══ 21 Sep. Put first on purpose: one confirms a fix that
-       shipped today and cannot be confirmed from this Mac, the other is holding a queue item. -->
-  <section id="new">
-    <div class="shead"><h2>New today</h2><span class="count">7 items</span></div>
-
-    <div class="card" data-id="929" data-item="929 (people + heart)" data-kind="say">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#929</span> The people shapes and the heart — pick from the sheets</h3>
-        <p>People, traced from real signs: <b>A</b> the airport sign (recommended) · <b>B</b> the map icon · <b>C</b> Google&rsquo;s icon set (no arms) · or keep today&rsquo;s.
-          Heart: <b>A</b> yours with the bulge fixed (recommended) · <b>B</b> Google&rsquo;s · <b>C</b> textbook; icon as an <b>outline</b> (recommended) or <b>filled</b>.
-          The sheets are the 14 pictures sent on 25 Sep.</p>
-      </div>
-      <div class="says"><textarea class="say" rows="2" placeholder="e.g. people A, heart A outline"></textarea></div>
-    </div>
-
-    <div class="card" data-id="927" data-item="927 (big Notes/Shortcuts)" data-kind="say">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#927</span> Big Notes and Shortcuts — the grab corner and the big size</h3>
-        <p>Built and working on a branch. Grab corner: <b>A</b> arc (recommended) · <b>B</b> grip lines · <b>C</b> expand button.
-          Big size: <b>Roomy</b> · <b>Focus</b> (recommended) · <b>Most of the screen</b>. The 11 pictures sent on 25 Sep show each one.</p>
-      </div>
-      <div class="says"><textarea class="say" rows="2" placeholder="e.g. A focus"></textarea></div>
-    </div>
-
-    <div class="card" data-id="921" data-item="921 (live collaboration)" data-kind="say">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#921</span> Try live collaboration on your Mac and iPhone together</h3>
-        <p>All eight stages are built and shipped (v16.89), behind <b>Settings &rarr; Labs</b>. Switch it on on both devices,
-          tap <b>Share</b> on the Mac, then open the link, scan the QR or type the short code on the iPhone. Move a layer on
-          one and watch the other. If it will not connect, <b>Settings &rarr; Labs &rarr; Test connection</b> gives a report
-          you can paste here. Once it works for you, Labs comes off and it is part of the app.</p>
-      </div>
-      <div class="says"><textarea class="say" rows="2" placeholder="works / what went wrong / paste the Test connection report"></textarea></div>
-    </div>
-
-    <div class="card" data-id="912f" data-item="912 (filters)" data-kind="say">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#912</span> Which new filters do you want to keep?</h3>
-        <p>Ten candidates were built and rendered on two photos (the sheets sent 22 Sep): <b>1</b> Sepia, <b>2</b> Digicam,
-          <b>3</b> Portrait Film, <b>4</b> Moody, <b>5</b> Cyberpunk, <b>6</b> Tungsten, <b>7</b> Airy,
-          <b>8</b> Colour Splash, <b>9</b> Cyanotype, <b>10</b> HDR. They are built and waiting; the unpicked ones get deleted.</p>
-      </div>
-      <div class="says"><textarea class="say" rows="2" placeholder="e.g. 1 4 5 9 &mdash; or &ldquo;all&rdquo;"></textarea></div>
-    </div>
-
-    <div class="card" data-id="920" data-kind="say">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#920</span> The blur at the top — it needs a fresh install</h3>
-        <p>Your 24 Sep screenshot shows the status bar drawn <b>over</b> the page, which only an install from before the fix can do:
-          iOS reads that setting once, when the app is added. Since v16.91 the app shows you the steps itself on Home, with a
-          Back up button: <b>back up</b> (removing the app deletes what it stores) → <b>remove FreeMotion</b> from your Home Screen →
-          in Safari open builderezra.github.io/FreeMotion → <b>Share → Add to Home Screen</b> → open it → <b>Settings → Restore</b>.
-          Then say whether the blur is gone.</p>
-      </div>
-      <div class="says"><textarea class="say" rows="2" placeholder="gone / still there after reinstalling / something else"></textarea></div>
-    </div>
-
-    <div class="card" data-id="917e" data-item="917 (export rows)" data-kind="pick">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#917</span> The Export box cuts off its own values on a phone</h3>
-        <p>&ldquo;Same as project &mdash; 1080&times;1920&rdquo; needs 219px and the dropdown is 179px, so it reads
-          &ldquo;Same as project &hellip;&rdquo;.</p>
-      </div>
-      <div class="opts">
-        <button class="opt" data-v="A"><span class="key">A</span><span>Put the labels above the dropdowns on phones, so each value has the full width <span class="rec">&mdash; recommended</span></span></button>
-        <button class="opt" data-v="B"><span class="key">B</span><span>Shorten the wording instead (e.g. &ldquo;Project &mdash; 1080&times;1920&rdquo;)</span></button>
-      </div>
-    </div>
-
-    <div class="card" data-id="917a" data-item="917 (Add sheet glass)" data-kind="pick">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#917</span> The Add sheet is see-through</h3>
-        <p>It is 82% opaque glass, so the timeline and its buttons show faintly through it behind your photos and videos.</p>
-      </div>
-      <div class="opts">
-        <button class="opt" data-v="A"><span class="key">A</span><span>Keep the glass &mdash; it matches the rest of the app <span class="rec">&mdash; recommended</span></span></button>
-        <button class="opt" data-v="B"><span class="key">B</span><span>Make it solid so nothing shows through</span></button>
-      </div>
-    </div>
-
-    <div class="card" data-id="917c" data-item="917 (colour box)" data-kind="pick">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#917</span> The custom background colour box looks like a second Black swatch</h3>
-        <p>In New project and Canvas settings it is a plain black box beside the Black / White / Green / Transparent swatches,
-          so nothing says it opens a colour picker.</p>
-      </div>
-      <div class="opts">
-        <button class="opt" data-v="A"><span class="key">A</span><span>Give it a rainbow ring, like the shape-colour swatch in Settings <span class="rec">&mdash; recommended</span></span></button>
-        <button class="opt" data-v="B"><span class="key">B</span><span>Leave it black</span></button>
-      </div>
-    </div>
-
-  </section>
-
-  <!-- ══ 1. THE REPORTS ══ ordered by how many items each one frees -->
-  <section id="reports">
-    <div class="shead"><h2>Reports to paste</h2><span class="count">12 items</span></div>
-    <p class="sdesc">The app already records these on your own device. Each one replaces a guess I would
-      otherwise keep making — several bugs here have survived because everything measures fine on this Mac.</p>
-
-    <div class="card" data-id="rep-playback" data-kind="tap" data-label="Your last playback">
-      <div class="row">
-        <button class="tick" aria-pressed="false" aria-label="Mark done"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></svg></button>
-        <div class="ask">
-          <h3>Your last playback</h3>
-          <p>On the phone: play a clip <b>with an effect or two on it</b> until the sound cuts out, stop, then <span class="path">Settings → Your last playback → Copy</span>.</p>
-          <p>This is the one I most want. Four separate audio complaints wait on it &mdash; you said the sound is fine until
-            effects go on (#845), which is why the clip should have some. <b>Three audio fixes shipped on 21 Sep</b> (v16.34
-            to v16.36), so a fresh report also tells us whether those were the cause. Since 5 Sep the lag item waits on it too:
-            every effect the numbers pointed at is now cropped or bounded, and whether the phone still lags is a number only it has.</p>
-          <div class="items"><span>#95</span><span>#96</span><span>#663</span><span>#692</span><span>#845</span></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card" data-id="rep-export" data-kind="tap" data-label="Your last export">
-      <div class="row">
-        <button class="tick" aria-pressed="false" aria-label="Mark done"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></svg></button>
-        <div class="ask">
-          <h3>Your last export</h3>
-          <p>On the phone: export something with sound, then <span class="path">Settings → Your last export → Copy</span>.</p>
-          <p>The report names which of six places the audio was lost. Silent exports are the longest-running
-            complaint in the list.</p>
-          <div class="items"><span>#215</span><span>#677</span></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card" data-id="rep-pcexport" data-kind="tap" data-label="PC export played in Chrome">
-      <div class="row">
-        <button class="tick" aria-pressed="false" aria-label="Mark done"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></svg></button>
-        <div class="ask">
-          <h3>One check on the PC: is the file silent, or is the player?</h3>
-          <p>Export something short with sound on the PC, drag the <span class="path">.mp4</span> into a Chrome
-            tab, press play. Sound or no sound decides which half of the bug this is — and they need opposite fixes.</p>
-                  <p><b>6 Sep, done on the PC for you:</b> an audible clip exports with a real sound track on this Mac (the app's own report: track written, mix peak 0.6), so the PC half is not a general fault; if your PC export was silent, Settings &#8594; Your last export &#8594; Copy names the reason. <b>Still needed from you: the phone half</b> &#8212; export something with sound on the phone and, if it is silent, paste that report.</p>
-<div class="items"><span>#604</span></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card" data-id="rep-measure-phone" data-kind="tap" data-label="What's slow (phone, effects stacked)">
-      <div class="row">
-        <button class="tick" aria-pressed="false" aria-label="Mark done"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></svg></button>
-        <div class="ask">
-          <h3>What’s slow — on the phone, with effects stacked</h3>
-          <p>Stack a few effects on one layer, then <span class="path">Settings → What’s slow → Measure</span>,
-            use the app for ten seconds, and Copy.</p>
-          <p>This is the oldest thing on the whole list — “editing lags, and gets bad fast”, still open.</p>
-          <div class="items"><span>oldest item</span></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card" data-id="rep-measure-pc" data-kind="tap" data-label="What's slow (PC, while scrubbing)">
-      <div class="row">
-        <button class="tick" aria-pressed="false" aria-label="Mark done"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></svg></button>
-        <div class="ask">
-          <h3>What’s slow — on the PC, <em>while scrubbing</em></h3>
-          <p>Press play <em>and</em> drag the playhead for the ten seconds, then Copy. Your last PC sample came
-            back healthy, which is why the scrubbing part matters — it is the case that never got sampled.</p>
-          <div class="items"><span>#657</span></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card" data-id="rep-scrub" data-kind="tap" data-label="Your last scrub">
-      <div class="row">
-        <button class="tick" aria-pressed="false" aria-label="Mark done"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></svg></button>
-        <div class="ask">
-          <h3>Your last scrub</h3>
-          <p>On the phone: select a layer, scrub the timeline once, then
-            <span class="path">Settings → Your last scrub → Copy</span>.</p>
-          <p>Scrubbing measured perfectly smooth in every state I could stage here, so the jumpiness depends on
-            something your device brings. This records every frame of the real thing.</p>
-          <div class="items"><span>#768</span></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card" data-id="rep-open" data-kind="tap" data-label="Your last project open">
-      <div class="row">
-        <button class="tick" aria-pressed="false" aria-label="Mark done"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></svg></button>
-        <div class="ask">
-          <h3>Your last project open</h3>
-          <p>Open a project on the phone, then <span class="path">Settings → Your last project open → Copy</span>.
-            It says which frames ran long, instead of me guessing again at why opening feels janky.</p>
-          <div class="items"><span>#508</span></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card" data-id="rep-blank" data-kind="tap" data-label="A clip with no picture">
-      <div class="row">
-        <button class="tick" aria-pressed="false" aria-label="Mark done"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 7"/></svg></button>
-        <div class="ask">
-          <h3>A clip with no picture <span style="color:var(--faint);font-weight:400">— next time it happens</span></h3>
-          <p>When a screen recording lands blank, go to
-            <span class="path">Settings → A clip with no picture → Copy</span>. It reports what your device can
-            actually decode; a table measured anywhere else is worthless here.</p>
-          <div class="items"><span>#129</span></div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ══ 2. THE PICKS ══ -->
-  <section id="picks">
-    <div class="shead"><h2>Letters to send</h2><span class="count">7 items</span></div>
-    <p class="sdesc">Nothing visual ships before you have seen it — your standing rule. Where I drew options and
-      sent them, the letters below are those same options.</p>
-
-    <div class="card" data-id="425" data-kind="pick">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#425</span> Where does <em>Copy</em> sit on a layer row?</h3>
-        <p>You asked for trash / copy / parent on the right. Copy is the one that fights an earlier instruction.</p>
-      </div>
-      <div class="opts">
-        <button class="opt" data-v="A"><span class="key">A</span><span>Copy moves right with the rest, switch and all</span></button>
-        <button class="opt" data-v="B"><span class="key">B</span><span>Copy stays left, where you put it a day earlier <span class="rec">— recommended</span></span></button>
-      </div>
-    </div>
-
-    <div class="card" data-id="454" data-kind="pick">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#454</span> “Save whole look as preset…”</h3>
-        <p>Presets are for effects only now. This row is the last thing still carrying the old meaning.</p>
-      </div>
-      <div class="opts">
-        <button class="opt" data-v="A"><span class="key">A</span><span>Remove it — your literal words</span></button>
-        <button class="opt" data-v="B"><span class="key">B</span><span>Keep it, rename it “Copy look &amp; motion to…”, move it out of the Presets card <span class="rec">— recommended</span></span></button>
-        <button class="opt" data-v="C"><span class="key">C</span><span>Cut it back to effects only</span></button>
-      </div>
-    </div>
-
-
-
-    <div class="card" data-id="775" data-kind="pick">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#775</span> The top row on a narrow PC window</h3>
-        <p>Going through the PC menus turned up one real defect: below about 1050px the top row runs out of room
-          and the right-hand controls get squeezed. Three ways out.</p>
-      </div>
-      <div class="opts">
-        <button class="opt" data-v="A"><span class="key">A</span><span>Drop the version label and the help button</span></button>
-        <button class="opt" data-v="B"><span class="key">B</span><span>Fold the right-hand end into a ⋯ button <span class="rec">— recommended</span> (nothing is lost, it just takes one more tap on a narrow window)</span></button>
-        <button class="opt" data-v="C"><span class="key">C</span><span>Switch to the phone’s row below 1050px</span></button>
-      </div>
-    </div>
-
-    <div class="card" data-id="904b" data-item="904 (Blink)" data-kind="pick">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#904</span> Blink runs at half the speed it says</h3>
-        <p>Blink&rsquo;s &ldquo;Rate&rdquo; is labelled in Hz, but set to 2 it blinks once a second, and its top setting gives 6 a
-          second rather than 12. So matching a blink to a beat by typing the number never lines up.</p>
-        <p><b>Why I am asking instead of fixing it:</b> every Blink you have ever placed uses this, at every setting. Correcting
-          the maths makes all of them blink twice as fast.</p>
-      </div>
-      <div class="opts">
-        <button class="opt" data-v="A"><span class="key">A</span><span>Keep every existing Blink looking exactly as it does, and make the number honest from now on &mdash; one showing &ldquo;2 Hz&rdquo; would show &ldquo;1 Hz&rdquo;, same speed, and the slider can reach a real 12 a second <span class="rec">&mdash; recommended, nothing you have made changes</span></span></button>
-        <button class="opt" data-v="B"><span class="key">B</span><span>Make the numbers right and let existing Blinks speed up to match what they say</span></button>
-        <button class="opt" data-v="C"><span class="key">C</span><span>Leave the speed alone and just change the label so it stops claiming Hz</span></button>
-      </div>
-    </div>
-
-    <div class="card" data-id="904f" data-item="904 (Flash darken)" data-kind="pick">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#904</span> Flash (darken)&rsquo;s &ldquo;Darkest&rdquo; slider mostly does nothing</h3>
-        <p>&ldquo;Darkest&rdquo; only works when it is set <em>lighter</em> than the flash&rsquo;s own Depth, so most of its travel changes
-          nothing &mdash; including in all ten built-in TikTok-look presets, which set it to a value it ignores.</p>
-      </div>
-      <div class="opts">
-        <button class="opt" data-v="A"><span class="key">A</span><span>Make Darkest the real bottom of every flash &mdash; the ten built-in presets get noticeably lighter</span></button>
-        <button class="opt" data-v="B"><span class="key">B</span><span>Remove Darkest and keep the look you have &mdash; Depth already does the job <span class="rec">&mdash; recommended, nothing you have made changes</span></span></button>
-      </div>
-    </div>
-
-    <div class="card" data-id="911" data-item="911 (Snow size)" data-kind="pick">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#911</span> Snow &amp; Rain: bigger flakes by default?</h3>
-        <p>Snow &amp; Rain is live (v16.74). At the default Size of 5px the flakes look tiny on a phone screen. Existing uses keep
-          whatever size they were set to only if you have not left it on the default.</p>
-      </div>
-      <div class="opts">
-        <button class="opt" data-v="A"><span class="key">A</span><span>Raise the default to 8px for new ones; ones you have already added stay 5px <span class="rec">&mdash; recommended</span></span></button>
-        <button class="opt" data-v="B"><span class="key">B</span><span>Leave it at 5px</span></button>
-      </div>
-    </div>
-
-    <div class="card" data-id="847" data-kind="pick">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#847</span> Keep the loop going when this chat is closed?</h3>
-        <p>The every-minute loop lives inside this chat. <b>Close the chat or restart the Claude app and it stops</b>,
-          until a new FreeMotion chat starts it again &mdash; which every new chat now does on its own, first thing.</p>
-        <p>The only thing that survives on its own is a routine scheduled in the cloud. It works, but it runs as a
-          <em>second</em> worker on its own copy of the project, so it and this chat could both be editing your request
-          list at once &mdash; the exact clash the inbox was set up to avoid &mdash; and it uses quota alongside this one.</p>
-      </div>
-      <div class="opts">
-        <button class="opt" data-v="A"><span class="key">A</span><span>Leave it &mdash; opening a new FreeMotion chat restarts it <span class="rec">&mdash; recommended</span></span></button>
-        <button class="opt" data-v="B"><span class="key">B</span><span>Set up the cloud routine anyway, so work carries on with no chat open</span></button>
-      </div>
-    </div>
-
-    <div class="card" data-id="406" data-kind="say">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#406</span> Which menu did you mean?</h3>
-        <p>Two things, and the second is the one you asked me to keep chasing you for.</p>
-        <p><b>1.</b> “Get rid of saving presets from this menu” — there are three menus that save a preset, and deleting
-          the wrong one removes the only way to do something. Which were you looking at? Or just say <b>A</b> for the
-          layer ⋯ menu, which is the one I would remove.</p>
-        <p><b>2.</b> You asked to be reminded to acknowledge the answer about presets: saving a preset saves the
-          EFFECTS only, and “save the layer as a preset” was a second button for the same call. Say “read it” and this
-          item closes.</p>
-      </div>
-      <textarea class="note" rows="2" placeholder="e.g. “A, read it” — or name the menu you were in"></textarea>
-    </div>
-
-    <div class="card" data-id="834b" data-item="834 (Cancel)" data-kind="pick">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#834</span> “Cancel” in the sketching bar</h3>
-        <p>It does not cancel anything. Every stroke is already a real layer the moment you draw it, so Cancel
-          just closes the bar and the drawing stays. Either the word is wrong or the button is.</p>
-      </div>
-      <div class="opts">
-        <button class="opt" data-v="A"><span class="key">A</span><span>Make it really discard — throw away this session’s drawing, and put an edited one back as it was</span></button>
-        <button class="opt" data-v="B"><span class="key">B</span><span>Rename it “Close” — the strokes are yours as you draw them, and Undo already takes one back <span class="rec">— recommended</span></span></button>
-      </div>
-    </div>
-
-    <div class="card" data-id="482" data-kind="say">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#482</span> The big one — improving every effect</h3>
-        <p>Two categories done by eye on your own photographs: <a href="https://claude.ai/code/artifact/1865b863-9713-4230-a19e-fb132604d722">Colouring</a> (43, Halation fixed, two taste calls left as they are) and <a href="https://claude.ai/code/artifact/8b17ffed-1990-4ac2-88c4-24efcf752315">Warping</a> (29, Chromatic Aberration fixed: it was RGB Split under another name). The other ten categories were <a href="https://claude.ai/code/artifact/ee514086-66d2-4388-a757-a944a0385ec9">swept by number</a> (165 effects including Text, two fixed: Electric Edges was invisible on photographs, a negative Text Curve mirrored the word).</p>
-        <p>Name the next category to judge the same way, say “move Gradient Overlay” or “move Palette Map”, or say no to stop here.</p>
-        <p>Blur 19 · Generative 19 · Stylize 20 · 3D 18 · Drawing &amp; Edge 16 · Keying 11 · Text 10 · Opacity 7 · Repetition 6 · Movement 7</p>
-      </div>
-      <textarea class="note" rows="2" placeholder="A category name, “move …”, or “no”"></textarea>
-    </div>
-
-    <div class="card" data-id="867" data-kind="pick">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#867</span> Controller &amp; New group tiles</h3>
-        <p>You were right about the colour, and the numbers agree: New group and Custom elements are 38 apart in RGB
-          where this menu&rsquo;s own rule says 60 minimum. At the opacity these tiles are painted at, that is no
-          difference at all. They are also both dashed outlines, which is why they read as the same kind of thing.</p>
-        <p>Three options are drawn at the real PC tile size next to their actual neighbours, and again at phone size.
-          Controller stays red in all three &mdash; &ldquo;Null being red is good&rdquo; is yours and I left it alone.</p>
-      </div>
-      <div class="opts">
-        <button class="opt" data-v="1"><span class="key">1</span><span>New group joins the coloured family, in green &mdash; every other card here <em>adds a layer</em>, while Custom elements <em>opens a browser</em>, so the quiet grey should be its alone <span class="rec">&mdash; recommended</span></span></button>
-        <button class="opt" data-v="2"><span class="key">2</span><span>Keep it quiet, but make it properly blue instead of grey &mdash; the smaller change</span></button>
-        <button class="opt" data-v="3"><span class="key">3</span><span>Option 1, plus a stronger plate on both tiles &mdash; if &ldquo;washed out&rdquo; is as much the problem as &ldquo;too alike&rdquo;</span></button>
-      </div>
-    </div>
-
-    <div class="card" data-id="856" data-kind="pick">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#856</span> The Assistant&rsquo;s paid keys</h3>
-        <p><b>The talking AI is built and live in v16.23</b> &mdash; open a layer&rsquo;s &ctdot; menu, tap
-          &ldquo;Ask the Assistant&rdquo;, and tell it what to change. That part is done and needs nothing from you.</p>
-        <p>What is left is the last line of what you asked for: <em>&ldquo;later when you pay for the pro version,
-          it&rsquo;ll unlock an API key for you to use like our own inbuilt but hidden API keys&rdquo;</em>.
-          <b>That one cannot be built the way it is described, and you should hear it from me.</b> FreeMotion has no
-          server &mdash; a key shipped inside the app is readable in the source and visible in the network call, so
-          &ldquo;hidden&rdquo; is not possible. Hiding it needs a server of ours sitting between the app and the AI,
-          and that would be the first thing in FreeMotion that stops being local-only.</p>
-      </div>
-      <div class="opts">
-        <button class="opt" data-v="A"><span class="key">A</span><span>Stay local-only: everyone brings their own key, and paying unlocks <em>features</em> instead of a key <span class="rec">&mdash; recommended, and the only one that changes nothing about what the app is</span></span></button>
-        <button class="opt" data-v="B"><span class="key">B</span><span>Build a small server of ours that passes the requests through for paying users &mdash; real cost per user, real accounts, and nothing is local-only any more</span></button>
-        <button class="opt" data-v="C"><span class="key">C</span><span>Park the whole paid-key question until after launch</span></button>
-      </div>
-    </div>
-
-    <div class="card" data-id="882x" data-item="882 (Xcode)" data-kind="pick">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#882</span> One line for your Mac (optional)</h3>
-        <p>Earlier this month an Xcode licence prompt quietly broke every <code>git</code> and <code>python3</code>
-          command on this Mac, which stopped releases reaching your phone. I worked around it without needing your
-          password, and that workaround is permanent &mdash; <b>nothing is broken right now</b>.</p>
-        <p>The proper fix covers your whole Mac, not just this app, and needs your password, so only you can run it.
-          Paste it into Terminal:</p>
-        <p><span class="path">sudo xcode-select -s /Library/Developer/CommandLineTools</span></p>
-      </div>
-      <div class="opts">
-        <button class="opt" data-v="A"><span class="key">A</span><span>I ran it <span class="rec">&mdash; recommended, it takes ten seconds</span></span></button>
-        <button class="opt" data-v="B"><span class="key">B</span><span>Leave the workaround as it is</span></button>
-      </div>
-    </div>
-
-  </section>
-
-  <!-- ══ 3. QUICK LOOKS ══ -->
-  <section id="looks">
-    <div class="shead"><h2>Quick looks</h2><span class="count">4 items</span></div>
-    <p class="sdesc">Each of these is a thing only your device can answer. The test harness genuinely cannot see them.</p>
-
-    <div class="card" data-id="676" data-item="676 + 706" data-kind="say">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#676 · #706</span> The add menu opening twice</h3>
-        <p>Does the sheet slide up, close, and slide up again — or does a second copy land on top of the first?
-          The two need opposite fixes, and this is still the blocker on both entries.</p>
-      </div>
-      <textarea class="note" rows="2" placeholder="Which of the two it looks like — and whether it still does it now"></textarea>
-    </div>
-
-    <div class="card" data-id="834a" data-item="834 (pinch)" data-kind="say">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#834</span> Pinching a layer with a finger on a corner square</h3>
-        <p>A reader said a pinch is thrown away when one finger lands on one of the little corner handles, and the
-          layer gets dragged instead of resized. I could not confirm it: the code branch it names is the
-          <em>third</em>-finger case, and a second finger passes it and does start a pinch. So either the cause is
-          somewhere I have not found, or it does not happen. I will not guess at the most-used gesture on your phone.</p>
-        <p><b>Select a layer, then pinch it with one finger starting ON a corner square.</b> Does it resize, or does
-          it drag away with your other finger?</p>
-      </div>
-      <textarea class="note" rows="2" placeholder="Resizes / drags — and whether the finger was exactly on the square"></textarea>
-    </div>
-
-    <div class="card" data-id="619" data-kind="say">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#619</span> Tapping a template</h3>
-        <p>One thing changed since you wrote this: your answer on #505 — “the element opens as its own document” —
-          applies to templates too, so tapping a template card now opens it for <em>editing</em>. The swap-your-media
-          flow this entry asked for would be a second route. Still want it?</p>
-      </div>
-      <textarea class="note" rows="2" placeholder="Yes, still want the fill-in flow — or no, editing is enough"></textarea>
-    </div>
-
-    <div class="card" data-id="860" data-kind="say">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#860</span> One screenshot of an icon not showing</h3>
-        <p>You said some icons do not display. I have checked all 37 on the PC across 19 different states of the app,
-          and added a guard that fails a release if one ever loses its ink &mdash; and I cannot make one disappear.
-          That does not mean you did not see it. It means I am looking in the wrong place.</p>
-        <p><b>Next time one is missing, take a screenshot.</b> Your two screenshots turned #903 around in minutes; one
-          here would do the same.</p>
-      </div>
-      <textarea class="note" rows="2" placeholder="Where it was and on which device &mdash; or &ldquo;haven&rsquo;t seen it since&rdquo;"></textarea>
-    </div>
-    <div class="card" data-id="883" data-kind="say">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#883</span> Is the white bar gone?</h3>
-        <p>You reported a white bar at the top when you&rsquo;re inside a project. Found it: the intro fades the page
-          from dark to white and switches that on with a class &mdash; and nothing ever switched it off, so the page
-          behind everything stayed white all session. Invisible on the home screen because the home paints over it;
-          obvious in a project, where the editor is dark and any strip it doesn&rsquo;t cover shows through.</p>
-        <p><b>Why I need you:</b> that strip only exists on a web view bigger than its page, which is the installed
-          app on a phone. A desktop browser has no such strip, so I can measure the cause but I cannot see your bar.
-          Say <b>gone</b> &mdash; or if it is still there, say so and I will keep looking, because that would mean a
-          second cause.</p>
-        <p class="mono" style="color:var(--faint);font-size:12px">Not ChatGPT, by the way &mdash; it made no changes to this app at all.</p>
-      </div>
-      <textarea class="note" rows="2" placeholder="&ldquo;gone&rdquo; &mdash; or what you still see"></textarea>
-    </div>
-
-    <div class="card" data-id="882c" data-item="882 (ChatGPT logs)" data-kind="say">
-      <div class="ask">
-        <h3><span class="mono" style="color:var(--faint)">#882</span> The ChatGPT chat logs you offered</h3>
-        <p>They will not contain code &mdash; ChatGPT made no changes to this app. But they may contain <b>things you
-          asked Codex for that never made it onto this list</b>, and the list is only worth anything if nothing you
-          asked for is missing from it.</p>
-        <p>Send them in a chat if you still have them, or just tell me here that there was nothing new in them.</p>
-      </div>
-      <textarea class="note" rows="2" placeholder="&ldquo;nothing new in them&rdquo; &mdash; or what you asked it for"></textarea>
-    </div>
-
-  </section>
-
-    <p class="sdesc" style="margin-top:16px">Three more were decided for you while you were away, under the rule that
-      says I choose and show you rather than sit waiting: <b>Comic Ink</b> ships at the middle weight, and the PC
-      <b>shape buttons</b> ship bigger with white glyphs on the coloured tiles. They are off this page because nothing
-      is waiting on them — one word changes any of them whenever you like.</p>
+  <!-- ══ THE CARDS ARE DATA NOW (25 Sep, v16.97) ══ Rebuilt from a sweep in which twelve agents read every open entry in
+       full and a thirteenth checked the rest of the repo for anything missed — 60 asks, plus the decisions made for him.
+       The hand-written cards had drifted: #454 was still asking after he had answered it, #202's ask had never been on
+       the page at all, and the "New today" answer boxes were never wired to the Copy button (they were .say, the script
+       reads .note). One JSON block below, rendered by one function, with textContent only — nothing here is HTML. -->
+  <div id="groups"></div>
+  <script type="application/json" id="unblock-data">
+{
+ "asOf": "25 Sep 2026, v16.97",
+ "groups": [
+  {
+   "id": "picks",
+   "title": "Quick picks",
+   "desc": "Answer with the letter. Where I drew options and sent pictures, the letters are those same options.",
+   "items": [
+    {
+     "n": 1,
+     "num": "936",
+     "kind": "pick",
+     "title": "The empty Projects screen on a fresh start — what should it say?",
+     "text": "A fresh start now opens on an empty Projects screen (v16.97). Picture sent 25 Sep.",
+     "options": [
+      [
+       "A",
+       "“Make your first edit” — Tap + to start a project — drop in a video, a photo or some text and bring it to life."
+      ],
+      [
+       "B",
+       "“Nothing here yet — let’s make something” — Tap + to start your first project."
+      ],
+      [
+       "C",
+       "“Your projects will live here” — Tap + to start one. Everything you make stays on this device."
+      ]
+     ],
+     "rec": "A"
+    },
+    {
+     "n": 2,
+     "num": "927",
+     "kind": "pick",
+     "title": "Big Notes and Shortcuts — the grab corner",
+     "text": "Built and working on a branch; 11 pictures sent 25 Sep.",
+     "options": [
+      [
+       "A",
+       "Arc"
+      ],
+      [
+       "B",
+       "Grip lines"
+      ],
+      [
+       "C",
+       "Expand button"
+      ]
+     ],
+     "rec": "A"
+    },
+    {
+     "n": 3,
+     "num": "927",
+     "kind": "pick",
+     "title": "Big Notes and Shortcuts — how big is big",
+     "text": "",
+     "options": [
+      [
+       "Roomy",
+       "Roomy"
+      ],
+      [
+       "Focus",
+       "Focus"
+      ],
+      [
+       "Most",
+       "Most of the screen"
+      ]
+     ],
+     "rec": "Focus"
+    },
+    {
+     "n": 4,
+     "num": "929",
+     "kind": "pick",
+     "title": "The people shapes",
+     "text": "Traced from real published pictograms; 14 pages sent to your phone.",
+     "options": [
+      [
+       "A",
+       "The airport-sign people (public domain)"
+      ],
+      [
+       "B",
+       "Mapbox’s map icons"
+      ],
+      [
+       "C",
+       "Google’s icon set (no arms)"
+      ],
+      [
+       "Keep",
+       "Keep today’s"
+      ]
+     ],
+     "rec": "A"
+    },
+    {
+     "n": 5,
+     "num": "929",
+     "kind": "pick",
+     "title": "The heart shape",
+     "text": "Two faults found and fixed: the bulge near the bottom and the ‘little lines’ in the icon.",
+     "options": [
+      [
+       "A",
+       "Your heart, with the bulge fixed"
+      ],
+      [
+       "B",
+       "Google’s heart"
+      ],
+      [
+       "C",
+       "A textbook heart"
+      ]
+     ],
+     "rec": "A"
+    },
+    {
+     "n": 6,
+     "num": "929",
+     "kind": "pick",
+     "title": "The heart’s icon in Add → Shape",
+     "text": "Either way it is now drawn from the heart’s own shape, so it matches what you add.",
+     "options": [
+      [
+       "Outline",
+       "Outline"
+      ],
+      [
+       "Filled",
+       "Filled"
+      ]
+     ],
+     "rec": "Outline"
+    },
+    {
+     "n": 7,
+     "num": "912",
+     "kind": "say",
+     "title": "Which of the ten new filters do you want to keep?",
+     "text": "All built; picture sheets sent 22 Sep. 1 Sepia · 2 Digicam · 3 Portrait Film · 4 Moody · 5 Cyberpunk · 6 Tungsten · 7 Airy · 8 Colour Splash · 9 Cyanotype · 10 HDR. The ones you do not pick get deleted.",
+     "placeholder": "e.g. 1 4 5 9 — or “all”"
+    },
+    {
+     "n": 8,
+     "num": "858",
+     "kind": "say",
+     "title": "Four filters look extreme — tone any down?",
+     "text": "Poster Print and Photocopy (almost all black-and-white dots), Old Film (very heavy texture), Teal & Orange (turns the whole frame blue).",
+     "placeholder": "leave them — or name the ones to tone down"
+    },
+    {
+     "n": 9,
+     "num": "904",
+     "kind": "pick",
+     "title": "Flash (darken)’s “Darkest” slider mostly does nothing",
+     "text": "It only works when set lighter than the flash’s own Depth — including in all ten built-in TikTok-look presets.",
+     "options": [
+      [
+       "A",
+       "Make it the real bottom of every flash (the built-in presets get noticeably lighter)"
+      ],
+      [
+       "B",
+       "Remove Darkest and keep the look you have — Depth already does the job"
+      ]
+     ],
+     "rec": "B"
+    },
+    {
+     "n": 10,
+     "num": "904",
+     "kind": "pick",
+     "title": "Blink runs at half the speed it says",
+     "text": "Set to “2 Hz” it blinks once a second.",
+     "options": [
+      [
+       "A",
+       "Keep every existing Blink the same speed and make the number honest from now on"
+      ],
+      [
+       "B",
+       "Fix the numbers and let existing Blinks speed up"
+      ],
+      [
+       "C",
+       "Keep the speed, just drop the Hz label"
+      ]
+     ],
+     "rec": "A"
+    },
+    {
+     "n": 11,
+     "num": "911",
+     "kind": "pick",
+     "title": "Snow & Rain — default flake size",
+     "text": "5px reads tiny on a phone.",
+     "options": [
+      [
+       "A",
+       "New ones start at 8px (ones you already made stay at 5px)"
+      ],
+      [
+       "B",
+       "Leave it at 5px"
+      ]
+     ],
+     "rec": "A"
+    },
+    {
+     "n": 12,
+     "num": "482",
+     "kind": "pick",
+     "title": "Gradient Overlay’s default strength",
+     "text": "At its default the pink-to-blue gradient covers most of your picture.",
+     "options": [
+      [
+       "Keep",
+       "Keep the default as it is"
+      ],
+      [
+       "Gentler",
+       "Make the default gentler so the photo shows through"
+      ]
+     ],
+     "rec": ""
+    },
+    {
+     "n": 13,
+     "num": "482",
+     "kind": "pick",
+     "title": "Should effect speed sliders go faster?",
+     "text": "Glitch speed, scanline roll, cloud drift and similar. I can’t measure whether faster is better — your call.",
+     "options": [
+      [
+       "Yes",
+       "Yes, open up the speed controls"
+      ],
+      [
+       "No",
+       "No, leave them"
+      ]
+     ],
+     "rec": ""
+    },
+    {
+     "n": 14,
+     "num": "534",
+     "kind": "pick",
+     "title": "Rename the “Stroke Colour” effect?",
+     "text": "You looked for an outline effect and couldn’t find it under this name.",
+     "options": [
+      [
+       "Rename",
+       "Rename it to an “Outline …” name"
+      ],
+      [
+       "Keep",
+       "Keep “Stroke Colour”"
+      ]
+     ],
+     "rec": ""
+    },
+    {
+     "n": 15,
+     "num": "664",
+     "kind": "pick",
+     "title": "Line height — its own effect tile?",
+     "text": "Today it is a setting inside the Text Spacing effect.",
+     "options": [
+      [
+       "Own tile",
+       "Its own tile, easier to find"
+      ],
+      [
+       "Keep",
+       "Keep it inside Text Spacing"
+      ]
+     ],
+     "rec": ""
+    },
+    {
+     "n": 16,
+     "num": "92",
+     "kind": "pick",
+     "title": "Audio effects browser — pull down for Favourites?",
+     "text": "It still makes you swipe sideways to reach your favourites; the visual one pulls down.",
+     "options": [
+      [
+       "Yes",
+       "Yes, same treatment as the visual browser"
+      ],
+      [
+       "Leave",
+       "Leave it"
+      ]
+     ],
+     "rec": ""
+    },
+    {
+     "n": 17,
+     "num": "917",
+     "kind": "pick",
+     "title": "The phone Export box cuts off its own values",
+     "text": "(“Same as project …”)",
+     "options": [
+      [
+       "A",
+       "Put the labels above the dropdowns on phones"
+      ],
+      [
+       "B",
+       "Shorten the wording (e.g. “Project — 1080×1920”)"
+      ]
+     ],
+     "rec": "A"
+    },
+    {
+     "n": 18,
+     "num": "917",
+     "kind": "pick",
+     "title": "The Add sheet’s see-through glass",
+     "text": "The timeline shows faintly behind your photos and videos.",
+     "options": [
+      [
+       "A",
+       "Keep the glass — it matches the rest of the app"
+      ],
+      [
+       "B",
+       "Make it solid"
+      ]
+     ],
+     "rec": "A"
+    },
+    {
+     "n": 19,
+     "num": "917 + 918",
+     "kind": "pick",
+     "title": "The custom background colour box is plain black",
+     "text": "In New project and Canvas settings it looks like a second Black swatch (and on PC it runs past its column).",
+     "options": [
+      [
+       "A",
+       "Give it a rainbow ring like the shape-colour swatch"
+      ],
+      [
+       "B",
+       "Leave it black"
+      ]
+     ],
+     "rec": "A"
+    },
+    {
+     "n": 20,
+     "num": "917",
+     "kind": "pick",
+     "title": "Effect option rows on a small phone (320px)",
+     "text": "Some rows leave one button alone on a second line.",
+     "options": [
+      [
+       "Above",
+       "Labels above the buttons on phones"
+      ],
+      [
+       "Leave",
+       "Leave as is"
+      ]
+     ],
+     "rec": ""
+    },
+    {
+     "n": 21,
+     "num": "775 + 918",
+     "kind": "pick",
+     "title": "Buttons overlap on a narrow PC window",
+     "text": "Under about 1050px wide, buttons in the row slide under others — clicking Layer actions can even close your project.",
+     "options": [
+      [
+       "A",
+       "Drop the version label and the ? help button"
+      ],
+      [
+       "B",
+       "Fold help, view options and settings into one ⋯ button"
+      ],
+      [
+       "C",
+       "Use the phone-style row below ~1050px"
+      ]
+     ],
+     "rec": "A"
+    },
+    {
+     "n": 22,
+     "num": "867",
+     "kind": "pick",
+     "title": "PC add menu: Controller and New group tiles look alike",
+     "text": "Drawn options were sent.",
+     "options": [
+      [
+       "1",
+       "New group joins the coloured family (green)"
+      ],
+      [
+       "2",
+       "Keep New group quiet but properly blue"
+      ],
+      [
+       "3",
+       "Option 1 plus a stronger background on both tiles"
+      ]
+     ],
+     "rec": "1"
+    },
+    {
+     "n": 23,
+     "num": "425",
+     "kind": "pick",
+     "title": "PC layer row: should Copy move right too?",
+     "text": "Parent, bin and ⋯ moved right; Copy stayed left because a day earlier you asked for it there.",
+     "options": [
+      [
+       "A",
+       "Move Copy right too (the switch goes with it)"
+      ],
+      [
+       "B",
+       "Leave Copy on the left"
+      ]
+     ],
+     "rec": "B"
+    },
+    {
+     "n": 24,
+     "num": "406",
+     "kind": "pick",
+     "title": "Which duplicate preset-save button goes? (and: got it?)",
+     "text": "You asked to be reminded until you confirm: “Effect” presets save only the effects; “Save look + animations” also saves fill, outline, shadow, blend and movement. Pick a letter, which also counts as “got it”.",
+     "options": [
+      [
+       "A",
+       "“Save whole look as preset” in the layer ⋯ menu (the same save stays on the Presets card)"
+      ],
+      [
+       "B",
+       "The effect row’s ⋯ save"
+      ],
+      [
+       "C",
+       "The Effects card button"
+      ]
+     ],
+     "rec": "A"
+    },
+    {
+     "n": 25,
+     "num": "834",
+     "kind": "pick",
+     "title": "The sketch bar’s Cancel button",
+     "text": "Today it only closes the bar — every stroke is already saved as a layer.",
+     "options": [
+      [
+       "A",
+       "Cancel throws away the whole drawing from this session"
+      ],
+      [
+       "B",
+       "Rename it Close (Undo already takes back a stroke)"
+      ]
+     ],
+     "rec": "B"
+    },
+    {
+     "n": 26,
+     "num": "937",
+     "kind": "pick",
+     "title": "Linking a layer whose animation can’t be kept exactly",
+     "text": "Some animated layers can’t keep their exact path when linked to a turned parent. Today linking goes ahead and a message names the layer; grouping leaves that layer out.",
+     "options": [
+      [
+       "Keep",
+       "Keep: link it and show the message"
+      ],
+      [
+       "Refuse",
+       "Make linking refuse, like grouping"
+      ]
+     ],
+     "rec": ""
+    },
+    {
+     "n": 27,
+     "num": "effects plan",
+     "kind": "say",
+     "title": "Corner Pin, LUT import, Curves — want any?",
+     "text": "You said “idk what any of those are” — say “show me” and I’ll send pictures of each first.",
+     "placeholder": "show me / none / a name"
+    }
+   ]
+  },
+  {
+   "id": "tests",
+   "title": "Try on your phone or PC",
+   "desc": "Each of these is something only your device can answer.",
+   "items": [
+    {
+     "n": 28,
+     "num": "920",
+     "kind": "say",
+     "title": "The top of the screen — one smooth surface now?",
+     "text": "v16.96, no reinstall needed. Look at Home in light mode, Home in dark mode, and inside a project.",
+     "placeholder": "one surface now — or which screen still has a bar/fade"
+    },
+    {
+     "n": 29,
+     "num": "936",
+     "kind": "say",
+     "title": "Delete every project — do you get the empty screen?",
+     "text": "Force-update first (tap the version number). On v16.97 you should get the empty Projects screen, not “Untitled”.",
+     "placeholder": "empty screen / still shows Untitled"
+    },
+    {
+     "n": 30,
+     "num": "215 · 604 · 677",
+     "kind": "say",
+     "title": "Do exports have sound?",
+     "text": "Export one video with a song and one with only sound effects, save both to your camera roll and play them in Photos. Also: does “Project 27” from 9 Sep have sound?",
+     "placeholder": "sound / muted — for each"
+    },
+    {
+     "n": 31,
+     "num": "663",
+     "kind": "say",
+     "title": "Does phone audio still cut in and out?",
+     "text": "v16.94 fixed two iPhone audio faults. Especially once effects are added.",
+     "placeholder": "still cuts out / better now"
+    },
+    {
+     "n": 32,
+     "num": "676 · 706",
+     "kind": "say",
+     "title": "Does the Add menu still open twice?",
+     "text": "One cause was fixed. If it still happens: does it slide up, drop and come up again, does a second copy land on top, or does the layer get added twice? A 3-second screen recording settles it.",
+     "placeholder": "fixed / which of the three"
+    },
+    {
+     "n": 33,
+     "num": "768",
+     "kind": "say",
+     "title": "Scrubbing with a layer selected — still jumpy?",
+     "text": "Two likely causes were fixed on 25 Sep.",
+     "placeholder": "smooth now / still jumpy"
+    },
+    {
+     "n": 34,
+     "num": "834",
+     "kind": "say",
+     "title": "Pinch a layer with one finger starting on a corner square",
+     "text": "Does it resize, or drag away with your other finger?",
+     "placeholder": "resizes / drags"
+    },
+    {
+     "n": 35,
+     "num": "619",
+     "kind": "say",
+     "title": "Templates → ⋯ → New project from template",
+     "text": "That opens the Insert your Media screen, where you swap clips, words and colours. Is it what you wanted?",
+     "placeholder": "yes / what’s missing"
+    },
+    {
+     "n": 36,
+     "num": "921",
+     "kind": "say",
+     "title": "Live collaboration on your Mac and iPhone together",
+     "text": "Settings → Labs on both, tap Share on the Mac, then open the link, scan the QR or type the code on the iPhone. If it won’t connect, Settings → Labs → Test connection gives a report to paste.",
+     "placeholder": "works / what went wrong / paste the report"
+    },
+    {
+     "n": 37,
+     "num": "96",
+     "kind": "say",
+     "title": "Has a song with NO effects ever refused to play since late August?",
+     "text": "Your 10 Sep note (“fine until adding effects”) suggests no — a plain “no” closes this.",
+     "placeholder": "no / yes — file type and length"
+    },
+    {
+     "n": 38,
+     "num": "934",
+     "kind": "say",
+     "title": "Two calls I made — keep both?",
+     "text": "(1) A short sound over a song now dips only the overlap in exports, not the whole song. (2) Undoing a Delete brings the layer back selected with its panel open.",
+     "placeholder": "keep both / reverse (1) / reverse (2)"
+    }
+   ]
+  },
+  {
+   "id": "reports",
+   "title": "Reports to paste",
+   "desc": "Only your phone can make these. Settings has a Copy button for each.",
+   "items": [
+    {
+     "n": 39,
+     "num": "202",
+     "kind": "say",
+     "title": "What’s slow → Measure, taken WHILE PLAYING",
+     "text": "One plain video clip or your effect-heavy project. Or just say “still laggy” or “fine now” after v16.95.",
+     "placeholder": "paste the report — or still laggy / fine now"
+    },
+    {
+     "n": 40,
+     "num": "lag",
+     "kind": "say",
+     "title": "Stack a few effects on one layer, then Measure",
+     "text": "Its GPU and DEVICE lines show whether the graphics-chip speedups reached your phone.",
+     "placeholder": "paste the report"
+    },
+    {
+     "n": 41,
+     "num": "508",
+     "kind": "say",
+     "title": "Open a project from Home, then Your last project open → Copy",
+     "text": "Shows which frames of the opening slide ran slow on your phone.",
+     "placeholder": "paste the report"
+    },
+    {
+     "n": 42,
+     "num": "657",
+     "kind": "say",
+     "title": "Play AND drag the playhead ~10 s, then What’s slow → Copy",
+     "text": "The only sample so far came from the PC, and scrubbing wasn’t measured.",
+     "placeholder": "paste the report"
+    },
+    {
+     "n": 43,
+     "num": "845",
+     "kind": "say",
+     "title": "Play a sound with audio effects until it glitches, then Your last playback → Copy",
+     "text": "The old report came from a broken instrument (fixed in v16.10).",
+     "placeholder": "paste the report"
+    },
+    {
+     "n": 44,
+     "num": "768",
+     "kind": "say",
+     "title": "If scrubbing is still jumpy: Your last scrub → Copy",
+     "text": "Names the cost so the fix isn’t another guess.",
+     "placeholder": "paste the report"
+    },
+    {
+     "n": 45,
+     "num": "129",
+     "kind": "say",
+     "title": "Next time a clip lands with no picture: A clip with no picture → Copy",
+     "text": "Most likely a screen recording. That one report says which of two fixes it needs.",
+     "placeholder": "paste the report (when it happens)"
+    },
+    {
+     "n": 46,
+     "num": "860",
+     "kind": "say",
+     "title": "Next time an icon doesn’t show properly — screenshot it",
+     "text": "Three hunts found nothing; one photo turns it into a fix.",
+     "placeholder": "where, which device — or haven’t seen it since"
+    }
+   ]
+  },
+  {
+   "id": "decisions",
+   "title": "Bigger decisions",
+   "desc": "No rush on any of these; nothing is broken while they wait.",
+   "items": [
+    {
+     "n": 47,
+     "num": "856",
+     "kind": "pick",
+     "title": "The Assistant’s pro version — how does it get its key?",
+     "text": "A ‘hidden built-in key’ can’t truly be hidden in the app.",
+     "options": [
+      [
+       "A",
+       "Stay local-only: people bring their own key, pro unlocks features"
+      ],
+      [
+       "B",
+       "Our own small server for pro users (costs, accounts, no longer local-only)"
+      ],
+      [
+       "C",
+       "Hold the whole idea until after launch"
+      ]
+     ],
+     "rec": "A"
+    },
+    {
+     "n": 48,
+     "num": "847",
+     "kind": "pick",
+     "title": "A cloud backstop for the work loop?",
+     "text": "Today the loop stops whenever this chat closes, until a new FreeMotion chat turns it back on.",
+     "options": [
+      [
+       "Yes",
+       "Yes, set up the cloud backstop"
+      ],
+      [
+       "No",
+       "No, leave it session-only"
+      ]
+     ],
+     "rec": ""
+    },
+    {
+     "n": 49,
+     "num": "777",
+     "kind": "pick",
+     "title": "This page’s old link died around 21 Sep",
+     "text": "Did you delete it on purpose? It’s kept up to date either way.",
+     "options": [
+      [
+       "Publish",
+       "Publish it again at a new link"
+      ],
+      [
+       "Leave",
+       "Leave it unpublished (it was deleted on purpose)"
+      ]
+     ],
+     "rec": ""
+    },
+    {
+     "n": 50,
+     "num": "545",
+     "kind": "pick",
+     "title": "A FreeMotion design system (icons, colours, type)",
+     "text": "You asked to hold this.",
+     "options": [
+      [
+       "Now",
+       "Make the design system now"
+      ],
+      [
+       "Identity first",
+       "Do the look-our-own identity pass first"
+      ],
+      [
+       "Hold",
+       "Keep holding"
+      ]
+     ],
+     "rec": ""
+    },
+    {
+     "n": 51,
+     "num": "identity",
+     "kind": "pick",
+     "title": "The “make it ours” pass before going public",
+     "text": "The look still copies Alight Motion; it must change before any public link, store listing, demo video or invite to someone else.",
+     "options": [
+      [
+       "Hold",
+       "Keep holding until launch"
+      ],
+      [
+       "Now",
+       "Start now"
+      ]
+     ],
+     "rec": "Hold"
+    },
+    {
+     "n": 52,
+     "num": "identity",
+     "kind": "pick",
+     "title": "Were these copied from Alight Motion screenshots?",
+     "text": "The effect browser’s press-and-hold card (v4.50) and the preset sheet (v4.59). Only you know.",
+     "options": [
+      [
+       "Yes",
+       "Yes, copied from AM"
+      ],
+      [
+       "No",
+       "No, our own"
+      ],
+      [
+       "Not sure",
+       "Not sure"
+      ]
+     ],
+     "rec": ""
+    },
+    {
+     "n": 53,
+     "num": "206",
+     "kind": "say",
+     "title": "Shape edit points (“a million dots”)",
+     "text": "You asked me to wait for you on this. Sit down with me now, or still later? And can I count and rank the fiddliest shapes first? That changes nothing in the app.",
+     "placeholder": "now / later — and yes/no to counting first"
+    },
+    {
+     "n": 54,
+     "num": "923",
+     "kind": "pick",
+     "title": "Easy + deep editor: one switch, or also per clip?",
+     "text": "Ideas only — nothing is built until you say so.",
+     "options": [
+      [
+       "One switch",
+       "One Quick/Full switch for the whole project"
+      ],
+      [
+       "Per clip",
+       "Also open a single clip in Full from Quick"
+      ]
+     ],
+     "rec": ""
+    },
+    {
+     "n": 55,
+     "num": "923",
+     "kind": "pick",
+     "title": "Easy + deep editor: what are the two modes called?",
+     "text": "",
+     "options": [
+      [
+       "Quick / Full",
+       "Quick / Full"
+      ],
+      [
+       "Cut / Motion",
+       "Cut / Motion"
+      ],
+      [
+       "Easy / Pro",
+       "Easy / Pro"
+      ]
+     ],
+     "rec": ""
+    },
+    {
+     "n": 56,
+     "num": "923",
+     "kind": "pick",
+     "title": "Easy + deep editor: who is the first version for?",
+     "text": "",
+     "options": [
+      [
+       "Little",
+       "People with little skill"
+      ],
+      [
+       "Lots",
+       "People with lots of skill"
+      ],
+      [
+       "Quick",
+       "Lots of skill, wants it quick"
+      ]
+     ],
+     "rec": ""
+    },
+    {
+     "n": 57,
+     "num": "923",
+     "kind": "pick",
+     "title": "Easy + deep editor: build a first version yet?",
+     "text": "The brainstorm suggests starting with Quick Edit on any project, the Quick/Full switch, and beat sync.",
+     "options": [
+      [
+       "Yes",
+       "Yes, build a first version"
+      ],
+      [
+       "Not yet",
+       "Not yet"
+      ]
+     ],
+     "rec": ""
+    }
+   ]
+  },
+  {
+   "id": "mac",
+   "title": "Only you can do these on the Mac",
+   "desc": "Each is one line in Terminal that needs your password, or a file only you have.",
+   "items": [
+    {
+     "n": 58,
+     "num": "882",
+     "kind": "say",
+     "title": "Make the Xcode fix permanent — or leave the workaround",
+     "text": "Nothing is broken meanwhile. The one line: sudo xcode-select -s /Library/Developer/CommandLineTools",
+     "placeholder": "ran it / leave it"
+    },
+    {
+     "n": 59,
+     "num": "882",
+     "kind": "say",
+     "title": "The ChatGPT chat logs you offered on 20 Sep",
+     "text": "They may hold requests you made there that never got written down here.",
+     "placeholder": "sent / not bothering"
+    },
+    {
+     "n": 60,
+     "num": "129",
+     "kind": "say",
+     "title": "Optional: turn on Safari automation",
+     "text": "Lets me test the no-picture clip in real Safari, the nearest thing to your phone’s engine. The one line: sudo safaridriver --enable",
+     "placeholder": "done / skip"
+    }
+   ]
+  },
+  {
+   "id": "vetoes",
+   "title": "Already decided — say one word to reverse",
+   "desc": "Nothing waits on these. Each shipped the option marked recommended while you were away.",
+   "items": [
+    {
+     "n": 61,
+     "num": "395 · 484 · 539 · 583 · 624 · 642 · 760 · 763 · 813 · 851",
+     "kind": "say",
+     "title": "Decisions made for you",
+     "text": "MP3 (#395) · the new effect names (#484) · squish damping (#539) · “Save as preset” wording (#583) · “open it” (#624) · home background (#642) · PC shape tiles (#760) · play/skip buttons (#763) · Comic Ink weight (#813) · “use the ⧉” (#851).",
+     "placeholder": "leave all — or name the ones to reverse"
+    }
+   ]
+  }
+ ]
+}
+  </script>
+  <script>
+  (function () {
+    var data = JSON.parse(document.getElementById('unblock-data').textContent);
+    var root = document.getElementById('groups');
+    function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+    data.groups.forEach(function (g) {
+      var sec = el('section'); sec.id = g.id;
+      var head = el('div', 'shead'); head.appendChild(el('h2', null, g.title)); head.appendChild(el('span', 'count', ''));
+      sec.appendChild(head);
+      if (g.desc) sec.appendChild(el('p', 'sdesc', g.desc));
+      g.items.forEach(function (it) {
+        var card = el('div', 'card');
+        card.dataset.id = 'i' + it.n; card.dataset.item = it.num + ' · item ' + it.n; card.dataset.kind = it.kind;
+        var ask = el('div', 'ask');
+        var h3 = el('h3');
+        var tag = el('span', 'mono', it.n + ' · #' + it.num + '  '); tag.style.color = 'var(--faint)';
+        h3.appendChild(tag); h3.appendChild(document.createTextNode(it.title));
+        ask.appendChild(h3);
+        if (it.text) ask.appendChild(el('p', null, it.text));
+        card.appendChild(ask);
+        if (it.kind === 'pick') {
+          var opts = el('div', 'opts');
+          it.options.forEach(function (o) {
+            var btn = el('button', 'opt'); btn.dataset.v = o[0]; btn.type = 'button';
+            btn.appendChild(el('span', 'key', o[0]));
+            var lab = el('span', null, o[1]);
+            if (it.rec && it.rec === o[0]) lab.appendChild(el('span', 'rec', ' — recommended'));
+            btn.appendChild(lab); opts.appendChild(btn);
+          });
+          card.appendChild(opts);
+        } else {
+          var ta = el('textarea', 'note'); ta.rows = 2; ta.placeholder = it.placeholder || '';
+          card.appendChild(ta);
+        }
+        sec.appendChild(card);
+      });
+      root.appendChild(sec);
+    });
+  })();
+  </script>
 
   <footer>
-    Built from REQUESTS.md at v16.36 · <b>21 Sep:</b> #869 left &mdash; built as the recommended option in v16.31 ·
-    #845, #847, #860 and #882 were waiting on you but missing from this page, and are on it now · #883 stays, because
-    the fix shipped but only your phone can confirm it. The counts at the top of each section are worked out by the
-    page itself, so they cannot go stale the way the ones written here used to.<br>
+    Rebuilt from REQUESTS.md at v16.97 (25 Sep) by a full sweep of every open entry · closed in the same sweep because they were not
+    really waiting on you: #95, #454 and #810 (answered or superseded), plus old questions in ten more · #202 was waiting on you but
+    hidden from every list by a sorting bug, now fixed. The counts at the top of each section are worked out by the page itself.<br>
     Anything you skip stays exactly where it is &mdash; nothing gets dropped.
   </footer>
 </div>
@@ -694,7 +1202,7 @@
     cards.forEach(function (c) { var k = c.dataset.kind; if (k in kind) kind[k]++; });
     var newToday = document.querySelectorAll('#new .card').length;
     var rows = [[newToday, 'new today'], [kind.tap, 'need a report pasted'],
-                [kind.pick, 'need a letter'], [kind.say, 'need a quick look']];
+                [kind.pick, 'need a letter'], [kind.say, 'need a line from you']];
     var ul = document.querySelector('.tally');
     if (ul) {
       ul.textContent = '';
@@ -718,7 +1226,7 @@
 </script>
 <script>
   (function () {
-    var KEY = 'fm.unblock.v1';
+    var KEY = 'fm.unblock.v2';   // v2 (25 Sep): the cards were renumbered; v1 answers belong to different questions
     var state = {};
     try { state = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { state = {}; }
 
