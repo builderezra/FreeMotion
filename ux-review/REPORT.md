@@ -1,6 +1,6 @@
 # FreeMotion UX review (v16.90, 24-25 Sep 2026)
 
-84 findings: 14 high, 53 medium, 16 low, 16 of them bugs found by accident.
+88 findings: 14 high, 56 medium, 16 low, 18 of them bugs found by accident.
 Review bots used the app like a person, mostly on a 390px phone, plus desktop and five other screen sizes. Nobody read the code. Every fix keeps the feature.
 
 ## Start here
@@ -537,9 +537,9 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Screenshots:** [E-out-1b-24-help.webp](shots/E-out-1b-24-help.webp), [E-out-43-help-scrolled.webp](shots/E-out-43-help-scrolled.webp)
 
 ### A full reload resets the playhead to 0:00; returning via Home keeps it, but neither restores selection or the open panel
-- **Impact:** MEDIUM · Found by 1 bot
+- **Impact:** MEDIUM · Found by 2 bots
 - **Where:** Leaving and reopening a project (Home > back into the project, vs. a full page reload)
-- **What happened:** With the playhead scrubbed to 00:03:03 and the "Diamond" layer selected (its effects panel open), going back to Home and reopening the same project restored the playhead to exactly 00:03:03, but the layer selection and its open panel were gone (back to nothing selected, timeline-only view). Separately, after a full browser reload with the playhead at 00:02:21, the project reopened with the playhead reset to 00:00:00, the position wasn't kept at all this time, on top of the same lost selection/panel.
+- **What happened:** With the playhead scrubbed to 00:03:03 and the "Diamond" layer selected (its effects panel open), going back to Home and reopening the same project restored the playhead to exactly 00:03:03, but the layer selection and its open panel were gone (back to nothing selected, timeline-only view). Separately, after a full browser reload with the playhead at 00:02:21, the project reopened with the playhead reset to 00:00:00, the position wasn't kept at all this time, on top of the same lost selection/panel. A second bot found the same on reload, and that reload also closes one panel level (an open Effects sub-panel falls back to the layer's tiles). The edit itself is always kept.
 - **Why it matters:** These two paths back into "the same project" behave differently in a way a user has no way to predict, a phone getting backgrounded and reclaimed by the OS (which reloads the page) loses your scrub position, while just tapping Home and back doesn't. Either way, the layer you were working on and the panel you had open are always gone, so resuming exactly where you left off never fully works.
 - **Suggested fix:** Persist playhead position, selected layer id, and which panel/tab was open as part of the project's saved state (not just in-memory route state), so both paths restore identically (recommended). This also fixes the reload case, since it would now read the same saved value instead of defaulting to 0:00.
 - **Screenshots:** [E-out-48-scrubbed.webp](shots/E-out-48-scrubbed.webp), [E-out-50-selected-before-leave.webp](shots/E-out-50-selected-before-leave.webp)
@@ -694,6 +694,30 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Suggested fix:** Number duplicates instead of chaining "copy": "Square", "Square copy", "Square copy 2", "Square copy 3"... (recommended, matches what most editors/OS file managers do and stays short). Alternatively, give each layer a distinct swatch tint variation, or show an index badge in the layer row.
 - **Screenshots:** [J-edge-19-many-dups-panel.webp](shots/J-edge-19-many-dups-panel.webp), [J-edge-20-many-layers-list.webp](shots/J-edge-20-many-layers-list.webp)
 
+### The top-left back arrow is blocked by the Export dialog but not by the Canvas settings dialog, one tap silently exits the whole project
+- **Impact:** MEDIUM (BUG) · Found by 1 bot
+- **Where:** Editor, top-left back arrow, with a full-screen dialog open over the editor
+- **What happened:** Opened Export (the up-arrow icon, top right). With it open, tapping the top-left back arrow (still visible, dimmed, behind the backdrop) did nothing, the modal correctly absorbed the tap, exactly as expected. Then opened Canvas settings (the gear icon) instead, on the same project, and tapped the exact same back-arrow location. This time the tap went straight through: the Canvas settings dialog closed AND the editor closed with it, landing on the Home screen in one tap, with no confirmation. Reproduced twice in a row, both times identical.
+- **Why it matters:** The two dialogs look and behave the same in every other way (same backdrop dim, same card style, same Cancel/Apply pattern), so there is no way for a person to predict that "back" is safe to tap over one but not the other. If Canvas settings changes had been made first (a new aspect ratio, a background color) before that stray tap, they would be silently discarded along with the exit, the person only asked to go back one step and got two.
+- **Suggested fix:** Give every modal dialog the same tap-blocking backdrop Export already has (recommended), it is clearly the correct behavior since Export already implements it; Canvas settings is the outlier. At minimum, make the back arrow's hit target inert (not just visually dimmed) whenever any dialog is open, app-wide, rather than per-dialog.
+- **Screenshots:** [J-edge-2-04-canvas-settings.webp](shots/J-edge-2-04-canvas-settings.webp), [J-edge-2-05-after-back-canvas.webp](shots/J-edge-2-05-after-back-canvas.webp)
+
+### Undo survives leaving and reopening a project via Home, but a full reload silently empties the undo stack
+- **Impact:** MEDIUM · Found by 1 bot
+- **Where:** Undo (Ctrl+Z), compared across "Home and back into the project" vs. a full page reload
+- **What happened:** Moved a Text layer, then left via the back arrow all the way to Home, then reopened the same project: the moved position was still showing (as expected), but pressing Ctrl+Z correctly undid that exact move, snapping the layer back to where it was before I left and re-selecting it, the undo history survived the round trip through Home. Then moved the layer again and, instead of going through Home, did a full page reload: the moved position was kept (as in the finding above), but Ctrl+Z this time did nothing at all, no visual change, no console message, no error. The undo stack had been silently reset by the reload.
+- **Why it matters:** Both paths look identical to a person, you left the project, you're back in it, your last change is showing, but only one of them lets you undo that change. There is no indicator anywhere (button state, tooltip, toast) saying "there is nothing to undo" vs "there is" so a reload-then-undo reads as broken rather than as an empty history.
+- **Suggested fix:** Either persist enough undo history across a reload to match the Home-and-back path (recommended, since the data needed, a small stack of recent operations, is the same either way), or, if that's not practical, grey out / disable the Undo button and its shortcut immediately after a fresh load until at least one new change is made, so a no-op reads as "there's genuinely nothing to undo" instead of "I pressed undo and nothing happened."
+- **Screenshots:** [J-edge-2-37-after-undo.webp](shots/J-edge-2-37-after-undo.webp), [J-edge-2-39-reload-then-undo.webp](shots/J-edge-2-39-reload-then-undo.webp)
+
+### Rapid double-tap on a shape doesn't duplicate the layer, but the second tap falls through onto the next screen and opens an unrelated panel
+- **Impact:** MEDIUM (BUG) · Found by 1 bot
+- **Where:** Add panel (+ → Shape), tapping a shape twice quickly (two separate real taps, not a single double-click event)
+- **What happened:** Tapped the Heart shape button twice quickly (two separate taps, ~150ms apart, at the same on-screen coordinates). Only one Heart layer was created (good, no duplicate). But the result screen was not the usual "shape added, plain timeline" view, it landed directly inside the new layer's Position/Scale panel. Tracing it: the first tap creates the layer and switches to its clip-options grid; the second tap, landing at the same x/y a beat later, hits whichever grid button now occupies that spot, in this case Position/Scale. Repeated with Pentagon (a shape in a different grid column): the second tap instead opened Customise Shape, matching whatever button sits at that same coordinate for that shape. A true single native double-click event (tested earlier on Star) did not show this, only two discrete real taps do, which is what an actual finger double-tap produces.
+- **Why it matters:** A person double-tapping "because the first tap didn't seem to register" (a very normal reflex, especially on a phone) doesn't just get one shape, they get dropped into a random sub-panel of it they never asked to open, and have to back out again to get to what they expected (the plain timeline with their new shape on it).
+- **Suggested fix:** Add a short tap-guard (150-250ms) after a create action so a fast-following tap in roughly the same spot is swallowed instead of hitting whatever renders next (recommended). Alternatively, always land a freshly-created shape on the plain timeline (deselect the auto-opened grid) rather than leaving a panel-of-buttons sitting right under the finger that just tapped "create."
+- **Screenshots:** [J-edge-2-42-after-two-rapid-taps.webp](shots/J-edge-2-42-after-two-rapid-taps.webp), [J-edge-2-46-pentagon-dbltap.webp](shots/J-edge-2-46-pentagon-dbltap.webp)
+
 ### Rapid layer-duplicate taps throw an uncaught NotFoundError in the console
 - **Impact:** LOW (BUG) · Found by 1 bot
 - **Where:** Editor, layer panel, "Layer actions -> Duplicate selected", tapped repeatedly in quick succession
@@ -701,6 +725,14 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Why it matters:** The message names a blur handler tearing down a DOM node (most likely the "Layer name" text input in the per-layer panel) while something else is also removing it, which is a classic race between a rename-input teardown and a rapid panel re-render. It happened during completely ordinary, if fast, real-world usage (a person double-tapping a button they like).
 - **Suggested fix:** Guard the node-removal in that blur/done handler with a try/catch or an isConnected/parentNode check before calling .remove(), so a stale reference from a fast re-render can't throw. Since I could not pin an exact repro, worth adding a regression test that fires "duplicate selected" N times back-to-back with minimal delay and asserts no uncaught console error.
 - **Screenshots:** 
+
+### The phone back gesture does nothing at all in the editor, open panel or not
+- **Impact:** LOW (needs a real-device check) · 1 bot. Headless test browsers may ignore the back shortcut, so check with a real swipe
+- **Where:** Editor, Alt+ArrowLeft (the browser/phone back gesture), with a layer's clip-options panel open and with nothing open
+- **What happened:** With a layer selected and its clip-options panel open, pressed the back gesture: no change at all, panel stayed open, nothing logged. Deselected everything (plain timeline, no panel), pressed it again: same, no change, still in the editor. Also tried it mid-text-edit with an uncommitted change typed in: no change, text stayed in the field, nothing was lost.
+- **Why it matters:** Nothing bad happens, which is the good news, but nothing good happens either, most phone web apps treat this gesture as "close the thing that's open," one level at a time, the same job the in-app back arrow does. Here it is simply inert everywhere in the editor, so a person's instinctive swipe-back to close a panel does nothing and they have to hunt for the tiny on-screen arrow instead.
+- **Suggested fix:** Push a history entry when a panel/dialog opens and pop it on the gesture, closing one level at a time, the same behavior the in-app back arrow already has, just wired to the gesture too (recommended). At minimum, if that's not desired, no change needed since it's at least safe.
+- **Screenshots:** [J-edge-2-23-gesture-panel-open.webp](shots/J-edge-2-23-gesture-panel-open.webp), [J-edge-2-24-gesture-no-panel.webp](shots/J-edge-2-24-gesture-no-panel.webp)
 
 ## Speed (tap counts)
 
@@ -768,7 +800,6 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 
 ## Not covered yet
 
-- Part of the edge-case pass: Back while a panel is open, the phone back gesture, and undo after reopening a project.
 - A real MP4 export from start to finish. This headless test browser can't encode H.264, so export was judged on GIF and PNG plus the app's own messages.
 - Anything that needs a real finger, such as pinch feel, scroll momentum and haptics. The bots used simulated touch.
 
@@ -812,6 +843,13 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 **Other screen sizes**
 - Selection, the open panel and the playhead survive a resize.
 - Tablet landscape (1180x820) is the best-looking size tested.
+
+**Edge cases**
+- A layer moved on the canvas keeps its exact position through a full reload, every time.
+- The back arrow closes one panel level at a time, and Export's backdrop correctly blocks it.
+- Escape while typing in a text layer keeps the text instead of throwing it away.
+- Double-tapping a shape never creates a duplicate layer.
+- Undo survives going Home and reopening a project.
 
 **Speed (tap counts)**
 - Skip to clip edge + Trim / Extend / Move to playhead is fast and exact once found. It's the reason Music + cut took 13 taps.
