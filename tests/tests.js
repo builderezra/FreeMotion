@@ -94431,4 +94431,258 @@
     } finally { R.drop(tag); R.drop(tag + 'b'); }
   });
 
+  /* ═══ HUNT-a (queue 690, fourth hunt) — TIMELINE EDITING: TRIM, MOVE, SPEED, KEYS ═══════════════════════════════════
+   * His standing brief: "go re audit, find some bugs coz theres a shit load". Four findings in trimming, moving and
+   * re-timing clips. The gestures are driven with TRUSTED input through tests/_cdp.py (realInput924) — a real finger at
+   * 380 and, when the driver window is wide enough to reach the PC timeline, a real mouse at 1280 — because clip drags,
+   * trims and their auto-scroll depend on capture and hit-testing that synthetic events never exercise. Each test carries
+   * a control proving its gesture engaged, so a red is the app, not a gesture that never started. */
+  async function hunt4aScene(defs, dur) {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.contextMenu) FM.contextMenu.hide();
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const cols = ['#e0245e', '#3b82f6', '#22c55e', '#f59e0b'];
+    const L = defs.map((d, i) => {
+      const l = FM.makeLayer(d.type || 'shape', Object.assign({ name: 'H4A ' + 'ABCD'[i], shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: cols[i % 4] }, d));
+      l.start = d.start; l.duration = d.duration;
+      if (d.trimStart != null) l.trimStart = d.trimStart;
+      if (d.speed != null) l.speed = JSON.parse(JSON.stringify(d.speed));
+      return l;
+    });
+    FM.scene = scene(L, { project: { width: 1080, height: 1920, fps: 30, duration: dur || 10, background: '#000000' } });
+    if (FM.pause) FM.pause();
+    FM.selectMode = false; FM.selectLayer(null); FM.setTime(0);
+    FM.refreshAll(); FM.timeline.rebuild();
+    await sleep(300);
+    return L;
+  }
+  function hunt4aSay(o) { let t; try { t = JSON.stringify(o); } catch (e) { t = String(o); } return String(t).replace(/"/g, "'"); }
+  function hunt4aClip(id) { return document.querySelector('#tl-tracks .clip[data-id="' + id + '"]'); }
+  // The driver's own window: the 380 pass cannot reach the PC timeline, which sits past x 380 at a 1280 frame.
+  function hunt4aWide() { try { return window.top.innerWidth >= 1200; } catch (e) { return false; } }
+  // What was on screen at the instant of release — read in the capture phase, before the app's own pointerup runs.
+  function hunt4aAtRelease(id) {
+    const tl = document.getElementById('timeline');
+    const rec = { sl: null, clip: null };
+    const on = () => { if (rec.sl != null) return; rec.sl = tl.scrollLeft; const c = hunt4aClip(id); rec.clip = c ? c.getBoundingClientRect() : null; };
+    window.addEventListener('pointerup', on, true);
+    return { rec: rec, stop: () => window.removeEventListener('pointerup', on, true) };
+  }
+  function hunt4aCleanup(saved) {
+    try { FM.timeline._abortGestures(); FM.timeline.stopMomentum(); } catch (e) {}
+    if (FM.contextMenu) FM.contextMenu.hide();
+    FM.selectMode = false;
+    FM.scene = saved;
+    try { FM.inspector.openCategory('home'); FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
+  }
+
+  test('HUNT-a letting go of a clip or a trim edge he carried to the screen edge throws the timeline back — what he just placed goes off screen', { item: '690', budgetMs: 90000 }, async function () {
+    /* Queue 115: dragging a clip (or a trim handle, which had it first) into the edge of the screen scrolls the timeline
+       so he can keep going — his words, "without needing to let go and then scroll". The scroll handler ignores those
+       scrolls on purpose (`if (trimDrag || clipMove || kfDrag || scrub) return`), so FM.time never follows the view; and
+       on release the rebuild runs updatePlayhead, which writes scrollLeft = FM.time × px-per-second. The view snaps back
+       to where the playhead was before the drag, and the clip he just carried is off the screen — he has to scroll to
+       find it again, which is the very thing 115 was built to save him. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const bad = [];
+    try {
+      /* THE PHONE: hold a clip, carry it into the right edge, hold there while the timeline scrolls, let go. */
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await hunt4aScene([{ start: 0, duration: 2 }, { start: 2, duration: 2 }, { start: 0, duration: 8 }], 8);
+          FM.setTime(1); FM.timeline.updatePlayhead(); await sleep(400);
+          const tl = document.getElementById('timeline'), tr = tl.getBoundingClientRect();
+          const cr = hunt4aClip(L[0].id).getBoundingClientRect();
+          const x = cr.left + cr.width / 2, y = cr.top + cr.height / 2;
+          if (x > 370 || y > 740 || x < 10) throw new Error('setup: the clip is at ' + Math.round(x) + ',' + Math.round(y) + ', out of reach of real input');
+          const sl0 = tl.scrollLeft, s0 = L[0].start, edgeX = tr.right - 6;
+          const D = huntDowns();
+          const steps = [{ t: 'touchStart', x: x, y: y, ms: 600 }];
+          for (let k = 1; k <= 10; k++) steps.push({ t: 'touchMove', x: x + (edgeX - x) * k / 10, y: y, ms: 40 });
+          steps.push({ t: 'touchMove', x: edgeX, y: y, ms: 700 });
+          try { await realInput924(steps, 'holding the clip and carrying it into the right edge'); } finally { D.stop(); }
+          const R = hunt4aAtRelease(L[0].id);
+          try { await realInput924([{ t: 'touchEnd', x: edgeX, y: y, ms: 0 }], 'letting go at the edge'); await sleep(500); } finally { R.stop(); }
+          if (!D.downs.length || !D.downs[0].trusted || D.downs[0].kind !== 'touch') throw new Error('CONTROL: the hold was not a trusted touch (' + hunt4aSay(D.downs) + ')');
+          if (!(L[0].start > s0 + 1)) throw new Error('CONTROL: the hold and carry did not move the clip (start ' + s0 + ' -> ' + L[0].start.toFixed(2) + ') — no clip drag happened');
+          if (!(R.rec.sl > sl0 + 100)) throw new Error('CONTROL: holding at the right edge did not scroll the timeline (' + Math.round(sl0) + ' -> ' + Math.round(R.rec.sl) + ' px), so there was nothing to throw back');
+          const onAt = R.rec.clip && R.rec.clip.right > tr.left + 70 && R.rec.clip.left < tr.right;
+          if (!onAt) throw new Error('CONTROL: at the moment he let go the clip was not on screen either (' + hunt4aSay(R.rec.clip) + ')');
+          const after = hunt4aClip(L[0].id).getBoundingClientRect();
+          const off = after.left >= tr.right - 4 || after.right <= tr.left + 70;
+          if (off || Math.abs(tl.scrollLeft - R.rec.sl) > (tr.width / 3)) {
+            bad.push('on the phone he held a clip and carried it to the right edge; the timeline scrolled with him (' + Math.round(sl0) + ' -> ' + Math.round(R.rec.sl) + ' px) and the clip sat under his finger at x ' + Math.round(R.rec.clip.left) + '..' + Math.round(R.rec.clip.right) + '; the moment he let go the timeline jumped back to ' + Math.round(tl.scrollLeft) + ' px and the clip is now at x ' + Math.round(after.left) + '..' + Math.round(after.right) + ', off a ' + Math.round(tr.right) + ' px screen — he has to scroll to find what he just placed');
+          }
+        });
+      }, 380);
+      /* THE PC: drag a clip's right trim handle into the right edge with the mouse, hold while it extends, let go. Only
+         when the driver's window is wide enough to reach the PC timeline (the 1280 pass); the phone half runs in both. */
+      if (hunt4aWide()) {
+        await atWideWidth(async function () {
+          await onScreen924(async function () {
+            const L = await hunt4aScene([{ start: 0, duration: 3 }, { start: 3, duration: 3 }], 12);
+            FM.selectLayer(L[0].id); FM.setTime(1); FM.timeline.updatePlayhead(); await sleep(400);
+            const tl = document.getElementById('timeline'), tr = tl.getBoundingClientRect();
+            const g = hunt4aClip(L[0].id).querySelector('.clip-grip.right');
+            if (!g) throw new Error('setup: the selected clip has no right trim handle');
+            const gr = g.getBoundingClientRect(), x = gr.left + gr.width / 2, y = gr.top + gr.height / 2;
+            if (x > tr.right - 60 || y > 740) throw new Error('setup: the right trim handle is at ' + Math.round(x) + ',' + Math.round(y) + ', too near the edge or out of reach');
+            const sl0 = tl.scrollLeft, d0 = L[0].duration, edgeX = tr.right - 8;
+            const steps = [{ t: 'mouseMove', x: x, y: y, ms: 30 }, { t: 'mouseDown', x: x, y: y, ms: 60 }];
+            for (let k = 1; k <= 10; k++) steps.push({ t: 'mouseMove', x: x + (edgeX - x) * k / 10, y: y, ms: 30 });
+            steps.push({ t: 'mouseMove', x: edgeX, y: y, ms: 900 });
+            await realInput924(steps, 'dragging the right trim handle into the right edge');
+            const R = hunt4aAtRelease(L[0].id);
+            try { await realInput924([{ t: 'mouseUp', x: edgeX, y: y, ms: 0 }], 'letting go at the edge'); await sleep(500); } finally { R.stop(); }
+            if (!(L[0].duration > d0 + 2)) throw new Error('CONTROL: the trim did not extend the clip (' + d0 + ' -> ' + L[0].duration.toFixed(2) + ' s) — no trim happened');
+            if (!(R.rec.sl > sl0 + 100)) throw new Error('CONTROL: holding the trim at the right edge did not scroll the timeline (' + Math.round(sl0) + ' -> ' + Math.round(R.rec.sl) + ' px)');
+            if (!(R.rec.clip && R.rec.clip.right > tr.left && R.rec.clip.right <= tr.right + 20)) throw new Error('CONTROL: at the moment he let go the trimmed end was not on screen (' + hunt4aSay(R.rec.clip) + ')');
+            const after = hunt4aClip(L[0].id).getBoundingClientRect();
+            if (after.right > tr.right + 20 || after.right < tr.left || Math.abs(tl.scrollLeft - R.rec.sl) > (tr.width / 3)) {
+              bad.push('on PC he dragged a clip end into the right edge and held it there; the timeline scrolled (' + Math.round(sl0) + ' -> ' + Math.round(R.rec.sl) + ' px) and the new end sat under the pointer at x ' + Math.round(R.rec.clip.right) + '; when he let go the timeline jumped back to ' + Math.round(tl.scrollLeft) + ' px and the end he just set is at x ' + Math.round(after.right) + ', off a ' + Math.round(tr.right) + ' px timeline');
+            }
+          });
+        }, 1280);
+      }
+      if (bad.length) throw new Error(bad.join('; AND '));
+    } finally { hunt4aCleanup(saved); }
+  });
+
+  test('HUNT-a trimming the head of a speed-ramped clip with its handle makes every kept frame jump', { item: '690', budgetMs: 90000 }, async function () {
+    /* A head trim has to leave the kept picture where it was: trimStart must advance by the source the cut part CONSUMED,
+       which on a ramp is the integral of the speed over the cut (FM.headSourceDelta). The A key, the phone buttons,
+       FM.trimLayerHead and Extend were all moved onto that integral (21 Aug, queue 914.2) — but the trim HANDLE the finger
+       and the mouse actually drag is js/timeline.js applyTrimAt, which still writes trimStart = trim + delta × speedAt(new
+       head): the instantaneous speed at the new head times the whole cut. The #912 audit and test 914.2 both treat
+       FM.trimLayerHead as the grip; it is not the grip. The flat 1.5x clip, same gesture, is the control. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const made = [];
+    const bad = [];
+    const TIMES = [5, 6, 7];   // all inside the clip before (2..8) and after a 2 s head trim (4..8)
+    const RAMP = { kf: [{ t: 2, v: 0.5, e: 'linear' }, { t: 8, v: 2, e: 'linear' }] };
+    async function trimHead(speed, kind) {
+      const L = await hunt4aScene([{ type: 'video', name: 'H4A clip', start: 2, duration: 6, trimStart: 1, speed: speed }], 10);
+      const v = L[0]; made.push(v.id);
+      FM.media.set(v.id, { kind: 'video', duration: 60, width: 2, height: 2 });
+      FM.selectLayer(v.id); FM.setTime(kind === 'touch' ? 3.5 : 2.5); FM.timeline.updatePlayhead(); FM.timeline.rebuild(); await sleep(400);   // parked inside, so the head sits left of centre with room to drag (clear of the PC track heads)
+      const clip = hunt4aClip(v.id), g = clip && clip.querySelector('.clip-grip.left');
+      if (!g) throw new Error('setup: the selected clip has no left trim handle');
+      const gr = g.getBoundingClientRect(), x = gr.left + gr.width / 2, y = gr.top + gr.height / 2;
+      const pps = FM.timeline.timeToX(1) - FM.timeline.timeToX(0), dx = pps * 2;
+      if ((kind === 'touch' && x + dx > 360) || y > 740 || x < 70) throw new Error('setup: the left trim handle is at ' + Math.round(x) + ',' + Math.round(y) + ' and a 2 s drag needs ' + Math.round(dx) + ' px, out of reach of real input');
+      const under = document.elementFromPoint(x, y);
+      if (!under || !under.classList.contains('clip-grip')) throw new Error('setup: the point on the left trim handle (' + Math.round(x) + ',' + Math.round(y) + ') is covered by ' + (under ? under.className : 'nothing'));
+      const before = TIMES.map(t => FM.layerLocalTime(v, t));
+      const steps = kind === 'touch'
+        ? [{ t: 'touchStart', x: x, y: y, ms: 450 }]
+        : [{ t: 'mouseMove', x: x, y: y, ms: 30 }, { t: 'mouseDown', x: x, y: y, ms: 60 }];
+      for (let k = 1; k <= 10; k++) steps.push({ t: kind === 'touch' ? 'touchMove' : 'mouseMove', x: x + dx * k / 10, y: y, ms: 40 });
+      steps.push({ t: kind === 'touch' ? 'touchMove' : 'mouseMove', x: x + dx, y: y, ms: 150 });
+      steps.push({ t: kind === 'touch' ? 'touchEnd' : 'mouseUp', x: x + dx, y: y, ms: 0 });
+      await realInput924(steps, (kind === 'touch' ? 'a real finger' : 'a real mouse') + ' dragging the left trim handle 2 s in');
+      await sleep(400);
+      if (!(v.start > 3.5 && v.start < 4.5)) throw new Error('CONTROL: the ' + kind + ' drag on the left handle did not trim the head to about 4 s (start ' + v.start.toFixed(3) + ') — no trim happened');
+      const now = TIMES.map(t => FM.layerLocalTime(v, t));
+      let worst = 0, at = null;
+      TIMES.forEach((t, i) => { const d = Math.abs(now[i] - before[i]); if (d > worst) { worst = d; at = i; } });
+      FM.media.remove(v.id);
+      return { worst: worst, t: TIMES[at], was: before[at], now: now[at], start: v.start };
+    }
+    try {
+      for (const kind of ['touch', 'mouse']) {
+        if (kind === 'mouse' && !hunt4aWide()) continue;   // the 380 pass cannot reach the PC timeline; the finger half runs in both
+        const run = async (fn) => kind === 'touch' ? atPhoneWidth(fn, 380) : atWideWidth(fn, 1280);
+        await run(async function () {
+          await onScreen924(async function () {
+            const ctl = await trimHead(1.5, kind);
+            if (ctl.worst > 0.01) throw new Error('CONTROL: trimming the head of a FLAT 1.5x clip by the ' + kind + ' already moved its picture by ' + ctl.worst.toFixed(3) + ' s at ' + ctl.t + ' s, so this probe cannot judge the ramp');
+            const r = await trimHead(RAMP, kind);
+            if (r.worst > 0.01) bad.push((kind === 'touch' ? 'on the phone' : 'on PC') + ' he trimmed the head of a speed-ramped clip (0.5x rising to 2x) by dragging its left handle 2 s in: every frame he kept jumped — at ' + r.t + ' s the picture was source ' + r.was.toFixed(3) + ' s and is now ' + r.now.toFixed(3) + ' s, ' + r.worst.toFixed(2) + ' s of footage skipped (' + Math.round(r.worst * 30) + ' frames), where the same drag on a flat 1.5x clip keeps its picture exactly');
+          });
+        });
+      }
+      if (bad.length) throw new Error(bad.join('; AND '));
+    } finally { made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); hunt4aCleanup(saved); }
+  });
+
+  test('HUNT-a Reset speed (1x) leaves his animation where it was — a fade at the end of a 2x clip now ends halfway through it', { item: '690', budgetMs: 90000 }, async function () {
+    /* Queue 68, his words: "changing all the key frames automatically to slow or speed with the layer instead of manually
+       doing it". The Speed slider and the two speed-to-playhead buttons re-time the clip AND scale its keyframes
+       (FM.scaleLayerKeyframes). The clip menu's Reset speed (1x) — the one-tap way back — sets speed 1 and the new
+       duration and nothing else, so every keyframe stays at its old time: a 2x clip that fades out over its last half
+       second doubles in length and goes invisible for its whole second half. Driven the way he reaches it on the phone: a
+       real tap on the top bar's ⋯, then a real tap on Reset speed. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const made = [];
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await hunt4aScene([{ type: 'video', name: 'H4A fast clip', start: 1, duration: 2, trimStart: 0, speed: 2 }], 3);
+          const v = L[0]; made.push(v.id);
+          FM.media.set(v.id, { kind: 'video', duration: 60, width: 2, height: 2 });
+          // fade in over the first quarter, fade out over the last quarter — the most ordinary animation a clip has
+          v.transform.opacity = { kf: [{ t: 1, v: 0, e: 'linear' }, { t: 1.5, v: 1, e: 'linear' }, { t: 2.5, v: 1, e: 'linear' }, { t: 3, v: 0, e: 'linear' }] };
+          FM.selectLayer(v.id); FM.setTime(2); FM.refreshAll(); await sleep(450);
+          const more = document.getElementById('m-more');
+          const mr = more && more.getBoundingClientRect();
+          if (!mr || !mr.width || mr.left > 370 || mr.top > 740) throw new Error('setup: the phone ⋯ (More clip options) button is not on screen with a clip selected (' + hunt4aSay(mr) + ')');
+          const tap = (x, y) => [{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 0 }];
+          await realInput924(tap(mr.left + mr.width / 2, mr.top + mr.height / 2), 'a tap on the ⋯ button');
+          await sleep(500);
+          const item = [].filter.call(document.querySelectorAll('#ctx-menu .ctx-item'), el => /Reset speed/.test(el.textContent))[0];
+          if (!item) throw new Error('setup: the ⋯ menu has no Reset speed item for a 2x clip (menu: ' + ((document.getElementById('ctx-menu') || {}).textContent || 'none') + ')');
+          item.scrollIntoView({ block: 'nearest' }); await sleep(150);
+          const ir = item.getBoundingClientRect();
+          if (ir.left > 370 || ir.top > 740 || ir.top < 0) throw new Error('setup: Reset speed is at ' + Math.round(ir.left) + ',' + Math.round(ir.top) + ', out of reach of real input');
+          await realInput924(tap(Math.min(ir.left + 40, 360), ir.top + ir.height / 2), 'a tap on Reset speed');
+          await sleep(400);
+          if (!(v.speed === 1 && Math.abs(v.duration - 4) < 1e-6)) throw new Error('CONTROL: the tap on Reset speed did not reset the clip (speed ' + hunt4aSay(v.speed) + ', length ' + v.duration + ' s) — nothing under test happened');
+          const end = v.start + v.duration;
+          const kfT = v.transform.opacity.kf.map(k => +k.t.toFixed(3));
+          const midOp = FM.evalProp(v.transform.opacity, v.start + v.duration * 0.625);
+          if (Math.abs(kfT[kfT.length - 1] - end) > 1 / 30 || !(midOp > 0.99)) {
+            throw new Error('his 2x clip faded in over its first half second and out over its last; after ⋯ then Reset speed (1x) the clip runs from ' + v.start + ' s to ' + end + ' s but its keyframes stayed at ' + kfT.join(', ') + ' s — the fade-out now ends at ' + kfT[kfT.length - 1] + ' s and the clip is invisible for its whole second half (opacity ' + midOp.toFixed(2) + ' at ' + (v.start + v.duration * 0.625).toFixed(2) + ' s); the Speed slider would have carried the fades to the new ends');
+          }
+        });
+      }, 380);
+    } finally { made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); hunt4aCleanup(saved); }
+  });
+
+  test('HUNT-a pressing Right to nudge a layer sideways puts a keyframe on its up-down animation and changes the move', { item: '690', budgetMs: 60000 }, async function () {
+    /* On PC, with a clip selected, the arrow keys nudge its canvas position (js/app.js keydown, the Arrow branch). The
+       branch works out dx and dy and then calls FM.setTransform on BOTH x and y — setting y to Math.round(its current value
+       + 0) at the playhead. On a layer whose Y is animated (a slide up, say) that inserts a new linear keyframe into the
+       slide at the playhead, so pressing Right re-shapes an axis he never touched: the eased slide becomes a straight run
+       into a new diamond and a shorter ease out of it, and the timeline grows a diamond he did not make. A layer whose Y is
+       not animated is still moved when it sits on a half pixel, for the same reason. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atWideWidth(async function () {
+        const L = await hunt4aScene([{ start: 0, duration: 6, x: 300 }], 6);
+        const l = L[0];
+        l.transform.x = 300;
+        l.transform.y = { kf: [{ t: 1, v: 1500, e: 'linear' }, { t: 3, v: 500, e: 'easeInOut' }] };   // an eased slide up, 1 s to 3 s
+        FM.selectLayer(l.id); FM.setTime(2); FM.refreshAll(); await sleep(250);
+        if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) document.activeElement.blur();
+        const probe = [1.5, 2, 2.5];
+        const yBefore = probe.map(t => FM.evalProp(l.transform.y, t));
+        const kfBefore = l.transform.y.kf.map(k => k.t).join(', ');
+        window.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowRight', code: 'ArrowRight' }));
+        window.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: 'ArrowRight', code: 'ArrowRight' }));
+        await sleep(150);
+        if (FM.evalProp(l.transform.x, 2) !== 301) throw new Error('CONTROL: Right did not nudge the layer (x ' + hunt4aSay(l.transform.x) + ') — the key never reached the nudge');
+        const kfAfter = l.transform.y.kf.map(k => +k.t.toFixed(3)).join(', ');
+        const yAfter = probe.map(t => FM.evalProp(l.transform.y, t));
+        const moved = probe.map((t, i) => Math.abs(yAfter[i] - yBefore[i])).reduce((a, b) => Math.max(a, b), 0);
+        if (kfAfter !== kfBefore || moved > 0.5) {
+          throw new Error('he pressed Right once to nudge a layer that slides up (Y keyframes at ' + kfBefore + ' s, eased): it moved 1 px right, and a new Y keyframe appeared at the playhead (Y keyframes now at ' + kfAfter + ' s) — the slide he did not touch changed shape, ' + moved.toFixed(0) + ' px off where it was at ' + probe.join(' / ') + ' s (' + yBefore.map(v => Math.round(v)).join(', ') + ' became ' + yAfter.map(v => Math.round(v)).join(', ') + ')');
+        }
+      }, 1280);
+    } finally { hunt4aCleanup(saved); }
+  });
+
 })();
