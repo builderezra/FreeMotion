@@ -94431,4 +94431,230 @@
     } finally { R.drop(tag); R.drop(tag + 'b'); }
   });
 
+  /* ═══ HUNT-c (queue 690, 26 Sep, fourth hunt) — TEXT AND COLOUR ═══════════════════════════════════════════════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". Four findings in text and colour, each written as a
+   * test that FAILS on the code as it stands, with a message that says what he would see. The phone taps go through
+   * tests/_cdp.py as REAL touches (realInput924) where the finger is the point. Not fixed yet. */
+  function hunt4cRender(sc, t) {
+    const c = offscreen(sc.project.width, sc.project.height), x = c.getContext('2d');
+    FM.renderScene(x, sc, t);
+    return x.getImageData(0, 0, c.width, c.height).data;
+  }
+  function hunt4cLive(id) { return FM.scene.layers.find(l => l.id === id) || null; }
+  /* The Animate menu of the text editor's Aa sheet, the way he reaches it: the editor, Aa, the menu, then ✓. The select's
+     own picker is native, so the choice itself is made the way that picker reports it — a change event. */
+  async function hunt4cPickAnim(id, preset) {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    FM.textEdit.start(id); await sleep(400);
+    if (!FM.textEdit.isActive()) throw new Error('setup: the text editor did not open');
+    await hunt2aPress(document.querySelector('.te-bar .te-extras'), 'Aa button');
+    await sleep(450);
+    const sel = [].slice.call(document.querySelectorAll('.te-pop-extras select')).find(s => [].some.call(s.options, o => o.value === preset));
+    if (!sel) throw new Error('setup: the Aa sheet has no Animate menu offering ' + preset);
+    sel.value = preset; sel.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(350);
+    await hunt2aPress(document.querySelector('.te-bar .te-done'), 'Done tick');
+    await sleep(300);
+    if (FM.textEdit.isActive()) throw new Error('setup: the Done tick did not close the text editor');
+    const L = hunt4cLive(id);
+    if (!L || !L.textAnim || L.textAnim.preset !== preset) throw new Error('setup: picking ' + preset + ' in the Animate menu did not set it on the layer');
+    return L;
+  }
+
+  test('HUNT-c an Animate preset plays only on the FIRST caption of a caption track — every caption after it just pops on', { item: '690', budgetMs: 90000 }, async function () {
+    /* captions.js promises that every text control, animation included, works on a caption track for free, because the
+       compositor draws the caption at the playhead through the ordinary text path. The animation half is not true:
+       drawAnimatedText (js/compositor.js) times every entrance from `t - layer.start`, the start of the whole TRACK, and
+       never from the caption that is showing. So caption 1 fades (or pops, or types) in, and by the time caption 2
+       starts the entrance finished seconds ago — caption 2, 3 and every one after appear at full strength on their
+       first frame. The same goes for Fade out, which only ever runs at the end of the track. Captions are exactly where
+       he would put Pop or Typewriter. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedT = FM.time;
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (wasOpen) FM.home.close();
+      const L0 = FM.makeLayer('text', { name: 'HuntC captions', x: 360, y: 200, fontSize: 70, start: 0, duration: 6 });
+      L0.text = '';
+      L0.captions = [{ start: 0, end: 2, text: 'FIRST WORDS' }, { start: 2, end: 4, text: 'SECOND WORDS' }, { start: 4, end: 6, text: 'THIRD WORDS' }];
+      FM.scene = scene([L0], { project: { width: 720, height: 400, fps: 30, duration: 6, background: '#000000' } });
+      FM.selectLayer(L0.id); if (FM.pause) FM.pause(); FM.setTime(0.5);
+      FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+      await sleep(250);
+      let L = null;
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () { L = await hunt4cPickAnim(L0.id, 'fade'); });
+      }, 380);
+      const ink = t => { const d = hunt4cRender(FM.scene, t); let s = 0; for (let k = 0; k < d.length; k += 4) s += d[k]; return s; };
+      const rows = L.captions.map(c => { const early = ink(c.start + 0.05), full = ink(c.start + 1.5); return { text: c.text, early: early, full: full, pct: full > 0 ? Math.round(100 * early / full) : -1 }; });
+      if (rows.length !== 3 || rows.some(r => !(r.full > 0))) throw new Error('setup: the three captions did not all draw once settled: ' + rows.map(r => r.text + ' ' + r.full).join(', '));
+      /* CONTROL: the preset reaches the render at all — caption 1 is still fading in 0.05 s after it starts. */
+      if (!(rows[0].pct < 35)) throw new Error('CONTROL: caption 1 is already at ' + rows[0].pct + '% of its settled ink 0.05 s after it starts, so Fade in is not reaching the render and this test cannot see the bug');
+      const late = rows.slice(1).filter(r => !(r.pct < 35));
+      if (late.length) throw new Error('he picked Animate → Fade in on a caption track: caption 1 fades in (' + rows[0].pct + '% of its ink 0.05 s after it starts), but ' + late.map(r => r.text + ' is already at ' + r.pct + '%').join(' and ') + ' 0.05 s after it starts — every caption after the first just pops on with no animation, in the preview and in the export');
+    } finally {
+      if (FM.textEdit.isActive()) FM.textEdit.stop();
+      FM.scene = saved; FM.time = savedT;
+      try { FM.selectLayer(null); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {}
+      try { if (wasOpen) FM.home.open(); } catch (e) {}
+    }
+  });
+
+  test('HUNT-c tapping a colour box and typing a hex colour does nothing on the phone — the tap leaves the caret after the old colour and the box is full', { item: '690', budgetMs: 90000 }, async function () {
+    /* colorField (js/inspector.js) is every colour in the app: Colouring's Custom row, both gradient colours, Outline,
+       Shadow, every effect colour, and the colour button of the text editor. Its hex box is an <input type=text> with
+       maxLength 7 that does nothing on focus. A real tap on a phone drops a CARET into the old #ffffff (at the end, or
+       wherever the finger landed) rather than selecting it, and with 7 of 7 characters already there every key he
+       types is refused — he types ff0000 and nothing appears, the colour does not change. v16.94 fixed exactly this for
+       the number boxes (typeInBox); the colour box never got it. The typing is done the way the keyboard does it,
+       inserted at whatever selection the real tap left, and a positive control types into the same box with its text
+       selected, to prove the harness can type there at all. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const bad = [];
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await huntBScene(() => [FM.makeLayer('text', { name: 'HuntC hex', text: 'Hello', x: 540, y: 700, fontSize: 160, color: '#ffffff', start: 0, duration: 4 })]);
+          const id = L[0].id;
+          const colourNow = () => String(FM.evalProp(hunt4cLive(id).color, FM.time) || '').toLowerCase();
+          FM.selectLayer(id); await sleep(250);
+          async function typeHex(box, what) {
+            box.scrollIntoView({ block: 'center' }); await sleep(250);
+            const r = box.getBoundingClientRect(), x = r.left + r.width * 0.6, y = r.top + r.height / 2;
+            if (x > 370 || y > 740 || y < 0) throw new Error('setup: the ' + what + ' is at ' + Math.round(x) + ',' + Math.round(y) + ', out of reach of real input');
+            const before = box.value;
+            await realInput924(huntBTap(x, y), 'the tap on the ' + what);
+            await sleep(300);
+            if (document.activeElement !== box) throw new Error('CONTROL: a real tap on the ' + what + ' did not focus it (focus is on ' + (document.activeElement && (document.activeElement.className || document.activeElement.tagName)) + ')');
+            const selAt = box.selectionStart + (box.selectionEnd !== box.selectionStart ? '-' + box.selectionEnd : '');
+            if (!document.execCommand('insertText', false, 'ff0000')) throw new Error('setup: this browser cannot insert text the way a keyboard does');
+            const shown = box.value;
+            await sleep(150);
+            const got = colourNow();
+            /* POSITIVE CONTROL: the very same typing, with the box's text selected, does land. */
+            box.setSelectionRange(0, box.value.length);
+            document.execCommand('insertText', false, '#00ff00');
+            await sleep(150);
+            const ctrl = colourNow();
+            box.blur(); await sleep(250);
+            if (ctrl !== '#00ff00') throw new Error('CONTROL: even with the whole ' + what + ' selected, typing #00ff00 made the colour ' + ctrl + ', so the harness cannot type into this box');
+            if (got !== '#ff0000') bad.push('the ' + what + ' read ' + before + ', his tap left the caret at ' + selAt + ' of ' + before.length + ' characters, he typed ff0000, the box still reads ' + shown + ' and the text stayed ' + got);
+          }
+          FM.inspector.openCategory('color'); await sleep(450);
+          const hx = document.querySelector('#inspector-panel .hex-input');
+          if (!hx) throw new Error('setup: no colour box in the Colouring card');
+          await typeHex(hx, 'Colouring colour box');
+          hunt4cLive(id).color = '#ffffff'; FM.requestRender();
+          /* …and the colour button of the text editor, where he is most likely to want it */
+          FM.textEdit.start(id); await sleep(400);
+          if (!FM.textEdit.isActive()) throw new Error('setup: the text editor did not open');
+          await hunt2aPress(document.querySelector('.te-bar .te-color'), 'text editor colour button');
+          await sleep(400);
+          const thx = document.querySelector('.te-pop-color .hex-input');
+          if (!thx) throw new Error('setup: the text editor colour button opened no colour box');
+          await typeHex(thx, 'text editor colour box');
+          FM.textEdit.stop(); await sleep(200);
+        });
+      }, 380);
+      if (bad.length) throw new Error('he cannot type a colour on his phone: a real tap on the hex box puts the caret after the old colour instead of selecting it, and the box only holds 7 characters, so every key he types is thrown away until he deletes the old colour by hand. ' + bad.join('; '));
+    } finally {
+      try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (e) {}
+      if (FM.textEdit.isActive()) FM.textEdit.stop();
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  test('HUNT-c gradient text turns one flat colour the moment an Animate preset is picked', { item: '690', budgetMs: 90000 }, async function () {
+    /* Colouring → Gradient on a text layer gives it the default gradient, angle 90: top to bottom, from its colour to
+       near-black. The moment any Animate preset is picked the text goes through drawAnimatedText (js/compositor.js),
+       which does not draw the gradient at all — it paints each character (or word, or line) ONE flat colour sampled at
+       that unit's centre. For a top-to-bottom gradient every unit on a line has the same centre height, so the whole
+       line comes out one flat grey: the gradient is simply gone, not only during the entrance but for the layer's whole
+       life, in the preview and the export. (A left-to-right one survives only as a stepped stripe per letter, and the
+       dragged gradient position and the Angular type are ignored the same way.) */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedT = FM.time;
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (wasOpen) FM.home.close();
+      const L0 = FM.makeLayer('text', { name: 'HuntC gradient', text: 'GRADIENT', x: 450, y: 200, fontSize: 130, color: '#ffffff', start: 0, duration: 6 });
+      FM.scene = scene([L0], { project: { width: 900, height: 400, fps: 30, duration: 6, background: '#1e40ff' } });
+      FM.selectLayer(L0.id); if (FM.pause) FM.pause(); FM.setTime(3);
+      FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+      await sleep(250);
+      FM.inspector.openCategory('color'); await sleep(450);
+      const tab = [].slice.call(document.querySelectorAll('#inspector-panel .fill-tab')).find(b => b.title === 'Gradient');
+      if (!tab) throw new Error('setup: the Colouring card has no Gradient tab for a text layer');
+      tab.click(); await sleep(350);
+      const L1 = hunt4cLive(L0.id);
+      if (!L1 || FM.fillModeOf(L1) !== 'gradient') throw new Error('setup: the Gradient tab did not give the text a gradient');
+      /* The ink is every pixel that is grey (the gradient runs white to near-black) rather than the blue background;
+         its brightness is read in the top and bottom 30% of the letters' own height. */
+      function spread() {
+        const P = FM.scene.project, d = hunt4cRender(FM.scene, 3), W = P.width, H = P.height;
+        const isInk = k => Math.abs(d[k] - d[k + 2]) < 40 && Math.abs(d[k] - d[k + 1]) < 40;
+        let y0 = H, y1 = -1;
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (isInk((y * W + x) * 4)) { if (y < y0) y0 = y; if (y > y1) y1 = y; }
+        if (y1 < 0) return null;
+        const band = (a, b) => { let s = 0, n = 0; for (let y = a; y <= b; y++) for (let x = 0; x < W; x++) { const k = (y * W + x) * 4; if (isInk(k)) { s += d[k]; n++; } } return n ? Math.round(s / n) : -1; };
+        const h = y1 - y0;
+        return { top: band(y0, y0 + Math.round(h * 0.3)), bottom: band(y1 - Math.round(h * 0.3), y1) };
+      }
+      const still = spread();
+      /* CONTROL: without an animation the letters really are a gradient, bright at the top and dark at the bottom. */
+      if (!still || !(still.top - still.bottom > 60)) throw new Error('CONTROL: with no animation the gradient text is not visibly top-to-bottom (top ' + (still && still.top) + ', bottom ' + (still && still.bottom) + '), so this test cannot judge it');
+      await onScreen924(async function () { await hunt4cPickAnim(L0.id, 'fade'); });
+      const moving = spread();
+      if (!moving) throw new Error('setup: the text drew nothing once animated');
+      if (!(moving.top - moving.bottom > 0.6 * (still.top - still.bottom))) throw new Error('his text had a top-to-bottom gradient (brightness ' + still.top + ' at the top of the letters, ' + still.bottom + ' at the bottom); he picked Animate → Fade in and, long after the fade has finished, the letters are one flat colour top to bottom (' + moving.top + ' at the top, ' + moving.bottom + ' at the bottom) — the gradient is gone for the whole life of the layer, in the preview and the export');
+    } finally {
+      if (FM.textEdit.isActive()) FM.textEdit.stop();
+      FM.scene = saved; FM.time = savedT;
+      try { FM.selectLayer(null); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {}
+      try { if (wasOpen) FM.home.open(); } catch (e) {}
+    }
+  });
+
+  test('HUNT-c the Opacity slider in a text layer’s Colouring does nothing — the card reads 30% and the text stays fully solid', { item: '690', budgetMs: 60000 }, async function () {
+    /* fillPanel (js/inspector.js) gives a text layer the same Opacity row as a shape, and its readout follows it
+       (#FFFFFF 30%). But only paintFillInPath — the SHAPE fill — ever reads layer.fillOpacity; the text branch of the
+       compositor sets its fillStyle from layer.color and never looks at it, solid or gradient. So the slider moves, the
+       card says 30%, and the text on the canvas and in the export does not change at all. A shape at the same 30% in
+       the same frame is the control: it proves the field is honoured where it is drawn, and that the measure works. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedT = FM.time;
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (wasOpen) FM.home.close();
+      const P = { width: 900, height: 400, fps: 30, duration: 6, background: '#000000' };
+      const L0 = FM.makeLayer('text', { name: 'HuntC opacity', text: 'HELLO', x: 450, y: 200, fontSize: 150, color: '#ffffff', start: 0, duration: 6 });
+      FM.scene = scene([L0], { project: Object.assign({}, P) });
+      FM.selectLayer(L0.id); if (FM.pause) FM.pause(); FM.setTime(1);
+      FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+      await sleep(250);
+      FM.inspector.openCategory('color'); await sleep(450);
+      const opRow = [].slice.call(document.querySelectorAll('#inspector-panel .prop-row--scrub')).find(r => /Opacity/i.test((r.querySelector('label') || {}).textContent || ''));
+      if (!opRow) throw new Error('setup: no Opacity row in the text layer’s Colouring card');
+      const box = opRow.querySelector('.fx-scrub-val');
+      box.value = '30'; box.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(250);
+      const L1 = hunt4cLive(L0.id);
+      if (!L1 || Math.abs((L1.fillOpacity != null ? L1.fillOpacity : 1) - 0.3) > 1e-6) throw new Error('setup: typing 30 in the Opacity box did not set the fill opacity (it is ' + (L1 && L1.fillOpacity) + ')');
+      const readout = ((document.querySelector('#inspector-panel .fill-hex') || {}).textContent || '').replace(/\s+/g, ' ').trim();
+      const peak = sc => { const d = hunt4cRender(sc, 1); let m = 0; for (let k = 0; k < d.length; k += 4) if (d[k] > m) m = d[k]; return m; };
+      const textPeak = peak(FM.scene);
+      const S = FM.makeLayer('shape', { name: 'HuntC shape', shape: 'rect', x: 450, y: 200, shapeW: 300, shapeH: 150, fill: '#ffffff', start: 0, duration: 6 });
+      S.fillMode = 'solid'; S.fillOpacity = 0.3;
+      const shapePeak = peak(scene([S], { project: Object.assign({}, P) }));
+      /* CONTROL: the same 30% on a shape draws at about 30% — the field is honoured where it is read, and the measure sees it. */
+      if (!(shapePeak > 40 && shapePeak < 120)) throw new Error('CONTROL: a white shape at 30% fill opacity peaks at ' + shapePeak + ' of 255, not about 77, so this measure cannot judge the text');
+      if (!(textPeak <= 120)) throw new Error('the Colouring card reads ' + (readout || '30%') + ' and the Opacity box says 30, but the text still draws at full strength (its brightest pixel is ' + textPeak + ' of 255, where a white shape at the same 30% peaks at ' + shapePeak + ') — the slider moves and the text does not change, in the preview or the export');
+    } finally {
+      FM.scene = saved; FM.time = savedT;
+      try { FM.selectLayer(null); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {}
+      try { if (wasOpen) FM.home.open(); } catch (e) {}
+    }
+  });
+
 })();
