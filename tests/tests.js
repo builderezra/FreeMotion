@@ -90038,8 +90038,10 @@
 
 
   /* ═══ HUNT-c (queue 690) — HOME AND PROJECTS, WITH A REAL FINGER AT 380 AND A REAL MOUSE AT 1280 ═══════════════════
-   * His standing brief: "go re audit, find some bugs coz theres a shit load". Each test below FAILS on v16.94 because of
-   * the bug it names. Shared helpers are prefixed hc so they cannot collide with anything else here. */
+   * His standing brief: "go re audit, find some bugs coz theres a shit load". Each test below was written first and
+   * FAILED on v16.94 because of the bug it names; each passes with its fix and was re-proven failing with that fix
+   * reverted (storage.js for the copy's name and the end-of-play card, home.js for the element draft and the
+   * hold-then-slide). Shared helpers are prefixed hc so they cannot collide with anything else here. */
   function hcCard(pid) { return document.querySelector('#home-screen .hm-card[data-pid="' + pid + '"]'); }
   function hcPt(el, dx) { const r = el.getBoundingClientRect(); return { x: Math.round(dx != null ? r.left + dx : r.left + r.width / 2), y: Math.round(r.top + r.height / 2), w: r.width, h: r.height }; }
   function hcTap(p) { return [{ t: 'touchStart', x: p.x, y: p.y, ms: 70 }, { t: 'touchEnd', x: p.x, y: p.y, ms: 0 }]; }
@@ -90078,7 +90080,7 @@
     await sleep(200);
   }
 
-  test('HUNT-c a duplicated project is still called X copy after he opens it — it never turns into a second card with the original name', { item: '690', budgetMs: 90000 }, async function () {
+  test('690 a duplicated project is still called X copy after he opens it — Home never shows two cards with the original name', { item: '690', budgetMs: 90000 }, async function () {
     /* ⋯ → Duplicate (and the bulk Duplicate) make X copy on the CARD, but the copy's document still carries the ORIGINAL
        project name — and every save stamps the card with the document's name. So the first time he opens the copy the
        editor calls it X, and when he comes back Home there are two cards both called X: he cannot tell the copy he just
@@ -90129,7 +90131,7 @@
     }
   });
 
-  test('HUNT-c holding a project card until Select comes on, then sliding the same finger down, ticks every card it passes', { item: '690', budgetMs: 90000 }, async function () {
+  test('690 holding a Home card until Select comes on, then sliding the same real finger down, ticks every card it passes', { item: '690', budgetMs: 90000 }, async function () {
     /* The Home cards say a hold enters Select and a drag across paints a run of ticks (selectify, v6.17). With a real
        finger the hold does enter Select — but the card was scrollable when the finger went down (touch-action is only
        none once Select is on), so the slide that follows is taken by the browser as a SCROLL: pointercancel ends the
@@ -90183,7 +90185,43 @@
   });
 
 
-  test('HUNT-c a project he played through to the end still has a picture on its Home card, not a plain black one', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 a plain real-finger swipe on the Home cards still scrolls the list — the hold-then-slide guard takes only a slide that began with a hold', { item: '690', budgetMs: 90000 }, async function () {
+    /* The CONTROL for the test above. The card now cancels touchmove while a paint is live, so the slide after a hold
+       cannot become a scroll — and the only thing that keeps that from swallowing every scroll on Home is the
+       condition that a paint has started. An ordinary swipe (no hold) must still scroll the list and must not
+       enter Select. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      for (let i = 1; i <= 14; i++) { made.push(await FM.projects.create({ name: 'HUNTc swipe ' + i, width: 320, height: 240 })); await sleep(10); }
+      await onScreen924(async function () {
+        await atPhoneWidth(async function () {
+          FM.home.open(); await sleep(900);
+          const sc = document.querySelector('#home-screen .hm-scroll');
+          if (!sc) throw new Error('setup: Home has no scrolling list');
+          sc.scrollTop = 0; await sleep(200);
+          if (sc.scrollHeight - sc.clientHeight < 200) throw new Error('setup: with 14 more projects the Home list still cannot scroll 200 px (' + (sc.scrollHeight - sc.clientHeight) + '), so a swipe proves nothing');
+          const c = hcCard(made[made.length - 3]);
+          if (!c) throw new Error('setup: HUNTc swipe 12 has no card on Home');
+          const p = hcPt(c, 70);
+          if (p.y < 300 || p.y > 730) throw new Error('setup: the card to swipe on is at y ' + p.y + ', not where a swipe up has room');
+          const moves = [];
+          for (let k = 1; k <= 8; k++) moves.push({ t: 'touchMove', x: p.x, y: Math.round(p.y - 200 * k / 8), ms: 16 });
+          await realInput924([{ t: 'touchStart', x: p.x, y: p.y, ms: 30 }].concat(moves).concat([{ t: 'touchEnd', x: p.x, y: p.y - 200, ms: 0 }]), 'a quick swipe up on a Home card');
+          await sleep(600);
+          const st = FM.home._selectionState();
+          if (st.selectMode) throw new Error('a quick swipe with no hold turned Select on');
+          if (!(sc.scrollTop > 60)) throw new Error('a real finger swiped 200 px up across the Home cards and the list moved only ' + Math.round(sc.scrollTop) + ' px — the card is cancelling ordinary scrolls, not only the slide after a hold');
+        }, 380);
+      });
+    } finally {
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('690 a project he played through to the end keeps a picture on its Home card, not a plain black one', { item: '690', budgetMs: 60000 }, async function () {
     /* Playback without Loop stops with the playhead ON the project's last instant (FM.time = duration), where every
        clip that runs to the end has already ended — the preview is the bare background. Going Home then captures the
        card from exactly that frame, so the project he just watched through turns into a solid black card. Element
@@ -90231,7 +90269,7 @@
   });
   const PUSH_WAIT_HC = 3200;   // Home takes the card picture after the pop (380 ms + 80) on an idle callback of at most 1.5 s
 
-  test('HUNT-c saving a new element from its draft card puts the draft away — Elements does not keep a second card still saying save as element', { item: '690', budgetMs: 90000 }, async function () {
+  test('690 saving a new element from its draft card puts the draft away — Elements never keeps a second card still saying save as element', { item: '690', budgetMs: 90000 }, async function () {
     /* Elements → + → Build a new one… makes a DRAFT workspace; its card says Draft — open it, build it, then ⋯ → Save as
        element. He does exactly that. The element appears — and the draft stays, still saying Save as element, so the tab
        now holds two cards for one thing and tells him it is not saved. Saving it again, as the card asks, makes a second
@@ -90274,6 +90312,72 @@
             throw new Error('he built HUNTc logo and saved it as an element from its own draft card — the element is there, and so is the draft, still reading ' +
               (sub || 'Save as element') + '. Two cards for one thing, one saying it is not saved; saving again as it asks makes a second HUNTc logo');
           }
+          await hcElementHoldsTheWork(el, dc, sub);
+        }, 380);
+      });
+    } finally {
+      for (const id of madeE) { try { await FM.elements.remove(id); } catch (e) {} }
+      try { FM.elements.list().filter(function (e) { return e.name === 'HUNTc logo'; }).forEach(function (e) { FM.elements.remove(e.id); }); } catch (e) {}
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+  /* Putting the draft away is only right if nothing he built goes with it — so after the save, the ELEMENT must hold
+     the layer he drew in the draft, there must be exactly one of it, and the draft's card must be gone from the tab. */
+  async function hcElementHoldsTheWork(el, dc, sub) {
+    if (dc && dc.isConnected) throw new Error('the draft is gone from storage but its card is still on the Elements tab, reading ' + sub);
+    const same = FM.elements.list().filter(function (e) { return e.name === 'HUNTc logo'; }).length;
+    if (same !== 1) throw new Error('one Save as element made ' + same + ' elements called HUNTc logo');
+    const pack = await FM.elements.getPack(el.id);
+    const names = pack && pack.layers ? pack.layers.map(function (l) { return l.name; }) : [];
+    if (names.indexOf('HUNTc mark') < 0) throw new Error('the draft was put away but the element does not hold what he built in it (its layers: ' + (names.join(', ') || 'none') + ') — his work went with the draft');
+  }
+
+  test('690 saving an element from the draft still open behind Home puts the draft away too, and lands on a project he already had', { item: '690', budgetMs: 90000 }, async function () {
+    /* His real order of events: Build a new one…, draw it, go Home — the draft is still the OPEN project behind Home —
+       then ⋯ → Save as element on its card. The draft has to be switched away from before it can go (the same dance
+       Delete draft does, queue 617 clause 4), and the switch must land on a project he already had: minting an
+       Untitled while putting a draft away is the failure queue 505 was about. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], madeE = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const base = await FM.projects.create({ name: 'HUNTc base2', width: 320, height: 240 }); made.push(base);
+      const d = await FM.projects.create({ name: 'HUNTc logo', width: 1080, height: 1080, elementDraft: true }); made.push(d);
+      FM.scene.project.background = null;
+      const S = FM.makeLayer('shape', { name: 'HUNTc mark', shape: 'rect', x: 540, y: 540, shapeW: 400, shapeH: 400, fill: '#e76f51' });
+      S.start = 0; S.duration = 3; FM.scene.layers.push(S); FM.refreshAll(); FM.history.commit();
+      if (!FM.storage.flushSync()) throw new Error('setup: the draft could not be saved');
+      if (FM.projects.currentId() !== d) throw new Error('setup: the draft is not the open project');
+      const before = FM.projects.list().filter(function (p) { return !p.elementDraft && !p.templateDraft; }).map(function (p) { return p.id; });
+      await onScreen924(async function () {
+        await atPhoneWidth(async function () {
+          FM.home.open(); await sleep(700);
+          FM.home._render('elements'); await sleep(400);
+          const sc = document.querySelector('#home-screen .hm-scroll'); if (sc) sc.scrollTop = 0;
+          await sleep(150);
+          const card = hcCard(d);
+          if (!card) throw new Error('setup: the open HUNTc logo draft has no card under Elements');
+          await realInput924(hcTap(hcPt(card.querySelector('.hm-card-more'))), 'a finger on the ⋯ of the open draft');
+          const item = await hcMenuItem(/Save as element/);
+          await realInput924(hcTap(hcPt(item)), 'a finger on Save as element…');
+          const s = await hfAskUp('for the element name');
+          await sleep(300);
+          await realInput924(hcTap(hcPt(s.querySelector('.fm-ask-ok'))), 'a finger on Save');
+          const el = await hcUntil('the new element', function () { return FM.elements.list().filter(function (e) { return e.name === 'HUNTc logo'; })[0]; }, 6000);
+          madeE.push(el.id);
+          await sleep(1200);
+          const dc = hcCard(d);
+          const sub = dc ? ((dc.querySelector('.hm-sub') || {}).textContent || '') : '';
+          if (FM.projects.list().some(function (p) { return p.id === d; })) {
+            throw new Error('he saved the draft he still had open as an element from its card — the element is there, and so is the draft, still reading ' + (sub || 'Save as element'));
+          }
+          await hcElementHoldsTheWork(el, dc, sub);
+          const now = FM.projects.list().filter(function (p) { return !p.elementDraft && !p.templateDraft; }).map(function (p) { return p.id; });
+          const minted = now.filter(function (id) { return before.indexOf(id) < 0; });
+          if (minted.length) throw new Error('putting the open draft away minted ' + minted.length + ' new project(s) on Home');
+          if (before.indexOf(FM.projects.currentId()) < 0) throw new Error('with the draft put away, the open project is not one he already had');
+          if (!FM.home.isOpen()) throw new Error('putting the draft away took him off Home');
         }, 380);
       });
     } finally {

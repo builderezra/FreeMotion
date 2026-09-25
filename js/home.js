@@ -1763,6 +1763,17 @@ window.FM = window.FM || {};
       }
     });
     card.addEventListener('pointercancel', () => { finish(); cancelPress(card); });
+    /* ⚠️ HOLD-THEN-SLIDE HAS TO BE OURS, NOT A SCROLL (queue 690, HUNT-c). Holding a card enters Select and the same
+       finger is meant to slide on and tick a run. With a real finger only the held card got ticked: the browser reads
+       touch-action at touchstart, when the card was still an ordinary scrollable card (`touch-action: none` only
+       arrives with `hm-selecting`, 380 ms later), so the first move after the hold became a pan and pointercancel
+       ended the paint. preventDefault in pointermove cannot stop a pan; only a touchmove can.
+       ⚠️ ON THE CARD ITSELF, NOT THE LIST OR THE WINDOW: the hold's render() throws this node away while the finger is
+       still on it, and a touch keeps its original target, so its events never bubble past the detached card. Only
+       while a paint has actually started (`moved` — set by the hold, or by a real drag in Select), so ordinary
+       scrolling and a plain tap are untouched. No scroll cost: `.hm-scroll` already holds a non-passive touchmove
+       for the pull-to-slam, so every card was already in a blocking region. */
+    card.addEventListener('touchmove', (ev) => { if (paint && paint.moved && ev.cancelable) ev.preventDefault(); }, { passive: false });
     return !selectMode;   // caller uses this to decide whether to append its ⋯ button
   }
 
@@ -2042,6 +2053,14 @@ window.FM = window.FM || {};
           const n = await FM.ask({ title: 'Save as element', message: 'Element name', input: { value: p.name || 'My element' }, ok: 'Save' });
           if (!n || !n.trim()) return;
           const ok = await FM.elements.saveFromProject(p.id, n.trim());
+          /* ⚠️ AND THE DRAFT GOES WITH IT (queue 690, HUNT-c) — which is what the Elements tab's own note in render()
+             has always promised. It used to stay: the element appeared, and beside it this card, still reading "Draft —
+             open it, build it, then ⋯ → Save as element". Two cards for one thing, one telling him it was never saved;
+             doing what it said made a second copy of the element, and nothing ever put the draft away.
+             Only after a save that LANDED — a refused one keeps the draft, because then it is the only copy of his work.
+             Nothing is lost: saveFromProject packs the layers AND their files into the element. `discardDraftAnyway` is
+             the call Delete draft makes, so it also handles the draft being the project still open behind Home. */
+          if (ok) { try { await FM.projects.discardDraftAnyway(p.id); } catch (e) {} }
           if (FM.toast) FM.toast(ok ? 'Element saved' : 'Could not save element');
           render();
         } },
