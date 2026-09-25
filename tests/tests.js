@@ -91071,7 +91071,7 @@
   }
   // Demux the video track of an MP4 (moov at either end) and decode EVERY sample; returns the bar index of each frame,
   // in presentation order.
-  async function hunt2dDecodeMp4(blob) {
+  async function hunt2dDecodeMp4(blob, read) {   // `read(g, w, h)` records something else of each frame (HUNT-c, 26 Sep); the bar index by default
     const buf = new Uint8Array(await blob.arrayBuffer()), dv = new DataView(buf.buffer);
     const u32 = o => dv.getUint32(o);
     const typ = o => String.fromCharCode(buf[o], buf[o + 1], buf[o + 2], buf[o + 3]);
@@ -91107,7 +91107,7 @@
       }
       const cv = new OffscreenCanvas(w, h), g = cv.getContext('2d', { willReadFrequently: true });
       const got = []; let decErr = null;
-      const dec = new VideoDecoder({ output: f => { g.clearRect(0, 0, w, h); g.drawImage(f, 0, 0); got.push({ ts: f.timestamp, k: hunt2dReadIndex(g, w, h) }); f.close(); }, error: e => { decErr = e; } });
+      const dec = new VideoDecoder({ output: f => { g.clearRect(0, 0, w, h); g.drawImage(f, 0, 0); got.push({ ts: f.timestamp, k: read ? read(g, w, h) : hunt2dReadIndex(g, w, h) }); f.close(); }, error: e => { decErr = e; } });
       dec.configure({ codec: codec, description: desc, codedWidth: w, codedHeight: h });
       for (let i = 0; i < count; i++) {
         dec.decode(new EncodedVideoChunk({ type: (!stss || keys.has(i)) ? 'key' : 'delta', timestamp: Math.round((dts[i] + cto[i]) / ts * 1e6), data: buf.subarray(soff[i], soff[i] + sizes[i]) }));
@@ -95891,6 +95891,311 @@
       if (bad.length) throw new Error(bad.join('; AND '));
     } finally {
       FM.scene = saved; FM.time = t0; try { FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
+    }
+  });
+
+  /* ═══ HUNT-c (queue 690, 26 Sep, fifth hunt) — SHAPES AND DRAWING ═══════════════════════════════════════════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". Four findings in shapes and the pencil, each written
+   * as a test that FAILS on v16.98 with a message that says what he would see. Where the finger is the point — drawing a
+   * stroke, pressing Draw more, tapping a number box — it is a REAL touch through tests/_cdp.py (realInput924), at 380.
+   * The pictures are measured through FM.renderScene, which is what the preview and every export draw; the Clipping Mask
+   * one is also measured in a real exported MP4, decoded frame by frame. */
+  const hunt5cSleep = ms => new Promise(r => setTimeout(r, ms));
+  // A finger stroke along `pts` (app-frame CSS px): down, a move every 16 ms, and — unless `hold` — up.
+  function hunt5cStroke(pts, hold) {
+    const st = [{ t: 'touchStart', x: pts[0][0], y: pts[0][1], ms: 40 }];
+    for (let i = 1; i < pts.length; i++) st.push({ t: 'touchMove', x: pts[i][0], y: pts[i][1], ms: 16 });
+    if (!hold) st.push({ t: 'touchEnd', x: pts[pts.length - 1][0], y: pts[pts.length - 1][1], ms: 60 });
+    return st;
+  }
+  // Where a finger on the preview lands in PROJECT pixels: the sum js/draw-tool.js toProject does.
+  function hunt5cToProject(cx, cy) {
+    const c = document.getElementById('preview'), r = c.getBoundingClientRect(), sc = c.__fmRS || 1;
+    return [(c.__fmOX || 0) + ((cx - r.left) / r.width) * (c.width / sc), (c.__fmOY || 0) + ((cy - r.top) / r.height) * (c.height / sc)];
+  }
+  // A straight row of finger points across the drawing overlay, at fraction fy of its height, from fx0 to fx1 of its width.
+  function hunt5cRow(fy, fx0, fx1) {
+    const ov = document.getElementById('draw-overlay');
+    if (!ov || ov.style.display === 'none') throw new Error('setup: the drawing overlay is not up, so there is nothing to draw on');
+    const o = ov.getBoundingClientRect(), pts = [];
+    for (let i = 0; i <= 16; i++) pts.push([o.left + o.width * (fx0 + (fx1 - fx0) * i / 16), o.top + o.height * fy]);
+    const reach = hunt2aReach();
+    if (pts.some(p => p[0] < 2 || p[0] > reach || p[1] < 2 || p[1] > window.innerHeight - 4)) throw new Error('setup: the stroke runs outside what real input can reach (' + pts.map(p => p.map(Math.round).join(',')).join(' ') + ')');
+    return pts;
+  }
+  function hunt5cRender(sc, t) {
+    const c = offscreen(sc.project.width, sc.project.height), x = c.getContext('2d');
+    FM.renderScene(x, sc, t || 0);
+    return { d: x.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height };
+  }
+  function hunt5cPx(img, x, y) {
+    const xx = Math.max(0, Math.min(img.w - 1, Math.round(x))), yy = Math.max(0, Math.min(img.h - 1, Math.round(y)));
+    const i = (yy * img.w + xx) * 4;
+    return [img.d[i], img.d[i + 1], img.d[i + 2], img.d[i + 3]];
+  }
+  const hunt5cRed = p => p[3] > 128 && p[0] > 150 && p[1] < 90 && p[2] < 90;
+  // Every red pixel on a 2 px grid, and their box — enough to say where a red drawing is.
+  function hunt5cRedInk(img) {
+    const at = new Set(); let x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1;
+    for (let y = 0; y < img.h; y += 2) for (let x = 0; x < img.w; x += 2) {
+      const i = (y * img.w + x) * 4;
+      if (img.d[i + 3] > 128 && img.d[i] > 150 && img.d[i + 1] < 90 && img.d[i + 2] < 90) {
+        at.add(y * img.w + x); if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+    }
+    return { at: at, box: at.size ? [x0, y0, x1, y1] : null };
+  }
+  // The drawing bar's own colour and brush-size controls, answering the way they do: the native colour picker reports
+  // through input/change on its <input type=color>, the brush slider through input on its range.
+  function hunt5cBrush(colour, size) {
+    const bar = document.getElementById('draw-bar');
+    const col = bar && bar.querySelector('.db-color input'), wid = bar && bar.querySelector('.db-width input');
+    if (!col || !wid) throw new Error('setup: the drawing bar has no colour or brush-size control');
+    col.value = colour; col.dispatchEvent(new Event('input', { bubbles: true })); col.dispatchEvent(new Event('change', { bubbles: true }));
+    wid.value = String(size); wid.dispatchEvent(new Event('input', { bubbles: true })); wid.dispatchEvent(new Event('change', { bubbles: true }));
+    if (FM.drawTool.color !== colour || FM.drawTool.stroke !== size) throw new Error('CONTROL: the drawing bar did not take the pick, the brush is ' + FM.drawTool.color + ' at ' + FM.drawTool.stroke);
+  }
+  function hunt5cDrawing() { return FM.scene.layers.filter(l => l.type === 'shape' && l.shape === 'path' && !l.closed); }
+  function hunt5cCleanup(saved, savedT) {
+    try { if (FM.drawTool && FM.drawTool.active && FM.drawTools) FM.drawTools.stop(); } catch (e) {}
+    FM.scene = saved; if (savedT != null) FM.time = savedT;
+    try { FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {}
+  }
+
+  /* HUNT-c 1 — A DRAWING HAS ONE COLOUR AND ONE BRUSH SIZE, WHATEVER THE BAR SAYS. Queue 167 made a sketching session ONE
+   * layer ("it should all be inside the one drawing you just made"), and the layer carries one colour (layer.fill) and one
+   * line width (stroke.width), both taken from the brush when the FIRST stroke is committed (FM.addPathLayer). Every later
+   * stroke goes through FM.refitPathLayer, which only moves geometry, while the colour swatch and the brush slider stay live
+   * on the bar the whole time. So he picks blue and a fat brush for his second line, sees it blue and fat under his finger
+   * (the overlay strokes with FM.drawTool.color and .stroke), and the moment he lifts it turns into the first stroke's
+   * colour and size. */
+  test('HUNT-c a second stroke drawn in a new colour and brush size turns into the first stroke colour and size when the finger lifts', { item: '690', budgetMs: 90000 }, async function () {
+    const saved = FM.scene, savedT = FM.time;
+    let got = null;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          await huntBScene(() => []);
+          FM.startDraw('freehand'); await hunt5cSleep(500);
+          if (!FM.drawTool.active || FM.drawTool.mode !== 'freehand') throw new Error('setup: Sketching did not open');
+          hunt5cBrush('#ff0000', 8);
+          const s1 = hunt5cRow(0.3, 0.2, 0.8), p1 = s1.map(p => hunt5cToProject(p[0], p[1]));
+          await realInput924(hunt5cStroke(s1), 'the first stroke');
+          await hunt5cSleep(350);
+          hunt5cBrush('#0000ff', 30);
+          const s2 = hunt5cRow(0.55, 0.2, 0.8), p2 = s2.map(p => hunt5cToProject(p[0], p[1]));
+          // the second stroke with the finger still DOWN, so what is under it can be read before he lifts
+          await realInput924(hunt5cStroke(s2, true), 'the second stroke, finger still down');
+          await hunt5cSleep(150);
+          const ov = document.getElementById('draw-overlay'), orr = ov.getBoundingClientRect(), mid = s2[8];
+          const live = ov.getContext('2d').getImageData(Math.round((mid[0] - orr.left) * ov.width / orr.width), Math.round((mid[1] - orr.top) * ov.height / orr.height), 1, 1).data;
+          const last = s2[s2.length - 1];
+          await realInput924([{ t: 'touchEnd', x: last[0], y: last[1], ms: 60 }], 'lifting the finger off the second stroke');
+          await hunt5cSleep(400);
+          await hunt2aPress(document.querySelector('#draw-bar .db-done'), 'Done button');
+          await hunt5cSleep(400);
+          let n = 0; hunt5cDrawing().forEach(l => { n += FM.evalShapeSubs(l, FM.time || 0).length; });
+          got = { p1: p1[8], p2: p2[8], live: [].slice.call(live), n: n };
+        });
+      }, 380);
+      if (got.n !== 2) throw new Error('CONTROL: two real finger strokes left ' + got.n + ' stroke(s) in the drawing, so the finger did not draw what this test needs');
+      /* Judged on the whole frame, not on one layer: whether a new colour joins the drawing or starts a second one is the
+         fix's choice (#167 wants one drawing per visit); what he sees is the only thing asserted. */
+      if (!(got.live[2] > 150 && got.live[0] < 100)) throw new Error('CONTROL: under his finger the second stroke was rgb ' + got.live.slice(0, 3).join(',') + ', not the blue he picked, so the pick never reached the brush and this test cannot see the bug');
+      const drawings = hunt5cDrawing();
+      if (!drawings.length) throw new Error('setup: the two strokes made no drawing');
+      const img = hunt5cRender(FM.scene, drawings[0].start || 0);
+      const thick = (p) => { let n = 0; for (let y = Math.round(p[1]) - 90; y <= Math.round(p[1]) + 90; y++) { const q = hunt5cPx(img, p[0], y); if (q[3] > 128 && q[0] + q[1] + q[2] > 100) n++; } return n; };
+      const c1 = hunt5cPx(img, got.p1[0], got.p1[1]), c2 = hunt5cPx(img, got.p2[0], got.p2[1]);
+      const t1 = thick(got.p1), t2 = thick(got.p2);
+      if (!hunt5cRed(c1)) throw new Error('CONTROL: the first stroke rendered rgb ' + c1.slice(0, 3).join(',') + ' where his finger drew it, not the red he picked');
+      if (!(t2 > 0)) throw new Error('CONTROL: there is no ink where his finger drew the second stroke, so it is somewhere else and this test cannot judge its colour');
+      const blue = c2[2] > 150 && c2[0] < 100;
+      if (!blue || t2 < 22) throw new Error('he picked red and drew a line, then picked blue and a brush of 30 and drew a second line under it. While his finger was down it showed blue, but the moment he lifted it the second line came out rgb ' + c2.slice(0, 3).join(',') + ' and ' + t2 + ' px thick, which is the red and the ' + t1 + ' px of the first stroke: every stroke of a drawing is repainted in the colour and brush size the drawing started with, so he cannot sketch in two colours or two sizes without leaving the tool');
+    } finally {
+      hunt5cCleanup(saved, savedT);
+    }
+  });
+
+  /* HUNT-c 2 — DRAW MORE IGNORES WHAT HE DID TO THE DRAWING. startDraw (js/draw-tool.js) adopts an existing drawing by
+   * putting its strokes back into project pixels as `transform.x/y - shapeW/2 + u * shapeW`, which is only true of a
+   * drawing at scale 1, no rotation, anchor in the middle and no parent. Then every new stroke re-fits the layer
+   * (FM.refitPathLayer) in plain project pixels and keeps the transform. A drawing he has pinched bigger (the pinch and the
+   * corner handles both write transform.scale) therefore JUMPS the moment the first new stroke lands: the refit box is
+   * measured unscaled and the old scale is applied to it again, so the old lines move and the new one lands away from the
+   * finger. */
+  test('HUNT-c Draw more on a sketch he has resized throws the drawing across the canvas and puts the new stroke away from his finger', { item: '690', budgetMs: 90000 }, async function () {
+    const saved = FM.scene, savedT = FM.time;
+    let r = null;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          await huntBScene(() => []);
+          FM.startDraw('freehand'); await hunt5cSleep(500);
+          if (!FM.drawTool.active) throw new Error('setup: Sketching did not open');
+          hunt5cBrush('#ff0000', 16);
+          await realInput924(hunt5cStroke(hunt5cRow(0.35, 0.25, 0.75)), 'the first stroke');
+          await hunt5cSleep(350);
+          await hunt2aPress(document.querySelector('#draw-bar .db-done'), 'Done button');
+          await hunt5cSleep(450);
+          const S = hunt5cDrawing()[0];
+          if (!S) throw new Error('setup: the finger stroke made no drawing');
+          /* HE MAKES IT BIGGER. The pinch on a selected drawing and its corner handles both end in transform.scale
+             (canvas-edit.js, FM.shiftTransform(L, 'scale', …)); a pinch is two fingers, which the driver cannot give, so the
+             value it leaves behind is set here. */
+          S.transform.scale = 1.6; FM.refreshAll(); FM.requestRender(); await hunt5cSleep(250);
+          const before = hunt5cRedInk(hunt5cRender(FM.scene, S.start || 0));
+          if (!before.box) throw new Error('setup: the resized drawing renders no red ink');
+          FM.selectLayer(S.id); await hunt5cSleep(300);
+          FM.inspector.openCategory('element'); await hunt5cSleep(550);
+          const more = [].slice.call(document.querySelectorAll('#inspector-panel button')).find(b => /Draw more/.test(b.textContent || ''));
+          if (!more) throw new Error('setup: the drawing Customise card has no Draw more button');
+          const how = await hunt2aPress(more, 'Draw more button');
+          await hunt5cSleep(550);
+          if (!FM.drawTool.active || FM.drawTools.layerId() !== S.id) throw new Error('CONTROL: Draw more (pressed by ' + how + ') did not re-open this drawing, the tool is ' + (FM.drawTool.active ? 'open on ' + FM.drawTools.layerId() : 'closed'));
+          const s2 = hunt5cRow(0.72, 0.3, 0.7), p2 = s2.map(p => hunt5cToProject(p[0], p[1]));
+          await realInput924(hunt5cStroke(s2), 'the new stroke');
+          await hunt5cSleep(350);
+          const subs = FM.drawTool._counts().subs;
+          await hunt2aPress(document.querySelector('#draw-bar .db-done'), 'Done button');
+          await hunt5cSleep(450);
+          const L = FM.layerById(FM.scene, S.id);
+          const after = hunt5cRedInk(hunt5cRender(FM.scene, L.start || 0));
+          /* The first line, judged along its own CENTRE ROW: a fix may keep the scale or bake it into the box (a thinner line,
+             in the same place), and both are right; a line that moved is wrong either way. */
+          const W = FM.scene.project.width, yc = (Math.round((before.box[1] + before.box[3]) / 2)) & ~1;
+          let kept = 0, of = 0;
+          for (let x = (before.box[0] + 12) & ~1; x <= before.box[2] - 12; x += 20) { if (!before.at.has(yc * W + x)) continue; of++; if (after.at.has(yc * W + x)) kept++; }
+          if (of < 10) throw new Error('setup: the first line has only ' + of + ' samples along its centre row');
+          const m = p2[8];
+          let near = false;
+          for (let y = (Math.round(m[1]) - 40) & ~1; y <= Math.round(m[1]) + 40 && !near; y += 2) if (after.at.has(y * W + (Math.round(m[0]) & ~1))) near = true;
+          r = { subs: subs, keptPct: Math.round(100 * kept / of), near: near, before: before.box, after: after.box, finger: m.map(Math.round), drawings: hunt5cDrawing().length };
+        });
+      }, 380);
+      if (r.subs !== 2) throw new Error('CONTROL: after Draw more and one real stroke the drawing holds ' + r.subs + ' stroke(s), not 2, so the finger did not draw into it');
+      if (r.drawings !== 1) throw new Error('setup: Draw more left ' + r.drawings + ' drawings instead of one');
+      const bad = [];
+      if (r.keptPct < 85) bad.push('only ' + r.keptPct + '% of his first line is still where it was (it was the ink from ' + r.before.slice(0, 2).join(',') + ' to ' + r.before.slice(2).join(',') + '; with one more stroke the drawing now spans ' + (r.after ? r.after.slice(0, 2).join(',') + ' to ' + r.after.slice(2).join(',') : 'nothing') + ', project px)');
+      if (!r.near) bad.push('the new line is not under his finger: there is no ink within 40 px of ' + r.finger.join(',') + ', where he drew it');
+      if (bad.length) throw new Error('he drew a line, pinched the drawing to 1.6x, then tapped Draw more and drew a second line lower down. The moment he lifted his finger ' + bad.join(', and ') + '. Draw more treats a resized drawing as if it had never been resized, so the whole sketch jumps');
+    } finally {
+      hunt5cCleanup(saved, savedT);
+    }
+  });
+
+  /* HUNT-c 3 — THE OPACITY ROW OF COLOURING IS DEAD ON EVERY OPEN SHAPE. fillPanel (js/inspector.js) gives an open shape
+   * — a Line, an Arc, a Spiral, and every drawing the pencil makes — one fill mode, 'Colour', and the same Opacity row a
+   * rectangle gets, which writes layer.fillOpacity. The compositor strokes an open shape with its colour in the 'stroke'
+   * branch of drawLayer and never reads fillOpacity there (only paintFillInPath does, and a stroke never goes through it).
+   * The fourth hunt fixed exactly this for TEXT (fillTextA); the line and the sketch were not in it. The number is typed
+   * the way his finger does it: a real tap on the box, then the keyboard's text going in. */
+  test('HUNT-c the Colouring Opacity slider does nothing on a sketch or a line', { item: '690', budgetMs: 90000 }, async function () {
+    const saved = FM.scene, savedT = FM.time;
+    const rows = [];
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          await huntBScene(() => [FM.makeLayer('shape', { name: 'HuntC box', shape: 'rect', x: 300, y: 420, shapeW: 240, shapeH: 240, fill: '#ff0000', start: 0, duration: 6 })]);
+          const box = FM.scene.layers[0];
+          FM.addShapeLayer('line', { name: 'HuntC line' });                                  // Add → Shape → Line
+          const line = FM.scene.layers.find(l => l.shape === 'line');
+          if (!line) throw new Error('setup: Add → Shape → Line made no line');
+          line.fill = '#ff0000'; line.stroke.width = 30;                                    // his colour, and a line thick enough to sample
+          const sketch = FM.addPathLayer([[200, 1500], [540, 1500], [880, 1500]], { closed: false, name: 'Sketch', color: '#ff0000', stroke: 30 });   // what the pencil makes
+          if (!sketch) throw new Error('setup: no drawing was made');
+          const probes = [[box, 'the rectangle', [300, 420]], [line, 'the Line', [FM.evalProp(line.transform.x, 0), FM.evalProp(line.transform.y, 0)]], [sketch, 'the sketch', [540, 1500]]];
+          for (const pr of probes) {
+            const L = pr[0];
+            FM.selectLayer(L.id); await hunt5cSleep(300);
+            FM.inspector.openCategory('color'); await hunt5cSleep(500);
+            const row = [].slice.call(document.querySelectorAll('#inspector-panel .prop-row')).find(rw => { const lb = rw.querySelector('label'); return lb && lb.textContent.trim() === 'Opacity'; });
+            const val = row && row.querySelector('.fx-scrub-val');
+            if (!val) throw new Error('setup: the Colouring card of ' + pr[1] + ' has no Opacity row');
+            val.scrollIntoView({ block: 'center' }); await hunt5cSleep(250);
+            const vr = val.getBoundingClientRect(), vx = vr.left + vr.width / 2, vy = vr.top + vr.height / 2;
+            const top = document.elementFromPoint(vx, vy);
+            if (vx > 2 && vy > 2 && vx < hunt2aReach() && vy < window.innerHeight - 4 && top === val) await realInput924(huntBTap(vx, vy), 'a tap on the Opacity box of ' + pr[1]);
+            else val.focus();
+            await hunt5cSleep(250);
+            if (document.activeElement !== val) val.focus();
+            val.setSelectionRange(0, val.value.length);
+            if (!document.execCommand('insertText', false, '20')) throw new Error('setup: this browser cannot insert text the way a keyboard does');
+            val.blur(); await hunt5cSleep(250);
+            if (Math.abs((L.fillOpacity == null ? 1 : L.fillOpacity) - 0.2) > 1e-6) throw new Error('CONTROL: typing 20 into the Opacity box of ' + pr[1] + ' left its opacity at ' + L.fillOpacity + ', so the row did not take it');
+            rows.push({ what: pr[1], at: pr[2], L: L });
+          }
+          FM.selectLayer(null);
+        });
+      }, 380);
+      const img = hunt5cRender(FM.scene, 0);
+      const read = rows.map(rw => ({ what: rw.what, px: hunt5cPx(img, rw.at[0], rw.at[1]) }));
+      const box = read[0];
+      if (!(box.px[0] > 25 && box.px[0] < 80)) throw new Error('CONTROL: the rectangle at Opacity 20 renders red ' + box.px[0] + ' over black, not about 51, so the row is not reaching the render for a closed shape either and this test cannot tell the two apart');
+      const dead = read.slice(1).filter(rw => !(rw.px[0] > 25 && rw.px[0] < 80));
+      if (read.slice(1).some(rw => !(rw.px[0] > 25))) throw new Error('setup: a probe missed its shape (' + read.map(rw => rw.what + ' red ' + rw.px[0]).join(', ') + ')');
+      if (dead.length) throw new Error('he set Colouring → Opacity to 20 and the box reads 20: the rectangle fades (red ' + box.px[0] + ' of 255 over black), but ' + dead.map(rw => rw.what + ' stays at red ' + rw.px[0]).join(' and ') + ', full strength, in the preview and the export. On a Line, an Arc, a Spiral or anything drawn with the pencil, the Opacity slider in its own Colouring card does nothing');
+    } finally {
+      hunt5cCleanup(saved, savedT);
+    }
+  });
+
+  /* HUNT-c 4 — CREATE CLIPPING MASK CUTS THE PROJECT BACKGROUND OUT TOO. FM.toggleClippingMask gives the layer the blend
+   * 'mask-include', which is canvas destination-in on the frame being drawn — and renderScene paints the project background
+   * into that same frame before the layers (js/compositor.js, the sceneBg fill), so the mask keeps the background only
+   * inside itself. Outside the shape the frame is left EMPTY: black in the preview, and in the export worse, because
+   * makeBlit draws each rendered frame over the previous one without clearing when there are no letterbox bars, so an
+   * empty pixel keeps whatever an earlier frame put there — a moving mask leaves a trail of every place it has been.
+   * (With a camera in the project the background is painted under the camera plate as well, so it survives: the same
+   * mask behaves two ways.) The control is the same two layers as a Masking group, which keeps the background. */
+  test('HUNT-c a shape made a Clipping Mask blacks out the project background outside it, and a moving one smears the export', { item: '690', budgetMs: 120000 }, async function () {
+    if (typeof VideoEncoder === 'undefined' || typeof VideoDecoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no file to measure');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, savedT = FM.time;
+    try {
+      const P = { width: 160, height: 96, fps: 30, duration: 1, background: '#ffffff' };
+      const mk = () => {
+        const photo = FM.makeLayer('shape', { name: 'HuntC photo', shape: 'rect', x: 80, y: 48, shapeW: 160, shapeH: 96, fill: '#00a000', start: 0, duration: 1 });
+        const dot = FM.makeLayer('shape', { name: 'HuntC circle', shape: 'ellipse', x: 30, y: 48, shapeW: 40, shapeH: 40, fill: '#ffffff', start: 0, duration: 1 });
+        dot.transform.x = { kf: [{ t: 0, v: 30, e: 'linear' }, { t: 1, v: 130, e: 'linear' }] };
+        return { photo: photo, dot: dot };
+      };
+      /* CONTROL: the same two layers as a Masking group — the other way the app offers to put a picture inside a shape. */
+      const g = FM.makeLayer('group', { name: 'HuntC mask group', x: 0, y: 0, start: 0, duration: 1 });
+      g.maskGroup = true;
+      const a = mk(); a.dot.parent = g.id; a.photo.parent = g.id;
+      const ctl = hunt5cRender(scene([g, a.dot, a.photo], { project: P }), 0.5);
+      const ctlIn = hunt5cPx(ctl, 80, 48), ctlOut = hunt5cPx(ctl, 8, 8);
+      if (!(ctlIn[1] > 120 && ctlIn[0] < 60) || !(ctlOut[0] > 240 && ctlOut[1] > 240 && ctlOut[2] > 240)) throw new Error('CONTROL: the Masking group version does not show the photo inside the circle on white (inside rgb ' + ctlIn.slice(0, 3).join(',') + ', outside rgb ' + ctlOut.slice(0, 3).join(',') + '), so the fixture is wrong');
+      /* HIS WAY: the circle over the photo, then Create Clipping Mask from the circle's own layer menu (the phone ≡ and
+         the PC right-click are both FM.layerMenuItems). */
+      const b = mk();
+      FM.scene = scene([b.dot, b.photo], { project: P });
+      FM.refreshAll(); FM.selectLayer(b.dot.id);
+      const item = (FM.layerMenuItems(b.dot) || []).find(i => i && /Create Clipping Mask/.test(i.label || ''));
+      if (!item) throw new Error('setup: the circle layer menu offers no Create Clipping Mask');
+      item.action();
+      if (b.dot.blendMode !== 'mask-include') throw new Error('CONTROL: Create Clipping Mask did not make the circle a clipping mask (blend ' + b.dot.blendMode + ')');
+      const img = hunt5cRender(FM.scene, 0.5);
+      const inside = hunt5cPx(img, 80, 48), outside = hunt5cPx(img, 8, 8);
+      if (!(inside[1] > 120 && inside[0] < 60)) throw new Error('CONTROL: the photo does not show inside the clipping-mask circle (rgb ' + inside.slice(0, 3).join(',') + '), so the clip itself is broken, which is a different bug');
+      const bad = [];
+      if (!(outside[3] > 240 && outside[0] > 240 && outside[1] > 240 && outside[2] > 240)) bad.push('in the preview the corner of the frame, outside the circle, reads rgba ' + outside.join(',') + ' where the white background should be, so it shows black');
+      /* …and in the file. */
+      const white = q => q[0] > 225 && q[1] > 225 && q[2] > 225;
+      const frames = await hunt2dDecodeMp4(await hunt2dExport({ fps: 30 }), (gc, w, h) => {
+        const at = (x, y) => [].slice.call(gc.getImageData(Math.round(x * w / P.width), Math.round(y * h / P.height), 1, 1).data);
+        return { corner: at(8, 8), start: at(30, 48) };
+      });
+      if (frames.length < 20) throw new Error('setup: the export has only ' + frames.length + ' frames');
+      const lateF = frames.slice(Math.round(frames.length * 0.8));   // the circle is past x 110 by now, far from where it started
+      const cornerBad = frames.filter(f => !white(f.corner)).length;
+      const smear = lateF.filter(f => f.start[1] > 100 && f.start[0] < 120);
+      if (cornerBad) bad.push('in the exported MP4 the corner is not white in ' + cornerBad + ' of ' + frames.length + ' frames (frame 0 reads rgb ' + frames[0].corner.slice(0, 3).join(',') + ')');
+      if (smear.length) bad.push('the spot the circle started from still shows the photo in ' + smear.length + ' of the last ' + lateF.length + ' frames of the MP4 (rgb ' + smear[0].start.slice(0, 3).join(',') + '), long after the circle has moved on, a smear of every place it has been');
+      if (bad.length) throw new Error('he put a circle over a photo on a white background and chose Create Clipping Mask: inside the circle the photo shows, but ' + bad.join('; and ') + '. The same two layers as a Masking group keep the white');
+    } finally {
+      hunt5cCleanup(saved, savedT);
     }
   });
 
