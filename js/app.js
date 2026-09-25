@@ -8259,6 +8259,19 @@ window.FM = window.FM || {};
       // outside the field), which is why it survived three rounds of "text editing is fixed".
       // Escape still passes: it is how the editor is closed.
       if (!isEscape && FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) return;
+      /* ⚠️ queue 690 (sixth hunt): THE DRAWING TOOL IS A MODE TOO, and nothing here knew it. Its own keys — Enter,
+         Escape, and now ⌘Z / ⌘⇧Z / ⌘Y for its stroke undo — are answered first by js/draw-tool.js (capture phase),
+         so anything that reaches this line while drawing is a key meant for the editor, aimed at a project he
+         cannot see: the timeline is hidden while he draws (body.drawing). Measured with real keys: Tab selected
+         a layer — the drawing itself — and Delete then deleted it mid-drawing; Right walked the playhead a frame;
+         Space goes to togglePlay by the same road. So they do nothing until Done — but the ones the editor always claims
+         stay claimed, so the browser does not act on them instead: Space would press whichever bar button was
+         clicked last, Tab would walk focus off the drawing, ⌘D would open the bookmark dialog. A text field
+         keeps its keys (`inEdit`, handled below as ever). */
+      if (!inEdit && FM.drawTool && FM.drawTool.active) {
+        if (mod ? /^[dDaA]$/.test(e.key) : /^(Space|Tab|Backspace|Delete|Home|End|Arrow)/.test(e.code || '')) e.preventDefault();
+        return;
+      }
       if (mod && (e.key === 'z' || e.key === 'Z')) {
         if (inEdit) return; // let field text-undo
         e.preventDefault();

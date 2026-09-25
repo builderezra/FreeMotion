@@ -97457,7 +97457,7 @@
   });
 
 
-  /* ═══ HUNT-c — PC LAYOUT AND KEYBOARD, WITH A REAL MOUSE, TRACKPAD AND KEYBOARD (queue 690, sixth hunt) ═══════════════
+  /* ═══ 690 (sixth hunt, HUNT-c) — PC LAYOUT AND KEYBOARD, WITH A REAL MOUSE, TRACKPAD AND KEYBOARD ═════════════════════
    * Every one of these drives the browser's own input pipeline through tests/_cdp.py (see 924): trusted clicks, trusted
    * wheel events (a trackpad pinch is a wheel with Ctrl held) and, new with this hunt, trusted KEYS — a KeyboardEvent made
    * in page script types nothing into a focused box and presses nothing, so it cannot show where the keyboard really went.
@@ -97468,6 +97468,10 @@
     enter: { t: 'key', key: 'Enter', code: 'Enter', vk: 13, text: '\r', ms: 80 },
     space: { t: 'key', key: ' ', code: 'Space', vk: 32, text: ' ', ms: 80 },
     cmdZ: { t: 'key', key: 'z', code: 'KeyZ', vk: 90, mods: 4, ms: 120 },   // 4 = Meta: ⌘ on his Mac
+    cmdShiftZ: { t: 'key', key: 'z', code: 'KeyZ', vk: 90, mods: 12, ms: 120 },   // 12 = Meta + Shift: ⌘⇧Z, redo
+    tab: { t: 'key', key: 'Tab', code: 'Tab', vk: 9, ms: 80 },
+    del: { t: 'key', key: 'Delete', code: 'Delete', vk: 46, ms: 80 },
+    right: { t: 'key', key: 'ArrowRight', code: 'ArrowRight', vk: 39, ms: 80 },
   };
   const click690c = (x, y) => [{ t: 'mouseMove', x: x, y: y, ms: 30 }, { t: 'mouseDown', x: x, y: y, ms: 60 }, { t: 'mouseUp', x: x, y: y, ms: 80 }];
   /* Keys go to the FOCUSED document. On his machine the app IS the page, so it always has the keyboard; here it sits in
@@ -97504,12 +97508,16 @@
     }
   }
 
-  test('HUNT-c a number typed in a box lands when he then clicks his layer on the canvas, and the keyboard comes back to the editor', { item: '690', budgetMs: 90000 }, async function () {
+  test('690 a number typed in a box lands when he then clicks his layer on the canvas or grabs its corner, and the keyboard comes back to the editor', { item: '690', budgetMs: 120000 }, async function () {
     /* On PC he types an exact value — Opacity 50 — and, as anyone does, clicks the layer on the canvas to look at it,
        rather than pressing Enter. The canvas cancels the press (canvas-edit's startMove preventDefaults every pointerdown),
-       so the browser never moves focus off the box: the box keeps saying 50, the layer stays at 100% because the box only
-       applies on change (blur), and every key he presses next — Space to play, Delete, the arrows, Cmd+Z — goes INTO the
-       box. The same holds for the layer-name box: Space after a canvas click renamed the layer to S0 with a space. */
+       so the browser never moved focus off the box: the box kept saying 50, the layer stayed at 100% because the box only
+       applies on change (blur), and every key he pressed next — Space to play, Delete, the arrows, Cmd+Z — went INTO the
+       box. The same held for the layer-name box: Space after a canvas click renamed the layer to S0 with a space.
+       Fixed by releaseTypingFocus (js/canvas-edit.js), which a mouse press on the canvas AND on its corner / rotate
+       handles now calls. Two more halves are checked here: the corner (startHandle, a separate listener that cancels its
+       press the same way), and the one field that must KEEP the keyboard — the text editor's (#857: clicking the canvas
+       while writing is "move the text", and a Space after it must still type a space into his words). */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const L = FM.makeLayer('shape', { name: 'HC opacity', shape: 'rect', x: 300, y: 420, shapeW: 300, shapeH: 300, fill: '#e0245e', start: 0, duration: 4 });
     await pcScene690c([L], async function () {
@@ -97554,15 +97562,58 @@
       if (stillIn) bad.push('the keyboard stayed in the ' + (stillIn === o.box ? 'Opacity box' : (stillIn.className || 'a') + ' box'));
       if (!played) bad.push('Space did not play' + (stillIn ? ' — it typed into the box instead (now ' + JSON.stringify(stillIn.value).replace(/"/g, '') + ')' : ''));
       if (bad.length) throw new Error('he typed 50 in Opacity and clicked his layer on the canvas: ' + bad.join('; ') + '.');
+
+      /* THE CORNER. A press on a scale handle is its own listener (startHandle) and cancels its press just the same, so
+         typing 30 and then grabbing a corner must land the 30 too. A press with no movement: the size stays as it was. */
+      L.fillOpacity = 1; FM.selectLayer(null); FM.refreshAll(); await sleep(250);
+      o = await openBox();
+      await realInput924(click690c(o.c.x, o.c.y).concat([KEY690c.digit(3), KEY690c.digit(0)]), 'typing 30 in Opacity');
+      await sleep(150);
+      if (document.activeElement !== o.box || o.box.value !== '30') throw new Error('setup: the box did not take the second typing (value ' + o.box.value + ')');
+      const corner = document.querySelector('#select-box .sb-se');
+      const cr = corner && corner.getBoundingClientRect();
+      if (!cr || !cr.width) throw new Error('setup: no bottom-right corner handle on the selection to grab');
+      const cc = { x: cr.left + cr.width / 2, y: cr.top + cr.height / 2 };
+      reach690c(cc.x, cc.y, 'the corner handle');
+      const onCorner = document.elementFromPoint(cc.x, cc.y);
+      if (onCorner !== corner) throw new Error('setup: the corner handle is covered by ' + (onCorner && (onCorner.id || onCorner.className)));
+      const sc0 = FM.evalProp(L.transform.scale, FM.time);
+      await realInput924(click690c(cc.x, cc.y), 'pressing the corner handle');
+      await sleep(400);
+      const op2 = +L.fillOpacity, still2 = document.activeElement && document.activeElement.tagName === 'INPUT';
+      if (Math.abs(op2 - 0.3) > 1e-6 || still2) throw new Error('he typed 30 in Opacity and grabbed the corner of his layer: ' +
+        [Math.abs(op2 - 0.3) > 1e-6 ? 'the layer is at ' + Math.round(op2 * 100) + '% opacity, not 30%' : '', still2 ? 'the keyboard stayed in the box' : ''].filter(Boolean).join('; ') + '.');
+      if (Math.abs(FM.evalProp(L.transform.scale, FM.time) - sc0) > 1e-6) throw new Error('setup: a press on the corner with no movement changed the size (' + sc0 + ' to ' + FM.evalProp(L.transform.scale, FM.time) + '), so the press above was not a plain grab');
+
+      /* AND THE ONE FIELD THAT KEEPS IT — THE TEXT EDITOR'S. Writing on PC, a click on the canvas is "let me look at /
+         move it" (#857, and text-edit's own desktop branch), so after it his next key still has to go into his text. */
+      const T = FM.makeLayer('text', { name: 'HC words', text: 'Hi', x: 540, y: 1300, start: 0, duration: 4 });
+      FM.scene.layers.push(T); FM.timeline.rebuild(); FM.selectLayer(T.id); FM.refreshAll(); await sleep(200);
+      FM.textEdit.start(T.id); await sleep(350);
+      try {
+        const ta = document.activeElement;
+        if (!FM.textEdit.isActive() || !ta || !ta.closest || !ta.closest('.te-panel')) throw new Error('setup: the text editor did not open with the keyboard in its field (focus on ' + (ta && (ta.id || ta.tagName)) + ')');
+        const tb = document.getElementById('select-box').getBoundingClientRect();
+        const tc = { x: tb.left + tb.width / 2, y: tb.top + tb.height / 2 };
+        reach690c(tc.x, tc.y, 'the text layer on the canvas');
+        const onText = document.elementFromPoint(tc.x, tc.y);
+        if (!onText || !onText.closest || !onText.closest('#canvas-wrap')) throw new Error('setup: the text layer on the canvas is covered by ' + (onText && (onText.id || onText.className)));
+        await realInput924(click690c(tc.x, tc.y), 'clicking the text layer on the canvas while writing');
+        await sleep(300);
+        if (document.activeElement !== ta) throw new Error('writing on PC, a click on his text on the canvas took the keyboard out of the text editor (focus now on ' + (document.activeElement && (document.activeElement.id || document.activeElement.tagName)) + ') — his next key would not go into his words (#857)');
+      } finally {
+        try { if (FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {}
+      }
     });
   });
 
-  test('HUNT-c Cmd+Z while drawing takes back the last stroke, and his next stroke does not bring it back', { item: '690', budgetMs: 90000 }, async function () {
+  test('690 Cmd+Z while drawing takes back the last stroke, Cmd+Shift+Z puts it back, and his next stroke does not bring an undone one back', { item: '690', budgetMs: 90000 }, async function () {
     /* The drawing tool keeps its own stroke list (sessionSubs, and its own undo stack behind the bar's ↶ button). The editor's
-       keydown sends Cmd+Z to FM.history.undo() whatever is on screen, and history.restore() tells the mask editor and the
-       group view about the swap but never the drawing tool. So the stroke disappears from the canvas — it looks exactly like
-       an undo — while the tool still holds it, and the next stroke re-fits the sketch from the tool's list: it comes back. Press
-       it a few more times and it undoes what he did BEFORE he started drawing, behind the drawing, with the tool none the wiser. */
+       keydown sent Cmd+Z to FM.history.undo() whatever was on screen, and history.restore() tells the mask editor and the
+       group view about the swap but never the drawing tool. So the stroke disappeared from the canvas — it looked exactly like
+       an undo — while the tool still held it, and the next stroke re-fitted the sketch from the tool's list: it came back.
+       Pressed a few more times it undid what he did BEFORE he started drawing, behind the drawing, the tool none the wiser.
+       Fixed in js/draw-tool.js's capture keydown: while drawing, Cmd+Z is the bar's ↶ and Cmd+Shift+Z its ↷. */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const S = FM.makeLayer('shape', { name: 'HC under', shape: 'rect', x: 700, y: 1500, shapeW: 200, shapeH: 200, fill: '#3b82f6', start: 0, duration: 4 });
     await pcScene690c([S], async function () {
@@ -97598,6 +97649,18 @@
         await realInput924([KEY690c.cmdZ], 'Cmd+Z while drawing');
         await sleep(350);
         const onCanvasAfterUndo = strokes(), toolAfterUndo = FM.drawTool._counts ? FM.drawTool._counts().subs : NaN;
+        /* REDO: Cmd+Shift+Z brings the stroke back, on the canvas and in the tool alike; a second Cmd+Z takes it away again. */
+        let redoNote = '';
+        if (toolAfterUndo === 1 && onCanvasAfterUndo === 1) {
+          await frameKeys690c('Cmd+Shift+Z');
+          await realInput924([KEY690c.cmdShiftZ], 'Cmd+Shift+Z while drawing');
+          await sleep(350);
+          const cR = strokes(), tR = FM.drawTool._counts().subs;
+          if (cR !== 2 || tR !== 2) redoNote = 'Cmd+Shift+Z did not put the stroke back (canvas ' + cR + ', drawing tool ' + tR + ', where both should be 2)';
+          await frameKeys690c('Cmd+Z again');
+          await realInput924([KEY690c.cmdZ], 'Cmd+Z again');
+          await sleep(350);
+        }
         const underStill = !!FM.layerById(FM.scene, S.id);
         await realInput924(stroke(y0 + 120), 'a third stroke');
         await sleep(300);
@@ -97607,6 +97670,8 @@
         const final = strokes();
         const bad = [];
         if (toolAfterUndo !== 1) bad.push('Cmd+Z did not take the stroke back in the drawing tool (it still held ' + toolAfterUndo + ' strokes while the canvas showed ' + onCanvasAfterUndo + ')');
+        else if (onCanvasAfterUndo !== 1) bad.push('Cmd+Z took the stroke out of the drawing tool but the canvas still shows ' + onCanvasAfterUndo);
+        if (redoNote) bad.push(redoNote);
         if (final !== 2) bad.push('his next stroke brought the undone one back: the finished sketch has ' + final + ' strokes where he kept 2');
         if (!underStill) bad.push('the layer he made before drawing is gone');
         if (bad.length) throw new Error('drawing on PC, he pressed Cmd+Z to take back his second stroke — it vanished from the canvas, but ' + bad.join('; ') + '.');
@@ -97616,11 +97681,62 @@
     });
   });
 
-  test('HUNT-c a sideways two-finger swipe on the trackpad over the preview leaves the view, and a selected camera, where they were', { item: '690', budgetMs: 60000 }, async function () {
-    /* canvas-edit's onWheel zooms by a fixed step per event and picks the direction with `deltaY < 0 ? in : out` — so an
-       event with NO vertical part at all (deltaY 0: a sideways swipe on a trackpad, or tilting a wheel) is read as zoom OUT.
-       With nothing selected the preview shrinks away from him; with the camera selected the camera is zoomed out, keyed at
-       the playhead and committed to undo — his project changed by a gesture that says nothing about zoom. */
+  test('690 while drawing, the editor keys (Tab, Delete, Space, the arrows) stay out of the project he cannot see', { item: '690', budgetMs: 90000 }, async function () {
+    /* The rest of the drawing-keyboard finding. Only Enter and Escape (and now Cmd+Z) belonged to the drawing tool, so every
+       other editor key went on to a project hidden behind it — the timeline is not even on screen while he draws. Tab
+       picked a layer behind the drawing and Delete then deleted it; Space started playback; the arrows walked the playhead.
+       Fixed in js/app.js's keydown: while FM.drawTool.active, a key outside a text field does nothing until Done. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const S = FM.makeLayer('shape', { name: 'HC behind', shape: 'rect', x: 700, y: 1500, shapeW: 200, shapeH: 200, fill: '#3b82f6', start: 0, duration: 4 });
+    await pcScene690c([S], async function () {
+      const labels = FM._instantLabels ? FM._instantLabels() : [];
+      const si = labels.indexOf('Sketching');
+      if (si < 0) throw new Error('setup: no Sketching tool in the Add menu (tools: ' + labels.join(', ') + ')');
+      FM.addMenu.instant(si);
+      await sleep(700);
+      if (!(FM.drawTool && FM.drawTool.active)) throw new Error('setup: Sketching did not start the drawing tool');
+      const ov = document.getElementById('draw-overlay');
+      const pr = (ov && ov.getBoundingClientRect().width ? ov : document.getElementById('preview')).getBoundingClientRect();
+      const x0 = pr.left + 25, x1 = Math.min(pr.right - 25, 360), y = pr.top + Math.min(120, pr.height * 0.25);
+      reach690c(x1, y, 'a stroke');
+      const st = [{ t: 'mouseMove', x: x0, y: y, ms: 30 }, { t: 'mouseDown', x: x0, y: y, ms: 40 }];
+      for (let k = 1; k <= 10; k++) st.push({ t: 'mouseMove', x: x0 + (x1 - x0) * k / 10, y: y + (k % 2 ? 4 : -4), ms: 18 });
+      st.push({ t: 'mouseUp', x: x1, y: y, ms: 160 });
+      await realInput924(st, 'one stroke');
+      await sleep(300);
+      const sketches = () => FM.scene.layers.filter(l => l.id !== S.id && Array.isArray(l.subs));
+      if (sketches().length !== 1) throw new Error('CONTROL: one real stroke made ' + sketches().length + ' sketch layers — the drawing itself did not work');
+      const t0 = FM.time, n0 = FM.scene.layers.length;
+      await frameKeys690c('Tab, Delete, Space and Right');
+      await realInput924([KEY690c.tab, KEY690c.del, KEY690c.space, KEY690c.right], 'Tab, Delete, Space and Right while drawing');
+      await sleep(400);
+      const playing = !!FM.playing; if (FM.pause) FM.pause();
+      const picked = FM.scene.selectedId, pickedName = picked ? ((FM.layerById(FM.scene, picked) || {}).name || picked) : '';
+      const bad = [];
+      if (!FM.layerById(FM.scene, S.id)) bad.push('the layer behind the drawing (HC behind) was deleted');
+      if (sketches().length !== 1) bad.push('the drawing itself is gone (' + sketches().length + ' sketch layers)');
+      else if (FM.scene.layers.length !== n0) bad.push('the project went from ' + n0 + ' layers to ' + FM.scene.layers.length);
+      if (picked) bad.push('Tab selected ' + pickedName + ' behind the drawing');
+      if (playing) bad.push('Space started playback behind the drawing');
+      if (Math.abs(FM.time - t0) > 1e-9) bad.push('the arrow moved the playhead from ' + t0.toFixed(3) + 's to ' + FM.time.toFixed(3) + 's');
+      if (!(FM.drawTool && FM.drawTool.active)) bad.push('the drawing tool closed');
+      /* CONTROL: the keys reach the app at all — Enter is the drawing tool's Done. */
+      if (FM.drawTool && FM.drawTool.active) {
+        await frameKeys690c('Enter');
+        await realInput924([KEY690c.enter], 'Enter — Done');
+        await sleep(500);
+        if (FM.drawTool.active) throw new Error('CONTROL: a real Enter did not finish the drawing, so the keys may never have reached the app and nothing above means anything');
+      }
+      if (bad.length) throw new Error('drawing on PC, he pressed Tab, Delete, Space and Right: ' + bad.join('; ') + '.');
+    });
+  });
+
+  test('690 a sideways two-finger swipe on the trackpad over the preview leaves the view, and a selected camera, where they were', { item: '690', budgetMs: 60000 }, async function () {
+    /* canvas-edit's onWheel zoomed by a fixed step per event and picked the direction with `deltaY < 0 ? in : out` — so an
+       event with NO vertical part at all (deltaY 0: a sideways swipe on a trackpad, or tilting a wheel) was read as zoom OUT.
+       With nothing selected the preview shrank away from him; with the camera selected the camera was zoomed out, keyed at
+       the playhead and committed to undo — his project changed by a gesture that says nothing about zoom.
+       Fixed by FM.wheelZoomFactor (js/timeline.js): no up-or-down in the event, no zoom. */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const A = FM.makeLayer('shape', { name: 'HC wheel', shape: 'rect', x: 540, y: 960, shapeW: 400, shapeH: 400, fill: '#22c55e', start: 0, duration: 4 });
     const cam = FM.makeLayer('camera', { name: 'HC cam', start: 0, duration: 4 });
@@ -97643,6 +97759,12 @@
         await realInput924(swipe, 'a sideways swipe, nothing selected');
         await sleep(150);
         const view = FM.viewport.scale;
+        FM.viewport.scale = 1; FM.viewport.x = 0; FM.viewport.y = 0; FM.viewport.apply(); await sleep(100);
+        /* A real hand is never perfectly level: the same swipe drifting 2px down per event is still a sideways swipe. */
+        const drift = swipe.map(st => Object.assign({}, st, { dy: 2 }));
+        await realInput924(drift, 'a sideways swipe drifting slightly down, nothing selected');
+        await sleep(150);
+        const viewDrift = FM.viewport.scale;
         FM.viewport.scale = 1; FM.viewport.x = 0; FM.viewport.y = 0; FM.viewport.apply();
         FM.selectLayer(cam.id); await sleep(300);
         const c = FM.layerById(FM.scene, cam.id);
@@ -97653,19 +97775,72 @@
         const z1 = FM.evalProp(c2.transform.scale, FM.time), cx1 = FM.evalProp(c2.transform.x, FM.time);
         const bad = [];
         if (Math.abs(view - 1) > 1e-6) bad.push('with nothing selected the preview zoomed ' + (view < 1 ? 'OUT' : 'in') + ' to ' + view.toFixed(2) + 'x');
+        if (Math.abs(viewDrift - 1) > 1e-6) bad.push('a sideways swipe drifting 2px down per event (18px across) zoomed the preview to ' + viewDrift.toFixed(2) + 'x');
         if (Math.abs(z1 - z0) > 1e-6 || Math.abs(cx1 - cx0) > 0.5) bad.push('with the camera selected the camera zoomed from ' + z0 + ' to ' + z1 + ' (x ' + Math.round(cx0) + ' to ' + Math.round(cx1) + ') and it is saved in his project');
-        if (bad.length) throw new Error('a sideways two-finger swipe over the preview, with no up or down in it at all: ' + bad.join('; ') + ' — every sideways wheel event counts as a zoom-out step.');
+        if (bad.length) throw new Error('a sideways two-finger swipe over the preview (level, or drifting slightly down): ' + bad.join('; ') + ' — a sideways wheel event counts as a zoom-out step.');
       } finally {
         document.getElementById('preview').removeEventListener('wheel', rec, true);
       }
     });
   });
 
-  test('HUNT-c a small trackpad pinch on the timeline zooms it a little, not five times over', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 a small trackpad pinch over the preview zooms the view, or a selected camera, as far as the fingers spread — and a mouse notch steps as it always did', { item: '690', budgetMs: 60000 }, async function () {
+    /* The other half of the preview's wheel finding: every event was a fixed step (1.08x the view, 1.1x the camera), so a
+       trackpad pinch — dozens of tiny Ctrl+wheel events — raced to the limit, and a two-finger scroll on the camera made
+       his camera leap. FM.wheelZoomFactor sizes each step to the event (exp of −deltaY/100 is exactly the scale the fingers
+       made) and caps it at the old step, so one notch of a mouse wheel is untouched — checked here to the last digit. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const A = FM.makeLayer('shape', { name: 'HC pinch', shape: 'rect', x: 540, y: 960, shapeW: 400, shapeH: 400, fill: '#22c55e', start: 0, duration: 4 });
+    const cam = FM.makeLayer('camera', { name: 'HC cam 2', start: 0, duration: 4 });
+    await pcScene690c([cam, A], async function () {
+      const pr = document.getElementById('preview').getBoundingClientRect();
+      const p = { x: Math.min(pr.right - 20, pr.left + pr.width * 0.35), y: pr.top + pr.height * 0.5 };
+      reach690c(p.x, p.y, 'the preview');
+      const got = [];
+      const rec = (e) => got.push({ trusted: e.isTrusted, ctrl: e.ctrlKey });
+      document.getElementById('preview').addEventListener('wheel', rec, true);
+      const pinch = [];
+      for (let k = 0; k < 12; k++) pinch.push({ t: 'wheel', x: p.x, y: p.y, dx: 0, dy: -1.5, mods: 2, ms: 16 });   // 18px in all: the fingers spread e^0.18 = 1.20x
+      const home = () => { FM.viewport.scale = 1; FM.viewport.x = 0; FM.viewport.y = 0; FM.viewport.apply(); };
+      try {
+        /* A MOUSE NOTCH, nothing selected: exactly the old 1.08 — the cap is what keeps a wheel feeling the same. */
+        await realInput924([{ t: 'mouseMove', x: p.x, y: p.y, ms: 30 }, { t: 'wheel', x: p.x, y: p.y, dx: 0, dy: -100, ms: 60 }], 'one wheel notch up');
+        await sleep(150);
+        if (!got.length || got.some(g => !g.trusted)) throw new Error('CONTROL: no trusted wheel event reached the preview');
+        const notch = FM.viewport.scale;
+        home(); await sleep(100);
+        got.length = 0;
+        await realInput924(pinch, 'a small pinch-out, nothing selected');
+        await sleep(150);
+        if (!got.length || !got.every(g => g.trusted && g.ctrl)) throw new Error('CONTROL: the pinch did not arrive as trusted wheel events with Ctrl held');
+        const view = FM.viewport.scale;
+        home();
+        FM.selectLayer(cam.id); await sleep(300);
+        const z0 = FM.evalProp(FM.layerById(FM.scene, cam.id).transform.scale, FM.time);
+        await realInput924([{ t: 'wheel', x: p.x, y: p.y, dx: 0, dy: -100, ms: 60 }], 'one wheel notch up on the camera');
+        await sleep(150);
+        const camNotch = FM.evalProp(FM.layerById(FM.scene, cam.id).transform.scale, FM.time);
+        await realInput924(pinch, 'a small pinch-out, camera selected');
+        await sleep(600);
+        const camPinch = FM.evalProp(FM.layerById(FM.scene, cam.id).transform.scale, FM.time) / camNotch;
+        const bad = [];
+        if (Math.abs(notch - 1.08) > 1e-9) bad.push('one mouse-wheel notch zoomed the view ' + notch.toFixed(4) + 'x where it has always been 1.08x');
+        if (!(view > 1.1 && view < 1.3)) bad.push('with nothing selected the view zoomed ' + view.toFixed(2) + 'x');
+        if (Math.abs(camNotch / z0 - 1.1) > 1e-3) bad.push('one mouse-wheel notch zoomed the camera ' + (camNotch / z0).toFixed(4) + 'x where it has always been 1.1x');
+        if (!(camPinch > 1.1 && camPinch < 1.3)) bad.push('with the camera selected the camera zoomed ' + camPinch.toFixed(2) + 'x, and it is saved in his project');
+        if (bad.length) throw new Error('a small pinch-out over the preview (12 Ctrl+wheel events of 1.5px, the fingers spread 1.20x): ' + bad.join('; ') + '.');
+      } finally {
+        document.getElementById('preview').removeEventListener('wheel', rec, true);
+      }
+    });
+  });
+
+  test('690 a small trackpad pinch on the timeline zooms it a little, not five times over, and a sideways Ctrl-swipe not at all', { item: '690', budgetMs: 60000 }, async function () {
     /* A trackpad pinch reaches the page as a run of small Ctrl+wheel events (Chrome sends deltaY = −100·ln(scale), so a
-       pinch that spreads the fingers a fifth adds up to about −18). The timeline's handler ignores how big each one is and
-       multiplies the zoom by 1.15 per event — so a gentle pinch, a dozen tiny events, zooms the timeline 5×, while one whole
-       100px notch of a mouse wheel zooms it 1.15×. He cannot zoom a little: it slams toward the limit. */
+       pinch that spreads the fingers a fifth adds up to about −18). The timeline's handler ignored how big each one was and
+       multiplied the zoom by 1.15 per event — so a gentle pinch, a dozen tiny events, zoomed the timeline 5×, while one whole
+       100px notch of a mouse wheel zoomed it 1.15×. He could not zoom a little: it slammed toward the limit.
+       Fixed by FM.wheelZoomFactor (js/timeline.js), capped at the old step so a mouse notch is still exactly 1.15×. */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const Ls = [0, 1, 2].map(i => FM.makeLayer('shape', { name: 'HC zoom ' + i, shape: 'rect', x: 300 + i * 100, y: 400, shapeW: 200, shapeH: 200, fill: ['#e0245e', '#3b82f6', '#22c55e'][i], start: 0, duration: 4 }));
     await pcScene690c(Ls, async function () {
@@ -97686,6 +97861,7 @@
         if (!got.length || !got.every(g => g.trusted && g.ctrl)) throw new Error('CONTROL: the Ctrl+wheel did not arrive as a trusted wheel with Ctrl held');
         const notch = FM.timeline.getZoom();
         if (!(notch > 1.01)) throw new Error('CONTROL: a Ctrl+wheel notch did not zoom the timeline in (zoom ' + notch + ')');
+        if (Math.abs(notch - 1.15) > 1e-6) throw new Error('one Ctrl+wheel notch of a mouse zoomed the timeline ' + notch.toFixed(4) + 'x, where it has always been 1.15x — the per-event cap is gone');
         FM.timeline.setZoom(1); await sleep(150);
         const pinch = [];
         for (let k = 0; k < 12; k++) pinch.push({ t: 'wheel', x: p.x, y: p.y, dx: 0, dy: -1.5, mods: 2, ms: 16 });
@@ -97693,6 +97869,14 @@
         await sleep(250);
         const z = FM.timeline.getZoom();
         if (!(z > 1.0) || z > 1.6) throw new Error('a small pinch-out on the trackpad (fingers spread about a fifth: 12 Ctrl+wheel events of 1.5px, 18px in all) zoomed the timeline ' + z.toFixed(2) + 'x — while one whole 100px notch of a mouse wheel zooms it ' + notch.toFixed(2) + 'x. Each event counts as a full 15% step whatever the fingers did.');
+        /* A SIDEWAYS swipe with Ctrl held has no up-or-down in it — it must not zoom (deltaY 0 read as zoom-out before). */
+        FM.timeline.setZoom(1); await sleep(150);
+        const side = [];
+        for (let k = 0; k < 8; k++) side.push({ t: 'wheel', x: p.x, y: p.y, dx: 18, dy: 0, mods: 2, ms: 16 });
+        await realInput924(side, 'a sideways swipe with Ctrl held');
+        await sleep(250);
+        const zs = FM.timeline.getZoom();
+        if (Math.abs(zs - 1) > 1e-6) throw new Error('a sideways swipe on the trackpad with Ctrl held (no up or down in it) zoomed the timeline to ' + zs.toFixed(2) + 'x');
       } finally {
         tl.removeEventListener('wheel', rec, true);
       }

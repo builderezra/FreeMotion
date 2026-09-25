@@ -1055,6 +1055,25 @@ window.FM = window.FM || {};
         if (!FM.drawTool.active) return;
         if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); finish(); }
         else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stop(); }
+        /* ⌘Z / CTRL+Z IS THE DRAWING'S OWN UNDO WHILE YOU DRAW (queue 690, sixth hunt). It used to fall through to
+           the app's keydown, which sends it to FM.history.undo() whatever is on screen — and that swapped the
+           project back one step behind this tool's back. The stroke vanished from the canvas, so it looked exactly
+           like an undo, but sessionSubs still held it, and the next stroke re-fitted the Sketch from that list and
+           brought it straight back: a finished sketch of 3 strokes where he kept 2. A few more presses went past
+           the drawing and undid what he did BEFORE he picked up the pencil, deleting the Sketch itself on the
+           way. The keys now do exactly what the bar's ↶ ↷ do (undoStep / redoStep), which move the tool's stroke
+           list and the Sketch layer together and go no further back than this drawing. ⌘⇧Z and ⌘Y redo, as they
+           do in the editor.
+           A text field keeps its own ⌘Z: typing is what that key undoes there. The brush-size slider and the
+           colour well are not text, so a ⌘Z pressed after using them still reaches the drawing. */
+        else if ((e.metaKey || e.ctrlKey) && !e.altKey && /^[zZyY]$/.test(e.key)) {
+          var t = e.target;
+          var typing = t && (t.tagName === 'TEXTAREA' || t.isContentEditable ||
+            (t.tagName === 'INPUT' && !/^(range|color|checkbox|radio|button|submit)$/i.test(t.type || '')));
+          if (typing) return;
+          e.preventDefault(); e.stopPropagation();
+          if (e.key === 'y' || e.key === 'Y' || e.shiftKey) redoStep(); else undoStep();
+        }
       }, true);
     },
   };
