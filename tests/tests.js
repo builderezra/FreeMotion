@@ -97457,4 +97457,242 @@
   });
 
 
+  /* ═══ HUNT-b (queue 690, 26 Sep) — EXPORT OPTIONS, AND WHAT THE FILE AND THE CARDS AROUND IT REALLY DO ═══════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". Four findings in the export path, each written to
+   * FAIL today with the words he would see. Not fixed here — the fixes come after a skeptic has read them.
+   * Shared: huntbShape builds a plain white box, huntbWait polls a condition with a deadline. */
+  function huntbWait(cond, ms, what) {
+    return (async function () {
+      const t0 = Date.now();
+      while (!cond()) {
+        if (Date.now() - t0 > ms) throw new Error('setup: ' + what + ' did not happen within ' + Math.round(ms / 1000) + ' s');
+        await new Promise(r => setTimeout(r, 40));
+      }
+    })();
+  }
+  function huntbOwn(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+
+  /* HUNT-b 1 — DISMISSING THE SHARE SHEET THROWS THE FINISHED VIDEO AWAY.
+   * The MP4 export ends on the Export ready card; Save opens the phone's share sheet (navigator.share). On his iPhone,
+   * swiping that sheet away — or tapping outside it, or backing out of Save to Files — rejects the share with an
+   * AbortError. deliver() (js/exporter.js) answers that with 'cancelled', and the card's onSave (js/app.js
+   * showExportReady) closes the card on ANY answer: finish() hides it and resolves, run() takes that as delivered and its
+   * finally frees everything and clears the crash-resume parts. The render he just waited through is gone, with no
+   * second Save, and the only way to get the file is to export again from zero.
+   * Driven with a REAL tap on Save at phone width. The share sheet itself is the OS's, so it is stood in for by a
+   * navigator.share that answers the way WebKit does when the sheet is dismissed.
+   * CONTROL: the tap really opened the share with one mp4 file in it. */
+  test('HUNT-b swiping the share sheet away after Save throws the finished export away', { item: '690', budgetMs: 120000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no MP4 to hand over');
+    if (!FM._runExport || !FM._setExportSoloId) throw new Error('setup: FM._runExport (the entry the Export button calls) is gone');
+    const ready = document.getElementById('export-ready'), save = document.getElementById('xr-save'), discard = document.getElementById('xr-discard');
+    const fmtEl = document.getElementById('exp-format'), rangeEl = document.getElementById('exp-range');
+    if (!ready || !save || !discard || !fmtEl || !rangeEl) throw new Error('setup: the export dialog or the Export ready card is missing from this build');
+    const nav = navigator, had = { share: huntbOwn(nav, 'share'), canShare: huntbOwn(nav, 'canShare') };
+    const saved = FM.scene, fmt0 = fmtEl.value, range0 = rangeEl.value;
+    const shares = [];
+    let running = null;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+          const S = FM.makeLayer('shape', { name: 'HUNT-b box', shape: 'rect', x: 32, y: 32, shapeW: 40, shapeH: 40, fill: '#ffcc33', start: 0, duration: 1 });
+          FM.scene = scene([S], { project: { width: 64, height: 64, fps: 30, duration: 1, background: '#203040' } });
+          FM.selectLayer(null); FM.refreshAll();
+          // his iPhone: Save opens the share sheet, and he swipes it away — WebKit rejects the share with an AbortError
+          Object.defineProperty(nav, 'canShare', { configurable: true, writable: true, value: function () { return true; } });
+          Object.defineProperty(nav, 'share', { configurable: true, writable: true, value: function (d) { shares.push(d); return Promise.reject(new DOMException('Share canceled', 'AbortError')); } });
+          fmtEl.value = 'mp4'; rangeEl.value = 'whole'; FM._setExportSoloId(null);
+          running = FM._runExport();
+          await huntbWait(() => !ready.classList.contains('hidden'), 60000, 'the MP4 export reaching its Export ready card');
+          await sleep(300);
+          const r = save.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+          if (!(r.width > 0) || y > 740 || x > 380) throw new Error('setup: Save is at ' + Math.round(x) + ',' + Math.round(y) + ', outside the part of the frame real input can reach');
+          await realInput924([{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 0 }], 'a tap on Save');
+          await sleep(600);
+          if (shares.length !== 1) throw new Error('CONTROL: a real tap on Save opened the share sheet ' + shares.length + ' times, not once — nothing below measures the dismiss');
+          const f = shares[0] && shares[0].files && shares[0].files[0];
+          if (!f || !/mp4/.test(f.type) || !(f.size > 0)) throw new Error('CONTROL: the share sheet was not handed the finished MP4 (' + (f ? f.type + ', ' + f.size + ' bytes' : 'no file') + ')');
+          if (ready.classList.contains('hidden')) throw new Error('he tapped Save, the share sheet came up, and he swiped it away (or tapped outside it, or backed out of Save to Files) — and the Export ready card closed with it. The finished video is thrown away: there is no second Save, and the only way to get the file is to run the whole export again');
+          if (save.disabled) throw new Error('after he dismissed the share sheet the Export ready card stayed up, but Save is still greyed out — the video is on screen and cannot be saved');
+        });
+      });
+    } finally {
+      if (had.share) { /* nothing of ours to remove */ } else { try { delete nav.share; } catch (e) {} }
+      if (had.canShare) { /* nothing of ours to remove */ } else { try { delete nav.canShare; } catch (e) {} }
+      if (!ready.classList.contains('hidden')) discard.click();
+      if (running) { try { await Promise.race([running, sleep(30000)]); } catch (e) {} }
+      fmtEl.value = fmt0; rangeEl.value = range0;
+      if (FM._expPrefsSave) FM._expPrefsSave();
+      FM.scene = saved;
+      try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* HUNT-b 2 — A LONG EXPORT ON THE PHONE LETS THE SCREEN GO TO SLEEP PART-WAY THROUGH.
+   * An export renders frame by frame, seeking every clip for every frame; on an iPhone a one-minute 1080p video takes
+   * minutes. He waits and does not touch the screen, so iOS auto-lock (30 s to 5 min) turns the screen off part-way
+   * through — the app is backgrounded and suspended, the render stops where it is, and under memory pressure the page
+   * is killed outright. Nothing in the export path holds a screen wake lock (navigator.wakeLock is only used while
+   * hosting a live session, js/collab-ui.js), although his standing answer on export safety is "if there's a thing to
+   * make exporting safer then do it" (REQUESTS.md, 21 Aug).
+   * Measured through FM._runExport — the entry the Export button calls — for the MP4 and the GIF, sampling at every
+   * frame the exporter renders. navigator.wakeLock is stood in for, so the test can see a request.
+   * CONTROL: frames were really rendered under FM._exporting, so the samples are from inside the export. */
+  test('HUNT-b a long export on the phone holds no wake lock, so the screen sleeps part-way through and the render stalls', { item: '690', budgetMs: 120000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser');
+    if (!FM._runExport || !FM._setExportSoloId) throw new Error('setup: FM._runExport (the entry the Export button calls) is gone');
+    const ready = document.getElementById('export-ready'), discard = document.getElementById('xr-discard');
+    const fmtEl = document.getElementById('exp-format'), rangeEl = document.getElementById('exp-range');
+    if (!ready || !discard || !fmtEl || !rangeEl) throw new Error('setup: the export dialog or the Export ready card is missing from this build');
+    const nav = navigator, hadWL = huntbOwn(nav, 'wakeLock');
+    const asked = [], sentinels = [];
+    const fakeWL = { request: function (type) {
+      asked.push(type);
+      const s = { type: type, released: false, onrelease: null, release: function () { s.released = true; return Promise.resolve(); }, addEventListener: function () {}, removeEventListener: function () {} };
+      sentinels.push(s); return Promise.resolve(s);
+    } };
+    const saved = FM.scene, fmt0 = fmtEl.value, range0 = rangeEl.value, rs0 = FM.renderScene;
+    const dl = hunt2dCatchDownloads();
+    const per = {};
+    let cur = null, closer = 0;
+    try {
+      await atPhoneWidth(async function () {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      Object.defineProperty(nav, 'wakeLock', { configurable: true, writable: true, value: fakeWL });
+      const S = FM.makeLayer('shape', { name: 'HUNT-b mover', shape: 'rect', x: 10, y: 32, shapeW: 20, shapeH: 20, fill: '#ffffff', start: 0, duration: 2 });
+      FM.scene = scene([S], { project: { width: 64, height: 64, fps: 30, duration: 2, background: '#000000' } });
+      FM.selectLayer(null); FM.refreshAll();
+      // every frame the exporter renders is a sample: is a screen wake lock held right now?
+      FM.renderScene = function () {
+        if (FM._exporting && cur) { cur.frames++; if (sentinels.some(s => s.type === 'screen' && !s.released)) cur.locked++; }
+        return rs0.apply(this, arguments);
+      };
+      // the MP4 ends on the Export ready card: put it away as soon as it is up, so the export can finish
+      closer = setInterval(() => { if (!ready.classList.contains('hidden')) discard.click(); }, 60);
+      for (const fmt of ['mp4', 'gif']) {
+        cur = per[fmt] = { frames: 0, locked: 0 };
+        fmtEl.value = fmt; rangeEl.value = 'whole'; FM._setExportSoloId(null);
+        await FM._runExport();
+        cur = null;
+        await sleep(200);
+      }
+      for (const fmt of ['mp4', 'gif']) {
+        if (per[fmt].frames < 30) throw new Error('CONTROL: the ' + fmt.toUpperCase() + ' export rendered only ' + per[fmt].frames + ' frames under FM._exporting — the samples are not from inside an export, so nothing below means anything');
+      }
+      const bare = ['mp4', 'gif'].filter(f => per[f].locked === 0);
+      if (bare.length) throw new Error(bare.map(f => 'the ' + f.toUpperCase() + ' export (' + per[f].frames + ' frames)').join(' and ') + ' ran with no screen wake lock held at any frame (wake lock requests: ' + asked.length + ') — on his iPhone the screen auto-locks part-way through a long render while he waits without touching it, the app is put to sleep, and the export stalls until he unlocks the phone, or is killed and lost');
+      });
+    } finally {
+      clearInterval(closer);
+      FM.renderScene = rs0;
+      if (hadWL) { /* never replaced an own property */ } else { try { delete nav.wakeLock; } catch (e) {} }
+      dl.stop();
+      if (!ready.classList.contains('hidden')) discard.click();
+      fmtEl.value = fmt0; rangeEl.value = range0;
+      if (FM._expPrefsSave) FM._expPrefsSave();
+      const ov = document.getElementById('export-overlay'); if (ov) ov.classList.add('hidden');
+      FM.scene = saved;
+      try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* HUNT-b 3 — THE SOUND IN AN EXPORTED MP4 PLAYS ABOUT 44 MS BEHIND THE PICTURE.
+   * The AAC encoder starts every stream with its priming samples (2112 of them, 44 ms at 48 kHz). A file says so with an
+   * edit list (an edts/elst box) and players skip them — but mp4-muxer writes no edit list (vendor/mp4-muxer.js has no
+   * edts), and encodeAudio (js/exporter.js) feeds the mix from sample 0 with timestamps from 0. So the priming plays as
+   * 44 ms of silence at the head of the soundtrack and EVERYTHING after it is late by that much: a beat he cut the
+   * picture on lands a frame and a third after the cut, a clap after the hands meet, speech after the lips. The preview
+   * plays them together, so it only shows in the file. The audio track also runs on past the last video frame, so the
+   * file is longer than the project.
+   * Measured in the finished file: a white frame appears at exactly 1.500 s and a click sits at exactly 1.500 s in the
+   * soundtrack; the file's picture and its sound are then read back the way a player reads them.
+   * CONTROLS: the flash is on frame 45 (the picture side is right), and the click is found at all. */
+  test('HUNT-b the sound in an exported MP4 plays about 44 ms behind the picture', { item: '690', budgetMs: 60000 }, async function () {
+    if (typeof VideoEncoder === 'undefined' || typeof VideoDecoder === 'undefined' || typeof AudioEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs audio and video in this browser, so there is no soundtrack to measure');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const SR = 48000, LEN = 3, AT = 1.5;
+    const saved = FM.scene, ids = [];
+    try {
+      const ab = new AudioBuffer({ numberOfChannels: 2, length: LEN * SR, sampleRate: SR });
+      for (let c = 0; c < 2; c++) { const d = ab.getChannelData(c), i0 = Math.round(AT * SR); for (let i = i0; i < i0 + 480; i++) d[i] = 0.8 * Math.sin(2 * Math.PI * 1000 * (i - i0) / SR); }
+      const A = FM.makeLayer('video', { name: 'HUNT-b click', start: 0, duration: LEN, trimStart: 0 });
+      A.start = 0; A.duration = LEN; A.trimStart = 0; A.volume = 1; A.fadeIn = 0; A.fadeOut = 0;
+      FM.media.set(A.id, { kind: 'video', file: new Blob(['x'], { type: 'audio/wav' }), audioBuffer: ab, duration: LEN, width: 0, height: 0 });
+      ids.push(A.id);
+      const S = FM.makeLayer('shape', { name: 'HUNT-b flash', shape: 'rect', x: 32, y: 32, shapeW: 64, shapeH: 64, fill: '#ffffff', start: AT, duration: LEN - AT });
+      S.start = AT; S.duration = LEN - AT;
+      FM.scene = scene([S, A], { project: { width: 64, height: 64, fps: 30, duration: LEN, background: '#000000' } });
+      FM.refreshAll();
+      const blob = await hunt2dExport({ fps: 30 });
+      // the picture, frame by frame, the way a player decodes it
+      const lum = await hunt2dDecodeMp4(blob, (g, w, h) => g.getImageData(w >> 1, h >> 1, 1, 1).data[0]);
+      const flash = lum.findIndex(v => v > 128);
+      if (flash !== 45) throw new Error('CONTROL: the white frame is frame ' + flash + ' of ' + lum.length + ', not frame 45 (1.500 s) — the picture itself is off, which is a different bug from this one');
+      // the sound, the way a player decodes it
+      const dec = await new OfflineAudioContext(2, SR, SR).decodeAudioData(await blob.arrayBuffer());
+      const ch = dec.getChannelData(0);
+      let hit = -1; for (let i = 0; i < ch.length; i++) if (Math.abs(ch[i]) > 0.2) { hit = i; break; }
+      if (hit < 0) throw new Error('CONTROL: the click is not in the exported soundtrack at all, so its timing cannot be read');
+      const at = hit / dec.sampleRate, lagMs = (at - AT) * 1000;
+      if (Math.abs(lagMs) > 250) throw new Error('CONTROL: the loudest moment of the soundtrack is at ' + at.toFixed(3) + ' s, nowhere near the click at 1.500 s — this is not measuring the click');
+      if (Math.abs(lagMs) > 8) throw new Error('in the exported MP4 the white frame comes up at 1.500 s but the click that goes with it plays at ' + at.toFixed(3) + ' s — the whole soundtrack runs ' + Math.round(lagMs) + ' ms (' + (lagMs * 30 / 1000).toFixed(1) + ' frames) behind the picture, so every beat he cut on, every clap and every word lands late in the file while the preview plays them together. The file also runs to ' + dec.duration.toFixed(3) + ' s for a ' + LEN.toFixed(3) + ' s project, the last frame frozen under the extra sound');
+    } finally {
+      FM.scene = saved;
+      ids.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      FM._lastMixGain = undefined; FM._lastMixRawPeak = undefined; FM._lastMixPeak = undefined;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* HUNT-b 4 — A CLIP WITH NO SOUND TRACK MAKES EVERY EXPORT SAY ITS SOUND WAS LOST.
+   * Plenty of real clips carry no audio track at all: an iPhone time-lapse, a screen recording with sound off, a clip
+   * saved from another app without audio. js/media.js knows this is ordinary (FM.decodeAudio: "no decodable audio track
+   * (screen recordings etc.)"). But buildAudioMix (js/exporter.js) files such a clip under `dropped` as "its audio would
+   * not decode", and with nothing else making sound that becomes 'all-unreadable': the progress card says Exporting with
+   * NO SOUND and the Export ready card ends on NO SOUND in the warning colour, naming a failure that never happened.
+   * He has reported silent exports four times (#215); a false alarm on a file that is exactly right sends him after a
+   * fifth. A project with no audio in it should read no soundtrack, the wording the card already has for it.
+   * CONTROL: the fixture really has no sound track (no 'soun' handler anywhere in the file). */
+  test('HUNT-b a clip with no sound track at all (a time-lapse) ends every export on NO SOUND, none of the audio clips could be read', { item: '690', budgetMs: 90000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser');
+    if (!FM._showExportReady) throw new Error('setup: FM._showExportReady (the Export ready card) is not reachable');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const ready = document.getElementById('export-ready'), discard = document.getElementById('xr-discard'), metaEl = document.getElementById('xr-meta');
+    if (!ready || !discard || !metaEl) throw new Error('setup: no Export ready card in this build');
+    const saved = FM.scene, made = [];
+    try {
+      const file = await hunt2dIndexedClip(90, 30);
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let soun = false; for (let i = 0; i + 3 < bytes.length; i++) if (bytes[i] === 0x73 && bytes[i + 1] === 0x6f && bytes[i + 2] === 0x75 && bytes[i + 3] === 0x6e) { soun = true; break; }
+      if (soun) throw new Error('CONTROL: the fixture clip carries a sound track, so it is not the silent clip this test is about');
+      const rec = await hunt2dLoadWarm(file);
+      rec.stripFrames = [];
+      FM.scene = hunt2dScene([hunt2dClipLayer(rec, made)], { duration: 3 });
+      FM.refreshAll();
+      let payload = null, meta = '', warnColour = false;
+      await FM.exporter.run({ scale: 1, fps: 30, name: 'huntb-silent', onProgress: function () {}, onNote: function () {},
+        onReady: async function (o) {
+          payload = o;
+          const shown = FM._showExportReady(o);
+          await sleep(80);
+          meta = metaEl.textContent; warnColour = metaEl.classList.contains('xr-nosound');
+          discard.click();
+          await shown;
+        } });
+      const note = (document.getElementById('export-note') || {}).textContent || '';
+      if (!payload || !meta) throw new Error('CONTROL: the export never reached its Export ready card, so there is no line to read');
+      if (payload.audioDropped || /could not be read|NO SOUND/.test(meta) || /could not be read/.test(note)) throw new Error('a project whose only clip simply has no sound track (an iPhone time-lapse, a silent screen recording) finished on an Export ready card reading: ' + meta + (warnColour ? ' — in the warning colour' : '') + (note ? '. The progress card said: ' + note.replace(/\n/g, ' / ') : '') + '. Nothing failed to read and the file is exactly right, but the card tells him his sound was lost; a project with no audio in it should read no soundtrack');
+    } finally {
+      if (!ready.classList.contains('hidden')) discard.click();
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+
 })();
