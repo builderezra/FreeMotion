@@ -93223,6 +93223,383 @@
       if (!said3.some(m => /zigzag/.test(m))) bad.push('a layer whose path could not be carried out of a turned group was not named (' + (said3.join(' / ') || 'nothing was said') + ')');
       if (bad.length) throw new Error(bad.join('; AND '));
     } finally { FM.toast = toast0; FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {} }
+  /* ═══ QUEUE 690, HUNT d (25 Sep) — THE AI DIRECTOR AND THE ASSISTANT ═══════════════════════════════════════════════════
+     Found under his standing brief ("go re audit, find some bugs coz theres a shit load"). NO NETWORK, EVER: the Assistant's
+     one model call is answered by a stand-in for FM.ai.call, and the Director's and Refine's own call() by a stand-in for
+     window.fetch that answers api.anthropic.com in the page and never lets the request out. The key they see is a fake one.
+     Shared helpers are prefixed hd so they cannot collide with anything else here. */
+
+  /* The Messages API's own rule, enforced with a 400 before it reads anything else: every tool_use the model made must be
+     answered by a tool_result in the very NEXT message. Returns the API's complaint, or '' when the history is well formed. */
+  function hdApiCheck(messages) {
+    for (let i = 0; i < (messages || []).length; i++) {
+      const m = messages[i];
+      if (!m || m.role !== 'assistant' || !Array.isArray(m.content)) continue;
+      const ids = m.content.filter(function (b) { return b && b.type === 'tool_use'; }).map(function (b) { return b.id; });
+      if (!ids.length) continue;
+      const next = messages[i + 1];
+      const answered = (next && next.role === 'user' && Array.isArray(next.content))
+        ? next.content.filter(function (b) { return b && b.type === 'tool_result'; }).map(function (b) { return b.tool_use_id; }) : [];
+      const missing = ids.filter(function (id) { return answered.indexOf(id) < 0; });
+      if (missing.length) return 'messages.' + (i + 1) + ': tool_use ids were found without tool_result blocks immediately after: ' + missing.join(', ') + '. Each tool_use block must have a corresponding tool_result block in the next message.';
+    }
+    return '';
+  }
+  /* window.fetch answered in the page for api.anthropic.com only; `answer(toolName, body)` returns the tool's input. */
+  function hdFakeApi(answer) {
+    const real = window.fetch, seen = [];
+    window.fetch = async function (url, init) {
+      if (String(url).indexOf('https://api.anthropic.com/') !== 0) return real.apply(this, arguments);   // the suite's own file reads
+      const body = JSON.parse((init && init.body) || '{}');
+      const name = (body.tool_choice && body.tool_choice.name) || (body.tools && body.tools[0] && body.tools[0].name) || '';
+      seen.push(name);
+      const input = answer(name, body);
+      await sleep(15);
+      return new Response(JSON.stringify({ content: [{ type: 'tool_use', id: 'toolu_hd_' + seen.length, name: name, input: input }], stop_reason: 'tool_use', usage: { input_tokens: 10, output_tokens: 10 } }), { status: 200, headers: { 'content-type': 'application/json' } });
+    };
+    return { seen: seen, restore: function () { window.fetch = real; } };
+  }
+  const HD_FAKE_KEY = 'sk-ant-api03-HUNTd-not-a-real-key-0000000000000000';
+
+  test('690 one failed Assistant reply does not break the Assistant — the next messages still reach Claude and still edit', { item: '690', budgetMs: 45000 }, async function () {
+    /* HUNT d. He asks the Assistant for an edit and it makes it (a tool_use). His next message fails — a dropped connection on
+       his phone, Claude overloaded past the retries, a reply cut off at max_tokens. send() popped the user turn it had just
+       added, and that turn was the ONLY place the tool_result answering the earlier edit lived (pendingResults was emptied into
+       it). From then on the history held an unanswered tool_use, which the API rejects with a 400 on every request, until the
+       app was restarted. Fixed in js/ai-chat.js send(): a failed turn cuts the history back to where it began and owes the same
+       answers again. hdApiCheck below is the API's own rule and nothing else. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    const realCall = FM.ai.call, realHas = FM.aiKey.has, dry0 = FM.ai.DRY_RUN;
+    try {
+      if (!FM.aiChat || !FM.aiChat.send) throw new Error('setup: FM.aiChat.send is missing');
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const pid = await FM.projects.create({ name: 'HUNTd chat', width: 1080, height: 1920 }); made.push(pid);
+      const L = FM.makeLayer('text', { name: 'HUNTd title', text: 'Summer', x: 540, y: 960 });
+      L.start = 0; L.duration = 4; FM.scene.layers.unshift(L); FM.selectLayer(L.id); FM.refreshAll(); FM.history.commit();
+      FM.ai.DRY_RUN = false;
+      FM.aiKey.has = function () { return true; };
+      const replies = [
+        { content: [{ type: 'text', text: 'Made it bigger.' }, { type: 'tool_use', id: 'toolu_hd_1', name: 'emit_ops', input: { ops: [{ op: 'setProp', ref: L.id, path: 'transform.scale', value: 1.3 }] } }] },
+        'fail',
+        { content: [{ type: 'text', text: 'Made it gold.' }, { type: 'tool_use', id: 'toolu_hd_3', name: 'emit_ops', input: { ops: [{ op: 'setProp', ref: L.id, path: 'color', value: '#ffce4a' }] } }] },
+        { content: [{ type: 'text', text: 'Made it gold.' }, { type: 'tool_use', id: 'toolu_hd_4', name: 'emit_ops', input: { ops: [{ op: 'setProp', ref: L.id, path: 'color', value: '#ffce4a' }] } }] },
+      ];
+      let n = 0; const rejected = [];
+      FM.ai.call = async function (model, system, messages) {
+        const bad = hdApiCheck(messages);   // what api.anthropic.com answers, with a 400, before it reads the request
+        if (bad) { rejected.push(bad); throw new Error(bad); }
+        const r = replies[n++];
+        await sleep(30);
+        if (r === 'fail') throw new Error('Network error reaching Claude');   // what FM.ai.call throws once its retries are spent
+        return r;
+      };
+      FM.aiChat.reset(); FM.aiChat.show(); await sleep(150);
+      const input = document.querySelector('#ai-chat .aic-input');
+      if (!input) throw new Error('setup: the Assistant composer is not in the DOM');
+      input.value = 'make it bigger'; await FM.aiChat.send();
+      if (Math.abs(FM.evalProp(L.transform.scale, FM.time) - 1.3) > 1e-6) throw new Error('CONTROL: the first reply did not apply, so this fixture cannot see what comes after it');
+      input.value = 'a bit bigger again'; await FM.aiChat.send();   // the connection drops on this one
+      const list = document.querySelector('#ai-chat .aic-list');
+      if (!list || !/Network error/.test(list.textContent)) throw new Error('CONTROL: the failed reply did not say so in the chat');
+      input.value = 'make it gold'; await FM.aiChat.send();
+      input.value = 'make it gold please'; await FM.aiChat.send();
+      if (rejected.length || L.color !== '#ffce4a') {
+        throw new Error('after ONE Assistant reply failed (a dropped connection), ' + rejected.length + ' of the 2 messages he typed next were rejected by Claude before it read them, each showing him: ' +
+          String(rejected[0] || 'nothing applied').replace(/"/g, "'") + ' — the edit Claude made just before the failure is never answered again, so every later message fails the same way and only restarting the app brings the Assistant back');
+      }
+    } finally {
+      FM.ai.call = realCall; FM.aiKey.has = realHas; FM.ai.DRY_RUN = dry0;
+      try { FM.aiChat.hide(); FM.aiChat.reset(); } catch (e) {}
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('690 asking the Assistant or Refine to make an animated title bigger keeps its pop-in, and a keyed fade survives a setProp', { item: '690', budgetMs: 45000 }, async function () {
+    /* HUNT d. Every title the Director builds pops in: keyframed scale and opacity (js/ai-mock.js t_title, and a real builder
+       is asked for motion). "Make the title bigger" in the Assistant, or in the Director's own Refine box, arrives as
+       setProp transform.scale — and js/ai-ops.js setNumericPath assigned the number straight over the {kf:[…]} object, so the
+       animation was gone and the title just sat there at the new size. The model could not even avoid it: nothing it was shown
+       said the channel was animated. Fixed: a setProp on an animated channel moves the WHOLE animation through FM.shiftTransform
+       (the canvas drag and pinch rule) to read the value in the frame the model was shown — the playhead for the Assistant,
+       the rendered frame for Refine — and the Assistant's scene block now lists the animated channels. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    const realCall = FM.ai.call, realHas = FM.aiKey.has, realGet = FM.aiKey.get, dry0 = FM.ai.DRY_RUN, last0 = FM.ai._lastBuild;
+    let api = null;
+    const popIn = function () { return { kf: [{ t: 0, v: 0.6, e: 'easeOut' }, { t: 0.6, v: 1.06, e: 'easeOut' }, { t: 0.9, v: 1, e: 'easeInOut' }] }; };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const pid = await FM.projects.create({ name: 'HUNTd animated title', width: 1080, height: 1920 }); made.push(pid);
+      const L = FM.makeLayer('text', { name: 'HUNTd title', text: 'SUMMER SALE', x: 540, y: 800 });
+      L.start = 0; L.duration = 6;
+      L.transform.scale = popIn();
+      L.transform.opacity = { kf: [{ t: 0, v: 0, e: 'easeOut' }, { t: 0.4, v: 1, e: 'easeOut' }] };
+      FM.scene.layers.unshift(L); FM.selectLayer(L.id); FM.refreshAll(); FM.history.commit();
+      FM.setTime(2);   // he is looking at the finished title, after the pop-in
+      const before = FM.evalProp(L.transform.scale, 2);
+      const animated = function () { const s = L.transform.scale; return !!(s && Array.isArray(s.kf) && s.kf.length >= 2); };
+      const popsIn = function () { return animated() && FM.evalProp(L.transform.scale, 0) < FM.evalProp(L.transform.scale, 2) - 0.05; };
+
+      /* 1. the Assistant */
+      FM.ai.DRY_RUN = false;
+      FM.aiKey.has = function () { return true; };
+      let told = '';
+      FM.ai.call = async function (model, system, messages) {
+        const last = messages[messages.length - 1];
+        told = (Array.isArray(last.content) ? last.content : []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('\n');
+        await sleep(30);
+        return { content: [{ type: 'text', text: 'Made the title bigger.' }, { type: 'tool_use', id: 'toolu_hd_kf', name: 'emit_ops', input: { ops: [{ op: 'setProp', ref: L.id, path: 'transform.scale', value: 1.4 }] } }] };
+      };
+      FM.aiChat.reset(); FM.aiChat.show(); await sleep(150);
+      const input = document.querySelector('#ai-chat .aic-input');
+      if (!input) throw new Error('setup: the Assistant composer is not in the DOM');
+      input.value = 'make the title bigger'; await FM.aiChat.send();
+      const after = FM.evalProp(L.transform.scale, 2);
+      if (!(after > before + 0.05) && animated()) throw new Error('CONTROL: the stand-in reply changed nothing at all, so this fixture cannot see the bug');
+      if (!popsIn()) {
+        throw new Error('he asked the Assistant to make his animated title bigger, and it DELETED the title pop-in: its scale keyframes were replaced by a flat ' +
+          JSON.stringify(L.transform.scale).replace(/"/g, "'") + ', so the title no longer grows in at the start — nothing says so, and the model could not have known the size was animated');
+      }
+      if (!(after > before + 0.05)) throw new Error('the pop-in survived, but the title is no bigger where he is looking (scale ' + before + ' before, ' + after + ' after at 2 s)');
+      if (Math.abs(after - 1.4) > 0.01) throw new Error('he was shown scale 1 at the playhead and asked for 1.4, and the title now reads ' + after + ' there');
+      const seen = (function () { try { return JSON.parse(told.slice(told.indexOf('{'), told.indexOf('\n\nTHEY SAID'))); } catch (e) { return null; } })();
+      const row = seen && (seen.layers || []).find(function (x) { return x.id === L.id; });
+      if (!row) throw new Error('CONTROL: the scene block the Assistant sent could not be read back, so this cannot see what it told the model');
+      if (!row.animated || row.animated.scale !== 1 || row.animated.opacity !== 1) {
+        throw new Error('the Assistant still does not tell the model his title is animated — its row says ' + JSON.stringify(row).replace(/"/g, "'") + ' — so it cannot know a setProp there moves a pop-in');
+      }
+      FM.aiChat.hide();
+
+      /* 2. Refine, on the Director's done screen — its own call(), answered by the fake API */
+      L.transform.scale = popIn(); FM.refreshAll(); FM.history.commit();
+      FM.aiKey.get = function () { return HD_FAKE_KEY; };
+      FM.ai._lastBuild = { intent: { subject: 'SUMMER SALE' }, tasks: [], refMap: { title: L.id }, dry: false };
+      if (FM.aiBudget) FM.aiBudget.reset();
+      api = hdFakeApi(function (name) { return name === 'emit_critique' ? { assessment: 'bigger title', ops: [{ op: 'setProp', ref: 'title', path: 'transform.scale', value: 1.4 }] } : { ops: [] }; });
+      /* The playhead is on the very START of the pop-in (scale 0.6 there), but Refine is SHOWN the frame at 45% of the
+         project — 2.7 s here, scale 1 — so its 1.4 means 1.4 at rest, not 1.4 over the shrunken start (which would leave
+         the finished title at 2.33, well past what he asked for). */
+      FM.setTime(0);
+      const beat = Math.max(0.01, Math.min((FM.scene.project.duration || 6) * 0.45, (FM.scene.project.duration || 6) - 0.01));
+      await FM.ai.refine('make the title bigger');
+      if (api.seen.indexOf('emit_critique') < 0) throw new Error('CONTROL: Refine never asked the critic, so this fixture cannot see what its answer does');
+      if (!popsIn()) {
+        throw new Error('he typed make the title bigger into the Director Refine box and it DELETED the title pop-in that the Director had just built: the scale keyframes became a flat ' +
+          JSON.stringify(L.transform.scale).replace(/"/g, "'"));
+      }
+      const rest = FM.evalProp(L.transform.scale, beat);
+      if (Math.abs(rest - 1.4) > 0.01) throw new Error('Refine was shown the frame at ' + beat.toFixed(2) + ' s, where the title reads 1, and asked for 1.4 — the finished title now reads ' + rest.toFixed(3) + ' there (it measured against the playhead at 0, the shrunken start of the pop-in)');
+      api.restore(); api = null;
+
+      /* 3. the same rule for a fade: more see-through on a keyed fade-in, and quieter on a keyed volume fade — the curve is
+         moved, never flattened, and never pushed past its range (a fade-in moved down would start below 0). */
+      FM.setTime(2);
+      L.transform.opacity = { kf: [{ t: 0, v: 0, e: 'easeOut' }, { t: 0.4, v: 1, e: 'easeOut' }] };
+      L.volume = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 1, e: 'linear' }] };
+      const r3 = FM.aiOps.applyOps([{ op: 'setProp', ref: L.id, path: 'transform.opacity', value: 0.5 }, { op: 'setProp', ref: L.id, path: 'volume', value: 0.5 }], {});
+      if (r3.appliedCount !== 2) throw new Error('CONTROL: the two setProps did not both apply (' + JSON.stringify(r3.dropped).replace(/"/g, "'") + ')');
+      const op = L.transform.opacity, vol = L.volume;
+      if (!(op && Array.isArray(op.kf) && op.kf.length === 2)) throw new Error('more see-through DELETED his fade-in: opacity became ' + JSON.stringify(op).replace(/"/g, "'"));
+      if (op.kf.some(function (k) { return k.v < 0 || k.v > 1; })) throw new Error('more see-through pushed his fade-in outside 0..1: ' + JSON.stringify(op.kf).replace(/"/g, "'"));
+      if (Math.abs(FM.evalProp(op, 2) - 0.5) > 0.01 || FM.evalProp(op, 0) > 0.01) throw new Error('the fade-in no longer fades from 0 to the half he asked for: ' + JSON.stringify(op.kf).replace(/"/g, "'"));
+      if (!(vol && Array.isArray(vol.kf) && vol.kf.length === 2)) throw new Error('quieter DELETED his volume fade: volume became ' + JSON.stringify(vol).replace(/"/g, "'"));
+      if (Math.abs(FM.evalProp(vol, 2) - 0.5) > 0.01 || FM.evalProp(vol, 0) > 0.01) throw new Error('the volume fade no longer rises from silence to the half he asked for: ' + JSON.stringify(vol.kf).replace(/"/g, "'"));
+    } finally {
+      if (api) api.restore();
+      FM.ai.call = realCall; FM.aiKey.has = realHas; FM.aiKey.get = realGet; FM.ai.DRY_RUN = dry0; FM.ai._lastBuild = last0;
+      try { FM.aiChat.hide(); FM.aiChat.reset(); } catch (e) {}
+      try { FM.aiPanel.hide(); } catch (e) {}
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('690 Aspect on auto keeps his landscape project landscape — Build a scene without a key, the demo and the Director', { item: '690', budgetMs: 60000 }, async function () {
+    /* HUNT d. The Director is reached from the Add menu of the project he is IN (✨ AI Scene), and it builds into that
+       project — it is told about his existing media and told not to recreate it. With Aspect left on auto, the no-key template
+       (js/ai-templates.js pick(chips, 'aspect', '9:16')) and the demo (js/ai-mock.js plan, 1080x1920) both sent a setProject
+       that resized his canvas to 1080x1920. His landscape project — with his clip already in it — became a tall portrait
+       frame with the clip hanging off one side, and it exported that shape. The real Director was never told the canvas size
+       either, so its planner sized from the Interpreter's default 9:16. Fixed: auto is the project's own shape for the
+       template and the demo (the demo lays itself out on it), and the Director is told the canvas and has width and height
+       taken off every setProject while the project already holds something. A chosen Aspect still sizes it (the control). */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    const realHas = FM.aiKey.has, realGet = FM.aiKey.get;
+    let api = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const pid = await FM.projects.create({ name: 'HUNTd landscape', width: 1920, height: 1080 }); made.push(pid);
+      const clip = FM.makeLayer('shape', { shape: 'rect', x: 960, y: 540, shapeW: 1920, shapeH: 1080, fill: '#2050ff' });
+      clip.name = 'HUNTd my clip'; clip.start = 0; clip.duration = 10;
+      FM.scene.layers.push(clip); FM.refreshAll(); FM.history.commit();
+      const P0 = FM.scene.project;
+      if (P0.width !== 1920 || P0.height !== 1080) throw new Error('setup: the project is ' + P0.width + 'x' + P0.height + ', not 1920x1080');
+      FM.aiKey.has = function () { return false; };   // the no-key screen: Watch a demo run / Build a scene without a key
+      const openKeyScreen = async function () {
+        FM.aiPanel.hide(); await sleep(60); FM.aiPanel.show(); await sleep(200);
+        const form = document.querySelector('#ai-panel .ai-keyform');
+        if (!form || !form.classList.contains('on')) throw new Error('setup: the Director did not show its no-key screen');
+        const aspect = [...document.querySelectorAll('#ai-panel .ai-field select')].find(function (s) { return [...s.options].some(function (o) { return o.value === '16:9'; }); });
+        if (aspect && aspect.value) throw new Error('setup: the Aspect chip is ' + aspect.value + ', not auto');
+        return [...form.querySelectorAll('.ai-link')];
+      };
+      const shape = function () { return FM.scene.project.width + 'x' + FM.scene.project.height; };
+
+      /* 1. Build a scene without a key */
+      let links = await openKeyScreen();
+      const tmpl = links.find(function (b) { return /without a key/i.test(b.textContent); });
+      if (!tmpl) throw new Error('setup: no Build a scene without a key button');
+      const n0 = FM.scene.layers.length;
+      tmpl.click();
+      for (let i = 0; i < 150 && FM.scene.layers.length === n0; i++) await sleep(20);
+      await sleep(100);
+      if (FM.scene.layers.length === n0) throw new Error('CONTROL: Build a scene without a key built nothing, so this cannot see what it does to his canvas');
+      const afterTemplate = shape();
+      FM.history.undo(); await sleep(80);
+      if (shape() !== '1920x1080') throw new Error('setup: undo did not put the canvas back (' + shape() + ')');
+
+      /* 2. Watch a demo run */
+      links = await openKeyScreen();
+      const demo = links.find(function (b) { return /demo/i.test(b.textContent); });
+      if (!demo) throw new Error('setup: no Watch a demo run button');
+      demo.click();
+      for (let i = 0; i < 100 && !FM.ai.isRunning(); i++) await sleep(20);
+      for (let i = 0; i < 1000 && FM.ai.isRunning(); i++) await sleep(20);
+      await sleep(100);
+      if (FM.ai.isRunning()) throw new Error('setup: the demo run never finished');
+      if (FM.scene.layers.length <= n0) throw new Error('CONTROL: the demo built nothing, so this cannot see what it does to his canvas');
+      const afterDemo = shape();
+      /* the demo is laid onto HIS frame: its full-frame backdrop is his canvas, centred */
+      const plate = FM.scene.layers.find(function (l) { return l.type === 'shape' && l.fill === '#0e1320'; });
+      const plateFits = !!plate && plate.shapeW === FM.scene.project.width && plate.shapeH === FM.scene.project.height &&
+        Math.abs(FM.evalProp(plate.transform.x, 0) - FM.scene.project.width / 2) < 1 && Math.abs(FM.evalProp(plate.transform.y, 0) - FM.scene.project.height / 2) < 1;
+      FM.history.undo(); await sleep(80);
+      if (shape() !== '1920x1080' || FM.scene.layers.length !== n0) throw new Error('setup: undo did not take the demo back (' + shape() + ', ' + FM.scene.layers.length + ' layers)');
+
+      /* 3. the Director with a key (answered in the page, never the network): the Interpreter defaults to 9:16 and the
+         planner sends the setProject it is told to ALWAYS send, sized from that */
+      FM.aiKey.has = function () { return true; };
+      FM.aiKey.get = function () { return HD_FAKE_KEY; };
+      if (FM.aiBudget) FM.aiBudget.reset();
+      let intentAsk = '', planAsk = '';
+      api = hdFakeApi(function (name, body) {
+        const said = JSON.stringify(body.messages || []);
+        if (name === 'emit_intent') { intentAsk = said; return { subject: 'SALE', style: 'bold', palette: ['#101010', '#ff0000'], pacing: 'fast', durationSec: 6, aspect: '9:16', captions: false, mood: 'loud' }; }
+        if (name === 'emit_plan') { planAsk = said; return { heroRef: 'title', tasks: [], scaffoldOps: [
+          { op: 'setProject', width: 1080, height: 1920, fps: 30, duration: 6, background: '#101010' },
+          { op: 'addText', ref: 'title', text: 'SALE', x: 540, y: 960, fontSize: 200, color: '#ff0000', z: 0 },
+        ] }; }
+        return { ops: [] };
+      });
+      await FM.ai.generateScene('a loud sale title card', null, { skipCritic: true });
+      if (api.seen.indexOf('emit_plan') < 0) throw new Error('CONTROL: the Director never asked the planner, so this cannot see what its plan does to his canvas');
+      if (!FM.scene.layers.some(function (l) { return l.type === 'text' && l.text === 'SALE'; })) throw new Error('CONTROL: the Director built nothing');
+      const afterDirector = shape();
+      const toldCanvas = /1920x1080/.test(intentAsk) && /1920x1080/.test(planAsk);
+      FM.history.undo(); await sleep(80);
+      if (shape() !== '1920x1080') throw new Error('setup: undo did not put the canvas back after the Director (' + shape() + ')');
+      /* CONTROL: with an Aspect CHOSEN, the Director still sizes the canvas — the fix keeps auto, it does not lock the size */
+      if (FM.aiBudget) FM.aiBudget.reset();
+      await FM.ai.generateScene('a loud sale title card', { aspect: '9:16' }, { skipCritic: true });
+      const chosen = shape();
+      FM.history.undo(); await sleep(80);
+      if (chosen !== '1080x1920') throw new Error('CONTROL: with Aspect set to 9:16 the Director left the canvas ' + chosen + ' — the size can no longer be chosen at all');
+
+      const bad = [];
+      if (afterTemplate !== '1920x1080') bad.push('Build a scene without a key made it ' + afterTemplate);
+      if (afterDemo !== '1920x1080') bad.push('Watch a demo run made it ' + afterDemo);
+      if (afterDirector !== '1920x1080') bad.push('the Director with a key made it ' + afterDirector);
+      if (bad.length) {
+        throw new Error('his 1920x1080 landscape project, with his own clip already in it, was turned into a portrait one with Aspect left on auto — ' + bad.join('; ') +
+          '. His clip now hangs off the side of a tall frame and the export comes out the wrong shape');
+      }
+      if (!plateFits) throw new Error('the demo kept his landscape canvas but laid itself out for a portrait one — its backdrop is ' + (plate ? plate.shapeW + 'x' + plate.shapeH + ' at ' + FM.evalProp(plate.transform.x, 0) + ',' + FM.evalProp(plate.transform.y, 0) : 'missing') + ', not his 1920x1080 frame');
+      if (!toldCanvas) throw new Error('the Director kept his canvas but was never told its size, so its models laid the scene out for the 1080x1920 they assume');
+    } finally {
+      if (api) api.restore();
+      FM.aiKey.has = realHas; FM.aiKey.get = realGet;
+      for (let i = 0; i < 300 && FM.ai.isRunning(); i++) await sleep(20);
+      try { FM.aiPanel.hide(); } catch (e) {}
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('690 a box or title the Assistant or the Director adds without a z goes on top, where he can see it', { item: '690', budgetMs: 60000 }, async function () {
+    /* HUNT d. z is optional in the op schema, and the digest invited leaving it out ("Omit z to stack in plan order").
+       js/ai-ops.js insertAt() then put the new layer at scene.layers.length — the very BACK (the compositor draws index 0 in
+       front). The app's own Add puts a new layer on top (FM.insertLayer / FM.addAt). So "put a red box in the middle" over his
+       full-screen clip was added, reported as done, and hidden under the clip; and a Director plan written in the natural
+       order — background first, then the title — built the title BEHIND its own background. Fixed: no z means index 0, the
+       front, and the digest says so. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    const realCall = FM.ai.call, realHas = FM.aiKey.has, realGet = FM.aiKey.get, dry0 = FM.ai.DRY_RUN;
+    let api = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const pid = await FM.projects.create({ name: 'HUNTd stacking', width: 1080, height: 1920 }); made.push(pid);
+      const bg = FM.makeLayer('shape', { shape: 'rect', x: 540, y: 960, shapeW: 1080, shapeH: 1920, fill: '#2050ff' });
+      bg.name = 'HUNTd his clip'; bg.start = 0; bg.duration = 8;
+      FM.scene.layers.push(bg); FM.selectLayer(null); FM.refreshAll(); FM.history.commit();
+      FM.setTime(1);
+      const centre = function () {
+        const c = document.createElement('canvas'); c.width = 1080; c.height = 1920;
+        const ctx = c.getContext('2d'); FM.renderScene(ctx, FM.scene, FM.time);
+        return ctx.getImageData(540, 960, 1, 1).data;
+      };
+      const c0 = centre();
+      if (!(c0[2] > 200 && c0[0] < 80)) throw new Error('setup: the full-screen clip does not draw blue at the centre (' + [c0[0], c0[1], c0[2]] + ')');
+
+      /* 1. the Assistant */
+      FM.ai.DRY_RUN = false;
+      FM.aiKey.has = function () { return true; };
+      FM.ai.call = async function () {
+        await sleep(30);
+        return { content: [{ type: 'text', text: 'Put a red box in the middle.' }, { type: 'tool_use', id: 'toolu_hd_z', name: 'emit_ops', input: { ops: [{ op: 'addShape', ref: 'box', shape: 'rect', x: 540, y: 960, shapeW: 400, shapeH: 400, fill: '#ff0000' }] } }] };
+      };
+      FM.aiChat.reset(); FM.aiChat.show(); await sleep(150);
+      const input = document.querySelector('#ai-chat .aic-input');
+      if (!input) throw new Error('setup: the Assistant composer is not in the DOM');
+      input.value = 'put a red box in the middle'; await FM.aiChat.send();
+      const box = FM.scene.layers.find(function (l) { return l.type === 'shape' && l.fill === '#ff0000'; });
+      if (!box) throw new Error('CONTROL: the stand-in reply added no box, so this fixture cannot see where it goes');
+      const c1 = centre();
+      if (!(c1[0] > 200 && c1[2] < 80)) {
+        throw new Error('the Assistant said it put a red box in the middle, and it did add one, but it went in BEHIND his full-screen clip (layer ' +
+          FM.scene.layers.indexOf(box) + ' of ' + FM.scene.layers.length + ', 0 is the front) — the middle of the canvas is still ' + [c1[0], c1[1], c1[2]] + ' and he sees nothing change');
+      }
+      FM.aiChat.hide();
+      FM.history.undo(); await sleep(60);
+
+      /* 2. the Director, a plan written background-first, answered by the fake API */
+      FM.aiKey.get = function () { return HD_FAKE_KEY; };
+      if (FM.aiBudget) FM.aiBudget.reset();
+      api = hdFakeApi(function (name) {
+        if (name === 'emit_intent') return { subject: 'SALE', style: 'bold', palette: ['#101010', '#ff0000'], pacing: 'fast', durationSec: 6, aspect: '9:16', captions: false, mood: 'loud' };
+        if (name === 'emit_plan') return { heroRef: 'title', tasks: [], scaffoldOps: [
+          { op: 'addShape', ref: 'plate', shape: 'rect', x: 540, y: 960, shapeW: 1080, shapeH: 1920, fill: '#101010' },
+          { op: 'addText', ref: 'title', text: 'SALE', x: 540, y: 960, fontSize: 300, color: '#ff0000' },
+        ] };
+        return { ops: [] };
+      });
+      const res = await FM.ai.generateScene('a loud sale title card', null, { skipCritic: true });
+      if (api.seen.indexOf('emit_plan') < 0) throw new Error('CONTROL: the Director never asked the planner, so this fixture cannot see what its plan builds (' + JSON.stringify(res && res.error && res.error.message).replace(/"/g, "'") + ')');
+      const plate = FM.scene.layers.find(function (l) { return l.type === 'shape' && l.fill === '#101010'; });
+      const title = FM.scene.layers.find(function (l) { return l.type === 'text' && l.text === 'SALE'; });
+      if (!plate || !title) throw new Error('CONTROL: the Director did not build both the background and the title');
+      const pi = FM.scene.layers.indexOf(plate), ti = FM.scene.layers.indexOf(title);
+      if (ti > pi) {
+        throw new Error('the Director built its background and then its title, in plan order as the digest tells the model to, and the title went BEHIND its own full-screen background (title layer ' +
+          ti + ', background layer ' + pi + ', 0 is the front), so the scene it built has no title he can see');
+      }
+    } finally {
+      if (api) api.restore();
+      FM.ai.call = realCall; FM.aiKey.has = realHas; FM.aiKey.get = realGet; FM.ai.DRY_RUN = dry0;
+      try { FM.aiChat.hide(); FM.aiChat.reset(); } catch (e) {}
+      try { FM.aiPanel.hide(); } catch (e) {}
+      await hfCleanup(made, orig, wasOpen);
+    }
   });
 
 })();
