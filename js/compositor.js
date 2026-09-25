@@ -2436,7 +2436,54 @@ window.FM = window.FM || {};
   function easeOutCubic(p) { return 1 - Math.pow(1 - p, 3); }
   function easeOutBack(p) { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2); }
   function hexToRGB(h) { h = String(h || '#000000').replace('#', ''); if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]; return [parseInt(h.slice(0, 2), 16) || 0, parseInt(h.slice(2, 4), 16) || 0, parseInt(h.slice(4, 6), 16) || 0]; }
-  function lerpHex(a, b, f) { f = Math.max(0, Math.min(1, f)); const A = hexToRGB(a), B = hexToRGB(b); return 'rgb(' + Math.round(A[0] + (B[0] - A[0]) * f) + ',' + Math.round(A[1] + (B[1] - A[1]) * f) + ',' + Math.round(A[2] + (B[2] - A[2]) * f) + ')'; }
+  /* ═══ THE COLOURING CARD'S OPACITY, FOR TEXT (queue 690, fourth hunt) ═══════════════════════════════════════════
+   * fillPanel gives a text layer the same Opacity row as a shape, and the card's readout follows it (#FFFFFF 30%) —
+   * but only paintFillInPath, the SHAPE fill, ever read layer.fillOpacity. Every text path set its colour and filled
+   * at full strength, so the slider moved, the card said 30% and the text on the canvas and in the export did not
+   * change at all. Measured: white text at 30% still peaked at 255 of 255, where a white shape at 30% peaks at 77.
+   * It is applied exactly the way the shape fill applies it: to the FILL only, as a multiplier on whatever alpha is
+   * already there (layer opacity, a fade-in), and never to the Outline, which has its own colour and width. The
+   * shadow follows on its own, because a canvas shadow is cast by what was drawn. At 100% — every text layer that
+   * never touched the slider — nothing is changed at all, not even the alpha written back. */
+  function textFillAlpha(layer) { const v = layer.fillOpacity; return (v == null || !isFinite(v)) ? 1 : clamp01(v); }
+  function fillTextA(ctx, str, x, y, fa) {
+    if (!(fa < 1)) { ctx.fillText(str, x, y); return; }
+    const a = ctx.globalAlpha;
+    ctx.globalAlpha = a * fa; ctx.fillText(str, x, y); ctx.globalAlpha = a;
+  }
+
+  /* ═══ WHEN EACH LINE ENTERS AND LEAVES (queue 690, fourth hunt) ═══════════════════════════════════════════════════
+   * An Animate preset used to be timed from the start and end of the whole LAYER — `t - layer.start` in, and
+   * `layer.start + layer.duration - t` out. For a caption track that is the wrong clock: captions.js promises that
+   * animation works on captions for free, and it only worked on the FIRST one. With Fade in on a three-caption
+   * track, caption 1 was at 1% of its ink 0.05 s after it began and captions 2 and 3 were already at 100% — every
+   * caption after the first just popped on, in the preview and the export, and Fade out only ever ran at the end of
+   * the track. Detect speech fills ONE layer with cues, so this was every caption he would ever animate.
+   * So each line gets a CLOCK — {t0, t1} in project seconds, and a counter `n` that numbers the units for the
+   * stagger. An ordinary text layer has ONE clock, the layer's own, shared by every line: exactly the numbers it
+   * always had, unit for unit. On a caption track each live cue has its own, from where that cue enters to where it
+   * leaves (FM.captions.animSpan: never before the clip's head or after its tail, and a cue Split cut in two does
+   * not enter or leave at the cut). Stacked captions (queue 574) are several cues joined by newlines, in
+   * FM.activeCaption's order, so each paragraph belongs to one cue and each wrapped line to its paragraph
+   * (FM.textLines records which) — a caption that stacks on top of one already showing animates in on its own
+   * while the first one holds still, and its letters are staggered from its own first letter. */
+  function textClocks(layer, t, lines) {
+    const whole = { t0: layer.start, t1: layer.start + layer.duration, n: 0 };
+    const caps = layer.captions;
+    if (!Array.isArray(caps) || !caps.length) return lines.map(() => whole);
+    const lt = t - (layer.start || 0), live = [];
+    caps.forEach((c, i) => { if (c && lt >= c.start && lt < c.end && (c.text || '') !== '') live.push({ c: c, i: i }); });
+    if (!live.length) return lines.map(() => whole);
+    live.sort((a, b) => (a.c.start - b.c.start) || (a.i - b.i));   // FM.activeCaption's order, which is the order of the lines
+    const own = [];   // paragraph -> the clock of the cue it came from
+    live.forEach(o => {
+      const sp = (FM.captions && FM.captions.animSpan) ? FM.captions.animSpan(o.c, layer.duration) : { from: Math.max(0, o.c.start), to: Math.min(layer.duration, o.c.end) };
+      const ck = { t0: layer.start + sp.from, t1: layer.start + sp.to, n: 0 };
+      String(o.c.text).split('\n').forEach(() => own.push(ck));
+    });
+    const para = lines.para;   // set by FM.textLines when it wrapped; unwrapped, line i IS paragraph i
+    return lines.map((ln, li) => own[Math.max(0, Math.min(own.length - 1, para ? para[li] : li))]);
+  }
   /* ═══ ONE CHARACTER HE TYPED IS NOT ONE CODE POINT (queue 690, second hunt) ═══════════════════════════════════════
    * The animated path and the curve used to split a line with Array.from(line), which splits CODE POINTS. Most of
    * the emoji keyboard on his iPhone is several code points drawn as one picture: the Australian flag is two
@@ -2488,16 +2535,31 @@ window.FM = window.FM || {};
     const stagger = an.stagger != null ? an.stagger : 0.04;
     const fs = layer.fontSize || 96;
     const align = layer.align || 'center';
-    const tIn = t - layer.start;                       // seconds since the layer began
-    const tToEnd = (layer.start + layer.duration) - t; // seconds until the layer ends
+    const clocks = textClocks(layer, t, lines);         // when each line enters and leaves — see textClocks (queue 690)
+    const fillA = textFillAlpha(layer);                 // the Colouring card's Opacity — see fillTextA (queue 690)
     const baseAlpha = ctx.globalAlpha;                 // layer opacity already applied
     const stk = layer.stroke, sbw = stk ? (FM.evalProp(stk.width, t) || 0) : 0, scol = stk ? (FM.evalProp(stk.color, t) || '#000') : '#000', drawStroke = stk && stk.enabled && sbw > 0;
     const prevAlign = ctx.textAlign;
     ctx.textAlign = 'left';
-    const grad = FM.layerHasGradient(layer) ? layer.fillGradient : null;   // per-unit gradient sampling
+    /* THE REAL GRADIENT, NOT ONE FLAT COLOUR PER LETTER (queue 690, fourth hunt). This used to paint each unit ONE
+       colour, sampled from the two gradient colours at the unit's centre. Colouring → Gradient starts top to bottom,
+       and every letter on a line has the same centre height, so the moment any Animate preset was picked the whole
+       line came out one flat grey — measured 132 at the top of the letters and 132 at the bottom, where the still
+       text read 210 and 78 — for the layer's whole life, not only during the entrance. Left to right survived only
+       as a stepped stripe per letter, and the dragged centre, Angular and keyframed colours were ignored outright.
+       Now each unit is painted with the very gradient the still text gets (buildGradient over the same box), laid
+       over the text where that unit SETTLES — so once the entrance is over the letters are coloured exactly as they
+       are with no animation, and while a letter slides, drops or spins in it carries its own piece with it. */
+    const grad = FM.layerHasGradient(layer) ? layer.fillGradient : null;
+    let gbox = null;
+    if (grad) {   // the static branch's box, measured the same way (FM.fillBoxOf mirrors it for the drag handle)
+      let maxW = 1; lines.forEach(l => { maxW = Math.max(maxW, ctx.measureText(l).width); });
+      gbox = { x: align === 'center' ? -maxW / 2 : align === 'right' ? -maxW : 0, y: -(total + fs) / 2, w: maxW, h: total + fs };
+    }
     /* ONE UNIT'S ANIMATION AT STAGGER INDEX gi — lifted out of the flat loop below UNCHANGED (queue 904,
        textcurve) so the flat path and the curved path read the very same numbers. */
-    const animFor = (gi) => {
+    const animFor = (gi, ck) => {
+      const tIn = t - ck.t0, tToEnd = ck.t1 - t;   // seconds since this unit's clock began, and until it ends (textClocks)
       const p = durIn > 0 ? Math.min(1, Math.max(0, (tIn - gi * stagger) / durIn)) : (tIn >= gi * stagger ? 1 : 0);
       const pe = easeOutCubic(p);
       const outA = durOut > 0 ? Math.min(1, Math.max(0, tToEnd / durOut)) : 1;
@@ -2578,9 +2640,19 @@ window.FM = window.FM || {};
          wherever a mark sits right after a space, and a range running past the end draws at NaN (queue 690). */
       else if (unit === 'word') { chars.forEach((c, i) => { const sp = /^\s+$/.test(c), last = ranges[ranges.length - 1]; if (last && last.sp === sp) last[1] = i + 1; else { const r = [i, i + 1]; r.sp = sp; ranges.push(r); } }); }
       else chars.forEach((c, i) => ranges.push([i, i + 1]));
+      /* Which line each character came from, so a unit runs on its line's clock (textClocks): the curve joins the
+         lines with one space, so the count is each line's characters plus that space. Should the count ever
+         disagree with `chars`, every unit takes the first line's clock rather than a wrong one. */
+      const lineOf = [];
+      lines.forEach((ln, li) => { graphemes(ln).forEach(() => lineOf.push(li)); if (li < lines.length - 1) lineOf.push(li); });
+      const clockOf = i => clocks[lineOf.length === chars.length ? lineOf[i] : 0];
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ranges.forEach((rg, gi) => {
-        const A = animFor(gi);
+      /* The gradient exactly as the still curve gets it — drawArcLine is handed a fillStyle built over this same box
+         and each glyph reads it in its own turned frame — so picking a preset does not change the settled colours. */
+      if (grad) ctx.fillStyle = buildGradient(ctx, grad, gbox, t);
+      ranges.forEach((rg) => {
+        const ck = clockOf(rg[0]);
+        const A = animFor(ck.n++, ck);
         const i0 = rg[0], i1 = rg[1] - 1;
         const U = arcAt(((cMid[i0] - cw[i0] / 2) + (cMid[i1] + cw[i1] / 2)) / 2);
         ctx.save();
@@ -2590,16 +2662,6 @@ window.FM = window.FM || {};
         ctx.translate(A.dx, A.dy);
         if (A.rot) ctx.rotate(A.rot);
         if (A.sc !== 1 || A.scx !== 1 || A.scy !== 1) ctx.scale(A.sc * A.scx, A.sc * A.scy);
-        if (grad) {   // sampled where the unit actually sits on the arc
-          let f;
-          if (grad.type === 'radial') f = Math.hypot(U.x, U.y) / (Math.max(tw, total + fs) / 2 || 1);
-          else {
-            const ang = (grad.angle || 0) * Math.PI / 180, co = Math.cos(ang), si = Math.sin(ang);
-            const half = (Math.abs(co) * tw + Math.abs(si) * (total + fs)) / 2 || 1;
-            f = (U.x * co + U.y * si) / half / 2 + 0.5;
-          }
-          ctx.fillStyle = lerpHex(grad.c0, grad.c1, Math.max(0, Math.min(1, f)));
-        }
         const ca = Math.cos(-sign * U.a), sa = Math.sin(-sign * U.a);
         for (let i = rg[0]; i < rg[1]; i++) {
           const C = arcAt(cMid[i]), rx = C.x - U.x, ry = C.y - U.y;
@@ -2607,7 +2669,7 @@ window.FM = window.FM || {};
           ctx.translate(rx * ca - ry * sa, rx * sa + ry * ca);   // the character's place, in the unit's own turned frame
           ctx.rotate(sign * (C.a - U.a));
           if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(chars[i], 0, 0); }
-          ctx.fillText(chars[i], 0, 0);
+          fillTextA(ctx, chars[i], 0, 0, fillA);
           ctx.restore();
         }
         ctx.restore();
@@ -2615,9 +2677,9 @@ window.FM = window.FM || {};
       done();
       return;
     }
-    let gi = 0;
     lines.forEach((line, li) => {
       const yy = li * lh - total / 2;
+      const ck = clocks[li];
       let units;
       if (unit === 'line') units = [line];
       else if (unit === 'word') units = line.split(/(\s+)/).filter(s => s.length);
@@ -2626,33 +2688,21 @@ window.FM = window.FM || {};
       const sp = parseFloat(ctx.letterSpacing) || 0;   // global spacing is active; measureText over-counts one trailing gap per unit (#5)
       const lineW = widths.reduce((a, b) => a + b, 0) - (units.length ? sp : 0);
       let x = align === 'center' ? -lineW / 2 : align === 'right' ? -lineW : 0;
-      const lineLeft = x;
       units.forEach((u, ui) => {
         const w = widths[ui];
         const wDraw = Math.max(0, w - sp);   // visual width = measured minus the over-counted trailing gap; advance still uses w (= inter-unit gap) (#5)
-        const { alpha, dx, dy, sc, scx, scy, rot, outA } = animFor(gi);
+        const { alpha, dx, dy, sc, scx, scy, rot, outA } = animFor(ck.n++, ck);
         ctx.save();
         ctx.globalAlpha = baseAlpha * Math.max(0, Math.min(1, alpha)) * outA;
         ctx.translate(x + wDraw / 2 + dx, yy + dy);
         if (rot) ctx.rotate(rot);
         if (sc !== 1 || scx !== 1 || scy !== 1) ctx.scale(sc * scx, sc * scy);
-        if (grad) {   // sample the gradient at this unit's position, respecting the gradient angle
-          const cx = x + wDraw / 2, dxc = cx - (lineLeft + lineW / 2), dyc = yy;
-          let f;
-          if (grad.type === 'radial') {
-            f = Math.hypot(dxc, dyc) / (Math.max(lineW, total + fs) / 2 || 1);
-          } else {
-            const ang = (grad.angle || 0) * Math.PI / 180, co = Math.cos(ang), si = Math.sin(ang);
-            const half = (Math.abs(co) * lineW + Math.abs(si) * (total + fs)) / 2 || 1;
-            f = (dxc * co + dyc * si) / half / 2 + 0.5;
-          }
-          ctx.fillStyle = lerpHex(grad.c0, grad.c1, Math.max(0, Math.min(1, f)));
-        }
+        // the text's own gradient box, seen from where this unit settles (its centre, with no animation offset)
+        if (grad) ctx.fillStyle = buildGradient(ctx, grad, { x: gbox.x - (x + wDraw / 2), y: gbox.y - yy, w: gbox.w, h: gbox.h }, t);
         if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(u, -wDraw / 2, 0); }
-        ctx.fillText(u, -wDraw / 2, 0);
+        fillTextA(ctx, u, -wDraw / 2, 0, fillA);
         ctx.restore();
         x += w;
-        gi++;
       });
     });
     ctx.textAlign = prevAlign;
@@ -2699,7 +2749,7 @@ window.FM = window.FM || {};
       ctx.translate(R * Math.sin(a), sign * (R - R * Math.cos(a)));
       ctx.rotate(sign * a);
       if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(ch, 0, 0); }
-      ctx.fillText(ch, 0, 0);
+      fillTextA(ctx, ch, 0, 0, textFillAlpha(layer));   // the Colouring card's Opacity (queue 690)
       ctx.restore();
       s += w + sp;
     });
@@ -14626,7 +14676,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
             ctx.strokeText(line, 0, yy);
             ctx.restore();
           }
-          ctx.fillText(line, 0, yy);
+          fillTextA(ctx, line, 0, yy, textFillAlpha(layer));   // the Colouring card's Opacity (queue 690)
         });
       }
     } else if (layer.type === 'shape') {
@@ -15898,7 +15948,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       }
       return s;
     };
-    paras.forEach(para => {
+    /* WHICH PARAGRAPH EACH LINE CAME FROM (queue 690, fourth hunt), kept on the array as `lines.para`. Stacked
+       captions are one cue per paragraph, and a caption track's animation runs on each cue's own clock
+       (textClocks) — so a wrapped line has to know whose it is. Unwrapped text returns `paras` itself above, where
+       line i is paragraph i and nothing needs recording. */
+    const paraOf = [];
+    paras.forEach((para, pi) => {
+      while (paraOf.length < out.length) paraOf.push(pi - 1);
       if (para === '') { out.push(''); return; }
       // Keep the whitespace with the word it follows, so runs of spaces survive the round trip.
       const words = para.match(/\S+\s*/g) || [para];
@@ -15911,6 +15967,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       });
       out.push(trim(line));
     });
+    while (paraOf.length < out.length) paraOf.push(paras.length - 1);
+    out.para = paraOf;
     if (cache) { cache.unshift({ key: key, lines: out }); if (cache.length > 2) cache.length = 2; }
     return out;
   };

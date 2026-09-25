@@ -94433,8 +94433,11 @@
 
   /* ═══ HUNT-c (queue 690, 26 Sep, fourth hunt) — TEXT AND COLOUR ═══════════════════════════════════════════════════════
    * His brief: "go re audit, find some bugs coz theres a shit load". Four findings in text and colour, each written as a
-   * test that FAILS on the code as it stands, with a message that says what he would see. The phone taps go through
-   * tests/_cdp.py as REAL touches (realInput924) where the finger is the point. Not fixed yet. */
+   * test that FAILED on the code as it stood, with a message that says what he would see. The phone taps go through
+   * tests/_cdp.py as REAL touches (realInput924) where the finger is the point. All four are fixed — the caption
+   * clock and the gradient in js/compositor.js (textClocks, drawAnimatedText), the colour box in js/inspector.js
+   * (colorField → typeInBox), the text fill opacity in js/compositor.js (fillTextA) — and each test is now the guard
+   * that says so; the 690 tests after them hold the parts these four do not reach. */
   function hunt4cRender(sc, t) {
     const c = offscreen(sc.project.width, sc.project.height), x = c.getContext('2d');
     FM.renderScene(x, sc, t);
@@ -94461,7 +94464,7 @@
     return L;
   }
 
-  test('HUNT-c an Animate preset plays only on the FIRST caption of a caption track — every caption after it just pops on', { item: '690', budgetMs: 90000 }, async function () {
+  test('690 an Animate preset plays on EVERY caption of a caption track, not only the first', { item: '690', budgetMs: 90000 }, async function () {
     /* captions.js promises that every text control, animation included, works on a caption track for free, because the
        compositor draws the caption at the playhead through the ordinary text path. The animation half is not true:
        drawAnimatedText (js/compositor.js) times every entrance from `t - layer.start`, the start of the whole TRACK, and
@@ -94500,7 +94503,7 @@
     }
   });
 
-  test('HUNT-c tapping a colour box and typing a hex colour does nothing on the phone — the tap leaves the caret after the old colour and the box is full', { item: '690', budgetMs: 90000 }, async function () {
+  test('690 a real tap on a colour box selects the old colour, so a hex colour typed on the phone replaces it', { item: '690', budgetMs: 90000 }, async function () {
     /* colorField (js/inspector.js) is every colour in the app: Colouring's Custom row, both gradient colours, Outline,
        Shadow, every effect colour, and the colour button of the text editor. Its hex box is an <input type=text> with
        maxLength 7 that does nothing on focus. A real tap on a phone drops a CARET into the old #ffffff (at the end, or
@@ -94565,7 +94568,7 @@
     }
   });
 
-  test('HUNT-c gradient text turns one flat colour the moment an Animate preset is picked', { item: '690', budgetMs: 90000 }, async function () {
+  test('690 gradient text keeps its gradient when an Animate preset is picked', { item: '690', budgetMs: 90000 }, async function () {
     /* Colouring → Gradient on a text layer gives it the default gradient, angle 90: top to bottom, from its colour to
        near-black. The moment any Animate preset is picked the text goes through drawAnimatedText (js/compositor.js),
        which does not draw the gradient at all — it paints each character (or word, or line) ONE flat colour sampled at
@@ -94616,7 +94619,7 @@
     }
   });
 
-  test('HUNT-c the Opacity slider in a text layer’s Colouring does nothing — the card reads 30% and the text stays fully solid', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 the Opacity slider in a text layer’s Colouring fades the text, as it does a shape', { item: '690', budgetMs: 60000 }, async function () {
     /* fillPanel (js/inspector.js) gives a text layer the same Opacity row as a shape, and its readout follows it
        (#FFFFFF 30%). But only paintFillInPath — the SHAPE fill — ever reads layer.fillOpacity; the text branch of the
        compositor sets its fillStyle from layer.color and never looks at it, solid or gradient. So the slider moves, the
@@ -94655,6 +94658,154 @@
       try { FM.selectLayer(null); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {}
       try { if (wasOpen) FM.home.open(); } catch (e) {}
     }
+  });
+
+  /* The caption track the next three read: a black frame, one text layer, cues back to back or stacked. Ink is the sum of
+     the red channel inside a band of rows, so a line of a stacked caption can be read on its own. */
+  function cap690(cues, anim, over) {
+    const L = FM.makeLayer('text', Object.assign({ name: '690 captions', x: 360, y: 200, fontSize: 70, start: 0, duration: 8 }, over || {}));
+    L.text = ''; L.captions = cues; L.textAnim = Object.assign({ preset: 'fade', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 }, anim || {});
+    return L;
+  }
+  function ink690(sc, t, y0, y1) {
+    const d = hunt4cRender(sc, t), W = sc.project.width, H = sc.project.height;
+    let s = 0;
+    for (let y = Math.max(0, y0 || 0); y < Math.min(H, y1 == null ? H : y1); y++) for (let x = 0; x < W; x++) s += d[(y * W + x) * 4];
+    return s;
+  }
+
+  test('690 splitting an animated caption track keeps every caption’s own entrance and Fade out, and the cut stays invisible', { item: '690', budgetMs: 90000 }, async function () {
+    /* Once an Animate preset runs per caption (textClocks), FM.splitLayer's old rule for text — clear the head half's
+       Fade out and the tail half's entrance, so the title does not vanish across the cut — would take the animation off
+       every caption after the cut and the Fade out off every one before it. A caption track keeps its animation and only
+       the ONE cue on screen across the cut is told where it really began and ended (animFrom / animTo). Checked on real
+       pixels: every sample of the frame is the same after the split as before it, and the captions away from the cut
+       still enter and leave. The first stage is also the check that Fade out runs at the end of EACH caption. */
+    const saved = FM.scene, savedT = FM.time;
+    const P = { width: 720, height: 400, fps: 30, duration: 8, background: '#000000' };
+    try {
+      const L0 = cap690([{ start: 0, end: 2, text: 'FIRST WORDS' }, { start: 2, end: 5, text: 'SECOND WORDS' }, { start: 5, end: 8, text: 'THIRD WORDS' }], { durOut: 0.4 });
+      FM.scene = scene([L0], { project: Object.assign({}, P) });
+      const times = [0.05, 1.0, 1.9, 2.05, 3.0, 3.4, 3.5, 3.6, 4.0, 4.8, 5.05, 6.5, 7.9];
+      const at = (arr, t) => arr[times.indexOf(t)];
+      const before = times.map(t => ink690(FM.scene, t));
+      /* Per-caption timing before any split: caption 1 fades out before 2 s, caption 2 before 5 s, caption 3 fades in at 5 s. */
+      if (!(at(before, 1.9) < 0.6 * at(before, 1.0))) throw new Error('Fade out does not run at the end of caption 1: its ink 0.1 s before it ends is ' + at(before, 1.9) + ' against ' + at(before, 1.0) + ' mid-way — Fade out only runs at the end of the whole track');
+      if (!(at(before, 4.8) < 0.8 * at(before, 4.0))) throw new Error('Fade out does not run at the end of caption 2: ink ' + at(before, 4.8) + ' 0.2 s before it ends against ' + at(before, 4.0));
+      if (!(at(before, 5.05) < 0.35 * at(before, 6.5))) throw new Error('caption 3 does not fade in: ' + at(before, 5.05) + ' of ink 0.05 s after it starts against ' + at(before, 6.5) + ' settled');
+      FM.time = 3.5;
+      await FM.splitLayer(L0.id);
+      if (FM.scene.layers.length !== 2) throw new Error('setup: the caption track did not split in two');
+      const after = times.map(t => ink690(FM.scene, t));
+      const off = [];
+      times.forEach((t, i) => { const base = Math.max(before[i], after[i], 1); if (Math.abs(after[i] - before[i]) / base > 0.05) off.push('at ' + t + ' s the ink went from ' + before[i] + ' to ' + after[i]); });
+      if (off.length) throw new Error('splitting the caption track at 3.5 s changed what is on screen: ' + off.join('; ') + ' — a caption either re-entered at the cut, left at it, or lost its animation');
+      const B = FM.scene.layers.filter(l => l.id !== L0.id)[0], A = FM.scene.layers.filter(l => l.id === L0.id)[0];
+      if (!(B.textAnim.durIn > 0) || !(A.textAnim.durOut > 0)) throw new Error('the split cleared the caption track’s animation (tail durIn ' + B.textAnim.durIn + ', head durOut ' + A.textAnim.durOut + ') — every caption after the cut would pop on');
+    } finally {
+      FM.scene = saved; FM.time = savedT;
+      try { FM.selectLayer(null); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {}
+    }
+  });
+
+  test('690 a caption stacked under one already showing fades in on its own, and the one showing holds still — wrapped lines too', { item: '690', budgetMs: 60000 }, async function () {
+    /* Stacked captions (queue 574) are several live cues joined by newlines. Each paragraph is one cue's, and each WRAPPED
+       line is its paragraph's (FM.textLines records which), so when a second caption joins at 2 s its line fades in from
+       its own start while the first caption — here wrapped over two lines — stays at full strength. Timed from the whole
+       track, the new line popped on; timed from the newest cue alone, the first caption would blink out and fade back. */
+    const saved = FM.scene;
+    try {
+      const L = cap690([{ start: 0, end: 4, text: 'TOP WORDS' }, { start: 2, end: 4, text: 'UNDER' }], {}, { wrapWidth: 330 });
+      FM.scene = scene([L], { project: { width: 720, height: 400, fps: 30, duration: 8, background: '#000000' } });
+      const c = offscreen(10, 10).getContext('2d');
+      c.font = (L.italic ? 'italic ' : '') + (L.bold ? '700 ' : '') + '70px ' + (L.fontFamily || 'sans-serif');   // the text branch's own font string
+      const lines = FM.textLines(c, L, 'TOP WORDS\nUNDER');
+      if (lines.length !== 3) throw new Error('setup: the first caption was meant to wrap over two lines and the second to sit under it, got ' + lines.length + ' lines: ' + lines.join(' | '));
+      const lh = 70 * 1.15, band = k => [Math.round(200 + (k - 1) * lh - lh / 2), Math.round(200 + (k - 1) * lh + lh / 2)];
+      const read = (t, k) => ink690(FM.scene, t, band(k)[0], band(k)[1]);
+      const rows = [0, 1, 2].map(k => ({ k: k, early: read(2.05, k), settled: read(3.5, k) }));
+      if (rows.some(r => !(r.settled > 0))) throw new Error('setup: a line of the stack drew nothing once settled: ' + rows.map(r => r.settled).join(', '));
+      const held = rows.slice(0, 2).filter(r => Math.abs(r.early - r.settled) / r.settled > 0.05);
+      if (held.length) throw new Error('when the second caption joined at 2 s, the FIRST caption did not hold still: ' + held.map(r => 'its line ' + (r.k + 1) + ' read ' + Math.round(100 * r.early / r.settled) + '% of its settled ink').join(' and ') + ' 0.05 s later — it re-entered with the newcomer');
+      if (!(rows[2].early < 0.35 * rows[2].settled)) throw new Error('the stacked caption did not fade in on its own: 0.05 s after it joined it is already at ' + Math.round(100 * rows[2].early / rows[2].settled) + '% of its ink');
+    } finally {
+      FM.scene = saved;
+      try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  test('690 under an Animate preset gradient text looks like the still text once settled — top to bottom, Angular with a moved centre, Radial, and on a Curve', { item: '690', budgetMs: 60000 }, async function () {
+    /* The flat per-letter colour ignored everything but the two colours and the angle — so Angular, a dragged centre,
+       Radial and a curve came out wrong as well. (Left to right on a curve is not asked here: the STILL curve paints
+       each letter with the middle of that gradient, drawArcLine's own way, so there is nothing for the two to differ on.) Each is rendered still and then with Fade in long after
+       it has settled, and compared cell by cell over the letters: the mean brightness of the ink in an 8 × 3 grid must
+       agree to within 22 of 255 (per-letter drawing moves a glyph by a pixel or so; the old flat colours miss by 60+). */
+    const saved = FM.scene;
+    try {
+      function cells(sc) {
+        const P = sc.project, d = hunt4cRender(sc, 3), W = P.width, H = P.height;
+        const isInk = k => Math.abs(d[k] - d[k + 2]) < 40 && Math.abs(d[k] - d[k + 1]) < 40;
+        let x0 = W, x1 = -1, y0 = H, y1 = -1;
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (isInk((y * W + x) * 4)) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+        if (x1 < 0) return null;
+        const out = [];
+        for (let r = 0; r < 3; r++) for (let q = 0; q < 8; q++) {
+          const ya = y0 + Math.floor((y1 - y0 + 1) * r / 3), yb = y0 + Math.floor((y1 - y0 + 1) * (r + 1) / 3), xa = x0 + Math.floor((x1 - x0 + 1) * q / 8), xb = x0 + Math.floor((x1 - x0 + 1) * (q + 1) / 8);
+          let s = 0, n = 0;
+          for (let y = ya; y < yb; y++) for (let x = xa; x < xb; x++) { const k = (y * W + x) * 4; if (isInk(k)) { s += d[k]; n++; } }
+          out.push(n > 40 ? s / n : null);
+        }
+        return out;
+      }
+      const cases = [
+        ['top to bottom', { type: 'linear', angle: 90 }, 0],
+        ['Angular with its centre dragged right', { type: 'angular', angle: 30, ox: 0.25, oy: -0.1 }, 0],
+        ['Radial', { type: 'radial' }, 0],
+        ['top to bottom on a 70° Curve', { type: 'linear', angle: 90 }, 70]
+      ];
+      const bad = [];
+      for (const cs of cases) {
+        const mk = preset => {
+          const L = FM.makeLayer('text', { name: '690 gradient', text: 'GRADIENT', x: 450, y: 200, fontSize: 110, color: '#ffffff', start: 0, duration: 6 });
+          L.fillMode = 'gradient'; L.fillGradient = Object.assign({ enabled: true, c0: '#ffffff', c1: '#0a0c10' }, cs[1]);
+          L.textCurve = cs[2];
+          L.textAnim = { preset: preset, unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 };
+          return scene([L], { project: { width: 900, height: 400, fps: 30, duration: 6, background: '#1e40ff' } });
+        };
+        const still = cells(mk('none')), moving = cells(mk('fade'));
+        if (!still || !moving) throw new Error('setup: ' + cs[0] + ' drew no letters');
+        const spread = Math.max.apply(null, still.filter(v => v != null)) - Math.min.apply(null, still.filter(v => v != null));
+        if (!(spread > 50)) throw new Error('CONTROL: the still ' + cs[0] + ' gradient barely varies over the letters (' + Math.round(spread) + '), so this comparison cannot see a flattened one');
+        let worst = 0, where = -1;
+        still.forEach((v, i) => { if (v != null && moving[i] != null && Math.abs(v - moving[i]) > worst) { worst = Math.abs(v - moving[i]); where = i; } });
+        if (worst > 22) bad.push(cs[0] + ': cell ' + where + ' reads ' + Math.round(still[where]) + ' still and ' + Math.round(moving[where]) + ' animated');
+      }
+      if (bad.length) throw new Error('with Fade in picked, long after it has finished, the gradient text is not coloured like the still text — ' + bad.join('; '));
+    } finally {
+      FM.scene = saved;
+      try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  test('690 the Colouring Opacity holds under an Animate preset and on a Curve, and leaves the Outline solid', { item: '690', budgetMs: 60000 }, async function () {
+    /* The HUNT test reads the still, straight text. The same Opacity has to reach the other three ways text is drawn —
+       animated, curved, and both — and, as on a shape, it fades the FILL only: a red Outline stays red at full strength
+       while the white letters inside it drop to 30%. Green and blue come only from the white fill, so their peak says
+       how strongly the fill is drawn (about 77 at 30%), and a pure red pixel says the Outline is still solid. */
+    const bad = [];
+    const P = { width: 900, height: 400, fps: 30, duration: 6, background: '#000000' };
+    for (const cs of [['still', 'none', 0], ['with Fade in', 'fade', 0], ['on a Curve', 'none', 60], ['with Fade in on a Curve', 'fade', 60]]) {
+      const L = FM.makeLayer('text', { name: '690 opacity', text: 'HELLO', x: 450, y: 200, fontSize: 150, color: '#ffffff', start: 0, duration: 6 });
+      L.fillOpacity = 0.3; L.textCurve = cs[2];
+      L.textAnim = { preset: cs[1], unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 };
+      L.stroke = { enabled: true, width: 6, color: '#ff0000', position: 'outside' };
+      const d = hunt4cRender(scene([L], { project: Object.assign({}, P) }), 3);
+      let gPeak = 0, solidRed = 0;
+      for (let k = 0; k < d.length; k += 4) { if (d[k + 1] > gPeak) gPeak = d[k + 1]; if (d[k] > 240 && d[k + 1] < 20) solidRed++; }
+      if (!(solidRed > 200)) bad.push(cs[0] + ': the red Outline is not drawn solid (' + solidRed + ' full-red pixels)');
+      if (!(gPeak > 40 && gPeak < 120)) bad.push(cs[0] + ': the letters peak at ' + gPeak + ' of 255 where 30% of white is about 77');
+    }
+    if (bad.length) throw new Error('text at 30% fill Opacity with a red Outline — ' + bad.join('; '));
   });
 
 })();

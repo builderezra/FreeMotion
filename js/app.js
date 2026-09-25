@@ -4604,8 +4604,15 @@ window.FM = window.FM || {};
      * following the HEAD half — which has just had its keyframes truncated at the cut and therefore
      * stops moving. Both halves are stamped, so `!p.splitOf` stays the cheap gate in FM.parentAt. */
     { const lineage = layer.splitOf || layer.id; layer.splitOf = lineage; B.splitOf = lineage; }
-    if (layer.textAnim) layer.textAnim.durOut = 0;
-    if (B.textAnim) { B.textAnim.durIn = 0; B.textAnim.stagger = 0; }
+    /* A CAPTION TRACK IS THE EXCEPTION (queue 690, fourth hunt). Its animation runs per CUE (FM.captions.animSpan),
+       so clearing the whole layer's durIn / durOut would take the entrance off every caption after the cut and the
+       exit off every caption before it. Only the ONE cue on screen across the cut must not leave or re-enter
+       there — that is marked on the cue itself below, and every other caption keeps its animation. */
+    const capTrack = Array.isArray(layer.captions) && layer.captions.length > 0;
+    if (!capTrack) {
+      if (layer.textAnim) layer.textAnim.durOut = 0;
+      if (B.textAnim) { B.textAnim.durIn = 0; B.textAnim.stagger = 0; }
+    }
     if (Array.isArray(layer.captions)) {
       // captions use LOCAL time (t − layer.start): re-base B's segments to its new start and trim A's to its new length
       const orig = layer.captions;
@@ -4614,8 +4621,22 @@ window.FM = window.FM || {};
          retuning the tail's blur retuned the head's, and "Apply to the whole track" emptied both (#912 audit).
          B is already a deep clone, but its captions are rebuilt from the ORIGINAL cues here, so it needs its own. */
       const own = c => JSON.parse(JSON.stringify(c, FM.jsonReplacer));   // the same copy cloneLayer and undo make
-      B.captions = orig.map(c => ({ ...own(c), start: c.start - into, end: c.end - into })).filter(c => c.end > 0.01).map(c => ({ ...c, start: Math.max(0, c.start) }));
-      layer.captions = orig.filter(c => c.start < into - 0.01).map(c => ({ ...own(c), end: Math.min(c.end, into) }));
+      /* Where each cue's animation REALLY runs, asked of the ORIGINAL clip (origDur — `layer.duration` is already the
+         head half's). Each half then records only what its own edges would get wrong: the cue cut in two gets
+         `animFrom` on the tail half (it began before the cut) and `animTo` on the head half (it ends after it); an
+         older mark is carried across, shifted into the tail half's time; every other cue carries none. */
+      const span = orig.map(c => (FM.captions && FM.captions.animSpan) ? FM.captions.animSpan(c, origDur) : { from: Math.max(0, c.start), to: Math.min(origDur, c.end) });
+      const mark = (o, sp, shift, D) => {
+        delete o.animFrom; delete o.animTo;
+        const f = sp.from - shift, e = sp.to - shift;
+        if (Math.abs(f - Math.max(0, o.start)) > 1e-3) o.animFrom = f;
+        if (Math.abs(e - Math.min(D, o.end)) > 1e-3) o.animTo = e;
+        return o;
+      };
+      B.captions = orig.map((c, i) => ({ c: { ...own(c), start: c.start - into, end: c.end - into }, i: i })).filter(o => o.c.end > 0.01)
+        .map(o => mark({ ...o.c, start: Math.max(0, o.c.start) }, span[o.i], into, B.duration));
+      layer.captions = orig.map((c, i) => ({ c: c, i: i })).filter(o => o.c.start < into - 0.01)
+        .map(o => mark({ ...own(o.c), end: Math.min(o.c.end, into) }, span[o.i], 0, into));
     }
     // DIVIDE keyframes at the split (times are absolute): A keeps t ≤ split, B keeps t ≥ split, each
     // getting a boundary keyframe holding the interpolated value so the ENDPOINT value is seamless
