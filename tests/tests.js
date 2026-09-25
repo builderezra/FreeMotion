@@ -90036,5 +90036,273 @@
     }
   });
 
+  /* ═══ 690 — HUNT-b: EFFECTS AND FILTERS, with a real finger where the finger is the point ═════════════════════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". Four findings in adding, picking, presets and copying
+   * looks, each written as a test that FAILS on the code as it stands, with a message that says what he would see. The
+   * browser tests run at 380 in the effects SHEET (multi-pick, numbered badges) — the mode his phone uses — and drive the
+   * taps and holds through tests/_cdp.py as trusted touches. */
+  function hb2Layer(name, start, dur, fill) {
+    return FM.makeLayer('shape', { name: name, shape: 'rect', x: 540, y: 700, shapeW: 300, shapeH: 300, fill: fill || '#c05030', start: start || 0, duration: dur || 4 });
+  }
+  async function hb2OpenBrowser(layer, cat) {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    FM.selectLayer(layer.id); await sleep(250);
+    FM.fxBrowser.open(FM.layerById(FM.scene, layer.id)); await sleep(700);
+    const root = document.getElementById('fx-browser');
+    if (!FM.fxBrowser.isOpen() || !root) throw new Error('setup: the effects browser did not open');
+    if (!root.classList.contains('fxb-sheet')) throw new Error('setup: at phone width the effects browser did not open as the multi-pick sheet');
+    if (cat) { FM.fxBrowser._openCategory(cat); await sleep(500); }
+    return root;
+  }
+  function hb2Reach(elm, what) {
+    if (!elm) throw new Error('setup: no ' + what + ' on screen');
+    const r = elm.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+    if (!(r.width > 0 && r.height > 0) || x < 0 || x > 370 || y < 0 || y > 740) throw new Error('setup: the ' + what + ' is at ' + Math.round(x) + ',' + Math.round(y) + ', out of reach of real input');
+    return { x: x, y: y, r: r };
+  }
+  function hb2Say(msg) { return String(msg).replace(/"/g, "'"); }   // runtime names go into these messages; the suite forbids a double quote in one
+  function hb2TopView(root) { const v = root.querySelectorAll('.fxb-catview'); return v.length ? v[v.length - 1] : null; }
+  function hb2Keep(keys) { const o = {}; keys.forEach(k => { try { o[k] = localStorage.getItem(k); } catch (e) { o[k] = null; } }); return o; }
+  function hb2Restore(o) { Object.keys(o).forEach(k => { try { if (o[k] == null) localStorage.removeItem(k); else localStorage.setItem(k, o[k]); } catch (e) {} }); }
+
+  test('HUNT-b holding an effect to see its presets adds it instead and shuts the browser, because the lift lands on the Default row that opened under his finger', { item: '690', budgetMs: 90000 }, async function () {
+    /* The browser tells him how to reach presets: "Tip: hold any effect to browse its presets". attachLongPress opens the
+       presets sheet after 420 ms WHILE THE FINGER IS STILL DOWN, and the sheet covers the tile. When he lifts, the
+       browser turns the touch into a click and hit-tests it where the finger is now — on the sheet, whose first row is
+       "Default" (addEffect(reg.id)). So the hold that was meant to LOOK at presets adds the effect at its defaults, closes
+       the browser and drops any numbered picks with it. guardedAdd's _lpFired only swallows a click aimed at the TILE;
+       this click never goes there. A mouse cannot do this (its click goes to the common ancestor of press and release),
+       which is why it only shows under a finger. The tile held is chosen by measuring where the sheet puts Default, so the
+       test aims at the case rather than hoping a layout lines up. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, keep = hb2Keep(['fm.fx.recents', 'fm.fx.presetHint']);
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await huntBScene(() => [hb2Layer('HB2 hold')]);
+          try { localStorage.setItem('fm.fx.presetHint', '1'); } catch (e) {}
+          const root = await hb2OpenBrowser(L[0], 'blur');
+          const cat = hb2TopView(root);
+          /* Find a tile that sits where its OWN presets sheet will put the Default row. */
+          let aim = null;
+          const tiles = [].slice.call(cat.querySelectorAll('.fxb-tile[data-fxid]'));
+          for (let i = 0; i < tiles.length && !aim; i++) {
+            const t = tiles[i], r = t.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+            if (!(r.height > 0) || cy < 0 || cy > 740 || cx > 370) continue;
+            FM._fxOpenPresets(FM.fxRegistry.get(t.dataset.fxid)); await sleep(120);
+            const pv = hb2TopView(root), def = pv && pv !== cat ? pv.querySelector('.fxp-row') : null;
+            const d = def && def.getBoundingClientRect();
+            if (pv && pv !== cat) {
+              const back = pv.querySelector('.fxb-back');   // closed like a tap (press, then click); removed outright if a fix swallows even that
+              if (back) { back.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'mouse' })); back.click(); }
+              await sleep(80);
+              if (pv.isConnected) pv.remove();
+            }
+            if (d && cy > d.top + 6 && cy < d.bottom - 6 && cx > d.left + 6 && cx < d.right - 6) aim = { id: t.dataset.fxid, x: cx, y: cy };
+          }
+          if (!aim) throw new Error('setup: no Blur tile on screen sits under the Default row of its own presets sheet — the layout moved, so re-aim this test');
+          if (hb2TopView(root) !== cat) throw new Error('setup: a measuring presets sheet was left open');
+          const label = FM.fxRegistry.get(aim.id).label;
+          const n0 = (FM.scene.layers[0].effects || []).length;
+          let sheetSeen = false;
+          const mo = new MutationObserver(() => { if (root.querySelector('.fxp-list')) sheetSeen = true; });
+          mo.observe(root, { childList: true, subtree: true });
+          try {
+            await realInput924([{ t: 'touchStart', x: aim.x, y: aim.y, ms: 650 }, { t: 'touchEnd', x: aim.x, y: aim.y, ms: 0 }], 'holding ' + label);
+            await sleep(700);
+          } finally { mo.disconnect(); }
+          /* CONTROL: the real hold did what a hold is for — it opened the presets sheet while the finger was down. */
+          if (!sheetSeen) throw new Error('CONTROL: a 650 ms real hold on ' + label + ' never opened its presets sheet — the hold did not register, so this cannot see the bug');
+          const fx = (FM.scene.layers[0].effects || []).map(e => (FM.fxRegistry.get(e.type) || {}).label || e.type);
+          const added = fx.length > n0, closed = !FM.fxBrowser.isOpen();
+          const sheetUp = !closed && !!root.querySelector('.fxp-list');
+          if (added || closed || !sheetUp) {
+            throw new Error(hb2Say('he held ' + label + ' to look at its presets and let go: ' +
+              (added ? label + ' was ADDED to his layer at its default settings (' + fx.join(', ') + ')' : 'nothing was added') +
+              (closed ? ' and the effects browser SHUT' : (sheetUp ? '' : ' and the presets sheet was gone')) +
+              ' — the tap the browser makes from his lift lands on the Default row that had just opened under his finger, so the hold he is told to use for browsing presets adds the effect instead, and would throw away anything he had already picked'));
+          }
+        });
+      }, 380);
+    } finally {
+      try { FM.fxBrowser.close(); } catch (e) {}
+      hb2Restore(keep);
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  test('HUNT-b picked effects are thrown away when he adds one from a presets sheet', { item: '690', budgetMs: 90000 }, async function () {
+    /* Queue 389 made every exit from the browser mean Done — the X, the backdrop and the Visual/Filters/Audio switch all
+       add the numbered picks, because his report was eight badges on screen and "The effects selected here still don't do
+       anything at allllll". A preset row is the exit that was missed: presetRow's click calls addEffect(reg.id, preset),
+       whose non-quiet path calls FM.fxBrowser.close(), and close() empties _picked. So picking Gaussian Blur and Zoom
+       Blur, then holding Shake and choosing one of its presets, lands ONLY the Shake. The picks are made with real taps
+       and the preset row is tapped for real; the presets sheet is opened through the seam so this measures the preset
+       row alone and not the hold (which has its own test above). */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, keep = hb2Keep(['fm.fx.recents', 'fm.fx.presetHint']);
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await huntBScene(() => [hb2Layer('HB2 picks')]);
+          try { localStorage.setItem('fm.fx.presetHint', '1'); } catch (e) {}
+          const root = await hb2OpenBrowser(L[0], 'blur');
+          const cat = hb2TopView(root);
+          for (const id of ['blur', 'zoomblur']) {
+            const p = hb2Reach(cat.querySelector('.fxb-tile[data-fxid="' + id + '"]'), (FM.fxRegistry.get(id) || {}).label + ' tile');
+            await realInput924(huntBTap(p.x, p.y), 'picking ' + id); await sleep(350);
+          }
+          /* CONTROL: both real taps picked, in order, and the badges say so. */
+          if (FM._fxPicks().join(',') !== 'blur,zoomblur') throw new Error('CONTROL: two real taps did not pick Gaussian Blur then Zoom Blur (picks: ' + FM._fxPicks().join(', ') + ')');
+          const badge = cat.querySelector('.fxb-tile[data-fxid="zoomblur"] .fxb-pick');
+          if (!badge || badge.textContent !== '2') throw new Error('CONTROL: Zoom Blur does not carry the badge 2 after being picked second');
+          const shake = FM.fxRegistry.get('shake');
+          if (!(FM.effectPresets.for('shake').shipped.length)) throw new Error('setup: Shake has no shipped presets to pick from');
+          FM._fxOpenPresets(shake); await sleep(500);
+          const pv = hb2TopView(root);
+          if (!pv || pv === cat) throw new Error('setup: the Shake presets sheet did not open');
+          const rows = [].slice.call(pv.querySelectorAll('.fxp-row'));
+          const row = rows[1];   // [0] is Default; [1] is the first real preset
+          if (!row) throw new Error('setup: the Shake presets sheet has no preset row after Default');
+          const name = ((row.querySelector('.fxp-name') || {}).firstChild || {}).textContent || 'a preset';
+          row.scrollIntoView({ block: 'center' }); await sleep(250);
+          const p = hb2Reach(row, 'Shake preset row');
+          await realInput924(huntBTap(p.x, p.y), 'tapping a Shake preset'); await sleep(700);
+          const types = (FM.scene.layers[0].effects || []).map(e => e.type);
+          /* CONTROL: the preset tap itself did something — Shake landed, or it was picked. */
+          if (types.indexOf('shake') < 0 && FM._fxPicks().indexOf('shake') < 0) throw new Error('CONTROL: a real tap on the ' + name + ' preset neither added Shake nor picked it');
+          const kept = id => types.indexOf(id) >= 0 || (FM.fxBrowser.isOpen() && FM._fxPicks().indexOf(id) >= 0);
+          const lost = ['blur', 'zoomblur'].filter(id => !kept(id)).map(id => FM.fxRegistry.get(id).label);
+          if (lost.length) {
+            throw new Error(hb2Say('he picked Gaussian Blur and Zoom Blur (numbered 1 and 2), then held Shake and tapped its ' + String(name).trim() + ' preset: the layer got only ' +
+              (types.map(t => (FM.fxRegistry.get(t) || {}).label || t).join(', ') || 'nothing') + (FM.fxBrowser.isOpen() ? '' : ' and the browser closed') +
+              ' — ' + lost.join(' and ') + ' were thrown away without a word. The X, Done and the tabs all add his picks; a preset row is the one way out that still drops them'));
+          }
+        });
+      }, 380);
+    } finally {
+      try { FM.fxBrowser.close(); } catch (e) {}
+      hb2Restore(keep);
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  test('HUNT-b an animated effect put on a clip that starts later does not animate there, by Copy and Paste or by a look + animations preset', { item: '690', budgetMs: 60000 }, async function () {
+    /* Keyframe times are ABSOLUTE project time (scene.js says so above shiftLayerKeyframes), so anything that moves an
+       animation to another clip has to re-anchor it by the difference in start. Paste look does (applyStyle's dt) and the
+       one-effect presets do (effectPresets.capture / makeInstance). Two paths do not:
+       · the effect clipboard — Copy / Paste under the stack and Copy effect / Paste in each row's ⋯ (FM.fxClipboard) —
+         lands the keyframes at the SOURCE clip's times;
+       · "Save look + animations" (FM.layerPresets) re-anchors the transform with shiftKf and stores `effects` raw, so the
+         preset's own name is half true: the rotation arrives on time and the blur beside it does not.
+       On a clip that starts after the source's animation has finished, the effect just sits at its last value — his blur-in
+       is a flat full blur. Driven through the real Copy and Paste buttons; the preset through its store, which is what the
+       Save look + animations button and its row call. The rotation in the same preset is the CONTROL: it proves this test
+       sees a re-anchored animation when there is one. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, keep = hb2Keep(['fm.fxclip', 'fm.layerpresets']);
+    const PRESET = 'HUNT-b blur in';
+    try {
+      const A = hb2Layer('HB2 source', 0, 3, '#c05030');
+      const blurIn = FM.fxRegistry.makeInstance('blur');
+      blurIn.params.radius = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 20, e: 'linear' }] };
+      A.effects = [blurIn];
+      A.transform.rotation = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 90, e: 'linear' }] };
+      const B = hb2Layer('HB2 pasted', 3, 3, '#3050c0');
+      const C = hb2Layer('HB2 preset', 3, 3, '#30a050');
+      await huntBScene(() => [A, B, C]);
+      const radiusOf = (layer, t) => { const l = FM.layerById(FM.scene, layer.id), fx = (l.effects || []).filter(e => e.type === 'blur')[0]; return fx ? FM.evalProp(fx.params.radius, t) : NaN; };
+      const kfTimes = (layer) => { const l = FM.layerById(FM.scene, layer.id), fx = (l.effects || []).filter(e => e.type === 'blur')[0]; const r = fx && fx.params.radius; return r && r.kf ? r.kf.map(k => +k.t.toFixed(2)).join(' and ') + ' s' : 'none'; };
+      /* CONTROL on the source: the blur really does animate on A, 0 at its start and 20 a second in. */
+      if (Math.abs(radiusOf(A, 0) - 0) > 0.5 || Math.abs(radiusOf(A, 1) - 20) > 0.5) throw new Error('setup: the source blur does not animate 0 to 20 over its first second');
+      const bad = [];
+      /* 1. Copy under A's stack, Paste under B's — the real buttons. */
+      FM.selectLayer(A.id); await sleep(200);
+      FM.inspector.openCategory('effects'); await sleep(400);
+      const copyBtn = [].slice.call(document.querySelectorAll('#inspector-panel .fx-stack-tools .fx-act')).filter(b => /^Copy$/.test(b.textContent.trim()))[0];
+      if (!copyBtn) throw new Error('setup: no Copy button under the effects stack');
+      copyBtn.click(); await sleep(200);
+      FM.selectLayer(B.id); await sleep(200);
+      FM.inspector.openCategory('effects'); await sleep(400);
+      const pasteBtn = [].slice.call(document.querySelectorAll('#inspector-panel .fx-stack-tools .fx-act')).filter(b => /^Paste/.test(b.textContent.trim()))[0];
+      if (!pasteBtn || pasteBtn.disabled) throw new Error('setup: the Paste button under B is missing or greyed after Copy');
+      pasteBtn.click(); await sleep(300);
+      if (!(FM.layerById(FM.scene, B.id).effects || []).some(e => e.type === 'blur')) throw new Error('CONTROL: Paste did not put the blur on the later clip at all');
+      const b0 = radiusOf(B, 3), b1 = radiusOf(B, 4);
+      if (Math.abs(b0 - 0) > 0.5 || Math.abs(b1 - 20) > 0.5) bad.push('Copy then Paste onto a clip starting at 3 s gave radius ' + b0.toFixed(0) + ' on its first frame and ' + b1.toFixed(0) + ' one second in (keyframes at ' + kfTimes(B) + ', before that clip exists)');
+      /* 2. Save look + animations from A, apply it to C. */
+      FM.layerPresets.save(PRESET, FM.layerById(FM.scene, A.id));
+      FM.layerPresets.apply(PRESET, FM.layerById(FM.scene, C.id)); await sleep(200);
+      const Cl = FM.layerById(FM.scene, C.id);
+      /* CONTROL: the same preset DID re-anchor the rotation onto C, so a re-anchored animation is visible to this test. */
+      if (Math.abs(FM.evalProp(Cl.transform.rotation, 3) - 0) > 0.5 || Math.abs(FM.evalProp(Cl.transform.rotation, 4) - 90) > 0.5) throw new Error('CONTROL: the look + animations preset did not re-anchor its own rotation onto the later clip either, so this cannot tell the blur apart');
+      const c0 = radiusOf(C, 3), c1 = radiusOf(C, 4);
+      if (Math.abs(c0 - 0) > 0.5 || Math.abs(c1 - 20) > 0.5) bad.push('Save look + animations applied to a clip starting at 3 s turned its rotation on time but gave the blur ' + c0.toFixed(0) + ' on the first frame and ' + c1.toFixed(0) + ' one second in (keyframes at ' + kfTimes(C) + ')');
+      if (bad.length) throw new Error('his blur-in (0 to 20 over the first second) moved onto a later clip does not animate there — it sits at full blur from the first frame: ' + bad.join('; '));
+    } finally {
+      try { FM.layerPresets.remove(PRESET); } catch (e) {}
+      hb2Restore(keep);
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  test('HUNT-b a picked effect loses its number when he goes back to its category or searches for it, and tapping it again un-picks it', { item: '690', budgetMs: 90000 }, async function () {
+    /* paintPicks() — the one function that draws the 1, 2, 3 badges — runs on open(), on a pick and on Clear. The
+       category views (openCategory, and its ‹ › arrows), the search results (rebuild) and the faves screen all build
+       FRESH tiles and never call it. So a picked effect shows no number the next time he sees it: pick Gaussian Blur,
+       page to Warping and back, and its tile is bare while the bar still says Add 1 effect. A bare tile reads as not
+       picked, he taps it — and togglePick REMOVES it. That is one way his picks "do nothing". Every tap here is real. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, keep = hb2Keep(['fm.fx.recents', 'fm.fx.presetHint']);
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await huntBScene(() => [hb2Layer('HB2 badges')]);
+          try { localStorage.setItem('fm.fx.presetHint', '1'); } catch (e) {}
+          const root = await hb2OpenBrowser(L[0], 'blur');
+          const tileIn = (view, id) => view && view.querySelector('.fxb-tile[data-fxid="' + id + '"]');
+          const badgeOf = t => { const b = t && t.querySelector('.fxb-pick'); return b ? b.textContent : ''; };
+          const titleOf = v => ((v && v.querySelector('.fxb-catview-title')) || {}).textContent || '';
+          let p = hb2Reach(tileIn(hb2TopView(root), 'blur'), 'Gaussian Blur tile');
+          await realInput924(huntBTap(p.x, p.y), 'picking Gaussian Blur'); await sleep(350);
+          /* CONTROL: the real tap picked it and the tile shows 1. */
+          if (FM._fxPicks().join(',') !== 'blur' || badgeOf(tileIn(hb2TopView(root), 'blur')) !== '1') throw new Error('CONTROL: a real tap on Gaussian Blur did not pick it with the badge 1 (picks: ' + FM._fxPicks().join(', ') + ')');
+          const bad = [];
+          /* 1. Page to the next category and back with the arrows under the grid. */
+          const navOf = (v, i) => { const n = v && v.querySelectorAll('.fxb-catnav .fxb-back'); return n && n[i]; };
+          p = hb2Reach(navOf(hb2TopView(root), 1), 'next-category arrow');
+          await realInput924(huntBTap(p.x, p.y), 'the next-category arrow'); await sleep(500);
+          const away = titleOf(hb2TopView(root));
+          if (!away || away === 'Blur') throw new Error('CONTROL: the real tap on the next-category arrow did not leave Blur');
+          p = hb2Reach(navOf(hb2TopView(root), 0), 'previous-category arrow');
+          await realInput924(huntBTap(p.x, p.y), 'the previous-category arrow'); await sleep(500);
+          if (titleOf(hb2TopView(root)) !== 'Blur') throw new Error('CONTROL: the previous-category arrow did not come back to Blur (on ' + titleOf(hb2TopView(root)) + ')');
+          if (FM._fxPicks().join(',') !== 'blur') throw new Error('CONTROL: paging categories changed the picks themselves (' + FM._fxPicks().join(', ') + ')');
+          const back = tileIn(hb2TopView(root), 'blur');
+          if (badgeOf(back) !== '1') bad.push('after paging to ' + away + ' and back, the Gaussian Blur tile shows ' + (badgeOf(back) ? 'the number ' + badgeOf(back) : 'NO number') + ' while the bar still says ' + ((root.querySelector('.fxb-commit-go') || {}).textContent || '?'));
+          /* 2. Out to the main grid, and search for it. */
+          const view = hb2TopView(root); const bk = view && view.querySelector('.fxb-back'); if (bk) bk.click(); await sleep(300);
+          const sb = root.querySelector('.fxb-search-btn'); if (!sb) throw new Error('setup: no search button');
+          sb.click(); await sleep(200);
+          const si = root.querySelector('.fxb-search-input');
+          si.value = 'gaussian'; si.dispatchEvent(new Event('input', { bubbles: true })); await sleep(500);
+          const found = root.querySelector('.fxb-search-grid .fxb-tile[data-fxid="blur"]');
+          if (!found) throw new Error('setup: searching gaussian did not find Gaussian Blur');
+          if (badgeOf(found) !== '1') bad.push('searching for it, the Gaussian Blur result shows ' + (badgeOf(found) ? 'the number ' + badgeOf(found) : 'NO number'));
+          if (bad.length) {
+            /* …and what a bare tile invites: he taps it to pick it. */
+            p = hb2Reach(found, 'Gaussian Blur search result');
+            await realInput924(huntBTap(p.x, p.y), 'tapping the bare Gaussian Blur result'); await sleep(400);
+            throw new Error(hb2Say('he picked Gaussian Blur (badge 1) and it is still picked, but ' + bad.join('; ') + ' — so it looks un-picked, and tapping it again, as he would, ' +
+              (FM._fxPicks().indexOf('blur') < 0 ? 'UN-PICKED it (the bar now ' + (root.querySelector('.fxb-commit.hidden') ? 'is gone' : 'says ' + (root.querySelector('.fxb-commit-go') || {}).textContent) + ') and nothing he chose would be added' : 'left the picks as ' + FM._fxPicks().join(', '))));
+          }
+        });
+      }, 380);
+    } finally {
+      try { FM.fxBrowser.close(); } catch (e) {}
+      hb2Restore(keep);
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
 
 })();
