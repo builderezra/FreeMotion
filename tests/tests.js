@@ -50011,8 +50011,10 @@
       const hooks = [
         ['../js/history.js', /if \(cb\) FM\.collab\.beforeSnap\(\)/, 'history.commit → beforeSnap'],
         ['../js/history.js', /if \(cb\) FM\.collab\.afterCommit\(\)/, 'history.commit → afterCommit'],
-        ['../js/history.js', /undo\(\) \{ if \(FM\.collab && FM\.collab\.undoActive && FM\.collab\.undoActive\(\)\) return FM\.collab\.undo\(\)/, 'history.undo delegates'],
-        ['../js/history.js', /redo\(\) \{ if \(FM\.collab && FM\.collab\.undoActive && FM\.collab\.undoActive\(\)\) return FM\.collab\.redo\(\)/, 'history.redo delegates'],
+        /* queue 690 (sixth hunt): the delegation now comes AFTER the open text card's flush — which is what makes ↶ with
+           the card open take back the typing in a session too — and still returns before the snapshot stack is touched. */
+        ['../js/history.js', /undo\(\) \{[^\n]*?if \(FM\.collab && FM\.collab\.undoActive && FM\.collab\.undoActive\(\)\) \{ const ok = FM\.collab\.undo\(\);[^\n]*?return ok; \}/, 'history.undo delegates'],
+        ['../js/history.js', /redo\(\) \{[^\n]*?if \(FM\.collab && FM\.collab\.undoActive && FM\.collab\.undoActive\(\)\) \{ const ok = FM\.collab\.redo\(\);[^\n]*?return ok; \}/, 'history.redo delegates'],
         ['../js/history.js', /FM\.collab\.undoActive\(\)\);\s*\n\s*const canU = collabUndo/, 'history.syncButtons asks collab'],
         ['../js/history.js', /if \(FM\.collab && FM\.collab\.onReset\) FM\.collab\.onReset\(\)/, 'history.reset → onReset'],
         ['../js/storage.js', /flushSync\(\) \{ if \(FM\.collab && FM\.collab\.active\) FM\.collab\.beforeFlush\(\)/, 'storage.flushSync → beforeFlush'],
@@ -97480,7 +97482,10 @@
     return 'a real mouse';
   }
 
-  /* HUNT-d 1 — AFTER SHARING STOPS, UNDO TAKES BACK AN EDIT FROM THE SESSION, NOT THE ONE HE JUST MADE.
+  /* 690 (HUNT-d 1) — AFTER SHARING STOPS, UNDO TAKES BACK AN EDIT FROM THE SESSION, NOT THE ONE HE JUST MADE. Fixed: a
+   * stopped session goes on RECORDING what he does (collab-session.js pushLocal, applied to its own base, sent nowhere),
+   * history.commit reaches it while undo is still handed to it, and its undo is applied locally rather than through the
+   * dead host (whose leases would refuse it). The finding, as measured:
    * collab-core.js keeps undo delegated to the stopped session after Stop sharing (C.detach leaves `undoHandover` on, by
    * design, §10.5), and the guest's session stays attached after the owner ends it. But history.commit only hands a
    * commit to collab while `C.active` (the owner is detached, so false), and the guest's pushLocal returns at once on an
@@ -97488,7 +97493,7 @@
    * last SESSION step: it reverts an edit made during the session, silently, and the edit he has just made can never be
    * undone until he opens another project. Measured on v16.99: the owner renamed Gamma after stopping, pressed ↶, and
    * Alpha lost the name he gave it during the session while Gamma kept its new one; the same on the guest's copy. */
-  test('HUNT-d after he stops sharing, undo takes back an edit from the session instead of the one he just made — on his Mac and on the phone that was in it', { item: '690', budgetMs: 300000 }, async function () {
+  test('690 after sharing stops, undo takes back the change he just made, not one from the session — on his Mac and on the phone that was in it', { item: '690', budgetMs: 300000 }, async function () {
     need921('the tier-3 rig');
     const t = await trio921(), R = t.R;
     await t3reset921(['h', 'a']);
@@ -97515,7 +97520,7 @@
       await R.rpc('h', 'setProp', { id: ids[2], key: 'name', value: 'Outro after' });
       await R.rpc('a', 'setProp', { id: ids[2], key: 'name', value: 'Outro on the phone' });
       const hBefore = (await R.rpc('h', 'state')).names, aBefore = (await R.rpc('a', 'state')).names;
-      if (hBefore[2] !== 'Outro after' || aBefore[2] !== 'Outro on the phone') throw new Error('setup: the rename after the end did not land (' + JSON.stringify([hBefore, aBefore]) + ')');
+      if (hBefore[2] !== 'Outro after' || aBefore[2] !== 'Outro on the phone') throw new Error('setup: the rename after the end did not land (his Mac: ' + hBefore.join(' / ') + '; the phone: ' + aBefore.join(' / ') + ')');
       await R.rpc('h', 'undo');
       await R.rpc('a', 'undo');
       await R.settle(300);
@@ -97527,7 +97532,10 @@
     } finally { await t3reset921(['h', 'a']); rig921().teardown(); }
   });
 
-  /* HUNT-d 2 — HIS DEVICE KEEPS OVERRULING A FRIEND ON A LAYER HE HAS STOPPED TOUCHING.
+  /* 690 (HUNT-d 2) — HIS DEVICE KEEPS OVERRULING A FRIEND ON A LAYER HE HAS STOPPED TOUCHING. Fixed in collab-bridge.js:
+   * fillDrag and an embedded pointEdit are no longer a tool in hand (presence's PASSIVE split), and only a box he types
+   * into counts as typing — a slider or a swatch counts while a pointer is on it or while it is still changing. The
+   * finding, as measured:
    * collab-bridge.js `interacting()` is how the engine knows a finger is on the document: while it is true, every path he
    * changes is HELD, a friend's change to a held path is parked, and the next tick sends his own value again — the last
    * person to let go wins (§8.2). It answers true in two states where nobody is holding anything:
@@ -97539,7 +97547,7 @@
    *     and `editableTarget` counts every input but buttons, checkboxes and radios as typing. Until he clicks elsewhere.
    * So Sam's edit to that layer snaps back on both screens, and when the panel does close the parked value is dropped as
    * "reasserted" — it never lands. Presence meanwhile tells Sam that Ezra is adjusting it. */
-  test('HUNT-d a friend’s edit to a layer he has stopped touching is thrown back — the Colour view left open on a gradient, or the Opacity slider after the mouse lets go', { item: '690', budgetMs: 180000 }, async function () {
+  test('690 a friend’s edit lands on a layer he has stopped touching — the Colour view left open on a gradient, or the Opacity slider after the mouse lets go', { item: '690', budgetMs: 180000 }, async function () {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const grad = { shape: 'rect', x: 160, y: 120, shapeW: 120, shapeH: 80, fill: '#ff0000', fillMode: 'gradient', fillGradient: { enabled: true, type: 'linear', angle: 90, c0: '#ff0000', c1: '#0000ff' } };
     await withCollab921([layer921('Card', grad), layer921('Other')], async function (c) {
@@ -97601,14 +97609,15 @@
     });
   });
 
-  /* HUNT-d 3 — RENAMING A LAYER ON THE PC TIMELINE WHILE A FRIEND EDITS: THE NAME BOX VANISHES MID-WORD.
+  /* 690 (HUNT-d 3) — RENAMING A LAYER ON THE PC TIMELINE WHILE A FRIEND EDITS: THE NAME BOX VANISHES MID-WORD. Fixed:
+   * timeline.js rebuild() waits while the rename box has the caret; its own blur rebuilds. The finding, as measured:
    * Double-click a clip's name on the PC timeline and it becomes a text box (timeline.js, `th-name-edit`); the name is
    * written on blur/Enter. In a session every batch from somebody else runs collab-bridge.js afterApply →
    * scheduleRebuild → FM.timeline.rebuild(), which rebuilds every row — the box is torn out of the page with no blur, so
    * nothing he typed is kept. rebuild() already defers itself for a live drag and used to for a marker rename (queue 725);
    * the layer rename was never covered, and before collaboration nothing rebuilt the timeline while he typed. With a
    * friend actively editing (a batch every 100 ms) the box does not survive long enough to type a word. */
-  test('HUNT-d renaming a layer on the PC timeline while a friend edits — the name box vanishes mid-word and what he typed is lost', { item: '690', budgetMs: 120000 }, async function () {
+  test('690 renaming a layer on the PC timeline while a friend edits — the name box stays open and keeps what he typed', { item: '690', budgetMs: 120000 }, async function () {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     await atWideWidth(async function () {
       await withCollab921([layer921('Alpha'), layer921('Beta')], async function (c) {
@@ -97641,13 +97650,15 @@
     }, 1280);
   });
 
-  /* HUNT-d 4 — IN A LIVE SESSION, ↶ WITH THE TEXT CARD OPEN BLAMES A FRIEND AND UNDOES NOTHING.
+  /* 690 (HUNT-d 4) — IN A LIVE SESSION, ↶ WITH THE TEXT CARD OPEN BLAMES A FRIEND AND UNDOES NOTHING. Fixed: history.undo
+   * and redo flush the card BEFORE handing ↶ to the session and resync it after, as the solo path does; and a refusal
+   * caused by his own later change no longer names someone else (collab-session.js whoChanged). The finding:
    * The solo fix (queue 690, second hunt) made history.undo call FM.textEdit.flush() first, so the typing becomes its own
    * step and ↶ takes it back. history.undo returns FM.collab.undo() BEFORE that line whenever a session owns undo, so in
    * a session the typing is still in the open step: collab-session.js runStep pops the step BEFORE it — Add text — finds
    * the layer no longer reads Text, and refuses with whoChanged(), which answers someone else when the one who changed
    * it was himself. The step is consumed either way, so the text he added can never be undone. */
-  test('HUNT-d in a live session, undo with the text card open says someone else changed it, undoes nothing, and the new text can never be undone', { item: '690', budgetMs: 120000 }, async function () {
+  test('690 in a live session, undo with the text card open takes back the typing, blames nobody, and the new text can still be undone', { item: '690', budgetMs: 120000 }, async function () {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const toasts = [], t0 = FM.toast;
     FM.toast = function (m) { toasts.push(String(m)); return t0.apply(this, arguments); };
@@ -97670,12 +97681,42 @@
             const how = await hunt6dPress('btn-undo', 'undo');
             const L1 = FM.scene.layers.find(l => l.id === id);
             const blame = toasts.filter(m => /someone else/i.test(m))[0];
+            const field = document.getElementById('te-input');
+            const shows = (FM.textEdit.isActive() && field) ? field.value : null;
             if (FM.textEdit.isActive()) { FM.textEdit.stop(); await sleep(200); }
             if (!L1 || L1.text !== 'Text' || blame) {
               throw new Error('on his Mac, sharing with Sam, he added a text, typed Hello world and pressed ↶ (' + how + ') with the card still open: ' +
                 (!L1 ? 'the whole layer went' : 'the layer still reads ' + L1.text + ' instead of taking back the typing (Text)') +
                 (blame ? ', and it said ' + blame + ' — nobody but him had touched it' : '') + '. Alone, the same ↶ takes back the typing.');
             }
+            /* The open field was re-read from the undone layer — left alone, ✓ would have written Hello world straight back. */
+            const after = (FM.scene.layers.find(l => l.id === id) || {}).text;
+            if (shows !== null && shows !== 'Text') throw new Error('↶ took the typing back but the open card still showed ' + shows + ', and closing it wrote that back: the layer now reads ' + after);
+            if (after !== 'Text') throw new Error('closing the card after ↶ put the typing back: the layer reads ' + after + ', not Text');
+            /* The Add text step is still there: the next ↶ takes the new text away. */
+            toasts.length = 0;
+            await hunt6dPress('btn-undo', 'undo');
+            const gone = !FM.scene.layers.find(l => l.id === id);
+            const blame2 = toasts.filter(m => /someone else/i.test(m))[0];
+            if (!gone || blame2) throw new Error('after ↶ took back the typing, the next ↶ should take away the text he added: ' + (gone ? 'it did' : 'the layer is still there') + (blame2 ? ', and it said ' + blame2 : '') + ' — the Add text step was used up');
+
+            /* …and if ↶ ever cannot undo because of something HE did since, it must not tell him a friend did it. The
+               session's own undo, handed a change of his that no commit has closed (a rename, written straight in): the
+               step before it — Add text — no longer matches, and it refuses. It must not name anybody. */
+            FM.addTextLayer();
+            await sleep(300);
+            const id2 = FM.textEdit.isActive() ? FM.textEdit.layerId() : null;
+            if (!id2) throw new Error('setup: the second Add text did not open the text editor');
+            FM.textEdit.stop(); await sleep(200);
+            c.S.tick('hot'); g.loop.settle();
+            const L2 = FM.scene.layers.find(l => l.id === id2);
+            L2.name = 'Renamed by him, not committed';
+            toasts.length = 0;
+            FM.collab.undo();
+            await sleep(100);
+            const said = toasts.filter(m => /undo/i.test(m))[0] || '';
+            if (!said) throw new Error('CONTROL: the session undid the step before an uncommitted rename without refusing (toasts: ' + (toasts.join(' / ') || 'none') + '), so the wording below is not measured');
+            if (/someone else/i.test(said)) throw new Error('↶ could not undo because of his OWN later change (nobody else was editing) and said ' + said + ' — it blamed a friend for his edit');
           });
         });
       }, 1280);

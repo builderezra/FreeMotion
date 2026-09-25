@@ -301,8 +301,12 @@ window.FM = window.FM || {};
     return true;
   };
 
-  C.beforeSnap = function () { const s = S(); if (s) s.beforeSnap(); };
-  C.afterCommit = function () { const s = S(); if (s) s.afterCommit(); };
+  /* ⚠️ US(), NOT S() (queue 690, sixth hunt): after Stop sharing ↶ still goes to the stopped session (§10.5, below),
+     so what he does after it has to be recorded THERE — or ↶ skips his newest change and takes back one he made during
+     the session. history.commit calls these while `undoActive()` for the same reason; the session records locally and
+     sends nothing once it has stopped (collab-session.js pushLocal). */
+  C.beforeSnap = function () { const s = US(); if (s) s.beforeSnap(); };
+  C.afterCommit = function () { const s = US(); if (s) s.afterCommit(); };
   C.beforeFlush = function () { const s = S(); if (s) s.beforeFlush(); };
 
   /* §10.5: undo stays delegated after a session ends, until the project is switched or the page

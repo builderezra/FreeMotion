@@ -247,7 +247,10 @@ window.FM = window.FM || {};
        * ⚠️ PAIRED ON EVERY EXIT, including the identical-snapshot return below: a beforeSnap whose
        * afterCommit never ran leaves an undo step open, and the next action merges into it. Both are
        * no-ops while no session is running, and FM.collab does not exist at all before stage 1. */
-      const cb = FM.collab && FM.collab.active;
+      /* …and while undo is still HANDED to a session that has stopped (§10.5 — after Stop sharing, until another project
+         opens): ↶ goes there, so what he does after the end has to be recorded there too, or ↶ skips it and takes back
+         an edit from the session instead (queue 690, sixth hunt). A stopped session records and sends nothing. */
+      const cb = FM.collab && (FM.collab.active || !!(FM.collab.undoActive && FM.collab.undoActive()));
       if (cb) FM.collab.beforeSnap();
       const s = snap();
       if (index >= 0 && stack[index] === s) { if (cb) FM.collab.afterCommit(); return; }   // identical to the current state → a no-op action can never add a stray undo step
@@ -279,7 +282,12 @@ window.FM = window.FM || {};
        only commits at ✓, so ↶ used to step over it — right after Add text, the layer went with his words and ↷ brought
        back the word Text. flush() makes the typing its own step first; resync() re-reads the field (and the caption it
        is bound to) from the restored scene, because the editor stays open whenever the layer survived. */
-    undo() { if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) return FM.collab.undo(); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush(); if (index > 0) { index--; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); syncButtons(); },   // persist so a hard kill after undo can't resurrect the edit; `re` — see the end of restore()
-    redo() { if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) return FM.collab.redo(); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush(); if (index < stack.length - 1) { index++; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); syncButtons(); },
+    /* ⚠️ …AND IN A SESSION TOO (queue 690, sixth hunt). The session's line used to return BEFORE the flush, so with the
+       card open his typing was still in collab's open step: ↶ popped the step before it — Add text — found the layer
+       no longer read Text and refused with "Can't undo — someone else changed it since" (nobody else had touched it),
+       and that step was used up, so the text he added could never be undone. The flush now runs first either way, and
+       the resync after either way (a session's undo also rewrites the layer under the open field). */
+    undo() { if (FM.flushPendingCommit) FM.flushPendingCommit(); if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush(); if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) { const ok = FM.collab.undo(); if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); return ok; } if (index > 0) { index--; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); syncButtons(); },   // persist so a hard kill after undo can't resurrect the edit; `re` — see the end of restore()
+    redo() { if (FM.flushPendingCommit) FM.flushPendingCommit(); if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush(); if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) { const ok = FM.collab.redo(); if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); return ok; } if (index < stack.length - 1) { index++; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); syncButtons(); },
   };
 })(window.FM);
