@@ -29,7 +29,12 @@
 window.FM = window.FM || {};
 (function (FM) {
   'use strict';
-  const COLOURS = { homeLight: '#fafdfe', homeDark: '#08161f', editor: '#161a21' };
+  /* ⚠️ SAFARI 26 IGNORES theme-color (queue 920, 25 Sep — his reinstall proved it: the strip was the page's
+   * background-color, not this). What actually paints the status bar is the background-COLOR set per screen in
+   * styles.css and theme-glass.css. These are the same three values, kept here for browsers that do read
+   * theme-color (Chrome on Android), and a test holds the CSS to them. Measured at 390x844 with no inset — the
+   * page starts below the status bar now, so its top row is what has to continue up. */
+  const COLOURS = { homeLight: '#fafdff', homeDark: '#091823', editor: '#161a21' };
   let meta = null, last = '';
 
   function want() {

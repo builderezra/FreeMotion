@@ -529,8 +529,13 @@ html[data-theme="glass"] .shortcuts-card .btn { background: #0c1c25; border-top-
 
 html[data-home="light"] #home-screen {
   /* Not pure #fff: a paper white. On an OLED phone a true white page behind small dark text is
-     glare, and every card border below is a tint of the same hue so the screen reads as one surface. */
-  background: #f4f6fa;
+     glare, and every card border below is a tint of the same hue so the screen reads as one surface.
+     ⚠️ THE PAPER WHITE IS AN IMAGE LAYER AND THE COLOUR IS THE HEADER'S (queue 920, 25 Sep). iOS 26 paints the
+     status bar with this element's background-COLOR — his reinstall showed #f4f6fa above a #fafdff header, a
+     visible bar. What you SEE is still #f4f6fa (the flat layer covers the colour); what iOS reads is the
+     header's own white, so the header runs up under the clock. The value lives in js/statusbar.js too. */
+  background-color: #fafdff;
+  background-image: linear-gradient(#f4f6fa, #f4f6fa);
   color: #10151f;
 }
 /* THE BLACK BAR UNDER A LIGHT HOME (queue 553, the half that was never measured). The PAGE itself paints the
@@ -540,7 +545,7 @@ html[data-home="light"] #home-screen {
    the same bar under the home's drift layer. Painting the page the home's own colour for as long as the home
    is up makes an uncovered strip invisible whatever leaves it; the moment the home is hidden the page is the
    editor's colour again. Measured in the phone layout with a parked push: page = home colour. */
-html[data-home="light"]:has(#home-screen:not(.hidden)) { background: #f4f6fa; }
+html[data-home="light"]:has(#home-screen:not(.hidden)) { background-color: #fafdff; background-image: linear-gradient(#f4f6fa, #f4f6fa); }   /* same split as #home-screen above (queue 920) */
 
 /* THE BLEED — "like the top colourful bar is leaning onto the page".
    🚨 IT LIVES ON ITS OWN ELEMENT, AND THE FIRST VERSION DID NOT — that cost the #187 bug back.
