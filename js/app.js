@@ -3020,6 +3020,55 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.commit();
   };
 
+  /* ═══ WHERE A DRAWING'S BOX IS ON THE CANVAS HE IS DRAWING ON (queue 690, fifth hunt) ═══════════════════════════
+   * The pencil works in the frame he sees — `toProject` in js/draw-tool.js turns his finger into project pixels of the
+   * preview — and a drawing is stored as points in [0,1] of its own box, placed by its whole transform: its x/y, scale,
+   * rotation, skew, flip and anchor, every parent above it, and the camera. The old arithmetic (`x - shapeW/2 +
+   * u * shapeW`) is only true of a drawing at 100%, unturned, anchored in the middle, with no parent and no camera.
+   * Draw more on a drawing he had pinched to 1.6x put its strokes back with that arithmetic and re-fitted the box
+   * without the scale, so the scale was applied a second time about a new centre: the moment his new stroke landed,
+   * the whole sketch jumped (0% of his first line stayed where it was) and the new line was nowhere near his finger.
+   * A new sketch started while editing inside a moved or scaled group was placed the same wrong way.
+   * This is the map between the two, read off FM.layerUVToCanvas — the one placement map every on-canvas editor
+   * already shares with the compositor, camera included — at three corners, which is exact because the whole
+   * chain is affine. `box` px are the drawing's own unscaled pixels, measured from its box's top-left.
+   *   toBox([x, y])   a point on the canvas → box px        toFrame([bx, by])   and back
+   *   unit            canvas px per box px (so a brush of 16 on a drawing at 1.6x is 10 of its own)
+   *   plain           the old arithmetic is exactly right; then it IS the old arithmetic, to the last bit, so every
+   *                   drawing that was never resized, turned, parented or filmed behaves exactly as it always has
+   *                   (and so does one squashed to nothing, which has no inside to map a finger into). */
+  const anchorOf = v => ((typeof v === 'number' && isFinite(v)) ? v : 0.5);   // the compositor's own reading of an anchor
+  FM.pathLayerSpace = function (layer) {
+    const t = FM.time || 0, tr = layer.transform || {};
+    const w = layer.shapeW || 1, h = layer.shapeH || 1;
+    const xv = FM.evalProp(tr.x, t) || 0, yv = FM.evalProp(tr.y, t) || 0;
+    const plainO = { x: xv - w / 2, y: yv - h / 2 };
+    const at = (u, v) => (FM.layerUVToCanvas ? FM.layerUVToCanvas(layer, u, v, w, h) : { x: plainO.x + u * w, y: plainO.y + v * h });
+    const o = at(0, 0), ex = at(1, 0), ey = at(0, 1);
+    const A = { a: (ex.x - o.x) / w, b: (ex.y - o.y) / w, c: (ey.x - o.x) / h, d: (ey.y - o.y) / h };
+    const det = A.a * A.d - A.b * A.c;
+    const plain = !(Math.abs(det) > 1e-12) || (Math.abs(A.a - 1) < 1e-9 && Math.abs(A.b) < 1e-9 && Math.abs(A.c) < 1e-9 && Math.abs(A.d - 1) < 1e-9
+      && Math.abs(o.x - plainO.x) < 1e-6 && Math.abs(o.y - plainO.y) < 1e-6);
+    if (plain) return { plain: true, unit: 1, w: w, h: h,
+      toBox: P => [P[0] - plainO.x, P[1] - plainO.y], toFrame: B => [plainO.x + B[0], plainO.y + B[1]] };
+    return { plain: false, unit: Math.sqrt(Math.abs(det)), w: w, h: h,
+      toBox: P => { const dx = P[0] - o.x, dy = P[1] - o.y; return [(A.d * dx - A.c * dy) / det, (-A.b * dx + A.a * dy) / det]; },
+      toFrame: B => [o.x + A.a * B[0] + A.c * B[1], o.y + A.b * B[0] + A.d * B[1]],
+      // Where the layer's own x/y must go for its anchor to land on canvas point Q — the one thing a re-fit changes.
+      // Probed rather than derived, so a parent, depth or a camera zoom is in the answer by construction.
+      posFor: Q => {
+        const ax = anchorOf(tr.anchorX), ay = anchorOf(tr.anchorY);
+        const F = at(ax, ay);
+        const moved = (dx, dy) => { const L2 = Object.assign({}, layer, { transform: Object.assign({}, tr, { x: xv + dx, y: yv + dy }) }); return FM.layerUVToCanvas(L2, ax, ay, w, h); };
+        const Fx = moved(1, 0), Fy = moved(0, 1);
+        const j = { a: Fx.x - F.x, b: Fx.y - F.y, c: Fy.x - F.x, d: Fy.y - F.y }, jd = j.a * j.d - j.b * j.c;
+        if (!(Math.abs(jd) > 1e-12)) return null;
+        const dx = Q[0] - F.x, dy = Q[1] - F.y;
+        return [xv + (j.d * dx - j.c * dy) / jd, yv + (-j.b * dx + j.a * dy) / jd];
+      } };
+  };
+
+
   // Path shape layer from drawn points (freehand brush stroke / vector polygon). projPts are in
   // project pixels; stored normalized [0,1] inside a box fitted to their bounds so they scale/rotate
   // like any shape. opt: { closed, name, color, fill, stroke }.
@@ -3031,9 +3080,17 @@ window.FM = window.FM || {};
    * re-fits it: the box grows to the union of every stroke, and all of them are re-normalised into
    * that box, because subs are stored in [0,1] of the layer's own box and a stroke drawn outside the
    * old box would otherwise land outside the drawing.
-   * The layer keeps its id, its place in the stack and its selection — this only moves geometry. */
-  FM.refitPathLayer = function (layer, projSubs) {
+   * The layer keeps its id, its place in the stack and its selection — this only moves geometry.
+   * `styles` (queue 690, fifth hunt): one entry per stroke for layer.subStyles — see FM.pathBrushRuns. Left alone
+   * when not given. */
+  FM.refitPathLayer = function (layer, projSubs, styles) {
     if (!layer || !projSubs || !projSubs.length) return layer;
+    if (styles !== undefined) {
+      if (Array.isArray(styles) && styles.some(Boolean)) layer.subStyles = styles.map(s => (s ? { c: s.c, w: s.w } : null));
+      else delete layer.subStyles;
+    }
+    const sp = FM.pathLayerSpace ? FM.pathLayerSpace(layer) : { plain: true };
+    if (!sp.plain) return refitPlaced(layer, projSubs, sp);
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     projSubs.forEach(sub => sub.forEach(p => {
       if (p[0] < minX) minX = p[0]; if (p[0] > maxX) maxX = p[0];
@@ -3052,6 +3109,50 @@ window.FM = window.FM || {};
        A keyframed path takes the new shape at the PLAYHEAD, where he is drawing, and the other keyframes
        are left alone; a keyframed position is SHIFTED by the same delta the flat assignment would have
        applied, which is what FM.shiftTransform exists for and what every other mover on the canvas does. */
+    writePathSubs(layer, flat);
+    layer.points = null;                       // subs win in traceShapePath; don't leave a stale single path
+    layer.shapeW = Math.round(w); layer.shapeH = Math.round(h);
+    const nx = minX + w / 2, ny = minY + h / 2;
+    if (FM.shiftTransform) { FM.shiftTransform(layer, 'x', nx, FM.time); FM.shiftTransform(layer, 'y', ny, FM.time); }
+    else { layer.transform.x = nx; layer.transform.y = ny; }
+    return layer;
+  };
+  /* The re-fit for a drawing that is NOT at 100%, unturned and unparented (queue 690, fifth hunt — see
+     FM.pathLayerSpace). Every stroke is taken into the drawing's own box px through the placement it has right now,
+     the box is re-fitted THERE, and then only the layer's x/y moves — by exactly what keeps the old strokes where they
+     were on the canvas. Its scale, rotation, skew, flip, anchor and parent are never touched: he resized it, and it
+     stays resized. Keyframed paths and positions take the same care as the plain re-fit above (#833). */
+  function refitPlaced(layer, projSubs, sp) {
+    const boxSubs = projSubs.map(sub => sub.map(p => { const b = sp.toBox(p); return p.length > 2 ? [b[0], b[1], p[2]] : b; }));
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    boxSubs.forEach(sub => sub.forEach(p => {
+      if (p[0] < minX) minX = p[0]; if (p[0] > maxX) maxX = p[0];
+      if (p[1] < minY) minY = p[1]; if (p[1] > maxY) maxY = p[1];
+    }));
+    if (!isFinite(minX)) return layer;
+    const w = Math.max(4, maxX - minX), h = Math.max(4, maxY - minY);
+    const W = Math.round(w), H = Math.round(h);
+    // Where the new box's middle is on the canvas now — it must still be there afterwards.
+    const Q = sp.toFrame([minX + w / 2, minY + h / 2]);
+    const tr = layer.transform || {};
+    const ax = anchorOf(tr.anchorX), ay = anchorOf(tr.anchorY);
+    // …and the anchor sits (anchor - 0.5) of the NEW box away from that middle, along the drawing's own axes. The map
+    // is affine, so the difference of two of its points is that offset turned and scaled exactly as the drawing is.
+    const mid = sp.toFrame([W / 2, H / 2]), anc = sp.toFrame([ax * W, ay * H]);
+    const pos = sp.posFor ? sp.posFor([Q[0] + anc[0] - mid[0], Q[1] + anc[1] - mid[1]]) : null;
+    if (!pos) return layer;   // a drawing squashed to nothing has no inside to draw into — leave it exactly as it was
+    const flat = boxSubs.map(sub => sub.map(p => (p.length > 2
+      ? [(p[0] - minX) / w, (p[1] - minY) / h, p[2]]
+      : [(p[0] - minX) / w, (p[1] - minY) / h])));
+    writePathSubs(layer, flat);
+    layer.points = null;
+    layer.shapeW = W; layer.shapeH = H;
+    if (FM.shiftTransform) { FM.shiftTransform(layer, 'x', pos[0], FM.time); FM.shiftTransform(layer, 'y', pos[1], FM.time); }
+    else { layer.transform.x = pos[0]; layer.transform.y = pos[1]; }
+    return layer;
+  }
+  // The new point set goes in at the PLAYHEAD on a keyframed path and replaces a still one — queue 833, above.
+  function writePathSubs(layer, flat) {
     if (layer.subs && !Array.isArray(layer.subs) && Array.isArray(layer.subs.kf) && layer.subs.kf.length) {
       const t = FM.time || 0;
       let hit = null, best = Infinity;
@@ -3061,13 +3162,7 @@ window.FM = window.FM || {};
     } else {
       layer.subs = flat;
     }
-    layer.points = null;                       // subs win in traceShapePath; don't leave a stale single path
-    layer.shapeW = Math.round(w); layer.shapeH = Math.round(h);
-    const nx = minX + w / 2, ny = minY + h / 2;
-    if (FM.shiftTransform) { FM.shiftTransform(layer, 'x', nx, FM.time); FM.shiftTransform(layer, 'y', ny, FM.time); }
-    else { layer.transform.x = nx; layer.transform.y = ny; }
-    return layer;
-  };
+  }
 
   FM.addPathLayer = function (projPts, opt) {
     opt = opt || {};
@@ -3106,6 +3201,16 @@ window.FM = window.FM || {};
       layer.stroke = { enabled: false, width: opt.stroke || 6, color: opt.color || '#ffffff' };
     }
     FM.insertLayer(layer);
+    /* The points are where his finger was ON THE CANVAS, and the box above assumed that is where the layer's own x/y
+       live. Inside a group he is editing (insertLayer hangs the layer under it) or under a moved camera they do not,
+       and the drawing landed wherever the group's or the camera's transform threw it (queue 690, fifth hunt — see
+       FM.pathLayerSpace). Re-placed through the same map, before anything is drawn or saved. A drawing on the plain
+       canvas is untouched. */
+    const sp = FM.pathLayerSpace ? FM.pathLayerSpace(layer) : { plain: true };
+    if (!sp.plain) {
+      refitPlaced(layer, [projPts], sp);
+      if (!opt.closed && sp.unit > 0) layer.stroke.width = (opt.stroke || 6) / sp.unit;   // the brush he saw, not the brush times the group's scale
+    }
     FM.scene.selectedId = layer.id;
     FM.scene.selectedIds = [layer.id];
     refreshAll();

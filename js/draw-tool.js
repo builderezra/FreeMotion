@@ -318,16 +318,18 @@ window.FM = window.FM || {};
         FM.scene.layers.splice(backAt, 0, layer);
         erasedAt = null;
         sessionLayerId = layer.id; strokes.push(layer.id);
-        if (FM.refitPathLayer) FM.refitPathLayer(layer, sessionSubs);
+        var backBrush = brushEntry(layer); if (backBrush) brushOf.set(sub, backBrush);   // queue 690: in HIS brush, not the old drawing's
+        if (FM.refitPathLayer) FM.refitPathLayer(layer, sessionSubs, sessionStyles());
         if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
         if (FM.refreshAll) FM.refreshAll();
         if (FM.requestRender) FM.requestRender();
       } else {
-        layer = FM.addPathLayer(sub, { closed: false, name: 'Sketch', color: t.color, stroke: t.stroke });
+        layer = FM.addPathLayer(sub, { closed: false, name: 'Sketch', color: t.color, stroke: t.stroke });   // the first stroke IS the drawing's brush
         if (layer) { sessionLayerId = layer.id; strokes.push(layer.id); }
       }
     } else if (FM.refitPathLayer) {
-      FM.refitPathLayer(layer, sessionSubs);
+      var nb = brushEntry(layer); if (nb) brushOf.set(sub, nb);   // queue 690: a new colour or size stays on THIS stroke
+      FM.refitPathLayer(layer, sessionSubs, sessionStyles());
       if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();   // the thumbnail has to follow the drawing
       /* ⚠️ AND THE CANVAS. THIS LINE IS THE WHOLE OF QUEUE 514 (queue 514). Ezra, twice: "when you draw a
          second stroke, it just doesn't show up until you actually finish the drawing so you can't see
@@ -453,6 +455,28 @@ window.FM = window.FM || {};
   // Queue 167: the ONE layer a freehand session is building, and every stroke that has gone into it
   // (kept in PROJECT pixels, because the layer's box is re-fitted around their union on every stroke).
   var sessionLayerId = null, sessionSubs = [];
+  /* ═══ EACH STROKE KEEPS THE BRUSH IT WAS DRAWN WITH (queue 690, fifth hunt) ═════════════════════════════════════
+   * The swatch and the brush slider stay live on the bar for the whole session and the overlay draws the stroke under
+   * his finger in whatever they say — but the drawing took ONE colour and ONE width from its first stroke, so a second
+   * line picked in blue at 30 showed blue and fat while his finger was down and turned into the first line's red and
+   * 8 px the moment he lifted it. Now a stroke drawn with a different brush remembers it: `brushOf` maps a session
+   * stroke to { c, w } (w in the drawing's own units, the way stroke.width is), and FM.refitPathLayer writes those
+   * into layer.subStyles for the compositor (FM.pathBrushRuns). A stroke drawn with the drawing's own brush has no
+   * entry and follows the drawing, so a one-colour sketch stores exactly what it always did and the Colouring card
+   * still recolours it. Keyed by the stroke ARRAY, so undo/redo snapshots (which hold the same arrays) and the
+   * eraser (which hands its pieces the brush of the stroke they came from) carry it without a second list. */
+  var brushOf = new WeakMap();
+  function brushEntry(layer) {
+    var t = FM.drawTool, time = FM.time || 0, ev = function (v) { return FM.evalProp ? FM.evalProp(v, time) : v; };
+    var sp = FM.pathLayerSpace ? FM.pathLayerSpace(layer) : null;
+    var w = t.stroke / ((sp && sp.unit) || 1);   // his brush is canvas px; the drawing keeps its own units
+    var own = ev(layer.fill), stk = layer.stroke;
+    var ownW = (stk && stk.width != null) ? (ev(stk.width) || 8) : 8;   // what the compositor strokes it at
+    var sameC = typeof own === 'string' && own.toLowerCase() === String(t.color).toLowerCase();
+    var sameW = Math.abs(ownW - w) <= 1e-6 * Math.max(1, Math.abs(ownW));
+    return (sameC && sameW) ? null : { c: t.color, w: w };
+  }
+  function sessionStyles() { return sessionSubs.map(function (s) { return brushOf.get(s) || null; }); }
   /* History is SNAPSHOTS of the whole stroke list, not a stack of individual strokes (queue 165.4,
    * generalised for 165.2). The first version pushed and popped the TAIL, which is fine while the only
    * edit is "add a stroke at the end" — and stops being fine the moment the eraser can take one out of
@@ -503,16 +527,16 @@ window.FM = window.FM || {};
         FM.scene.layers.splice(at, 0, layer);
         erasedAt = null;
         sessionLayerId = layer.id; strokes.length = 0; strokes.push(layer.id);
-        if (FM.refitPathLayer) FM.refitPathLayer(layer, sessionSubs);
+        if (FM.refitPathLayer) FM.refitPathLayer(layer, sessionSubs, sessionStyles());
       } else {
         layer = FM.addPathLayer(sessionSubs[0], { closed: false, name: 'Sketch', color: FM.drawTool.color, stroke: FM.drawTool.stroke });
         if (layer) {
           sessionLayerId = layer.id; strokes.length = 0; strokes.push(layer.id);
-          if (sessionSubs.length > 1 && FM.refitPathLayer) FM.refitPathLayer(layer, sessionSubs);
+          if ((sessionSubs.length > 1 || brushOf.has(sessionSubs[0])) && FM.refitPathLayer) FM.refitPathLayer(layer, sessionSubs, sessionStyles());
         }
       }
     } else if (FM.refitPathLayer) {
-      FM.refitPathLayer(layer, sessionSubs);
+      FM.refitPathLayer(layer, sessionSubs, sessionStyles());
     }
     if (!live) {
       if (FM.selectLayer) FM.selectLayer(null);   // same rule as commitStroke: no inspector sheet mid-drawing
@@ -624,6 +648,8 @@ window.FM = window.FM || {};
        ⚠️ BOTH FLAGS. `erasing` is this module's own, and `FM.drawTool.erasing` is the one the bar and the
        suite can see; they are set together everywhere, and reading both means the seam can drive a real
        drag instead of only the private half. */
+    var cut = brushOf.get(sub);
+    if (cut) runs.forEach(function (r) { brushOf.set(r, cut); });   // queue 690: what is left of a blue stroke is still blue
     var live = erasing || !!FM.drawTool.erasing;
     if (!live || !eraseDirty) pushHistory();
     eraseDirty = true;
@@ -901,21 +927,43 @@ window.FM = window.FM || {};
       var adopt = FM.layerById(FM.scene, opts.layerId);
       if (adopt && adopt.type === 'shape' && adopt.shape === 'path' && !adopt.closed) {
         var norm = FM.evalShapeSubs ? FM.evalShapeSubs(adopt, FM.time || 0) : (adopt.subs || (adopt.points ? [adopt.points] : []));
-        var ev = function (v) { return (FM.evalProp ? FM.evalProp(v, FM.time || 0) : v) || 0; };
+        var evAt = function (v) { return FM.evalProp ? FM.evalProp(v, FM.time || 0) : v; };
         var bw = adopt.shapeW || 1, bh = adopt.shapeH || 1;
+        /* THROUGH EVERYTHING THAT PLACES IT (queue 690, fifth hunt). This was `x - shapeW/2 + u * shapeW`, which is only
+           where a drawing is at 100%, unturned, anchored in the middle and unparented — so Draw more on a drawing he
+           had pinched to 1.6x put every stroke back as if it had never been resized, and the next re-fit threw the
+           whole sketch across the canvas. FM.pathLayerSpace puts each point where it really shows (and IS that same
+           sum, to the bit, for a drawing that was never touched). */
+        var sp = FM.pathLayerSpace ? FM.pathLayerSpace(adopt) : null;
+        var ev = function (v) { return evAt(v) || 0; };
         var ox = ev(adopt.transform && adopt.transform.x) - bw / 2;
         var oy = ev(adopt.transform && adopt.transform.y) - bh / 2;
+        var toF = sp ? sp.toFrame : function (B) { return [ox + B[0], oy + B[1]]; };
         sessionSubs = norm.map(function (sub) {
           return sub.map(function (q) {
-            return q.length > 2 ? [ox + q[0] * bw, oy + q[1] * bh, q[2]] : [ox + q[0] * bw, oy + q[1] * bh];
+            var f = toF([q[0] * bw, q[1] * bh]);
+            return q.length > 2 ? [f[0], f[1], q[2]] : [f[0], f[1]];
           });
         });
+        // …and each stroke's own brush comes back with it, so drawing more cannot repaint the ones in another colour.
+        var ownBrushes = Array.isArray(adopt.subStyles) ? adopt.subStyles : null;
+        if (ownBrushes) sessionSubs.forEach(function (sub, i) { var b = ownBrushes[i]; if (b && typeof b === 'object') brushOf.set(sub, { c: b.c, w: b.w }); });
         if (sessionSubs.length) {
           sessionLayerId = adopt.id;
           strokes.length = 0; strokes.push(adopt.id);
-          FM.drawTool.color = adopt.fill || FM.drawTool.color;
-          // The brush width lives on the (disabled) border, which is where addPathLayer parks it.
-          if (adopt.stroke && adopt.stroke.width) FM.drawTool.stroke = adopt.stroke.width;
+          var ownCol = evAt(adopt.fill);
+          if (typeof ownCol === 'string' && ownCol) FM.drawTool.color = ownCol;
+          // The brush width lives on the (disabled) border, which is where addPathLayer parks it — in the drawing's own
+          // units, so on a resized drawing the brush is that times the size it shows at.
+          var ownW = adopt.stroke ? evAt(adopt.stroke.width) : null;
+          if (ownW) FM.drawTool.stroke = ownW * ((sp && sp.unit) || 1);
+          /* THE BAR SAYS WHAT THE BRUSH IS (queue 690, fifth hunt). The two lines above changed the brush and left the
+             swatch and the slider showing whatever the last session picked — a red swatch over a white brush. */
+          if (bar) {
+            var swIn = bar.querySelector('.db-color input'), wdIn = bar.querySelector('.db-width input');
+            if (swIn && /^#[0-9a-f]{6}$/i.test(String(FM.drawTool.color))) swIn.value = String(FM.drawTool.color).toLowerCase();
+            if (wdIn) wdIn.value = String(Math.round(FM.drawTool.stroke));
+          }
         }
       }
     }

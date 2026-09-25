@@ -13536,7 +13536,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    *
    * Closed paths are left alone. Trimming one turns a filled shape into a filled crescent, which is not
    * what the control says it does, and every user of this is an open stroke. */
-  FM.trimSubs = function (subs, layer, t) {
+  /* `srcOf` (optional, queue 690 fifth hunt): an array this fills with the index of the subpath each returned run was
+     cut from, so a drawing whose strokes carry their own brush can still find each stroke's brush after a trim has
+     dropped some of them. Left EMPTY when nothing is trimmed, which means "the same index". */
+  FM.trimSubs = function (subs, layer, t, srcOf) {
     if (!layer || layer.closed) return subs;
     /* Held in PERCENT, because that is what the control reads and what a keyframe on it will say. A
        0..1 model with a 0..100 label is two units for one number and the sort of thing that gets
@@ -13578,9 +13581,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // Start of this kept run: the real point if we are past the cut, otherwise the cut itself.
         if (!run.length) run.push(f0 <= 0 ? [p1[0], p1[1], p1[2]] : lerp(p1, p2, f0));
         run.push(f1 >= 1 ? [p2[0], p2[1], p2[2]] : lerp(p1, p2, f1));
-        if (f1 < 1) { if (run.length >= 2) out.push(run); run = []; }
+        if (f1 < 1) { if (run.length >= 2) { out.push(run); if (srcOf) srcOf.push(s); } run = []; }
       }
-      if (run.length >= 2) out.push(run);
+      if (run.length >= 2) { out.push(run); if (srcOf) srcOf.push(s); }
     }
     // Hard ends on the cuts — see the note above.
     out.forEach(run => { if (run[0]) run[0] = [run[0][0], run[0][1]]; const e = run[run.length - 1]; if (e) run[run.length - 1] = [e[0], e[1]]; });
@@ -13697,6 +13700,45 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * small rect still drew inside 400ms here, and tightening the limit would only ask a question about
    * the machine — the mistake that made the vertical-glide test flaky (queue 450). */
   FM._drawShapeSrc = function () { return String(drawLayer); };
+
+  /* ═══ EVERY STROKE OF A DRAWING KEEPS THE BRUSH IT WAS DRAWN WITH (queue 690, fifth hunt) ═══════════════════════
+   * Queue 167 made a sketching session ONE layer — *"it should all be inside the one drawing you just made"* — and a
+   * layer has one colour (layer.fill) and one line width (stroke.width), both taken from the brush when the FIRST
+   * stroke was committed. The swatch and the brush slider stay live on the drawing bar the whole time, and the overlay
+   * draws the stroke under his finger in whatever they say — so he picked blue and a fat brush for his second line,
+   * saw it blue and fat while his finger was down, and the moment he lifted it it turned into the first stroke's red
+   * and 8 px. He could not sketch in two colours without leaving the tool.
+   * `layer.subStyles` sits beside layer.subs, one entry per stroke: null for a stroke drawn with the drawing's own
+   * brush (it follows layer.fill and stroke.width, so the Colouring card still recolours it), or { c, w } for one drawn
+   * with a different colour or size — w in the layer's own units, like stroke.width. A drawing with no entry, which is
+   * every drawing made before this and every one-brush drawing after it, returns null here and draws exactly as it
+   * always has: one traced path, one stroke.
+   * Consecutive strokes with the same brush go down as ONE path, so where two of them cross at a reduced opacity the
+   * crossing does not darken — the same thing the single path always gave. Strokes paint in the order they were
+   * drawn, so a later stroke still sits on top of an earlier one. */
+  FM.pathBrushRuns = function (layer, t) {
+    const st = (layer && layer.shape === 'path' && !layer.closed && Array.isArray(layer.subStyles)) ? layer.subStyles : null;
+    if (!st || !st.some(s => s && typeof s === 'object')) return null;
+    const from = [];
+    const subs = FM.trimSubs(FM.evalShapeSubs(layer, t == null ? (FM.time || 0) : t), layer, t == null ? (FM.time || 0) : t, from);
+    const runs = [];
+    let cur = null;
+    subs.forEach((pts, i) => {
+      const s = st[from.length ? from[i] : i];
+      // Read defensively: a file can say anything, and a bad entry falls back to the drawing's own brush.
+      const c = (s && typeof s.c === 'string' && s.c) ? s.c : null;
+      const w = (s && isFinite(+s.w) && +s.w > 0) ? +s.w : null;
+      if (cur && cur.c === c && cur.w === w) cur.subs.push(pts);
+      else { cur = { c: c, w: w, subs: [pts] }; runs.push(cur); }
+    });
+    return runs;
+  };
+  // One run of FM.pathBrushRuns as the current path, in the same box the whole drawing is traced into.
+  function traceBrushRun(ctx, run, ox, oy, sw, sh) {
+    ctx.beginPath();
+    run.subs.forEach(pts => FM.buildSubPath(ctx, pts, false, p => [ox + p[0] * sw, oy + p[1] * sh]));
+  }
+  FM.traceBrushRun = traceBrushRun;
 
   FM.traceShapePath = function (ctx, layer, ox, oy, sw, sh, t) {
     const kind = layer.shape || 'rect';
@@ -13974,7 +14016,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (layer.type === 'shape') {
       const sw = layer.shapeW || 400, sh = layer.shapeH || 300, ox = -sw * anchorX(tr), oy = -sh * anchorY(tr);
       const mode = FM.traceShapePath(a, layer, ox, oy, sw, sh, t);
-      if (mode === 'stroke') { a.lineWidth = (layer.stroke && layer.stroke.width) || 8; a.strokeStyle = '#fff'; a.lineCap = 'round'; a.stroke(); }
+      if (mode === 'stroke') {
+        const lw0 = (layer.stroke && layer.stroke.width) || 8, runs = FM.pathBrushRuns(layer, t);   // each stroke at its own width (queue 690)
+        a.strokeStyle = '#fff'; a.lineCap = 'round';
+        if (!runs) { a.lineWidth = lw0; a.stroke(); }
+        else runs.forEach(r => { traceBrushRun(a, r, ox, oy, sw, sh); a.lineWidth = r.w != null ? r.w : lw0; a.stroke(); });
+      }
       else a.fill();
     } else if (layer.type === 'text') {
       a.textAlign = layer.align || 'center'; a.textBaseline = 'middle';
@@ -14617,7 +14664,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * falls through every branch and returns, and the layer then draws zero pixels — see the
      * registry note on Magnify Background. */
 
-    if (scene && tilt3D(layer, t)) { draw3DTiltLayer(ctx, layer, t, scene); return; }
+    if (scene && tilt3D(layer, t)) { draw3DTiltLayer(ctx, layer, t, scene); relayBackground(ctx, BLEND[layer.blendMode]); return; }   // a tilted clipping mask composites its own plate with the cut
     // MASK blend modes composite the layer as ONE plate (destination-in/out) — multi-pass draws
     // (fill+stroke, caption pill, keyed video) would otherwise each re-clip the canvas below.
     const _bop = BLEND[layer.blendMode];
@@ -14645,6 +14692,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (_bext) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(_blendMaskCv, 0, 0); }   // same grid: pixel for pixel
       else ctx.drawImage(_blendMaskCv, 0, 0, P.width, P.height);
       ctx.restore();
+      relayBackground(ctx, _bop);   // the cut is for the layers below, not the background (queue 690) — see _bgRelay
       return;
     }
     // Pen masks (layer.masks) wrap the layer's whole rasterized plate — outermost of the per-layer
@@ -14928,24 +14976,47 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         if (mode === 'stroke') {   // open kinds (line / arc / freehand) are stroked, never filled — Color & Fill IS the line colour
           if (skipStroke) return;   // trim window empty → nothing to draw
           const lw = (stk && stk.width != null) ? (FM.evalProp(stk.width, t) || 8) : 8;
+          const lineCol = FM.evalProp(layer.fill, t) || '#ffffff';
+          /* A drawing whose strokes carry their own brush (queue 690, fifth hunt) is stroked RUN BY RUN — see
+             FM.pathBrushRuns. null for every other open shape and for a one-brush drawing, and then this is the
+             single traced path exactly as before. */
+          const runs = FM.pathBrushRuns(layer, t);
+          const eachRun = (paint) => {
+            if (!runs) { paint(lineCol, lw); return; }
+            runs.forEach(r => { traceBrushRun(ctx, r, ox, oy, sw, sh); paint(r.c || lineCol, r.w != null ? r.w : lw); });
+          };
           // Border on an open path = an outline hugging the line from BEHIND: a 2× under-stroke in the
           // border colour, then the drawing's own colour on top (same trick as a filled shape's
           // 'outside' border, where the fill overpaints the inner half). Both strokes share the dash so
           // trim/dash keep the line + its border aligned.
           if (stk && stk.enabled && stk.color != null) {
-            ctx.save();
-            applyDash();
-            ctx.lineWidth = lw * 2; ctx.strokeStyle = FM.evalProp(stk.color, t) || '#fff';
-            ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
-            ctx.restore();
+            const bcol = FM.evalProp(stk.color, t) || '#fff';
+            eachRun((col, w) => {
+              ctx.save();
+              applyDash();
+              ctx.lineWidth = w * 2; ctx.strokeStyle = bcol;
+              ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
+              ctx.restore();
+            });
             ctx.shadowColor = 'transparent';   // the under-stroke already cast the silhouette shadow — don't double it
           }
-          ctx.save();
-          applyDash();
-          ctx.lineWidth = lw;
-          ctx.strokeStyle = FM.evalProp(layer.fill, t) || '#ffffff';
-          ctx.lineCap = 'round'; ctx.stroke();
-          ctx.restore();
+          /* THE COLOURING CARD'S OPACITY, ON A LINE (queue 690, fifth hunt). fillPanel gives every open shape — a Line,
+             an Arc, a Spiral, anything the pencil draws — the same Opacity row a rectangle gets, and it writes
+             layer.fillOpacity. Only paintFillInPath read it, and a stroke never goes through there, so the box said 20%
+             and the line stayed at full strength in the preview and the export. On an open shape the line IS the fill
+             colour, so it fades exactly as a filled shape's fill does: as a multiplier on the alpha already there, and
+             never on the border under-stroke above, which has its own colour — the same rule the text got. At 100% the
+             alpha is not touched at all. */
+          const fa = textFillAlpha(layer);
+          eachRun((col, w) => {
+            ctx.save();
+            applyDash();
+            if (fa < 1) ctx.globalAlpha = ctx.globalAlpha * fa;
+            ctx.lineWidth = w;
+            ctx.strokeStyle = col;
+            ctx.lineCap = 'round'; ctx.stroke();
+            ctx.restore();
+          });
         } else {
           // BORDER (keyframeable, positioned). Canvas stroke() is always centre-aligned, so:
           // outside = stroke 2× behind the fill (fill overpaints inner half); inside = clip to the shape
@@ -15409,6 +15480,45 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // plane, and fog. Scoped to the layer loop exactly like _camParallax, so thumbnails, fx previews
   // and any comp rendered without a camera keep the legacy fixed lens and no blur or fog at all.
   let _camLens = null;
+  /* ═══ A CLIPPING MASK CUTS THE LAYERS BELOW IT, NOT THE PROJECT BACKGROUND (queue 690, fifth hunt) ═══════════════
+   * Create Clipping Mask gives a layer the blend 'mask-include' — canvas destination-in on the frame being drawn, and
+   * 'mask-exclude' is destination-out. renderScene paints the project background into that same frame BEFORE the
+   * layers (it has to: a blend mode needs something to blend against and an adjustment layer something to grade), so
+   * the cut took the background with it. He put a circle over a photo on white and chose Create Clipping Mask: the
+   * photo showed inside the circle and everything outside it went BLACK in the preview and the export, where the white
+   * should have been — while the same two layers as a Masking group kept the white. The app's own toast says
+   * "layers below show only inside this layer", and the background is not a layer.
+   * So once a cut has gone down on the scene's own frame, the background goes back in UNDER what is left
+   * (destination-over): the pixels the cut emptied show the background again, the pixels it kept are untouched
+   * (the background was already under them), and a soft edge sits over the background exactly as it would have.
+   * It happens straight after the cut rather than after the whole stack, so a blend-mode layer ABOVE the mask still
+   * has the background to blend against. Scoped to renderScene's layer loop exactly like _camParallax — a group's
+   * plate, a thumbnail or any other canvas never matches `canvas` and is never touched — and a transparent export
+   * (sceneBg null) keeps its hole transparent, which is what an alpha export is for. With a camera the background
+   * is painted into the plate as the same inverse-mapped quad renderScene uses, for the same reason. */
+  let _bgRelay = null;
+  function relayBackground(ctx, op) {
+    const r = _bgRelay;
+    if ((op !== 'destination-in' && op !== 'destination-out') || !r || !ctx || ctx.canvas !== r.canvas) return;
+    const bg = sceneBg(r.P);
+    if (!bg) return;
+    const q = r.cam ? cameraFrameQuad(r.cam, r.t, r.P) : null;
+    if (r.cam && !q) return;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    baseT(ctx);
+    ctx.globalCompositeOperation = 'destination-over'; ctx.globalAlpha = 1; ctx.filter = 'none'; ctx.shadowColor = 'transparent';
+    ctx.fillStyle = bg;
+    if (!q) ctx.fillRect(0, 0, r.P.width, r.P.height);
+    else {
+      ctx.beginPath();
+      ctx.moveTo(q[0][0], q[0][1]);
+      for (let qi = 1; qi < q.length; qi++) ctx.lineTo(q[qi][0], q[qi][1]);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
 
   // ===== CAMERA OPTIONS (Alight Motion parity): Camera View · Focus Blur · Fog =====
   // Resolve a camera's optics for one frame. EVERY field is absent-by-default and every fallback is
@@ -16026,6 +16136,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * the loop's skips exactly, so a fill only ever exists for a layer that is really about to draw:
      * solo, isolate and visibility all have to agree, or the frame gains a wash from a layer that is
      * not on screen. */
+    const _bgRelayWas = _bgRelay;   // a comp rendered from inside the loop must not take this frame's away
+    _bgRelay = sceneBg(P) ? { canvas: target.canvas, P: P, cam: cam, t: t } : null;
     const _fbUnits = new Set();
     fillBehindPass(target, scene, t, function (L) {
       if (soloActive && !L.solo) return null;
@@ -16084,6 +16196,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     target.restore();
     _camParallax = null;   // parallax is scoped to the layer loop above only
     _camLens = null;
+    _bgRelay = _bgRelayWas;
     if (cam) {
       const cx = P.width / 2, cy = P.height / 2;
       /* Behavior-resolved (same as the parallax stash above — the two MUST agree or depth layers shear
@@ -16582,7 +16695,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const iw = aw * fk, ih = ah * fk;
       const ox = pad + (bw - iw) / 2, oy = pad + (bh - ih) / 2;   // centred in what is left over
       const mode = FM.traceShapePath(ctx, layer, ox, oy, iw, ih, FM.time || 0);
-      if (mode === 'stroke') { ctx.strokeStyle = FM.evalProp(layer.fill, FM.time || 0) || '#fff'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.stroke(); return; }
+      if (mode === 'stroke') {
+        const col0 = FM.evalProp(layer.fill, FM.time || 0) || '#fff', runs = FM.pathBrushRuns(layer, FM.time || 0);   // each stroke in its own colour (queue 690)
+        ctx.lineWidth = 3; ctx.lineCap = 'round';
+        if (!runs) { ctx.strokeStyle = col0; ctx.stroke(); }
+        else runs.forEach(r => { traceBrushRun(ctx, r, ox, oy, iw, ih); ctx.strokeStyle = r.c || col0; ctx.stroke(); });
+        return;
+      }
       const fmode = FM.fillModeOf(layer);
       // Outline-only: the CANVAS strokes this with layer.stroke.color, so the thumb has to as well —
       // it was using the (invisible) fill, which showed a colour the shape never actually renders.

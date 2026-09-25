@@ -987,15 +987,20 @@ window.FM = window.FM || {};
    * their size from the project's own aspect, so they never letterbox, and passing null says that
    * rather than making them compute an identity rectangle to satisfy a signature. With one they
    * letterbox like the MP4 (queue 690). */
+  /* ⚠️ EVERY FRAME STARTS FROM AN EMPTY CANVAS (queue 690, fifth hunt). Only the letterboxed case used to clear:
+   * without bars the frame was drawn straight OVER the previous one, and drawImage leaves whatever is under a
+   * transparent pixel. The GIF and PNG paths clear before calling this; the MP4 path never did, so any frame with
+   * a transparent pixel in it — a clipping mask's cut, a project whose background is transparent — kept an earlier
+   * frame there, and a moving shape left a trail of every place it had been, in the file only (the preview clears
+   * its canvas every frame). Measured: a clipping-mask circle sliding across a photo still showed the photo where
+   * it started in the last 6 of 30 frames. Clearing here puts the rule in the one blit all three paths share. */
   function makeBlit(projCanvas, outW, outH, fit, barFillNow) {
     return function (ctx) {
       ctx.save();
-      if (fit && fit.letterboxed) {
-        ctx.globalCompositeOperation = 'source-over';
-        const barFill = barFillNow ? barFillNow() : null;
-        if (barFill) { ctx.fillStyle = barFill; ctx.fillRect(0, 0, outW, outH); }
-        else ctx.clearRect(0, 0, outW, outH);   // transparent export keeps the bars transparent
-      }
+      ctx.globalCompositeOperation = 'source-over';
+      const barFill = (fit && fit.letterboxed && barFillNow) ? barFillNow() : null;
+      if (barFill) { ctx.fillStyle = barFill; ctx.fillRect(0, 0, outW, outH); }
+      else ctx.clearRect(0, 0, outW, outH);   // no bars, or a transparent export's bars: nothing of the last frame survives
       if (fit) ctx.drawImage(projCanvas, fit.dx, fit.dy, fit.dw, fit.dh);
       else ctx.drawImage(projCanvas, 0, 0, outW, outH);
       ctx.restore();
