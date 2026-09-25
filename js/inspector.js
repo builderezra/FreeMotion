@@ -4763,20 +4763,61 @@ window.FM = window.FM || {};
         for (let i = 0; i < targets.length; i++) { const d = Math.abs(v - targets[i]); if (d < bd) { bd = d; best = targets[i]; } }
         return best;
       };
+      /* ⚠️ SNAP WHERE THE LAYER IS SEEN, NOT THE NUMBER IN ITS X/Y (queue 690, fourth hunt). The targets are FRAME
+         positions (0, the centre, the far edge), and for a plain layer its x/y IS its frame position, so the raw
+         value could be snapped straight. Two kinds of layer are not like that:
+         - A GROUP's x/y is an OFFSET from where its members are (a new group sits at 0,0 on purpose). Snapping
+           the raw number said "Snapped to left edge + top edge" the moment his finger touched a group sitting dead
+           centre, held it still for the first ~9 px of swipe, drew the guides on the frame's left and top edges —
+           and the snap it called centre put the group's centre on the RIGHT edge of the frame (offset 540).
+           canvas-edit.js learned this long ago (drag.boundsOffX: "offset 0 snapping to centre 540 was
+           meaningless"); the half that knew it never came across when the snapping moved to this pad.
+         - A layer INSIDE a group has x/y in the group's space, so a group moved 200 px right shifted every
+           target a member was snapped to by 200 px.
+         So each axis carries a map from the value the pad writes to where the thing is SEEN in the frame,
+         `seen = a + s·value` (the group's bounds centre for a group, through the parent chain for a member).
+         The snap is judged, named and drawn in the frame, and written back through the inverse. A parent that is
+         TURNED has no such per-axis map — a frame edge is a slanted line in its space — so, like the canvas drag,
+         that layer gets no frame targets at all rather than wrong ones. Its own earlier keyframes are still
+         mapped the same way, so "put it back where it was" keeps working wherever the frame map exists. */
+      const padFrame = () => {
+        const t = FM.time;
+        let ax = 0, ay = 0, s = 1;
+        if (layer.parent) {
+          const pt = FM.canvasEdit && FM.canvasEdit._parentXform ? FM.canvasEdit._parentXform(layer, t) : null;
+          const turned = !pt || Math.abs(Math.sin(pt.rot)) > 1e-6 || Math.cos(pt.rot) < 0 || !(pt.s > 1e-6);
+          if (turned) return null;
+          ax = pt.x; ay = pt.y; s = pt.s;
+        }
+        if (layer.type === 'group' && FM.groupBounds) {
+          const gb = FM.groupBounds(layer, FM.scene, t);   // in the group's PARENT space, the same space as its x/y
+          if (gb) { ax += s * (gb.x - mtEval(layer, 'x')); ay += s * (gb.y - mtEval(layer, 'y')); }
+        }
+        return { ax: ax, ay: ay, s: s };
+      };
+      const padTargets = (fr, axis) => {
+        const P = FM.scene.project, out = axis === 'x' ? [P.width / 2, 0, P.width] : [P.height / 2, 0, P.height];
+        const p = layer.transform && layer.transform[axis], a = axis === 'x' ? fr.ax : fr.ay;
+        // this layer's own earlier keyframes, carried into the frame by the same map (de-duped, like FM.alignTargets)
+        if (p && p.kf) p.kf.forEach(k => { const w = a + fr.s * k.v; if (out.indexOf(w) < 0) out.push(w); });
+        return out;
+      };
       let pd = null;
       pad.addEventListener('pointerdown', e => {
+        const fr = padFrame();
         pd = { x: e.clientX, y: e.clientY, ix: mtEval(layer, 'x'), iy: mtEval(layer, 'y'),
-               tx: FM.alignTargets ? FM.alignTargets(layer, 'x') : [FM.scene.project.width / 2, 0, FM.scene.project.width],
-               ty: FM.alignTargets ? FM.alignTargets(layer, 'y') : [FM.scene.project.height / 2, 0, FM.scene.project.height] };
+               fr: fr || { ax: 0, ay: 0, s: 1 },
+               tx: fr ? padTargets(fr, 'x') : [], ty: fr ? padTargets(fr, 'y') : [] };
         try { pad.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault();
       });
       pad.addEventListener('pointermove', e => {
         if (!pd) return;
         if (e.pointerType === 'mouse' && e.buttons === 0) { pd = null; commitH(); return; }
-        const thr = 9 * sens;   // ~9 finger px of stickiness, expressed in project units
+        const fr = pd.fr, thr = 9 * sens * fr.s;   // ~9 finger px of stickiness, expressed in FRAME units
         const rx = pd.ix + (e.clientX - pd.x) * sens, ry = pd.iy + (e.clientY - pd.y) * sens;
-        const hx = snapT(rx, pd.tx, thr), hy = snapT(ry, pd.ty, thr);
-        mtSet(layer, 'x', Math.round(hx == null ? rx : hx)); mtSet(layer, 'y', Math.round(hy == null ? ry : hy));
+        // judged where the layer is SEEN (see padFrame); hx/hy are frame positions — what the hint names and the guide draws
+        const hx = snapT(fr.ax + fr.s * rx, pd.tx, thr), hy = snapT(fr.ay + fr.s * ry, pd.ty, thr);
+        mtSet(layer, 'x', Math.round(hx == null ? rx : (hx - fr.ax) / fr.s)); mtSet(layer, 'y', Math.round(hy == null ? ry : (hy - fr.ay) / fr.s));
         showPadSnap(hx, hy);
         if (FM.showAlignGuide) FM.showAlignGuide(hx, hy);   // the line on the CANVAS — what did I line up with?
         refreshAllBoxes(); if (FM.canvasEdit) FM.canvasEdit.update();

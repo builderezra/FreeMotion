@@ -10,6 +10,7 @@ window.FM = window.FM || {};
   let canvas, wrap, box;
   let drag = null;
   let guideV = null, guideH = null, anchorDot = null;
+  let rotKnob = null;   // the rotate knob — placeRotKnob() keeps it where a finger can reach it (queue 690)
 
   // Snap a value to the nearest target within threshold (canvas centre / edges).
   function snapTo(v, targets, thr) {
@@ -882,6 +883,37 @@ window.FM = window.FM || {};
       anchorDot.style.display = showA ? 'block' : 'none';
       if (showA) { anchorDot.style.left = g.anchorX + 'px'; anchorDot.style.top = g.anchorY + 'px'; }
     }
+    placeRotKnob();
+  }
+
+  /* ⚠️ THE ROTATE KNOB HAS TO BE WHERE A FINGER CAN GET IT (queue 690, fourth hunt). It sits 28 px above the box
+     (.sb-rot, top: -28px), and #stage clips everything outside it. On the phone a 9:16 project fills the stage from
+     the top bar down, so on any layer that reaches the top of the frame — every portrait photo or video he imports
+     is fitted to fill it — the knob was drawn at y 38 while the top bar runs to 52: it could not be seen, and his
+     finger on it landed on the bar's help button and turned the layer 0 degrees. On a landscape project the same
+     layer's knob sits in the letterbox and works, which is why it hid.
+     So after the box is placed, the knob is measured against the stage. Where it is on screen it stays exactly as
+     it always was. Where it is not, it goes to the box's BOTTOM edge if that is on screen (a title near the top
+     keeps the knob off its text), and otherwise INSIDE the box under the top edge (a layer that fills the frame
+     has no room above or below it). The bottom spot is the top spot mirrored through the box's centre — the
+     same affine box, so that holds rotated and sheared too — which is why it needs no second measurement.
+     The rotate drag measures its angle from where the finger went down, so a knob in either spot turns the layer
+     the same way. Not re-placed while it is being turned: jumping away from the finger turning it is worse than
+     sitting half off the stage for the length of one drag. */
+  function placeRotKnob() {
+    if (!rotKnob || !box || box.style.display === 'none') return;
+    if (drag && drag.mode === 'rotate') return;
+    const stage = document.getElementById('stage');
+    if (!stage) return;
+    rotKnob.classList.remove('sb-rot-below', 'sb-rot-in');
+    const sr = stage.getBoundingClientRect(), kr = rotKnob.getBoundingClientRect(), br = box.getBoundingClientRect();
+    if (!(sr.width > 0) || !(kr.width > 0)) return;
+    const M = 8;   // the dot's own radius plus a little: the whole dot on the stage, not its centre scraping the edge
+    const seen = (x, y) => x >= sr.left + M && x <= sr.right - M && y >= sr.top + M && y <= sr.bottom - M;
+    const kx = kr.left + kr.width / 2, ky = kr.top + kr.height / 2;
+    if (seen(kx, ky)) return;
+    const cx = br.left + br.width / 2, cy = br.top + br.height / 2;
+    rotKnob.classList.add(seen(2 * cx - kx, 2 * cy - ky) ? 'sb-rot-below' : 'sb-rot-in');
   }
 
   // Show the alignment guide lines from OUTSIDE a canvas drag (used by Move & Transform when its X/Y
@@ -957,6 +989,7 @@ window.FM = window.FM || {};
       rotH.className = 'sb-handle sb-rot';
       rotH.addEventListener('pointerdown', startHandle('rotate'));
       box.appendChild(rotH);
+      rotKnob = rotH;
       wrap.appendChild(box);
       guideV = document.createElement('div'); guideV.className = 'snap-guide v'; guideV.style.display = 'none';
       guideH = document.createElement('div'); guideH.className = 'snap-guide h'; guideH.style.display = 'none';
