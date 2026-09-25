@@ -92117,4 +92117,275 @@
     } finally { probe.remove(); if (FM.hideToast) FM.hideToast(); else t.classList.add('hidden'); }
   });
 
+  /* ═══ HUNT-a — IMPORTING FROM HIS PHONE (queue 690, 25 Sep) ════════════════════════════════════════════════════════════
+   * Four findings from a hunt through the Add sheet, the picker, the media library and Replace media. Each test goes in by
+   * the route he uses: the New project dialog and the ⋯ menu are driven with a REAL finger at phone width, and every file
+   * arrives through the app's own #file-input `change` (exactly what the iOS picker does) or through the input
+   * FM.replaceMedia creates — only the picker's own sheet, which no page can drive, is stood in for. */
+  function h3aCodec(w, h) { return w * h <= 414720 ? 'avc1.42e01e' : w * h <= 2100000 ? 'avc1.640028' : 'avc1.640033'; }
+  // A real H.264 MP4 made the way a phone clip is (constant frame duration), painted by `paint(g, k, w, h)`.
+  async function h3aClip(w, h, n, name, paint) {
+    const muxer = new Mp4Muxer.Muxer({ target: new Mp4Muxer.ArrayBufferTarget(), video: { codec: 'avc', width: w, height: h }, fastStart: 'in-memory' });
+    let encErr = null;
+    const enc = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: e => { encErr = e; } });
+    enc.configure({ codec: h3aCodec(w, h), width: w, height: h, bitrate: 4e6, framerate: 30 });
+    const cv = new OffscreenCanvas(w, h), g = cv.getContext('2d');
+    for (let k = 0; k < n; k++) {
+      paint(g, k, w, h);
+      const f = new VideoFrame(cv, { timestamp: Math.round(k * 1e6 / 30), duration: Math.round(1e6 / 30) });
+      enc.encode(f, { keyFrame: k % 10 === 0 }); f.close();
+    }
+    await enc.flush(); enc.close();
+    if (encErr) throw new Error('setup: the fixture clip could not be encoded: ' + encErr);
+    muxer.finalize();
+    return new File([muxer.target.buffer], name, { type: 'video/mp4', lastModified: Date.now() });
+  }
+  function h3aWav(secs, hz, name) {
+    const rate = 8000, n = Math.round(secs * rate);
+    const buf = new ArrayBuffer(44 + n * 2), dv = new DataView(buf);
+    const w = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+    w(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+    dv.setUint32(24, rate, true); dv.setUint32(28, rate * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, n * 2, true);
+    for (let i = 0; i < n; i++) dv.setInt16(44 + i * 2, Math.round(Math.sin(2 * Math.PI * hz * i / rate) * 12000), true);
+    return new File([buf], name, { type: 'audio/wav', lastModified: Date.now() });
+  }
+  // A file through the app's own picker input — the `change` the iOS photo picker fires. Resolves with the new layer.
+  async function h3aImport(file) {
+    const fi = document.getElementById('file-input');
+    if (!fi) throw new Error('setup: there is no #file-input, the picker the Add sheet opens');
+    const had = new Set(FM.scene.layers.map(l => l.id));
+    const dt = new DataTransfer(); dt.items.add(file); fi.files = dt.files;
+    fi.dispatchEvent(new Event('change'));
+    const L = await hcUntil('the import of ' + file.name, () => FM.scene.layers.find(l => !had.has(l.id)), 10000);
+    await sleep(200);
+    return L;
+  }
+  // Every file input the app clicks while `fn` runs is handed `file`, as the picker would. Records what it asked for.
+  async function h3aPicker(file, fn) {
+    const realClick = HTMLInputElement.prototype.click, seen = { accept: null, n: 0 };
+    HTMLInputElement.prototype.click = function () {
+      if (this.type !== 'file') return realClick.apply(this, arguments);
+      seen.accept = this.getAttribute('accept'); seen.n++;
+      const dt = new DataTransfer(); dt.items.add(file); this.files = dt.files;
+      this.dispatchEvent(new Event('change'));
+    };
+    try { await fn(); } finally { HTMLInputElement.prototype.click = realClick; }
+    return seen;
+  }
+  // A real finger on `el`, which must be inside the part of the frame real input can reach.
+  async function h3aTap(el, what) {
+    if (!el) throw new Error('setup: nothing to tap for ' + what);
+    const r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+    if (!(r.width > 0) || x > 350 || y > 740 || x < 0 || y < 0) throw new Error('setup: ' + what + ' is at ' + Math.round(x) + ',' + Math.round(y) + ' (' + Math.round(r.width) + ' wide), out of reach of real input');
+    await realInput924([{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 0 }], what);
+  }
+  // ⋯ → an item of the layer menu, by a real finger on the phone top bar (the only door to Replace media on a phone).
+  async function h3aLayerMenu(L, re, what) {
+    FM.selectLayer(L.id); FM.refreshAll(); await sleep(450);
+    const more = document.getElementById('m-more');
+    if (!more || !more.getBoundingClientRect().width) throw new Error('setup: the phone ⋯ (#m-more) is not on screen with ' + L.name + ' selected');
+    await h3aTap(more, 'a tap on ⋯');
+    const item = await hcMenuItem(re);
+    await h3aTap(item, what);
+  }
+  function h3aLibSnapshot() { return new Set(FM.mediaLib.list().map(e => e.mid)); }
+  function h3aLibRestore(before) { FM.mediaLib.list().forEach(e => { if (!before.has(e.mid)) FM.mediaLib.remove(e.mid); }); }
+  function h3aPixel(t) {   // the centre-left and centre of the whole frame, rendered as the canvas renders it
+    const P = FM.scene.project, s = 0.25;
+    const c = document.createElement('canvas'); c.width = Math.max(4, Math.round(P.width * s)); c.height = Math.max(4, Math.round(P.height * s));
+    const g = c.getContext('2d'); g.setTransform(s, 0, 0, s, 0, 0);
+    FM.renderScene(g, FM.scene, t);
+    const at = (x, y) => Array.prototype.slice.call(g.getImageData(x, y, 1, 1).data, 0, 3);
+    return { edge: at(1, c.height >> 1), centre: at(c.width >> 1, c.height >> 1) };
+  }
+  function h3aName(rgb) {
+    const [r, g, b] = rgb;
+    if (r > 180 && g > 180 && b < 90) return 'yellow';
+    if (r > 150 && g < 90 && b < 90) return 'red';
+    if (g > 120 && r < 90 && b < 90) return 'green';
+    if (b > 150 && r < 90 && g < 110) return 'blue';
+    return 'rgb(' + rgb.join(',') + ')';
+  }
+
+  test('HUNT-a a new project keeps the aspect and size he picked when the first thing he adds is a phone clip of another shape', { item: '690', budgetMs: 90000 }, async function () {
+    /* He starts every project in the New project dialog, and the dialog exists so a project starts the way he wants it
+       instead of being corrected later in Canvas settings. Its sixth tile is Custom, labelled Auto adjusts (his words,
+       #659) — so the other five are promises. addMediaLayer breaks them: the first clip or photo added to an empty
+       project REPLACES the canvas size with the file's own (js/app.js, FM.addMediaLayer, `first && rec.width && rec.height`),
+       whatever tile he picked. A 16:9 project becomes portrait the moment his phone clip lands; a 1080p pick becomes 4K
+       when the clip is 4K, and the export follows the canvas. Dialog driven with a real finger at 360. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], lib0 = h3aLibSnapshot();
+    let remembered = null; try { remembered = localStorage.getItem('fm.newproj'); } catch (e) {}
+    try {
+      try { localStorage.setItem('fm.newproj', JSON.stringify({ aspect: '9:16', res: '1080', fps: 30, bg: '#000000', w: 1080, h: 1920 })); } catch (e) {}
+      const clip = await h3aClip(1080, 1920, 6, 'IMG_2041.MOV', function (g, k, w, h) { g.fillStyle = '#2050d0'; g.fillRect(0, 0, w, h); g.fillStyle = '#f0c040'; g.fillRect(w * 0.3, h * 0.4, w * 0.4, h * 0.2); });
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          FM.home.open(); await sleep(900);
+          const tab = document.querySelector('#home-screen .hm-tab[data-tab="projects"]');
+          if (tab) { tab.click(); await sleep(300); }
+          const before = new Set(FM.projects.list().map(p => p.id));
+          await h3aTap(document.getElementById('hm-new'), 'a tap on + (new project)');
+          const wide = await hcUntil('the New project dialog', () => { const d = document.getElementById('hm-dialog'); return d && !d.classList.contains('hidden') ? d.querySelector('.hm-aspect[data-aspect="16:9"]') : null; }, 4000);
+          await sleep(350);
+          await h3aTap(wide, 'a tap on 16:9 Wide');
+          await sleep(150);
+          const said = (document.getElementById('hm-new-size') || {}).textContent || '';
+          if (!/1920\D+1080/.test(said)) throw new Error('setup: after a tap on 16:9 Wide the dialog reads ' + said + ', not 1920 x 1080 — the pick did not happen');
+          await h3aTap(document.getElementById('hm-create'), 'a tap on Create');
+          const pid = await hcUntil('the new project to open', () => { const id = FM.projects.currentId(); return (id && !before.has(id) && !FM.home.isOpen()) ? id : null; }, 8000);
+          made.push(pid);
+          await sleep(400);
+          const P = FM.scene.project;
+          if (P.width !== 1920 || P.height !== 1080) throw new Error('setup: the new project opened at ' + P.width + ' x ' + P.height + ', not the 1920 x 1080 the dialog showed');
+          if (FM.scene.layers.length) throw new Error('setup: the new project is not empty');
+          await h3aImport(clip);
+          const W = FM.scene.project.width, H = FM.scene.project.height;
+          if (W !== 1920 || H !== 1080) {
+            throw new Error('he picked 16:9 Wide at 1080p in New project (1920 x 1080) and added his portrait phone clip first — the project silently became ' +
+              W + ' x ' + H + ': the canvas he chose is gone, the preview turned portrait and the export will come out ' + W + ' x ' + H + '. Only the Custom tile says Auto adjusts');
+          }
+        });
+      }, 360);
+    } finally {
+      try { if (remembered == null) localStorage.removeItem('fm.newproj'); else localStorage.setItem('fm.newproj', remembered); } catch (e) {}
+      try { const d = document.getElementById('hm-dialog'); if (d) d.classList.add('hidden'); } catch (e) {}
+      h3aLibRestore(lib0);
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('HUNT-a Replace media puts the new clip where the old one was at the same size, instead of blowing it up by its pixel count', { item: '690', budgetMs: 90000 }, async function () {
+    /* Replace media (the ⋯ menu, and the Replace Media button of a template's Insert your Media sheet, which calls the
+       same FM.replaceMedia) keeps the layer's transform — and a media layer's size on the canvas is the FILE's pixel size
+       times that scale (FM.layerSize). So the scale that made the old file fit is applied to a file of a different
+       pixel count: a 4K clip swapped in for a 1080p one of the SAME shape comes in twice as wide and twice as tall, and
+       he sees only its middle quarter. His phone shoots 4K and 12 MP stills, so nearly every swap does this. Driven
+       with a real finger on the phone ⋯. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], lib0 = h3aLibSnapshot();
+    try {
+      if (wasOpen) FM.home.close();
+      made.push(await FM.projects.create({ name: 'HUNT-a replace', width: 1080, height: 1920 }));
+      await sleep(250);
+      const bordered = function (g, k, w, h) { g.fillStyle = '#00c000'; g.fillRect(0, 0, w, h); const b = Math.round(w * 0.12); g.fillStyle = '#0030ff'; g.fillRect(b, b, w - 2 * b, h - 2 * b); };
+      const hd = await h3aClip(1080, 1920, 4, 'IMG_1001.MOV', function (g, k, w, h) { g.fillStyle = '#d02020'; g.fillRect(0, 0, w, h); });
+      const uhd = await h3aClip(2160, 3840, 3, 'IMG_1002.MOV', bordered);   // his 4K portrait clip: green border, blue middle
+      const L = await h3aImport(hd);
+      const size0 = FM.layerSize(L).w * L.transform.scale;
+      if (Math.abs(size0 - 1080) > 11) throw new Error('setup: the first clip does not fill the 1080 px canvas (' + Math.round(size0) + ' px wide)');
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const seen = await h3aPicker(uhd, async function () { await h3aLayerMenu(L, /^Replace media/, 'a tap on Replace media…'); });
+          if (!seen.n) throw new Error('setup: tapping Replace media… opened no file picker');
+        });
+      }, 360);
+      const m = await hcUntil('the 4K clip to replace the old one', () => { const r = FM.media.get(L.id); return r && r.width === 2160 ? r : null; }, 8000);
+      // the timeline re-draws the new clip's filmstrip by seeking its own element; the canvas holds nothing until that is done
+      await hcUntil('the 4K clip to decode a frame and its filmstrip to finish', () => m.el && m.el.readyState >= 2 && !m.el.seeking && !m._stripBuilding && m.stripFrames !== undefined, 10000);
+      await sleep(200);
+      await hcUntil('the 4K clip to hold a decoded frame', () => m.el.readyState >= 2 && !m.el.seeking, 4000);
+      const Lnow = FM.layerById(FM.scene, L.id);
+      const drawn = FM.layerSize(Lnow).w * Lnow.transform.scale;
+      const px = h3aPixel(Lnow.start + 0.02);
+      if (Math.abs(drawn - 1080) > 22) {
+        throw new Error('he swapped his 1080 x 1920 clip for a 4K portrait clip of the same shape with Replace media — the new clip came in ' + (drawn / 1080).toFixed(2) +
+          ' times the size, ' + Math.round(drawn) + ' px wide on the 1080 px canvas, so only its middle quarter shows: the left edge of the canvas is ' + h3aName(px.edge) +
+          ' where the clip green border should be. Filling a template slot (Insert your Media) with his own 4K clip or 12 MP photo goes the same way');
+      }
+      if (h3aName(px.edge) !== 'green') throw new Error('the replaced clip reports the right size but the left edge of the canvas is ' + h3aName(px.edge) + ', not the clip green border');
+    } finally {
+      h3aLibRestore(lib0);
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('HUNT-a an animated GIF he adds moves on the canvas, instead of freezing on its first frame', { item: '690', budgetMs: 60000 }, async function () {
+    /* The importer takes .gif as a picture (RE_IMAGE in js/app.js) and loads it into an <img> that is never in the page.
+       A detached image never advances its animation, so drawImage paints frame 0 for the whole clip, in the preview and in
+       every export (the exporter renders through the same FM.renderScene). Nothing tells him: the reaction GIF or animated
+       sticker he added simply sits still. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], lib0 = h3aLibSnapshot();
+    try {
+      if (wasOpen) FM.home.close();
+      made.push(await FM.projects.create({ name: 'HUNT-a gif', width: 1080, height: 1920 }));
+      await sleep(250);
+      const W = 240, H = 240, cols = [[230, 30, 30], [30, 60, 230], [30, 200, 40], [240, 220, 30]];
+      const enc = FM.gifEncoder.create(W, H, { loop: true });
+      cols.forEach(function (c) {
+        const rgba = new Uint8ClampedArray(W * H * 4);
+        for (let i = 0; i < W * H; i++) { rgba[i * 4] = c[0]; rgba[i * 4 + 1] = c[1]; rgba[i * 4 + 2] = c[2]; rgba[i * 4 + 3] = 255; }
+        enc.addFrame(rgba, 250);
+      });
+      const gif = new File([enc.finish()], 'reaction.gif', { type: 'image/gif', lastModified: Date.now() });
+      /* CONTROL: the fixture really is a four-frame animation, as the browser itself reads it. */
+      if (window.ImageDecoder) {
+        const d = new ImageDecoder({ data: await gif.arrayBuffer(), type: 'image/gif' });
+        await d.tracks.ready;
+        const n = d.tracks.selectedTrack.frameCount;
+        const f2 = await d.decode({ frameIndex: 2 });
+        const oc = new OffscreenCanvas(4, 4), og = oc.getContext('2d'); og.drawImage(f2.image, 0, 0, 4, 4); f2.image.close();
+        const c2 = h3aName(Array.prototype.slice.call(og.getImageData(2, 2, 1, 1).data, 0, 3));
+        d.close();
+        if (n !== 4 || c2 !== 'green') throw new Error('CONTROL: the browser reads the fixture as ' + n + ' frame(s) with frame 3 ' + c2 + ' — it is not the four-colour animation this test needs');
+      }
+      const L = await h3aImport(gif);
+      if (L.type !== 'image') throw new Error('setup: the GIF imported as a ' + L.type + ' layer');
+      const at = [0.1, 0.35, 0.6, 0.85].map(function (dt) { return { dt: dt, c: h3aName(h3aPixel(L.start + dt).centre) }; });
+      if (at[0].c !== 'red') throw new Error('setup: 0.1 s into the GIF the canvas centre is ' + at[0].c + ', not its first frame (red) — the layer is not drawing');
+      const distinct = new Set(at.map(function (a) { return a.c; }));
+      if (distinct.size < 3) {
+        throw new Error('his animated GIF (four frames a second, red, blue, green, yellow) is frozen on its first frame — the canvas shows ' +
+          at.map(function (a) { return a.c + ' at ' + a.dt + ' s'; }).join(', ') + '. It never moves, in the preview or in the export');
+      }
+    } finally {
+      h3aLibRestore(lib0);
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('HUNT-a Replace media on a song lets him pick another song, and the layer then plays it', { item: '690', budgetMs: 60000 }, async function () {
+    /* A song is a video layer with no picture, so its ⋯ menu offers Replace media… like any clip (and a template's Insert
+       your Media sheet lists it as a slot). But FM.replaceMedia opens a picker for video/*,image/* only — on his iPhone
+       every song in Files is greyed out — and it decides photo-or-video from the file itself: a song handed to it is
+       loaded as a PICTURE, fails, and the toast says Could not load that file. The layer keeps the old song; the only way
+       to try another is to delete the layer and lose its cuts, volume and fades. Driven with a real finger on the ⋯. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], lib0 = h3aLibSnapshot();
+    const toasts = [], realToast = FM.toast;
+    try {
+      if (wasOpen) FM.home.close();
+      made.push(await FM.projects.create({ name: 'HUNT-a song', width: 1080, height: 1920 }));
+      await sleep(250);
+      const L = await h3aImport(h3aWav(6, 440, 'Song A.wav'));
+      const m0 = FM.media.get(L.id);
+      if (!m0 || !m0.file || m0.file.name !== 'Song A.wav' || L.type !== 'video') throw new Error('setup: Song A did not import as a song layer');
+      const songB = h3aWav(9, 660, 'Song B.wav');
+      FM.toast = function (msg) { toasts.push(String(msg)); return realToast.apply(this, arguments); };
+      let seen = null;
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          seen = await h3aPicker(songB, async function () { await h3aLayerMenu(L, /^Replace media/, 'a tap on Replace media…'); });
+        });
+      }, 360);
+      if (!seen || !seen.n) throw new Error('setup: tapping Replace media… on the song opened no file picker');
+      let rec = null;
+      for (let i = 0; i < 60; i++) { rec = FM.media.get(L.id); if (rec && rec.file === songB) break; await sleep(50); }
+      const offersAudio = /audio/i.test(seen.accept || '');
+      const replaced = !!(rec && rec.file === songB);
+      if (!offersAudio || !replaced) {
+        throw new Error('Replace media… on his song opens a picker for ' + (seen.accept || 'anything') + (offersAudio ? '' : ' only — on his iPhone every song in Files is greyed out') +
+          ', and Song B handed to it anyway ' + (replaced ? 'did replace it' : 'was refused' + (toasts.length ? ' (toast: ' + toasts[toasts.length - 1] + ')' : '') +
+          ' — the layer still plays ' + ((rec && rec.file && rec.file.name) || 'nothing')));
+      }
+      if (!(Math.abs(FM.layerById(FM.scene, L.id).duration - 6) < 0.2)) throw new Error('the song was replaced but its clip length changed to ' + FM.layerById(FM.scene, L.id).duration + ' s');
+    } finally {
+      FM.toast = realToast;
+      h3aLibRestore(lib0);
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
 })();
