@@ -94436,7 +94436,9 @@
    * re-timing clips. The gestures are driven with TRUSTED input through tests/_cdp.py (realInput924) — a real finger at
    * 380 and, when the driver window is wide enough to reach the PC timeline, a real mouse at 1280 — because clip drags,
    * trims and their auto-scroll depend on capture and hit-testing that synthetic events never exercise. Each test carries
-   * a control proving its gesture engaged, so a red is the app, not a gesture that never started. */
+   * a control proving its gesture engaged, so a red is the app, not a gesture that never started.
+   * Found as four failing HUNT-a tests; all four fixed (js/timeline.js adoptEdgeScrolledTime and applyTrimAt's ramp
+   * branches, js/app.js Reset speed and the arrow nudge) and renamed 690 for what they now hold. */
   async function hunt4aScene(defs, dur) {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     if (FM.contextMenu) FM.contextMenu.hide();
@@ -94476,13 +94478,14 @@
     try { FM.inspector.openCategory('home'); FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
   }
 
-  test('HUNT-a letting go of a clip or a trim edge he carried to the screen edge throws the timeline back — what he just placed goes off screen', { item: '690', budgetMs: 90000 }, async function () {
+  test('690 letting go of a clip or a trim edge he carried to the screen edge leaves the timeline where he carried it — what he just placed stays on screen', { item: '690', budgetMs: 90000 }, async function () {
     /* Queue 115: dragging a clip (or a trim handle, which had it first) into the edge of the screen scrolls the timeline
        so he can keep going — his words, "without needing to let go and then scroll". The scroll handler ignores those
        scrolls on purpose (`if (trimDrag || clipMove || kfDrag || scrub) return`), so FM.time never follows the view; and
        on release the rebuild runs updatePlayhead, which writes scrollLeft = FM.time × px-per-second. The view snaps back
        to where the playhead was before the drag, and the clip he just carried is off the screen — he has to scroll to
-       find it again, which is the very thing 115 was built to save him. */
+       find it again, which is the very thing 115 was built to save him. Fixed: the release adopts the time under the centre
+       line (js/timeline.js adoptEdgeScrolledTime), which is the fixed-centre rule the scroll handler already keeps. */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const saved = FM.scene;
     const bad = [];
@@ -94549,29 +94552,35 @@
     } finally { hunt4aCleanup(saved); }
   });
 
-  test('HUNT-a trimming the head of a speed-ramped clip with its handle makes every kept frame jump', { item: '690', budgetMs: 90000 }, async function () {
+  test('690 trimming a speed-ramped clip with its handle keeps every kept frame still — the head of a ramp, the tail of a reversed ramp', { item: '690', budgetMs: 120000 }, async function () {
     /* A head trim has to leave the kept picture where it was: trimStart must advance by the source the cut part CONSUMED,
        which on a ramp is the integral of the speed over the cut (FM.headSourceDelta). The A key, the phone buttons,
        FM.trimLayerHead and Extend were all moved onto that integral (21 Aug, queue 914.2) — but the trim HANDLE the finger
        and the mouse actually drag is js/timeline.js applyTrimAt, which still writes trimStart = trim + delta × speedAt(new
        head): the instantaneous speed at the new head times the whole cut. The #912 audit and test 914.2 both treat
-       FM.trimLayerHead as the grip; it is not the grip. The flat 1.5x clip, same gesture, is the control. */
+       FM.trimLayerHead as the grip; it is not the grip. The flat 1.5x clip, same gesture, is the control.
+       The same function's REVERSED TAIL had the matching hole — `extra = (nd - dur) × sp` with sp = 1 for any ramp, the
+       bug FM.extendClipTo was cured of on 21 Aug — so a reversed ramp's right handle dragged 1 s out is checked too, with a
+       reversed flat 1.5x clip as its control. Fixed in js/timeline.js applyTrimAt: both through the curve, measured at the grab. */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const saved = FM.scene;
     const made = [];
     const bad = [];
-    const TIMES = [5, 6, 7];   // all inside the clip before (2..8) and after a 2 s head trim (4..8)
+    const TIMES = [5, 6, 7];   // all inside the clip before (2..8), after a 2 s head trim (4..8) and after a 1 s tail pull (2..9)
     const RAMP = { kf: [{ t: 2, v: 0.5, e: 'linear' }, { t: 8, v: 2, e: 'linear' }] };
-    async function trimHead(speed, kind) {
-      const L = await hunt4aScene([{ type: 'video', name: 'H4A clip', start: 2, duration: 6, trimStart: 1, speed: speed }], 10);
+    async function trimHead(speed, kind, tail) {
+      // tail: the RIGHT handle of a REVERSED clip, pulled 1 s out — the tail of a reversed clip eats source below trimStart
+      const L = await hunt4aScene([{ type: 'video', name: 'H4A clip', start: 2, duration: 6, trimStart: tail ? 3 : 1, speed: speed }], 10);
       const v = L[0]; made.push(v.id);
+      if (tail) v.reversed = true;
       FM.media.set(v.id, { kind: 'video', duration: 60, width: 2, height: 2 });
-      FM.selectLayer(v.id); FM.setTime(kind === 'touch' ? 3.5 : 2.5); FM.timeline.updatePlayhead(); FM.timeline.rebuild(); await sleep(400);   // parked inside, so the head sits left of centre with room to drag (clear of the PC track heads)
-      const clip = hunt4aClip(v.id), g = clip && clip.querySelector('.clip-grip.left');
-      if (!g) throw new Error('setup: the selected clip has no left trim handle');
+      FM.selectLayer(v.id); FM.setTime(tail ? 7.5 : (kind === 'touch' ? 3.5 : 2.5)); FM.timeline.updatePlayhead(); FM.timeline.rebuild(); await sleep(400);   // parked inside, so the handle sits beside centre with room to drag (clear of the PC track heads)
+      const clip = hunt4aClip(v.id), g = clip && clip.querySelector(tail ? '.clip-grip.right' : '.clip-grip.left');
+      if (!g) throw new Error('setup: the selected clip has no ' + (tail ? 'right' : 'left') + ' trim handle');
       const gr = g.getBoundingClientRect(), x = gr.left + gr.width / 2, y = gr.top + gr.height / 2;
-      const pps = FM.timeline.timeToX(1) - FM.timeline.timeToX(0), dx = pps * 2;
-      if ((kind === 'touch' && x + dx > 360) || y > 740 || x < 70) throw new Error('setup: the left trim handle is at ' + Math.round(x) + ',' + Math.round(y) + ' and a 2 s drag needs ' + Math.round(dx) + ' px, out of reach of real input');
+      const pps = FM.timeline.timeToX(1) - FM.timeline.timeToX(0), dx = pps * (tail ? 1 : 2);
+      const tlr = document.getElementById('timeline').getBoundingClientRect();
+      if ((kind === 'touch' && x + dx > 345) || x + dx > tlr.right - 50 || y > 740 || x < 70) throw new Error('setup: the ' + (tail ? 'right' : 'left') + ' trim handle is at ' + Math.round(x) + ',' + Math.round(y) + ' and the drag needs ' + Math.round(dx) + ' px, out of reach of real input or into the auto-scroll band');
       const under = document.elementFromPoint(x, y);
       if (!under || !under.classList.contains('clip-grip')) throw new Error('setup: the point on the left trim handle (' + Math.round(x) + ',' + Math.round(y) + ') is covered by ' + (under ? under.className : 'nothing'));
       const before = TIMES.map(t => FM.layerLocalTime(v, t));
@@ -94581,9 +94590,10 @@
       for (let k = 1; k <= 10; k++) steps.push({ t: kind === 'touch' ? 'touchMove' : 'mouseMove', x: x + dx * k / 10, y: y, ms: 40 });
       steps.push({ t: kind === 'touch' ? 'touchMove' : 'mouseMove', x: x + dx, y: y, ms: 150 });
       steps.push({ t: kind === 'touch' ? 'touchEnd' : 'mouseUp', x: x + dx, y: y, ms: 0 });
-      await realInput924(steps, (kind === 'touch' ? 'a real finger' : 'a real mouse') + ' dragging the left trim handle 2 s in');
+      await realInput924(steps, (kind === 'touch' ? 'a real finger' : 'a real mouse') + (tail ? ' dragging the right trim handle 1 s out' : ' dragging the left trim handle 2 s in'));
       await sleep(400);
-      if (!(v.start > 3.5 && v.start < 4.5)) throw new Error('CONTROL: the ' + kind + ' drag on the left handle did not trim the head to about 4 s (start ' + v.start.toFixed(3) + ') — no trim happened');
+      if (!tail && !(v.start > 3.5 && v.start < 4.5)) throw new Error('CONTROL: the ' + kind + ' drag on the left handle did not trim the head to about 4 s (start ' + v.start.toFixed(3) + ') — no trim happened');
+      if (tail && !(v.start + v.duration > 8.5 && v.start + v.duration < 9.5)) throw new Error('CONTROL: the ' + kind + ' drag on the right handle did not pull the tail out to about 9 s (end ' + (v.start + v.duration).toFixed(3) + ') — no trim happened');
       const now = TIMES.map(t => FM.layerLocalTime(v, t));
       let worst = 0, at = null;
       TIMES.forEach((t, i) => { const d = Math.abs(now[i] - before[i]); if (d > worst) { worst = d; at = i; } });
@@ -94600,6 +94610,10 @@
             if (ctl.worst > 0.01) throw new Error('CONTROL: trimming the head of a FLAT 1.5x clip by the ' + kind + ' already moved its picture by ' + ctl.worst.toFixed(3) + ' s at ' + ctl.t + ' s, so this probe cannot judge the ramp');
             const r = await trimHead(RAMP, kind);
             if (r.worst > 0.01) bad.push((kind === 'touch' ? 'on the phone' : 'on PC') + ' he trimmed the head of a speed-ramped clip (0.5x rising to 2x) by dragging its left handle 2 s in: every frame he kept jumped — at ' + r.t + ' s the picture was source ' + r.was.toFixed(3) + ' s and is now ' + r.now.toFixed(3) + ' s, ' + r.worst.toFixed(2) + ' s of footage skipped (' + Math.round(r.worst * 30) + ' frames), where the same drag on a flat 1.5x clip keeps its picture exactly');
+            const ctlT = await trimHead(1.5, kind, true);
+            if (ctlT.worst > 0.01) throw new Error('CONTROL: pulling out the tail of a REVERSED FLAT 1.5x clip by the ' + kind + ' already moved its picture by ' + ctlT.worst.toFixed(3) + ' s at ' + ctlT.t + ' s, so this probe cannot judge the reversed ramp');
+            const rT = await trimHead(RAMP, kind, true);
+            if (rT.worst > 0.01) bad.push((kind === 'touch' ? 'on the phone' : 'on PC') + ' he pulled the right handle of a REVERSED speed-ramped clip 1 s out: every frame already on screen slid — at ' + rT.t + ' s the picture was source ' + rT.was.toFixed(3) + ' s and is now ' + rT.now.toFixed(3) + ' s (' + Math.round(rT.worst * 30) + ' frames), where the same drag on a reversed flat 1.5x clip keeps its picture exactly');
           });
         });
       }
@@ -94607,13 +94621,14 @@
     } finally { made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); hunt4aCleanup(saved); }
   });
 
-  test('HUNT-a Reset speed (1x) leaves his animation where it was — a fade at the end of a 2x clip now ends halfway through it', { item: '690', budgetMs: 90000 }, async function () {
+  test('690 Reset speed (1x) carries his animation with the clip — a fade at the end of a 2x clip still ends at its end', { item: '690', budgetMs: 90000 }, async function () {
     /* Queue 68, his words: "changing all the key frames automatically to slow or speed with the layer instead of manually
        doing it". The Speed slider and the two speed-to-playhead buttons re-time the clip AND scale its keyframes
        (FM.scaleLayerKeyframes). The clip menu's Reset speed (1x) — the one-tap way back — sets speed 1 and the new
        duration and nothing else, so every keyframe stays at its old time: a 2x clip that fades out over its last half
        second doubles in length and goes invisible for its whole second half. Driven the way he reaches it on the phone: a
-       real tap on the top bar's ⋯, then a real tap on Reset speed. */
+       real tap on the top bar's ⋯, then a real tap on Reset speed. Fixed: js/app.js Reset speed now does what the slider
+       does — scales the keyframes by the durations that resulted, clamps to the source, refits the group. */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const saved = FM.scene;
     const made = [];
@@ -94651,13 +94666,14 @@
     } finally { made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); hunt4aCleanup(saved); }
   });
 
-  test('HUNT-a pressing Right to nudge a layer sideways puts a keyframe on its up-down animation and changes the move', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 pressing Right to nudge a layer sideways leaves its up-down animation alone — no new keyframe, same move', { item: '690', budgetMs: 60000 }, async function () {
     /* On PC, with a clip selected, the arrow keys nudge its canvas position (js/app.js keydown, the Arrow branch). The
        branch works out dx and dy and then calls FM.setTransform on BOTH x and y — setting y to Math.round(its current value
        + 0) at the playhead. On a layer whose Y is animated (a slide up, say) that inserts a new linear keyframe into the
        slide at the playhead, so pressing Right re-shapes an axis he never touched: the eased slide becomes a straight run
        into a new diamond and a shorter ease out of it, and the timeline grows a diamond he did not make. A layer whose Y is
-       not animated is still moved when it sits on a half pixel, for the same reason. */
+       not animated is still moved when it sits on a half pixel, for the same reason. Fixed: js/app.js writes only the axis
+       that moved. */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const saved = FM.scene;
     try {

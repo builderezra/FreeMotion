@@ -3871,9 +3871,26 @@ window.FM = window.FM || {};
        button refuses on a reversed clip rather than get it wrong — so this is the odd one out, not a new
        idea. */
     const rev = L.type === 'video' && !!L.reversed;
+    /* Run a speed-curve measurement on the layer AS IT WAS AT THE GRAB (queue 690, fourth hunt). The live
+       L.start / L.duration have already moved on earlier frames of this drag, and FM.speedAdvanceOver lays
+       its window off L.start — the speed keyframes are in project time. Put back on a finally. */
+    const atGrab = fn => { const s0 = L.start, d0 = L.duration; L.start = trimDrag.start; L.duration = trimDrag.dur; try { return fn(); } finally { L.start = s0; L.duration = d0; } };
     if (trimDrag.edge === 'right') {
       let nd = Math.max(0.1, trimDrag.dur + dt);
-      if (rev) {
+      if (rev && ramped) {
+        /* A REVERSED RAMP'S TAIL, through the curve (queue 690, fourth hunt) — the same repair FM.extendClipTo
+           had on 21 Aug. The flat branch below uses sp, which is 1 for ANY ramp, so the source the new tail
+           plays did not equal the source trimStart gave up, and every frame already on screen slid by the
+           difference. Growing is capped by the source below trimStart, solved on the real curve; shrinking
+           hands back exactly what the cut part played. */
+        let extra;
+        if (nd > trimDrag.dur) {
+          nd = Math.max(0.1, atGrab(() => FM.speedAdvanceSolve(L, trimDrag.dur, nd, trimDrag.trim)));
+          extra = atGrab(() => FM.speedAdvanceOver(L, trimDrag.dur, nd));
+        } else extra = -atGrab(() => FM.speedAdvanceOver(L, nd, trimDrag.dur));
+        L.trimStart = Math.max(0, trimDrag.trim - extra);
+        L.duration = nd;
+      } else if (rev) {
         /* The TAIL is the window START. Lengthening the clip consumes source BELOW trimStart, so the
            window end is held and trimStart comes down — and the limit is trimStart reaching 0, not
            `srcDur - trimStart`, which is the head's limit and would have let this run off the source. */
@@ -3901,11 +3918,31 @@ window.FM = window.FM || {};
         L.start = trimDrag.start + delta;
         L.duration = trimDrag.dur - delta;
       } else {
-        const spL = ramped ? FM.speedAt(L, trimDrag.start + delta) : sp;   // local source rate at the new head
-        if (L.type === 'video' && trimDrag.trim + delta * spL < 0) delta = -trimDrag.trim / spL;
+        /* THE SOURCE THE CUT CONSUMED, THROUGH THE RAMP'S INTEGRAL (queue 690, fourth hunt). This was
+           `trim + delta × speedAt(new head)` — the instantaneous rate at the new head times the whole cut —
+           which is only right when the speed is flat. On a 0.5x -> 2x ramp a 2 s head trim advanced
+           trimStart by 2.0 s of source where the cut part had played 1.5 s, and every frame he kept
+           jumped half a second (15 frames) the moment he dragged the handle. FM.trimLayerHead, the A key
+           and Extend were all moved onto FM.headSourceDelta on 21 Aug (queue 914.2) — and the tests for
+           that drove FM.trimLayerHead, calling it the grip; it never was. This is the grip.
+           Measured at the grab (atGrab, above). A flat clip keeps its old multiply. */
+        const srcOf = d => ramped ? atGrab(() => FM.headSourceDelta(L, d)) : d * sp;
+        let srcD = srcOf(delta);
+        if (L.type === 'video' && trimDrag.trim + srcD < 0) {
+          /* Pulled back past the first frame of the source: the head can only go back as far as the
+             source before trimStart lasts. Flat: exact division. Ramp: bisect the curve, as
+             FM.speedAdvanceSolve does forwards — the consumed source only grows as the head goes back. */
+          if (!ramped) delta = -trimDrag.trim / sp;
+          else {
+            let lo = delta, hi = 0;
+            atGrab(() => { for (let i = 0; i < 30; i++) { const mid = (lo + hi) / 2; if (FM.speedAdvanceOver(L, mid, 0) > trimDrag.trim) lo = mid; else hi = mid; } });
+            delta = hi;
+          }
+          srcD = srcOf(delta);
+        }
         L.start = trimDrag.start + delta;
         L.duration = trimDrag.dur - delta;
-        if (L.type === 'video') L.trimStart = trimDrag.trim + delta * spL;
+        if (L.type === 'video') L.trimStart = Math.max(0, trimDrag.trim + srcD);
         /* A CAPTION TRACK'S CUES ARE ITS SOURCE, AND A HEAD TRIM MUST NOT DRAG THEM (bug hunt, 21 Aug).
            Cue times are layer-LOCAL (`t - layer.start`) with no trim offset, so raising `start` slid
            every caption later in project time. Measured on a 1.6s track: a 0.367s head trim moved a cue
@@ -4217,6 +4254,7 @@ window.FM = window.FM || {};
     timelineEl.scrollLeft = Math.max(0, before + v);
     const moved = timelineEl.scrollLeft - before;
     if (!moved) return;                                                        // brake 1
+    clipMove.edgeScrolled = true;   // queue 690: the release adopts the time this scroll put under the centre line
     /* The origin shift. The finger has not moved but the content under it has, so the clip must move
      * by the scrolled amount. Shifting the drag's ORIGIN by that amount makes the existing `dx` absorb
      * it with no second term anywhere — without this the clip stops dead at the edge while the timeline
@@ -4247,9 +4285,32 @@ window.FM = window.FM || {};
       const need = timelineEl.scrollLeft + timelineEl.clientWidth + v + 120;
       if ((parseFloat(innerEl.style.width) || 0) < need) innerEl.style.width = need + 'px';
     }
-    timelineEl.scrollLeft = Math.max(0, timelineEl.scrollLeft + v);
+    const before = timelineEl.scrollLeft;
+    timelineEl.scrollLeft = Math.max(0, before + v);
+    if (timelineEl.scrollLeft !== before) trimDrag.edgeScrolled = true;   // queue 690: see adoptEdgeScrolledTime
     applyTrimAt(trimDrag.lastX);
     trimScrollRAF = requestAnimationFrame(trimEdgeScroll);
+  }
+
+  /* LETTING GO MUST NOT THROW THE VIEW BACK (queue 690, fourth hunt). Queue 115 made a clip — and a trim
+     handle, which had it first — carry the timeline along when he holds it at the screen edge, his words
+     "without needing to let go and then scroll". The scroll handler ignores those scrolls on purpose
+     (`if (trimDrag || clipMove || kfDrag || scrub) return`), so FM.time never followed the view; and the
+     release's rebuild runs updatePlayhead, which writes scrollLeft = FM.time × px-per-second. So the moment
+     he lifted his finger the timeline jumped back to where the playhead was BEFORE the drag, and what he
+     had just placed was off the screen — measured at 380: the clip went from x 309..435 under his finger
+     to x 629..755; on PC a trimmed end went from x 1268 to x 2615. He had to scroll to find it, which is
+     the very chore 115 was built to save him.
+     The fixed-centre rule (the scroll handler below) says whatever sits under the centre line IS the
+     current time, so the release adopts it — read from scrollLeft BEFORE the rebuild (which may re-zoom),
+     and AFTER autoFitDuration, because scrubTime clamps to the project and a trim does not grow the
+     project until the fit runs. Only when the edge really scrolled: a drag that never reached the edge
+     leaves the playhead exactly where it was. The gesture must already be cleared, or updatePlayhead
+     refuses to write scrollLeft. An ABORTED drag (restoreGestures) puts the clip back and keeps the old
+     view on purpose — the view follows the edit, and there is no edit. */
+  function adoptEdgeScrolledTime(g) {
+    if (!g || !g.edgeScrolled || !timelineEl || !timelineEl.clientWidth || !FM.scrubTime) return;
+    FM.scrubTime(snapT(Math.max(0, timelineEl.scrollLeft / pxPerSec())));
   }
 
   FM.timeline = {
@@ -4956,6 +5017,7 @@ window.FM = window.FM || {};
               (cm.group || []).forEach(g => FM.shiftLayerKeyframes(g.layer, g.layer.start - g.origStart));
             }
             if (FM.autoFitDuration) FM.autoFitDuration();   // fit comp to clips (grows or shrinks)
+            adoptEdgeScrolledTime(cm);                        // queue 690: the view stays where he carried the clip
             FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit();
           }
           /* A grab that never MOVED was a plain click, so it selects here instead of on pointerdown.
@@ -4984,11 +5046,12 @@ window.FM = window.FM || {};
              changes nothing: the next undo appeared to do nothing at all, and you had to press it twice to
              take back the edit before it. The slip release two blocks up has compared against its own
              pre-grab value since it was written; trimDrag has carried the same three values all along. */
-          const TL = trimDrag.layer;
+          const TL = trimDrag.layer, td = trimDrag;
           const changed = Math.abs(TL.start - trimDrag.start) > 1e-4
             || Math.abs(TL.duration - trimDrag.dur) > 1e-4
             || (TL.trimStart != null && Math.abs((TL.trimStart || 0) - (trimDrag.trim || 0)) > 1e-4);
           trimDrag = null; hideSnap(); hideTrimHud();
+          adoptEdgeScrolledTime(td);   // queue 690: the view stays where he carried the edge
           // the rebuild and the refresh stay unconditional: the grip's own colour and geometry must settle
           FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh();
           if (changed && FM.history) FM.history.commit();

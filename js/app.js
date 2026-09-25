@@ -4838,11 +4838,29 @@ window.FM = window.FM || {};
       } });
       if (FM.isAnimated(layer.speed) || Math.abs((layer.speed || 1) - 1) > 1e-3) {   // ramped speed is an object — offer reset for it too
         items.push({ label: 'Reset speed (1×)', action: () => {
-          const span = FM.isAnimated(layer.speed) ? FM.layerSourceAdvance(layer, layer.duration) : layer.duration * (layer.speed || 1);
-          layer.speed = 1; layer.duration = span;
+          /* THE ONE-TAP WAY BACK MUST DO WHAT THE SLIDER DOES (queue 690, fourth hunt). This set speed 1 and the new
+             length and nothing else — older than queue 68 and missed when #68 taught the Speed slider and the two
+             speed-to-playhead buttons to carry the animation with the clip ("changing all the key frames
+             automatically to slow or speed with the layer instead of manually doing it"). So a 2x clip with an
+             ordinary fade in and out doubled in length and kept its keyframes where they were: the fade-out ended
+             halfway through and the clip was invisible for its whole second half. Now the same three steps as the
+             slider (js/inspector.js, the Speed % row): clamp to the source that is really left, scale the
+             keyframes by the durations that actually resulted, and refit any group around it (queue 626).
+             speedAt, not `|| 1` (queue 451): a malformed prop is an object and the span would be NaN. */
+          const durBefore = layer.duration;
+          const span = FM.isAnimated(layer.speed) ? FM.layerSourceAdvance(layer, layer.duration) : layer.duration * FM.speedAt(layer, layer.start);
+          layer.speed = 1; layer.duration = Math.max(0.1, span);
+          const mm = FM.media.get(layer.id);
+          const srcDur = (mm && mm.duration) ? mm.duration : Infinity;
+          if (isFinite(srcDur)) layer.duration = Math.max(0.1, Math.min(layer.duration, srcDur - (layer.trimStart || 0)));
+          // the speed track is gone by now, and scaleLayerKeyframes leaves a speed track alone anyway
+          if (durBefore > 0 && FM.scaleLayerKeyframes) FM.scaleLayerKeyframes(layer, layer.duration / durBefore);
+          if (FM.refitGroupsFor) FM.refitGroupsFor(layer);
           const end = layer.start + layer.duration;
           if (end > FM.scene.project.duration) FM.scene.project.duration = end;
-          FM.timeline.rebuild(); FM.requestRender(); if (FM.history) FM.history.commit();
+          if (mm && mm.el) { try { mm.el.playbackRate = 1; } catch (e) {} }
+          FM.seekVideosToTime(); FM.timeline.rebuild(); FM.requestRender(); if (FM.inspector) FM.inspector.refresh();
+          if (FM.history) FM.history.commit();
         } });
       }
     }
@@ -8049,10 +8067,16 @@ window.FM = window.FM || {};
           let dx = 0, dy = 0;
           if (e.code === 'ArrowLeft') dx = -step; else if (e.code === 'ArrowRight') dx = step;
           else if (e.code === 'ArrowUp') dy = -step; else if (e.code === 'ArrowDown') dy = step;
+          /* Queue 690 (fourth hunt): WRITE ONLY THE AXIS THAT MOVED. Both axes used to be written on every press,
+             the unmoved one as Math.round(its value + 0) — and FM.setTransform on an ANIMATED prop upserts a
+             keyframe at the playhead, a linear one that takes over the easing of the segment it lands in. So
+             pressing Right on a layer that slides up put a Y diamond at the playhead and bent an eased slide he
+             never touched (125 px off at 1.5 s), and a layer sitting on a half pixel was shifted half a pixel on
+             the axis he did not press. A canvas drag already follows this rule (FM.shiftTransform, "never to add"). */
           nudgeable.forEach(layer => {
             const tr = layer.transform;
-            FM.setTransform(layer, 'x', Math.round(FM.evalProp(tr.x, FM.time) + dx), FM.time);
-            FM.setTransform(layer, 'y', Math.round(FM.evalProp(tr.y, FM.time) + dy), FM.time);
+            if (dx) FM.setTransform(layer, 'x', Math.round(FM.evalProp(tr.x, FM.time) + dx), FM.time);
+            if (dy) FM.setTransform(layer, 'y', Math.round(FM.evalProp(tr.y, FM.time) + dy), FM.time);
           });
           FM.requestRender(); if (FM.inspector) FM.inspector.refresh(); if (FM.canvasEdit) FM.canvasEdit.update();
           _nudged = true;
