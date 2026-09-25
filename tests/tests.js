@@ -90037,4 +90037,362 @@
   });
 
 
+  /* ═══ HUNT-e — KEYFRAMES, MASKS AND POINT EDITING, WITH A REAL FINGER (25 Sep, #690) ═══════════════════════════════
+   * Four findings of the second real-input hunt, each written as a failing test FIRST. Every gesture goes through
+   * tests/_cdp.py (realInput924) as trusted touches — capture, hit-testing and the browser's own touch -> pointer
+   * pipeline — and each test carries a control proving the gesture really engaged, so a red is the app. */
+  function huntEWait(ms) { return new Promise(r => setTimeout(r, ms)); }
+  function huntEJ(o) { return JSON.stringify(o).replace(/"/g, "'"); }   // a failure message must not carry a double quote
+  function huntEDowns() {
+    const downs = [];
+    const on = (e) => { const t = e.target; downs.push({ trusted: e.isTrusted, kind: e.pointerType, id: (t && t.id) || '', cls: t && t.className && t.className.baseVal === undefined ? String(t.className) : (t ? t.tagName : '?') }); };
+    window.addEventListener('pointerdown', on, true);
+    return { downs: downs, stop: () => window.removeEventListener('pointerdown', on, true) };
+  }
+  function huntECleanTools() {
+    try { if (FM.contextMenu) FM.contextMenu.hide(); } catch (e) {}
+    try { if (FM.maskTool && FM.maskTool.isActive()) FM.maskTool.stop(); } catch (e) {}
+    try { if (FM.pointEdit && FM.pointEdit.isActive()) FM.pointEdit.stop(); } catch (e) {}
+    try { if (FM.motionPath && FM.motionPath.isActive()) FM.motionPath.stop(); } catch (e) {}
+    try { FM.timeline._abortGestures(); FM.timeline.stopMomentum(); } catch (e) {}
+  }
+  function huntERestore(saved) {
+    huntECleanTools();
+    FM.scene = saved;
+    try { FM.inspector.openCategory('home'); FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
+  }
+  // A layer animated the way the Position diamond animates one: X AND Y keyed together, at the same times.
+  async function huntEPosFixture() {
+    huntECleanTools();
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const L = FM.makeLayer('shape', { name: 'HUNTe pos', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#e0245e', start: 0, duration: 6 });
+    L.transform.x = { kf: [{ t: 1, v: 100, e: 'linear' }, { t: 3, v: 500, e: 'linear' }, { t: 5, v: 300, e: 'linear' }] };
+    L.transform.y = { kf: [{ t: 1, v: 300, e: 'linear' }, { t: 3, v: 900, e: 'linear' }, { t: 5, v: 600, e: 'linear' }] };
+    FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+    if (FM.pause) FM.pause();
+    FM.refreshAll(); FM.selectLayer(L.id);
+    await huntEWait(250);
+    FM.inspector.openCategory('transform'); FM._mtMode = 'move';
+    FM.setTime(2); FM.timeline.rebuild(); FM.timeline.updatePlayhead();
+    await huntEWait(300);
+    return L;
+  }
+  function huntELiveDotsAt(t) {
+    return [].filter.call(document.querySelectorAll('#tl-tracks .kf-dot.kf-live'), d => Math.abs(parseFloat(d.dataset.t) - t) < 1e-3);
+  }
+  function huntEMenuItem(label) {
+    const m = document.getElementById('ctx-menu');
+    if (!m || m.classList.contains('hidden')) return null;
+    return [].filter.call(m.querySelectorAll('.ctx-item'), b => b.textContent.trim() === label)[0] || null;
+  }
+  function huntETap(x, y) { return [{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 0 }]; }
+  function huntEHold(x, y) { return [{ t: 'touchStart', x: x, y: y, ms: 650 }, { t: 'touchEnd', x: x, y: y, ms: 0 }]; }
+
+  test('HUNT-e the Position keyframe diamond moves and deletes as ONE keyframe — X and Y never come apart on the timeline', { item: '690', budgetMs: 60000 }, async function () {
+    /* The Position ◆ in Move & Transform keys X and Y TOGETHER (inspector.js moveTransformPanel: with no row picked, a
+       plain position keyframe keys x and y together). The timeline then draws ONE DIAMOND PER PROPERTY (timeline.js,
+       keyframe diamonds) — so every position keyframe is two live diamonds stacked on the same pixel. The hold-and-drag
+       carries only the diamond on top (kfs = [entry.kf]), and the hold menu Delete keyframe removes only that one
+       (deleteKeyframesAt(layer, tt, entry.prop)). He sees one diamond: drag it and a second one is left behind where it
+       was; delete it and it is still there. That is his #625 word for word — Sometimes I try to move key frames and it
+       just duplicates them and sometimes I try to delete them and I cant — by a route the v13.75 fix never covered. */
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          // CONTROL: the Position ◆ really does key X and Y together, so the fixture is what his taps make.
+          {
+            let L0 = await huntEPosFixture();
+            L0.transform.x = 300; L0.transform.y = 300;
+            FM.setTime(1); FM.inspector.refresh(); await huntEWait(150);
+            const kb = document.querySelector('#inspector-panel .mt-kf, .mt-kf');
+            if (!kb) throw new Error('setup: no Position keyframe button in Move and Transform');
+            kb.click(); await huntEWait(150);
+            L0 = FM.scene.layers[0];
+            if (!(FM.isAnimated(L0.transform.x) && FM.isAnimated(L0.transform.y))) throw new Error('CONTROL: the Position keyframe button did not key X and Y together (x ' + huntEJ(L0.transform.x) + ', y ' + huntEJ(L0.transform.y) + '), so this fixture is not what his taps make');
+          }
+
+          // 1. HOLD, THEN DRAG IT 30px RIGHT
+          let L = await huntEPosFixture();
+          let dots = huntELiveDotsAt(3);
+          if (dots.length < 1) throw new Error('setup: no live diamond at 3 s with Move and Transform open');
+          const lefts = dots.map(d => Math.round(d.getBoundingClientRect().left));
+          let r = dots[dots.length - 1].getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+          if (cx > 370 || cx < 10 || cy > 740) throw new Error('setup: the diamond is at ' + Math.round(cx) + ',' + Math.round(cy) + ', out of reach of real input');
+          const D = huntDowns();
+          try {
+            await realInput924([
+              { t: 'touchStart', x: cx, y: cy, ms: 650 },
+              { t: 'touchMove', x: cx + 10, y: cy, ms: 40 },
+              { t: 'touchMove', x: cx + 20, y: cy, ms: 40 },
+              { t: 'touchMove', x: cx + 30, y: cy, ms: 120 },
+              { t: 'touchEnd', x: cx + 30, y: cy, ms: 0 },
+            ], 'a hold, then a 30px drag of the Position diamond at 3 s');
+          } finally { D.stop(); }
+          await huntEWait(350);
+          if (!D.downs.length || !D.downs[0].trusted || D.downs[0].kind !== 'touch' || !/kf-dot/.test(D.downs[0].cls)) throw new Error('CONTROL: the press was not a trusted touch on the diamond (' + huntEJ(D.downs) + ')');
+          const xs = L.transform.x.kf.map(k => k.t), ys = L.transform.y.kf.map(k => k.t);
+          const xMid = xs.filter(t => t > 1.5 && t < 4.5), yMid = ys.filter(t => t > 1.5 && t < 4.5);
+          const movedAny = xMid.concat(yMid).some(t => Math.abs(t - 3) > 1e-6);
+          if (!movedAny) throw new Error('CONTROL: a hold and a 30px drag moved neither keyframe (x ' + xs.join(', ') + ' / y ' + ys.join(', ') + '), so this test cannot judge the pair');
+          const bad = [];
+          if (xMid.length !== 1 || yMid.length !== 1 || Math.abs(xMid[0] - yMid[0]) > 1e-6) {
+            bad.push('he held the Position keyframe diamond at 3 s and dragged it right: X now has its keyframes at ' + xs.map(t => t.toFixed(3)).join(', ') + ' s and Y at ' + ys.map(t => t.toFixed(3)).join(', ') +
+              ' s — only one of the two stacked diamonds moved (' + dots.length + ' live diamonds sat at 3 s, lefts ' + lefts.join('/') + '), so a second diamond is left behind where he picked it up (his #625: it just duplicates them) and the layer now reaches X and Y at different times');
+          }
+
+          // 2. HOLD FOR THE MENU, THEN DELETE KEYFRAME
+          L = await huntEPosFixture();
+          dots = huntELiveDotsAt(3);
+          r = dots[dots.length - 1].getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2;
+          await realInput924(huntEHold(cx, cy), 'a still hold on the Position diamond at 3 s');
+          await huntEWait(450);
+          if (!huntCtxUp()) throw new Error('CONTROL: a still 0.65 s hold on the Position diamond did not open its menu, so the delete cannot be judged');
+          const del = huntEMenuItem('Delete keyframe');
+          if (!del) throw new Error('CONTROL: the keyframe menu has no Delete keyframe item');
+          const dr = del.getBoundingClientRect();
+          await realInput924(huntETap(dr.left + dr.width / 2, dr.top + dr.height / 2), 'tapping Delete keyframe');
+          await huntEWait(400);
+          const xHas = L.transform.x && FM.isAnimated(L.transform.x) && L.transform.x.kf.some(k => Math.abs(k.t - 3) < 1e-3);
+          const yHas = L.transform.y && FM.isAnimated(L.transform.y) && L.transform.y.kf.some(k => Math.abs(k.t - 3) < 1e-3);
+          if (xHas && yHas) throw new Error('CONTROL: tapping Delete keyframe removed nothing at all, so the tap did not reach the menu');
+          const left = huntELiveDotsAt(3).length;
+          if (xHas || yHas || left) bad.push('he held the same diamond and chose Delete keyframe: a diamond is still at 3 s (' + (xHas ? 'X' : 'Y') + ' kept its keyframe there, ' + left + ' live diamond(s) left) — he has to delete it a second time, his #625: sometimes I try to delete them and I cant');
+          if (bad.length) throw new Error(bad.join('; AND '));
+        });
+      }, 380);
+    } finally { huntERestore(saved); }
+  });
+
+  test('HUNT-e while the mask editor is open, moving the playhead moves its outline to the mask at that frame — and a point dragged there keeps the rest of that frame shape', { item: '690', budgetMs: 60000 }, async function () {
+    /* js/mask-tool.js seeds its working points ONCE, in open(), from the path at the playhead — and nothing reseeds them
+       when the playhead moves: draw() only reseeds when the mask OBJECT changes (undo / load). So with an animated mask
+       (the AE-style roto its own header advertises: edits write into the keyframe at the playhead), he scrubs to the next
+       frame he wants to fix and the teal outline stays where the mask was on the frame he opened it on, while the mask
+       itself has moved on. Touch a handle there and flush() writes the WHOLE stale outline into a new keyframe at the
+       playhead: that frame snaps back to the old frame's shape with one point moved, and the roto he had there is gone. */
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          huntECleanTools();
+          if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+          const L = FM.makeLayer('shape', { name: 'HUNTe mask', shape: 'rect', x: 540, y: 960, shapeW: 1080, shapeH: 1920, fill: '#3b82f6', start: 0, duration: 6 });
+          const A = [[200, 300], [600, 300], [600, 700], [200, 700]], B = [[480, 1100], [880, 1100], [880, 1500], [480, 1500]];
+          const m = FM.masks.make('add');
+          m.path = { kf: [{ t: 0, v: A.map(p => p.slice()), e: 'linear' }, { t: 4, v: B.map(p => p.slice()), e: 'linear' }] };
+          L.masks = [m];
+          FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+          if (FM.pause) FM.pause();
+          FM.setTime(0); FM.refreshAll(); FM.selectLayer(L.id); FM.timeline.rebuild(); FM.timeline.updatePlayhead();
+          await huntEWait(300);
+          FM.maskTool.open(L.id, m.id);
+          await huntEWait(350);
+          const far = (a, b) => { let d = 0; for (let i = 0; i < Math.min(a.length, b.length); i++) d = Math.max(d, Math.hypot(a[i][0] - b[i][0], a[i][1] - b[i][1])); return a.length !== b.length ? Infinity : d; };
+          // CONTROL: on the frame it opened on, the editor's outline IS the mask.
+          if (far(FM.maskTool._points(), A) > 0.5) throw new Error('CONTROL: opened at 0 s, the mask editor does not hold the 0 s shape (' + huntEJ(FM.maskTool._points()) + ')');
+
+          // He scrubs on with a real swipe along his clip, clear of every diamond.
+          const clip = [].filter.call(document.querySelectorAll('#tl-tracks .clip'), c => c.dataset.id === L.id)[0];
+          if (!clip) throw new Error('setup: the masked layer has no clip on the timeline');
+          const cr = clip.getBoundingClientRect(), cy = cr.top + cr.height / 2;
+          const dotXs = [].map.call(document.querySelectorAll('#tl-tracks .kf-dot'), q => { const b = q.getBoundingClientRect(); return b.left + b.width / 2; });
+          let x0 = null;
+          for (let xx = Math.min(cr.right - 24, 360); xx > Math.max(cr.left + 24, 100); xx -= 4) if (dotXs.every(dx => Math.abs(dx - xx) > 34)) { x0 = xx; break; }
+          if (x0 == null || cy > 740) throw new Error('setup: no stretch of the clip is clear of the diamonds to swipe on (clip ' + Math.round(cr.left) + '..' + Math.round(cr.right) + ' at y ' + Math.round(cy) + ')');
+          const sw = [{ t: 'touchStart', x: x0, y: cy, ms: 40 }];
+          for (let k = 1; k <= 10; k++) sw.push({ t: 'touchMove', x: x0 - 8 * k, y: cy, ms: 30 });
+          sw.push({ t: 'touchEnd', x: x0 - 80, y: cy, ms: 0 });
+          const D = huntDowns();
+          try { await realInput924(sw, 'the swipe along the timeline'); } finally { D.stop(); }
+          await huntEWait(700);
+          try { FM.timeline.stopMomentum(); } catch (e) {}
+          await huntEWait(100);
+          const t1 = FM.time;
+          if (!D.downs.length || !D.downs[0].trusted || D.downs[0].kind !== 'touch') throw new Error('CONTROL: the swipe was not a trusted touch (' + huntEJ(D.downs) + ')');
+          if (!(t1 > 0.4 && t1 < 3.9)) throw new Error('CONTROL: an 80px swipe on the clip moved the playhead from 0 s to ' + t1.toFixed(2) + ' s — it has to land between the two mask keyframes (0 s and 4 s) for this test to judge anything');
+          if (!FM.maskTool.isActive()) throw new Error('setup: scrubbing closed the mask editor');
+          const want = FM.evalMaskPath(m, t1).map(p => p.slice());
+          const have = FM.maskTool._points();
+          const bad = [];
+          const off = far(have, want);
+          if (off > 2) bad.push('with the mask editor open he scrubbed from 0 s to ' + t1.toFixed(2) + ' s: the mask moved on, but the teal outline and its handles stayed ' + Math.round(off) + ' px (project) away, on the 0 s shape — he is editing a shape that is not on screen');
+
+          // He grabs the first handle WHERE THE EDITOR DRAWS IT and drags it 40px right.
+          const cv = document.getElementById('preview'), ov = document.getElementById('mask-overlay');
+          if (!cv || !ov) throw new Error('setup: no mask overlay on the canvas');
+          const orr = ov.getBoundingClientRect(), o = FM.projectToOverlay(cv, have[0][0], have[0][1]);
+          const px = orr.left + o.x, py = orr.top + o.y;
+          if (px < 8 || px > 330 || py < 8 || py > 740) throw new Error('setup: the handle is drawn at ' + Math.round(px) + ',' + Math.round(py) + ', out of reach of real input');
+          const D2 = huntEDowns();
+          try {
+            await realInput924([
+              { t: 'touchStart', x: px, y: py, ms: 60 },
+              { t: 'touchMove', x: px + 10, y: py, ms: 30 }, { t: 'touchMove', x: px + 20, y: py, ms: 30 },
+              { t: 'touchMove', x: px + 30, y: py, ms: 30 }, { t: 'touchMove', x: px + 40, y: py, ms: 60 },
+              { t: 'touchEnd', x: px + 40, y: py, ms: 0 },
+            ], 'dragging the first mask handle');
+          } finally { D2.stop(); }
+          await huntEWait(300);
+          if (!D2.downs.length || !D2.downs[0].trusted || D2.downs[0].id !== 'mask-overlay') throw new Error('CONTROL: the drag did not land on the mask overlay (' + huntEJ(D2.downs) + ')');
+          const after = FM.evalMaskPath(m, t1);
+          const movedFirst = Math.hypot(after[0][0] - have[0][0], after[0][1] - have[0][1]);
+          if (!(movedFirst > 20 / FM.previewDispScale() * 0.5)) throw new Error('CONTROL: the 40px drag did not move the handle it started on (' + movedFirst.toFixed(1) + ' project px), so the write cannot be judged');
+          const rest = far(after.slice(1), want.slice(1));
+          if (rest > 2) bad.push('then he dragged one handle 40px there: the mask at ' + t1.toFixed(2) + ' s jumped ' + Math.round(rest) + ' px (project) — the other three points were overwritten with the 0 s shape, a keyframe of the wrong frame was written at the playhead, and the roto he had there is gone');
+          if (bad.length) throw new Error(bad.join('; AND '));
+        });
+      }, 380);
+    } finally { huntERestore(saved); }
+  });
+
+  test('HUNT-e a tap to select a point (Customise Points, a mask point, a motion path dot) leaves it where it was, and a drag moves it by the finger travel', { item: '690', budgetMs: 90000 }, async function () {
+    /* All three on-canvas point editors place the point AT THE FINGER on every move — point-edit.js onMove
+       (p[0] = loc.u), mask-tool.js onMove (p[0] = pp.x) and motion-path.js onMove (setProp x = pp.x) — with no slop.
+       Their touch targets are deliberately generous (26px, 16px, 20px), because a fingertip never lands dead centre;
+       and a real finger always trembles a pixel or two while it is down. So a TAP just to select a point — to read its
+       X and Y, switch it to a curve, or use the nudge pad — jumps it to wherever the fingertip landed, and the release
+       writes that into undo. The v16.94 hunt fixed exactly this on the keyframe diamonds; the point editors kept it. */
+    const saved = FM.scene;
+    const bad = [];
+    const cv = () => document.getElementById('preview');
+    // press 12px LEFT of the point, tremble 1px, lift; then a deliberate drag of 30px right from the same place
+    async function tapAndDrag(tool, overlayId, readScreen, selectedOk) {
+      const s0 = readScreen();
+      if (!s0 || s0.x < 20 || s0.x > 330 || s0.y < 10 || s0.y > 740) throw new Error('setup (' + tool + '): the point is drawn at ' + huntEJ(s0) + ', out of reach of real input');
+      const x = s0.x - 12, y = s0.y;
+      const D = huntEDowns();
+      try {
+        await realInput924([
+          { t: 'touchStart', x: x, y: y, ms: 90 },
+          { t: 'touchMove', x: x + 1, y: y, ms: 60 },
+          { t: 'touchEnd', x: x + 1, y: y, ms: 0 },
+        ], tool + ' — a tap 12px off the point with a 1px tremor');
+      } finally { D.stop(); }
+      await huntEWait(600);   // past every double-tap window, so the drag below is not read as a second tap
+      if (!D.downs.length || !D.downs[0].trusted || D.downs[0].kind !== 'touch' || D.downs[0].id !== overlayId) throw new Error('CONTROL (' + tool + '): the tap was not a trusted touch on the editor overlay (' + huntEJ(D.downs) + ')');
+      const ovEl = document.getElementById(overlayId);
+      if (!ovEl) throw new Error('CONTROL (' + tool + '): the editor overlay is gone after the tap');
+      if (selectedOk && !selectedOk()) throw new Error('CONTROL (' + tool + '): the tap 12px off the point did not select it, so it did not land on the point');
+      const s1 = readScreen();
+      const tapMoved = Math.hypot(s1.x - s0.x, s1.y - s0.y);
+      await realInput924([
+        { t: 'touchStart', x: x, y: y, ms: 90 },
+        { t: 'touchMove', x: x + 10, y: y, ms: 40 }, { t: 'touchMove', x: x + 20, y: y, ms: 40 },
+        { t: 'touchMove', x: x + 30, y: y, ms: 100 },
+        { t: 'touchEnd', x: x + 30, y: y, ms: 0 },
+      ], tool + ' — a deliberate 30px drag');
+      await huntEWait(400);
+      const s2 = readScreen();
+      const dragMoved = s2.x - s1.x;
+      if (!(Math.abs(dragMoved) > 8)) throw new Error('CONTROL (' + tool + '): a deliberate 30px drag from 12px off the point moved it ' + dragMoved.toFixed(1) + ' px, so the press is not reaching the point at all');
+      if (tapMoved > 2) bad.push(tool + ': a tap to select the point, landing 12px from its centre with a 1px tremor, moved it ' + tapMoved.toFixed(1) + ' px on screen (' + Math.round(tapMoved / FM.previewDispScale()) + ' px in the project) to where his fingertip was');
+      if (Math.abs(dragMoved - 30) > 3) bad.push(tool + ': a 30px drag moved the point ' + dragMoved.toFixed(1) + ' px — it follows where the fingertip IS, not how far it travelled');
+    }
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          // 1. CUSTOMISE POINTS on a triangle — the bottom-right corner
+          huntECleanTools();
+          if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+          let L = FM.makeLayer('shape', { name: 'HUNTe tri', shape: 'triangle', x: 540, y: 900, shapeW: 800, shapeH: 800, fill: '#22c55e', start: 0, duration: 6 });
+          FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+          if (FM.pause) FM.pause();
+          FM.setTime(0); FM.refreshAll(); FM.selectLayer(L.id); await huntEWait(250);
+          FM.inspector.openCategory('element'); await huntEWait(400);
+          if (!FM.pointEdit.isActive() || !Array.isArray(L.subs)) throw new Error('setup: Customise Points did not open the point editor on the triangle');
+          const peScreen = () => {
+            const p = L.subs[0][1], q = FM.pointEdit._toCanvas(L, p[0], p[1]);
+            const o = FM.projectToOverlay(cv(), q.x, q.y), r = document.getElementById('pe-overlay').getBoundingClientRect();
+            return { x: r.left + o.x, y: r.top + o.y };
+          };
+          await tapAndDrag('Customise Points', 'pe-overlay', peScreen, () => { const s = FM.pointEdit.getSel(); return !!(s && s.pi === 1); });
+          FM.pointEdit.stop();
+
+          // 2. A MASK POINT in the mask editor (a closed mask, so the editor is in its edit mode)
+          huntECleanTools();
+          L = FM.makeLayer('shape', { name: 'HUNTe mask2', shape: 'rect', x: 540, y: 960, shapeW: 1080, shapeH: 1920, fill: '#3b82f6', start: 0, duration: 6 });
+          const m = FM.masks.make('add'); m.path = [[240, 400], [840, 400], [840, 1000], [240, 1000]];
+          L.masks = [m];
+          FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+          FM.setTime(0); FM.refreshAll(); FM.selectLayer(L.id); await huntEWait(250);
+          FM.maskTool.open(L.id, m.id); await huntEWait(350);
+          const mkScreen = () => {
+            const p = FM.evalMaskPath(m, FM.time)[1];
+            const o = FM.projectToOverlay(cv(), p[0], p[1]), r = document.getElementById('mask-overlay').getBoundingClientRect();
+            return { x: r.left + o.x, y: r.top + o.y };
+          };
+          await tapAndDrag('a mask point', 'mask-overlay', mkScreen, () => !!document.querySelector('#mask-bar .mk-del'));
+          FM.maskTool.stop();
+
+          // 3. A MOTION PATH DOT — the keyframe at 0 s
+          huntECleanTools();
+          L = FM.makeLayer('shape', { name: 'HUNTe path', shape: 'rect', x: 300, y: 600, shapeW: 160, shapeH: 160, fill: '#f59e0b', start: 0, duration: 6 });
+          L.transform.x = { kf: [{ t: 0, v: 300, e: 'linear' }, { t: 2, v: 800, e: 'linear' }] };
+          L.transform.y = { kf: [{ t: 0, v: 600, e: 'linear' }, { t: 2, v: 1400, e: 'linear' }] };
+          FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+          FM.setTime(1); FM.refreshAll(); FM.selectLayer(L.id); await huntEWait(250);
+          FM.motionPath.open(L.id); await huntEWait(350);
+          if (!FM.motionPath.isActive()) throw new Error('setup: the motion path editor did not open');
+          const mpScreen = () => {
+            const x = FM.evalProp(L.transform.x, 0), y = FM.evalProp(L.transform.y, 0);
+            const o = FM.projectToOverlay(cv(), x, y), r = document.getElementById('mpath-overlay').getBoundingClientRect();
+            return { x: r.left + o.x, y: r.top + o.y };
+          };
+          await tapAndDrag('a motion path dot', 'mpath-overlay', mpScreen, null);
+          FM.motionPath.stop();
+          if (bad.length) throw new Error(bad.join('; AND '));
+        });
+      }, 380);
+    } finally { huntERestore(saved); }
+  });
+
+  test('HUNT-e an easing picked on the FIRST keyframe diamond shapes the move that leaves it', { item: '690', budgetMs: 60000 }, async function () {
+    /* On the phone the diamond's hold menu is the way to ease a keyframe (a finger never makes a double-click or a
+       right-click). Its items write the ease onto THAT diamond's own keyframe (timeline.js openKfMenu: entry.kf.e = key).
+       But FM.evalProp reads a segment's ease from the keyframe it ENDS on (scene.js: easing resolved from b, the later
+       key), and the graph editor agrees (pickKfs edits the END keyframe). So an ease chosen on the FIRST keyframe of a
+       move — the start of the motion, and half the diamonds of any two-keyframe animation — lands on a field nothing
+       reads: the diamond recolours to say it is eased, and the move plays exactly as linearly as before. */
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          huntECleanTools();
+          if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+          const L = FM.makeLayer('shape', { name: 'HUNTe ease', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#a855f7', start: 0, duration: 6 });
+          L.transform.x = { kf: [{ t: 1, v: 100, e: 'linear' }, { t: 3, v: 500, e: 'linear' }] };   // the commonest animation there is: A to B
+          FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+          if (FM.pause) FM.pause();
+          FM.refreshAll(); FM.selectLayer(L.id); await huntEWait(250);
+          FM.inspector.openCategory('transform'); FM._mtMode = 'move';
+          FM.setTime(2); FM.timeline.rebuild(); FM.timeline.updatePlayhead(); await huntEWait(300);
+          const before = FM.evalProp(L.transform.x, 1.5);
+          const d = huntDotAt(1);
+          if (!d) throw new Error('setup: no live diamond for the first keyframe at 1 s with Move and Transform open');
+          const r = d.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+          if (cx < 10 || cx > 370 || cy > 740) throw new Error('setup: the first diamond is at ' + Math.round(cx) + ',' + Math.round(cy) + ', out of reach of real input');
+          await realInput924(huntEHold(cx, cy), 'a still hold on the first keyframe diamond');
+          await huntEWait(450);
+          if (!huntCtxUp()) throw new Error('CONTROL: a still 0.65 s hold on the first diamond did not open its menu');
+          const it = huntEMenuItem('Ease In-Out');
+          if (!it) throw new Error('CONTROL: the keyframe menu has no Ease In-Out item');
+          const ir = it.getBoundingClientRect();
+          await realInput924(huntETap(ir.left + ir.width / 2, ir.top + ir.height / 2), 'tapping Ease In-Out');
+          await huntEWait(400);
+          const kfs = L.transform.x.kf;
+          if (!kfs.some(k => k.e === 'easeInOut' || (k.ez && k.ez.fam))) throw new Error('CONTROL: tapping Ease In-Out changed no keyframe at all (' + huntEJ(kfs) + '), so the tap did not reach the menu');
+          const after = FM.evalProp(L.transform.x, 1.5);
+          const dot = huntDotAt(1);
+          const saysEased = !!(dot && /ease-smooth/.test(dot.className));
+          if (Math.abs(after - before) < 5) {
+            throw new Error('he held the first keyframe diamond of a move from 1 s to 3 s and picked Ease In-Out' + (saysEased ? ': the diamond turned green to say it is eased' : '') +
+              ', but the move out of it is exactly as linear as before (X at 1.5 s is ' + after.toFixed(1) + ', was ' + before.toFixed(1) + ') — the ease went onto a keyframe nothing before it reads');
+          }
+        });
+      }, 380);
+    } finally { huntERestore(saved); }
+  });
+
+
 })();
