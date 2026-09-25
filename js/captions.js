@@ -51,6 +51,23 @@ window.FM = window.FM || {};
     },
     cueAt(layer, t) { const i = C.indexAt(layer, t); return i < 0 ? null : C.cues(layer)[i]; },
 
+    /* WHERE A CUE'S ANIMATION RUNS, in layer-local seconds: {from, to} (queue 690, fourth hunt). An Animate preset
+     * on a caption track enters as each CUE starts and leaves as it ends — it used to run once, for the whole track,
+     * so only the first caption ever animated (js/compositor.js, textClocks). Two things bend the plain start/end:
+     *  - never before the clip's own head or after its own tail. A head-trimmed track enters at its new head, and a
+     *    cue running to the end leaves with the clip — exactly what an ordinary text layer does.
+     *  - a cue the Split button cut in two remembers where it REALLY began (`animFrom`, on the tail half) and ended
+     *    (`animTo`, on the head half), so neither half enters or leaves at the cut and the cut stays invisible — the
+     *    rule FM.splitLayer has always kept for text ("the title VANISHED for 1.2s across the cut"). Each mark only
+     *    counts while its edge is still where the cut put it: drag that edge and it is an ordinary cue again.
+     * `dur` is passed rather than read, because the split asks about the ORIGINAL clip after it has shortened it. */
+    animSpan(cue, dur) {
+      const D = dur > 0 ? dur : Infinity, s = num(cue && cue.start, 0), e = num(cue && cue.end, D);
+      const from = (Number.isFinite(cue && cue.animFrom) && Math.abs(s) < 1e-3) ? cue.animFrom : Math.max(0, s);
+      const to = (Number.isFinite(cue && cue.animTo) && Math.abs(e - D) < 1e-3) ? cue.animTo : Math.min(D, e);
+      return { from: from, to: to };
+    },
+
     /* The cue nearest project time t (used when the playhead sits in a gap). */
     nearestIndex(layer, t) {
       const cues = C.cues(layer), lt = C.localTime(layer, t);

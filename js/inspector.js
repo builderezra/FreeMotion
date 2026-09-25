@@ -254,6 +254,13 @@ window.FM = window.FM || {};
     const wrap = el('div', 'color-field');
     const sw = document.createElement('input'); sw.type = 'color'; sw.value = normHex(getVal());
     const hex = document.createElement('input'); hex.type = 'text'; hex.className = 'hex-input'; hex.spellcheck = false; hex.maxLength = 7; hex.value = normHex(getVal());
+    /* A TAP SELECTS THE OLD COLOUR, SO WHAT HE TYPES REPLACES IT (queue 690, fourth hunt). This box always holds a
+       full 7 of its 7 characters (#ffffff), and a tap on a phone drops a caret into it rather than selecting it — so
+       every key he typed was refused by maxLength: ff0000 went nowhere and the colour stayed white until he had
+       backspaced the old one by hand. Measured with a real tap in Colouring and in the text editor's colour button,
+       which is this same field. It is the number boxes' bug exactly (Opacity 100 + typing 50 read 10500) and gets
+       their cure, typeInBox — no `min`, so no number pad: a hex colour needs the letters a to f. */
+    typeInBox(hex, null);
     const apply = (v) => { const n = normHex(v); setVal(n); sw.value = n; FM.requestRender(); };
     const commitColor = () => { addRecentColor(getVal()); commitH(); };
     sw.addEventListener('input', () => { hex.value = sw.value; apply(sw.value); });
