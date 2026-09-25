@@ -212,6 +212,77 @@ window.FM = window.FM || {};
   // two-item overflow menu next to a settings cog was two front doors to the same cupboard.
   // `tone` marks a destructive one red (Reset project) so it never reads as one more neutral button
   // in a column of them — the same warning the ⋯ menu's `danger` flag used to carry.
+  /* ONE BACKUP, TWO DOORS (queue 920, 24 Sep): the Settings row below, and the note an install from before the status-bar fix
+     shows on Home (js/statusbar.js), whose first step is "back up". The handler was inline in the row; lifted out unchanged so
+     both run the identical code, rather than a second copy of the "say what is not in it" rules. */
+  FM.backupEverything = async function () {
+    if (!FM.storage || !FM.storage.backupAll) return null;
+    /* actionRow closes the panel before it runs the handler, so progress has to live in a toast
+       rather than on the button. A library of videos takes a few seconds and silence in that gap
+       reads as "nothing happened", which is how people tap a thing twice. */
+    if (FM.toast) FM.toast('Packing up your projects…', 4000);
+    let r = null;
+    try {
+      r = await FM.storage.backupAll(null);
+    } catch (e) { r = { ok: false, reason: 'The backup could not be written.' }; }
+    if (!r || !r.ok) { if (FM.toast) FM.toast((r && r.reason) || 'The backup could not be written.', 6000); return; }
+    /* ⚠️ SAY WHAT IS NOT IN IT, EVERY TIME. A backup that quietly leaves a clip out is worse
+       than no backup, because he would trust it and find out when it mattered. */
+    const miss = (r.notIncluded && r.notIncluded.media) || [];
+    const mb = Math.round((r.bytes || 0) / 1048576);
+    /* queue 915 clause 8: drafts are counted as what they are, not as projects he would go looking for */
+    const nd = r.drafts || 0, np = r.count - nd;
+    let msg = 'Backed up ' + np + (np === 1 ? ' project' : ' projects') + (nd ? ' and ' + nd + (nd === 1 ? ' draft' : ' drafts') : '') + ' (' + (mb >= 1 ? mb + ' MB' : 'under 1 MB') + ').';
+    /* queue 915 phase A: a clip with NO footage stored is listed too (`missing`), and it is not "too big" —
+       "Clip (0 MB) was too big" would be a second lie on top of the blank. Two sentences, each true. */
+    const big = miss.filter(m => !m.missing), gone = miss.filter(m => m.missing);
+    if (big.length) {
+      const names = big.slice(0, 3).map(m => m.file + ' (' + m.mb + ' MB)').join(', ');
+      msg += ' ⚠️ ' + big.length + (big.length === 1 ? ' clip was' : ' clips were') + ' too big to include: ' + names + (big.length > 3 ? ' and more' : '') + '.';
+    }
+    if (gone.length) {
+      const names = gone.slice(0, 3).map(m => m.file + ' in ' + m.project).join(', ');
+      msg += ' ⚠️ ' + gone.length + (gone.length === 1 ? ' clip has' : ' clips have') + ' no footage stored on this device, so the file has none either: ' + names + (gone.length > 3 ? ' and more' : '') + '.';
+    }
+    if (miss.length) msg += ' Everything else is in the file.';
+    if (FM.toast) FM.toast(msg, miss.length ? 12000 : 6000);
+    return r;
+  };
+  /* A LABS ROW OPENS ITS CARD ON TOP OF SETTINGS, AND CLOSING THE CARD COMES BACK HERE (queue 933). Ezra: "every time I
+     test something out, like one of the options and then click out, it just like completely closes the settings. So you
+     have to reopen the settings and go all the way to the bottom, which is very frustrating." actionRow shuts the panel
+     first because its other rows hand him the app (a backup, a sample); the collaboration cards are the opposite — each
+     is a question about THIS section, and their scrim already sits above Settings' (222 over 220), so a click out lands
+     on the card's scrim and closes only the card. Settings never moved, so it is exactly where he left it, scrolled to
+     Labs. Two things still follow the card: a JOIN that succeeds takes him into the project, so Settings gets out of the
+     way then; and anything the card changed (his name) is re-read into the row. */
+  function stayRow(label, hint, btnLabel, fn, after) {
+    const row = el('div', 'set-row');
+    const txt = el('div', 'set-rowtext');
+    txt.appendChild(el('div', 'set-label', label));
+    const h = hint ? el('div', 'set-hint', hint) : null;
+    if (h) txt.appendChild(h);
+    const b = el('button', 'set-action', btnLabel);
+    b.type = 'button';
+    b.addEventListener('click', () => {
+      const wasLive = !!(FM.collab && FM.collab.active);
+      let seen = false;
+      const mo = new MutationObserver(() => {
+        const up = document.body.classList.contains('collab-card-open');
+        if (up) { seen = true; return; }
+        if (!seen) return;                       // the class toggling on its way UP, not the card closing
+        mo.disconnect();
+        if (!wasLive && FM.collab && FM.collab.active) { FM.settings.close({ handBack: false }); return; }
+        if (after) after(h);
+      });
+      mo.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+      seen = document.body.classList.contains('collab-card-open');
+      fn();
+      if (document.body.classList.contains('collab-card-open')) seen = true;
+    });
+    row.appendChild(txt); row.appendChild(b);
+    return row;
+  }
   function actionRow(label, hint, btnLabel, fn, tone) {
     const row = el('div', 'set-row');
     const txt = el('div', 'set-rowtext');
@@ -219,7 +290,7 @@ window.FM = window.FM || {};
     if (hint) txt.appendChild(el('div', 'set-hint', hint));
     const b = el('button', 'set-action' + (tone ? ' ' + tone : ''), btnLabel);
     b.type = 'button';
-    b.addEventListener('click', () => { FM.settings.close(); fn(); });
+    b.addEventListener('click', () => { FM.settings.close({ handBack: false }); fn(); });
     row.appendChild(txt); row.appendChild(b);
     return row;
   }
@@ -323,6 +394,7 @@ window.FM = window.FM || {};
   }
 
   let panel = null, scrim = null, escBound = null;
+  let _onClose = null;   // queue 930: FM.settings.openAt(…, { onClose }) — who to hand back to when Settings closes
 
   function build() {
     scrim = el('div', 'set-scrim');
@@ -451,6 +523,73 @@ window.FM = window.FM || {};
       ));
     }
 
+    /* ── YOUR AI KEY, IN ONE PLACE (queue 930) ───────────────────────────────────────────────────────────────────
+     * Ezra: "the only way you can put in an API key is in the director menu. So basically what you should do is move it so
+     * that there's a button in both pages that takes you to app settings and it takes you to a section in the app settings
+     * where you put in the API key and you put it in there instead." (And, in the same breath, NOT a password lock: "we'll
+     * add accounts … people will just … be protected by their account.")
+     * The key still lives in ONE place — js/ai-key.js, FM.aiKey, the only module that holds it — so a key he entered in the
+     * Director before this is the same key here; nothing moves in storage. This row only reads the MASKED form ("sk-ant-…a1b2")
+     * and never writes the key into the page: the field is a password field, it starts empty, and it is cleared the moment
+     * the key is saved. `FM.settings.openAt('aikey')` is the door the Director and the Assistant each have. */
+    if (FM.aiKey) {
+      const ak = el('div', 'set-row set-aikey');
+      ak.id = 'set-aikey';
+      const txt = el('div', 'set-rowtext');
+      txt.appendChild(el('div', 'set-label', 'AI — your Anthropic key'));
+      const state = el('div', 'set-hint');
+      const paint = () => { state.textContent = FM.aiKey.has() ? ('Connected: ' + FM.aiKey.masked() + (FM.aiKey.remembered() ? ' · remembered on this device' : ' · for this session only')) : 'No key yet — the Director and the Assistant use it. Used only on this device, sent only to api.anthropic.com, never logged or uploaded; spend is on your own account.'; };
+      paint();
+      txt.appendChild(state);
+      ak.appendChild(txt);
+      const form = el('div', 'set-aikey-form');
+      const input = el('input', 'set-aikey-input');
+      input.type = 'password'; input.placeholder = 'sk-ant-…'; input.autocomplete = 'off'; input.spellcheck = false;
+      input.setAttribute('autocapitalize', 'off'); input.setAttribute('aria-label', 'Anthropic API key');
+      /* NOT A LOGIN (queue 930 review): a password field invites the browser and password-manager extensions to offer to save
+         it — the key would then live in a vault that Forget cannot reach. These are the opt-outs the common managers honour.
+         (Not autocomplete="one-time-code": on his iPhone that makes the keyboard offer SMS codes into the key field.) */
+      ['data-1p-ignore', 'data-bwignore'].forEach(a => input.setAttribute(a, ''));
+      input.setAttribute('data-lpignore', 'true'); input.setAttribute('data-form-type', 'other');
+      const remRow = el('label', 'set-aikey-rem');
+      /* Unticked for a new key, as the Director's was — a key is kept for the session unless he chooses otherwise; ticked
+         only if the key he has IS remembered (queue 930 review). */
+      const rem = el('input'); rem.type = 'checkbox'; rem.checked = FM.aiKey.remembered();
+      remRow.appendChild(rem); remRow.appendChild(el('span', null, 'Remember on this device'));
+      const save = el('button', 'set-action', 'Save key'); save.type = 'button';
+      const forget = el('button', 'set-action danger', 'Forget key'); forget.type = 'button';
+      const getKey = el('a', 'set-aikey-get', 'Get a key → console.anthropic.com');
+      getKey.href = 'https://console.anthropic.com/settings/keys'; getKey.target = '_blank'; getKey.rel = 'noopener';
+      const sync = () => { paint(); forget.classList.toggle('hidden', !FM.aiKey.has()); if (FM.aiPanel && FM.aiPanel.refreshKey) FM.aiPanel.refreshKey(); };
+      /* The box means what it says the moment it changes (queue 930 review): unticking it takes a remembered key out of this
+         device's storage at once, ticking it keeps the key he has — not only on the next Save. */
+      rem.addEventListener('change', () => { if (FM.aiKey.has()) { FM.aiKey.set(FM.aiKey.get(), rem.checked); sync(); } });
+      save.addEventListener('click', () => {
+        const v = input.value.trim();
+        if (!FM.aiKey.looksValid(v)) { input.classList.add('bad'); input.value = ''; input.placeholder = 'That doesn\u2019t look like an sk-ant- key'; return; }
+        FM.aiKey.set(v, rem.checked);
+        input.value = ''; input.classList.remove('bad'); input.placeholder = 'sk-ant-…';
+        sync();
+        if (FM.toast) FM.toast('Key saved — the Director and the Assistant will use it', 2200);
+      });
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save.click(); } });
+      forget.addEventListener('click', async () => {
+        // one tap from Save, so it asks (queue 930 review) — and a Director build running on the key is stopped, not left to fail stage by stage
+        const running = !!(FM.ai && FM.ai.isRunning && FM.ai.isRunning());
+        const ok = FM.ask ? await FM.ask({ title: 'Forget your key?', message: 'The Director and the Assistant stop working until you add it again.' + (running ? ' The scene being built now is stopped.' : ''), ok: 'Forget', cancel: 'Keep it', danger: true }) : true;
+        if (!ok) return;
+        if (running && FM.ai.cancel) FM.ai.cancel();
+        FM.aiKey.forget(); rem.checked = false; sync();
+        if (FM.toast) FM.toast('Key forgotten on this device', 1800);
+      });
+      form.appendChild(input); form.appendChild(remRow);
+      const btns = el('div', 'set-aikey-btns'); btns.appendChild(save); btns.appendChild(forget);
+      form.appendChild(btns); form.appendChild(getKey);
+      ak.appendChild(form);
+      sync();
+      body.appendChild(group(ak));
+    }
+
     // The old home ⋯ menu, rehomed. Both are app-level rather than project-level, so they belong
     // with the rest of the app's settings and work the same from Home or from inside a project.
     body.appendChild(group(
@@ -465,39 +604,12 @@ window.FM = window.FM || {};
        * Deliberately a FILE HE SAVES, which is option A of #869 and the only one that changes
        * nothing about what this app is: no server, no account, nothing of his on anyone else's
        * machine. Say the word and it can become something else. */
+      /* Only on an install from before the status-bar fix (queue 920) — the steps again, for whenever he is ready. */
+      (FM.statusBar && FM.statusBar.staleInstall && FM.statusBar.staleInstall())
+        ? actionRow('Remove the blur at the top of the screen', 'This copy was added to your Home Screen before the fix. A fresh install fixes it — the steps, with a backup first.', 'How…', () => FM.statusBar.explain(true))
+        : null,
       actionRow('Back up every project', 'Writes ALL your projects into one file you keep wherever you like. Nothing is uploaded anywhere — it saves to this device like any download.', 'Back up…',
-        async () => {
-          if (!FM.storage || !FM.storage.backupAll) return;
-          /* actionRow closes the panel before it runs the handler, so progress has to live in a toast
-             rather than on the button. A library of videos takes a few seconds and silence in that gap
-             reads as "nothing happened", which is how people tap a thing twice. */
-          if (FM.toast) FM.toast('Packing up your projects…', 4000);
-          let r = null;
-          try {
-            r = await FM.storage.backupAll(null);
-          } catch (e) { r = { ok: false, reason: 'The backup could not be written.' }; }
-          if (!r || !r.ok) { if (FM.toast) FM.toast((r && r.reason) || 'The backup could not be written.', 6000); return; }
-          /* ⚠️ SAY WHAT IS NOT IN IT, EVERY TIME. A backup that quietly leaves a clip out is worse
-             than no backup, because he would trust it and find out when it mattered. */
-          const miss = (r.notIncluded && r.notIncluded.media) || [];
-          const mb = Math.round((r.bytes || 0) / 1048576);
-          /* queue 915 clause 8: drafts are counted as what they are, not as projects he would go looking for */
-          const nd = r.drafts || 0, np = r.count - nd;
-          let msg = 'Backed up ' + np + (np === 1 ? ' project' : ' projects') + (nd ? ' and ' + nd + (nd === 1 ? ' draft' : ' drafts') : '') + ' (' + (mb >= 1 ? mb + ' MB' : 'under 1 MB') + ').';
-          /* queue 915 phase A: a clip with NO footage stored is listed too (`missing`), and it is not "too big" —
-             "Clip (0 MB) was too big" would be a second lie on top of the blank. Two sentences, each true. */
-          const big = miss.filter(m => !m.missing), gone = miss.filter(m => m.missing);
-          if (big.length) {
-            const names = big.slice(0, 3).map(m => m.file + ' (' + m.mb + ' MB)').join(', ');
-            msg += ' ⚠️ ' + big.length + (big.length === 1 ? ' clip was' : ' clips were') + ' too big to include: ' + names + (big.length > 3 ? ' and more' : '') + '.';
-          }
-          if (gone.length) {
-            const names = gone.slice(0, 3).map(m => m.file + ' in ' + m.project).join(', ');
-            msg += ' ⚠️ ' + gone.length + (gone.length === 1 ? ' clip has' : ' clips have') + ' no footage stored on this device, so the file has none either: ' + names + (gone.length > 3 ? ' and more' : '') + '.';
-          }
-          if (miss.length) msg += ' Everything else is in the file.';
-          if (FM.toast) FM.toast(msg, miss.length ? 12000 : 6000);
-        }),
+        () => FM.backupEverything()),
       actionRow('Restore from a backup', 'Adds every project from a backup file back in. It never replaces or deletes what is already here.', 'Restore…',
         () => {
           const input = document.createElement('input');
@@ -545,7 +657,7 @@ window.FM = window.FM || {};
       perfBtn.addEventListener('click', () => {
         if (perfBtn.disabled) return;
         perfBtn.disabled = true; copyBtn.disabled = true;
-        FM.settings.close();                       // he has to be able to USE the app while it samples
+        FM.settings.close({ handBack: false });     // he has to be able to USE the app while it samples
         /* One definition of "measure", shared with the automatic offer that fires when playback is
            struggling (js/app.js). It stores the report; this panel reads it back from storage when
            reopened, which is what the `stored` branch below already does. */
@@ -802,10 +914,11 @@ window.FM = window.FM || {};
       const ui = FM.collab.ui;
       const me = ui.getProfile();
       const kids = el('div', 'set-labs' + (state.collabLabs ? '' : ' hidden'));
-      kids.appendChild(actionRow('Your name and colour',
+      kids.appendChild(stayRow('Your name and colour',
         me ? me.name : 'Not set yet — you are asked the first time you share or join',
-        'Change…', () => ui.profile({ force: true })));
-      kids.appendChild(actionRow('Join a live project', 'Paste an invite link, or type the short code somebody read you.', 'Join…', () => ui.join()));
+        'Change…', () => ui.profile({ force: true }),
+        (h) => { const p = ui.getProfile(); if (h && p && p.name) h.textContent = p.name; }));
+      kids.appendChild(stayRow('Join a live project', 'Paste an invite link, or type the short code somebody read you.', 'Join…', () => ui.join()));
       /* S8 (§25.5): "Test connection". Not an actionRow — that shuts the panel, and the answer IS this row. Nothing
          is tried until the button is tapped (§23); the result is one sentence per question and the numbers behind
          them in the same copyable box the Reports use, kept as `fm.lastConnReport`. */
@@ -905,17 +1018,53 @@ window.FM = window.FM || {};
          first, which is all the transition needed. */
       void panel.offsetWidth;
       requestAnimationFrame(() => { if (scrim) scrim.classList.add('open'); });
-      escBound = e => { if (e.key === 'Escape') { e.preventDefault(); FM.settings.close(); } };
+      document.body.classList.add('set-open');   // lifts #toast above the panel (queue 930 review: "Key saved" appeared behind it)
+      _onClose = null;                           // a plain open never inherits a return trip; openAt sets it after this
+      /* ONE Escape listener, ever (queue 690). open() on an already-open panel — openAt from the Director's or the
+         Assistant's key button, a second route in — rebuilt the panel and added a SECOND listener without taking the
+         first one off, and close() only removes the newest. The stranded one then answered every Escape for the rest of
+         the session: preventDefault on a key nothing was listening for. That used to be harmless noise; since the
+         editor now leaves an Escape that something else has already answered (js/app.js, the Escape branch), it
+         silently turned Escape off everywhere after the panel had been opened twice. Measured in the suite after the
+         930 test: the editor's Escape stopped reaching its handler at all. So the old one goes first, and the listener
+         only answers while the panel is actually up. */
+      if (escBound) document.removeEventListener('keydown', escBound);
+      escBound = e => { if (e.key === 'Escape' && FM.settings.isOpen()) { e.preventDefault(); FM.settings.close(); } };
       document.addEventListener('keydown', escBound);
     },
-    close() {
+    close(opts) {
       if (!scrim) return;
+      document.body.classList.remove('set-open');
+      /* The panel that sent him here comes back only when he DISMISSES Settings (✕, the scrim, Escape, the cog) — not when a
+         row closes it to hand him something else (a backup, Measure, a joined project), which the AI panel would then cover
+         (queue 930 review, round 2). And never over a Settings he has already reopened. */
+      const back = (opts && opts.handBack === false) ? null : _onClose; _onClose = null;
+      if (back) setTimeout(() => { if (FM.settings.isOpen()) return; try { back(); } catch (e) {} }, 280);   // after the slide-out
       scrim.classList.remove('open');
       if (escBound) { document.removeEventListener('keydown', escBound); escBound = null; }
       const s = scrim; scrim = null; panel = null;
       setTimeout(() => s.remove(), 260);   // after the slide-out
     },
     isOpen() { return !!scrim; },
+    /* Open straight at one section (queue 930: the Director's and the Assistant's "API key" buttons). The panel is rebuilt
+       on every open, so the section is looked up after it, scrolled to the top of the panel, and — with a real keyboard —
+       its first field focused; on a phone a focus would throw the keyboard over the very row he came to read. */
+    openAt(which, opts) {
+      FM.settings.open();
+      _onClose = (opts && typeof opts.onClose === 'function') ? opts.onClose : null;   // the panel that sent him here comes back
+      const id = which === 'aikey' ? 'set-aikey' : String(which || '');
+      const target = id && document.getElementById(id);
+      if (!target) return false;
+      requestAnimationFrame(() => {
+        try { target.scrollIntoView({ block: 'start' }); } catch (e) {}
+        target.classList.add('set-flash');
+        setTimeout(() => target.classList.remove('set-flash'), 1400);
+        const fine = window.matchMedia && window.matchMedia('(pointer: fine)').matches;
+        const f = target.querySelector('input[type=password]');
+        if (fine && f) { try { f.focus({ preventScroll: true }); } catch (e) {} }
+      });
+      return true;
+    },
     toggle() { if (FM.settings.isOpen()) FM.settings.close(); else FM.settings.open(); },   // by name, not `this`: callers pass it detached — `(FM.settings.toggle || FM.settings.open)()` — and a detached method has no `this` in strict mode   // a second tap on the button CLOSES it (queue 762)
   };
 

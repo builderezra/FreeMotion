@@ -1789,7 +1789,13 @@ window.FM = window.FM || {};
             epoch: snap.epoch, seq: snap.seq, name: o.name
           }, snap.D);
           if (!gpid) return Promise.reject({ why: 'no-room' });
-          return FM.projects.open(gpid).then(function () {
+          return FM.projects.open(gpid).then(function (opened) {
+            /* queue 690: false = storage is full, his open project is not saved, and he chose to stay in it. The
+               session must not attach: it would apply the room's edits into HIS project. Take back the copy just
+               made (nothing of his is in it) and say what is true — there is no room. */
+            if (opened === false) {
+              return Promise.resolve(FM.projects.remove(gpid)).catch(function () {}).then(function () { return Promise.reject({ why: 'no-room' }); });
+            }
             const S = Session({
               adapter: A, role: (welcome && welcome.role) || o.role || 'editor',
               mid: (welcome && welcome.mid) || 'g',

@@ -1,0 +1,230 @@
+{
+ "date": "2026-09-25",
+ "item": "923",
+ "note": "IDEAS ONLY — his instruction: brainstorm and relay, do not build. Three independent perspectives (easy side; deep side + the switch; what exists and how it fits) and the message sent to him.",
+ "perspectives": [
+  {
+   "ideas": [
+    {
+     "title": "A Quick / Deep switch: one project, two ways of looking at it",
+     "what": "A two-position pill in the top bar says Quick or Deep. Quick swaps today's one-row-per-layer timeline for a CapCut-style story strip: your clips in one big row in play order, and text, stickers, captions and music as slim coloured chips above and below it. Deep is the editor as it is now. Flipping the pill keeps the playhead, the selection and undo exactly where they were, because both views draw from the same FM.scene. Anything built in Deep that Quick can't show simply (a keyframed group, a masked adjustment) appears in Quick as one sealed chip with a small badge, 'Built in Deep: tap to open'. Quick can move it, trim it or delete it, but never takes it apart.",
+     "why": "This is the core of his idea for all three kinds of people. It's what stops the plan turning into two apps. Premiere and After Effects are two programs passing files back and forth; here it's one project and one undo history, and switching costs a tap. The sealed chip is how a beginner can work on a pro's project without breaking it.",
+     "reuse": "FM.scene (flat layers, parent ids, groups), timeline.js rows and clip lanes, the history system. The strip is a new view of existing data, not a new data model.",
+     "risk": "The strip has to be worked out from the layers, never stored separately, or the two views drift apart. Some Deep projects have clips overlapping in awkward ways, so there needs to be a clear rule for which clips count as 'the main row'. Ripple-deleting in Quick has to write ordinary start times that Deep understands."
+    },
+    {
+     "title": "Long-press anything in Quick to go one level deeper, right there",
+     "what": "Every Quick control has a Deep twin. Long-press the Look chip, a caption, a transition diamond or a text style, and that one part of the Deep inspector slides up as a sheet, with its keyframes and curve showing. You don't switch the whole app over. Close the sheet and you're back in Quick. A 'Stay in Deep' button at the top of the sheet does the full switch if you want it.",
+     "why": "This is for his third kind of person: lots of skill, wants a quick system. A pro doing a fast edit shouldn't have to change modes to fix one ease. It also teaches beginners, because the deep version of what they just tapped is always one hold away.",
+     "reuse": "The inspector's existing sections, the graph editor, the phone's docked edit sheet, and the way Settings already opens at a named section (FM.settings.openAt).",
+     "risk": "Every Quick control needs a clear Deep home, so a Quick control without one is a gap that needs a rule. On a phone, a long-press can clash with drag-to-reorder on the strip, so the gestures need planning."
+    },
+    {
+     "title": "'Show in Quick': a pro picks which controls a beginner gets",
+     "what": "In Deep, hold any property (a text, a colour, an effect slider, a clip slot) and choose 'Show in Quick'. In Quick, that layer then shows just those few controls as big friendly rows, for example 'Headline', 'Brand colour', 'Your logo', 'Shake strength'. It works like After Effects' Essential Graphics panel, except the whole rig stays open underneath. Save the project as a template and those rows become the template's fill-in screen.",
+     "why": "This connects his skilled and unskilled users. A pro builds a rig once and a beginner (or the pro in a hurry next week) fills it in. It's also a clear win over CapCut, whose templates are sealed boxes. His #343 words were templates 'so noobs can use them… and get quick easy edits', and this is the mechanism for that.",
+     "reuse": "template-fill.js already turns a template's media, text and shape colours into slots with the right control for each. This lets the author choose the slots instead of taking every layer. It also builds on layer presets (FM.layerPresets) and effect params.",
+     "risk": "The chosen controls must survive duplicate, re-id, import sanitising and collab sync, the same field-list drift that has caused bugs before. #619 (what tapping a template should do) is still waiting on his answer, and this should follow that answer, not jump ahead of it."
+    },
+    {
+     "title": "Pick your clips and a song, get a first cut",
+     "what": "Home → New → 'Make it for me'. Pick 6 to 20 clips from the camera roll, optionally a song and a template, and tap Go. The app picks each clip's liveliest few seconds (the most movement and the loudest sound, measured on the device), puts them in order, cuts them to the music, adds a title and a look, and opens the result in Quick. With a template, the clips go into its slots in order and are trimmed to each slot's length. Every part of the result is ordinary layers, so Deep can pull all of it apart.",
+     "why": "For the beginner, this is the 'I have footage and no idea where to start' moment CapCut wins on. For the pro in a hurry, it gets a rough cut done in 20 seconds. Better than CapCut's AutoCut because nothing is locked and there's no account or watermark.",
+     "reuse": "ai-templates.js already builds a real, editable scene with no API key and no tokens, through the same checked path (applyOps) the AI uses. It also reuses template-fill slots, FM.replaceMediaWith (keeps timing and effects while swapping media), and the importer.",
+     "risk": "Reading frames from many videos in iPhone Safari is slow and memory-hungry (he already has memory-pressure history), so it needs a cap on clips and a progress bar. Needs the beat detection in the next idea to cut on the beat. Picking the 'best part' without machine learning is rough, so the promise has to stay modest."
+    },
+    {
+     "title": "Beat sync: see the beats, cut to them, pulse on them",
+     "what": "Add a song and small beat dots appear along its chip in Quick, found on the device. Two big buttons: 'Cut to the beat' re-times the clip row so every cut lands on a beat, with a 1 / 2 / 4-beat choice. 'Pulse on the beat' adds a small punch-in or Beat Slam shake at each beat, with an intensity slider. In Deep, the beats are ordinary project markers that clips and keyframes already snap to, and each pulse is a real keyframe or preset instance you can edit.",
+     "why": "Every kind of person uses this. Beat sync is table stakes for a CapCut-style mode and is listed as missing (BACKLOG #5, PARITY 'beat detection ❌'). Making the beats real markers that Deep snaps to is the extra box ticked over Alight Motion.",
+     "reuse": "project.markers and the timeline's snapping already treat markers as snap points. Also audio-react.js (bass/mid/treble envelopes that bake to keyframes), the 'Beat Slam' / 'Zoom Hit' effect presets that anchor to the playhead, and audio-tools' audio decoding.",
+     "risk": "Beat detection is new code and needs a sensitivity control plus a way to drag a wrong dot. A tricky test fixture too: it needs music with an off-beat hit to tell right from wrong. Re-timing clips must be one undo step."
+    },
+    {
+     "title": "Auto-captions that write the words, with one-tap caption styles",
+     "what": "Tap Captions → Auto, and the app finds the speech (which it already does) and now also fills in the words. Then a row of style tiles shows your own video with each style on: word-by-word highlight, bouncy pop-in, boxed subtitle, big karaoke. One tap applies a style, and the text stays editable cue by cue with ‹ ›. In Deep, the caption track is a normal text layer, so every font, stroke, effect and text animation works on it.",
+     "why": "Mainly for the beginner and the pro in a hurry, since auto-captions are the single most-used CapCut feature for talking videos. It's better than CapCut because the styles are real text layers you can keep animating in Deep, not a closed caption box.",
+     "reuse": "captions.js (a caption track is already a text layer with timed cues, and it burns into the export), captions-vad.js (on-device speech timing, which today leaves the cues empty for typing), text-edit.js cue editing, setTextAnim presets.",
+     "risk": "This is the hard one to be honest about. The Anthropic API takes no audio, so his BYOK key can't do the transcribing. The browser's speech recognition only listens to the live mic and may send audio to Apple. Doing it properly on the device means a Whisper-style model loaded from a CDN, tens of megabytes on first use. That's a real decision for him (download size vs privacy vs a paid service later). Word-by-word highlighting also needs timings for each word."
+    },
+    {
+     "title": "The 'Just say it' bar: the Assistant as Quick's main way to edit",
+     "what": "In Quick, a bar sits along the bottom: 'What should happen?' It has a mic button and suggestion chips built from the project, like 'Add captions', 'Make it 9:16', 'Punch in on the name at 0:03', 'Cut to the beat'. After each request a small receipt card lists what changed ('Title: scale 1 → 1.4, gold fill, pop-in'). Tapping any line opens that exact property in Deep, and one Undo takes the whole sentence back.",
+     "why": "This serves all three kinds of person and is what he asked for in #856 ('like CapCut… talk to her and say what you want'). Better than CapCut because the receipts turn the AI into a teacher. Each change leads to the control that made it, which moves a beginner toward the Deep side over time.",
+     "reuse": "ai-chat.js (a real conversation, one sentence = one undo step, sees the live scene), the closed op vocabulary in ai-manifest/ai-ops, the key in Settings (#930), and ai-templates' no-key builder for chips that don't need the model.",
+     "risk": "Without a key, the bar is dead for exactly the beginners it's meant for, so the chips have to work without a key wherever they can. Only a few actions like cut-to-beat and look can do that. His plan for pro-tier hidden keys (#856 clause 3) is still undecided. Voice input would rely on the phone keyboard's dictation, not a new speech engine."
+    },
+    {
+     "title": "The Looks shelf: whole-video looks you can open up",
+     "what": "A Look button in Quick opens a swipeable shelf of full-frame previews of YOUR video, not a stock photo, each with a look on: Warm Film, Clean Punchy, VHS, Moody Teal, and so on. A look bundles colour grade, grain, vignette and a matching caption and transition style. One tap adds it with an intensity slider. In Deep it's a single Adjustment layer named 'Look: Warm Film' that you can mask, keyframe or tweak effect by effect. A pro can save any adjustment layer as a new Look.",
+     "why": "It gives a beginner a great-looking video in one tap. It gives the pro in a hurry their own looks in one tap too. Better than CapCut's filters, which are flat and locked. Here a look is a real layer that fades in, sits under the captions only, or gets masked to the sky.",
+     "reuse": "The Adjustment layer type, colorGrade, the 205-effect catalogue, fx-thumbs.js (it already renders effect previews), FM.layerPresets (saves effects, grade and keyframes as one preset), and the carousel-pause behaviour from #931 for the shelf.",
+     "risk": "Rendering live previews of each look on the user's own footage, on a phone, needs to be cheap: one frozen frame, not playback. Looks that also set caption and transition styles would touch other layers, so that part should be opt-in or clearly listed. Per his #545 rule, the shelf design needs options drawn for him first."
+    },
+    {
+     "title": "Transitions between clips, stored as keyframes you can edit",
+     "what": "On Quick's clip row, a small diamond sits between every two clips. Tap it and choose Whip, Zoom punch, Glitch, Spin, Dissolve or Flash, plus a length slider and 'Apply to all'. Behind the scenes the two clips overlap slightly and get normal keyframes and effect instances. In Deep you see the overlap, the diamonds and the curves, and can reshape them in the graph editor. Removing the transition in Quick removes only what it wrote.",
+     "why": "This is for beginners, and for pros who want a whip pan without hand-keying it. The app has no clip-to-clip transitions today (the only matches in the code are UI animations), which is a standard CapCut and Premiere box. Keyframes you can open in Deep are the extra tick.",
+     "reuse": "Effect presets with relative keyframes that already re-anchor to wherever they're placed (fx-presets.js: Zoom Hit, shake presets), the graph editor, motion blur, and the Deep timeline's overlapping rows.",
+     "risk": "The transition needs an owner tag on everything it writes, or it can't be removed cleanly after Deep edits. Re-trimming a clip in Quick has to move its transition with it. Overlaps in the one-layer-per-row timeline need a clear visual in Deep so they don't look like a mistake."
+    },
+    {
+     "title": "Hand it over live: a beginner in Quick, a pro in Deep, same project",
+     "what": "In Quick there's a 'Get help' button that shares the project live with a friend or editor. They join in Deep and see the whole rig, while you stay in Quick and watch their changes appear on your clip row. Their comments pin to moments on your strip. The same works in reverse: a pro builds in Deep and passes a Quick-only link to a client, who can change the words and swap photos but can't break anything.",
+     "why": "This covers all three kinds of person together, and neither CapCut nor Alight Motion does it. It's the Premiere-plus-After-Effects handoff done live instead of through files, and it reuses work he has already paid for.",
+     "reuse": "#921 live collaboration: roles (Viewer and others), comments, owner control, sharing settings, QR join. It combines with 'Show in Quick' (the client only gets those controls).",
+     "risk": "Collab is still in Labs, and #921 clause 19 about where it lives is open. A 'Quick-only' role is a new permission that has to be enforced on the host, not just hidden in the UI. Syncing two devices showing different views needs testing on his real phone and PC."
+    }
+   ]
+  },
+  {
+   "ideas": [
+    {
+     "title": "The switch: 'Cut' and 'Compose' are two views of one project, not two apps",
+     "what": "A two-part pill next to the project name reads 'Cut | Compose'. Cut shows the project CapCut-style: one main row of clips placed end to end that close up their own gaps, text, stickers and overlays as short chips above it, and music and voice below. Compose is today's timeline, with one row per layer and keyframe diamonds. He can flip between them mid-edit, and the playhead, selection and undo all carry over, because both views read the same layers and nothing gets exported, imported or re-linked. On PC one key flips it.",
+     "why": "It serves all three kinds of people at once. Beginners live in Cut. Skilled people who want speed cut in Cut and flip to Compose only when they need to. Deep users stay in Compose. This is 'After Effects + Premiere' without Dynamic Link, because there is only ever one project to keep in sync.",
+     "reuse": "FM.scene's flat layer list and the timeline.js rebuild. Edit Group already proves that a second timeline view can be a filtered projection of the same data. The magnet snapping carries over.",
+     "risk": "He retired a third layout in #249 ('I just want two layouts not three'), so this has to be a timeline VIEW and phone/PC must stay the only two layouts. The real design decision is which layers count as 'on the storyline': a flag set on import, or every unparented video/image. It also roughly doubles the timeline's test surface."
+    },
+    {
+     "title": "Depth, not modes: an Easy / Pro / Everything setting that trims the panels, plus a search that reaches every tool",
+     "what": "This is a separate control from Cut/Compose. First run asks once: 'New to editing / I edit a lot / Show me everything'. Easy gives a layer six big cards: Looks, Text, Animate (presets), Speed, Volume and Replace. Pro gives today's nine Alight Motion cards. Everything adds keyframe lanes, links and expressions. Every panel ends in a quiet 'More ›' that shows the rest for that one layer without changing the setting. A search (⌘K on PC, a magnifier on the phone) finds any tool by name ('motion blur', 'track', 'mask') at any depth.",
+     "why": "This answers his third person, 'lots of skill but wants a quick system': they can keep Pro depth while working in Cut, or keep Easy panels and search for the one pro tool they need. Beginners never face a wall of 190 effects, and deep users lose nothing.",
+     "reuse": "inspector.js catsFor() already filters the card list by layer type, and the same gate could also take a depth. The fx-browser search field. The Assistant (ai-chat.js) could be the beginner's version of search ('make it pop').",
+     "risk": "Hidden tools are how #596 happened ('What do the controllers and adjustments even do?'), and they breed 'where did X go' reports, so 'More ›' and search must always be visible. Every depth needs test coverage. It must not quietly grow into a third layout."
+    },
+    {
+     "title": "Dive in: 'Open in Compose' on one clip, which is Premiere's 'Replace with After Effects Composition' inside one app",
+     "what": "In Cut he long-presses a clip and taps 'Animate this in depth'. That clip, plus anything stacked over it during its time, opens as its own mini-timeline with a breadcrumb at the top: 'Story › Clip 3 (0:04–0:07)'. Everything deep works in there: masks, lanes, camera and effects. Back returns him to the storyline, where the clip now wears a small ◆ badge. Trimming or sliding that clip in Cut carries its animation with it.",
+     "why": "For the skilled person who wants speed: cut the whole video fast, then go deep on only the three seconds that need it. Beginners never have to open one, and a clip someone else composed still behaves like an ordinary clip in their Cut view.",
+     "reuse": "Groups and Edit Group, which already give a group its own timeline view, and the group 'flattened unit' that effects apply to. The breadcrumb can follow how Edit Group already shows where you are.",
+     "risk": "Groups have no time base of their own today. If a clip is slid or trimmed in Cut, everything inside has to move with it, so this needs a clip-local clock. MISSION.md lists nested group flattening (inner effects dropping or double-drawing) as a known deferred bug, and this would lean on exactly that path."
+    },
+    {
+     "title": "Live precomps: linked Elements with 'Controls' (AE precomps and Essential Graphics in one)",
+     "what": "Today, inserting a saved Element makes an independent copy with new IDs (confirmed in storage.js elements.insert). Add 'Insert linked': the clip shows a chain icon, double-tapping it opens the master in its own timeline, and one edit updates every placement in the project. In the master, a deep user stars properties such as the title text, the brand colour, a 'your video here' slot or the speed. Those become the element's Controls, which are the only thing an Easy user sees when they tap it: a text box, a colour chip, a Replace button.",
+     "why": "This is the glue between his three kinds of people. Deep users build, easy users fill in, and pros reuse their own lower-thirds and intros without rebuilding them. It also makes templates better than Alight Motion's, because a template becomes a linked element with Controls, which is an extra tick.",
+     "reuse": "elements-browser.js, FM.elements in storage.js, template-fill.js 'Insert your Media' (FM.replaceMediaWith already keeps timing, effects and masks) and the Home Templates tab.",
+     "risk": "It changes the data model: a layer that renders another set of layers. It needs cycle protection (an element containing itself), hostile-import sanitising, collab diffs for a shared master and old-project guards. It is the biggest structural change in this list."
+    },
+    {
+     "title": "Property lanes and a real graph editor, the missing half of Compose",
+     "what": "In Compose, a ▸ on each layer row twirls it open into one lane per animated thing: Position, Scale, Rotation, Opacity, each animated effect slider and the mask path, each with its own diamonds. He drags a box across lanes to grab many keyframes, then moves them together, stretches them in time, or applies one ease to all of them. A 'Graph' toggle swaps the lanes for curves, as a value graph (the actual numbers over time) or a speed graph (where it speeds up and slows down), with After Effects-style handles to drag.",
+     "why": "For the lots-of-skill person, this is the first thing an After Effects user reaches for and doesn't find. Today easing is edited one segment at a time inside the Move & Transform panel. PARITY.md records 'apply easing to multiple selected keyframes: missing' and 'no separate velocity view'. Beginners never see lanes, because Cut hides them.",
+     "reuse": "graph-editor.js and eases.js (curve maths and parameterised bounce/steps), motion-path.js spatial tangents (ti/to), the timeline's keyframe diamonds and FM.animatedProps().",
+     "risk": "Lanes don't fit beside clips at 380px, so the phone version is probably a full-screen per-layer sheet with the lanes built for PC. Keyframe copy/paste addresses effects by position, which the code already warns about. Many lanes on a long project could slow timeline rebuilds."
+    },
+    {
+     "title": "Link anything to anything: a pickwhip first, then a safe one-line expression",
+     "what": "He holds a property's ◆ and drags it onto any other property, on any layer or effect slider. A thin line joins them and a small card asks '× 1.0, + 0, delay 0s'. One gear's spin can drive the next gear backwards, a blur can follow the camera's zoom, or a text's opacity can follow the music. For deep users the same card has an 'Expression' line in a tiny closed language (wiggle, time × 90, loop, clamp, another layer's value) with autocomplete. It is not real JavaScript.",
+     "why": "For the lots-of-skill person. Expressions are After Effects' power tool, and the pickwhip gives the same power to people who can't code, which ticks the box without a scripting wall. Easy users only ever meet it through presets that already contain links.",
+     "reuse": "behaviors.js already has Follow (target layer, multiplier, offset, delay) and Audio Drive, but only on x/y/scale/rotation/opacity. This extends that to every property and effect parameter. ai-ops.js's closed, whitelisted op vocabulary is the model for a safe expression parser.",
+     "risk": "Security comes first: this must never become eval or new Function, because imported projects are treated as hostile and the code already warns about prototype-chain lookups on user strings. Other risks: per-frame cost, link cycles (A drives B drives A), and typing on a phone, so the expression line leans towards PC while the pickwhip works fine on a phone."
+    },
+    {
+     "title": "Tracking that does the After Effects jobs: follow plus spin and size, pin to a surface, steady the shot, masks that ride the track",
+     "what": "The Track sheet offers four choices. Follow is today's one-point x/y. Follow + turn + size uses two points, so a sticker rotates and grows with a head. Pin to a surface uses four corners to drop a picture onto a phone screen, a sign or a laptop. Steady applies the opposite motion to the clip itself, which stabilises it. Any pen mask also gets a 'Follows the track' switch, so a rotoscope only needs keyframes when the shape actually changes.",
+     "why": "For the lots-of-skill person, screen replacement and stabilising are staple After Effects and Premiere jobs that Alight Motion doesn't do well, so they are extra ticks. Beginners get 'Steady' as a single button in Cut.",
+     "reuse": "tracker.js (coarse-to-fine block matching on the frame cache, which already writes ordinary editable keyframes), masks.js animated paths and the mask-tool's keyframe-at-playhead roto. The 3D tilt code's perspective-quad drawing (renderMesh / draw3DTiltLayer) can do the corner-pin warp.",
+     "risk": "Template matching is not planar tracking: four independent points drift and shear, so corner pin needs a way to fix a bad point by hand. Steady needs a crop or scale-up to hide the moving edges. Long clips take a lot of compute on the phone. ML roto brush is on MISSION.md's explicit do-not-attempt list, so this stays track-plus-keyframes."
+    },
+    {
+     "title": "Premiere's editing boxes for Cut: ripple, roll, slip, J/L cuts, multi-cam synced by sound, and camera cuts",
+     "what": "In Cut, deleting a clip closes the gap (ripple). Dragging the line between two clips moves both (roll). Dragging inside a clip changes which part plays without moving it (slip). Letting a clip's sound start early under the previous clip is a J/L cut. For multi-cam he picks two to four videos of the same moment; the app lines them up by listening to their sound, plays them as a grid, and he taps an angle while it plays to cut to it. The same grid could cut between several virtual cameras in a 3D Compose scene.",
+     "why": "For the Premiere user with lots of skill who wants speed. PARITY.md records ripple delete as absent, and multi-cam is a box neither Alight Motion nor CapCut ticks. The result is always ordinary clips, so each one can still be opened in Compose.",
+     "reuse": "FM.splitLayer, the trim grips and snapping in timeline.js, media.js getWaveform peaks (for sound sync) and audio-play.js. Camera FOV, focus and fog already exist in the camera inspector.",
+     "risk": "J/L cuts need a clip's audio to have its own offset from its picture, which is a data-model addition. Ripple must not shove overlays and their keyframes out of sync, so they have to follow their clip. Four live decodes on an iPhone are heavy, so the grid should use low-res frame caches. Camera cuts break today's one-camera rule, which is enforced in app.js and ai-ops.js."
+    },
+    {
+     "title": "Render queue and editing copies: the pro media boxes",
+     "what": "The Export sheet gains 'Add to queue'. He queues several outputs (9:16 for Reels, 16:9 for YouTube, a GIF, a transparent frame set, even several projects), and a Queue screen shows each one's progress while they save one after another. When he imports a heavy 4K clip, the app offers a light 'editing copy' (a small P badge on the clip). Scrubbing and playing on the phone use the light copy, while export always uses the original.",
+     "why": "For the lots-of-skill person who wants speed: delivering to every platform in one go is After Effects' render queue and Media Encoder in one. Editing copies are what make the deep side usable on an iPhone with real footage.",
+     "reuse": "exporter.js already has contain-fit maths for other aspect ratios (queue 141) plus GIF, frame-sequence and transparent paths. Also export-resume.js, the frames.js decode cache, medialib.js storage and the adaptive preview resolution during playback.",
+     "risk": "Editing copies roughly double media storage in IndexedDB, and iOS can evict it. iOS also suspends a backgrounded PWA, so the queue has to survive interruption (export-resume helps). Adaptive preview resolution already exists, so measure whether editing copies are actually needed before building them."
+    },
+    {
+     "title": "Two people, two views, one project: live Cut-and-Compose together",
+     "what": "Once Cut/Compose exists, live collaboration makes it a working Dynamic Link between people. Someone on a phone cuts the story in Cut view while someone on a PC animates the title in Compose, in the same project at the same moment. Each sees the other's presence in their own view: 'Ezra is in Clip 3' shows as a coloured outline on that clip in Cut and on its rows in Compose. Comments pinned to a moment show in both.",
+     "why": "This is an extra tick beyond both After Effects and Alight Motion. Adobe's Dynamic Link is one person on one machine. It suits a skilled animator working with a quick editor, which is his third kind of person teamed with his second.",
+     "reuse": "The shipped #921 collaboration stack (collab-*.js stages S0–S8: roles, comments, presence, owner control, earlier versions), which already syncs FM.scene edits, so a second view needs presence drawn in it rather than a new sync layer.",
+     "risk": "It depends on idea 1 existing first. Presence has to be drawn twice, once per view, and tested on both. Two people rippling and animating the same clip at once is a new kind of conflict for collab-diff to resolve."
+    }
+   ]
+  },
+  {
+   "ideas": [
+    {
+     "title": "One project, two lenses: the rule that stops it forking",
+     "what": "Quick and Full are two ways of looking at the same project. Nothing about the project changes when you switch. The playhead, the selected layer and undo history all carry over, and a project made in one mode opens untouched in the other. The mode is a setting on the device, the same kind of switch as Demo mode, not something saved in the project. Both modes use the same engine, add menu, effects browser, inspector pages, Presets card and AI. Quick only chooses which of those it shows, and how big.",
+     "why": "This serves all three kinds of people, and it is what makes his clause 'switch over to something more in depth' actually work. If you can hop between modes mid-edit and lose nothing, nobody has to pick a side forever.",
+     "reuse": "FM.scene, FM.history, selection, and the settings.js device switches (demoMode works the same way). Collab and the AI need no changes, because nothing new is saved.",
+     "risk": "He has already killed a second layout once. On 15 Aug he said 'I just want two layouts not three' (#249): the old Classic desktop layout had survived as the default on his other machines. Then it flashed up on refresh (#292) and he worried people would use it against us. A second UI that isn't the main path goes stale and leaks the same way. There is a second pull too: to give Quick its own data, like a 'main track' flag. Any new field has to be added to the import whitelist, the collab schema and the AI vocabulary, and a missed whitelist has dropped fields silently three times in two days before. So anything Quick needs to know has to be worked out from the layers, never stored. The test suite (about 1,790 tests, run at PC width and at 380) would also need a Quick pass on the parts only Quick has."
+    },
+    {
+     "title": "The switch: 'Quick | Full', in the same spot on phone and PC",
+     "what": "A two-part pill next to the project name: in the phone top bar, and in the Studio layout's side strip on PC. When you tap it, the timeline rows fold into Quick's single strip, or unfold back, so you can see it's the same edit and not a different screen. My suggested names are 'Quick / Full' or 'Cut / Motion' rather than 'Easy / Pro'. Before anything is built, draw both modes of one real project at 380 and on PC as a sheet he can pick from.",
+     "why": "His third kind of person is 'lots of skill but wants a quick system'. A skilled person should not feel demoted to a beginner mode, so the names describe the task, not the person's skill. Using the same spot on both devices keeps it 'simply and easily integrated'.",
+     "reuse": "The phone top bar next to #proj-name-m, the Studio side strip, and the settings toggle pattern. The folding reuses the timeline's row animation.",
+     "risk": "His standing design rule (#545) says no visual ships before he has seen options. 'Make it look good' comes up about 73 times in REQUESTS.md, and the Template icon was redrawn four times before he picked one. So the picture has to come before any code. Copying CapCut's look would also repeat the BEFORE-PUBLISHING problem we already have with Alight Motion. Quick is a fresh surface, so it can look like ours from the start."
+    },
+    {
+     "title": "Quick Edit on every project: the smallest first step",
+     "what": "The 'Insert your Media' screen already exists: preview at the top, a scrub bar, and one slot per clip in play order. A media slot has Replace, a text slot has a text box, a shape slot has a colour picker. Today it only opens after you make a project from a template. The step is a 'Quick edit' button on every project card on Home and in the editor, which opens that screen on any project. Done drops you into the full editor, which is already open underneath. Swap footage and words on last week's project without touching the timeline.",
+     "why": "This proves the whole idea (a quick way in on top of the deep editor) with almost nothing new. A beginner can fill a template, and a skilled person can make a quick change to an existing video. He can try it on his phone within a release and say if the idea feels right before any mode gets built.",
+     "reuse": "js/template-fill.js as it is: the slot rules from queue 619 and replacing through FM.replaceMedia, so the undo behaviour is the same. The template entry point in home.js stays.",
+     "risk": "A 40-layer project gives a 40-slot list, so it would need a cap, or only named/visible layers, or the first-level groups. Queue 619 shows how this can fail: with the wrong slot rules the screen silently never appeared for him, and he reported it twice as 'the feature doesn't exist'. The 'Insert your Media' title also echoes Alight Motion and would need renaming."
+    },
+    {
+     "title": "Quick's timeline: one strip of clips, like Premiere or CapCut",
+     "what": "In Quick, the timeline is one big filmstrip of your clips in play order. Text, stickers and shapes sit above it as thin coloured tabs. Drag a clip and the rest close up behind it, and deleting leaves no gap. Tap the join between two clips to pick a transition. Full shows the same edit as today's one row per layer.",
+     "why": "This is the Premiere half of his After Effects + Premiere comparison, and the main thing a beginner expects from CapCut. It also speeds up the skilled person who just needs to cut and order footage.",
+     "reuse": "The timeline's clip drawing, thumbnails, trim grips, split (S) and speed badge. Keyframe times are stored as absolute times, so any shift has to go through the existing helpers: FM.shiftLayerKeyframes, shiftLayerCues and shiftLayerFxClock. Transitions could start as the shipped effect presets with relative timing (Zoom Hit, Glitch Pop, Beat Slam) applied at the cut, not as a new engine.",
+     "risk": "This is the biggest build here, and FreeMotion has neither yet: there is no gap-closing (ripple) delete in the code, and no clip-to-clip transitions at all. timeline.js is 5,187 lines with a long history of drag bugs; the add switch took four fixes (#924). A second drag engine would double that, so the strip has to reuse the same clip elements and drag code with different row placement. Anything that has to move with a clip in time (keyframes, caption cues, the effect clock) must use one shared code path. A fourth thing added later would otherwise get missed in Quick."
+    },
+    {
+     "title": "Six big tiles, each with a door to the full controls",
+     "what": "Select a clip in Quick and the phone sheet shows about six large tiles: Looks (the filter library), Animate (in/out presets), Adjust (three or four sliders), Speed, Volume, and Text or Captions. Each tile opens the same page Full uses, cut down, with 'All controls' at the bottom that switches to Full on that page. If a layer has something Quick can't show (keyframes, masks, wiggle-style behaviors, 3D tilt, a parent), a small chip says so, e.g. 'Has keyframes · Open in Full', so nothing is secretly hidden.",
+     "why": "Beginners get a short, friendly set of choices. Skilled people are always one tap from the real control, and that is the thing that makes switching 'easy'. It also directly answers the risk of a mode that hides things you then can't find.",
+     "reuse": "The inspector's existing tiles and pages (Mixing, Position / Scale, Speed, Volume, Presets, Effects, Captions), the Presets card that already shows every preset on your own layer (v9.29), the 57 sectioned filters, and FM.isAnimated for the chips.",
+     "risk": "If Quick grows its own copies of those pages, they drift apart. The tiles must open Full's page code with a smaller set of rows, not a rewrite. He has also said we put 'an explanation for everything in every section, and it just looks messy', so Quick's labels have to stay short and not turn into a hint-filled beginner screen."
+    },
+    {
+     "title": "Effects land looking finished in Quick, blank in Full",
+     "what": "In Quick, one tap on an effect adds it with a ready-made look (its chosen preset). In Full it still arrives with blank settings, as now. The effects browser already has a remembered pill, 'Keep preview values / Add naked'. The mode would set it for you. He also floated long-pressing an effect to pick which preset a plain tap adds (#277 clause 10), and that would be the Quick default.",
+     "why": "This is his own complaint, 'most of our filters and stuff I kind of just like basic when you first add them', solved where it hurts: for beginners and people in a hurry. People who want to build from scratch in Full keep the blank start.",
+     "reuse": "The #277 multi-select browser and its v8.70 pill. Also js/fx-presets.js (a dozen shipped presets, plus your own through 'Save as preset'), and holding an effect already opens its presets.",
+     "risk": "He explicitly said 'I don't want you to start on it yet' about default good-looking values, so this one needs his yes. Good starting looks for about 200 effects is a lot of taste work. Start with the Featured / New effects strip only."
+    },
+    {
+     "title": "Motion clips: After Effects inside Premiere, the actual trick he's pointing at",
+     "what": "In Quick, a group or saved Element shows as one clip on the strip, with a small sparkle badge. Double-tap it and you're in Full, inside that group, with the Edit Group breadcrumb at the top ('Main edit › Title card'). Change keyframes, masks or behaviors, tap the breadcrumb, and you're back in Quick with the clip updated. Cut fast, and only go deep where it's needed.",
+     "why": "This is what After Effects and Premiere's Dynamic Link does and the reason he gave for the pair's popularity. It is the most important piece for the skilled-but-quick person, and beginners can drop in a pro-made title without ever opening it.",
+     "reuse": "Groups, Edit Group and its breadcrumb (FM.groupContext), Elements (saved selections with thumbnails and a searchable full-screen browser), and templates saved as elements.",
+     "risk": "In Quick, a group has to act as one sealed clip: trimming or moving it moves every member's keyframes, cues and effect clock, and collapse and parent transforms need to hold. Edit Group has had leftover-state bugs before, such as the breadcrumb still naming a deleted group. Test real flows on a phone, not only simulated events."
+    },
+    {
+     "title": "The AI as the bridge between the modes",
+     "what": "In Quick, the Assistant is the big button ('Tell it what you want'). In Full it stays in the layer ⋯ menu. The Director builds a full detailed scene, and Quick then presents it through Quick Edit so a beginner just fills it in. A new ask, 'What's this layer doing?', makes the Assistant explain the Full-mode setup in plain words, with a 'Show me' that switches to Full at that control.",
+     "why": "A beginner can get Full-level results without learning Full. The 'Show me' door is also how someone learns their way over to the deep side, which is his 'if they want to switch over' clause. Skilled people get a fast shortcut in either mode.",
+     "reuse": "js/ai-chat.js (one undo per sentence, the checked set of AI commands through ai-ops) and js/ai.js (the Director). The no-key fallback in ai-templates.js has three built-in looks (punchy / elegant / retro), and the key now lives in Settings (#930).",
+     "risk": "The AI needs your own Anthropic key, and a beginner won't have one, so Quick must be fully usable without AI. The key-less templates and Quick Edit have to carry it. His built-in 'pro version' key is a future decision (#856 clause 3). Everything the AI does has to keep going through ai-ops only, and never through a new Quick-only route."
+    },
+    {
+     "title": "'What are you making?' instead of 'Easy or Pro?'",
+     "what": "The New Project dialog (aspect, resolution, fps, background) gets one question first, with three doors: 'Start from a template' (opens Quick Edit), 'Edit my clips' (Quick strip), and 'Blank canvas' (Full). It remembers your last answer the same way it remembers aspect ratio, so skilled people just tap through. The Home 'Tutorials are coming' tab becomes where the switch is taught in a few short clips.",
+     "why": "It sends each of his three kinds of people to the right door without asking them to rate their own skill. LAUNCH-PLAN.md makes the case: the maths only works if people stay, and a beginner's first five minutes decide whether they do.",
+     "reuse": "newProjectDialog in home.js and its remembered choices, the Templates and Elements tabs, and the empty Tutorials placeholder.",
+     "risk": "It is another step before you can start. It needs 'remember my answer' and a way to skip, or it annoys exactly the skilled-but-quick person. It is a design surface too, so it needs pictures first."
+    },
+    {
+     "title": "Two people, two modes, one project (later, not first)",
+     "what": "With live collaboration on, one person cuts in Quick on a phone while another does titles in Full on a PC, in the same project at the same time. Their presence dot shows which mode each person is in, and a Motion clip someone is working on in Full shows as busy on the Quick strip.",
+     "why": "This is the studio version of After Effects + Premiere: an editor and a motion designer on one edit. Something Alight Motion doesn't have, which fits 'adding extra ticks'.",
+     "reuse": "#921 live collaboration: presence, roles (Editor / Commenter / Viewer), and per-layer locks while someone is editing.",
+     "risk": "Collaboration is still behind the Labs switch and being perfected, so this should wait until the modes themselves are proven. The mode must stay local to each device and never sync, or two people would keep flipping each other's screens."
+    }
+   ]
+  }
+ ],
+ "message": "Ideas only for #923. Nothing has been built or started, as you asked.\n\n**The core idea**\nOne project, two ways of looking at it. Quick shows your video CapCut-style: one big row of clips, with text and music as slim tabs above and below. Full is the editor you have now. One tap flips between them, and the playhead, selection and undo stay put, because it's the same project underneath, not two apps.\n\n**Switching between them**\n- **A Quick | Full switch (start here)**: next to the project name, in the same spot on phone and PC. The layer rows fold into the strip as you tap it. The names describe the job, not the person, so skilled people never feel sent to \"beginner mode\".\n- **Hold to go deeper**: long-press a title or transition in Quick and just its full controls slide up, keyframes included. You stay in Quick.\n- **Motion clips**: a title built in Full shows in Quick as one clip with a badge. Double-tap to go inside it, tap back out. Cut fast, go deep only where needed. That's the After Effects + Premiere trick.\n- **Show in Quick**: in Full, hold any setting (a headline, a colour, a logo) and pick \"Show in Quick\". Beginners then see only those few big controls, so a pro builds once and anyone can fill it in.\n\n**Easy side**\n- **Quick Edit on any project (start here)**: the \"Insert your Media\" screen, which today only opens from templates, on any project, so you can swap clips and words without the timeline. It's the smallest step, and it would show quickly whether the idea feels right.\n- **Tap the join for a transition**: tap between two clips and pick Whip, Zoom punch or Glitch. In Full it's ordinary keyframes you can reshape.\n- **Beat sync (start here)**: beat dots appear on your song, with one button to cut to the beat and one to pulse on it. In Full, the beats are markers everything snaps to.\n\n**Deep side**\n- **Keyframe lanes and real curves**: open a layer into one lane per animated setting, grab many keyframes at once and drag their curve handles, like After Effects.\n- **Link anything to anything**: drag one setting onto another so one gear drives the next. No code.\n- **Pin and steady**: stick a picture onto a moving sign in your shot, or steady a shaky clip.\n\nAlso came up: captions that write the words for you, a first cut made from your clips and a song, and two people editing live, one in each mode.\n\n**For you to decide**\n1. One switch for the whole project, or also open a single clip in Full straight from Quick?\n2. Names: Quick / Full, Cut / Motion, or Easy / Pro?\n3. Which of your three kinds of people is the first version for?"
+}

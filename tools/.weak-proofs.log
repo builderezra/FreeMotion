@@ -60,3 +60,5 @@
 2026-09-24 13:42	WEAK	921 S8r an old invite link that nobody answers names the reset as a reason — not only “their device isn’t answering”	§22’s relay sentences are not reachable (FM.collab.ui._relayError)
 2026-09-24 13:42	WEAK	921 S8r “Most people at once” holds after the knock: two knocks that each saw one place left cannot both be let in	ui._room is not a function
 2026-09-24 13:42	WEAK	921 S8r the short code on an open Share panel is the code that works — never replaced behind the screen — and its half hour starts when the panel closes	ui._room is not a function
+2026-09-24 23:44	WEAK	915.5Br a reused VIDEO is stored as a pointer that says video, and reopens as a playing video, not blank	the shared copy lib:m_mufpc83xla1xy6 is nothing of kind undefined, not the video
+2026-09-25 09:48	WEAK	690 the export limiter keeps every sample under the ceiling, never jumps its gain at a block seam, and leaves the song away from an over untouched	FM._limitMix is not exposed — the mix limiter cannot be driven directly

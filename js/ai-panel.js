@@ -66,21 +66,14 @@ window.FM = window.FM || {};
     bodyEl = el('div', 'ai-body');
 
     // ---- key form ----
+    /* THE KEY IS ENTERED IN SETTINGS NOW (queue 930). Ezra: "the only way you can put in an API key is in the director menu.
+       So basically … a button in both pages that takes you to app settings … a section in the app settings where you put in
+       the API key". This used to be the only key field in the app; it is now a door to the one in Settings → AI key. */
     keyForm = el('div', 'ai-keyform');
     keyForm.appendChild(el('div', 'ai-kf-title', 'Connect your Anthropic key'));
-    keyForm.appendChild(el('div', 'ai-kf-sub', 'Used only in this browser, sent only to api.anthropic.com, never logged or uploaded. Spend is on your own account.'));
-    var keyInput = el('input', 'ai-input'); keyInput.type = 'password'; keyInput.placeholder = 'sk-ant-…'; keyInput.autocomplete = 'off'; keyInput.spellcheck = false;
-    keyForm.appendChild(keyInput);
-    var remRow = el('label', 'ai-remember');
-    var rem = el('input'); rem.type = 'checkbox';
-    remRow.appendChild(rem); remRow.appendChild(el('span', null, 'Remember on this device'));
-    keyForm.appendChild(remRow);
-    var saveBtn = el('button', 'ai-btn ai-btn-accent', 'Save key & continue');
-    saveBtn.addEventListener('click', function () {
-      var v = keyInput.value.trim();
-      if (!FM.aiKey.looksValid(v)) { keyInput.classList.add('bad'); keyInput.placeholder = 'That doesn\'t look like an sk-ant- key'; return; }
-      FM.aiKey.set(v, rem.checked); setMode('compose');
-    });
+    keyForm.appendChild(el('div', 'ai-kf-sub', 'Your key goes in Settings → AI key. It is used only on this device, sent only to api.anthropic.com, never logged or uploaded. Spend is on your own account.'));
+    var saveBtn = el('button', 'ai-btn ai-btn-accent ai-keysettings', 'Add your key in Settings');
+    saveBtn.addEventListener('click', openKeySettings);
     keyForm.appendChild(saveBtn);
     var orRow = el('div', 'ai-or');
     var demoLink = el('button', 'ai-link', '▶ Watch a demo run (no key, no spend)');
@@ -117,7 +110,7 @@ window.FM = window.FM || {};
     genBtn.addEventListener('click', function () { startRun({}); });
     compose.appendChild(genBtn);
     var keyNote = el('button', 'ai-keynote', '');
-    keyNote.addEventListener('click', function () { setMode('key'); });
+    keyNote.addEventListener('click', openKeySettings);   // "· change" goes to Settings → AI key (queue 930)
     compose.appendChild(keyNote);
     compose._keyNote = keyNote;
     bodyEl.appendChild(compose);
@@ -134,6 +127,7 @@ window.FM = window.FM || {};
 
     panelEl.appendChild(bodyEl);
     document.body.appendChild(panelEl);
+    panelEl.inert = true;
     setMode(FM.aiKey.has() ? 'compose' : 'key');
   }
 
@@ -155,7 +149,7 @@ window.FM = window.FM || {};
     compose.classList.toggle('on', m === 'compose');
     progress.classList.toggle('on', m === 'running' || m === 'done');
     if (m === 'compose' && compose._keyNote) {
-      compose._keyNote.textContent = FM.aiKey.has() ? ('Key: ' + FM.aiKey.masked() + ' · change') : 'No key — using demo/templates · add a key';
+      compose._keyNote.textContent = FM.aiKey.has() ? ('Key: ' + FM.aiKey.masked() + ' · change in Settings') : 'No key — using demo/templates · add one in Settings';
     }
   }
 
@@ -247,7 +241,8 @@ window.FM = window.FM || {};
   function done(info) {
     mode = 'done';
     doneBar.textContent = '';
-    var msg = info && info.cancelled ? 'Stopped — kept what was built.' : (info && info.template ? 'Template ready — edit anything.' : 'Done! ' + ((info && info.layersAdded) || 0) + ' layers — all editable.');
+    var msg = info && info.left ? 'Stopped — you opened another project. What was built is kept in “' + info.left + '”.'   // queue 690 (textContent: his project name prints as typed)
+      : info && info.cancelled ? 'Stopped — kept what was built.' : (info && info.template ? 'Template ready — edit anything.' : 'Done! ' + ((info && info.layersAdded) || 0) + ' layers — all editable.');
     var summary = el('div', 'ai-summary', msg);
     doneBar.appendChild(summary);
 
@@ -292,16 +287,32 @@ window.FM = window.FM || {};
   }
 
   // While the pipeline runs, mirror "streaming" rows: add a live cancel control in the done bar.
+  /* The door to Settings → AI key. The Director steps aside while Settings is up — they would otherwise stack — and when he
+     comes back it shows whichever mode the key now allows. */
+  function openKeySettings() {
+    hide();
+    if (FM.settings && FM.settings.openAt) FM.settings.openAt('aikey', { onClose: show });   // back to the Director when Settings closes
+  }
+  /* The key changed somewhere else — Save, Forget or Remember in Settings (queue 930 review). A Director left open would go
+     on showing the old key state and Generate would quietly build a template. Not while a build runs: that has its own
+     screen, and Forget stops the build itself. */
+  function refreshKey() {
+    if (!panelEl || mode === 'running' || mode === 'done') return;
+    setMode(FM.aiKey.has() ? 'compose' : 'key');
+  }
   function show() {
+    /* ONE AI PANEL AT A TIME (queue 930). Ezra: "the assistant menu and the director menu both pop up at the same time and go
+       on top of each other, you should make it when you open one or the other, the other one closes." */
+    if (FM.aiChat && FM.aiChat.isOpen && FM.aiChat.isOpen()) FM.aiChat.hide();
     if (FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone() && FM.mobile.close) FM.mobile.close();
-    panelEl.classList.add('open');
+    panelEl.classList.add('open'); panelEl.inert = false;
     document.body.classList.add('ai-open');
     if (mode === 'running') {} else setMode(FM.aiKey.has() ? 'compose' : 'key');
   }
-  function hide() { panelEl.classList.remove('open'); document.body.classList.remove('ai-open'); }
+  function hide() { panelEl.classList.remove('open'); panelEl.inert = true; document.body.classList.remove('ai-open'); }   // closed = unreachable (queue 930 review)
   function toggle() { panelEl.classList.contains('open') ? hide() : show(); }
 
-  FM.aiPanel = { show: show, hide: hide, toggle: toggle, reset: reset, row: row, note: note, criticThumbs: criticThumbs, done: done, error: error };
+  FM.aiPanel = { show: show, hide: hide, toggle: toggle, refreshKey: refreshKey, isOpen: function () { return !!(panelEl && panelEl.classList.contains('open')); }, reset: reset, row: row, note: note, criticThumbs: criticThumbs, done: done, error: error };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();

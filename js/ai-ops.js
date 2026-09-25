@@ -147,7 +147,11 @@ window.FM = window.FM || {};
             if (o.fps != null) P.fps = clamp(Math.round(num(o.fps, P.fps || 30)), 1, 120);   // queue 733 (16c): the UI offers Custom 1..120 (index.html, home.js) — snapping 24 to 25 landed on a rate he never chose   // the rates the UI actually offers (queue 118 dropped 24, added 15 and 120) — the AI should not land on one you cannot then re-pick
             if (o.duration != null) P.duration = clamp(num(o.duration, P.duration), 0.1, 600);
             if (o.background != null) { var bg = hex(o.background, null); if (bg) P.background = bg; }
-            if (o.name != null) { var pn = str(o.name, 80); if (pn != null) P.name = pn; }
+            /* THE PROJECT'S NAME IS HIS, NOT THE AI'S (queue 932). Ezra: "for some reason when you use the AI director, it
+               changes the name of the project to AI scene … That would annoy people who name their projects and then it just
+               changes their name." This line wrote whatever `name` the op carried — the Director's scaffold sends "AI Scene",
+               a template sends its subject — straight into P.name, which is the name on the Home card (storage re-reads it
+               on every save). A name in a setProject op is now ignored, from every caller: renaming is a thing he does. */
             if (changed && FM.resizeCanvas) FM.resizeCanvas();
             ok(o.op, ref); break;
           }

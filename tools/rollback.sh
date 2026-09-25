@@ -13,7 +13,16 @@
 #   tools/rollback.sh 35c1fe7         …or by commit id, if a version is not what you have
 #
 # ⚠️ WHAT IT DOES NOT TOUCH: HIS PROJECTS. They live in localStorage and IndexedDB on the device, not in
-# this repo — a rollback changes the app's code, never his work. He cannot lose a project this way.
+# this repo — a rollback changes the app's code, never his work.
+# ⚠️ …BUT AN OLD ENOUGH BUILD CANNOT READ ALL OF HIS WORK (queue 915 clause 5). A clip added more than once
+# from Add → Media is stored ONCE, as a shared copy every reuse points at. v16.80 was the first release that
+# can read one; anything older shows those clips BLANK, leaves them out of backups, drops them from any
+# template or element updated there, and — at its FIRST LAUNCH, with nothing done by him — its boot sweep
+# deletes for good every shared copy whose Media tile is already gone: removed, cleared, or simply pushed
+# off the end of the 300-tile list by newer imports (a build before v3.72 deletes every one, tile or not). So
+# "leave the tiles alone" is NOT a safe way to stay there. This script says so, plainly, BEFORE it asks to
+# publish, and for such a release a "y" is not enough: he types the version back, and -y cannot say it.
+# `tools/rollback.sh <version> --check` prints only the verdict and touches nothing.
 #
 # ⚠️ IT NEVER REWRITES HISTORY. It makes a NEW commit that restores the old files, so the record of what
 # happened stays intact and there is no force-push. Roll back the rollback the same way if need be.
@@ -49,6 +58,37 @@ SUBJ="$(git log -1 --format='%s' "$HASH" | cut -c1-90)"
 echo "→ putting the app back to:  $SUBJ"
 echo "   (commit $HASH)"
 
+# ── A BUILD OLDER THAN v16.80 CANNOT READ A REUSED CLIP (queue 915 clause 5) ─────────────────────
+# Said BEFORE the question below, because after the publish a warning is only a post-mortem. The version
+# comes from the target's OWN index.html label — a rollback commit carries the old label, so this is right
+# even when the target is itself an earlier rollback — and ancestry is the fallback for a commit with no label.
+READER_V=16.80
+target_label="$(git show "$HASH:index.html" 2>/dev/null | grep -o '>v[0-9][0-9]*\.[0-9][0-9]*<' | head -1 | tr -d '><v')"
+PREDATES=0
+if [ -n "$target_label" ]; then
+  PREDATES="$(awk -v a="$target_label" -v b="$READER_V" 'BEGIN { split(a, x, "."); split(b, y, "."); print ((x[1]+0 < y[1]+0) || (x[1]+0 == y[1]+0 && x[2]+0 < y[2]+0)) ? 1 : 0 }')"
+else
+  READER_HASH="$(git log --format='%H %s' | grep -m1 -E "^[0-9a-f]+ v${READER_V}( |—|\$)" | cut -d' ' -f1)"
+  if [ -z "$READER_HASH" ] || ! git merge-base --is-ancestor "$READER_HASH" "$HASH" 2>/dev/null; then PREDATES=1; fi
+fi
+WHO="${target_label:+v$target_label}"; [ -n "$WHO" ] || WHO="THAT RELEASE"   # a commit with no version label still gets a readable sentence
+if [ "$PREDATES" = 1 ]; then
+  echo
+  echo "⚠️  WARNING — $WHO IS OLDER THAN v$READER_V, AND CANNOT READ CLIPS YOU REUSED FROM ADD → MEDIA."
+  echo "   Since then a clip added more than once from the Media tiles is stored once and shared. On this older build:"
+  echo "   · every one of those clips shows BLANK;"
+  echo "   · the FIRST TIME IT OPENS — before you touch anything — it deletes FOR GOOD every shared copy whose Media"
+  echo "     tile is already gone (removed, cleared, or just pushed off the end of the list by newer imports), and"
+  echo "     later any whose tile goes while you are on it. Those clips then stay blank even after you roll forward;"
+  echo "   · backups made there leave those clips out, and updating a template or element there drops them from it for good."
+  echo "   Leaving the tiles alone does NOT make it safe. Your original imports are safe."
+  echo "   Unless you are sure you never reused a clip from Add → Media, pick v$READER_V or later."
+  echo
+elif [ "${2:-}" = "--check" ]; then
+  echo "✅ $WHO can read clips reused from Add → Media (v$READER_V or later)."
+fi
+[ "${2:-}" = "--check" ] && exit 0
+
 # ── ASK BEFORE PUBLISHING, BECAUSE THE NEXT STEP IS PUBLIC ───────────────────────────────────────
 # One argument and this commits AND pushes to the URL his installed app updates from. A mistyped version
 # silently republishes the wrong build. One keystroke is not a tutorial, and it is the difference between
@@ -59,12 +99,32 @@ echo "   (commit $HASH)"
 # publish to his live site with no human in the loop. For a tool whose entire purpose is "what if an AI
 # wrecks the code", being the one script an AI can fire unprompted is backwards. `-y` is the deliberate,
 # visible way to say yes from a script; an absent tty and no `-y` is now a stop, not a shrug.
-if [ "${3:-}" != "-y" ] && [ "${2:-}" != "-y" ] && [ ! -t 0 ]; then
+# ── …AND A RELEASE THAT CAN LOSE HIS CLIPS NEEDS MORE THAN A "y" (queue 915, review round 1) ───────
+# A "y" is what every SAFE rollback takes too, so the same keystroke must not say yes to both — typed by
+# reflex, it would be the one that costs him clips for good. Typing the version back is one line, and
+# nothing types it by reflex. -y cannot say it either: this is never published from a script, only by him.
+CONFIRMED=0
+if [ "$PREDATES" = 1 ]; then
+  if [ ! -t 0 ]; then
+    echo "❌ $WHO is older than v$READER_V, and that is never published from a script — not even with -y."
+    echo "   If you really mean it, run it yourself in a terminal: it will ask you to type the version back."
+    exit 1
+  fi
+  printf '   this will PUBLISH %s to https://builderezra.github.io/FreeMotion/ — reused clips can be LOST FOR GOOD there.\n' "$WHO"
+  printf '   to go ahead anyway, type %s and press enter (anything else stops): ' "$WANT"
+  read -r ANS
+  if [ "$ANS" = "$WANT" ] || { [ -n "$target_label" ] && { [ "$ANS" = "v$target_label" ] || [ "$ANS" = "$target_label" ]; }; }; then
+    CONFIRMED=1
+  else
+    echo "→ stopped. Nothing was changed."; exit 0
+  fi
+fi
+if [ "$CONFIRMED" = 0 ] && [ "${3:-}" != "-y" ] && [ "${2:-}" != "-y" ] && [ ! -t 0 ]; then
   echo "❌ nothing here can answer a yes/no, and this would PUBLISH to the live site."
   echo "   If you really mean it, say so out loud:  tools/rollback.sh $WANT -y"
   exit 1
 fi
-if [ "${3:-}" != "-y" ] && [ "${2:-}" != "-y" ] && [ -t 0 ]; then
+if [ "$CONFIRMED" = 0 ] && [ "${3:-}" != "-y" ] && [ "${2:-}" != "-y" ] && [ -t 0 ]; then
   printf '   this will PUBLISH that version to https://builderezra.github.io/FreeMotion/\n'
   printf '   type y and press enter to go ahead (anything else stops): '
   read -r ANS
@@ -139,7 +199,9 @@ git commit -q -m "ROLLBACK to $SUBJ
 
 Put the app's files back to $HASH. Nothing was deleted from the history — this is a new
 commit that restores the old content, so the rollback itself can be rolled back.
-His projects are untouched: they live in localStorage / IndexedDB on the device, not here." || { echo "❌ commit failed."; exit 1; }
+His projects are untouched: they live in localStorage / IndexedDB on the device, not here.
+(A build older than v16.80 cannot read clips reused from Add → Media — rollback.sh warns before publishing,
+and publishes one only when the version is typed back.)" || { echo "❌ commit failed."; exit 1; }
 
 # ⚠️ A FRESH CLONE HAS NO `ssh` REMOTE — it is a hand-added remote on his Mac, and remotes are not
 # committed. On a new machine this script used to restore the files, commit, then die with "'ssh' does

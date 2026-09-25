@@ -56,20 +56,40 @@ window.FM = window.FM || {};
     if (_staleWarned) return; _staleWarned = true;
     if (FM.toast) FM.toast('This tab is showing an older copy of the project — newer changes were saved elsewhere. Reload to catch up; nothing here has been saved over them.', 9000);
   }
+  /* queue 690: WHY the last scene write did not land. The two reasons need opposite answers when he
+     switches project: 'stale' means a newer copy was saved elsewhere and NOT writing is the point (the
+     local edits are meant to be dropped), while 'refused' means the store said no — a full phone — and
+     what he did since the last save exists only on this screen. Only the second may hold a switch up. */
+  let _writeFail = null;
   // The ONE place a scene doc is written. Returns true only if the bytes actually landed.
   function writeScene() {
-    if (_stale) return false;
+    if (_stale) { _writeFail = 'stale'; return false; }
     const dr = diskRev();
-    if (dr > lastRev) { _stale = true; warnStale(); return false; }
+    if (dr > lastRev) { _stale = true; warnStale(); _writeFail = 'stale'; return false; }
     const rev = dr + 1;
     const doc = sceneDoc(); doc.rev = rev;
     // rev FIRST in the serialised object, so diskRev()'s anchored regex can find it without a parse
     const ordered = { rev: rev }; for (const k in doc) if (k !== 'rev') ordered[k] = doc[k];
     try { localStorage.setItem(curKey(), JSON.stringify(ordered, FM.jsonReplacer)); }
-    catch (e) { warnQuota(e); return false; }
-    if (diskRev() !== rev) { warnQuota({ name: 'QuotaExceededError' }); return false; }   // the write silently did nothing
-    lastRev = rev;
+    catch (e) { warnQuota(e); _writeFail = 'refused'; return false; }
+    if (diskRev() !== rev) { warnQuota({ name: 'QuotaExceededError' }); _writeFail = 'refused'; return false; }   // the write silently did nothing
+    lastRev = rev; _writeFail = null;
     return true;
+  }
+  /* ⚠️ queue 690: IS THERE WORK ON THIS SCREEN THAT THE DISK DOES NOT HAVE? Asked only after a write was
+     refused, so the cost (one parse of the doc) is paid on a full phone and never on an ordinary switch.
+     A refused write is not by itself lost work — on a full store, rewriting a doc that has not changed
+     can be refused too — and asking "leave anyway?" over nothing would teach him to tap through the one
+     question that matters. The project and its layers are what he made; the selection is not compared. */
+  function unsavedOnScreen() {
+    if (_writeFail !== 'refused') return false;
+    try {
+      const raw = localStorage.getItem(curKey());
+      if (!raw) return true;
+      const d = JSON.parse(raw);
+      return JSON.stringify(d.project) !== JSON.stringify(FM.scene.project, FM.jsonReplacer) ||
+             JSON.stringify(d.layers || []) !== JSON.stringify(FM.scene.layers || [], FM.jsonReplacer);
+    } catch (e) { return true; }   // cannot tell — say there is, the question is cheaper than the loss
   }
   // load()/open() call this so a fresh document resets the guard for the new project.
   function adoptRev(r) { lastRev = (typeof r === 'number' && isFinite(r)) ? r : 0; _stale = false; _staleWarned = false; }
@@ -111,19 +131,104 @@ window.FM = window.FM || {};
    * a rollback from the writer release lands on a build that keeps and reads what the writer made.
    * Both refusals live at the bottom (idbPut / idbDel), not at each caller, because "every deleter" is
    * a list nobody can keep complete by hand — the phase-B writer has to lift them ON PURPOSE.
-   * A record stored the old way, the file itself, reads exactly as it always did. */
+   * A record stored the old way, the file itself, reads exactly as it always did.
+   *
+   * ═══ PHASE B, THE WRITER (queue 915 clause 5) ═══════════════════════════════════════════════════
+   * Phase A has been on his phone since v16.80, so a rollback now lands on a build that keeps and reads
+   * everything below. What this release adds, and what it still refuses:
+   *  · the FIRST reuse of a tile writes its one shared copy, `lib:<mid>`, through idbPutSharedOnce — one
+   *    readwrite transaction that writes only if nothing is there, so a shared copy is never rewritten
+   *    under a clip that is playing from it. Every clip made from the tile is stored as a pointer, through
+   *    idbPutPointer — one transaction that writes the pointer only if the shared copy is really there.
+   *  · his ORIGINAL import is never touched. It stays a whole copy under its own layer id. (The first
+   *    attempt swapped it for a pointer, and the review traced a rollback blanking it for good.)
+   *  · the generic idbPut still refuses a `lib:` key and a pointer, so no other route — a collab write, a
+   *    restore, a stray writeMedia — can make or overwrite one by accident. Only the two writers above.
+   *  · idbDel still refuses every `lib:` key: this release NEVER deletes a shared copy. Leaking one is the
+   *    accepted cost; collecting them is a later, separately reviewed step.
+   *  · …and idbDel refuses any key whose FILE is still held in memory by ANOTHER record or the clipboard
+   *    (see heldByAnother). "Is this file in use" is decided by the file, never by a layer id alone: a
+   *    pasted, split or duplicated copy plays from a Blob read out of the original's record. */
   const LIB_PREFIX = 'lib:';
   function isLibKey(k) { return typeof k === 'string' && k.indexOf(LIB_PREFIX) === 0; }
   function isRef(v) { return !!v && typeof v === 'object' && !v.file && isLibKey(v.ref); }
   /* A layer's record, with a pointer read through to the file it points at. A pointer whose shared copy
      is gone answers null — exactly what a layer with no record has always answered — so every caller's
-     existing "nothing stored" path handles it, and none of them can copy the dead pointer onward. */
+     existing "nothing stored" path handles it, and none of them can copy the dead pointer onward.
+     A pointer answers `ref` too (phase B): the clip it becomes is still a pointer, so its next save, and
+     every split, duplicate or paste of it, writes a few bytes instead of the whole file again. */
   async function idbGetMedia(db, key) {
     const v = await idbGet(db, key);
     if (!isRef(v)) return v;
     const t = await idbGet(db, v.ref);
     if (!t || !t.file) return null;
-    return { file: t.file, kind: v.kind || t.kind, rev: v.rev || 0 };
+    return { file: t.file, kind: v.kind || t.kind, rev: v.rev || 0, ref: v.ref };
+  }
+  /* queue 915 phase B: WHICH STORED KEY A LIVE RECORD'S BYTES WERE READ OUT OF. A Blob read from IndexedDB
+     is backed by that record, and whether it stays readable once the record is deleted is not something
+     this app has ever measured on WebKit — so nothing deletes a record while another copy still plays
+     from it. `fileKey` is stamped wherever a Blob is read from the store for a clip — hydrate, a tile
+     reuse, and a template or element dropped into a project (hydratePack, review round 2: deleting the
+     element with its clip still on screen was not refused) — and carried by every copy made from it
+     (split, duplicate, copy/paste — app.js). */
+  function heldByAnother(key) {
+    if (typeof key !== 'string' || !key) return false;
+    try {
+      const all = (FM.media && FM.media.all && FM.media.all()) || {};
+      for (const id in all) {
+        if (id === key) continue;   // its OWN record: whether that one may go is the deleter's call, as it always was
+        const r = all[id];
+        if (r && (r.fileKey === key || r.ref === key)) return true;
+      }
+      const clip = Array.isArray(FM.clipboard) ? FM.clipboard : [];
+      for (let i = 0; i < clip.length; i++) { const e = clip[i]; if (e && (e.fileKey === key || e.ref === key)) return true; }
+    } catch (e) { return true; }   // could not tell — keeping a record is always the safe answer
+    return false;
+  }
+  function sameFile(a, b) {
+    return !!a && !!b && a.size === b.size && (a.type || '') === (b.type || '') && (a.name || '') === (b.name || '') && (a.lastModified || 0) === (b.lastModified || 0);
+  }
+  /* The shared copy, written ONCE. Resolves 'written', 'exists' (something is already there — it is never
+     rewritten, because a clip may be playing from it), or false (the write failed: no room). */
+  function idbPutSharedOnce(db, lk, val) {
+    if (!isLibKey(lk) || !val || !val.file) return Promise.resolve(false);
+    return new Promise((res) => {
+      let out = false;
+      try {
+        const tx = db.transaction(STORE, 'readwrite'), st = tx.objectStore(STORE);
+        const g = st.get(lk);
+        g.onsuccess = () => {
+          const have = g.result;
+          if (have && have.file) { out = 'exists'; return; }
+          st.put({ file: val.file, kind: val.kind }, lk);
+          out = 'written';
+        };
+        tx.oncomplete = () => { if (out === 'written') storeWrote(); res(out); };
+        tx.onerror = () => { warnStore(tx.error, lk); res(false); };
+        tx.onabort = () => { warnStore(tx.error, lk); res(false); };
+      } catch (e) { warnStore(e, lk); res(false); }
+    });
+  }
+  /* A pointer, written only if the shared copy it names is really there — the check and the write are one
+     transaction, so nothing can slip between them. False means "not written": the caller writes the file. */
+  function idbPutPointer(db, id, ptr) {
+    if (!id || isLibKey(id) || !isRef(ptr)) return Promise.resolve(false);
+    return new Promise((res) => {
+      let out = false;
+      try {
+        const tx = db.transaction(STORE, 'readwrite'), st = tx.objectStore(STORE);
+        const g = st.get(ptr.ref);
+        g.onsuccess = () => {
+          const t = g.result;
+          if (!t || !t.file) return;   // no shared copy: a pointer at nothing would be a blank clip
+          st.put({ ref: ptr.ref, kind: ptr.kind, rev: ptr.rev || 0 }, id);
+          out = true;
+        };
+        tx.oncomplete = () => { if (out) storeWrote(); res(out); };
+        tx.onerror = () => { warnStore(tx.error, id); res(false); };
+        tx.onabort = () => { warnStore(tx.error, id); res(false); };
+      } catch (e) { warnStore(e, id); res(false); }
+    });
   }
   // Resolves TRUE only if the write actually landed. This used to resolve the same way on success and
   // on failure, and writeMedia returned a hardcoded true on top of it — so a video too big for the
@@ -131,16 +236,31 @@ window.FM = window.FM || {};
   // On mobile, where the quota is far smaller and Safari rejects rather than prompting, that is most of
   // what "I cannot add long videos, it won't work" looks like from the outside.
   function idbPut(db, key, val) {
-    if (isLibKey(key) || isRef(val)) return Promise.resolve(false);   // queue 915 phase A: this release never writes a shared copy or a pointer (see above)
-    return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).put(val, key); tx.oncomplete = () => res(true); tx.onerror = () => { warnStore(tx.error); res(false); }; tx.onabort = () => { warnStore(tx.error); res(false); }; } catch (e) { warnStore(e); res(false); } }); }
+    if (isLibKey(key) || isRef(val)) return Promise.resolve(false);   // queue 915: the generic writer never writes a shared copy or a pointer — only idbPutSharedOnce / idbPutPointer do (see above)
+    return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).put(val, key); tx.oncomplete = () => { if (!quietKey(key)) storeWrote(); res(true); }; tx.onerror = () => { warnStore(tx.error, key); res(false); }; tx.onabort = () => { warnStore(tx.error, key); res(false); }; } catch (e) { warnStore(e, key); res(false); } }); }
 
   // Say WHY, with the real numbers, instead of failing mutely. Separate latch from warnQuota so a
   // localStorage warning earlier in the session cannot suppress this one.
-  let _storeWarned = false;
-  function warnStore(e) {
+  /* ⚠️ queue 690 (hunt f): A LATCH THAT NEVER LIFTS IS A MUTE BUTTON. This was one boolean, set by the first
+     failure of the session and never cleared — and the project-card thumbnail that autosave refreshes every
+     12 s writes through here too, so on a nearly-full phone the one warning could go on a picture he never
+     asked about. Later, after clips had been saving fine, the phone filled again and he added a photo: the
+     write was refused, the clip played from memory, nothing said a word, and it came back blank the next
+     time the app opened. Now:
+       · each thing that could not be saved is warned about once (autosave retries the same clip on every
+         save, and a toast per retry would be noise), and every name is forgotten the moment a write lands —
+         room came back, so the next refusal is news again;
+       · the caches — card and library thumbnails, export crash-resume parts — never warn and never count:
+         losing one costs a picture or a resume point, and it must not spend the warning a clip needs. */
+  const _storeWarned = new Set();
+  function quietKey(key) { return typeof key === 'string' && (key.indexOf('thumb:') === 0 || key.indexOf('libthumb2:') === 0 || key.indexOf('xr:') === 0); }
+  function storeWrote() { _storeWarned.clear(); }
+  function warnStore(e, key) {
     const quota = e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014);
-    if (_storeWarned || !FM.toast) return;
-    _storeWarned = true;
+    if (quietKey(key)) return;
+    const what = key == null ? '' : String(key);
+    if (_storeWarned.has(what) || !FM.toast) return;
+    _storeWarned.add(what);
     const mb = n => (n / 1048576).toFixed(0) + ' MB';
     const say = extra => FM.toast((quota ? 'Not enough storage to save that media.' : 'Could not save that media.') + (extra || ''), 6000);
     if (quota && navigator.storage && navigator.storage.estimate) {
@@ -157,7 +277,8 @@ window.FM = window.FM || {};
     }
   } catch (e) {}
   function idbDel(db, key) {
-    if (isLibKey(key)) return Promise.resolve();   // queue 915 phase A: no deleter in this release may take a shared copy — a later build's clips point at it
+    if (isLibKey(key)) return Promise.resolve();   // queue 915: no deleter may take a shared copy — clips in any project point at it (phase B still never collects one)
+    if (heldByAnother(key)) return Promise.resolve();   // queue 915 phase B: another copy in memory still plays from this record's file — it goes at a later sweep, when nothing holds it
     return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).delete(key); tx.oncomplete = () => res(); tx.onerror = () => res(); } catch (e) { res(); } }); }
   function idbKeys(db) { return new Promise((res) => { try { const rq = db.transaction(STORE, 'readonly').objectStore(STORE).getAllKeys(); rq.onsuccess = () => res(rq.result || []); rq.onerror = () => res([]); } catch (e) { res([]); } }); }
 
@@ -278,6 +399,11 @@ window.FM = window.FM || {};
           const rec = await idbGetMedia(db, layer.id);   // queue 915 phase A: a reused clip's pointer reads as its file
           if (rec && rec.file) {
             const loaded = rec.kind === 'video' ? await FM.loadVideoFile(rec.file) : await FM.loadImageFile(rec.file);
+            /* queue 915 phase B: …and STAYS a pointer — a split, duplicate or paste of it writes a few bytes, not
+               the file again — and remembers which record its bytes came out of (heldByAnother). */
+            if (rec.ref) loaded.ref = rec.ref;
+            loaded.fileKey = rec.ref || layer.id;
+            loaded.rev = rec.rev || 0;   // queue 690: which revision these bytes are, so undo can tell whether the picture matches the layer
             FM.media.set(layer.id, loaded);
             if (loaded.kind === 'video') loaded.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); });
             if (FM.wireVideoRepaint) FM.wireVideoRepaint(loaded);   // a reopened project decodes from cold — repaint when the frame lands
@@ -339,6 +465,8 @@ window.FM = window.FM || {};
         if (!FM.media.get(id)) continue;                                  // nothing resident to free
         if (FM.media.isPinned && FM.media.isPinned(id)) continue;         // owned by something other than the scene
         if (!keys.has(id)) continue;                                      // ← IDB cannot give it back, so it is not ours to free
+        const m = FM.media.get(id);
+        if (m && m.ref && !keys.has(m.ref)) continue;                     // queue 915 phase B: …nor can a pointer whose shared copy is not there
         ids.push(id);
       }
     } catch (e) { return 0; }
@@ -354,10 +482,28 @@ window.FM = window.FM || {};
     (FM.scene.layers || []).forEach(layer => {
       if (!layer || layer.type === 'text') return;
       const m = FM.media.get(layer.id);
-      if (m && m.file) jobs.push({ id: layer.id, file: m.file, kind: m.kind, rev: layer.mediaRev || 0 });
+      /* queue 690: the revision written is the one the FILE is — its record says so once a replace, an undo or a load
+         has labelled it — and the layer's only for a record that carries none. They differ for exactly as long as an
+         undo is still fetching the file it wants: an autosave landing in that window wrote the outgoing file under
+         the WANTED revision, and every save after it skipped the record as up to date — the wrong clip on disk. */
+      if (m && m.file) jobs.push({ id: layer.id, file: m.file, kind: m.kind, rev: (m.rev != null ? m.rev : layer.mediaRev) || 0, ref: isLibKey(m.ref) ? m.ref : null });   // queue 915 phase B: a reused clip is saved as a pointer
     });
     return jobs;
   }
+  /* ═══ THE DISK CAN BE BEHIND THE EDITOR (queue 915 phase B, review round 3) ═══════════════════════════════
+   * Replace media and every import start a save they do not wait for, and give the file a library tile at
+   * once — so for as long as that save takes (seconds for a video on a phone, longer queued behind another
+   * big write) the tile's record on disk is still the OLD file, or nothing at all. A tap on the tile in that
+   * window read the disk, found another file of another size and nothing on screen to say otherwise, and
+   * dropped the tile with "That file is no longer stored" — about a file seconds from being written.
+   * Every save is counted while it runs; pendingSaves() says whether one is, and settled() resolves once
+   * every save running NOW has finished, so mediaLib.use can let the disk catch up before it decides. */
+  const _saving = new Set();
+  /* queue 690: which revisions of which layer have a kept file (see stashPrevMedia), and WHICH File object each
+     one holds. Session-only on purpose: a kept file is only reachable through undo, and undo does not outlive
+     the session — so after a reload nothing is looked up, even while the boot sweep has not yet run. */
+  const _prevFiles = new Map();
+  function prevKey(id, rev) { return 'prev:' + id + ':' + (rev || 0); }
   FM.storage = {
     _writeJobs: planBlobWrites,   // queue 830 suite seam
     _hydrateSceneMedia: hydrateSceneMedia,   // queue 834 (u8) suite seam: the shared-run guard itself
@@ -366,27 +512,60 @@ window.FM = window.FM || {};
        "the outgoing blob is NOT deleted any more", and it is right that nothing deletes it, but the save
        overwrites it a moment later. Together with the registry release and the library entry going, that
        was every copy: pick the wrong file and the original is gone, with undo unable to bring it back
-       because history only ever swaps layer JSON. One slot per layer, so a chain of replaces cannot grow
-       without bound, and it is written before the new file is, not after. */
+       because history only ever swaps layer JSON. It is written before the new file is, not after.
+       ⚠️ queue 690 (hunt f): ONE SLOT PER REVISION, NOT ONE PER LAYER. The single `prev:<id>` slot meant a
+       SECOND replace wrote the first replacement over his original — the one copy of it left anywhere — so
+       two undos put the layer's settings back while the clip kept showing his second pick, and the next save
+       wrote that over the layer's record for good. Redo could never bring a file back either. Now the file
+       that was live at revision r is kept under `prev:<id>:<r>`, and restoreReplacedMedia (app.js) swaps in
+       both directions. The growth is one copy per revision a replace or an undo/redo actually puts away —
+       a file already kept at its revision is not written again — and the boot sweep clears every one of
+       them, as it cleared the single slot (undo history does not outlive the session, so neither need they). */
     async stashPrevMedia(id, rec, rev) {
       if (!id || !rec || !rec.file) return false;
+      rev = rev || 0;
+      const kept = _prevFiles.get(id);
+      if (kept && kept.get(rev) === rec.file) return true;   // this exact file is already kept at this revision
       try {
         const db = await openDB();
-        await idbPut(db, 'prev:' + id, { file: rec.file, kind: rec.kind, rev: rev || 0 });
+        const ok = await idbPut(db, prevKey(id, rev), { file: rec.file, kind: rec.kind, rev: rev, at: Date.now() });
         db.close();
-        return true;
+        if (ok) { if (!kept) _prevFiles.set(id, new Map()); _prevFiles.get(id).set(rev, rec.file); }
+        return ok;
       } catch (e) { return false; }
     },
-    async takePrevMedia(id) {
+    /* The file kept for revision `rev` of layer `id`. Without a rev (the suite, and anything written before the
+       per-revision slots): the one kept most recently. */
+    async takePrevMedia(id, rev) {
       if (!id) return null;
       try {
         const db = await openDB();
-        const got = await idbGet(db, 'prev:' + id);
+        let got = null;
+        if (rev != null) got = await idbGet(db, prevKey(id, rev));
+        else {
+          const pre = 'prev:' + id + ':';
+          for (const k of await idbKeys(db)) {
+            if (typeof k !== 'string' || k.indexOf(pre) !== 0) continue;
+            const v = await idbGet(db, k);
+            if (v && v.file && (!got || (v.at || 0) > (got.at || 0) || ((v.at || 0) === (got.at || 0) && (v.rev || 0) > (got.rev || 0)))) got = v;
+          }
+        }
         db.close();
+        /* the file read back IS what that slot holds, so a later stash of this same object at this revision
+           (the clip it restores, put away again by the next undo or redo) is a no-op rather than a second copy */
+        if (got && got.file) { if (!_prevFiles.has(id)) _prevFiles.set(id, new Map()); _prevFiles.get(id).set(got.rev || 0, got.file); }
         return got || null;
       } catch (e) { return null; }
     },
+    // queue 690: is anything kept for this layer at this revision in THIS session? No read — undo asks it of every clip.
+    hasPrevMedia(id, rev) { const kept = _prevFiles.get(id); return !!kept && kept.has(rev || 0); },
+    pendingSaves() { return _saving.size; },
+    settled() { return Promise.all(Array.from(_saving)).then(() => true, () => true); },
     async save() {
+      let saved = null;
+      const running = new Promise(r => { saved = r; });
+      _saving.add(running);   // queue 915 phase B, review round 3: see _saving above
+      try {
       let sceneOk = writeScene();   // rev-guarded; a quota failure shouldn't block the IDB media save below
       const warnedBefore = _quotaWarned;
       /* queue 748 (hunt MEDIUM #31): `warnedBefore` can only see a flag raised THIS tick, and the index write's result was
@@ -429,7 +608,14 @@ window.FM = window.FM || {};
              * re-write on first launch. `kind` rides along, which also fixes a video→image replace
              * saving the layer as one type against a stored record marked the other. */
             const existing = await idbGet(db, job.id);
-            if (!existing || (existing.rev || 0) !== job.rev) await idbPut(db, job.id, { file: job.file, kind: job.kind, rev: job.rev });
+            if (!existing || (existing.rev || 0) !== job.rev) {
+              /* queue 915 phase B: a clip reused from Add → Media — or a split, duplicate or paste of one — is
+                 written as a POINTER at its one shared copy, and only if that copy is really there (checked in
+                 the same transaction). If it is not, the whole file is written exactly as before: a pointer at
+                 nothing would be a blank clip, and the file is in memory to write. */
+              const asPtr = job.ref ? await idbPutPointer(db, job.id, { ref: job.ref, kind: job.kind, rev: job.rev }) : false;
+              if (!asPtr) await idbPut(db, job.id, { file: job.file, kind: job.kind, rev: job.rev });
+            }
           }
         }
         // NOTE: no blanket prune here any more — media blobs are shared across ALL projects (plus
@@ -437,6 +623,7 @@ window.FM = window.FM || {};
         // handle explicit deletions; FM.projects.pruneOrphans() sweeps true orphans once at boot.
         db.close();
       } catch (e) { /* storage unavailable — ignore */ }
+      } finally { _saving.delete(running); saved(); }
     },
 
     /* Synchronous best-effort scene write for page unload (the 600ms debounce can't run there).
@@ -444,6 +631,10 @@ window.FM = window.FM || {};
        base, so a phone killed at pagehide comes back knowing what it had already sent. Inert until a
        session is running. */
     flushSync() { if (FM.collab && FM.collab.active) FM.collab.beforeFlush(); clearTimeout(saveTimer); return writeScene(); },
+    /* queue 690: did the last scene write fail because the store refused it (not because the tab went stale)?
+       A flag read and no write, so Home can ask it on every card tap for free. */
+    lastWriteRefused() { return _writeFail === 'refused'; },
+    unsavedOnScreen: unsavedOnScreen,   // queue 690: see the function
 
     async removeMedia(id) { try { const db = await openDB(); await idbDel(db, id); db.close(); } catch (e) {} },
 
@@ -453,6 +644,35 @@ window.FM = window.FM || {};
     // Reports what actually happened. It used to return a hardcoded true, so callers could not tell a
     // stored clip from one the browser refused on quota.
     async writeMedia(key, val) { try { const db = await openDB(); const ok = await idbPut(db, key, val); db.close(); return ok; } catch (e) { return false; } },
+    /* ═══ THE ONE SHARED COPY OF A LIBRARY TILE (queue 915 clause 5, phase B) ═══════════════════════════
+     * `rec` is the tile's file, read by mediaLib.use AT THE TAP — so a Replace media that lands while this
+     * is writing cannot change which file gets shared (review finding: a Replace mid-reuse ended in a wrong
+     * "no longer stored"). Writes `lib:<mid>` only if nothing is there yet; the ORIGINAL import's record is
+     * never read for writing, never swapped, never touched. Resolves `{ key, file, kind, wrote }` — `file`
+     * read back OUT of the shared copy, so the new clip plays from the one record that is never deleted —
+     * or null: "no shared copy, store this reuse as a whole copy, the old way". Never rejects. */
+    async shareMedia(mid, rec) {
+      if (!mid || typeof mid !== 'string' || !rec || !rec.file) return null;
+      const lk = LIB_PREFIX + mid;
+      FM._mediaBusy = (FM._mediaBusy || 0) + 1;   // a media write is in flight: Home's release and the boot sweep stand down
+      let db = null;
+      try {
+        db = await openDB();
+        const r = await idbPutSharedOnce(db, lk, { file: rec.file, kind: rec.kind });
+        if (!r) return null;                                            // no room — the caller reuses the old way
+        const t = await idbGet(db, lk);
+        if (!t || !t.file) return null;
+        if (r === 'exists' && !sameFile(t.file, rec.file)) return null;  // a different file already there — never point this clip at it
+        return { key: lk, file: t.file, kind: t.kind || rec.kind, wrote: r === 'written' };
+      } catch (e) { return null; }
+      finally {
+        try { if (db) db.close(); } catch (e) {}
+        FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1);
+      }
+    },
+    // THIS tab's open project — not the shared fm.currentProject, which a second tab can move (see boundId).
+    // mediaLib.use captures it at the tap, so a reuse can never land in a project he did not tap in.
+    openProjectId() { return boundId || curId(); },
     // Every key in the store, optionally narrowed to one prefix. Export crash-resume needs it to sweep
     // its own leftovers (`xr:part:*`) without knowing how many there were — a job that died mid-write
     // is precisely the case where the count on record is not to be trusted.
@@ -1482,6 +1702,11 @@ window.FM = window.FM || {};
        project while Home's OPEN badge still sat on his own, and a restore from inside a project dropped
        him into a different one behind his back. Adding things must not move him. */
     const wasOn = curId();
+    /* queue 690: every entry goes through create(), which leaves the open project — so ask about HIS project
+       once, up front, instead of once per entry; after that the project being left is one this restore made. */
+    if (FM.projects && FM.projects.confirmLeave && !(await FM.projects.confirmLeave())) {
+      return { ok: false, reason: 'Nothing was restored — storage is full and your open project is not saved, so it was kept on screen.' };
+    }
     let restored = 0, drafts = 0; const failed = [];
     for (let i = 0; i < obj.projects.length; i++) {
       const one = obj.projects[i];
@@ -1490,11 +1715,11 @@ window.FM = window.FM || {};
       /* queue 915 clause 8: a workspace comes back as the same KIND of workspace — see buildBackup */
       const draft = one && (one.draft === 'element' || one.draft === 'template') ? one.draft : null;
       let ok = false;
-      try { ok = await FM.storage.importObject(one, null, { quiet: true, draft: draft }); } catch (e) { ok = false; }
+      try { ok = await FM.storage.importObject(one, null, { quiet: true, draft: draft, confirmed: true }); } catch (e) { ok = false; }
       if (ok) { restored++; if (draft) drafts++; } else failed.push(nm);
     }
     if (wasOn && FM.projects && curId() !== wasOn && FM.projects.list().some(p => p.id === wasOn)) {
-      try { await FM.projects.open(wasOn); } catch (e) {}
+      try { await FM.projects.open(wasOn, { confirmed: true }); } catch (e) {}   // queue 690: what is left is a restored copy, not his work
     }
     return { ok: restored > 0, restored: restored, drafts: drafts, failed: failed, total: obj.projects.length };
   };
@@ -1529,8 +1754,13 @@ window.FM = window.FM || {};
     const problem = FM.storage.sceneFileProblem(obj);
     if (problem) { if (FM.toast) FM.toast(problem, 5000); return false; }
     const kind = opts && opts.draft;   // queue 915 clause 8: only restoreBackup passes this, and only these two values
-    if (FM.projects) await FM.projects.create(Object.assign({ name: (obj.project && obj.project.name ? obj.project.name : 'Imported project'), width: obj.project && obj.project.width, height: obj.project && obj.project.height },
-      kind === 'element' ? { elementDraft: true } : kind === 'template' ? { templateDraft: true } : {}));
+    if (FM.projects) {
+      const pid = await FM.projects.create(Object.assign({ name: (obj.project && obj.project.name ? obj.project.name : 'Imported project'), width: obj.project && obj.project.width, height: obj.project && obj.project.height },
+        kind === 'element' ? { elementDraft: true } : kind === 'template' ? { templateDraft: true } : {}, opts && opts.confirmed ? { confirmed: true } : {}));
+      /* queue 690: false = his open project could not be saved and he chose to stay. applyScene below writes the
+         file INTO whatever is open, so going on would put the import over the very work he just chose to keep. */
+      if (!pid) return false;
+    }
     const ok = await FM.storage.applyScene(obj);
     if (!ok) {
       /* Belt and braces: sceneFileProblem should have caught everything applyScene refuses, but if the
@@ -1631,7 +1861,12 @@ window.FM = window.FM || {};
     return { layers: JSON.parse(JSON.stringify(layers, FM.jsonReplacer)), media: media };
   }
   // Register a pack's media for freshly re-id'd layers: in-memory registry + IDB (so it autosaves).
-  async function hydratePack(layers, media, idMap) {
+  /* `packKey` ('tpl:<id>' / 'elem:<id>') is the record the pack's Blobs were read out of. Every clip made here
+     plays from one until a reopen reads it back from its own record, so it is stamped as the clip's fileKey
+     (queue 915 phase B, review round 2): deleting that template or element while such a clip — or a split,
+     duplicate or paste of it — is on screen then leaves the pack record for the sweep to collect later,
+     instead of pulling the file out from under the clip. */
+  async function hydratePack(layers, media, idMap, packKey) {
     FM._mediaBusy = (FM._mediaBusy || 0) + 1;   // pruneOrphans stands down while packs hydrate
     let db = null;
     try { db = await openDB(); } catch (e) {}
@@ -1647,6 +1882,7 @@ window.FM = window.FM || {};
       try { if (db) await idbPut(db, newLayerId, { file: md.file, kind: md.kind }); } catch (e) {}
       try {
         const rec = md.kind === 'video' ? await FM.loadVideoFile(md.file) : await FM.loadImageFile(md.file);
+        if (typeof packKey === 'string' && packKey) rec.fileKey = packKey;
         FM.media.set(newLayerId, rec);
         if (rec.kind === 'video' && rec.el) rec.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); });
         if (FM.wireVideoRepaint) FM.wireVideoRepaint(rec);
@@ -1861,8 +2097,33 @@ window.FM = window.FM || {};
     return freed;
   };
 
+  /* ═══ A FULL PHONE MUST NOT THROW HIS WORK AWAY AT THE SWITCH (queue 690, hunt f) ═══════════════════
+   * When the store refuses the scene, the app says "Storage full — autosave paused" ONCE and lets him
+   * carry on, which is right: the work is safe in memory for as long as he stays. open() and create()
+   * then flushed, ignored the answer and tore the scene down anyway — so the next card he tapped on Home
+   * emptied the project, loaded the other one and reset undo, and everything since that one toast was
+   * gone with nothing said at the moment it happened. The template and element save-backs already refuse
+   * on a failed flush; the ordinary switch was the one door that did not. Now it asks, and Stay (also
+   * what Cancel, Escape and a tap outside give) leaves everything exactly where it was. */
+  function askLeave() {
+    const name = (FM.scene && FM.scene.project && FM.scene.project.name) || 'This project';
+    if (!FM.ask) return Promise.resolve(false);   // no way to ask — never throw it away unasked
+    return FM.ask({
+      title: 'Storage full — “' + name + '” is not saved',
+      message: 'What you changed since it last saved is only on this screen. Opening another project now throws it away. To keep it, stay and use ⚙ → Save project file inside it.',
+      ok: 'Leave anyway', cancel: 'Stay', danger: true,
+    }).then(v => !!v);
+  }
+
   FM.projects = {
     list() { return readJSON(PROJ_INDEX, []); },
+    /* queue 690: save the open project, and if that cannot be done and it matters, ask before leaving it.
+       True = go ahead. For callers that must ask BEFORE they start moving things — Home's card tap asks here,
+       ahead of the push, rather than half-way through it — and then pass { confirmed: true } to open(). */
+    async confirmLeave() {
+      if (FM.storage.flushSync() || !FM.storage.unsavedOnScreen()) return true;
+      return askLeave();
+    },
     // Thumbnail for a card — IDB first, then the legacy inline thumb (pre-migration entries). Async.
     async getThumb(id) {
       if (_thumbCache.has(id)) return _thumbCache.get(id);
@@ -1962,7 +2223,9 @@ window.FM = window.FM || {};
       return true;
     },
     // Switch the editor to another project (stash current first).
-    async open(id) {
+    // Resolves FALSE when the project could not be saved and he chose to stay (queue 690) — nothing changed.
+    // `opts.confirmed`: the caller has already asked (confirmLeave), or what is being left is being thrown away.
+    async open(id, opts) {
       if (id === curId()) return true;
       if (FM.tracker && FM.tracker.isPicking && FM.tracker.isPicking()) FM.tracker.cancel();   // drop any tracking overlay from the outgoing project
       if (FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive()) FM.pointEdit.stop();
@@ -1971,7 +2234,11 @@ window.FM = window.FM || {};
       if (FM.maskTool && FM.maskTool.isActive && FM.maskTool.isActive()) FM.maskTool.stop();   // same — and it caches the path it is editing
       if (FM.pause) FM.pause(); else FM.playing = false;   // stop WebAudio + <video> sound, not just the flag (#r4)
       if (FM.groupContext && FM.exitGroup) FM.exitGroup(true);   // the group view belongs to the outgoing project
-      FM.storage.flushSync(); this.touchCurrent(true);   // queue 915: a no-op picture while its media are released (makeThumb)
+      /* queue 690: the flush's answer is READ now. Refused, with work only on screen → ask, BEFORE anything below
+         is torn down; Stay returns with the project exactly as it was. (A stale tab also fails the flush, and
+         there dropping the local copy is the point, so unsavedOnScreen says no and the switch goes ahead.) */
+      if (!FM.storage.flushSync() && !(opts && opts.confirmed) && FM.storage.unsavedOnScreen() && !(await askLeave())) return false;
+      this.touchCurrent(true);   // queue 915: a no-op picture while its media are released (makeThumb)
       /* ⚠️ THE SESSION STANDS DOWN HERE, NOT AT history.reset() BELOW (queue 921, spec §12.1 `paused`).
          Everything from the next line to `load()` finishing is a document that belongs to NEITHER
          project: the scene is emptied, then `load()` is awaited for as long as IndexedDB and a media
@@ -2002,9 +2269,12 @@ window.FM = window.FM || {};
       if (FM.warnOversizeProject) FM.warnOversizeProject();
       return true;
     },
+    /* Resolves the new id, or FALSE when the open project could not be saved and he chose to stay (queue 690):
+       asked BEFORE anything is written, so Stay leaves no half-made project behind. */
     async create(opts) {
       opts = opts || {};
-      FM.storage.flushSync(); this.touchCurrent(true);
+      if (!FM.storage.flushSync() && !opts.confirmed && FM.storage.unsavedOnScreen() && !(await askLeave())) return false;
+      this.touchCurrent(true);
       const id = newId('p');
       const fresh = FM.newScene();
       fresh.project.name = opts.name || 'Untitled';
@@ -2039,7 +2309,7 @@ window.FM = window.FM || {};
       if (opts.ofTemplate) rec.ofTemplate = opts.ofTemplate;
       idx.unshift(rec);
       this.saveIndex(idx);
-      await this.open(id);
+      await this.open(id, { confirmed: true });   // queue 690: asked (or saved) above, and nothing has changed since
       return id;
     },
     /* ⚠️ queue 915 clause 3: TRUE ONLY WHEN THERE IS A WHOLE COPY. Every write here was unread and the
@@ -2102,7 +2372,11 @@ window.FM = window.FM || {};
              gone answers null, like a clip with no record, and is not copied onward. */
           const rec = await idbGetMedia(db, oldId);
           if (!rec) continue;
-          if (!(await idbPut(db, re.map[oldId], rec))) { whole = false; break; }
+          /* queue 915 phase B: still the FILE, deliberately — a project copy is a whole copy any build can read,
+             and it is a rare act next to a tile tap. The `ref` the reader now reports is left behind, so the copy
+             is an ordinary record and not half of a pointer. */
+          const val = rec.ref ? { file: rec.file, kind: rec.kind, rev: rec.rev || 0 } : rec;
+          if (!(await idbPut(db, re.map[oldId], val))) { whole = false; break; }
           wrote.push(re.map[oldId]);
         }
         if (whole && id) { const th = await idbGet(db, 'thumb:' + id); if (th) { await idbPut(db, 'thumb:' + nid, th); _thumbCache.set(nid, th); } }   // copy the card thumbnail too (cosmetic — not part of "whole")
@@ -2261,7 +2535,7 @@ window.FM = window.FM || {};
       const others = this.list().filter(p => p.id !== id);
       const target = (others.filter(p => !p.elementDraft && !p.templateDraft)[0] || others[0] || {}).id;
       if (!target) return { ok: false, why: 'last' };
-      await this.open(target);
+      await this.open(target, { confirmed: true });   // queue 690: the draft being left is the one being discarded
       const ok = await this.discardDraft(id);
       return { ok: ok, why: ok ? '' : 'refused' };
     },
@@ -2321,8 +2595,9 @@ window.FM = window.FM || {};
            No `|| any draft` fallback on purpose: with no real project left, a NEW one is the honest
            answer, and that branch already exists below. */
         const rest = this.list().filter(p => !p.elementDraft && !p.templateDraft);
-        if (rest.length) await this.open(rest[0].id);
-        else { try { localStorage.removeItem(CUR_KEY); } catch (e) {} await this.create({}); }
+        // confirmed (queue 690): the project being left is the one he just deleted — nothing to ask about
+        if (rest.length) await this.open(rest[0].id, { confirmed: true });
+        else { try { localStorage.removeItem(CUR_KEY); } catch (e) {} await this.create({ confirmed: true }); }
         // open()/create() flushSync'd BEFORE switching CUR_KEY, resurrecting the deleted doc as an
         // unindexed localStorage orphan that leaks quota forever — remove it (again) now. (#r2)
         try { localStorage.removeItem('fm.proj.' + id); localStorage.removeItem('fm.proj.default'); } catch (e) {}
@@ -2378,11 +2653,11 @@ window.FM = window.FM || {};
              two prefixes stay unconditional — libthumb2 is the media library's own cache and xr is the
              export-resume scratch, and neither has an index here to check against. */
           if (typeof k === 'string' && (k.indexOf('libthumb2:') === 0 || k.indexOf('xr:') === 0)) continue;
-          /* ⚠️ queue 915 phase A: A SHARED COPY IS NEVER A CANDIDATE. The one-copy writer (phase B) keeps clips
-             in any project as pointers at 'lib:<mid>', and whether one is still used can only be told by reading
-             every record — which this release does not do. Keeping them all is the only answer that cannot
-             blank a clip; collecting the truly unused ones is the writer's job, with the writer's knowledge.
-             (idbDel refuses them as well; this keeps them out of the list so nothing even tries.) */
+          /* ⚠️ queue 915: A SHARED COPY IS NEVER A CANDIDATE. Reused clips in any project are pointers at
+             'lib:<mid>' (phase B writes them), and whether one is still used can only be told by reading every
+             record, every pack and every clip in memory. Keeping them all is the only answer that cannot blank
+             a clip; collecting the truly unused ones is a later, separately reviewed step. Leaking one is the
+             accepted cost. (idbDel refuses them as well; this keeps them out of the list so nothing even tries.) */
           if (isLibKey(k)) continue;
           /* queue 921 S0: NOTHING UNDER `collab:` IS EVER A CANDIDATE (spec §4.2, §12.4). Three kinds
              live there — the pre-session checkpoints, a guest's confirmed base, and part-received media —
@@ -2574,6 +2849,7 @@ window.FM = window.FM || {};
       const pack = await this.getPack(tid); if (!pack) return false;
       const meta = this.list().find(t => t.id === tid) || {};
       const pid = await FM.projects.create({ name: (meta.name || 'Template') + ' project', width: pack.project.width, height: pack.project.height });
+      if (!pid) return false;   // queue 690: his project could not be saved and he chose to stay — the pack must not land in it
       /* …and again on the way OUT, for templates saved before v8.22. Stripping only at save would
          leave every existing template still handing its notes to new projects. */
       /* REMEMBER WHICH TEMPLATE THIS CAME FROM (queue 408). Ezra: "templates need to be editable as well,
@@ -2581,7 +2857,7 @@ window.FM = window.FM || {};
          is the way BACK, and there was nothing recording where the project came from to go back to.
          Kept on the project object, so it saves and reloads with the doc, AND mirrored onto the index entry
          so the Home card can offer the update without reading every project's document to find out. */
-      await this._adopt(pack, { name: FM.scene.project.name, notes: [], fromTemplate: tid });
+      await this._adopt(pack, { name: FM.scene.project.name, notes: [], fromTemplate: tid }, 'tpl:' + tid);
       try { const idx = FM.projects.list(); const e = idx.find(x => x.id === pid); if (e) { e.fromTemplate = tid; FM.projects.saveIndex(idx); } } catch (e) {}
       if (FM.resizeCanvas) FM.resizeCanvas();
       if (FM.refreshAll) FM.refreshAll();
@@ -2599,7 +2875,7 @@ window.FM = window.FM || {};
        and autosave wrote it to disk. Measured, end to end. What that costs is in clampProjectDims' own
        note: ~1GB per canvas, an OOM crash on open, and — being the current project — again on every
        relaunch. A brick. */
-    async _adopt(pack, extra) {
+    async _adopt(pack, extra, packKey) {
       const proj = JSON.parse(JSON.stringify(pack.project));
       // packs saved before v15.04 may carry a session's pointers; the way OUT strips them as the way in now does
       ['ofTemplate', 'ofElement', 'returnTo', 'fromTemplate'].forEach(k => { delete proj[k]; });
@@ -2607,7 +2883,7 @@ window.FM = window.FM || {};
       clampProjectDims(FM.scene.project);
       const re = reIdLayers(pack.layers);
       FM.scene.layers = re.layers;
-      await hydratePack(re.layers, pack.media, re.map);
+      await hydratePack(re.layers, pack.media, re.map, packKey);
     },
     /* ═══ OPEN A TEMPLATE FOR EDITING (queue 505 clause 4) — the shape `elements.openForEdit` settled on.
        Ezra, 1 Sep: "The element opens as its own document" — and his words were "Elements AND templates".
@@ -2625,12 +2901,12 @@ window.FM = window.FM || {};
       const rev = meta.rev || 0;
       const existing = FM.projects.list().find(p => p.templateDraft && p.ofTemplate === tid);
       if (existing) {
-        await FM.projects.open(existing.id);
+        if ((await FM.projects.open(existing.id)) === false) return false;   // queue 690: he chose to stay — never adopt a pack into HIS project
         /* THE TEMPLATE MOVED ON WHILE THIS WORKSPACE SAT (review, 2 Sep): "Update template from project" on some
            other project bumps `rev`; a workspace built from the older pack would, on Home, write the OLD contents
            back over the NEW ones. Re-adopt the current pack instead — the workspace was stale by definition. */
         if ((FM.scene.project.ofTemplateRev || 0) !== rev) {
-          await this._adopt(pack, Object.assign({ name: meta.name || 'Template', notes: [], ofTemplate: tid, ofTemplateRev: rev }, FM.scene.project.returnTo ? { returnTo: FM.scene.project.returnTo } : {}));
+          await this._adopt(pack, Object.assign({ name: meta.name || 'Template', notes: [], ofTemplate: tid, ofTemplateRev: rev }, FM.scene.project.returnTo ? { returnTo: FM.scene.project.returnTo } : {}), 'tpl:' + tid);
           if (FM.selectLayer) FM.selectLayer(null); FM.scene.selectedIds = [];
           if (FM.resizeCanvas) FM.resizeCanvas(); if (FM.refreshAll) FM.refreshAll(); if (FM.history) FM.history.reset();
           if (FM.storage) { FM.storage.markDirty(); await FM.storage.save(); }
@@ -2639,9 +2915,9 @@ window.FM = window.FM || {};
       }
       const returnTo = curId();
       const pid = await FM.projects.create({ name: meta.name || 'Template', width: pack.project.width, height: pack.project.height, templateDraft: true, ofTemplate: tid });
-      if (!pid) return null;
+      if (!pid) return false;   // queue 690: create() says false only when he chose to stay in an unsaved project
       // the pack's project replaces the doc's, so the session's own pointers ride in as `extra`
-      await this._adopt(pack, Object.assign({ name: meta.name || 'Template', notes: [], ofTemplate: tid, ofTemplateRev: rev }, returnTo ? { returnTo: returnTo } : {}));
+      await this._adopt(pack, Object.assign({ name: meta.name || 'Template', notes: [], ofTemplate: tid, ofTemplateRev: rev }, returnTo ? { returnTo: returnTo } : {}), 'tpl:' + tid);
       /* ⚠️ ARRIVE WITH NOTHING SELECTED — the element path's lesson ("it's just opening you having every
          layer selected"). Nothing here selects, but say it explicitly so a later change cannot. */
       if (FM.selectLayer) FM.selectLayer(null);
@@ -2743,7 +3019,7 @@ window.FM = window.FM || {};
       // one) gave the project multiple cameras, and the composite silently uses the first it finds.
       if (FM.scene.layers.some(l => l.type === 'camera')) re.layers = re.layers.filter(l => l.type !== 'camera');
       FM.scene.layers = re.layers.concat(FM.scene.layers);
-      await hydratePack(re.layers, pack.media, re.map);
+      await hydratePack(re.layers, pack.media, re.map, 'tpl:' + tid);
       if (FM.refreshAll) FM.refreshAll();
       if (FM.history) FM.history.commit();
       FM.storage.autosave();
@@ -2807,10 +3083,10 @@ window.FM = window.FM || {};
       const meta = this.list().find(e => e.id === eid);
       if (!meta) return null;
       const existing = FM.projects.list().find(p => p.elementDraft && p.ofElement === eid);
-      if (existing) { await FM.projects.open(existing.id); return existing.id; }
+      if (existing) { return (await FM.projects.open(existing.id)) === false ? false : existing.id; }   // queue 690: false = he chose to stay
       const returnTo = curId();
       const pid = await FM.projects.create({ name: meta.name || 'Element', width: 1080, height: 1080, elementDraft: true, ofElement: eid });
-      if (!pid) return null;
+      if (!pid) return false;   // queue 690: create() says false only when he chose to stay in an unsaved project
       FM.scene.project.background = null;              // transparent, like the element itself
       if (returnTo) FM.scene.project.returnTo = returnTo;   // where to land when he goes back
       const ok = await this.insert(eid);
@@ -2827,7 +3103,7 @@ window.FM = window.FM || {};
          there is nowhere named to return to; it picks a real project first and refuses only if this is
          the last project in existence. */
       if (!ok) {
-        if (returnTo && returnTo !== pid) { await FM.projects.open(returnTo); await FM.projects.discardDraft(pid); }
+        if (returnTo && returnTo !== pid) { await FM.projects.open(returnTo, { confirmed: true }); await FM.projects.discardDraft(pid); }   // queue 690: the draft left is the one being discarded
         else await FM.projects.discardDraftAnyway(pid);
         return null;
       }
@@ -2949,7 +3225,7 @@ window.FM = window.FM || {};
       const t0 = Math.min.apply(null, re.layers.length ? re.layers.map(l => l.start || 0) : [0]);
       re.layers.forEach(l => { const d = FM.time - t0; l.start = (l.start || 0) + d; if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(l, d); });   // keyframes are absolute time — inserted animation rides to the playhead
       FM.scene.layers = re.layers.concat(FM.scene.layers);
-      await hydratePack(re.layers, pack.media, re.map);
+      await hydratePack(re.layers, pack.media, re.map, 'elem:' + eid);
       FM.scene.selectedId = re.layers[0] ? re.layers[0].id : FM.scene.selectedId;
       FM.scene.selectedIds = re.layers.map(l => l.id);
       if (FM.refreshAll) FM.refreshAll();

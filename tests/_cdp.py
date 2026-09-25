@@ -206,6 +206,7 @@ def main():
         payload = None
         last_seen = ""
         cpu = [1]
+        inp = {"touch_emu": False, "touch_down": False, "mouse_down": False}   # the real-input channel's state across requests (queue 924)
         while time.time() < deadline:
             # A TEST MAY ASK FOR A CPU THROTTLE, AND ONLY THIS DRIVER CAN GIVE ONE (queue 921 S8). The page cannot
             # slow itself down — `Emulation.setCPUThrottlingRate` is a DevTools call — and a performance budget
@@ -228,6 +229,79 @@ def main():
                     cpu[0] = want
                 cdp.eval("(function(){var f=document.getElementById('app');var w=f&&f.contentWindow;"
                          "if(w) w.__fmCpuRate=%s;})()" % json.dumps(cpu[0]))
+            except Exception:
+                pass
+            # A TEST MAY ASK FOR REAL INPUT, AND ONLY THIS DRIVER CAN GIVE IT (queue 924). A synthetic pointer event
+            # from page script is untrusted: setPointerCapture refuses it, the browser does no hit-testing of its own,
+            # and touch never becomes pointer events the way a finger does. The add switch was declared live after
+            # #438, #533, #570 and #865 on synthetic drags, and he reported it frozen a fifth time. So a test writes
+            # `window.__fmWantInput = {seq, steps:[{t, x, y, ms}]}` (coordinates in the APP FRAME's CSS pixels),
+            # this loop turns each step into Input.dispatchTouchEvent / Input.dispatchMouseEvent at the frame's
+            # position on the page, sleeps `ms` after it, and answers `__fmInputDone = seq`. Touch emulation is
+            # switched on only for a run of touch steps and off again after, so no other test sees a touch device.
+            # The frame must be on screen for the events to reach it — the test moves it and puts it back.
+            try:
+                want_in = cdp.eval("(function(){var f=document.getElementById('app');var w=f&&f.contentWindow;"
+                                   "var q=w&&w.__fmWantInput;if(!q||typeof q.seq!=='number'||w.__fmInputDone===q.seq) return null;"
+                                   "var r=f.getBoundingClientRect();return JSON.stringify({seq:q.seq,steps:q.steps||[],ox:r.left,oy:r.top});})()")
+                if want_in:
+                    q = json.loads(want_in)
+                    err = ''
+                    try:
+                        for st in q["steps"]:
+                            t = st.get("t", "")
+                            x = float(st.get("x", 0)) + q["ox"]
+                            y = float(st.get("y", 0)) + q["oy"]
+                            if t.startswith("touch"):
+                                if not inp["touch_emu"]:
+                                    cdp.send("Emulation.setTouchEmulationEnabled", enabled=True, maxTouchPoints=5)
+                                    inp["touch_emu"] = True
+                                typ = {"touchStart": "touchStart", "touchMove": "touchMove", "touchEnd": "touchEnd", "touchCancel": "touchCancel"}[t]
+                                pts = [] if typ in ("touchEnd", "touchCancel") else [{"x": x, "y": y, "id": 1}]
+                                cdp.send("Input.dispatchTouchEvent", type=typ, touchPoints=pts)
+                                inp["touch_down"] = typ in ("touchStart", "touchMove")
+                            elif t == "wheel":
+                                # a real wheel / trackpad scroll (queue 931: the PC half of pausing the New strip)
+                                cdp.send("Input.dispatchMouseEvent", type="mouseWheel", x=x, y=y, deltaX=float(st.get("dx", 0)), deltaY=float(st.get("dy", 0)))
+                            elif t.startswith("mouse"):
+                                typ = {"mouseDown": "mousePressed", "mouseMove": "mouseMoved", "mouseUp": "mouseReleased"}[t]
+                                if typ == "mouseMoved":
+                                    btns = 1 if inp["mouse_down"] else 0
+                                else:
+                                    btns = 1 if typ == "mousePressed" else 0
+                                cdp.send("Input.dispatchMouseEvent", type=typ, x=x, y=y, button="left" if typ != "mouseMoved" or inp["mouse_down"] else "none",
+                                         buttons=btns, clickCount=1 if typ != "mouseMoved" else 0)
+                                if typ == "mousePressed":
+                                    inp["mouse_down"] = True
+                                elif typ == "mouseReleased":
+                                    inp["mouse_down"] = False
+                            ms = float(st.get("ms", 0) or 0)
+                            if ms > 0:
+                                time.sleep(min(ms, 2000) / 1000.0)
+                    except Exception as ex:
+                        err = str(ex)[:300]
+                        # a batch that died mid-gesture must not leave a finger or a button down for every later test
+                        # (Chrome then refuses the next touchStart and every later real-input test fails for us)
+                        try:
+                            if inp["touch_down"]:
+                                cdp.send("Input.dispatchTouchEvent", type="touchCancel", touchPoints=[])
+                                inp["touch_down"] = False
+                            if inp["mouse_down"]:
+                                cdp.send("Input.dispatchMouseEvent", type="mouseReleased", x=0, y=0, button="left", buttons=0, clickCount=1)
+                                inp["mouse_down"] = False
+                        except Exception:
+                            pass
+                    finally:
+                        # touch emulation stays on only while a finger is still down — a test may split one gesture across
+                        # two requests (hold, act, then move and lift) — and goes off the moment none is
+                        if inp["touch_emu"] and not inp["touch_down"]:
+                            try:
+                                cdp.send("Emulation.setTouchEmulationEnabled", enabled=False)
+                            except Exception:
+                                pass
+                            inp["touch_emu"] = False
+                    cdp.eval("(function(){var f=document.getElementById('app');var w=f&&f.contentWindow;"
+                             "if(w){w.__fmInputErr=%s;w.__fmInputDone=%s;}})()" % (json.dumps(err), json.dumps(q["seq"])))
             except Exception:
                 pass
             try:

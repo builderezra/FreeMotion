@@ -1235,57 +1235,1533 @@
     }
   });
 
-  test('915.5A this release never writes a shared copy or a pointer: three reuses of a tile are still three whole copies', { item: '915', budgetMs: 45000 }, async function () {
-    /* The reader must not start writing the new format by the back door — a pointer written by THIS build is
-       exactly what an older build cannot read. So: the whole everyday route (import, reuse a tile three
-       times, duplicate), and not one `lib:` key or pointer may appear; reuse stays byte-for-byte what it
-       was (a whole copy per tap — the writer release is what changes that). And the store itself refuses
-       both, so no future caller can do it by accident either. */
+  /* ═══ 915.5B — THE WRITER (queue 915 clause 5, phase B) ═══════════════════════════════════════════
+   * His answer, 22 Sep: "Yes, one copy (Recommended)". Phase A (v16.80) taught every reader the pointer;
+   * this release WRITES them. Each test below is one of the rules the review of the first attempt paid for
+   * (audits/915-5-review.json): one shared copy written on the first reuse only; his original import never
+   * swapped; the project captured at the tap; Preparing… and a repeat tap ignored; liveness decided by the
+   * file; split/duplicate/paste carry the pointer; no deleter reaches a shared copy; rollback.sh warns; a
+   * backup holds the bytes; a Replace racing a reuse ends honestly. Photos are drawn here, never his media.
+   * No failure message may contain a double-quote character (the runner's report is JSON). */
+  function q915bShape(v) { return v === undefined ? 'nothing' : (v && typeof v === 'object') ? '{' + Object.keys(v).join(',') + '}' : String(v); }
+  async function q915bImport(name, rgb) {   // a photo imported the everyday way into a NEW project: its layer, its file and its tile
+    const pid = await FM.projects.create({ name: name, width: 320, height: 240 });
+    const file = await q915aPng(name.replace(/\W+/g, ''), rgb);
+    FM.addMediaLayer(await FM.loadImageFile(file));
+    await sleep(60); await FM.storage.save();
+    const fp = [file.name, file.size, file.lastModified].join('|');
+    const tile = FM.mediaLib.list().filter(function (e) { return e.fp === fp; })[0];
+    if (!tile) throw new Error('setup: importing the photo made no library tile, so there is nothing to reuse');
+    const L = FM.scene.layers.filter(function (l) { return l.type === 'image'; })[0];
+    if (!L) throw new Error('setup: importing the photo made no layer');
+    return { pid: pid, file: file, tile: tile, orig: L.id, rgb: rgb };
+  }
+  async function q915bReuse(mid) { const ok = await FM.mediaLib.use(mid); await sleep(60); FM.storage.markDirty(); await FM.storage.save(); return ok; }   // use() does not await its own save
+  function q915bImages() { return FM.scene.layers.filter(function (l) { return l.type === 'image'; }); }
+  function q915bIsPtr(v, lk) { return !!v && typeof v === 'object' && !v.file && v.ref === lk; }
+  function q915bIsWhole(v, file) { return !!v && !!v.file && v.file.size === file.size && !v.ref; }
+  /* The clip PLAYS: rendered through the app on black, its own colour comes out. A clip with nothing loaded
+     renders nothing, so black here is the blank-clip failure. */
+  function q915bPixel(L) {   // the photo's fill, sampled at the LAYER's own position (a first clip resizes an empty project to itself)
+    const P = FM.scene.project, T = L.transform || {};
+    const num = function (v, d) { return typeof v === 'number' && isFinite(v) ? v : d; };
+    const s = num(T.scale, 1);
+    const c = offscreen(P.width, P.height), x = c.getContext('2d');
+    FM.renderScene(x, scene([L], { project: Object.assign({}, P, { background: '#000000' }) }), (L.start || 0) + 0.1);
+    return px(x, Math.round(num(T.x, P.width / 2) + 8 * s), Math.round(num(T.y, P.height / 2) + 6 * s));   // (24,18) of the 32x24 photo: fill colour, clear of its white mark
+  }
+  function q915bShows(L, rgb) {
+    const d = q915bPixel(L);
+    const want = [parseInt(rgb.slice(1, 3), 16), parseInt(rgb.slice(3, 5), 16), parseInt(rgb.slice(5, 7), 16)];
+    return Math.abs(d[0] - want[0]) < 14 && Math.abs(d[1] - want[1]) < 14 && Math.abs(d[2] - want[2]) < 14;
+  }
+  function q915bMustShow(ids, rgb, when) {
+    const blank = ids.filter(function (id) { const L = FM.layerById(FM.scene, id); return !L || !q915bShows(L, rgb); });
+    if (blank.length) throw new Error(blank.length + ' of ' + ids.length + ' clips came back BLANK ' + when + ' (' + blank.map(function (id) {
+      const m = FM.media.get(id), L = FM.layerById(FM.scene, id);
+      return id + ': ' + (m && m.file ? 'loaded, drew rgb ' + Array.prototype.slice.call(q915bPixel(L), 0, 3).join(',') + ' at t ' + ((L.start || 0) + 0.1).toFixed(2) + ' for ' + (L.duration || 0).toFixed(2) + 's, scale ' + JSON.stringify(L.transform && L.transform.scale).replace(/"/g, '') : 'nothing loaded');
+    }).join('; ') + ')');
+  }
+  function q915bGate() {   // hold a step until the test lets go — the phone's seconds-long first copy, made observable
+    const g = { entered: false };
+    g.done = new Promise(function (r) { g.release = r; });
+    return g;
+  }
+  async function q915bFinish(made, orig, wasOpen, libs, idx0) {
+    try { if (idx0 == null) localStorage.removeItem('fm.medialib'); else localStorage.setItem('fm.medialib', idx0); } catch (e) {}
+    await q915aCleanup(made, orig, wasOpen, [], [], libs);
+  }
+
+  test('915.5B three reuses of a tile store ONE shared copy and three pointers, and his original import stays a whole copy', { item: '915', budgetMs: 45000 }, async function () {
     const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
-    const made = [];
+    const made = [], libs = [];
     const ts = Date.now().toString(36);
-    const probeLib = 'lib:q915aprobe' + ts, probeRef = 'l_q915aprobe' + ts, probeCtl = 'l_q915actl' + ts;
+    const probeLib = 'lib:q915bprobe' + ts, probeRef = 'l_q915bprobe' + ts, probeCtl = 'l_q915bctl' + ts;
     try {
       if (wasOpen) FM.home.close();
       await sleep(100);
       const keys0 = new Set(Object.keys(await q915aRaw()));
-      const file = await q915aPng('reuse', '#9b5de5');
-      made.push(await FM.projects.create({ name: 'FX915A import', width: 320, height: 240 }));
-      FM.addMediaLayer(await FM.loadImageFile(file));
+      const a = await q915bImport('FX915B once', '#9b5de5'); made.push(a.pid);
+      const lk = 'lib:' + a.tile.mid; libs.push(lk);
+      made.push(await FM.projects.create({ name: 'FX915B once reuse', width: 320, height: 240 }));
+      /* every write to the store is counted by key: that the shared copy is written ONCE is observed directly,
+         because rewriting it with the same file would leave nothing on disk to tell the two apart */
+      const realPut = IDBObjectStore.prototype.put, puts = [];
+      IDBObjectStore.prototype.put = function (v, k) { puts.push(k); return realPut.apply(this, arguments); };
+      try { for (let i = 0; i < 3; i++) if (!(await q915bReuse(a.tile.mid))) throw new Error('setup: reuse ' + (i + 1) + ' of the tile was refused'); }
+      finally { IDBObjectStore.prototype.put = realPut; }
+      const libPuts = puts.filter(function (k) { return k === lk; }).length;
+      if (libPuts > 1) throw new Error('three reuses wrote the shared copy ' + libPuts + ' times - it is written on the first reuse only');
+      const ids = q915bImages().map(function (l) { return l.id; });
+      if (ids.length !== 3) throw new Error('setup: three reuses made ' + ids.length + ' clips');
+
+      const raw = await q915aRaw();
+      if (!(raw[lk] && raw[lk].file && raw[lk].file.size === a.file.size)) throw new Error('no shared copy under ' + lk + ' after three reuses (found ' + q915bShape(raw[lk]) + ') - every reuse is still a whole copy of its own');
+      const notPtr = ids.filter(function (id) { return !q915bIsPtr(raw[id], lk); });
+      if (notPtr.length) throw new Error(notPtr.length + ' of the 3 reused clips are stored as ' + notPtr.map(function (id) { return q915bShape(raw[id]); }).join(', ') + ', not as a pointer at the shared copy');
+      if (!q915bIsWhole(raw[a.orig], a.file)) throw new Error('his ORIGINAL import is stored as ' + q915bShape(raw[a.orig]) + ' - it must stay a whole copy of its own; swapping it for a pointer is what let a rollback blank it for good');
+      const fresh = Object.keys(raw).filter(function (k) { return !keys0.has(k); });
+      const shared = fresh.filter(function (k) { return /^lib:/.test(k); });
+      if (shared.length !== 1) throw new Error(shared.length + ' shared copies were written (' + shared.join(', ') + ') - the first reuse writes one and no later reuse writes another');
+      const whole = fresh.filter(function (k) { const v = raw[k]; return v && v.file && v.file.name === a.file.name && v.file.size === a.file.size; });
+      if (whole.length !== 2) throw new Error('an import and three reuses left ' + whole.length + ' whole copies of the file, not 2 (his original and the one shared copy)');
+      const tile = FM.mediaLib.list().filter(function (e) { return e.mid === a.tile.mid; })[0];
+      if (!tile || tile.key !== lk) throw new Error('the tile is keyed at ' + (tile ? tile.key : 'nothing') + ', not at its shared copy - the next reuse would start the copy again');
+      if (FM.mediaLib.list().filter(function (e) { return e.fp === a.tile.fp || e.key === lk; }).length !== 1) throw new Error('reusing the tile left a second tile for the same file');
+      q915bMustShow(ids, a.rgb, 'straight after the reuse');
+
+      // …and whether the copy exists is decided by the STORED FILE, not by the index: a tile whose re-key never
+      // landed (a full localStorage) must not write the shared copy a second time under clips that play from it
+      const list = FM.mediaLib.list(); list.forEach(function (e) { if (e.mid === a.tile.mid) e.key = a.orig; });
+      localStorage.setItem('fm.medialib', JSON.stringify(list));
+      const before = raw[lk].file, puts4 = [];
+      IDBObjectStore.prototype.put = function (v, k) { puts4.push(k); return realPut.apply(this, arguments); };
+      try { if (!(await q915bReuse(a.tile.mid))) throw new Error('a reuse through a tile whose re-key had not landed was refused'); }
+      finally { IDBObjectStore.prototype.put = realPut; }
+      if (puts4.indexOf(lk) >= 0) throw new Error('the shared copy was written again by a later reuse - a clip may be playing from it');
+      const raw2 = await q915aRaw();
+      const fourth = q915bImages().map(function (l) { return l.id; }).filter(function (id) { return ids.indexOf(id) < 0; })[0];
+      if (!q915bIsPtr(raw2[fourth], lk)) throw new Error('with the shared copy already on disk, the next reuse stored ' + q915bShape(raw2[fourth]) + ' instead of a pointer at it');
+      if (Object.keys(raw2).filter(function (k) { return !keys0.has(k) && /^lib:/.test(k); }).length !== 1 || !(raw2[lk].file.size === before.size && raw2[lk].file.lastModified === before.lastModified)) throw new Error('the shared copy was written again - a clip may be playing from it');
+
+      // ── the generic writer still refuses both (only the one-copy writer may), and still takes an ordinary record
+      const okLib = await FM.storage.writeMedia(probeLib, { file: a.file, kind: 'image' });
+      const okRef = await FM.storage.writeMedia(probeRef, { ref: lk, kind: 'image', rev: 0 });
+      const okCtl = await FM.storage.writeMedia(probeCtl, { file: a.file, kind: 'image' });
+      const raw3 = await q915aRaw();
+      if (!okCtl || !raw3[probeCtl]) throw new Error('control: an ordinary record could not be written, so the refusals below prove nothing');
+      if (okLib || raw3[probeLib]) throw new Error('writeMedia wrote a lib: key - only the one-copy writer may make a shared copy, and never over one');
+      if (okRef || raw3[probeRef]) throw new Error('writeMedia wrote a pointer - only the one-copy writer may, and only when its shared copy is there');
+    } finally {
+      for (const k of [probeLib, probeRef, probeCtl]) { try { await q915aDel(k); } catch (e) {} }
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5B round trip: two reuses reopen and play, still play after the original is deleted, and back up and restore with their footage', { item: '915', budgetMs: 60000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915B trip A', '#e76f51'); made.push(a.pid);
+      const lk = 'lib:' + a.tile.mid; libs.push(lk);
+      const bId = await FM.projects.create({ name: 'FX915B trip B', width: 320, height: 240 }); made.push(bId);
+      if (!(await q915bReuse(a.tile.mid)) || !(await q915bReuse(a.tile.mid))) throw new Error('setup: a reuse of the tile was refused');
+      const reused = q915bImages().map(function (l) { return l.id; });
+      const raw1 = await q915aRaw();
+      if (reused.length !== 2 || reused.some(function (id) { return !q915bIsPtr(raw1[id], lk); })) throw new Error('the two reused clips are stored as ' + reused.map(function (id) { return q915bShape(raw1[id]); }).join(', ') + ', not as pointers at ' + lk);
+      const away = await FM.projects.create({ name: 'FX915B trip away', width: 320, height: 240 }); made.push(away);
+
+      // 1. reload the project: both play
+      await FM.projects.open(bId);
+      q915bMustShow(reused, a.rgb, 'after the project was reopened');
+
+      // 2. delete his ORIGINAL clip and let the sweep collect its record: the reused ones do not depend on it
+      await FM.projects.open(a.pid);
+      FM.deleteLayer(a.orig);
+      FM.storage.markDirty(); await FM.storage.save();
+      await FM.projects.open(away);
+      await FM.projects.pruneOrphans();
+      if ((await q915aRaw())[a.orig]) throw new Error('control: the deleted original was not collected by the sweep, so the clips below could still be reading it - nothing was proved');
+      // …and a template or element made from the CLOSED project carries the real bytes, read through the pointers
+      const got = await FM._packFromProject(bId, true);
+      const packed = reused.filter(function (id) { const m = got && got.pack && got.pack.media[id]; return !!(m && m.file && m.file.size === a.file.size && !m.ref); });
+      if (packed.length !== 2) throw new Error('a template or element made from the project carries footage for ' + packed.length + ' of the 2 reused clips - a pack must hold the real bytes, never a pointer into this device');
+      await FM.projects.open(bId);
+      q915bMustShow(reused, a.rgb, 'after his original clip was deleted and its record collected');
+
+      // 3. back up and restore: the backup holds the real bytes, and the restored project plays
+      const obj = await FM.storage.buildBackup(null);
+      const entry = obj.projects.filter(function (x) { return x.project && x.project.name === 'FX915B trip B'; })[0];
+      if (!entry) throw new Error('the backup has no entry for the project');
+      const carried = reused.filter(function (id) { return entry.media[id] && /^data:image\/png/.test(entry.media[id].dataURL || ''); });
+      if (carried.length !== 2) throw new Error('the backup carries footage for ' + carried.length + ' of the 2 reused clips - a backup must hold the real bytes, never a pointer into this device');
+      const missing = ((obj.notIncluded && obj.notIncluded.media) || []).filter(function (m) { return m.project === 'FX915B trip B'; });
+      if (missing.length) throw new Error('the backup lists ' + missing.length + ' reused clip(s) as not included');
+      const had = new Set(FM.projects.list().map(function (p) { return p.id; }));
+      const r = await FM.storage.restoreBackup({ app: 'freemotion', backup: 1, v: 1, count: 1, projects: [entry] }, null);
+      const back = FM.projects.list().filter(function (p) { return !had.has(p.id); })[0];
+      if (back) made.push(back.id);
+      if (!r || !r.ok || !back) throw new Error('restoring the backup did not bring the project back');
+      const docIds = ((JSON.parse(localStorage.getItem('fm.proj.' + back.id) || '{}').layers) || []).filter(function (l) { return l.type === 'image'; }).map(function (l) { return l.id; });
+      for (let i = 0; i < 60; i++) { const rr = await q915aRaw(); if (docIds.length && docIds.every(function (id) { return rr[id] && rr[id].file; })) break; await sleep(100); }   // the restore does not await its own save
+      await FM.projects.open(back.id);
+      if (docIds.length !== 2) throw new Error('the restored project has ' + docIds.length + ' photo clips, not 2');
+      q915bMustShow(docIds, a.rgb, 'in the restored project');
+
+      // 4. every deleter he can reach, then the sweep: the shared copy the pointers use is never deleted
+      await FM.projects.open(away);
+      for (const id of [bId, a.pid]) { await FM.projects.remove(id); made.splice(made.indexOf(id), 1); }
+      FM.mediaLib.remove(a.tile.mid);
+      await FM.projects.pruneOrphans();
+      if (!((await q915aRaw())[lk] || {}).file) throw new Error('the shared copy was DELETED once the projects that used it and its tile were gone - this release never deletes one');
+    } finally {
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5B a reused clip never lands in a project he did not tap in: leaving while it prepares gives up with a toast', { item: '915', budgetMs: 45000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [], said = [];
+    const realShare = FM.storage.shareMedia, realLoad = FM.loadImageFile, realToast = FM.toast;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915B tap A', '#2a9d8f'); made.push(a.pid);
+      libs.push('lib:' + a.tile.mid);
+      const bId = await FM.projects.create({ name: 'FX915B tapped in', width: 320, height: 240 }); made.push(bId);
+      const cId = await FM.projects.create({ name: 'FX915B switched to', width: 320, height: 240 }); made.push(cId);
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      const imagesIn = function (pid) { return ((JSON.parse(localStorage.getItem('fm.proj.' + pid) || '{}').layers) || []).filter(function (l) { return l.type === 'image'; }).length; };
+      const round = async function (label, holdShare) {
+        await FM.projects.open(bId);
+        const g = q915bGate();
+        if (holdShare && realShare) FM.storage.shareMedia = async function () { g.entered = true; await g.done; return realShare.apply(this, arguments); };
+        FM.loadImageFile = async function () { g.entered = true; await g.done; return realLoad.apply(this, arguments); };
+        said.length = 0;
+        const p = FM.mediaLib.use(a.tile.mid);                   // he taps the tile in B…
+        for (let i = 0; i < 100 && !g.entered; i++) await sleep(20);
+        if (!g.entered) throw new Error('setup (' + label + '): the reuse never reached the copy or the decode');
+        await FM.projects.open(cId);                             // …and opens C while it is still preparing
+        g.release();
+        const ok = await p;
+        FM.storage.shareMedia = realShare; FM.loadImageFile = realLoad;
+        await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+        if (q915bImages().length || imagesIn(cId)) throw new Error('(' + label + ') the clip he tapped in project B landed in project C, which he opened while it was preparing');
+        if (imagesIn(bId)) throw new Error('(' + label + ') the clip was added to project B behind his back while he was in C');
+        if (ok !== false) throw new Error('(' + label + ') the reuse answered ' + ok + ' although nothing was added');
+        if (!said.some(function (m) { return /not added/i.test(m); })) throw new Error('(' + label + ') nothing told him the clip was not added (toasts: ' + (said.join(' | ') || 'none') + ')');
+      };
+      await round('during the first copy', true);
+      await round('during the decode of a later reuse', false);
+    } finally {
+      FM.storage.shareMedia = realShare; FM.loadImageFile = realLoad; FM.toast = realToast;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5B the first reuse says Preparing while it copies, and a second tap on the same tile is ignored', { item: '915', budgetMs: 45000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    const realShare = FM.storage.shareMedia;
+    const g = q915bGate();
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915B prep A', '#264653'); made.push(a.pid);
+      libs.push('lib:' + a.tile.mid);
+      made.push(await FM.projects.create({ name: 'FX915B prep B', width: 320, height: 240 }));
+      if (realShare) FM.storage.shareMedia = async function () { g.entered = true; await g.done; return realShare.apply(this, arguments); };
+      const p1 = FM.mediaLib.use(a.tile.mid);
+      for (let i = 0; i < 50 && !g.entered; i++) await sleep(20);
+      await sleep(30);
+      const t = document.getElementById('toast');
+      const showing = (t && !t.classList.contains('hidden')) ? t.textContent : '';
+      const p2 = FM.mediaLib.use(a.tile.mid);                   // his second tap while the first is still preparing
+      const second = await Promise.race([p2, sleep(1500).then(function () { return 'still waiting'; })]);
+      g.release();
+      const first = await p1;
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      if (!/^Preparing/.test(showing)) throw new Error('nothing on screen while the first reuse copied the file (toast: ' + (showing || 'none') + ') - on a phone that is seconds of nothing after the sheet closes');
+      const n = q915bImages().length;
+      if (n !== 1) throw new Error('two taps on the tile while the first was preparing added ' + n + ' clips, not 1');
+      if (second !== false) throw new Error('the second tap was not ignored (it answered ' + second + ')');
+      if (first !== true) throw new Error('the first tap answered ' + first + ', not true');
+      const t2 = document.getElementById('toast');
+      if (t2 && !t2.classList.contains('hidden') && /^Preparing/.test(t2.textContent)) throw new Error('Preparing is still on screen after the clip was added');
+    } finally {
+      g.release(); FM.storage.shareMedia = realShare;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5B split, duplicate and paste of a reused clip store pointers, not the whole file again', { item: '915', budgetMs: 45000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib'), clip0 = FM.clipboard;
+    const made = [], libs = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915B copies A', '#e9c46a'); made.push(a.pid);
+      const lk = 'lib:' + a.tile.mid; libs.push(lk);
+      const keys0 = new Set(Object.keys(await q915aRaw()));   // after the import: only what the reuse and its copies write counts
+      const bId = await FM.projects.create({ name: 'FX915B copies B', width: 320, height: 240 }); made.push(bId);
+      if (!(await q915bReuse(a.tile.mid))) throw new Error('setup: the reuse was refused');
+      const L1 = q915bImages()[0];
+      FM.time = L1.start + L1.duration / 2;
+      await FM.splitLayer(L1.id);
+      await FM.duplicateLayer(L1.id);
+      FM.scene.selectedId = L1.id; FM.scene.selectedIds = [L1.id];
+      if (FM.copySelection() !== 1) throw new Error('setup: copying the reused clip copied nothing');
+      await FM.pasteClipboard();
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      const ids = q915bImages().map(function (l) { return l.id; });
+      if (ids.length !== 4) throw new Error('setup: expected the reused clip, its split half, a duplicate and a paste (4 clips), found ' + ids.length);
+      const raw = await q915aRaw();
+      const notPtr = ids.filter(function (id) { return !q915bIsPtr(raw[id], lk); });
+      if (notPtr.length) throw new Error(notPtr.length + ' of the 4 clips (the reuse, its split half, a duplicate, a paste) are stored as ' + notPtr.map(function (id) { return q915bShape(raw[id]); }).join(', ') + ' - a copy of a reused clip must point at the same shared copy');
+      const whole = Object.keys(raw).filter(function (k) { return !keys0.has(k) && raw[k] && raw[k].file && raw[k].file.size === a.file.size; });
+      if (whole.length !== 1) throw new Error('the reuse, a split, a duplicate and a paste wrote ' + whole.length + ' whole copies of the file, not 1 (the shared copy)');
+      made.push(await FM.projects.create({ name: 'FX915B copies away', width: 320, height: 240 }));
+      await FM.projects.open(bId);
+      q915bMustShow(ids, a.rgb, 'after the project was reopened');
+    } finally {
+      FM.clipboard = clip0;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5B a stored file another copy still plays from is not deleted with its project, only once nothing holds it', { item: '915', budgetMs: 45000 }, async function () {
+    /* Liveness is decided by the FILE, never by a layer id alone: a pasted copy (and the clipboard) play from
+       a Blob read out of the original's record, under ids no deleter looks at. Whether WebKit keeps such a
+       Blob readable once its record is deleted has never been measured, so nothing deletes it while held. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib'), clip0 = FM.clipboard;
+    const made = [];
+    let K = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915B held P', '#8ab17d'); made.push(a.pid);
+      K = a.orig;
+      FM.mediaLib.remove(a.tile.mid);   // no tile: nothing in the library keeps the record, only what holds its file
+      const q = await FM.projects.create({ name: 'FX915B held Q', width: 320, height: 240 }); made.push(q);
+      await FM.projects.open(a.pid);    // reopened, so the clip now plays from a Blob read out of its own record
+      FM.scene.selectedId = K; FM.scene.selectedIds = [K];
+      if (FM.copySelection() !== 1) throw new Error('setup: copying the clip copied nothing');
+      await FM.projects.open(q);
+      await FM.pasteClipboard();
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      const pasted = q915bImages()[0];
+      if (!pasted) throw new Error('setup: the paste added nothing');
+      await FM.projects.remove(a.pid); made.splice(made.indexOf(a.pid), 1);
+      if (!(await q915aRaw())[K]) throw new Error('deleting the project deleted the record the clipboard and a pasted copy still play from - decided by the layer id alone, not by who holds the file');
+      await FM.projects.pruneOrphans();
+      if (!(await q915aRaw())[K]) throw new Error('the sweep deleted a record whose file the clipboard and a pasted copy still hold');
+      // nothing holds it any more: now the sweep collects it (the control - holding the file was the reason it stayed)
+      FM.clipboard = [];
+      made.push(await FM.projects.create({ name: 'FX915B held R', width: 320, height: 240 }));   // Q's clips are released
+      await FM.projects.pruneOrphans();
+      const raw = await q915aRaw();
+      if (raw[K]) throw new Error('control: with nothing holding the file the sweep still kept the record, so it may not have run - nothing above was measured');
+      if (!(raw[pasted.id] && raw[pasted.id].file)) throw new Error('the pasted clip has no whole copy of its own (' + q915bShape(raw[pasted.id]) + ')');
+      await FM.projects.open(q);
+      q915bMustShow([pasted.id], a.rgb, 'as the pasted copy, after its source record was collected');
+    } finally {
+      FM.clipboard = clip0;
+      if (K) { try { await q915aDel(K); } catch (e) {} }
+      await q915bFinish(made, orig, wasOpen, [], idx0);
+    }
+  });
+
+  test('915.5B a Replace media that lands while the first reuse is copying ends with the tapped clip, no wrong message and no blank', { item: '915', budgetMs: 45000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [], said = [];
+    const realShare = FM.storage.shareMedia, realToast = FM.toast, realClick = HTMLInputElement.prototype.click;
+    const g = q915bGate();
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915B replace', '#bc4749'); made.push(a.pid);
+      const lk = 'lib:' + a.tile.mid; libs.push(lk);
+      const newer = await q915aPng('replacement', '#6a4c93');
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      if (realShare) FM.storage.shareMedia = async function () { g.entered = true; await g.done; return realShare.apply(this, arguments); };
+      const p = FM.mediaLib.use(a.tile.mid);                      // his tap on the tile…
+      for (let i = 0; i < 50 && !g.entered; i++) await sleep(20);
+      // …and a Replace media on the ORIGINAL clip, through the real route: the picker hands back `newer`
+      HTMLInputElement.prototype.click = function () {
+        if (this.type !== 'file') return realClick.apply(this, arguments);
+        const dt = new DataTransfer(); dt.items.add(newer); this.files = dt.files;
+        this.dispatchEvent(new Event('change'));
+      };
+      FM.replaceMedia(a.orig);
+      HTMLInputElement.prototype.click = realClick;
+      const replaced = function () { const m = FM.media.get(a.orig); return !!(m && m.file && m.file.name === newer.name && !FM.mediaLib.list().some(function (e) { return e.mid === a.tile.mid && e.key === a.orig; })); };
+      for (let i = 0; i < 100 && !replaced(); i++) await sleep(30);
+      if (!replaced()) throw new Error('setup: the Replace media had not landed 3 s after the tap, so it did not race the copy - nothing below would be measured');   // review round 1: this loop used to run out silently
+      await sleep(200);
+      g.release();
+      const ok = await p;
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      const wrong = said.filter(function (m) { return /no longer stored/i.test(m); });
+      if (wrong.length) throw new Error('the tap ended with a wrong message (' + wrong[0] + ') - the file was there, it was being copied');
+      if (ok !== true) throw new Error('the tap added nothing (it answered ' + ok + ')');
+      const added = q915bImages().filter(function (l) { return l.id !== a.orig; });
+      if (added.length !== 1) throw new Error('the tap added ' + added.length + ' clips, not 1');
+      const m = FM.media.get(added[0].id);
+      if (!(m && m.file && m.file.name === a.file.name)) throw new Error('the clip added is ' + (m && m.file ? m.file.name : 'BLANK') + ', not the file on the tile he tapped');
+      const raw = await q915aRaw();
+      if (!q915bIsPtr(raw[added[0].id], lk)) throw new Error('the reused clip is stored as ' + q915bShape(raw[added[0].id]) + ', not as a pointer at its shared copy');
+      if (!(raw[lk] && raw[lk].file && raw[lk].file.name === a.file.name)) throw new Error('the shared copy holds ' + (raw[lk] && raw[lk].file ? raw[lk].file.name : 'nothing') + ' - it must be the file he tapped, not the replacement');
+      if (!(raw[a.orig] && raw[a.orig].file && raw[a.orig].file.name === newer.name)) throw new Error('control: the Replace itself did not land, so nothing raced');
+      made.push(await FM.projects.create({ name: 'FX915B replace away', width: 320, height: 240 }));
+      await FM.projects.open(a.pid);
+      q915bMustShow([added[0].id], a.rgb, 'as the reused clip after a reload');
+      q915bMustShow([a.orig], '#6a4c93', 'as the replaced clip after a reload');
+    } finally {
+      g.release(); FM.storage.shareMedia = realShare; FM.toast = realToast; HTMLInputElement.prototype.click = realClick;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5B tools/rollback.sh warns plainly, before it publishes, when the target is older than v16.80', { item: '915' }, async function () {
+    /* A build before v16.80 reads a pointer as nothing stored and its boot sweep can delete a shared copy once
+       the tile is gone — so a rollback there is the one way phase B's clips can be lost. The script is bash and
+       this suite is a browser, so what is checked is the script's own ORDER: the verdict is computed from the
+       target's version label and printed before the publish question, the push, and any file is touched.
+       (Run for real in bash: v16.79 warns, v16.80 and v16.90 do not.) */
+    const res = await fetch('../tools/rollback.sh?t=' + Date.now(), { cache: 'no-store' });
+    const src = res.ok ? await res.text() : '';
+    if (!/^#!\/bin\/bash/.test(src)) throw new Error('setup: could not read tools/rollback.sh from the server');
+    const at = function (re) { const m = re.exec(src); return m ? m.index : -1; };
+    const reader = at(/READER_V=16\.80\b/);
+    const label = at(/git show "\$HASH:index\.html"/);
+    const warn = at(/echo "[^\n]*WARNING[^\n]*OLDER THAN v\$READER_V/);
+    const check = at(/\[ "\$\{2:-\}" = "--check" \] && exit 0/);
+    const ask = at(/read -r ANS/), touch = at(/git checkout "\$HASH" -- \./), push = at(/git push "\$REMOTE"/);
+    if (reader < 0 || warn < 0) throw new Error('rollback.sh has no warning for a target older than v16.80 - rolling back there blanks every reused clip, and can lose the shared copies for good');
+    if (label < 0 || label > warn) throw new Error('the verdict is not read from the target release own version label');
+    if (!(ask > 0 && warn < ask)) throw new Error('the warning comes AFTER the publish question (or there is no question) - said after the publish it is a post-mortem');
+    if (!(touch > 0 && push > 0 && warn < touch && warn < push)) throw new Error('the warning is not printed before the files are restored and pushed');
+    if (!(check > 0 && check < ask && check < touch)) throw new Error('rollback.sh has no --check that stops before anything is touched, so the verdict cannot be asked for safely');
+  });
+
+  /* ═══ 915.5Br — THE REVIEW OF PHASE B, ROUND 1 ════════════════════════════════════════════════════════
+   * Nine findings, and most of them are the same shape: a guard the writer has that no test would miss if it
+   * were deleted. Each test below pins one of them, and each was proven twice — it fails against main, and it
+   * fails with its own guard taken out of this tree. The rollback.sh verdict itself is RUN in
+   * tools/test-rollback.sh (bash); the test here can only read the script's text. */
+  test('915.5Br a reused clip reopened later still splits, duplicates and pastes as pointers at its one shared copy', { item: '915', budgetMs: 45000 }, async function () {
+    /* The everyday order: reuse a clip, close the app, come back later and split it. The reopened clip's record
+       comes only from hydrate, so hydrate is what must remember it is a pointer — the first test of this did its
+       split in the same session as the reuse, and could not see hydrate forget. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib'), clip0 = FM.clipboard;
+    const made = [], libs = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br reopen A', '#f4a261'); made.push(a.pid);
+      const lk = 'lib:' + a.tile.mid; libs.push(lk);
+      const bId = await FM.projects.create({ name: 'FX915Br reopen B', width: 320, height: 240 }); made.push(bId);
+      if (!(await q915bReuse(a.tile.mid))) throw new Error('setup: the reuse was refused');
+      const L1id = q915bImages()[0].id;
+      made.push(await FM.projects.create({ name: 'FX915Br reopen away', width: 320, height: 240 }));
+      await FM.projects.open(bId);   // closed and reopened: the clip is rebuilt from what is stored
+      const m = FM.media.get(L1id);
+      if (!(m && m.file)) throw new Error('setup: the reused clip did not load when its project was reopened');
+      if (m.ref !== lk) throw new Error('reopened, the reused clip no longer knows it points at its shared copy (ref ' + (m.ref || 'none') + ') - every split, duplicate or paste of it would write the whole file again');
+      const keys0 = new Set(Object.keys(await q915aRaw()));
+      const L1 = FM.layerById(FM.scene, L1id);
+      FM.time = L1.start + L1.duration / 2;
+      await FM.splitLayer(L1id);
+      await FM.duplicateLayer(L1id);
+      FM.scene.selectedId = L1id; FM.scene.selectedIds = [L1id];
+      if (FM.copySelection() !== 1) throw new Error('setup: copying the reopened clip copied nothing');
+      await FM.pasteClipboard();
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      const ids = q915bImages().map(function (l) { return l.id; });
+      if (ids.length !== 4) throw new Error('setup: expected the reopened clip, its split half, a duplicate and a paste (4 clips), found ' + ids.length);
+      const raw = await q915aRaw();
+      const notPtr = ids.filter(function (id) { return !q915bIsPtr(raw[id], lk); });
+      if (notPtr.length) throw new Error(notPtr.length + ' of the 4 clips are stored as ' + notPtr.map(function (id) { return q915bShape(raw[id]); }).join(', ') + ' after the project was reopened - a copy of a reused clip must point at the same shared copy');
+      const whole = Object.keys(raw).filter(function (k) { return !keys0.has(k) && raw[k] && raw[k].file; });
+      if (whole.length) throw new Error('splitting, duplicating and pasting the reopened clip wrote ' + whole.length + ' whole copies of the file - each should be a pointer at the one shared copy');
+      q915bMustShow(ids, a.rgb, 'after a split, a duplicate and a paste of the reopened clip');
+    } finally {
+      FM.clipboard = clip0;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  /* Liveness decided by the FILE, one holder at a time: the first test of this had the clipboard AND a pasted
+     copy holding the file at once, so either check could be deleted and it still passed. */
+  function q915brNoOneElseHolds(K) {
+    const all = (FM.media && FM.media.all && FM.media.all()) || {};
+    return Object.keys(all).filter(function (id) { const r = all[id]; return r && (id === K || r.fileKey === K || r.ref === K); });
+  }
+  test('915.5Br the clipboard alone keeps a stored file: copy, open another project, delete the first, then paste', { item: '915', budgetMs: 45000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib'), clip0 = FM.clipboard;
+    const made = [];
+    let K = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br clip P', '#6d597a'); made.push(a.pid);
+      K = a.orig;
+      FM.mediaLib.remove(a.tile.mid);   // no tile: nothing in the library keeps the record
+      const q = await FM.projects.create({ name: 'FX915Br clip Q', width: 320, height: 240 }); made.push(q);
+      await FM.projects.open(a.pid);    // reopened, so the clip plays from a Blob read out of its own record
+      FM.scene.selectedId = K; FM.scene.selectedIds = [K];
+      if (FM.copySelection() !== 1) throw new Error('setup: copying the clip copied nothing');
+      await FM.projects.open(q);        // P is released: from here ONLY the clipboard holds the file
+      const others = q915brNoOneElseHolds(K);
+      if (others.length) throw new Error('setup: ' + others.length + ' clip(s) in memory still hold the file, so the clipboard is not the only holder');
+      await FM.projects.remove(a.pid); made.splice(made.indexOf(a.pid), 1);
+      if (!(await q915aRaw())[K]) throw new Error('deleting the project deleted the record whose file only the clipboard holds - the paste he makes next could come back blank');
+      await FM.projects.pruneOrphans();
+      if (!(await q915aRaw())[K]) throw new Error('the sweep deleted a record whose file only the clipboard holds');
+      await FM.pasteClipboard();
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      const pasted = q915bImages()[0];
+      if (!pasted) throw new Error('the paste after the project was deleted added nothing');
+      q915bMustShow([pasted.id], a.rgb, 'as the clip pasted after its project was deleted');
+      // the control: nothing holds the file any more, and now the sweep does collect it
+      FM.clipboard = [];
+      made.push(await FM.projects.create({ name: 'FX915Br clip R', width: 320, height: 240 }));
+      await FM.projects.pruneOrphans();
+      if ((await q915aRaw())[K]) throw new Error('control: with nothing holding the file the sweep still kept the record, so it may not have run - nothing above was measured');
+    } finally {
+      FM.clipboard = clip0;
+      if (K) { try { await q915aDel(K); } catch (e) {} }
+      await q915bFinish(made, orig, wasOpen, [], idx0);
+    }
+  });
+
+  test('915.5Br a pasted copy alone keeps the stored file it plays from, with the clipboard empty', { item: '915', budgetMs: 45000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib'), clip0 = FM.clipboard;
+    const made = [];
+    let K = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br paste P', '#b56576'); made.push(a.pid);
+      K = a.orig;
+      FM.mediaLib.remove(a.tile.mid);
+      const q = await FM.projects.create({ name: 'FX915Br paste Q', width: 320, height: 240 }); made.push(q);
+      await FM.projects.open(a.pid);
+      FM.scene.selectedId = K; FM.scene.selectedIds = [K];
+      if (FM.copySelection() !== 1) throw new Error('setup: copying the clip copied nothing');
+      await FM.projects.open(q);
+      await FM.pasteClipboard();
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      const pasted = q915bImages()[0];
+      if (!pasted) throw new Error('setup: the paste added nothing');
+      FM.clipboard = [];                // from here ONLY the pasted copy, playing in Q, holds the file
+      await FM.projects.remove(a.pid); made.splice(made.indexOf(a.pid), 1);
+      if (!(await q915aRaw())[K]) throw new Error('deleting the project deleted the record the pasted copy is still playing from - decided by the layer id alone, not by who holds the file');
+      await FM.projects.pruneOrphans();
+      if (!(await q915aRaw())[K]) throw new Error('the sweep deleted a record the pasted copy is still playing from');
+      // the control: Q released, nothing holds the file, the sweep collects it — and the paste plays from its own copy
+      made.push(await FM.projects.create({ name: 'FX915Br paste R', width: 320, height: 240 }));
+      await FM.projects.pruneOrphans();
+      const raw = await q915aRaw();
+      if (raw[K]) throw new Error('control: with nothing holding the file the sweep still kept the record, so it may not have run - nothing above was measured');
+      if (!(raw[pasted.id] && raw[pasted.id].file)) throw new Error('the pasted clip has no whole copy of its own (' + q915bShape(raw[pasted.id]) + ')');
+      await FM.projects.open(q);
+      q915bMustShow([pasted.id], a.rgb, 'as the pasted copy, after its source record was collected');
+    } finally {
+      FM.clipboard = clip0;
+      if (K) { try { await q915aDel(K); } catch (e) {} }
+      await q915bFinish(made, orig, wasOpen, [], idx0);
+    }
+  });
+
+  test('915.5Br a tile is shared only under its own file: not after Replace then Undo, and not onto another file already at its key', { item: '915', budgetMs: 60000 }, async function () {
+    /* Replace media gives the new file a tile keyed at the clip; Undo puts the OLD file back under that key. Tap
+       the new tile then and its key holds a different file: sharing that would hand out the wrong footage from
+       that tile for good, because this release never deletes a shared copy. Likewise a different file already
+       at lib:<mid> is never pointed at, nor overwritten. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    const realClick = HTMLInputElement.prototype.click;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br undo X', '#457b9d'); made.push(a.pid);
+      libs.push('lib:' + a.tile.mid);
+      const bId = await FM.projects.create({ name: 'FX915Br undo B', width: 320, height: 240 }); made.push(bId);
+      // the control: an ordinary first reuse IS a pointer at its own shared copy — without it the guards below prove nothing
+      if (!(await q915bReuse(a.tile.mid))) throw new Error('setup: the ordinary reuse was refused');
+      const raw0 = await q915aRaw(), r0 = q915bImages()[0];
+      if (!r0 || !q915bIsPtr(raw0[r0.id], 'lib:' + a.tile.mid)) throw new Error('control: an ordinary first reuse is stored as ' + q915bShape(r0 && raw0[r0.id]) + ', not as a pointer at its shared copy - the guards below would prove nothing');
+
+      // 1. Replace media on X with Y, through the real picker route, then Undo
+      await FM.projects.open(a.pid);
+      const y = await q915aPng('undoY', '#e63946');
+      const fpY = [y.name, y.size, y.lastModified].join('|');
+      HTMLInputElement.prototype.click = function () {
+        if (this.type !== 'file') return realClick.apply(this, arguments);
+        const dt = new DataTransfer(); dt.items.add(y); this.files = dt.files;
+        this.dispatchEvent(new Event('change'));
+      };
+      FM.replaceMedia(a.orig);
+      HTMLInputElement.prototype.click = realClick;
+      let tileY = null;
+      for (let i = 0; i < 100 && !tileY; i++) { tileY = FM.mediaLib.list().filter(function (e) { return e.fp === fpY; })[0] || null; if (!tileY) await sleep(30); }
+      if (!tileY) throw new Error('setup: Replace media made no tile for the replacement file');
+      if (tileY.key !== a.orig) throw new Error('setup: the replacement tile is keyed at ' + tileY.key + ', not at the clip it replaced');
+      const lkY = 'lib:' + tileY.mid; libs.push(lkY);
+      await sleep(150);
+      FM.history.undo();
+      for (let i = 0; i < 100; i++) { const m = FM.media.get(a.orig); if (m && m.file && m.file.name === a.file.name) break; await sleep(30); }
+      const mu = FM.media.get(a.orig);
+      if (!(mu && mu.file && mu.file.name === a.file.name)) throw new Error('setup: Undo did not bring the original file back (the clip holds ' + (mu && mu.file ? mu.file.name : 'nothing') + ')');
+      FM.storage.markDirty(); await FM.storage.save();
+      const rawU = await q915aRaw();
+      if (!(rawU[a.orig] && rawU[a.orig].file && rawU[a.orig].file.name === a.file.name)) throw new Error('setup: after Undo the clip record holds ' + (rawU[a.orig] && rawU[a.orig].file ? rawU[a.orig].file.name : 'nothing') + ', not the original');
+      await FM.projects.open(bId);
+      await q915bReuse(tileY.mid);   // his tap on the replacement tile, whose key holds X again
+      const rawY = await q915aRaw();
+      if (rawY[lkY] && !(rawY[lkY].file && rawY[lkY].file.name === y.name)) throw new Error('the replacement tile shared ' + (rawY[lkY].file ? rawY[lkY].file.name : q915bShape(rawY[lkY])) + ' under its own key - that tile would hand out the wrong footage for good');
+      const tY = FM.mediaLib.list().filter(function (e) { return e.mid === tileY.mid; })[0];
+      if (tY && tY.key !== a.orig && !(rawY[tY.key] && rawY[tY.key].file && rawY[tY.key].file.name === y.name)) throw new Error('the replacement tile was re-keyed to ' + tY.key + ', which does not hold its file');
+
+      // 2. a different file already under the tile's shared key: never pointed at, never overwritten
+      const w = await q915bImport('FX915Br samefile W', '#2b9348'); made.push(w.pid);
+      const lkW = 'lib:' + w.tile.mid; libs.push(lkW);
+      const other = await q915aPng('samefileOther', '#ff006e');
+      await q915aPut(lkW, { file: other, kind: 'image' });
+      await FM.projects.open(bId);
+      const had = new Set(q915bImages().map(function (l) { return l.id; }));
+      if (!(await q915bReuse(w.tile.mid))) throw new Error('the tap on a tile whose shared key already holds another file added nothing');
+      const nw = q915bImages().filter(function (l) { return !had.has(l.id); })[0];
+      if (!nw) throw new Error('the tap on a tile whose shared key already holds another file added no clip');
+      const rawW = await q915aRaw();
+      const mW = FM.media.get(nw.id);
+      if (!(mW && mW.file && mW.file.name === w.file.name)) throw new Error('the clip added plays ' + (mW && mW.file ? mW.file.name : 'nothing') + ', not the file on the tile he tapped');
+      if (q915bIsPtr(rawW[nw.id], lkW)) throw new Error('the clip was stored as a pointer at ' + lkW + ', which holds a different file - after a reload it would play the wrong footage');
+      if (!(rawW[lkW] && rawW[lkW].file && rawW[lkW].file.name === other.name)) throw new Error('the file already at the shared key was overwritten - a clip may be playing from it');
+      const tW = FM.mediaLib.list().filter(function (e) { return e.mid === w.tile.mid; })[0];
+      if (!tW || tW.key !== w.orig) throw new Error('the tile was re-keyed to ' + (tW ? tW.key : 'nothing') + ' - a shared copy holding another file');
+      q915bMustShow([nw.id], w.rgb, 'as the clip from a tile whose shared key held another file');
+    } finally {
+      HTMLInputElement.prototype.click = realClick;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br Preparing stays on screen for a first copy that takes longer than a toast lasts', { item: '915', budgetMs: 45000 }, async function () {
+    /* A toast expires after 2.2 s unless told not to. A big video's first copy on his phone takes longer than
+       that, so Preparing is read here at 2.7 s — the first test read it 50 ms in, and an expiring one passed. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    const realShare = FM.storage.shareMedia;
+    const g = q915bGate();
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br long A', '#1d3557'); made.push(a.pid);
+      libs.push('lib:' + a.tile.mid);
+      made.push(await FM.projects.create({ name: 'FX915Br long B', width: 320, height: 240 }));
+      if (realShare) FM.storage.shareMedia = async function () { g.entered = true; await g.done; return realShare.apply(this, arguments); };
+      const p = FM.mediaLib.use(a.tile.mid);
+      for (let i = 0; i < 100 && !g.entered; i++) await sleep(20);
+      if (!g.entered) throw new Error('setup: the first reuse never reached the copy');
+      await sleep(2700);
+      const t = document.getElementById('toast');
+      const showing = (t && !t.classList.contains('hidden')) ? t.textContent : '';
+      g.release();
+      const ok = await p;
+      if (!/^Preparing/.test(showing)) throw new Error('2.7 s into a first copy the screen shows ' + (showing || 'nothing') + ' - a big video copies for longer than that, and Preparing must stay until it is done');
+      if (ok !== true) throw new Error('setup: the reuse answered ' + ok);
+      const t2 = document.getElementById('toast');
+      if (t2 && !t2.classList.contains('hidden') && /^Preparing/.test(t2.textContent)) throw new Error('Preparing is still on screen after the clip was added');
+    } finally {
+      g.release(); FM.storage.shareMedia = realShare;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br two different tiles copying at once: Preparing stays until the last one is done', { item: '915', budgetMs: 45000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    const realShare = FM.storage.shareMedia;
+    const gates = {};
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br pair A', '#bc6c25'); made.push(a.pid);
+      const b = await q915bImport('FX915Br pair B', '#606c38'); made.push(b.pid);
+      libs.push('lib:' + a.tile.mid, 'lib:' + b.tile.mid);
+      made.push(await FM.projects.create({ name: 'FX915Br pair T', width: 320, height: 240 }));
+      gates[a.tile.mid] = q915bGate(); gates[b.tile.mid] = q915bGate();
+      if (realShare) FM.storage.shareMedia = async function (mid) { const g = gates[mid]; if (g) { g.entered = true; await g.done; } return realShare.apply(this, arguments); };
+      const pa = FM.mediaLib.use(a.tile.mid);
+      for (let i = 0; i < 100 && !gates[a.tile.mid].entered; i++) await sleep(20);
+      const pb = FM.mediaLib.use(b.tile.mid);   // he reopens Add, taps a second first-time tile
+      for (let i = 0; i < 100 && !gates[b.tile.mid].entered; i++) await sleep(20);
+      if (!gates[a.tile.mid].entered || !gates[b.tile.mid].entered) throw new Error('setup: the two first reuses did not both reach their copy');
+      gates[a.tile.mid].release();
+      const okA = await pa;
+      await sleep(50);
+      const t = document.getElementById('toast');
+      const showing = (t && !t.classList.contains('hidden')) ? t.textContent : '';
+      gates[b.tile.mid].release();
+      const okB = await pb;
+      if (okA !== true || okB !== true) throw new Error('setup: the reuses answered ' + okA + ' and ' + okB);
+      if (!/^Preparing/.test(showing)) throw new Error('the first tile finished while the second was still copying, and the screen went to ' + (showing || 'nothing') + ' - Preparing must stay until the last copy is done');
+      const t2 = document.getElementById('toast');
+      if (t2 && !t2.classList.contains('hidden') && /^Preparing/.test(t2.textContent)) throw new Error('Preparing is still on screen after both clips were added');
+      if (q915bImages().length !== 2) throw new Error('two taps on two tiles added ' + q915bImages().length + ' clips, not 2');
+    } finally {
+      Object.keys(gates).forEach(function (k) { gates[k].release(); });
+      FM.storage.shareMedia = realShare;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br the project is captured at the tap: switching while the tile is still being read gives up with a toast', { item: '915', budgetMs: 45000 }, async function () {
+    /* The first test held the copy and the decode, which both come AFTER the tile's record is read — so taking the
+       project after that first read passed it too. This holds the read itself. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [], said = [];
+    const realRead = FM.storage.readMedia, realToast = FM.toast;
+    const g = q915bGate();
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br read A', '#4a4e69'); made.push(a.pid);
+      libs.push('lib:' + a.tile.mid);
+      const bId = await FM.projects.create({ name: 'FX915Br read B', width: 320, height: 240 }); made.push(bId);
+      const cId = await FM.projects.create({ name: 'FX915Br read C', width: 320, height: 240 }); made.push(cId);
+      await FM.projects.open(bId);
+      const imagesIn = function (pid) { return ((JSON.parse(localStorage.getItem('fm.proj.' + pid) || '{}').layers) || []).filter(function (l) { return l.type === 'image'; }).length; };
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      let held = false;
+      FM.storage.readMedia = async function (key) { if (!held && key === a.tile.key) { held = true; g.entered = true; await g.done; } return realRead.apply(this, arguments); };
+      const p = FM.mediaLib.use(a.tile.mid);                   // he taps the tile in B…
+      for (let i = 0; i < 100 && !g.entered; i++) await sleep(20);
+      if (!g.entered) throw new Error('setup: the tap never read the tile record');
+      await FM.projects.open(cId);                             // …and opens C while its record is still being read
+      g.release();
+      const ok = await p;
+      FM.storage.readMedia = realRead;
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      if (q915bImages().length || imagesIn(cId)) throw new Error('the clip he tapped in project B landed in project C, which he opened while the tile was still being read');
+      if (imagesIn(bId)) throw new Error('the clip was added to project B behind his back while he was in C');
+      if (ok !== false) throw new Error('the reuse answered ' + ok + ' although nothing was added');
+      if (!said.some(function (m) { return /not added/i.test(m); })) throw new Error('nothing told him the clip was not added (toasts: ' + (said.join(' | ') || 'none') + ')');
+    } finally {
+      g.release(); FM.storage.readMedia = realRead; FM.toast = realToast;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br a tile with no fingerprint (the kind backfill made) is reused as a pointer and stays one tile', { item: '915', budgetMs: 45000 }, async function () {
+    /* Backfill wrote the tiles for everything imported before the library existed, with fp ''. There is no
+       fingerprint for the add that follows a reuse to match, so it must find the tile by its shared key. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br backfill A', '#9a8c98'); made.push(a.pid);
+      const lk = 'lib:' + a.tile.mid; libs.push(lk);
+      const list = FM.mediaLib.list(); list.forEach(function (e) { if (e.mid === a.tile.mid) e.fp = ''; });
+      localStorage.setItem('fm.medialib', JSON.stringify(list));
+      made.push(await FM.projects.create({ name: 'FX915Br backfill B', width: 320, height: 240 }));
+      if (!(await q915bReuse(a.tile.mid))) throw new Error('the reuse of a tile with no fingerprint was refused');
+      const L = q915bImages()[0];
+      if (!L) throw new Error('the reuse of a tile with no fingerprint added no clip');
+      const raw = await q915aRaw();
+      if (!q915bIsPtr(raw[L.id], lk)) throw new Error('the clip from a tile with no fingerprint is stored as ' + q915bShape(raw[L.id]) + ', not as a pointer at ' + lk);
+      const naming = FM.mediaLib.list().filter(function (e) { return e.key === lk || e.fp === a.tile.fp; });
+      if (naming.length !== 1) throw new Error('reusing a tile with no fingerprint left ' + naming.length + ' tiles for the same file (' + naming.map(function (e) { return e.key; }).join(', ') + '), not 1');
+      if (naming[0].mid !== a.tile.mid) throw new Error('the tile left is a new one, not the tile he tapped');
+      q915bMustShow([L.id], a.rgb, 'as the clip from a tile with no fingerprint');
+    } finally {
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br tools/rollback.sh says an older build deletes shared copies at its first launch, and asks for the version typed back', { item: '915' }, async function () {
+    /* The first warning named removing or clearing a tile as the way to lose a shared copy, which reads as "so
+       leave the tiles alone" — but an older build's boot sweep deletes, at its FIRST launch, every shared copy
+       whose tile is already gone, and the 300-tile cap removes tiles with nothing done by him. The wording is
+       checked here; what the script DOES (the verdicts, -y refused, y refused, the typed version accepted) is
+       run for real in tools/test-rollback.sh, which ship.sh runs whenever this script changes. */
+    const res = await fetch('../tools/rollback.sh?t=' + Date.now(), { cache: 'no-store' });
+    const src = res.ok ? await res.text() : '';
+    if (!/^#!\/bin\/bash/.test(src)) throw new Error('setup: could not read tools/rollback.sh from the server');
+    const at = function (re) { const m = re.exec(src); return m ? m.index : -1; };
+    const warn = at(/echo "[^\n]*WARNING[^\n]*OLDER THAN v\$READER_V/);
+    const first = at(/echo "[^\n]*FIRST TIME IT OPENS[^\n]*"/);
+    const gone = at(/echo "[^\n]*already gone[^\n]*"/), pushedOff = at(/echo "[^\n]*pushed off the end of the list[^\n]*"/);
+    const tpl = at(/echo "[^\n]*updating a template or element there drops them[^\n]*"/);
+    const notSafe = at(/echo "[^\n]*Leaving the tiles alone does NOT make it safe[^\n]*"/);
+    const typed = at(/type %s and press enter[^\n]*' "\$WANT"/), cmp = at(/\[ "\$ANS" = "\$WANT" \]/);
+    const noScript = at(/never published from a script/);
+    const touch = at(/git checkout "\$HASH" -- \./), push = at(/git push "\$REMOTE"/);
+    if (warn < 0) throw new Error('rollback.sh has no warning for a release older than v16.80');
+    if (first < 0 || gone < 0 || pushedOff < 0) throw new Error('the warning does not say an older build deletes, the first time it opens, every shared copy whose tile is already gone (removed, cleared or pushed off the list)');
+    if (/removing or clearing that clip.s Media tile while on it/.test(src)) throw new Error('the warning still names removing or clearing the tile as the way to lose the shared copy - that reads as if leaving the tiles alone were safe');
+    if (notSafe < 0) throw new Error('the warning does not say that leaving the tiles alone does not make an older build safe');
+    if (tpl < 0) throw new Error('the warning does not say that updating a template or element on an older build drops the reused clips from it');
+    if (!(warn < first && first < touch)) throw new Error('the first-launch warning is not printed before any file is restored');
+    if (typed < 0 || cmp < 0) throw new Error('rollback.sh does not ask for the version to be typed back before publishing a release older than v16.80');
+    if (noScript < 0) throw new Error('rollback.sh lets -y publish a release older than v16.80 from a script');
+    if (!(typed < touch && typed < push && noScript < touch)) throw new Error('the typed-back question comes after the files are restored or pushed');
+  });
+
+  /* ═══ 915.5Br — THE REVIEW OF PHASE B, ROUND 2 ════════════════════════════════════════════════════════
+   * Eight findings. Four are guards no test would miss if deleted (the file a first reuse plays from, a split or
+   * duplicate as the only holder, a pointer whose shared copy is gone, this tab's project versus the shared key);
+   * four are code: a clip from an element or template now names its pack record as the file it holds; a tile whose
+   * stored file was put back to another file says so instead of adding that file; the tile Replace media makes
+   * is never tied to the old file; a tap in another project while the first copy runs is no longer dropped. */
+  async function q915brPng(tag, rgb, w, h) {   // like q915aPng, at another size — so its FILE size differs too
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const g = c.getContext('2d'); g.fillStyle = rgb; g.fillRect(0, 0, w, h); g.fillStyle = '#fff'; g.fillRect(3, 3, 7, 5);
+    const blob = await new Promise(function (r) { c.toBlob(r, 'image/png'); });
+    return new File([blob], 'q915br-' + tag + '-' + Date.now() + '.png', { type: 'image/png', lastModified: Date.now() });
+  }
+  async function q915brReplace(id, file) {   // Replace media through the real route: the picker hands back `file`; resolves with its new tile
+    const realClick = HTMLInputElement.prototype.click;
+    const fp = [file.name, file.size, file.lastModified].join('|');
+    HTMLInputElement.prototype.click = function () {
+      if (this.type !== 'file') return realClick.apply(this, arguments);
+      const dt = new DataTransfer(); dt.items.add(file); this.files = dt.files;
+      this.dispatchEvent(new Event('change'));
+    };
+    try { FM.replaceMedia(id); } finally { HTMLInputElement.prototype.click = realClick; }
+    let tile = null;
+    for (let i = 0; i < 100 && !tile; i++) { tile = FM.mediaLib.list().filter(function (e) { return e.fp === fp; })[0] || null; if (!tile) await sleep(30); }
+    if (!tile) throw new Error('setup: Replace media made no tile for the replacement file');
+    return tile;
+  }
+
+  test('915.5Br a first reuse plays from the file read back out of its shared copy, never from his original clip record', { item: '915', budgetMs: 45000 }, async function () {
+    /* The new clip's fileKey names lib:<mid>, the one record that is never deleted, so that is all heldByAnother
+       protects. Had it played from the Blob read out of his ORIGINAL clip's record, nothing would stop that
+       record being deleted under it. Chrome keeps such a Blob readable, so no render can tell the two apart -
+       identity can: loadImageFile hands the same File straight through.
+       Review round 3: comparing the clip with shareMedia's own ANSWER alone let shareMedia hand back the File it
+       was GIVEN (read out of his original's record at the tap) and still pass - both sides were the same wrong
+       File. So the input is kept too, and the clip must not be playing from it. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    const realShare = FM.storage.shareMedia;
+    let shared = null, input = null, calls = 0;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br ownfile A', '#3d405b'); made.push(a.pid);
+      const lk = 'lib:' + a.tile.mid; libs.push(lk);
+      made.push(await FM.projects.create({ name: 'FX915Br ownfile B', width: 320, height: 240 }));
+      if (realShare) FM.storage.shareMedia = async function (mid, rec) { calls++; input = rec; const r = await realShare.apply(this, arguments); shared = r; return r; };
+      const ok = await q915bReuse(a.tile.mid);
+      FM.storage.shareMedia = realShare;
+      const L = q915bImages()[0];
+      if (!ok || !L) throw new Error('setup: the reuse added no clip');
+      if (!(input && input.file)) throw new Error('setup: shareMedia was given no file to share (' + q915bShape(input) + ')');
+      if (!(shared && shared.file && shared.key === lk)) throw new Error('the first reuse wrote no shared copy (shareMedia was called ' + calls + ' time(s) and answered ' + q915bShape(shared) + ')');
+      const m = FM.media.get(L.id);
+      if (!(m && m.file)) throw new Error('the reused clip has nothing loaded');
+      if (m.fileKey !== lk) throw new Error('the reused clip says its bytes came out of ' + (m.fileKey || 'nothing') + ', not its shared copy ' + lk);
+      if (m.file !== shared.file) throw new Error('the reused clip plays from a File read out of another record (his original clip), not the one read back out of its shared copy - its fileKey names ' + lk + ', so nothing would stop the record it really plays from being deleted under it');
+      if (m.file === input.file) throw new Error('the reused clip plays from the very File shareMedia was given - read out of his ORIGINAL clip record at the tap - not one read back out of its shared copy ' + lk + ': its fileKey names ' + lk + ', so nothing stops that original record being deleted under it');
+      q915bMustShow([L.id], a.rgb, 'as the first reuse');
+    } finally {
+      FM.storage.shareMedia = realShare;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br a split half alone, and a duplicate alone, keep the stored file they play from', { item: '915', budgetMs: 90000 }, async function () {
+    /* Rule 5 names split and duplicated copies as holders of a file, but the holder tests only ever had the clipboard
+       or a paste as the holder - so a split or duplicate that stopped carrying fileKey passed them all. Here the ONLY
+       holder is a copy made by split (then by duplicate), carried into another project by copy and paste: the paste
+       can carry only what the split or duplicate gave it. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib'), clip0 = FM.clipboard;
+    const made = [], keys = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const round = async function (how, rgb) {
+        const a = await q915bImport('FX915Br ' + how + ' P', rgb); made.push(a.pid);
+        const K = a.orig; keys.push(K);
+        FM.mediaLib.remove(a.tile.mid);   // no tile: nothing in the library keeps the record
+        const q = await FM.projects.create({ name: 'FX915Br ' + how + ' Q', width: 320, height: 240 }); made.push(q);
+        await FM.projects.open(a.pid);    // reopened, so the clip plays from a Blob read out of its own record
+        const before = new Set(q915bImages().map(function (l) { return l.id; }));
+        const L = FM.layerById(FM.scene, K);
+        if (!L) throw new Error('setup (' + how + '): the clip is not in its reopened project');
+        if (how === 'split') { FM.time = L.start + L.duration / 2; await FM.splitLayer(K); } else await FM.duplicateLayer(K);
+        const made1 = q915bImages().filter(function (l) { return !before.has(l.id); })[0];
+        if (!made1) throw new Error('setup (' + how + '): it made no new clip');
+        FM.scene.selectedId = made1.id; FM.scene.selectedIds = [made1.id];
+        if (FM.copySelection() !== 1) throw new Error('setup (' + how + '): copying the new clip copied nothing');
+        await FM.projects.open(q);        // P is released
+        await FM.pasteClipboard();
+        await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+        const pasted = q915bImages()[0];
+        if (!pasted) throw new Error('setup (' + how + '): the paste added nothing');
+        FM.clipboard = [];                // from here ONLY the pasted copy of the new clip, playing in Q, holds the file
+        await FM.projects.remove(a.pid); made.splice(made.indexOf(a.pid), 1);
+        if (!(await q915aRaw())[K]) throw new Error('(' + how + ') deleting the project deleted the record a copy of its ' + how + ' still plays from - the ' + how + ' did not carry which record its file came out of');
+        await FM.projects.pruneOrphans();
+        if (!(await q915aRaw())[K]) throw new Error('(' + how + ') the sweep deleted the record a copy of its ' + how + ' still plays from');
+        // the control: Q released, nothing holds the file, and now the sweep does collect it
+        made.push(await FM.projects.create({ name: 'FX915Br ' + how + ' R', width: 320, height: 240 }));
+        await FM.projects.pruneOrphans();
+        if ((await q915aRaw())[K]) throw new Error('control (' + how + '): with nothing holding the file the sweep still kept the record, so it may not have run - nothing above was measured');
+        await FM.projects.open(q);
+        q915bMustShow([pasted.id], a.rgb, 'as the pasted ' + how + ', after its source record was collected');
+      };
+      await round('split', '#81b29a');
+      await round('duplicate', '#f2cc8f');
+    } finally {
+      FM.clipboard = clip0;
+      for (const K of keys) { try { await q915aDel(K); } catch (e) {} }
+      await q915bFinish(made, orig, wasOpen, [], idx0);
+    }
+  });
+
+  test('915.5Br a pointer whose shared copy is gone is never saved as a pointer again, and Home never frees it', { item: '915', budgetMs: 45000 }, async function () {
+    /* No build deletes a shared copy yet, so nothing he can do reaches this - which is exactly why only a test would
+       notice these guards going missing before the step that collects shared copies lands:
+        · save writes a pointer only if its shared copy is there, otherwise the whole file (a pointer at nothing
+          reopens as a blank clip, and the file is in memory to write);
+        · Home frees a clip only if storage can give it back - for a pointer, only if its shared copy is there. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br dangling A', '#e07a5f'); made.push(a.pid);
+      const lk = 'lib:' + a.tile.mid; libs.push(lk);
+      made.push(await FM.projects.create({ name: 'FX915Br dangling B', width: 320, height: 240 }));
+      if (!(await q915bReuse(a.tile.mid))) throw new Error('setup: the reuse was refused');
+      const N = q915bImages()[0];
+      const raw0 = await q915aRaw();
+      if (!(N && q915bIsPtr(raw0[N.id], lk))) throw new Error('control: the reused clip is stored as ' + q915bShape(N && raw0[N.id]) + ', not as a pointer at its shared copy - nothing below would be measured');
+      // an ordinary clip beside it: the control that Home's release really runs and frees what storage can give back
+      FM.addMediaLayer(await FM.loadImageFile(await q915aPng('danglingctl', '#3d5a80')));
+      await sleep(60); FM.storage.markDirty(); await FM.storage.save();
+      const ctl = q915bImages().filter(function (l) { return l.id !== N.id; })[0];
+      if (!(ctl && (await q915aRaw())[ctl.id])) throw new Error('setup: the control clip was not stored');
+      await q915aDel(lk);   // the shared copy goes - raw, because no build does this yet
+      // 1. a split of the reused clip carries its pointer; with nothing to point at, the save writes the whole file
+      const before = new Set(q915bImages().map(function (l) { return l.id; }));
+      const NL = FM.layerById(FM.scene, N.id);
+      FM.time = NL.start + NL.duration / 2;
+      await FM.splitLayer(N.id);
+      const H = q915bImages().filter(function (l) { return !before.has(l.id); })[0];
+      if (!H) throw new Error('setup: the split made no new clip');
+      const mh = FM.media.get(H.id);
+      if (!(mh && mh.ref === lk)) throw new Error('setup: the split half does not carry the pointer (ref ' + ((mh && mh.ref) || 'none') + '), so the save below is never asked to write one');
+      await sleep(60); FM.storage.markDirty(); await FM.storage.save();
+      const raw1 = await q915aRaw();
+      if (!q915bIsWhole(raw1[H.id], a.file)) throw new Error('with its shared copy gone the split half was saved as ' + q915bShape(raw1[H.id]) + ', not as the whole file - a pointer at nothing reopens BLANK, and the file was in memory to write');
+      // 2. Home: storage cannot give the reused clip back, so it is not freed
+      const freed = await q385AsIfHome(function () { return FM.storage.releaseSceneMedia(); });
+      const stillN = FM.media.get(N.id), ctlFreed = !FM.media.get(ctl.id);
+      try { await FM.storage.hydrateSceneMedia({ onlyMissing: true }); } catch (e) {}
+      if (!freed || !ctlFreed) throw new Error('control: Home released ' + freed + ' clip(s) and ' + (ctlFreed ? 'did' : 'did NOT') + ' free the ordinary one it can give back - nothing below was measured');
+      if (!(stillN && stillN.file)) throw new Error('Home freed the reused clip although its shared copy is gone - storage cannot give it back, so it would come back BLANK');
+    } finally {
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br the project captured at the tap is this tab own: another tab opening a project neither drops the clip nor moves it', { item: '915', budgetMs: 45000 }, async function () {
+    /* fm.currentProject is shared by every tab on this device; the project THIS tab has open is not. Taking the
+       shared key would make a second tab opening another project throw away the clip he just tapped here - and the
+       project switch tests could not tell, because in one tab the two always agree. Both halves: another tab moving
+       the key changes nothing; this tab moving does give up. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [], said = [];
+    const realRead = FM.storage.readMedia, realToast = FM.toast;
+    let restoreKey = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br tab A', '#5f0f40'); made.push(a.pid);
+      libs.push('lib:' + a.tile.mid);
+      const bId = await FM.projects.create({ name: 'FX915Br tab B', width: 320, height: 240 }); made.push(bId);
+      const cId = await FM.projects.create({ name: 'FX915Br tab C', width: 320, height: 240 }); made.push(cId);
+      const imagesIn = function (pid) { return ((JSON.parse(localStorage.getItem('fm.proj.' + pid) || '{}').layers) || []).filter(function (l) { return l.type === 'image'; }).length; };
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      const tap = async function (label, during) {
+        await FM.projects.open(bId);
+        const k = (FM.mediaLib.list().filter(function (e) { return e.mid === a.tile.mid; })[0] || {}).key;
+        const g = q915bGate(); let held = false;
+        FM.storage.readMedia = async function (key) { if (!held && key === k) { held = true; g.entered = true; await g.done; } return realRead.apply(this, arguments); };
+        said.length = 0;
+        const p = FM.mediaLib.use(a.tile.mid);                 // he taps the tile in B…
+        for (let i = 0; i < 100 && !g.entered; i++) await sleep(20);
+        if (!g.entered) throw new Error('setup (' + label + '): the tap never read the tile record');
+        await during();                                        // …and a project is opened meanwhile
+        g.release();
+        const ok = await p;
+        FM.storage.readMedia = realRead;
+        if (restoreKey) { localStorage.setItem('fm.currentProject', restoreKey); restoreKey = null; }
+        await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+        return ok;
+      };
+      // 1. ANOTHER TAB opens C: only the shared key moves; this tab is still in B, where he tapped
+      const ok1 = await tap('another tab', async function () { restoreKey = localStorage.getItem('fm.currentProject'); localStorage.setItem('fm.currentProject', cId); });
+      if (said.some(function (m) { return /not added/i.test(m); })) throw new Error('another tab opening a project made this tab say the clip was not added - he never left project B');
+      if (ok1 !== true || imagesIn(bId) !== 1) throw new Error('another tab opening a project dropped the clip he tapped in this tab (it answered ' + ok1 + ', project B holds ' + imagesIn(bId) + ' photo clips)');
+      if (imagesIn(cId)) throw new Error('the clip landed in the project another tab opened, not in the one he tapped in');
+      // 2. THIS TAB opens C: it gives up and says so, and nothing lands anywhere
+      const ok2 = await tap('this tab', function () { return FM.projects.open(cId); });
+      if (q915bImages().length || imagesIn(cId)) throw new Error('the clip he tapped in project B landed in project C, which this tab opened while the tile was being read');
+      if (imagesIn(bId) !== 1) throw new Error('the clip was added to project B behind his back while he was in C');
+      if (ok2 !== false) throw new Error('the reuse answered ' + ok2 + ' although nothing was added');
+      if (!said.some(function (m) { return /not added/i.test(m); })) throw new Error('nothing told him the clip was not added (toasts: ' + (said.join(' | ') || 'none') + ')');
+    } finally {
+      if (restoreKey) { try { localStorage.setItem('fm.currentProject', restoreKey); } catch (e) {} }
+      FM.storage.readMedia = realRead; FM.toast = realToast;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br a clip dropped in from an element or a template keeps that pack stored file while it is on screen', { item: '915', budgetMs: 90000 }, async function () {
+    /* Inserting an element or a template plays the new clip from a Blob read out of the pack record (elem:<id> /
+       tpl:<id>), and nothing said so - so deleting that element from the Add menu, with its clip on screen,
+       deleted the record under it. Now the delete leaves the record for the sweep, which collects it once nothing
+       holds it any more (the control at the end). */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], tpls = [], elems = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br pack src', '#6d6875'); made.push(a.pid);
+      FM.mediaLib.remove(a.tile.mid);
+      const L = FM.layerById(FM.scene, a.orig);
+      const e0 = new Set(FM.elements.list().map(function (e) { return e.id; }));
+      if (!(await FM.elements.save('FX915Br elem', [L]))) throw new Error('setup: the element was not saved');
+      const eid = (FM.elements.list().filter(function (e) { return !e0.has(e.id); })[0] || {}).id; elems.push(eid);
+      const t0 = new Set(FM.templates.list().map(function (t) { return t.id; }));
+      if (!(await FM.templates.save('FX915Br tpl 1', a.pid))) throw new Error('setup: the first template was not saved');
+      const tid = (FM.templates.list().filter(function (t) { return !t0.has(t.id); })[0] || {}).id; tpls.push(tid);
+      const t1 = new Set(FM.templates.list().map(function (t) { return t.id; }));
+      if (!(await FM.templates.save('FX915Br tpl 2', a.pid))) throw new Error('setup: the second template was not saved');
+      const tid2 = (FM.templates.list().filter(function (t) { return !t1.has(t.id); })[0] || {}).id; tpls.push(tid2);
+      if (!eid || !tid || !tid2) throw new Error('setup: the element or a template has no card');
+      const q = await FM.projects.create({ name: 'FX915Br pack Q', width: 320, height: 240 }); made.push(q);
+      // 1. an element and a template dropped INTO Q, then both deleted with their clips on screen
+      if (!(await FM.elements.insert(eid))) throw new Error('setup: inserting the element failed');
+      if (!(await FM.templates.insertInto(tid))) throw new Error('setup: inserting the template failed');
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      const inQ = q915bImages().map(function (l) { return l.id; });
+      if (inQ.length !== 2) throw new Error('setup: inserting an element and a template gave ' + inQ.length + ' photo clips, not 2');
+      await FM.elements.remove(eid);
+      await FM.templates.remove(tid);
+      if (FM.elements.list().some(function (e) { return e.id === eid; }) || FM.templates.list().some(function (t) { return t.id === tid; })) throw new Error('setup: deleting them did not remove their cards');
+      const raw1 = await q915aRaw();
+      if (!raw1['elem:' + eid]) throw new Error('deleting the element deleted its stored record while the clip dropped in from it is still on screen, playing from a file read out of it');
+      if (!raw1['tpl:' + tid]) throw new Error('deleting the template deleted its stored record while the clip put in from it is still on screen, playing from a file read out of it');
+      q915bMustShow(inQ, a.rgb, 'after the element and the template they came from were deleted');
+      // 2. a new project started from a template (the route editing a template shares), then that template deleted
+      const u = await FM.templates.useAsNew(tid2);
+      if (u) made.push(u);
+      const inU = q915bImages().map(function (l) { return l.id; });
+      if (!u || inU.length !== 1) throw new Error('setup: starting a project from the template gave ' + inU.length + ' photo clips');
+      await FM.templates.remove(tid2);
+      if (!(await q915aRaw())['tpl:' + tid2]) throw new Error('deleting the template deleted its stored record while the project just started from it still plays from a file read out of it');
+      // the control: nothing holds them any more, and the sweep collects all three
+      made.push(await FM.projects.create({ name: 'FX915Br pack R', width: 320, height: 240 }));
+      await FM.projects.pruneOrphans();
+      const raw2 = await q915aRaw();
+      const left = ['elem:' + eid, 'tpl:' + tid, 'tpl:' + tid2].filter(function (k) { return raw2[k]; });
+      if (left.length) throw new Error('control: with nothing holding them the sweep still kept ' + left.join(', ') + ' - a deleted pack left for the sweep must be collected by it');
+    } finally {
+      try { if (idx0 == null) localStorage.removeItem('fm.medialib'); else localStorage.setItem('fm.medialib', idx0); } catch (e) {}
+      await q915aCleanup(made, orig, wasOpen, tpls, elems, []);
+    }
+  });
+
+  test('915.5Br a tile whose stored file was put back to another file says so and adds nothing, never that file footage', { item: '915', budgetMs: 60000 }, async function () {
+    /* Replace media gives the new file (Y) a tile keyed at the clip; Undo writes the old file (X) back over that key,
+       and Y is stored nowhere. Tapping Y's tile used to add X's footage under Y's name, on every tap, without a word. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [], said = [];
+    const realToast = FM.toast;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br putback X', '#0081a7'); made.push(a.pid);
+      libs.push('lib:' + a.tile.mid);
+      const bId = await FM.projects.create({ name: 'FX915Br putback B', width: 320, height: 240 }); made.push(bId);
+      await FM.projects.open(a.pid);
+      const y = await q915brPng('putbackY', '#f07167', 48, 36);
+      if (y.size === a.file.size) throw new Error('setup: the two photos are the same size, so this is not a tile whose file is gone');
+      const tileY = await q915brReplace(a.orig, y);
+      if (tileY.key !== a.orig) throw new Error('setup: the replacement tile is keyed at ' + tileY.key + ', not at the clip it replaced');
+      libs.push('lib:' + tileY.mid);
+      await sleep(150);
+      FM.history.undo();
+      for (let i = 0; i < 100; i++) { const m = FM.media.get(a.orig); if (m && m.file && m.file.name === a.file.name) break; await sleep(30); }
+      FM.storage.markDirty(); await FM.storage.save();
+      const rawU = await q915aRaw();
+      if (!(rawU[a.orig] && rawU[a.orig].file && rawU[a.orig].file.name === a.file.name)) throw new Error('setup: after Undo the clip record holds ' + (rawU[a.orig] && rawU[a.orig].file ? rawU[a.orig].file.name : 'nothing') + ', not the original');
+      await FM.projects.open(bId);
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      const ok = await FM.mediaLib.use(tileY.mid);   // his tap on the replacement tile, whose key holds X again
+      FM.toast = realToast;
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      const added = q915bImages();
+      if (added.length) { const m = FM.media.get(added[0].id); throw new Error('the tap on the tile for ' + y.name + ' added a clip playing ' + (m && m.file ? m.file.name : 'nothing') + ' - that is the file Undo put back under its key, not the one on the tile he tapped'); }
+      if (ok !== false) throw new Error('the tap answered ' + ok + ' although nothing was added');
+      if (!said.some(function (m) { return /no longer stored/i.test(m); })) throw new Error('nothing told him the file is no longer stored (toasts: ' + (said.join(' | ') || 'none') + ')');
+      if (FM.mediaLib.list().some(function (e) { return e.mid === tileY.mid; })) throw new Error('the tile is still in Add - Media, offering a file that is stored nowhere');
+      if ((await q915aRaw())['lib:' + tileY.mid]) throw new Error('the tap shared the other file under the tile own key');
+      // the control: his clip itself is untouched, and still plays X
+      await FM.projects.open(a.pid);
+      q915bMustShow([a.orig], a.rgb, 'as his own clip after Undo');
+    } finally {
+      FM.toast = realToast;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br the tile Replace media makes is never tied to the old file, even when tapped before the replacement is saved - and that tap still shares the new file', { item: '915', budgetMs: 60000 }, async function () {
+    /* Replace keys its new tile at the clip it replaced and does not wait for its save, so until that save lands the
+       clip's record on disk is still the OLD file - for a reused clip, a pointer at the old tile's shared copy.
+       Tapping the new tile then re-keyed it to that shared copy for good: every later tap added the old footage.
+       The write is held here by dropping it, which is what a save that has not landed yet looks like on disk. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    const realPut = IDBObjectStore.prototype.put;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br early OLD', '#2a6f97'); made.push(a.pid);
+      const lk = 'lib:' + a.tile.mid; libs.push(lk);
+      const bId = await FM.projects.create({ name: 'FX915Br early B', width: 320, height: 240 }); made.push(bId);
+      if (!(await q915bReuse(a.tile.mid))) throw new Error('setup: the reuse was refused');
+      const N = q915bImages()[0];
+      if (!(N && q915bIsPtr((await q915aRaw())[N.id], lk))) throw new Error('control: the reused clip is not stored as a pointer at ' + lk + ' - nothing below would be measured');
+      const nw = await q915brPng('earlyNEW', '#ffb703', 48, 36);
+      let dropped = 0;
+      IDBObjectStore.prototype.put = function (v, k) { if (k === N.id && v && v.file) { dropped++; return undefined; } return realPut.apply(this, arguments); };
+      const M2 = await q915brReplace(N.id, nw);
+      libs.push('lib:' + M2.mid);
+      if (M2.key !== N.id) throw new Error('setup: the new tile is keyed at ' + M2.key + ', not at the clip it replaced');
+      await sleep(150);
+      if (!q915bIsPtr((await q915aRaw())[N.id], lk)) throw new Error('setup: the replacement was saved although its write was held - nothing below is the early tap');
+      const had = new Set(q915bImages().map(function (l) { return l.id; }));
+      const ok1 = await FM.mediaLib.use(M2.mid);   // his tap on the new tile, before the replacement is saved
+      await sleep(60);
+      const c1 = q915bImages().filter(function (l) { return !had.has(l.id); })[0];
+      const m1 = c1 && FM.media.get(c1.id);
+      if (!ok1 || !(m1 && m1.file)) throw new Error('the tap on the new tile added nothing (it answered ' + ok1 + ')');
+      if (m1.file.name !== nw.name) throw new Error('tapped before the replacement was saved, the tile for ' + nw.name + ' added ' + m1.file.name + ' - the OLD file');
+      const t1 = FM.mediaLib.list().filter(function (e) { return e.mid === M2.mid; })[0];
+      if (t1 && t1.key === lk) throw new Error('the new tile was re-keyed to the OLD file shared copy (' + lk + ') - every tap on it from now on adds the old footage');
+      // review round 3: …and the early tap SHARED the new file - a whole second copy per tap is what clause 5 removes
+      if (!t1 || t1.key !== 'lib:' + M2.mid) throw new Error('tapped before the replacement was saved, the new tile is keyed at ' + (t1 ? t1.key : 'nothing') + ', not at its own shared copy lib:' + M2.mid + ' - the tap stored a whole second copy of the file instead of sharing it');
+      // the replacement's save lands
+      IDBObjectStore.prototype.put = realPut;
+      FM.storage.markDirty(); await FM.storage.save();
+      const rawS = await q915aRaw();
+      if (!(rawS[N.id] && rawS[N.id].file && rawS[N.id].file.name === nw.name)) throw new Error('setup: the replacement was not saved once its write was let through (' + q915bShape(rawS[N.id]) + ', ' + dropped + ' write(s) held)');
+      if (!q915bIsPtr(rawS[c1.id], 'lib:' + M2.mid)) throw new Error('the clip from the early tap is stored as ' + q915bShape(rawS[c1.id]) + ', not as a pointer at the new tile shared copy lib:' + M2.mid + ' - a whole second copy of the file');
+      const had2 = new Set(q915bImages().map(function (l) { return l.id; }));
+      if (!(await q915bReuse(M2.mid))) throw new Error('the tap on the new tile after the replacement was saved was refused');
+      const c2 = q915bImages().filter(function (l) { return !had2.has(l.id); })[0];
+      const m2 = c2 && FM.media.get(c2.id);
+      if (!(m2 && m2.file && m2.file.name === nw.name)) throw new Error('after the replacement was saved the tile for ' + nw.name + ' added ' + (m2 && m2.file ? m2.file.name : 'nothing'));
+      const t2 = FM.mediaLib.list().filter(function (e) { return e.mid === M2.mid; })[0];
+      if (!t2 || t2.key === lk) throw new Error('the new tile is keyed at ' + (t2 ? t2.key : 'nothing') + ' - the OLD file shared copy');
+      made.push(await FM.projects.create({ name: 'FX915Br early away', width: 320, height: 240 }));
+      await FM.projects.open(bId);
+      q915bMustShow([c1.id, c2.id, N.id], '#ffb703', 'after a reload, as the replacement and the two clips from its tile');
+    } finally {
+      IDBObjectStore.prototype.put = realPut;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br a tap on the same tile in another project, while its first copy is still running, is added there', { item: '915', budgetMs: 45000 }, async function () {
+    /* He taps a big video in B, realises he is in the wrong project, opens C and taps the same tile while B's copy is
+       still writing. The repeat-tap guard was keyed on the tile alone, so the tap in C was dropped without a word and
+       B's gave up: no clip anywhere. A repeat tap in the SAME project is still ignored (the Preparing test). */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    const realShare = FM.storage.shareMedia;
+    const g = q915bGate();
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br again A', '#7b2cbf'); made.push(a.pid);
+      const lk = 'lib:' + a.tile.mid; libs.push(lk);
+      const bId = await FM.projects.create({ name: 'FX915Br again B', width: 320, height: 240 }); made.push(bId);
+      const cId = await FM.projects.create({ name: 'FX915Br again C', width: 320, height: 240 }); made.push(cId);
+      const imagesIn = function (pid) { return ((JSON.parse(localStorage.getItem('fm.proj.' + pid) || '{}').layers) || []).filter(function (l) { return l.type === 'image'; }).length; };
+      await FM.projects.open(bId);
+      let first = true;
+      if (realShare) FM.storage.shareMedia = async function () { if (first) { first = false; g.entered = true; await g.done; } return realShare.apply(this, arguments); };
+      const pB = FM.mediaLib.use(a.tile.mid);                  // his tap in B…
+      for (let i = 0; i < 100 && !g.entered; i++) await sleep(20);
+      if (!g.entered) throw new Error('setup: the tap in B never reached the first copy');
+      await FM.projects.open(cId);                             // …he opens C instead…
+      const okC = await Promise.race([FM.mediaLib.use(a.tile.mid), sleep(8000).then(function () { return 'still waiting'; })]);   // …and taps the same tile there
+      g.release();
+      const okB = await pB;
+      FM.storage.shareMedia = realShare;
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      const inC = q915bImages();
+      if (okC !== true || inC.length !== 1) throw new Error('his tap in project C, made while the copy started in B was still running, answered ' + okC + ' and added ' + inC.length + ' clips - it was dropped without a word');
+      if (imagesIn(bId)) throw new Error('the clip was added to project B behind his back while he was in C');
+      if (okB !== false) throw new Error('the tap in B answered ' + okB + ' although he had left B');
+      if (!q915bIsPtr((await q915aRaw())[inC[0].id], lk)) throw new Error('the clip added in C is not stored as a pointer at the shared copy');
+      q915bMustShow([inC[0].id], a.rgb, 'as the clip added in C');
+    } finally {
+      g.release(); FM.storage.shareMedia = realShare;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  /* ── review round 3 ────────────────────────────────────────────────────────────────────────────────── */
+  async function q915brVideo(tag) {   // the real splash.mp4 from this origin, as a picked file: a VIDEO, which is what he mostly reuses
+    const r = await fetch('/splash.mp4');
+    if (!r.ok) throw new Error('setup: splash.mp4 could not be fetched from the test origin (' + r.status + ')');
+    return new File([await r.blob()], 'q915br-' + tag + '-' + Date.now() + '.mp4', { type: 'video/mp4', lastModified: Date.now() });
+  }
+  /* A readwrite transaction on the media store, held open until released: every later transaction on the store queues
+     behind it, exactly as behind a big video write on a phone. Only a transaction can be held like this - a single put
+     cannot be delayed from inside its own transaction. */
+  async function q915brHoldStore() {
+    const db = await q915aOpen();
+    const h = { held: true };
+    const tx = db.transaction('media', 'readwrite'), st = tx.objectStore('media');
+    const spin = function () { if (h.held) st.get('q915br-hold').onsuccess = spin; };
+    spin();
+    h.done = new Promise(function (r) { tx.oncomplete = tx.onerror = tx.onabort = function () { try { db.close(); } catch (e) {} r(); }; });
+    h.release = function () { h.held = false; return h.done; };
+    return h;
+  }
+
+  test('915.5Br a reused VIDEO is stored as a pointer that says video, and reopens as a playing video, not blank', { item: '915', budgetMs: 60000 }, async function () {
+    /* Every other 915.5 fixture is a PNG, where image is also the right kind - so a pointer that lost its video kind
+       (reopened through the photo loader, which rejects an mp4, and the per-layer catch swallows it) came back BLANK
+       with the whole suite green. He mostly reuses videos, and songs are video layers too. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const pid = await FM.projects.create({ name: 'FX915Br video A', width: 320, height: 240 }); made.push(pid);
+      const file = await q915brVideo('clip');
+      FM.addMediaLayer(await FM.loadVideoFile(file));
       await sleep(60); await FM.storage.save();
       const fp = [file.name, file.size, file.lastModified].join('|');
       const tile = FM.mediaLib.list().filter(function (e) { return e.fp === fp; })[0];
-      if (!tile) throw new Error('setup: importing the photo made no library tile, so there is nothing to reuse');
-      made.push(await FM.projects.create({ name: 'FX915A reuse', width: 320, height: 240 }));
-      const bId = FM.projects.currentId();
-      for (let i = 0; i < 3; i++) {
-        if (!(await FM.mediaLib.use(tile.mid))) throw new Error('setup: reuse ' + (i + 1) + ' of the tile was refused');
-        await sleep(60); await FM.storage.save();   // use() does not await its own save
-      }
-      if ((await FM.projects.duplicate(bId)) !== true) throw new Error('setup: duplicating the project failed');
-      const dup = FM.projects.list().filter(function (x) { return x.name === 'FX915A reuse copy'; })[0]; if (dup) made.push(dup.id);
-
+      if (!tile) throw new Error('setup: importing the video made no library tile');
+      if (tile.kind !== 'video' || FM.mediaLib.isAudio(tile)) throw new Error('setup: the video tile is filed as ' + tile.kind + (FM.mediaLib.isAudio(tile) ? ' (a song)' : '') + ', not a video');
+      const lk = 'lib:' + tile.mid; libs.push(lk);
+      const bId = await FM.projects.create({ name: 'FX915Br video B', width: 320, height: 240 }); made.push(bId);
+      if (!(await q915bReuse(tile.mid)) || !(await q915bReuse(tile.mid))) throw new Error('setup: a reuse of the video tile was refused');
+      const ids = FM.scene.layers.filter(function (l) { return l.type === 'video'; }).map(function (l) { return l.id; });
+      if (ids.length !== 2) throw new Error('setup: two reuses of the video tile made ' + ids.length + ' video clips');
       const raw = await q915aRaw();
-      const fresh = Object.keys(raw).filter(function (k) { return !keys0.has(k); });
-      const libs = fresh.filter(function (k) { return /^lib:/.test(k); });
-      if (libs.length) throw new Error('this release wrote shared copies (' + libs.join(', ') + ') — only the writer release may, once this reader is on his phone');
-      const refs = fresh.filter(function (k) { const v = raw[k]; return v && typeof v === 'object' && !v.file && typeof v.ref === 'string'; });
-      if (refs.length) throw new Error(refs.length + ' pointer record(s) written (' + refs.join(', ') + ') — a build before this one reads each as a blank clip');
-      const copies = fresh.filter(function (k) { const v = raw[k]; return v && v.file && v.file.name === file.name && v.file.size === file.size; });
-      if (copies.length !== 7) throw new Error('import + 3 reuses + a duplicate of the 3 left ' + copies.length + ' whole copies, not 7 — reuse is meant to be exactly what it was until the writer release');
-
-      // ── the store itself refuses both, and still takes an ordinary record (the control)
-      const okLib = await FM.storage.writeMedia(probeLib, { file: file, kind: 'image' });
-      const okRef = await FM.storage.writeMedia(probeRef, { ref: probeLib, kind: 'image', rev: 0 });
-      const okCtl = await FM.storage.writeMedia(probeCtl, { file: file, kind: 'image' });
-      const raw2 = await q915aRaw();
-      if (!okCtl || !raw2[probeCtl]) throw new Error('control: an ordinary record could not be written, so the refusals below prove nothing');
-      if (okLib || raw2[probeLib]) throw new Error('writeMedia wrote a “lib:” key (' + okLib + ') — this release must not make a shared copy by any route');
-      if (okRef || raw2[probeRef]) throw new Error('writeMedia wrote a pointer record (' + okRef + ') — a build before this one reads it as a blank clip');
+      if (!(raw[lk] && raw[lk].file && raw[lk].kind === 'video')) throw new Error('the shared copy ' + lk + ' is ' + q915bShape(raw[lk]) + ' of kind ' + (raw[lk] && raw[lk].kind) + ', not the video');
+      const bad = ids.filter(function (id) { return !(q915bIsPtr(raw[id], lk) && raw[id].kind === 'video'); });
+      if (bad.length) throw new Error(bad.length + ' of 2 reused video clips are stored as ' + bad.map(function (id) { return q915bShape(raw[id]) + ' of kind ' + (raw[id] && raw[id].kind); }).join(', ') + ' - not as a pointer at ' + lk + ' that says video: reopened, it goes through the photo loader and comes back blank');
+      // reopen: every clip hydrates from its pointer
+      made.push(await FM.projects.create({ name: 'FX915Br video away', width: 320, height: 240 }));
+      await FM.projects.open(bId);
+      const blank = [];
+      ids.forEach(function (id) {
+        const m = FM.media.get(id);
+        const ok = m && m.kind === 'video' && m.el && m.el.tagName === 'VIDEO' && m.el.readyState >= 1 && m.el.videoWidth > 0;
+        if (!ok) blank.push(id + ': ' + (m ? 'kind ' + m.kind + ', ' + (m.el ? m.el.tagName + ' readyState ' + m.el.readyState + ' width ' + m.el.videoWidth : 'no element') : 'nothing loaded'));
+      });
+      if (blank.length) throw new Error(blank.length + ' of 2 reused video clips came back BLANK after a reopen (' + blank.join('; ') + ')');
     } finally {
-      for (const k of [probeLib, probeRef, probeCtl]) { try { await q915aDel(k); } catch (e) {} }
-      try { if (idx0 == null) localStorage.removeItem('fm.medialib'); else localStorage.setItem('fm.medialib', idx0); } catch (e) {}
-      await q915aCleanup(made, orig, wasOpen);
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br a reuse stored the old way, with no shared copy, keeps his original record while it plays from it', { item: '915', budgetMs: 60000 }, async function () {
+    /* When no shared copy can be made - a full phone, or another file already at lib:<mid> - the new clip plays from the
+       Blob read out of his ORIGINAL clip record, and on a full phone its own save fails too, so that record is the only
+       copy it has. Only its mark (fileKey) says so: without it, deleting the original project took the record while
+       the clip still played from it. Another file at the shared key is how no shared copy is made here. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [];
+    let K = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br fallback P', '#588157'); made.push(a.pid);
+      K = a.orig;
+      const lk = 'lib:' + a.tile.mid; libs.push(lk);
+      await q915aPut(lk, { file: await q915aPng('fallbackOther', '#ff006e'), kind: 'image' });
+      const q = await FM.projects.create({ name: 'FX915Br fallback Q', width: 320, height: 240 }); made.push(q);
+      if (!(await q915bReuse(a.tile.mid))) throw new Error('setup: the reuse was refused');
+      const nw = q915bImages()[0];
+      if (!nw) throw new Error('setup: the reuse added no clip');
+      if (q915bIsPtr((await q915aRaw())[nw.id], lk)) throw new Error('setup: the reuse was stored as a pointer, so this is not a reuse stored the old way');
+      FM.mediaLib.remove(a.tile.mid);   // no tile: nothing in the library keeps the record, only what plays from its file
+      const others = q915brNoOneElseHolds(K).filter(function (id) { return id !== nw.id; });
+      if (others.length) throw new Error('setup: ' + others.length + ' other clip(s) in memory hold the file, so the reused clip is not the only holder');
+      await FM.projects.remove(a.pid); made.splice(made.indexOf(a.pid), 1);
+      if (!(await q915aRaw())[K]) throw new Error('deleting his original project deleted the record the clip reused from it still plays from - stored the old way, with no shared copy, and on a full phone that record is the only copy it has');
+      await FM.projects.pruneOrphans();
+      if (!(await q915aRaw())[K]) throw new Error('the sweep deleted the record a clip reused the old way still plays from');
+      // the control: Q released, nothing holds the file, the sweep collects it - and the clip plays from its own copy
+      made.push(await FM.projects.create({ name: 'FX915Br fallback R', width: 320, height: 240 }));
+      await FM.projects.pruneOrphans();
+      const raw = await q915aRaw();
+      if (raw[K]) throw new Error('control: with nothing holding the file the sweep still kept the record, so it may not have run - nothing above was measured');
+      if (!(raw[nw.id] && raw[nw.id].file)) throw new Error('the clip reused the old way has no whole copy of its own (' + q915bShape(raw[nw.id]) + ')');
+      await FM.projects.open(q);
+      q915bMustShow([nw.id], a.rgb, 'as the clip reused the old way, after his original record was collected');
+    } finally {
+      if (K) { try { await q915aDel(K); } catch (e) {} }
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br a tap on the same tile in the project he moved to lands there with no Not added message, whichever tap finishes first', { item: '915', budgetMs: 90000 }, async function () {
+    /* He taps a tile in B, opens C and taps it again there while B's first copy runs. The clip lands in C, and B's tap
+       gives up - but it used to say Not added - you switched projects for 4 s, just before or just after his clip
+       arrived: a clip landing under a message saying it was not added, which invites a third tap and a second copy.
+       Both orders are run, and a control: with no tap in C, the message IS said. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [], said = [];
+    const realShare = FM.storage.shareMedia, realToast = FM.toast;
+    const gates = [];
+    const notAdded = function () { return said.filter(function (m) { return /not added/i.test(m); }); };
+    const onScreen = function () { const t = document.getElementById('toast'); return t ? String(t.textContent || '') : ''; };
+    const waitIn = async function (g, what) { for (let i = 0; i < 150 && !g.entered; i++) await sleep(20); if (!g.entered) throw new Error('setup: ' + what + ' never reached its first copy'); };
+    const inProject = function (pid) { return ((JSON.parse(localStorage.getItem('fm.proj.' + pid) || '{}').layers) || []).filter(function (l) { return l.type === 'image'; }).length; };
+    const all = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const tiles = [];
+      for (const n of ['one', 'two', 'ctl']) { const a = await q915bImport('FX915Br landed ' + n, '#9c6644'); made.push(a.pid); libs.push('lib:' + a.tile.mid); tiles.push(a); }
+      const pids = [];
+      for (let i = 0; i < 6; i++) { const id = await FM.projects.create({ name: 'FX915Br landed P' + i, width: 320, height: 240 }); made.push(id); pids.push(id); }
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      if (realShare) FM.storage.shareMedia = async function () { const g = gates.shift(); if (g) { g.entered = true; await g.done; } return realShare.apply(this, arguments); };
+
+      // 1. the tap in C finishes first, then the tap in B gives up
+      said.length = 0;
+      await FM.projects.open(pids[0]);
+      const g1 = q915bGate(); all.push(g1); gates.push(g1);
+      const pB1 = FM.mediaLib.use(tiles[0].tile.mid);
+      await waitIn(g1, 'the tap in B');
+      await FM.projects.open(pids[1]);
+      const okC1 = await Promise.race([FM.mediaLib.use(tiles[0].tile.mid), sleep(8000).then(function () { return 'still waiting'; })]);
+      if (okC1 !== true || q915bImages().length !== 1) throw new Error('setup: the tap in C answered ' + okC1 + ' and C holds ' + q915bImages().length + ' clips');
+      g1.release();
+      const okB1 = await pB1;
+      await sleep(60);
+      if (okB1 !== false) throw new Error('setup: the tap in B answered ' + okB1 + ' although he had left B');
+      if (notAdded().length) throw new Error('his clip landed in C, then the tap he left behind in B said ' + notAdded()[0] + ' - over the clip he just watched arrive (toasts: ' + said.join(' | ') + ')');
+      if (/not added/i.test(onScreen())) throw new Error('the message on screen after his clip landed in C is ' + onScreen());
+
+      // 2. the tap in B gives up first, while the tap in C is still copying
+      said.length = 0;
+      await FM.projects.open(pids[2]);
+      const g2 = q915bGate(), g3 = q915bGate(); all.push(g2, g3); gates.push(g2, g3);
+      const pB2 = FM.mediaLib.use(tiles[1].tile.mid);
+      await waitIn(g2, 'the tap in B');
+      await FM.projects.open(pids[3]);
+      const pC2 = FM.mediaLib.use(tiles[1].tile.mid);
+      await waitIn(g3, 'the tap in C');
+      g2.release();
+      const okB2 = await pB2;
+      if (okB2 !== false) throw new Error('setup: the tap in B answered ' + okB2 + ' although he had left B');
+      if (notAdded().length) throw new Error('while his tap in C was still copying, the tap he left behind in B said ' + notAdded()[0] + ' - his clip then lands under it (toasts: ' + said.join(' | ') + ')');
+      g3.release();
+      const okC2 = await pC2;
+      await sleep(60);
+      if (okC2 !== true || q915bImages().length !== 1) throw new Error('the tap in C answered ' + okC2 + ' and C holds ' + q915bImages().length + ' clips');
+      if (notAdded().length) throw new Error('his clip landed in C and a Not added message was said: ' + said.join(' | '));
+      if (/not added/i.test(onScreen())) throw new Error('the message on screen after his clip landed in C is ' + onScreen());
+      if (inProject(pids[0]) || inProject(pids[2])) throw new Error('a clip was added to a project he had left');
+
+      // 3. the control: a tap in B, he opens C and taps nothing - the message IS said
+      said.length = 0;
+      await FM.projects.open(pids[4]);
+      const g4 = q915bGate(); all.push(g4); gates.push(g4);
+      const pB3 = FM.mediaLib.use(tiles[2].tile.mid);
+      await waitIn(g4, 'the tap in B');
+      await FM.projects.open(pids[5]);
+      g4.release();
+      const okB3 = await pB3;
+      if (okB3 !== false) throw new Error('control: the tap in B answered ' + okB3 + ' although he had left B');
+      if (!notAdded().length) throw new Error('control: a tap he left behind, with nothing added anywhere, said nothing (toasts: ' + (said.join(' | ') || 'none') + ') - the silence above proves nothing');
+    } finally {
+      all.forEach(function (g) { g.release(); });
+      FM.storage.shareMedia = realShare; FM.toast = realToast;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br a tile tapped while the file Replace media gave it is still queued to be saved waits for the save and adds it, never says it is no longer stored', { item: '915', budgetMs: 60000 }, async function () {
+    /* Replace media keys its new tile at the clip and starts a save it does not wait for. Behind a big write - a phone
+       still saving the videos he just imported - that save queues, so the clip record on disk is still the OLD file.
+       He opens another project (the clip on screen is released) and taps the new tile: the disk says another file of
+       another size, and nothing on screen says otherwise. That dropped the tile with no longer stored and added
+       nothing, about a file seconds from being written. The big write is a transaction held open here. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [], said = [];
+    const realToast = FM.toast, realStash = FM.storage.stashPrevMedia, realRead = FM.storage.readMedia;
+    let hold = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br queued X', '#1d3557'); made.push(a.pid);
+      libs.push('lib:' + a.tile.mid);
+      const bId = await FM.projects.create({ name: 'FX915Br queued B', width: 320, height: 240 }); made.push(bId);
+      await FM.projects.open(a.pid);
+      const nw = await q915brPng('queuedNEW', '#e9c46a', 48, 36);
+      if (nw.size === a.file.size) throw new Error('setup: the two photos are the same size, so the disk and the tile would not disagree on it');
+      FM.storage.stashPrevMedia = async function () { const r = await realStash.apply(this, arguments); hold = await q915brHoldStore(); return r; };   // the big write starts just after Replace keeps the old file, so its own save queues
+      const T2 = await q915brReplace(a.orig, nw);
+      FM.storage.stashPrevMedia = realStash;
+      libs.push('lib:' + T2.mid);
+      if (!hold) throw new Error('setup: the held write never started');
+      if (T2.key !== a.orig) throw new Error('setup: the new tile is keyed at ' + T2.key + ', not at the clip it replaced');
+      await FM.projects.open(bId);   // A released: nothing on screen holds the new file
+      const mA = FM.media.get(a.orig);
+      if (mA && mA.file) throw new Error('setup: the replaced clip is still in memory after opening another project, so nothing here is the disk alone');
+      let asked = false;
+      FM.storage.readMedia = function (k) { if (k === a.orig) asked = true; return realRead.apply(this, arguments); };
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      const p = FM.mediaLib.use(T2.mid);   // his tap in B, while the replacement is still queued
+      for (let i = 0; i < 150 && !asked; i++) await sleep(20);
+      if (!asked) throw new Error('setup: the tap never read the tile record');
+      await sleep(200);                    // its read queues behind the held write, ahead of the replacement's own write
+      await hold.release(); hold = null;
+      const ok = await Promise.race([p, sleep(15000).then(function () { return 'still waiting'; })]);
+      FM.storage.readMedia = realRead; FM.toast = realToast;
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      const gone = said.filter(function (m) { return /no longer stored/i.test(m); });
+      if (gone.length) throw new Error('the tap on the tile for a file still queued to be saved said ' + gone[0] + ' (answered ' + ok + ')');
+      if (!FM.mediaLib.list().some(function (e) { return e.mid === T2.mid; })) throw new Error('the tile for a file still queued to be saved was dropped from Add - Media');
+      const c = q915bImages();
+      if (ok !== true || c.length !== 1) throw new Error('the tap answered ' + ok + ' and added ' + c.length + ' clips (toasts: ' + (said.join(' | ') || 'none') + ')');
+      const raw = await q915aRaw();
+      if (!(raw[a.orig] && raw[a.orig].file && raw[a.orig].file.name === nw.name)) throw new Error('setup: the replacement never reached the disk (' + q915bShape(raw[a.orig]) + ')');
+      if (!q915bIsPtr(raw[c[0].id], 'lib:' + T2.mid)) throw new Error('the clip is stored as ' + q915bShape(raw[c[0].id]) + ', not as a pointer at the new tile shared copy');
+      q915bMustShow([c[0].id], '#e9c46a', 'as the clip from the tile tapped while its file was queued');
+    } finally {
+      if (hold) { try { await hold.release(); } catch (e) {} }
+      FM.toast = realToast; FM.storage.stashPrevMedia = realStash; FM.storage.readMedia = realRead;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br a tile tapped while its own import is still being saved waits for the save and adds it, never says it is no longer stored', { item: '915', budgetMs: 60000 }, async function () {
+    /* Every import gives the file its tile at once and starts the save that writes it. On a phone - a video, or behind
+       the one before it - that takes seconds, and a tap on the new tile in that window found no record under its key:
+       the tile was dropped with no longer stored, for a file that was being written as he looked at it. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [], said = [];
+    const realToast = FM.toast, realRead = FM.storage.readMedia;
+    let hold = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      made.push(await FM.projects.create({ name: 'FX915Br importing', width: 320, height: 240 }));
+      const file = await q915aPng('importing', '#bc4749');
+      const rec = await FM.loadImageFile(file);
+      hold = await q915brHoldStore();
+      FM.addMediaLayer(rec);               // its save queues behind the held write
+      const fp = [file.name, file.size, file.lastModified].join('|');
+      const tile = FM.mediaLib.list().filter(function (e) { return e.fp === fp; })[0];
+      if (!tile) throw new Error('setup: the import made no library tile');
+      libs.push('lib:' + tile.mid);
+      const K = tile.key;
+      let asked = false;
+      FM.storage.readMedia = function (k) { if (k === K) asked = true; return realRead.apply(this, arguments); };
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      const p = FM.mediaLib.use(tile.mid);   // his tap on the new tile, at once
+      for (let i = 0; i < 150 && !asked; i++) await sleep(20);
+      if (!asked) throw new Error('setup: the tap never read the tile record');
+      await sleep(200);
+      await hold.release(); hold = null;
+      const ok = await Promise.race([p, sleep(15000).then(function () { return 'still waiting'; })]);
+      FM.storage.readMedia = realRead; FM.toast = realToast;
+      await sleep(80); FM.storage.markDirty(); await FM.storage.save();
+      const gone = said.filter(function (m) { return /no longer stored/i.test(m); });
+      if (gone.length) throw new Error('the tap on the tile of a file still being saved said ' + gone[0] + ' (answered ' + ok + ')');
+      if (!FM.mediaLib.list().some(function (e) { return e.mid === tile.mid; })) throw new Error('the tile of a file still being saved was dropped from Add - Media');
+      const ims = q915bImages();
+      if (ok !== true || ims.length !== 2) throw new Error('the tap answered ' + ok + ' and the project holds ' + ims.length + ' clips, not 2 (toasts: ' + (said.join(' | ') || 'none') + ')');
+      const raw = await q915aRaw();
+      const reused = ims.filter(function (l) { return l.id !== K; })[0];
+      if (!q915bIsWhole(raw[K], file)) throw new Error('setup: the import is stored as ' + q915bShape(raw[K]) + ', not as a whole copy');
+      if (!q915bIsPtr(raw[reused.id], 'lib:' + tile.mid)) throw new Error('the reused clip is stored as ' + q915bShape(raw[reused.id]) + ', not as a pointer at the shared copy');
+      q915bMustShow([K, reused.id], '#bc4749', 'as the import and the clip from its tile tapped while it was being saved');
+    } finally {
+      if (hold) { try { await hold.release(); } catch (e) {} }
+      FM.toast = realToast; FM.storage.readMedia = realRead;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
+    }
+  });
+
+  test('915.5Br a tile is never dropped while another tap on it is still copying its file', { item: '915', budgetMs: 60000 }, async function () {
+    /* He replaces a clip and its save does not land (held here by dropping it: no room, or still queued). He taps the new
+       tile, which copies the file from the clip on screen to the tile shared copy; opens another project and taps the
+       tile there while that copy runs. The second tap reads the OLD file on disk, finds nothing on screen, and dropped
+       the tile with no longer stored - though the first tap was writing that very file. The tile was lost for good and
+       its shared copy leaked. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], libs = [], said = [];
+    const realPut = IDBObjectStore.prototype.put, realShare = FM.storage.shareMedia, realToast = FM.toast;
+    const g = q915bGate();
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await q915bImport('FX915Br copying X', '#6a4c93'); made.push(a.pid);
+      libs.push('lib:' + a.tile.mid);
+      const bId = await FM.projects.create({ name: 'FX915Br copying B', width: 320, height: 240 }); made.push(bId);
+      await FM.projects.open(a.pid);
+      const nw = await q915brPng('copyingNEW', '#f4a261', 48, 36);
+      IDBObjectStore.prototype.put = function (v, k) { if (k === a.orig && v && v.file) return undefined; return realPut.apply(this, arguments); };
+      const T2 = await q915brReplace(a.orig, nw);
+      const lk2 = 'lib:' + T2.mid; libs.push(lk2);
+      await sleep(150);
+      const raw0 = await q915aRaw();
+      if (!(raw0[a.orig] && raw0[a.orig].file && raw0[a.orig].file.name === a.file.name)) throw new Error('setup: the replacement reached the disk although its write was held');
+      let first = true;
+      if (realShare) FM.storage.shareMedia = async function () { if (first) { first = false; g.entered = true; await g.done; } return realShare.apply(this, arguments); };
+      const p1 = FM.mediaLib.use(T2.mid);   // his tap in A: copies the new file from the clip on screen
+      for (let i = 0; i < 150 && !g.entered; i++) await sleep(20);
+      if (!g.entered) throw new Error('setup: the tap in A never reached the first copy');
+      await FM.projects.open(bId);
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      const ok2 = await Promise.race([FM.mediaLib.use(T2.mid), sleep(8000).then(function () { return 'still waiting'; })]);   // his tap in B, while that copy runs
+      FM.toast = realToast;
+      if (!FM.mediaLib.list().some(function (e) { return e.mid === T2.mid; })) throw new Error('the tile was dropped from Add - Media while another tap on it was still copying its file (the tap answered ' + ok2 + ', toasts: ' + (said.join(' | ') || 'none') + ')');
+      const gone = said.filter(function (m) { return /no longer stored/i.test(m); });
+      if (gone.length) throw new Error('while another tap was copying its file, the tile said ' + gone[0]);
+      if (!said.some(function (m) { return /still copying/i.test(m); })) throw new Error('the tap in B added nothing and said nothing about why (answered ' + ok2 + ', toasts: ' + (said.join(' | ') || 'none') + ')');
+      g.release();
+      await p1;
+      IDBObjectStore.prototype.put = realPut;
+      const t = FM.mediaLib.list().filter(function (e) { return e.mid === T2.mid; })[0];
+      if (!t || t.key !== lk2) throw new Error('once the first copy finished the tile is keyed at ' + (t ? t.key : 'nothing') + ', not at its shared copy ' + lk2);
+      const had = new Set(q915bImages().map(function (l) { return l.id; }));
+      if (!(await q915bReuse(T2.mid))) throw new Error('the tap on the tile after its copy finished was refused');
+      const c = q915bImages().filter(function (l) { return !had.has(l.id); })[0];
+      if (!c) throw new Error('the tap on the tile after its copy finished added nothing');
+      if (!q915bIsPtr((await q915aRaw())[c.id], lk2)) throw new Error('the clip is not stored as a pointer at the tile shared copy');
+      q915bMustShow([c.id], '#f4a261', 'as the clip from the tile once its copy finished');
+    } finally {
+      g.release();
+      IDBObjectStore.prototype.put = realPut; FM.storage.shareMedia = realShare; FM.toast = realToast;
+      await q915bFinish(made, orig, wasOpen, libs, idx0);
     }
   });
 
@@ -63698,8 +65174,11 @@
       val.dispatchEvent(new PointerEvent('pointerdown', at));
       val.dispatchEvent(new PointerEvent('pointerup', at));
       await sleep(140);
-      const live = document.querySelector('.mt-vbox-val.editing') || (val.isContentEditable ? val : null);
-      if (!live) throw new Error('one tap on the X position number did not open the editor — it was swallowed switching axis, which is what he is reporting');
+      /* ON SCREEN, WITH THE FOCUS IN IT (queue 690). This used to accept `val.isContentEditable` on the box that was
+         tapped — and a box thrown away by a rebuild still reports that, so for months this passed while a real tap
+         opened nothing: the glide's settle rebuilt the card under the tap and the editor opened on the detached box. */
+      const live = document.querySelector('.mt-vbox-val.editing');
+      if (!live || !live.isConnected || document.activeElement !== live) throw new Error('one tap on the X position number did not open an editor on screen with the focus in it — ' + (!val.isConnected ? 'the card was rebuilt under the tap, so the editor opened on a box no longer on screen (queue 690)' : 'it was swallowed switching axis, which is what he is reporting'));
       if (FM._mtAxis !== 'xy') throw new Error('the tap opened the editor but did not move the axis to the one you touched (' + FM._mtAxis + ')');
     } finally {
       FM._mtAxis = axis0;
@@ -79398,17 +80877,16 @@
       const C = mk('same');
       C.fill = { kf: [{ t: 0, v: '#22c55e' }, { t: 3, v: '#22c55e' }] };
       if (FM._clipColorStops(C) !== null) throw new Error('a colour that is keyframed but never changes took the gradient path — that is a flat fill wearing a gradient\'s clothes');
-      // 4. THE NAME MUST KEEP A FIXED GROUND. That fade is the whole difference between his option A
-      //    and the C he picked, and the clip name is already the lowest-contrast text in the editor.
+      // 4. NO DARK GROUND ANY MORE — HIS LATER WORD OVERRULES HIS EARLIER PICK (queue 928). He chose option C in #679 (a dark
+      //    fade under the name); on 24 Sep, looking at it on his PC: "make it so that it doesn't start black because for some
+      //    reason it always makes the start of it black … Get rid of that." So the fade is gone, and the name is kept legible
+      //    the way every other clip's is — by `.clip-label`'s own text-shadow, which this now checks is still there.
       const css = await (await fetch('../styles.css?boot=' + Date.now())).text();
-      if (!/\.clip\.clip-kfcolor::before/.test(css))
-        throw new Error('the dark fade behind the clip name is gone — that is option A, not the C he chose, and it puts the least readable text in the editor on a background that changes along its own length');
-      /* ⚠️ AND IT MUST NAME THE ELEMENT THAT EXISTS. The first version of this rule said `.clip-name`;
-         a clip's label is `.clip-label`, so it styled nothing. It looked correct only because the label
-         is a later sibling than the ::before and painted above it by document order anyway — the rule
-         was inert and would have stayed inert the day that order changed. */
-      if (!/\.clip\.clip-kfcolor > \.clip-label/.test(css))
-        throw new Error('the kfcolor rule no longer targets .clip-label — check the class the clip actually creates, not the one the rule assumes');
+      if (/\.clip\.clip-kfcolor::before\s*\{/.test(css))
+        throw new Error('the dark fade behind a keyframed-colour clip is back — he asked for it to go in #928 (it makes the clip start black)');
+      const labelRule = (css.match(/\n\.clip-label\s*\{[^}]*\}/) || [''])[0];
+      if (!/text-shadow/.test(labelRule))
+        throw new Error('the clip name lost its text-shadow — with the #679 fade gone (#928) the shadow is all that keeps it legible over a colour arc');
       /* THE INK. On a gradient bar the label cannot take its colour from a measurement of ONE colour:
          the arc may run from near-black to near-white, so the start colour says nothing about what is
          under the text. Option C gives the label a fixed dark ground, so the ink is fixed to match it. */
@@ -85637,5 +87115,2926 @@
       FM.media.remove(id);
     }
   });
+
+  /* ═══ 924 — THE ADD SWITCH, DRIVEN BY A REAL FINGER ═════════════════════════════════════════════════════════════════
+   * His fifth report (after #438, #533, #570, #865): "When you drag any layer … the level of where the switch is should
+   * resemble where that layer is in the project. And also it should update live." Every earlier proof used SYNTHETIC
+   * pointer events dispatched from this script — untrusted, uncapturable, never hit-tested — and every one came back.
+   * These use REAL input: tests/_cdp.py turns `__fmWantInput` into Input.dispatchTouchEvent / dispatchMouseEvent, so
+   * the drag goes through the browser's own touch → pointer pipeline, capture and all, like his phone. The control on
+   * every test is that the recorded moves are isTrusted and of the expected pointerType; a run without the driver fails
+   * saying so rather than passing on nothing. The switch is SAMPLED ON EVERY MOVE WHILE THE FINGER IS DOWN — "live"
+   * means before the release, and the release is the one moment all the earlier probes happened to agree. */
+  async function realInput924(steps, what) {
+    const seq = (window.__fmInputSeq = (window.__fmInputSeq || 0) + 1);
+    window.__fmInputErr = '';
+    window.__fmWantInput = { seq: seq, steps: steps };
+    const deadline = Date.now() + 30000;
+    while (window.__fmInputDone !== seq) {
+      if (Date.now() > deadline) throw new Error('no real input arrived for ' + what + ' — this test needs tests/_cdp.py, which turns __fmWantInput into trusted touches and clicks');
+      await new Promise(r => setTimeout(r, 40));
+    }
+    if (window.__fmInputErr) throw new Error('the driver could not send the input for ' + what + ': ' + window.__fmInputErr);
+    await new Promise(r => setTimeout(r, 30));   // let the recorder's deferred reads land
+  }
+  async function onScreen924(fn) {
+    // real events land where the frame IS; run.html parks it at left -10000px, so bring it into view and put it back
+    const fe = window.frameElement;
+    if (!fe) throw new Error('this test needs run.html’s iframe to be able to bring it on screen');
+    const l0 = fe.style.left, t0 = fe.style.top, z0 = fe.style.zIndex;
+    fe.style.left = '0px'; fe.style.top = '0px'; fe.style.zIndex = '99999';
+    try { await new Promise(r => setTimeout(r, 120)); return await fn(); }
+    finally { fe.style.left = l0; fe.style.top = t0; fe.style.zIndex = z0; }
+  }
+  function recorder924() {
+    const sw = document.getElementById('btn-addside');
+    const rec = [];
+    /* The switch is read AFTER the whole event has been dispatched (queue 924 review). The add row's gestures listen on
+       window too, registered after this recorder, so reading inline sampled the switch one move stale — and the grip
+       test's first check passed on the old value every time. A 0 ms timer runs once every listener has had the event. */
+    const on = (e) => {
+      const s = { trusted: e.isTrusted, kind: e.pointerType, type: e.type, y: e.clientY, buttons: e.buttons, sw: NaN, held: null };
+      rec.push(s);
+      setTimeout(() => { s.sw = parseFloat(sw.style.getPropertyValue('--sw')); s.held = FM.dragLayerId || null; const tl = document.getElementById('timeline'); s.scroll = tl ? tl.scrollTop : 0; s.addAt = FM.dragAddAt; }, 0);
+    };
+    const downs = [], events = [];
+    const onAny = (e) => { if (events.length < 12) events.push(e.type + (e.pointerType ? ':' + e.pointerType : '') + '@' + Math.round(performance.now() % 100000) + (FM.dragLayerId ? '+held' : '')); };
+    ['pointercancel', 'lostpointercapture', 'gotpointercapture', 'touchcancel'].forEach(t => window.addEventListener(t, onAny, true));
+    const onDown = (e) => { const t = e.target; downs.push({ kind: e.pointerType, trusted: e.isTrusted, x: Math.round(e.clientX), y: Math.round(e.clientY), what: (t && t.closest ? ((t.closest('.row-drag') ? '≡ ' : '') + (t.className && t.className.baseVal !== undefined ? 'svg ' + t.tagName : (t.className || t.tagName))) : String(t)) }); };
+    window.addEventListener('pointerdown', onDown, true);   // capture: see the press even if the gesture stops it
+    window.addEventListener('pointermove', on);     // bubble: fires AFTER the gesture's own handler has updated the switch
+    window.addEventListener('pointerup', on);
+    return { rec: rec, downs: downs, events: events, stop: () => { ['pointercancel', 'lostpointercapture', 'gotpointercapture', 'touchcancel'].forEach(t => window.removeEventListener(t, onAny, true)); window.removeEventListener('pointerdown', onDown, true); window.removeEventListener('pointermove', on); window.removeEventListener('pointerup', on); } };
+  }
+  async function stack924(n, addAt) {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const cols = ['#e0245e', '#3b82f6', '#22c55e', '#f59e0b', '#a855f7', '#14b8a6'];
+    const L = [];
+    for (let i = 0; i < n; i++) L.push(FM.makeLayer('shape', { name: 'S924 ' + 'ABCDEF'[i], shape: 'rect', x: 200 + i * 20, y: 300, shapeW: 120, shapeH: 120, fill: cols[i], start: 0, duration: 4 }));
+    FM.scene = scene(L, { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+    FM.selectLayer(null); if (FM.pause) FM.pause(); FM.setTime(0);
+    FM.addAt = addAt; FM.dragAddAt = null; FM.dragLayerId = null; FM.dragLayerAt = null;
+    FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+    await sleep(350);
+    const tl = document.getElementById('timeline'); if (tl) tl.scrollTop = 0;
+    await sleep(150);
+    return L;
+  }
+
+  test('924 a real finger dragging a LAYER moves the switch live, step by step, to where THAT LAYER is — before the finger lifts', { item: '924', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await stack924(5, 5);   // five layers, the add row at the very bottom — out of the way of the layer
+          const headA = [].slice.call(document.querySelectorAll('#tl-tracks .track-row .track-head')).find(h => FM.scene.layers[parseInt(h.dataset.idx, 10)] === L[0]);
+          const handle = headA && headA.closest('.track-row').querySelector('.row-drag');
+          if (!handle) throw new Error('setup: no ≡ reorder handle on the top layer at phone width — nothing to drag');
+          const r = handle.getBoundingClientRect(), rowH = headA.closest('.track-row').getBoundingClientRect().height;
+          const x = r.left + r.width / 2, y0 = r.top + r.height / 2;
+          if (x > 370 || y0 > 740) throw new Error('setup: the handle is at ' + Math.round(x) + ',' + Math.round(y0) + ', off the part of the frame real input can reach');
+          const sw = document.getElementById('btn-addside');
+          const topId = FM.scene.layers[parseInt(headA.dataset.idx, 10)].id;   // the layer under the handle, as the scene holds it now
+          const R = recorder924();
+          const steps = [{ t: 'touchStart', x: x, y: y0, ms: 120 }];
+          const travel = rowH * 4.6;
+          for (let k = 1; k <= 23; k++) steps.push({ t: 'touchMove', x: x, y: y0 + travel * k / 23, ms: 45 });
+          steps.push({ t: 'touchEnd', x: x, y: y0 + travel, ms: 0 });
+          try { await realInput924(steps, 'the layer drag'); await sleep(450); } finally { R.stop(); }
+          const moves = R.rec.filter(s => s.type === 'pointermove');
+          /* CONTROL: this was a real finger, not a script. */
+          if (moves.length < 10) throw new Error('only ' + moves.length + ' pointer moves reached the page from 23 real touch moves — the drag did not happen');
+          const fake = moves.filter(s => !s.trusted || s.kind !== 'touch');
+          if (fake.length) throw new Error('CONTROL: ' + fake.length + ' of the recorded moves were not trusted touch (' + fake[0].kind + ', trusted ' + fake[0].trusted + ') — this is not the phone’s pipeline');
+          const held = moves.filter(s => s.held === topId);
+          if (held.length < 8) throw new Error('only ' + held.length + ' of ' + moves.length + ' moves had a layer in hand — the ≡ drag did not start from a real touch (the press landed on ' + JSON.stringify(R.downs) + ', the handle is at ' + Math.round(r.left) + '..' + Math.round(r.right) + ' x ' + Math.round(r.top) + '..' + Math.round(r.bottom) + '; moves ' + JSON.stringify(moves.slice(0, 4).map(m => [m.buttons, m.held, m.sw])) + '; events ' + JSON.stringify(R.events) + ')');
+          const vals = held.map(s => s.sw);
+          const distinct = vals.filter((v, i) => i === 0 || Math.abs(v - vals[i - 1]) > 1e-6);
+          if (!(vals[0] <= 0.26)) throw new Error('at the start of the drag the switch read ' + vals[0].toFixed(3) + ' while the layer in hand was at the TOP of the project — it is showing something else (the add row sits at the bottom: 1.0)');
+          if (!(Math.max.apply(null, vals) >= 0.74)) throw new Error('carried four rows down, the switch only ever reached ' + Math.max.apply(null, vals).toFixed(3) + ' while the finger was still down — it did not follow the layer live (samples ' + vals.map(v => v.toFixed(2)).join(' ') + ')');
+          for (let i = 1; i < vals.length; i++) if (vals[i] < vals[i - 1] - 1e-6) throw new Error('the switch went back UP while the layer only went down: ' + vals.map(v => v.toFixed(2)).join(' '));
+          if (distinct.length < 4) throw new Error('the switch moved in ' + (distinct.length - 1) + ' step(s) across four rows — it should step once per slot, live (samples ' + vals.map(v => v.toFixed(2)).join(' ') + ')');
+          const bad = vals.filter(v => Math.abs(v * 4 - Math.round(v * 4)) > 1e-6);
+          if (bad.length) throw new Error('with five layers the switch should sit on a slot (0, .25, .5, .75, 1) — it read ' + bad[0]);
+          /* …and it landed where the switch last said: the layer is now that far down. */
+          const at = FM.scene.layers.findIndex(l => l.id === topId);
+          if (Math.abs(at / 4 - vals[vals.length - 1]) > 1e-6) throw new Error('the switch last showed ' + vals[vals.length - 1] + ' but the layer landed at index ' + at + ' of 5');
+          if (FM.dragLayerId || FM.dragLayerAt != null) throw new Error('the drag ended but the switch still thinks a layer is in hand');
+          if (Math.abs(parseFloat(sw.style.getPropertyValue('--sw')) - FM.addAt / 5) > 1e-6) throw new Error('after the drop the switch did not go back to the add row’s level');
+        });
+      }, 360);
+    } finally { FM.scene = saved; FM.dragLayerId = null; FM.dragLayerAt = null; FM.dragAddAt = null; try { FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {} }
+  });
+
+  test('924 a real finger dragging the ADD ROW by its grip moves the switch while the finger is still down', { item: '924', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          await stack924(4, 0);   // the add row at the TOP
+          const grip = document.querySelector('.tl-addrow .tl-addrow-grip');
+          if (!grip) throw new Error('setup: no add-row grip at phone width');
+          const r = grip.getBoundingClientRect(), rowH = document.querySelector('#tl-tracks .track-row').getBoundingClientRect().height;
+          const x = r.left + r.width / 2, y0 = r.top + r.height / 2;
+          if (x > 370 || y0 > 740) throw new Error('setup: the grip is at ' + Math.round(x) + ',' + Math.round(y0) + ', off the part of the frame real input can reach');
+          const R = recorder924();
+          const steps = [{ t: 'touchStart', x: x, y: y0, ms: 100 }];
+          for (let k = 1; k <= 18; k++) steps.push({ t: 'touchMove', x: x, y: y0 + rowH * 3.6 * k / 18, ms: 45 });
+          steps.push({ t: 'touchEnd', x: x, y: y0 + rowH * 3.6, ms: 0 });
+          try { await realInput924(steps, 'the add-row grip drag'); await sleep(450); } finally { R.stop(); }
+          const moves = R.rec.filter(s => s.type === 'pointermove');
+          if (moves.length < 8) throw new Error('only ' + moves.length + ' pointer moves reached the page from 18 real touch moves');
+          if (moves.some(s => !s.trusted || s.kind !== 'touch')) throw new Error('CONTROL: not every recorded move was a trusted touch');
+          const vals = moves.map(s => s.sw);
+          if (!(vals[0] <= 0.26)) throw new Error('the add row started at the top but the switch read ' + vals[0]);
+          if (!(Math.max.apply(null, vals) >= 0.74)) throw new Error('dragged three rows down, the switch only reached ' + Math.max.apply(null, vals).toFixed(3) + ' before the finger lifted (samples ' + vals.map(v => v.toFixed(2)).join(' ') + ')');
+          if (!(FM.addAt >= 3)) throw new Error('the add row did not land lower down (addAt ' + FM.addAt + ') — the drag did not really happen');
+        });
+      }, 360);
+    } finally { FM.scene = saved; FM.dragAddAt = null; FM.addAt = 0; try { FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {} }
+  });
+
+  test('924 on PC a real mouse dragging the add LINE moves the switch while the button is still down', { item: '924', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atWideWidth(async function () {
+        await onScreen924(async function () {
+          await stack924(4, 0);
+          const line = document.querySelector('.tl-addrow.tl-addrow--line');
+          if (!line) throw new Error('setup: at a desktop width the add row is not the PC line — this would measure the phone grip');
+          const lr = line.getBoundingClientRect(), rowH = document.querySelector('#tl-tracks .track-row').getBoundingClientRect().height;
+          const x = Math.min(lr.left + 40, 360), y0 = lr.top + lr.height / 2;
+          if (y0 > 740 || y0 < 0) throw new Error('setup: the add line is at y ' + Math.round(y0) + ', off the part of the frame real input can reach');
+          const R = recorder924();
+          const steps = [{ t: 'mouseMove', x: x, y: y0, ms: 60 }, { t: 'mouseDown', x: x, y: y0, ms: 80 }];
+          for (let k = 1; k <= 18; k++) steps.push({ t: 'mouseMove', x: x, y: y0 + rowH * 3.6 * k / 18, ms: 45 });
+          steps.push({ t: 'mouseUp', x: x, y: y0 + rowH * 3.6, ms: 0 });
+          try { await realInput924(steps, 'the add-line drag'); await sleep(450); } finally { R.stop(); }
+          const moves = R.rec.filter(s => s.type === 'pointermove');
+          const down = moves.slice(1);   // the first move is the hover before the press
+          if (down.length < 8) throw new Error('only ' + down.length + ' pointer moves reached the page while the button was down');
+          if (down.some(s => !s.trusted || s.kind !== 'mouse')) throw new Error('CONTROL: not every recorded move was a trusted mouse move');
+          /* Judged on the moves made BEFORE the timeline's bottom edge. At the edge the list auto-scrolls, and that loop
+             re-publishes the row on its own — so a switch that only moves there would pass a whole-drag check while
+             being frozen for the drag itself (that is how this test first let the unfixed build through). */
+          const tl = document.getElementById('timeline').getBoundingClientRect();
+          const clear = down.filter(s => s.type === 'pointermove' && s.y < tl.bottom - 48);
+          if (clear.length < 6) throw new Error('setup: only ' + clear.length + ' moves happened clear of the auto-scroll edge — the drag starts too low to judge');
+          const vals = clear.map(s => s.sw);
+          if (!(Math.max.apply(null, vals) >= 0.49)) throw new Error('dragged two rows down, clear of the edge, the switch only reached ' + Math.max.apply(null, vals).toFixed(3) + ' with the button still down — it jumps on release instead of moving live (samples ' + vals.map(v => v.toFixed(2)).join(' ') + ')');
+          if (!(FM.addAt >= 3)) throw new Error('the add line did not land lower down (addAt ' + FM.addAt + ') — the drag did not really happen');
+        });
+      }, 1100);
+    } finally { FM.scene = saved; FM.dragAddAt = null; FM.addAt = 0; try { FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {} }
+  });
+
+  test('932 an AI setProject never renames his project — not the Director, not a template, not any op', { item: '932' }, function () {
+    /* Queue 932: "when you use the AI director, it changes the name of the project to AI scene". The op still sets what it
+       is for — size, rate, length, background — so the control is that those DID change in the same call. */
+    if (!FM.aiOps || !FM.aiOps.applyOps) throw new Error('FM.aiOps.applyOps is not exposed — the suite cannot drive the real op path');
+    const P = FM.scene.project, keep = { name: P.name, width: P.width, height: P.height, fps: P.fps, duration: P.duration, background: P.background };
+    try {
+      P.name = 'Ezra’s beach edit';
+      FM.aiOps.applyOps([{ op: 'setProject', width: 720, height: 1280, fps: 24, duration: 5, background: '#123456', name: 'AI Scene' }]);
+      if (P.name !== 'Ezra’s beach edit') throw new Error('the AI renamed the project to “' + P.name + '” — his own name must stay');
+      if (P.fps !== 24 || P.background !== '#123456' || P.width !== 720) throw new Error('CONTROL: the same setProject did not set the size, rate or background (' + P.width + ', ' + P.fps + ', ' + P.background + ') — this call proves nothing about the name');
+      FM.aiOps.applyOps([{ op: 'setProject', name: 'Template scene' }]);
+      if (P.name !== 'Ezra’s beach edit') throw new Error('a name-only setProject renamed the project to “' + P.name + '”');
+    } finally {
+      Object.assign(P, keep);
+      if (FM.resizeCanvas) FM.resizeCanvas();
+    }
+  });
+
+  test('933 trying a Labs option in Settings and clicking out comes back to Settings, where he was — phone taps and PC clicks, for real', { item: '933', budgetMs: 90000 }, async function () {
+    /* Queue 933: "every time I test something out, like one of the options and then click out, it just like completely
+       closes the settings. So you have to reopen the settings and go all the way to the bottom". Real input (see 924): a
+       click-out is a hit-test question — which scrim is under the finger — and a synthetic event answers it by fiat. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.settings || !FM.settings.open || !FM.collab || !FM.collab.ui) throw new Error('settings or the collaboration UI is not loaded');
+    const wasLabs = FM.settings.get ? FM.settings.get('collabLabs') : undefined;
+    const scroller = (el) => { for (let n = el && el.parentElement; n; n = n.parentElement) { const cs = getComputedStyle(n); if (/auto|scroll/.test(cs.overflowY) && n.scrollHeight > n.clientHeight + 1) return n; } return null; };
+    const joinBtn = () => [].slice.call(document.querySelectorAll('.set-labs .set-action')).find(b => /Join/.test(b.textContent));
+    const centre = (el) => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, r: r }; };
+    async function once(kind, where) {
+      if (FM.settings.isOpen && FM.settings.isOpen()) FM.settings.close();
+      await sleep(250);
+      if (FM.settings.set) FM.settings.set('collabLabs', true);
+      FM.settings.open();
+      await sleep(450);
+      const b = joinBtn();
+      if (!b) throw new Error(where + ': no Join… row in Settings → Labs with Labs on');
+      b.scrollIntoView({ block: 'center' });
+      await sleep(250);
+      const sc = scroller(b);
+      if (!sc) throw new Error(where + ': could not find the Settings scroller around the Join row');
+      if (!(sc.scrollTop > 40)) throw new Error(where + ': setup: Settings did not need scrolling to reach Labs (scrollTop ' + sc.scrollTop + ') — the case he describes is not being made');
+      const top0 = sc.scrollTop, c = centre(b);
+      if (c.x > 370 || c.y > 740 || c.y < 0) throw new Error(where + ': setup: the Join button is at ' + Math.round(c.x) + ',' + Math.round(c.y) + ', out of reach of real input');
+      const tap = (x, y) => kind === 'touch' ? [{ t: 'touchStart', x: x, y: y, ms: 60 }, { t: 'touchEnd', x: x, y: y, ms: 60 }]
+                                            : [{ t: 'mouseMove', x: x, y: y, ms: 30 }, { t: 'mouseDown', x: x, y: y, ms: 60 }, { t: 'mouseUp', x: x, y: y, ms: 60 }];
+      await realInput924(tap(c.x, c.y), where + ' — tapping Join…');
+      await sleep(500);
+      // Join asks for his name first when none is set — that card IS what he meets, so any collaboration card counts
+      const openCard = () => document.querySelector('.collab-scrim .collab-card');
+      const card = openCard();
+      if (!card) throw new Error(where + ': a real ' + kind + ' on Join… opened no collaboration card');
+      if (!(FM.settings.isOpen && FM.settings.isOpen())) throw new Error(where + ': opening the Join card CLOSED Settings — this is his complaint exactly');
+      // click out: a point on the card's scrim, well clear of the card
+      const cr = card.getBoundingClientRect();
+      const out = { x: 12, y: Math.max(12, Math.min(cr.top - 20, 60)) };
+      if (out.y >= cr.top && out.y <= cr.bottom && out.x >= cr.left && out.x <= cr.right) throw new Error(where + ': setup: no scrim clear of the card to click on');
+      await realInput924(tap(out.x, out.y), where + ' — clicking out of the card');
+      await sleep(600);
+      if (openCard()) throw new Error(where + ': the click out landed but the card (' + card.id + ') is still open — the test did not click out');
+      if (!(FM.settings.isOpen && FM.settings.isOpen())) throw new Error(where + ': clicking out of the Join card closed SETTINGS as well — he has to reopen it and scroll to the bottom again');
+      const b2 = joinBtn(), sc2 = b2 && scroller(b2);
+      if (!b2 || !sc2) throw new Error(where + ': Settings is open but the Labs rows are gone');
+      if (Math.abs(sc2.scrollTop - top0) > 2) throw new Error(where + ': Settings came back scrolled to ' + sc2.scrollTop + ' instead of ' + top0 + ' — not where he left it');
+      /* …and Escape out of the card is the same promise. */
+      await realInput924(tap(c.x, c.y), where + ' — tapping Join… again');
+      await sleep(500);
+      if (!openCard()) throw new Error(where + ': the second tap on Join… did not open the card');
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      await sleep(400);
+      if (openCard()) throw new Error(where + ': Escape did not close the card');
+      if (!(FM.settings.isOpen && FM.settings.isOpen())) throw new Error(where + ': Escape out of the Join card closed Settings too');
+      FM.settings.close();
+      await sleep(250);
+    }
+    try {
+      await onScreen924(async function () {
+        await atPhoneWidth(function () { return once('touch', 'phone (360)'); }, 360);
+        await atWideWidth(function () { return once('mouse', 'PC (1100)'); }, 1100);
+      });
+    } finally {
+      try { if (FM.collab.ui.close) FM.collab.ui.close(); } catch (e) {}
+      const s = document.querySelector('.collab-scrim'); if (s) s.remove();
+      document.body.classList.remove('collab-card-open');
+      try { if (FM.settings.isOpen && FM.settings.isOpen()) FM.settings.close(); } catch (e) {}
+      if (FM.settings.set && wasLabs !== undefined) FM.settings.set('collabLabs', wasLabs);
+    }
+  });
+
+  test('928 a colour-keyframed clip has no black start, its name stays centred, and its keyframe diamonds sit on the centre line — PC and phone', { item: '928', budgetMs: 60000 }, async function () {
+    /* Queue 928 (his PC screenshot at v16.90): the Rect clip's colour arc darkened to near-black at its left end, "Rect" sat
+       on the clip's bottom line while Hexagon and Squircle were centred, and the two ◇ sat high. Measured on the elements
+       he is looking at, at the two layouts he uses — never on a stylesheet reading. The plain clip beside it is the control:
+       the same measurements must hold for a clip that never had the keyframed-colour styling. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    async function measure(where) {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      const A = FM.makeLayer('shape', { name: 'Rect', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 150, fill: '#e0457b', start: 0, duration: 4 });
+      A.fill = { kf: [{ t: 0.5, v: '#e0457b', e: 'linear' }, { t: 2.5, v: '#7a7a7a', e: 'linear' }] };
+      const B = FM.makeLayer('shape', { name: 'Hexagon', shape: 'rect', x: 300, y: 600, shapeW: 200, shapeH: 150, fill: '#22b8e0', start: 0, duration: 4 });
+      FM.scene = scene([A, B], { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+      FM.refreshAll(); FM.selectLayer(A.id); if (FM.timeline.rebuild) FM.timeline.rebuild();
+      await sleep(400);
+      const clipOf = (L) => document.querySelector('#tl-tracks .clip[data-id="' + L.id + '"]');
+      let ca = clipOf(A), cb = clipOf(B);
+      if (!ca) throw new Error(where + ': setup: the keyframed clip is not on the timeline');
+      /* The phone shows a selected layer on its own (the solo row), so the plain clip is measured with nothing selected —
+         and the keyframed clip's NAME is measured both ways, since that is where the two layouts differ. */
+      let caFree = null;
+      if (!cb) {
+        FM.selectLayer(null); if (FM.timeline.rebuild) FM.timeline.rebuild(); await sleep(300);
+        cb = clipOf(B); caFree = clipOf(A);
+        if (!cb) throw new Error(where + ': setup: the plain clip is not on the timeline even with nothing selected');
+      }
+      if (!ca.classList.contains('clip-kfcolor')) throw new Error(where + ': setup: the keyframed clip is not drawn as a colour arc (no clip-kfcolor) — this is not the case he reported');
+      if (cb.classList.contains('clip-kfcolor')) throw new Error(where + ': CONTROL: the plain clip is drawn as a colour arc');
+      const out = [];
+      /* 1. NO BLACK START — the dark ground that sat under the first ~110px. Measured as the pseudo-element he sees. */
+      const bf = getComputedStyle(ca, '::before');
+      if (bf.content !== 'none' && /rgba?\(\s*6,\s*12,\s*20/.test(bf.backgroundImage + ' ' + bf.backgroundColor)) out.push('the clip still has its dark ground over the start (' + bf.backgroundImage.slice(0, 80) + ')');
+      /* 2. THE NAME IS CENTRED, like the plain clip's */
+      [[caFree || ca, 'the keyframed clip'], [cb, 'the plain clip (control)']].forEach(function (p) {
+        const lab = p[0].querySelector('.clip-label');
+        if (!lab) { out.push(p[1] + ' has no name on it'); return; }
+        const cr = p[0].getBoundingClientRect(), lr = lab.getBoundingClientRect();
+        const d = (lr.top + lr.height / 2) - (cr.top + cr.height / 2);
+        if (Math.abs(d) > 1.5) out.push(p[1] + '’s name is ' + d.toFixed(1) + 'px off the clip’s centre (clip ' + cr.top.toFixed(1) + '..' + cr.bottom.toFixed(1) + ', name ' + lr.top.toFixed(1) + '..' + lr.bottom.toFixed(1) + ')');
+      });
+      /* 3. THE DIAMONDS SIT ON THE CENTRE LINE of the clip they belong to — shown while it is selected */
+      if (caFree) { FM.selectLayer(A.id); if (FM.timeline.rebuild) FM.timeline.rebuild(); await sleep(300); ca = clipOf(A); if (!ca) throw new Error(where + ': setup: reselecting lost the keyframed clip'); }
+      const row = ca.closest('.track-row') || ca.parentElement;
+      const dots = [].slice.call((row || document).querySelectorAll('.kf-dot'));
+      if (dots.length < 2) out.push('setup: ' + dots.length + ' keyframe diamond(s) on the selected clip’s row, expected 2');
+      const cr = ca.getBoundingClientRect(), mid = cr.top + cr.height / 2;
+      dots.forEach(function (d, i) { const r = d.getBoundingClientRect(), y = r.top + r.height / 2; if (Math.abs(y - mid) > 1) out.push('diamond ' + (i + 1) + ' is centred at ' + y.toFixed(1) + ', the clip’s centre line is ' + mid.toFixed(1) + ' (' + (y - mid).toFixed(1) + 'px)'); });
+      if (out.length) throw new Error(where + ': ' + out.join('; '));
+    }
+    try {
+      await atWideWidth(function () { return measure('PC (1280)'); }, 1280);
+      await atPhoneWidth(function () { return measure('phone (380)'); }, 380);
+    } finally { FM.scene = saved; try { FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {} }
+  });
+
+  test('924 a real finger carrying a GROUP moves the switch by the whole block, and it lands where the switch last said', { item: '924', budgetMs: 60000 }, async function () {
+    /* Review finding: the switch first read the grabbed ROW's slot, while the drop moves the whole block — a group and all
+       its members, some with no row on screen. The level is now the block's top over the places a block that size can sit. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await stack924(5, 0);   // add row at the TOP, so it never sits between the block and the rows it passes
+          FM.scene.selectedIds = [L[3].id, L[4].id]; FM.scene.selectedId = L[3].id;
+          FM.groupSelection();
+          const G = FM.scene.layers.filter(l => l.type === 'group')[0];
+          if (!G) throw new Error('setup: grouping made no group');
+          FM.selectLayer(null); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); await sleep(350);
+          const n = FM.scene.layers.length, block = [G.id].concat(FM.groupDescendants ? FM.groupDescendants(G.id).map(m => m.id) : []);
+          const span = FM.scene.layers.filter(l => block.indexOf(l.id) >= 0).length;
+          if (span < 3) throw new Error('setup: the group block is ' + span + ' layers, expected the group and its two members');
+          const top0 = FM.scene.layers.findIndex(l => block.indexOf(l.id) >= 0);
+          if (top0 !== n - span) throw new Error('setup: the group is not at the bottom of the project (block top ' + top0 + ' of ' + n + ')');
+          const headG = [].slice.call(document.querySelectorAll('#tl-tracks .track-row .track-head')).find(h => FM.scene.layers[parseInt(h.dataset.idx, 10)] === G);
+          const handle = headG && headG.closest('.track-row').querySelector('.row-drag');
+          if (!handle) throw new Error('setup: no ≡ handle on the group row');
+          const r = handle.getBoundingClientRect(), rowH = headG.closest('.track-row').getBoundingClientRect().height;
+          const x = r.left + r.width / 2, y0 = r.top + r.height / 2;
+          if (x > 370 || y0 > 740) throw new Error('setup: the group handle is at ' + Math.round(x) + ',' + Math.round(y0) + ', out of reach');
+          const R = recorder924();
+          const steps = [{ t: 'touchStart', x: x, y: y0, ms: 120 }];
+          const travel = -(y0 - 20 - (document.querySelector('#tl-tracks .track-row').getBoundingClientRect().top));   // up to the first row
+          for (let k = 1; k <= 20; k++) steps.push({ t: 'touchMove', x: x, y: y0 + travel * k / 20, ms: 45 });
+          steps.push({ t: 'touchEnd', x: x, y: y0 + travel, ms: 0 });
+          try { await realInput924(steps, 'the group drag'); await sleep(450); } finally { R.stop(); }
+          const held = R.rec.filter(s => s.type === 'pointermove' && s.held === G.id);
+          if (held.length < 8) throw new Error('only ' + held.length + ' moves had the group in hand');
+          const vals = held.map(s => s.sw), slots = n - span;
+          if (Math.abs(vals[0] - 1) > 1e-6) throw new Error('holding a group that sits at the BOTTOM, the switch read ' + vals[0].toFixed(3) + ' — it should be 1 (the block can go no lower)');
+          const bad = vals.filter(v => Math.abs(v * slots - Math.round(v * slots)) > 1e-6);
+          if (bad.length) throw new Error('with a ' + span + '-layer block in ' + n + ' layers the switch should sit on steps of 1/' + slots + ' — it read ' + bad[0]);
+          const topNow = FM.scene.layers.findIndex(l => block.indexOf(l.id) >= 0);
+          if (Math.abs(topNow / slots - vals[vals.length - 1]) > 1e-6) throw new Error('the switch last showed ' + vals[vals.length - 1].toFixed(3) + ' but the block landed with its top at ' + topNow + ' (' + (topNow / slots).toFixed(3) + ')');
+          if (topNow !== 0) throw new Error('carried to the top row, the group landed with its top at ' + topNow + ' — the drag did not go where it was taken');
+        });
+      }, 360);
+    } finally { FM.scene = saved; FM.dragLayerId = null; FM.dragLayerAt = null; FM.dragAddAt = null; try { FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {} }
+  });
+
+  test('924 pressing the switch while a real finger holds a layer throws it to the far end — and letting go does not put it back', { item: '924', budgetMs: 60000 }, async function () {
+    /* Review finding: the throw left the ≡ gesture running, so the release re-applied the finger's slot and undid it, and
+       until then the knob and the rows described the finger. One gesture in two requests: hold and carry, press the switch
+       with the finger still down, then move and lift. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          await stack924(5, 5);
+          const heads = [].slice.call(document.querySelectorAll('#tl-tracks .track-row .track-head'));
+          const headA = heads.find(h => parseInt(h.dataset.idx, 10) === 0);
+          const topId = FM.scene.layers[0].id;
+          const handle = headA && headA.closest('.track-row').querySelector('.row-drag');
+          if (!handle) throw new Error('setup: no ≡ handle on the top layer');
+          const r = handle.getBoundingClientRect(), rowH = headA.closest('.track-row').getBoundingClientRect().height;
+          const x = r.left + r.width / 2, y0 = r.top + r.height / 2;
+          const carry = [{ t: 'touchStart', x: x, y: y0, ms: 120 }];
+          for (let k = 1; k <= 14; k++) carry.push({ t: 'touchMove', x: x, y: y0 + rowH * 3.6 * k / 14, ms: 45 });
+          await realInput924(carry, 'carrying the layer down');
+          await sleep(150);
+          if (FM.dragLayerId !== topId) throw new Error('setup: the layer is not in hand after the carry (held ' + FM.dragLayerId + ')');
+          const pBefore = FM._addSwitchProportion();
+          if (!(pBefore >= 0.5)) throw new Error('setup: carried nearly to the bottom, the switch reads ' + pBefore.toFixed(3) + ' — the throw would go the wrong way for this test');
+          FM.toggleAddSide();   // the press — the finger is still down
+          await sleep(200);
+          const atThrow = FM.scene.layers.findIndex(l => l.id === topId);
+          if (atThrow !== 0) throw new Error('pressing the switch while holding the layer low down left it at index ' + atThrow + ' — it should be thrown to the TOP');
+          if (FM.dragLayerId) throw new Error('the throw did not end the drag — the switch still thinks a layer is in hand, so the release will re-apply the old slot');
+          await realInput924([{ t: 'touchMove', x: x, y: y0 + rowH * 3.8, ms: 45 }, { t: 'touchEnd', x: x, y: y0 + rowH * 3.8, ms: 0 }], 'moving on and lifting the finger');
+          await sleep(450);
+          const atEnd = FM.scene.layers.findIndex(l => l.id === topId);
+          if (atEnd !== 0) throw new Error('letting go after the throw put the layer at index ' + atEnd + ' — the release undid the throw');
+        });
+      }, 360);
+    } finally { FM.scene = saved; FM.dragLayerId = null; FM.dragLayerAt = null; FM.dragAddAt = null; try { FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {} }
+  });
+
+  test('924 on PC the add line dragged into the auto-scroll edge keeps moving the switch as the list scrolls, and lands under the pointer', { item: '924', budgetMs: 60000 }, async function () {
+    /* Review finding (the fault is #411's): the line drag measured rows in SCREEN coordinates snapshotted at the grab, so
+       once the list auto-scrolled under a still pointer it kept answering the pre-scroll slot — the switch froze and the
+       drop landed on the row that had been under the pointer before the scroll. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atWideWidth(async function () {
+        await onScreen924(async function () {
+          await stack924(6, 0);
+          // six is not enough to scroll the PC timeline — add more
+          for (let i = 0; i < 10; i++) FM.scene.layers.push(FM.makeLayer('shape', { name: 'S924 more ' + i, shape: 'rect', x: 200, y: 200, shapeW: 50, shapeH: 50, fill: '#888888', start: 0, duration: 4 }));
+          FM.addAt = 0; FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); await sleep(400);
+          const tlEl = document.getElementById('timeline'); tlEl.scrollTop = 0; await sleep(150);
+          if (!(tlEl.scrollHeight > tlEl.clientHeight + 80)) throw new Error('setup: the timeline does not scroll (' + tlEl.scrollHeight + ' vs ' + tlEl.clientHeight + ') — the edge case cannot be made');
+          const line = document.querySelector('.tl-addrow.tl-addrow--line');
+          if (!line) throw new Error('setup: no PC add line');
+          const lr = line.getBoundingClientRect(), tl = tlEl.getBoundingClientRect();
+          const x = Math.min(lr.left + 60, 360), y0 = lr.top + lr.height / 2, yEdge = Math.min(tl.bottom - 8, 745);
+          if (y0 < 0 || y0 > 740) throw new Error('setup: the add line is at y ' + Math.round(y0) + ', out of reach');
+          const R = recorder924();
+          const steps = [{ t: 'mouseMove', x: x, y: y0, ms: 40 }, { t: 'mouseDown', x: x, y: y0, ms: 80 }];
+          for (let k = 1; k <= 10; k++) steps.push({ t: 'mouseMove', x: x, y: y0 + (yEdge - y0) * k / 10, ms: 40 });
+          for (let k = 0; k < 12; k++) steps.push({ t: 'mouseMove', x: x, y: yEdge, ms: 180 });   // hold at the edge while the list scrolls
+          steps.push({ t: 'mouseUp', x: x, y: yEdge, ms: 0 });
+          let scrolled = 0;
+          try { await realInput924(steps, 'the add-line edge drag'); scrolled = tlEl.scrollTop; await sleep(500); } finally { R.stop(); }
+          if (!(scrolled > 40)) throw new Error('setup: holding at the edge did not auto-scroll the list (scrollTop ' + scrolled + ')');
+          const moves = R.rec.filter(s => s.type === 'pointermove' && s.buttons === 1);
+          const firstAtEdge = moves.findIndex(s => Math.abs(s.y - yEdge) < 1);
+          if (firstAtEdge < 0) throw new Error('setup: no move reached the edge');
+          const atEdge = moves[firstAtEdge].sw, last = moves[moves.length - 1].sw;
+          if (!(last > atEdge + 1e-6)) throw new Error('while the list auto-scrolled ' + Math.round(scrolled) + 'px under a still pointer, the switch stayed at ' + atEdge.toFixed(3) + ' → ' + last.toFixed(3) + ' — it is still judging the rows where they were before the scroll (samples at the edge [scroll, slot, switch]: ' + JSON.stringify(moves.slice(firstAtEdge).map(m => [Math.round(m.scroll), m.addAt, +m.sw.toFixed(3)])) + ')');
+          // the list keeps scrolling between the last move and the release, so the drop is judged against the switch AT the release
+          const n = FM.scene.layers.length, upS = R.rec.filter(s => s.type === 'pointerup').pop();
+          if (!upS) throw new Error('setup: the release was not recorded');
+          if (Math.abs(FM.addAt / n - upS.sw) > 1e-6) throw new Error('at the release the switch showed ' + upS.sw.toFixed(3) + ' but the line landed at ' + FM.addAt + ' of ' + n);
+          if (!(FM.addAt >= n - 4)) throw new Error('held at the bottom edge while the list scrolled, the line landed at ' + FM.addAt + ' of ' + n + ' — nowhere near where the pointer had taken it');
+        });
+      }, 1100);
+    } finally { FM.scene = saved; FM.dragAddAt = null; FM.addAt = 0; try { FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {} }
+  });
+
+  test('925 on PC a real click on the Export button closes the export menu when it is open, and opens it when it is not', { item: '925', budgetMs: 60000 }, async function () {
+    /* Queue 925: "the export menu doesn't go away when you click on it again it just keeps reopening". A real click, because
+       the question is which element the second click LANDS on — the lifted button or the dialog's scrim — and only the
+       browser's own hit-test answers that. The frame is slid sideways so the button is inside the part of the page real
+       input can reach at either suite width. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const dlg = document.getElementById('export-dialog');
+    const fe = window.frameElement;
+    if (!dlg || !fe) throw new Error('setup: no export dialog, or no runner frame');
+    const shown = () => !dlg.classList.contains('hidden');
+    try {
+      await atWideWidth(async function () {
+        if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        await sleep(300);
+        const btn = document.getElementById('btn-export');
+        if (!btn || !btn.getBoundingClientRect().width) throw new Error('setup: the Export button is not on screen at a desktop width');
+        // (Studio is the only desktop layout since queue 293 — there is no second one to check.)
+        const l0 = fe.style.left, t0 = fe.style.top, z0 = fe.style.zIndex;
+        const br = btn.getBoundingClientRect();
+        fe.style.left = Math.round(180 - br.left) + 'px'; fe.style.top = Math.round(Math.min(0, 300 - br.top)) + 'px'; fe.style.zIndex = '99999';
+        try {
+          await sleep(150);
+          const click = async (what) => {
+            const r = btn.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+            await realInput924([{ t: 'mouseMove', x: x, y: y, ms: 40 }, { t: 'mouseDown', x: x, y: y, ms: 60 }, { t: 'mouseUp', x: x, y: y, ms: 60 }], what);
+            await sleep(700);
+          };
+          if (shown()) throw new Error('setup: the export menu is already open');
+          await click('the first click on Export');
+          if (!shown()) throw new Error('CONTROL: a real click on Export did not open the export menu — nothing below would mean anything');
+          await click('the second click on Export');
+          if (shown()) throw new Error('clicking the Export button with the menu open left it OPEN — it should close, like the notes button');
+          await click('the third click on Export');
+          if (!shown()) throw new Error('after closing it with the button, clicking Export again did not open the menu');
+        } finally {
+          fe.style.left = l0; fe.style.top = t0; fe.style.zIndex = z0;
+        }
+      }, 1100);
+    } finally {
+      if (shown()) { const c = document.getElementById('exp-cancel'); if (c) c.click(); }
+      await sleep(200);
+    }
+  });
+
+  test('926 the view menu: Layers is greyed with no single clip selected, and the Camera button and the camera’s timeline eye are one state', { item: '926', budgetMs: 90000 }, async function () {
+    /* Queue 926. The eye is pressed with REAL input (see 924) — it is a pointerdown paint gesture on the timeline, and the
+       clash he described is between two different routes to the same flag, so the route has to be the real one. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const vbL = document.getElementById('vb-layers'), vbC = document.getElementById('vb-camera');
+    if (!vbL || !vbC) throw new Error('setup: the view rail has no Layers or Camera button');
+    const greyed = (b) => b.classList.contains('vb-na') && parseFloat(getComputedStyle(b).opacity) < 0.6;
+    async function run(where) {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      const A = FM.makeLayer('shape', { name: 'A926', shape: 'rect', x: 300, y: 300, shapeW: 100, shapeH: 100, fill: '#e0457b', start: 0, duration: 4 });
+      const B = FM.makeLayer('shape', { name: 'B926', shape: 'rect', x: 500, y: 500, shapeW: 100, shapeH: 100, fill: '#22b8e0', start: 0, duration: 4 });
+      FM.scene = scene([A, B], { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+      FM.selectLayer(null); FM.refreshAll(); await sleep(250);
+      /* 1. LAYERS: greyed with none, live with one, greyed with two */
+      if (!greyed(vbL)) throw new Error(where + ': with nothing selected the Layers button is not greyed (opacity ' + getComputedStyle(vbL).opacity + ')');
+      FM.selectLayer(A.id); await sleep(120);
+      if (greyed(vbL)) throw new Error(where + ': with one clip selected the Layers button is still greyed');
+      FM.scene.selectedIds = [A.id, B.id]; FM.scene.selectedId = A.id; FM.refreshAll(); await sleep(120);
+      if (!greyed(vbL)) throw new Error(where + ': with two clips selected (isolate needs ONE) the Layers button is not greyed');
+      FM.selectLayer(null); await sleep(120);
+      if (!greyed(vbL)) throw new Error(where + ': deselecting did not grey the Layers button again');
+      /* 2. CAMERA: add it with the button, hide it with the timeline eye, the button must follow */
+      vbC.click(); await sleep(300);
+      const cam = FM.scene.layers.filter(l => l.type === 'camera')[0];
+      if (!cam) throw new Error(where + ': setup: the Camera button did not add a camera');
+      FM.selectLayer(null); if (FM.timeline.rebuild) FM.timeline.rebuild(); await sleep(250);
+      if (!vbC.classList.contains('on') || vbC.classList.contains('cam-off')) throw new Error(where + ': CONTROL: a visible camera does not show as on in the view menu');
+      const eye = document.querySelector('#tl-tracks .th-eye[data-lid="' + cam.id + '"]');
+      if (!eye) throw new Error(where + ': setup: no eye on the camera row');
+      const er = eye.getBoundingClientRect(), x = er.left + er.width / 2, y = er.top + er.height / 2;
+      if (x > 370 || y > 740 || y < 0) throw new Error(where + ': setup: the camera eye is at ' + Math.round(x) + ',' + Math.round(y) + ', out of reach of real input');
+      const tap = (kind) => kind === 'touch' ? [{ t: 'touchStart', x: x, y: y, ms: 60 }, { t: 'touchEnd', x: x, y: y, ms: 80 }]
+                                             : [{ t: 'mouseMove', x: x, y: y, ms: 30 }, { t: 'mouseDown', x: x, y: y, ms: 60 }, { t: 'mouseUp', x: x, y: y, ms: 80 }];
+      await realInput924(tap(where.indexOf('phone') === 0 ? 'touch' : 'mouse'), where + ' — the camera’s eye');
+      await sleep(400);
+      if (cam.visible !== false) throw new Error(where + ': setup: a real tap on the camera’s eye did not hide it');
+      if (!vbC.classList.contains('cam-off') || vbC.classList.contains('on')) throw new Error(where + ': the camera was hidden from the TIMELINE EYE but the view menu’s Camera button still shows it on — the clash he reported');
+      /* …and back the other way: the view menu shows it, the eye must open */
+      vbC.click(); await sleep(350);
+      if (cam.visible === false) throw new Error(where + ': the Camera button did not show the camera again');
+      const eye2 = document.querySelector('#tl-tracks .th-eye[data-lid="' + cam.id + '"]');
+      if (!eye2 || eye2.classList.contains('off')) throw new Error(where + ': the camera was shown from the VIEW MENU but its timeline eye is still shut');
+      if (!vbC.classList.contains('on')) throw new Error(where + ': the Camera button does not show itself on after showing the camera');
+      /* …and undo keeps them together */
+      if (FM.history && FM.history.undo) { FM.history.undo(); await sleep(400);
+        const camU = FM.scene.layers.filter(l => l.type === 'camera')[0];
+        if (camU && (camU.visible === false) !== vbC.classList.contains('cam-off')) throw new Error(where + ': after undo the camera is ' + (camU.visible === false ? 'hidden' : 'shown') + ' but the Camera button says the opposite');
+      }
+    }
+    try {
+      await onScreen924(async function () {
+        await atWideWidth(function () { return run('PC (1100)'); }, 1100);
+        await atPhoneWidth(function () { return run('phone (360)'); }, 360);
+      });
+    } finally { FM.scene = saved; try { FM.refreshAll(); } catch (e) {} }
+  });
+
+  test('920 an install from before the status-bar fix tells him once, on Home, how to get rid of the blur — and a fresh install never does', { item: '920', budgetMs: 45000 }, async function () {
+    /* Queue 920, 24 Sep: "The fade at the top is still an issue" — his screenshot shows the status bar drawn OVER the page,
+       which only an install from before v16.78's `default` status bar can do (iOS reads that setting once, at install).
+       The runner is not an installed app and has no status bar, so the two facts are faked through the seam; the measuring
+       of env(safe-area-inset-top) itself is exercised by tools/shot.py --safe-top. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const SB = FM.statusBar;
+    if (!SB || !SB.staleInstall || !SB._maybeTell) throw new Error('FM.statusBar exposes no stale-install check');
+    if (SB.staleInstall()) throw new Error('the test runner, which is not an installed app, reads as a stale install — the check would nag every browser tab');
+    const realAsk = FM.ask, realBackup = FM.backupEverything, asked = [], backups = [];
+    let seen0 = null; try { seen0 = localStorage.getItem(SB._SEEN); localStorage.removeItem(SB._SEEN); } catch (e) {}
+    const hadHome = FM.home && FM.home.isOpen && FM.home.isOpen();
+    try {
+      FM.ask = async (o) => { asked.push(o); return true; };
+      FM.backupEverything = async () => { backups.push(1); return { ok: true }; };
+      if (FM.home && FM.home.open && !hadHome) { FM.home.open(); await sleep(400); }
+      /* a FRESH install: installed, nothing under the status bar */
+      SB._fake = { installed: true, inset: 0 };
+      SB._maybeTell(); await sleep(50);
+      if (asked.length) throw new Error('a fresh install (page below the status bar) was told to reinstall');
+      /* the OLD install he has */
+      SB._fake = { installed: true, inset: 47 };
+      if (!SB.staleInstall()) throw new Error('an installed app with its page 47px under the status bar is not recognised as the old install');
+      SB._maybeTell(); await sleep(80);
+      if (asked.length !== 1) throw new Error('the old install was not told on Home (' + asked.length + ' notes)');
+      const o = asked[0];
+      if (!/blur/i.test(o.title || '') || !/Back up/.test(o.message || '') || !/Add to Home Screen/.test(o.message || '') || !/Restore/.test(o.message || '')) throw new Error('the note does not carry the steps (back up, remove, Add to Home Screen, restore): ' + JSON.stringify(o).slice(0, 200));
+      if (!/Back up/.test(o.ok || '')) throw new Error('the note’s button is “' + o.ok + '”, not a Back up');
+      if (backups.length !== 1) throw new Error('pressing “' + o.ok + '” did not start a backup');
+      SB._maybeTell(); await sleep(50);
+      if (asked.length !== 1) throw new Error('the note came back a second time — it is said once per install');
+      /* …and Settings keeps the steps for whenever he is ready */
+      if (FM.settings && FM.settings.open) {
+        FM.settings.open(); await sleep(400);
+        const row = [].slice.call(document.querySelectorAll('.set-label')).find(l => /blur at the top/i.test(l.textContent));
+        FM.settings.close(); await sleep(200);
+        if (!row) throw new Error('Settings has no “Remove the blur at the top” row on the old install');
+        SB._fake = { installed: true, inset: 0 };
+        FM.settings.open(); await sleep(400);
+        const row2 = [].slice.call(document.querySelectorAll('.set-label')).find(l => /blur at the top/i.test(l.textContent));
+        FM.settings.close(); await sleep(200);
+        if (row2) throw new Error('a fresh install still shows the “Remove the blur” row');
+      }
+    } finally {
+      delete SB._fake;
+      FM.ask = realAsk; FM.backupEverything = realBackup;
+      try { if (seen0 === null) localStorage.removeItem(SB._SEEN); else localStorage.setItem(SB._SEEN, seen0); } catch (e) {}
+      if (FM.home && !hadHome && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    }
+  });
+
+  test('930 the Assistant and the Director never stack, and the API key is entered in Settings, reached from a button in each', { item: '930', budgetMs: 60000 }, async function () {
+    /* Queue 930 — his clauses: one AI panel at a time; the key entered in App Settings in its own section; a button in both
+       panels that opens Settings there; nothing he already entered is lost. And, because it is his real key: the full key
+       is never written into the page, and the field is cleared once it is saved. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.aiKey || !FM.aiPanel || !FM.aiChat || !FM.settings || !FM.settings.openAt) throw new Error('setup: the AI panels, the key store or FM.settings.openAt are missing');
+    const had = FM.aiKey.get(), hadRem = FM.aiKey.remembered();
+    const realAsk = FM.ask; const asked = [];
+    const FAKE = 'sk-ant-test0930-' + 'x'.repeat(24) + 'Q9Z1';
+    const pageHas = (k) => document.documentElement.outerHTML.indexOf(k) >= 0 || [].slice.call(document.querySelectorAll('input')).some(i => i.value === k);
+    async function run(where) {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      FM.aiKey.forget();
+      /* 1. never both */
+      FM.aiPanel.show(); await sleep(200);
+      FM.aiChat.show(); await sleep(200);
+      if (FM.aiPanel.isOpen()) throw new Error(where + ': opening the Assistant left the Director open under it');
+      FM.aiPanel.show(); await sleep(200);
+      if (FM.aiChat.isOpen()) throw new Error(where + ': opening the Director left the Assistant open under it');
+      /* 2. the Director's button goes to Settings → AI key */
+      const dBtn = document.querySelector('.ai-keyform .ai-keysettings');
+      if (!dBtn || !dBtn.offsetParent) throw new Error(where + ': with no key the Director shows no “Add your key in Settings” button');
+      dBtn.click(); await sleep(500);
+      if (FM.aiPanel.isOpen()) throw new Error(where + ': the Director stayed open over Settings');
+      if (!FM.settings.isOpen()) throw new Error(where + ': the Director’s key button did not open Settings');
+      const sec = document.getElementById('set-aikey');
+      if (!sec) throw new Error(where + ': Settings has no AI key section');
+      const sr = sec.getBoundingClientRect();
+      if (sr.top < -2 || sr.top > innerHeight * 0.5) throw new Error(where + ': Settings opened but the AI key section is at y ' + Math.round(sr.top) + ' — not brought into view');
+      /* 3. entering the key there: saved to the one key store, masked on screen, never in the page */
+      const input = sec.querySelector('input[type=password]');
+      /* review fixes: 16px so iOS does not zoom into the field; Remember starts UNTICKED for a new key (the Director's default) */
+      if (input && parseFloat(getComputedStyle(input).fontSize) < 16) throw new Error(where + ': the key field is ' + getComputedStyle(input).fontSize + ' — iOS zooms the whole page into a field under 16px');
+      const remBox = sec.querySelector('.set-aikey-rem input[type=checkbox]');
+      if (!remBox) throw new Error(where + ': no Remember box');
+      if (remBox.checked) throw new Error(where + ': Remember on this device starts TICKED for a new key — it was unticked in the Director, and a key should only be stored if he chooses');
+      const save = [].slice.call(sec.querySelectorAll('button')).find(b => /Save/.test(b.textContent));
+      if (!input || !save) throw new Error(where + ': the AI key section has no password field or no Save');
+      remBox.checked = true; remBox.dispatchEvent(new Event('change'));
+      input.value = FAKE; save.click(); await sleep(150);
+      if (!FM.aiKey.remembered()) throw new Error(where + ': saved with Remember ticked, but the key is not remembered');
+      /* the toast about it is not painted under the panel */
+      if (!document.body.classList.contains('set-open') || parseInt(getComputedStyle(document.getElementById('toast')).zIndex, 10) <= 220) throw new Error(where + ': with Settings open the toast sits at z-index ' + getComputedStyle(document.getElementById('toast')).zIndex + ', under the panel (220)');
+      /* unticking Remember takes the key out of storage at once */
+      remBox.checked = false; remBox.dispatchEvent(new Event('change')); await sleep(60);
+      if (FM.aiKey.remembered()) throw new Error(where + ': unticking Remember left the key stored on the device');
+      if (FM.aiKey.get() !== FAKE) throw new Error(where + ': unticking Remember lost the key for this session');
+      if (FM.aiKey.get() !== FAKE) throw new Error(where + ': Save did not put the key in FM.aiKey (the one place it lives)');
+      if (input.value) throw new Error(where + ': the password field still holds the key after Save');
+      if (pageHas(FAKE)) throw new Error(where + ': the FULL key is written somewhere in the page after Save');
+      if (sec.textContent.indexOf(FM.aiKey.masked()) < 0) throw new Error(where + ': the section does not show the masked key (' + FM.aiKey.masked() + ')');
+      /* …and junk is refused without being stored */
+      input.value = 'not-a-key'; save.click(); await sleep(100);
+      if (FM.aiKey.get() !== FAKE) throw new Error(where + ': an invalid key replaced the saved one');
+      FM.settings.close(); await sleep(300);
+      /* 4. the Assistant's header button goes to the same place */
+      FM.aiChat.show(); await sleep(200);
+      const aBtn = document.querySelector('.aic-keybtn');
+      if (!aBtn || !aBtn.offsetParent) throw new Error(where + ': the Assistant has no API key button');
+      aBtn.click(); await sleep(500);
+      if (FM.aiChat.isOpen()) throw new Error(where + ': the Assistant stayed open over Settings');
+      if (!FM.settings.isOpen() || !document.getElementById('set-aikey')) throw new Error(where + ': the Assistant’s key button did not open Settings at the AI key section');
+      /* THE HIGH ONE: the hidden Assistant cannot take the focus (a reply landing used to focus it, and the key pasted for
+         Settings went into the chat) */
+      const box = document.querySelector('#ai-chat textarea, #ai-chat input[type=text]');
+      if (box) { box.focus(); if (document.activeElement === box) throw new Error(where + ': the HIDDEN Assistant’s text box took the focus — a key pasted for Settings would land in the chat'); }
+      /* 5. Forget */
+      const forget = [].slice.call(document.getElementById('set-aikey').querySelectorAll('button')).find(b => /Forget/.test(b.textContent));
+      if (!forget) throw new Error(where + ': no Forget key with a key saved');
+      FM.ask = async (o) => { asked.push(o); return true; };
+      forget.click(); await sleep(150);
+      FM.ask = realAsk;
+      if (!asked.length) throw new Error(where + ': Forget key did not ask first — it is one tap from Save');
+      if (FM.aiKey.has()) throw new Error(where + ': Forget key (confirmed) left the key in place');
+      FM.settings.close(); await sleep(600);
+      /* …and the panel that sent him to Settings comes back */
+      if (!FM.aiChat.isOpen()) throw new Error(where + ': closing Settings did not bring the Assistant back — he has to find it again to use the key');
+      FM.aiChat.hide(); await sleep(200);
+      /* ROUND 2 of the review. (a) closed means unreachable, from the start */
+      const chatEl = document.getElementById('ai-chat');
+      if (chatEl && !chatEl.inert) throw new Error(where + ': the closed Assistant is not inert — something can still focus or type into it off screen');
+      /* (b) Settings opened OVER an open Assistant (the cog route): the Assistant must not pull the focus out of the key field */
+      FM.aiKey.set(FAKE, false);
+      FM.aiChat.show(); await sleep(250);
+      FM.settings.open(); await sleep(450);
+      const kf = document.querySelector('#set-aikey input[type=password]');
+      if (!kf) throw new Error(where + ': setup: no key field');
+      kf.focus();
+      FM.aiChat.show(); await sleep(300);   // show()'s own focus timer — the same one a landing reply goes through
+      if (document.activeElement !== kf) throw new Error(where + ': with Settings open over the Assistant, the Assistant took the focus from the Settings key field (now ' + (document.activeElement && (document.activeElement.className || document.activeElement.tagName)) + ')');
+      FM.settings.close(); await sleep(400);
+      /* (c) a key pasted into the chat is never sent */
+      const box2 = document.querySelector('#ai-chat textarea');
+      const sendB = document.querySelector('#ai-chat .aic-send');
+      if (box2 && sendB) {
+        const before = document.querySelectorAll('#ai-chat .aic-me, #ai-chat .aic-bubble').length;
+        box2.value = 'my key is ' + FAKE; sendB.click(); await sleep(200);
+        if (pageHas(FAKE)) throw new Error(where + ': a key typed into the chat is still in the page after Send');
+        if (document.querySelectorAll('#ai-chat .aic-me, #ai-chat .aic-bubble').length > before) throw new Error(where + ': a message holding the key was put in the chat');
+      } else throw new Error(where + ': setup: no chat box or Send button');
+      FM.aiChat.hide(); await sleep(200);
+      /* (d) a Settings row that closes Settings to hand him something else does NOT bring the Assistant back over it */
+      FM.aiChat.show(); await sleep(200);
+      document.querySelector('.aic-keybtn').click(); await sleep(500);
+      const handOff = [].slice.call(document.querySelectorAll('.set-action')).find(bt => /^Show$/.test(bt.textContent.trim()));
+      if (handOff) {
+        handOff.click(); await sleep(700);
+        if (FM.aiChat.isOpen()) throw new Error(where + ': a Settings row that closes Settings to open something else brought the Assistant back over it');
+        const sc = document.getElementById('shortcuts-overlay'); if (sc) { const x = sc.querySelector('button'); if (x) x.click(); sc.classList.add('hidden'); }
+        await sleep(300);
+      } else { FM.settings.close({ handBack: false }); await sleep(300); }
+      FM.aiKey.forget();
+      /* 6. a key entered BEFORE this change (the Director used FM.aiKey.set directly) shows as connected — nothing lost */
+      FM.aiKey.set(FAKE, false);
+      FM.settings.openAt('aikey'); await sleep(450);
+      const t = document.getElementById('set-aikey').textContent;
+      if (t.indexOf(FM.aiKey.masked()) < 0) throw new Error(where + ': a key that was already set does not show as connected in Settings');
+      FM.settings.close(); await sleep(300);
+      FM.aiKey.forget();
+    }
+    try {
+      await atPhoneWidth(function () { return run('phone (380)'); }, 380);
+      await atWideWidth(function () { return run('PC (1280)'); }, 1280);
+    } finally {
+      FM.ask = realAsk;
+      try { FM.aiPanel.hide(); FM.aiChat.hide(); if (FM.settings.isOpen()) FM.settings.close(); } catch (e) {}
+      if (had) FM.aiKey.set(had, hadRem); else FM.aiKey.forget();
+    }
+  });
+
+  test('931 swiping the New effects strip pauses its auto-scroll well past the old 3 s, and it resumes from where he left it — real touch and a real wheel', { item: '931', budgetMs: 90000 }, async function () {
+    /* Queue 931: "it's annoying when you try to slide it to see something at the start, but then it instantly starts
+       scrolling. So you can't see the first effect that shows up." Real input (see 924): a swipe is a native pan whose events
+       a script cannot fake, and a PC scroll is a wheel or trackpad, which never presses a pointer at all. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    async function run(where, kind) {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      const L = FM.makeLayer('shape', { name: 'S931', shape: 'rect', x: 300, y: 300, shapeW: 100, shapeH: 100, fill: '#e0457b', start: 0, duration: 4 });
+      FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+      FM.refreshAll(); FM.selectLayer(L.id); await sleep(200);
+      FM.fxBrowser.open(L); await sleep(700);
+      try {
+        const row = document.querySelector('#fx-browser .fxb-featured');
+        if (!row) throw new Error(where + ': setup: no New strip in the effects browser');
+        if (!(row.scrollWidth - row.clientWidth > 300)) throw new Error(where + ': setup: the New strip does not overflow enough to swipe (' + row.scrollWidth + ' vs ' + row.clientWidth + ')');
+        // CONTROL: left alone, it does auto-scroll
+        const a0 = row.scrollLeft; await sleep(900);
+        if (!(row.scrollLeft > a0 + 5)) throw new Error(where + ': CONTROL: left alone the strip did not auto-scroll (' + a0 + ' → ' + row.scrollLeft + '; paused for another ' + Math.round(FM._fxAutoPausedFor ? FM._fxAutoPausedFor() : -1) + ' ms) — nothing below would mean anything');
+        row.scrollLeft = 260; row._autoLeft = 260; await sleep(80);   // somewhere past the start, as if it had been running
+        const r = row.getBoundingClientRect(), x = Math.min(r.left + r.width * 0.3, 200), y = r.top + r.height / 2;
+        if (y > 740 || y < 0) throw new Error(where + ': setup: the strip is at y ' + Math.round(y) + ', out of reach');
+        const steps = kind === 'touch'
+          ? [{ t: 'touchStart', x: x, y: y, ms: 60 }].concat(Array.from({ length: 10 }, (_, k) => ({ t: 'touchMove', x: x + 28 * (k + 1), y: y, ms: 35 })), [{ t: 'touchEnd', x: x + 280, y: y, ms: 0 }])
+          : [{ t: 'mouseMove', x: x, y: y, ms: 30 }, { t: 'wheel', x: x, y: y, dx: -150, dy: 0, ms: 40 }, { t: 'wheel', x: x, y: y, dx: -150, dy: 0, ms: 40 }];
+        await realInput924(steps, where + ' — scrolling the strip back to the start');
+        await sleep(300);
+        const back = row.scrollLeft;
+        if (!(back < 120)) throw new Error(where + ': setup: the real ' + (kind === 'touch' ? 'swipe' : 'wheel') + ' did not take the strip back towards the start (scrollLeft ' + back + ')');
+        await sleep(4200);   // past the old pause (3 s from the PRESS)
+        if (Math.abs(row.scrollLeft - back) > 2) throw new Error(where + ': 4.5 s after he scrolled it back, the strip had moved from ' + back.toFixed(1) + ' to ' + row.scrollLeft.toFixed(1) + ' — it did not stay put for him to look at the first effects');
+        await sleep(Math.max(0, (FM._carouselPauseMs || 8000) - 4200) + 1500);
+        const later = row.scrollLeft;
+        if (!(later > back + 3)) throw new Error(where + ': well after the pause the strip had not started again (' + back.toFixed(1) + ' → ' + later.toFixed(1) + ')');
+        if (later > back + 80) throw new Error(where + ': it resumed with a jump (' + back.toFixed(1) + ' → ' + later.toFixed(1) + ') instead of carrying on from where he left it');
+      } finally { FM.fxBrowser.close(); await sleep(300); }
+    }
+    try {
+      await onScreen924(async function () {
+        await atPhoneWidth(function () { return run('phone (360)', 'touch'); }, 360);
+        await atWideWidth(function () { return run('PC (1100)', 'wheel'); }, 1100);
+      });
+    } finally { FM.scene = saved; try { FM.refreshAll(); } catch (e) {} }
+  });
+
+
+  /* ═══ HUNT-a (queue 690) — THE PHONE TIMELINE, DRIVEN BY A REAL FINGER ════════════════════════════════════════════
+   * His standing brief: "go re audit, find some bugs coz theres a shit load". Every test below uses TRUSTED touch
+   * through tests/_cdp.py (realInput924), because the phone timeline's gestures depend on capture, hit-testing and the
+   * browser's own touch -> pointer pipeline, and his phone bugs have repeatedly survived synthetic events. Each one
+   * carries a control that proves the gesture really engaged, so a red here is the app, not a gesture that never started.
+   * Found by the hunt as four failing HUNT-a tests; all four fixed in js/timeline.js and renamed 690 for what they now hold. */
+  async function huntKfFixture() {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.contextMenu) FM.contextMenu.hide();
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const L = FM.makeLayer('shape', { name: 'HUNT kf', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#e0245e', start: 0, duration: 6 });
+    L.transform.x = { kf: [{ t: 1, v: 100 }, { t: 3, v: 500 }, { t: 5, v: 300 }] };
+    FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+    if (FM.pause) FM.pause();
+    FM.refreshAll(); FM.selectLayer(L.id);
+    await sleep(250);
+    FM.inspector.openCategory('transform'); FM._mtMode = 'move';
+    FM.timeline.rebuild(); FM.timeline.updatePlayhead();
+    await sleep(300);
+    return L;
+  }
+  function huntDotAt(t) {
+    return [].filter.call(document.querySelectorAll('#tl-tracks .kf-dot.kf-live'), d => Math.abs(parseFloat(d.dataset.t) - t) < 1e-3)[0] || null;
+  }
+  function huntDowns() {
+    const downs = [];
+    const on = (e) => { const t = e.target; downs.push({ trusted: e.isTrusted, kind: e.pointerType, cls: t && t.className && t.className.baseVal === undefined ? String(t.className) : (t ? t.tagName : '?'), head: !!(t && t.closest && t.closest('.track-head')) }); };
+    window.addEventListener('pointerdown', on, true);
+    return { downs: downs, stop: () => window.removeEventListener('pointerdown', on, true) };
+  }
+  function huntCtxUp() {
+    const m = document.getElementById('ctx-menu');
+    return !!(m && !m.classList.contains('hidden') && /Delete keyframe/.test(m.textContent));
+  }
+
+  test('690 a trembling hold on a keyframe diamond still opens its menu, and a drag moves the keyframe by the finger travel, not to the finger', { item: '690', budgetMs: 60000 }, async function () {
+    /* On the phone the hold IS the only way to delete a keyframe or change its easing — a finger never produces a
+       double-click or a right-click (the diamond's own comment says so). The hold arms at KF_HOLD_MS; after that, the
+       window pointermove branch sets kfDrag.moved = true on ANY move, with no slop at all, and writes
+       kf.t = timeFromX(finger) — an ABSOLUTE position. So a real finger that drifts one pixel while it waits for the
+       menu (the diamond's comment calls it the first speck of finger drift) turns the hold into a drag: no menu, and if
+       the press landed anywhere but dead centre of the 35px touch pad, the keyframe jumps to under the finger and the
+       release commits it to history. His #625 was sometimes I try to delete them and I cant. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          // CONTROL: the same hold with a perfectly still finger opens the menu, so the route exists in this harness.
+          let L = await huntKfFixture(); FM.setTime(2.5); FM.timeline.updatePlayhead(); await sleep(150);
+          let d = huntDotAt(3);
+          if (!d) throw new Error('setup: no live diamond for the position keyframe at 3 s with Move and Transform open');
+          let r = d.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+          if (cx > 370 || cy > 740 || cx < 10) throw new Error('setup: the diamond is at ' + Math.round(cx) + ',' + Math.round(cy) + ', out of reach of real input');
+          const D = huntDowns();
+          try { await realInput924([{ t: 'touchStart', x: cx, y: cy, ms: 650 }, { t: 'touchEnd', x: cx, y: cy, ms: 0 }], 'a still hold on the diamond'); } finally { D.stop(); }
+          await sleep(300);
+          if (!D.downs.length || !D.downs[0].trusted || D.downs[0].kind !== 'touch') throw new Error('CONTROL: the hold was not a trusted touch (' + JSON.stringify(D.downs) + ')');
+          if (!/kf-dot/.test(D.downs[0].cls)) throw new Error('CONTROL: the press landed on ' + D.downs[0].cls + ', not on the diamond');
+          if (!huntCtxUp()) throw new Error('CONTROL: a perfectly still 0.65 s hold on the diamond did not open its menu either, so this test cannot judge the trembling hold');
+          if (FM.contextMenu) FM.contextMenu.hide();
+
+          // THE CASE: the same hold, pressed 8px right of centre (inside the diamond's own touch pad) with a 1px tremor.
+          L = await huntKfFixture(); FM.setTime(2.5); FM.timeline.updatePlayhead(); await sleep(150);
+          d = huntDotAt(3); r = d.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2;
+          const x = cx + 8;
+          const under = document.elementFromPoint(x, cy);
+          if (!under || !under.classList.contains('kf-dot')) throw new Error('setup: 8px right of the diamond centre is ' + (under ? under.className : 'nothing') + ', not its touch pad');
+          const D2 = huntDowns();
+          try {
+            await realInput924([
+              { t: 'touchStart', x: x, y: cy, ms: 650 },
+              { t: 'touchMove', x: x + 1, y: cy, ms: 80 },
+              { t: 'touchMove', x: x, y: cy, ms: 80 },
+              { t: 'touchEnd', x: x, y: cy, ms: 0 },
+            ], 'a hold with a one-pixel tremor');
+          } finally { D2.stop(); }
+          await sleep(300);
+          if (!D2.downs.length || !/kf-dot/.test(D2.downs[0].cls)) throw new Error('CONTROL: the trembling hold did not land on the diamond (' + JSON.stringify(D2.downs) + ')');
+          const menu = huntCtxUp();
+          const t3 = L.transform.x.kf.map(k => k.t).filter(t => Math.abs(t - 3) < 0.6)[0];
+          const bad = [];
+          if (!menu) bad.push('he held the keyframe diamond for 0.65 s to delete it or change its easing, his finger drifted 1px, and the menu never opened — on the phone that hold is the only way in');
+          if (t3 == null || Math.abs(t3 - 3) > 1e-6) bad.push('the same hold moved the keyframe from 3.000 s to ' + (t3 == null ? '?' : t3.toFixed(3)) + ' s — a press a few pixels off the diamond centre plus one pixel of drift retimes it, and the release records it in undo');
+          if (bad.length) throw new Error(bad.join('; AND '));
+          if (FM.contextMenu) FM.contextMenu.hide();
+
+          /* …AND A REAL DRAG STILL RETIMES — by how far the finger TRAVELLED, not to wherever the finger is. The same
+             off-centre press (8px right of the diamond), held until it arms, then a deliberate 30px drag right: the
+             keyframe must move 30px worth, where the old absolute placement moved it 38px worth. */
+          L = await huntKfFixture(); FM.setTime(2.5); FM.timeline.updatePlayhead(); await sleep(150);
+          const d1 = huntDotAt(1); d = huntDotAt(3);
+          if (!d1 || !d) throw new Error('setup: the diamonds at 1 s and 3 s are not both live');
+          const pps = (d.getBoundingClientRect().left - d1.getBoundingClientRect().left) / 2;
+          if (!(pps > 20)) throw new Error('setup: the lane is drawn at ' + pps.toFixed(1) + ' px a second, too tight to tell 30px from 38px');
+          r = d.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2;
+          const xs = cx + 8;
+          await realInput924([
+            { t: 'touchStart', x: xs, y: cy, ms: 650 },
+            { t: 'touchMove', x: xs + 10, y: cy, ms: 40 },
+            { t: 'touchMove', x: xs + 20, y: cy, ms: 40 },
+            { t: 'touchMove', x: xs + 30, y: cy, ms: 120 },
+            { t: 'touchEnd', x: xs + 30, y: cy, ms: 0 },
+          ], 'a hold, then a deliberate 30px drag');
+          await sleep(300);
+          const want = Math.round((3 + 30 / pps) * 30) / 30, absolute = Math.round((3 + 38 / pps) * 30) / 30;
+          const ts = L.transform.x.kf.map(k => k.t);
+          const moved = ts.filter(t => Math.abs(t - 1) > 1e-6 && Math.abs(t - 5) > 1e-6)[0];
+          if (huntCtxUp()) throw new Error('a deliberate 30px drag after the hold opened the keyframe menu instead of moving the keyframe');
+          if (moved == null || Math.abs(moved - want) > 0.5 / 30) throw new Error('a hold then a 30px drag put the keyframe at ' + (moved == null ? '?' : moved.toFixed(3)) + ' s; the finger travelled ' + (30 / pps).toFixed(3) + ' s worth, so it belongs at ' + want.toFixed(3) + ' s' + (moved != null && Math.abs(moved - absolute) < 0.5 / 30 ? ' — it went to where the finger is, not by how far it moved' : ''));
+        });
+      }, 380);
+    } finally {
+      if (FM.contextMenu) FM.contextMenu.hide();
+      try { FM.timeline._abortGestures(); } catch (e) {}
+      FM.scene = saved; try { FM.inspector.openCategory('home'); FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
+    }
+  });
+
+  test('690 a sideways swipe that starts on a keyframe diamond scrubs the timeline like the clip under it', { item: '690', budgetMs: 60000 }, async function () {
+    /* With a property editor open (Move and Transform on the phone), that property's diamonds are LIVE and carry a ~35px
+       invisible touch pad (styles.css .kf-dot::after). The diamond's pointerdown stops propagation and captures the
+       pointer, so neither the clip's scrub nor the timeline's own grab ever sees the finger; and the window pointermove
+       branch, seeing travel before the hold arms, just drops the gesture (kfDrag = null) — no scrub, no scroll. The
+       keyframe he has just set sits at the PLAYHEAD, i.e. dead centre of the lane, so the natural next swipe to move on
+       lands on it and does nothing. Queue 699 was the same dead strip on the trim grips; this is the diamonds.
+       #768 (scrubbing with a layer selected is jumpy) is still open, and diamonds only exist with a layer selected. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await huntKfFixture();
+          FM.setTime(3); FM.timeline.updatePlayhead(); await sleep(200);   // parked on the keyframe he just made
+          const d = huntDotAt(3);
+          if (!d) throw new Error('setup: no live diamond at the playhead');
+          const r = d.getBoundingClientRect(), x = r.left + r.width / 2 + 4, y = r.top + r.height / 2;
+          const swipe = (x0, y0) => { const s = [{ t: 'touchStart', x: x0, y: y0, ms: 40 }]; for (let k = 1; k <= 10; k++) s.push({ t: 'touchMove', x: x0 - 8 * k, y: y0, ms: 30 }); s.push({ t: 'touchEnd', x: x0 - 80, y: y0, ms: 0 }); return s; };
+
+          // CONTROL: the identical swipe on the same clip, clear of every diamond, scrubs.
+          const clip = [].filter.call(document.querySelectorAll('#tl-tracks .clip'), c => c.dataset.id === L.id)[0];
+          const cr = clip.getBoundingClientRect(), cy = cr.top + cr.height / 2;
+          const dotXs = [].map.call(document.querySelectorAll('#tl-tracks .kf-dot'), q => { const b = q.getBoundingClientRect(); return b.left + b.width / 2; });
+          let clearX = null;
+          for (let xx = Math.max(cr.left + 24, 90); xx < Math.min(cr.right - 24, 360); xx += 4) if (dotXs.every(dx => Math.abs(dx - xx) > 34)) { clearX = xx; break; }
+          if (clearX == null) throw new Error('setup: no stretch of the clip is clear of the diamonds to run the control swipe on');
+          const D0 = huntDowns();
+          const tA = FM.time;
+          try { await realInput924(swipe(clearX, cy), 'the control swipe on the clip'); } finally { D0.stop(); }
+          await sleep(500);
+          const movedClip = Math.abs(FM.time - tA);
+          if (!D0.downs.length || !D0.downs[0].trusted || D0.downs[0].kind !== 'touch') throw new Error('CONTROL: the swipe was not a trusted touch (' + JSON.stringify(D0.downs) + ')');
+          if (!(movedClip > 0.5)) throw new Error('CONTROL: an 80px swipe on the clip moved the playhead only ' + movedClip.toFixed(2) + ' s, so this test cannot judge the diamond');
+
+          FM.setTime(3); FM.timeline.updatePlayhead(); await sleep(250);
+          const d2 = huntDotAt(3), r2 = d2.getBoundingClientRect(), x2 = r2.left + r2.width / 2 + 4, y2 = r2.top + r2.height / 2;
+          const D1 = huntDowns();
+          const tB = FM.time;
+          try { await realInput924(swipe(x2, y2), 'the swipe from the diamond'); } finally { D1.stop(); }
+          await sleep(500);
+          const movedDot = Math.abs(FM.time - tB);
+          if (!D1.downs.length || !/kf-dot/.test(D1.downs[0].cls)) throw new Error('CONTROL: the swipe did not start on the diamond (' + JSON.stringify(D1.downs) + ')');
+          const kfT = L.transform.x.kf.map(k => k.t);
+          if (kfT.join() !== '1,3,5') throw new Error('the swipe from the diamond retimed a keyframe (' + kfT.join(', ') + ')');
+          if (!(movedDot > movedClip * 0.5)) throw new Error('an 80px sideways swipe that started on the keyframe diamond under the playhead moved the playhead ' + movedDot.toFixed(2) + ' s, where the same swipe on the clip moves it ' + movedClip.toFixed(2) + ' s — with a keyframe at the playhead the middle of the phone timeline is dead to his thumb');
+        });
+      }, 380);
+    } finally {
+      try { FM.timeline._abortGestures(); FM.timeline.stopMomentum(); } catch (e) {}
+      FM.scene = saved; try { FM.inspector.openCategory('home'); FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
+    }
+  });
+
+  test('690 a flick of the layer list glides from a clip and from a layer name, not only from bare lane', { item: '690', budgetMs: 60000 }, async function () {
+    /* Queue 415 gave the vertical pan a glide ("Scrolling up and down on timeline should have some glide to it like
+       dragging left and right") — but only in the empty-lane branch (scrub.axis === y samples vY and flings). A vertical
+       drag that starts ON A CLIP runs the clipTap branch, which pans scrollTop and samples nothing, and its release only
+       flings for axis x; a drag on a LAYER NAME is the head pan (queue 815), which has no release velocity at all. Queue
+       351 was exactly this split for the horizontal fling. With a real project every row is mostly clip and the name
+       column is the natural place to scroll, so nearly every flick he makes stops the instant his finger lifts.
+       The #415 test dispatches on #tl-inner itself, i.e. only ever the bare-lane path. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+          const Ls = [];
+          for (let i = 0; i < 24; i++) Ls.push(FM.makeLayer('shape', { name: 'HUNT v' + i, shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#3b82f6', start: i % 2 ? 0 : 3, duration: 3 }));
+          FM.scene = scene(Ls, { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+          if (FM.pause) FM.pause();
+          FM.selectLayer(null); FM.refreshAll(); FM.setTime(1); FM.timeline.rebuild(); FM.timeline.updatePlayhead();
+          await sleep(400);
+          const tl = document.getElementById('timeline');
+          if (tl.scrollHeight - tl.clientHeight < 400) throw new Error('setup: the list only overflows by ' + (tl.scrollHeight - tl.clientHeight) + 'px, not enough to flick and glide in');
+          const flick = async (pick, what) => {
+            tl.scrollTop = 0; await sleep(150);
+            const p = pick();
+            if (!p) throw new Error('setup: nothing on screen to start the flick from ' + what);
+            const D = huntDowns();
+            const steps = [{ t: 'touchStart', x: p.x, y: p.y, ms: 16 }];
+            for (let k = 1; k <= 6; k++) steps.push({ t: 'touchMove', x: p.x, y: p.y - 22 * k, ms: 16 });
+            steps.push({ t: 'touchEnd', x: p.x, y: p.y - 132, ms: 0 });
+            try { await realInput924(steps, 'the flick from ' + what); } finally { D.stop(); }
+            const atLift = tl.scrollTop; await sleep(450); const later = tl.scrollTop;
+            return { atLift: atLift, later: later, down: D.downs[0] || null, t: FM.time };
+          };
+          const tlr = tl.getBoundingClientRect();
+          const rows = () => [].slice.call(document.querySelectorAll('#tl-tracks .track-row')).filter(r => { const b = r.getBoundingClientRect(); return b.top > tlr.top + 150 && b.bottom < Math.min(tlr.bottom, 740); }).reverse();   // lowest first: room to flick upwards
+          const idxOf = row => { const h = row.querySelector('.track-head'); return h ? parseInt(h.dataset.idx, 10) : -1; };
+          const pickLane = () => {   // a row whose clip starts at 3 s: bare lane between the name column and the clip
+            const row = rows().filter(r => FM.scene.layers[idxOf(r)] && FM.scene.layers[idxOf(r)].start === 3)[0]; if (!row) return null;
+            const h = row.querySelector('.track-head').getBoundingClientRect(), c = row.querySelector('.clip').getBoundingClientRect();
+            const x = Math.round((h.right + c.left) / 2) - 20; return (c.left - h.right > 90) ? { x: x, y: c.top + c.height / 2 } : null;
+          };
+          const pickClip = () => {
+            const row = rows().filter(r => FM.scene.layers[idxOf(r)] && FM.scene.layers[idxOf(r)].start === 0)[0]; if (!row) return null;
+            const c = row.querySelector('.clip').getBoundingClientRect();
+            return { x: Math.round(c.left + c.width * 0.6), y: c.top + c.height / 2 };
+          };
+          const pickName = () => {   // the layer's own cell on the left (on the phone: its thumbnail — the name text is hidden), clear of the eye and of the phone's bottom buttons
+            for (const row of rows()) {
+              const hEl = row.querySelector('.track-head'), eEl = row.querySelector('.th-eye'); if (!hEl) continue;
+              const h = hEl.getBoundingClientRect(), e = eEl ? eEl.getBoundingClientRect() : { right: h.left };
+              if (h.right - e.right < 16) continue;
+              const p = { x: Math.round((Math.max(e.right, h.left) + h.right) / 2), y: h.top + h.height / 2 };
+              const hit = document.elementFromPoint(p.x, p.y);
+              if (hit && hit.closest && hit.closest('.track-head') === hEl && !hit.closest('.th-eye')) return p;
+            }
+            return null;
+          };
+          // CONTROL: from bare lane the same flick keeps gliding after the finger lifts.
+          const lane = await flick(pickLane, 'bare lane');
+          if (!lane.down || !lane.down.trusted || lane.down.kind !== 'touch') throw new Error('CONTROL: the lane flick was not a trusted touch (' + JSON.stringify(lane.down) + ')');
+          if (!/track-lane/.test(lane.down.cls)) throw new Error('CONTROL: the lane flick landed on ' + lane.down.cls + ', not bare lane');
+          if (!(lane.atLift > 60)) throw new Error('CONTROL: the lane flick only scrolled the list ' + lane.atLift + 'px under the finger');
+          if (!(lane.later > lane.atLift + 20)) throw new Error('CONTROL: even from bare lane the flick did not glide (' + lane.atLift + ' -> ' + lane.later + 'px), so this test cannot judge the others');
+          const clip = await flick(pickClip, 'a clip');
+          const name = await flick(pickName, 'a layer name');
+          if (!clip.down || !/(^| )clip( |$)/.test(clip.down.cls)) throw new Error('CONTROL: the clip flick landed on ' + (clip.down && clip.down.cls) + ', not a clip');
+          if (!name.down || !name.down.head || /th-eye/.test(name.down.cls)) throw new Error('CONTROL: the name flick landed on ' + (name.down && name.down.cls) + ', not a layer name');
+          if (!(clip.atLift > 60) || !(name.atLift > 60)) throw new Error('CONTROL: a flick did not scroll the list under the finger at all (clip ' + clip.atLift + 'px, name ' + name.atLift + 'px)');
+          const bad = [];
+          if (!(clip.later > clip.atLift + 20)) bad.push('from a clip the list stopped dead the moment his finger lifted (' + clip.atLift + ' -> ' + clip.later + 'px)');
+          if (!(name.later > name.atLift + 20)) bad.push('from a layer name it stopped dead too (' + name.atLift + ' -> ' + name.later + 'px)');
+          if (bad.length) throw new Error('the same upward flick that glides ' + (lane.later - lane.atLift) + 'px from bare lane does not glide at all from anywhere else: ' + bad.join('; ') + ' — on a full timeline almost every flick starts on a clip or a name');
+        });
+      }, 380);
+    } finally {
+      try { FM.timeline._abortGestures(); } catch (e) {}
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
+    }
+  });
+
+  test('690 a touch that catches a gliding timeline stops it without selecting or deselecting anything', { item: '690', budgetMs: 90000 }, async function () {
+    /* Queue 823 c9 made a touch on a clip STOP a glide (the capture-phase pointerdown on #timeline kills both momenta),
+       but the touch was still read as a TAP by the clip's pointerup: clipTap was never moved, so it called
+       FM.selectLayer. On the phone a selection flips the timeline to the one-row solo view and raises the edit sheet,
+       so catching a flick where he wants it cost him his whole view and a tap-off to get it back. A touch that catches
+       a moving list is a catch, not a tap, everywhere else on his phone. Three taps had the same hole, and each is held
+       here with its own control — a plain tap on a still timeline must keep doing its job:
+         A. a clip — the catch must not select it;
+         B. the ruler, with a layer selected — the catch must not deselect it (the lane / ruler tap-off);
+         C. a layer name — the catch must not select it. Its select rides on the CLICK, and every clip release arms a
+            300 ms click shield (queue 707), so the catch is made after the shield is down or the test proves nothing. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+          const Ls = [];
+          for (let i = 0; i < 4; i++) Ls.push(FM.makeLayer('shape', { name: 'HUNT g' + i, shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#22c55e', start: 0, duration: 30 }));
+          FM.scene = scene(Ls, { project: { width: 1080, height: 1920, fps: 30, duration: 30, background: '#000000' } });
+          if (FM.pause) FM.pause();
+          FM.selectLayer(null); FM.refreshAll(); FM.setTime(2); FM.timeline.rebuild(); FM.timeline.updatePlayhead();
+          await sleep(400);
+          const clipOf = (L) => [].filter.call(document.querySelectorAll('#tl-tracks .clip'), el => el.dataset.id === L.id)[0] || null;
+          const tap = (x, y) => [{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 0 }];
+          /* A hard sideways flick on a clip, then proof the playhead really is gliding: without a glide there is nothing
+             to catch and every check below would pass on nothing. */
+          const flickOn = async (L, what) => {
+            const c = clipOf(L);
+            if (!c) throw new Error('setup: no clip on screen for ' + what);
+            const y = c.getBoundingClientRect().top + c.getBoundingClientRect().height / 2;
+            if (y > 740) throw new Error('setup: the clip for ' + what + ' is at y ' + Math.round(y) + ', out of reach');
+            const fling = [{ t: 'touchStart', x: 300, y: y, ms: 16 }];
+            for (let k = 1; k <= 6; k++) fling.push({ t: 'touchMove', x: 300 - 30 * k, y: y, ms: 16 });
+            fling.push({ t: 'touchEnd', x: 120, y: y, ms: 0 });
+            FM.setTime(2); FM.timeline.updatePlayhead(); await sleep(120);
+            await realInput924(fling, 'the flick for ' + what);
+            return y;
+          };
+          const gliding = async (what, wait) => {
+            await sleep(wait || 0);
+            const g1 = FM.time; await sleep(60); const g2 = FM.time;
+            if (!(g2 > g1 + 0.02)) throw new Error('CONTROL: after the flick for ' + what + ' the playhead was not gliding (' + g1.toFixed(2) + ' -> ' + g2.toFixed(2) + ' s), so there is no glide to catch');
+          };
+          const stopped = async (what) => {
+            const s1 = FM.time; await sleep(350); const s2 = FM.time;
+            if (Math.abs(s2 - s1) > 0.02) throw new Error(what + ': the touch did not even stop the glide (' + s1.toFixed(2) + ' -> ' + s2.toFixed(2) + ' s)');
+          };
+          const selName = () => { const s = FM.scene.selectedId ? FM.layerById(FM.scene, FM.scene.selectedId) : null; return s ? s.name : null; };
+
+          /* ── A. THE CLIP ── */
+          const y = await flickOn(Ls[1], 'the clip catch');
+          await gliding('the clip catch', 30);
+          if (FM.scene.selectedId) throw new Error('setup: the flick itself selected a layer');
+          const D = huntDowns();
+          try { await realInput924(tap(250, y), 'the touch that catches the glide'); } finally { D.stop(); }
+          await stopped('on a clip');
+          if (!D.downs.length || !D.downs[0].trusted || !/(^| )clip( |$)/.test(D.downs[0].cls)) throw new Error('CONTROL: the catching touch did not land on a clip (' + JSON.stringify(D.downs) + ')');
+          if (selName()) throw new Error('he flicked the timeline and touched it to stop the glide — it stopped, but the same touch selected ' + selName() + (FM._soloLayerId && FM._soloLayerId() ? ', the timeline collapsed to that one row and the edit sheet came up' : '') + ', so every catch of a glide costs him his view and a tap-off');
+          /* …and a plain tap with nothing moving still selects, so the fix tells a catch from a tap rather than stopping taps. */
+          await sleep(200);
+          await realInput924(tap(250, y), 'a plain tap on a still timeline');
+          await sleep(300);
+          if (selName() !== 'HUNT g1') throw new Error('a plain tap on a clip with nothing gliding no longer selects it (selected: ' + selName() + ') — the catch must not cost the tap');
+
+          /* ── B. THE RULER, WITH A LAYER SELECTED ── */
+          await sleep(400);
+          const ruler = document.getElementById('tl-ruler');
+          if (!ruler) throw new Error('setup: no #tl-ruler');
+          const rr = ruler.getBoundingClientRect(), rx = 240, ry = rr.top + rr.height / 2;
+          const underR = document.elementFromPoint(rx, ry);
+          if (!underR || !underR.closest || !underR.closest('#tl-ruler')) throw new Error('setup: the ruler is not what sits at ' + rx + ',' + Math.round(ry) + ' with a layer selected (' + (underR ? underR.id || underR.className : 'nothing') + ')');
+          await flickOn(Ls[1], 'the ruler catch');
+          await gliding('the ruler catch', 30);
+          if (selName() !== 'HUNT g1') throw new Error('setup: the flick on the selected clip changed the selection to ' + selName());
+          const DR = huntDowns();
+          try { await realInput924(tap(rx, ry), 'the touch on the ruler that catches the glide'); } finally { DR.stop(); }
+          await stopped('on the ruler');
+          if (!DR.downs.length || !DR.downs[0].trusted || DR.downs[0].kind !== 'touch') throw new Error('CONTROL: the ruler catch was not a trusted touch (' + JSON.stringify(DR.downs) + ')');
+          if (selName() !== 'HUNT g1') throw new Error('he touched the ruler to stop a glide and it also DESELECTED his layer (now: ' + selName() + ') — the catch cost him the selection he was working on');
+          await sleep(400);
+          await realInput924(tap(rx, ry), 'a plain tap on the still ruler');
+          await sleep(300);
+          if (selName()) throw new Error('CONTROL: a plain tap on the ruler with nothing gliding no longer deselects (still ' + selName() + ') — the catch must not cost the tap-off');
+
+          /* ── C. A LAYER NAME ── */
+          FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); await sleep(300);
+          const headAt = (L) => {
+            const row = [].filter.call(document.querySelectorAll('#tl-tracks .track-row'), r => { const c = r.querySelector('.clip'); return c && c.dataset.id === L.id; })[0];
+            const hEl = row && row.querySelector('.track-head'); if (!hEl) return null;
+            const h = hEl.getBoundingClientRect(), eEl = hEl.querySelector('.th-eye'), e = eEl ? eEl.getBoundingClientRect() : { right: h.left };
+            const p = { x: Math.round((Math.max(e.right, h.left) + h.right) / 2), y: h.top + h.height / 2 };
+            const hit = document.elementFromPoint(p.x, p.y);
+            return (hit && hit.closest && hit.closest('.track-head') === hEl && !hit.closest('.th-eye')) ? p : null;
+          };
+          const hp = headAt(Ls[2]);
+          if (!hp) throw new Error('setup: no reachable layer name for HUNT g2');
+          await flickOn(Ls[1], 'the name catch');
+          await gliding('the name catch', 380);   // past the clip release's 300 ms click shield (queue 707)
+          if (FM._clickShieldLeft && FM._clickShieldLeft() > 0) throw new Error('CONTROL: the click shield was still up (' + Math.round(FM._clickShieldLeft()) + ' ms), so it, not the catch, would swallow the tap');
+          const DH = huntDowns();
+          try { await realInput924(tap(hp.x, hp.y), 'the touch on a layer name that catches the glide'); } finally { DH.stop(); }
+          await stopped('on a layer name');
+          if (!DH.downs.length || !DH.downs[0].trusted || !DH.downs[0].head) throw new Error('CONTROL: the name catch did not land on a layer name (' + JSON.stringify(DH.downs) + ')');
+          if (selName()) throw new Error('he touched a layer name to stop a glide and it selected ' + selName() + (FM._soloLayerId && FM._soloLayerId() ? ', collapsing the timeline to that one row' : '') + ' — a catch is not a tap');
+          await sleep(400);
+          await realInput924(tap(hp.x, hp.y), 'a plain tap on a still layer name');
+          await sleep(300);
+          if (selName() !== 'HUNT g2') throw new Error('CONTROL: a plain tap on a layer name with nothing gliding no longer selects it (selected: ' + selName() + ')');
+        });
+      }, 380);
+    } finally {
+      try { FM.timeline.stopMomentum(); FM.timeline._abortGestures(); } catch (e) {}
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
+    }
+  });
+
+  /* ═══ QUEUE 690 (hunt b) — PHONE EDITING SHEETS, REAL TOUCH ══════════════════════════════════════════════════════════
+   * His standing brief: "go re audit, find some bugs coz theres a shit load". Each test below was written failing, against
+   * the bug it guards, and was proven to fail again with its fix reverted; its failure message says what he would see.
+   * Real input through tests/_cdp.py (see 924) wherever the behaviour depends on it; the control in each proves the
+   * gesture really landed where the test says it did. */
+  async function huntBScene(layersFn) {
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd();
+    if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+    const L = layersFn();
+    FM.scene = scene(L, { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+    FM.selectLayer(null); if (FM.pause) FM.pause(); FM.setTime(0);
+    FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    await new Promise(r => setTimeout(r, 300));
+    return L;
+  }
+  function huntBTap(x, y) { return [{ t: 'touchStart', x: x, y: y, ms: 80 }, { t: 'touchEnd', x: x, y: y, ms: 0 }]; }
+
+  test('690 one real tap on a Position number (X / Y) opens its editor ON SCREEN with the focus in it', { item: '690', budgetMs: 60000 }, async function () {
+    /* Queue 414 promised it: "The buttons that show a number for the position should be able to be tapped on and
+       customised, so you can type exactly the number you want." The box's own pointerup opens the editor — but the
+       glide attached to the same box runs its pointerup FIRST, and a tap is a zero-velocity release, so it settled at
+       once: commitH() + FM.inspector.refresh(), which threw the whole card away and built a new one. The editor was
+       then opened on the old, detached box, where focus() does nothing. Fixed in mtVBox: the settle skips the rebuild
+       while `drag` still marks a tap. The 414 test passed throughout because a detached contenteditable still
+       reports isContentEditable. This asks the only question that matters: after one real tap, is there an editor
+       ON SCREEN with the focus in it. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, axis0 = FM._mtAxis;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await huntBScene(() => [FM.makeLayer('shape', { name: 'HB number', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#c05030', start: 0, duration: 4 })]);
+          FM.selectLayer(L[0].id); await sleep(300);
+          FM.inspector.openCategory('transform'); await sleep(450);
+          for (const lab of ['X', 'Y']) {
+            const boxes = [].slice.call(document.querySelectorAll('#inspector-panel .mt-vbox'));   // re-read: finishing an edit rebuilds the card
+            const box = boxes.find(b => ((b.querySelector('.mt-vbox-lab') || {}).textContent || '').trim() === lab);
+            if (!box) throw new Error('setup: no ' + lab + ' number box in Position / Scale at phone width (boxes: ' + boxes.map(b => (b.querySelector('.mt-vbox-lab') || {}).textContent).join(', ') + ')');
+            const val = box.querySelector('.mt-vbox-val');
+            const r = val.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+            if (x > 370 || y > 740 || y < 0) throw new Error('setup: the ' + lab + ' box is at ' + Math.round(x) + ',' + Math.round(y) + ', out of reach of real input');
+            const downs = [];
+            const onDown = e => downs.push({ trusted: e.isTrusted, kind: e.pointerType, hit: !!(e.target && e.target.closest && e.target.closest('.mt-vbox-val')) });
+            window.addEventListener('pointerdown', onDown, true);
+            try { await realInput924(huntBTap(x, y), 'the tap on the ' + lab + ' number'); } finally { window.removeEventListener('pointerdown', onDown, true); }
+            await sleep(350);
+            /* CONTROL: a real finger, and it landed on the number box. */
+            if (!downs.length || !downs[0].trusted || downs[0].kind !== 'touch') throw new Error('CONTROL: the tap on ' + lab + ' did not arrive as a trusted touch (' + downs.map(d => d.kind + (d.trusted ? ' trusted' : ' untrusted')).join(', ') + ')');
+            if (!downs[0].hit) throw new Error('CONTROL: the tap on ' + lab + ' landed on something other than its number box');
+            const a = document.activeElement;
+            const live = a && a.classList && a.classList.contains('mt-vbox-val') && a.isContentEditable && a.isConnected;
+            if (!live) throw new Error('one tap on the ' + lab + ' position number opened NO editor — nothing to type into and no keyboard comes up. The box he tapped was thrown away and rebuilt by the scrub glide settling on the tap, so the editor opened on a box no longer on screen (tapped box still on screen: ' + val.isConnected + ', focus is on ' + (a ? (a.id || a.className || a.tagName) : 'nothing') + ')');
+            a.blur(); await sleep(250);
+          }
+        });
+      }, 380);
+    } finally {
+      FM._mtAxis = axis0;
+      document.querySelectorAll('.mt-vbox-val.editing').forEach(n => { n.contentEditable = 'false'; n.classList.remove('editing'); });
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  test('690 a short drag down on the Add sheet that does not close it leaves the sheet where it rests — it never opens a second time', { item: '690', budgetMs: 60000 }, async function () {
+    /* His #676 and #706: "when you open the add menu it opens twice", "the add layer on mobile still has the glitch
+       that opens up twice now". Both entries measured one open and one render per tap and parked on a description.
+       Since v15.21 (queue 773, two days AFTER #706 was logged, so not proven to be his original cause) there is a
+       concrete second opening that needs no second tap: the swipe-to-dismiss claims any downward drag over 6px and
+       switches the sheet's hinge animation OFF (panel.style.animation = 'none'); when the drag ends short of closing —
+       released, or taken over by the browser as a scroll — settle() handed it back with animation = ''. Clearing an
+       animation and putting the same one back RESTARTS it, and fm-hinge-up starts at translateY(100%): the sheet jumped
+       to below the screen and swung up again. A finger that lands on the sheet with a little downward travel — a
+       tap with a wobble, or the start of a scroll through the tiles — was all it took. Fixed in makeSwipeDown: a panel
+       whose animation was running when the drag began keeps it off until openAdd() next opens it. The top edge is
+       sampled every frame from before the touch until well after, and must never leave the neighbourhood of where
+       the sheet rests. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    let iv = 0;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          await huntBScene(() => [FM.makeLayer('shape', { name: 'HB add', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3050c0', start: 0, duration: 4 })]);
+          const sheet = document.getElementById('add-sheet');
+          if (!sheet || !FM.mobile || !FM.mobile.openAdd) throw new Error('setup: no phone Add sheet');
+          FM.mobile.openAdd();
+          await sleep(900);   // the opening swing (360ms) is over
+          if (!sheet.classList.contains('open')) throw new Error('setup: the Add sheet did not open');
+          const rest = sheet.getBoundingClientRect();
+          const x = Math.min(rest.left + rest.width / 2, 360), y0 = rest.top + 34;   // the title strip, clear of tiles and inputs
+          if (y0 > 700 || y0 < 0) throw new Error('setup: the Add sheet top is at ' + Math.round(rest.top) + ', out of reach of real input');
+          const tops = [];
+          iv = setInterval(() => { tops.push(Math.round(sheet.getBoundingClientRect().top)); }, 16);
+          const steps = [{ t: 'touchStart', x: x, y: y0, ms: 60 }];
+          for (let k = 1; k <= 4; k++) steps.push({ t: 'touchMove', x: x, y: y0 + 8 * k, ms: 35 });
+          steps.push({ t: 'touchEnd', x: x, y: y0 + 32, ms: 0 });
+          const R = recorder924();
+          try { await realInput924(steps, 'a short drag down on the Add sheet'); } finally { R.stop(); }
+          await sleep(900);
+          clearInterval(iv); iv = 0;
+          /* CONTROL: a real finger, and the sheet was still open at the end — a drag this short is not a dismiss. */
+          if (!R.downs.length || !R.downs[0].trusted || R.downs[0].kind !== 'touch') throw new Error('CONTROL: the drag did not arrive as a trusted touch (' + R.downs.map(d => d.kind + (d.trusted ? ' trusted' : ' untrusted') + ' on ' + d.what).join(', ') + ')');
+          if (!sheet.classList.contains('open')) throw new Error('CONTROL: a 32px drag closed the Add sheet — this test is about a drag too short to close it');
+          const worst = Math.max.apply(null, tops);
+          if (worst > rest.top + 120) throw new Error('a 32px drag down on the open Add sheet made it OPEN AGAIN: its top edge jumped from ' + Math.round(rest.top) + ' to ' + worst + ' (off the bottom of the screen) and swung back up, the same hinge it opens with — that is the sheet opening twice (top edge per frame: ' + tops.join(' ') + ')');
+          /* …AND THE NEXT OPENING STILL SWINGS. The fix keeps the hinge off after the drag rather than replaying it, so
+             openAdd() has to hand it back — or from the first swipe on, the sheet would arrive in a single frame. */
+          FM.mobile.closeAdd(); await sleep(500);
+          FM.mobile.openAdd(); await sleep(60);
+          const an = getComputedStyle(sheet).animationName;
+          if (an !== 'fm-hinge-up') throw new Error('after the drag, the next opening of the Add sheet did not swing: its animation is ' + an + ' (inline ' + (sheet.style.animation || 'unset') + ') — the hinge was switched off for the drag and never handed back');
+        });
+      }, 380);
+    } finally {
+      if (iv) clearInterval(iv);
+      try { if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd(); } catch (e) {}
+      FM.scene = saved; try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  test('690 leaving the effects browser by the X or by Add puts the playhead back where he parked it', { item: '690', budgetMs: 60000 }, async function () {
+    /* The browser's preview loop takes the clock the moment it opens (restartPreview: setTime(layer.start), then a
+       24fps ticker). Queue 722 captured the PARKED time in _anchorTime so a preset lands on it — and close() then
+       threw _anchorTime away without putting the playhead back. So every trip through + Add Effect, whether he added
+       one or backed out with the X, left the playhead at a random point inside the clip. The next keyframe diamond
+       he tapped — on the effect he had just added — landed at that random time, and the canvas was showing a different
+       frame from the one he was working on. Fixed in close(): the loop stops ON the parked time. Both exits are driven
+       with real taps. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await huntBScene(() => [FM.makeLayer('shape', { name: 'HB park', shape: 'rect', x: 540, y: 700, shapeW: 300, shapeH: 300, fill: '#20a060', start: 0, duration: 5 })]);
+          const layer = L[0];
+          FM.selectLayer(layer.id); await sleep(250);
+          const PARK = 2.5;
+          const fps = FM.scene.project.fps || 30;
+          async function trip(how) {
+            FM.setTime(PARK); await sleep(150);
+            if (Math.abs(FM.time - PARK) > 1e-6) throw new Error('setup: could not park the playhead at ' + PARK + 's (' + FM.time + ')');
+            FM.fxBrowser.open(layer);
+            await sleep(1100);   // browsing for a second — the preview loop is running
+            const root = document.getElementById('fx-browser');
+            if (!root || root.classList.contains('hidden')) throw new Error('setup: the effects browser did not open');
+            /* CONTROL: the loop really did take the clock while the browser was up (that part is by design). */
+            if (Math.abs(FM.time - PARK) < 1 / fps) throw new Error('CONTROL: with the browser open the playhead never moved from ' + PARK + 's — the preview loop is not running, so this test cannot see the bug');
+            let btn;
+            if (how === 'X') btn = root.querySelector('.fxb-close');
+            else {
+              const tile = [].slice.call(root.querySelectorAll('[data-fxid]')).find(t => FM.fxRegistry.get(t.dataset.fxid) && FM.fxRegistry.supportsLayer(t.dataset.fxid, layer));
+              if (!tile) throw new Error('setup: no effect tile to pick');
+              tile.click(); await sleep(400);
+              btn = root.querySelector('.fxb-commit-go');
+            }
+            if (!btn) throw new Error('setup: no ' + how + ' button in the effects browser');
+            const r = btn.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+            if (x > 370 || y > 740 || y < 0) throw new Error('setup: the ' + how + ' button is at ' + Math.round(x) + ',' + Math.round(y) + ', out of reach of real input');
+            const n0 = (FM.scene.layers[0].effects || []).length;
+            await realInput924(huntBTap(x, y), 'tapping ' + how + ' in the effects browser');
+            await sleep(500);
+            if (!root.classList.contains('hidden')) throw new Error('CONTROL: a real tap on ' + how + ' did not close the effects browser');
+            if (how !== 'X' && !((FM.scene.layers[0].effects || []).length > n0)) throw new Error('CONTROL: tapping Add did not add the picked effect');
+            if (Math.abs(FM.time - PARK) > 0.5 / fps) return (how === 'X' ? 'backing out with the X' : 'adding an effect with Add') + ' left it at ' + FM.time.toFixed(2) + 's';
+            return '';
+          }
+          const bad = [await trip('X'), await trip('Add')].filter(Boolean);
+          if (bad.length) throw new Error('he parked the playhead at ' + PARK + 's and went into + Add Effect: ' + bad.join('; ') + '. The preview loop moved it and nothing put it back, so the next keyframe he sets lands at the wrong time and the canvas shows a different frame from the one he was working on');
+        });
+      }, 380);
+    } finally {
+      try { FM.fxBrowser.close(); } catch (e) {}
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  test('690 a real tap on an effect or opacity value box selects the number, so what he types replaces it', { item: '690', budgetMs: 60000 }, async function () {
+    /* The comment on rangeRow says it plainly: "Typing an exact number still has to work: the ruler is for feel, the box
+       is for precision." Every effect parameter (fxScrubber) and every rangeRow (fill opacity, stroke width, corner
+       radius, feather… 37 call sites) put its number in an <input type=text> and did nothing on focus. A real tap on a
+       phone drops a CARET into the old text rather than selecting it, so the digits he typed went INTO the old number:
+       Twist 140° + 90 became 14900° and landed on the 360° maximum; Opacity 100 + 50 became 10050 or 15000 and stayed at
+       100. (The Position boxes select their text on edit — these never did.) Fixed by typeInBox in js/inspector.js,
+       which all four builders now call. The typing is done the way a keyboard does it — inserted at whatever selection
+       the real tap left — and committed the way the keyboard's Done does, by blur. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await huntBScene(() => {
+            const a = FM.makeLayer('shape', { name: 'HB type', shape: 'rect', x: 540, y: 700, shapeW: 300, shapeH: 300, fill: '#c05030', start: 0, duration: 4 });
+            const tw = FM.fxRegistry.makeInstance('twirl'); tw.params.amount = 140; tw._expanded = true;
+            a.effects = [tw];
+            return [a];
+          });
+          const layer = L[0];
+          FM.selectLayer(layer.id); await sleep(250);
+          async function typeInto(box, text, what) {
+            box.scrollIntoView({ block: 'center' }); await sleep(250);
+            const r = box.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+            if (x > 370 || y > 740 || y < 0) throw new Error('setup: the ' + what + ' box is at ' + Math.round(x) + ',' + Math.round(y) + ', out of reach of real input');
+            const before = box.value;
+            await realInput924(huntBTap(x, y), 'the tap on the ' + what + ' box');
+            await sleep(300);
+            /* CONTROL: the real tap put the keyboard focus in that box. */
+            if (document.activeElement !== box) throw new Error('CONTROL: a real tap on the ' + what + ' box did not focus it (focus is on ' + (document.activeElement && (document.activeElement.className || document.activeElement.tagName)) + ')');
+            if (!document.execCommand('insertText', false, text)) throw new Error('setup: this browser cannot insert text the way a keyboard does');
+            const shown = box.value;
+            box.blur(); await sleep(250);
+            return { before: before, shown: shown };
+          }
+          const bad = [];
+          FM.inspector.openCategory('effects'); await sleep(450);
+          const twRow = [].slice.call(document.querySelectorAll('#inspector-panel .fx-scrub-row')).find(r => /Twist/.test((r.querySelector('.fx-scrub-label') || {}).textContent || ''));
+          if (!twRow) throw new Error('setup: no Twist row in the open Twirl effect');
+          const t = await typeInto(twRow.querySelector('.fx-scrub-val'), '90', 'Twist');
+          const amt = FM.scene.layers[0].effects[0].params.amount;
+          if (amt !== 90) bad.push('Twist: tapped ' + t.before + ', typed 90, the box read ' + t.shown + ' and the effect became ' + amt + '°');
+          FM.inspector.openCategory('color'); await sleep(450);
+          const opRow = [].slice.call(document.querySelectorAll('#inspector-panel .prop-row--scrub')).find(r => /Opacity/i.test((r.querySelector('label') || {}).textContent || ''));
+          if (!opRow) throw new Error('setup: no Opacity row in Colouring');
+          const o = await typeInto(opRow.querySelector('.fx-scrub-val'), '50', 'Opacity');
+          const fo = FM.scene.layers[0].fillOpacity;
+          const opNow = Math.round((fo != null ? fo : 1) * 100);
+          if (opNow !== 50) bad.push('Opacity: tapped ' + o.before + ', typed 50, the box read ' + o.shown + ' and the fill opacity became ' + opNow + '%');
+          if (bad.length) throw new Error('typing an exact number into a value box does not set it — the real tap leaves a caret inside the old number, so his digits are added to it instead of replacing it. ' + bad.join('; '));
+        });
+      }, 380);
+    } finally {
+      try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (e) {}
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* ═══ 690 — PC with a real mouse and keyboard: Studio at 1280 and a narrow 900 window ══════════════════════════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". Four findings from the HUNT-c pass, each written as a
+   * test that FAILED on the code as it stood, with a message that says what he would see; the fixes are in js/history.js,
+   * js/app.js (the Escape branch and the file drop), js/notepad.js, js/shortcuts.js and js/addmenu.js. A shared scene: two
+   * squares, Red and Blue, Blue added last (so the history's newest step has Blue selected, exactly as adding a layer
+   * leaves it). */
+  async function huntCScene(where) {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (FM.shortcuts && FM.shortcuts.isOpen()) FM.shortcuts.hide();
+    const R = FM.makeLayer('shape', { name: 'HuntC Red', shape: 'rect', x: 300, y: 500, shapeW: 200, shapeH: 200, fill: '#e0245e', start: 0, duration: 4 });
+    const B = FM.makeLayer('shape', { name: 'HuntC Blue', shape: 'rect', x: 700, y: 500, shapeW: 200, shapeH: 200, fill: '#3b82f6', start: 0, duration: 4 });
+    FM.scene = scene([R, B], { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+    if (FM.pause) FM.pause();
+    FM.setTime(1);
+    FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    if (FM.history && FM.history.reset) FM.history.reset();
+    FM.selectLayer(B.id);                       // Blue was the layer just added — adding selects it and commits
+    if (FM.history) FM.history.commit();
+    await sleep(350);
+    if (!FM.scene.layers.length || FM.scene.selectedId !== B.id) throw new Error(where + ': setup: the two-square scene did not come up with Blue selected');
+    return { R: R, B: B };
+  }
+  function huntCKey(key, code, mods) {
+    const o = Object.assign({ key: key, code: code, bubbles: true, cancelable: true }, mods || {});
+    document.body.dispatchEvent(new KeyboardEvent('keydown', o));
+    document.body.dispatchEvent(new KeyboardEvent('keyup', o));
+  }
+  function huntCName(id) { const l = id && FM.layerById(FM.scene, id); return l ? l.name.replace('HuntC ', '') : 'nothing'; }
+
+  test('690 Escape closes the Export dialog, Canvas settings, Notes, its Before-you-export card, Settings and a right-click menu — and never deselects the layer behind them', { item: '690', budgetMs: 90000 }, async function () {
+    /* On a PC, Escape is the key everyone presses to get out of a dialog or a menu. The app's Escape branch (js/app.js, the
+       keydown handler's `e.code === 'Escape'`) knew the shortcuts sheet, the canvas tools and the Effects browser (#809), but
+       not the first five here — so Escape fell through to inspector.back(), which DESELECTED the layer under the dialog, and
+       the dialog or menu stayed up. The right-click menu then still offered Delete / Lock for a layer that was no longer
+       selected. Settings is the sixth and the other half of the fix: it closes ITSELF on Escape (its own document listener,
+       which calls preventDefault), and then the app's window listener deselected Blue behind it anyway — an Escape that was
+       already answered, answered twice. The reminder card must go out through its Back (no export), not a bare close, or the
+       export waiting on it never gets an answer. CONTROL at the end: with nothing open, Escape still steps back as it always
+       has, which proves the key reaches the handler at all — even after Settings has been opened twice (js/settings.js). */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const bad = [];
+    let answered;
+    const surfaces = [
+      { name: 'the Export dialog', open: () => document.getElementById('btn-export').click(),
+        isOpen: () => !document.getElementById('export-dialog').classList.contains('hidden'),
+        close: () => { const c = document.getElementById('exp-cancel'); if (c) c.click(); } },
+      { name: 'Canvas settings', open: () => document.getElementById('btn-canvas').click(),
+        isOpen: () => !document.getElementById('canvas-dialog').classList.contains('hidden'),
+        close: () => { const c = document.getElementById('cv-cancel'); if (c) c.click(); } },
+      { name: 'the Notes panel', open: () => { const b = document.getElementById('btn-notes'); if (b && b.offsetParent) b.click(); else FM.notepad.open(); },
+        isOpen: () => FM.notepad.isOpen(), close: () => FM.notepad.close() },
+      { name: 'the Before you export card', open: () => {
+          FM.scene.project.notes = [{ id: 'n690', text: 'Check the logo', remind: true }];
+          /* The export button awaits this card's answer; watch it, so a card that merely VANISHES (every .np-scrim
+             removed) cannot pass for one that answered Back. Looked up by name at call time, so the real route runs. */
+          answered = 'no answer';
+          const orig = FM.notepad.confirmExport;
+          FM.notepad.confirmExport = function () { FM.notepad.confirmExport = orig; const p = orig.apply(this, arguments); p.then(v => { answered = v; }); return p; };
+          document.getElementById('btn-export').click();
+        }, isOpen: () => !!document.querySelector('.np-remind'),
+        after: () => !document.getElementById('export-dialog').classList.contains('hidden') ? 'Escape on the reminder card went on to the Export dialog — it must be Back, not Export anyway'
+          : answered !== false ? 'Escape removed the reminder card without answering it (' + answered + ') — the export behind it is never told Back' : '',
+        close: () => { const b = document.querySelector('.np-remind .np-actions button'); if (b) b.click(); } },
+      { name: 'Settings', open: () => FM.settings.open(), isOpen: () => FM.settings.isOpen(), close: () => FM.settings.close() },
+      { name: 'the right-click menu on the clip', open: (s) => {
+          const clip = [].slice.call(document.querySelectorAll('#tl-tracks .clip')).find(c => c.textContent.indexOf('Blue') >= 0);
+          if (!clip) throw new Error('setup: no Blue clip on the timeline to right-click');
+          const r = clip.getBoundingClientRect();
+          clip.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 40, clientY: r.top + r.height / 2, button: 2 }));
+        }, isOpen: () => FM.contextMenu.isOpen(), close: () => FM.contextMenu.hide() },
+    ];
+    async function run(where) {
+      for (const s of surfaces) {
+        const sc = await huntCScene(where);
+        s.open(sc); await sleep(450);
+        try {
+          if (!s.isOpen()) throw new Error(where + ': setup: ' + s.name + ' did not open, so Escape cannot be tested on it');
+          if (FM.scene.selectedId !== sc.B.id) throw new Error(where + ': setup: opening ' + s.name + ' already changed the selection');
+          huntCKey('Escape', 'Escape'); await sleep(350);
+          const still = s.isOpen(), lost = FM.scene.selectedId !== sc.B.id;
+          if (still || lost) bad.push(where + ' — Escape ' + (still ? 'left ' + s.name + ' open' : 'closed ' + s.name) +
+            (lost ? (still ? ' AND' : ' but') + ' deselected Blue behind it (now ' + huntCName(FM.scene.selectedId) + ' is selected, the panel flipped to the Add menu)' : ''));
+          const extra = s.after ? s.after() : '';
+          if (extra) bad.push(where + ' — ' + extra);
+        } finally {
+          if (s.isOpen()) s.close();
+          const xd = document.getElementById('export-dialog'); if (xd && !xd.classList.contains('hidden')) { const c = document.getElementById('exp-cancel'); if (c) c.click(); }
+          await sleep(300);
+        }
+      }
+      /* CONTROL: nothing open — Escape steps back as it always has (the layer page → deselect). Settings is opened TWICE
+         and closed first: a second open() used to strand its Escape listener, which answered every Escape from then on,
+         and with the editor now leaving an answered Escape alone that switched Escape off everywhere (found by the full
+         suite, after the 930 test did exactly this). */
+      FM.settings.open(); await sleep(60); FM.settings.open(); await sleep(60); FM.settings.close(); await sleep(350);
+      const sc = await huntCScene(where);
+      const state = () => 'view ' + (FM.inspector.currentView ? FM.inspector.currentView() : '?') + ', fx sheet ' + !!(FM.fxSheetOpen && FM.fxSheetOpen()) +
+        ', canvas tool ' + !!(FM.toolOwnsCanvas && FM.toolOwnsCanvas()) + ', overlay ' + !!FM.overlayOwnsScreen() + ', focus ' + (document.activeElement ? document.activeElement.tagName + '#' + document.activeElement.id : 'none');
+      const before = state();
+      huntCKey('Escape', 'Escape'); await sleep(350);
+      if (FM.scene.selectedId === sc.B.id) throw new Error(where + ': CONTROL: with nothing open Escape did not step back off Blue (' + before + ') — the key is not reaching the handler, so the checks above prove nothing' + (bad.length ? '; and before that: ' + bad.join('; ') : ''));
+    }
+    try {
+      await atWideWidth(function () { return run('PC 1280'); }, 1280);
+      await atWideWidth(function () { return run('PC 900'); }, 900);
+    } finally { FM.scene = saved; try { FM.refreshAll(); } catch (e) {} }
+    if (bad.length) throw new Error('Escape does not get him out: ' + bad.join('; '));
+  });
+
+  test('690 a file dropped on the timeline or the Add menu is imported like one dropped on the canvas — and nowhere is the drop left to the browser', { item: '690', budgetMs: 90000 }, async function () {
+    /* The only drop target in the whole app used to be #stage. Everywhere else nobody called preventDefault on dragover, so a
+       real drop there was the BROWSER's: measured with a real drag (Input.dispatchDragEvent) at 1280x800, a PNG dropped on
+       the timeline imported nothing and Chrome opened file:///…png. The timeline is where every desktop editor takes a
+       dropped clip, and at 1280 it is the biggest thing on the screen after the canvas. The window takes a file drag now.
+       Synthetic events cannot make the browser navigate, so this checks the two things that decide it: did anything TAKE the
+       dragover, and did the drop import the file (exactly once). The stage is the control — the same drop must work there.
+       Two guards on the fix: over Home the drop is TAKEN (the file must not open in place of FreeMotion) but refused and not
+       imported (a clip landing in a project he cannot see); and a drag that carries no files — text — is left alone, so
+       dragging text into a field still inserts it. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const bad = [];
+    const cv = document.createElement('canvas'); cv.width = 32; cv.height = 32;
+    const g = cv.getContext('2d'); g.fillStyle = '#22c55e'; g.fillRect(0, 0, 32, 32);
+    const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+    if (!blob) throw new Error('setup: could not make a PNG to drop');
+    const added = [];
+    async function dropAt(el, where, what, opts) {
+      const dt = new DataTransfer();
+      dt.items.add(new File([blob], 'hunt-c-drop.png', { type: 'image/png' }));
+      const n0 = FM.scene.layers.length;
+      el.dispatchEvent(new DragEvent('dragenter', { bubbles: true, cancelable: true, dataTransfer: dt }));
+      const over = new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt });
+      const notTaken = el.dispatchEvent(over);
+      const effect = dt.dropEffect;
+      el.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+      const wait = (opts && opts.wait) || 4000;
+      for (let k = 0; k < wait / 100 && FM.scene.layers.length === n0; k++) await sleep(100);
+      await sleep(300);   // a second import, if the drop were taken twice, lands in this window
+      const grew = FM.scene.layers.length - n0;
+      FM.scene.layers.forEach(l => { if (/hunt-c-drop/.test(l.name || '') && added.indexOf(l.id) < 0) added.push(l.id); });
+      const st = document.getElementById('stage'); if (st) st.classList.remove('dragover');
+      return { taken: !notTaken, imported: grew > 0, count: grew, effect: effect };
+    }
+    async function run(where) {
+      await huntCScene(where);
+      FM.selectLayer(null); await sleep(300);   // nothing selected: the band shows the Add menu, Media tab and all
+      const stage = document.getElementById('stage');
+      const pv = document.getElementById('preview').getBoundingClientRect();
+      const onStage = document.elementFromPoint(pv.left + pv.width / 2, pv.top + pv.height / 2);
+      if (!onStage || !stage.contains(onStage)) throw new Error(where + ': setup: the middle of the canvas is not inside #stage');
+      const ctl = await dropAt(onStage, where, 'the canvas');
+      if (!ctl.taken || !ctl.imported) throw new Error(where + ': CONTROL: the same drop on the canvas was ' + (ctl.taken ? '' : 'not taken and ') + (ctl.imported ? 'imported' : 'not imported') + ' — the fixture proves nothing');
+      if (ctl.count !== 1) bad.push(where + ' — one file dropped on the canvas made ' + ctl.count + ' layers (the drop was imported more than once)');
+      /* Each target is looked up at the moment of ITS drop: an import selects the new layer and rebuilds the band, and an
+         element found before that is detached by then — a drop on a detached node reaches nothing, which would be a false red. */
+      const onTl = () => { const tl = document.getElementById('timeline').getBoundingClientRect(); return document.elementFromPoint(tl.left + tl.width * 0.7, tl.bottom - 16); };
+      const onAdd = () => { const ip = document.getElementById('inspector-panel').getBoundingClientRect(); return document.elementFromPoint(ip.left + ip.width / 2, ip.top + ip.height * 0.6); };
+      for (const t of [{ at: onTl, what: 'the timeline' }, { at: onAdd, what: 'the Add menu' }]) {
+        FM.selectLayer(null); await sleep(400);   // the band back on the Add menu, and settled, before anything is looked up
+        const el = t.at();
+        if (!el) { bad.push(where + ': nothing is under ' + t.what); continue; }
+        const r = await dropAt(el, where, t.what);
+        if (!r.taken || !r.imported) bad.push(where + ' — dropped on ' + t.what + ': ' + (r.imported ? 'imported' : 'NOT imported') + (r.taken ? '' : ', and nothing took the drag, so on his PC the browser opens the file in place of FreeMotion'));
+        else if (r.count !== 1) bad.push(where + ' — one file dropped on ' + t.what + ' made ' + r.count + ' layers');
+      }
+      /* Text, not a file: nobody may take it (a field under it is the browser's to fill). */
+      { const tl = onTl(); const dt = new DataTransfer(); dt.setData('text/plain', 'hello');
+        const notTaken = tl.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+        if (!notTaken) bad.push(where + ' — a TEXT drag over the timeline was taken as if it were a file'); }
+      /* Home: taken (so the browser does not open it), refused, and nothing imported into the project hidden behind it. */
+      FM.home.open(); await sleep(700);
+      try {
+        if (!FM.home.isOpen()) throw new Error(where + ': setup: Home did not open');
+        const hel = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
+        const h = await dropAt(hel, where, 'Home', { wait: 800 });
+        if (!h.taken) bad.push(where + ' — a file dropped on Home: nothing took the drag, so the browser opens the file in place of FreeMotion');
+        if (h.imported) bad.push(where + ' — a file dropped on Home was imported into the project hidden behind it');
+        if (h.taken && h.effect !== 'none') bad.push(where + ' — over Home the drag showed ' + h.effect + ', not the no-entry cursor, though the drop does nothing there');
+      } finally { if (FM.home.isOpen()) FM.home.close(); await sleep(400); }
+    }
+    try {
+      await atWideWidth(function () { return run('PC 1280'); }, 1280);
+      await atWideWidth(function () { return run('PC 900'); }, 900);
+    } finally {
+      added.forEach(id => { try { if (FM.media && FM.media.remove) FM.media.remove(id); } catch (e) {} });
+      FM.scene = saved; try { FM.refreshAll(); } catch (e) {}
+    }
+    if (bad.length) throw new Error('a file dragged in from his desktop only works if it lands on the canvas: ' + bad.join('; '));
+  });
+
+  test('690 undo keeps the layer he is on — undoing a nudge or a delete of Red never selects Blue, by Cmd+Z or the undo button', { item: '690', budgetMs: 90000 }, async function () {
+    /* js/history.js restore() used to put back the SNAPSHOT's selectedId — the selection at the PREVIOUS commit — and the #629
+       guard only steps in when the current layer is gone. Clicking a clip does not commit, so: Blue added (selected,
+       committed), he CLICKS Red with the mouse, nudges it with an arrow key, presses Cmd+Z — Red went back AND Blue became
+       selected, with the panel open on it. #629 said why that matters: it is how the next slider drag, nudge or Delete lands
+       on a layer he never chose. Measured with a real click and real keys at 1280: after undoing a Delete of Red, Blue was
+       selected, and a second Delete took Blue. The click on the clip and on the undo button are REAL mouse input.
+       Also held here: undoing the Delete brings Red back SELECTED (what he had before he deleted it), and after an undo the
+       redo is still there when something commits without changing anything — the stack entry is re-stamped with the
+       selection undo kept, or that no-op commit would push a selection-only step and throw the redo away. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const bad = [];
+    const reach = () => Math.min(window.innerWidth, (window.top && window.top.innerWidth) || window.innerWidth) - 8;
+    async function clickRed(where) {
+      /* The clip body where the window reaches it; otherwise the row's thumbnail, which selects the same way (measured: a
+         real click on either selects Red and adds no history step). Real input only lands inside the real window, so a
+         point past its edge would be a false red. */
+      const clip = [].slice.call(document.querySelectorAll('#tl-tracks .clip')).find(c => c.textContent.indexOf('Red') >= 0);
+      if (!clip) throw new Error(where + ': setup: no Red clip on the timeline');
+      const r = clip.getBoundingClientRect();
+      let x = Math.min(r.right - 30, Math.max(r.left + 30, r.left + r.width / 2)), y = r.top + r.height / 2, what = 'the Red clip';
+      if (x > reach()) {
+        const row = clip.closest('.track-row');
+        const th = row && row.querySelector('.th-thumb-wrap, .th-thumb');
+        if (!th) throw new Error(where + ': setup: the Red clip is past the reachable ' + reach() + 'px and its row has no thumbnail to click');
+        const t = th.getBoundingClientRect(); x = t.left + t.width / 2; y = t.top + t.height / 2; what = 'the Red row thumbnail';
+      }
+      if (x > reach() || y > window.innerHeight - 4) throw new Error(where + ': setup: ' + what + ' is off the reachable frame at ' + Math.round(x) + ',' + Math.round(y));
+      await realInput924([{ t: 'mouseMove', x: x, y: y, ms: 40 }, { t: 'mouseDown', x: x, y: y, ms: 70 }, { t: 'mouseUp', x: x, y: y, ms: 60 }], where + ' — clicking ' + what);
+      await sleep(350);
+    }
+    async function clickUndo(where) {
+      const b = document.getElementById('btn-undo');
+      const r = b && b.getBoundingClientRect();
+      if (!r || !r.width) throw new Error(where + ': setup: the undo button is not on screen');
+      const x = r.left + r.width / 2, y = r.top + r.height / 2;
+      /* The suite's phone pass runs Chrome 380 wide, and real input only lands inside the real window — the button sits
+         at x 741 in the 1280 layout, out of reach. There it is pressed through its own click handler instead; the desktop
+         pass, where the window is wide enough, is the one that clicks it for real. */
+      if (x > reach() || y > window.innerHeight - 4) { b.click(); await sleep(350); return; }
+      await realInput924([{ t: 'mouseMove', x: x, y: y, ms: 40 }, { t: 'mouseDown', x: x, y: y, ms: 70 }, { t: 'mouseUp', x: x, y: y, ms: 60 }], where + ' — clicking the undo button');
+      await sleep(350);
+    }
+    async function nudgeThenUndo(where, how, undo) {
+      const sc = await huntCScene(where);
+      await clickRed(where);
+      if (FM.scene.selectedId !== sc.R.id) throw new Error(where + ': setup: a real click on the Red clip did not select Red (' + huntCName(FM.scene.selectedId) + ')');
+      const x0 = FM.evalProp(FM.layerById(FM.scene, sc.R.id).transform.x, FM.time);
+      huntCKey('ArrowRight', 'ArrowRight', { shiftKey: true }); await sleep(200);
+      const x1 = FM.evalProp(FM.layerById(FM.scene, sc.R.id).transform.x, FM.time);
+      if (!(x1 > x0)) throw new Error(where + ': setup: Shift+Right did not nudge Red (' + x0 + ' → ' + x1 + ')');
+      await undo();
+      const x2 = FM.evalProp(FM.layerById(FM.scene, sc.R.id).transform.x, FM.time);
+      if (x2 !== x0) throw new Error(where + ': CONTROL: ' + how + ' did not undo the nudge (' + x0 + ' → ' + x1 + ' → ' + x2 + ')');
+      if (FM.scene.selectedId !== sc.R.id) bad.push(where + ' — ' + how + ' undid his nudge of Red and the selection jumped to ' + huntCName(FM.scene.selectedId) + ' (the panel is now on a layer he never clicked)');
+      return sc;
+    }
+    async function run(where) {
+      /* 1. nudge, then Cmd+Z — and the redo survives a commit that changes nothing */
+      await nudgeThenUndo(where, 'Cmd+Z', async () => { huntCKey('z', 'KeyZ', { metaKey: true }); await sleep(350); });
+      if (!FM.history.canRedo()) throw new Error(where + ': CONTROL: nothing to redo straight after the undo');
+      FM.history.commit();
+      if (!FM.history.canRedo()) bad.push(where + ' — after Cmd+Z, a commit that changed nothing threw the redo away (a selection-only step was pushed)');
+      /* 2. nudge, then the undo BUTTON (a real click) */
+      await nudgeThenUndo(where, 'the undo button', () => clickUndo(where));
+      /* 3. delete, then undo */
+      const sc = await huntCScene(where);
+      await clickRed(where);
+      if (FM.scene.selectedId !== sc.R.id) throw new Error(where + ': setup: the second click on the Red clip did not select Red');
+      huntCKey('Delete', 'Delete'); await sleep(250);
+      if (FM.layerById(FM.scene, sc.R.id)) throw new Error(where + ': setup: Delete did not delete Red');
+      huntCKey('z', 'KeyZ', { metaKey: true }); await sleep(350);
+      if (!FM.layerById(FM.scene, sc.R.id)) throw new Error(where + ': CONTROL: Cmd+Z did not bring Red back');
+      if (FM.scene.selectedId === sc.B.id) bad.push(where + ' — Cmd+Z brought back the Red he deleted and selected Blue, so pressing Delete again deletes Blue');
+      else if (FM.scene.selectedId !== sc.R.id) bad.push(where + ' — Cmd+Z brought back the Red he deleted with ' + huntCName(FM.scene.selectedId) + ' selected, not Red as he had it');
+    }
+    try {
+      await onScreen924(async function () {
+        await atWideWidth(function () { return run('PC 1280'); }, 1280);
+        await atWideWidth(function () { return run('PC 900'); }, 900);
+      });
+    } finally { FM.scene = saved; try { FM.refreshAll(); } catch (e) {} }
+    if (bad.length) throw new Error('undo changes which layer he is editing: ' + bad.join('; '));
+  });
+
+  test('690 the ? sheet names the keys as they really are — 1–5 open the Add-menu tabs it lists, ⇧1–4 add the tools it lists', { item: '690', budgetMs: 45000 }, async function () {
+    /* The ? sheet (js/shortcuts.js) described the Add menu from before Elements moved to the front and Captions joined the
+       instant list: it said 1–5 are Shape · Media · Audio · Object/Element · Template and Shift+1/2/3 are Text · Sketching ·
+       Custom shape. The keys (js/app.js Digit branch → FM.addMenu.openTab / instant) do Elements · Shape · Media · Audio ·
+       Template and Text · Captions · Sketching · Custom shape. He read the sheet, pressed Shift+2 to draw, and got a Captions
+       track with the text editor open. The sheet now writes both rows from the Add menu's own lists. The expectations are
+       READ FROM THE SHEET, and every key the sheet names must do what it says — including ⇧4, which it never listed. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const bad = [];
+    const norm = s => String(s || '').toLowerCase().replace(/[^a-z/ ]/g, '').trim();
+    const same = (listed, got) => {
+      const g = norm(got).replace(/s$/, '');
+      return norm(listed).split('/').some(p => { p = p.trim().replace(/s$/, ''); return p && (p === g || g.indexOf(p) === 0 || p.indexOf(g) === 0); });
+    };
+    const real = { text: FM.addTextLayer, cap: FM.addCaptionLayer, draw: FM.startDraw };
+    try {
+      await atWideWidth(async function () {
+        await huntCScene('PC 1280');
+        FM.selectLayer(null); await sleep(300);
+        FM.shortcuts.show(); await sleep(250);
+        const rows = [].slice.call(document.querySelectorAll('#shortcuts-overlay .shortcut-row')).map(r => ({ k: (r.querySelector('.shortcut-key') || {}).textContent || '', d: (r.querySelector('.shortcut-desc') || {}).textContent || '' }));
+        FM.shortcuts.hide(); await sleep(150);
+        const tabRow = rows.find(r => /^1\s*[–-]\s*5$/.test(r.k.trim()));
+        const shRow = rows.find(r => /⇧/.test(r.k) && /1/.test(r.k) && /Text/.test(r.d));
+        if (!tabRow || !shRow) throw new Error('setup: the sheet has no 1–5 row or no ⇧1/2/3 row to check (' + rows.map(r => r.k).join(' | ') + ')');
+        /* 1–5 with nothing selected: which Add-menu tab opens */
+        const tabNames = tabRow.d.split('→').pop().split('·').map(s => s.trim()).filter(Boolean);
+        if (tabNames.length !== 5) bad.push('the 1 – 5 row names ' + tabNames.length + ' tabs, not 5');
+        for (let n = 1; n <= tabNames.length; n++) {
+          FM.selectLayer(null); await sleep(150);
+          huntCKey(String(n), 'Digit' + n); await sleep(250);
+          const act = document.querySelector('.addmenu-tab.active');
+          const got = act ? (act.getAttribute('aria-label') || act.title || act.textContent).trim() : '(no tab)';
+          if (!same(tabNames[n - 1], got)) bad.push('the sheet says ' + n + ' opens ' + tabNames[n - 1] + ', but ' + n + ' opened ' + got);
+        }
+        /* Shift+N: which instant tool runs — spied, so nothing is actually added */
+        const calls = [];
+        FM.addTextLayer = function () { calls.push('Text'); };
+        FM.addCaptionLayer = function () { calls.push('Captions'); };
+        FM.startDraw = function (k) { calls.push(k === 'freehand' ? 'Sketching' : k === 'vector' ? 'Custom shape' : String(k)); };
+        const nums = (shRow.k.match(/\d/g) || []).map(Number);
+        const names = shRow.d.replace(/^Add\s+/i, '').split('·').map(s => s.trim()).filter(Boolean);
+        if (nums.length !== names.length) bad.push('the ⇧ row names ' + nums.length + ' keys for ' + names.length + ' tools (' + shRow.k + ' — ' + shRow.d + ')');
+        for (let i = 0; i < nums.length && i < names.length; i++) {
+          calls.length = 0;
+          const n = nums[i];
+          huntCKey('!@#$'[n - 1] || String(n), 'Digit' + n, { shiftKey: true }); await sleep(150);
+          const got = calls[0] || 'nothing';
+          if (!same(names[i], got)) bad.push('the sheet says Shift+' + n + ' adds ' + names[i] + ', but Shift+' + n + ' added ' + got);
+        }
+      }, 1280);
+    } finally {
+      FM.addTextLayer = real.text; FM.addCaptionLayer = real.cap; FM.startDraw = real.draw;
+      if (FM.shortcuts.isOpen()) FM.shortcuts.hide();
+      FM.scene = saved; try { FM.refreshAll(); } catch (e) {}
+    }
+    if (bad.length) throw new Error('the ? sheet teaches him the wrong keys: ' + bad.join('; '));
+  });
+
+
+  /* ═══ HUNT-d — RENDER PARITY ACROSS LAYER TYPES AND COMPOSITION (queue 690, 25 Sep) ════════════════════════════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". The area: the preview must be the export — the idea of
+   * 913.5 (render the whole frame and a zoomed slice and compare) carried across layer types and composition rather than the
+   * effect catalogue. Each test below FAILED on v16.93 because of a real bug (all four, plus the crop-tool sibling of the
+   * first, fixed on the same branch and proved by reverting the sources), and each carries a control that proves the
+   * comparison can see what it claims to. Probed first with a sweep of text / shapes / images / groups / nested groups /
+   * masks / blend modes / adjustment layers / camera / motion blur / parenting at the reduced playback plate (0.5, 0.3), a
+   * 2x and a 3x zoomed slice — the plain compositing paths all matched; these four did not. */
+
+  /* 690 (HUNT-d 1) — the View menu Layers button (isolate) is documented as VIEW ONLY: "this shouldnt change anything but just
+   * be its own little tool to help you visualise stuff" (v5.27). FM.isolate is read inside FM.renderScene — and the exporter
+   * calls that same function on FM.scene, and nothing on the way to an export (showExportDialog, runExport, the exporter)
+   * cleared it. So a layer left isolated exported ALONE: every other layer missing from the file — or, in mode 2, that clip
+   * wrongly on top. The fix: the compositor does not read the isolate while FM._exporting, and the still (FM.snapshotPNG,
+   * which renders without that flag) holds it aside for its one render. Driven through the real button, the real PNG-frames
+   * exporter (the frames are read back out of the zip it builds) and the real still (its PNG blob is read back). */
+  const grab690 = { frames: [], blob: null };
+  function stub690() {
+    const realURL = URL.createObjectURL, realClick = HTMLAnchorElement.prototype.click, realCreate = FM.zipWrite.create;
+    URL.createObjectURL = function (b) { if (b && b.type === 'image/png') grab690.blob = b; return 'blob:hunt-d'; };   // nothing may actually download
+    HTMLAnchorElement.prototype.click = function () {};
+    FM.zipWrite.create = function () {
+      const z = realCreate.apply(this, arguments), add = z.add;
+      z.add = function (name, buf) { grab690.frames.push(buf); return add.apply(this, arguments); };
+      return z;
+    };
+    return function () { URL.createObjectURL = realURL; HTMLAnchorElement.prototype.click = realClick; FM.zipWrite.create = realCreate; };
+  }
+  async function pngCtx690(bytes) {
+    const bmp = await createImageBitmap(bytes instanceof Blob ? bytes : new Blob([bytes], { type: 'image/png' }));
+    const c = offscreen(bmp.width, bmp.height), g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(bmp, 0, 0);
+    return g;
+  }
+  async function exportFrame690(name) {   // frame 0 of the real PNG-frames export
+    grab690.frames.length = 0;
+    await FM.exporter.runFrames({ scale: 1, fps: 10, from: 0, to: 0.2, name: name, format: 'png', onProgress: function () {} });
+    if (!grab690.frames.length) throw new Error('setup: the frames export produced no frames to read back');
+    return pngCtx690(grab690.frames[0]);
+  }
+  async function stillFrame690() {        // the real single-frame PNG (the toolbar snapshot, and This frame in the dialog)
+    grab690.blob = null;
+    FM.snapshotPNG();
+    for (let i = 0; i < 100 && !grab690.blob; i++) await new Promise(r => setTimeout(r, 20));
+    if (!grab690.blob) throw new Error('setup: the still produced no PNG to read back');
+    return pngCtx690(grab690.blob);
+  }
+  test('690 the View menu isolate stays out of the export — the video and the still hold every layer, in their own order', { item: '690', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.exporter || !FM.exporter.runFrames || !FM.zipWrite || !FM.zipWrite.create || !FM.snapshotPNG) throw new Error('setup: the PNG-frames exporter or the still is not reachable');
+    const btn = document.getElementById('vb-layers');
+    if (!btn) throw new Error('setup: the View menu Layers (isolate) button is gone');
+    const saved = FM.scene;
+    const at = (g, x, y) => g.getImageData(x, y, 1, 1).data;
+    const isRed = g => { const d = at(g, 30, 60); return d[0] > 200 && d[1] < 60 && d[2] < 60; };
+    const isBlue = g => { const d = at(g, 74, 60); return d[2] > 200 && d[0] < 60 && d[1] < 60; };        // blue's edge, clear of the green
+    const greenOnBlue = g => { const d = at(g, 90, 60); return d[1] > 200 && d[0] < 60 && d[2] < 60; };   // green sits ABOVE blue in the stack
+    let unstub = null;
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      const green = FM.makeLayer('shape', { name: 'HD green', shape: 'rect', x: 90, y: 60, shapeW: 20, shapeH: 20, fill: '#00ff00', start: 0, duration: 1 });
+      const red = FM.makeLayer('shape', { name: 'HD red', shape: 'rect', x: 30, y: 60, shapeW: 40, shapeH: 40, fill: '#ff0000', start: 0, duration: 1 });
+      const blue = FM.makeLayer('shape', { name: 'HD blue', shape: 'rect', x: 90, y: 60, shapeW: 40, shapeH: 40, fill: '#0000ff', start: 0, duration: 1 });
+      FM.scene = scene([green, red, blue], { project: { width: 120, height: 120, fps: 10, duration: 1, background: '#000000' } });
+      FM.refreshAll(); FM.setTime(0); await sleep(120);
+      unstub = stub690();
+      // CONTROL 1: with nothing isolated the export holds all three, so the read-back can see each of them
+      if (FM.setIsolate) FM.setIsolate(0);
+      const plain = await exportFrame690('hunt-d-iso');
+      if (!isRed(plain) || !isBlue(plain) || !greenOnBlue(plain)) throw new Error('CONTROL FAILED — with nothing isolated the exported frame does not show all three squares in their order, so this harness cannot read an export');
+      // his path: select the red square, tap the View menu Layers button once (only this layer)
+      FM.selectLayer(red.id); await sleep(60);
+      btn.click(); await sleep(60);
+      if (!(FM.isolate && FM.isolate.id === red.id && FM.isolate.mode === 1)) throw new Error('setup: tapping the Layers button with one clip selected did not isolate it (FM.isolate is ' + (FM.isolate ? FM.isolate.id + ' mode ' + FM.isolate.mode : 'off') + ')');
+      // CONTROL 2: the PREVIEW is isolated, which is the tool doing its job
+      const pv = offscreen(120, 120), pg = pv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(pg, FM.scene, 0);
+      if (isBlue(pg)) throw new Error('CONTROL FAILED — the preview still shows the blue square with the red one isolated, so the isolate did not take effect');
+      const iso = await exportFrame690('hunt-d-iso');
+      if (!isRed(iso)) throw new Error('setup: the isolated red square is missing from the export as well');
+      if (!isBlue(iso) || !greenOnBlue(iso)) throw new Error('with one layer isolated by the View menu Layers button (a view-only tool), the EXPORTED frame is missing every other layer — the blue square is not in the file. He exports a video that holds only the one clip he was looking at');
+      const still = await stillFrame690();
+      if (!isRed(still) || !isBlue(still)) throw new Error('with one layer isolated, the exported STILL (the single-frame PNG) holds only that layer — the blue square is missing from it');
+      if (!(FM.isolate && FM.isolate.id === red.id && FM.isolate.mode === 1)) throw new Error('the export switched his isolate off — the preview he was looking at changed (FM.isolate is ' + (FM.isolate ? FM.isolate.id + ' mode ' + FM.isolate.mode : 'off') + ')');
+      // mode 2 — the blue square brought to the top: the preview lifts it over the green, the file must keep the green on top
+      FM.selectLayer(blue.id); await sleep(60);
+      btn.click(); await sleep(60); btn.click(); await sleep(60);
+      if (!(FM.isolate && FM.isolate.id === blue.id && FM.isolate.mode === 2)) throw new Error('setup: two taps on the Layers button did not bring the blue square to the top (FM.isolate is ' + (FM.isolate ? FM.isolate.id + ' mode ' + FM.isolate.mode : 'off') + ')');
+      FM.renderScene(pg, FM.scene, 0);
+      if (greenOnBlue(pg)) throw new Error('CONTROL FAILED — with the blue square brought to the top the preview still draws the green over it, so mode 2 did not take effect');
+      const top = await exportFrame690('hunt-d-iso');
+      if (!greenOnBlue(top) || !isRed(top)) throw new Error('with a layer brought to the top by the View menu Layers button, the EXPORTED frame draws it over the layers above it — the file stacks his clips in an order he never set');
+      const topStill = await stillFrame690();
+      if (!greenOnBlue(topStill)) throw new Error('with a layer brought to the top by the View menu Layers button, the exported STILL draws it over the layers above it');
+    } finally {
+      if (unstub) unstub();
+      if (FM.setIsolate) FM.setIsolate(0);
+      FM.scene = saved; FM.selectLayer(null);
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 (HUNT-d 1, its sibling) — the Free-Crop tool is the same kind of view state: while it is open the layer shows its
+   * WHOLE frame so he can re-crop from it (layer._cropEditing, read by FM.cropOf). Nothing cleared it on the way to an export
+   * either, so an export started with the tool open wrote the whole uncropped frame into the file. Opened through the real
+   * tool; exported through the real PNG-frames exporter and the real still. */
+  test('690 an export started with the Free-Crop tool still open holds the crop he committed, not the whole frame', { item: '690', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.cropTool || !FM.cropTool.start || !FM.exporter || !FM.exporter.runFrames || !FM.snapshotPNG) throw new Error('setup: the crop tool, the frames exporter or the still is not reachable');
+    const saved = FM.scene;
+    const tex = offscreen(120, 120), tc = tex.getContext('2d');
+    tc.fillStyle = '#ff0000'; tc.fillRect(0, 0, 60, 120);
+    tc.fillStyle = '#0000ff'; tc.fillRect(60, 0, 60, 120);
+    const L = FM.makeLayer('image', { name: 'HD cropped', x: 60, y: 60, start: 0, duration: 1 });
+    L.start = 0; L.duration = 1;
+    L.crop = { x: 0, y: 0, w: 60, h: 120 };   // he kept the red half: a 60-wide frame centred on x 60 (30..90)
+    FM.media.set(L.id, { kind: 'image', el: tex, width: 120, height: 120 });
+    const blueAt = (g, x) => { const d = g.getImageData(x, 60, 1, 1).data; return d[2] > 200 && d[0] < 60; };
+    const redAt = (g, x) => { const d = g.getImageData(x, 60, 1, 1).data; return d[0] > 200 && d[2] < 60; };
+    let unstub = null;
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      FM.scene = scene([L], { project: { width: 120, height: 120, fps: 10, duration: 1, background: '#000000' } });
+      FM.refreshAll(); FM.setTime(0); await sleep(120);
+      unstub = stub690();
+      // CONTROL 1: the committed crop exports as the red half alone
+      const plain = await exportFrame690('hunt-d-crop');
+      if (!redAt(plain, 60) || blueAt(plain, 100)) throw new Error('CONTROL FAILED — with the crop tool closed the export is not the cropped red half, so this harness cannot read a crop');
+      FM.cropTool.start(L.id); await sleep(60);
+      if (!(FM.cropTool.isActive && FM.cropTool.isActive())) throw new Error('setup: the Free-Crop tool did not open on the image');
+      // CONTROL 2: the PREVIEW shows the whole frame while the tool is open — the tool doing its job
+      const pv = offscreen(120, 120), pg = pv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(pg, FM.scene, 0);
+      if (!blueAt(pg, 100)) throw new Error('CONTROL FAILED — with the crop tool open the preview does not show the whole frame, so the tool state did not take effect');
+      const open = await exportFrame690('hunt-d-crop');
+      if (blueAt(open, 100)) throw new Error('an export started with the Free-Crop tool open wrote the WHOLE uncropped frame into the file — the half he cropped away is back in his video');
+      const still = await stillFrame690();
+      if (blueAt(still, 100)) throw new Error('a still exported with the Free-Crop tool open holds the whole uncropped frame');
+      if (!FM.cropTool.isActive() || !L._cropEditing) throw new Error('the export closed his crop tool or dropped its whole-frame view');
+    } finally {
+      try { if (FM.cropTool && FM.cropTool.stop) FM.cropTool.stop(); } catch (e) {}
+      if (unstub) unstub();
+      FM.media.remove(L.id);
+      FM.scene = saved; FM.selectLayer(null);
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 (HUNT-d 2) — a Blur on a GREEN-SCREENED clip. A keyed media layer bakes its CSS filter into the key offscreen
+   * (compositor.js media branch: chromaKey(src, w, h, …, ctx.filter, …)), and that offscreen is in SOURCE pixels — but the
+   * filter string was built for the TARGET in device pixels (effectFilter(layer, t, renderScale(ctx))). So the blur radius is
+   * multiplied by the preview's render scale twice: once into the string, once more when the keyed source is drawn through
+   * the canvas transform. The export (scale 1) is right; the phone preview (about 0.58), the playback tier (down to 0.3)
+   * and a zoomed preview (up to 6) all show a different softness. Measured as the width of the red edge ramp, in project
+   * pixels, across the subject's left edge. CONTROL: the same blur on the same clip WITHOUT the key is the same width at
+   * every scale, so the ruler is sound. Glow goes the same way (it is a drop-shadow length in the same string).
+   * The fix (compositor.js filterToSource): the string handed to the key offscreen has every px length divided by the
+   * transform's scale at the draw, so it lands on the target exactly as the unkeyed layer's does. */
+  test('690 a Blur on a green-screened clip is the same softness in every preview as in the export, and at any clip scale', { item: '690', budgetMs: 30000 }, function () {
+    const PW = 320, PH = 240, T = 0.5, ids = [];
+    function build(keyed, scale) {
+      const tex = offscreen(200, 120), c = tex.getContext('2d');
+      c.fillStyle = '#00ff00'; c.fillRect(0, 0, 200, 120);
+      c.fillStyle = '#ff0000'; c.fillRect(60, 20, 80, 80);   // the subject: project x 120..200 once centred at 160 (at scale 1)
+      const L = FM.makeLayer('image', { name: 'HD keyed', x: 160, y: 120, start: 0, duration: 3 });
+      L.start = 0; L.duration = 3;
+      if (scale) L.transform.scale = scale;   // an imported clip is fitted to the frame this way (app.js: transform.scale = fit)
+      const blur = FM.fxRegistry.makeInstance('blur'); blur.params.radius = 8;
+      L.effects = (keyed ? [FM.fxRegistry.makeInstance('chromakey')] : []).concat([blur]);
+      FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 120 }); ids.push(L.id);
+      return { project: { width: PW, height: PH, fps: 30, duration: 3, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] };
+    }
+    // width (project px) over which the red channel climbs from 10% to 90% along row y=120, across 25 px either side of the
+    // subject's left edge (project x 120 at scale 1; 160 - 40 * scale in general)
+    function ramp(sc, st, edge) {
+      const E = edge == null ? 120 : edge;
+      const cv = offscreen(st.w, st.h);
+      if (st.crop) { cv.__fmCrop = true; cv.__fmRS = st.rs; cv.__fmOX = st.ox; cv.__fmOY = st.oy; }
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, sc, T);
+      const ox = st.ox || 0, oy = st.oy || 0, rs = st.rs;
+      const d = ctx.getImageData(0, Math.round((120 - oy) * rs), st.w, 1).data;
+      const vals = [];
+      for (let px = 0; px < st.w; px++) { const X = ox + (px + 0.5) / rs; if (X >= E - 25 && X <= E + 25) vals.push([X, d[px * 4]]); }
+      const mx = Math.max.apply(null, vals.map(v => v[1]));
+      let lo = null, hi = null;
+      vals.forEach(v => { if (lo == null && v[1] > 0.1 * mx) lo = v[0]; if (hi == null && v[1] > 0.9 * mx) hi = v[0]; });
+      if (lo == null || hi == null || !(mx > 100)) throw new Error('setup: no red edge found to measure at scale ' + rs);
+      return hi - lo;
+    }
+    const SCALES = [
+      { name: 'the export', w: PW, h: PH, rs: 1 },
+      { name: 'the phone preview (scale 0.58)', w: 186, h: 139, rs: 186 / 320 },
+      { name: 'the playback tier (scale 0.3)', w: 96, h: 72, rs: 0.3 },
+      { name: 'a 3x zoomed preview', w: 240, h: 180, rs: 3, ox: 90, oy: 90, crop: true },
+    ];
+    try {
+      const plain = build(false), keyed = build(true);
+      // CONTROL: unkeyed, the ruler reads the same softness at every scale
+      const pw = SCALES.map(s => ramp(plain, s));
+      pw.forEach((w, i) => { if (Math.abs(w - pw[0]) > 1.5) throw new Error('CONTROL FAILED — an UNKEYED blur measured ' + w.toFixed(1) + ' px in ' + SCALES[i].name + ' against ' + pw[0].toFixed(1) + ' in the export, so the ruler itself is scale-dependent'); });
+      // CONTROL: the key is really on — the green around the subject is gone (the black background shows)
+      const kc = offscreen(PW, PH), kx = kc.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(kx, keyed, T);
+      const g = kx.getImageData(75, 120, 1, 1).data;
+      if (g[1] > 60) throw new Error('setup: the chroma key did not remove the green screen, so this is not a keyed clip');
+      // MEASURED (25 Sep): after the fix the keyed ramp is 13.0 / 13.8 / 13.3 / 13.3 px across the four scales; before it,
+      // the nearest miss was 4.4 px off (8.6 against 13.0). 2 px sits between the two.
+      const kw = SCALES.map(s => ramp(keyed, s));
+      const bad = [];
+      for (let i = 1; i < SCALES.length; i++) {
+        if (Math.abs(kw[i] - kw[0]) > 2) bad.push(kw[i].toFixed(1) + ' px in ' + SCALES[i].name);
+      }
+      if (bad.length) throw new Error('a Blur on a green-screened clip is ' + kw[0].toFixed(1) + ' px soft in the export but ' + bad.join(', ') + ' — he judges the softness on a preview that does not match the file (the same blur without the key is ' + pw[0].toFixed(1) + ' px everywhere)');
+      /* …AND IN THE FILE ITSELF, a keyed clip's Blur no longer depends on the clip's own scale. The same double scaling made it
+         the layer's scale times the radius: a green-screen clip fitted to the frame at half size (a 4K clip in a 1080 project)
+         exported HALF as soft as the same Blur on the same clip unkeyed — and as the same keyed clip at full size. So this is
+         the one thing the fix changes in an export: a keyed clip that is not at 100% scale gets the softness its Blur says. */
+      const hk = ramp(build(true, 0.5), SCALES[0], 140), hp = ramp(build(false, 0.5), SCALES[0], 140);
+      if (Math.abs(hp - pw[0]) > 1.5) throw new Error('CONTROL FAILED — an UNKEYED blur on the half-size clip measured ' + hp.toFixed(1) + ' px against ' + pw[0].toFixed(1) + ' at full size, so the ruler does not survive the layer scale');
+      if (Math.abs(hk - kw[0]) > 2) throw new Error('in the EXPORT, a Blur on a green-screened clip scaled to half is ' + hk.toFixed(1) + ' px soft against ' + kw[0].toFixed(1) + ' px at full size — the Blur follows the clip scale only when the key is on');
+    } finally {
+      ids.forEach(id => FM.media.remove(id));
+    }
+  });
+
+  /* 690 (HUNT-d 3) — a mask added from Effects → Mask is born as a MARKER in the effect stack (queue 560, fx-browser.js
+   * addMaskFromBrowser), so it is applied inside whatever plate the layer is being drawn into. Motion Blur (Object)
+   * dispatches OUTERMOST and draws the layer into a plate padded by the travel on every side (drawMotionBlur:
+   * plate.__fmOX = -m). drawPenMaskAt then builds the mask's stencil at project (0,0) and stamps it at the plate's origin
+   * (-m,-m): the reveal window lands m px up and left of where he drew it — in the preview AND the export — for as long as
+   * the layer moves, and snaps back when it stops (the blur declines and the plate is not padded). m is the travel plus 2,
+   * up to a quarter of the frame. CONTROLS: the same mask without Motion Blur, and the same mask UNMARKED with Motion Blur,
+   * both land exactly on the drawn path. The fix: FM.buildMaskAlpha takes the plate's origin and traces the path from it. */
+  test('690 a mask added from Effects stays where he drew it while Motion Blur is on and the layer moves', { item: '690', budgetMs: 30000 }, function () {
+    const PW = 320, PH = 240, T = 0.25;
+    const PATH = [[140, 100], [180, 100], [180, 140], [140, 140]];   // the window he drew, in frame pixels
+    function layerWith(blur, marker) {
+      const L = FM.makeLayer('shape', { name: 'HD masked', shape: 'rect', x: 160, y: 120, shapeW: 300, shapeH: 200, fill: '#e0245e', start: 0, duration: 3 });
+      L.start = 0; L.duration = 3;
+      L.transform.x = { kf: [{ t: 0, v: 100 }, { t: 0.5, v: 220 }] };   // a brisk move across the frame
+      const m = (FM.masks && FM.masks.make) ? FM.masks.make('add') : { id: 'hd-m', enabled: true, mode: 'add', feather: 0, opacity: 1, invert: false, closed: true, path: [] };
+      m.path = PATH.map(p => p.slice());
+      L.masks = [m];
+      L.effects = [];
+      if (blur) { const ob = FM.fxRegistry.makeInstance('objectblur'); ob.params.shutter = 2; L.effects.push(ob); }
+      if (marker) L.effects.push({ type: 'penmask', maskId: m.id });   // exactly what Effects → Mask adds
+      return L;
+    }
+    function box(L) {
+      const cv = offscreen(PW, PH), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, { project: { width: PW, height: PH, fps: 30, duration: 3, background: null }, layers: [L], selectedId: null, selectedIds: [] }, T);
+      const d = ctx.getImageData(0, 0, PW, PH).data;
+      let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+      for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) if (d[(y * PW + x) * 4 + 3] > 128) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      return x1 < 0 ? null : { x0: x0, y0: y0, x1: x1 + 1, y1: y1 + 1 };
+    }
+    const at = b => b ? b.x0 + ',' + b.y0 + ' to ' + b.x1 + ',' + b.y1 : 'nothing';
+    const onPath = b => b && Math.abs(b.x0 - 140) <= 1 && Math.abs(b.y0 - 100) <= 1 && Math.abs(b.x1 - 180) <= 1 && Math.abs(b.y1 - 140) <= 1;
+    // CONTROL: Motion Blur really engages on this move — unmasked, the leading edge is smeared, not sharp
+    const bare = layerWith(true, false); bare.masks = [];
+    const bc = offscreen(PW, PH), bx = bc.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(bx, { project: { width: PW, height: PH, fps: 30, duration: 3, background: null }, layers: [bare], selectedId: null, selectedIds: [] }, T);
+    const edge = []; for (let x = 300; x < PW; x++) edge.push(bx.getImageData(x, 120, 1, 1).data[3]);
+    if (!edge.some(a => a > 20 && a < 235)) throw new Error('CONTROL FAILED — Motion Blur did not smear this move at all, so nothing below would exercise the blur plate');
+    const noBlur = box(layerWith(false, true)), unmarked = box(layerWith(true, false)), marked = box(layerWith(true, true));
+    if (!onPath(noBlur)) throw new Error('CONTROL FAILED — without Motion Blur the Effects mask is not on the drawn path (' + at(noBlur) + '), so the fixture is wrong, not the blur');
+    if (!onPath(unmarked)) throw new Error('CONTROL FAILED — an ordinary (unmarked) mask with Motion Blur is off the drawn path too (' + at(unmarked) + ')');
+    if (!onPath(marked)) throw new Error('with Motion Blur on, the mask he added from Effects shows through ' + at(marked) + ' instead of the 140,100 to 180,140 he drew — it slides ' + (140 - marked.x0) + ' px left and ' + (100 - marked.y0) + ' px up while the layer moves, in the preview and the export, and snaps back when it stops');
+    // …and the ORDINARY mask pass (drawPenMaskLayer) has the same origin to honour: any plate padded past the frame — the
+    // way Motion Blur's and Squish's start left of and above it — holds an ordinary mask where he drew it too.
+    const PAD = 20, pc = offscreen(PW + 2 * PAD, PH + 2 * PAD);
+    pc.__fmCrop = true; pc.__fmRS = 1; pc.__fmOX = -PAD; pc.__fmOY = -PAD;   // plate pixel (0,0) IS project (-20,-20)
+    const px2 = pc.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(px2, { project: { width: PW, height: PH, fps: 30, duration: 3, background: null }, layers: [layerWith(false, false)], selectedId: null, selectedIds: [] }, T);
+    const pd = px2.getImageData(0, 0, pc.width, pc.height).data;
+    let q = { x0: 1e9, y0: 1e9, x1: -1, y1: -1 };
+    for (let y = 0; y < pc.height; y++) for (let x = 0; x < pc.width; x++) if (pd[(y * pc.width + x) * 4 + 3] > 128) { q.x0 = Math.min(q.x0, x - PAD); q.y0 = Math.min(q.y0, y - PAD); q.x1 = Math.max(q.x1, x + 1 - PAD); q.y1 = Math.max(q.y1, y + 1 - PAD); }
+    if (q.x1 < 0) q = null;
+    if (!onPath(q)) throw new Error('drawn into a plate that starts 20 px left of and above the frame, an ordinary mask shows through ' + at(q) + ' instead of the 140,100 to 180,140 he drew — the stencil is traced from the frame corner and stamped at the plate corner');
+  });
+
+  /* 690 (HUNT-d 4) — 913.5 made every EFFECT draw the same in a zoomed slice as in the whole frame, and v16.90 told him so
+   * ("zooming into the preview no longer changes your effects"). It was proved on an IMAGE layer only. An ADJUSTMENT layer
+   * grades a snapshot of the target instead (applyAdjustment), and on a zoomed preview that target is the SLICE: Pixelate
+   * counted its blocks across the slice and started them at the slice's corner, and RGB Split's Radial centred on the slice.
+   * So zoom in on an adjustment-layer Pixelate and the blocks were different sizes in different places from the export
+   * (54.7% of the pixels), and RGB Split with Radial 73.3%.
+   * The fix tells the two passes where the frame is (pixelateOnFrameGrid; applyPixelFx's geo). What a slice cannot know is
+   * what lies past its own edge — the layers below were only ever drawn into it — so a block straddling the edge, or a split
+   * sampling past it, reads the nearest pixel it has. The real preview renders CROP_MARGIN (18%) of the visible size past
+   * every visible edge (app.js previewCrop) precisely so that band is never on screen, so the comparison is over the part of
+   * the slice the preview SHOWS. MEASURED after the fix: every pixel that differs lies within 5.5 px of the slice edge (RGB
+   * Split's reach) — except Pixelate at 1:1, where two blocks differ by 13 levels at most: the export's downscale and the
+   * slice's sample the same point, and the bilinear weights round differently on a 184-level edge. A misplaced block is
+   * about 200 levels off, so the per-pixel threshold is 24 — above that rounding, far below the fault.
+   * Same comparison as 913.5 otherwise (a slice at 1:1 and at 2x against the whole frame at that scale). CONTROLS: no effect,
+   * an adjustment Brightness, and the SAME Pixelate / RGB Split on the image layer itself all match over the WHOLE slice. */
+  test('690 zooming into the preview leaves an adjustment layer Pixelate and RGB Split where the export draws them', { item: '690', budgetMs: 60000 }, function () {
+    const PW = 320, PH = 240, T = 0.5, CROP_MARGIN = 0.18, TOL = 24;
+    const tex = offscreen(PW, PH), tc = tex.getContext('2d');
+    for (let y = 0; y < PH; y += 10) for (let x = 0; x < PW; x += 10) { tc.fillStyle = ((x + y) / 10) % 2 ? '#e8e8e8' : '#1c4aa8'; tc.fillRect(x, y, 10, 10); }
+    tc.fillStyle = '#d0302a'; tc.fillRect(20, 30, 50, 40);
+    const img = FM.makeLayer('image', { name: 'HD plate', x: PW / 2, y: PH / 2, start: 0, duration: 3 });
+    img.start = 0; img.duration = 3;
+    FM.media.set(img.id, { kind: 'image', el: tex, width: PW, height: PH });
+    function fx(type, params) { const f = FM.fxRegistry.makeInstance(type); if (!f) throw new Error('setup: ' + type + ' is not in the catalog'); Object.assign(f.params, params || {}); return f; }
+    function adj(f) { const A = FM.makeLayer('adjustment', { name: 'HD adjust', start: 0, duration: 3 }); A.start = 0; A.duration = 3; A.effects = [f]; return A; }
+    function render(layers, st) {
+      const cv = offscreen(st.w, st.h);
+      cv.__fmRS = st.rs; cv.__fmOX = st.ox; cv.__fmOY = st.oy; cv.__fmCrop = !!st.crop;
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, { project: { width: PW, height: PH, fps: 30, duration: 3, background: '#000000' }, layers: layers, selectedId: null, selectedIds: [] }, T);
+      return { d: ctx.getImageData(0, 0, st.w, st.h).data, w: st.w };
+    }
+    // a slice at an ordinary, un-round origin — where a pinch-zoom actually leaves the preview's crop
+    const PASSES = [
+      { name: '1:1', full: { rs: 1, ox: 0, oy: 0, w: PW, h: PH }, crop: { rs: 1, ox: 73, oy: 51, w: 120, h: 90, crop: true }, dx: 73, dy: 51 },
+      { name: '2x zoom', full: { rs: 2, ox: 0, oy: 0, w: PW * 2, h: PH * 2 }, crop: { rs: 2, ox: 73, oy: 51, w: 240, h: 180, crop: true }, dx: 146, dy: 102 },
+    ];
+    // `shown`: only the part of the slice the preview puts on screen — the slice is the visible area plus CROP_MARGIN of it
+    // on every side, so the margin is CROP_MARGIN / (1 + 2 * CROP_MARGIN) of the slice
+    function worst(layers, shown, tol) {
+      let out = 0;
+      PASSES.forEach(p => {
+        const A = render(layers, p.full), B = render(layers, p.crop);
+        const f = shown ? CROP_MARGIN / (1 + 2 * CROP_MARGIN) : 0;
+        const mx = Math.ceil(p.crop.w * f), my = Math.ceil(p.crop.h * f);
+        let n = 0, all = 0;
+        for (let y = my; y < p.crop.h - my; y++) for (let x = mx; x < p.crop.w - mx; x++) {
+          const i = (y * B.w + x) * 4, j = ((y + p.dy) * A.w + (x + p.dx)) * 4;
+          all++;
+          if (Math.abs(A.d[j] - B.d[i]) > tol || Math.abs(A.d[j + 1] - B.d[i + 1]) > tol || Math.abs(A.d[j + 2] - B.d[i + 2]) > tol) n++;
+        }
+        out = Math.max(out, n / all);
+      });
+      return out;
+    }
+    const pct = f => (f * 100).toFixed(1) + '%';
+    try {
+      if (worst([img], false, 12) > 0) throw new Error('CONTROL FAILED — with no effect at all the zoomed slice differs from the whole frame, so the harness misplaces the slice');
+      if (worst([adj(fx('brightness')), img], false, 12) > 0.01) throw new Error('CONTROL FAILED — an adjustment Brightness, which does not care where it is, differs in the slice — the adjustment snapshot itself is misplaced');
+      const lp = worst([Object.assign({}, img, { effects: [fx('pixelate')] })], false, 12), lr = worst([Object.assign({}, img, { effects: [fx('rgbsplit', { radial: 100 })] })], false, 12);
+      if (lp > 0.01 || lr > 0.01) throw new Error('CONTROL FAILED — the same effects on the IMAGE layer differ when zoomed too (Pixelate ' + pct(lp) + ', RGB Split ' + pct(lr) + '), which is 913.5 regressing, not this');
+      const ap = worst([adj(fx('pixelate')), img], true, TOL), ar = worst([adj(fx('rgbsplit', { radial: 100 })), img], true, TOL);
+      const bad = [];
+      if (ap > 0.01) bad.push('Pixelate ' + pct(ap));
+      if (ar > 0.01) bad.push('RGB Split with Radial ' + pct(ar));
+      if (bad.length) throw new Error('zoomed into the preview, an ADJUSTMENT layer draws differently from the export (' + bad.join(', ') + ' of the pixels on screen differ) — the pixel blocks sit in other places and at other sizes than in the file, while the same effects on the clip itself match exactly');
+    } finally {
+      FM.media.remove(img.id);
+    }
+  });
+
+
+  /* ═══ 690 — AUDIO (queue 690, his words: go re audit, find some bugs coz theres a shit load) ═══════════════════════════════
+   * Four audio faults found by measuring (the HUNT-e pass), each first written to FAIL, then fixed; each test says what he
+   * would have seen. Two of them are about his iPhone, which this suite cannot run: where a test stands in for WebKit it
+   * says exactly which documented WebKit behaviour it copies, and it keeps a control so the instrument is proven on the
+   * same run. */
+  function huntEWav(secs, fn, name) {
+    const sr = 48000, n = Math.max(1, Math.floor(secs * sr));
+    const oac = new OfflineAudioContext(2, n, sr);
+    const b = oac.createBuffer(2, n, sr);
+    for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); for (let i = 0; i < n; i++) d[i] = fn(i / sr); }
+    return new File([FM.audioBufferToWav(b)], (name || 'hunte') + '.wav', { type: 'audio/wav' });
+  }
+  function huntEScene(layers, dur) {
+    return scene(layers, { project: { width: 64, height: 64, fps: 30, duration: dur, background: '#000000' } });
+  }
+
+  /* 1 — ON HIS IPHONE THE PREVIEW IGNORES MUTE, VOLUME AND FADES.
+   * Every level below 100% reaches a forward clip through ONE line — js/app.js syncMediaToClock:
+   *   m.el.muted = false; m.el.volume = Math.max(0, Math.min(1, vol));
+   * (vol = layerVolume x fadeMul x declick; layer.muted makes it 0). FM.play does the same (m.el.volume = 0, then the
+   * tick lifts it). On an iPhone, WebKit does not let a page set a media element's volume: Apple's own Safari audio
+   * guide says the volume property is not settable in JavaScript on iOS and always reads 1, because the level belongs
+   * to the hardware buttons. So on his phone the MUTE button leaves the clip playing at full level (the line
+   * above un-mutes the element and writes a 0 that is ignored), a clip set to 25% plays at 100%, fades and volume
+   * keyframes do nothing, and the 45 ms de-click does nothing. The export honours all of it (a Web Audio GainNode), so
+   * what he hears while mixing on the phone is not what the file contains — and the mute that Extract Audio and
+   * Remove Vocals rely on does not happen, so the original plays on top of the copy.
+   * The stand-in: the element's volume is made unsettable, reading 1, exactly as WebKit on iPhone has it. What reaches
+   * the speakers is measured as the element's own output when it plays natively, plus whatever Web Audio sends to the
+   * destination (every connection to it is tapped), so a fix that routes the level through Web Audio is measured too.
+   * CONTROL: a 200% clip — the one level that already goes through Web Audio — must measure about 2x on the same tap.
+   * FIXED (queue 690): a level of zero is el.muted, which iOS does honour, and an element whose volume will not stick
+   * (write, read back — js/audio-fx-live.js volumeLocked) takes any level other than a flat 100% through a Web Audio gain. */
+  test('690 on an iPhone, where el.volume cannot be set, a muted clip is silent in the preview and a 25 percent clip plays at 25 percent', { item: '690', budgetMs: 90000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, made = [];
+    const ctx = FM.audioCtx();
+    const origConnect = AudioNode.prototype.connect;
+    const tapIn = ctx.createGain(), an = ctx.createAnalyser();
+    an.fftSize = 2048;
+    origConnect.call(tapIn, an); origConnect.call(an, ctx.destination);
+    const REF = 0.4 / Math.SQRT2;   // RMS of the 0.4 sine at full level
+    /* The shared context has to be RUNNING before anything is measured — on a cold start a headless Chrome can take a
+       moment to open its audio device, and a stopped clock reads as silence (the same wait the recorder test uses). */
+    try { await ctx.resume(); } catch (e) {}
+    { const w0 = Date.now(), c0 = ctx.currentTime;
+      while (!(ctx.state === 'running' && ctx.currentTime > c0 + 0.05)) {
+        if (Date.now() - w0 > 9000) { AudioNode.prototype.connect = origConnect; throw new Error('setup: the audio context never ran (state ' + ctx.state + ', currentTime ' + ctx.currentTime.toFixed(2) + ') — the environment refuses to run audio at all'); }
+        await sleep(50);
+      } }
+    AudioNode.prototype.connect = function () {
+      const a = Array.prototype.slice.call(arguments);
+      if (a[0] === ctx.destination && this !== an) a[0] = tapIn;
+      return origConnect.apply(this, a);
+    };
+    async function heard(rec) {
+      const buf = new Float32Array(an.fftSize);
+      let acc = 0;
+      for (let k = 0; k < 6; k++) {
+        an.getFloatTimeDomainData(buf);
+        let s = 0; for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i];
+        acc += Math.sqrt(s / buf.length);
+        await sleep(40);
+      }
+      const web = acc / 6 / REF;
+      const routed = !!rec._mes;
+      // a natively playing element is heard at its own volume — which on iOS reads back 1 whatever was written
+      const native = (!routed && !rec.el.paused && !rec.el.muted) ? rec.el.volume : 0;
+      return { level: web + native, web: web, native: native, routed: routed, paused: rec.el.paused, muted: rec.el.muted };
+    }
+    async function run(label, setup) {
+      window.__fmStep = '690 iOS level ' + label;
+      const rec = await FM.loadVideoFile(huntEWav(4, t => 0.4 * Math.sin(2 * Math.PI * 440 * t), 'hunte-' + label));
+      // WebKit on iPhone: the volume attribute cannot be set by a page and always reads 1
+      Object.defineProperty(rec.el, 'volume', { configurable: true, get: function () { return 1; }, set: function () {} });
+      const L = FM.makeLayer('video', { name: 'song ' + label, x: 32, y: 32, start: 0, duration: 4 });
+      setup(L);
+      FM.media.set(L.id, rec); made.push(L.id);
+      FM.scene = huntEScene([L], 4);
+      FM.refreshAll(); FM.setTime(0);
+      FM.play();
+      await sleep(900);
+      const r = await heard(rec);
+      FM.pause();
+      await sleep(120);
+      return r;
+    }
+    const fmt = r => 'level ' + r.level.toFixed(2) + ' (web audio ' + r.web.toFixed(2) + ', native ' + r.native.toFixed(2) + ', routed ' + r.routed + ', paused ' + r.paused + ', el.muted ' + r.muted + ')';
+    try {
+      const boost = await run('200', L => { L.volume = 2; });
+      if (!(boost.level > 1.5 && boost.level < 2.8)) throw new Error('CONTROL: a 200 percent clip measured ' + fmt(boost) + ' (context ' + ctx.state + ')' + ' — the speaker tap cannot read the Web Audio path, so nothing below means anything');
+      const muted = await run('muted', L => { L.muted = true; });
+      if (!(muted.level < 0.05)) throw new Error('on an iPhone a MUTED clip still plays at full volume in the preview (' + fmt(muted) + ') — the app mutes by writing el.volume = 0 and setting el.muted = false, and iOS ignores el.volume; the export is silent, so the mute button, Extract Audio and Remove Vocals all leave the original playing while he edits');
+      const quarter = await run('25', L => { L.volume = 0.25; });
+      if (Math.abs(quarter.level - 0.25) > 0.1) throw new Error('on an iPhone a clip set to 25 percent plays at ' + Math.round(quarter.level * 100) + ' percent in the preview (' + fmt(quarter) + ') — every level below 100 percent, every fade and volume keyframe and the de-click are written to el.volume, which iOS ignores; only the export honours them, so the phone preview is not the file');
+    } finally {
+      AudioNode.prototype.connect = origConnect;
+      try { FM.pause(); } catch (e) {}
+      try { tapIn.disconnect(); an.disconnect(); } catch (e) {}
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 2 — AFTER A STALL, THE CATCH-UP DETUNES THE SONG AND THEN LEAVES IT LATE FOR GOOD.
+   * When a playing element falls behind the transport (a decode stall — the normal state of his phone: his 10 Sep
+   * report measured the clock a median 158 ms out, 357 ms at worst, 94 trims in 1.2 s), js/app.js syncMediaToClock
+   * does two things, and both are wrong for a STEP of lag, which is what a stall is:
+   *   · it trims playbackRate by err/SYNC_TAU, capped at +-10% (FM.mediaSyncPlan). That was written when preservesPitch
+   *     was on and a trim was a time-stretch. Since queue 916 (v16.77) js/media.js turns preservesPitch OFF on every
+   *     element so a sped-up clip sounds sped up — so every trim is now a PITCH BEND: +10% is the song 1.65 semitones
+   *     sharp for as long as the catch-up lasts;
+   *   · and it never finishes catching up. FM._syncBiasStep learns the element's output latency with a slow EMA
+   *     (ERR_BIAS_ALPHA 0.01, about 1.7 s) and corrects only what is left over. Its comment says real drift outruns
+   *     that EMA because drift accumulates — but a stall does not accumulate, it is a STEP, and the EMA swallows it as
+   *     if it were latency while the trim is still closing it. The two meet in the middle, the de-biased error reads
+   *     zero, and the song stays most of the stall behind the picture and every other layer for the rest of the clip,
+   *     until a later stall pushes it past the 350 ms hard seek (an audible jump). That is his 158 ms median.
+   * The lag is made the plain way: the element is set 200 ms behind where the transport is. Pitch is read from the
+   * element (playbackRate against the clip's own speed, unless it is preserving pitch); the lag from
+   * FM.layerLocalTime against el.currentTime, measured before the stall and again once the controller has settled.
+   * CONTROL: the controller must see the lag (a trim or a seek), or the readings below mean nothing.
+   * FIXED (queue 690): a 1x clip keeps its pitch through a trim (FM.pitchForRate — only a sped-up clip resamples, which
+   * is what queue 916 asked), and the latency learner only learns inside the dead band (FM._syncMayLearn), so a stall is
+   * corrected rather than absorbed. Measured after: 0 cents, and 33-36 ms left, inside the 45 ms dead band. */
+  test('690 after a 200 ms stall a 1x song keeps its pitch while it catches up, and ends back in step with the picture', { item: '690', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, pr0 = FM.previewRate;
+    let id = null;
+    try {
+      const rec = await FM.loadVideoFile(huntEWav(12, t => 0.3 * Math.sin(2 * Math.PI * 440 * t), 'hunte-sync'));
+      const L = FM.makeLayer('video', { name: 'song', x: 32, y: 32, start: 0, duration: 12 });
+      FM.media.set(L.id, rec); id = L.id;
+      FM.scene = huntEScene([L], 12);
+      FM.refreshAll(); FM.setTime(0);
+      FM.play();
+      await sleep(1600);   // past the start wait and SYNC_WARMUP, so the controller has learned this element's latency
+      if (!FM.playing || rec.el.paused) throw new Error('setup: the song is not playing (' + (FM.playing ? 'element paused' : 'transport stopped') + ')');
+      const errNow = () => FM.layerLocalTime(L, FM.time) - rec.el.currentTime;
+      const med = a => a.slice().sort((x, y) => x - y)[a.length >> 1];
+      const e0 = []; for (let k = 0; k < 10; k++) { e0.push(errNow()); await new Promise(r => requestAnimationFrame(r)); }
+      const before = med(e0);
+      FM.playbackStats.trims = 0; FM.playbackStats.seeks = 0;
+      window.__fmStep = '690 sync stall';
+      rec.el.currentTime = Math.max(0, rec.el.currentTime - 0.2);   // the element is now 200 ms behind the transport
+      const log = [];
+      const t0 = performance.now();
+      await new Promise(res => {
+        (function f() {
+          const base = (FM.speedAt ? FM.speedAt(L, FM.time) : 1) * (FM.previewRate || 1);
+          const follows = rec.el.preservesPitch !== true;
+          const cents = follows ? 1200 * Math.log2((rec.el.playbackRate || 1) / base) : 0;
+          log.push({ w: performance.now() - t0, cents: cents, rate: rec.el.playbackRate, err: errNow() });
+          if (performance.now() - t0 < 4500 && FM.playing) requestAnimationFrame(f); else res();
+        })();
+      });
+      FM.pause();
+      const corrections = FM.playbackStats.trims + FM.playbackStats.seeks;
+      if (!corrections) throw new Error('CONTROL: the sync controller never saw the 200 ms stall (0 trims, 0 seeks) — the lag did not register, so nothing below means anything');
+      const worst = log.reduce((a, s) => Math.abs(s.cents) > Math.abs(a.cents) ? s : a, log[0]);
+      const off = log.filter(s => Math.abs(s.cents) > 25);
+      const offMs = off.length ? Math.round(off[off.length - 1].w - off[0].w) : 0;
+      const left = med(log.slice(-20).map(s => s.err)) - before;   // how much of the stall is still there once it has settled
+      const detuned = Math.abs(worst.cents) > 25, late = Math.abs(left) > 0.06;
+      if (detuned || late) {
+        throw new Error('after the song fell 200 ms behind, the catch-up ' +
+          (detuned ? 'played it ' + (worst.cents / 100).toFixed(2) + ' semitones ' + (worst.cents > 0 ? 'sharp' : 'flat') + ' (rate ' + worst.rate.toFixed(3) + ' with pitch following speed) for about ' + offMs + ' ms' : 'kept its pitch') +
+          ' and ' + (late ? 'then stopped with the song still ' + Math.round(left * 1000) + ' ms later than before the stall, 4.5 s on — the latency learner swallowed the stall and nothing will correct it until the error passes the 350 ms hard seek' : 'closed the lag') +
+          ' (' + FM.playbackStats.trims + ' trims, ' + FM.playbackStats.seeks + ' seeks). On his phone stalls are constant, so songs keep going out of tune and drift out of step with the picture and every other layer while he edits; the export is right, so the preview is not the file');
+      }
+    } finally {
+      try { FM.pause(); } catch (e) {}
+      FM.previewRate = pr0;
+      FM.scene = saved;
+      if (id) { try { FM.media.remove(id); } catch (e) {} }
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 3 — ONE SHORT SOUND OVER A SONG TURNS THE WHOLE EXPORT DOWN.
+   * js/exporter.js buildAudioMix (queue 604) measures the peak of the WHOLE rendered mix and, if it is over 1, divides
+   * EVERY sample of the soundtrack by it. So the loudest single moment sets the level of the entire file: a 0.2 s sound
+   * effect over a song that peaks at 0.9 makes the whole song — minutes of it, nowhere near the overlap — about 5 dB
+   * quieter in the export than in the preview and than the original file. That is his own #604 setup word for word
+   * (a clip plus one sound effect, measured there at peak 1.52-1.61, so that whole file went out about 4 dB down), and
+   * #677 (two sound effects, x0.853). Real songs are mastered close to full scale, so almost any overlap trips it.
+   * Measured in the FILE: a real export, decoded, the song's level read from 0.5 to 1.5 s, well before the sound effect
+   * at 2.0 s. CONTROL: the same song exported alone must come back at its own level, which proves the decode and the
+   * reading and pins the drop on the overlap.
+   * FIXED (queue 690): a look-ahead limiter (js/exporter.js limitMix) turns down only the moments that would clip, so
+   * the song keeps its level before and after the overlap, and the overlap is still held under 1.0. */
+  test('690 one short sound effect over a song turns down only the overlap in the exported file, not the whole song', { item: '690', budgetMs: 120000 }, async function () {
+    if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, made = [];
+    const SONG = 0.9;
+    async function exportLevel(withSfx) {
+      window.__fmStep = '690 mix ' + (withSfx ? 'song+sfx' : 'song');
+      const recS = await FM.loadVideoFile(huntEWav(4, t => SONG * Math.sin(2 * Math.PI * 220 * t), 'hunte-song'));
+      const song = FM.makeLayer('video', { name: 'song', x: 32, y: 32, start: 0, duration: 4 });
+      FM.media.set(song.id, recS); made.push(song.id);
+      const layers = [song];
+      if (withSfx) {
+        const recX = await FM.loadVideoFile(huntEWav(0.2, t => 0.9 * Math.sin(2 * Math.PI * 880 * t), 'hunte-whoosh'));
+        const sfx = FM.makeLayer('video', { name: 'whoosh', x: 32, y: 32, start: 2, duration: 0.2 });
+        FM.media.set(sfx.id, recX); made.push(sfx.id);
+        layers.unshift(sfx);
+      }
+      FM.scene = huntEScene(layers, 4);
+      FM.refreshAll();
+      let blob = null;
+      await FM.exporter.run({ fps: 10, scale: 1, name: 'hunte', onReady: async r => { blob = r.blob; } });
+      if (!blob) throw new Error('setup: the export produced no file');
+      const ab = await blob.arrayBuffer();
+      const dec = await new OfflineAudioContext(2, 48000, 48000).decodeAudioData(ab);
+      const d = dec.getChannelData(0), sr = dec.sampleRate;
+      const rmsOf = (t0, t1) => { let s = 0; const a = Math.floor(t0 * sr), b = Math.floor(t1 * sr); for (let i = a; i < b; i++) s += d[i] * d[i]; return Math.sqrt(s / (b - a)); };
+      return { rms: rmsOf(0.5, 1.5), after: rmsOf(2.6, 3.6), gain: FM._lastMixGain, raw: FM._lastMixRawPeak, peak: FM._lastMixPeak };
+    }
+    try {
+      const alone = await exportLevel(false);
+      const own = SONG / Math.SQRT2;
+      const aloneDb = 20 * Math.log10(alone.rms / own);
+      if (Math.abs(aloneDb) > 1) throw new Error('CONTROL: the song exported ALONE came back at ' + aloneDb.toFixed(1) + ' dB from its own level (rms ' + alone.rms.toFixed(3) + ' vs ' + own.toFixed(3) + ') — the decode or the reading is off, so the comparison below means nothing');
+      const mixed = await exportLevel(true);
+      const dropDb = 20 * Math.log10(mixed.rms / alone.rms);
+      if (dropDb < -1) throw new Error('one 0.2 s sound effect at 2.0 s made the WHOLE song ' + (-dropDb).toFixed(1) + ' dB quieter in the exported file, from 0.5 to 1.5 s where nothing else plays (the mix peaked at ' + (mixed.raw || 0).toFixed(2) + ' and every sample was scaled by ' + (mixed.gain || 0).toFixed(3) + ') — the export turns the entire soundtrack down by its single loudest moment, so a song with a sound effect on it comes out much quieter than the preview');
+      // …and AFTER the overlap too: the limiter lets go within a fraction of a second, so 0.4 s on the song is back.
+      const afterDb = 20 * Math.log10(mixed.after / alone.after);
+      if (afterDb < -1) throw new Error('from 2.6 to 3.6 s, well after the 0.2 s sound effect ended, the song is still ' + (-afterDb).toFixed(1) + ' dB down in the exported file — the mix limiter never let go');
+      // …while the overlap itself was really held under the ceiling, or the fix would just be letting it clip.
+      if (!(mixed.raw > 1.2)) throw new Error('CONTROL: the song and the sound effect only summed to ' + (mixed.raw || 0).toFixed(2) + ', so the overlap never needed limiting and this proves nothing');
+      if (!(mixed.peak <= 1)) throw new Error('the overlap was left at a peak of ' + (mixed.peak || 0).toFixed(3) + ' in the mix — over 1.0 it hard-clips through AAC, which is the buzz queue 604 fixed');
+      if (!(mixed.gain < 0.9)) throw new Error('the mix summed to ' + (mixed.raw || 0).toFixed(2) + ' and the deepest gain applied was ' + (mixed.gain || 0).toFixed(3) + ' — the overlap was not turned down at all');
+    } finally {
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 3b — THE LIMITER ITSELF, on a buffer long enough to cross its internal blocks. js/exporter.js limitMix works in
+   * blocks so a long export does not need a second full-length array on a phone, and a block edge is exactly where a
+   * look-ahead limiter goes wrong without anything sounding obviously broken: a gain that jumps at the seam is a click
+   * in the middle of the song. So the overs here sit ACROSS the seams (one is a single sample on a block's last
+   * sample), and the test reads the applied gain back sample by sample. It holds the three things the fix promises
+   * without re-implementing it: nothing comes out above the ceiling; the gain never moves faster than one attack or
+   * one release slope per sample, seam or no seam; and everything well away from an over is left bit-for-bit alone.
+   * CONTROL: the fixture really does go over, by a lot, in every burst. */
+  test('690 the export limiter keeps every sample under the ceiling, never jumps its gain at a block seam, and leaves the song away from an over untouched', { item: '690' }, function () {
+    if (typeof FM._limitMix !== 'function') throw new Error('FM._limitMix is not exposed — the mix limiter cannot be driven directly');
+    const sr = 48000, n = sr * 4, C = 0.995, BLK = 32768;
+    const buf = new AudioBuffer({ numberOfChannels: 2, length: n, sampleRate: sr });
+    // across a seam; ending just past one; a single sample on a block's last sample; and STARTING exactly on a seam, so
+    // its attack has to reach back into the block before it
+    const bursts = [[BLK - 500, BLK + 500], [2 * BLK - 3000, 2 * BLK + 100], [3 * BLK - 1, 3 * BLK], [4 * BLK, 4 * BLK + 400]];
+    for (let c = 0; c < 2; c++) {
+      const d = buf.getChannelData(c);
+      for (let i = 0; i < n; i++) d[i] = 0.5 * Math.sin(2 * Math.PI * 220 * i / sr + c);
+      for (const k of [0, 1, 3]) for (let i = bursts[k][0]; i < bursts[k][1]; i++) d[i] += 0.9 * Math.sin(2 * Math.PI * 880 * i / sr + 1);
+      d[3 * BLK - 1] = c ? -1.8 : 1.8;   // one sample, the last of a block
+    }
+    const src = [new Float32Array(buf.getChannelData(0)), new Float32Array(buf.getChannelData(1))];
+    let rawPeak = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < n; i++) rawPeak = Math.max(rawPeak, Math.abs(src[c][i]));
+    if (!(rawPeak > 1.3)) throw new Error('CONTROL: the fixture only peaks at ' + rawPeak.toFixed(2) + ', so the limiter has nothing to do');
+    const res = FM._limitMix(buf, C);
+    const out = [buf.getChannelData(0), buf.getChannelData(1)];
+    let peak = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(out[c][i]));
+    if (peak > C + 1e-6) throw new Error('the limited mix still peaks at ' + peak.toFixed(4) + ', over the ' + C + ' ceiling — it would clip through AAC');
+    if (Math.abs(res.peak - peak) > 1e-6) throw new Error('limitMix reported a peak of ' + res.peak + ' but the buffer peaks at ' + peak + ' — the export report would print a wrong number');
+    if (!(res.low < 0.7)) throw new Error('the deepest gain reported was ' + res.low + ' for a mix that peaked at ' + rawPeak.toFixed(2) + ' — it was not turned down');
+    // The applied gain, read back where the input is loud enough to divide by, must never step faster than the slopes allow.
+    const fall = 1 / Math.round(0.005 * sr), rise = 1 / Math.round(0.25 * sr);
+    let prevI = -1, prevG = 1, worst = 0, worstAt = -1;
+    for (let i = 0; i < n; i++) {
+      const x = src[0][i]; if (Math.abs(x) < 0.05) continue;
+      const g = out[0][i] / x;
+      if (prevI >= 0) {
+        const allowed = (i - prevI) * Math.max(fall, rise) + 1e-4;
+        const step = Math.abs(g - prevG) - allowed;
+        if (step > worst) { worst = step; worstAt = i; }
+      }
+      prevI = i; prevG = g;
+    }
+    if (worst > 0) throw new Error('the limiter gain jumped ' + worst.toFixed(4) + ' more than its slope allows at sample ' + worstAt + ' (block seams every ' + BLK + ') — that is a click in the exported song');
+    // Untouched away from an over: before the first burst's attack, and after the last over's full release.
+    const A = Math.round(0.005 * sr), R = Math.round(0.25 * sr);
+    const quiet = [[0, bursts[0][0] - A - 2000], [bursts[3][1] + R + 10, n]];
+    for (const q of quiet) for (let c = 0; c < 2; c++) for (let i = q[0]; i < q[1]; i++) {
+      if (out[c][i] !== src[c][i]) throw new Error('sample ' + i + ' (' + (i / sr).toFixed(3) + ' s), nowhere near an over, was changed from ' + src[c][i] + ' to ' + out[c][i] + ' — the limiter is touching the song where nothing clips');
+    }
+  });
+
+  /* 4 — ON AN IPHONE SET TO SILENT, THE SOUND-EFFECT PREVIEW IS SILENT.
+   * The ▶ in Add ▸ Audio ▸ Sound effects plays through Web Audio alone (js/sfx.js preview), and so do reversed clips
+   * (js/audio-play.js). WebKit gives a page that is only playing Web Audio the AMBIENT audio session, which the
+   * ring/silent switch mutes — ordinary media elements get the playback session and are not muted. That is why Safari
+   * 16.4+ has navigator.audioSession: a page sets its type to 'playback' so its Web Audio is treated like media. The app
+   * never touches it (no audioSession anywhere in js/), so on a phone in silent mode — which is how most iPhones sit —
+   * every ▶ in the sound-effects list does nothing at all, and a reversed clip plays without sound, while his other
+   * clips play. #562 was exactly 'previewing sound effects doesn't work'; v12.78 fixed a real throw, and this is the
+   * part a desktop could never show.
+   * The stand-in: navigator.audioSession as Safari exposes it, starting at 'auto'. The ▶ is pressed with a REAL click.
+   * CONTROL: the click must reach the preview (its row lights up), or the assertion would pass on a dead button.
+   * FIXED (queue 690): FM.audioCtx() asks for the playback session (FM.playbackSession) — see the next test for the
+   * microphone, which must be left to WebKit. */
+  test('690 the sound effect preview asks for the playback audio session, so an iPhone set to silent still plays it', { item: '690', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (!FM.sfx || !FM.sfx.open) throw new Error('FM.sfx.open is missing — the sound-effects sheet has no opener');
+    const had = Object.prototype.hasOwnProperty.call(navigator, 'audioSession');
+    const prev = had ? Object.getOwnPropertyDescriptor(navigator, 'audioSession') : null;
+    const session = { type: 'auto', state: 'inactive' };
+    Object.defineProperty(navigator, 'audioSession', { configurable: true, enumerable: true, get: function () { return session; } });
+    try {
+      await onScreen924(async function () {
+        FM.sfx.open(); await sleep(450);
+        try {
+          const play = document.querySelector('.sfx-play');
+          if (!play) throw new Error('setup: the sound-effects sheet has no ▶ button');
+          play.scrollIntoView({ block: 'center' }); await sleep(150);
+          const r = play.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+          if (!(r.width > 0) || y < 0 || y > 740 || x < 0 || x > 890) throw new Error('setup: the ▶ is at ' + Math.round(x) + ',' + Math.round(y) + ', out of reach of real input');
+          const row = play.closest('.sfx-row');
+          let lit = false;
+          const obs = new MutationObserver(() => { if (row && row.classList.contains('playing')) lit = true; });
+          if (row) obs.observe(row, { attributes: true, attributeFilter: ['class'] });
+          window.__fmStep = '690 sfx preview click';
+          try { await realInput924([{ t: 'mouseMove', x: x, y: y, ms: 30 }, { t: 'mouseDown', x: x, y: y, ms: 60 }, { t: 'mouseUp', x: x, y: y, ms: 0 }], 'the ▶ of a sound effect'); await sleep(350); }
+          finally { obs.disconnect(); }
+          if (!lit) throw new Error('CONTROL: the real click on the ▶ never reached the preview (its row did not light up) — nothing below means anything');
+          if (session.type !== 'playback') throw new Error('the sound effect previewed through Web Audio with navigator.audioSession left at ' + String(session.type) + ' — on an iPhone that is the ambient session, which the ring/silent switch mutes, so on a phone set to silent every ▶ in the sound effects list (and every reversed clip) makes no sound while his other clips still play');
+        } finally { try { if (FM.sfx.stopPreview) FM.sfx.stopPreview(); FM.sfx.close(); } catch (e) {} await sleep(250); }
+      });
+    } finally {
+      if (prev) Object.defineProperty(navigator, 'audioSession', prev); else delete navigator.audioSession;
+    }
+  });
+
+  /* 4b — …AND THE MICROPHONE STILL RECORDS. The fix above sets navigator.audioSession to 'playback' whenever the shared
+   * audio context is reached. On an iPhone that override would also beat the play-and-record session WebKit picks for
+   * a capture, and a playback-only session cannot record — the voice recorder would break on exactly the phone the fix
+   * is for. So the recorder hands the session back to WebKit ('auto') before it asks for the mic, the app leaves it
+   * there while a mic track is live, and puts playback back when the mic is released. Driven through the real recorder
+   * with the suite's permission-free microphone (withFakeMic), and the session stubbed as Safari exposes it.
+   * CONTROL: reaching the shared context on its own must ask for playback, or nothing below is measured. */
+  test('690 while the microphone is open the app leaves the audio session to WebKit, and asks for playback again once it is released', { item: '690', budgetMs: 45000 }, async function () {
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (!FM.voiceRec || !FM.voiceRec.micLive) throw new Error('FM.voiceRec.micLive is missing — the audio session cannot tell whether the microphone is open');
+    const had = Object.prototype.hasOwnProperty.call(navigator, 'audioSession');
+    const prev = had ? Object.getOwnPropertyDescriptor(navigator, 'audioSession') : null;
+    const session = { type: 'auto', state: 'inactive' };
+    Object.defineProperty(navigator, 'audioSession', { configurable: true, enumerable: true, get: function () { return session; } });
+    try {
+      window.__fmStep = '690 mic session control';
+      FM.audioCtx();
+      if (session.type !== 'playback') throw new Error('CONTROL: reaching the shared audio context left navigator.audioSession at ' + session.type + ' — the playback session is never asked for, so nothing below means anything');
+      await withFakeMic(async function () {
+        window.__fmStep = '690 mic session open';
+        FM.voiceRec.open();
+        const pend = FM.voiceRec._micPending();
+        if (session.type !== 'auto') throw new Error('the recorder asked for the microphone with the audio session still forced to ' + session.type + ' — on an iPhone that override beats the play-and-record session a recording needs');
+        FM.audioCtx();   // a sound while the permission prompt is up
+        if (session.type !== 'auto') throw new Error('the app forced the audio session back to ' + session.type + ' while the microphone request was still waiting on its answer');
+        await pend;
+        if (!FM.voiceRec.micLive()) throw new Error('CONTROL: the fake microphone never went live, so the session could not be tested while it was held');
+        FM.audioCtx();   // any sound while the mic is open — a boosted clip, a sound-effect preview
+        if (session.type !== 'auto') throw new Error('the app forced the audio session to ' + session.type + ' while the microphone was open — the recording would lose its play-and-record session');
+        window.__fmStep = '690 mic session close';
+        FM.voiceRec.close();
+        if (FM.voiceRec.micLive()) throw new Error('CONTROL: closing the recorder left a microphone track live');
+        if (session.type !== 'playback') throw new Error('the microphone was released and the audio session was left at ' + session.type + ' — on a phone set to silent the sound effect preview goes quiet again until something else asks');
+      });
+    } finally {
+      if (prev) Object.defineProperty(navigator, 'audioSession', prev); else delete navigator.audioSession;
+    }
+  });
+
+  /* ═══ QUEUE 690, HUNT f (25 Sep) — DATA SAFETY: four ways his work was lost or silently changed ════════
+     Found by a data-safety hunt under his standing brief ("go re audit, find some bugs coz theres a shit
+     load"). Each of these FAILED on v16.93 because of the bug it names, and each was proved to fail again
+     with its fix reverted. Shared helpers are prefixed hf so they cannot collide with anything else here. */
+  async function hfCleanup(made, orig, wasOpen) {
+    try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig, { confirmed: true }); } catch (e) {}
+    for (const id of made) { try { if (FM.projects.list().some(function (p) { return p.id === id; })) await FM.projects.remove(id); } catch (e) {} }
+    try { if (wasOpen) FM.home.open(); } catch (e) {}
+  }
+  function hfDropTiles(layerId) {
+    try { if (FM.mediaLib && FM.mediaLib.list) FM.mediaLib.list().filter(function (e) { return e.key === layerId; }).forEach(function (e) { FM.mediaLib.remove(e.mid); }); } catch (e) {}
+  }
+  // The real FreeMotion question on screen, and the centre of one of its two buttons in the app frame's pixels.
+  async function hfAskUp(what) {
+    for (let i = 0; i < 150; i++) {
+      const s = document.getElementById('fm-ask');
+      if (s && !s.classList.contains('hidden')) return s;
+      await sleep(20);
+    }
+    throw new Error('no question came up ' + what);
+  }
+  function hfCentre(el) { const r = el.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), w: r.width, h: r.height }; }
+
+  test('690 with the phone storage full, leaving the project asks first — Stay (a real tap) keeps his work, Leave anyway (a real click) goes', { item: '690', budgetMs: 90000 }, async function () {
+    /* His phone is full. The app said so ONCE ("Storage full — autosave paused…") and let him carry on
+       editing, which is right — the work is safe in memory for as long as he stays. But FM.projects.open()
+       called flushSync() and threw the answer away: the write failed again, the outgoing scene was emptied,
+       the other project loaded, and everything he did since that one toast was gone. No second warning at
+       the moment it mattered, nothing to undo (history resets on open), and coming back showed the old
+       version. Home → another card and + → Create both go through open(). The answers here are REAL input
+       on the app's own dialog — a finger on Stay at phone width, a mouse on Leave anyway — not a stub. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    const realSet = Storage.prototype.setItem, realAsk = FM.ask;
+    /* ⚠️ the stub goes where localStorage.setItem RESOLVES. Several earlier tests restore their own stub with
+       `localStorage.setItem = realSet`, which leaves an OWN property on the instance — and that shadows anything
+       put on Storage.prototype, so in the full suite a prototype-only stub refused nothing (it passed alone). */
+    const instSet = localStorage.setItem;
+    const asked = [];
+    let fullKey = null, realDialog = false;
+    // until the real-input half, a question is only RECORDED and answered Stay at once — a control that fails must fail by name, not hang on a dialog nobody taps
+    FM.ask = function (o) { asked.push(o); return realDialog ? realAsk.apply(this, arguments) : Promise.resolve(false); };
+    const has = function (name) { return FM.scene.layers.some(function (l) { return l.name === name; }); };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await FM.projects.create({ name: 'HUNTf full A', width: 320, height: 240 }); made.push(a);
+      const L1 = FM.makeLayer('shape', { name: 'HUNTf saved', shape: 'rect', x: 160, y: 120, shapeW: 60, shapeH: 40, fill: '#2a9d8f' });
+      L1.start = 0; L1.duration = 2; FM.scene.layers.push(L1); FM.refreshAll(); FM.history.commit();
+      if (!FM.storage.flushSync()) throw new Error('setup: project A could not be saved even with room, so nothing below means anything');
+      const b = await FM.projects.create({ name: 'HUNTf full B', width: 320, height: 240 }); made.push(b);
+      await FM.projects.open(a); await sleep(100);
+      if (!has('HUNTf saved')) throw new Error('setup: project A did not reopen with its saved layer');
+      if (asked.length) throw new Error('CONTROL: with room to save, creating and switching projects asked ' + asked.length + ' question(s) — a question on every switch is one he learns to tap through');
+      /* the phone fills up: every write of THIS project's document is refused, as a full localStorage refuses it */
+      fullKey = 'fm.proj.' + a;
+      const full = function (k, v) {
+        if (k === fullKey) { const e = new Error('quota'); e.name = 'QuotaExceededError'; throw e; }
+        return realSet.call(this, k, v);
+      };
+      Storage.prototype.setItem = full;
+      if (localStorage.setItem !== full) localStorage.setItem = full;
+      if (localStorage.setItem !== full) throw new Error('setup: could not put a full store in front of localStorage.setItem, so nothing below means anything');
+      /* CONTROL: a refused write with NOTHING new on screen loses nothing, so it must not ask */
+      if ((await FM.projects.open(b)) !== true || FM.projects.currentId() !== b) throw new Error('CONTROL: with nothing unsaved on screen, a full store stopped him leaving the project');
+      if (asked.length) throw new Error('CONTROL: leaving a project with nothing unsaved asked a question — the save was refused, but the disk already had everything on screen');
+      await FM.projects.open(a); await sleep(100);
+      const L2 = FM.makeLayer('text', { name: 'HUNTf unsaved', text: 'my title', x: 160, y: 60 });
+      L2.start = 0; L2.duration = 2; FM.scene.layers.push(L2); FM.refreshAll(); FM.history.commit();
+      await sleep(900);   // the 600 ms autosave runs and fails
+      if (FM.storage.flushSync()) throw new Error('setup: the save did not fail, so the phone is not full and this measures nothing');
+      realDialog = true;
+      await onScreen924(async function () {
+        /* 1. he opens his other project — and says Stay, with a finger, at phone width */
+        await atPhoneWidth(async function () {
+          window.__fmStep = '690 storage: 1 open → Stay';
+          const going = FM.projects.open(b);
+          const s = await hfAskUp('when he opened another project with unsaved work on a full phone');
+          const stay = hfCentre(s.querySelector('.fm-ask-cancel'));
+          if (!stay.w || !stay.h) throw new Error('the Stay button has no size on a phone, so he cannot tap it');
+          await realInput924([{ t: 'touchStart', x: stay.x, y: stay.y, ms: 60 }, { t: 'touchEnd', x: stay.x, y: stay.y, ms: 0 }], 'a finger on Stay');
+          const res = await going;
+          if (res !== false) throw new Error('after Stay, projects.open() answered ' + res + ' instead of false — its callers cannot tell the switch did not happen');
+          if (FM.projects.currentId() !== a) throw new Error('he said Stay and was moved to another project anyway');
+          if (!has('HUNTf unsaved')) throw new Error('he said Stay and the text layer he had just added is gone');
+          if (!/HUNTf full A/.test(asked[0] && asked[0].title || '')) throw new Error('the question does not name the project that is not saved: ' + JSON.stringify(asked[0] && asked[0].title).replace(/"/g, "'"));
+          /* 2. + → Create: the same question, and Stay leaves no half-made project behind */
+          window.__fmStep = '690 storage: 2 create → Stay';
+          const n0 = FM.projects.list().length;
+          const making = FM.projects.create({ name: 'HUNTf never made' });
+          const s2 = await hfAskUp('when he created a new project with unsaved work on a full phone');
+          const stay2 = hfCentre(s2.querySelector('.fm-ask-cancel'));
+          await realInput924([{ t: 'touchStart', x: stay2.x, y: stay2.y, ms: 60 }, { t: 'touchEnd', x: stay2.x, y: stay2.y, ms: 0 }], 'a finger on Stay (Create)');
+          const pid = await making;
+          if (pid !== false) throw new Error('after Stay, projects.create() answered ' + pid + ' instead of false');
+          if (FM.projects.list().length !== n0) throw new Error('after Stay on Create a project was still added (' + n0 + ' → ' + FM.projects.list().length + ')');
+          if (FM.projects.currentId() !== a || !has('HUNTf unsaved')) throw new Error('after Stay on Create he was not left in his project with his work');
+          /* 3. Home → a card: asked BEFORE the push starts, and Stay leaves him on Home */
+          window.__fmStep = '690 storage: 3 Home card → Stay';
+          FM.home.open(); await sleep(250);
+          const tapping = FM.home._openProject(b);
+          const s3 = await hfAskUp('when he tapped another project card on Home');
+          const app = document.getElementById('app');
+          if (document.body.classList.contains('fm-pushing') || (app && app.classList.contains('fm-push-wait'))) throw new Error('the question came up half-way through the push into the editor — Home was already sliding away under it');
+          const stay3 = hfCentre(s3.querySelector('.fm-ask-cancel'));
+          await realInput924([{ t: 'touchStart', x: stay3.x, y: stay3.y, ms: 60 }, { t: 'touchEnd', x: stay3.x, y: stay3.y, ms: 0 }], 'a finger on Stay (Home card)');
+          const r3 = await tapping;
+          if (r3 !== null) throw new Error('after Stay on a Home card tap, openProject answered ' + r3 + ' (null means he chose to stay; false would make its ⋯ actions say busy)');
+          await sleep(200);
+          if (!FM.home.isOpen()) throw new Error('after Stay on a Home card tap, Home closed anyway');
+          if (FM.projects.currentId() !== a || !has('HUNTf unsaved')) throw new Error('after Stay on a Home card tap his project or its unsaved layer was lost');
+          FM.home.close(); await sleep(200);
+        }, 380);
+        /* 4. Leave anyway, with a mouse at a PC width — the door is not locked, it is asked. The frame is slid so the
+           button sits inside the browser window in BOTH passes (the phone pass's window is 380 px wide) — the same
+           trick the 924 Export test uses; a click aimed outside the window lands nowhere. */
+        window.__fmStep = '690 storage: 4 open → Leave anyway';
+        await atWideWidth(async function () {
+          const leaving = FM.projects.open(b);
+          const s4 = await hfAskUp('the fourth time');
+          const okb = s4.querySelector('.fm-ask-ok');
+          if (!/Leave anyway/.test(okb.textContent)) throw new Error('the answer that throws the work away is not labelled Leave anyway: ' + okb.textContent);
+          const fe = window.frameElement, l0 = fe.style.left, t0 = fe.style.top;
+          const r0 = okb.getBoundingClientRect();
+          fe.style.left = Math.round(180 - r0.left) + 'px'; fe.style.top = Math.round(Math.min(0, 300 - r0.top)) + 'px';
+          try {
+            await sleep(150);
+            const go = hfCentre(okb);
+            await realInput924([{ t: 'mouseMove', x: go.x, y: go.y, ms: 40 }, { t: 'mouseDown', x: go.x, y: go.y, ms: 60 }, { t: 'mouseUp', x: go.x, y: go.y, ms: 60 }], 'a click on Leave anyway');
+          } finally { fe.style.left = l0; fe.style.top = t0; }
+          if ((await leaving) !== true || FM.projects.currentId() !== b) throw new Error('Leave anyway did not open the other project');
+        }, 1100);
+      });
+      if (asked.length !== 4) throw new Error('expected exactly four questions (open, create, Home card, open), got ' + asked.length);
+    } finally {
+      Storage.prototype.setItem = realSet; FM.ask = realAsk;
+      if (localStorage.setItem !== instSet) localStorage.setItem = instSet;
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('690 replacing a clip twice then undoing twice brings his original back, on screen and on disk, and redo brings the last pick back', { item: '690', budgetMs: 60000 }, async function () {
+    /* Queue 829 made ONE wrong pick in Replace media… undoable by stashing the outgoing file — in one slot per
+       layer. Pick wrong twice (or try two replacements) and the second replace overwrote that slot with the
+       FIRST replacement, so the original existed nowhere: the next save wrote over the layer's own record and
+       the library tile was removed at the first replace. Undo twice put the layer's settings back and left the
+       second pick on screen; the save after it wrote that over the record for good. Redo twice then claimed
+       the third file and still showed the second. Driven through the real Replace media… handler (its own
+       hidden file input), not a copy of it. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    let id = null;
+    async function replaceVia(layerId, file) {
+      const before = new Set([].slice.call(document.querySelectorAll('input[type=file]')));
+      FM.replaceMedia(layerId);
+      const inp = [].slice.call(document.querySelectorAll('input[type=file]')).filter(function (i) { return !before.has(i); })[0];
+      if (!inp) throw new Error('setup: Replace media… made no file input to answer');
+      const dt = new DataTransfer(); dt.items.add(file); inp.files = dt.files;
+      inp.dispatchEvent(new Event('change'));
+      for (let i = 0; i < 150; i++) { await sleep(20); const m = FM.media.get(layerId); if (m && m.file === file) break; }
+      await sleep(150); await FM.storage.settled();
+    }
+    const shows = function () { const m = FM.media.get(id); return (m && m.file && m.file.name) || '(nothing)'; };
+    async function settleOn(name) { for (let i = 0; i < 60; i++) { if (shows() === name) return; await sleep(25); } }
+    async function onDisk() { await sleep(700); await FM.storage.settled(); const d = await FM.storage.readMedia(id); return (d && d.file && d.file.name) || '(nothing)'; }
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await FM.projects.create({ name: 'HUNTf replace', width: 320, height: 240 }); made.push(a);
+      const fA = await q915aPng('hfORIGINAL', '#d62828'), fB = await q915aPng('hfSECOND', '#2a9d8f'), fC = await q915aPng('hfTHIRD', '#264653');
+      FM.addMediaLayer(await FM.loadImageFile(fA));
+      id = FM.scene.selectedId;
+      await sleep(700); await FM.storage.settled();
+      await replaceVia(id, fB);
+      await replaceVia(id, fC);
+      if (shows() !== fC.name) throw new Error('setup: after two replaces the clip shows ' + shows() + ', not the third file');
+      FM.history.undo(); await settleOn(fB.name); await sleep(200);
+      if (shows() !== fB.name) throw new Error('control: ONE undo of a replace (the queue 829 case) no longer brings the previous file back — it shows ' + shows());
+      FM.history.undo(); await settleOn(fA.name); await sleep(300);
+      const diskName = await onDisk();
+      if (shows() !== fA.name) {
+        throw new Error('he replaced a photo twice, then pressed undo twice to get his original back: the settings went back but the clip still shows his SECOND pick (' +
+          shows() + '), and the saved copy is now ' + diskName + ' — the original photo is gone from the project for good');
+      }
+      if (diskName !== fA.name) throw new Error('the original is back on screen but the saved copy is ' + diskName + ' — the next time the app opens it shows the wrong photo');
+      FM.history.redo(); await settleOn(fB.name); await sleep(200);
+      if (shows() !== fB.name) throw new Error('after undoing two replaces, ONE redo shows ' + shows() + ' instead of his second pick');
+      FM.history.redo(); await settleOn(fC.name); await sleep(300);
+      if (shows() !== fC.name) throw new Error('after undoing two replaces and redoing both, the clip shows ' + shows() + ' instead of the last file he picked');
+      if ((await onDisk()) !== fC.name) throw new Error('after redoing both replaces the saved copy is not his last pick');
+      /* two undos pressed back to back — no waiting between — must still land on the original, not on whichever fetch finished last */
+      FM.history.undo(); FM.history.undo(); await settleOn(fA.name); await sleep(400);
+      if (shows() !== fA.name) throw new Error('two quick undos (no pause between) left the clip on ' + shows() + ' instead of his original');
+      if ((await onDisk()) !== fA.name) throw new Error('two quick undos put the original on screen but the saved copy is not the original');
+    } finally {
+      if (id) { hfDropTiles(id); for (let r = 0; r < 4; r++) { try { await q915aDel('prev:' + id + ':' + r); } catch (e) {} } }
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('690 undo past a replace still brings his original back after he went Home and came back', { item: '690', budgetMs: 60000 }, async function () {
+    /* Going Home frees a project's media and coming back reads it from disk again (queue 385). The record read back
+       carried no revision, so after the round trip a clip at revision 1 looked like revision 0: undo past the
+       replace did nothing — and once undo swaps in BOTH directions, an unrelated undo would have filed the clip on
+       screen under revision 0, over the kept original. The record now carries the revision its bytes are. The
+       release and the rehydrate are the app's own (FM.storage.releaseSceneMedia / hydrateSceneMedia), driven the
+       way the 385 tests drive them. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    let id = null;
+    const shows = function () { const m = FM.media.get(id); return (m && m.file && m.file.name) || '(nothing)'; };
+    async function settleOn(name) { for (let i = 0; i < 60; i++) { if (shows() === name) return; await sleep(25); } }
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await FM.projects.create({ name: 'HUNTf round trip', width: 320, height: 240 }); made.push(a);
+      const fA = await q915aPng('hfRTORIG', '#d62828'), fB = await q915aPng('hfRTNEW', '#2a9d8f');
+      FM.addMediaLayer(await FM.loadImageFile(fA));
+      id = FM.scene.selectedId;
+      await sleep(700); await FM.storage.settled();
+      const before = new Set([].slice.call(document.querySelectorAll('input[type=file]')));
+      FM.replaceMedia(id);
+      const inp = [].slice.call(document.querySelectorAll('input[type=file]')).filter(function (i) { return !before.has(i); })[0];
+      if (!inp) throw new Error('setup: Replace media… made no file input to answer');
+      const dt = new DataTransfer(); dt.items.add(fB); inp.files = dt.files; inp.dispatchEvent(new Event('change'));
+      await settleOn(fB.name); await sleep(150); await FM.storage.settled();
+      FM.history.undo(); await settleOn(fA.name); await sleep(200);
+      FM.history.redo(); await settleOn(fB.name); await sleep(200);
+      if (shows() !== fB.name) throw new Error('setup: undo then redo of the replace did not come back to his new pick (' + shows() + ')');
+      await sleep(700); await FM.storage.settled();
+      /* he goes Home (the media is released) and comes back (it is read from disk again) */
+      const freed = await q385AsIfHome(function () { return FM.storage.releaseSceneMedia(); });
+      if (!freed || FM.media.get(id)) throw new Error('setup: going Home did not free the clip, so the round trip below measures nothing');
+      await FM.storage.hydrateSceneMedia({ onlyMissing: true });
+      if (shows() !== fB.name) throw new Error('setup: coming back did not put his clip back (' + shows() + ')');
+      /* an unrelated edit, undone — this must not touch the clip or what is kept for it */
+      const L = FM.layerById(FM.scene, id);
+      L.transform.x = (FM.evalProp(L.transform.x, 0) || 0) + 17; FM.refreshAll(); FM.history.commit();
+      FM.history.undo(); await sleep(400);
+      if (shows() !== fB.name) throw new Error('undoing an unrelated move after the round trip changed the clip to ' + shows());
+      /* …and undo past the replace */
+      FM.history.undo(); await settleOn(fA.name); await sleep(300);
+      if (shows() !== fA.name) throw new Error('after going Home and back, undo past the replace left the clip on ' + shows() + ' instead of his original');
+    } finally {
+      if (id) { hfDropTiles(id); for (let r = 0; r < 3; r++) { try { await q915aDel('prev:' + id + ':' + r); } catch (e) {} } }
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('690 an autosave that lands while undo is still fetching his original never files the wrong clip under it', { item: '690', budgetMs: 60000 }, async function () {
+    /* Undo puts the layer back at once and fetches the kept file after — IndexedDB and a decode, seconds for a video
+       on a phone. The undo's own autosave fires 600 ms later, and it wrote the clip still on screen (the replacement)
+       under the revision the layer now names (the original's). When the original arrived, every later save saw that
+       revision already on disk and skipped it: the original on screen, the replacement on disk, and the wrong clip
+       the next time the app opened. The fetch is slowed here so the autosave lands inside it on every run. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    const realLoad = FM.loadImageFile;
+    let id = null, slow = null;
+    const shows = function () { const m = FM.media.get(id); return (m && m.file && m.file.name) || '(nothing)'; };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await FM.projects.create({ name: 'HUNTf slow undo', width: 320, height: 240 }); made.push(a);
+      const fA = await q915aPng('hfSLOWORIG', '#d62828'), fB = await q915aPng('hfSLOWNEW', '#2a9d8f');
+      FM.addMediaLayer(await FM.loadImageFile(fA));
+      id = FM.scene.selectedId;
+      await sleep(700); await FM.storage.settled();
+      const before = new Set([].slice.call(document.querySelectorAll('input[type=file]')));
+      FM.replaceMedia(id);
+      const inp = [].slice.call(document.querySelectorAll('input[type=file]')).filter(function (i) { return !before.has(i); })[0];
+      if (!inp) throw new Error('setup: Replace media… made no file input to answer');
+      const dt = new DataTransfer(); dt.items.add(fB); inp.files = dt.files; inp.dispatchEvent(new Event('change'));
+      for (let i = 0; i < 100 && shows() !== fB.name; i++) await sleep(25);
+      await sleep(800); await FM.storage.settled();
+      const d0 = await FM.storage.readMedia(id);
+      if (!d0 || !d0.file || d0.file.name !== fB.name) throw new Error('setup: the replacement never reached the disk, so there is nothing for the undo to put right');
+      slow = fA.name;
+      FM.loadImageFile = async function (f) { if (f && f.name === slow) await sleep(1500); return realLoad.apply(this, arguments); };
+      FM.history.undo();
+      for (let i = 0; i < 160 && shows() !== fA.name; i++) await sleep(25);
+      if (shows() !== fA.name) throw new Error('setup: the slowed undo never brought the original back (' + shows() + ')');
+      await sleep(900); await FM.storage.settled();
+      const d = await FM.storage.readMedia(id);
+      const dn = (d && d.file && d.file.name) || '(nothing)';
+      if (dn !== fA.name) throw new Error('the original is back on screen but the saved copy is ' + dn + ' (revision ' + (d && d.rev) + ') — an autosave during the undo filed the replacement under the original revision, and nothing wrote the original after it');
+    } finally {
+      FM.loadImageFile = realLoad;
+      if (id) { hfDropTiles(id); for (let r = 0; r < 3; r++) { try { await q915aDel('prev:' + id + ':' + r); } catch (e) {} } }
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('690 the AI Director, a re-roll and the Assistant only ever change the project they were started in', { item: '690', budgetMs: 90000 }, async function () {
+    /* A Director build is a chain of model calls — seconds each, most of a minute on a real key — and every
+       step wrote into FM.scene, which is whichever project is open NOW. Close the panel (✕ works mid-run),
+       go Home and open another project while it thinks, and the builders landed their layers — a camera
+       among them, which takes over that project's whole view — in the OTHER project, then committed and
+       autosaved them there. The project he asked for kept only the scaffold. A re-roll removed its task's
+       layers before its call, so the project left behind was saved without them and the other project could
+       be given this one's layers; the Assistant applied its reply to whatever was open when it arrived.
+       The Director and re-roll run in the no-key demo mode (dryRun), so no network is touched; the pipeline
+       and the writes are the real ones. The Assistant's one model call is answered by a stand-in. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    const hadLast = FM.ai ? FM.ai._lastBuild : undefined;
+    const realCall = FM.ai && FM.ai.call, realHas = FM.aiKey && FM.aiKey.has, dry0 = FM.ai && FM.ai.DRY_RUN, realToast = FM.toast;
+    const toasts = [];
+    let run = null;
+    const idsOf = function () { return FM.scene.layers.map(function (l) { return l.id; }); };
+    try {
+      if (!FM.ai || typeof FM.ai.generateScene !== 'function') throw new Error('the Director (FM.ai.generateScene) is missing');
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await FM.projects.create({ name: 'HUNTf director A', width: 1080, height: 1920 }); made.push(a);
+      const b = await FM.projects.create({ name: 'HUNTf director B', width: 1080, height: 1920 }); made.push(b);
+      const own = FM.makeLayer('text', { name: 'HUNTf B own', text: 'mine', x: 540, y: 960 });
+      own.start = 0; own.duration = 3; FM.scene.layers.push(own); FM.refreshAll(); FM.history.commit();
+      FM.storage.flushSync();
+      const bIds = new Set(idsOf());
+      FM.toast = function (m) { toasts.push(String(m)); return realToast.apply(this, arguments); };
+      await FM.projects.open(a); await sleep(100);
+      /* 1. a build, and he opens his other project while it is still building */
+      run = FM.ai.generateScene('a neon title card for my channel', null, { dryRun: true, skipCritic: true });
+      for (let i = 0; i < 250 && !FM.scene.layers.length; i++) await sleep(20);
+      if (!FM.scene.layers.length) throw new Error('setup: the Director demo never started building in project A');
+      try { FM.aiPanel.hide(); } catch (e) {}
+      await FM.projects.open(b); await sleep(50);
+      const res = await run; run = null;
+      await sleep(700);
+      const intruders = FM.scene.layers.filter(function (l) { return !bIds.has(l.id); });
+      const onDisk = ((JSON.parse(localStorage.getItem('fm.proj.' + b) || '{}').layers) || []).filter(function (l) { return !bIds.has(l.id); });
+      if (intruders.length) {
+        throw new Error('the AI Director was still building when he opened another project, and it finished INSIDE that project: ' +
+          intruders.length + ' layers he never made (' + intruders.map(function (l) { return l.name + ' ' + l.type; }).slice(0, 5).join(', ').replace(/"/g, "'") + ') were added to it' +
+          (onDisk.length ? ' and saved' : '') + ', while the project he asked for kept only the start of the build');
+      }
+      if (!(res && res.left)) throw new Error('the build did not report that it stopped because he left the project');
+      if (!toasts.some(function (t) { return /stopped/i.test(t) && /HUNTf director A/.test(t); })) throw new Error('nothing told him the Director stopped, or where its work is — toasts: [' + toasts.join(' | ').replace(/"/g, "'") + ']');
+      await FM.projects.open(a); await sleep(100);
+      if (!FM.scene.layers.length) throw new Error('the project he asked for lost the part of the build it had before he left');
+
+      /* 2. a finished build, then a re-roll of one task — and he leaves while it is re-rolling */
+      FM.ai._lastBuild = null;
+      const full = await FM.ai.generateScene('a neon title card for my channel', null, { dryRun: true, skipCritic: true });
+      if (!full || full.error || !FM.ai._lastBuild) throw new Error('setup: the second demo build did not finish (' + JSON.stringify(full && full.error).replace(/"/g, "'") + ')');
+      const lb = FM.ai._lastBuild;
+      const task = (lb.tasks || []).filter(function (t) { return t && (t.refs || []).some(function (r) { return lb.refMap[r] && FM.layerById(FM.scene, lb.refMap[r]); }); })[0];
+      if (!task) throw new Error('setup: no task of the demo build owns a layer, so a re-roll would remove nothing and prove nothing');
+      const taskIds = task.refs.map(function (r) { return lb.refMap[r]; }).filter(function (x) { return x && FM.layerById(FM.scene, x); });
+      FM.storage.flushSync();
+      const reroll = FM.ai.rerollTask(task.id);
+      await sleep(30);
+      await FM.projects.open(b); await sleep(50);
+      await reroll; await sleep(300);
+      const bNow = idsOf();
+      if (bNow.length !== bIds.size || bNow.some(function (x) { return !bIds.has(x); })) throw new Error('a re-roll started in one project changed the OTHER project he opened while it ran: it now holds [' + FM.scene.layers.map(function (l) { return l.name; }).join(', ').replace(/"/g, "'") + ']');
+      await FM.projects.open(a); await sleep(100);
+      const lost = taskIds.filter(function (x) { return !FM.layerById(FM.scene, x); });
+      if (lost.length) throw new Error('leaving mid re-roll saved the project WITHOUT the ' + lost.length + ' layer(s) the re-roll had taken out to replace — they are gone');
+
+      /* 3. the Assistant: one reply that adds a title, arriving after he has opened another project */
+      FM.ai.DRY_RUN = false;
+      FM.aiKey.has = function () { return true; };
+      let n = 0;
+      FM.ai.call = function () {
+        n++;
+        return new Promise(function (r) { setTimeout(r, 400); }).then(function () {
+          return { content: [{ type: 'text', text: 'Added it.' }, { type: 'tool_use', id: 'tu_hf690_' + n, name: 'emit_ops', input: { ops: [{ op: 'addText', ref: 'hf' + n, text: 'HUNTf chat ' + n }] } }] };
+        });
+      };
+      const input = document.querySelector('#ai-chat .aic-input');
+      if (!input || !FM.aiChat || !FM.aiChat.send) throw new Error('the Assistant composer is not in the DOM');
+      FM.aiChat.reset();
+      /* CONTROL: staying put, the stand-in reply DOES add its title — else the check below proves nothing */
+      input.value = 'add a title'; await FM.aiChat.send();
+      if (!FM.scene.layers.some(function (l) { return l.text === 'HUNTf chat 1'; })) throw new Error('CONTROL: the stand-in reply added nothing even without leaving, so this fixture cannot see the bug');
+      input.value = 'add another title';
+      const sending = FM.aiChat.send();
+      await sleep(60);
+      await FM.projects.open(b); await sleep(50);
+      await sending; await sleep(200);
+      if (FM.scene.layers.some(function (l) { return l.text === 'HUNTf chat 2'; })) throw new Error('the Assistant applied a reply about one project to the OTHER project he had opened while it was thinking');
+      const said = (document.querySelector('#ai-chat .aic-list') || {}).textContent || '';
+      if (!/Not applied/.test(said)) throw new Error('the Assistant dropped the reply without saying so');
+    } finally {
+      if (run) { try { await run; } catch (e) {} }
+      if (FM.ai) { FM.ai.call = realCall; FM.ai.DRY_RUN = dry0; FM.ai._lastBuild = hadLast; }
+      if (FM.aiKey) FM.aiKey.has = realHas;
+      FM.toast = realToast;
+      try { FM.aiPanel.hide(); } catch (e) {}
+      try { FM.aiChat.hide(); FM.aiChat.reset(); } catch (e) {}
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('690 every clip that cannot be saved is warned about, however many warnings came before — and a thumbnail never spends one', { item: '690', budgetMs: 60000 }, async function () {
+    /* warnStore (js/storage.js) latched on its FIRST call and nothing ever cleared it. Every IndexedDB write went
+       through it — the project-card thumbnail that autosave refreshes every 12 s included — so on a nearly-full
+       phone the one warning could go on a picture he never asked about ("Not enough storage to save that
+       media."). Later, after a clip HAD saved fine, the phone filled again and he added a photo: the write was
+       refused, the clip played from memory, nothing said a word, and after the app was closed it came back blank. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    const realPut = IDBObjectStore.prototype.put, realToast = FM.toast;
+    const toasts = [];
+    const ids = [];
+    let refuse = null;
+    const storeToasts = function () { return toasts.filter(function (t) { return /storage|could not save|no room|space|full/i.test(t); }); };
+    async function addClip(tag, rgb) {
+      FM.addMediaLayer(await FM.loadImageFile(await q915aPng(tag, rgb)));
+      const id = FM.scene.selectedId; ids.push(id);
+      await sleep(700); await FM.storage.settled(); await sleep(300);
+      return id;
+    }
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await FM.projects.create({ name: 'HUNTf store', width: 320, height: 240 }); made.push(a);
+      const T = FM.makeLayer('text', { name: 'HUNTf title', text: 'card', x: 160, y: 120 });
+      T.start = 0; T.duration = 2; FM.scene.layers.push(T); FM.refreshAll(); FM.history.commit();
+      IDBObjectStore.prototype.put = function (val, key) {
+        if (refuse && typeof key === 'string' && refuse.test(key)) throw new DOMException('refused by the 690 test', 'QuotaExceededError');
+        return realPut.apply(this, arguments);
+      };
+      FM.toast = function (m) { toasts.push(String(m)); return realToast.apply(this, arguments); };
+      /* 1. the phone is full when the card thumbnail is refreshed — a picture he never asked about says nothing */
+      refuse = /^thumb:/;
+      FM.projects.pinThumbnail();
+      await sleep(800);
+      if (storeToasts().length) throw new Error('a card THUMBNAIL that could not be stored put up a storage warning (' + storeToasts().join(' | ').replace(/"/g, "'") + ') — that is the one warning a clip needs');
+      /* 2. a clip refused → warned (the control: the warning itself still works) */
+      refuse = /^(layer_|l_)/;
+      const first = await addClip('hfFIRST', '#f4a261');
+      if (await FM.storage.readMedia(first)) throw new Error('setup: the refused write went through anyway, so the phone was not full');
+      if (storeToasts().length !== 1) throw new Error('CONTROL: the first clip that could not be saved gave ' + storeToasts().length + ' storage warnings instead of one');
+      /* …and autosave retrying that SAME clip does not say it again on every save */
+      FM.storage.markDirty(); await FM.storage.save(); await sleep(300);
+      if (storeToasts().length !== 1) throw new Error('autosave retrying the same unsaved clip repeated its warning (' + storeToasts().length + ' warnings) — one per retry is noise he learns to ignore');
+      /* 3. space comes back and a clip saves perfectly well */
+      refuse = null;
+      const ok = await addClip('hfOK', '#8ab17d');
+      if (!(await FM.storage.readMedia(ok))) throw new Error('setup: with room to write, the clip was not saved either — this measures the harness, not the warning');
+      /* 4. the phone fills again and he adds his photo */
+      refuse = /^(layer_|l_)/;
+      toasts.length = 0;
+      const mine = await addClip('hfMINE', '#e76f51');
+      if (await FM.storage.readMedia(mine)) throw new Error('setup: the refused write went through anyway, so the phone was not full');
+      if (!storeToasts().length) {
+        throw new Error('the photo he just added could not be saved because the phone is full, and NOTHING said so — the only storage warning of the session had already been used up' +
+          ' (by an earlier clip, before a later one saved fine). It plays now and will come back blank the next time the app opens. Toasts at the time: [' + toasts.join(' | ').replace(/"/g, "'") + ']');
+      }
+      /* 5. …and a SECOND new clip, with the first still unsaved, is news too */
+      toasts.length = 0;
+      await addClip('hfMINE2', '#6d597a');
+      if (!storeToasts().length) throw new Error('a second clip that could not be saved said nothing, because the first unsaved clip had already been warned about');
+    } finally {
+      IDBObjectStore.prototype.put = realPut; FM.toast = realToast;
+      ids.forEach(hfDropTiles);
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
 
 })();

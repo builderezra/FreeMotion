@@ -370,6 +370,58 @@ window.FM = window.FM || {};
   }
   FM._exportInfo = exportInfo;   // the writer app.js's onNote hands the resume sentence to
 
+  /* ═══ THE MIX LIMITER (queue 690) — turn down only the moments that would clip ═══════════════════════════
+   * A look-ahead peak limiter over the rendered mix, in place. For every sample the gain it NEEDS is
+   * ceiling / |loudest channel| (both channels share one gain, so the stereo image cannot wander). The gain
+   * actually applied is the lowest of those needs, with two slopes around each one:
+   *   · ATTACK, read backwards: the gain starts falling up to 5 ms BEFORE an over, so it is already down
+   *     when the over arrives — no sample is ever cut to the ceiling, which is what a clip sounds like;
+   *   · RELEASE, read forwards: after the last over it climbs back to 1 at 1/250 ms per sample, so a dip
+   *     to 0.57 recovers in about 0.1 s. Slow enough that it does not follow the waveform (distortion),
+   *     quick enough that a sound effect does not duck the song for seconds after it.
+   * A linear gain slope rather than a curve, because it makes the bound provable: every applied gain is
+   * <= the gain its own sample needed, so nothing can come out above the ceiling.
+   * WHY NOT A DynamicsCompressorNode inside the OfflineAudioContext (the boost stage's limiter): the spec's
+   * compressor adds its own make-up gain (about +0.9 dB at these settings) to EVERYTHING, and a fixed
+   * look-ahead delay — it would turn the quiet parts UP and shift the whole soundtrack, which is the same
+   * whole-file change this replaces, just the other way.
+   * In blocks, so a long export does not need a second full-length array beside the mix on a phone: an
+   * over can only reach back one attack length, so each block needs just that much of the next. */
+  function limitMix(buf, ceiling) {
+    const n = buf.length, nc = buf.numberOfChannels, sr = buf.sampleRate || 48000;
+    const ch = []; for (let c = 0; c < nc; c++) ch.push(buf.getChannelData(c));
+    const A = Math.max(1, Math.round(0.005 * sr)), fall = 1 / A;         // attack: 5 ms per unit of gain
+    const rise = 1 / Math.max(1, Math.round(0.25 * sr));                 // release: 250 ms per unit of gain
+    const B = Math.max(A * 8, 1 << 15);
+    const g = new Float32Array(B + A);
+    let rel = 1, low = 1, out = 0;
+    for (let b0 = 0; b0 < n; b0 += B) {
+      const b1 = Math.min(n, b0 + B), e = Math.min(n, b1 + A), len = e - b0;
+      /* The release pass, forwards. `rel` carries across blocks; the look-ahead tail is recomputed by the
+         next block from the same carried state, so it is never counted twice. */
+      let r = rel;
+      for (let i = 0; i < len; i++) {
+        let a = 0; for (let c = 0; c < nc; c++) { const v = ch[c][b0 + i]; const x = v < 0 ? -v : v; if (x > a) a = x; }
+        const need = a > ceiling ? ceiling / a : 1;
+        r = Math.min(need, r + rise);
+        g[i] = r;
+        if (b0 + i === b1 - 1) rel = r;
+      }
+      // …the attack pass, backwards, from the end of the look-ahead.
+      for (let i = len - 2; i >= 0; i--) { const v = g[i + 1] + fall; if (v < g[i]) g[i] = v; }
+      for (let i = 0; i < b1 - b0; i++) {
+        const k = g[i];
+        if (k < low) low = k;
+        for (let c = 0; c < nc; c++) {
+          const d = ch[c]; const y = k < 1 ? (d[b0 + i] *= k) : d[b0 + i];
+          const ay = y < 0 ? -y : y; if (ay > out) out = ay;
+        }
+      }
+    }
+    return { low: low, peak: out };
+  }
+  FM._limitMix = limitMix;   // suite seam: the limiter is pure arithmetic, so it can be driven on a buffer directly
+
   async function buildAudioMix(scene, from, to) {
     const P = scene.project;
     const sampleRate = 48000, channels = 2;
@@ -652,27 +704,30 @@ window.FM = window.FM || {};
      * was measured for #604 and all of them are sound. This is a separate, genuine defect found in the
      * same function, and it fits the half of his report that says the sound *"would cut in and out"*
      * and *"was inconsistent"* better than anything else found.
-     * WHY A FLAT NORMALISE RATHER THAN A SOFT-KNEE LIMITER: dividing by the peak is the only correction
-     * that leaves every layer's balance EXACTLY as mixed — it changes one number, not the shape of the
-     * waveform. A knee would keep more loudness and would also be the first thing in this file capable
-     * of altering how a mix sounds relative to the preview in a way nobody asked for. Losing 4 dB on a
-     * 1.6 peak is inaudible next to the buzz it replaces.
+     * ⚠️ HOW IT IS HELD DOWN CHANGED IN QUEUE 690 (audio hunt). This used to divide the WHOLE mix by its
+     * single loudest sample — "the only correction that leaves every layer's balance exactly as mixed",
+     * and a knee "would be the first thing in this file capable of altering how a mix sounds relative to
+     * the preview". Measured, the flat divide does exactly that, everywhere: one 0.2 s sound effect over
+     * a song made the WHOLE song 4.8 dB quieter in the file, minutes away from the overlap where nothing
+     * else plays (his own #604 setup came out 3.7-4.1 dB down, #677 1.4 dB). The preview has no master
+     * gain at all, so the file sounded quieter than what he mixed for its entire length, to fix a problem
+     * that lasted a fifth of a second.
+     * So now only the moments that would clip are turned down (limitMix, below): the gain dips just
+     * before an over, holds it at the ceiling, and comes back up over a fraction of a second. Everything
+     * that never went over — the song before and after the sound effect — keeps exactly the level heard
+     * in the preview. Within an overlap the balance between the layers is still one gain, so it is kept.
      * The 0.995 is real headroom, not superstition: AAC is lossy and the decoded waveform overshoots
      * its input slightly — the round-trip above came back at 0.8224 from a 0.8000 source. Landing
      * exactly on 1.0 would clip on the way out of the decoder instead of on the way in. */
     FM._lastMixGain = 1;
     FM._lastMixRawPeak = peak;
     if (peak > 1) {
-      const g = 0.995 / peak;
-      for (let c = 0; c < rendered.numberOfChannels; c++) {
-        const d = rendered.getChannelData(c);
-        for (let i = 0; i < d.length; i++) d[i] *= g;
-      }
-      FM._lastMixGain = g;
-      peak *= g;
+      const lim = limitMix(rendered, 0.995);
+      FM._lastMixGain = lim.low;     // the deepest the gain went, at the loudest overlap — not a whole-file figure any more
+      peak = lim.peak;
       FM._lastMixPeak = peak;
-      console.info('[export] the mix summed to ' + FM._lastMixRawPeak.toFixed(2) + ' — turned down by ' +
-                   (20 * Math.log10(g)).toFixed(1) + ' dB so it does not clip through AAC');
+      console.info('[export] the mix summed to ' + FM._lastMixRawPeak.toFixed(2) + ' — held down by up to ' +
+                   (-20 * Math.log10(lim.low)).toFixed(1) + ' dB where it overlapped, so it does not clip through AAC; the rest is untouched');
     }
     if (peak <= 0.0001) {
       console.warn('[export] the mix rendered but is pure silence — every contributing clip is muted or at zero volume');
@@ -1312,7 +1367,7 @@ window.FM = window.FM || {};
             'audio      ' + (mix ? 'TRACK WRITTEN' : 'NO TRACK'),
             'dropped    ' + (FM._audioTrackDropped || 'no'),
             'mix peak   ' + (FM._lastMixRawPeak == null ? '-' : FM._lastMixRawPeak.toFixed(3)) +
-              (FM._lastMixGain != null && FM._lastMixGain < 1 ? '  (turned down x' + FM._lastMixGain.toFixed(3) + ')' : ''),
+              (FM._lastMixGain != null && FM._lastMixGain < 1 ? '  (limited: x' + FM._lastMixGain.toFixed(3) + ' at the loudest overlap only)' : ''),
             'drops      ' + JSON.stringify(FM._lastAudioDrops || []),
             'suppressed ' + JSON.stringify(FM._lastAudioSuppressed || []),
             'AAC encode ' + (typeof AudioEncoder === 'undefined' ? 'AudioEncoder MISSING in this browser' : 'AudioEncoder present'),
