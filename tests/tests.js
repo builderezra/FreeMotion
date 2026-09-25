@@ -94431,4 +94431,358 @@
     } finally { R.drop(tag); R.drop(tag + 'b'); }
   });
 
+  /* ═══ HUNT-b (queue 690, 26 Sep, fourth hunt) — CANVAS TOOLS, WITH A REAL FINGER ═════════════════════════════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". The area: the transform handles, the snapping guides,
+   * masks, crop, Edit Points, the motion path, the eyedropper and fill-drag — on a phone-shaped and a landscape project.
+   * Four findings, each written to FAIL today and to say what he would see. Every gesture is a trusted touch through
+   * tests/_cdp.py (realInput924), so capture, hit-testing and the browser's own touch -> pointer pipeline are the phone's,
+   * and each test carries a control that proves the gesture really reached the tool, so a red is the app. */
+  function hb4Wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+  function hb4J(o) { return JSON.stringify(o).replace(/"/g, "'"); }
+  function hb4StopTools() {
+    ['pointEdit', 'cropTool', 'fillDrag', 'maskTool', 'motionPath', 'eyedropper'].forEach(k => {
+      const t = FM[k]; try { if (t && t.isActive && t.isActive() && t.stop) t.stop(); } catch (e) {}
+    });
+  }
+  async function hb4Scene(layers, project) {
+    hb4StopTools();
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd();
+    if (FM.viewport) FM.viewport.reset();
+    FM.scene = scene(layers, { project: Object.assign({ width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' }, project || {}) });
+    FM.selectLayer(null); if (FM.pause) FM.pause(); FM.setTime(0);
+    FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    if (FM.resizeCanvas) FM.resizeCanvas();
+    await hb4Wait(350);
+  }
+  function hb4Restore(saved) {
+    hb4StopTools();
+    FM.scene = saved; FM._mtMode = 'move';
+    try { FM.inspector.openCategory('home'); } catch (e) {}
+    try { FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {}
+    try { if (FM.viewport) FM.viewport.reset(); if (FM.resizeCanvas) FM.resizeCanvas(); } catch (e) {}
+  }
+  // where a PROJECT point is on screen, through the same pair every overlay uses (crop origin and zoom included)
+  function hb4Screen(px, py) {
+    const cv = document.getElementById('preview'), r = cv.getBoundingClientRect(), k = FM.previewDispScale();
+    return { x: r.left + (px - (cv.__fmOX || 0)) * k, y: r.top + (py - (cv.__fmOY || 0)) * k };
+  }
+  // the x of the brightest pixel on one row of a real render of the scene — where a white-cored radial gradient's core is
+  function hb4CoreX(row) {
+    const P = FM.scene.project, c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, FM.scene, FM.time);
+    const d = g.getImageData(0, row, P.width, 1).data;
+    let best = -1, bx = -1;
+    for (let x = 0; x < P.width; x++) { const v = d[x * 4] + d[x * 4 + 1] + d[x * 4 + 2]; if (v > best) { best = v; bx = x; } }
+    return bx;
+  }
+  // where fill-drag's teal ring is DRAWN, read off its own overlay's pixels and put back into project px
+  function hb4RingX() {
+    const ov = document.getElementById('fd-overlay'); if (!ov) return NaN;
+    const g = ov.getContext('2d', { willReadFrequently: true }), d = g.getImageData(0, 0, ov.width, ov.height).data;
+    let sx = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] > 200 && Math.abs(d[i] - 41) < 30 && Math.abs(d[i + 1] - 217) < 30 && Math.abs(d[i + 2] - 187) < 30) { sx += (i / 4) % ov.width; n++; }
+    }
+    if (!n) return NaN;
+    // backing px -> the overlay's own CSS px (it fills the wrap, whose layout box is the whole comp) -> project px
+    const cssX = (sx / n) / (ov.width / (ov.clientWidth || 1));
+    return cssX / ((ov.clientWidth || 1) / FM.scene.project.width);
+  }
+
+  /* HUNT-b 1 — THE MOVE PAD SNAPS A GROUP'S OFFSET, NOT THE GROUP. A group's X and Y are an OFFSET from where its members
+     are (a new group sits at 0,0 on purpose), and canvas-edit.js already knows it: its old snapping moved the group's
+     visible BOUNDS CENTRE onto the targets ("offset 0 snapping to centre 540 was meaningless"). The snapping moved to the
+     Move & Transform pad (his request) and that half never came with it: the pad (js/inspector.js, pd.tx = FM.alignTargets)
+     snaps the raw offset to 0 / 540 / 1080. So on a group sitting dead centre the pad says Snapped to left edge + top edge
+     the moment his finger touches it, holds the group still for the first ~9 px of swipe, and draws the guide lines on the
+     frame's left and top edges; and the snap it names centre puts the group's centre on the RIGHT edge of the frame. */
+  test('HUNT-b the Move pad on a GROUP names a snap the group is not at — left edge while it sits in the middle, and centre with its centre on the right edge', { item: '690', budgetMs: 90000 }, async function () {
+    const saved = FM.scene;
+    const P = { width: 1080, height: 1920 };
+    // read what the pad claims, as he reads it: the hint under his finger
+    const claims = (txt) => { const m = /Snapped to (.*)$/.exec(txt || ''); return m ? m[1].split(' + ').map(s => s.trim()) : []; };
+    const wrong = (name, c) => {
+      // the target is where the thing's CENTRE goes — for a plain layer its anchor (x, y), for a group its visible centre
+      const want = { 'centre': ['x', P.width / 2], 'left edge': ['x', 0], 'right edge': ['x', P.width], 'middle': ['y', P.height / 2], 'top edge': ['y', 0], 'bottom edge': ['y', P.height] }[name];
+      if (!want) return null;   // a keyframe — not what this test is about
+      return Math.abs(c[want[0]] - want[1]) > 3 ? name + ' (its centre ' + want[0] + ' is ' + Math.round(c[want[0]]) + ', not ' + want[1] + ')' : null;
+    };
+    async function padSwipes(where, centreOf, swipes) {
+      const pad = document.querySelector('.mt-trackpad');
+      if (!pad) throw new Error('setup (' + where + '): the Move pad is not in Move & Transform');
+      const pr = pad.getBoundingClientRect();
+      const x0 = pr.left + 30, y0 = pr.top + pr.height / 2;
+      if (pr.width < 200 || x0 < 10 || pr.right > 372 || y0 > 740 || y0 < 20) throw new Error('setup (' + where + '): the Move pad is at ' + hb4J([pr.left, pr.top, pr.right, pr.bottom]) + ', out of reach of real input');
+      const samples = [];
+      const on = (e) => { const s = { trusted: e.isTrusted, kind: e.pointerType }; samples.push(s); setTimeout(() => { const h = document.querySelector('.mt-trackpad .mt-trackpad-hint'); s.hint = h ? h.textContent : ''; s.c = centreOf(); s.gv = FM._hb4GuideV(); s.gh = FM._hb4GuideH(); }, 0); };
+      window.addEventListener('pointermove', on);
+      try {
+        for (const sw of swipes) {
+          const steps = [{ t: 'touchStart', x: x0, y: y0, ms: 90 }];
+          sw.forEach(dx => steps.push({ t: 'touchMove', x: x0 + dx, y: y0, ms: 45 }));
+          steps.push({ t: 'touchEnd', x: x0 + sw[sw.length - 1], y: y0, ms: 0 });
+          await realInput924(steps, where + ' — a swipe on the Move pad');
+          await hb4Wait(250);
+        }
+      } finally { window.removeEventListener('pointermove', on); }
+      await hb4Wait(60);
+      const fake = samples.filter(s => !s.trusted || s.kind !== 'touch');
+      if (samples.length < 4 || fake.length) throw new Error('CONTROL (' + where + '): the swipes did not arrive as trusted touches on the pad (' + samples.length + ' moves, ' + fake.length + ' not trusted touch)');
+      return samples;
+    }
+    // the canvas guide lines, back in project px (they are laid out in the wrap's own pixels)
+    FM._hb4GuideV = () => { const g = document.querySelector('.snap-guide.v'), w = document.getElementById('canvas-wrap'); return (g && g.style.display !== 'none') ? Math.round(parseFloat(g.style.left) / (w.offsetWidth / P.width)) : null; };
+    FM._hb4GuideH = () => { const g = document.querySelector('.snap-guide.h'), w = document.getElementById('canvas-wrap'); return (g && g.style.display !== 'none') ? Math.round(parseFloat(g.style.top) / (w.offsetHeight / P.height)) : null; };
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          /* CONTROL: a plain shape in the middle of the frame. Its X/Y IS its centre, so every claim the pad makes must be
+             true of it — this proves the harness reads the pad the way he does. */
+          const S = FM.makeLayer('shape', { name: 'HB4 plain', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#e0245e', start: 0, duration: 6 });
+          await hb4Scene([S]);
+          FM.selectLayer(S.id); await hb4Wait(200);
+          FM._mtMode = 'move'; FM.inspector.openCategory('transform'); await hb4Wait(400);
+          const cs = await padSwipes('a plain shape', () => ({ x: FM.evalProp(S.transform.x, 0), y: FM.evalProp(S.transform.y, 0) }), [[2, 4, 6, 23, 40, 57, 74, 91]]);
+          const csClaims = cs.filter(s => claims(s.hint).length);
+          if (!csClaims.length) throw new Error('CONTROL: a plain shape at the frame centre never showed a snap on the Move pad, so this harness cannot read the pad');
+          const csBad = [];
+          cs.forEach(s => claims(s.hint).forEach(n => { const w = wrong(n, s.c); if (w) csBad.push(w); }));
+          if (csBad.length) throw new Error('CONTROL: on a plain shape the pad already names a snap it is not at (' + csBad[0] + ') — the harness reads it wrong');
+          if (!(Math.abs(FM.evalProp(S.transform.x, 0) - 540) > 20)) throw new Error('CONTROL: a 40 px swipe on the Move pad did not move the plain shape — the pad is not taking the finger');
+
+          /* THE CASE: two shapes grouped, the group sitting dead centre (its members span 340..740 x 860..1060). */
+          const A = FM.makeLayer('shape', { name: 'HB4 left', shape: 'rect', x: 440, y: 960, shapeW: 200, shapeH: 200, fill: '#e0245e', start: 0, duration: 6 });
+          const B = FM.makeLayer('shape', { name: 'HB4 right', shape: 'rect', x: 640, y: 960, shapeW: 200, shapeH: 200, fill: '#3b82f6', start: 0, duration: 6 });
+          await hb4Scene([A, B]);
+          FM.scene.selectedIds = [A.id, B.id]; FM.scene.selectedId = A.id;
+          FM.groupSelection(); await hb4Wait(250);
+          const G = FM.scene.layers.find(l => l.type === 'group');
+          if (!G || A.parent !== G.id || B.parent !== G.id) throw new Error('setup: Group Selection did not put the two shapes in a group');
+          FM.selectLayer(G.id); await hb4Wait(200);
+          FM._mtMode = 'move'; FM.inspector.openCategory('transform'); await hb4Wait(400);
+          const gc = () => { const b = FM.groupBounds(G, FM.scene, 0); return { x: b.x, y: b.y }; };
+          const c0 = gc();
+          if (Math.abs(c0.x - 540) > 2 || Math.abs(c0.y - 960) > 2) throw new Error('setup: the group does not start at the centre of the frame (' + hb4J(c0) + ')');
+          // a touch with a tremble, then two long swipes right: across the first the group should simply follow; the
+          // second carries it (by the pad's own gain) to where the pad announces centre
+          const gs = await padSwipes('the group', gc, [[2, 4, 6, 23, 40, 57, 74, 91, 108, 125, 142, 159, 176], [17, 34, 51, 68, 85, 102, 119, 136, 153, 170]]);
+          if (!(gc().x - c0.x > 100)) throw new Error('CONTROL: two long swipes on the Move pad did not carry the group to the right (centre ' + hb4J(gc()) + ') — the pad is not taking the finger');
+          const bad = [];
+          gs.forEach(s => {
+            const cl = claims(s.hint); if (!cl.length) return;
+            const w = cl.map(n => wrong(n, s.c)).filter(Boolean);
+            if (w.length && bad.length < 3 && !bad.some(b => b.hint === s.hint)) bad.push({ hint: s.hint, c: s.c, w: w, gv: s.gv, gh: s.gh });
+          });
+          if (bad.length) {
+            throw new Error('moving a GROUP with the Move pad, the pad names snaps the group is not at: ' + bad.map(b =>
+              'it said ' + b.hint + ' while the group sat with its centre at ' + Math.round(b.c.x) + ', ' + Math.round(b.c.y) +
+              ' (' + b.w.join(', ') + ')' + (b.gv != null || b.gh != null ? ', with the canvas guide drawn at ' + (b.gv != null ? 'x ' + b.gv : '') + (b.gv != null && b.gh != null ? ' and ' : '') + (b.gh != null ? 'y ' + b.gh : '') : '')
+            ).join('; then ') + ' — it snaps the group offset (0 on a new group) as if it were a position, so the group sticks at the start and centre throws it onto the edge of the frame');
+          }
+        });
+      }, 380);
+    } finally { delete FM._hb4GuideV; delete FM._hb4GuideH; hb4Restore(saved); }
+  });
+
+  /* HUNT-b 2 — A TAP IN FREE CROP THROWS THE CROP BOX AWAY. crop-tool.js onDown starts a drag on ANY press: on a handle
+     (resize), inside a partial crop (move), anywhere else (draw a fresh box) — and onMove acts on the first move with no
+     slop. A real finger always trembles a pixel while it is down, so a TAP outside the box he has set replaces it with a
+     16 px square at his fingertip (the 'new' box's minimum), and a tap near a corner jumps that corner to where the finger
+     landed (the handle's pad is 16 px). The point editors had exactly this fault and were given a grab slop in the v16.95
+     hunt (HUNT-e); the crop tool was not among them. Done then writes whatever the tap left. */
+  test('HUNT-b a tap in Free crop leaves the crop box alone — outside the box it became a 16 px square, and near a corner the corner jumped to the finger', { item: '690', budgetMs: 90000 }, async function () {
+    const saved = FM.scene;
+    const tex = document.createElement('canvas'); tex.width = 1080; tex.height = 1920;
+    const tc = tex.getContext('2d'); tc.fillStyle = '#c03030'; tc.fillRect(0, 0, 540, 1920); tc.fillStyle = '#3050c0'; tc.fillRect(540, 0, 540, 1920);
+    const L = FM.makeLayer('image', { name: 'HB4 crop', x: 540, y: 960, start: 0, duration: 6 });
+    L.start = 0; L.duration = 6;
+    const BOX = { x: 100, y: 200, w: 700, h: 1200 };
+    const srcScreen = (sx, sy) => {
+      const q = FM.layerUVToCanvas(L, sx / 1080, sy / 1920, 1080, 1920), ov = document.getElementById('crop-overlay');
+      const o = FM.projectToOverlay(document.getElementById('preview'), q.x, q.y), r = ov.getBoundingClientRect();
+      return { x: r.left + o.x, y: r.top + o.y };
+    };
+    const tapAt = (p, what) => realInput924([
+      { t: 'touchStart', x: p.x, y: p.y, ms: 90 },
+      { t: 'touchMove', x: p.x + 1, y: p.y, ms: 60 },   // the tremble every real fingertip has
+      { t: 'touchEnd', x: p.x + 1, y: p.y, ms: 0 },
+    ], what);
+    const cropNow = () => { const c = L.crop || {}; return { x: Math.round(FM.evalProp(c.x, 0)), y: Math.round(FM.evalProp(c.y, 0)), w: Math.round(FM.evalProp(c.w, 0)), h: Math.round(FM.evalProp(c.h, 0)) }; };
+    const same = (a, b) => ['x', 'y', 'w', 'h'].every(k => Math.abs(a[k] - b[k]) <= 2);
+    async function openCrop(where) {
+      L.crop = Object.assign({}, BOX);
+      FM.selectLayer(L.id); await hb4Wait(150);
+      FM.cropTool.start(L.id); await hb4Wait(250);
+      if (!FM.cropTool.isActive() || !document.getElementById('crop-overlay')) throw new Error('setup (' + where + '): Free crop did not open on the photo');
+    }
+    const done = () => { const b = document.querySelector('#crop-bar .cb-done'); if (!b) throw new Error('no Done on the crop bar'); b.click(); };
+    try {
+      FM.media.set(L.id, { kind: 'image', el: tex, width: 1080, height: 1920 });
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          await hb4Scene([L]);
+          /* CONTROL: a deliberate drag inside the box moves it — the tool is taking real touches, and Done writes. */
+          await openCrop('control');
+          const a = srcScreen(450, 800);
+          if (a.x < 10 || a.x > 370 || a.y < 20 || a.y > 740) throw new Error('setup: the crop box is drawn at ' + hb4J(a) + ', out of reach of real input');
+          await realInput924([
+            { t: 'touchStart', x: a.x, y: a.y, ms: 90 },
+            { t: 'touchMove', x: a.x + 10, y: a.y, ms: 45 }, { t: 'touchMove', x: a.x + 20, y: a.y, ms: 45 }, { t: 'touchMove', x: a.x + 30, y: a.y, ms: 80 },
+            { t: 'touchEnd', x: a.x + 30, y: a.y, ms: 0 },
+          ], 'a deliberate drag inside the crop box');
+          await hb4Wait(150); done(); await hb4Wait(150);
+          const moved = cropNow();
+          if (!(moved.x - BOX.x > 60) || moved.w !== BOX.w) throw new Error('CONTROL: a 30 px drag inside the crop box did not move it (crop now ' + hb4J(moved) + ') — the tool is not receiving the finger');
+
+          const bad = [];
+          /* 1. A tap on the dimmed part of the photo, outside the box he set */
+          await openCrop('tap outside');
+          const out = srcScreen(50, 1750);
+          await tapAt(out, 'a tap outside the crop box');
+          await hb4Wait(150); done(); await hb4Wait(150);
+          const c1 = cropNow();
+          if (!same(c1, BOX)) bad.push('a tap on the photo outside his crop box replaced the box (' + BOX.w + ' x ' + BOX.h + ') with a ' + c1.w + ' x ' + c1.h + ' square at his fingertip, and Done kept it');
+          /* 2. A tap 10 px in from the bottom-right corner handle, well inside the handle's 16 px pad */
+          await openCrop('tap near a corner');
+          const se = srcScreen(BOX.x + BOX.w, BOX.y + BOX.h);
+          await tapAt({ x: se.x - 10, y: se.y - 10 }, 'a tap 10 px in from the corner handle');
+          await hb4Wait(150); done(); await hb4Wait(150);
+          const c2 = cropNow();
+          if (!same(c2, BOX)) bad.push('a tap 10 px in from the bottom-right corner moved that corner to his fingertip — the crop went from ' + BOX.w + ' x ' + BOX.h + ' to ' + c2.w + ' x ' + c2.h);
+          if (bad.length) throw new Error(bad.join('; AND '));
+        });
+      }, 380);
+    } finally { FM.media.remove(L.id); hb4Restore(saved); }
+  });
+
+  /* HUNT-b 3 — ON A PHONE-SHAPED PROJECT THE ROTATE KNOB IS UNDER THE TOP BAR. The knob sits 28 px above the selection
+     box (.sb-rot, top: -28px). On the phone a 9:16 project fills the stage from the top bar down, so on any layer that
+     reaches the top of the frame — every photo or video he imports fills it — the knob is drawn at y 38 while the top bar
+     runs to 52: it cannot be seen, and his finger on it lands on the bar. #stage clips everything above its top, so all
+     that is left above the canvas is a 6 px sliver of the knob's invisible touch pad. On a landscape project the same
+     layer's knob sits in the letterbox and works. */
+  test('HUNT-b on a 9 by 16 project the rotate knob of a full-frame layer can be reached and turns the layer, as it does on a landscape one', { item: '690', budgetMs: 60000 }, async function () {
+    const saved = FM.scene;
+    async function tryKnob(where, W, H) {
+      const L = FM.makeLayer('shape', { name: 'HB4 ' + where, shape: 'rect', x: W / 2, y: H / 2, shapeW: W, shapeH: H, fill: '#3050c0', start: 0, duration: 6 });
+      await hb4Scene([L], { width: W, height: H });
+      FM.selectLayer(L.id); await hb4Wait(450);
+      const box = document.getElementById('select-box'), knob = box && box.querySelector('.sb-rot');
+      if (!knob || box.style.display === 'none') throw new Error('setup (' + where + '): the selection box is not showing on the selected layer');
+      const kr = knob.getBoundingClientRect(), k = { x: kr.left + kr.width / 2, y: kr.top + kr.height / 2 };
+      if (!(kr.width > 0) || k.x < 20 || k.x > 330 || k.y < 0 || k.y > 740) throw new Error('setup (' + where + '): the knob is at ' + hb4J(k) + ', off the part of the frame real input can reach');
+      const under = document.elementFromPoint(k.x, k.y);
+      const downs = [];
+      const onDown = (e) => { const t = e.target; downs.push({ trusted: e.isTrusted, kind: e.pointerType, on: t ? (t.id || String(t.className || t.tagName)).slice(0, 30) : '?' }); };
+      window.addEventListener('pointerdown', onDown, true);
+      const r0 = FM.evalProp(L.transform.rotation, 0) || 0;
+      try {
+        const steps = [{ t: 'touchStart', x: k.x, y: k.y, ms: 90 }];
+        [10, 20, 30, 40, 50, 60].forEach(dx => steps.push({ t: 'touchMove', x: k.x + dx, y: k.y, ms: 45 }));
+        steps.push({ t: 'touchEnd', x: k.x + 60, y: k.y, ms: 0 });
+        await realInput924(steps, where + ' — a finger on the rotate knob, dragged right');
+      } finally { window.removeEventListener('pointerdown', onDown, true); }
+      await hb4Wait(200);
+      if (!downs.length || !downs[0].trusted || downs[0].kind !== 'touch') throw new Error('CONTROL (' + where + '): the press on the knob was not a trusted touch (' + hb4J(downs) + ')');
+      const turned = (FM.evalProp(L.transform.rotation, 0) || 0) - r0;
+      const tb = document.getElementById('topbar-m'), tbr = tb ? tb.getBoundingClientRect() : null;
+      return { turned: turned, k: k, under: under ? (under.id || String(under.className)).slice(0, 30) : '?', down: downs[0].on, barBottom: tbr ? Math.round(tbr.bottom) : null };
+    }
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          /* CONTROL: a landscape project, the same full-frame layer — its knob sits in the letterbox and the drag turns it */
+          const land = await tryKnob('landscape', 1920, 1080);
+          if (!(Math.abs(land.turned) > 5)) throw new Error('CONTROL: on a landscape project a finger dragged 60 px from the rotate knob turned the layer ' + land.turned.toFixed(1) + ' degrees (the press landed on ' + land.down + ') — the gesture is not reaching the knob at all');
+          /* THE CASE: his usual 9:16 project, a layer that fills the frame */
+          const tall = await tryKnob('9x16', 1080, 1920);
+          if (!(Math.abs(tall.turned) > 5)) throw new Error('on a 9:16 project the rotate knob of a layer that fills the frame is under the top bar: it is drawn at y ' + Math.round(tall.k.y) + ' and the bar runs to ' + tall.barBottom + ', so what is there is the ' + tall.under + ' — his finger on the knob landed on the top bar (' + tall.down + ') and dragging it turned the layer ' + tall.turned.toFixed(1) + ' degrees (the same drag on a landscape project turned it ' + land.turned.toFixed(0) + ')');
+        });
+      }, 380);
+    } finally { hb4Restore(saved); }
+  });
+
+  /* HUNT-b 4 — FILL-DRAG DOES ITS OWN LAYER MATHS, AND IT HAS NO FLIP AND NO GROUP. js/fill-drag.js builds the layer's
+     matrix by hand (skew, scale, rotate, translate) instead of going through FM.layerUVToCanvas like the point editor and
+     the crop tool — the shared map that carries the flips and the parent chain because it runs the compositor's own
+     transform. applyLayerTransform mirrors the layer LAST (flipH), so the gradient and the picture are drawn mirrored, and
+     the tool's hand-built inverse is not: on a flipped layer, dragging the gradient RIGHT moves it LEFT, while the teal ring
+     that marks it goes right — the two part company under his finger. Inside a group he has moved, the ring is drawn where
+     the shape would be without the group. (The camera case is already recorded as left as it was; it is not tested here.) */
+  test('HUNT-b dragging a gradient on the canvas moves it with the finger on a flipped layer, and its ring sits on it inside a moved group', { item: '690', budgetMs: 90000 }, async function () {
+    const saved = FM.scene;
+    const mk = (name, x, flip) => {
+      const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: 960, shapeW: 800, shapeH: 800, fill: '#ffffff', start: 0, duration: 6 });
+      L.fillMode = 'gradient';
+      L.fillGradient = { enabled: true, type: 'radial', angle: 0, c0: '#ffffff', c1: '#000000' };
+      if (flip) L.flipH = true;
+      return L;
+    };
+    async function openFill(L, where) {
+      FM.selectLayer(L.id); await hb4Wait(200);
+      FM.inspector.openCategory('color'); await hb4Wait(400);
+      if (!FM.fillDrag.isActive() || FM.fillDrag.layerId() !== L.id || FM.fillDrag.mode() !== 'gradient') throw new Error('setup (' + where + '): Colouring on a gradient shape did not start dragging the gradient on the canvas');
+    }
+    async function dragRight(L, where) {
+      const s = hb4Screen(FM.evalProp(L.transform.x, 0), 960);
+      if (s.x < 20 || s.x > 300 || s.y < 20 || s.y > 740) throw new Error('setup (' + where + '): the shape is at ' + hb4J(s) + ', out of reach of real input');
+      const downs = [];
+      const onDown = (e) => downs.push({ trusted: e.isTrusted, kind: e.pointerType, id: e.target && e.target.id });
+      window.addEventListener('pointerdown', onDown, true);
+      try {
+        await realInput924([
+          { t: 'touchStart', x: s.x, y: s.y, ms: 90 },
+          { t: 'touchMove', x: s.x + 10, y: s.y, ms: 45 }, { t: 'touchMove', x: s.x + 20, y: s.y, ms: 45 },
+          { t: 'touchMove', x: s.x + 30, y: s.y, ms: 45 }, { t: 'touchMove', x: s.x + 40, y: s.y, ms: 90 },
+          { t: 'touchEnd', x: s.x + 40, y: s.y, ms: 0 },
+        ], where + ' — a finger dragging the gradient 40 px right');
+      } finally { window.removeEventListener('pointerdown', onDown, true); }
+      await hb4Wait(250);
+      if (!downs.length || !downs[0].trusted || downs[0].kind !== 'touch' || downs[0].id !== 'fd-overlay') throw new Error('CONTROL (' + where + '): the press was not a trusted touch on the fill-drag surface (' + hb4J(downs) + ')');
+    }
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          /* CONTROL: the same shape, not flipped — the core follows the finger right, and the ring sits on the core */
+          const U = mk('HB4 plain gradient', 540, false);
+          await hb4Scene([U]);
+          await openFill(U, 'unflipped');
+          const u0 = hb4CoreX(960);
+          if (Math.abs(u0 - 540) > 6) throw new Error('setup: the unflipped gradient core does not start at the shape centre (' + u0 + ')');
+          await dragRight(U, 'unflipped');
+          const u1 = hb4CoreX(960), uRing = hb4RingX();
+          if (!(u1 - u0 > 60)) throw new Error('CONTROL: on an unflipped shape a 40 px drag moved the gradient core from ' + u0 + ' to ' + u1 + ' — the tool is not taking the finger');
+          if (!(Math.abs(uRing - u1) < 25)) throw new Error('CONTROL: on an unflipped shape the ring is drawn at ' + Math.round(uRing) + ' and the core at ' + u1 + ' — this harness cannot find the ring');
+
+          const bad = [];
+          /* 1. The same shape, flipped horizontally (the ⋯ menu's Flip) */
+          const F = mk('HB4 flipped gradient', 540, true);
+          await hb4Scene([F]);
+          await openFill(F, 'flipped');
+          const f0 = hb4CoreX(960);
+          await dragRight(F, 'flipped');
+          const f1 = hb4CoreX(960), fRing = hb4RingX();
+          if (!(f1 - f0 > 60)) bad.push('on a flipped shape a finger dragging the gradient 40 px RIGHT moved it ' + (f1 < f0 ? 'LEFT, from ' : 'from ') + f0 + ' to ' + f1 + ' (the same drag on the unflipped shape took it to ' + u1 + ')');
+          if (Math.abs(fRing - f1) > 25) bad.push('on the flipped shape the teal ring is drawn at x ' + Math.round(fRing) + ' while the gradient it marks is at x ' + f1);
+          /* 2. A shape inside a group he has moved 200 px right — nothing dragged, just where the ring is drawn */
+          const M = mk('HB4 grouped gradient', 540, false);
+          const N = FM.makeLayer('shape', { name: 'HB4 group mate', shape: 'rect', x: 540, y: 300, shapeW: 100, shapeH: 100, fill: '#20a060', start: 0, duration: 6 });
+          await hb4Scene([M, N]);
+          FM.scene.selectedIds = [M.id, N.id]; FM.scene.selectedId = M.id;
+          FM.groupSelection(); await hb4Wait(200);
+          const G = FM.scene.layers.find(l => l.type === 'group');
+          if (!G || M.parent !== G.id || N.parent !== G.id) throw new Error('setup: Group Selection did not put the gradient shape in a group');
+          G.transform.x = 200; FM.refreshAll(); await hb4Wait(150);
+          await openFill(M, 'in a moved group');
+          const m0 = hb4CoreX(960), mRing = hb4RingX();
+          if (Math.abs(m0 - 740) > 6) throw new Error('setup: in the group moved 200 px right the gradient core is at ' + m0 + ', not 740');
+          if (Math.abs(mRing - m0) > 25) bad.push('inside a group moved 200 px right, the ring that marks the gradient is drawn at x ' + Math.round(mRing) + ' — where the shape would be without the group — while the gradient is at x ' + m0);
+          if (bad.length) throw new Error(bad.join('; AND '));
+        });
+      }, 380);
+    } finally { hb4Restore(saved); }
+  });
+
 })();
