@@ -90039,7 +90039,9 @@
 
   /* ═══ HUNT-a (queue 690, 25 Sep, second hunt) — TEXT: typing, the text sheet, captions, emoji, undo while typing ═════════
    * His brief: "go re audit, find some bugs coz theres a shit load". Four findings in the text area, each a failing test
-   * first. The phone taps go through tests/_cdp.py as REAL touches (realInput924) wherever the finger can reach them. */
+   * first. The phone taps go through tests/_cdp.py as REAL touches (realInput924) wherever the finger can reach them.
+   * Found by the hunt as four failing HUNT-a tests; all four fixed (js/compositor.js graphemes, js/text-edit.js binding the
+   * caption object and flush/resync, js/history.js calling them) and renamed 690 for what they now hold. */
   function hunt2aTap(x, y) { return [{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 40 }]; }
   function hunt2aReach() { return Math.min(window.innerWidth, (window.top && window.top.innerWidth) || window.innerWidth) - 4; }
   /* A real finger on an element when it is inside the part of the window real input can reach; its own click otherwise
@@ -90072,7 +90074,7 @@
     return { w: maxX >= 0 ? maxX - minX + 1 : 0, n: n };
   }
 
-  test('HUNT-a emoji break apart on animated or curved text — a flag becomes two boxed letters, a skin tone becomes a separate square', { item: '690' }, function () {
+  test('690 emoji stay whole on animated and curved text — a flag, a skin tone and a family each draw as one picture, By Character and on a Curve', { item: '690' }, function () {
     /* drawAnimatedText (js/compositor.js) lays an animated text out unit by unit, and for the default unit — by
        Character — it splits each line with Array.from(line). Array.from splits CODE POINTS, not the characters he typed:
        the Australian flag is two regional-indicator code points, a thumbs-up with a skin tone is the thumb plus a colour
@@ -90090,6 +90092,8 @@
     if (!(flagWhole < flagApart * 0.8)) throw new Error('setup: this browser draws the flag no narrower whole (' + flagWhole + 'px) than as two letters (' + flagApart + 'px), so it cannot see the bug');
     const anim = (L) => { L.textAnim = { preset: 'fade', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 }; };
     const curve = (L) => { L.textCurve = 90; };
+    // By Word on a Curve lays each word out character by character too, from word ranges counted in the same pieces.
+    const wordCurve = (L) => { L.textAnim = { preset: 'fade', unit: 'word', durIn: 0.6, durOut: 0, stagger: 0.04 }; L.textCurve = 90; };
     // CONTROL 2: plain letters come out the same width animated (the entrance is long over at 3 s) and curved (one letter).
     const ab = widthOf('AB'), abAnim = widthOf('AB', anim), w1 = widthOf('W'), w1Curve = widthOf('W', curve);
     if (Math.abs(abAnim - ab) > ab * 0.1) throw new Error('CONTROL: plain AB is ' + ab + 'px still and ' + abAnim + 'px with Fade in finished — the comparison below measures something else');
@@ -90099,11 +90103,23 @@
       const still = widthOf(s[1]), a = widthOf(s[1], anim), c = widthOf(s[1], curve);
       if (a > still * 1.25) bad.push(s[0] + ' is ' + still + 'px wide as plain text but ' + a + 'px with Fade in (finished)');
       if (c > still * 1.25) bad.push(s[0] + ' is ' + still + 'px wide flat but ' + c + 'px on a Curve');
+      const wc = widthOf(s[1], wordCurve);
+      if (wc > still * 1.25) bad.push(s[0] + ' is ' + still + 'px wide flat but ' + wc + 'px on a Curve animated By Word');
     });
+    /* The fallback splitter (a browser without Intl.Segmenter — iOS before 14.5) must cut these the same way. Chrome
+       always has Segmenter, so the regex is called directly and held against it. */
+    if (!FM._graphemesFallback || typeof Intl === 'undefined' || !Intl.Segmenter) bad.push('there is no fallback splitter to check (FM._graphemesFallback)');
+    else {
+      const seg = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+      ['G’day 🇦🇺 mate 👍🏽!', '🇦🇺🇳🇿', FAMILY, '👩🏽‍💻 ❤️ 1️⃣ 🏴󠁧󠁢󠁳󠁣󠁴󠁿', 'cafe\u0301 AB', ''].forEach(function (str) {
+        const want = Array.from(seg.segment(str), g => g.segment).join('|'), got = FM._graphemesFallback(str).join('|');
+        if (got !== want) bad.push('the fallback splitter cuts ' + str + ' as ' + got + ' where Intl.Segmenter cuts ' + want);
+      });
+    }
     if (bad.length) throw new Error('emoji fall apart the moment a text is animated or curved — each piece of the emoji is drawn as its own character, in the preview and in the export (the flag turns into two boxed letters A U, the skin tone into a separate square): ' + bad.join('; '));
   });
 
-  test('HUNT-a deleting or re-timing a caption in the text editor makes Done write his words over a DIFFERENT caption', { item: '690', budgetMs: 90000 }, async function () {
+  test('690 the caption editor keeps his words on the caption he is typing when a caption is deleted or re-timed in its own Aa sheet', { item: '690', budgetMs: 120000 }, async function () {
     /* js/text-edit.js binds the cue being typed by its INDEX (active.cueIndex) into layer.captions, and every read and
        write goes back through that number — onInput, and commit() on Done, which writes the field into cues[index]
        whether he typed since or not. The Aa sheet of the SAME editor hosts the caption list (captions.js mount, via
@@ -90114,6 +90130,7 @@
     const saved = FM.scene, savedT = FM.time;
     const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     const bad = [];
+    session.label = '';
     async function session(where, t, typed, act) {
       const L = FM.makeLayer('text', { name: 'Caps', x: 540, y: 1500, fontSize: 90, start: 0, duration: 6 });
       L.text = '';
@@ -90138,7 +90155,7 @@
       await sleep(300);
       if (FM.textEdit.isActive()) throw new Error(where + ': setup: the Done tick did not close the editor');
       const live = FM.scene.layers.find(l => l.id === L.id) || L;
-      return { bound: bound, texts: live.captions.map(c => c.text) };
+      return { bound: bound, texts: live.captions.map(c => c.text), label: session.label };
     }
     try {
       if (wasOpen) FM.home.close();
@@ -90150,9 +90167,18 @@
             await hunt2aPress(rows[0].querySelector('.cap-del'), 'first caption’s ✕');
             await sleep(250);
             if (L.captions.length !== 2) throw new Error('deleting caption 1: setup: the ✕ did not remove the caption (' + L.captions.length + ' left)');
+            session.label = ((document.querySelector('.te-cue-nav .te-cue-lbl') || {}).textContent || '').trim();
           });
           if (r.bound !== 'Bravo') throw new Error('setup: the editor opened on ' + r.bound + ', not on Bravo at the playhead');
           if (r.texts.join(' | ') !== 'Bravo, edited | Charlie') bad.push('he typed caption 2, deleted caption 1 from the Aa sheet and tapped ✓ — the captions are now [' + r.texts.join(' | ') + '] instead of [Bravo, edited | Charlie]: Done wrote his words over Charlie, and Charlie is gone');
+          if (r.label !== 'Cue 1 / 2') bad.push('after caption 1 was deleted the editor’s label read ' + (r.label || 'nothing') + ' — the caption he is typing is now Cue 1 / 2');
+          /* 1b. typing caption 2 (Bravo), he deletes caption 2 ITSELF, then ✓ — his words go with it, not onto Charlie */
+          r = await session('deleting the caption he is typing', 2.2, 'Bravo, edited', async function (L, rows) {
+            await hunt2aPress(rows[1].querySelector('.cap-del'), 'second caption’s ✕');
+            await sleep(250);
+            if (L.captions.length !== 2) throw new Error('deleting the caption he is typing: setup: the ✕ did not remove the caption (' + L.captions.length + ' left)');
+          });
+          if (r.texts.join(' | ') !== 'Alpha | Charlie') bad.push('he typed caption 2, deleted caption 2 itself from the Aa sheet and tapped ✓ — the captions are now [' + r.texts.join(' | ') + '] instead of [Alpha | Charlie]: Done wrote the deleted caption’s words over the next one');
           /* 2. typing caption 1 (Alpha), he moves its Start past the others in the Aa sheet, then ✓ */
           r = await session('re-timing caption 1', 0.5, 'Alpha, edited', async function (L, rows) {
             const s = rows[0].querySelector('.cap-time');
@@ -90174,7 +90200,7 @@
     }
   });
 
-  test('HUNT-a on PC, Undo with the text card open throws away the words he typed — the layer vanishes and Redo brings back only the placeholder', { item: '690', budgetMs: 90000 }, async function () {
+  test('690 on PC, Undo with the text card open takes back only the typing — the layer stays, the field follows, and Redo brings his words back', { item: '690', budgetMs: 120000 }, async function () {
     /* The PC text editor is a modeless card: the transport's ↶ stays live beside it, and typing is not committed until ✓
        (js/text-edit.js commit()). So ↶ skips the typing and undoes the step BEFORE it. Right after Add text that step is
        adding the layer: the layer he is typing into disappears with his words, and ↷ restores the layer as it was
@@ -90214,14 +90240,56 @@
           const how = await press('btn-undo', 'undo');
           const afterUndo = FM.scene.layers.find(l => l.id === id);
           const fieldOpen = FM.textEdit.isActive();
+          const fieldAfterUndo = fieldOpen ? (document.getElementById('te-input') || {}).value : null;
           await press('btn-redo', 'redo');
+          const fieldAfterRedo = FM.textEdit.isActive() ? (document.getElementById('te-input') || {}).value : null;
           if (FM.textEdit.isActive()) { FM.textEdit.stop(); await sleep(200); }
           const afterRedo = FM.scene.layers.find(l => l.id === id);
           const bad = [];
           if (!afterUndo) bad.push('one ↶ (' + how + ') took away the whole text layer he was typing into' + (fieldOpen ? '' : ', and the editor closed with it'));
+          else if (afterUndo.text !== 'Text') bad.push('one ↶ left the layer reading ' + afterUndo.text + ' instead of taking back the typing (Text)');
+          /* The editor stays open on the surviving layer, so its field must show what the layer now says — a field still
+             reading Hello world would write it straight back on the next key or at ✓, undoing the undo. */
+          if (afterUndo && fieldOpen && fieldAfterUndo !== afterUndo.text) bad.push('after ↶ the layer reads ' + afterUndo.text + ' but the open field still reads ' + fieldAfterUndo);
           if (!afterRedo) bad.push('↷ did not bring the layer back at all');
           else if (afterRedo.text !== 'Hello world') bad.push('↷ brought the layer back reading ' + afterRedo.text + ' — the words he typed, Hello world, are gone for good');
+          else if (fieldAfterRedo != null && fieldAfterRedo !== 'Hello world') bad.push('after ↷ the layer reads Hello world but the open field reads ' + fieldAfterRedo);
           if (bad.length) throw new Error('on PC he added a text, typed Hello world and pressed ↶ with the card still open: ' + bad.join('; ') + '. The typing was never committed, so ↶ skipped it and undid the step before it.');
+
+          /* THE SAME ON A CAPTION TRACK — every cue is a new object after an undo, so the editor has to find the caption
+             he is typing again. Typing caption 2, ↶ takes back that typing only; ↷ puts it back; more typing still lands
+             on caption 2, and ✓ leaves the other two alone. */
+          const C = FM.makeLayer('text', { name: 'Caps', x: 540, y: 1500, fontSize: 90, start: 0, duration: 6 });
+          C.text = '';
+          C.captions = [{ start: 0, end: 1.5, text: 'Alpha' }, { start: 1.5, end: 3, text: 'Bravo' }, { start: 3, end: 4.5, text: 'Charlie' }];
+          FM.scene = scene([C], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+          FM.selectLayer(C.id); FM.setTime(2.2); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+          FM.history.reset();
+          await sleep(200);
+          FM.textEdit.start(C.id); await sleep(400);
+          const tc = document.getElementById('te-input');
+          if (!tc || tc.value !== 'Bravo') throw new Error('setup: the caption editor did not open on Bravo');
+          tc.focus(); tc.value = 'Bravo, edited'; tc.dispatchEvent(new Event('input', { bubbles: true }));
+          const texts = () => (FM.scene.layers.find(l => l.id === C.id) || { captions: [] }).captions.map(c => c.text).join(' | ');
+          const cb = [];
+          await press('btn-undo', 'undo');
+          const u1 = texts(), f1 = FM.textEdit.isActive() ? document.getElementById('te-input').value : null;
+          if (u1 !== 'Alpha | Bravo | Charlie') cb.push('↶ left the captions [' + u1 + '] instead of taking back the typing');
+          if (f1 !== 'Bravo') cb.push('after ↶ the caption editor ' + (f1 == null ? 'closed' : 'field read ' + f1) + ' instead of reading Bravo');
+          await press('btn-redo', 'redo');
+          const r1 = texts(), f2 = FM.textEdit.isActive() ? document.getElementById('te-input').value : null;
+          if (r1 !== 'Alpha | Bravo, edited | Charlie') cb.push('↷ left the captions [' + r1 + '] instead of putting his typing back');
+          if (f2 !== 'Bravo, edited') cb.push('after ↷ the caption editor ' + (f2 == null ? 'closed' : 'field read ' + f2) + ' instead of Bravo, edited');
+          if (FM.textEdit.isActive()) {
+            const tc2 = document.getElementById('te-input');
+            tc2.value = 'Bravo, edited again'; tc2.dispatchEvent(new Event('input', { bubbles: true }));
+            await press('btn-undo', 'undo');   // takes back only the last typing
+            await press('btn-redo', 'redo');
+            FM.textEdit.stop(); await sleep(200);
+          }
+          const r2 = texts();
+          if (r2 !== 'Alpha | Bravo, edited again | Charlie') cb.push('typing on after ↶ ↷ and tapping ✓ left the captions [' + r2 + '] instead of [Alpha | Bravo, edited again | Charlie]');
+          if (cb.length) throw new Error('on PC, a caption track: ' + cb.join('; '));
         });
       }, 1280);
     } finally {
@@ -90233,7 +90301,7 @@
     }
   });
 
-  test('HUNT-a the caption editor’s next button skips a caption when it opened between two captions', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 the caption editor’s next button opens the very next caption when it opened between two captions', { item: '690', budgetMs: 60000 }, async function () {
     /* Open the text editor on a caption track with the playhead in a GAP (the silence between two detected captions, or
        before the first) and bindCue adds a blank cue there so typing has somewhere to land (js/text-edit.js). Press › and
        gotoCue(index + 1) runs dropEmptyCreated() FIRST — which splices that blank cue out and shifts every later caption
@@ -90243,7 +90311,7 @@
     const saved = FM.scene, savedT = FM.time;
     const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     const bad = [];
-    async function nextFrom(t, want, where) {
+    async function nextFrom(t, want, where, title) {
       const L = FM.makeLayer('text', { name: 'Caps', x: 540, y: 1500, fontSize: 90, start: 0, duration: 6 });
       L.text = '';
       L.captions = [{ start: 0.5, end: 1.5, text: 'Alpha' }, { start: 2, end: 3, text: 'Bravo' }, { start: 3.5, end: 4.5, text: 'Charlie' }];
@@ -90254,13 +90322,13 @@
       const ta = document.getElementById('te-input');
       if (!ta || !FM.textEdit.isActive()) throw new Error(where + ': setup: the text editor did not open on the caption track');
       if (ta.value !== '') throw new Error(where + ': setup: with the playhead in a gap the editor should open on a new blank caption, it opened on ' + ta.value);
-      const next = [].slice.call(document.querySelectorAll('.te-cue-nav .te-cue-btn')).find(b => b.title === 'Next cue');
-      const how = await hunt2aPress(next, 'next-caption button');
+      const next = [].slice.call(document.querySelectorAll('.te-cue-nav .te-cue-btn')).find(b => b.title === (title || 'Next cue'));
+      const how = await hunt2aPress(next, (title ? 'previous' : 'next') + '-caption button');
       await sleep(200);
       const got = (document.getElementById('te-input') || {}).value;
       const lbl = ((document.querySelector('.te-cue-nav .te-cue-lbl') || {}).textContent || '').trim();
       FM.textEdit.stop(); await sleep(200);
-      if (got !== want) bad.push(where + ', › (' + how + ') opened ' + (got || 'a blank caption') + ' (' + lbl + ') instead of ' + want);
+      if (got !== want) bad.push(where + ', ' + (title ? '‹' : '›') + ' (' + how + ') opened ' + (got || 'a blank caption') + ' (' + lbl + ') instead of ' + want);
     }
     try {
       if (wasOpen) FM.home.close();
@@ -90269,6 +90337,9 @@
         await onScreen924(async function () {
           await nextFrom(1.75, 'Bravo', 'from the gap between Alpha and Bravo');
           await nextFrom(0.2, 'Alpha', 'from before the first caption');
+          // CONTROLS — these always worked and must keep working: ‹ from the same gap, › from after the last caption.
+          await nextFrom(1.75, 'Alpha', 'CONTROL from the gap between Alpha and Bravo', 'Previous cue');
+          await nextFrom(5.2, 'Charlie', 'CONTROL from after the last caption');
         });
       });
       if (bad.length) throw new Error('the next-caption button skips a caption whenever the editor opened in a gap: ' + bad.join('; '));

@@ -255,7 +255,11 @@ window.FM = window.FM || {};
        WHOLE document back, wiping out everything the other people have done since — his rule for the
        feature was "undo only undoes your own changes". So while collab owns undo, it answers instead.
        One line, first, and false until a session starts. */
-    undo() { if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) return FM.collab.undo(); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (index > 0) { index--; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } syncButtons(); },   // persist so a hard kill after undo can't resurrect the edit; `re` — see the end of restore()
-    redo() { if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) return FM.collab.redo(); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (index < stack.length - 1) { index++; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } syncButtons(); },
+    /* The open text editor is a pending commit too (queue 690, second hunt): on PC its card leaves ↶ live, and his typing
+       only commits at ✓, so ↶ used to step over it — right after Add text, the layer went with his words and ↷ brought
+       back the word Text. flush() makes the typing its own step first; resync() re-reads the field (and the caption it
+       is bound to) from the restored scene, because the editor stays open whenever the layer survived. */
+    undo() { if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) return FM.collab.undo(); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush(); if (index > 0) { index--; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); syncButtons(); },   // persist so a hard kill after undo can't resurrect the edit; `re` — see the end of restore()
+    redo() { if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) return FM.collab.redo(); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush(); if (index < stack.length - 1) { index++; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); syncButtons(); },
   };
 })(window.FM);
