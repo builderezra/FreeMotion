@@ -2989,7 +2989,7 @@ window.FM = window.FM || {};
         }
         return existing.id;
       }
-      const returnTo = curId();
+      const returnTo = tabId();   // THIS tab's project, or none (queue 936) — never another window's
       const pid = await FM.projects.create({ name: meta.name || 'Template', width: pack.project.width, height: pack.project.height, templateDraft: true, ofTemplate: tid });
       if (!pid) return false;   // queue 690: create() says false only when he chose to stay in an unsaved project
       // the pack's project replaces the doc's, so the session's own pointers ride in as `extra`
@@ -3242,7 +3242,7 @@ window.FM = window.FM || {};
       const pack = await this.getPack(eid);
       if (!pack) return null;
       const size = elementCanvas(pack);
-      const returnTo = curId();
+      const returnTo = tabId();   // THIS tab's project, or none (queue 936) — never another window's
       const pid = await FM.projects.create({ name: meta.name || 'Element', width: size.width, height: size.height, elementDraft: true, ofElement: eid });
       if (!pid) return false;   // queue 690: create() says false only when he chose to stay in an unsaved project
       FM.scene.project.background = null;              // transparent, like the element itself
