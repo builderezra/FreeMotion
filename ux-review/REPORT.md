@@ -1,6 +1,6 @@
 # FreeMotion UX review (v16.90, 24-25 Sep 2026)
 
-84 findings: 16 high, 51 medium, 16 low, 16 of them bugs found by accident.
+84 findings: 14 high, 53 medium, 16 low, 16 of them bugs found by accident.
 Review bots used the app like a person, mostly on a 390px phone, plus desktop and five other screen sizes. Nobody read the code. Every fix keeps the feature.
 
 ## Start here
@@ -17,7 +17,7 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
    The big keyframe diamond keeps its old state until the panel redraws. At 1:07, with the only keyframe at 0:00, it showed gold "Remove keyframe", and tapping it added one. The opposite case deletes a keyframe you meant to keep.
    *Fix:* Refresh the diamond's colour, fill and label on every playhead change: scrub, play, typed time and the skip buttons.
 
-4. **There is no play button; play/pause hides behind tapping the time readout** (high · Found by 1 bot)
+4. **There is no play button; play/pause hides behind tapping the time readout** (high · Checked by Claude + 1 bot)
    Play/pause only works by tapping the 00:00:00 time pill, and nothing on a phone explains that. While playing, the only change is the pill's outline colour. The project length isn't shown anywhere.
    *Fix:* Put a play/pause triangle inside the time pill and show "current / total". Tap and double-tap keep working as they do now.
 
@@ -29,15 +29,15 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
    On a 390px phone the Categories row (Colouring 43, Blur 19, Warping 29 and more) sits almost entirely below the screen, and swiping up does nothing. Search and the New row still work, but browsing by category is how new users explore.
    *Fix:* Make that screen scroll like the category pages already do. Until then, add a "See all categories" button above the fold.
 
-7. **A finished export gives you nothing: no toast, no "done", no file name, no way to know it worked** (high · Found by 1 bot)
+7. **A finished export gives you nothing: no toast, no "done", no file name, no way to know it worked** (high · Confirmed by a 2nd bot)
    The "Exporting... NN%" box disappears at 100% with no tick, no file name and no "saved", so a finished export looks exactly like a failed one.
    *Fix:* End on a success state for a couple of seconds ("GIF saved, 2.1 MB") and leave a toast behind, with Share or Open where the phone allows it.
 
-8. **Undo gives no indication of what it undid, and can jump you into an unrelated layer's full-screen panel** (high · Found by 1 bot)
-   No toast or highlight says what Undo did. In one repro a single Undo reverted two edits (a duplicate and a move) and then opened an unrelated layer's panel.
-   *Fix:* Toast on every Undo and Redo naming the action ("Undid: move clip-4s"). One press, one step. Stay on the screen you were on.
+8. **You can't move the playhead past the current end, so the trim tools can't make a project longer** (high · Confirmed by a 2nd bot)
+   In a 5 s project, typing 6 into the time readout snaps back to 5 s, and Extend end to playhead then says there's nothing to extend into. The only way to make the project longer is an unreliable drag on the clip.
+   *Fix:* Let the playhead run past the end and let Extend grow the project. At minimum, ask "Extend the project to 6 s?" when a typed time is past the end.
 
-9. **First imported photo silently overrides the aspect ratio I just picked** (high · Found by 1 bot)
+9. **First imported photo silently overrides the aspect ratio I just picked** (high · Confirmed by a 2nd bot)
    Pick 9:16 Phone, import a 4:5 or 16:9 photo first, and the canvas quietly becomes 4:5 or 16:9. Nothing says so. Someone making a Reel finds out at export.
    *Fix:* Only auto-match the first media for Custom / Auto projects. Otherwise keep 9:16 and fit the photo, or toast "Canvas changed to 16:9, Keep 9:16".
 
@@ -45,11 +45,11 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
    Opacity takes typing, but X, Y, Width, Height and Rotation only change by dragging at about 1 unit per pixel, so centring something at X 540 is guesswork. The same on phone and desktop.
    *Fix:* Reuse the Opacity field everywhere: tap the number to type, Enter commits, and drag-to-scrub stays. On desktop add arrow keys and the wheel.
 
-11. **Long paragraph of text overflows the canvas with no wrap and no warning** (high · Found by 1 bot)
+11. **Long paragraph of text overflows the canvas with no wrap and no warning** (high · Confirmed by a 2nd bot)
    A pasted 300-character caption wraps nicely in the typing box but renders on the canvas as one giant line running far past both edges.
    *Fix:* Give text layers a box width with side handles so text wraps inside it by default. At minimum, warn or auto-shrink when text leaves the frame.
 
-12. **Tapping a template opens the template itself for editing, not a new project from it** (medium · Found by 1 bot)
+12. **Tapping a template opens the template itself for editing, not a new project from it** (medium · Confirmed by a 2nd bot)
    In every template gallery a tap means "use this". Here it opens the master template for editing, with only a short toast saying so, and every later project made from it inherits the change.
    *Fix:* Tap = new project from this template. Move "Edit template" into its "..." menu, and show a TEMPLATE chip in the editor header while editing one.
 
@@ -121,7 +121,7 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Screenshots:** [A-home-01-first-open.webp](shots/A-home-01-first-open.webp), [A-home-02-templates.webp](shots/A-home-02-templates.webp)
 
 ### Tapping a template opens the template itself for editing, not a new project from it
-- **Impact:** MEDIUM · Found by 1 bot
+- **Impact:** MEDIUM · Confirmed by a 2nd bot
 - **Where:** Home > Templates tab, tap a template card
 - **What happened:** Tapped the "Blank vertical" template card. It opened the template in the editor; a toast says "Editing 'Blank vertical', your changes save back to it when you go Home". The toast covers the editor's main "Tap here to start creating" + button, and after ~3 s it is gone. From then on the header just says "Blank v..." and nothing shows you are editing a template rather than a project. Starting a project from the template needs the "..." > "New project from template" route instead. The same happens for elements (tap = edit the element, toast only).
 - **Why it matters:** In every template gallery a tap means "use this". Here a user who meant to start a video edits the master template, and every later project made from it inherits the change.
@@ -203,7 +203,7 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 ## Building
 
 ### First imported photo silently overrides the aspect ratio I just picked
-- **Impact:** HIGH · Found by 1 bot
+- **Impact:** HIGH · Confirmed by a 2nd bot
 - **Where:** New project dialog -> editor -> + -> Media -> Import (first media in an empty project)
 - **What happened:** Made a new project with 9:16 Phone selected (the dialog even shows "1080 x 1920"). Imported a 4:5 photo as the first layer: Canvas settings now says 4:5, 1080 x 1350. Repeated in a second fresh 9:16 project with a 16:9 photo: the canvas became 16:9 landscape. No toast, no prompt, nothing in the top bar says the canvas changed; I only noticed because the preview frame got wider and the black 9:16 frame vanished. Fixing it costs 4 taps (cog-like Canvas settings icon, 9:16, Apply, and it reflows the layers). Undo does revert it, but only together with the import.
 - **Why it matters:** I chose 9:16 on purpose one screen earlier (the dialog calls it "Phone"). The app throws that choice away without asking, and someone building a Reel/TikTok will only find out at export time.
@@ -219,7 +219,7 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Screenshots:** [main-13-tap-circle.webp](shots/main-13-tap-circle.webp), [B-build-73-drag-star-nosel.webp](shots/B-build-73-drag-star-nosel.webp), [F-desk-51-drag-unselected.webp](shots/F-desk-51-drag-unselected.webp)
 
 ### There is no play button; play/pause hides behind tapping the time readout
-- **Impact:** HIGH · Found by 1 bot
+- **Impact:** HIGH · Checked by Claude + 1 bot
 - **Where:** Bar under the preview, centre readout "00:00:00"
 - **What happened:** Looked for a play button for my 10 s video. The bar has 9 controls (sliders, copy, a pill, ||, two circular arrows, a "fullscreen" frame) and none is a play triangle. Playing only works by tapping the "00:00:00" pill; the only hint is its tooltip ("Tap: play / pause - double-click: type"), which a phone never shows. While playing, the only state change is the pill's outline turning cyan (compare B-build-87 vs B-build-95-pb). Double-tapping it turns it into a text box showing "10.97" (seconds) while the pill itself showed "00:10:29" (seconds:frames), so the same time is written two different ways. The project length is nowhere on screen: "total 0:10" only exists in the tooltip.
 - **Why it matters:** Play is the most-used control in any editor. A new user will hunt for it, and even Ezra's own muscle memory would not transfer to another device. "00:10:29" reads as ten and a bit seconds, not 10.97 s.
@@ -233,14 +233,6 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Why it matters:** Moving a clip in time is one of the most common edits there is. Two separate bots concluded it was impossible, which shows how invisible the hold is. On desktop the quick drag does something destructive instead.
 - **Suggested fix:** The first time someone quick-drags a clip, show a one-line hint ("Hold, then drag to move") (recommended). Give the clip a visible lift (shadow, slight scale, haptic on phones) the moment the hold kicks in, so people learn it. On desktop, let a plain drag on the clip body move it and keep trimming for the edge handles only, with a move cursor on the body and a resize cursor on the edges.
 - **Screenshots:** [main-14-holddrag-clip.webp](shots/main-14-holddrag-clip.webp), [main-32-desk-holddrag.webp](shots/main-32-desk-holddrag.webp), [F-desk-1b-33-drag-clip.webp](shots/F-desk-1b-33-drag-clip.webp)
-
-### Undo gives no indication of what it undid, and can jump you into an unrelated layer's full-screen panel
-- **Impact:** HIGH · Found by 1 bot
-- **Where:** Transport bar, Undo (Cmd+Z) / Redo, after any edit
-- **What happened:** No toast, no highlight, no "Undid: moved clip" text anywhere - the only feedback is the timeline/canvas silently changing. Sequence, reproduced with screenshots at every step: selected clip-4s, used "Move clip left to the playhead" to reposition it, closed the clip panel (back arrow, confirmed I was back on the plain timeline with the move visibly intact), then tapped Undo once. Result: the app didn't return to the plain timeline or reopen clip-4s - it opened a full-screen property panel for the Text layer, which I had not touched in several steps, with no message saying why. Closing that panel and checking the layer list showed two earlier edits had been reverted by that single Undo press (a duplicated music clip was gone, and clip-4s was back at its old position) - not just the most recent one. In a second, separate run in this session, one Undo similarly opened the duplicated music-6s clip's panel instead of anything related to what I'd just done.
-- **Why it matters:** Undo is the safety net people reach for right after something goes wrong, and its whole job is to be predictable. Here it can silently revert more than the last action, and the screen you land on (a random layer's full panel, hiding the whole timeline) actively obscures what happened rather than showing it - so you can't tell, without manually re-checking every layer, whether Undo did what you wanted or took something else with it.
-- **Suggested fix:** Show a small toast on every Undo/Redo naming the action reverted ("Undid: Move clip-4s", "Undid: Duplicate music-6s") (recommended). Make one Undo press revert exactly one history entry - if the duplicate and the move are being coalesced into one step, split them. After an Undo, return to the general timeline (not a layer's full property panel) and briefly highlight the affected clip so its position is visible in context.
-- **Screenshots:** [B-build-1b-24-undo-feedback.webp](shots/B-build-1b-24-undo-feedback.webp), [B-build-1b-25-step1-closed.webp](shots/B-build-1b-25-step1-closed.webp)
 
 ### The bar under the preview is 9 unlabeled icons, several of which look like something else
 - **Impact:** MEDIUM · Found by 1 bot
@@ -273,6 +265,14 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Why it matters:** Every item in that menu costs a moment of "wait, does that even do anything to a song?" and a few (Extract Audio from audio, Sharpen for upscaling on a .wav) read as broken. Meanwhile the two things people actually do with a music track when they add it - fade it out before it cuts off, or loop a 6s clip to cover a 15s video - have no visible home. And with no waveform, lining up a beat or a lyric with the video content is guesswork: you only find out where the loud part of the track is by scrubbing and listening.
 - **Suggested fix:** Give audio-type clips their own context menu variant: keep Replace media / Lock / Reverse / Save as preset / Ask the Assistant / Media info / colour tag, drop the ones that only apply to visuals, and add Fade in, Fade out and Loop to fill (recommended). Draw a simple waveform inside the clip's timeline pill (most editors generate this once on import and cache it) so cuts and syncing don't require scrubbing blind.
 - **Screenshots:** [G-speed-96-audioadded.webp](shots/G-speed-96-audioadded.webp), [B-build-1b-13-music-selected.webp](shots/B-build-1b-13-music-selected.webp)
+
+### Undo doesn't say what it undid (and once reverted two edits at once)
+- **Impact:** MEDIUM · 1 bot. A 2nd bot couldn't reproduce the double undo
+- **Where:** Transport bar, Undo (Cmd+Z) / Redo, after any edit
+- **What happened:** Re-test: a second bot duplicated a layer, moved the original and pressed Undo once. Only the move was undone and it stayed on the same panel, so the double undo below has an unknown trigger. The missing feedback is the part that holds everywhere. Original report: No toast, no highlight, no "Undid: moved clip" text anywhere - the only feedback is the timeline/canvas silently changing. Sequence, reproduced with screenshots at every step: selected clip-4s, used "Move clip left to the playhead" to reposition it, closed the clip panel (back arrow, confirmed I was back on the plain timeline with the move visibly intact), then tapped Undo once. Result: the app didn't return to the plain timeline or reopen clip-4s - it opened a full-screen property panel for the Text layer, which I had not touched in several steps, with no message saying why. Closing that panel and checking the layer list showed two earlier edits had been reverted by that single Undo press (a duplicated music clip was gone, and clip-4s was back at its old position) - not just the most recent one. In a second, separate run in this session, one Undo similarly opened the duplicated music-6s clip's panel instead of anything related to what I'd just done.
+- **Why it matters:** Undo is the safety net people reach for right after something goes wrong, and its whole job is to be predictable. Here it can silently revert more than the last action, and the screen you land on (a random layer's full panel, hiding the whole timeline) actively obscures what happened rather than showing it - so you can't tell, without manually re-checking every layer, whether Undo did what you wanted or took something else with it.
+- **Suggested fix:** Show a small toast on every Undo/Redo naming the action reverted ("Undid: Move clip-4s", "Undid: Duplicate music-6s") (recommended). Make one Undo press revert exactly one history entry - if the duplicate and the move are being coalesced into one step, split them. After an Undo, return to the general timeline (not a layer's full property panel) and briefly highlight the affected clip so its position is visible in context.
+- **Screenshots:** [B-build-1b-24-undo-feedback.webp](shots/B-build-1b-24-undo-feedback.webp), [B-build-1b-25-step1-closed.webp](shots/B-build-1b-25-step1-closed.webp)
 
 ### Pinching to scale a layer can zoom the whole browser page instead, and it doesn't clear on reload
 - **Impact:** MEDIUM (BUG) (needs a real-device check) · 1 bot. Probably a side effect of how the test simulates a pinch
@@ -332,10 +332,10 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Suggested fix:** Recompute the diamond's state (colour, filled/hollow, label) on every playhead change (scrub, play/pause, typed time, skip buttons, tapping a keyframe on the timeline), not only on panel render. Use the Alight Motion convention: hollow = animated but no key here, filled = key here.
 - **Screenshots:** [main-19-at-later.webp](shots/main-19-at-later.webp), [main-20-kf-at-1s.webp](shots/main-20-kf-at-1s.webp), [C-anim-37-scrub1s.webp](shots/C-anim-37-scrub1s.webp)
 
-### The keyframe diamonds on the timeline look draggable but a drag retimes the whole clip instead; a plain tap does nothing
-- **Impact:** HIGH (BUG) · Found by 1 bot
+### Keyframe diamonds on the timeline ignore taps and drags; everything is behind an unmarked long-press
+- **Impact:** MEDIUM (BUG) · 2 bots, partly confirmed
 - **Where:** Timeline, the little diamond markers drawn on a selected layer's clip
-- **What happened:** With a Text layer selected and 3 Width/Height keyframes visible as diamonds on its clip, a single tap directly on a diamond does nothing at all (no selection highlight, no panel change), verified on the gold ("keyframe here") diamond and a hollow one. Dragging a diamond sideways (tried starting exactly on the gold diamond, and again a few px off it) does not move that keyframe in time: it silently retimes the whole clip instead, the clip's start slid ~50 px right and the layer's content emptied out at the old playhead position. Reproduced twice, confirmed undoable (Undo correctly restores the clip position). The only thing that treats a diamond as its own object is a 700 ms long-press, which opens a genuinely good context menu: Linear / Ease In / Ease Out / Ease In-Out / Overshoot / Anticipate / Hold (step), Loop: off/cycle/ping-pong, Copy keyframe, Delete keyframe (and cross-layer "Paste keyframe at playhead" appears once something is copied, this works well, verified by copying a Position keyframe from the Square and pasting it onto the Text layer, which took the exact X/Y values across). Nothing on screen hints that long-press is the way in; there is no chevron, no "hold" affordance, no different cursor.
+- **What happened:** Re-test: a tap on a diamond does nothing and a drag does nothing either (the second bot did NOT see the whole clip move), while a 700 ms long-press opens the full keyframe menu. Original report: With a Text layer selected and 3 Width/Height keyframes visible as diamonds on its clip, a single tap directly on a diamond does nothing at all (no selection highlight, no panel change), verified on the gold ("keyframe here") diamond and a hollow one. Dragging a diamond sideways (tried starting exactly on the gold diamond, and again a few px off it) does not move that keyframe in time: it silently retimes the whole clip instead, the clip's start slid ~50 px right and the layer's content emptied out at the old playhead position. Reproduced twice, confirmed undoable (Undo correctly restores the clip position). The only thing that treats a diamond as its own object is a 700 ms long-press, which opens a genuinely good context menu: Linear / Ease In / Ease Out / Ease In-Out / Overshoot / Anticipate / Hold (step), Loop: off/cycle/ping-pong, Copy keyframe, Delete keyframe (and cross-layer "Paste keyframe at playhead" appears once something is copied, this works well, verified by copying a Position keyframe from the Square and pasting it onto the Text layer, which took the exact X/Y values across). Nothing on screen hints that long-press is the way in; there is no chevron, no "hold" affordance, no different cursor.
 - **Why it matters:** A diamond drawn on a track is the universal "this is a handle, drag me" shape in every timeline-based tool (After Effects, Premiere, CapCut, Alight Motion). Here it looks exactly like one but isn't: a tap is a dead end and a drag does something destructive and unrelated (moves the clip), with no toast or undo hint telling you what just happened. The one real interaction (long-press) is invisible, so the good menu underneath it, full ease presets, loop modes, copy/delete, cross-layer paste, is easy to never find. There is also no multi-select of keyframes (nothing in the long-press menu offers it, and a tap doesn't "arm" a diamond for a second tap to extend selection).
 - **Suggested fix:** Make a plain tap on a diamond select it (highlight + show its time/value in a small readout) and let a drag on a selected diamond retime just that keyframe, snapping to other keyframes and the playhead (recommended), this also matches how dragging the value pad already behaves for a single keyframe, so the mental model becomes consistent across the app. Keep "drag the clip" as the behavior for dragging the clip body away from any diamond. Regardless of drag support, surface the long-press menu's contents through a visible affordance too, e.g. a tap opens a small popover with the same options, since a 700 ms hold has no visual cue on a touchscreen.
 - **Screenshots:** [C-anim-1b-02-tapdiamond.webp](shots/C-anim-1b-02-tapdiamond.webp), [C-anim-1b-08-dragdiamond.webp](shots/C-anim-1b-08-dragdiamond.webp)
@@ -398,10 +398,10 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Suggested fix:** Escape (and the back gesture) closes the top-most thing first: the menu, then the panel, then the selection (recommended). A menu that is no longer visible must never receive a tap.
 - **Screenshots:** [D-look-1b-07-more-open.webp](shots/D-look-1b-07-more-open.webp), [D-look-1b-08-after-escape.webp](shots/D-look-1b-08-after-escape.webp), [F-desk-59-esc-menu-repro.webp](shots/F-desk-59-esc-menu-repro.webp)
 
-### Expanding a blend-mode category with the Mixing panel not scrolling hides every category below it, unreachable
-- **Impact:** HIGH · Found by 1 bot
+### The blend-mode list in Mixing doesn't scroll, so an opened category pushes later ones off-screen
+- **Impact:** HIGH · 2 bots, partly confirmed
 - **Where:** Layer > Mixing (blending modes list: Normal, Cutout, Brighten, Deepen, Punch, each a collapsible group of sub-modes)
-- **What happened:** At rest, all 5 top-level groups (Normal/Cutout/Brighten/Deepen/Punch) just barely fit in the 390x844 viewport, with Punch's row already clipped a few px past the bottom edge (its centre reports at y=828, i.e. row bottom ~849, past the 844 viewport), still tappable only because a sliver remains on-screen. Expanding "Brighten" pushes "Brightest Colour" (its 3rd sub-item) to a row centred at y=846, i.e. almost entirely below the visible area; only a 1-2 px strip at y=843 was tappable, found by trial. Expanding a second category ("Cutout") on top of that pushes "Deepen" to y=863 and "Punch" further still, both now completely off-screen with nothing tappable at all. I tried both drag and touchdrag (up-swipes) inside the panel to scroll and neither moved the list at all; the panel does not scroll.
+- **What happened:** Re-test: the categories are an accordion (one open at a time), but even with one open the later categories are cut off and neither a swipe nor the mouse wheel scrolls the list. Original report: At rest, all 5 top-level groups (Normal/Cutout/Brighten/Deepen/Punch) just barely fit in the 390x844 viewport, with Punch's row already clipped a few px past the bottom edge (its centre reports at y=828, i.e. row bottom ~849, past the 844 viewport), still tappable only because a sliver remains on-screen. Expanding "Brighten" pushes "Brightest Colour" (its 3rd sub-item) to a row centred at y=846, i.e. almost entirely below the visible area; only a 1-2 px strip at y=843 was tappable, found by trial. Expanding a second category ("Cutout") on top of that pushes "Deepen" to y=863 and "Punch" further still, both now completely off-screen with nothing tappable at all. I tried both drag and touchdrag (up-swipes) inside the panel to scroll and neither moved the list at all; the panel does not scroll.
 - **Why it matters:** Blending modes are core to compositing layers, and this is a touch-only phone build. A user who opens two categories to compare options (an entirely reasonable thing to do) loses access to every mode below them with zero feedback that content still exists, no scrollbar, no fade-out edge, no "more below" hint, and no gesture recovers it short of remembering to collapse a category above.
 - **Suggested fix:** Make the Mixing panel's blend-mode list its own scrollable region (recommended) so expanding any category simply reveals more scrollable content instead of pushing later categories past the fold. Alternative: accordion behaviour where opening one category auto-collapses the others, so at most one is expanded at a time and the list can't grow taller than the screen.
 - **Screenshots:** [D-look-1b-17-mixing-scroll.webp](shots/D-look-1b-17-mixing-scroll.webp), [D-look-1b-19-brightest-selected.webp](shots/D-look-1b-19-brightest-selected.webp)
@@ -473,7 +473,7 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 ## Export & settings
 
 ### A finished export gives you nothing: no toast, no "done", no file name, no way to know it worked
-- **Impact:** HIGH · Found by 1 bot
+- **Impact:** HIGH · Confirmed by a 2nd bot
 - **Where:** Export dialog, any format, once the progress bar reaches 100%
 - **What happened:** Exported a 2-layer, 5 s project as an Animated GIF twice, live. Each time the "Exporting… Encoding gif… NN%" progress modal (with a Cancel button) counted up, and the instant it hit 100% the modal simply disappeared, dropping you back on the plain editor screen you started from, no toast, no checkmark, no "Saved" or "Downloaded" message, no filename, no way to open/share/locate the result, nothing in the header or the layer list changes. I polled with screenshots taken immediately after completion (no sleep) three separate times and never caught any feedback because there is none to catch. The same is true for "This frame (PNG)" and was true for GIF in the prior round's screenshots (shots/E-out-23-gifend-1.png through -4.png, shots/E-out-22-gif-b10.png all look identical to the idle editor).
 - **Why it matters:** Exporting is the entire point of the "getting a video out" flow, and it ends in total silence. A user has no way to tell "it worked" from "it silently failed", both look exactly like tapping Cancel. On a phone, where the download also isn't visibly obvious the way a browser's download tray is on desktop, this is the one moment that most needs a clear "done" signal and gets none.
@@ -671,7 +671,7 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 ## Edge cases
 
 ### Long paragraph of text overflows the canvas with no wrap and no warning
-- **Impact:** HIGH · Found by 1 bot
+- **Impact:** HIGH · Confirmed by a 2nd bot
 - **Where:** Editor, Text layer, on-canvas render (also visible in the main timeline preview after committing)
 - **What happened:** Added a Text layer, typed a ~300-character paragraph (with emoji) at the default 160pt size. The text-entry field at the top of the screen nicely wraps the text into 3 readable lines while typing. But the moment you look at the canvas (both live while editing and after committing with the checkmark), the same text renders as ONE giant single line that overflows both left and right edges of the frame, showing only a small illegible slice like "w it just keeps g". This is not a temporary artifact, it's what actually renders, and it's how the layer looks back in the main timeline view after exiting the text editor. There's no auto-shrink-to-fit, no wrap toggle, no width handle visible in "Customise Text", and no warning that the text no longer fits.
 - **Why it matters:** The editing chrome (the input field) actively lies to the user about what their text looks like, it wraps there but not on the actual layer, so a user has no reason to suspect a problem until they scrub the preview and find giant unreadable text sticking off both sides of the frame. Long captions, quotes, or pasted paragraphs are a completely normal use case, not a stress test.
@@ -705,17 +705,17 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 ## Speed (tap counts)
 
 ### You can't move the playhead past the current end, so the trim tools can't make a project longer
-- **Impact:** HIGH · Found by 1 bot (2 repros)
+- **Impact:** HIGH · Confirmed by a 2nd bot
 - **Where:** Timeline, time readout, and a clip's Trim / Extend to playhead buttons
-- **What happened:** Slideshow job: 3 photos at 2 s each needs 6 s, but the project was 5 s long. Typing 6 into the time readout silently snapped to 00:05:00, the current end. So there's no way to park the playhead at 6 s and tap "Extend end to playhead". The only way out was dragging the clip itself, which sometimes scrubbed the playhead and sometimes moved the clip, for the same gesture. The total only reached 0:06 after the drag worked.
+- **What happened:** Slideshow job: 3 photos at 2 s each needs 6 s, but the project was 5 s long. Typing 6 into the time readout silently snapped to 00:05:00, the current end. So there's no way to park the playhead at 6 s and tap "Extend end to playhead". The only way out was dragging the clip itself, which sometimes scrubbed the playhead and sometimes moved the clip, for the same gesture. The total only reached 0:06 after the drag worked. The second bot saw the same, and "Extend end to playhead" then said "No more source to extend into".
 - **Why it matters:** "Make this last clip end at 6 s" is an everyday edit. The app's best editing tool (Skip to edge + Trim/Extend to playhead) stops working exactly when a project needs to grow, and nothing says why.
 - **Suggested fix:** Let the playhead go past the end (show the empty area after it as a darker zone), and let Extend-to-playhead grow the project (recommended). At minimum, when a typed time is past the end, say so: "Project is 5 s long. Extend it to 6 s?" with a one-tap Extend.
 - **Screenshots:** [G-speed-38-dragextend.webp](shots/G-speed-38-dragextend.webp), [G-speed-42-total6.webp](shots/G-speed-42-total6.webp)
 
 ### Importing several photos at once stacks them all at 0:00 instead of one after another
-- **Impact:** HIGH · Found by 1 bot
+- **Impact:** HIGH · Confirmed by a 2nd bot
 - **Where:** + > Media > Import, picking several files in one go
-- **What happened:** Picked 3 photos in one file-picker action (a nice shortcut that works). All 3 landed as separate layers starting at 0:00 and fully overlapping, so only the top one is visible. Turning that into a slideshow took 14 steps of trimming and moving.
+- **What happened:** Picked 3 photos in one file-picker action (a nice shortcut that works). All 3 landed as separate layers starting at 0:00 and fully overlapping, so only the top one is visible. Turning that into a slideshow took 14 steps of trimming and moving. The second bot saw the same with 2 photos and a video.
 - **Why it matters:** When someone picks several photos in order, they almost always want them in order. The multi-pick shortcut currently creates the most work instead of saving it.
 - **Suggested fix:** When several photos or videos come in from one pick, lay them end to end in the order picked (recommended). Offer the other option in a toast: "Added 3 in a row. Stack them instead?"
 - **Screenshots:** [G-speed-24-bulkimport2.webp](shots/G-speed-24-bulkimport2.webp), [G-speed-34-trimmed1.webp](shots/G-speed-34-trimmed1.webp)
@@ -764,6 +764,7 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Corrected:** "There are no built-in animation presets" is wrong for text. Text has Fade, Slide, Pop and Spin under Aa > Animate. Rewritten as "presets exist for text only".
 - **Corrected:** "Audio clips have no waveform anywhere" is half wrong. A faint waveform shows on the full timeline, and it disappears when the clip is selected. Downgraded to medium.
 - **Left out:** The tap-count bot said shapes have no Width/Height fields. They do, behind the Scale toggle in Position / Scale, so that claim isn't in the report.
+- **Re-tested:** A second bot re-did the 9 high-impact claims that only one bot had made, each from a fresh project. 6 confirmed. Keyframe diamonds and the blend-mode list were partly confirmed. The Undo double-revert wasn't reproduced, so it dropped to medium and out of the top 12.
 
 ## Not covered yet
 
