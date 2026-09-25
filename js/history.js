@@ -189,9 +189,29 @@ window.FM = window.FM || {};
        of that is this stack — collab reads it once, at arm, and diffs consecutive pairs lazily. A copy:
        the array itself must never leave this closure. */
     _snapshotsUpTo() { return stack.slice(0, index + 1); },
+    /* ═══ A NAME GIVEN ON HOME IS NOT AN EDITOR EDIT (queue 690, hunt 5) ═══════════════════════════════════
+     * ⋯ → Rename… on Home renames the open project with no history step — and going back into the SAME
+     * project keeps this stack, every snapshot of which still carried the OLD name. So the first Undo he
+     * pressed inside, meaning to take back a move, put the old name back too: in the editor, on the card
+     * and in the saved project, and Redo could not bring the new one back (every snapshot ahead had the old
+     * name as well). The rename is written into every snapshot instead, so from undo's point of view the
+     * project has always been called that. A rename made INSIDE the editor still commits its own step and
+     * still undoes. One parse per snapshot, once, for a tap on Home — the same work one undo does. */
+    renameProject(name) {
+      for (let i = 0; i < stack.length; i++) {
+        try {
+          const o = JSON.parse(stack[i]);
+          if (!o || !o.project || o.project.name === name) continue;
+          o.project.name = name;
+          stack[i] = JSON.stringify(o, FM.jsonReplacer);   // snap()'s own key order survives the round trip, so an unchanged scene still matches stack[index]
+        } catch (e) {}
+      }
+    },
     // reset() runs on open/load/boot — its commit must not count as a user edit, or merely VIEWING
     // a project would bump it to the top of the home list (the autosave it schedules is harmless:
-    // it rewrites the just-loaded doc).
+    // it would rewrite the just-loaded doc, and since queue 690 (hunt 5) writeScene makes no write at
+    // all when nothing changed — it used to bump the rev, which made every OTHER window on the project
+    // think newer work had been saved and stop saving).
     /* Resetting the stack strands media just as an eviction does, and MORE of it: every clip deleted
      * during the outgoing project becomes unreachable the instant the undo history goes. The
      * project-switch teardown (FM.releaseProjectMedia) only walks FM.scene.layers, and a deleted
