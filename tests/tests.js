@@ -98124,4 +98124,693 @@
   });
 
 
+
+  /* ═══ HUNT-b (queue 690, 26 Sep) — EXPORT OPTIONS, AND WHAT THE FILE AND THE CARDS AROUND IT REALLY DO ═══════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". Four findings in the export path, each written to
+   * FAIL with the words he would see; a skeptic read them, three were confirmed and are fixed below (renamed from
+   * HUNT-b to 690). The fourth — AAC priming putting the sound 44 ms behind the picture — was not confirmed, and its
+   * test was removed rather than left red.
+   * Shared: huntbWait polls a condition with a deadline. */
+  function huntbWait(cond, ms, what) {
+    return (async function () {
+      const t0 = Date.now();
+      while (!cond()) {
+        if (Date.now() - t0 > ms) throw new Error('setup: ' + what + ' did not happen within ' + Math.round(ms / 1000) + ' s');
+        await new Promise(r => setTimeout(r, 40));
+      }
+    })();
+  }
+  function huntbOwn(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+
+  /* 690 (HUNT-b 1) — DISMISSING THE SHARE SHEET THREW THE FINISHED VIDEO AWAY. Fixed: the card's onSave (js/app.js
+   * showExportReady) keeps the card up, with Save live again, when deliver() answers 'cancelled' — only a real hand-over
+   * or Discard puts it away. The account below is of the bug as found.
+   * The MP4 export ends on the Export ready card; Save opens the phone's share sheet (navigator.share). On his iPhone,
+   * swiping that sheet away — or tapping outside it, or backing out of Save to Files — rejects the share with an
+   * AbortError. deliver() (js/exporter.js) answers that with 'cancelled', and the card's onSave closed the card on ANY
+   * answer: finish() hid it and resolved, run() took that as delivered and its finally freed everything and cleared the
+   * crash-resume parts. The render he had just waited through was gone, with no second Save, and the only way to get the
+   * file was to export again from zero.
+   * Driven with a REAL tap on Save at phone width. The share sheet itself is the OS's, so it is stood in for by a
+   * navigator.share that answers the way WebKit does when the sheet is dismissed.
+   * CONTROLS: the tap really opened the share with one mp4 file in it — and a second real tap, with the sheet taking the
+   * file this time, hands over the SAME file and puts the card away, so the fix is not a card that can never close. */
+  test('690 swiping the share sheet away after Save keeps the Export ready card, and a second Save hands the same file over', { item: '690', budgetMs: 120000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no MP4 to hand over');
+    if (!FM._runExport || !FM._setExportSoloId) throw new Error('setup: FM._runExport (the entry the Export button calls) is gone');
+    const ready = document.getElementById('export-ready'), save = document.getElementById('xr-save'), discard = document.getElementById('xr-discard');
+    const fmtEl = document.getElementById('exp-format'), rangeEl = document.getElementById('exp-range');
+    if (!ready || !save || !discard || !fmtEl || !rangeEl) throw new Error('setup: the export dialog or the Export ready card is missing from this build');
+    const nav = navigator, had = { share: huntbOwn(nav, 'share'), canShare: huntbOwn(nav, 'canShare') };
+    const saved = FM.scene, fmt0 = fmtEl.value, range0 = rangeEl.value;
+    const shares = [];
+    let running = null;
+    const tapSave = async function (what) {
+      const r = save.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      if (!(r.width > 0) || y > 740 || x > 380) throw new Error('setup: Save is at ' + Math.round(x) + ',' + Math.round(y) + ', outside the part of the frame real input can reach');
+      await realInput924([{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 0 }], what);
+      await sleep(600);
+    };
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+          const S = FM.makeLayer('shape', { name: 'HUNT-b box', shape: 'rect', x: 32, y: 32, shapeW: 40, shapeH: 40, fill: '#ffcc33', start: 0, duration: 1 });
+          FM.scene = scene([S], { project: { width: 64, height: 64, fps: 30, duration: 1, background: '#203040' } });
+          FM.selectLayer(null); FM.refreshAll();
+          // his iPhone: Save opens the share sheet, and he swipes it away — WebKit rejects the share with an AbortError
+          Object.defineProperty(nav, 'canShare', { configurable: true, writable: true, value: function () { return true; } });
+          Object.defineProperty(nav, 'share', { configurable: true, writable: true, value: function (d) { shares.push(d); return Promise.reject(new DOMException('Share canceled', 'AbortError')); } });
+          fmtEl.value = 'mp4'; rangeEl.value = 'whole'; FM._setExportSoloId(null);
+          running = FM._runExport();
+          await huntbWait(() => !ready.classList.contains('hidden'), 60000, 'the MP4 export reaching its Export ready card');
+          await sleep(300);
+          await tapSave('a tap on Save');
+          if (shares.length !== 1) throw new Error('CONTROL: a real tap on Save opened the share sheet ' + shares.length + ' times, not once — nothing below measures the dismiss');
+          const f = shares[0] && shares[0].files && shares[0].files[0];
+          if (!f || !/mp4/.test(f.type) || !(f.size > 0)) throw new Error('CONTROL: the share sheet was not handed the finished MP4 (' + (f ? f.type + ', ' + f.size + ' bytes' : 'no file') + ')');
+          if (ready.classList.contains('hidden')) throw new Error('he tapped Save, the share sheet came up, and he swiped it away (or tapped outside it, or backed out of Save to Files) — and the Export ready card closed with it. The finished video is thrown away: there is no second Save, and the only way to get the file is to run the whole export again');
+          if (save.disabled) throw new Error('after he dismissed the share sheet the Export ready card stayed up, but Save is still greyed out — the video is on screen and cannot be saved');
+          // …and this time the sheet takes the file: the same file goes over, and the card is put away
+          nav.share = function (d) { shares.push(d); return Promise.resolve(); };
+          await tapSave('a second tap on Save');
+          if (shares.length !== 2) throw new Error('CONTROL: the second tap on Save opened the share sheet ' + (shares.length - 1) + ' times, not once — the card stayed up but Save no longer does anything');
+          const f2 = shares[1] && shares[1].files && shares[1].files[0];
+          if (!f2 || f2.size !== f.size || f2.type !== f.type) throw new Error('CONTROL: the second Save handed over ' + (f2 ? f2.type + ', ' + f2.size + ' bytes' : 'no file') + ', not the ' + f.size + '-byte MP4 the first one offered');
+          if (!ready.classList.contains('hidden')) throw new Error('CONTROL: the share sheet took the file on the second Save and the Export ready card is still up — a card that saving can never put away');
+          const end = await Promise.race([running.then(() => 'done'), sleep(30000).then(() => 'hung')]);
+          if (end !== 'done') throw new Error('CONTROL: the file was handed over and the export never finished — it is still holding its caches');
+        });
+      });
+    } finally {
+      if (had.share) { /* nothing of ours to remove */ } else { try { delete nav.share; } catch (e) {} }
+      if (had.canShare) { /* nothing of ours to remove */ } else { try { delete nav.canShare; } catch (e) {} }
+      if (!ready.classList.contains('hidden')) discard.click();
+      if (running) { try { await Promise.race([running, sleep(30000)]); } catch (e) {} }
+      fmtEl.value = fmt0; rangeEl.value = range0;
+      if (FM._expPrefsSave) FM._expPrefsSave();
+      FM.scene = saved;
+      try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 (HUNT-b 2) — A LONG EXPORT ON THE PHONE LET THE SCREEN GO TO SLEEP PART-WAY THROUGH. Fixed: runExport (js/app.js)
+   * holds a screen wake lock from the tap on Export until the file is ready, takes it again whenever the page comes back
+   * to the screen (iOS lets it go when the page is hidden), and lets it go when the Export ready card comes up and in its
+   * finally. The account below is of the bug as found.
+   * An export renders frame by frame, seeking every clip for every frame; on an iPhone a one-minute 1080p video takes
+   * minutes. He waits and does not touch the screen, so iOS auto-lock (30 s to 5 min) turns the screen off part-way
+   * through — the app is backgrounded and suspended, the render stops where it is, and under memory pressure the page
+   * is killed outright. Nothing in the export path held a screen wake lock (navigator.wakeLock was only used while
+   * hosting a live session, js/collab-ui.js), although his standing answer on export safety is "if there's a thing to
+   * make exporting safer then do it" (REQUESTS.md, 21 Aug).
+   * Measured through FM._runExport — the entry the Export button calls — for the MP4 and the GIF, sampling at every
+   * frame the exporter renders. navigator.wakeLock is stood in for, so the test can see a request; part-way through the
+   * MP4 the stand-in drops the lock the way iOS does when the page is hidden, and the page comes back.
+   * CONTROL: frames were really rendered under FM._exporting, so the samples are from inside the export. */
+  test('690 an export holds the screen awake while it renders, takes the lock back after the phone drops it, and lets it go when the render is done', { item: '690', budgetMs: 120000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser');
+    if (!FM._runExport || !FM._setExportSoloId) throw new Error('setup: FM._runExport (the entry the Export button calls) is gone');
+    const ready = document.getElementById('export-ready'), discard = document.getElementById('xr-discard');
+    const fmtEl = document.getElementById('exp-format'), rangeEl = document.getElementById('exp-range');
+    if (!ready || !discard || !fmtEl || !rangeEl) throw new Error('setup: the export dialog or the Export ready card is missing from this build');
+    const nav = navigator, hadWL = huntbOwn(nav, 'wakeLock');
+    const asked = [], sentinels = [];
+    const fakeWL = { request: function (type) {
+      asked.push(type);
+      const on = {};
+      const s = { type: type, released: false, onrelease: null,
+        release: function () { s.released = true; return Promise.resolve(); },
+        addEventListener: function (t, fn) { (on[t] = on[t] || []).push(fn); }, removeEventListener: function () {},
+        // what the OS does when the page is hidden: the lock is gone, and says so
+        osDrop: function () { if (s.released) return; s.released = true; (on.release || []).forEach(fn => { try { fn({ type: 'release' }); } catch (e) {} }); } };
+      sentinels.push(s); return Promise.resolve(s);
+    } };
+    const held = () => sentinels.some(s => s.type === 'screen' && !s.released);
+    const saved = FM.scene, fmt0 = fmtEl.value, range0 = rangeEl.value, rs0 = FM.renderScene;
+    const dl = hunt2dCatchDownloads();
+    const per = {};
+    let cur = null, closer = 0, heldAtCard = null;
+    try {
+      await atPhoneWidth(async function () {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      if (document.visibilityState !== 'visible') throw new Error('setup: this page reads as ' + document.visibilityState + ', and a wake lock is only ever taken on a page that is on screen');
+      Object.defineProperty(nav, 'wakeLock', { configurable: true, writable: true, value: fakeWL });
+      const S = FM.makeLayer('shape', { name: 'HUNT-b mover', shape: 'rect', x: 10, y: 32, shapeW: 20, shapeH: 20, fill: '#ffffff', start: 0, duration: 2 });
+      FM.scene = scene([S], { project: { width: 64, height: 64, fps: 30, duration: 2, background: '#000000' } });
+      FM.selectLayer(null); FM.refreshAll();
+      // every frame the exporter renders is a sample: is a screen wake lock held right now?
+      FM.renderScene = function () {
+        if (FM._exporting && cur) {
+          cur.frames++;
+          if (held()) { cur.locked++; if (cur.dropped) cur.relocked++; }
+          // part-way through the MP4: the phone hides the page (the lock goes), and it comes back to the screen
+          if (cur.fmt === 'mp4' && cur.frames === 20 && !cur.dropped) {
+            cur.dropped = true;
+            sentinels.forEach(s => s.osDrop());
+            document.dispatchEvent(new Event('visibilitychange'));
+          }
+        }
+        return rs0.apply(this, arguments);
+      };
+      // the MP4 ends on the Export ready card: note whether it still holds the screen on, then put it away so the export can finish
+      closer = setInterval(() => { if (!ready.classList.contains('hidden')) { if (heldAtCard === null) heldAtCard = held(); discard.click(); } }, 60);
+      for (const fmt of ['mp4', 'gif']) {
+        cur = per[fmt] = { fmt: fmt, frames: 0, locked: 0, dropped: false, relocked: 0 };
+        fmtEl.value = fmt; rangeEl.value = 'whole'; FM._setExportSoloId(null);
+        await FM._runExport();
+        cur = null;
+        per[fmt].heldAfter = held();
+        await sleep(200);
+      }
+      for (const fmt of ['mp4', 'gif']) {
+        if (per[fmt].frames < 30) throw new Error('CONTROL: the ' + fmt.toUpperCase() + ' export rendered only ' + per[fmt].frames + ' frames under FM._exporting — the samples are not from inside an export, so nothing below means anything');
+      }
+      const bare = ['mp4', 'gif'].filter(f => per[f].locked === 0);
+      if (bare.length) throw new Error(bare.map(f => 'the ' + f.toUpperCase() + ' export (' + per[f].frames + ' frames)').join(' and ') + ' ran with no screen wake lock held at any frame (wake lock requests: ' + asked.length + ') — on his iPhone the screen auto-locks part-way through a long render while he waits without touching it, the app is put to sleep, and the export stalls until he unlocks the phone, or is killed and lost');
+      if (!per.mp4.dropped) throw new Error('CONTROL: the MP4 never reached frame 20, so the lock was never dropped and taking it back was not measured');
+      if (!per.mp4.relocked) throw new Error('the phone hid the page part-way through the MP4 (iOS lets the wake lock go then) and it came back to the screen, but the export never took the lock again: ' + (per.mp4.frames - 20) + ' more frames rendered with nothing holding the screen on, so the next auto-lock stops it');
+      if (heldAtCard === null) throw new Error('CONTROL: the MP4 never reached its Export ready card');
+      if (heldAtCard) throw new Error('the render was over and the Export ready card was up, still holding the screen awake — a finished card waiting for his tap keeps his phone lit for as long as he is away');
+      const kept = ['mp4', 'gif'].filter(f => per[f].heldAfter);
+      if (kept.length) throw new Error('the ' + kept.join(' and ').toUpperCase() + ' export finished and its screen wake lock was never let go — his screen would stay on after the export for nothing');
+      });
+    } finally {
+      clearInterval(closer);
+      FM.renderScene = rs0;
+      if (hadWL) { /* never replaced an own property */ } else { try { delete nav.wakeLock; } catch (e) {} }
+      dl.stop();
+      if (!ready.classList.contains('hidden')) discard.click();
+      fmtEl.value = fmt0; rangeEl.value = range0;
+      if (FM._expPrefsSave) FM._expPrefsSave();
+      const ov = document.getElementById('export-overlay'); if (ov) ov.classList.add('hidden');
+      FM.scene = saved;
+      try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 (HUNT-b 4) — A CLIP WITH NO SOUND TRACK MADE EVERY EXPORT SAY ITS SOUND WAS LOST. Fixed: buildAudioMix
+   * (js/exporter.js) asks the file whether it lists a sound track at all (FM.soundTrackInFile, js/media.js) before it
+   * calls a clip that decoded to nothing unreadable, and skips a definite no in silence. The account below is of the bug
+   * as found.
+   * Plenty of real clips carry no audio track at all: an iPhone time-lapse, a screen recording with sound off, a clip
+   * saved from another app without audio. js/media.js knows this is ordinary (FM.decodeAudio: "no decodable audio track
+   * (screen recordings etc.)"). But buildAudioMix filed such a clip under `dropped` as "its audio would not decode", and
+   * with nothing else making sound that became 'all-unreadable': the progress card said Exporting with NO SOUND and the
+   * Export ready card ended on NO SOUND in the warning colour, naming a failure that never happened. He has reported
+   * silent exports four times (#215); a false alarm on a file that is exactly right sends him after a fifth. A project
+   * with no audio in it should read no soundtrack, the wording the card already has for it.
+   * CONTROLS: the fixture really has no sound track (no 'soun' handler anywhere in the file) — and the SAME file with its
+   * track relabelled as sound, which then fails to decode, is still reported as could not be read, so the fix cannot be
+   * a mixer that has simply stopped reporting. */
+  test('690 a clip with no sound track at all (a time-lapse) exports as no soundtrack, while a sound track that will not decode is still reported', { item: '690', budgetMs: 90000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser');
+    if (!FM._showExportReady) throw new Error('setup: FM._showExportReady (the Export ready card) is not reachable');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const ready = document.getElementById('export-ready'), discard = document.getElementById('xr-discard'), metaEl = document.getElementById('xr-meta');
+    if (!ready || !discard || !metaEl) throw new Error('setup: no Export ready card in this build');
+    const saved = FM.scene, made = [];
+    try {
+      const file = await hunt2dIndexedClip(90, 30);
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let soun = false; for (let i = 0; i + 3 < bytes.length; i++) if (bytes[i] === 0x73 && bytes[i + 1] === 0x6f && bytes[i + 2] === 0x75 && bytes[i + 3] === 0x6e) { soun = true; break; }
+      if (soun) throw new Error('CONTROL: the fixture clip carries a sound track, so it is not the silent clip this test is about');
+      const rec = await hunt2dLoadWarm(file);
+      rec.stripFrames = [];
+      FM.scene = hunt2dScene([hunt2dClipLayer(rec, made)], { duration: 3 });
+      FM.refreshAll();
+      let payload = null, meta = '', warnColour = false;
+      await FM.exporter.run({ scale: 1, fps: 30, name: 'huntb-silent', onProgress: function () {}, onNote: function () {},
+        onReady: async function (o) {
+          payload = o;
+          const shown = FM._showExportReady(o);
+          await sleep(80);
+          meta = metaEl.textContent; warnColour = metaEl.classList.contains('xr-nosound');
+          discard.click();
+          await shown;
+        } });
+      const note = (document.getElementById('export-note') || {}).textContent || '';
+      if (!payload || !meta) throw new Error('CONTROL: the export never reached its Export ready card, so there is no line to read');
+      if (payload.audioDropped || /could not be read|NO SOUND/.test(meta) || /could not be read/.test(note)) throw new Error('a project whose only clip simply has no sound track (an iPhone time-lapse, a silent screen recording) finished on an Export ready card reading: ' + meta + (warnColour ? ' — in the warning colour' : '') + (note ? '. The progress card said: ' + note.replace(/\n/g, ' / ') : '') + '. Nothing failed to read and the file is exactly right, but the card tells him his sound was lost; a project with no audio in it should read no soundtrack');
+      if (!/no soundtrack/.test(meta)) throw new Error('CONTROL: the Export ready card for a clip with no sound track reads: ' + meta + ' — not no soundtrack, the words it has for a project with no audio in it');
+
+      // THE OTHER CONTROL: the same bytes with the video track's handler relabelled 'soun'. The file now CLAIMS a sound
+      // track, which will not decode (it is H.264) — the real #215 loss, and it must still be said out loud.
+      let h = -1; for (let i = 0; i + 15 < bytes.length; i++) if (bytes[i] === 0x68 && bytes[i + 1] === 0x64 && bytes[i + 2] === 0x6c && bytes[i + 3] === 0x72) { h = i; break; }
+      if (h < 0 || String.fromCharCode(bytes[h + 12], bytes[h + 13], bytes[h + 14], bytes[h + 15]) !== 'vide') throw new Error('setup: the fixture has no hdlr box naming its video track, so it cannot be relabelled');
+      const lie = bytes.slice(); lie.set([0x73, 0x6f, 0x75, 0x6e], h + 12);
+      const liar = new File([lie], 'huntb-claims-sound.mp4', { type: 'video/mp4' });
+      if (FM.soundTrackInFile) {
+        const said = [await FM.soundTrackInFile(file), await FM.soundTrackInFile(liar), await FM.soundTrackInFile(new Blob(['not an mp4 at all']))];
+        if (said[0] !== false || said[1] !== true || said[2] !== null) throw new Error('CONTROL: asked whether each file lists a sound track, the reader answered ' + said.join(', ') + ' for the silent clip, the relabelled one and a file that is not an MP4 — it should be false, true and null (cannot tell)');
+      }
+      const L = FM.makeLayer('video', { name: 'huntb claims sound', start: 0, duration: 3 });
+      L.start = 0; L.duration = 3; L.trimStart = 0; L.trimEnd = 3;
+      FM.media.set(L.id, { kind: 'video', file: liar, duration: 3 }); made.push(L.id);
+      FM.scene = hunt2dScene([L], { duration: 3 });
+      FM._audioTrackDropped = null; FM._lastAudioDrops = null;
+      const mix = await FM.exporter.buildAudioMix(FM.scene, 0, 3);
+      if (mix) throw new Error('setup: the relabelled clip decoded to a soundtrack, so it is not a sound track that fails to read');
+      if (FM._audioTrackDropped !== 'all-unreadable') throw new Error('a clip whose file lists a sound track that will not decode was flagged ' + FM._audioTrackDropped + ', not all-unreadable — the real loss of #215 is no longer said out loud, and the card would read no soundtrack over a file whose sound was lost');
+    } finally {
+      if (!ready.classList.contains('hidden')) discard.click();
+      FM._audioTrackDropped = null; FM._lastAudioDrops = null;
+      const ne = document.getElementById('export-note'); if (ne) { ne.textContent = ''; ne.classList.add('hidden'); ne.classList.remove('export-note-warn'); }
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+
+
+  /* ═══ 690 (sixth hunt, HUNT-c) — PC LAYOUT AND KEYBOARD, WITH A REAL MOUSE, TRACKPAD AND KEYBOARD ═════════════════════
+   * Every one of these drives the browser's own input pipeline through tests/_cdp.py (see 924): trusted clicks, trusted
+   * wheel events (a trackpad pinch is a wheel with Ctrl held) and, new with this hunt, trusted KEYS — a KeyboardEvent made
+   * in page script types nothing into a focused box and presses nothing, so it cannot show where the keyboard really went.
+   * The PC layout is forced at 720px so every point stays inside the part of the frame that real input can reach in the
+   * 380px pass as well (x ≤ 370). */
+  const KEY690c = {
+    digit: (d) => ({ t: 'key', key: String(d), code: 'Digit' + d, vk: 48 + d, text: String(d), ms: 50 }),
+    enter: { t: 'key', key: 'Enter', code: 'Enter', vk: 13, text: '\r', ms: 80 },
+    space: { t: 'key', key: ' ', code: 'Space', vk: 32, text: ' ', ms: 80 },
+    cmdZ: { t: 'key', key: 'z', code: 'KeyZ', vk: 90, mods: 4, ms: 120 },   // 4 = Meta: ⌘ on his Mac
+    cmdShiftZ: { t: 'key', key: 'z', code: 'KeyZ', vk: 90, mods: 12, ms: 120 },   // 12 = Meta + Shift: ⌘⇧Z, redo
+    tab: { t: 'key', key: 'Tab', code: 'Tab', vk: 9, ms: 80 },
+    del: { t: 'key', key: 'Delete', code: 'Delete', vk: 46, ms: 80 },
+    right: { t: 'key', key: 'ArrowRight', code: 'ArrowRight', vk: 39, ms: 80 },
+  };
+  const click690c = (x, y) => [{ t: 'mouseMove', x: x, y: y, ms: 30 }, { t: 'mouseDown', x: x, y: y, ms: 60 }, { t: 'mouseUp', x: x, y: y, ms: 80 }];
+  /* Keys go to the FOCUSED document. On his machine the app IS the page, so it always has the keyboard; here it sits in
+     run.html's frame, and a press that the app cancels (the canvas, the drawing overlay) never moves focus into the frame —
+     so a key sent then would land on the runner, not the app. Focus the frame's window (not any element in it) first. */
+  async function frameKeys690c(what) {
+    window.focus();
+    await new Promise(r => setTimeout(r, 60));
+    if (!document.hasFocus()) throw new Error('setup: the app frame does not have the keyboard for ' + what + ' — a key sent now would reach the test runner, not the app');
+  }
+  const reach690c = (x, y, what) => { if (!(x > 2 && x <= 370 && y > 2 && y <= 740)) throw new Error('setup: ' + what + ' is at ' + Math.round(x) + ',' + Math.round(y) + ', outside the part of the frame real input can reach'); };
+  async function pcScene690c(layers, fn) {
+    const saved = FM.scene;
+    try {
+      await onScreen924(async function () {
+        await atWideWidth(async function () {
+          if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+          FM.scene = scene(layers, { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+          if (FM.pause) FM.pause();
+          FM.setTime(1);
+          FM.viewport.scale = 1; FM.viewport.x = 0; FM.viewport.y = 0; FM.viewport.apply();
+          FM.selectLayer(null); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+          await new Promise(r => setTimeout(r, 350));
+          return await fn();
+        }, 720);
+      });
+    } finally {
+      try { if (FM.pause) FM.pause(); } catch (e) {}
+      try { if (FM.drawTool && FM.drawTool.active && FM.drawTools && FM.drawTools.stop) FM.drawTools.stop(); } catch (e) {}
+      try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (e) {}
+      FM.viewport.scale = 1; FM.viewport.x = 0; FM.viewport.y = 0; FM.viewport.apply();
+      if (FM.timeline.setZoom) FM.timeline.setZoom(1);
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {}
+    }
+  }
+
+  test('690 a number typed in a box lands when he then clicks his layer on the canvas or grabs its corner, and the keyboard comes back to the editor', { item: '690', budgetMs: 120000 }, async function () {
+    /* On PC he types an exact value — Opacity 50 — and, as anyone does, clicks the layer on the canvas to look at it,
+       rather than pressing Enter. The canvas cancels the press (canvas-edit's startMove preventDefaults every pointerdown),
+       so the browser never moved focus off the box: the box kept saying 50, the layer stayed at 100% because the box only
+       applies on change (blur), and every key he pressed next — Space to play, Delete, the arrows, Cmd+Z — went INTO the
+       box. The same held for the layer-name box: Space after a canvas click renamed the layer to S0 with a space.
+       Fixed by releaseTypingFocus (js/canvas-edit.js), which a mouse press on the canvas AND on its corner / rotate
+       handles now calls. Two more halves are checked here: the corner (startHandle, a separate listener that cancels its
+       press the same way), and the one field that must KEEP the keyboard — the text editor's (#857: clicking the canvas
+       while writing is "move the text", and a Space after it must still type a space into his words). */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const L = FM.makeLayer('shape', { name: 'HC opacity', shape: 'rect', x: 300, y: 420, shapeW: 300, shapeH: 300, fill: '#e0245e', start: 0, duration: 4 });
+    await pcScene690c([L], async function () {
+      const openBox = async function () {
+        FM.selectLayer(L.id); await sleep(250);
+        if (!FM.inspector.openCategoryByIndex(1)) throw new Error('setup: key 1 on a selected shape did not open its Colouring card');
+        await sleep(400);
+        const box = [].slice.call(document.querySelectorAll('#inspector-panel .fx-scrub-val')).find(v => v.offsetWidth && /Opacity/.test((v.closest('.prop-row') || {}).textContent || ''));
+        if (!box) throw new Error('setup: no Opacity value box in the Colouring card');
+        box.scrollIntoView({ block: 'center' }); await sleep(200);
+        const r = box.getBoundingClientRect(), c = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+        reach690c(c.x, c.y, 'the Opacity box');
+        return { box: box, c: c };
+      };
+      /* CONTROL: typing 40 and pressing Enter is what the box is for, and it works — so the harness types into it. */
+      let o = await openBox();
+      await realInput924(click690c(o.c.x, o.c.y).concat([KEY690c.digit(4), KEY690c.digit(0), KEY690c.enter]), 'typing 40 then Enter in Opacity');
+      await sleep(300);
+      if (Math.abs((+L.fillOpacity) - 0.4) > 1e-6) throw new Error('CONTROL FAILED: a real click in the Opacity box, 4, 0 and Enter left the fill opacity at ' + L.fillOpacity + ' — the harness is not typing into the box, so nothing below would mean anything');
+      L.fillOpacity = 1; FM.selectLayer(null); FM.refreshAll(); await sleep(250);
+      /* HIS CASE: type 50, then click the layer on the canvas. */
+      o = await openBox();
+      await realInput924(click690c(o.c.x, o.c.y).concat([KEY690c.digit(5), KEY690c.digit(0)]), 'typing 50 in Opacity');
+      await sleep(150);
+      if (document.activeElement !== o.box || o.box.value !== '50') throw new Error('setup: the box did not take the typing (value ' + o.box.value + ')');
+      const sb = document.getElementById('select-box');
+      const sr = sb && sb.getBoundingClientRect();
+      if (!sr || !sr.width) throw new Error('setup: no selection outline on the canvas to click');
+      const lc = { x: sr.left + sr.width / 2, y: sr.top + sr.height / 2 };
+      reach690c(lc.x, lc.y, 'the layer on the canvas');
+      const hit = document.elementFromPoint(lc.x, lc.y);
+      if (!hit || !hit.closest || !hit.closest('#canvas-wrap, #preview, #select-box, #stage')) throw new Error('setup: the point on the layer is covered by ' + (hit && (hit.id || hit.className)));
+      await realInput924(click690c(lc.x, lc.y), 'clicking the layer on the canvas');
+      await sleep(400);
+      const op = +L.fillOpacity, stillIn = document.activeElement && document.activeElement.tagName === 'INPUT' ? document.activeElement : null;
+      await frameKeys690c('Space');
+      await realInput924([KEY690c.space], 'pressing Space to play');
+      await sleep(350);
+      const played = !!FM.playing; if (FM.pause) FM.pause();
+      const bad = [];
+      if (Math.abs(op - 0.5) > 1e-6) bad.push('the box says ' + o.box.value.trim() + ' but the layer is still at ' + Math.round(op * 100) + '% opacity');
+      if (stillIn) bad.push('the keyboard stayed in the ' + (stillIn === o.box ? 'Opacity box' : (stillIn.className || 'a') + ' box'));
+      if (!played) bad.push('Space did not play' + (stillIn ? ' — it typed into the box instead (now ' + JSON.stringify(stillIn.value).replace(/"/g, '') + ')' : ''));
+      if (bad.length) throw new Error('he typed 50 in Opacity and clicked his layer on the canvas: ' + bad.join('; ') + '.');
+
+      /* THE CORNER. A press on a scale handle is its own listener (startHandle) and cancels its press just the same, so
+         typing 30 and then grabbing a corner must land the 30 too. A press with no movement: the size stays as it was. */
+      L.fillOpacity = 1; FM.selectLayer(null); FM.refreshAll(); await sleep(250);
+      o = await openBox();
+      await realInput924(click690c(o.c.x, o.c.y).concat([KEY690c.digit(3), KEY690c.digit(0)]), 'typing 30 in Opacity');
+      await sleep(150);
+      if (document.activeElement !== o.box || o.box.value !== '30') throw new Error('setup: the box did not take the second typing (value ' + o.box.value + ')');
+      const corner = document.querySelector('#select-box .sb-se');
+      const cr = corner && corner.getBoundingClientRect();
+      if (!cr || !cr.width) throw new Error('setup: no bottom-right corner handle on the selection to grab');
+      const cc = { x: cr.left + cr.width / 2, y: cr.top + cr.height / 2 };
+      reach690c(cc.x, cc.y, 'the corner handle');
+      const onCorner = document.elementFromPoint(cc.x, cc.y);
+      if (onCorner !== corner) throw new Error('setup: the corner handle is covered by ' + (onCorner && (onCorner.id || onCorner.className)));
+      const sc0 = FM.evalProp(L.transform.scale, FM.time);
+      await realInput924(click690c(cc.x, cc.y), 'pressing the corner handle');
+      await sleep(400);
+      const op2 = +L.fillOpacity, still2 = document.activeElement && document.activeElement.tagName === 'INPUT';
+      if (Math.abs(op2 - 0.3) > 1e-6 || still2) throw new Error('he typed 30 in Opacity and grabbed the corner of his layer: ' +
+        [Math.abs(op2 - 0.3) > 1e-6 ? 'the layer is at ' + Math.round(op2 * 100) + '% opacity, not 30%' : '', still2 ? 'the keyboard stayed in the box' : ''].filter(Boolean).join('; ') + '.');
+      if (Math.abs(FM.evalProp(L.transform.scale, FM.time) - sc0) > 1e-6) throw new Error('setup: a press on the corner with no movement changed the size (' + sc0 + ' to ' + FM.evalProp(L.transform.scale, FM.time) + '), so the press above was not a plain grab');
+
+      /* AND THE ONE FIELD THAT KEEPS IT — THE TEXT EDITOR'S. Writing on PC, a click on the canvas is "let me look at /
+         move it" (#857, and text-edit's own desktop branch), so after it his next key still has to go into his text. */
+      const T = FM.makeLayer('text', { name: 'HC words', text: 'Hi', x: 540, y: 1300, start: 0, duration: 4 });
+      FM.scene.layers.push(T); FM.timeline.rebuild(); FM.selectLayer(T.id); FM.refreshAll(); await sleep(200);
+      FM.textEdit.start(T.id); await sleep(350);
+      try {
+        const ta = document.activeElement;
+        if (!FM.textEdit.isActive() || !ta || !ta.closest || !ta.closest('.te-panel')) throw new Error('setup: the text editor did not open with the keyboard in its field (focus on ' + (ta && (ta.id || ta.tagName)) + ')');
+        const tb = document.getElementById('select-box').getBoundingClientRect();
+        const tc = { x: tb.left + tb.width / 2, y: tb.top + tb.height / 2 };
+        reach690c(tc.x, tc.y, 'the text layer on the canvas');
+        const onText = document.elementFromPoint(tc.x, tc.y);
+        if (!onText || !onText.closest || !onText.closest('#canvas-wrap')) throw new Error('setup: the text layer on the canvas is covered by ' + (onText && (onText.id || onText.className)));
+        await realInput924(click690c(tc.x, tc.y), 'clicking the text layer on the canvas while writing');
+        await sleep(300);
+        if (document.activeElement !== ta) throw new Error('writing on PC, a click on his text on the canvas took the keyboard out of the text editor (focus now on ' + (document.activeElement && (document.activeElement.id || document.activeElement.tagName)) + ') — his next key would not go into his words (#857)');
+      } finally {
+        try { if (FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {}
+      }
+    });
+  });
+
+  test('690 Cmd+Z while drawing takes back the last stroke, Cmd+Shift+Z puts it back, and his next stroke does not bring an undone one back', { item: '690', budgetMs: 90000 }, async function () {
+    /* The drawing tool keeps its own stroke list (sessionSubs, and its own undo stack behind the bar's ↶ button). The editor's
+       keydown sent Cmd+Z to FM.history.undo() whatever was on screen, and history.restore() tells the mask editor and the
+       group view about the swap but never the drawing tool. So the stroke disappeared from the canvas — it looked exactly like
+       an undo — while the tool still held it, and the next stroke re-fitted the sketch from the tool's list: it came back.
+       Pressed a few more times it undid what he did BEFORE he started drawing, behind the drawing, the tool none the wiser.
+       Fixed in js/draw-tool.js's capture keydown: while drawing, Cmd+Z is the bar's ↶ and Cmd+Shift+Z its ↷. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const S = FM.makeLayer('shape', { name: 'HC under', shape: 'rect', x: 700, y: 1500, shapeW: 200, shapeH: 200, fill: '#3b82f6', start: 0, duration: 4 });
+    await pcScene690c([S], async function () {
+      const labels = FM._instantLabels ? FM._instantLabels() : [];
+      const si = labels.indexOf('Sketching');
+      if (si < 0) throw new Error('setup: no Sketching tool in the Add menu (tools: ' + labels.join(', ') + ')');
+      FM.addMenu.instant(si);
+      await sleep(700);
+      if (!(FM.drawTool && FM.drawTool.active)) throw new Error('setup: Sketching did not start the drawing tool');
+      const ov = document.getElementById('draw-overlay');
+      const pr = (ov && ov.getBoundingClientRect().width ? ov : document.getElementById('preview')).getBoundingClientRect();
+      const x0 = pr.left + 25, x1 = Math.min(pr.right - 25, 360);
+      if (x1 - x0 < 60) throw new Error('setup: the drawing surface is only ' + Math.round(x1 - x0) + 'px wide inside reach');
+      const trusted = [];
+      const rec = (e) => { trusted.push(e.isTrusted && e.pointerType === 'mouse'); };
+      window.addEventListener('pointerdown', rec, true);
+      const stroke = (y) => {
+        reach690c(x1, y, 'a stroke');
+        const st = [{ t: 'mouseMove', x: x0, y: y, ms: 30 }, { t: 'mouseDown', x: x0, y: y, ms: 40 }];
+        for (let k = 1; k <= 10; k++) st.push({ t: 'mouseMove', x: x0 + (x1 - x0) * k / 10, y: y + (k % 2 ? 4 : -4), ms: 18 });
+        st.push({ t: 'mouseUp', x: x1, y: y, ms: 160 });
+        return st;
+      };
+      const y0 = pr.top + Math.min(120, pr.height * 0.25);
+      const sketch = () => FM.scene.layers.filter(l => l.id !== S.id && Array.isArray(l.subs));
+      const strokes = () => sketch().reduce((n, l) => n + l.subs.length, 0);
+      try {
+        await realInput924(stroke(y0).concat(stroke(y0 + 60)), 'two strokes');
+        await sleep(300);
+        if (!trusted.length || trusted.some(t => !t)) throw new Error('CONTROL: the strokes were not trusted mouse input');
+        if (strokes() !== 2) throw new Error('CONTROL: two real strokes made ' + strokes() + ' stroke(s) on the canvas — the drawing itself did not work, so nothing below means anything');
+        await frameKeys690c('Cmd+Z');
+        await realInput924([KEY690c.cmdZ], 'Cmd+Z while drawing');
+        await sleep(350);
+        const onCanvasAfterUndo = strokes(), toolAfterUndo = FM.drawTool._counts ? FM.drawTool._counts().subs : NaN;
+        /* REDO: Cmd+Shift+Z brings the stroke back, on the canvas and in the tool alike; a second Cmd+Z takes it away again. */
+        let redoNote = '';
+        if (toolAfterUndo === 1 && onCanvasAfterUndo === 1) {
+          await frameKeys690c('Cmd+Shift+Z');
+          await realInput924([KEY690c.cmdShiftZ], 'Cmd+Shift+Z while drawing');
+          await sleep(350);
+          const cR = strokes(), tR = FM.drawTool._counts().subs;
+          if (cR !== 2 || tR !== 2) redoNote = 'Cmd+Shift+Z did not put the stroke back (canvas ' + cR + ', drawing tool ' + tR + ', where both should be 2)';
+          await frameKeys690c('Cmd+Z again');
+          await realInput924([KEY690c.cmdZ], 'Cmd+Z again');
+          await sleep(350);
+        }
+        const underStill = !!FM.layerById(FM.scene, S.id);
+        await realInput924(stroke(y0 + 120), 'a third stroke');
+        await sleep(300);
+        await frameKeys690c('Enter');
+        await realInput924([KEY690c.enter], 'Enter — Done');
+        await sleep(500);
+        const final = strokes();
+        const bad = [];
+        if (toolAfterUndo !== 1) bad.push('Cmd+Z did not take the stroke back in the drawing tool (it still held ' + toolAfterUndo + ' strokes while the canvas showed ' + onCanvasAfterUndo + ')');
+        else if (onCanvasAfterUndo !== 1) bad.push('Cmd+Z took the stroke out of the drawing tool but the canvas still shows ' + onCanvasAfterUndo);
+        if (redoNote) bad.push(redoNote);
+        if (final !== 2) bad.push('his next stroke brought the undone one back: the finished sketch has ' + final + ' strokes where he kept 2');
+        if (!underStill) bad.push('the layer he made before drawing is gone');
+        if (bad.length) throw new Error('drawing on PC, he pressed Cmd+Z to take back his second stroke — it vanished from the canvas, but ' + bad.join('; ') + '.');
+      } finally {
+        window.removeEventListener('pointerdown', rec, true);
+      }
+    });
+  });
+
+  test('690 while drawing, the editor keys (Tab, Delete, Space, the arrows) stay out of the project he cannot see', { item: '690', budgetMs: 90000 }, async function () {
+    /* The rest of the drawing-keyboard finding. Only Enter and Escape (and now Cmd+Z) belonged to the drawing tool, so every
+       other editor key went on to a project hidden behind it — the timeline is not even on screen while he draws. Tab
+       picked a layer behind the drawing and Delete then deleted it; Space started playback; the arrows walked the playhead.
+       Fixed in js/app.js's keydown: while FM.drawTool.active, a key outside a text field does nothing until Done. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const S = FM.makeLayer('shape', { name: 'HC behind', shape: 'rect', x: 700, y: 1500, shapeW: 200, shapeH: 200, fill: '#3b82f6', start: 0, duration: 4 });
+    await pcScene690c([S], async function () {
+      const labels = FM._instantLabels ? FM._instantLabels() : [];
+      const si = labels.indexOf('Sketching');
+      if (si < 0) throw new Error('setup: no Sketching tool in the Add menu (tools: ' + labels.join(', ') + ')');
+      FM.addMenu.instant(si);
+      await sleep(700);
+      if (!(FM.drawTool && FM.drawTool.active)) throw new Error('setup: Sketching did not start the drawing tool');
+      const ov = document.getElementById('draw-overlay');
+      const pr = (ov && ov.getBoundingClientRect().width ? ov : document.getElementById('preview')).getBoundingClientRect();
+      const x0 = pr.left + 25, x1 = Math.min(pr.right - 25, 360), y = pr.top + Math.min(120, pr.height * 0.25);
+      reach690c(x1, y, 'a stroke');
+      const st = [{ t: 'mouseMove', x: x0, y: y, ms: 30 }, { t: 'mouseDown', x: x0, y: y, ms: 40 }];
+      for (let k = 1; k <= 10; k++) st.push({ t: 'mouseMove', x: x0 + (x1 - x0) * k / 10, y: y + (k % 2 ? 4 : -4), ms: 18 });
+      st.push({ t: 'mouseUp', x: x1, y: y, ms: 160 });
+      await realInput924(st, 'one stroke');
+      await sleep(300);
+      const sketches = () => FM.scene.layers.filter(l => l.id !== S.id && Array.isArray(l.subs));
+      if (sketches().length !== 1) throw new Error('CONTROL: one real stroke made ' + sketches().length + ' sketch layers — the drawing itself did not work');
+      const t0 = FM.time, n0 = FM.scene.layers.length;
+      await frameKeys690c('Tab, Delete, Space and Right');
+      await realInput924([KEY690c.tab, KEY690c.del, KEY690c.space, KEY690c.right], 'Tab, Delete, Space and Right while drawing');
+      await sleep(400);
+      const playing = !!FM.playing; if (FM.pause) FM.pause();
+      const picked = FM.scene.selectedId, pickedName = picked ? ((FM.layerById(FM.scene, picked) || {}).name || picked) : '';
+      const bad = [];
+      if (!FM.layerById(FM.scene, S.id)) bad.push('the layer behind the drawing (HC behind) was deleted');
+      if (sketches().length !== 1) bad.push('the drawing itself is gone (' + sketches().length + ' sketch layers)');
+      else if (FM.scene.layers.length !== n0) bad.push('the project went from ' + n0 + ' layers to ' + FM.scene.layers.length);
+      if (picked) bad.push('Tab selected ' + pickedName + ' behind the drawing');
+      if (playing) bad.push('Space started playback behind the drawing');
+      if (Math.abs(FM.time - t0) > 1e-9) bad.push('the arrow moved the playhead from ' + t0.toFixed(3) + 's to ' + FM.time.toFixed(3) + 's');
+      if (!(FM.drawTool && FM.drawTool.active)) bad.push('the drawing tool closed');
+      /* CONTROL: the keys reach the app at all — Enter is the drawing tool's Done. */
+      if (FM.drawTool && FM.drawTool.active) {
+        await frameKeys690c('Enter');
+        await realInput924([KEY690c.enter], 'Enter — Done');
+        await sleep(500);
+        if (FM.drawTool.active) throw new Error('CONTROL: a real Enter did not finish the drawing, so the keys may never have reached the app and nothing above means anything');
+      }
+      if (bad.length) throw new Error('drawing on PC, he pressed Tab, Delete, Space and Right: ' + bad.join('; ') + '.');
+    });
+  });
+
+  test('690 a sideways two-finger swipe on the trackpad over the preview leaves the view, and a selected camera, where they were', { item: '690', budgetMs: 60000 }, async function () {
+    /* canvas-edit's onWheel zoomed by a fixed step per event and picked the direction with `deltaY < 0 ? in : out` — so an
+       event with NO vertical part at all (deltaY 0: a sideways swipe on a trackpad, or tilting a wheel) was read as zoom OUT.
+       With nothing selected the preview shrank away from him; with the camera selected the camera was zoomed out, keyed at
+       the playhead and committed to undo — his project changed by a gesture that says nothing about zoom.
+       Fixed by FM.wheelZoomFactor (js/timeline.js): no up-or-down in the event, no zoom. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const A = FM.makeLayer('shape', { name: 'HC wheel', shape: 'rect', x: 540, y: 960, shapeW: 400, shapeH: 400, fill: '#22c55e', start: 0, duration: 4 });
+    const cam = FM.makeLayer('camera', { name: 'HC cam', start: 0, duration: 4 });
+    await pcScene690c([cam, A], async function () {
+      const pr = document.getElementById('preview').getBoundingClientRect();
+      const p = { x: Math.min(pr.right - 20, pr.left + pr.width * 0.35), y: pr.top + pr.height * 0.5 };
+      reach690c(p.x, p.y, 'the preview');
+      const got = [];
+      const rec = (e) => got.push(e.isTrusted);
+      document.getElementById('preview').addEventListener('wheel', rec, true);
+      const swipe = [];
+      for (let k = 0; k < 12; k++) swipe.push({ t: 'wheel', x: p.x, y: p.y, dx: 18, dy: 0, ms: 16 });
+      try {
+        /* CONTROL: one notch of a mouse wheel over the preview does zoom it — the wheel reaches the handler. */
+        await realInput924([{ t: 'mouseMove', x: p.x, y: p.y, ms: 30 }, { t: 'wheel', x: p.x, y: p.y, dx: 0, dy: -100, ms: 60 }], 'one wheel notch up');
+        await sleep(150);
+        if (!got.length || got.some(t => !t)) throw new Error('CONTROL: no trusted wheel event reached the preview');
+        if (!(FM.viewport.scale > 1.01)) throw new Error('CONTROL: a wheel notch up over the preview did not zoom it in (scale ' + FM.viewport.scale + ') — the wheel path is not the one under test');
+        FM.viewport.scale = 1; FM.viewport.x = 0; FM.viewport.y = 0; FM.viewport.apply(); await sleep(100);
+        await realInput924(swipe, 'a sideways swipe, nothing selected');
+        await sleep(150);
+        const view = FM.viewport.scale;
+        FM.viewport.scale = 1; FM.viewport.x = 0; FM.viewport.y = 0; FM.viewport.apply(); await sleep(100);
+        /* A real hand is never perfectly level: the same swipe drifting 2px down per event is still a sideways swipe. */
+        const drift = swipe.map(st => Object.assign({}, st, { dy: 2 }));
+        await realInput924(drift, 'a sideways swipe drifting slightly down, nothing selected');
+        await sleep(150);
+        const viewDrift = FM.viewport.scale;
+        FM.viewport.scale = 1; FM.viewport.x = 0; FM.viewport.y = 0; FM.viewport.apply();
+        FM.selectLayer(cam.id); await sleep(300);
+        const c = FM.layerById(FM.scene, cam.id);
+        const z0 = FM.evalProp(c.transform.scale, FM.time), cx0 = FM.evalProp(c.transform.x, FM.time);
+        await realInput924(swipe, 'a sideways swipe, camera selected');
+        await sleep(600);
+        const c2 = FM.layerById(FM.scene, cam.id);
+        const z1 = FM.evalProp(c2.transform.scale, FM.time), cx1 = FM.evalProp(c2.transform.x, FM.time);
+        const bad = [];
+        if (Math.abs(view - 1) > 1e-6) bad.push('with nothing selected the preview zoomed ' + (view < 1 ? 'OUT' : 'in') + ' to ' + view.toFixed(2) + 'x');
+        if (Math.abs(viewDrift - 1) > 1e-6) bad.push('a sideways swipe drifting 2px down per event (18px across) zoomed the preview to ' + viewDrift.toFixed(2) + 'x');
+        if (Math.abs(z1 - z0) > 1e-6 || Math.abs(cx1 - cx0) > 0.5) bad.push('with the camera selected the camera zoomed from ' + z0 + ' to ' + z1 + ' (x ' + Math.round(cx0) + ' to ' + Math.round(cx1) + ') and it is saved in his project');
+        if (bad.length) throw new Error('a sideways two-finger swipe over the preview (level, or drifting slightly down): ' + bad.join('; ') + ' — a sideways wheel event counts as a zoom-out step.');
+      } finally {
+        document.getElementById('preview').removeEventListener('wheel', rec, true);
+      }
+    });
+  });
+
+  test('690 a small trackpad pinch over the preview zooms the view, or a selected camera, as far as the fingers spread — and a mouse notch steps as it always did', { item: '690', budgetMs: 60000 }, async function () {
+    /* The other half of the preview's wheel finding: every event was a fixed step (1.08x the view, 1.1x the camera), so a
+       trackpad pinch — dozens of tiny Ctrl+wheel events — raced to the limit, and a two-finger scroll on the camera made
+       his camera leap. FM.wheelZoomFactor sizes each step to the event (exp of −deltaY/100 is exactly the scale the fingers
+       made) and caps it at the old step, so one notch of a mouse wheel is untouched — checked here to the last digit. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const A = FM.makeLayer('shape', { name: 'HC pinch', shape: 'rect', x: 540, y: 960, shapeW: 400, shapeH: 400, fill: '#22c55e', start: 0, duration: 4 });
+    const cam = FM.makeLayer('camera', { name: 'HC cam 2', start: 0, duration: 4 });
+    await pcScene690c([cam, A], async function () {
+      const pr = document.getElementById('preview').getBoundingClientRect();
+      const p = { x: Math.min(pr.right - 20, pr.left + pr.width * 0.35), y: pr.top + pr.height * 0.5 };
+      reach690c(p.x, p.y, 'the preview');
+      const got = [];
+      const rec = (e) => got.push({ trusted: e.isTrusted, ctrl: e.ctrlKey });
+      document.getElementById('preview').addEventListener('wheel', rec, true);
+      const pinch = [];
+      for (let k = 0; k < 12; k++) pinch.push({ t: 'wheel', x: p.x, y: p.y, dx: 0, dy: -1.5, mods: 2, ms: 16 });   // 18px in all: the fingers spread e^0.18 = 1.20x
+      const home = () => { FM.viewport.scale = 1; FM.viewport.x = 0; FM.viewport.y = 0; FM.viewport.apply(); };
+      try {
+        /* A MOUSE NOTCH, nothing selected: exactly the old 1.08 — the cap is what keeps a wheel feeling the same. */
+        await realInput924([{ t: 'mouseMove', x: p.x, y: p.y, ms: 30 }, { t: 'wheel', x: p.x, y: p.y, dx: 0, dy: -100, ms: 60 }], 'one wheel notch up');
+        await sleep(150);
+        if (!got.length || got.some(g => !g.trusted)) throw new Error('CONTROL: no trusted wheel event reached the preview');
+        const notch = FM.viewport.scale;
+        home(); await sleep(100);
+        got.length = 0;
+        await realInput924(pinch, 'a small pinch-out, nothing selected');
+        await sleep(150);
+        if (!got.length || !got.every(g => g.trusted && g.ctrl)) throw new Error('CONTROL: the pinch did not arrive as trusted wheel events with Ctrl held');
+        const view = FM.viewport.scale;
+        home();
+        FM.selectLayer(cam.id); await sleep(300);
+        const z0 = FM.evalProp(FM.layerById(FM.scene, cam.id).transform.scale, FM.time);
+        await realInput924([{ t: 'wheel', x: p.x, y: p.y, dx: 0, dy: -100, ms: 60 }], 'one wheel notch up on the camera');
+        await sleep(150);
+        const camNotch = FM.evalProp(FM.layerById(FM.scene, cam.id).transform.scale, FM.time);
+        await realInput924(pinch, 'a small pinch-out, camera selected');
+        await sleep(600);
+        const camPinch = FM.evalProp(FM.layerById(FM.scene, cam.id).transform.scale, FM.time) / camNotch;
+        const bad = [];
+        if (Math.abs(notch - 1.08) > 1e-9) bad.push('one mouse-wheel notch zoomed the view ' + notch.toFixed(4) + 'x where it has always been 1.08x');
+        if (!(view > 1.1 && view < 1.3)) bad.push('with nothing selected the view zoomed ' + view.toFixed(2) + 'x');
+        if (Math.abs(camNotch / z0 - 1.1) > 1e-3) bad.push('one mouse-wheel notch zoomed the camera ' + (camNotch / z0).toFixed(4) + 'x where it has always been 1.1x');
+        if (!(camPinch > 1.1 && camPinch < 1.3)) bad.push('with the camera selected the camera zoomed ' + camPinch.toFixed(2) + 'x, and it is saved in his project');
+        if (bad.length) throw new Error('a small pinch-out over the preview (12 Ctrl+wheel events of 1.5px, the fingers spread 1.20x): ' + bad.join('; ') + '.');
+      } finally {
+        document.getElementById('preview').removeEventListener('wheel', rec, true);
+      }
+    });
+  });
+
+  test('690 a small trackpad pinch on the timeline zooms it a little, not five times over, and a sideways Ctrl-swipe not at all', { item: '690', budgetMs: 60000 }, async function () {
+    /* A trackpad pinch reaches the page as a run of small Ctrl+wheel events (Chrome sends deltaY = −100·ln(scale), so a
+       pinch that spreads the fingers a fifth adds up to about −18). The timeline's handler ignored how big each one was and
+       multiplied the zoom by 1.15 per event — so a gentle pinch, a dozen tiny events, zoomed the timeline 5×, while one whole
+       100px notch of a mouse wheel zoomed it 1.15×. He could not zoom a little: it slammed toward the limit.
+       Fixed by FM.wheelZoomFactor (js/timeline.js), capped at the old step so a mouse notch is still exactly 1.15×. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const Ls = [0, 1, 2].map(i => FM.makeLayer('shape', { name: 'HC zoom ' + i, shape: 'rect', x: 300 + i * 100, y: 400, shapeW: 200, shapeH: 200, fill: ['#e0245e', '#3b82f6', '#22c55e'][i], start: 0, duration: 4 }));
+    await pcScene690c(Ls, async function () {
+      const tl = document.getElementById('timeline');
+      const tr = tl.getBoundingClientRect();
+      const p = { x: Math.min(tr.left + 50, 360), y: Math.min(tr.top + 80, tr.bottom - 20) };
+      reach690c(p.x, p.y, 'the timeline');
+      const at = document.elementFromPoint(p.x, p.y);
+      if (!at || !tl.contains(at)) throw new Error('setup: the point on the timeline is covered by ' + (at && (at.id || at.className)));
+      const got = [];
+      const rec = (e) => got.push({ trusted: e.isTrusted, ctrl: e.ctrlKey });
+      tl.addEventListener('wheel', rec, true);
+      try {
+        FM.timeline.setZoom(1); await sleep(150);
+        /* CONTROL: one Ctrl+wheel notch zooms in — the pinch path is live and the modifier arrives. */
+        await realInput924([{ t: 'mouseMove', x: p.x, y: p.y, ms: 30 }, { t: 'wheel', x: p.x, y: p.y, dx: 0, dy: -100, mods: 2, ms: 80 }], 'one Ctrl+wheel notch');
+        await sleep(200);
+        if (!got.length || !got.every(g => g.trusted && g.ctrl)) throw new Error('CONTROL: the Ctrl+wheel did not arrive as a trusted wheel with Ctrl held');
+        const notch = FM.timeline.getZoom();
+        if (!(notch > 1.01)) throw new Error('CONTROL: a Ctrl+wheel notch did not zoom the timeline in (zoom ' + notch + ')');
+        if (Math.abs(notch - 1.15) > 1e-6) throw new Error('one Ctrl+wheel notch of a mouse zoomed the timeline ' + notch.toFixed(4) + 'x, where it has always been 1.15x — the per-event cap is gone');
+        FM.timeline.setZoom(1); await sleep(150);
+        const pinch = [];
+        for (let k = 0; k < 12; k++) pinch.push({ t: 'wheel', x: p.x, y: p.y, dx: 0, dy: -1.5, mods: 2, ms: 16 });
+        await realInput924(pinch, 'a small pinch-out');
+        await sleep(250);
+        const z = FM.timeline.getZoom();
+        if (!(z > 1.0) || z > 1.6) throw new Error('a small pinch-out on the trackpad (fingers spread about a fifth: 12 Ctrl+wheel events of 1.5px, 18px in all) zoomed the timeline ' + z.toFixed(2) + 'x — while one whole 100px notch of a mouse wheel zooms it ' + notch.toFixed(2) + 'x. Each event counts as a full 15% step whatever the fingers did.');
+        /* A SIDEWAYS swipe with Ctrl held has no up-or-down in it — it must not zoom (deltaY 0 read as zoom-out before). */
+        FM.timeline.setZoom(1); await sleep(150);
+        const side = [];
+        for (let k = 0; k < 8; k++) side.push({ t: 'wheel', x: p.x, y: p.y, dx: 18, dy: 0, mods: 2, ms: 16 });
+        await realInput924(side, 'a sideways swipe with Ctrl held');
+        await sleep(250);
+        const zs = FM.timeline.getZoom();
+        if (Math.abs(zs - 1) > 1e-6) throw new Error('a sideways swipe on the trackpad with Ctrl held (no up or down in it) zoomed the timeline to ' + zs.toFixed(2) + 'x');
+      } finally {
+        tl.removeEventListener('wheel', rec, true);
+      }
+    });
+  });
+
 })();
