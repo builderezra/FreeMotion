@@ -90088,7 +90088,7 @@
   function huntETap(x, y) { return [{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 0 }]; }
   function huntEHold(x, y) { return [{ t: 'touchStart', x: x, y: y, ms: 650 }, { t: 'touchEnd', x: x, y: y, ms: 0 }]; }
 
-  test('HUNT-e the Position keyframe diamond moves and deletes as ONE keyframe — X and Y never come apart on the timeline', { item: '690', budgetMs: 60000 }, async function () {
+  test('HUNT-e dragging the Position keyframe diamond moves only one of X and Y and leaves a diamond behind, and Delete keyframe leaves one there too', { item: '690', budgetMs: 60000 }, async function () {
     /* The Position ◆ in Move & Transform keys X and Y TOGETHER (inspector.js moveTransformPanel: with no row picked, a
        plain position keyframe keys x and y together). The timeline then draws ONE DIAMOND PER PROPERTY (timeline.js,
        keyframe diamonds) — so every position keyframe is two live diamonds stacked on the same pixel. The hold-and-drag
@@ -90164,7 +90164,7 @@
     } finally { huntERestore(saved); }
   });
 
-  test('HUNT-e while the mask editor is open, moving the playhead moves its outline to the mask at that frame — and a point dragged there keeps the rest of that frame shape', { item: '690', budgetMs: 60000 }, async function () {
+  test('HUNT-e the mask editor ignores the playhead — after a scrub its outline stays on the old frame, and dragging a point there writes the old frame shape into the new one', { item: '690', budgetMs: 60000 }, async function () {
     /* js/mask-tool.js seeds its working points ONCE, in open(), from the path at the playhead — and nothing reseeds them
        when the playhead moves: draw() only reseeds when the mask OBJECT changes (undo / load). So with an animated mask
        (the AE-style roto its own header advertises: edits write into the keyframe at the playhead), he scrubs to the next
@@ -90246,7 +90246,7 @@
     } finally { huntERestore(saved); }
   });
 
-  test('HUNT-e a tap to select a point (Customise Points, a mask point, a motion path dot) leaves it where it was, and a drag moves it by the finger travel', { item: '690', budgetMs: 90000 }, async function () {
+  test('HUNT-e a tap to select a point jumps it to the fingertip — Customise Points, a mask point and a motion path dot', { item: '690', budgetMs: 90000 }, async function () {
     /* All three on-canvas point editors place the point AT THE FINGER on every move — point-edit.js onMove
        (p[0] = loc.u), mask-tool.js onMove (p[0] = pp.x) and motion-path.js onMove (setProp x = pp.x) — with no slop.
        Their touch targets are deliberately generous (26px, 16px, 20px), because a fingertip never lands dead centre;
@@ -90347,7 +90347,7 @@
     } finally { huntERestore(saved); }
   });
 
-  test('HUNT-e an easing picked on the FIRST keyframe diamond shapes the move that leaves it', { item: '690', budgetMs: 60000 }, async function () {
+  test('HUNT-e an easing picked on the first keyframe diamond changes nothing — the move out of it stays linear', { item: '690', budgetMs: 60000 }, async function () {
     /* On the phone the diamond's hold menu is the way to ease a keyframe (a finger never makes a double-click or a
        right-click). Its items write the ease onto THAT diamond's own keyframe (timeline.js openKfMenu: entry.kf.e = key).
        But FM.evalProp reads a segment's ease from the keyframe it ENDS on (scene.js: easing resolved from b, the later
