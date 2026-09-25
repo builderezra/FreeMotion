@@ -4917,8 +4917,13 @@ window.FM = window.FM || {};
            route (boxes, pad, Centre) came through this clamp, which still pinned it to 0…1: type 150% and the readout
            snapped back to 100%. The clamp now matches the boxes. */
         const nx = Math.max(-4, Math.min(5, ax)), ny = Math.max(-4, Math.min(5, ay));
+        // A group turns about a point it KEEPS (queue 690, third hunt — compositor.js FM.settleGroupPivot), so the
+        // pivot it is drawn with right now is read before the anchor changes, and the new one is stored after.
+        const gP0 = isGroupPivot ? FM.groupPivot(layer, FM.scene, FM.time) : null;
         layer.transform.anchorX = Math.round(nx * 1000) / 1000;
         layer.transform.anchorY = Math.round(ny * 1000) / 1000;
+        const gP1 = isGroupPivot ? FM.groupPivotMeasured(layer, FM.scene, FM.time) : null;
+        if (gP1) layer.pivot = { x: gP1.x, y: gP1.y };
         // Keep it visually still. The anchor moved (nx-oldX) of the layer's SCALED width — but that
         // displacement is in the LAYER's own space, and the layer is drawn translate → rotate →
         // scale, so it has to be rotated into the parent frame before it can be added to x/y.
@@ -4929,6 +4934,10 @@ window.FM = window.FM || {};
            is the whole reason the law below differs. */
         let dx = (nx - oldX) * asz.w * (isGroupPivot ? 1 : aEffX());
         let dy = (ny - oldY) * asz.h * (isGroupPivot ? 1 : aEffY());
+        /* For a group δ is the STORED pivot's actual travel, not the anchor's step across today's box: the point it
+           was turning about may have been measured on a different box (members moved since), and compensating by
+           the anchor step would then correct for a move that is not the one that happened. */
+        if (isGroupPivot) { dx = (gP0 && gP1) ? gP1.x - gP0.x : 0; dy = (gP0 && gP1) ? gP1.y - gP0.y : 0; }
         const rot = (mtEval(layer, 'rotation') || 0) * Math.PI / 180;
         if (isGroupPivot) {
           // (R·S − 1)·δ : zero when the group is unrotated and unscaled, which is exactly when moving
@@ -5014,12 +5023,21 @@ window.FM = window.FM || {};
   // Parent picker (moved out of the old Element Properties so it lives with the transform it controls).
   function parentControl(layer) {
     const wrap = el('div', 'parent-ctl');
-    const candidates = FM.scene.layers.filter(l => l.id !== layer.id && !FM.isAncestor(FM.scene, layer.id, l.id));
+    /* The CAMERA is not offered, exactly as the link button's picker leaves it out: it is the view, not a
+       transform parent, and hanging a layer on it read its x/y as an offset from the camera's (queue 690). One
+       already hung on a camera (an older project) still lists it, so the row does not claim None. */
+    const candidates = FM.scene.layers.filter(l => l.id !== layer.id && (l.type !== 'camera' || l.id === layer.parent) && !FM.isAncestor(FM.scene, layer.id, l.id));
     const row = el('div', 'prop-row'); row.appendChild(el('label', null, 'Parent'));
     const sel = document.createElement('select');
     const none = document.createElement('option'); none.value = ''; none.textContent = 'None'; if (!layer.parent) none.selected = true; sel.appendChild(none);
     candidates.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; if (layer.parent === c.id) o.selected = true; sel.appendChild(o); });
-    sel.addEventListener('change', () => { layer.parent = sel.value || null; FM.requestRender(); FM.inspector.refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); commitH(); });
+    // Through FM.relinkParent (queue 690, third hunt): choosing a parent here keeps the layer where he sees it,
+    // the same as the link button — it used to write the id alone and the layer jumped by its new parent's x/y.
+    sel.addEventListener('change', () => {
+      const note = FM.relinkParent ? FM.relinkParent(layer, sel.value || null) : ((layer.parent = sel.value || null), '');
+      FM.requestRender(); FM.inspector.refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); commitH();
+      if (note && FM.toast) FM.toast(note, 5000);
+    });
     row.appendChild(sel); wrap.appendChild(row);
     if (layer.parent) {
       if (!layer.parentMode) layer.parentMode = 'normal';
