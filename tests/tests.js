@@ -94431,4 +94431,310 @@
     } finally { R.drop(tag); R.drop(tag + 'b'); }
   });
 
+  /* ═══ HUNT-d, FOURTH PASS (queue 690, 26 Sep) — KEYFRAMES AND ANIMATION ════════════════════════════════════════════════
+   * His standing brief (REQUESTS.md #690): "go re audit, find some bugs coz theres a shit load". Four findings in keyframes,
+   * easing, behaviours and animation presets, each written to FAIL today with what he would see. The phone one is driven
+   * by a REAL finger through tests/_cdp.py (realInput924), with a control that proves the same hold works where it should,
+   * so a red is the app and not a gesture that never started. Nothing is fixed here. */
+  async function hd4ColourFixture() {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.contextMenu) FM.contextMenu.hide();
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const L = FM.makeLayer('shape', { name: 'HUNT-d colour', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#e0245e', start: 0, duration: 6 });
+    // red at 1 s turning blue by 3 s — what the Colouring panel's diamond writes (layer.fill as colour keyframes, #928)
+    L.fill = { kf: [{ t: 1, v: '#ff0000', e: 'linear' }, { t: 3, v: '#0000ff', e: 'linear' }] };
+    // a position move at other times, for the control: the same hold on THIS diamond, with Position / Scale open
+    L.transform.x = { kf: [{ t: 1.5, v: 100, e: 'linear' }, { t: 2.5, v: 500, e: 'linear' }] };
+    FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+    if (FM.pause) FM.pause();
+    FM.refreshAll(); FM.selectLayer(L.id);
+    await sleep(250);
+    return L;
+  }
+  async function hd4OpenAt(cat) {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    FM.inspector.openCategory(cat);
+    if (cat === 'transform') FM._mtMode = 'move';
+    FM.setTime(2); FM.timeline.rebuild(); FM.timeline.updatePlayhead();
+    await sleep(300);
+  }
+  function hd4DotAt(t) {
+    return [].filter.call(document.querySelectorAll('#tl-tracks .kf-dot'), d => Math.abs(parseFloat(d.dataset.t) - t) < 1e-3)[0] || null;
+  }
+  function hd4Centre(d) { const r = d.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
+
+  test('HUNT-d with Colouring open, holding a colour keyframe diamond on the phone opens no menu, and dragging it slides the whole clip instead of the keyframe', { item: '690', budgetMs: 90000 }, async function () {
+    /* A diamond is LIVE (solid, draggable, the hold menu) only while the editor that owns its property is open — the v5.42
+       rule in js/timeline.js, and every inert diamond's own title says Open this property's editor to move this keyframe.
+       But FM.kfFocusProps (js/inspector.js kfScope) only knows Effects, Position / Scale, Mixing, Volume and Speed. Colouring,
+       Outline and Shadows and Element Properties return nothing, so with Colouring open the colour keyframes stay inert
+       outlines — their editor IS open, and nothing he can do on the timeline reaches them. An inert diamond takes no touch
+       at all, so his finger lands on the CLIP underneath: the hold is a clip hold, and a drag moves the clip.
+       On the phone that hold is the only way to ease or delete a keyframe (a finger never double-clicks or right-clicks),
+       and a drag is the only way to retime one — on PC as well: the mouse drag bails on the same live check.
+       He uses colour keyframes (#928, his words: the feature that makes a layer change color depending on how you
+       keyframe the colors). */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          // CONTROL: with Position / Scale open, the same still hold on the position diamond opens the keyframe menu.
+          let L = await hd4ColourFixture();
+          await hd4OpenAt('transform');
+          let d = hd4DotAt(2.5);
+          if (!d || !d.classList.contains('kf-live')) throw new Error('setup: the position diamond at 2.5 s is not live with Position / Scale open (' + (d ? d.className : 'no diamond') + ')');
+          let c = hd4Centre(d);
+          if (c.x < 10 || c.x > 370 || c.y > 740) throw new Error('setup: the position diamond is at ' + Math.round(c.x) + ',' + Math.round(c.y) + ', out of reach of real input');
+          const D0 = huntDowns();
+          try { await realInput924([{ t: 'touchStart', x: c.x, y: c.y, ms: 650 }, { t: 'touchEnd', x: c.x, y: c.y, ms: 0 }], 'the control hold on a position diamond'); } finally { D0.stop(); }
+          await sleep(300);
+          if (!D0.downs.length || !D0.downs[0].trusted || D0.downs[0].kind !== 'touch') throw new Error('CONTROL: the hold was not a trusted touch (' + JSON.stringify(D0.downs).replace(/"/g, "'") + ')');
+          if (!huntCtxUp()) throw new Error('CONTROL: a still 0.65 s hold on a live position diamond did not open the keyframe menu, so this test cannot judge the colour diamond');
+          if (FM.contextMenu) FM.contextMenu.hide();
+
+          // THE CASE, part 1: Colouring open, the same still hold on the colour keyframe at 3 s.
+          L = await hd4ColourFixture();
+          await hd4OpenAt('color');
+          d = hd4DotAt(3);
+          if (!d) throw new Error('setup: no diamond is drawn for the colour keyframe at 3 s');
+          c = hd4Centre(d);
+          if (c.x < 10 || c.x > 370 || c.y > 740) throw new Error('setup: the colour diamond is at ' + Math.round(c.x) + ',' + Math.round(c.y) + ', out of reach of real input');
+          const liveWithPanel = d.classList.contains('kf-live');
+          const D1 = huntDowns();
+          try { await realInput924([{ t: 'touchStart', x: c.x, y: c.y, ms: 650 }, { t: 'touchEnd', x: c.x, y: c.y, ms: 0 }], 'a still hold on the colour diamond'); } finally { D1.stop(); }
+          await sleep(300);
+          if (!D1.downs.length || !D1.downs[0].trusted) throw new Error('CONTROL: the hold on the colour diamond was not a trusted touch');
+          const menu = huntCtxUp();
+          const landedOn = D1.downs[0].cls;
+          if (FM.contextMenu) FM.contextMenu.hide();
+          try { FM.timeline._abortGestures(); } catch (e) {}
+
+          // THE CASE, part 2: Colouring open, hold the colour keyframe at 3 s and drag it 40px right to retime it.
+          L = await hd4ColourFixture();
+          await hd4OpenAt('color');
+          const d1 = hd4DotAt(1), d3 = hd4DotAt(3);
+          const pps = (hd4Centre(d3).x - hd4Centre(d1).x) / 2;
+          if (!(pps > 20)) throw new Error('setup: the lane is drawn at ' + pps.toFixed(1) + ' px a second, too tight to read a 40px drag');
+          c = hd4Centre(d3);
+          await realInput924([
+            { t: 'touchStart', x: c.x, y: c.y, ms: 650 },
+            { t: 'touchMove', x: c.x + 10, y: c.y, ms: 40 },
+            { t: 'touchMove', x: c.x + 20, y: c.y, ms: 40 },
+            { t: 'touchMove', x: c.x + 30, y: c.y, ms: 40 },
+            { t: 'touchMove', x: c.x + 40, y: c.y, ms: 120 },
+            { t: 'touchEnd', x: c.x + 40, y: c.y, ms: 0 },
+          ], 'a hold then a 40px drag on the colour diamond');
+          await sleep(350);
+          const want = Math.round((3 + 40 / pps) * 30) / 30;
+          const kfT = (FM.isAnimated(L.fill) ? L.fill.kf : []).map(k => k.t).sort((a, b) => a - b);
+          const clipStart = L.start || 0;
+          const retimed = kfT.length === 2 && Math.abs(kfT[0] - 1) < 1e-6 && Math.abs(kfT[1] - want) <= 0.5 / 30;
+
+          const bad = [];
+          if (!menu) bad.push('with Colouring open he held the colour keyframe diamond for 0.65 s and no menu opened (the press landed on ' + landedOn + (liveWithPanel ? '' : ', because the diamond stays an inert outline while its own Colouring editor is open') + ') — on the phone that hold is the only way to ease or delete a keyframe, and the same hold works on a Position diamond');
+          if (Math.abs(clipStart) > 1e-6) bad.push('he held the colour keyframe at 3 s and dragged it 40px right to retime it, and the WHOLE CLIP slid to start at ' + clipStart.toFixed(2) + ' s, carrying every keyframe with it');
+          if (!retimed) bad.push('the colour keyframe did not move to ' + want.toFixed(2) + ' s against the clip — the colour keys now read ' + kfT.map(t => t.toFixed(2)).join(', ') + ' s');
+          if (bad.length) throw new Error(bad.join('; AND '));
+        });
+      }, 380);
+    } finally {
+      if (FM.contextMenu) FM.contextMenu.hide();
+      try { FM.timeline._abortGestures(); FM.timeline.stopMomentum(); } catch (e) {}
+      FM.scene = saved; try { FM.inspector.openCategory('home'); FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
+    }
+  });
+
+  /* How much of the frame a pure-red layer covers, rendered through the app — the same renderScene the export uses. */
+  function hd4RedShare(sc, t) {
+    const P = sc.project, c = offscreen(P.width, P.height), g = c.getContext('2d');
+    FM.renderScene(g, sc, t);
+    const d = g.getImageData(0, 0, P.width, P.height).data;
+    let n = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i] > 180 && d[i + 1] < 70 && d[i + 2] < 70) n++;
+    return n / (P.width * P.height);
+  }
+
+  test('HUNT-d a behaviour on Scale uses pixel-sized amounts: Oscillate or Wiggle switched to Scale, and Audio Drive as it comes, blow the layer up to thousands of percent and flicker it out', { item: '690', budgetMs: 60000 }, async function () {
+    /* Behaviours (Position / Scale → + Add behavior) add Amount straight onto the channel they drive (js/behaviors.js
+       behaviorValue: base + amp × wave). The defaults are pixel amounts — Wiggle 20, Oscillate 30, Audio Drive 50 — and the
+       channel select next to each one offers Scale and Opacity with nothing rescaled. Scale is a multiplier where 1 is 100%,
+       so Oscillate on Scale swings 1 ± 30: the layer goes to 3100% and then below zero, which the compositor clamps to
+       nothing. Audio Drive does not even need the switch: the inspector gives it Scale by default (BE_DEFAULT_PROP), so the
+       moment he picks a song the layer grows by up to 50× on every loud moment. The Amount ruler cannot rescue it either:
+       its span of 0–2400 is coarsened to a notch of 10 (tickQuantum), i.e. 1000% a notch on Scale. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      const ab = await fetch('tests/_fixtures/vad/music-only.wav').then(r => r.arrayBuffer());
+      const ac = new (window.AudioContext || window.webkitAudioContext)();
+      const buf = await ac.decodeAudioData(ab);
+      const M = FM.makeLayer('video', { name: 'HUNT-d song', start: 0, duration: Math.min(8, buf.duration) });
+      M.transform.opacity = 0;   // the song's own picture stays out of the pixel count
+      const S = FM.makeLayer('shape', { name: 'HUNT-d pulse', shape: 'rect', x: 180, y: 320, shapeW: 60, shapeH: 60, fill: '#ff0000', start: 0, duration: M.duration });
+      FM.scene = scene([M, S], { project: { width: 360, height: 640, fps: 30, duration: M.duration, background: '#000000' } });
+      FM.media.set(M.id, { kind: 'video', audioBuffer: buf, duration: buf.duration, width: 2, height: 2 });
+      if (FM.pause) FM.pause();
+      FM.refreshAll(); FM.selectLayer(S.id); await sleep(200);
+      FM.inspector.openCategory('transform'); FM._mtMode = 'move'; FM.inspector.refresh(); await sleep(250);
+
+      const addVia = async (label) => {
+        const add = [].filter.call(document.querySelectorAll('#inspector .fx-add-btn'), b => /Add behavior/.test(b.textContent))[0];
+        if (!add) throw new Error('setup: no + Add behavior button in Position / Scale');
+        add.click(); await sleep(80);
+        const pick = [].filter.call(document.querySelectorAll('#inspector .be-pick-btn'), b => b.textContent === label)[0];
+        if (!pick) throw new Error('setup: the behaviour picker has no ' + label);
+        pick.click(); await sleep(200);
+        return S.behaviors[S.behaviors.length - 1];
+      };
+      const rowSelect = (i) => [].slice.call(document.querySelectorAll('#inspector .be-row'))[i];
+      const scaleOver = (times) => times.map(t => FM.behaviorValue(S, 'scale', FM.evalProp(S.transform.scale, t), t));
+      const times = []; for (let t = 0.05; t < 3; t += 1 / 30) times.push(+t.toFixed(3));
+      const range = (v) => ({ lo: Math.min.apply(null, v), hi: Math.max.apply(null, v) });
+      const pct = (v) => Math.round(v * 100) + '%';
+      const bad = [];
+
+      /* 1 — Oscillate, switched to Scale in its own channel select (a pulse: the obvious thing to make with it) */
+      const osc = await addVia('Oscillate');
+      const sel = rowSelect(0) && rowSelect(0).querySelector('select.be-prop');
+      if (!sel || [].map.call(sel.options, o => o.value).indexOf('scale') < 0) throw new Error('setup: the Oscillate row offers no Scale target');
+      sel.value = 'scale'; sel.dispatchEvent(new Event('change', { bubbles: true })); await sleep(150);
+      if (osc.prop !== 'scale') throw new Error('setup: the channel select did not move Oscillate onto Scale (' + osc.prop + ')');
+      const r1 = range(scaleOver(times));
+      const peakT = times[scaleOver(times).indexOf(r1.hi)], lowT = times[scaleOver(times).indexOf(r1.lo)];
+      const cover = hd4RedShare(FM.scene, peakT), goneShare = hd4RedShare(FM.scene, lowT), rest = hd4RedShare(FM.scene, 0);
+      if (!(rest > 0.005)) throw new Error('CONTROL: the square does not render at rest (' + rest + ') — nothing below can be judged');
+      if (r1.hi > 4 || r1.lo < 0.1) bad.push('Oscillate on Scale at its default Amount swings the 60px square between ' + pct(r1.lo) + ' and ' + pct(r1.hi) + ': at ' + peakT.toFixed(2) + ' s it covers ' + Math.round(cover * 100) + '% of the frame and at ' + lowT.toFixed(2) + ' s it is ' + (goneShare < 1e-4 ? 'gone' : 'a speck') + ' — a pulse he cannot get without typing a decimal into the box');
+
+      /* 2 — Wiggle, switched to Scale */
+      S.behaviors = []; FM.inspector.refresh(); await sleep(150);
+      const wig = await addVia('Wiggle');
+      const sel2 = rowSelect(0) && rowSelect(0).querySelector('select.be-prop');
+      sel2.value = 'scale'; sel2.dispatchEvent(new Event('change', { bubbles: true })); await sleep(150);
+      if (wig.prop !== 'scale') throw new Error('setup: the channel select did not move Wiggle onto Scale');
+      const r2 = range(scaleOver(times));
+      if (r2.hi > 4 || r2.lo < 0.1) bad.push('Wiggle on Scale at its default Amount jumps between ' + pct(r2.lo) + ' and ' + pct(r2.hi));
+
+      /* 3 — Audio Drive exactly as it comes: the inspector puts it on Scale, and he picks the song */
+      S.behaviors = []; FM.inspector.refresh(); await sleep(150);
+      const aud = await addVia('Audio Drive');
+      const srcSel = [].filter.call(rowSelect(0).querySelectorAll('select'), s => !s.classList.contains('be-prop'))[0];
+      if (!srcSel || [].map.call(srcSel.options, o => o.value).indexOf(M.id) < 0) throw new Error('setup: the Audio Drive row does not offer the song as its source');
+      srcSel.value = M.id; srcSel.dispatchEvent(new Event('change', { bubbles: true })); await sleep(150);
+      const sm = (aud.params && typeof aud.params.smooth === 'number') ? aud.params.smooth : 0.4;
+      await FM.audioEnvelopePrewarm(M, { band: aud.params.band || 'overall', gain: aud.params.gain || 1, attack: 0.005 + sm * 0.055, release: 0.03 + sm * 0.37 });
+      const r3 = range(scaleOver(times));
+      if (!(r3.hi - r3.lo > 0.01)) throw new Error('CONTROL: Audio Drive did not move the layer at all with the song as its source (' + r3.lo.toFixed(3) + ' to ' + r3.hi.toFixed(3) + '), so its size cannot be judged');
+      const aT = times[scaleOver(times).indexOf(r3.hi)];
+      if (r3.hi > 4) bad.push('Audio Drive, added as it comes (it lands on ' + aud.prop + ' with Amount ' + (aud.params && aud.params.amount) + '), blows the square up to ' + pct(r3.hi) + ' on the music at ' + aT.toFixed(2) + ' s, covering ' + Math.round(hd4RedShare(FM.scene, aT) * 100) + '% of the frame');
+
+      if (bad.length) throw new Error(bad.join('; AND '));
+    } finally {
+      try { FM.scene.layers.forEach(l => { if (l.type === 'video' && FM.media.get(l.id)) FM.media.remove(l.id); }); } catch (e) {}
+      FM.scene = saved; try { FM.inspector.openCategory('home'); FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
+    }
+  });
+
+  test('HUNT-d applying a look + animations preset to a photo resizes the photo to the size of the layer the preset was saved from', { item: '690', budgetMs: 60000 }, async function () {
+    /* Presets → Look + animations. save() stores transform.rotation / scale / opacity through shiftKf, which hands a STATIC
+       value back unchanged, and applyTo writes it over the target whenever it is not null — so every look carries the
+       source layer's SIZE, turn and opacity, whether or not they were animated (js/inspector.js FM.layerPresets). The code's
+       own note says what it is meant to carry: the transform's keyframes. Position is already treated properly — it goes
+       over as a delta from where the target already is — and scale is not.
+       A photo is fitted when it comes in (js/app.js addMediaLayer: scale = the fit, 0.225 here for a landscape photo in a
+       9:16 project), so a Fade in saved on a title (scale 1) takes the photo to 100%: 4.4 times bigger, filling the frame
+       and cropped on every side. A pop-in saved on a title (scale 0 → 1) grows the photo to the same wrong size. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const NAME = 'HUNT-d fade in', NAME2 = 'HUNT-d pop in';
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      const P = { width: 360, height: 640, fps: 30, duration: 4, background: '#000000' };
+      const title = FM.makeLayer('text', { name: 'HUNT-d title', text: 'Hi', x: 180, y: 120, start: 0, duration: 4 });
+      title.transform.opacity = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 0.5, v: 1, e: 'linear' }] };
+      const popper = FM.makeLayer('text', { name: 'HUNT-d title 2', text: 'Yo', x: 180, y: 120, start: 0, duration: 4 });
+      popper.transform.scale = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 0.4, v: 1, e: 'linear' }] };
+      const photo = FM.makeLayer('image', { name: 'HUNT-d photo', x: 180, y: 320, start: 0, duration: 4 });
+      const cv = document.createElement('canvas'); cv.width = 1600; cv.height = 1200;
+      const cg = cv.getContext('2d'); cg.fillStyle = '#ff0000'; cg.fillRect(0, 0, 1600, 1200);
+      const fit = Math.min(P.width / 1600, P.height / 1200);   // exactly what addMediaLayer does on import
+      photo.transform.scale = fit;
+      FM.scene = scene([photo], { project: P });
+      FM.media.set(photo.id, { kind: 'image', el: cv, width: 1600, height: 1200 });
+      if (FM.pause) FM.pause();
+      FM.refreshAll();
+      FM.layerPresets.save(NAME, title);      // what Save look + animations stores from the title
+      FM.layerPresets.save(NAME2, popper);
+      const topRow = () => { const c = offscreen(P.width, P.height), g = c.getContext('2d'); FM.renderScene(g, FM.scene, 1); return px(g, 180, 40); };
+      const before = topRow();
+      if (!(before[0] < 40)) throw new Error('setup: the fitted photo already reaches the top of the frame (' + Array.prototype.slice.call(before, 0, 3).join(',') + ')');
+      const bad = [];
+      for (const nm of [NAME, NAME2]) {
+        photo.transform.scale = fit; photo.transform.opacity = 1; delete photo.fromPreset;
+        FM.selectLayer(photo.id); FM.setTime(0); await sleep(120);
+        FM.inspector.openCategory('presets'); await sleep(300);
+        const row = [].filter.call(document.querySelectorAll('#inspector .insp-preset-name'), b => b.textContent === nm)[0];
+        if (!row) throw new Error('setup: the Presets panel has no row for ' + nm);
+        row.click(); await sleep(250);
+        if (photo.fromPreset !== nm) throw new Error('CONTROL: tapping the ' + nm + ' row did not apply it to the photo');
+        const endScale = FM.evalProp(photo.transform.scale, 1);
+        const top = topRow();
+        if (nm === NAME) {
+          const op0 = FM.evalProp(photo.transform.opacity, 0), op1 = FM.evalProp(photo.transform.opacity, 1);
+          if (!(op0 < 0.05 && op1 > 0.95)) throw new Error('CONTROL: the fade itself did not arrive on the photo (opacity ' + op0 + ' then ' + op1 + ')');
+        }
+        if (Math.abs(endScale - fit) > 0.01) bad.push('applying the ' + (nm === NAME ? 'Fade in' : 'pop-in') + ' look he saved on a title took his photo from ' + Math.round(fit * 100) + '% to ' + Math.round(endScale * 100) + '% — ' + (endScale / fit).toFixed(1) + ' times bigger' + (top[0] > 180 ? ', filling the whole frame and cropped on every side' : ''));
+      }
+      if (bad.length) throw new Error(bad.join('; AND '));
+    } finally {
+      try { FM.layerPresets.remove(NAME); FM.layerPresets.remove(NAME2); } catch (e) {}
+      try { FM.scene.layers.forEach(l => { if (l.type === 'image' && FM.media.get(l.id)) FM.media.remove(l.id); }); } catch (e) {}
+      FM.scene = saved; try { FM.inspector.openCategory('home'); FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
+    }
+  });
+
+  test('HUNT-d splitting a clip in the middle of an eased move makes the layer stop dead at the cut and jump ahead before it', { item: '690', budgetMs: 60000 }, async function () {
+    /* Split (the S key, the scissors) divides every keyframe list at the cut and gives each half a SEAM keyframe holding the
+       value there (js/app.js splitAnimated). The seam copies the ease of the segment it cut, so ONE ease-in-out over 0–2 s
+       becomes TWO: one over 0–1 s and one over 1–2 s. An ease-in-out arrives at rest and leaves from rest, so the layer now
+       slows to a stop at the cut and starts again, where before the cut it was moving at full speed — and everything before
+       the cut runs early. The code calls this a close approximation; measured, it is neither close nor invisible, and a
+       split is meant to be invisible. Rendered through renderScene, so it is what the preview and the export both draw. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, t0 = FM.time;
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      const L = FM.makeLayer('shape', { name: 'HUNT-d glide', shape: 'rect', x: 50, y: 100, shapeW: 20, shapeH: 20, fill: '#ff0000', start: 0, duration: 4 });
+      // 50 → 850 px over 0–2 s, Ease In-Out — what the keyframe diamond's menu writes (bez + e on the keyframe the move arrives at)
+      L.transform.x = { kf: [{ t: 0, v: 50, e: 'linear' }, { t: 2, v: 850, e: 'easeInOut', bez: FM.EASE_PRESETS.easeInOut.slice() }] };
+      FM.scene = scene([L], { project: { width: 900, height: 200, fps: 30, duration: 4, background: '#000000' } });
+      if (FM.pause) FM.pause();
+      FM.refreshAll(); FM.selectLayer(L.id); await sleep(150);
+      const xAt = (t) => {   // the red square's centre column in a rendered frame
+        const c = offscreen(900, 200), g = c.getContext('2d');
+        FM.renderScene(g, FM.scene, t);
+        const row = g.getImageData(0, 100, 900, 1).data;
+        let a = -1, b = -1;
+        for (let i = 0; i < 900; i++) { const r = row[i * 4], gg = row[i * 4 + 1]; if (r > 180 && gg < 70) { if (a < 0) a = i; b = i; } }
+        return a < 0 ? null : (a + b) / 2;
+      };
+      const T = [0.5, 29 / 30, 31 / 30, 1.5];
+      const before = T.map(xAt);
+      if (before.some(v => v == null)) throw new Error('CONTROL: the square is not drawn at every sample before the split (' + JSON.stringify(before) + ')');
+      if (!(before[2] - before[1] > 20)) throw new Error('CONTROL: the square is not moving fast through the middle of the move before the split (' + (before[2] - before[1]).toFixed(1) + ' px over two frames)');
+      FM.setTime(1); await FM.splitLayer(L.id); await sleep(250);
+      if (FM.scene.layers.length !== 2) throw new Error('setup: the clip did not split in two (' + FM.scene.layers.length + ' layers)');
+      const after = T.map(xAt);
+      const bad = [];
+      const across0 = before[2] - before[1], across1 = (after[2] != null && after[1] != null) ? after[2] - after[1] : NaN;
+      if (!(across1 > across0 * 0.7)) bad.push('across the cut the square moves ' + (isFinite(across1) ? across1.toFixed(1) : '?') + ' px in two frames where it moved ' + across0.toFixed(1) + ' px before the split — it slows to a dead stop at the cut and starts again, in the preview and the export');
+      const worst = T.reduce((m, t, i) => (after[i] == null ? m : Math.max(m, Math.abs(after[i] - before[i]))), 0);
+      if (worst > 3) bad.push('at 0.5 s the square is at ' + (after[0] == null ? '?' : Math.round(after[0])) + ' px instead of ' + Math.round(before[0]) + ' px — the half before the cut runs ' + Math.round(worst) + ' px ahead of the move he made');
+      if (bad.length) throw new Error(bad.join('; AND '));
+    } finally {
+      FM.scene = saved; FM.time = t0; try { FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
+    }
+  });
+
 })();
